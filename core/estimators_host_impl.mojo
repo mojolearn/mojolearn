@@ -15,6 +15,7 @@ from std.math import isfinite
 from core.hostptr import f32_ptr, i32_ptr, read_f32
 from checks.numerics import ftz
 from core.classical_host_predict import (
+    host_pca_transform_into,
     host_pca_whiten_inverse_transform_into,
     host_pca_whiten_transform_into,
 )
@@ -31,6 +32,9 @@ from decomposition.impl.pca_rank import pca_rank_finish
 from checks.soft_f64 import sf64_from_f32
 from std.memory import bitcast
 from x_decomp.pca_mle import mle_scratch_words, pca_mle_rank_host
+from x_decomp.cells import F32Ptr
+from x_decomp.host import HostExec
+from x_decomp.pca_randomized import NoRDev, pca_randomized_fit_run
 from decomposition.host.pca_oracle import (
     host_pca_fit,
     host_pca_validate,
@@ -165,15 +169,42 @@ def pca_mle_rank_host_run(ev: _F32P, d: Int, n: Int) raises -> Int:
     return rank
 
 
+def pca_project_host_run(
+    x_address: Int, mp: _F32P, cp: _F32P, sp: _F32P, op: _F32P,
+    nr: Int, nf: Int, nc: Int, whiten: Bool,
+) raises:
+    """`transform(X)` of the model just fitted on X, on the host: the
+    `pca_transform` / `pca_whiten_transform` entries' refusals and
+    arithmetic, the whitened scale from the fit's own row count. Nothing to
+    write when no component is kept."""
+    if whiten:
+        if nr < 1 or nf < 1 or nc < 1 or nc > nf or nr < 2:
+            raise Error("PCA whitening requires positive rows/features/components and fit_rows>=2")
+        if nr > 2147483647 or nf > 2147483647 or nc > 2147483647:
+            raise Error("PCA whitening dimensions exceed Int32")
+        if nr > 2147483647 // nf or nc > 2147483647 // nf:
+            raise Error("PCA whitening matrix cell count exceeds Int32")
+        pca_whiten_check_host(x_address, Int(mp), Int(cp), Int(sp), Int(op), nr * nf, nf, nc, nr * nc)
+        pca_whiten_host_run(x_address, Int(mp), Int(cp), Int(sp), op, nr, nf, nc, nr, nr * nf, nr * nc, False)
+        return
+    if nc < 1:
+        return
+    _positive(nr, "n_rows")
+    _positive(nf, "n_features")
+    host_pca_transform_into(f32_ptr(x_address), mp, cp, op, nr, nf, nc, host_predict_task_count(nr))
+
+
 def pca_fit_owned_host_run(
     x_address: Int, cp: _F32P, mp: _F32P, ep: _F32P, rp: _F32P, sp: _F32P,
     nr: Int, nf: Int, nc: Int, dense: Bool, keep_mode: Int, frac: Float64,
+    op: _F32P, project: Bool, whiten: Bool,
 ) raises -> Tuple[Int, Float64]:
-    """`PCA.fit` for the exact solvers as one host operation (the GPU
-    binding's `decomposition/impl/pca_owner.mojo::pca_fit_owned`): the fit,
-    then for a float (`keep_mode` 1) or "mle" (`keep_mode` 2)
-    `n_components` the kept count and the dropped tail's noise variance.
-    Returns (kept count, noise variance)."""
+    """`PCA.fit` / `fit_transform` for the exact solvers as one host
+    operation (the GPU binding's `decomposition/impl/pca_owner.mojo::
+    pca_fit_owned`): the fit, then for a float (`keep_mode` 1) or "mle"
+    (`keep_mode` 2) `n_components` the kept count and the dropped tail's
+    noise variance, then with `project` X's projection at `op`. Returns
+    (kept count, noise variance)."""
     if keep_mode < 0 or keep_mode > 2:
         raise Error("pca_fit_owned: unknown n_components mode")
     var noise: Float64
@@ -182,16 +213,37 @@ def pca_fit_owned_host_run(
         noise = pca_fit_full_host_run(x_address, cp, mp, ep, rp, sp, nr, nf, nc)
     else:
         noise = pca_fit_host_run(x_address, cp, mp, ep, rp, sp, nr, nf, nc)
-    if keep_mode == 0:
-        return (nc, noise)
-    var keep_in = -1
-    if keep_mode == 2:
-        keep_in = pca_mle_rank_host_run(ep, nc, nr)
-    var tail: Float64 = 0.0
-    var keep = 0
-    if nc > 0:
-        keep = pca_rank_finish(rp, ep, nc, keep_in, frac, tail)
-    return (keep, tail)
+    var keep = nc
+    if keep_mode != 0:
+        var keep_in = -1
+        if keep_mode == 2:
+            keep_in = pca_mle_rank_host_run(ep, nc, nr)
+        noise = 0.0
+        keep = 0
+        if nc > 0:
+            keep = pca_rank_finish(rp, ep, nc, keep_in, frac, noise)
+    if project:
+        pca_project_host_run(x_address, mp, cp, sp, op, nr, nf, keep, whiten)
+    return (keep, noise)
+
+
+def pca_randomized_owned_host_run(
+    x_address: Int, cp: _F32P, mp: _F32P, ep: _F32P, rp: _F32P, sp: _F32P,
+    nr: Int, nf: Int, nc: Int, oversamples: Int, iterations: Int, auto_iterations: Bool, seed: Int,
+    op: _F32P, project: Bool, whiten: Bool,
+) raises -> Float64:
+    """`PCA(svd_solver='randomized').fit` / `fit_transform` on the host: the
+    decomp lane's randomized driver on the host executor, then with
+    `project` X's projection at `op`. Returns the noise variance."""
+    var noise = pca_randomized_fit_run[HostExec, NoRDev, False](
+        F32Ptr(unsafe_from_address=x_address), F32Ptr(unsafe_from_address=Int(cp)),
+        F32Ptr(unsafe_from_address=Int(mp)), F32Ptr(unsafe_from_address=Int(ep)),
+        F32Ptr(unsafe_from_address=Int(rp)), F32Ptr(unsafe_from_address=Int(sp)),
+        nr, nf, nc, oversamples, iterations, auto_iterations, seed,
+    )
+    if project:
+        pca_project_host_run(x_address, mp, cp, sp, op, nr, nf, nc, whiten)
+    return noise
 
 
 def tsvd_fit_host_run(

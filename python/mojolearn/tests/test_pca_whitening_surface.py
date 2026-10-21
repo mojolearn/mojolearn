@@ -28,23 +28,31 @@ class FakePCA:
         self.calls = []
         self.nonfinite = False
 
-    def pca_fit(self, x, components, mean, explained, ratio, singular, params):
+    def pca_fit_owned(self, x, components, mean, explained, ratio, singular, params, frac):
         self.calls.append(('fit', list(params)))
-        rows, features, count = params
+        rows, features, count, dense, keep_mode = params
         floats(components, count * features)[:] = np.eye(count, features, dtype=np.float32).ravel()
         floats(mean, features)[:] = 0
         floats(explained, count)[:] = 1
         floats(ratio, count)[:] = 1 / count
         floats(singular, count)[:] = 2
-        return 0.
+        return count, 0.
+
+    def _refuse(self):
+        # The real binding refuses a non-finite output by device scan, with
+        # this sentence, as a plain Exception.
+        if self.nonfinite:
+            raise Exception("PCA whitening requires finite inputs and outputs")
 
     def pca_whiten_transform(self, x, mean, components, singular, out, params):
         self.calls.append(('whiten', list(params)))
-        floats(out, params[0] * params[2])[:] = np.nan if self.nonfinite else .25
+        floats(out, params[0] * params[2])[:] = .25
+        self._refuse()
 
     def pca_whiten_inverse_transform(self, scores, components, singular, mean, out, params):
         self.calls.append(('inverse_whiten', list(params)))
-        floats(out, params[0] * params[1])[:] = np.inf if self.nonfinite else .5
+        floats(out, params[0] * params[1])[:] = .5
+        self._refuse()
 
     def pca_transform(self, x, mean, components, out, params):
         self.calls.append(('plain', list(params)))
@@ -77,7 +85,7 @@ def test_whitening_abi_uses_fit_row_count_and_keeps_state(fake):
     before = x.tobytes()
     scores = model.transform(x[:3])
     model.inverse_transform(scores[:1])
-    assert fake.calls == [('fit', [8, 2, 2]), ('whiten', [3, 2, 2, 8]),
+    assert fake.calls == [('fit', [8, 2, 2, 0, 0]), ('whiten', [3, 2, 2, 8]),
                           ('inverse_whiten', [1, 2, 2, 8])]
     assert x.tobytes() == before
     assert all(getattr(model, name).tobytes() == value for name, value in state.items())
@@ -87,17 +95,27 @@ def test_plain_transform_abi_unchanged(fake):
     x = np.zeros((8, 2), dtype=np.float32)
     model = PCA(2, whiten=False).fit(x)
     model.inverse_transform(model.transform(x[:3]))
-    assert fake.calls == [('fit', [8, 2, 2]), ('plain', [3, 2, 2]),
+    assert fake.calls == [('fit', [8, 2, 2, 0, 0]), ('plain', [3, 2, 2]),
                           ('inverse_plain', [3, 2, 2, 1])]
 
 
 @pytest.mark.parametrize('name,value', [('singular_values_', -1.),
-    ('singular_values_', np.inf), ('explained_variance_', -1.),
-    ('components_', np.nan), ('mean_', np.inf)])
-def test_invalid_whitening_state_refused_before_native(fake, name, value):
-    model = PCA(2, whiten=True).fit(np.zeros((8, 2), dtype=np.float32))
+    ('singular_values_', np.inf), ('components_', np.nan), ('mean_', np.inf)])
+def test_invalid_whitening_state_refused_by_the_native_call(name, value):
+    # The whitened transforms read components_, mean_ and singular_values_
+    # and refuse non-finite values and negative singular values themselves,
+    # in the call that transforms; nothing is written to the output.
+    x = np.random.default_rng(3).random((8, 2), dtype=np.float32)
+    model = PCA(2, whiten=True).fit(x)
     np.asarray(getattr(model, name)).flat[0] = value
     with pytest.raises(ValueError, match='finite|nonnegative'):
+        model.transform(x[:1])
+
+
+def test_whitening_state_layout_refused_before_native(fake):
+    model = PCA(2, whiten=True).fit(np.zeros((8, 2), dtype=np.float32))
+    model.singular_values_ = np.ones(2, dtype=np.float64)
+    with pytest.raises(ValueError, match='float32 singular_values_'):
         model.transform(np.zeros((1, 2), dtype=np.float32))
     assert len(fake.calls) == 1
 
@@ -122,9 +140,9 @@ def test_nonfinite_input_and_output_refused(fake):
     with pytest.raises(ValueError, match='Input X contains NaN'):
         model.inverse_transform(bad)
     fake.nonfinite = True
-    with pytest.raises(ValueError, match='nonfinite output'):
+    with pytest.raises(ValueError, match='requires finite inputs and outputs'):
         model.transform(x)
-    with pytest.raises(ValueError, match='nonfinite output'):
+    with pytest.raises(ValueError, match='requires finite inputs and outputs'):
         model.inverse_transform(x)
 
 

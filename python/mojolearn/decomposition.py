@@ -355,6 +355,16 @@ class PCA(NumericModeMixin):
             ``svd_solver="full"`` on a wide matrix outside ``"identical"``
             mode.
         """
+        self._fit(X, False)
+        return self
+
+    def _fit(self, X, project):
+        """The fit, and with `project` X's projection onto the kept
+        components (`fit_transform`), as ONE native call: the exact solvers
+        through `pca_fit_owned` (decomposition/impl/pca_owner.mojo), the
+        randomized one through `pca_fit_randomized`. Python checks the
+        arguments, allocates the outputs at the fitted component count and
+        keeps the prefix the call reports. Returns the projection or None."""
         if self.svd_solver not in self._SOLVERS:
             raise NotImplementedError(
                 f"mojolearn PCA: svd_solver={self.svd_solver!r} is not "
@@ -372,7 +382,7 @@ class PCA(NumericModeMixin):
         if self.whiten:
             self._whiten_binding()
         if self.svd_solver in self._RANDOM_SOLVERS:
-            return self._fit_randomized(X)
+            return self._fit_randomized(X, project)
         x, copied = as_f32_c(_dense(X), ndim=2, name="X")
         # One feature is a fit scikit-learn makes (check_fit2d_1feature): the
         # covariance arm takes the 1 x 1 covariance without a rotation
@@ -426,22 +436,31 @@ class PCA(NumericModeMixin):
                 "mojolearn PCA: this build of _mojolearn_estimators does not "
                 "export pca_fit_owned; rebuild it with bindings/build_estimators.sh"
             )
-        d = x.shape[1]
+        n, d = x.shape
         components = empty((nc, d), "<f4")
         mean = empty((d,), "<f4")
         variance = empty((nc,), "<f4")
         ratio = empty((nc,), "<f4")
         singular = empty((nc,), "<f4")
-        # ONE native call: the fit, the rank choice and the dropped tail's
-        # noise variance. The kept components are the prefix of the outputs.
-        keep, noise = fit_owned(
-            addr_ro(x, name="x"), addr(components, name="components_"), addr(mean, name="mean_"),
+        z = empty((n, nc), "<f4") if project else None
+        # ONE native call: the fit, the rank choice, the dropped tail's noise
+        # variance and (fit_transform) the projection. The kept components
+        # are the prefix of the outputs.
+        keep, noise = self._native(
+            fit_owned, addr_ro(x, name="x"), addr(components, name="components_"), addr(mean, name="mean_"),
             addr(variance, name="explained_variance_"), addr(ratio, name="explained_variance_ratio_"),
-            addr(singular, name="singular_values_"), [x.shape[0], d, nc, int(dense), keep_mode], frac,
+            addr(singular, name="singular_values_"), addr(z, name="out") if project else 0,
+            [n, d, nc, int(dense), keep_mode, int(bool(self.whiten))], frac,
         )
         if keep != nc:
             components, variance = components[:keep], variance[:keep]
             ratio, singular = ratio[:keep], singular[:keep]
+            if project:
+                z = z.reshape((n * nc,))[:n * keep].reshape((n, keep))
+        self._keep_fit(copied, components, mean, variance, ratio, singular, noise, keep, d, n)
+        return z
+
+    def _keep_fit(self, copied, components, mean, variance, ratio, singular, noise, keep, d, n):
         self.input_copied_ = copied
         self.components_ = components
         self.mean_ = mean
@@ -451,16 +470,15 @@ class PCA(NumericModeMixin):
         self.noise_variance_ = noise
         self.n_components_ = keep
         self.n_features_in_ = d
-        self.n_samples_ = x.shape[0]
-        return self
+        self.n_samples_ = n
 
-    def _fit_randomized(self, X):
+    def _fit_randomized(self, X, project):
         """svd_solver='randomized' (scikit-learn `_pca.py::_fit_truncated`):
         the centered data through `mojolearn.randomized_svd`, then
         svd_flip on Vt; explained variance S^2 / (n - 1), the ratio against
         the total sample variance, the noise variance the mean of what is
         left. random_state None means seed 0 (the Philox stream). One
-        native call (x_decomp/pca_randomized.mojo)."""
+        native call (x_decomp/pca_randomized.mojo through `pca_fit_randomized`)."""
         x, copied = as_f32_c(_dense(X), ndim=2, name="X")
         if x.shape[0] < 2 or x.shape[1] < 2:
             raise ValueError(_too_small(x.shape, "PCA"))
@@ -477,12 +495,11 @@ class PCA(NumericModeMixin):
             raise ValueError("n_oversamples must be nonnegative")
         auto = isinstance(self.iterated_power, str) and self.iterated_power == "auto"
         iterations = 0 if auto else int(self.iterated_power)
-        binding = self._bind("_mojolearn_x_decomp")
-        fit = getattr(binding, "x_decomp_pca_randomized", None)
+        fit = getattr(self._bind("_mojolearn_estimators"), "pca_fit_randomized", None)
         if fit is None:
             raise NotImplementedError(
-                "mojolearn PCA: this build of _mojolearn_x_decomp does not export "
-                "x_decomp_pca_randomized; rebuild it with bindings/build_x_decomp.sh"
+                "mojolearn PCA: this build of _mojolearn_estimators does not "
+                "export pca_fit_randomized; rebuild it with bindings/build_estimators.sh"
             )
         n, d = x.shape
         components = empty((nc, d), "<f4")
@@ -490,23 +507,16 @@ class PCA(NumericModeMixin):
         variance = empty((nc,), "<f4")
         ratio = empty((nc,), "<f4")
         singular = empty((nc,), "<f4")
+        z = empty((n, nc), "<f4") if project else None
         noise = self._native(
             fit, addr_ro(x, name="x"), addr(components, name="components_"), addr(mean, name="mean_"),
             addr(variance, name="explained_variance_"), addr(ratio, name="explained_variance_ratio_"),
-            addr(singular, name="singular_values_"), [n, d, nc, oversamples, iterations, int(auto)],
+            addr(singular, name="singular_values_"), addr(z, name="out") if project else 0,
+            [n, d, nc, oversamples, iterations, int(auto), int(bool(self.whiten))],
             seed & 0xFFFFFFFF,  # glue: the Philox seed is taken mod 2^32
         )
-        self.input_copied_ = copied
-        self.components_ = components
-        self.mean_ = mean
-        self.explained_variance_ = variance
-        self.explained_variance_ratio_ = ratio
-        self.singular_values_ = singular
-        self.noise_variance_ = noise
-        self.n_components_ = nc
-        self.n_features_in_ = d
-        self.n_samples_ = n
-        return self
+        self._keep_fit(copied, components, mean, variance, ratio, singular, noise, nc, d, n)
+        return z
 
     def transform(self, X):
         """Project ``X`` onto the principal components.
@@ -566,7 +576,7 @@ class PCA(NumericModeMixin):
         Z : Array of shape (n_samples, ``n_components_``), float32
             The projected data.
         """
-        return self.fit(X, y=y).transform(X)
+        return self._fit(X, True)
 
     def inverse_transform(self, X):
         """Map projected data back to the original feature space.

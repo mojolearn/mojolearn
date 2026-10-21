@@ -114,7 +114,7 @@ from decomposition.impl.linalg.detail.svd_full import pca_full_validate
 from glm.impl.center_device import col_sums_device, col_sums_pair_device, center_device, scale_rows_device
 from glm.impl.lm_finish import lm_intercept, lm_means_finish
 from decomposition.impl.pca_rank import pca_rank_finish
-from decomposition.impl.pca_owner import pca_fit_owned
+from decomposition.impl.pca_owner import pca_fit_owned, pca_randomized_owned
 from glm.impl.ridge_multi import MULTIOUT_RIDGE, ridge_fit_multi_host, ridge_predict_multi_host
 from core.estimators_impl import (
     pca_whiten_overlap_check,
@@ -745,37 +745,88 @@ def pca_fit_owned_binding(
     explained_addr: PythonObject,
     ratio_addr: PythonObject,
     singular_addr: PythonObject,
+    out_addr: PythonObject,
     params: PythonObject,
     frac: PythonObject,
 ) raises -> PythonObject:
-    """`PCA.fit` for the exact solvers in one call
+    """`PCA.fit` / `fit_transform` for the exact solvers in one call
     (decomposition/impl/pca_owner.mojo): the five public arrays written at
-    n_components, then the kept count. params: n_rows, n_features,
+    n_components, the kept count chosen, and with an output address (0:
+    none) X projected onto the kept components. params: n_rows, n_features,
     n_components, dense (1: svd_solver='full'), keep mode (0: every
-    component, 1: the fraction `frac`, 2: "mle"). Returns (kept count,
-    noise variance)."""
-    if len(params) != 5:
-        raise Error("pca_fit_owned: params must contain n_rows, n_features, n_components, dense, keep mode")
+    component, 1: the fraction `frac`, 2: "mle"), whiten. Returns (kept
+    count, noise variance)."""
+    if len(params) != 6:
+        raise Error("pca_fit_owned: params must contain n_rows, n_features, n_components, dense, keep mode, whiten")
     var xp = _f32_ptr(Int(py=x_addr))
     var cp = _f32_ptr(Int(py=components_addr))
     var mp = _f32_ptr(Int(py=mean_addr))
     var ep = _f32_ptr(Int(py=explained_addr))
     var rp = _f32_ptr(Int(py=ratio_addr))
     var sp = _f32_ptr(Int(py=singular_addr))
+    var oa = Int(py=out_addr)
+    var op = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=oa)  # read only when oa != 0
     var nr = Int(py=params[0])
     var nf = Int(py=params[1])
     var nc = Int(py=params[2])
     var dense = Int(py=params[3]) != 0
     var keep_mode = Int(py=params[4])
+    var whiten = Int(py=params[5]) != 0
     var fraction = Float64(py=frac)
     var kept = 0
     var noise = Float64(0.0)
     with GILReleased(Python()):
         var ctx = process_ctx[_DEVCTX_SLOT]()
-        var fitted = pca_fit_owned(ctx, xp, cp, mp, ep, rp, sp, nr, nf, nc, dense, keep_mode, fraction)
+        var fitted = pca_fit_owned(
+            ctx, xp, cp, mp, ep, rp, sp, nr, nf, nc, dense, keep_mode, fraction, op, oa != 0, whiten
+        )
         kept = fitted[0]
         noise = fitted[1]
     return Python.tuple(PythonObject(kept), PythonObject(noise))
+
+
+def pca_fit_randomized_binding(
+    x_addr: PythonObject,
+    components_addr: PythonObject,
+    mean_addr: PythonObject,
+    explained_addr: PythonObject,
+    ratio_addr: PythonObject,
+    singular_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+    seed: PythonObject,
+) raises -> PythonObject:
+    """`PCA(svd_solver='randomized').fit` / `fit_transform` in one call
+    (decomposition/impl/pca_owner.mojo `pca_randomized_owned`). params:
+    n_rows, n_features, n_components, n_oversamples, power iterations, auto
+    (1: iterated_power='auto'), whiten; seed: the Philox seed mod 2^32.
+    With an output address (0: none) X is projected. Returns the noise
+    variance."""
+    if len(params) != 7:
+        raise Error("pca_fit_randomized: params must contain rows, features, components, oversamples, iterations, auto, whiten")
+    var xp = _f32_ptr(Int(py=x_addr))
+    var cp = _f32_ptr(Int(py=components_addr))
+    var mp = _f32_ptr(Int(py=mean_addr))
+    var ep = _f32_ptr(Int(py=explained_addr))
+    var rp = _f32_ptr(Int(py=ratio_addr))
+    var sp = _f32_ptr(Int(py=singular_addr))
+    var oa = Int(py=out_addr)
+    var op = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=oa)  # read only when oa != 0
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var nc = Int(py=params[2])
+    var oversamples = Int(py=params[3])
+    var iterations = Int(py=params[4])
+    var auto = Int(py=params[5]) != 0
+    var whiten = Int(py=params[6]) != 0
+    var s = Int(py=seed)
+    var noise = Float64(0.0)
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        noise = pca_randomized_owned(
+            ctx, xp, cp, mp, ep, rp, sp, nr, nf, nc, oversamples, iterations, auto, s, op, oa != 0, whiten
+        )
+    return PythonObject(noise)
 
 
 def lm_center_binding(x_addr: PythonObject, mu_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
@@ -1496,6 +1547,7 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[lm_intercept_binding]("lm_intercept")
         m.def_function[pca_rank_finish_binding]("pca_rank_finish")
         m.def_function[pca_fit_owned_binding]("pca_fit_owned")
+        m.def_function[pca_fit_randomized_binding]("pca_fit_randomized")
         m.def_function[lm_center_binding]("lm_center")
         m.def_function[lm_scale_rows_binding]("lm_scale_rows")
         m.def_function[ols_predict_binding]("ols_predict")

@@ -239,7 +239,7 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
     def close(mut self) raises:
         # Views may share a device id, so only the allocation ledger frees.
         for i in range(len(self.allocations) - 1, -1, -1):  # driver-loop: over this fit's device allocations
-            D.free(self.allocations[i])
+            Self.D.free(self.allocations[i])
         self.allocations.clear()
 
     def r(self, a: Int) -> Int:
@@ -261,7 +261,7 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
         return self.add(self._host_words(rows * cols), -1, rows, cols)
 
     def device_output(mut self, rows: Int, cols: Int) raises -> Int:
-        var handle = D.alloc(max(rows * cols, 1))
+        var handle = Self.D.alloc(max(rows * cols, 1))
         self.allocations.append(handle)
         return self.add(0, handle, rows, cols)
 
@@ -271,7 +271,7 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
             var n = self.mats[a].rows * self.mats[a].cols
             var words = self._host_words(n)
             if n:
-                D.download(self.mats[a].dev, F32Ptr(unsafe_from_address=words), n)
+                Self.D.download(self.mats[a].dev, F32Ptr(unsafe_from_address=words), n)
             self.mats[a].host = words
             self.mats[a].dev = -1
         return self.mats[a].host
@@ -284,10 +284,10 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
         if self.mats[a].dev < 0:
             var n = self.mats[a].rows * self.mats[a].cols
             var words = self.host(a)
-            var handle = D.alloc(max(n, 1))
+            var handle = Self.D.alloc(max(n, 1))
             self.allocations.append(handle)
             if n:
-                D.upload(handle, F32Ptr(unsafe_from_address=words), n)
+                Self.D.upload(handle, F32Ptr(unsafe_from_address=words), n)
             self.mats[a].dev = handle
             self.mats[a].host = 0
         return self.mats[a].dev
@@ -297,7 +297,7 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
         if count <= 0:
             return
         if self.mats[a].host == 0:
-            D.download(self.mats[a].dev, dst, count)
+            Self.D.download(self.mats[a].dev, dst, count)
         else:
             memcpy(dest=dst, src=F32Ptr(unsafe_from_address=self.mats[a].host), count=count)
 
@@ -334,20 +334,20 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
         var cols = self.mats[a].cols
         var lb = self.mats[ib].rows * self.mats[ib].cols
         var lc = self.mats[ic].rows * self.mats[ic].cols
-        comptime if RES:
+        comptime if Self.RES:
             if rows * cols:
                 var out = self.device_output(rows, cols)
                 var da = self.device(a)
                 var db = self.device(ib)
                 var dc = self.device(ic)
-                D.ew(da, db, dc, self.mats[out].dev, op, rows * cols, cols, lb, bm, lc, cm, scalar)
+                Self.D.ew(da, db, dc, self.mats[out].dev, op, rows * cols, cols, lb, bm, lc, cm, scalar)
                 return out
         var out = self.zeros(rows, cols)
         if rows * cols:
             var pa = self.ptr(a)
             var pb = self.ptr(ib)
             var pc = self.ptr(ic)
-            ew_run[E](op, pa, pb, lb, bm, pc, lc, cm, self.ptr(out), rows * cols, cols, Float32(scalar))
+            ew_run[Self.E](op, pa, pb, lb, bm, pc, lc, cm, self.ptr(out), rows * cols, cols, Float32(scalar))
         return out
 
     def mm(mut self, a: Int, b: Int, ta: Bool = False, tb: Bool = False) raises -> Int:
@@ -357,18 +357,18 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
         var n = self.mats[b].rows if tb else self.mats[b].cols
         if k != k2:
             raise Error("x_decomp: randomized PCA has an invalid internal matrix product")
-        comptime if RES:
+        comptime if Self.RES:
             if m * n and m * k and k * n:
                 var out = self.device_output(m, n)
                 var da = self.device(a)
                 var db = self.device(b)
-                D.gemm(da, db, self.mats[out].dev, m, k, n, ta, tb)
+                Self.D.gemm(da, db, self.mats[out].dev, m, k, n, ta, tb)
                 return out
         var out = self.zeros(m, n)
         if m * n:
             var pa = self.ptr(a)
             var pb = self.ptr(b)
-            _ = gemm_run[E](pa, pb, self.ptr(out), m, k, n, ta, tb)
+            _ = gemm_run[Self.E](pa, pb, self.ptr(out), m, k, n, ta, tb)
         return out
 
     def sum(mut self, a: Int, columns: Bool) raises -> Int:
@@ -376,21 +376,21 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
         var cols = self.mats[a].cols
         var nr = 1 if columns else rows
         var nc = cols if columns else 1
-        comptime if RES:
+        comptime if Self.RES:
             if rows * cols:
                 var out = self.device_output(nr, nc)
                 var da = self.device(a)
                 if columns:
-                    D.colsum(da, self.mats[out].dev, rows, cols)
+                    Self.D.colsum(da, self.mats[out].dev, rows, cols)
                 else:
-                    D.rowsum(da, self.mats[out].dev, rows, cols)
+                    Self.D.rowsum(da, self.mats[out].dev, rows, cols)
                 return out
         var out = self.zeros(nr, nc)
         var pa = self.ptr(a)
         if columns:
-            E.colsum(pa, self.ptr(out), rows, cols)
+            Self.E.colsum(pa, self.ptr(out), rows, cols)
         else:
-            E.rowsum(pa, self.ptr(out), rows, cols)
+            Self.E.rowsum(pa, self.ptr(out), rows, cols)
         return out
 
     def word(mut self, a: Int) raises -> Float64:
@@ -410,12 +410,12 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
         mut self, a: Int, idx: Int, rows: Int, cols: Int, op: Int, count: Int, a1: Int, a2: Int, a3: Int,
         ist: Int, ioff: Int, nsrc: Int, ndst: Int, nidx: Int, resident: Bool,
     ) raises -> Int:
-        comptime if RES:
+        comptime if Self.RES:
             if rows * cols and resident:
                 var out = self.device_output(rows, cols)
                 var da = self.device(a)
                 var di = self.device(idx)
-                D.move(da, di, self.mats[out].dev, op, count, a1, a2, a3, ist, ioff, nsrc, ndst, nidx)
+                Self.D.move(da, di, self.mats[out].dev, op, count, a1, a2, a3, ist, ioff, nsrc, ndst, nidx)
                 return out
         var out = self.zeros(rows, cols)
         if rows * cols:
@@ -428,7 +428,7 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
         var rows = self.mats[idx].rows * self.mats[idx].cols
         var cols = self.mats[a].cols
         return self.move(a, idx, rows, cols, _MV_TAKE_ROWS, rows * cols, cols, 0, 0, 1, 0,
-                         self.mats[a].rows * cols, rows * cols, rows, RES)
+                         self.mats[a].rows * cols, rows * cols, rows, Self.RES)
 
     def columns(mut self, a: Int, start: Int, stop: Int) raises -> Int:
         """`_M.cols(start, stop)`: the device gather for a resident matrix,
@@ -457,29 +457,29 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
             return self.add(self.mats[a].host, self.mats[a].dev, cols, rows)
         var one = self.zeros(1, 1)
         return self.move(a, one, cols, rows, _MV_TRANSPOSE, rows * cols, rows, cols, 0, 0, 0,
-                         rows * cols, rows * cols, 1, RES)
+                         rows * cols, rows * cols, 1, Self.RES)
 
     def strided_first(mut self, a: Int) raises -> Int:
         """`_Kit.strided(A, 1, 1)`: the first value as a 1 x 1 matrix."""
         var idx = self.constant(Float32(0))
         var n = self.mats[a].rows * self.mats[a].cols
-        return self.move(a, idx, 1, 1, _MV_TAKE_COLS, 1, 1, 1, 0, 0, 0, n, 1, 1, RES)
+        return self.move(a, idx, 1, 1, _MV_TAKE_COLS, 1, 1, 1, 0, 0, 0, n, 1, 1, Self.RES)
 
     def order(mut self, a: Int) raises -> Int:
         """`_Kit.order`: the stable ascending order as n x 1 exact floats;
         NaN refused."""
         var n = self.mats[a].rows * self.mats[a].cols
-        comptime if RES:
+        comptime if Self.RES:
             if n:
                 var maximum = self.device_output(1, 1)
                 var da = self.device(a)
-                D.reduce(da, self.mats[maximum].dev, n, _SEL_MAX)
+                Self.D.reduce(da, self.mats[maximum].dev, n, _SEL_MAX)
                 var v = self.word(maximum)
                 if v != v:
                     raise Error("x_decomp: a NaN has no order (refused)")
                 var out = self.device_output(n, 1)
                 var count = self.device_output(1, 1)
-                D.order_f(da, da, self.mats[out].dev, self.mats[count].dev, n, 0, 0)
+                Self.D.order_f(da, da, self.mats[out].dev, self.mats[count].dev, n, 0, 0)
                 return out
         var out = self.zeros(n, 1)
         if n:
@@ -504,28 +504,28 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
     def rand(mut self, rows: Int, cols: Int, seed: Int) raises -> Int:
         """`_Kit.rand(rows, cols, seed, 30, 1)`."""
         var count = rows * cols
-        comptime if RES:
+        comptime if Self.RES:
             if count >= _RAND_RESIDENT_MIN:
                 var out = self.device_output(rows, cols)
-                D.rand(self.mats[out].dev, count, seed, _RSVD_STREAM, _RSVD_KIND)
+                Self.D.rand(self.mats[out].dev, count, seed, _RSVD_STREAM, _RSVD_KIND)
                 return out
         var out = self.zeros(rows, cols)
         if count:
-            rand_run[E](self.ptr(out), count, seed, _RSVD_STREAM, _RSVD_KIND)
+            rand_run[Self.E](self.ptr(out), count, seed, _RSVD_STREAM, _RSVD_KIND)
         return out
 
     def orth(mut self, a: Int) raises -> Int:
         """`_Kit.orth`: a copy of a with its columns orthonormalized."""
         var rows = self.mats[a].rows
         var cols = self.mats[a].cols
-        comptime if RES:
+        comptime if Self.RES:
             if rows * cols:
                 var out = self.device_output(rows, cols)
                 var da = self.device(a)
-                D.orth(da, self.mats[out].dev, rows, cols)
+                Self.D.orth(da, self.mats[out].dev, rows, cols)
                 return out
         var out = self.copy_host(a)
-        E.orth(self.ptr(out), rows, cols)
+        Self.E.orth(self.ptr(out), rows, cols)
         return out
 
     def absmax_signs(mut self, a: Int, columns: Bool) raises -> Int:
@@ -535,17 +535,17 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
         var cols = self.mats[a].cols
         var count = cols if columns else rows
         var out: Int
-        comptime if RES:
+        comptime if Self.RES:
             out = self.device_output(1, count)
         else:
             out = self.zeros(1, count)
         if count and rows * cols:
-            comptime if RES:
+            comptime if Self.RES:
                 var da = self.device(a)
-                D.absmax(da, self.mats[out].dev, rows, cols, columns)
+                Self.D.absmax(da, self.mats[out].dev, rows, cols, columns)
             else:
                 var pa = self.ptr(a)
-                _ = absmax_sign_run[E](pa, self.ptr(out), rows, cols, columns)
+                _ = absmax_sign_run[Self.E](pa, self.ptr(out), rows, cols, columns)
         if not columns:
             out = self.transpose(out)
         return self.signs(out)
@@ -554,14 +554,14 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
         """`_Kit.order_small`: the stable ascending order (n <= 65536)."""
         var count = self.mats[a].rows * self.mats[a].cols
         var out: Int
-        comptime if RES:
+        comptime if Self.RES:
             out = self.device_output(count, 1)
         else:
             out = self.zeros(count, 1)
         if count:
-            comptime if RES:
+            comptime if Self.RES:
                 var da = self.device(a)
-                D.order_small(da, self.mats[out].dev, count)
+                Self.D.order_small(da, self.mats[out].dev, count)
             else:
                 var pa = self.ptr(a)
                 order_small_run(pa, self.ptr(out), count)
@@ -576,13 +576,13 @@ struct RKit[E: Exec, D: RDev, RES: Bool](Movable):
         var ps = self.ptr(s)
         var pv = self.ptr(v)
         var resident_svd = False
-        comptime if RES:
-            resident_svd = D.has_svd() and rows >= cols and cols >= 1
+        comptime if Self.RES:
+            resident_svd = Self.D.has_svd() and rows >= cols and cols >= 1
         if resident_svd:
             var da = self.device(a)
-            D.svd(da, ps, pv, rows, cols)
+            Self.D.svd(da, ps, pv, rows, cols)
         else:
-            svd_run[E](self.ptr(a), ps, pv, rows, cols)
+            svd_run[Self.E](self.ptr(a), ps, pv, rows, cols)
         var negated = self.ew(_OP_SCALE, s, scalar=-1.0)
         var order = self.order(negated)
         var st = self.transpose(s)
