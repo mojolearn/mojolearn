@@ -156,7 +156,10 @@ def program_execute_run[E: Exec & Movable & Deinitable, KIND: Int](
     swap(held, s[].prog_tape)
     for k in range(len(buffers)):  # driver-loop: over input owners
         s[].ex.free(buffers[k])
-    var result = ProgramExecResult(s[].ex.execution_profile_end() if profile else ExecutionProfile())
+    var executor = ExecutionProfile()
+    if profile:
+        executor = s[].ex.execution_profile_end()
+    var result = ProgramExecResult(executor^)
     result.outputs = outputs^
     result.upload_bytes = upload_bytes
     result.input_bytes = input_bytes
