@@ -748,11 +748,260 @@ def recorded_lanes():
     return out
 
 
+# ------------------------------------------------------------------ triage
+
+#: The lanes this audit added (tools/identity_lanes/coverage.py). They read
+#: OWED until a release record admits them.
+NEW_LANES = frozenset({"gp-lml-theta", "cross-vendor-fold", "sequence-moe-backward",
+                       "sequence-export-roundtrip", "sequence-onnx-import",
+                       "transformer-decode-load-state", "safetensors-widen-f16",
+                       "sequence-program-save-load", "hf-causal-lm-stream"})
+
+_BYTE_SESSION = ("covered", ["byte-lm", "byte-lm-resident"],
+                 "the CPU column routes _mojolearn_byte_lm through _byte_lm_trainer_host "
+                 "(host_surface ADAPTED_MODULES), whose TrainerOwnerEntries call it for every "
+                 "SmallByteLanguageModelTrainer step; on a GPU install byte_lm_trainer_step runs the "
+                 "same session ops inside Mojo")
+_DEAD_KIT = "n/a: no live caller (the _expansion_decomp helper that calls it is never called)"
+_MIGRATION_TRAINING = ("owed", [], "migration lane on python/mojolearn/_training_impl.py (running): "
+                       "lane owed after it lands; tools/lane_accounting.py DECLARED_LANELESS already "
+                       "names training.chunked_lm_head_loss and training.mlp_inference_sessions")
+_MIGRATION_MAMBA = ("owed", [], "migration lane on python/mojolearn/_mamba_impl.py and mamba/ (running): "
+                    "mamba2-decode-session and mamba3-decode-session lanes owed after it lands "
+                    "(mamba1-decode-session is the template)")
+
+#: entry -> (status, lanes, why), read by hand where the static reach cannot
+#: see the call (a worker process, a native owner handed the entry, a class
+#: adapter) or where no lane can apply. Each one was checked in the source.
+ANNOTATIONS = {
+    **{e: _BYTE_SESSION for e in ("byte_lm_session_eval", "byte_lm_session_export_gradients",
+                                  "byte_lm_session_export_state", "byte_lm_session_logits",
+                                  "byte_lm_session_next_bytes", "byte_lm_session_open",
+                                  "byte_lm_session_rollback", "byte_lm_session_step")},
+    "knn_classify_neighbors": ("covered", ["par-reference-knn"],
+                               "run in a worker process (_parallel_worker 'neighbor_vote' -> "
+                               "parallel_neighbors_reference._vote); par-* lanes run on two-device boxes"),
+    "knn_regress_neighbors": ("covered", ["par-reference-knn-reg"],
+                              "run in a worker process (_parallel_worker 'neighbor_vote')"),
+    "fold_pair_f32": ("covered", ["cross-vendor-fold"],
+                      "mojolearn.cross_vendor hands it to the native fold at import "
+                      "(_buffer_native('fold_pair_f32')); every ordered_fold and fold_pair runs it"),
+    "ivf_flat_partial_search": ("covered", ["par-ivf"], "run in a worker process (_parallel_worker)"),
+    "ivf_finalize_distances": ("covered", ["par-ivf"], "run in a worker process (_parallel_worker)"),
+    "pca_fit": ("covered", ["pca", "pca-full-whiten", "pca-whiten"],
+                "the native PCA owner is handed it at connect (_native_pca_bridge.connect)"),
+    "x_decomp_pca_mle_rank": ("covered", ["x-decomp-pca-randomized"],
+                              "PCA(n_components='mle') through the native PCA owner (_native_pca_bridge)"),
+    "x_decomp_dev_pca_mle_rank": ("covered", ["x-decomp-pca-randomized"],
+                                  "PCA(n_components='mle') through the native PCA owner (_native_pca_bridge)"),
+    **{e: ("n/a", [], "fast tier only (Apple): the verifier runs identical and refuses a fast process")
+       for e in ("fast_from_bf16", "fast_matmul_bf16", "fast_to_bf16", "public_fast_from_bf16",
+                 "public_fast_to_bf16")},
+    "ops_shape": ("n/a", [], "the verifier's own native-session boundary probe (_verify_graph)"),
+    "covariance": ("n/a", [], "Apple FAST quality probe binding (tools/scoped_gemm_quality.py)"),
+    **{e: ("n/a", [], "no live caller: _expansion_cnn._sgd/_adam/_softmax_xent are never called")
+       for e in ("x_cnn_adam", "x_cnn_sgd", "x_cnn_softmax_xent")},
+    **{e: ("n/a", [], _DEAD_KIT) for e in ("x_decomp_chi2_cdf", "x_decomp_eigh_batch", "x_decomp_knn_select",
+                                           "x_decomp_dev_knn_select", "x_decomp_dev_cd_rows",
+                                           "x_decomp_dev_als_rows", "x_decomp_dev_dict_update")},
+    "ops_metric": ("n/a", [], "no live caller: Session._metric is never called (accuracy and log_loss "
+                              "run through ops_session_call)"),
+    "onnx_from_words": ("n/a", [], "the torch.export import path: needs torch, which a verifier run never "
+                                   "has; the ONNX path is sequence-onnx-import"),
+    **{e: _MIGRATION_TRAINING for e in ("chunked_lm_head_v2_loss", "chunked_lm_head_v2_train",
+                                        "samba_head_loss", "mlp_sessions", "neural_rng",
+                                        "optimizer_finalize")},
+    **{e: _MIGRATION_MAMBA for e in ("mamba2_session_export_state", "mamba2_session_load_state",
+                                     "mamba2_session_open", "mamba3_session_export_state",
+                                     "mamba3_session_load_state", "mamba3_session_open",
+                                     "mamba3_session_step")},
+}
+
+#: (public, op) -> (status, lanes, why) for the public methods.
+PY_ANNOTATIONS = {
+    ("mojolearn.models.ParallelCausalLM", "generate"): (
+        "covered", ["hf-causal-lm", "par-causal-lm"],
+        "the inherited CausalLM.generate (hf-causal-lm) over ParallelCausalLM's forward (par-causal-lm)"),
+}
+
+#: Defines a verifier run provably turns DIVERGENT: the CPU identity gate builds
+#: every host binding with it and requires the covered lanes' parts to move
+#: (docs/VERIFY.md, tools/cpu_identity_gate_check.py).
+GATE_DEFINES = frozenset({"MOJOLEARN_HOST_SABOTAGE"})
+
+
+def triage(row):
+    """(status, lanes, why) for one native row."""
+    if row["entry"] in ANNOTATIONS:
+        status, lanes, why = ANNOTATIONS[row["entry"]]
+        return status, sorted(set(lanes) | set(row["lanes_precise"])), why
+    if row["lanes_precise"]:
+        if set(row["lanes_precise"]) <= NEW_LANES:
+            return "covered (new lane)", row["lanes_precise"], "new lane, OWED until recorded"
+        return "covered", row["lanes_precise"], ""
+    if not row["py_files"]:
+        return "n/a", [], "no Python caller in the package (manifest, tests or Mojo-internal dispatch only)"
+    return "GAP", [], "no lane reaches it"
+
+
+def sabotage_of(row):
+    """(status, text) of one native row's fault-injection arm."""
+    gate = sorted(set(row["sabotage_defines"]) & GATE_DEFINES)
+    other = sorted(set(row["sabotage_defines"]) - GATE_DEFINES)
+    patches = row["sabotage_patches"]
+    bits = []
+    if gate:
+        bits.append("CPU gate " + gate[0].replace("MOJOLEARN_", ""))
+    if other:
+        bits.append(", ".join(d.replace("MOJOLEARN_", "") for d in other[:2]) + (" +%d" % (len(other) - 2)
+                                                                               if len(other) > 2 else ""))
+    if patches:
+        bits.append(f"{len(patches)} seam patch(es)")
+    if bits:
+        return "armed", "; ".join(bits)
+    if not row["changed_kernel"]:
+        return "n/a", "door-only change (conversion, no arithmetic)"
+    return "owed", "no arm reaches " + row["changed_kernel"][0]
+
+
+def _short(lanes, n=3):
+    if not lanes:
+        return "-"
+    return ", ".join(f"`{l}`" for l in lanes[:n]) + (f" +{len(lanes) - n}" if len(lanes) > n else "")
+
+
+def render_markdown(audit, path):
+    nat, py = audit["native"], audit["python"]
+    tri = [(r, triage(r), sabotage_of(r)) for r in nat]
+    count = defaultdict(int)
+    for _, (st, _, _), _ in tri:
+        count[st] += 1
+    sab = defaultdict(int)
+    for _, (st, _, _), (ss, _) in tri:
+        if not st.startswith("n/a"):
+            sab[ss] += 1
+    lines = []
+    w = lines.append
+    w("# Verifier coverage of the endpoints changed since the last release (2026-10-21)")
+    w("")
+    w(f"Release gate (Andrew, 2026-10-21): every endpoint that is new or changed since the last published "
+      f"release is reached by a verifier lane and by a fault-injection arm the verifier or a check provably "
+      f"catches. Range `{audit['base']}..{audit['head']}`. Generated by `tools/verify_coverage_audit.py` "
+      f"(static: the export walk of `tools/public_runtime_inventory.py`, `tools/lane_select.py`'s Mojo "
+      f"definition graph, and a scoped name closure from each lane's own code); the rows marked by hand are "
+      f"the `ANNOTATIONS` table in that file, each checked in the source.")
+    w("")
+    w("Regenerate:")
+    w("")
+    w("```sh")
+    w(f"python3 tools/verify_coverage_audit.py --base {audit['base']} --json <audit.json> --markdown "
+      f"docs/plans/VERIFY_COVERAGE_20261021.md")
+    w("```")
+    w("")
+    w("## Summary")
+    w("")
+    w("Native entries (one row per registration; a GPU binding and its host twin are two rows):")
+    w("")
+    w("| status | rows |")
+    w("|---|---|")
+    for st in ("covered", "covered (new lane)", "n/a", "owed", "GAP"):
+        w(f"| {st} | {count.get(st, 0)} |")
+    w(f"| total | {len(nat)} |")
+    w("")
+    w("Fault-injection arms, over the rows that are not n/a:")
+    w("")
+    w("| arm | rows |")
+    w("|---|---|")
+    for ss in ("armed", "n/a", "owed"):
+        w(f"| {ss} | {sab.get(ss, 0)} |")
+    w("")
+    pst = defaultdict(int)
+    prow = []
+    for r in py:
+        key = (r["public"], r["op"])
+        if key in PY_ANNOTATIONS:
+            st, lanes, why = PY_ANNOTATIONS[key]
+        elif r["lanes"]:
+            st = "covered (new lane)" if set(r["lanes"]) <= NEW_LANES else "covered"
+            lanes, why = r["lanes"], ""
+        else:
+            st, lanes, why = "GAP", [], "no lane reaches it"
+        pst[st] += 1
+        prow.append((r, st, lanes, why))
+    w(f"Public Python methods whose call path changed: {len(py)} "
+      + ", ".join(f"{k} {v}" for k, v in sorted(pst.items())) + ".")
+    w("")
+    w("A lane that reaches an entry `covered` is recorded unless it is one of the new lanes below, which "
+      "read OWED until a release record admits them.")
+    w("")
+    w("## New lanes (tools/identity_lanes/coverage.py)")
+    w("")
+    w("Each ran 9 of 9 fixtures STABLE at `--repeats 2` on the Mac (Metal) build of integ/20261021; "
+      "parts are Mojo FNV-1a64 digests (`verify_digest`). Declared in their family's training lanes with "
+      "the pending reason `no reference`.")
+    w("")
+    for lane in sorted(NEW_LANES):
+        reached = sorted({r["entry"] for r in nat if lane in r["lanes_precise"]})
+        w(f"- `{lane}`: " + (", ".join(f"`{e}`" for e in reached[:8]) + (" ..." if len(reached) > 8 else "")
+                             if reached else "public call path (see the Python table)"))
+    w("")
+    w("## Owed")
+    w("")
+    owed = [(r, t) for r, t, _ in tri if t[0] == "owed"]
+    for why in sorted({t[2] for _, t in owed}):
+        names = sorted({r["entry"] for r, t in owed if t[2] == why})
+        w(f"- {', '.join(f'`{n}`' for n in names)}: {why}")
+    gaps = [r for r, t, _ in tri if t[0] == "GAP"]
+    if gaps:
+        w(f"- GAP (no lane, no reason): {', '.join(sorted({r['entry'] for r in gaps}))}")
+    sab_owed = defaultdict(set)
+    for r, t, (ss, txt) in tri:
+        if ss == "owed" and not t[0].startswith("n/a"):
+            sab_owed[r["changed_kernel"][0].split(":")[0]].add(r["entry"])
+    if sab_owed:
+        w("")
+        w("Sabotage arms still owed (changed kernel file -> entries it reaches):")
+        w("")
+        for f in sorted(sab_owed):
+            names = sorted(sab_owed[f])
+            w(f"- `{f}`: " + ", ".join(f"`{n}`" for n in names[:10]) + (f" +{len(names) - 10}" if len(names) > 10 else ""))
+    w("")
+    w("## Public Python methods")
+    w("")
+    w("| method | where | lanes | status |")
+    w("|---|---|---|---|")
+    for r, st, lanes, why in prow:
+        w(f"| `{r['public']}.{r['op']}` | `{r['where']}` | {_short(lanes)} | {st}{': ' + why if why else ''} |")
+    w("")
+    w("## Native entries")
+    w("")
+    w("Change: `new` (registered nowhere at the base), `door`, `impl` or `kernel` (the kinds of the changed "
+      "Mojo definitions the export reaches). Sabotage: `CPU gate HOST_SABOTAGE` is the verifier's own "
+      "negative control (every host binding rebuilt with it, every covered lane's parts must move); other "
+      "defines and seam patches are the family check arms.")
+    by_src = defaultdict(list)
+    for r, t, sb in tri:
+        by_src[r["src"]].append((r, t, sb))
+    for src in sorted(by_src):
+        w("")
+        w(f"### `{src}`")
+        w("")
+        w("| entry | change | lanes | sabotage | status |")
+        w("|---|---|---|---|---|")
+        for r, (st, lanes, why), (ss, txt) in sorted(by_src[src], key=lambda x: x[0]["entry"]):
+            change = "new" if r["new_anywhere"] else ("moved here" if r["new"] else "/".join(r["kinds"]))
+            w(f"| `{r['entry']}` | {change} | {_short(lanes)} | {ss}: {txt} | {st}{': ' + why if why else ''} |")
+    with open(path, "w") as fh:
+        fh.write("\n".join(lines) + "\n")
+    return count, sab, pst
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--base", default="fc8d425fb")
     ap.add_argument("--json", help="write the audit here")
     ap.add_argument("--from-json", help="read a previous audit instead of deriving one")
+    ap.add_argument("--markdown", help="write the coverage table here")
     args = ap.parse_args(argv)
     if args.from_json:
         audit = json.load(open(args.from_json))
@@ -768,6 +1017,11 @@ def main(argv=None):
         os.makedirs(os.path.dirname(os.path.abspath(args.json)), exist_ok=True)
         with open(args.json, "w") as fh:
             json.dump(audit, fh, indent=1, sort_keys=True)
+    if args.markdown:
+        count, sab, pst = render_markdown(audit, args.markdown)
+        print("native status: " + ", ".join(f"{k} {v}" for k, v in sorted(count.items())))
+        print("sabotage: " + ", ".join(f"{k} {v}" for k, v in sorted(sab.items())))
+        print("python: " + ", ".join(f"{k} {v}" for k, v in sorted(pst.items())))
     rec = set(audit["recorded"])
     nat = audit["native"]
     print(f"native: {len(nat)} new/changed registrations; "
