@@ -35,15 +35,6 @@
      return status
  
  
-@@ -224,7 +243,7 @@
-     var hits = 0
-     for i in range(count):
-         var r = Int(ip.unsafe_load(i))
--        if r >= 0 and r < rows and fp.unsafe_load(r) == f:
-+        if r >= 0 and r < rows and fp.unsafe_load(r) == Int32(_sab_swap01(Int(f), 2)):  # SABOTAGE (coverage-core-hotpath_impl_rows)
-             hits += 1
-     return hits
- 
 @@ -251,7 +270,7 @@
          if rp.unsafe_load(base + row) != Float32(0):
              status = 2
