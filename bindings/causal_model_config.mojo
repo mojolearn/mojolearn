@@ -55,7 +55,7 @@ def model_plan_init_binding(plan: PythonObject, fields: PythonObject) raises -> 
 def model_layer_weights_binding(plan: PythonObject, layer: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
     var out = bi.list()
-    for j in range(len(plan._layer_map)):
+    for j in range(len(plan._layer_map)):  # driver-loop: over the model layer map entries
         var entry = plan._layer_map[j]
         var item = bi.list()
         item.append(entry[0])
@@ -73,9 +73,9 @@ def model_checkpoint_names_binding(plan: PythonObject) raises -> PythonObject:
         names.append(plan.norm_name)
     if plan.head_name is not None:
         names.append(plan.head_name)
-    for i in range(Int(py=plan.n_layers)):
+    for i in range(Int(py=plan.n_layers)):  # driver-loop: over model layers
         var layer = model_layer_weights_binding(plan, PythonObject(i))
-        for j in range(len(layer)):
+        for j in range(len(layer)):  # driver-loop: over one layer's weight entries
             var name = layer[j][1]
             if not Bool(py=names.__contains__(name)):
                 names.append(name)
@@ -110,7 +110,7 @@ def _config_number(data: PythonObject, field: String, default: Float64) raises -
 
 
 def _config_fixed(data: PythonObject, names: List[String], values: List[Int]) raises:
-    for i in range(len(names)):
+    for i in range(len(names)):  # small-loop(fixed config field words)
         var got = data.get(names[i], PythonObject(values[i]))
         if not Bool(py=got == PythonObject(values[i])):
             _config_refuse(data, names[i], "fixed at " + String(values[i]))
@@ -118,7 +118,7 @@ def _config_fixed(data: PythonObject, names: List[String], values: List[Int]) ra
 
 def _config_transformer(data: PythonObject, mt: String, context: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
-    for field in [String("num_local_experts"), String("num_experts"), String("num_experts_per_tok"), String("n_routed_experts")]:
+    for field in [String("num_local_experts"), String("num_experts"), String("num_experts_per_tok"), String("n_routed_experts")]:  # small-loop(the four mixture-of-experts field names)
         var v = data.get(field)
         if v is not None and not Bool(py=v == PythonObject(0)) and not Bool(py=v == PythonObject(1)):
             _config_refuse(data, field, "mixture of experts")
@@ -265,7 +265,7 @@ def _config_phi3(mut fields: PythonObject, data: PythonObject) raises:
     var it = Int(py=fields["intermediate"])
     var layers = fields["_layer_map"]
     var mapped = bi.list()
-    for i in range(len(layers)):
+    for i in range(len(layers)):  # driver-loop: over model layer descriptors
         var item = bi.list(layers[i])
         var key = String(item[0])
         var begin = -1
@@ -303,7 +303,7 @@ def model_plan_for_binding(input: PythonObject, context: PythonObject) raises ->
     if row is None:
         raise Error("model_type '" + mt + "' is not in the option matrix")
     if mt == "gemma2":
-        for field in [String("attn_logit_softcapping"), String("final_logit_softcapping"), String("query_pre_attn_scalar")]:
+        for field in [String("attn_logit_softcapping"), String("final_logit_softcapping"), String("query_pre_attn_scalar")]:  # small-loop(the three fixed gemma2 field names)
             if data.get(field) is not None:
                 _config_refuse(data, field, "unsupported for gemma2")
     if mt == "gemma" or mt == "gemma2":
@@ -313,14 +313,14 @@ def model_plan_for_binding(input: PythonObject, context: PythonObject) raises ->
     if byte_lm:
         var fixed = context["byte_fixed"]
         var names = bi.list(fixed)
-        for i in range(len(names)):
+        for i in range(len(names)):  # small-loop(the fixed byte-LM config fields)
             var name = names[i]
             if Bool(py=data.__contains__(name)) and not Bool(py=data[name] == fixed[name]):
                 raise Error("model config: byte-LM " + String(name) + " differs from required value")
         var hf = bi.dict()
         var targets = [String("hidden_size"), String("num_attention_heads"), String("num_key_value_heads"), String("head_dim"), String("intermediate_size"), String("num_hidden_layers"), String("vocab_size"), String("rms_norm_eps"), String("rope_theta"), String("max_position_embeddings")]
         var sources = [String("d_model"), String("n_heads"), String("n_kv"), String("head_dim"), String("intermediate"), String("n_layers"), String("vocab_size"), String("rms_norm_eps"), String("rope_theta"), String("max_position_embeddings")]
-        for i in range(len(targets)):
+        for i in range(len(targets)):  # small-loop(the fixed config field mapping)
             var v = data.get(sources[i])
             if v is not None:
                 hf[targets[i]] = v
