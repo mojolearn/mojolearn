@@ -14,6 +14,7 @@ from bindings.native_error_class import error_without_class
 from std.math import isfinite
 from std.memory import memcpy
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, generation_copy, py_ints
+from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from bindings.parallel_byte_native import _parallel_array, _parallel_view, _parallel_int, _parallel_float, _parallel_schedule_check
 from bindings.native_transport import _transport_json
 from bindings.native_json import native_json_parse
@@ -62,12 +63,12 @@ def mlp_initialize(model_cls: PythonObject, opt_cls: PythonObject, binding: Pyth
                  String("clip_parallel_available")]:
         var entry = PythonObject(None)
         try:
-            entry = b[].bi.getattr(binding, name)
+            entry = py_call(b[].bi.getattr, binding, name)
         except:
             pass
-        if entry is not None and b[].bi.type(entry) is not b[].bi.type(b[].bi.len):
+        if entry is not None and py_type(entry) is not py_type(b[].bi.len):
             raise Error("parallel MLP: training entries must be compiled native functions")
-        b[].entries[name] = entry
+        py_setitem(b[].entries, name, entry)
     if Int(py=b[].entries["training_numeric_mode"]()) != (1 if mode == "identical" else 0) or String(b[].entries["training_vendor"]()) != vendor:
         raise Error("parallel MLP: compiled mode/vendor admission mismatch")
 
@@ -103,13 +104,13 @@ def _mlp_mode() raises:
 
 def _mlp_fields(value: PythonObject, fields: String) raises:
     var bi = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()[].bi
-    if bi.type(value) is not bi.dict or Bool(py=bi.set(value) != bi.set(PythonObject(fields).split("|"))):
+    if py_type(value) is not bi.dict or Bool(py=py_call(bi.set, value) != py_call(bi.set, py_call(PythonObject(fields).split, "|"))):
         raise Error("parallel MLP: state has missing or unknown fields")
 
 
 def _mlp_schedule(value: PythonObject) raises -> PythonObject:
     var bi = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()[].bi
-    if bi.type(value) is not bi.dict or len(value) == 0:
+    if py_type(value) is not bi.dict or len(value) == 0:
         raise Error("SmallMLPTrainer data_schedule must be a nonempty JSON object")
     var budget = 128
     _parallel_schedule_check(value, 0, budget)
@@ -131,7 +132,7 @@ def mlp_validate_state(state: PythonObject) raises -> PythonObject:
     var names = _mlp_names()
     var name_list = bi.list()
     for name in names:  # small-loop(the fixed MLP field-name words)
-        name_list.append(name)
+        _ = py_call(name_list.append, name)
     if String(state["schema"]) != "mojolearn.small-mlp-trainer.v1" or String(state["numeric_mode"]) != "identical" or Bool(py=state["architecture"] != py_ints([8, 16, 3])) or Bool(py=state["parameter_order"] != name_list):
         raise Error("SmallMLPTrainer state schema/architecture/mode/order mismatch")
     _mlp_fields(state["weights"], "weight1|bias1|weight2|bias2")
@@ -139,31 +140,31 @@ def mlp_validate_state(state: PythonObject) raises -> PythonObject:
     _mlp_fields(state["config"], "lr|beta1|beta2|eps|weight_decay")
     var config = bi.dict()
     for name in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay")]:  # small-loop(the five optimizer config words)
-        config[name] = Float64(_parallel_float(state["config"][name], name))
+        py_setitem(config, name, Float64(_parallel_float(state["config"][name], name)))
     if Float64(py=config["lr"]) <= 0 or Float64(py=config["eps"]) <= 0 or Float64(py=config["weight_decay"]) < 0 or Float64(py=config["beta1"]) < 0 or Float64(py=config["beta1"]) >= 1 or Float64(py=config["beta2"]) < 0 or Float64(py=config["beta2"]) >= 1:
         raise Error("SmallMLPTrainer optimizer configuration outside admitted range")
     var old = state["optimizer"]
     if String(old["kind"]) != "AdamW":
         raise Error("SmallMLPTrainer state optimizer mismatch")
     var optimizer = bi.dict()
-    optimizer["kind"] = "AdamW"
-    optimizer["step"] = _parallel_int(old["step"], 0, 2147483647, "SmallMLPTrainer step", False)
-    optimizer["m"] = _parallel_array(old["m"], [195])
-    optimizer["v"] = _parallel_array(old["v"], [195])
-    optimizer["flags"] = _parallel_array(old["flags"], [4], True)
+    py_setitem(optimizer, "kind", "AdamW")
+    py_setitem(optimizer, "step", _parallel_int(old["step"], 0, 2147483647, "SmallMLPTrainer step", False))
+    py_setitem(optimizer, "m", _parallel_array(old["m"], [195]))
+    py_setitem(optimizer, "v", _parallel_array(old["v"], [195]))
+    py_setitem(optimizer, "flags", _parallel_array(old["flags"], [4], True))
     var v = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=optimizer["v"]._addr))
     var flags = Pointer[Int32, ImmUntrackedOrigin](unsafe_from_address=Int(py=optimizer["flags"]._addr))
     mlp_check_optimizer_state(v, flags)
     var weights = bi.dict()
     for i in range(4):  # driver-loop: over the existing fixed MLP parameter registry
-        weights[names[i]] = _parallel_array(state["weights"][names[i]], _mlp_dims(i))
-    var result = bi.dict(state)
-    result["architecture"] = py_ints([8, 16, 3])
-    result["parameter_order"] = name_list
-    result["weights"] = weights
-    result["optimizer"] = optimizer
-    result["config"] = config
-    result["data_schedule"] = _mlp_schedule(state["data_schedule"])
+        py_setitem(weights, names[i], _parallel_array(state["weights"][names[i]], _mlp_dims(i)))
+    var result = py_call(bi.dict, state)
+    py_setitem(result, "architecture", py_ints([8, 16, 3]))
+    py_setitem(result, "parameter_order", name_list)
+    py_setitem(result, "weights", weights)
+    py_setitem(result, "optimizer", optimizer)
+    py_setitem(result, "config", config)
+    py_setitem(result, "data_schedule", _mlp_schedule(state["data_schedule"]))
     return result
 
 
@@ -171,14 +172,14 @@ def mlp_snapshot(model: PythonObject) raises -> PythonObject:
     """The model's complete state, read from its native state handle (the
     public `state_dict` call, under the model's lock), admitted as identical."""
     _mlp_mode()
-    return mlp_validate_state(small_mlp_call("state_dict", Python.tuple(model.__dict__.get("_handle"))))
+    return mlp_validate_state(small_mlp_call("state_dict", Python.tuple(py_get(model.__dict__, "_handle"))))
 
 
 def mlp_publish(model: PythonObject, state: PythonObject) raises:
     """Replace the model's native state with a validated copy of `state`."""
     _mlp_mode()
     var checked = mlp_validate_state(state)
-    _ = small_mlp_call("load_state_dict", Python.tuple(model.__dict__.get("_handle"), checked))
+    _ = small_mlp_call("load_state_dict", Python.tuple(py_get(model.__dict__, "_handle"), checked))
 
 
 def mlp_from_state(state: PythonObject) raises -> PythonObject:
@@ -190,7 +191,7 @@ def mlp_from_state(state: PythonObject) raises -> PythonObject:
 def mlp_batch(value: PythonObject) raises -> PythonObject:
     var bi = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()[].bi
     var view = _parallel_view(value)
-    var shape = value.shape if bi.type(value) is GENERATION_BOUNDARY.get_or_create_ptr()[].array_cls else view.shape
+    var shape = value.shape if py_type(value) is GENERATION_BOUNDARY.get_or_create_ptr()[].array_cls else view.shape
     if len(shape) != 2 or Int(py=shape[1]) != 8 or Int(py=shape[0]) < 1 or Int(py=shape[0]) > 256:
         raise Error("SmallMLPTrainer X must have shape (batch, 8), batch in [1,256]")
     return _parallel_array(value, [Int(py=shape[0]), 8])
@@ -199,14 +200,14 @@ def mlp_batch(value: PythonObject) raises -> PythonObject:
 def mlp_targets(value: PythonObject, rows: Int) raises -> PythonObject:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var view = _parallel_view(value)
-    var shape = value.shape if g[].bi.type(value) is g[].array_cls else view.shape
-    var fmt = String(view.format.lstrip("=@<"))
+    var shape = value.shape if py_type(value) is g[].array_cls else view.shape
+    var fmt = String(py_call(view.format.lstrip, "=@<"))
     if len(shape) != 1 or Int(py=shape[0]) != rows:
         raise Error("SmallMLPTrainer targets must match batch rows")
     if fmt != "b" and fmt != "B" and fmt != "h" and fmt != "H" and fmt != "i" and fmt != "I" and fmt != "l" and fmt != "L" and fmt != "q" and fmt != "Q":
         raise Error("TypeError: SmallMLPTrainer targets must be a native integer array")
-    var packed = g[].arrays(fmt)
-    packed.frombytes(view.tobytes("C"))
+    var packed = py_call(g[].arrays, fmt)
+    _ = py_call(packed.frombytes, py_call(view.tobytes, "C"))
     var output = generation_array([rows], "i")
     var ids = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=output._addr))
     var signed = fmt == "b" or fmt == "h" or fmt == "i" or fmt == "l" or fmt == "q"
@@ -217,7 +218,7 @@ def mlp_targets(value: PythonObject, rows: Int) raises -> PythonObject:
 
 def _mlp_gemm(a: PythonObject, b: PythonObject, m: Int, n: Int, k: Int, transpose: Int) raises -> PythonObject:
     var out = generation_array([m, n])
-    var written = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()[].entries["neural_gemm"](a._addr, b._addr, out._addr, py_ints([m, n, k, transpose]))
+    var written = py_call(PARALLEL_MLP_BOUNDARY.get_or_create_ptr()[].entries["neural_gemm"], a._addr, b._addr, out._addr, py_ints([m, n, k, transpose]))
     if Int(py=written) != m * n:
         raise Error("RuntimeError: SmallMLPTrainer neural GEMM returned incomplete output")
     _mlp_finite(out, "GEMM")
@@ -226,7 +227,7 @@ def _mlp_gemm(a: PythonObject, b: PythonObject, m: Int, n: Int, k: Int, transpos
 
 def _mlp_bias(values: PythonObject, bias: PythonObject, rows: Int, columns: Int, relu: Bool) raises -> PythonObject:
     var out = generation_array([rows, columns])
-    var written = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()[].entries["mlp_bias_activation"](values._addr, bias._addr, out._addr, py_ints([rows, columns, Int(relu)]))
+    var written = py_call(PARALLEL_MLP_BOUNDARY.get_or_create_ptr()[].entries["mlp_bias_activation"], values._addr, bias._addr, out._addr, py_ints([rows, columns, Int(relu)]))
     if Int(py=written) != rows * columns:
         raise Error("RuntimeError: SmallMLPTrainer bias returned incomplete output")
     _mlp_finite(out, "bias/activation")
@@ -235,7 +236,7 @@ def _mlp_bias(values: PythonObject, bias: PythonObject, rows: Int, columns: Int,
 
 def _mlp_sum(values: PythonObject, rows: Int, columns: Int) raises -> PythonObject:
     var out = generation_array([columns])
-    var written = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()[].entries["mlp_sum_rows"](values._addr, out._addr, py_ints([rows, columns]))
+    var written = py_call(PARALLEL_MLP_BOUNDARY.get_or_create_ptr()[].entries["mlp_sum_rows"], values._addr, out._addr, py_ints([rows, columns]))
     if Int(py=written) != columns:
         raise Error("RuntimeError: SmallMLPTrainer sum returned incomplete output")
     _mlp_finite(out, "bias gradient")
@@ -244,51 +245,51 @@ def _mlp_sum(values: PythonObject, rows: Int, columns: Int) raises -> PythonObje
 
 def _mlp_fused_enabled() raises -> Bool:
     var b = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()
-    return b[].entries["mlp_train_step"] is not None and Bool(py=b[].environ.get(
-        PythonObject("MOJOLEARN_MLP_FUSED").encode("ascii"), PythonObject("1").encode("ascii")) != PythonObject("0").encode("ascii")) and Bool(py=b[].environ.get(
-        PythonObject("MOJOLEARN_OPTIMIZER_DEVICE_COUNT").encode("ascii"), PythonObject("1").encode("ascii")) == PythonObject("1").encode("ascii"))
+    return b[].entries["mlp_train_step"] is not None and Bool(py=py_get(b[].environ,
+        py_call(PythonObject("MOJOLEARN_MLP_FUSED").encode, "ascii"), py_call(PythonObject("1").encode, "ascii")) != py_call(PythonObject("0").encode, "ascii")) and Bool(py=py_get(b[].environ,
+        py_call(PythonObject("MOJOLEARN_OPTIMIZER_DEVICE_COUNT").encode, "ascii"), py_call(PythonObject("1").encode, "ascii")) == py_call(PythonObject("1").encode, "ascii"))
 
 
 def _mlp_fused_gradients(checked: PythonObject, x: PythonObject, y: PythonObject) raises -> PythonObject:
     var b = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()
     var rows = Int(py=x.shape[0])
     var owners = b[].bi.list()
-    owners.append(x)
-    owners.append(y)
+    _ = py_call(owners.append, x)
+    _ = py_call(owners.append, y)
     var names = _mlp_names()
     for i in range(4):  # driver-loop: over fused MLP parameter registry entries
-        owners.append(checked["weights"][names[i]])
-    owners.append(generation_array([1]))
-    owners.append(generation_array([1]))
-    owners.append(generation_array([4], "i"))
-    owners.append(generation_array([1]))
-    owners.append(generation_array([rows, 3]))
+        _ = py_call(owners.append, checked["weights"][names[i]])
+    _ = py_call(owners.append, generation_array([1]))
+    _ = py_call(owners.append, generation_array([1]))
+    _ = py_call(owners.append, generation_array([4], "i"))
+    _ = py_call(owners.append, generation_array([1]))
+    _ = py_call(owners.append, generation_array([rows, 3]))
     var gradients = b[].bi.list()
     for i in range(4):  # driver-loop: over fused MLP gradient output owners
         var grad = generation_array(_mlp_dims(i))
-        owners.append(grad)
-        gradients.append(grad)
-    owners.append(generation_array([1]))
-    owners.append(generation_array([3]))
+        _ = py_call(owners.append, grad)
+        _ = py_call(gradients.append, grad)
+    _ = py_call(owners.append, generation_array([1]))
+    _ = py_call(owners.append, generation_array([3]))
     var addresses = b[].bi.list()
     for i in range(len(owners)):  # driver-loop: over the existing fused MLP ABI pointer registry
-        addresses.append(owners[i]._addr)
+        _ = py_call(addresses.append, owners[i]._addr)
     var config = checked["config"]
     var params = py_ints([rows, 1, 1])
     for name in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay")]:  # small-loop(the five optimizer config words)
-        params.append(config[name])
-    params.append(0)
-    var written = b[].entries["mlp_train_step"](addresses, params)
+        _ = py_call(params.append, config[name])
+    _ = py_call(params.append, 0)
+    var written = py_call(b[].entries["mlp_train_step"], addresses, params)
     if Int(py=written) != rows * 3:
         raise Error("RuntimeError: SmallMLPTrainer fused gradient returned incomplete output")
     _mlp_finite(owners[9], "loss")
     for i in range(4):  # driver-loop: over the four MLP parameter tensors
         _mlp_finite(gradients[i], "parameter gradient")
     var result = b[].bi.list()
-    result.append(Float64(Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=owners[9]._addr))[0]))
-    result.append(gradients)
+    _ = py_call(result.append, Float64(Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=owners[9]._addr))[0]))
+    _ = py_call(result.append, gradients)
     _ = owners^
-    return b[].bi.tuple(result)
+    return py_call(b[].bi.tuple, result)
 
 
 def mlp_gradients_from_state(state: PythonObject, inputs: PythonObject, targets: PythonObject) raises -> PythonObject:
@@ -305,28 +306,28 @@ def mlp_gradients_from_state(state: PythonObject, inputs: PythonObject, targets:
     var loss = generation_array([1])
     var row_loss = generation_array([rows])
     var dlogits = generation_array([rows, 3])
-    _ = b[].entries["ce_loss"](loss._addr, row_loss._addr, dlogits._addr, logits._addr, y._addr, py_ints([rows, 3, -100, 2, 0, 1, 0]))
+    _ = py_call(b[].entries["ce_loss"], loss._addr, row_loss._addr, dlogits._addr, logits._addr, y._addr, py_ints([rows, 3, -100, 2, 0, 1, 0]))
     _mlp_finite(loss, "loss")
     _mlp_finite(dlogits, "logit gradient")
     var dw2 = _mlp_gemm(dlogits, hidden, 3, 16, rows, 2)
     var db2 = _mlp_sum(dlogits, rows, 3)
     var incoming = _mlp_gemm(dlogits, w["weight2"], rows, 16, 3, 0)
     var dhidden = generation_array([rows, 16])
-    var written = b[].entries["mlp_relu_backward"](hidden._addr, incoming._addr, dhidden._addr, py_ints([rows, 16]))
+    var written = py_call(b[].entries["mlp_relu_backward"], hidden._addr, incoming._addr, dhidden._addr, py_ints([rows, 16]))
     if Int(py=written) != rows * 16:
         raise Error("RuntimeError: SmallMLPTrainer backward returned incomplete output")
     _mlp_finite(dhidden, "ReLU gradient")
     var dw1 = _mlp_gemm(dhidden, x, 16, 8, rows, 2)
     var db1 = _mlp_sum(dhidden, rows, 16)
     var grads = b[].bi.list()
-    grads.append(dw1)
-    grads.append(db1)
-    grads.append(dw2)
-    grads.append(db2)
+    _ = py_call(grads.append, dw1)
+    _ = py_call(grads.append, db1)
+    _ = py_call(grads.append, dw2)
+    _ = py_call(grads.append, db2)
     var result = b[].bi.list()
     var scalar = Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=loss._addr))[0]
-    result.append(Float64(scalar))
-    result.append(grads)
+    _ = py_call(result.append, Float64(scalar))
+    _ = py_call(result.append, grads)
     # Integer addresses do not retain their owners across sibling native
     # entries; keep every input/workspace alive through its consuming call.
     _ = checked^
@@ -339,23 +340,23 @@ def mlp_gradients_from_state(state: PythonObject, inputs: PythonObject, targets:
     _ = dlogits^
     _ = incoming^
     _ = dhidden^
-    return b[].bi.tuple(result)
+    return py_call(b[].bi.tuple, result)
 
 
 def neural_ordered_sum(parts: PythonObject) raises -> PythonObject:
     _mlp_mode()
     var b = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()
-    var shards = b[].bi.list(parts)
+    var shards = py_call(b[].bi.list, parts)
     if len(shards) == 0:
         raise Error("ordered reduction needs at least one shard")
-    var first = b[].bi.list(shards[0])
+    var first = py_call(b[].bi.list, shards[0])
     var total = b[].bi.list()
     var dims = List[List[Int]]()
     var counts = List[Int]()
     var count = 0
     for j in range(len(first)):  # driver-loop: over the caller's gradient tensor registry
         var view = _parallel_view(first[j])
-        var shape = first[j].shape if b[].bi.type(first[j]) is GENERATION_BOUNDARY.get_or_create_ptr()[].array_cls else view.shape
+        var shape = first[j].shape if py_type(first[j]) is GENERATION_BOUNDARY.get_or_create_ptr()[].array_cls else view.shape
         var axes = List[Int]()
         var n = 1
         for axis in range(len(shape)):  # small-loop(gradient shape dimension words)
@@ -371,7 +372,7 @@ def neural_ordered_sum(parts: PythonObject) raises -> PythonObject:
         # Ordered addition historically admits nonfinite float32 inputs; the
         # existing accumulation kernel owns canonicalization. Do not turn a
         # preparation helper's finite scan into a new reduction restriction.
-        total.append(_parallel_array(first[j], axes, False, False))
+        _ = py_call(total.append, _parallel_array(first[j], axes, False, False))
         dims.append(axes^)
     if len(shards) == 1:
         return total
@@ -380,7 +381,7 @@ def neural_ordered_sum(parts: PythonObject) raises -> PythonObject:
     var stacked = generation_array([2, count])
     var output = generation_array([count])
     for shard in range(1, len(shards)):  # driver-loop: over fixed ascending logical gradient shard order
-        var current = b[].bi.list(shards[shard])
+        var current = py_call(b[].bi.list, shards[shard])
         if len(current) != len(total):
             raise Error("ordered reduction gradient tensor count mismatch")
         var offset = 0
@@ -394,9 +395,9 @@ def neural_ordered_sum(parts: PythonObject) raises -> PythonObject:
             offset += counts[j]
             _ = value^
         var addresses = b[].bi.list()
-        addresses.append(output._addr)
-        addresses.append(stacked._addr)
-        _ = b[].entries["accumulate"](addresses, py_ints([count, 2, -1]))
+        _ = py_call(addresses.append, output._addr)
+        _ = py_call(addresses.append, stacked._addr)
+        _ = py_call(b[].entries["accumulate"], addresses, py_ints([count, 2, -1]))
         var source = Pointer[UInt32, ImmUntrackedOrigin](unsafe_from_address=Int(py=output._addr))
         offset = 0
         for j in range(len(total)):  # driver-loop: over owned folded gradient output tensors
@@ -410,7 +411,7 @@ def neural_ordered_sum(parts: PythonObject) raises -> PythonObject:
 
 def neural_cooperative_admit() raises:
     var b = PARALLEL_MLP_BOUNDARY.get_or_create_ptr()
-    var count = Int(py=b[].bi.int(b[].environ.get(PythonObject("MOJOLEARN_OPTIMIZER_DEVICE_COUNT").encode("ascii"), PythonObject("1").encode("ascii"))))
+    var count = Int(py=py_call(b[].bi.int, py_get(b[].environ, py_call(PythonObject("MOJOLEARN_OPTIMIZER_DEVICE_COUNT").encode, "ascii"), py_call(PythonObject("1").encode, "ascii"))))
     if count > 1:
         for name in [String("optimizer_parallel_available"), String("accumulate_parallel_available"), String("clip_parallel_available")]:  # small-loop(the three cooperative entry names)
             if b[].entries[name] is None:
@@ -451,11 +452,11 @@ def mlp_apply_from_state(state: PythonObject, gradients: PythonObject) raises ->
     var cfg = next["config"]
     var plan = py_ints([4, 2, step + 1, 0])
     for name in [String("lr"), String("beta1"), String("beta2"), String("eps"), String("weight_decay")]:  # small-loop(the five optimizer config words)
-        plan.append(cfg[name])
+        _ = py_call(plan.append, cfg[name])
     for i in range(4):  # small-loop(the four trailing plan words)
-        plan.append(0)
+        _ = py_call(plan.append, 0)
     var saved = next["optimizer"]
-    var written = b[].entries["optimizer_step"](params._addr, grads._addr,
+    var written = py_call(b[].entries["optimizer_step"], params._addr, grads._addr,
         saved["m"]._addr, saved["v"]._addr, offsets._addr, saved["flags"]._addr, info._addr, plan)
     if Int(py=written) != 195:
         raise Error("RuntimeError: SmallMLPTrainer update returned incomplete state")
@@ -469,7 +470,7 @@ def mlp_apply_from_state(state: PythonObject, gradients: PythonObject) raises ->
         var dst = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=value._addr))
         memcpy(dest=dst, src=pp + offset, count=n)
         offset += n
-    saved["step"] = step + 1
+    py_setitem(saved, "step", step + 1)
     _ = params^
     _ = grads^
     _ = offsets^

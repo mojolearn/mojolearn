@@ -18,6 +18,7 @@ from bindings.native_transport import (
 )
 from bindings.native_codec import codec_pack, codec_unpack
 from bindings.native_json import native_json_parse
+from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 
 
 comptime PROCESS_MAX_BYTES = (1 << 63) - 1
@@ -49,7 +50,7 @@ comptime PROCESS_BOUNDARY = _Global[
 def process_initialize(executable: String, environ: PythonObject, vendor: String) raises:
     var p = PROCESS_BOUNDARY.get_or_create_ptr()
     p[].bi = Python.import_module("builtins")
-    if p[].bi.type(environ) is not p[].bi.dict or executable == "":
+    if py_type(environ) is not p[].bi.dict or executable == "":
         raise Error("process: initialization requires an executable and native environment mapping")
     # Cache the underlying bytes dictionary, not os._Environ.get/__iter__.
     # os.environ mutation updates this same dictionary, preserving selection
@@ -60,7 +61,7 @@ def process_initialize(executable: String, environ: PythonObject, vendor: String
     var posix = Python.import_module("posix")
     p[].random = posix.urandom
     p[].pid = posix.getpid
-    if p[].bi.type(p[].random) is not p[].bi.type(p[].bi.len) or p[].bi.type(p[].pid) is not p[].bi.type(p[].bi.len):
+    if py_type(p[].random) is not py_type(p[].bi.len) or py_type(p[].pid) is not py_type(p[].bi.len):
         raise Error("process: process metadata entries must be native C builtins")
     transport_initialize()
 
@@ -69,30 +70,30 @@ def _process_environment(devices: PythonObject, group: PythonObject) raises -> L
     var p = PROCESS_BOUNDARY.get_or_create_ptr()
     var bi = p[].bi
     var env = bi.dict()
-    var keys = bi.list(p[].environ)
+    var keys = py_call(bi.list, p[].environ)
     for i in range(len(keys)):  # driver-loop: over process environment records
-        env[keys[i].decode("utf-8", "surrogateescape")] = p[].environ[keys[i]].decode("utf-8", "surrogateescape")
-    env["MOJOLEARN_NUMERIC_MODE"] = "identical"
+        py_setitem(env, py_call(keys[i].decode, "utf-8", "surrogateescape"), py_call(p[].environ[keys[i]].decode, "utf-8", "surrogateescape"))
+    py_setitem(env, "MOJOLEARN_NUMERIC_MODE", "identical")
     # The parent selected its installed route at connection time. Later
     # visibility-mask edits still apply, but a changed process environment
     # must not silently move an existing GPU owner onto CPU workers.
-    env["MOJOLEARN_VENDOR"] = p[].vendor
+    py_setitem(env, "MOJOLEARN_VENDOR", p[].vendor)
     var mask = String()
     if p[].vendor == "cuda":
         mask = "CUDA_VISIBLE_DEVICES"
     elif p[].vendor == "hip":
         mask = "ROCR_VISIBLE_DEVICES" if "ROCR_VISIBLE_DEVICES" in env else "HIP_VISIBLE_DEVICES"
-        _ = env.pop("HIP_VISIBLE_DEVICES" if mask == "ROCR_VISIBLE_DEVICES" else "ROCR_VISIBLE_DEVICES", PythonObject(None))
+        _ = py_call(env.pop, "HIP_VISIBLE_DEVICES" if mask == "ROCR_VISIBLE_DEVICES" else "ROCR_VISIBLE_DEVICES", PythonObject(None))
     elif p[].vendor == "metal":
         if len(group) != 1 or Int(py=group[0]) != 0:
             raise Error("process: Metal supports only the selected device zero")
     elif p[].vendor != "cpu":
         raise Error("process: unsupported installed vendor")
     if mask != "":
-        var visible = env.get(mask)
+        var visible = py_get(env, mask)
         var selected = bi.list()
         var used = bi.set()
-        var tokens = visible.split(",") if visible is not None else bi.list()
+        var tokens = py_call(visible.split, ",") if visible is not None else bi.list()
         for i in range(len(devices)):  # driver-loop: over all selected device identities before launching a worker
             var device = Int(py=devices[i])
             if visible is not None and device >= len(tokens):
@@ -100,19 +101,19 @@ def _process_environment(devices: PythonObject, group: PythonObject) raises -> L
             var identity = tokens[device].strip() if visible is not None else PythonObject(String(device))
             if len(identity) == 0 or identity in used:
                 raise Error("process: selected devices repeat or omit a visibility identifier")
-            used.add(identity)
+            _ = py_call(used.add, identity)
         for i in range(len(group)):  # driver-loop: over worker device visibility records
             var device = Int(py=group[i])
-            selected.append(tokens[device].strip() if visible is not None else PythonObject(String(device)))
-        env[mask] = PythonObject(",").join(selected)
+            _ = py_call(selected.append, tokens[device].strip() if visible is not None else PythonObject(String(device)))
+        py_setitem(env, mask, py_call(PythonObject(",").join, selected))
     # small-loop(the fixed family device-count variable names)
     for family in [String("KMEANS"), String("GBDT"), String("GRAM"), String("QR"),
                    String("OPTIMIZER"), String("GLM"), String("SOLVER"), String("IFOREST"),
                    String("FOREST"), String("SVM"), String("GP"), String("GMM"),
                    String("RESAMPLE"), String("DBSCAN"), String("NEIGHBORS"), String("HIERARCHY")]:
-        env["MOJOLEARN_" + family + "_DEVICE_COUNT"] = String(len(group))
+        py_setitem(env, "MOJOLEARN_" + family + "_DEVICE_COUNT", String(len(group)))
     var result = List[String]()
-    keys = bi.list(env)
+    keys = py_call(bi.list, env)
     for i in range(len(keys)):  # driver-loop: over native process environment records
         result.append(String(keys[i]) + "=" + String(env[keys[i]]))
     return result^
@@ -121,36 +122,36 @@ def _process_environment(devices: PythonObject, group: PythonObject) raises -> L
 def process_pool_create(devices: PythonObject, cooperative: Bool, child_module: String) raises -> PythonObject:
     var p = PROCESS_BOUNDARY.get_or_create_ptr()
     var bi = p[].bi
-    var selected = bi.tuple(devices)
+    var selected = py_call(bi.tuple, devices)
     var seen = bi.set()
     if len(selected) == 0 or child_module == "":
         raise Error("process: nonempty devices and child module are required")
     for i in range(len(selected)):  # driver-loop: over admitted physical device indices
-        if bi.type(selected[i]) is not bi.int or Int(py=selected[i]) < 0 or selected[i] in seen:
+        if py_type(selected[i]) is not bi.int or Int(py=selected[i]) < 0 or selected[i] in seen:
             raise Error("process: devices must be distinct nonnegative integer indices")
-        seen.add(selected[i])
+        _ = py_call(seen.add, selected[i])
     var result = bi.dict()
-    result["devices"] = selected
-    result["cooperative"] = cooperative
-    result["module"] = child_module
-    result["workers"] = bi.list()
-    result["closed"] = False
-    result["sequence"] = 0
+    py_setitem(result, "devices", selected)
+    py_setitem(result, "cooperative", cooperative)
+    py_setitem(result, "module", child_module)
+    py_setitem(result, "workers", bi.list())
+    py_setitem(result, "closed", False)
+    py_setitem(result, "sequence", 0)
     return result
 
 
 def process_send(socket: PythonObject, kind: String, sequence: Int, value: PythonObject) raises:
     var p = PROCESS_BOUNDARY.get_or_create_ptr()
     var packed = codec_pack(value, PROCESS_MAX_BYTES)
-    var description = PythonObject(_transport_json(packed[0])).encode("ascii")
+    var description = py_call(PythonObject(_transport_json(packed[0])).encode, "ascii")
     var header = p[].bi.dict()
-    header["kind"] = kind
-    header["sequence"] = sequence
-    header["description_bytes"] = len(description)
+    py_setitem(header, "kind", kind)
+    py_setitem(header, "sequence", sequence)
+    py_setitem(header, "description_bytes", len(description))
     # Descriptors travel in the binary frame so tensor registries do not
     # inherit the transport's small control-header size limit.
-    var body = p[].bi.bytearray(description)
-    body.extend(packed[1])
+    var body = py_call(p[].bi.bytearray, description)
+    _ = py_call(body.extend, packed[1])
     transport_send(socket, header, body)
 
 
@@ -159,18 +160,18 @@ def process_receive(socket: PythonObject) raises -> PythonObject:
     var frame = transport_receive(socket, PROCESS_MAX_BYTES)
     var header = frame[0]
     var body = frame[1]
-    var raw = header.get("description_bytes")
-    if p[].bi.type(raw) is not p[].bi.int:
+    var raw = py_get(header, "description_bytes")
+    if py_type(raw) is not p[].bi.int:
         raise Error("process: missing structural descriptor length")
     var length = Int(py=raw)
     if length <= 0 or length > len(body):
         raise Error("process: structural descriptor outside frame")
-    var descriptor = native_json_parse(body[p[].bi.slice(0, length)])
-    var decoded = codec_unpack(descriptor, body[p[].bi.slice(length, len(body))], PROCESS_MAX_BYTES)
+    var descriptor = native_json_parse(body[py_call(p[].bi.slice, 0, length)])
+    var decoded = codec_unpack(descriptor, body[py_call(p[].bi.slice, length, len(body))], PROCESS_MAX_BYTES)
     var result = p[].bi.list()
-    result.append(header)
-    result.append(decoded)
-    return p[].bi.tuple(result)
+    _ = py_call(result.append, header)
+    _ = py_call(result.append, decoded)
+    return py_call(p[].bi.tuple, result)
 
 
 def _process_reap(pid: Int) raises:
@@ -207,8 +208,8 @@ def _process_reap(pid: Int) raises:
 def process_pool_close(pool: PythonObject) raises:
     var workers = pool["workers"]
     var bi = PROCESS_BOUNDARY.get_or_create_ptr()[].bi
-    pool["workers"] = bi.list()
-    pool["closed"] = True
+    py_setitem(pool, "workers", bi.list())
+    py_setitem(pool, "closed", True)
     var failure = String()
     for i in range(len(workers)):  # driver-loop: over owned worker sockets and process IDs
         var worker = workers[i]
@@ -228,7 +229,7 @@ def process_pool_close(pool: PythonObject) raises:
             _process_reap(Int(py=worker["pid"]))
         except error:
             # A failed reap remains owned and can be retried by close().
-            pool["workers"].append(worker)
+            _ = py_call(pool["workers"].append, worker)
             if failure == "":
                 failure = String(error)
     if failure != "":
@@ -248,17 +249,17 @@ def process_pool_start(pool: PythonObject) raises:
         raise Error("NotImplementedError: cooperative neural updates across multiple CPU devices have no host implementation")
     var server = transport_listen("127.0.0.1", 0, 120.0)
     var socket_type = TRANSPORT_BOUNDARY.get_or_create_ptr()[].socket
-    var port = Int(py=socket_type.getsockname(server)[1])
+    var port = Int(py=py_call(socket_type.getsockname, server)[1])
     var groups = 1 if cooperative else len(devices)
     try:
         for i in range(groups):  # driver-loop: over native worker process groups
             var group = bi.list()
             if cooperative:
-                group = bi.list(devices)
+                group = py_call(bi.list, devices)
             else:
-                group.append(devices[i])
+                _ = py_call(group.append, devices[i])
             var env = _process_environment(devices, group)
-            var token = String(p[].random(32).hex())
+            var token = String(py_call(p[].random, 32).hex())
             var argv = List[String]()
             argv.append(String(p[].executable))
             argv.append(String("-m"))
@@ -267,29 +268,29 @@ def process_pool_start(pool: PythonObject) raises:
             argv.append(String(token))
             var pid = transport_spawn(p[].executable, argv, env)
             var worker = bi.dict()
-            worker["pid"] = pid
-            worker["socket"] = PythonObject(None)
-            worker["devices"] = bi.tuple(group)
-            pool["workers"].append(worker)
+            py_setitem(worker, "pid", pid)
+            py_setitem(worker, "socket", PythonObject(None))
+            py_setitem(worker, "devices", py_call(bi.tuple, group))
+            _ = py_call(pool["workers"].append, worker)
             var connection = transport_accept(server, 120.0)
-            worker["socket"] = connection
+            py_setitem(worker, "socket", connection)
             var hello = transport_receive(connection, 0)[0]
-            if String(hello.get("kind", "")) != "hello" or String(hello.get("token", "")) != token or Int(py=hello.get("pid", -1)) != pid:
+            if String(py_get(hello, "kind", "")) != "hello" or String(py_get(hello, "token", "")) != token or Int(py=py_get(hello, "pid", -1)) != pid:
                 raise Error("process: child authentication or process identity mismatch")
-            if String(hello.get("vendor", "")) != p[].vendor:
+            if String(py_get(hello, "vendor", "")) != p[].vendor:
                 raise Error("process: child vendor differs from the parent native route")
             # Existing local model workers have no training-operation timeout.
             # Keep only the connection handshake bounded; large supported
             # model steps must not acquire a new two-minute runtime limit.
-            socket_type.settimeout(connection, PythonObject(None))
-            worker["identity"] = hello
+            _ = py_call(socket_type.settimeout, connection, PythonObject(None))
+            py_setitem(worker, "identity", hello)
     except error:
         transport_close(server)
         try:
             process_pool_close(pool)
         except cleanup_error:
             raise Error("RuntimeError: native process startup failed: " + String(error) + "; cleanup also failed: " + String(cleanup_error))
-        pool["closed"] = False
+        py_setitem(pool, "closed", False)
         raise error
     transport_close(server)
 
@@ -297,7 +298,7 @@ def process_pool_start(pool: PythonObject) raises:
 def process_pool_map(pool: PythonObject, requests: PythonObject) raises -> PythonObject:
     var p = PROCESS_BOUNDARY.get_or_create_ptr()
     var bi = p[].bi
-    var inputs = bi.list(requests)
+    var inputs = py_call(bi.list, requests)
     process_pool_start(pool)
     var workers = pool["workers"]
     var result = bi.list()
@@ -312,13 +313,13 @@ def process_pool_map(pool: PythonObject, requests: PythonObject) raises -> Pytho
             for i in range(width):  # driver-loop: over worker replies in fixed logical request order
                 try:
                     var reply = process_receive(workers[i]["socket"])
-                    if Int(py=reply[0].get("sequence", -1)) != sequence + i:
+                    if Int(py=py_get(reply[0], "sequence", -1)) != sequence + i:
                         raise Error("process: response sequence mismatch")
-                    if String(reply[0].get("kind", "")) == "error":
+                    if String(py_get(reply[0], "kind", "")) == "error":
                         raise Error("RuntimeError: native model worker failed: " + String(reply[1]))
-                    if String(reply[0].get("kind", "")) != "result":
+                    if String(py_get(reply[0], "kind", "")) != "result":
                         raise Error("process: unexpected worker response")
-                    result.append(reply[1])
+                    _ = py_call(result.append, reply[1])
                 except error:
                     if failure == "":
                         failure = String(error)
@@ -326,13 +327,13 @@ def process_pool_map(pool: PythonObject, requests: PythonObject) raises -> Pytho
                 raise Error(failure)
             offset += width
             sequence += width
-            pool["sequence"] = sequence
+            py_setitem(pool, "sequence", sequence)
     except error:
         try:
             process_pool_close(pool)
         except cleanup_error:
             raise Error("RuntimeError: native process request failed: " + String(error) + "; cleanup also failed: " + String(cleanup_error))
-        pool["closed"] = False
+        py_setitem(pool, "closed", False)
         raise error
     return result
 
@@ -351,18 +352,18 @@ def process_pool_call(pool: PythonObject, worker_index: Int, request: PythonObje
         var worker = pool["workers"][worker_index]
         process_send(worker["socket"], "request", sequence, request)
         reply = process_receive(worker["socket"])
-        if Int(py=reply[0].get("sequence", -1)) != sequence:
+        if Int(py=py_get(reply[0], "sequence", -1)) != sequence:
             raise Error("process: response sequence mismatch")
-        var kind = String(reply[0].get("kind", ""))
+        var kind = String(py_get(reply[0], "kind", ""))
         if kind != "result" and kind != "error":
             raise Error("process: unexpected addressed worker response")
-        pool["sequence"] = sequence + 1
+        py_setitem(pool, "sequence", sequence + 1)
     except error:
         try:
             process_pool_close(pool)
         except cleanup_error:
             raise Error("RuntimeError: native process request failed: " + String(error) + "; cleanup also failed: " + String(cleanup_error))
-        pool["closed"] = False
+        py_setitem(pool, "closed", False)
         raise error
     if String(reply[0]["kind"]) == "error":
         raise Error("RuntimeError: native model worker failed: " + String(reply[1]))
@@ -373,18 +374,18 @@ def process_worker_connect(argv: PythonObject) raises -> PythonObject:
     var p = PROCESS_BOUNDARY.get_or_create_ptr()
     if len(argv) != 3:
         raise Error("process: worker requires the private port and authentication token")
-    var port = Int(py=p[].bi.int(argv[1]))
+    var port = Int(py=py_call(p[].bi.int, argv[1]))
     var token = String(argv[2])
     if port <= 0 or port > 65535 or token.byte_length() != 64:
         raise Error("process: invalid worker connection envelope")
     var socket = transport_connect("127.0.0.1", port, 120.0)
     var hello = p[].bi.dict()
-    hello["kind"] = "hello"
-    hello["token"] = token
-    hello["pid"] = p[].pid()
-    hello["vendor"] = p[].vendor
+    py_setitem(hello, "kind", "hello")
+    py_setitem(hello, "token", token)
+    py_setitem(hello, "pid", p[].pid())
+    py_setitem(hello, "vendor", p[].vendor)
     transport_send(socket, hello, PythonObject(None))
-    TRANSPORT_BOUNDARY.get_or_create_ptr()[].socket.settimeout(socket, PythonObject(None))
+    _ = py_call(TRANSPORT_BOUNDARY.get_or_create_ptr()[].socket.settimeout, socket, PythonObject(None))
     return socket
 
 
@@ -397,7 +398,7 @@ def process_echo_worker(argv: PythonObject) raises:
             var request = process_worker_next(socket)
             if request is None:
                 break
-            var sequence = Int(py=request[0].get("sequence", -1))
+            var sequence = Int(py=py_get(request[0], "sequence", -1))
             process_send(socket, "result", sequence, request[1])
     except:
         transport_close(socket)
@@ -407,7 +408,7 @@ def process_echo_worker(argv: PythonObject) raises:
 
 def process_worker_next(socket: PythonObject) raises -> PythonObject:
     var request = process_receive(socket)
-    var kind = String(request[0].get("kind", ""))
+    var kind = String(py_get(request[0], "kind", ""))
     if kind == "close":
         return PythonObject(None)
     if kind != "request":
@@ -432,7 +433,7 @@ def process_call(operation: String, args: PythonObject) raises -> PythonObject:
         var env = _process_environment(args[0], args[1])
         var out = PROCESS_BOUNDARY.get_or_create_ptr()[].bi.list()
         for i in range(len(env)):  # driver-loop: over verifier-visible process environment entries
-            out.append(env[i])
+            _ = py_call(out.append, env[i])
         return out
     else:
         raise Error("process: unknown operation " + operation)
