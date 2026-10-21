@@ -90,7 +90,7 @@ from svm.estimator import (
 )
 
 
-from svm.impl.scale_gamma_device import scale_gamma_limbs_device_binding, py2mojo_linear_flags_binding
+from svm.impl.scale_gamma_device_pyapi import scale_gamma_limbs_device_binding, py2mojo_linear_flags_binding
 from svm.estimator import _family_ctx as _sg_family_ctx
 from svm.impl.svc_ovo_layout import svc_ovo_layout_device_binding, svc_dual_gemv_device_binding
 
