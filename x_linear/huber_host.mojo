@@ -13,7 +13,7 @@ precedent). The device binding runs this fit on its grid driver
 so the host column's bits are unchanged.
 """
 from x_linear.tops import FOLD_BLOCK
-from x_linear.ops import par_rows
+from x_linear.ops_host import par_rows
 from x_linear.ops import (
     FP,
     IP,

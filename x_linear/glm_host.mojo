@@ -14,7 +14,7 @@ so the host column's bits are unchanged.
 """
 from experiments.classical_identical_ideas.linear_controls import C16_GLM_FUSED
 from x_linear.tops import FOLD_BLOCK, fold_blocks, fold_fa_blocked
-from x_linear.ops import par_rows
+from x_linear.ops_host import par_rows
 from x_linear.ops import (
     FP,
     IP,
