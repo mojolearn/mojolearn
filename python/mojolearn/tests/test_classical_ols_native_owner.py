@@ -59,6 +59,12 @@ def fixture(case):
         x *= np.array([1 / 64, 1, 8, 128], dtype="f4")
     elif case == "normal_equations_shape":
         # TSQR's documented rows >= cols+1 condition is false here.
+        # The square route is supported by both the CPU and GPU OLS kernels.
+        x = np.array([[1, 0], [0, 1]], dtype="f4")
+        intercept = False
+    elif case == "wide_minimum_norm":
+        # Keep the original wide fixture: GPU kernels support minimum norm,
+        # while the existing CPU kernel explicitly refuses this operation.
         x = np.array([[1, 0, 0], [0, 1, 0]], dtype="f4")
         intercept = False
     truth = np.arange(1, x.shape[1] + 1, dtype="f4") / 4
@@ -91,6 +97,31 @@ def test_ols_native_preserves_driver_bits_and_independent_predictions(case):
     answer = np.linalg.lstsq((xd - mx) * sw[:, None], (yd - my) * sw, rcond=None)[0]
     independent = (xd - mx) @ answer + my
     np.testing.assert_allclose(prediction, independent, rtol=5e-4, atol=3e-4)
+
+
+def test_ols_native_preserves_wide_minimum_norm_support_boundary():
+    x, y, intercept, weight = fixture("wide_minimum_norm")
+    independent_coef = np.linalg.lstsq(x.astype("f8"), y.astype("f8"), rcond=None)[0]
+    np.testing.assert_array_equal(independent_coef, [0.25, 0.5, 0.0])
+    native = LinearRegression(fit_intercept=intercept)
+    audit = audit_native_call(native_fit, native, x, y, weight)
+    if CONTEXT["vendor"] == "cpu":
+        # This is a verified refusal, not a skipped correctness fixture: the
+        # owner must reach the same unsupported native kernel without Python.
+        clean(audit, ValueError)
+        assert "lstsq_min_norm" in str(audit.exception)
+        assert "no CPU restatement" in str(audit.exception)
+        assert "coef_" not in vars(native)
+        with pytest.raises(Exception, match="lstsq_min_norm.*no CPU restatement"):
+            LinearRegression(fit_intercept=intercept).fit(x, y, sample_weight=weight)
+        return
+    assert clean(audit) is native
+    prediction = clean(audit_native_call(native_predict, native, x))
+    legacy = LinearRegression(fit_intercept=intercept).fit(x, y, sample_weight=weight)
+    np.testing.assert_array_equal(bits(native.coef_), bits(legacy.coef_))
+    np.testing.assert_array_equal(bits(prediction), bits(legacy.predict(x)))
+    np.testing.assert_allclose(native.coef_, independent_coef, rtol=5e-4, atol=3e-4)
+    np.testing.assert_allclose(prediction, x.astype("f8") @ independent_coef, rtol=5e-4, atol=3e-4)
 
 
 @pytest.mark.parametrize("layout", ["fortran", "negative_stride", "nested", "memoryview", "float64", "float16"])
