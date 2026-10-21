@@ -966,6 +966,27 @@ def render_markdown(audit, path):
         w(f"- `{lane}`: " + (", ".join(f"`{e}`" for e in reached[:8]) + (" ..." if len(reached) > 8 else "")
                              if reached else "public call path (see the Python table)"))
     w("")
+    w("## Fault-injection arms added (tools/identity_lanes/coverage_sabotage.tsv)")
+    w("")
+    w("One source patch per changed kernel file that no arm reached, each a value fault in the changed "
+      "definitions (a float one ulp off, an index permuted, a byte flipped), applied only to a scratch copy. "
+      "`python3 tools/coverage_sabotage.py plan --arm <arm>` prints the build and the two identity_break runs, "
+      "and `check` requires every named lane to read MOVED or REFUSED on the sabotaged build. RUN OWED: no arm "
+      "has been built or run yet (lanes never compile); `apply-check` passes on this commit.")
+    w("")
+    try:
+        import coverage_sabotage
+        table = coverage_sabotage.arms()
+    except (ImportError, OSError, SystemExit):
+        table = {}
+    if table:
+        w("| arm | patch | bindings | lanes |")
+        w("|---|---|---|---|")
+        for name, arm in table.items():
+            w(f"| `{name}` | `{arm['patch']}` | {', '.join(arm['bindings'])} | {_short(arm['lanes'], 4)} |")
+    else:
+        w("(none yet)")
+    w("")
     w("## Owed")
     w("")
     owed = [(r, t) for r, t, _ in tri if t[0] == "owed"]
