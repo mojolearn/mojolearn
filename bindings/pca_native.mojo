@@ -4,6 +4,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
+from bindings.py_balanced import py_type
 from bindings.sequential_admission import sequential_admit_value
 from bindings.classical_metadata import classical_is_fitted
 from bindings.classical_exceptions import classical_not_fitted_class
@@ -21,15 +22,15 @@ def pca_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
             raise Error("TypeError: pca_native_call requires model, operation, arguments and connected context")
         var model = call[0]
         var b = Python.import_module("builtins")
-        if b.type(call[1]) is not b.str or b.type(call[2]) is not b.tuple:
+        if py_type(call[1]) is not b.str or py_type(call[2]) is not b.tuple:
             raise Error("TypeError: native PCA operation and argument tuple are required")
         var operation = String(call[1])
         var args = call[2]
         var context = call[3]
-        if b.type(context) is not b.dict:
+        if py_type(context) is not b.dict:
             raise Error("TypeError: native PCA requires connected context")
         var loading = operation == "load"
-        if (model is not context["pca_class"] if loading else b.type(model) is not context["pca_class"]):
+        if (model is not context["pca_class"] if loading else py_type(model) is not context["pca_class"]):
             raise Error("TypeError: the private PCA owner requires an exact PCA instance")
         var result = PythonObject(None)
         if loading:

@@ -10,6 +10,7 @@ from bindings.classical_arrays import classical_host_f32
 from bindings.sequential_arrays import sequential_address
 from bindings.sequential_description import sequential_fields
 from bindings.pca_exact import pca_copied, pca_prefix, pca_whiten_entries
+from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 
 
 def pca_random_draw(mut kit: ClassicalKit, rows: Int, cols: Int, seed: PythonObject) raises -> Int:
@@ -20,12 +21,12 @@ def pca_random_draw(mut kit: ClassicalKit, rows: Int, cols: Int, seed: PythonObj
     # entries execute the same Philox normal kernel, not a host RNG fallback.
     if count >= 1024 and kit.resident:
         var out = kit.device_output(rows, cols)
-        _ = kit.entries["x_decomp_dev_rand"](kit.matrices[out].device, params)
+        _ = py_call(kit.entries["x_decomp_dev_rand"], kit.matrices[out].device, params)
         return out
     var out = kit.zeros(rows, cols)
     if count:
         var address = kit.address(out)
-        _ = kit.entries["x_decomp_rand"](address, params)
+        _ = py_call(kit.entries["x_decomp_rand"], address, params)
     return out
 
 
@@ -35,15 +36,15 @@ def pca_orth(mut kit: ClassicalKit, a: Int) raises -> Int:
     if rows * cols and kit.resident:
         var out = kit.device_output(rows, cols)
         var flags = 0
-        if kit.entries.get("x_decomp_s_flags") is not None:
+        if py_get(kit.entries, "x_decomp_s_flags") is not None:
             flags = Int(py=kit.entries["x_decomp_s_flags"]())
         var entry = kit.entries["x_decomp_dev_orth_ws"] if flags & 2 else kit.entries["x_decomp_dev_orth"]
         var source = kit.device(a)
-        _ = entry(source, kit.matrices[out].device, Python.list(rows, cols))
+        _ = py_call(entry, source, kit.matrices[out].device, Python.list(rows, cols))
         return out
     var out = kit.copy_host(a)
     var address = kit.address(out)
-    _ = kit.entries["x_decomp_orth"](address, Python.list(rows, cols))
+    _ = py_call(kit.entries["x_decomp_orth"], address, Python.list(rows, cols))
     return out
 
 
@@ -55,11 +56,11 @@ def pca_absmax_signs(mut kit: ClassicalKit, a: Int, columns: Bool) raises -> Int
     if count and rows * cols:
         if kit.resident:
             var source = kit.device(a)
-            _ = kit.entries["x_decomp_dev_absmax"](source, kit.matrices[out].device, Python.list(rows, cols, Int(columns)))
+            _ = py_call(kit.entries["x_decomp_dev_absmax"], source, kit.matrices[out].device, Python.list(rows, cols, Int(columns)))
         else:
             var source = kit.address(a)
             var dest = kit.address(out)
-            _ = kit.entries["x_decomp_absmax_sign"](source, dest, Python.list(rows, cols, Int(columns)))
+            _ = py_call(kit.entries["x_decomp_absmax_sign"], source, dest, Python.list(rows, cols, Int(columns)))
     if not columns:
         out = kit.transpose(out)
     return kit.signs(out)
@@ -72,12 +73,12 @@ def pca_tall_svd(mut kit: ClassicalKit, a: Int) raises -> Tuple[Int, Int]:
     var v = kit.zeros(cols, cols)
     var sa = kit.address(s)
     var va = kit.address(v)
-    if rows >= cols and cols >= 1 and kit.resident and kit.entries.get("x_decomp_dev_svd") is not None:
+    if rows >= cols and cols >= 1 and kit.resident and py_get(kit.entries, "x_decomp_dev_svd") is not None:
         var source = kit.device(a)
-        _ = kit.entries["x_decomp_dev_svd"](source, sa, va, Python.list(rows, cols))
+        _ = py_call(kit.entries["x_decomp_dev_svd"], source, sa, va, Python.list(rows, cols))
     else:
         var source = kit.address(a)
-        _ = kit.entries["x_decomp_svd"](source, sa, va, Python.list(rows, cols))
+        _ = py_call(kit.entries["x_decomp_svd"], source, sa, va, Python.list(rows, cols))
     var negated = kit.ew(14, s, scalar=-1.0)
     var order = kit.order(negated)
     var st = kit.transpose(s)
@@ -121,11 +122,11 @@ def pca_order_small(mut kit: ClassicalKit, a: Int) raises -> Int:
     if count:
         if kit.resident:
             var source = kit.device(a)
-            _ = kit.entries["x_decomp_dev_order_small"](source, kit.matrices[out].device, Python.list(count))
+            _ = py_call(kit.entries["x_decomp_dev_order_small"], source, kit.matrices[out].device, Python.list(count))
         else:
             var source = kit.address(a)
             var dest = kit.address(out)
-            _ = kit.entries["x_decomp_order_small"](source, dest, Python.list(count))
+            _ = py_call(kit.entries["x_decomp_order_small"], source, dest, Python.list(count))
     return out
 
 
@@ -219,7 +220,7 @@ def pca_randomized_fit(model: PythonObject, args: PythonObject, entries: PythonO
     if min(rows, cols) < 2:
         raise Error("randomized PCA requires at least two rows and features")
     var requested = fields["n_components"]
-    var nc = min(rows, cols) if requested is None else Int(py=b.int(requested))
+    var nc = min(rows, cols) if requested is None else Int(py=py_call(b.int, requested))
     if nc < 1 or nc >= min(rows, cols):
         raise Error("svd_solver='randomized' needs 1 <= n_components < min(n_samples, n_features)")
     var normalizer = String(fields["power_iteration_normalizer"])
@@ -227,18 +228,18 @@ def pca_randomized_fit(model: PythonObject, args: PythonObject, entries: PythonO
         raise Error("power_iteration_normalizer must be 'auto', 'QR', 'LU' or 'none'")
     var power = fields["iterated_power"]
     # Incumbent Halko iteration policy, not a benchmark-shape selection rule.
-    var iterations = (7 if Float64(nc) < 0.1 * Float64(min(rows, cols)) else 4) if b.type(power) is b.str and String(power) == "auto" else Int(py=b.int(power))
-    var oversamples = Int(py=b.int(fields["n_oversamples"]))
+    var iterations = (7 if Float64(nc) < 0.1 * Float64(min(rows, cols)) else 4) if py_type(power) is b.str and String(power) == "auto" else Int(py=py_call(b.int, power))
+    var oversamples = Int(py=py_call(b.int, fields["n_oversamples"]))
     if oversamples < 0:
         raise Error("n_oversamples must be nonnegative")
     var seed = fields["random_state"]
     if seed is None:
         seed = PythonObject(0)
-    elif b.type(seed) is not b.int:
+    elif py_type(seed) is not b.int:
         raise Error("TypeError: random_state must be None or an int")
     seed = seed.__and__(0xFFFFFFFF)
-    var decomp = entries.get("randomized_bindings")
-    if b.type(decomp) is not b.dict:
+    var decomp = py_get(entries, "randomized_bindings")
+    if py_type(decomp) is not b.dict:
         raise Error("ImportError: randomized PCA native entries are unavailable")
     var kit = ClassicalKit(decomp, context)
     try:
@@ -271,17 +272,17 @@ def pca_randomized_fit(model: PythonObject, args: PythonObject, entries: PythonO
         var variance_array = pca_prefix(kit.host(variance), nc, 0, context)
         var ratio_array = pca_prefix(kit.host(ratio), nc, 0, context)
         var noise_value = kit.word(noise)
-        fields["components_"] = components_array
-        fields["mean_"] = mean_array
-        fields["singular_values_"] = singular_array
-        fields["explained_variance_"] = variance_array
-        fields["explained_variance_ratio_"] = ratio_array
-        fields["noise_variance_"] = PythonObject(noise_value)
-        fields["n_components_"] = nc
-        fields["n_features_in_"] = cols
-        fields["n_samples_"] = rows
-        fields["input_copied_"] = pca_copied(args[0], context)
-        fields["_mojolearn_fitted"] = True
+        py_setitem(fields, "components_", components_array)
+        py_setitem(fields, "mean_", mean_array)
+        py_setitem(fields, "singular_values_", singular_array)
+        py_setitem(fields, "explained_variance_", variance_array)
+        py_setitem(fields, "explained_variance_ratio_", ratio_array)
+        py_setitem(fields, "noise_variance_", PythonObject(noise_value))
+        py_setitem(fields, "n_components_", nc)
+        py_setitem(fields, "n_features_in_", cols)
+        py_setitem(fields, "n_samples_", rows)
+        py_setitem(fields, "input_copied_", pca_copied(args[0], context))
+        py_setitem(fields, "_mojolearn_fitted", True)
         _ = x^
         return model
     finally:

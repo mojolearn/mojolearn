@@ -83,10 +83,8 @@ def lr_decide_binding(vs_addr: PythonObject, es_addr: PythonObject, n: PythonObj
 
 
 def _pair(r: LrOut) raises -> PythonObject:
-    var out = Python.list()
-    out.append(PythonObject(r.status))
-    out.append(PythonObject(Float64(r.value)))
-    return out
+    # Python.list owns its items once; list.append from Mojo would retain each.
+    return Python.list(PythonObject(r.status), PythonObject(Float64(r.value)))
 
 
 def lr_schedule_exact_binding(ip: PythonObject, fp: PythonObject) raises -> PythonObject:
@@ -107,10 +105,7 @@ def lr_onecycle_exact_binding(ip: PythonObject, fp: PythonObject) raises -> Pyth
 
 
 def _status_pair(r: Tuple[Int, Int]) raises -> PythonObject:
-    var res = Python.list()
-    res.append(PythonObject(r[0]))
-    res.append(PythonObject(r[1]))
-    return res
+    return Python.list(PythonObject(r[0]), PythonObject(r[1]))
 
 
 def lr_pow_values_binding(fp: PythonObject, ip: PythonObject, out_addr: PythonObject) raises -> PythonObject:

@@ -6,6 +6,7 @@ twin is bindings/_mojolearn_x_cnn_host.mojo, same names, same contract."""
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, copy_f32
 from std.os import abort
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_call
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
@@ -430,7 +431,7 @@ def softmax_xent_binding[resident: Bool = False](
 
 def _is_list(o: PythonObject) raises -> Bool:
     var bi = Python.import_module("builtins")
-    return Bool(py=bi.isinstance(o, bi.list))
+    return Bool(py=py_call(bi.isinstance, o, bi.list))
 
 
 def _many(ws_: PythonObject, gs: PythonObject, bs: PythonObject, params: PythonObject) raises -> Tuple[List[Int], List[Int], List[Int], List[Int]]:

@@ -6,6 +6,7 @@ x_cnn/host/ops_host.mojo."""
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, copy_f32
 from std.os import abort
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_call
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from std.memory import alloc, memcpy, memset_zero
@@ -775,7 +776,7 @@ def conv_block_backward_r_binding(
 
 def _is_list(o: PythonObject) raises -> Bool:
     var bi = Python.import_module("builtins")
-    return Bool(py=bi.isinstance(o, bi.list))
+    return Bool(py=py_call(bi.isinstance, o, bi.list))
 
 
 def _list_counts(a: PythonObject, b: PythonObject, c: PythonObject, params: PythonObject) raises -> List[Int]:

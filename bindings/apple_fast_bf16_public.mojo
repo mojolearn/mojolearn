@@ -24,6 +24,7 @@ No numerical source or dispatch of the identical tier changes here.
 from std.ffi import _Global
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
+from bindings.py_balanced import py_call, py_setattr, py_setitem, py_type
 
 from core.hostptr import f32_ptr, u16_ptr
 from core.neural_context import process_ctx
@@ -99,7 +100,7 @@ struct _Input(Movable):
         var shape = PythonObject(None)
         # Array.__buffer__ is a Python method on 3.12+. Read its native
         # backing memoryview directly on all supported Python versions.
-        if builtins.type(value) is state[].array_class:
+        if py_type(value) is state[].array_class:
             view = value._mv
             shape = value.shape
             var dtype = String(value.dtype)
@@ -110,7 +111,7 @@ struct _Input(Movable):
             if String(value.order) != "C":
                 raise Error("fast BF16: Array operands must be C-contiguous; buffer-protocol operands may be strided")
         else:
-            view = builtins.memoryview(value)
+            view = py_call(builtins.memoryview, value)
             shape = view.shape
         var format = String(view.format)
         self.bf16 = format == "H" or format == "@H" or format == "=H" or format == "<H"
@@ -122,8 +123,8 @@ struct _Input(Movable):
         var itemsize = 2 if self.bf16 else 4
         if Int(py=view.nbytes) != self.count * itemsize or Int(py=view.itemsize) != itemsize:
             raise Error("fast BF16: buffer span and shape disagree")
-        self.store = state[].array_type("H" if self.bf16 else "f")
-        self.store.frombytes(view.tobytes("C"))
+        self.store = py_call(state[].array_type, "H" if self.bf16 else "f")
+        _ = py_call(self.store.frombytes, py_call(view.tobytes, "C"))
         self.address = Int(py=self.store.buffer_info()[0])
 
 
@@ -131,31 +132,32 @@ def _new_array(shape: PythonObject, bf16: Bool) raises -> PythonObject:
     var state = _BOUNDARY.get_or_create_ptr()
     var count = _shape_size(shape)
     var itemsize = 2 if bf16 else 4
-    var store = state[].array_type("H" if bf16 else "f")
-    store.frombytes(state[].builtins.bytes(count * itemsize))
+    var store = py_call(state[].array_type, "H" if bf16 else "f")
+    _ = py_call(store.frombytes, py_call(state[].builtins.bytes, count * itemsize))
     # object.__new__ and the slot setters are CPython C operations. Do not
     # call Array.__init__, _init_owned, _set_meta, reshape or from_buffer.
-    var result = state[].builtins.object.__new__(state[].array_class)
-    result._store = store
-    result._base = PythonObject(None)
-    result._pin = PythonObject(None)
-    result._mv = state[].builtins.memoryview(store)
-    result._addr = store.buffer_info()[0]
-    result._readonly = PythonObject(False)
-    result.shape = shape
-    result.dtype = PythonObject("<u2" if bf16 else "<f4")
-    result.ndim = PythonObject(len(shape))
-    result.size = PythonObject(count)
-    result.nbytes = PythonObject(count * itemsize)
-    result.itemsize = PythonObject(itemsize)
-    result.order = PythonObject("C")
+    var result = py_call(state[].builtins.object.__new__, state[].array_class)
+    py_setattr(result, "_store", store)
+    py_setattr(result, "_base", PythonObject(None))
+    py_setattr(result, "_pin", PythonObject(None))
+    py_setattr(result, "_mv", py_call(state[].builtins.memoryview, store))
+    py_setattr(result, "_addr", store.buffer_info()[0])
+    py_setattr(result, "_readonly", PythonObject(False))
+    py_setattr(result, "shape", shape)
+    py_setattr(result, "dtype", PythonObject("<u2" if bf16 else "<f4"))
+    py_setattr(result, "ndim", PythonObject(len(shape)))
+    py_setattr(result, "size", PythonObject(count))
+    py_setattr(result, "nbytes", PythonObject(count * itemsize))
+    py_setattr(result, "itemsize", PythonObject(itemsize))
+    py_setattr(result, "order", PythonObject("C"))
     var strides = state[].builtins.list()
+    var insert = strides.insert
     var stride = itemsize
     for index in range(len(shape)):  # small-loop(array shape dimension words)
         var axis = len(shape) - index - 1
-        strides.insert(0, stride)
+        _ = py_call(insert, 0, stride)
         stride *= Int(py=shape[axis])
-    result.strides = state[].builtins.tuple(strides)
+    py_setattr(result, "strides", py_call(state[].builtins.tuple, strides))
     return result
 
 
@@ -224,7 +226,7 @@ def _single_operand(args: PythonObject, kwargs: PythonObject, name: String) rais
         value = args[0]
     var keywords = _normalized_keywords(kwargs)
     if keywords is not PythonObject(None):
-        var keys = _BOUNDARY.get_or_create_ptr()[].builtins.tuple(keywords.keys())
+        var keys = py_call(_BOUNDARY.get_or_create_ptr()[].builtins.tuple, keywords.keys())
         for index in range(len(keys)):  # small-loop(keys: API keyword metadata): one supported name then first unknown rejects, never tensor elements
             var key = keys[index]
             if String(key) != name:
@@ -273,7 +275,7 @@ def fast_matmul_bf16_binding(
     var out = PythonObject(None)
     var keywords = _normalized_keywords(kwargs)
     if keywords is not PythonObject(None):
-        var keys = _BOUNDARY.get_or_create_ptr()[].builtins.tuple(keywords.keys())
+        var keys = py_call(_BOUNDARY.get_or_create_ptr()[].builtins.tuple, keywords.keys())
         for index in range(len(keys)):  # small-loop(keys: API keyword metadata): five supported names then first unknown rejects, never tensor elements
             var key = keys[index]
             var name = String(key)
@@ -311,16 +313,16 @@ def fast_matmul_bf16_binding(
         raise Error("fast matmul_bf16: contracted extents differ")
     var op = OP_TN if transpose_a else (OP_NT if transpose_b else OP_NN)
     var state = _BOUNDARY.get_or_create_ptr()
-    var shape = state[].builtins.tuple([PythonObject(m), PythonObject(n)])
+    var shape = Python.tuple(PythonObject(m), PythonObject(n))
     var result = _new_array(shape, False)
     var out_view = PythonObject(None)
     if out is not PythonObject(None):
-        if state[].builtins.type(out) is state[].array_class:
+        if py_type(out) is state[].array_class:
             if out.shape != shape or String(out.dtype) != "<f4" or String(out.order) != "C" or Bool(out._readonly):
                 raise Error("fast matmul_bf16: out must be writable C-contiguous float32 with the output shape")
             out_view = out._mv
         else:
-            out_view = state[].builtins.memoryview(out)
+            out_view = py_call(state[].builtins.memoryview, out)
             var format = String(out_view.format)
             if out_view.shape != shape or not Bool(out_view.c_contiguous) or Bool(out_view.readonly) or (format != "f" and format != "@f" and format != "=f" and format != "<f"):
                 raise Error("fast matmul_bf16: out must be writable C-contiguous float32 with the output shape")
@@ -354,7 +356,7 @@ def fast_matmul_bf16_binding(
     _ = left^
     _ = right^
     if out is not PythonObject(None):
-        var bytes_view = out_view.cast("B")
-        bytes_view[:] = result._mv.cast("B")
+        var bytes_view = py_call(out_view.cast, "B")
+        py_setitem(bytes_view, py_call(state[].builtins.slice, PythonObject(None)), py_call(result._mv.cast, "B"))
         return out
     return result

@@ -143,6 +143,7 @@ from mamba.impl.ops.mamba3_siso import m3_phase_tick
 from mamba.impl.modules.mamba3_transfer import m3_upload, m3_download
 from std.os import abort, getenv
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_call
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
@@ -569,10 +570,10 @@ def mamba1_session_info_binding(session: PythonObject) raises -> PythonObject:
     """[open, usable, B, d_model] as ints."""
     var owner = session.downcast_value_ptr[Mamba1DecodeSession]()
     var out = Python.list()
-    out.append(PythonObject(1 if owner[].is_open() else 0))
-    out.append(PythonObject(1 if owner[].usable else 0))
-    out.append(PythonObject(owner[].b))
-    out.append(PythonObject(owner[].dm))
+    _ = py_call(out.append, PythonObject(1 if owner[].is_open() else 0))
+    _ = py_call(out.append, PythonObject(1 if owner[].usable else 0))
+    _ = py_call(out.append, PythonObject(owner[].b))
+    _ = py_call(out.append, PythonObject(owner[].dm))
     return out
 
 
@@ -1271,12 +1272,12 @@ def mamba3_prefill_session_info_binding(session: PythonObject) raises -> PythonO
     byte compares (how often the weights and the forward were reused)."""
     var owner = session.downcast_value_ptr[Mamba3PrefillSession]()
     var out = Python.list()
-    out.append(PythonObject(owner[].weight_uploads))
-    out.append(PythonObject(owner[].weight_recopies))
-    out.append(PythonObject(owner[].weight_reuses))
-    out.append(PythonObject(owner[].backward_reuses))
-    out.append(PythonObject(owner[].backward_recomputes))
-    out.append(PythonObject(1 if owner[].stages_valid else 0))
+    _ = py_call(out.append, PythonObject(owner[].weight_uploads))
+    _ = py_call(out.append, PythonObject(owner[].weight_recopies))
+    _ = py_call(out.append, PythonObject(owner[].weight_reuses))
+    _ = py_call(out.append, PythonObject(owner[].backward_reuses))
+    _ = py_call(out.append, PythonObject(owner[].backward_recomputes))
+    _ = py_call(out.append, PythonObject(1 if owner[].stages_valid else 0))
     return out
 
 
@@ -1346,8 +1347,8 @@ def mamba3_session_export_state_binding(session: PythonObject, addrs: PythonObje
         owner[].busy = False; owner[].usable = False; raise error
     owner[].busy = False
     var result = Python.list()
-    result.append(PythonObject(q))
-    result.append(PythonObject(1 if owner[].state.value().pending else 0))
+    _ = py_call(result.append, PythonObject(q))
+    _ = py_call(result.append, PythonObject(1 if owner[].state.value().pending else 0))
     return result
 
 

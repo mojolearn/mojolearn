@@ -6,6 +6,7 @@
 from std.memory import memcpy, bitcast
 from core.pca_exact_impl import pca_check_state, pca_widen_spectrum
 from std.python import Python, PythonObject
+from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
 from bindings.classical_arrays import classical_array, classical_host_f32, classical_word
 from bindings.sequential_inputs import sequential_input
 from bindings.sequential_arrays import sequential_array, sequential_address
@@ -25,11 +26,11 @@ struct PCADimensions(Copyable, Movable):
 
 def pca_copied(source: PythonObject, context: PythonObject) raises -> Bool:
     var b = Python.import_module("builtins")
-    if b.type(source) is context["ndarray"] or b.type(source) is context["array_class"]:
+    if py_type(source) is context["ndarray"] or py_type(source) is context["array_class"]:
         var view = sequential_input(source, context)
         return not (view.dtype is context["float32"] and Bool(py=view.flags.c_contiguous))
-    if b.type(source) is b.memoryview or b.type(source) is context["array_type"] or b.type(source) is b.bytearray:
-        var view = b.memoryview(source)
+    if py_type(source) is b.memoryview or py_type(source) is context["array_type"] or py_type(source) is b.bytearray:
+        var view = py_call(b.memoryview, source)
         return not (Int(py=view.itemsize) == 4 and String(view.format) == "f" and Bool(py=view.c_contiguous))
     # Nested native sequences are materialized. Pandas/Torch publication and
     # feature-name semantics remain outside this private dense-buffer slice.
@@ -37,13 +38,13 @@ def pca_copied(source: PythonObject, context: PythonObject) raises -> Bool:
 
 
 def pca_whiten_entries(entries: PythonObject) raises:
-    if entries.get("pca_whiten_transform") is None or entries.get("pca_whiten_inverse_transform") is None:
+    if py_get(entries, "pca_whiten_transform") is None or py_get(entries, "pca_whiten_inverse_transform") is None:
         raise Error("NotImplementedError: PCA whiten=True requires the compiled whitened transform pair")
 
 
 def pca_state_array(fields: PythonObject, name: String, shape: PythonObject,
                     context: PythonObject, finite: Bool = False, nonnegative: Bool = False) raises -> PythonObject:
-    if not Bool(py=fields.__contains__(name)):
+    if not py_contains(fields, name):
         raise Error("PCA fitted state is missing " + name)
     var value = sequential_input(fields[name], context)
     if value.dtype is not context["float32"] or value.shape != shape or not Bool(py=value.flags.c_contiguous):
@@ -58,8 +59,8 @@ def pca_mle(spectrum: PythonObject, rows: Int, entries: PythonObject, context: P
     var count = Int(py=spectrum.size)
     if count < 2:
         return 0
-    var ranks = entries.get("rank_bindings")
-    if Python.import_module("builtins").type(ranks) is not Python.import_module("builtins").dict:
+    var ranks = py_get(entries, "rank_bindings")
+    if py_type(ranks) is not Python.import_module("builtins").dict:
         raise Error("ImportError: native PCA rank entries are unavailable")
     var wide = classical_array(count, 0, context, True)
     var src = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(spectrum)))
@@ -67,28 +68,28 @@ def pca_mle(spectrum: PythonObject, rows: Int, entries: PythonObject, context: P
     pca_widen_spectrum(src, dst, count)
     var rank = 0
     if String(context["vendor"]) == "cpu":
-        if ranks.get("x_decomp_pca_mle_rank") is None:
+        if py_get(ranks, "x_decomp_pca_mle_rank") is None:
             raise Error("ImportError: native CPU PCA MLE rank entry is unavailable")
-        rank = Int(py=ranks["x_decomp_pca_mle_rank"](sequential_address(wide), Python.list(count, rows)))
+        rank = Int(py=py_call(ranks["x_decomp_pca_mle_rank"], sequential_address(wide), Python.list(count, rows)))
     else:
         var required = Python.tuple("x_decomp_dev_alloc", "x_decomp_dev_free", "x_decomp_dev_upload",
                                     "x_decomp_dev_download", "x_decomp_dev_pca_mle_rank")
         for i in range(len(required)):  # driver-loop: over required resident MLE entry names
-            if ranks.get(required[i]) is None:
+            if py_get(ranks, required[i]) is None:
                 raise Error("ImportError: native device PCA MLE rank entry is unavailable")
-        var device_spectrum = Int(py=ranks["x_decomp_dev_alloc"](2 * count))
+        var device_spectrum = Int(py=py_call(ranks["x_decomp_dev_alloc"], 2 * count))
         var device_rank = -1
         try:
-            device_rank = Int(py=ranks["x_decomp_dev_alloc"](1))
-            _ = ranks["x_decomp_dev_upload"](device_spectrum, sequential_address(wide), 2 * count)
-            _ = ranks["x_decomp_dev_pca_mle_rank"](device_spectrum, device_rank, Python.list(count, rows))
+            device_rank = Int(py=py_call(ranks["x_decomp_dev_alloc"], 1))
+            _ = py_call(ranks["x_decomp_dev_upload"], device_spectrum, sequential_address(wide), 2 * count)
+            _ = py_call(ranks["x_decomp_dev_pca_mle_rank"], device_spectrum, device_rank, Python.list(count, rows))
             var result = classical_array(1, 0, context)
-            _ = ranks["x_decomp_dev_download"](device_rank, sequential_address(result), 1)
+            _ = py_call(ranks["x_decomp_dev_download"], device_rank, sequential_address(result), 1)
             rank = Int(classical_word(result))
         finally:
             if device_rank >= 0:
-                _ = ranks["x_decomp_dev_free"](device_rank)
-            _ = ranks["x_decomp_dev_free"](device_spectrum)
+                _ = py_call(ranks["x_decomp_dev_free"], device_rank)
+            _ = py_call(ranks["x_decomp_dev_free"], device_spectrum)
     _ = wide^
     return rank
 
@@ -121,13 +122,13 @@ def pca_exact_fit(model: PythonObject, args: PythonObject, entries: PythonObject
     if rows < 2:
         raise Error("Found array with " + String(rows) + " sample(s) while a minimum of 2 is required by PCA")
     var dense = solver == "full" and cols >= 2
-    if dense and entries.get("pca_fit_full") is None:
+    if dense and py_get(entries, "pca_fit_full") is None:
         raise Error("NotImplementedError: PCA svd_solver='full' requires its compiled dense arm")
     if dense and rows < cols and Int(py=entries["estimators_numeric_mode"]()) != 1:
         raise Error("NotImplementedError: wide full PCA requires identical mode")
     var requested = fields["n_components"]
-    var mle = b.type(requested) is b.str and String(requested) == "mle"
-    var fraction = Bool(py=b.isinstance(requested, b.float))
+    var mle = py_type(requested) is b.str and String(requested) == "mle"
+    var fraction = Bool(py=py_call(b.isinstance, requested, b.float))
     var frac = Float64(0)
     var nc = min(rows, cols)
     if mle:
@@ -138,7 +139,7 @@ def pca_exact_fit(model: PythonObject, args: PythonObject, entries: PythonObject
         if not (frac > 0 and frac < 1):
             raise Error("a float n_components must be in (0, 1)")
     else:
-        nc = min(rows, cols) if requested is None else Int(py=b.int(requested))
+        nc = min(rows, cols) if requested is None else Int(py=py_call(b.int, requested))
         if nc < 1 or nc > cols:
             raise Error("n_components must be between 1 and n_features")
     if dense and nc > min(rows, cols):
@@ -149,12 +150,12 @@ def pca_exact_fit(model: PythonObject, args: PythonObject, entries: PythonObject
     var ratio = classical_array(nc, 0, context)
     var singular = classical_array(nc, 0, context)
     var fit = entries["pca_fit_full"] if dense else entries["pca_fit"]
-    var noise = fit(sequential_address(x), sequential_address(components), sequential_address(mean),
+    var noise = py_call(fit, sequential_address(x), sequential_address(components), sequential_address(mean),
                     sequential_address(variance), sequential_address(ratio), sequential_address(singular),
                     Python.list(rows, cols, nc))
     if fraction or mle:
         var keep_in = pca_mle(variance, rows, entries, context) if mle else -1
-        var finish = entries["pca_rank_finish"](sequential_address(ratio), sequential_address(variance),
+        var finish = py_call(entries["pca_rank_finish"], sequential_address(ratio), sequential_address(variance),
                                                 Python.list(nc, keep_in), PythonObject(frac))
         nc = Int(py=finish[0])
         noise = finish[1]
@@ -163,17 +164,17 @@ def pca_exact_fit(model: PythonObject, args: PythonObject, entries: PythonObject
         ratio = pca_prefix(ratio, nc, 0, context)
         singular = pca_prefix(singular, nc, 0, context)
     # Commit a complete state only after all native calls and rank selection.
-    fields["components_"] = components
-    fields["mean_"] = mean
-    fields["explained_variance_"] = variance
-    fields["explained_variance_ratio_"] = ratio
-    fields["singular_values_"] = singular
-    fields["noise_variance_"] = b.float(noise)
-    fields["n_components_"] = nc
-    fields["n_features_in_"] = cols
-    fields["n_samples_"] = rows
-    fields["input_copied_"] = pca_copied(args[0], context)
-    fields["_mojolearn_fitted"] = True
+    py_setitem(fields, "components_", components)
+    py_setitem(fields, "mean_", mean)
+    py_setitem(fields, "explained_variance_", variance)
+    py_setitem(fields, "explained_variance_ratio_", ratio)
+    py_setitem(fields, "singular_values_", singular)
+    py_setitem(fields, "noise_variance_", py_call(b.float, noise))
+    py_setitem(fields, "n_components_", nc)
+    py_setitem(fields, "n_features_in_", cols)
+    py_setitem(fields, "n_samples_", rows)
+    py_setitem(fields, "input_copied_", pca_copied(args[0], context))
+    py_setitem(fields, "_mojolearn_fitted", True)
     _ = x^
     return model
 
@@ -181,7 +182,7 @@ def pca_exact_fit(model: PythonObject, args: PythonObject, entries: PythonObject
 def pca_transform(model: PythonObject, source: PythonObject, inverse: Bool,
                    entries: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = sequential_fields(model)
-    if not Bool(py=fields.__contains__("components_")):
+    if not py_contains(fields, "components_"):
         raise Error("RuntimeError: this estimator is not fitted yet")
     var dims = PCADimensions(Int(py=fields["n_samples_"]), Int(py=fields["n_features_in_"]), Int(py=fields["n_components_"]))
     if dims.features < 1 or dims.components < 0:
@@ -201,20 +202,20 @@ def pca_transform(model: PythonObject, source: PythonObject, inverse: Bool,
         var singular = pca_state_array(fields, "singular_values_", Python.tuple(dims.components), context, True, True)
         var variance = pca_state_array(fields, "explained_variance_", Python.tuple(dims.components), context, True, True)
         if inverse:
-            _ = entries["pca_whiten_inverse_transform"](sequential_address(x), sequential_address(components),
+            _ = py_call(entries["pca_whiten_inverse_transform"], sequential_address(x), sequential_address(components),
                     sequential_address(singular), sequential_address(mean), sequential_address(output),
                     Python.list(rows, dims.features, dims.components, dims.rows))
         else:
-            _ = entries["pca_whiten_transform"](sequential_address(x), sequential_address(mean),
+            _ = py_call(entries["pca_whiten_transform"], sequential_address(x), sequential_address(mean),
                     sequential_address(components), sequential_address(singular), sequential_address(output),
                     Python.list(rows, dims.features, dims.components, dims.rows))
         _ = singular^
         _ = variance^
     elif inverse:
-        _ = entries["inverse_transform"](sequential_address(x), sequential_address(components),
+        _ = py_call(entries["inverse_transform"], sequential_address(x), sequential_address(components),
                 sequential_address(mean), sequential_address(output), Python.list(rows, dims.features, dims.components, 1))
     else:
-        _ = entries["pca_transform"](sequential_address(x), sequential_address(mean), sequential_address(components),
+        _ = py_call(entries["pca_transform"], sequential_address(x), sequential_address(mean), sequential_address(components),
                                     sequential_address(output), Python.list(rows, dims.features, dims.components))
     _ = x^
     _ = components^
