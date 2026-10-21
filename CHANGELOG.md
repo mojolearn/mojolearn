@@ -2,6 +2,26 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
+## 0.8.56 (unreleased)
+
+- `Sequential` supports dropout: add `.dropout(rate)` between layers. Prediction and validation use every activation, and the
+  seeded masks continue across resumed training.
+- `Sequential.fit` takes `validation_data=(X, y)` and `restore_best_weights`: early stopping watches the held-out loss, and
+  restoring the best epoch also restores its optimizer, shuffle and schedule state. `validation_loss_curve_`, `best_epoch_` and
+  `epochs_run_` report each call. Classification labels are matched to the training classes on the GPU.
+- `Program.fit` trains a captured graph in one native call (shuffling, minibatches, forward and backward passes, optimizer
+  updates), with the `mse`, `mae`, `huber`, `bce_with_logits` and `cross_entropy` losses or a captured scalar loss.
+- `Session.run` and `Program.run` take `dynamic_shapes=True` to vary input dimensions, such as batch size or sequence length,
+  while the rank stays fixed.
+- `layer_norm` records gradients through its input, scale and bias, so second derivatives pass through it.
+- Linux wheels build their AMD kernels with eight compiler workers by default; `MOJOLEARN_AMD_COMPILE_JOBS=1` keeps one.
+  Results are unchanged.
+- Linux wheel packaging accepts the merged-binding indexes in the PTX slot and refuses a wheel that mixes merged and
+  per-binding layouts with a clear error.
+- A new release check runs 37 standalone native programs, covering the estimators, preprocessing, the tokenizer, `Sequential`
+  and the optimizers, with no Python interpreter present. Its first runs corrected the KDE, IVF and UMAP check programs.
+- Release uploads read the stored R2 credential file before reporting missing keys.
+
 ## 0.8.55 (published 2026-10-20)
 
 - Import pretrained models: `mojolearn.import_model` takes a `torch.export.ExportedProgram` or an ONNX file (opset 13 or later) and returns a
