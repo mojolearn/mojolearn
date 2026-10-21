@@ -22,6 +22,11 @@
 # tools/hooks/python_in_kernels_baseline.txt. It judges refs exactly like the
 # host-route fence: main on the whole tree, any other branch with --branch.
 #
+# The fifth fence (2026-10-21): no_compute_in_shells.py --tree refuses, in a shell
+# .mojo file (bindings/, *pyapi*.mojo, *_py.mojo), an untagged for/while loop or a
+# kernel launch (enqueue_function, DeviceContext(, parallelize, vectorize) beyond
+# tools/hooks/compute_in_shells_baseline.txt. Same main/--branch judging rule.
+#
 # Which refs the host-route fence judges (2026-10-09):
 #   refs/heads/main                       the whole tree
 #   refs/heads/<anything else>            --branch: only what it adds over its
@@ -50,7 +55,7 @@ here=$(dirname "$0")
 # installed copies never update themselves (an Oct 8 copy refused tagged driver loops on 2026-10-17): say so when the
 # checkout's hooks differ from the installed ones
 top=$(git rev-parse --show-toplevel 2>/dev/null)
-for f in pre-push no_host_routes.py rebuild_fence.py no_python_in_kernels.py; do
+for f in pre-push no_host_routes.py rebuild_fence.py no_python_in_kernels.py no_compute_in_shells.py; do
     if [ -f "$top/tools/hooks/$f" ] && ! cmp -s "$top/tools/hooks/$f" "$here/$f"; then
         echo "pre-push: the installed $f differs from tools/hooks/$f in this checkout; run bash tools/hooks/install.sh" >&2
     fi
@@ -78,6 +83,8 @@ echo "$refs" | while read -r local_ref local_sha remote_ref remote_sha; do
     if [ -f "$here/rebuild_fence.py" ]; then python3 "$here/rebuild_fence.py" "$local_sha" $mode || exit 4; fi
     # the no-Python-in-kernels check (2026-10-21), same branch/main judging rule
     if [ -f "$here/no_python_in_kernels.py" ]; then python3 "$here/no_python_in_kernels.py" --tree "$local_sha" $mode || exit 4; fi
+    # the no-compute-in-shells check (2026-10-21), same branch/main judging rule
+    if [ -f "$here/no_compute_in_shells.py" ]; then python3 "$here/no_compute_in_shells.py" --tree "$local_sha" $mode || exit 4; fi
 done
 [ $? -eq 4 ] && bad=1
 echo "$refs" | while read -r local_ref local_sha remote_ref remote_sha; do
