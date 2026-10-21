@@ -16,7 +16,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_linear.spearman import spearman_sign_host
 from x_linear.ops import FP, IP, X_LINEAR_HOST_SABOTAGE
 from x_linear.ridgecv import ridge_best_alpha
-from x_linear.dispatch import fit_dispatch, decision_one, decision_code_row, team_rows, team_own, ALGO_ISOTONIC, ALGO_LOGCV, ALGO_RIDGE, isotonic_abi_check
+from x_linear.dispatch_host import fit_dispatch
+from x_linear.dispatch import decision_one, decision_code_row, team_rows, team_own, ALGO_ISOTONIC, ALGO_LOGCV, ALGO_RIDGE, isotonic_abi_check
 from x_linear.dispatch import ALGO_GLM
 from x_linear.glm_ydom import XLIN_GLM_DEV_YDOM, GLM_YDOM_REFUSED, glm_ydom_host
 from x_linear.logcv import logcv_fold_ids, lcv_caller_folds

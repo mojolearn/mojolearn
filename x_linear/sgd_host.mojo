@@ -12,7 +12,8 @@ precedent). The device binding runs this fit on its grid driver
 (x_linear/device.mojo `fit_device`, `_sgd_mb_grid` and `_sgd_ps_grid`); the statements here are unchanged,
 so the host column's bits are unchanged.
 """
-from x_linear.ops import FP, IP, fill, i2f, ld, ldi, par_rows, shuffle, st
+from x_linear.rows_host import par_rows
+from x_linear.ops import FP, IP, fill, i2f, ld, ldi, shuffle, st
 from x_linear.team import Team
 from x_linear.sgd import (
     mb_sub_size,
