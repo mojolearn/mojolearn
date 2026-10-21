@@ -48,12 +48,11 @@ def connect_host(host_ridge_class, host_linear_class):
     # glue: connect the existing explicit Host* CPU ABI once at setup
     from types import BuiltinFunctionType
     import hashlib
-    from ._classical_host import _HostBound
 
     entry, context = connect(host_ridge_class, host_linear_class)
     owner = object.__new__(host_ridge_class)
     object.__setattr__(owner, "numeric_mode", "identical")
-    module = _HostBound._bind(owner, "_mojolearn_estimators")
+    module = host_ridge_class._bind(owner, "_mojolearn_estimators")
     cpu = {}
     names = ("estimators_vendor", "estimators_numeric_mode", "ols_predict",
              "ols_fit", "ridge_fit", "lm_col_sums", "lm_means_finish",
