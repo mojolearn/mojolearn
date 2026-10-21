@@ -221,7 +221,7 @@ def cross_vendor_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
         return result.steal_data()
     except error:
         if io_error.pending:
-            return io_error.restore()
+            return io_error^.restore()
         if String(error).startswith("CrossVendorMismatch:"):
             try:
                 ref cpy = Python().cpython()
