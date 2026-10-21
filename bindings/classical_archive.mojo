@@ -5,8 +5,7 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.native_json import native_path
-from bindings.sequential_arrays import sequential_address
-from bindings.classical_arrays import classical_input, classical_typed, classical_dtype_str, classical_c_bytes
+from bindings.classical_arrays import classical_input, classical_typed, classical_dtype_str, classical_c_bytes, classical_address
 from bindings.sequential_description import sequential_fields
 
 
@@ -59,7 +58,7 @@ def _archive_npy(value: PythonObject, context: PythonObject) raises -> PythonObj
         var array = classical_input(value, context)
         descr = classical_dtype_str(array, context)
         shape = array.shape if Int(py=array.ndim) else Python.tuple(1)
-        raw = classical_c_bytes(array, context)
+        raw = classical_c_bytes(array, "model field", context)
         # raw retains the actual exporter, including a borrowed contiguous
         # ndarray; no pointer outlives the owner passed to the native write.
         _ = array^
@@ -176,10 +175,10 @@ def classical_archive_save(model: PythonObject, path: PythonObject, ridge: Bool,
     if String(mode) != "fast" and String(mode) != "identical":
         raise Error("cannot save invalid numeric_mode")
     var bias = classical_typed(Python.tuple(1), "<f8", context)
-    var bias_ptr = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(bias)))
+    var bias_ptr = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(bias)))
     bias_ptr[0] = Float64(py=fields["intercept_"])
     var meta = classical_typed(Python.tuple(2), "<i8", context)
-    var meta_ptr = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(meta)))
+    var meta_ptr = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(meta)))
     meta_ptr[0] = Int64(Int(py=fields["n_features_in_"]))
     meta_ptr[1] = 1 if Bool(py=fields["fit_intercept"]) else 0
     var values = Python.dict()
@@ -191,7 +190,7 @@ def classical_archive_save(model: PythonObject, path: PythonObject, ridge: Bool,
     py_setitem(values, "meta", meta)
     if ridge:
         var alpha = classical_typed(Python.tuple(1), "<f8", context)
-        var ptr = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(alpha)))
+        var ptr = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(alpha)))
         ptr[0] = Float64(py=fields["alpha"])
         py_setitem(values, "alpha", alpha)
     return classical_archive_write(path, values, context)

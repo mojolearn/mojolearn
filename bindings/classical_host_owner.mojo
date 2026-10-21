@@ -7,7 +7,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.sequential_description import sequential_fields
 from bindings.sequential_admission import sequential_admit_value
 from bindings.sequential_inputs import sequential_input
-from bindings.classical_arrays import classical_numpy, classical_input
+from bindings.classical_arrays import classical_numpy, classical_input, classical_c_bytes
 from bindings.sha256_door import sha256_hexdigest
 
 
@@ -45,7 +45,7 @@ def classical_host_hash(model: PythonObject, context: PythonObject) raises -> Py
         else:
             # The same C-order bytes, read from the Array.
             var array = classical_input(value, context, "coef_")
-            payload = py_call(py_call(array.ravel).tobytes)
+            payload = py_call(b.bytes, classical_c_bytes(array, "coef_", context))
             _ = array^
     # Match _HostBound.model_sha256: the linear families hash their stored
     # coefficient bytes, not intercept/parameters or the whole ZIP archive.

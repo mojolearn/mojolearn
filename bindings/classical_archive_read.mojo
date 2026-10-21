@@ -7,7 +7,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contai
 from bindings.classical_archive import _archive_methods
 from bindings.native_json import native_path
 from bindings.sequential_description import sequential_fields
-from bindings.classical_arrays import classical_numpy, classical_is_array, classical_dtype_str, classical_item
+from bindings.classical_arrays import classical_numpy, classical_is_array, classical_dtype_str, classical_i64, classical_f64, classical_wrap_array, _store_code
 from core.classical_archive_read_impl import npy_latin1_bytes, npy_peek, npy_skip_ws, npy_string_close, npy_digits_end
 
 
@@ -204,7 +204,8 @@ def _decode_npy(raw: PythonObject, context: PythonObject) raises -> PythonObject
         # it does not compute, cast, or invoke NumPy preparation helpers.
         # Without NumPy the copy is an Array's own store, in the same layout.
         if not classical_numpy(context):
-            return py_call(context["array_restore"], payload, shape, dtype, "F" if fortran else "C", False)
+            var store = py_call(context["array_type"], PythonObject(_store_code(String(dtype))), py_call(bi.bytes, payload))
+            return classical_wrap_array(store, shape, String(dtype), "F" if fortran else "C", context)
         return py_call(context["ndarray"], shape, dtype=dtype, buffer=py_call(bi.bytearray, payload), order="F" if fortran else "C")
     var items = Python.list()
     for k in range(count):  # driver-loop: over serialized string/bytes metadata entries
@@ -438,11 +439,13 @@ def _archive_string(arrays: PythonObject, name: String, context: PythonObject) r
         raise Error("model file is missing field " + name)
     var value = arrays[name]
     var bi = Python.import_module("builtins")
-    var numeric = py_type(value) is context["ndarray"] if classical_numpy(context) else classical_is_array(value, context)
-    if numeric:
+    if py_type(value) is context["array_class"]:
+        # A NumPy-free read: a text field never decodes to numbers.
+        raise Error("model string field " + name + " is not text")
+    if classical_numpy(context) and py_type(value) is context["ndarray"]:
         if Int(py=value.size) == 0:
             raise Error("model string field is empty")
-        value = classical_item(value, 0, context)
+        value = value.flat[0]
     while py_type(value) is bi.list:  # driver-loop: over the nesting depth of a stored string field
         if len(value) == 0:
             raise Error("model string field is empty")
@@ -490,7 +493,7 @@ def classical_archive_build(cls: PythonObject, arrays: PythonObject, path: Pytho
     if String(mode) != "identical" and String(mode) != "fast":
         raise Error("invalid saved numeric_mode")
     var coef = _archive_exact(arrays, "coef", "<f4", context)
-    var features = Int(py=classical_item(meta, 0, context))
+    var features = classical_i64(meta, 0)
     if Int(py=coef.ndim) != 1 or Int(py=coef.size) != features:
         raise Error("model coef does not match n_features_in_")
     var intercept = _archive_exact(arrays, "intercept", "<f8", context)
@@ -504,13 +507,13 @@ def classical_archive_build(cls: PythonObject, arrays: PythonObject, path: Pytho
     var bi = Python.import_module("builtins")
     var model = py_call(bi.object.__new__, cls)
     var fields = sequential_fields(model)
-    py_setitem(fields, "fit_intercept", py_call(bi.bool, classical_item(meta, 1, context)))
+    py_setitem(fields, "fit_intercept", classical_i64(meta, 1) != 0)
     py_setitem(fields, "numeric_mode", mode)
     py_setitem(fields, "coef_", coef)
-    py_setitem(fields, "intercept_", py_call(bi.float, classical_item(intercept, 0, context)))
+    py_setitem(fields, "intercept_", classical_f64(intercept, 0))
     py_setitem(fields, "n_features_in_", features)
     if ridge:
-        py_setitem(fields, "alpha", py_call(bi.float, classical_item(alpha, 0, context)))
+        py_setitem(fields, "alpha", classical_f64(alpha, 0))
         # load preserves the constructor's default solver parameter; only the
         # fitted solver_ metadata records the eig implementation used by Ridge.
         py_setitem(fields, "solver", "auto")

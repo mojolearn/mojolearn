@@ -6,10 +6,9 @@
 # here; values are read by the typed CastIn conversion.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
-from bindings.classical_arrays import classical_array, classical_host_f32, classical_input, classical_kind
+from bindings.classical_arrays import classical_array, classical_host_f32, classical_input, classical_kind, classical_address
 from bindings.classical_pandas import native_pandas_exact, native_pandas_f32, classical_admit_value
 from bindings.sequential_admission import _ordinary_torch
-from bindings.sequential_arrays import sequential_address
 from bindings.native_torch_admission import native_torch_numpy
 from core.classical_arrays_impl import classical_check_weights
 
@@ -134,8 +133,8 @@ def classical_check_weights_input(source: PythonObject, rows: Int, context: Pyth
             raise Error("Input sample_weight contains NaN or infinity.")
         raise Error(String(error))
     var out = classical_array(rows, 0, context) if scalar else value
-    var input = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(value)))
-    var output = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(out)))
+    var input = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(value)))
+    var output = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out)))
     var any_positive = classical_check_weights(input, output, rows, scalar)
     if not any_positive:
         raise Error("Sample weights must contain at least one non-zero number.")

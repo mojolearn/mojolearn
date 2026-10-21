@@ -73,8 +73,7 @@ def _numpy_free_context():
     import mmap
     from array import array
     from . import _backend
-    from ._array import Array, _restore_array
-    from ._buffer import _materialize
+    from ._array import Array
     array_fields = {name: vars(Array)[name].__get__ for name in ("_mv", "shape", "dtype", "order")}  # glue: retain native slot descriptors once at package import
     return {
         "mapping_types": (dict, OrderedDict, defaultdict), "defaultdict_class": defaultdict,
@@ -83,8 +82,9 @@ def _numpy_free_context():
                                PurePosixPath, type(iter([])), type(iter(())), type(iter(range(0))), type(reversed([]))),
         "buffer_owner_types": (type(None), bytes, bytearray, array, mmap.mmap),
         "scalar_types": (), "integer_types": (int,), "array_fields": array_fields,
-        "array_type": array, "array_class": Array, "array_materialize": _materialize,
-        "array_restore": _restore_array, "backend_fields": vars(_backend), "vendor": _backend.vendor(),
+        "array_type": array, "array_class": Array, "backend_fields": vars(_backend), "vendor": _backend.vendor(),
+        "buffer_codes": {("b", 1): "b", ("i", 8): "q", ("u", 8): "Q", ("f", 8): "d"},
+        "int64_min": -(2 ** 63), "int64_max": 2 ** 63 - 1, "uint64_max": 2 ** 64 - 1,
     }
 
 
