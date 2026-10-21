@@ -2,21 +2,21 @@
 # Native normalization for the existing Session API. Public wrappers hand
 # over objects unchanged; this boundary owns descriptors, options and outputs.
 from std.python import Python, PythonObject
-from autograd.python_errors import graph_int
+from autograd.python_errors_pyapi import graph_int
 from sequence.exec_trait import Exec
 from sequence.ops import FP
 from autograd.ops_api import ops_session
 from autograd.program_pyapi import ProgramInput, _integer, ops_program_fit_native_py
-from autograd.program_arrays import output_array, is_integer_input, uint64_input
+from autograd.program_arrays_pyapi import output_array, is_integer_input, uint64_input
 from autograd.pyapi import program_info, ops_close_py, ops_profile_reset_py, ops_profile_report_py
-from autograd.model_checkpoint import ops_load_program_py, ops_save_state_py, ops_load_state_py
-from autograd.program_save import ops_program_save_native_py
+from autograd.model_checkpoint_pyapi import ops_load_program_py, ops_save_state_py, ops_load_state_py
+from autograd.program_save_pyapi import ops_program_save_native_py
 from bindings.native_json import native_path
-from autograd.weight_frontend import ops_weights_native_py
+from autograd.weight_frontend_pyapi import ops_weights_native_py
 from autograd.session_lifetime import SessionLifetime
 from autograd.execution_profile_pyapi import execution_profile_object
-from autograd.control_checkpoint import control_save_py, control_load_py
-from autograd.gradient_diagnostics import gradient_report_py
+from autograd.control_checkpoint_pyapi import control_save_py, control_load_py
+from autograd.gradient_diagnostics_pyapi import gradient_report_py
 
 
 def _nil(x: PythonObject) -> Bool:

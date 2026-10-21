@@ -8,10 +8,11 @@ from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 from std.python._cpython import PyObjectPtr
-from autograd.python_errors import graph_python_error
-from autograd.ops_frontend import ops_session_call_py
-from autograd.session_frontend import ops_session_initialize_py
-from autograd.session_lifetime import SessionLifetime, ops_session_create_py
+from autograd.python_errors_pyapi import graph_python_error
+from autograd.ops_frontend_pyapi import ops_session_call_py
+from autograd.session_frontend_pyapi import ops_session_initialize_py
+from autograd.session_lifetime import SessionLifetime
+from autograd.session_lifetime_pyapi import ops_session_create_py
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
@@ -22,7 +23,7 @@ from sequence.ets_team_py import ets_team_applies, ets_team_py
 from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, prophet_predict_py, moe_forward_py
 from sequence.opt_resident import AF_RESIDENT, adafactor_resident_open_py, adafactor_resident_step_py, lamb_resident_open_py, lamb_resident_step_py, opt_resident_close_py, opt_resident_move_py, opt_resident_open_py, opt_resident_step_py
 from autograd.program_pyapi import ops_program_dynamic_py, ops_program_fit_py, ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py
-from autograd.program_control import ops_program_control_py
+from autograd.program_control_pyapi import ops_program_control_py
 from autograd.distributed_pyapi import (
     distributed_object,
     distributed_devices, distributed_open, distributed_load, distributed_fit_py,
@@ -36,7 +37,7 @@ from autograd.partition_pyapi import (
 )
 from max.gpu.host import DeviceContext
 from sequence.launch_profile import launch_profile_level
-from autograd.program_control_grad import ops_program_control_vjp_py
+from autograd.program_control_grad_pyapi import ops_program_control_vjp_py
 from autograd.pyapi import model_fit_py, model_labels_check, model_labels_result, model_n_params_py, model_predict_py
 from autograd.pyapi import model_gather_labels_py
 from autograd.pyapi import model_import_params_py, ops_load_weights_py
@@ -54,12 +55,12 @@ from autograd.pyapi import (
 from autograd.ops_api import OPS_DEVICE
 # the ONNX model reader and shape resolution (autograd/import_reader.mojo,
 # import_resolve.mojo): host only, the same entries in both bindings
-from autograd.import_reader import onnx_read_py, onnx_info_py, onnx_copy_blob_py, onnx_close_py
-from autograd.import_resolve import onnx_resolve_py
+from autograd.import_reader_pyapi import onnx_read_py, onnx_info_py, onnx_copy_blob_py, onnx_close_py
+from autograd.import_resolve_pyapi import onnx_resolve_py
 # the lowering onto session operations and the GraphIR-from-words handle (autograd/import_lower.mojo)
-from autograd.import_lower import onnx_import_py, onnx_from_words_py
-from autograd.model_verify import verify_digest_py, verify_file_sha256_py, verify_fill_py, verify_model_info_py
-from autograd.model_checkpoint import (
+from autograd.import_lower_pyapi import onnx_import_py, onnx_from_words_py
+from autograd.model_verify_pyapi import verify_digest_py, verify_file_sha256_py, verify_fill_py, verify_model_info_py
+from autograd.model_checkpoint_pyapi import (
     model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py, ops_load_state_py,
     ops_save_state_py, ops_load_program_py, ops_save_program_py,
 )

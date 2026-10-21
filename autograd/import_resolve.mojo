@@ -22,7 +22,6 @@ with no shape rule named, for the lowering to report with its own refusals."""
 # cpu-route: model file parsing. Resolving shapes is part of the explicit
 # input step before the runtime: it walks nodes, dims and integer shape
 # constants on the host, never tensor element values of floating type.
-from std.python import Python, PythonObject
 
 from autograd.import_reader import (
     AK_FLOAT, AK_FLOATS, AK_INT, AK_INTS, AK_STRING, AK_TENSOR, DT_BOOL, DT_F32, DT_I64, FATAL_PREFIX,
@@ -1367,62 +1366,74 @@ def _resolve(g: OnnxGraph, gnames: List[Int], gdims: List[List[Int]], mut c: RCt
                                           + ", the graph computes " + fmt_tuple(got)))
 
 
-def onnx_resolve_py(h: PythonObject, names: PythonObject, flat: PythonObject) raises -> PythonObject:
-    """[words, strings]: the resolved shapes of handle h (layout in this module's docstring)."""
-    var gp = onnx_graph(Int(py=h))
+struct OnnxResolved(Movable):
+    """The words and strings of a resolution (layout in this module's
+    docstring); onnx_resolve_py hands them to Python as two lists."""
+    var words: List[Int]
+    var strs: List[String]
+
+    def __init__(out self, var words: List[Int], var strs: List[String]):
+        self.words = words^
+        self.strs = strs^
+
+
+def onnx_resolve(h: Int, names: List[String], flat: List[Int]) raises -> OnnxResolved:
+    """The resolved shapes of handle h. `flat` holds, per name, its rank then its dims."""
+    var gp = onnx_graph(h)
     var gnames = List[Int]()
     var gdims = List[List[Int]]()
     var pos = 0
     for i in range(len(names)):  # cpu-route: model file parsing (the shapes argument)
-        gnames.append(gp[].st.intern(String(py=names[i])))
-        var rank = Int(py=flat[pos])
+        gnames.append(gp[].st.intern(names[i]))
+        if pos >= len(flat):
+            raise Error("onnx_resolve: the shapes argument is shorter than its ranks")
+        var rank = flat[pos]
         pos += 1
+        if rank < 0 or pos + rank > len(flat):
+            raise Error("onnx_resolve: the shapes argument is shorter than its ranks")
         var dims = List[Int]()
         for _ in range(rank):  # cpu-route: model file parsing (one per axis)
-            dims.append(Int(py=flat[pos]))
+            dims.append(flat[pos])
             pos += 1
         gdims.append(dims^)
     var c = RCtx()
     var no_rule = List[Int]()
     var problems = List[_RProblem]()
-    var w = Python.list()
-    w.append(PythonObject(ONNX_READ_MAGIC))
-    w.append(PythonObject(ONNX_READ_VERSION))
+    var w = List[Int]()
+    w.append(ONNX_READ_MAGIC)
+    w.append(ONNX_READ_VERSION)
     try:
         _resolve(gp[], gnames, gdims, c, no_rule, problems)
-        w.append(PythonObject(0))
-        w.append(PythonObject(len(c.s_name)))
+        w.append(0)
+        w.append(len(c.s_name))
         for i in range(len(c.s_name)):  # cpu-route: model file parsing (resolved values)
-            w.append(PythonObject(c.s_name[i]))
-            w.append(PythonObject(c.s_dtype[i]))
-            w.append(PythonObject(len(c.s_shape[i])))
+            w.append(c.s_name[i])
+            w.append(c.s_dtype[i])
+            w.append(len(c.s_shape[i]))
             for k in range(len(c.s_shape[i])):  # cpu-route: model file parsing (one per axis)
-                w.append(PythonObject(c.s_shape[i][k]))
-        w.append(PythonObject(len(c.f_name)))
+                w.append(c.s_shape[i][k])
+        w.append(len(c.f_name))
         for i in range(len(c.f_name)):  # cpu-route: model file parsing (folded values)
-            w.append(PythonObject(c.f_name[i]))
-            w.append(PythonObject(len(c.f_vals[i])))
+            w.append(c.f_name[i])
+            w.append(len(c.f_vals[i]))
             for k in range(len(c.f_vals[i])):  # cpu-route: model file parsing (folded shape integers)
-                w.append(PythonObject(c.f_vals[i][k]))
-        w.append(PythonObject(len(no_rule)))
+                w.append(c.f_vals[i][k])
+        w.append(len(no_rule))
         for i in range(len(no_rule)):  # cpu-route: model file parsing (nodes without a rule)
-            w.append(PythonObject(no_rule[i]))
-        w.append(PythonObject(len(problems)))
+            w.append(no_rule[i])
+        w.append(len(problems))
         for i in range(len(problems)):  # cpu-route: model file parsing (the problems found)
-            w.append(PythonObject(problems[i].name))
-            w.append(PythonObject(problems[i].op))
-            w.append(PythonObject(gp[].st.intern(problems[i].reason)))
+            w.append(problems[i].name)
+            w.append(problems[i].op)
+            w.append(gp[].st.intern(problems[i].reason))
     except e:
         var msg = String(e)
-        w = Python.list()
-        w.append(PythonObject(ONNX_READ_MAGIC))
-        w.append(PythonObject(ONNX_READ_VERSION))
-        w.append(PythonObject(ONNX_BAD_VALUE))
-        w.append(PythonObject(gp[].st.intern(fatal_text(msg) if is_fatal(msg) else msg)))
-    var strs = Python.list()
+        w = List[Int]()
+        w.append(ONNX_READ_MAGIC)
+        w.append(ONNX_READ_VERSION)
+        w.append(ONNX_BAD_VALUE)
+        w.append(gp[].st.intern(fatal_text(msg) if is_fatal(msg) else msg))
+    var strs = List[String]()
     for i in range(len(gp[].st.items)):  # cpu-route: model file parsing (the graph's strings)
-        strs.append(PythonObject(gp[].st.items[i]))
-    var out = Python.list()
-    out.append(w)
-    out.append(strs)
-    return out
+        strs.append(gp[].st.items[i].copy())
+    return OnnxResolved(w^, strs^)

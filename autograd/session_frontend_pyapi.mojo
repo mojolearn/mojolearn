@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native Session setup over connections established by the package importer.
 from std.python import Python, PythonObject
-from autograd.program_arrays import initialize_program_arrays
+from autograd.program_arrays_pyapi import initialize_program_arrays
 
 
 def ops_session_initialize_py(session: PythonObject, record: PythonObject, mode: PythonObject,

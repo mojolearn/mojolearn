@@ -47,7 +47,6 @@ external data file (its resolved path)."""
 from std.ffi import _Global
 from std.memory import bitcast, memcpy
 from std.os.path import isfile, realpath
-from std.python import Python, PythonObject
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from autograd.import_proto import (
@@ -1573,33 +1572,32 @@ def onnx_graph(h: Int) raises -> OnnxPtr:
     raise Error("onnx: model graph " + String(h) + " is not open")
 
 
-def _w_tensor(w: PythonObject, t: TRec) raises:
-    w.append(PythonObject(t.name))
-    w.append(PythonObject(t.dtype))
-    w.append(PythonObject(len(t.dims)))
+def _w_tensor(mut w: List[Int], t: TRec):
+    w.append(t.name)
+    w.append(t.dtype)
+    w.append(len(t.dims))
     for i in range(len(t.dims)):  # cpu-route: model file parsing (one per axis)
-        w.append(PythonObject(t.dims[i]))
-    w.append(PythonObject(t.buf))
-    w.append(PythonObject(t.off))
-    w.append(PythonObject(t.off + t.nbytes))
+        w.append(t.dims[i])
+    w.append(t.buf)
+    w.append(t.off)
+    w.append(t.off + t.nbytes)
 
 
-def _w_value(w: PythonObject, v: GValue) raises:
-    w.append(PythonObject(v.name))
-    w.append(PythonObject(v.dtype))
-    w.append(PythonObject(len(v.dims)))
+def _w_value(mut w: List[Int], v: GValue):
+    w.append(v.name)
+    w.append(v.dtype)
+    w.append(len(v.dims))
     for i in range(len(v.dims)):  # cpu-route: model file parsing (one per axis)
         if v.dim_str[i] >= 0:
-            w.append(PythonObject(1))
-            w.append(PythonObject(v.dim_str[i]))
+            w.append(1)
+            w.append(v.dim_str[i])
         else:
-            w.append(PythonObject(0))
-            w.append(PythonObject(v.dims[i]))
+            w.append(0)
+            w.append(v.dims[i])
 
 
-def onnx_read_py(path: PythonObject) raises -> PythonObject:
-    """Read the ONNX model at `path`; returns its handle (>= 1)."""
-    var file = String(py=path)
+def onnx_read(file: String) raises -> Int:
+    """Read the ONNX model at `file`; returns its handle (>= 1)."""
     var p = alloc[OnnxGraph](1)
     p.init_pointee_move(onnx_read_file(file))
     var s = _ONNX_GRAPHS.get_or_create_ptr()
@@ -1607,114 +1605,122 @@ def onnx_read_py(path: PythonObject) raises -> PythonObject:
     s[].next_id += 1
     s[].ids.append(h)
     s[].addr.append(Int(p))
-    return PythonObject(h)
+    return h
 
 
-def onnx_info_py(h: PythonObject) raises -> PythonObject:
-    """[words, strings, floats] of handle h (the layout in this module's docstring)."""
-    var g = onnx_graph(Int(py=h))
-    var w = Python.list()
-    var floats = Python.list()
+struct OnnxInfo(Movable):
+    """The words, strings and floats of an open graph (the layout in this
+    module's docstring); onnx_info_py hands them to Python as three lists."""
+    var words: List[Int]
+    var strs: List[String]
+    var floats: List[Float64]
+
+    def __init__(out self, var words: List[Int], var strs: List[String], var floats: List[Float64]):
+        self.words = words^
+        self.strs = strs^
+        self.floats = floats^
+
+
+def onnx_info(h: Int) raises -> OnnxInfo:
+    """The words, strings and floats of handle h."""
+    var g = onnx_graph(h)
+    var w = List[Int]()
+    var floats = List[Float64]()
     var nf = 0
-    w.append(PythonObject(ONNX_READ_MAGIC))
-    w.append(PythonObject(ONNX_READ_VERSION))
-    w.append(PythonObject(g[].status))
+    w.append(ONNX_READ_MAGIC)
+    w.append(ONNX_READ_VERSION)
+    w.append(g[].status)
     if g[].status == ONNX_PROBLEMS:
-        w.append(PythonObject(len(g[].problems)))
+        w.append(len(g[].problems))
         for i in range(len(g[].problems)):  # cpu-route: model file parsing (the problems found)
-            w.append(PythonObject(g[].problems[i].name))
-            w.append(PythonObject(g[].problems[i].op))
-            w.append(PythonObject(g[].problems[i].reason))
+            w.append(g[].problems[i].name)
+            w.append(g[].problems[i].op)
+            w.append(g[].problems[i].reason)
     elif g[].status != ONNX_OK:
         var msg = g[].message
         var mk = g[].st.intern(msg)
-        w.append(PythonObject(mk))
+        w.append(mk)
     else:
-        w.append(PythonObject(g[].opset))
-        w.append(PythonObject(len(g[].buf_kind)))
+        w.append(g[].opset)
+        w.append(len(g[].buf_kind))
         for i in range(len(g[].buf_kind)):  # cpu-route: model file parsing (the model's files)
-            w.append(PythonObject(g[].buf_kind[i]))
-            w.append(PythonObject(g[].buf_path[i]))
-            w.append(PythonObject(g[].buf_size[i]))
-        w.append(PythonObject(len(g[].inputs)))
+            w.append(g[].buf_kind[i])
+            w.append(g[].buf_path[i])
+            w.append(g[].buf_size[i])
+        w.append(len(g[].inputs))
         for i in range(len(g[].inputs)):  # cpu-route: model file parsing (graph inputs)
             _w_value(w, g[].inputs[i])
-        w.append(PythonObject(len(g[].outputs)))
+        w.append(len(g[].outputs))
         for i in range(len(g[].outputs)):  # cpu-route: model file parsing (graph outputs)
             _w_value(w, g[].outputs[i])
-        w.append(PythonObject(len(g[].nodes)))
+        w.append(len(g[].nodes))
         for i in range(len(g[].nodes)):  # cpu-route: model file parsing (graph nodes)
             ref n = g[].nodes[i]
-            w.append(PythonObject(n.op))
-            w.append(PythonObject(n.domain))
-            w.append(PythonObject(n.name))
-            w.append(PythonObject(len(n.inputs)))
+            w.append(n.op)
+            w.append(n.domain)
+            w.append(n.name)
+            w.append(len(n.inputs))
             for k in range(len(n.inputs)):  # cpu-route: model file parsing (node inputs)
-                w.append(PythonObject(n.inputs[k]))
-            w.append(PythonObject(len(n.outputs)))
+                w.append(n.inputs[k])
+            w.append(len(n.outputs))
             for k in range(len(n.outputs)):  # cpu-route: model file parsing (node outputs)
-                w.append(PythonObject(n.outputs[k]))
-            w.append(PythonObject(len(n.attrs)))
+                w.append(n.outputs[k])
+            w.append(len(n.attrs))
             for k in range(len(n.attrs)):  # cpu-route: model file parsing (node attributes)
                 ref a = n.attrs[k]
-                w.append(PythonObject(a.name))
-                w.append(PythonObject(a.kind))
+                w.append(a.name)
+                w.append(a.kind)
                 if a.kind == AK_FLOAT:
-                    w.append(PythonObject(nf))
-                    floats.append(PythonObject(a.f))
+                    w.append(nf)
+                    floats.append(a.f)
                     nf += 1
                 elif a.kind == AK_INT:
-                    w.append(PythonObject(a.i))
+                    w.append(a.i)
                 elif a.kind == AK_STRING:
-                    w.append(PythonObject(a.s))
+                    w.append(a.s)
                 elif a.kind == AK_TENSOR:
                     _w_tensor(w, a.tensors[0])
                 elif a.kind == AK_FLOATS:
-                    w.append(PythonObject(nf))
+                    w.append(nf)
                     for j in range(len(a.floats)):  # cpu-route: model file parsing (attribute list)
-                        floats.append(PythonObject(a.floats[j]))
+                        floats.append(a.floats[j])
                         nf += 1
-                    w.append(PythonObject(nf))
+                    w.append(nf)
                 elif a.kind == AK_INTS:
-                    w.append(PythonObject(len(a.ints)))
+                    w.append(len(a.ints))
                     for j in range(len(a.ints)):  # cpu-route: model file parsing (attribute list)
-                        w.append(PythonObject(a.ints[j]))
+                        w.append(a.ints[j])
                 elif a.kind == AK_STRINGS:
-                    w.append(PythonObject(len(a.strs)))
+                    w.append(len(a.strs))
                     for j in range(len(a.strs)):  # cpu-route: model file parsing (attribute list)
-                        w.append(PythonObject(a.strs[j]))
+                        w.append(a.strs[j])
                 else:
-                    w.append(PythonObject(len(a.tensors)))
+                    w.append(len(a.tensors))
                     for j in range(len(a.tensors)):  # cpu-route: model file parsing (attribute list)
                         _w_tensor(w, a.tensors[j])
-        w.append(PythonObject(len(g[].inits)))
+        w.append(len(g[].inits))
         for i in range(len(g[].inits)):  # cpu-route: model file parsing (initializers)
             _w_tensor(w, g[].inits[i])
-    var strs = Python.list()
+    var strs = List[String]()
     for i in range(len(g[].st.items)):  # cpu-route: model file parsing (the graph's strings)
-        strs.append(PythonObject(g[].st.items[i]))
-    var out = Python.list()
-    out.append(w)
-    out.append(strs)
-    out.append(floats)
-    return out
+        strs.append(g[].st.items[i].copy())
+    return OnnxInfo(w^, strs^, floats^)
 
 
-def onnx_copy_blob_py(h: PythonObject, addr: PythonObject) raises -> PythonObject:
+def onnx_copy_blob(h: Int, addr: Int) raises -> Int:
     """Copy the reader's own bytes (buffer 1) to `addr` (the caller's
     buffer of that size) and release them. Returns the byte count."""
-    var g = onnx_graph(Int(py=h))
+    var g = onnx_graph(h)
     var n = len(g[].blob)
     if n > 0:
-        memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=addr)),
+        memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr),
                src=g[].blob.unsafe_ptr(), count=n)
     g[].blob = List[UInt8]()
-    return PythonObject(n)
+    return n
 
 
-def onnx_close_py(h: PythonObject) raises -> PythonObject:
-    """Release handle h."""
-    var hid = Int(py=h)
+def onnx_close(hid: Int) raises:
+    """Release handle `hid` (a handle that is not open is a no-op)."""
     var s = _ONNX_GRAPHS.get_or_create_ptr()
     for i in range(len(s[].ids)):  # small-loop(ids: open model graphs): a handle lookup, no data
         if s[].ids[i] == hid:
@@ -1723,5 +1729,4 @@ def onnx_close_py(h: PythonObject) raises -> PythonObject:
             _ = s[].addr.pop(i)
             p.destroy_pointee()
             p.free()
-            return PythonObject(0)
-    return PythonObject(0)
+            return
