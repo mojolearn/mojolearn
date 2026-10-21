@@ -3015,7 +3015,7 @@ FAMILIES = (
         display="IVF-Flat search over a saved index and extending it",
         host_modules=(
             "ivf/host/ivf_host.mojo", "bindings/ivf_host_search.mojo",
-            "bindings/ivf_index_arrays.mojo", "ivf/host/ivf_index_arrays_impl.mojo",
+            "bindings/ivf_index_arrays.mojo", "ivf/index_arrays_impl.mojo",
             "ivf/impl/neighbors/ivf_flat/ivf_flat_index.mojo",
         ),
         exports=(

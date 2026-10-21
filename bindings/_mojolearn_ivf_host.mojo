@@ -35,7 +35,7 @@ from bindings.ivf_host_search import (
     ivf_flat_search_binding,
 )
 from bindings.ivf_index_arrays import ivf_build_extents, ivf_write_index_arrays
-from ivf.host.ivf_index_arrays_impl import ivf_store_ids_counts
+from ivf.index_arrays_impl import ivf_store_ids_counts
 from ivf.host.ivf_host import IVF_HOST_SABOTAGE, host_ivf_build, host_ivf_build_and_search
 
 

@@ -37,7 +37,7 @@ from bindings.ivf_index_arrays import (
     ivf_write_search_result,
 )
 from ivf.host.ivf_host import IvfHostIndex, host_ivf_extend, host_ivf_search
-from ivf.host.ivf_index_arrays_impl import ivf_finalize_distances_host
+from ivf.index_arrays_impl import ivf_finalize_distances_host
 from checks.numerics import GLOBAL_NUMERIC_MODE
 
 

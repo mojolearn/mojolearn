@@ -49,7 +49,7 @@ from bindings.hostptr import f32_ptr, i32_ptr, u32_ptr, read_f32, read_i32, list
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import ivf_validate_index_arrays
 # The typed bodies (lane thin-trees-metrics, 2026-10-21): the output
 # stores, the shard merge and the shard plan, moved word for word.
-from ivf.host.ivf_index_arrays_impl import (
+from ivf.index_arrays_impl import (
     ivf_merge_shards_host,
     ivf_shard_plan_host,
     ivf_store_extended_arrays,
