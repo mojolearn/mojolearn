@@ -123,3 +123,40 @@ only shrinks: when a file's Python door moves to a shell, delete its row
 (`no_python_in_kernels.py --prune-baseline` removes every row whose file no
 longer matches). A row that main's baseline lacks is not honored, so a new
 kernel file that imports Python is always refused.
+
+## The no-compute-in-shells check
+
+A shell file (`bindings/**`, `*pyapi*.mojo`, `*_py.mojo`) is a passthrough: it
+unpacks PythonObject arguments into typed values, calls one typed kernel entry
+and converts the typed result back. `tools/hooks/no_compute_in_shells.py --tree`
+reports, in every shell file, each `for`/`while` line that carries no tag and
+each kernel launch (`enqueue_function`, `DeviceContext(`, `parallelize`,
+`vectorize`). A loop over argument words of bounded, data-independent length is
+tagged `# small-loop(<what>)`, and a driver loop over model structure
+`# driver-loop: over <what>`, on the loop line or the line above; launches are
+never taggable. The pre-push hook and the second job of
+`.github/workflows/no-python-in-kernels.yml` run it with the same main/branch
+rule as the other fences.
+
+The hits on main `28b8ed11b` (1,206 in 116 files: 1,185 untagged loops and 21
+launches) are listed in `tools/hooks/compute_in_shells_baseline.txt` as
+`path:line: code`. A hit is matched by path and code text, so edits above a row
+do not break it. The list only shrinks: when the work moves into the kernel
+file, `no_compute_in_shells.py --prune-baseline` drops the stale rows.
+
+## The kernel closure compile check
+
+`tools/kernel_closure_check.py` is the compile proof that kernel code needs no
+Python. It writes `checks/kernel_closure_main.mojo` (git-ignored), a program
+that imports every kernel module, and builds it for the CPU target in a copy of
+the tree where every shell that imports or reaches Python is deleted and every
+Python import line is removed. A kernel module that uses a Python name, or
+imports a Python shell directly or through other modules, fails to compile.
+The binary must have no undefined CPython symbol and no libpython dependency,
+and it runs once. A static pass first lists kernel imports of Python shells
+(failures) and of Python-free helpers that still live under `bindings/`
+(to move out). `--emit-only` writes the program and the stripped tree and
+prints the program path and the build command. The GitHub workflow
+`.github/workflows/kernel-closure.yml` runs it on every push to main and on
+dispatch, with a 45-minute compile budget, and keeps the generated program, the
+build log and `summary.json`.
