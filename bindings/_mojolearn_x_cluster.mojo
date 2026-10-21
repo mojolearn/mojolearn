@@ -20,7 +20,8 @@ from x_cluster.bisect_fast import BISECT_FAST_ZEROCOPY, bisect_entry_ptr
 from x_cluster.entries import ENTRY_BISECT, ENTRY_MINIBATCH, run_entry
 from x_cluster.minibatch_ptr import MBK_DEVSCAN_ANY, MBK_IDN_RESIDENT, MBK_NONFINITE_MSG, MBK_ZEROCOPY, minibatch_entry_ptr
 from x_cluster.minibatch_ptr import minibatch_entry_ptr_idn
-from x_cluster.out import ClusterOut, py_floats, py_ints
+from x_cluster.out import ClusterOut
+from x_cluster.out_pyapi import cluster_out_to_py, py_floats, py_ints
 from x_cluster.minibatch_fast import MBK_CLS2_POOL, MBK_W2_SUMCMP
 from x_cluster.tree_cut import PY2MOJO_CLUSTER
 
@@ -48,7 +49,7 @@ def call_binding(
                 var ops0 = DeviceOps()
                 took = minibatch_entry_ptr(ops0, xp, nx, a0, ints0, floats0, res0)
             if took:
-                return res0.to_py()
+                return cluster_out_to_py(res0)
     # lane/apple-fast-gap-clus3, FAST on Apple, DEFAULT since the M3 A/B
     # (off: -D MOJOLEARN_BISECT_FAST_ZEROCOPY_OFF): BisectingKMeans uploads X from the
     # caller's array and centers it on the device (x_cluster/bisect_fast.mojo);
@@ -64,7 +65,7 @@ def call_binding(
                 var ops1 = DeviceOps()
                 took1 = bisect_entry_ptr(ops1, xp1, nx, na > 0, ints1, floats1, res1)
             if took1:
-                return res1.to_py()
+                return cluster_out_to_py(res1)
     # lane/neighbors-small-ports, IDENTICAL, default off (-D MOJOLEARN_IDN_MBK_RESIDENT):
     # MiniBatchKMeans uploads X from the caller's array and fits on the
     # resident copy (x_cluster/minibatch_ptr.mojo); False falls through
@@ -80,7 +81,7 @@ def call_binding(
                 var ops2 = DeviceOps()
                 took2 = minibatch_entry_ptr_idn(ops2, xp2, nx, a2, ints2, floats2, res2)
             if took2:
-                return res2.to_py()
+                return cluster_out_to_py(res2)
     var x = read_f32(Int(py=x_addr), nx) if nx > 0 else List[Float32]()
     var a = read_f32(Int(py=a_addr), na) if na > 0 else List[Float32]()
     var ints = py_ints(ip)
@@ -104,7 +105,7 @@ def call_binding(
             res = run_entry(ops, w, x, a, ints, floats)
     if bad:
         raise Error(MBK_NONFINITE_MSG)
-    return res.to_py()
+    return cluster_out_to_py(res)
 
 
 def mbk_devscan_binding() raises -> PythonObject:
