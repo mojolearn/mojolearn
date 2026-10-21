@@ -370,11 +370,14 @@ class RunTests(unittest.TestCase):
         self.assertNotIn("--ref-column", gpu)
         self.assertNotIn("-- linux-joint-diff", out.stdout)
         self.assertNotIn("-- release-check", out.stdout)
-        # the default route is GitHub's runners (2026-09-27): nothing is rented to build
+        # the default route follows the source's layout (2026-10-21): the merged layout builds on
+        # CPU pods, the per-binding one on GitHub's runners; no GPU box is rented to build
         self.assertNotIn("gemm_remote_leg.sh", out.stdout.split("-- linux-builds", 1)[1].split("-- ", 1)[0])
+        route = ("release_linux_build.sh" if release.default_build_backend(release.git("rev-parse", "HEAD")) == "cpu-box"
+                 else "release_github_build.py run")
         for name in ("cuda-sm_89", "cuda-sm_80", "hip-gfx942"):
             if name in legs:
-                self.assertIn("release_github_build.py run", out.stdout)
+                self.assertIn(route, out.stdout)
         if not any(n in legs for n in ("cuda-", "hip-")):
             self.assertIn("no build leg", out.stdout)
         self.assertIn("pack-linux-wheel", out.stdout)

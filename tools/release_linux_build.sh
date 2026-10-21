@@ -76,7 +76,7 @@ while [ $# -gt 0 ]; do
         --lease) shift; LEASE="${1:-}" ;;
         --no-bincache) BINCACHE=0 ;;
         --rent) RENT=1 ;;
-        -h|--help) sed -n '2,63p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,62p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) echo "unknown argument $1" >&2; exit 2 ;;
     esac
     shift
