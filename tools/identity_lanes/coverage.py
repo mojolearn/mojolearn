@@ -224,9 +224,9 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     """TransformerDecodeSession.load_state on the `transformer-decode-session`
     lane's block: a session steps four tokens of two rows, `sync_state`
-    copies its cache into the state, four more tokens are stepped, then
-    `load_state` rewinds the session to the four-token cache and four other
-    tokens are stepped. Those last outputs are held byte for byte in the cell
+    copies its cache into the state, four more tokens are stepped, the
+    state's `cached_tokens` is set back to four and `load_state` rewinds the
+    session to the four-token cache, and four other tokens are stepped. Those last outputs are held byte for byte in the cell
     to a fresh session that stepped the first four tokens and then the same
     four, which is load_state's documented claim."""
     d = _coverage_digester(ml)
@@ -249,6 +249,9 @@ def _(ml, X, yc, yr, Xh=None):
         sess.sync_state()
         for t in range(4, 8):  # glue: four steps the reload discards
             sess.step(tok(t))
+        # the edit load_state is for: rewind the state's length to the synced
+        # four tokens (each step advanced it)
+        st.cached_tokens = 4
         sess.load_state()
         after = np.concatenate([np.asarray(sess.step(tok(t))) for t in range(8, 12)], axis=1)  # glue: four steps
         sess.sync_state()
