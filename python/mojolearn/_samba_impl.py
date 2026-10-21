@@ -716,8 +716,8 @@ class SambaStack(object):
         The file is written atomically. Saving reads the live parameter and optimizer
         storage, so do not train or modify the stack while it saves.
         """
-        from ._samba_checkpoint import save
-        return save(path, self.state_dict(_copy_arrays=False))
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "checkpoint_save", (self, path), _native_samba_bridge.CONTEXT)
 
     @classmethod
     def from_checkpoint(cls, path, numeric_mode=None):
@@ -735,53 +735,13 @@ class SambaStack(object):
 
         Raises `ValueError` when the checkpoint fails its integrity or schema checks.
         """
-        from ._samba_checkpoint import MAGIC, load
-        with Path(path).open("rb") as stream:
-            streamed = stream.read(len(MAGIC)) == MAGIC
-        if streamed:
-            payload = load(path)
-        else:
-            payload = cls._read_legacy_checkpoint(path)
-        if numeric_mode is None:
-            numeric_mode = payload["numeric_mode"]
-        config = SambaConfig.from_dict(payload["config"])
-        oc = payload["optimizer"]
-        sched = (None if payload["schedule"] is None
-                 else T._Schedule.from_config(payload["schedule"]))
-        weights = {}
-        flat = _checks.flat_view(payload["parameters"], 'f')
-        for entry in payload["registry"]:  # glue: views per checkpoint tensor
-            weights[entry["name"]] = _Array.from_buffer(flat[
-                entry["offset"]:entry["offset"] + entry["size"]]).reshape(entry["shape"])
-        stack = cls(config, weights=weights, lr=oc["lr"],
-                    betas=(oc["beta1"], oc["beta2"]), eps=oc["eps"],
-                    weight_decay=oc["weight_decay"], lr_schedule=sched,
-                    max_norm=oc["max_norm"],
-                    accumulation_steps=oc["accumulation_steps"],
-                    numeric_mode=numeric_mode)
-        return stack.load_state_dict(payload)
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "checkpoint_load", (cls, path, numeric_mode), _native_samba_bridge.CONTEXT)
 
     @classmethod
     def _read_legacy_checkpoint(cls, path):
-        with Path(path).open("rb") as stream:
-            encoded = stream.read(_CHECKPOINT_LIMIT + 1)
-        if len(encoded) > _CHECKPOINT_LIMIT:
-            raise ValueError("mojolearn.SambaStack: checkpoint exceeds the size limit")
-        envelope = json.loads(encoded)
-        if (not isinstance(envelope, dict)
-                or set(envelope) != {"schema", "payload", "payload_sha256"}
-                or envelope["schema"] != _CHECKPOINT_SCHEMA):
-            raise ValueError("mojolearn.SambaStack: checkpoint schema mismatch")
-        payload = envelope["payload"]
-        if hashlib.sha256(_canonical(payload)).hexdigest() != envelope["payload_sha256"]:
-            raise ValueError("mojolearn.SambaStack: checkpoint integrity mismatch")
-        for key, dtype in cls._ARRAYS:  # glue: checks each checkpoint array
-            d = payload[key]
-            if d["dtype"] != dtype:
-                raise ValueError("mojolearn.SambaStack: checkpoint tensor dtype mismatch")
-            raw = bytes.fromhex(d["hex"])
-            payload[key] = _buffers.frombytes(raw, dtype, d["shape"])
-        return payload
+        return _native_samba_bridge.RUNTIME.samba_native_call(
+            "checkpoint_read", (path,), _native_samba_bridge.CONTEXT)
 
 
 # Import-time native ABI connection; legacy public methods remain until their

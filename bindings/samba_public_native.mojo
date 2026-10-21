@@ -9,6 +9,7 @@ from bindings.generator_state_native import generator_init, generator_snapshot, 
 from bindings.samba_construct_native import samba_construct, samba_load_weights, samba_parameters
 from bindings.samba_step_native import samba_train_step
 from bindings.samba_inference_native import samba_forward, samba_allocate, samba_loss, samba_state_construct
+from bindings.samba_checkpoint_native import samba_checkpoint_save, samba_checkpoint_load, samba_checkpoint_read
 
 
 def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
@@ -30,6 +31,12 @@ def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
             result = samba_state_construct(values[0], values[1], values[2], values[3])
         elif operation == "loss":
             result = samba_loss(values[0], values[1], values[2], context)
+        elif operation == "checkpoint_save":
+            result = samba_checkpoint_save(values[0], values[1], context)
+        elif operation == "checkpoint_load":
+            result = samba_checkpoint_load(values[0], values[1], values[2], context)
+        elif operation == "checkpoint_read":
+            result = samba_checkpoint_read(values[0], context)
         elif operation == "construct":
             result = samba_construct(values[0], values[1], context)
         elif operation == "load_weights":
@@ -67,6 +74,10 @@ def samba_public_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
             return raise_python_exception(error, ExceptionType("PyExc_NotImplementedError"))
         if message.startswith("RuntimeError:"):
             return raise_python_exception(error, ExceptionType("PyExc_RuntimeError"))
+        if message.startswith("FileNotFoundError:"):
+            return raise_python_exception(error, ExceptionType("PyExc_FileNotFoundError"))
+        if message.startswith("OSError:"):
+            return raise_python_exception(error, ExceptionType("PyExc_OSError"))
         if message.startswith("TypeError:"):
             return raise_python_exception(error, ExceptionType.TypeError)
         return raise_python_exception(error, ExceptionType.ValueError)
