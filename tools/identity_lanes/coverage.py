@@ -414,8 +414,35 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(p1=d(resident[0]), p2=d(resident[1]), back=d(back), copy=d(twin)))
 
 
+# ---------------------------------------------------------------- randomized SVD of a rank-deficient matrix
+
+@lane("x-decomp-rsvd-rank-deficient")
+def _(ml, X, yc, yr, Xh=None):
+    """randomized_svd, PCA(svd_solver="randomized") and
+    TruncatedSVD(algorithm="randomized") of a 256 x 8 matrix of rank 4 (four
+    fixture columns and the same four doubled, exactly): the sketch is eight
+    columns wide, so the orthonormalized range has four dead columns, and the
+    live ones are compacted by the stable order of the 0 (live) / 1 (dead)
+    keys (`x_decomp_order_small` on the host column, `x_decomp_dev_order_small`
+    on a GPU binding, x_decomp/select_ops.mojo and select_dev.mojo) before the
+    small SVD. No other lane's sketch is wider than its matrix's rank. Parts:
+    U, s and Vt, the PCA components, singular values and transform, and the
+    TruncatedSVD components and transform."""
+    d = _coverage_digester(ml)
+    B = np.ascontiguousarray(X[:256, :4], dtype=np.float32)
+    M = np.ascontiguousarray(np.concatenate([B, B * np.float32(2)], axis=1))  # rank 4: a power-of-two copy is exact
+    U, s, Vt = ml.randomized_svd(M, 2, random_state=0)
+    p = ml.PCA(n_components=2, svd_solver="randomized", random_state=1).fit(M)
+    t = ml.TruncatedSVD(n_components=3, algorithm="randomized", random_state=2).fit(M)
+    f32 = lambda a: np.asarray(a, dtype=np.float32)
+    return _fit(dict(U=d(f32(U)), s=d(f32(s)), Vt=d(f32(Vt)), pc=d(f32(p.components_)),
+                     psv=d(f32(p.singular_values_)), pT=d(f32(p.transform(M[:64]))),
+                     tc=d(f32(t.components_)), tT=d(f32(t.transform(M[:64])))))
+
+
 _batch_decl("n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; "
             "its outputs are train parts, digested whole)",
             "gp-lml-theta", "cross-vendor-fold", "sequence-moe-backward", "sequence-export-roundtrip",
             "sequence-onnx-import", "transformer-decode-load-state", "safetensors-widen-f16",
-            "sequence-program-save-load", "hf-causal-lm-stream", "ivf-short-fill", "sequence-device-tensor")
+            "sequence-program-save-load", "hf-causal-lm-stream", "ivf-short-fill", "sequence-device-tensor",
+            "x-decomp-rsvd-rank-deficient")

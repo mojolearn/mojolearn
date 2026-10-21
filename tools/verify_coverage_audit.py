@@ -772,7 +772,7 @@ NEW_LANES = frozenset({"gp-lml-theta", "cross-vendor-fold", "sequence-moe-backwa
                        "sequence-export-roundtrip", "sequence-onnx-import",
                        "transformer-decode-load-state", "safetensors-widen-f16",
                        "sequence-program-save-load", "hf-causal-lm-stream", "ivf-short-fill",
-                       "sequence-device-tensor"})
+                       "sequence-device-tensor", "x-decomp-rsvd-rank-deficient"})
 
 #: What each new lane is for: the endpoints only it reaches.
 NEW_LANE_PURPOSE = {
@@ -790,6 +790,8 @@ NEW_LANE_PURPOSE = {
                       "the host column (`ivf_out_of_bounds_distance`)",
     "sequence-device-tensor": "resident sequence tensors (`seq_tensor_alloc`, `seq_tensor_upload`, "
                               "`seq_tensor_download`, `seq_tensor_copy`) through RMSprop",
+    "x-decomp-rsvd-rank-deficient": "randomized_svd, PCA and TruncatedSVD (randomized) of a rank-deficient matrix: "
+                                    "the live-column compaction (`x_decomp_order_small`, `x_decomp_dev_order_small`)",
 }
 
 _BYTE_SESSION = ("covered", ["byte-lm", "byte-lm-resident"],
