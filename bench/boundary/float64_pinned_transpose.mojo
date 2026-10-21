@@ -7,7 +7,7 @@ Build (only in a granted slot):
 Run under the same build lock, nice -n 19. No fit or DMA is timed.
 """
 from _mojolearn import _tiled_transpose_to_f32
-from hostptr import copy_f32
+from core.hostptr import copy_f32
 from max.gpu.host import DeviceContext
 from std.memory import bitcast
 from std.time import perf_counter_ns

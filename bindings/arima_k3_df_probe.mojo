@@ -7,6 +7,7 @@ from core.hostptr import f32_ptr, i32_ptr, copy_f32
 
 
 from arima.k3_df_probe_impl import _probe_df
+from arima.impl.fast_scalar_df import DF_MAX_OBS
 
 
 def arima_k3_df_probe_binding(y: PythonObject, state: PythonObject,

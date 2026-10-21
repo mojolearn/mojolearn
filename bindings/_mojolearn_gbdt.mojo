@@ -54,7 +54,7 @@ from std.python import Python, PythonObject
 from std.sys.compile import is_defined
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
-from hostptr import list_f32, list_u32
+from core.hostptr import list_f32, list_u32
 from core.pair_split_device import device_split_pairs
 
 from checks.vendor import COMPILED_VENDOR

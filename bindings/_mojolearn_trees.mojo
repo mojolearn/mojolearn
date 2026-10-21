@@ -31,7 +31,7 @@ from ensemble.device_finite import FOREST_DEVICE_FINITE
 from ensemble.instruments import StageTimes
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
-from hostptr import list_f32, list_i32, store_f32
+from core.hostptr import list_f32, list_i32, store_f32
 from std.python.bindings import PythonModuleBuilder
 
 from forest_inference_binding import (

@@ -28,7 +28,7 @@ sampler's first Python caller.
 """
 
 from std.memory import memcpy
-from hostptr import copy_f32, list_f32, list_i32, store_f32
+from core.hostptr import copy_f32, list_f32, list_i32, store_f32
 from ensemble.device_layout import device_has_nan_f32, upload_forest_x
 from ensemble.dart_member import launch_dart_member_x, launch_dart_member_y
 from xtrees.dart_device import DART_SESSIONS, _DART_CTX
