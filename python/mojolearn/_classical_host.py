@@ -116,6 +116,8 @@ _HOST_BASENAMES = {
     "_mojolearn_preprocessing": _HOST_BASENAME,
     "_mojolearn_solver": _HOST_BASENAME,
     "_mojolearn_kernel_methods": _HOST_BASENAME,
+    # PCA(svd_solver='randomized') runs in the decomp lane's binding
+    "_mojolearn_x_decomp": "_mojolearn_x_decomp_host",
 }
 
 
@@ -206,6 +208,7 @@ class HostTruncatedSVD(_HostBound, TruncatedSVD):
 
 class HostPCA(_HostBound, PCA):
     _HOST_ARRAYS = ("components_", "mean_", "singular_values_")
+    _HOST_AUX_BINDINGS = ("_mojolearn_x_decomp",)
 
     def _whiten_binding(self):
         """The host binding carries the whitened pair since the kde svc host

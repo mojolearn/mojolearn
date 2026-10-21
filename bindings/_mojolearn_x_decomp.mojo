@@ -98,6 +98,8 @@ from x_decomp.qfix_pyapi import lu_resid_py, qfix_flags_py
 # Tried: TSVD_QFIX's R from shifted CholeskyQR3 on the matrix unit (x_decomp/tsvd_fast.mojo) instead of the Householder TSQR; tsvd istella +19.9% (verdicts batch 6).
 # Restore: git apply experiments/removed/MOJOLEARN_TSVD_FAST_CHOLQR3.patch; record in docs/TOMBSTONES.md.
 from x_decomp.s_linalg_fast import DECOMP_FAST_ORTH_WS, LU_FAST_RESIDENT, LU_RESIDENT_ENTRIES, RSVD_FAST_DEVSCAN
+from x_decomp.pca_randomized_pyapi import pca_randomized_py
+from x_decomp.pca_randomized_dev import DevRDev
 from x_decomp.s_linalg_fast_pyapi import (
     dev_lu_factor_py, dev_lu_solve_py, dev_orth_ws_py, dev_upload_scan_py, s_flags_py,
 )
@@ -239,6 +241,8 @@ def build__mojolearn_x_decomp() -> PythonObject:
         # lane/apple-fast-s-linalg (x_decomp/s_linalg_fast.mojo): bit 1 RSVD_FAST_DEVSCAN,
         # bit 2 DECOMP_FAST_ORTH_WS, bit 4 LU_FAST_RESIDENT (FAST + Apple defaults, _OFF rollbacks)
         m.def_function[s_flags_py]("x_decomp_s_flags")
+        # lane activate-pca-owner: PCA(svd_solver='randomized').fit in one call
+        m.def_function[pca_randomized_py[DevExec, DevRDev, True]]("x_decomp_pca_randomized")
         comptime if RSVD_FAST_DEVSCAN:
             m.def_function[dev_upload_scan_py]("x_decomp_dev_upload_scan")
         comptime if DECOMP_FAST_ORTH_WS:

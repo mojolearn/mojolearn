@@ -295,12 +295,12 @@ class PCA(NumericModeMixin):
             raise ValueError("mojolearn PCA whitening requires fit rows >=2 and nonnegative singular values/variance")
 
     @staticmethod
-    def _whitened(entry, *args):
-        """One whitened transform call. The binding's refusals (non-finite
-        data or output, negative singular values) are plain exceptions;
-        they reach the caller as the ValueError the Python checks raised."""
+    def _native(entry, *args):
+        """One native call. Its refusals of the data or the fitted state
+        (non-finite values, negative singular values, a numerically zero
+        matrix) are plain exceptions; they reach the caller as ValueError."""
         try:
-            entry(*args)
+            return entry(*args)
         except Exception as err:
             if type(err) is Exception:
                 raise ValueError(f"mojolearn PCA: {err}") from err
@@ -459,33 +459,53 @@ class PCA(NumericModeMixin):
         the centered data through `mojolearn.randomized_svd`, then
         svd_flip on Vt; explained variance S^2 / (n - 1), the ratio against
         the total sample variance, the noise variance the mean of what is
-        left. random_state None means seed 0 (the Philox stream)."""
-        from ._expansion_decomp import _randomized_decompose
-        x, self.input_copied_ = as_f32_c(_dense(X), ndim=2, name="X")
+        left. random_state None means seed 0 (the Philox stream). One
+        native call (x_decomp/pca_randomized.mojo)."""
+        x, copied = as_f32_c(_dense(X), ndim=2, name="X")
         if x.shape[0] < 2 or x.shape[1] < 2:
             raise ValueError(_too_small(x.shape, "PCA"))
         nc = _component_count(self.n_components, x.shape)
         if nc >= min(x.shape):  # glue: smaller of two shape dims
             raise ValueError("svd_solver='randomized' needs n_components < min(n_samples, n_features)")
-        n_iter = self.iterated_power
-        if n_iter == "auto":
-            n_iter = 7 if nc < 0.1 * min(x.shape) else 4  # glue: smaller of two shape dims
-        got = _randomized_decompose(
-            x, nc, center=True, n_oversamples=self.n_oversamples, n_iter=n_iter,
-            power_iteration_normalizer=self.power_iteration_normalizer, random_state=self.random_state,
-            numeric_mode=self.numeric_mode_used(),
-            binding=_backend.binding("_mojolearn_x_decomp", self.numeric_mode_used()))
-        self.components_ = got["components"]
-        self.mean_ = got["mean"]
-        self.explained_variance_ = got["explained_variance"]
-        self.explained_variance_ratio_ = got["explained_variance_ratio"]
-        self.singular_values_ = got["singular_values"]
-        self.noise_variance_ = float(got["noise_variance"])
+        if self.power_iteration_normalizer not in ("auto", "QR", "LU", "none"):
+            raise ValueError("power_iteration_normalizer must be 'auto', 'QR', 'LU' or 'none'")
+        seed = 0 if self.random_state is None else self.random_state
+        if isinstance(seed, bool) or not isinstance(seed, int):
+            raise TypeError("random_state must be None or an int (the counter-based RNG takes an integer seed)")
+        oversamples = int(self.n_oversamples)
+        if oversamples < 0:
+            raise ValueError("n_oversamples must be nonnegative")
+        auto = isinstance(self.iterated_power, str) and self.iterated_power == "auto"
+        iterations = 0 if auto else int(self.iterated_power)
+        binding = self._bind("_mojolearn_x_decomp")
+        fit = getattr(binding, "x_decomp_pca_randomized", None)
+        if fit is None:
+            raise NotImplementedError(
+                "mojolearn PCA: this build of _mojolearn_x_decomp does not export "
+                "x_decomp_pca_randomized; rebuild it with bindings/build_x_decomp.sh"
+            )
+        n, d = x.shape
+        components = empty((nc, d), "<f4")
+        mean = empty((d,), "<f4")
+        variance = empty((nc,), "<f4")
+        ratio = empty((nc,), "<f4")
+        singular = empty((nc,), "<f4")
+        noise = self._native(
+            fit, addr_ro(x, name="x"), addr(components, name="components_"), addr(mean, name="mean_"),
+            addr(variance, name="explained_variance_"), addr(ratio, name="explained_variance_ratio_"),
+            addr(singular, name="singular_values_"), [n, d, nc, oversamples, iterations, int(auto)],
+            seed & 0xFFFFFFFF,  # glue: the Philox seed is taken mod 2^32
+        )
+        self.input_copied_ = copied
+        self.components_ = components
+        self.mean_ = mean
+        self.explained_variance_ = variance
+        self.explained_variance_ratio_ = ratio
+        self.singular_values_ = singular
+        self.noise_variance_ = noise
         self.n_components_ = nc
-        self.n_features_in_ = x.shape[1]
-        self.n_samples_ = x.shape[0]
-        if self.whiten:
-            self._validate_whiten_state()
+        self.n_features_in_ = d
+        self.n_samples_ = n
         return self
 
     def transform(self, X):
@@ -519,7 +539,7 @@ class PCA(NumericModeMixin):
             # their `transform(X[:100])` disagrees with `transform(X)[:100]`.
             # Their own sparse path uses the fit's count and so does
             # scikit-learn, and so does this.
-            self._whitened(
+            self._native(
                 self._whiten_binding().pca_whiten_transform,
                 addr_ro(x, name="x"), addr_ro(self.mean_, name="mean_"), addr_ro(self.components_, name="components_"),
                 addr_ro(self.singular_values_, name="singular_values_"), addr(out, name="out"),
@@ -574,7 +594,7 @@ class PCA(NumericModeMixin):
         out = empty((z.shape[0], self.n_features_in_), "<f4")
         if self.whiten:
             self._validate_whiten_state()
-            self._whitened(
+            self._native(
                 self._whiten_binding().pca_whiten_inverse_transform,
                 addr_ro(z, name="z"), addr_ro(self.components_, name="components_"),
                 addr_ro(self.singular_values_, name="singular_values_"), addr_ro(self.mean_, name="mean_"),

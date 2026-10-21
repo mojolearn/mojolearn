@@ -660,7 +660,7 @@ def pca_randomized_core[E: Exec, D: RDev, RES: Bool](
     var live = kit.ew(_OP_GTS, absolute_sums)
     var nlive = Int(kit.total(live))
     if nlive == 0:
-        raise Error("ValueError: randomized_svd: M is numerically zero")
+        raise Error("randomized_svd: M is numerically zero")
     var full = kit.c(q)
     if nlive < full:
         var negated = kit.ew(_OP_SCALE, live, scalar=-1.0)
@@ -705,11 +705,11 @@ def pca_randomized_fit_run[E: Exec, D: RDev, RES: Bool](
     (components x cols, cols, and components each), the noise variance
     returned. `auto_iterations`: scikit-learn's `iterated_power='auto'`."""
     if rows < 2 or cols < 2:
-        raise Error("ValueError: randomized PCA needs at least two rows and two features")
+        raise Error("randomized PCA needs at least two rows and two features")
     if components < 1 or components >= min(rows, cols):
-        raise Error("ValueError: svd_solver='randomized' needs n_components < min(n_samples, n_features)")
+        raise Error("svd_solver='randomized' needs n_components < min(n_samples, n_features)")
     if oversamples < 0:
-        raise Error("ValueError: n_oversamples must be nonnegative")
+        raise Error("n_oversamples must be nonnegative")
     var power = iterations
     if auto_iterations:
         # scikit-learn's `randomized_svd` default, by the problem's size
