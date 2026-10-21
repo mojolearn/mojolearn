@@ -24,7 +24,7 @@ from autograd.rankn_fold import RankNFoldRules
 from autograd.rankn_bmm import RankNBmmRules
 from autograd.rankn_layout import RankNLayoutRules
 from autograd.rules_conv2d import Conv2dRules
-from autograd.transformer_primitives import TransformerPrimitiveRules, GRAPH_RMS_NORM, GRAPH_ROTARY, GRAPH_TRANSFORMER_LINEAR
+from autograd.transformer_primitives import TransformerPrimitiveRules, GRAPH_RMS_NORM, GRAPH_ROTARY, GRAPH_TRANSFORMER_LINEAR, GRAPH_TRANSFORMER_SOFTMAX
 
 comptime RN_TAG_FOLD_FIRST = 136
 comptime RN_TAG_FOLD_LAST = 151
@@ -45,7 +45,7 @@ struct RankNRules(BackwardRules):
     """NeuralRules plus every rank-N lane's custom rules, by tag block."""
 
     def supports(self, tag: Int) -> Bool:
-        if tag == GRAPH_RMS_NORM or tag == GRAPH_ROTARY or tag == GRAPH_TRANSFORMER_LINEAR:
+        if tag == GRAPH_RMS_NORM or tag == GRAPH_ROTARY or tag == GRAPH_TRANSFORMER_LINEAR or tag == GRAPH_TRANSFORMER_SOFTMAX:
             return True
         if tag >= RN_TAG_FOLD_FIRST and tag <= RN_TAG_FOLD_LAST:
             return RankNFoldRules().supports(tag)
@@ -58,7 +58,7 @@ struct RankNRules(BackwardRules):
         return NeuralRules().supports(tag)
 
     def zeroed_destination(self, tag: Int, saved: Args, edge: Int) -> Bool:
-        if tag == GRAPH_RMS_NORM or tag == GRAPH_ROTARY or tag == GRAPH_TRANSFORMER_LINEAR:
+        if tag == GRAPH_RMS_NORM or tag == GRAPH_ROTARY or tag == GRAPH_TRANSFORMER_LINEAR or tag == GRAPH_TRANSFORMER_SOFTMAX:
             return TransformerPrimitiveRules().zeroed_destination(tag, saved, edge)
         if tag >= RN_TAG_FOLD_FIRST and tag <= RN_TAG_FOLD_LAST:
             return RankNFoldRules().zeroed_destination(tag, saved, edge)
@@ -71,7 +71,7 @@ struct RankNRules(BackwardRules):
         return NeuralRules().zeroed_destination(tag, saved, edge)
 
     def writes_total(self, tag: Int, saved: Args, edge: Int) -> Bool:
-        if tag == GRAPH_RMS_NORM or tag == GRAPH_ROTARY or tag == GRAPH_TRANSFORMER_LINEAR:
+        if tag == GRAPH_RMS_NORM or tag == GRAPH_ROTARY or tag == GRAPH_TRANSFORMER_LINEAR or tag == GRAPH_TRANSFORMER_SOFTMAX:
             return False
         if tag >= RN_TAG_FOLD_FIRST and tag <= RN_TAG_FOLD_LAST:
             return RankNFoldRules().writes_total(tag, saved, edge)
@@ -87,7 +87,7 @@ struct RankNRules(BackwardRules):
         self, mut ex: E, tag: Int, saved: Args, output: FP, upstream: FP,
         inputs: List[FP], gradients: List[FP], rows: List[Int], cols: List[Int],
     ) raises:
-        if tag == GRAPH_RMS_NORM or tag == GRAPH_ROTARY or tag == GRAPH_TRANSFORMER_LINEAR:
+        if tag == GRAPH_RMS_NORM or tag == GRAPH_ROTARY or tag == GRAPH_TRANSFORMER_LINEAR or tag == GRAPH_TRANSFORMER_SOFTMAX:
             TransformerPrimitiveRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)
         elif tag >= RN_TAG_FOLD_FIRST and tag <= RN_TAG_FOLD_LAST:
             RankNFoldRules().apply(ex, tag, saved, output, upstream, inputs, gradients, rows, cols)

@@ -2,6 +2,7 @@
 # Native scalar bodies shared by HostExec and DeviceExec. Forward seams match
 # transformer/impl/llama/modeling_llama.mojo S1..S10; no float algebra rewrites.
 from sequence.ops import Args, FP
+from autograd.ops import op_ag_softmax_fwd, op_ag_softmax_vjp
 from checks.numerics import ftz, identical_mul, identical_mul_add, identical_div, identical_rsqrt, identical_sin, identical_cos
 from transformer.experiments.norm_profile_contract import NN24_NORM_LANES8, NN24_LANES, norm_profile_dot
 from gemm.contract import contract_leaf_size, leaf_count
@@ -14,7 +15,9 @@ comptime OP_TFP_RMS_DW = 4702
 comptime OP_TFP_ROPE_TABLE = 4703
 comptime OP_TFP_ROPE = 4704
 comptime OP_TFP_LINEAR = 4705
-comptime OP_TFP_LAST = 4705
+comptime OP_TFP_SOFTMAX = 4706
+comptime OP_TFP_SOFTMAX_VJP = 4707
+comptime OP_TFP_LAST = 4707
 
 
 def _linear(cell: Int, a: Args):
@@ -125,3 +128,10 @@ def apply_transformer_primitive[OP: Int](cell: Int, a: Args):
         _rope(cell, a)
     elif OP == OP_TFP_LINEAR:
         _linear(cell, a)
+    elif OP == OP_TFP_SOFTMAX:
+        # Transformer contract S17 folds keys ascending. The ordinary graph
+        # softmax dispatch deliberately uses fold32 under ROW_COOP; bypass
+        # that dispatch, preserving both established numerical contracts.
+        op_ag_softmax_fwd(cell, a)
+    elif OP == OP_TFP_SOFTMAX_VJP:
+        op_ag_softmax_vjp(cell, a)

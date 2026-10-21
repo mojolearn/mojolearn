@@ -75,6 +75,48 @@ def test_projection_first_vjp_keeps_full_rank_and_parameter_shape():
         assert type(refusal.value) is Exception
 
 
+@pytest.mark.parametrize("columns", [5, 33, 65])
+def test_transformer_softmax_keeps_both_reduction_contracts_and_vjp(columns, tmp_path):
+    rng = np.random.default_rng(718 + columns)
+    x = rng.normal(0, .7, (2, 3, columns)).astype(np.float32)
+    seed = rng.normal(0, .3, x.shape).astype(np.float32)
+    reference = np.exp(x.astype(np.float64) - x.max(axis=-1, keepdims=True))
+    reference /= reference.sum(axis=-1, keepdims=True)
+    derivative = reference * (seed - (reference * seed).sum(axis=-1, keepdims=True))
+    with ops.Session(record=True) as s:
+        h = s.tensor(x, requires_grad=True)
+        y = native(s._transformer_softmax, h)
+        got = native(s.numpy, y)
+        gradient, = native(s.vjp, y, [h], s.tensor(seed))
+        np.testing.assert_allclose(got, reference, rtol=2e-6, atol=2e-7)
+        np.testing.assert_allclose(native(s.numpy, gradient), derivative, rtol=3e-6, atol=2e-7)
+        # A separate native exp operation establishes the rounded terms;
+        # the test controller computes each documented sum independently.
+        exp = native(s.numpy, s.exp(s.sub(h, s.max(h, axis=-1, keepdims=True))))
+        serial = np.zeros(x.shape[:-1], np.float32)
+        slots = np.zeros((*x.shape[:-1], 32), np.float32)
+        for k in range(columns):
+            serial = np.add(serial, exp[..., k], dtype=np.float32)
+            slots[..., k % 32] = np.add(slots[..., k % 32], exp[..., k], dtype=np.float32)
+        for offset in (16, 8, 4, 2, 1):
+            slots[..., :offset] = np.add(slots[..., :offset], slots[..., offset:2*offset], dtype=np.float32)
+        expected = exp / serial[..., None]
+        ordinary = native(s.numpy, native(s.softmax, h, axis=-1))
+        np.testing.assert_array_equal(got.view(np.uint32), expected.view(np.uint32))
+        np.testing.assert_array_equal(ordinary.view(np.uint32), (exp / slots[..., :1]).view(np.uint32))
+        assert np.any(got.view(np.uint32) != ordinary.view(np.uint32)), "fixture must distinguish the two contracts"
+    with ops.Session() as s:
+        h = s.tensor(x)
+        p = native(s.capture, h, s._transformer_softmax(h))
+        np.testing.assert_array_equal(native(p.run, x, optimize=True).view(np.uint32), expected.view(np.uint32))
+        checkpoint = tmp_path / "transformer-softmax.mjl"
+        native(p.save, checkpoint)
+        restored = native(s.load_program, checkpoint)
+        report = native(restored.inspect)
+        assert any(node["op"] == "transformer_softmax" for node in report["nodes"])
+        np.testing.assert_array_equal(native(restored.run, x).view(np.uint32), expected.view(np.uint32))
+
+
 @pytest.mark.parametrize("bad", ["rms_weight", "rms_epsilon", "rms_nan", "rotary_odd", "rotary_width", "rotary_domain", "rotary_theta", "integer"])
 def test_native_primitive_refusals_and_recovery(bad):
     with ops.Session() as s:

@@ -661,6 +661,12 @@ def ops_session_call_py[E: Exec & Movable & Deinitable, KIND: Int](
         if not eps > 0:
             raise Error("ValueError: eps must be positive")
         fs.append(eps)
+    if name == "transformer_softmax":
+        var b = Python.import_module("builtins")
+        if not (b.type(args[0]) is b.int):
+            raise Error("TypeError: transformer handles must be exact native integers")
+        code = 80
+        hs = [_int(args[0], "input", 1)]
     if name == "transformer_linear":
         var b = Python.import_module("builtins")
         for j in range(2):  # small-loop(2: projection handles): exact native scalar admission

@@ -165,6 +165,8 @@ def program_op_name(code: Int) -> String:
         return "rotary"
     if code == 79:
         return "transformer_linear"
+    if code == 80:
+        return "transformer_softmax"
     return "op_" + String(code)
 
 
