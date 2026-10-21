@@ -4,6 +4,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
+from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from bindings.generator_state_native import generator_fields, generator_next
 from bindings.causal_checkpoint import checkpoint_array
 from bindings.causal_lm_construct import _model_f32
@@ -14,19 +15,19 @@ def _generator_shape(shape: PythonObject, context: PythonObject) raises -> Pytho
     var bi = Python.import_module("builtins")
     var scalar = PythonObject(None)
     try:
-        scalar = context["generator_index"](shape)
+        scalar = py_call(context["generator_index"], shape)
     except:
         pass
-    var source = Python.tuple(scalar) if scalar is not None else bi.tuple(shape)
+    var source = Python.tuple(scalar) if scalar is not None else py_call(bi.tuple, shape)
     var dims = bi.list()
     var count = PythonObject(1)
     for i in range(len(source)):  # driver-loop: over caller shape metadata
-        var d = bi.int(source[i])
+        var d = py_call(bi.int, source[i])
         if Bool(py=d < 1):
             raise Error("Generator: shape must be positive")
-        dims.append(d)
+        _ = py_call(dims.append, d)
         count = count * d
-    return Python.tuple(bi.tuple(dims), count)
+    return Python.tuple(py_call(bi.tuple, dims), count)
 
 
 def _generator_binding(owner: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -35,8 +36,8 @@ def _generator_binding(owner: PythonObject, context: PythonObject) raises -> Pyt
     if not Bool(py=mode):
         mode = context["generator_backend"]._DEFAULT_MODE
     mode = mode.strip().lower()
-    var connected = context["generator_bindings"].get(mode)
-    if connected is None or bi.type(connected) is bi.str:
+    var connected = py_get(context["generator_bindings"], mode)
+    if connected is None or py_type(connected) is bi.str:
         raise Error("Generator: native RNG binding is unavailable for numeric_mode=" + String(mode))
     var vendor = String(connected["training_vendor"]())
     var compiled = Int(py=connected["training_numeric_mode"]())
@@ -45,13 +46,13 @@ def _generator_binding(owner: PythonObject, context: PythonObject) raises -> Pyt
     if vendor != expected or compiled != (1 if String(mode) == "identical" else 0):
         raise Error("ImportError: Generator native RNG vendor or numeric mode differs from the selected route")
     var entry = connected["neural_rng"]
-    if bi.type(entry) is not bi.type(bi.len):
+    if py_type(entry) is not py_type(bi.len):
         raise Error("Generator: RNG entry must be a compiled native function")
     return entry
 
 
 def _generator_f32(value: PythonObject) raises -> Float32:
-    return Float32(Float64(py=Python.import_module("builtins").float(value)))
+    return Float32(Float64(py=py_call(Python.import_module("builtins").float, value)))
 
 
 def _generator_input(value: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -67,17 +68,17 @@ def _generator_input(value: PythonObject, context: PythonObject) raises -> Pytho
 
 def _generator_sqrt(value: PythonObject, context: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
-    var x = bi.float(value)
+    var x = py_call(bi.float, value)
     if Bool(py=x < 0):
         raise Error("Generator initializer: math domain error")
     var entry = context["generator_sqrt"]
-    if bi.type(entry) is bi.str:
+    if py_type(entry) is bi.str:
         raise Error("OSError: Generator initializer requires portable math: " + String(entry))
-    if bi.type(entry) is not context["generator_sqrt_type"]:
+    if py_type(entry) is not context["generator_sqrt_type"]:
         raise Error("TypeError: Generator initializer requires its connected portable-math C entry")
     # This is the original mojolearn_sqrt C ABI, connected once at import.
     # No replacement square-root approximation or Python math wrapper runs.
-    return entry(x)
+    return py_call(entry, x)
 
 
 def _generator_div(numerator: PythonObject, denominator: PythonObject) raises -> PythonObject:
@@ -91,17 +92,17 @@ def _generator_run(entry: PythonObject, shape: PythonObject, count: PythonObject
                    stream: PythonObject, a: PythonObject, b: PythonObject,
                    input: PythonObject, context: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
-    var out = checkpoint_array(bi.bytes(count * PythonObject(4)), shape, "f", context["neural"]["array_class"])
+    var out = checkpoint_array(py_call(bi.bytes, count * PythonObject(4)), shape, "f", context["neural"]["array_class"])
     var source = input
     if source is None:
-        source = checkpoint_array(bi.bytes(4), Python.tuple(1), "f", context["neural"]["array_class"])
+        source = checkpoint_array(py_call(bi.bytes, 4), Python.tuple(1), "f", context["neural"]["array_class"])
     # Python integer primitives here preserve the legacy two's-complement
     # low/high split even if a caller edited the public seed field directly.
     var lo = seed.__and__(PythonObject(4294967295))
     var hi = seed.__rshift__(32).__and__(PythonObject(4294967295))
-    var params = Python.list(count, bi.int(offset), bi.int(lo), bi.int(hi), bi.int(stream), kind, bi.float(a), bi.float(b))
+    var params = Python.list(count, py_call(bi.int, offset), py_call(bi.int, lo), py_call(bi.int, hi), py_call(bi.int, stream), kind, py_call(bi.float, a), py_call(bi.float, b))
     try:
-        _ = entry(Python.list(out._addr, source._addr), params)
+        _ = py_call(entry, Python.list(out._addr, source._addr), params)
     except error:
         # Existing def_function RNG entries report numerical admission through
         # the base Exception type; preserve that public failure contract.
@@ -122,13 +123,13 @@ def generator_draw(operation: String, values: PythonObject, context: PythonObjec
         var slope = values[3]
         if slope is None:
             slope = _generator_sqrt(PythonObject(5.0), context)
-        var square = bi.float(slope) * bi.float(slope)
+        var square = py_call(bi.float, slope) * py_call(bi.float, slope)
         var gain = _generator_sqrt(_generator_div(PythonObject(2.0), PythonObject(1.0) + square), context)
-        var bound = gain * _generator_sqrt(_generator_div(PythonObject(3.0), bi.float(bi.int(values[2]))), context)
+        var bound = gain * _generator_sqrt(_generator_div(PythonObject(3.0), py_call(bi.float, py_call(bi.int, values[2]))), context)
         return generator_draw("uniform", Python.tuple(owner, values[1], -bound, bound), context)
     if operation == "xavier_uniform" or operation == "xavier_normal":
-        var gain = bi.float(values[4])
-        var fan = bi.float(bi.int(values[2]) + bi.int(values[3]))
+        var gain = py_call(bi.float, values[4])
+        var fan = py_call(bi.float, py_call(bi.int, values[2]) + py_call(bi.int, values[3]))
         var ratio = _generator_div(PythonObject(6.0 if operation == "xavier_uniform" else 2.0), fan)
         var scale = gain * _generator_sqrt(ratio, context)
         if operation == "xavier_uniform":
@@ -138,8 +139,8 @@ def generator_draw(operation: String, values: PythonObject, context: PythonObjec
         var gain = values[3]
         if gain is None:
             gain = _generator_sqrt(PythonObject(2.0), context)
-        var numerator = bi.float(gain)
-        var denominator = _generator_sqrt(bi.float(bi.int(values[2])), context)
+        var numerator = py_call(bi.float, gain)
+        var denominator = _generator_sqrt(py_call(bi.float, py_call(bi.int, values[2])), context)
         var scale = _generator_div(numerator, denominator)
         return generator_draw("normal", Python.tuple(owner, values[1], 0.0, scale), context)
     if operation == "uniform":
@@ -174,13 +175,13 @@ def generator_draw(operation: String, values: PythonObject, context: PythonObjec
             raise Error("Generator.dropout: p must be in [0, 1)")
         var x = _generator_input(values[1], context)
         var scale = Float32(Float64(1) / (Float64(1) - Float64(probability)))
-        var stream = generator_next(owner) if values[4] is None else bi.int(values[4])
+        var stream = generator_next(owner) if values[4] is None else py_call(bi.int, values[4])
         var key = bi.dict()
-        key["seed"] = fields["seed"]
-        key["stream"] = stream
-        key["p"] = Float64(probability)
-        key["scale"] = Float64(scale)
-        key["offset"] = bi.int(values[3])
+        py_setitem(key, "seed", fields["seed"])
+        py_setitem(key, "stream", stream)
+        py_setitem(key, "p", Float64(probability))
+        py_setitem(key, "scale", Float64(scale))
+        py_setitem(key, "offset", py_call(bi.int, values[3]))
         # Dropout consumed above before converting offset or selecting mode.
         var entry = _generator_binding(owner, context)
         var out = _generator_run(entry, x.shape, x.size, 2, key["offset"], key["seed"], stream,

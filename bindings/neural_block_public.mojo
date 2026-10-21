@@ -5,6 +5,7 @@ from core.neural_block_public_impl import neural_copy_row_prefixes
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
+from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
 from std.memory import memcpy
 from std.os import getenv
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
@@ -15,28 +16,28 @@ from core.hostptr import f32_ptr
 
 def neural_block_owner(block: PythonObject, context: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
-    var fields = bi.object.__getattribute__(block, "__dict__")
+    var fields = py_call(bi.object.__getattribute__, block, "__dict__")
     var kind = String(fields["_native_kind"])
     var route = fields["_native_route"]
-    var mode = fields.get("numeric_mode")
+    var mode = py_get(fields, "numeric_mode")
     var bindings = _model_bindings(route, kind, context, mode)
-    if kind == "transformer" and Bool(py=bi.hasattr(bindings[kind], "transformer_arithmetic_profile")):
+    if kind == "transformer" and Bool(py=py_call(bi.hasattr, bindings[kind], "transformer_arithmetic_profile")):
         var next_profile = _native_function(bindings[kind], "transformer_arithmetic_profile")()
         var want_mode = context["backend"]._DEFAULT_MODE if mode is None else mode
-        var saved = fields.get("_arithmetic_profile")
-        if saved is not None and Bool(py=fields.get("_arithmetic_profile_mode") == want_mode) and not Bool(py=saved == next_profile):
+        var saved = py_get(fields, "_arithmetic_profile")
+        if saved is not None and Bool(py=py_get(fields, "_arithmetic_profile_mode") == want_mode) and not Bool(py=saved == next_profile):
             raise Error("neural block: saved arithmetic profile differs from binding")
-        fields["_arithmetic_profile"] = next_profile
-        fields["_arithmetic_profile_mode"] = want_mode
-        fields["_arithmetic_profile_changed"] = _native_function(bindings[kind], "transformer_arithmetic_profile_changed")()
-    var owner = bi.object.__new__(context["model_class"])
-    owner.kind = PythonObject(kind)
-    owner.device = route
-    owner.d_model = fields["d_model"]
-    owner.numeric_profile = fields.get("numeric_profile", PythonObject("fp32_v1"))
-    owner._head_int15 = fields.get("_int15")
-    owner._blocks = bi.list()
-    owner._blocks.append(block)
+        py_setitem(fields, "_arithmetic_profile", next_profile)
+        py_setitem(fields, "_arithmetic_profile_mode", want_mode)
+        py_setitem(fields, "_arithmetic_profile_changed", _native_function(bindings[kind], "transformer_arithmetic_profile_changed")())
+    var owner = py_call(bi.object.__new__, context["model_class"])
+    py_setattr(owner, "kind", PythonObject(kind))
+    py_setattr(owner, "device", route)
+    py_setattr(owner, "d_model", fields["d_model"])
+    py_setattr(owner, "numeric_profile", py_get(fields, "numeric_profile", PythonObject("fp32_v1")))
+    py_setattr(owner, "_head_int15", py_get(fields, "_int15"))
+    py_setattr(owner, "_blocks", bi.list())
+    _ = py_call(owner._blocks.append, block)
     _ = causal_lm_admit_binding(owner, bindings[kind], bindings["primitives"], bindings["linalg"] if owner._head_int15 is not None else PythonObject(None))
     return owner
 
@@ -45,39 +46,39 @@ def neural_block_init_binding(block: PythonObject, weights: PythonObject, kind_v
     var bi = Python.import_module("builtins")
     _ = generation_initialize_binding(context["generation_classes"])
     var kind = String(kind_value)
-    var cpu = Bool(py=bi.isinstance(block, context["block_classes"]["cpu"][kind]))
+    var cpu = Bool(py=py_call(bi.isinstance, block, context["block_classes"]["cpu"][kind]))
     var route = PythonObject("cpu" if cpu else "gpu")
     # The established GPU block class routes to native host arithmetic on a
     # CPU-only installation, just as the package binding selector does.
     if context["selected_vendor"] is None or String(context["selected_vendor"]) == "cpu":
         route = PythonObject("cpu")
-    var plan = bi.object.__new__(context["config_context"]["plan_class"])
-    plan.kind = kind_value
+    var plan = py_call(bi.object.__new__, context["config_context"]["plan_class"])
+    py_setattr(plan, "kind", kind_value)
     var norm_name = "input_layernorm.weight" if kind == "transformer" else ("norm.weight" if kind == "mamba1" else "block_norm.weight")
     var norm = _model_f32(weights[norm_name], norm_name, context)
     if len(norm.shape) != 1 or Int(py=norm.shape[0]) < 1:
         raise Error("neural block: norm weight requires positive d_model")
-    plan.d_model = norm.shape[0]
-    var fields = bi.object.__getattribute__(block, "__dict__")
+    py_setattr(plan, "d_model", norm.shape[0])
+    var fields = py_call(bi.object.__getattribute__, block, "__dict__")
     var mode = options[1]
-    fields["numeric_mode"] = mode
-    plan.block_options = bi.dict()
-    plan.block_kwargs = bi.dict()
+    py_setitem(fields, "numeric_mode", mode)
+    py_setattr(plan, "block_options", bi.dict())
+    py_setattr(plan, "block_kwargs", bi.dict())
     var profile = PythonObject("fp32_v1")
     if kind == "transformer":
         profile = _model_profile(options[2], "transformer_block", context)
-        plan.n_heads = options[3]
+        py_setattr(plan, "n_heads", options[3])
         var names = context["block_option_names"]
         for i in range(len(names)):  # driver-loop: over transformer option keyword metadata
-            plan.block_options[names[i]] = options[i + 4]
+            py_setitem(plan.block_options, names[i], options[i + 4])
     elif kind == "mamba2":
-        plan.block_kwargs["dt_limit"] = options[2]
+        py_setitem(plan.block_kwargs, "dt_limit", options[2])
     var bindings = _model_bindings(route, kind, context, mode)
     var created = _model_block(weights, plan, profile, route, bindings, context)
-    fields.update(bi.object.__getattribute__(created, "__dict__"))
-    fields["numeric_mode"] = mode
-    fields["_native_kind"] = kind_value
-    fields["_native_route"] = route
+    _ = py_call(fields.update, py_call(bi.object.__getattribute__, created, "__dict__"))
+    py_setitem(fields, "numeric_mode", mode)
+    py_setitem(fields, "_native_kind", kind_value)
+    py_setitem(fields, "_native_route", route)
     return PythonObject(None)
 
 
@@ -94,22 +95,22 @@ def _neural_input(value: PythonObject, d_model: Int, step: Bool, context: Python
     var x = _model_f32(value, "x", context)
     var bi = Python.import_module("builtins")
     if step and len(x.shape) == 2:
-        var shaped = bi.object.__new__(context["array_class"])
+        var shaped = py_call(bi.object.__new__, context["array_class"])
         # A metadata view retains its native buffer owner; no Array callback.
-        shaped._store = x._store
-        shaped._base = x
-        shaped._pin = x._pin
-        shaped._mv = x._mv
-        shaped._addr = x._addr
-        shaped._readonly = x._readonly
-        shaped.shape = bi.tuple(py_ints([Int(py=x.shape[0]), 1, Int(py=x.shape[1])]))
-        shaped.dtype = x.dtype
-        shaped.ndim = PythonObject(3)
-        shaped.size = x.size
-        shaped.nbytes = x.nbytes
-        shaped.itemsize = x.itemsize
-        shaped.order = x.order
-        shaped.strides = bi.tuple(py_ints([d_model * 4, d_model * 4, 4]))
+        py_setattr(shaped, "_store", x._store)
+        py_setattr(shaped, "_base", x)
+        py_setattr(shaped, "_pin", x._pin)
+        py_setattr(shaped, "_mv", x._mv)
+        py_setattr(shaped, "_addr", x._addr)
+        py_setattr(shaped, "_readonly", x._readonly)
+        py_setattr(shaped, "shape", py_call(bi.tuple, py_ints([Int(py=x.shape[0]), 1, Int(py=x.shape[1])])))
+        py_setattr(shaped, "dtype", x.dtype)
+        py_setattr(shaped, "ndim", PythonObject(3))
+        py_setattr(shaped, "size", x.size)
+        py_setattr(shaped, "nbytes", x.nbytes)
+        py_setattr(shaped, "itemsize", x.itemsize)
+        py_setattr(shaped, "order", x.order)
+        py_setattr(shaped, "strides", py_call(bi.tuple, py_ints([d_model * 4, d_model * 4, 4])))
         x = shaped
     if len(x.shape) != 3 or Int(py=x.shape[0]) < 1 or Int(py=x.shape[1]) < 1 or Int(py=x.shape[2]) != d_model:
         raise Error("neural block: x must have shape (positive B, positive L, d_model)")
@@ -120,7 +121,7 @@ def _neural_input(value: PythonObject, d_model: Int, step: Bool, context: Python
 
 def _neural_state(owner: PythonObject, state: PythonObject, b: Int, l: Int) raises:
     var bi = Python.import_module("builtins")
-    var fields = bi.object.__getattribute__(owner._blocks[0], "__dict__")
+    var fields = py_call(bi.object.__getattribute__, owner._blocks[0], "__dict__")
     if String(owner.kind) == "transformer":
         if Int(py=state.batch_size) != b or Int(py=state.n_kv_heads) != Int(py=fields["n_kv_heads"]) or Int(py=state.head_dim) != Int(py=fields["head_dim"]) or Int(py=state.window) != Int(py=fields["window"]):
             raise Error("neural block: transformer state dimensions differ")
@@ -132,49 +133,49 @@ def _neural_state(owner: PythonObject, state: PythonObject, b: Int, l: Int) rais
 
 def _neural_plain(owner: PythonObject, x: PythonObject, supplied_state: PythonObject, step: Bool) raises -> PythonObject:
     var bi = Python.import_module("builtins")
-    var fields = bi.object.__getattribute__(owner._blocks[0], "__dict__")
+    var fields = py_call(bi.object.__getattribute__, owner._blocks[0], "__dict__")
     var b = Int(py=x.shape[0])
     var l = Int(py=x.shape[1])
     var d = Int(py=x.shape[2])
     var transformer = String(owner.kind) == "transformer"
     var e = owner._native_entries
-    var reuse = transformer and Bool(py=e.__contains__("forward_session")) and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1"
-    var lock = fields.get("_runtime_lock") if transformer else PythonObject(None)
+    var reuse = transformer and py_contains(e, "forward_session") and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1"
+    var lock = py_get(fields, "_runtime_lock") if transformer else PythonObject(None)
     var locked = transformer and (reuse or fields["_native_session"] is not None or fields["_int15"] is not None)
     if locked:
         lock.acquire()
     try:
         if transformer and fields["_native_session"] is not None and (not reuse or fields["_session_binding"] is not e["block_binding"]):
-            _native_function(fields["_session_binding"], "transformer_session_close")(fields["_native_session"])
-            fields["_native_session"] = PythonObject(None)
-            fields["_session_binding"] = PythonObject(None)
+            _ = py_call(_native_function(fields["_session_binding"], "transformer_session_close"), fields["_native_session"])
+            py_setitem(fields, "_native_session", PythonObject(None))
+            py_setitem(fields, "_session_binding", PythonObject(None))
         if transformer and supplied_state is None and not step and fields["_int15"] is None:
-            var fresh_session = reuse and Bool(py=e.__contains__("transformer_session_forward_fresh")) and String(getenv("MOJOLEARN_TRANSFORMER_SESSION_FRESH")) != "0"
-            if fresh_session or Bool(py=e.__contains__("transformer_forward_fresh")):
+            var fresh_session = reuse and py_contains(e, "transformer_session_forward_fresh") and String(getenv("MOJOLEARN_TRANSFORMER_SESSION_FRESH")) != "0"
+            if fresh_session or py_contains(e, "transformer_forward_fresh"):
                 var y = generation_array([b, l, d])
                 var keep = List[PythonObject]()
                 var addresses = py_ints([_addr(x, keep)])
                 for i in range(len(fields["_w"])):  # driver-loop: over fixed transformer weight slots
-                    addresses.append(_addr(fields["_w"][i], keep))
+                    _ = py_call(addresses.append, _addr(fields["_w"][i], keep))
                 var params = py_ints([b, l, d, Int(py=fields["n_heads"]), Int(py=fields["n_kv_heads"]), Int(py=fields["head_dim"]), Int(py=fields["intermediate"])])
                 if fresh_session:
-                    addresses.append(0)
-                    addresses.append(0)
-                    params.append(l)
-                    params.append(0)
-                addresses.append(_addr(y, keep))
-                params.append(fields["window"])
+                    _ = py_call(addresses.append, 0)
+                    _ = py_call(addresses.append, 0)
+                    _ = py_call(params.append, l)
+                    _ = py_call(params.append, 0)
+                _ = py_call(addresses.append, _addr(y, keep))
+                _ = py_call(params.append, fields["window"])
                 if Bool(py=fields["_extended"]):
                     for i in range(len(fields["_wopt"])):  # driver-loop: over optional transformer weight slots
-                        addresses.append(_addr(fields["_wopt"][i], keep))
-                    params.extend(fields["_opts_tail"])
+                        _ = py_call(addresses.append, _addr(fields["_wopt"][i], keep))
+                    _ = py_call(params.extend, fields["_opts_tail"])
                 if fresh_session:
                     if fields["_native_session"] is None:
-                        fields["_native_session"] = e["create"]()
-                        fields["_session_binding"] = e["block_binding"]
-                    e["transformer_session_forward_fresh"](fields["_native_session"], addresses, params)
+                        py_setitem(fields, "_native_session", e["create"]())
+                        py_setitem(fields, "_session_binding", e["block_binding"])
+                    _ = py_call(e["transformer_session_forward_fresh"], fields["_native_session"], addresses, params)
                 else:
-                    e["transformer_forward_fresh"](addresses, params)
+                    _ = py_call(e["transformer_forward_fresh"], addresses, params)
                 if locked:
                     lock.release()
                 _ = keep^
@@ -191,19 +192,19 @@ def _neural_plain(owner: PythonObject, x: PythonObject, supplied_state: PythonOb
         if locked:
             lock.release()
         if supplied_state is not None and String(owner.kind) == "mamba1":
-            supplied_state._nn34_usable = PythonObject(False)
+            py_setattr(supplied_state, "_nn34_usable", PythonObject(False))
         raise error
 
 
 def _neural_lengths(value: PythonObject, b: Int, l: Int, context: PythonObject) raises -> List[Int]:
     var bi = Python.import_module("builtins")
     var values = value
-    if bi.type(value) is context["array_class"]:
+    if py_type(value) is context["array_class"]:
         values = value._mv
         if len(value.shape) != 1:
             raise Error("neural block: lengths must be one-dimensional")
-    elif bi.type(value) is not bi.list and bi.type(value) is not bi.tuple:
-        values = bi.memoryview(value)
+    elif py_type(value) is not bi.list and py_type(value) is not bi.tuple:
+        values = py_call(bi.memoryview, value)
         if Int(py=values.ndim) != 1:
             raise Error("neural block: lengths must be one-dimensional")
     if len(values) != b:
@@ -211,7 +212,7 @@ def _neural_lengths(value: PythonObject, b: Int, l: Int, context: PythonObject) 
     var result = List[Int]()
     for i in range(b):  # small-loop(one length argument word per batch row)
         var v = values[i]
-        if bi.type(v) is not bi.int:
+        if py_type(v) is not bi.int:
             raise Error("TypeError: neural block lengths entries must be integers, not bool or float")
         var n = Int(py=v)
         if n < 1 or n > l:
@@ -248,7 +249,7 @@ def neural_block_forward_binding(block: PythonObject, input: PythonObject, state
 
 def neural_training_entries(fields: PythonObject, context: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
-    var mode = fields.get("numeric_mode")
+    var mode = py_get(fields, "numeric_mode")
     if mode is None:
         mode = context["backend"]._DEFAULT_MODE
     else:
@@ -256,12 +257,12 @@ def neural_training_entries(fields: PythonObject, context: PythonObject) raises 
     if String(mode) != "identical" and String(mode) != "fast":
         raise Error("NotImplementedError: neural backward requires identical or fast mode")
     var key = fields["_native_route"] + PythonObject(":") + mode
-    var selected = context["training_bindings"].get(key)
+    var selected = py_get(context["training_bindings"], key)
     if selected is None:
         raise Error("NotImplementedError: native training bindings unavailable for " + String(key))
     var family = "transformer" if String(fields["_native_kind"]) == "transformer" else "mamba"
     var entries = selected[family]
-    if bi.type(entries) is bi.str:
+    if py_type(entries) is bi.str:
         raise Error("RuntimeError: " + String(entries))
     var vendor = String(_native_function(entries, family + "_vendor")())
     var code = Int(py=_native_function(entries, family + "_numeric_mode")())
@@ -272,46 +273,46 @@ def neural_training_entries(fields: PythonObject, context: PythonObject) raises 
             raise Error("RuntimeError: CPU backward requires native CPU kernels")
     elif vendor != "metal" and vendor != "cuda" and vendor != "hip":
         raise Error("RuntimeError: GPU backward requires native GPU kernels")
-    if family == "transformer" and Bool(py=bi.hasattr(entries, "transformer_arithmetic_profile")):
+    if family == "transformer" and Bool(py=py_call(bi.hasattr, entries, "transformer_arithmetic_profile")):
         var profile = _native_function(entries, "transformer_arithmetic_profile")()
-        var saved = fields.get("_arithmetic_profile")
-        if saved is not None and Bool(py=fields.get("_arithmetic_profile_mode") == mode) and not Bool(py=saved == profile):
+        var saved = py_get(fields, "_arithmetic_profile")
+        if saved is not None and Bool(py=py_get(fields, "_arithmetic_profile_mode") == mode) and not Bool(py=saved == profile):
             raise Error("RuntimeError: saved transformer arithmetic profile differs from training binding")
-        fields["_arithmetic_profile"] = profile
-        fields["_arithmetic_profile_mode"] = mode
-        fields["_arithmetic_profile_changed"] = _native_function(entries, "transformer_arithmetic_profile_changed")()
+        py_setitem(fields, "_arithmetic_profile", profile)
+        py_setitem(fields, "_arithmetic_profile_mode", mode)
+        py_setitem(fields, "_arithmetic_profile_changed", _native_function(entries, "transformer_arithmetic_profile_changed")())
     return entries
 
 
 def neural_mamba3_restore(fields: PythonObject, entries: PythonObject, weights: PythonObject) raises:
     var bi = Python.import_module("builtins")
-    if Bool(py=fields.get("_owned_restore_pending", PythonObject(False))):
-        if not Bool(py=bi.hasattr(entries, "mamba3_owned_weights_enabled")) or not Bool(py=_native_function(entries, "mamba3_owned_weights_enabled")()):
+    if Bool(py=py_get(fields, "_owned_restore_pending", PythonObject(False))):
+        if not Bool(py=py_call(bi.hasattr, entries, "mamba3_owned_weights_enabled")) or not Bool(py=_native_function(entries, "mamba3_owned_weights_enabled")()):
             raise Error("RuntimeError: Mamba3 owned weights require the compiled owned-weight entry")
-        if fields.get("_prefill_session") is None or fields.get("_prefill_binding") is not entries.canonical:
-            fields["_prefill_session"] = _native_function(entries, "mamba3_prefill_session_create")()
-            fields["_prefill_binding"] = entries.canonical
+        if py_get(fields, "_prefill_session") is None or py_get(fields, "_prefill_binding") is not entries.canonical:
+            py_setitem(fields, "_prefill_session", _native_function(entries, "mamba3_prefill_session_create")())
+            py_setitem(fields, "_prefill_binding", entries.canonical)
         var addresses = bi.list()
         for i in range(len(weights)):  # driver-loop: over the fixed owned-weight registry
-            addresses.append(weights[i]._addr)
-        fields["_owned_generation"] = _native_function(entries, "mamba3_prefill_session_install_weights")(fields["_prefill_session"], addresses, fields["d_model"])
-        fields["_owned_restore_pending"] = False
-    if fields.get("_owned_generation") is not None:
-        if fields.get("_prefill_binding") is not entries.canonical or getenv("MOJOLEARN_MAMBA3_LEGACY_SETUP", "0") == "1":
+            _ = py_call(addresses.append, weights[i]._addr)
+        py_setitem(fields, "_owned_generation", py_call(_native_function(entries, "mamba3_prefill_session_install_weights"), fields["_prefill_session"], addresses, fields["d_model"]))
+        py_setitem(fields, "_owned_restore_pending", False)
+    if py_get(fields, "_owned_generation") is not None:
+        if py_get(fields, "_prefill_binding") is not entries.canonical or getenv("MOJOLEARN_MAMBA3_LEGACY_SETUP", "0") == "1":
             raise Error("RuntimeError: Mamba3 owned snapshot requires its installed binding/setup")
 
 
 def neural_block_backward_binding(block: PythonObject, input: PythonObject, grad_output: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["generation_classes"])
     var bi = Python.import_module("builtins")
-    var fields = bi.object.__getattribute__(block, "__dict__")
+    var fields = py_call(bi.object.__getattribute__, block, "__dict__")
     var kind = String(fields["_native_kind"])
     var transformer = kind == "transformer"
     if transformer and (fields["_int15"] is not None or Bool(py=fields["_extended"])):
         raise Error("NotImplementedError: TransformerBlock.backward requires default float32 block options; numeric_profile=" + String(fields["numeric_profile"]))
     var entries = neural_training_entries(fields, context)
     var name = ("transformer" if transformer else kind) + "_backward"
-    if not Bool(py=bi.hasattr(entries, name)):
+    if not Bool(py=py_call(bi.hasattr, entries, name)):
         raise Error("RuntimeError: loaded native training binding lacks " + name)
     var d = Int(py=fields["d_model"])
     var x = _neural_input(input, d, False, context)
@@ -321,93 +322,93 @@ def neural_block_backward_binding(block: PythonObject, input: PythonObject, grad
     _model_shape(dy, [b, l, d], "grad_output")
     var weights = fields["_w"]
     if not transformer:
-        var mode = fields.get("numeric_mode")
+        var mode = py_get(fields, "numeric_mode")
         if mode is None:
             mode = context["backend"]._DEFAULT_MODE
         else:
             mode = mode.strip().lower()
         var selected = context["training_bindings"][fields["_native_route"] + PythonObject(":") + mode]
-        if Int(py=selected["all_finite_f32"](dy._addr, dy.size)) != 1:
+        if Int(py=py_call(selected["all_finite_f32"], dy._addr, dy.size)) != 1:
             raise Error("neural backward: grad_output must be finite")
         # Preserve the existing current-weight shape validation without
         # calling a Python block constructor from the operation.
-        var plan = bi.object.__new__(context["config_context"]["plan_class"])
-        plan.kind = PythonObject(kind)
-        plan.d_model = PythonObject(d)
-        plan.block_kwargs = bi.dict()
+        var plan = py_call(bi.object.__new__, context["config_context"]["plan_class"])
+        py_setattr(plan, "kind", PythonObject(kind))
+        py_setattr(plan, "d_model", PythonObject(d))
+        py_setattr(plan, "block_kwargs", bi.dict())
         if kind == "mamba2":
-            plan.block_kwargs["dt_limit"] = fields["dt_limit"]
+            py_setitem(plan.block_kwargs, "dt_limit", fields["dt_limit"])
         var named = bi.dict()
         var names = block._W_NAMES
         for i in range(len(names)):  # driver-loop: over the fixed block weight registry
-            named[names[i]] = weights[i]
+            py_setitem(named, names[i], weights[i])
         var checked = _model_block(named, plan, PythonObject("fp32_v1"), fields["_native_route"], _model_bindings(fields["_native_route"], kind, context, mode), context)
-        weights = bi.object.__getattribute__(checked, "__dict__")["_w"]
+        weights = py_call(bi.object.__getattribute__, checked, "__dict__")["_w"]
     var keep = List[PythonObject]()
     var addresses = py_ints([_addr(x, keep)])
     var gradients = bi.list()
-    gradients.append(generation_array([b, l, d]))
+    _ = py_call(gradients.append, generation_array([b, l, d]))
     for i in range(len(weights)):  # driver-loop: over parameter buffers and their shapes
-        addresses.append(_addr(weights[i], keep))
+        _ = py_call(addresses.append, _addr(weights[i], keep))
         var shape = List[Int]()
         for j in range(len(weights[i].shape)):  # driver-loop: over tensor shape metadata
             shape.append(Int(py=weights[i].shape[j]))
-        gradients.append(generation_array(shape))
-    addresses.append(_addr(dy, keep))
+        _ = py_call(gradients.append, generation_array(shape))
+    _ = py_call(addresses.append, _addr(dy, keep))
     for i in range(len(gradients)):  # driver-loop: over gradient buffer addresses
-        addresses.append(_addr(gradients[i], keep))
+        _ = py_call(addresses.append, _addr(gradients[i], keep))
     var params = py_ints([b, l, d])
     if transformer:
         for key in [String("n_heads"), String("n_kv_heads"), String("head_dim"), String("intermediate"), String("window")]:  # driver-loop: over transformer launch dimensions
-            params.append(fields[key])
+            _ = py_call(params.append, fields[key])
         var lock = fields["_runtime_lock"]
         lock.acquire()
         try:
-            var session = Bool(py=bi.hasattr(entries, "transformer_session_backward")) and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1"
+            var session = Bool(py=py_call(bi.hasattr, entries, "transformer_session_backward")) and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1"
             if session:
                 if fields["_native_session"] is not None and fields["_session_binding"] is not entries.canonical:
-                    _native_function(fields["_session_binding"], "transformer_session_close")(fields["_native_session"])
-                    fields["_native_session"] = PythonObject(None)
-                    fields["_session_binding"] = PythonObject(None)
+                    _ = py_call(_native_function(fields["_session_binding"], "transformer_session_close"), fields["_native_session"])
+                    py_setitem(fields, "_native_session", PythonObject(None))
+                    py_setitem(fields, "_session_binding", PythonObject(None))
                 if fields["_native_session"] is None:
-                    fields["_native_session"] = _native_function(entries, "transformer_session_create")()
-                    fields["_session_binding"] = entries.canonical
-                _native_function(entries, "transformer_session_backward")(fields["_native_session"], addresses, params)
+                    py_setitem(fields, "_native_session", _native_function(entries, "transformer_session_create")())
+                    py_setitem(fields, "_session_binding", entries.canonical)
+                _ = py_call(_native_function(entries, "transformer_session_backward"), fields["_native_session"], addresses, params)
             else:
-                if fields["_native_session"] is not None and Bool(py=bi.hasattr(entries, "transformer_session_invalidate_tape")):
-                    _native_function(entries, "transformer_session_invalidate_tape")(fields["_native_session"])
-                _native_function(entries, name)(addresses, params)
+                if fields["_native_session"] is not None and Bool(py=py_call(bi.hasattr, entries, "transformer_session_invalidate_tape")):
+                    _ = py_call(_native_function(entries, "transformer_session_invalidate_tape"), fields["_native_session"])
+                _ = py_call(_native_function(entries, name), addresses, params)
             lock.release()
         except error:
             lock.release()
             raise error
     else:
         if kind == "mamba2":
-            params.extend(fields["dt_limit"])
+            _ = py_call(params.extend, fields["dt_limit"])
         if kind == "mamba3":
             neural_mamba3_restore(fields, entries, weights)
-            var generation = fields.get("_owned_generation")
-            var session = Bool(py=bi.hasattr(entries, "mamba3_prefill_session_backward")) and getenv("MOJOLEARN_MAMBA3_LEGACY_SETUP", "0") != "1"
+            var generation = py_get(fields, "_owned_generation")
+            var session = Bool(py=py_call(bi.hasattr, entries, "mamba3_prefill_session_backward")) and getenv("MOJOLEARN_MAMBA3_LEGACY_SETUP", "0") != "1"
             if generation is not None:
                 var owned_addresses = py_ints([Int(py=addresses[0])])
                 for i in range(10, len(addresses)):  # driver-loop: over input-gradient and result address slots
-                    owned_addresses.append(addresses[i])
-                params.append(generation)
-                _native_function(entries, "mamba3_prefill_session_backward_owned")(fields["_prefill_session"], owned_addresses, params)
+                    _ = py_call(owned_addresses.append, addresses[i])
+                _ = py_call(params.append, generation)
+                _ = py_call(_native_function(entries, "mamba3_prefill_session_backward_owned"), fields["_prefill_session"], owned_addresses, params)
             elif session:
-                if fields.get("_prefill_session") is None or fields.get("_prefill_binding") is not entries.canonical:
-                    fields["_prefill_session"] = _native_function(entries, "mamba3_prefill_session_create")()
-                    fields["_prefill_binding"] = entries.canonical
-                _native_function(entries, "mamba3_prefill_session_backward")(fields["_prefill_session"], addresses, params)
+                if py_get(fields, "_prefill_session") is None or py_get(fields, "_prefill_binding") is not entries.canonical:
+                    py_setitem(fields, "_prefill_session", _native_function(entries, "mamba3_prefill_session_create")())
+                    py_setitem(fields, "_prefill_binding", entries.canonical)
+                _ = py_call(_native_function(entries, "mamba3_prefill_session_backward"), fields["_prefill_session"], addresses, params)
             else:
-                _native_function(entries, name)(addresses, params)
+                _ = py_call(_native_function(entries, name), addresses, params)
         else:
-            _native_function(entries, name)(addresses, params)
+            _ = py_call(_native_function(entries, name), addresses, params)
     var result = bi.dict()
-    result["x"] = gradients[0]
+    py_setitem(result, "x", gradients[0])
     var names = block._W_NAMES
     for i in range(len(names)):  # driver-loop: over named gradient slots
-        result[names[i]] = gradients[i + 1]
+        py_setitem(result, names[i], gradients[i + 1])
     _ = keep^
     return result
 

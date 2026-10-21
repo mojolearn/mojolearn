@@ -6,15 +6,16 @@ from std.memory import bitcast
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
+from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
 from bindings.native_json import native_json_parse, native_json_read, native_path, native_path_exists
 from gemm.f16_widen import f16_bits_to_f32
 
 
 def checkpoint_array(raw: PythonObject, shape: PythonObject, code: String, array_class: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
-    var store = Python.import_module("array").array(code)
-    store.frombytes(raw)
-    var result = bi.object.__new__(array_class)
+    var store = py_call(Python.import_module("array").array, code)
+    _ = py_call(store.frombytes, raw)
+    var result = py_call(bi.object.__new__, array_class)
     var itemsize = Int(py=store.itemsize)
     var count = 1
     var strides = bi.list()
@@ -24,34 +25,34 @@ def checkpoint_array(raw: PythonObject, shape: PythonObject, code: String, array
         if size < 0:
             raise Error("safetensors: negative shape dimension")
         count *= size
-        strides.insert(0, stride)
+        _ = py_call(strides.insert, 0, stride)
         stride *= size
     if count != len(store):
         raise Error("safetensors: tensor shape does not match stored bytes")
-    result._store = store
-    result._mv = bi.memoryview(store)
-    result._base = PythonObject(None)
-    result._pin = PythonObject(None)
-    result._addr = store.buffer_info()[0]
-    result._readonly = PythonObject(False)
-    result.shape = bi.tuple(shape)
-    result.dtype = PythonObject("<f4" if code == "f" else ("<u2" if code == "H" else ("<i8" if code == "q" else ("<i1" if code == "b" else "<i4"))))
-    result.ndim = PythonObject(len(shape))
-    result.size = PythonObject(count)
-    result.nbytes = PythonObject(count * itemsize)
-    result.itemsize = PythonObject(itemsize)
-    result.order = PythonObject("C")
-    result.strides = bi.tuple(strides)
+    py_setattr(result, "_store", store)
+    py_setattr(result, "_mv", py_call(bi.memoryview, store))
+    py_setattr(result, "_base", PythonObject(None))
+    py_setattr(result, "_pin", PythonObject(None))
+    py_setattr(result, "_addr", store.buffer_info()[0])
+    py_setattr(result, "_readonly", PythonObject(False))
+    py_setattr(result, "shape", py_call(bi.tuple, shape))
+    py_setattr(result, "dtype", PythonObject("<f4" if code == "f" else ("<u2" if code == "H" else ("<i8" if code == "q" else ("<i1" if code == "b" else "<i4")))))
+    py_setattr(result, "ndim", PythonObject(len(shape)))
+    py_setattr(result, "size", PythonObject(count))
+    py_setattr(result, "nbytes", PythonObject(count * itemsize))
+    py_setattr(result, "itemsize", PythonObject(itemsize))
+    py_setattr(result, "order", PythonObject("C"))
+    py_setattr(result, "strides", py_call(bi.tuple, strides))
     return result
 
 
 def tensor_info_init_binding(value: PythonObject, fields: PythonObject) raises -> PythonObject:
-    value.name = fields[0]
-    value.dtype = fields[1]
-    value.shape = fields[2]
-    value.begin = fields[3]
-    value.end = fields[4]
-    value.file = fields[5]
+    py_setattr(value, "name", fields[0])
+    py_setattr(value, "dtype", fields[1])
+    py_setattr(value, "shape", fields[2])
+    py_setattr(value, "begin", fields[3])
+    py_setattr(value, "end", fields[4])
+    py_setattr(value, "file", fields[5])
     return PythonObject(None)
 
 
@@ -67,18 +68,18 @@ def tensor_info_size_binding(value: PythonObject, bytes: PythonObject) raises ->
 def safetensors_init_binding(value: PythonObject, input_path: PythonObject, context: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
     var path = native_path(input_path)
-    value.path = path
-    value._fh = PythonObject(None)
-    value._mm = PythonObject(None)
-    value._infos = bi.dict()
+    py_setattr(value, "path", path)
+    py_setattr(value, "_fh", PythonObject(None))
+    py_setattr(value, "_mm", PythonObject(None))
+    py_setattr(value, "_infos", bi.dict())
     if not native_path_exists(path):
         raise Error("FileNotFoundError: safetensors file does not exist")
-    var file = bi.open(path, "rb")
+    var file = py_call(bi.open, path, "rb")
     var raw = PythonObject(None)
     var total = 0
     var n = 0
     try:
-        var head = file.read(8)
+        var head = py_call(file.read, 8)
         if len(head) != 8:
             raise Error("safetensors: file is shorter than its 8-byte header length")
         var length = UInt64(0)
@@ -87,55 +88,55 @@ def safetensors_init_binding(value: PythonObject, input_path: PythonObject, cont
         if length > 100 * 1024 * 1024:
             raise Error("safetensors: header length exceeds 104857600")
         n = Int(length)
-        raw = file.read(n)
+        raw = py_call(file.read, n)
         if len(raw) != n:
             raise Error("safetensors: header is truncated")
-        file.seek(0, 2)
+        _ = py_call(file.seek, 0, 2)
         total = Int(py=file.tell())
     except error:
         file.close()
         raise error
     file.close()
-    value.data_start = PythonObject(8 + n)
-    value.data_size = PythonObject(total - 8 - n)
+    py_setattr(value, "data_start", PythonObject(8 + n))
+    py_setattr(value, "data_size", PythonObject(total - 8 - n))
     var header = native_json_parse(raw)
-    if bi.type(header) is not bi.dict:
+    if py_type(header) is not bi.dict:
         raise Error("safetensors: header is not a JSON object")
-    value.metadata = header.pop("__metadata__", PythonObject(None))
-    var names = bi.list(header)
+    py_setattr(value, "metadata", py_call(header.pop, "__metadata__", PythonObject(None)))
+    var names = py_call(bi.list, header)
     for i in range(len(names)):  # driver-loop: over the checkpoint header tensor entries
         var name = names[i]
         var entry = header[name]
-        if bi.type(entry) is not bi.dict or not Bool(py=entry.__contains__("dtype")) or not Bool(py=entry.__contains__("shape")) or not Bool(py=entry.__contains__("data_offsets")):
+        if py_type(entry) is not bi.dict or not py_contains(entry, "dtype") or not py_contains(entry, "shape") or not py_contains(entry, "data_offsets"):
             raise Error("safetensors: tensor " + String(name) + " lacks dtype/shape/data_offsets")
         var dtype = String(entry["dtype"])
         var shape = bi.list()
         var count = 1
         var input_shape = entry["shape"]
         for j in range(len(input_shape)):  # small-loop(tensor shape dimension words)
-            var size = Int(py=bi.int(input_shape[j]))
+            var size = Int(py=py_call(bi.int, input_shape[j]))
             if size < 0 or (size != 0 and count > 9223372036854775807 // size):
                 raise Error("safetensors: invalid tensor shape")
             count *= size
-            shape.append(size)
+            _ = py_call(shape.append, size)
         var offsets = entry["data_offsets"]
         if len(offsets) != 2:
             raise Error("safetensors: data_offsets requires a pair")
-        var begin = Int(py=bi.int(offsets[0]))
-        var end = Int(py=bi.int(offsets[1]))
+        var begin = Int(py=py_call(bi.int, offsets[0]))
+        var end = Int(py=py_call(bi.int, offsets[1]))
         if begin < 0 or end < begin or end > total - 8 - n:
             raise Error("safetensors: tensor " + String(name) + " offsets fall outside the data section")
         var itemsize = 8 if dtype == "I64" else (4 if dtype == "F32" or dtype == "I32" else (2 if dtype == "BF16" or dtype == "F16" else 0))
         if itemsize != 0 and (count > 9223372036854775807 // itemsize or count * itemsize != end - begin):
             raise Error("safetensors: tensor " + String(name) + " bytes differ from dtype/shape")
-        var info = bi.object.__new__(context["info_class"])
-        info.name = name
-        info.dtype = entry["dtype"]
-        info.shape = bi.tuple(shape)
-        info.begin = PythonObject(begin)
-        info.end = PythonObject(end)
-        info.file = path
-        value._infos[name] = info
+        var info = py_call(bi.object.__new__, context["info_class"])
+        py_setattr(info, "name", name)
+        py_setattr(info, "dtype", entry["dtype"])
+        py_setattr(info, "shape", py_call(bi.tuple, shape))
+        py_setattr(info, "begin", PythonObject(begin))
+        py_setattr(info, "end", PythonObject(end))
+        py_setattr(info, "file", path)
+        py_setitem(value._infos, name, info)
     return PythonObject(None)
 
 
@@ -143,23 +144,23 @@ def safetensors_map_binding(value: PythonObject) raises -> PythonObject:
     if value._mm is None:
         var bi = Python.import_module("builtins")
         var mmap = Python.import_module("mmap")
-        value._fh = bi.open(value.path, "rb")
-        value._mm = mmap.mmap(value._fh.fileno(), 0, access=mmap.ACCESS_READ)
+        py_setattr(value, "_fh", py_call(bi.open, value.path, "rb"))
+        py_setattr(value, "_mm", py_call(mmap.mmap, value._fh.fileno(), 0, access=mmap.ACCESS_READ))
     return value._mm
 
 
 def safetensors_close_binding(value: PythonObject) raises -> PythonObject:
     if value._mm is not None:
         value._mm.close()
-        value._mm = PythonObject(None)
+        py_setattr(value, "_mm", PythonObject(None))
     if value._fh is not None:
         value._fh.close()
-        value._fh = PythonObject(None)
+        py_setattr(value, "_fh", PythonObject(None))
     return PythonObject(None)
 
 
 def safetensors_info_binding(value: PythonObject, name: PythonObject) raises -> PythonObject:
-    if not Bool(py=value._infos.__contains__(name)):
+    if not py_contains(value._infos, name):
         raise Error("KeyError: safetensors holds no tensor " + String(name))
     return value._infos[name]
 
@@ -176,33 +177,34 @@ def safetensors_read_binding(value: PythonObject, name: PythonObject, bf16: Pyth
     var mmap = safetensors_map_binding(value)
     var begin = Int(py=value.data_start) + Int(py=info.begin)
     var end = Int(py=value.data_start) + Int(py=info.end)
-    var raw = bi.memoryview(mmap)[bi.slice(begin, end)]
+    var raw = py_call(bi.memoryview, mmap)[py_call(bi.slice, begin, end)]
     var code = "f" if dtype == "F32" else ("q" if dtype == "I64" else ("i" if dtype == "I32" else "H"))
     var owned = checkpoint_array(raw, info.shape, code, context["array_class"])
     raw.release()
     if dtype == "F16" or (dtype == "BF16" and format == "widen"):
         var count = Int(py=owned.size)
-        var out = checkpoint_array(bi.bytes(4 * count), info.shape, "f", context["array_class"])
+        var out = checkpoint_array(py_call(bi.bytes, 4 * count), info.shape, "f", context["array_class"])
         if count != 0:
             var source = MutPointer[UInt16, MutUntrackedOrigin](unsafe_from_address=Int(py=owned._addr))
             var dest = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr))
             checkpoint_widen_halves(source, dest, count, dtype)
+            _ = owned^  # read by address above
         return out
     if dtype == "BF16" and format == "bits" and len(info.shape) == 2:
-        var packed = bi.object.__new__(context["bf16_class"])
-        packed.bits = owned
-        packed.shape = info.shape
+        var packed = py_call(bi.object.__new__, context["bf16_class"])
+        py_setattr(packed, "bits", owned)
+        py_setattr(packed, "shape", info.shape)
         return packed
     return owned
 
 
 def checkpoint_init_binding(value: PythonObject, files: PythonObject, weight_map: PythonObject, root: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
-    value.root = root
-    value._paths = bi.list(files)
-    value._weight_map = bi.dict(weight_map)
-    value._open = bi.dict()
-    value._infos = PythonObject(None)
+    py_setattr(value, "root", root)
+    py_setattr(value, "_paths", py_call(bi.list, files))
+    py_setattr(value, "_weight_map", py_call(bi.dict, weight_map))
+    py_setattr(value, "_open", bi.dict())
+    py_setattr(value, "_infos", PythonObject(None))
     return PythonObject(None)
 
 
@@ -213,54 +215,54 @@ def checkpoint_open_binding(cls: PythonObject, input_path: PythonObject, context
     var weight_map = bi.dict()
     var root = path
     if native_path_exists(path, True):
-        var index = path.rstrip("/") + PythonObject("/model.safetensors.index.json")
-        var single = path.rstrip("/") + PythonObject("/model.safetensors")
+        var index = py_call(path.rstrip, "/") + PythonObject("/model.safetensors.index.json")
+        var single = py_call(path.rstrip, "/") + PythonObject("/model.safetensors")
         if native_path_exists(index):
             var data = native_json_read(index)
-            if bi.type(data) is not bi.dict:
+            if py_type(data) is not bi.dict:
                 raise Error("safetensors: index has no weight_map")
-            var wm = data.get("weight_map")
-            if bi.type(wm) is not bi.dict or len(wm) == 0:
+            var wm = py_get(data, "weight_map")
+            if py_type(wm) is not bi.dict or len(wm) == 0:
                 raise Error("safetensors: index has no weight_map")
-            var names = bi.list(wm)
+            var names = py_call(bi.list, wm)
             for i in range(len(names)):  # driver-loop: over the checkpoint index weight-map entries
                 var filename = wm[names[i]]
-                if not Bool(py=filename.startswith("/")):
-                    filename = path.rstrip("/") + PythonObject("/") + filename
+                if not Bool(py=py_call(filename.startswith, "/")):
+                    filename = py_call(path.rstrip, "/") + PythonObject("/") + filename
                 if not native_path_exists(filename):
                     raise Error("FileNotFoundError: checkpoint index names shard that does not exist: " + String(filename))
-                weight_map[names[i]] = filename
-                if not Bool(py=files.__contains__(filename)):
-                    files.append(filename)
+                py_setitem(weight_map, names[i], filename)
+                if not py_contains(files, filename):
+                    _ = py_call(files.append, filename)
             files.sort()
         elif native_path_exists(single):
-            files.append(single)
+            _ = py_call(files.append, single)
         else:
-            var entries = Python.import_module("os").listdir(path)
+            var entries = py_call(Python.import_module("os").listdir, path)
             for i in range(len(entries)):  # driver-loop: over checkpoint directory entries
-                if Bool(py=entries[i].endswith(".safetensors")):
-                    files.append(path.rstrip("/") + PythonObject("/") + entries[i])
+                if Bool(py=py_call(entries[i].endswith, ".safetensors")):
+                    _ = py_call(files.append, py_call(path.rstrip, "/") + PythonObject("/") + entries[i])
             if len(files) != 1:
                 raise Error("FileNotFoundError: checkpoint holds neither model.safetensors nor model.safetensors.index.json (shard files alone are not an index)")
     elif native_path_exists(path):
-        files.append(path)
-        var pieces = path.rsplit("/", 1)
+        _ = py_call(files.append, path)
+        var pieces = py_call(path.rsplit, "/", 1)
         root = pieces[0] if len(pieces) == 2 else PythonObject(".")
         if len(root) == 0:
             root = PythonObject("/")
     else:
         raise Error("FileNotFoundError: checkpoint path does not exist")
-    var value = bi.object.__new__(cls)
+    var value = py_call(bi.object.__new__, cls)
     _ = checkpoint_init_binding(value, files, weight_map, root)
     return value
 
 
 def checkpoint_file_binding(value: PythonObject, path: PythonObject, context: PythonObject) raises -> PythonObject:
-    var file = value._open.get(path)
+    var file = py_get(value._open, path)
     if file is None:
-        file = Python.import_module("builtins").object.__new__(context["file_class"])
+        file = py_call(Python.import_module("builtins").object.__new__, context["file_class"])
         _ = safetensors_init_binding(file, path, context)
-        value._open[path] = file
+        py_setitem(value._open, path, file)
     return file
 
 
@@ -271,19 +273,19 @@ def checkpoint_index_binding(value: PythonObject, context: PythonObject) raises 
         for i in range(len(value._paths)):  # driver-loop: over checkpoint shard files
             var path = value._paths[i]
             var file = checkpoint_file_binding(value, path, context)
-            var names = bi.list(file._infos)
+            var names = py_call(bi.list, file._infos)
             for j in range(len(names)):  # driver-loop: over a shard's tensor entries
                 var name = names[j]
-                if Bool(py=infos.__contains__(name)):
+                if py_contains(infos, name):
                     raise Error("safetensors: tensor " + String(name) + " appears in both shards")
-                infos[name] = file._infos[name]
-        var names = bi.list(value._weight_map)
+                py_setitem(infos, name, file._infos[name])
+        var names = py_call(bi.list, value._weight_map)
         for i in range(len(names)):  # driver-loop: over the checkpoint weight-map entries
             var name = names[i]
             var path = value._weight_map[name]
-            if not Bool(py=infos.__contains__(name)) or not Bool(py=infos[name].file == path):
+            if not py_contains(infos, name) or not Bool(py=infos[name].file == path):
                 raise Error("safetensors: index maps " + String(name) + " to a shard that does not hold it")
-        value._infos = infos
+        py_setattr(value, "_infos", infos)
     return value._infos
 
 
@@ -291,12 +293,12 @@ def checkpoint_access_binding(value: PythonObject, operation: PythonObject, name
     var infos = checkpoint_index_binding(value, context)
     var op = Int(py=operation)
     if op == 0:
-        return Python.import_module("builtins").list(infos)
+        return py_call(Python.import_module("builtins").list, infos)
     if op == 1:
-        if not Bool(py=infos.__contains__(name)):
+        if not py_contains(infos, name):
             raise Error("KeyError: checkpoint holds no tensor " + String(name))
         return infos[name]
-    return infos.__contains__(name)
+    return py_contains(infos, name)
 
 
 def checkpoint_read_binding(value: PythonObject, name: PythonObject, bf16: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -306,10 +308,10 @@ def checkpoint_read_binding(value: PythonObject, name: PythonObject, bf16: Pytho
 
 def checkpoint_close_binding(value: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
-    var files = bi.list(value._open.values())
+    var files = py_call(bi.list, value._open.values())
     for i in range(len(files)):  # driver-loop: over open shard files
         _ = safetensors_close_binding(files[i])
-    value._open = bi.dict()
+    py_setattr(value, "_open", bi.dict())
     return PythonObject(None)
 
 
@@ -348,7 +350,7 @@ def checkpoint_c[operation: Int](py_self: PyObjectPtr, args_ptr: PyObjectPtr) ab
         elif operation == 14:
             result = args[0]
         elif operation == 15:
-            result = Python.import_module("builtins").list(args[0]._infos)
+            result = py_call(Python.import_module("builtins").list, args[0]._infos)
         elif operation == 16:
             result = args[0]._infos.__contains__(args[1])
         return result.steal_data()

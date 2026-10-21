@@ -4,6 +4,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
+from bindings.py_balanced import py_call, py_get, py_setitem
 from std.os import getenv
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
 from bindings.neural_block_public import neural_training_entries, neural_mamba3_restore, neural_block_forward_binding, _neural_input
@@ -13,17 +14,17 @@ from bindings.causal_lm_public import _native_function
 
 def _prefill_mamba3(block: PythonObject, x: PythonObject, entries: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
-    var fields = bi.object.__getattribute__(block, "__dict__")
+    var fields = py_call(bi.object.__getattribute__, block, "__dict__")
     var b = Int(py=x.shape[0])
     var l = Int(py=x.shape[1])
     var d = Int(py=fields["d_model"])
     var nh = Int(py=fields["nheads"])
     var weights = fields["_w"]
     neural_mamba3_restore(fields, entries, weights)
-    var owned = fields.get("_owned_generation")
-    var session = (Bool(py=bi.hasattr(entries, "mamba3_prefill_session_forward")) or owned is not None) and getenv("MOJOLEARN_MAMBA3_LEGACY_SETUP", "0") != "1"
+    var owned = py_get(fields, "_owned_generation")
+    var session = (Bool(py=py_call(bi.hasattr, entries, "mamba3_prefill_session_forward")) or owned is not None) and getenv("MOJOLEARN_MAMBA3_LEGACY_SETUP", "0") != "1"
     var skip = False
-    if session and Bool(py=fields.get("_discard_reports", PythonObject(False))) and Bool(py=bi.hasattr(entries, "mamba3_prefill_session_reports_optional")):
+    if session and Bool(py=py_get(fields, "_discard_reports", PythonObject(False))) and Bool(py=py_call(bi.hasattr, entries, "mamba3_prefill_session_reports_optional")):
         skip = Bool(py=_native_function(entries, "mamba3_prefill_session_reports_optional")())
     var reports = bi.list()
     var report_addresses = bi.list()
@@ -35,44 +36,44 @@ def _prefill_mamba3(block: PythonObject, x: PythonObject, entries: PythonObject)
             for axis in range(len(report_shapes[i])):  # driver-loop: over report shape metadata
                 dims.append(Int(py=report_shapes[i][axis]))
             report = generation_array(dims)
-        reports.append(report)
-        report_addresses.append(0 if skip else Int(py=report._addr))
+        _ = py_call(reports.append, report)
+        _ = py_call(report_addresses.append, 0 if skip else Int(py=report._addr))
     var out = generation_array([b, l, d])
     var addresses = Python.list(x._addr)
     for i in range(len(weights)):  # driver-loop: over fixed Mamba3 weight addresses
-        addresses.append(weights[i]._addr)
-    addresses.append(out._addr)
-    addresses.extend(report_addresses)
+        _ = py_call(addresses.append, weights[i]._addr)
+    _ = py_call(addresses.append, out._addr)
+    _ = py_call(addresses.extend, report_addresses)
     var params = py_ints([b, l, d])
     if session:
-        if fields.get("_prefill_session") is None or fields.get("_prefill_binding") is not entries.canonical:
-            fields["_prefill_session"] = _native_function(entries, "mamba3_prefill_session_create")()
-            fields["_prefill_binding"] = entries.canonical
+        if py_get(fields, "_prefill_session") is None or py_get(fields, "_prefill_binding") is not entries.canonical:
+            py_setitem(fields, "_prefill_session", _native_function(entries, "mamba3_prefill_session_create")())
+            py_setitem(fields, "_prefill_binding", entries.canonical)
         if owned is not None:
             var owned_addresses = Python.list(x._addr, out._addr)
-            owned_addresses.extend(report_addresses)
-            params.append(owned)
-            _native_function(entries, "mamba3_prefill_session_forward_owned")(fields["_prefill_session"], owned_addresses, params)
+            _ = py_call(owned_addresses.extend, report_addresses)
+            _ = py_call(params.append, owned)
+            _ = py_call(_native_function(entries, "mamba3_prefill_session_forward_owned"), fields["_prefill_session"], owned_addresses, params)
         else:
-            _native_function(entries, "mamba3_prefill_session_forward")(fields["_prefill_session"], addresses, params)
+            _ = py_call(_native_function(entries, "mamba3_prefill_session_forward"), fields["_prefill_session"], addresses, params)
     else:
-        _native_function(entries, "mamba3_forward_fresh")(addresses, params)
+        _ = py_call(_native_function(entries, "mamba3_forward_fresh"), addresses, params)
     var names = [String("h_last_"), String("k_last_"), String("v_last_"), String("theta_last_")]
     for i in range(4):  # driver-loop: over report result metadata slots
-        fields[names[i]] = reports[i]
+        py_setitem(fields, names[i], reports[i])
     return out
 
 
 def neural_prefill_forward(block: PythonObject, input: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["generation_classes"])
     var bi = Python.import_module("builtins")
-    var fields = bi.object.__getattribute__(block, "__dict__")
+    var fields = py_call(bi.object.__getattribute__, block, "__dict__")
     var kind = String(fields["_native_kind"])
     if kind != "transformer" and kind != "mamba3":
         raise Error("neural prefill tape requires TransformerBlock or Mamba3Block")
     var entries = neural_training_entries(fields, context)
     var x = _neural_input(input, Int(py=fields["d_model"]), False, context)
-    var enabled = Bool(py=bi.hasattr(entries, kind + "_forward_tape_enabled"))
+    var enabled = Bool(py=py_call(bi.hasattr, entries, kind + "_forward_tape_enabled"))
     if enabled:
         enabled = Bool(py=_native_function(entries, kind + "_forward_tape_enabled")())
     if kind == "transformer":
@@ -92,33 +93,33 @@ def neural_prefill_forward(block: PythonObject, input: PythonObject, context: Py
     var weights = fields["_w"]
     var shapes = bi.list()
     for i in range(len(weights)):  # driver-loop: over immutable tape input weights
-        addresses.append(weights[i]._addr)
-        shapes.append(weights[i].shape)
-    addresses.append(out._addr)
+        _ = py_call(addresses.append, weights[i]._addr)
+        _ = py_call(shapes.append, weights[i].shape)
+    _ = py_call(addresses.append, out._addr)
     var params = py_ints([b, l, d])
     var lock = PythonObject(None)
     if kind == "transformer":
         for name in [String("n_heads"), String("n_kv_heads"), String("head_dim"), String("intermediate"), String("window")]:  # driver-loop: over transformer launch dimensions
-            params.append(fields[name])
+            _ = py_call(params.append, fields[name])
         lock = fields["_runtime_lock"]
     if lock is not None:
         lock.acquire()
     var handle = PythonObject(None)
     try:
-        handle = _native_function(entries, kind + "_forward_tape")(addresses, params)
+        handle = py_call(_native_function(entries, kind + "_forward_tape"), addresses, params)
         if lock is not None:
             lock.release()
     except error:
         if lock is not None:
             lock.release()
         raise error
-    return Python.tuple(out, Python.tuple(entries, handle, x.shape, bi.tuple(shapes)))
+    return Python.tuple(out, Python.tuple(entries, handle, x.shape, py_call(bi.tuple, shapes)))
 
 
 def neural_prefill_backward(block: PythonObject, tape: PythonObject, grad_output: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = generation_initialize_binding(context["generation_classes"])
     var bi = Python.import_module("builtins")
-    var fields = bi.object.__getattribute__(block, "__dict__")
+    var fields = py_call(bi.object.__getattribute__, block, "__dict__")
     var kind = String(fields["_native_kind"])
     var dims = List[Int]()
     for i in range(len(tape[2])):  # driver-loop: over immutable input shape metadata
@@ -131,15 +132,15 @@ def neural_prefill_backward(block: PythonObject, tape: PythonObject, grad_output
         var shape = List[Int]()
         for axis in range(len(shapes[i])):  # driver-loop: over tensor shape metadata
             shape.append(Int(py=shapes[i][axis]))
-        gradients.append(generation_array(shape))
+        _ = py_call(gradients.append, generation_array(shape))
     var addresses = Python.list(dy._addr)
     for i in range(len(gradients)):  # driver-loop: over gradient output addresses
-        addresses.append(gradients[i]._addr)
+        _ = py_call(addresses.append, gradients[i]._addr)
     var lock = fields["_runtime_lock"] if kind == "transformer" else PythonObject(None)
     if lock is not None:
         lock.acquire()
     try:
-        _native_function(tape[0], kind + "_backward_tape")(tape[1], addresses)
+        _ = py_call(_native_function(tape[0], kind + "_backward_tape"), tape[1], addresses)
         if lock is not None:
             lock.release()
     except error:
@@ -148,10 +149,10 @@ def neural_prefill_backward(block: PythonObject, tape: PythonObject, grad_output
         raise error
     _ = dy^  # the backward entry read `dy` by address
     var result = bi.dict()
-    result["x"] = gradients[0]
-    var names = bi.object.__getattribute__(block, "_W_NAMES")
+    py_setitem(result, "x", gradients[0])
+    var names = py_call(bi.object.__getattribute__, block, "_W_NAMES")
     for i in range(len(names)):  # driver-loop: over named gradient result metadata
-        result[names[i]] = gradients[i + 1]
+        py_setitem(result, names[i], gradients[i + 1])
     return result
 
 
@@ -159,8 +160,8 @@ def neural_prefill_close(tape: PythonObject) raises:
     if tape is None:
         return
     var bi = Python.import_module("builtins")
-    var kind = "transformer" if Bool(py=bi.hasattr(tape[0], "transformer_close_tape")) else "mamba3"
-    _native_function(tape[0], kind + "_close_tape")(tape[1])
+    var kind = "transformer" if Bool(py=py_call(bi.hasattr, tape[0], "transformer_close_tape")) else "mamba3"
+    _ = py_call(_native_function(tape[0], kind + "_close_tape"), tape[1])
 
 
 def neural_prefill_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:

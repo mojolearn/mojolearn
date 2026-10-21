@@ -8,6 +8,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
+from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from std.math import isfinite
 from std.memory import memcpy, bitcast
@@ -31,7 +32,7 @@ def _model_shape(value: PythonObject, shape: List[Int], name: String) raises:
 
 def _model_f32(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
-    if bi.type(value) is context["array_class"]:
+    if py_type(value) is context["array_class"]:
         if String(value.dtype) != "<f4":
             raise Error("TypeError: CausalLM tensor " + name + " must be float32")
         if String(value.order) == "C":
@@ -46,7 +47,7 @@ def _model_f32(value: PythonObject, name: String, context: PythonObject) raises 
         var target = f32_ptr(Int(py=result._addr))
         causal_lm_gather_f32(source, target, Int(py=value.size), dims, strides)
         return result
-    var view = bi.memoryview(value)
+    var view = py_call(bi.memoryview, value)
     var format = String(view.format)
     if format != "f" and format != "<f" and format != "=f" and format != "@f":
         raise Error("TypeError: CausalLM tensor " + name + " must be float32")
@@ -55,12 +56,12 @@ def _model_f32(value: PythonObject, name: String, context: PythonObject) raises 
 
 def _model_native_buffer(value: PythonObject, code: String, context: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
-    if bi.type(value) is context["array_class"]:
+    if py_type(value) is context["array_class"]:
         var dtype = "<u2" if code == "H" else ("<i1" if code == "b" else "<i4")
         if String(value.dtype) != dtype or String(value.order) != "C":
             raise Error("TypeError: CausalLM packed storage requires matching dtype and C layout")
         return value
-    var view = bi.memoryview(value)
+    var view = py_call(bi.memoryview, value)
     if String(view.format) != code:
         raise Error("TypeError: CausalLM packed storage has the wrong dtype")
     return checkpoint_array(view.tobytes(), view.shape, code, context["array_class"])
@@ -74,25 +75,25 @@ def _model_pack(value: PythonObject, format: String, linalg: PythonObject, conte
         raise Error("CausalLM: packed projection weights require two dimensions")
     var rows = Int(py=value.shape[0])
     var cols = Int(py=value.shape[1])
-    var packed = bi.object.__new__(context["bf16_class"] if format == "bfloat16" else context["int8_class"])
-    packed.shape = value.shape
+    var packed = py_call(bi.object.__new__, context["bf16_class"] if format == "bfloat16" else context["int8_class"])
+    py_setattr(packed, "shape", value.shape)
     if format == "bfloat16":
-        var bits = checkpoint_array(bi.bytes(rows * cols * 2), value.shape, "H", context["array_class"])
-        _native_function(linalg, "to_bf16")(bits._addr, value._addr, py_ints([rows * cols]))
-        packed.bits = bits
+        var bits = checkpoint_array(py_call(bi.bytes, rows * cols * 2), value.shape, "H", context["array_class"])
+        _ = py_call(_native_function(linalg, "to_bf16"), bits._addr, value._addr, py_ints([rows * cols]))
+        py_setattr(packed, "bits", bits)
     else:
         var codes = generation_array([rows, cols], "b")
         var exponents = generation_array([rows], "i")
-        _native_function(linalg, "quantize_int8")(codes._addr, exponents._addr, value._addr, py_ints([rows, cols]))
-        packed.codes = codes
-        packed.exponents = exponents
+        _ = py_call(_native_function(linalg, "quantize_int8"), codes._addr, exponents._addr, value._addr, py_ints([rows, cols]))
+        py_setattr(packed, "codes", codes)
+        py_setattr(packed, "exponents", exponents)
     return packed
 
 
 def _model_unpack(value: PythonObject, linalg: PythonObject, context: PythonObject) raises -> PythonObject:
     var bi = Python.import_module("builtins")
-    var bf16 = bi.type(value) is context["bf16_class"]
-    var int8 = bi.type(value) is context["int8_class"]
+    var bf16 = py_type(value) is context["bf16_class"]
+    var int8 = py_type(value) is context["int8_class"]
     if not bf16 and not int8:
         return _model_f32(value, "weight", context)
     if len(value.shape) != 2:
@@ -103,14 +104,14 @@ def _model_unpack(value: PythonObject, linalg: PythonObject, context: PythonObje
     if bf16:
         var bits = _model_native_buffer(value.bits, "H", context)
         _model_shape(bits, [rows, cols], "bfloat16 bits")
-        _native_function(linalg, "from_bf16")(out._addr, bits._addr, py_ints([rows * cols]))
+        _ = py_call(_native_function(linalg, "from_bf16"), out._addr, bits._addr, py_ints([rows * cols]))
         _ = bits^  # read by address above
     else:
         var codes = _model_native_buffer(value.codes, "b", context)
         var exponents = _model_native_buffer(value.exponents, "i", context)
         _model_shape(codes, [rows, cols], "int8 codes")
         _model_shape(exponents, [rows], "int8 exponents")
-        _native_function(linalg, "dequantize_int8")(out._addr, codes._addr, exponents._addr, py_ints([rows, cols]))
+        _ = py_call(_native_function(linalg, "dequantize_int8"), out._addr, codes._addr, exponents._addr, py_ints([rows, cols]))
         _ = codes^  # read by address above
         _ = exponents^
     return out
@@ -122,12 +123,12 @@ def _model_quantize15(value: PythonObject, linalg: PythonObject) raises -> Pytho
     var hi = generation_array([rows, cols], "b")
     var lo = generation_array([rows, cols], "b")
     var exponents = generation_array([rows], "i")
-    _native_function(linalg, "quantize_int15")(py_ints([Int(py=hi._addr), Int(py=lo._addr), Int(py=exponents._addr), Int(py=value._addr)]), py_ints([rows, cols]))
+    _ = py_call(_native_function(linalg, "quantize_int15"), py_ints([Int(py=hi._addr), Int(py=lo._addr), Int(py=exponents._addr), Int(py=value._addr)]), py_ints([rows, cols]))
     var out = Python.import_module("builtins").list()
-    out.append(hi)
-    out.append(lo)
-    out.append(exponents)
-    return Python.import_module("builtins").tuple(out)
+    _ = py_call(out.append, hi)
+    _ = py_call(out.append, lo)
+    _ = py_call(out.append, exponents)
+    return py_call(Python.import_module("builtins").tuple, out)
 
 
 def _model_profile(requested: PythonObject, family: String, context: PythonObject) raises -> PythonObject:
@@ -136,28 +137,28 @@ def _model_profile(requested: PythonObject, family: String, context: PythonObjec
     var defaults = context["profile_defaults"]
     var selected = requested
     if selected is None:
-        selected = defaults.get("inference")
+        selected = py_get(defaults, "inference")
         if selected is None:
             var env = getenv("MOJOLEARN_NUMERIC_PROFILE", "")
             selected = PythonObject(env).strip()
             if len(selected) == 0:
                 selected = PythonObject("fp32_v1")
-    if bi.type(selected) is not bi.str:
+    if py_type(selected) is not bi.str:
         raise Error("TypeError: numeric_profile must be a profile name")
     selected = selected.strip()
-    if not Bool(py=profiles.__contains__(selected)):
-        var reason = context["rejected_profiles"].get(selected)
+    if not py_contains(profiles, selected):
+        var reason = py_get(context["rejected_profiles"], selected)
         raise Error("numeric_profile=" + String(selected) + " is not offered: " + (String(reason) if reason is not None else String("not a registered numeric profile")))
     var row = profiles[selected]
     if not Bool(py=row["inference"]):
         raise Error("NotImplementedError: numeric_profile=" + String(selected) + " is unavailable for inference")
-    if requested is None and defaults.get("inference") is None:
-        defaults["inference"] = selected
+    if requested is None and py_get(defaults, "inference") is None:
+        py_setitem(defaults, "inference", selected)
     var computes = row["computes"]
-    var covered = computes is None or Bool(py=computes.__contains__(family))
+    var covered = computes is None or py_contains(computes, family)
     if requested is None:
         var reaches = row["default_for"]
-        if not covered or (reaches is not None and not Bool(py=reaches.__contains__(family))):
+        if not covered or (reaches is not None and not py_contains(reaches, family)):
             return PythonObject("fp32_v1")
     elif not covered:
         raise Error("NotImplementedError: numeric_profile=" + String(selected) + " does not compute the " + family + " family")
@@ -176,11 +177,11 @@ def _model_route(device: PythonObject, context: PythonObject) raises -> PythonOb
 def _model_bindings(route: PythonObject, kind: String, context: PythonObject, requested_mode: PythonObject) raises -> PythonObject:
     var mode = PythonObject("identical") if String(route) == "cpu" else (context["backend"]._DEFAULT_MODE if requested_mode is None else requested_mode.strip().lower())
     var key = route + PythonObject(":") + mode
-    var entries = context["bindings"].get(key)
+    var entries = py_get(context["bindings"], key)
     if entries is None:
         raise Error("CausalLM: native binding connection is unavailable for " + String(key))
     var block = entries[kind]
-    if Python.import_module("builtins").type(block) is Python.import_module("builtins").str:
+    if py_type(block) is Python.import_module("builtins").str:
         raise Error("CausalLM: " + String(block))
     var prefix = ("transformer" if kind == "transformer" else "mamba") if String(route) == "gpu" else "neural_host"
     var vendor = String(_native_function(block, prefix + "_vendor")())
@@ -192,7 +193,7 @@ def _model_bindings(route: PythonObject, kind: String, context: PythonObject, re
     if mode_code != (1 if String(mode) == "identical" else 0):
         raise Error("CausalLM: binding numeric mode differs from requested mode")
     var arithmetic = entries["linalg"]
-    if Python.import_module("builtins").type(arithmetic) is not Python.import_module("builtins").str:
+    if py_type(arithmetic) is not Python.import_module("builtins").str:
         if String(_native_function(arithmetic, "linalg_vendor")()) != vendor or Int(py=_native_function(arithmetic, "linalg_numeric_mode")()) != mode_code:
             raise Error("CausalLM: packed weight binding vendor or mode differs from model")
     return entries
@@ -203,7 +204,7 @@ def _model_bindings(route: PythonObject, kind: String, context: PythonObject) ra
 
 
 def _model_bits(value: PythonObject, name: String) raises -> Int:
-    var number = Float64(py=Python.import_module("builtins").float(value))
+    var number = Float64(py=py_call(Python.import_module("builtins").float, value))
     if not isfinite(number) or number <= 0:
         raise Error("CausalLM: " + name + " must be finite and positive")
     var rounded = Float32(number)
@@ -216,24 +217,24 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
     var bi = Python.import_module("builtins")
     var kind = String(plan.kind)
     var cls = context["block_classes"][route][kind]
-    var block = bi.object.__new__(cls)
-    var fields = bi.object.__getattribute__(block, "__dict__")
-    fields["numeric_mode"] = PythonObject("identical") if String(route) == "cpu" else context["backend"]._DEFAULT_MODE
+    var block = py_call(bi.object.__new__, cls)
+    var fields = py_call(bi.object.__getattribute__, block, "__dict__")
+    py_setitem(fields, "numeric_mode", PythonObject("identical") if String(route) == "cpu" else context["backend"]._DEFAULT_MODE)
     var names = cls._W_NAMES
     var w = bi.dict()
-    var keys = bi.list(weights)
+    var keys = py_call(bi.list, weights)
     var format = "float32"
     for i in range(len(keys)):  # driver-loop: over the layer's named tensors
         var v = weights[keys[i]]
-        var tag = "bfloat16" if bi.type(v) is context["bf16_class"] else ("int8" if bi.type(v) is context["int8_class"] else "float32")
+        var tag = "bfloat16" if py_type(v) is context["bf16_class"] else ("int8" if py_type(v) is context["int8_class"] else "float32")
         if tag != "float32":
             if format != "float32" and format != tag:
                 raise Error("CausalLM: mixed packed weight formats")
             format = tag
-        w[keys[i]] = _model_unpack(v, bindings["linalg"], context)
-    fields["weight_format"] = PythonObject(format)
-    fields["_native_kind"] = plan.kind
-    fields["_native_route"] = route
+        py_setitem(w, keys[i], _model_unpack(v, bindings["linalg"], context))
+    py_setitem(fields, "weight_format", PythonObject(format))
+    py_setitem(fields, "_native_kind", plan.kind)
+    py_setitem(fields, "_native_route", route)
     var dm = Int(py=plan.d_model)
     var base = bi.list()
     var optional = bi.list()
@@ -242,8 +243,8 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
     var gated = True
     var it = 0
     if kind == "transformer":
-        var options = bi.dict(context["config_context"]["defaults"])
-        options.update(plan.block_options)
+        var options = py_call(bi.dict, context["config_context"]["defaults"])
+        _ = py_call(options.update, plan.block_options)
         var nh = Int(py=plan.n_heads)
         if nh < 1:
             raise Error("CausalLM: n_heads must be positive")
@@ -270,7 +271,7 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
         tail[5] = 8192
         var scaling = options["rope_scaling"]
         if scaling is not None:
-            var sk = String(scaling.get("type", scaling.get("rope_type")))
+            var sk = String(py_get(scaling, "type", py_get(scaling, "rope_type")))
             if sk != "linear" and sk != "llama3":
                 raise Error("CausalLM: unsupported rope_scaling type")
             tail[1] = 1 if sk == "linear" else 2
@@ -300,120 +301,120 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
         var window = Int(py=options["window"])
         if window < 0:
             raise Error("CausalLM: sliding window must be nonnegative")
-        fields.update(options)
-        fields["d_model"] = PythonObject(dm)
-        fields["n_heads"] = PythonObject(nh)
-        fields["n_kv_heads"] = PythonObject(nkv)
-        fields["head_dim"] = PythonObject(hd)
-        fields["intermediate"] = PythonObject(it)
-        fields["rope_dim"] = PythonObject(rd)
-        fields["_opts_tail"] = py_ints(tail)
+        _ = py_call(fields.update, options)
+        py_setitem(fields, "d_model", PythonObject(dm))
+        py_setitem(fields, "n_heads", PythonObject(nh))
+        py_setitem(fields, "n_kv_heads", PythonObject(nkv))
+        py_setitem(fields, "head_dim", PythonObject(hd))
+        py_setitem(fields, "intermediate", PythonObject(it))
+        py_setitem(fields, "rope_dim", PythonObject(rd))
+        py_setitem(fields, "_opts_tail", py_ints(tail))
         var default_tail = [0x461c4000, 0, 0x3f800000, 0x3f800000, 0x40800000, 8192, 0, 8192, 0, 0, 0, 0x358637bd, 0, 0, 0, 0, 0]
         var extended = False
         for i in range(17):  # driver-loop: over the fixed block options record
             extended = extended or tail[i] != default_tail[i]
-        fields["_extended"] = PythonObject(extended)
-        fields["_gated"] = PythonObject(gated)
-        fields["_runtime_lock"] = context["rlock"]()
-        fields["_native_session"] = PythonObject(None)
-        fields["_session_binding"] = PythonObject(None)
-        fields["_arithmetic_profile"] = PythonObject(None)
-        if Bool(py=bi.hasattr(bindings[kind], "transformer_arithmetic_profile")):
-            fields["_arithmetic_profile"] = _native_function(bindings[kind], "transformer_arithmetic_profile")()
-            fields["_arithmetic_profile_mode"] = fields["numeric_mode"]
-            fields["_arithmetic_profile_changed"] = _native_function(bindings[kind], "transformer_arithmetic_profile_changed")()
-        fields["numeric_profile"] = profile
-        shapes.append(py_ints([dm]))
-        shapes.append(py_ints([dm]))
-        shapes.append(py_ints([nh * hd, dm]))
-        shapes.append(py_ints([nkv * hd, dm]))
-        shapes.append(py_ints([nkv * hd, dm]))
-        shapes.append(py_ints([dm, nh * hd]))
-        shapes.append(py_ints([it, dm]))
-        shapes.append(py_ints([it, dm]))
-        shapes.append(py_ints([dm, it]))
+        py_setitem(fields, "_extended", PythonObject(extended))
+        py_setitem(fields, "_gated", PythonObject(gated))
+        py_setitem(fields, "_runtime_lock", context["rlock"]())
+        py_setitem(fields, "_native_session", PythonObject(None))
+        py_setitem(fields, "_session_binding", PythonObject(None))
+        py_setitem(fields, "_arithmetic_profile", PythonObject(None))
+        if Bool(py=py_call(bi.hasattr, bindings[kind], "transformer_arithmetic_profile")):
+            py_setitem(fields, "_arithmetic_profile", _native_function(bindings[kind], "transformer_arithmetic_profile")())
+            py_setitem(fields, "_arithmetic_profile_mode", fields["numeric_mode"])
+            py_setitem(fields, "_arithmetic_profile_changed", _native_function(bindings[kind], "transformer_arithmetic_profile_changed")())
+        py_setitem(fields, "numeric_profile", profile)
+        _ = py_call(shapes.append, py_ints([dm]))
+        _ = py_call(shapes.append, py_ints([dm]))
+        _ = py_call(shapes.append, py_ints([nh * hd, dm]))
+        _ = py_call(shapes.append, py_ints([nkv * hd, dm]))
+        _ = py_call(shapes.append, py_ints([nkv * hd, dm]))
+        _ = py_call(shapes.append, py_ints([dm, nh * hd]))
+        _ = py_call(shapes.append, py_ints([it, dm]))
+        _ = py_call(shapes.append, py_ints([it, dm]))
+        _ = py_call(shapes.append, py_ints([dm, it]))
         var flags = [tail[8], tail[8], tail[8], tail[9], tail[12], tail[12], tail[14], tail[14], tail[14] if gated else 0, tail[15], tail[15]]
         var widths = [nh * hd, nkv * hd, nkv * hd, dm, dm, dm, it, dm, it, hd, hd]
         var flag_dict = bi.dict()
         for i in range(11):  # driver-loop: over optional block tensors
             var name = context["optional_names"][i]
-            flag_dict[name] = PythonObject(flags[i] != 0)
-            var present = Bool(py=w.__contains__(name))
+            py_setitem(flag_dict, name, PythonObject(flags[i] != 0))
+            var present = py_contains(w, name)
             if present != (flags[i] != 0):
                 raise Error("CausalLM: " + String(name) + " presence does not match its option")
             if present:
                 _model_shape(w[name], [widths[i]], String(name))
-                optional.append(w[name])
-                expected.add(name)
+                _ = py_call(optional.append, w[name])
+                _ = py_call(expected.add, name)
             else:
-                optional.append(PythonObject(None))
-        fields["_opts_flags"] = flag_dict
-        fields["_wopt"] = optional
+                _ = py_call(optional.append, PythonObject(None))
+        py_setitem(fields, "_opts_flags", flag_dict)
+        py_setitem(fields, "_wopt", optional)
     else:
         var di = 2 * dm
-        fields["d_model"] = PythonObject(dm)
-        fields["d_inner"] = PythonObject(di)
+        py_setitem(fields, "d_model", PythonObject(dm))
+        py_setitem(fields, "d_inner", PythonObject(di))
         if kind == "mamba1":
             var rank = (dm + 15) // 16
-            fields["dt_rank"] = PythonObject(rank)
-            shapes.append(py_ints([dm]))
-            shapes.append(py_ints([2 * di, dm]))
-            shapes.append(py_ints([di, 1, 4]))
-            shapes.append(py_ints([di]))
-            shapes.append(py_ints([rank + 32, di]))
-            shapes.append(py_ints([di, rank]))
-            shapes.append(py_ints([di]))
-            shapes.append(py_ints([di, 16]))
-            shapes.append(py_ints([di]))
-            shapes.append(py_ints([dm, di]))
+            py_setitem(fields, "dt_rank", PythonObject(rank))
+            _ = py_call(shapes.append, py_ints([dm]))
+            _ = py_call(shapes.append, py_ints([2 * di, dm]))
+            _ = py_call(shapes.append, py_ints([di, 1, 4]))
+            _ = py_call(shapes.append, py_ints([di]))
+            _ = py_call(shapes.append, py_ints([rank + 32, di]))
+            _ = py_call(shapes.append, py_ints([di, rank]))
+            _ = py_call(shapes.append, py_ints([di]))
+            _ = py_call(shapes.append, py_ints([di, 16]))
+            _ = py_call(shapes.append, py_ints([di]))
+            _ = py_call(shapes.append, py_ints([dm, di]))
         elif kind == "mamba2":
             if dm % 32 != 0:
                 raise Error("CausalLM: Mamba2 d_model must be a multiple of 32")
             var nh = di // 64
             var cd = di + 256
-            fields["nheads"] = PythonObject(nh)
-            fields["conv_dim"] = PythonObject(cd)
+            py_setitem(fields, "nheads", PythonObject(nh))
+            py_setitem(fields, "conv_dim", PythonObject(cd))
             var defaults = bi.list()
-            defaults.append(0.0)
-            defaults.append(bi.float("inf"))
-            var limit = plan.block_kwargs.get("dt_limit", defaults)
+            _ = py_call(defaults.append, 0.0)
+            _ = py_call(defaults.append, py_call(bi.float, "inf"))
+            var limit = py_get(plan.block_kwargs, "dt_limit", defaults)
             var pair = bi.list()
-            pair.append(bi.float(limit[0]))
-            pair.append(bi.float(limit[1]))
-            fields["dt_limit"] = bi.tuple(pair)
-            shapes.append(py_ints([dm]))
-            shapes.append(py_ints([2 * di + 256 + nh, dm]))
-            shapes.append(py_ints([cd, 1, 4]))
-            shapes.append(py_ints([cd]))
-            shapes.append(py_ints([nh]))
-            shapes.append(py_ints([nh]))
-            shapes.append(py_ints([nh]))
-            shapes.append(py_ints([di]))
-            shapes.append(py_ints([dm, di]))
+            _ = py_call(pair.append, py_call(bi.float, limit[0]))
+            _ = py_call(pair.append, py_call(bi.float, limit[1]))
+            py_setitem(fields, "dt_limit", py_call(bi.tuple, pair))
+            _ = py_call(shapes.append, py_ints([dm]))
+            _ = py_call(shapes.append, py_ints([2 * di + 256 + nh, dm]))
+            _ = py_call(shapes.append, py_ints([cd, 1, 4]))
+            _ = py_call(shapes.append, py_ints([cd]))
+            _ = py_call(shapes.append, py_ints([nh]))
+            _ = py_call(shapes.append, py_ints([nh]))
+            _ = py_call(shapes.append, py_ints([nh]))
+            _ = py_call(shapes.append, py_ints([di]))
+            _ = py_call(shapes.append, py_ints([dm, di]))
         elif kind == "mamba3":
             if dm % 32 != 0:
                 raise Error("Mamba3Block: d_model must be a multiple of 32")
             var nh = di // 64
             var dip = 2 * di + 256 + 3 * nh + 32
-            fields["nheads"] = PythonObject(nh)
-            fields["d_in_proj"] = PythonObject(dip)
-            shapes.append(py_ints([dm]))
-            shapes.append(py_ints([dip, dm]))
-            shapes.append(py_ints([nh]))
-            shapes.append(py_ints([128]))
-            shapes.append(py_ints([128]))
-            shapes.append(py_ints([nh, 128]))
-            shapes.append(py_ints([nh, 128]))
-            shapes.append(py_ints([nh]))
-            shapes.append(py_ints([dm, di]))
+            py_setitem(fields, "nheads", PythonObject(nh))
+            py_setitem(fields, "d_in_proj", PythonObject(dip))
+            _ = py_call(shapes.append, py_ints([dm]))
+            _ = py_call(shapes.append, py_ints([dip, dm]))
+            _ = py_call(shapes.append, py_ints([nh]))
+            _ = py_call(shapes.append, py_ints([128]))
+            _ = py_call(shapes.append, py_ints([128]))
+            _ = py_call(shapes.append, py_ints([nh, 128]))
+            _ = py_call(shapes.append, py_ints([nh, 128]))
+            _ = py_call(shapes.append, py_ints([nh]))
+            _ = py_call(shapes.append, py_ints([dm, di]))
         else:
             raise Error("neural block: unsupported block kind " + kind)
     for i in range(len(names)):  # driver-loop: over fixed block weight slots
         var name = names[i]
         if kind == "transformer" and i == 6 and not gated:
-            base.append(PythonObject(None))
+            _ = py_call(base.append, PythonObject(None))
             continue
-        if not Bool(py=w.__contains__(name)):
+        if not py_contains(w, name):
             raise Error("CausalLM: missing block tensor " + String(name))
         var value = w[name]
         var shape = List[Int]()
@@ -422,17 +423,17 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
         if (kind == "mamba1" or kind == "mamba2") and i == 2 and len(value.shape) == 2:
             shape = [shape[0], 4]
         _model_shape(value, shape, String(name))
-        base.append(value)
-        expected.add(name)
+        _ = py_call(base.append, value)
+        _ = py_call(expected.add, name)
     if len(expected) != len(w):
         raise Error("CausalLM: unexpected block tensor names")
-    fields["_w"] = base
-    fields["_int15"] = PythonObject(None)
+    py_setitem(fields, "_w", base)
+    py_setitem(fields, "_int15", PythonObject(None))
     if String(profile) == "fixed15_v1":
         var planes = bi.list()
         for i in range(2, 9):  # driver-loop: over the seven transformer projections
-            planes.append(PythonObject(None) if base[i] is None else _model_quantize15(base[i], bindings["linalg"]))
-        fields["_int15"] = planes
+            _ = py_call(planes.append, PythonObject(None) if base[i] is None else _model_quantize15(base[i], bindings["linalg"]))
+        py_setitem(fields, "_int15", planes)
     return block
 
 
@@ -447,18 +448,18 @@ def causal_model_prepare(model: PythonObject, plan: PythonObject, weights: Pytho
     var route = _model_route(options[2], context)
     var profile = _model_profile(options[3], String(plan.kind), context)
     var bindings = _model_bindings(route, String(plan.kind), context)
-    model._runtime = context["runtime"]
-    model.plan = plan
-    model.config = plan.config
-    model.kind = plan.kind
-    model.d_model = plan.d_model
-    model.vocab_size = plan.vocab_size
-    model.n_layers = plan.n_layers
-    model.norm_eps = plan.norm_eps
-    model.numeric_profile = profile
-    model.device = route
-    model.weight_format = options[0]
-    model.unused_names = bi.list(weights.get("unused", bi.tuple()))
+    py_setattr(model, "_runtime", context["runtime"])
+    py_setattr(model, "plan", plan)
+    py_setattr(model, "config", plan.config)
+    py_setattr(model, "kind", plan.kind)
+    py_setattr(model, "d_model", plan.d_model)
+    py_setattr(model, "vocab_size", plan.vocab_size)
+    py_setattr(model, "n_layers", plan.n_layers)
+    py_setattr(model, "norm_eps", plan.norm_eps)
+    py_setattr(model, "numeric_profile", profile)
+    py_setattr(model, "device", route)
+    py_setattr(model, "weight_format", options[0])
+    py_setattr(model, "unused_names", py_call(bi.list, py_get(weights, "unused", bi.tuple())))
     var dm = Int(py=plan.d_model)
     var vocab = Int(py=plan.vocab_size)
     if dm < 1 or vocab < 1 or Int(py=plan.n_layers) < 1:
@@ -469,26 +470,26 @@ def causal_model_prepare(model: PythonObject, plan: PythonObject, weights: Pytho
         var cap = min(config_cap, 8192)
         if positions is None:
             positions = PythonObject(cap)
-        var mp = Int(py=bi.int(positions))
+        var mp = Int(py=py_call(bi.int, positions))
         if mp < 1:
             raise Error("CausalLM: max_positions must be positive")
         if mp > config_cap or mp > 8192:
             raise Error("UnsupportedModel: max_positions exceeds max_position_embeddings or transformer ceiling 8192")
         positions = PythonObject(mp)
     elif positions is not None:
-        positions = bi.int(positions)
-    model.max_positions = positions
-    model._embed = _model_f32(weights["embed"], String(plan.embed_name), context)
-    if not Bool(py=model._embed.shape == bi.tuple(py_ints([vocab, dm]))):
-        raise Error("UnsupportedModel: model_type " + String(plan.model_type) + ": vocab_size=" + String(vocab) + " and hidden_size=" + String(dm) + " but " + String(plan.embed_name) + " has shape " + String(bi.str(model._embed.shape)))
-    model._norm = PythonObject(None)
+        positions = py_call(bi.int, positions)
+    py_setattr(model, "max_positions", positions)
+    py_setattr(model, "_embed", _model_f32(weights["embed"], String(plan.embed_name), context))
+    if not Bool(py=model._embed.shape == py_call(bi.tuple, py_ints([vocab, dm]))):
+        raise Error("UnsupportedModel: model_type " + String(plan.model_type) + ": vocab_size=" + String(vocab) + " and hidden_size=" + String(dm) + " but " + String(plan.embed_name) + " has shape " + String(py_call(bi.str, model._embed.shape)))
+    py_setattr(model, "_norm", PythonObject(None))
     if plan.norm_name is not None:
-        model._norm = _model_f32(weights["norm"], String(plan.norm_name), context)
-        if not Bool(py=model._norm.shape == bi.tuple(py_ints([dm]))):
-            raise Error("UnsupportedModel: tensor " + String(plan.norm_name) + " has shape " + String(bi.str(model._norm.shape)) + ", want hidden_size=" + String(dm))
-    model._head = model._embed if plan.head_name is None else _model_f32(weights["head"], String(plan.head_name), context)
-    if not Bool(py=model._head.shape == bi.tuple(py_ints([vocab, dm]))):
-        raise Error("UnsupportedModel: tensor " + String(plan.head_name) + " has shape " + String(bi.str(model._head.shape)) + ", want vocab_size=" + String(vocab) + " and hidden_size=" + String(dm))
+        py_setattr(model, "_norm", _model_f32(weights["norm"], String(plan.norm_name), context))
+        if not Bool(py=model._norm.shape == py_call(bi.tuple, py_ints([dm]))):
+            raise Error("UnsupportedModel: tensor " + String(plan.norm_name) + " has shape " + String(py_call(bi.str, model._norm.shape)) + ", want hidden_size=" + String(dm))
+    py_setattr(model, "_head", model._embed if plan.head_name is None else _model_f32(weights["head"], String(plan.head_name), context))
+    if not Bool(py=model._head.shape == py_call(bi.tuple, py_ints([vocab, dm]))):
+        raise Error("UnsupportedModel: tensor " + String(plan.head_name) + " has shape " + String(py_call(bi.str, model._head.shape)) + ", want vocab_size=" + String(vocab) + " and hidden_size=" + String(dm))
     for value in [model._embed, model._norm, model._head]:  # driver-loop: over the three top-level tensors
         if value is not None:
             var ptr = f32_ptr(Int(py=value._addr))
@@ -506,26 +507,26 @@ def causal_model_init_binding(model: PythonObject, plan: PythonObject, weights: 
     var route = model.device
     var profile = model.numeric_profile
     var layers = weights["layers"]
-    model._blocks = bi.list()
+    py_setattr(model, "_blocks", bi.list())
     for i in range(len(layers)):  # driver-loop: over the model layer definitions
         var block = _model_block(layers[i], plan, profile, route, bindings, context)
-        var fields = bi.object.__getattribute__(block, "__dict__")
+        var fields = py_call(bi.object.__getattribute__, block, "__dict__")
         if String(fields["weight_format"]) != format:
             raise Error("CausalLM: layer reports a different weight_format than requested")
-        model._blocks.append(block)
-    model._block_class = context["block_classes"][route][plan.kind]
-    model._block_kwargs = bi.dict(plan.block_options if String(plan.kind) == "transformer" else plan.block_kwargs)
+        _ = py_call(model._blocks.append, block)
+    py_setattr(model, "_block_class", context["block_classes"][route][plan.kind])
+    py_setattr(model, "_block_kwargs", py_call(bi.dict, plan.block_options if String(plan.kind) == "transformer" else plan.block_kwargs))
     if String(plan.kind) == "transformer":
-        model._block_kwargs["n_heads"] = plan.n_heads
-        model._block_kwargs["numeric_profile"] = profile
-    model._prims = bi.object.__new__(context["primitive_classes"][route])
+        py_setitem(model._block_kwargs, "n_heads", plan.n_heads)
+        py_setitem(model._block_kwargs, "numeric_profile", profile)
+    py_setattr(model, "_prims", py_call(bi.object.__new__, context["primitive_classes"][route]))
     if String(route) == "gpu":
-        model._prims._T = context["training_module"]
+        py_setattr(model._prims, "_T", context["training_module"])
     else:
-        model._prims._ext = bindings["primitives"]
-    model._head_int15 = PythonObject(None)
+        py_setattr(model._prims, "_ext", bindings["primitives"])
+    py_setattr(model, "_head_int15", PythonObject(None))
     if String(profile) == "fixed15_v1":
-        model._head_int15 = _model_quantize15(model._head, bindings["linalg"])
+        py_setattr(model, "_head_int15", _model_quantize15(model._head, bindings["linalg"]))
     _ = causal_lm_admit_binding(model, bindings[plan.kind], bindings["primitives"], bindings["linalg"] if model._head_int15 is not None else PythonObject(None))
     return PythonObject(None)
 
@@ -537,14 +538,14 @@ def causal_model_read_weights_binding(checkpoint: PythonObject, plan: PythonObje
     var infos = checkpoint_index_binding(checkpoint, ck)
     var need = model_checkpoint_names_binding(plan)
     for i in range(len(need)):  # driver-loop: over checkpoint tensor names
-        if not Bool(py=infos.__contains__(need[i])):
+        if not py_contains(infos, need[i]):
             raise Error("UnsupportedModel: checkpoint lacks tensor " + String(need[i]))
     var out = bi.dict()
-    out["embed"] = checkpoint_read_binding(checkpoint, plan.embed_name, PythonObject("widen"), ck)
+    py_setitem(out, "embed", checkpoint_read_binding(checkpoint, plan.embed_name, PythonObject("widen"), ck))
     if plan.norm_name is not None:
-        out["norm"] = checkpoint_read_binding(checkpoint, plan.norm_name, PythonObject("widen"), ck)
+        py_setitem(out, "norm", checkpoint_read_binding(checkpoint, plan.norm_name, PythonObject("widen"), ck))
     if plan.head_name is not None:
-        out["head"] = checkpoint_read_binding(checkpoint, plan.head_name, PythonObject("widen"), ck)
+        py_setitem(out, "head", checkpoint_read_binding(checkpoint, plan.head_name, PythonObject("widen"), ck))
     var bindings = _model_bindings(route, String(plan.kind), context)
     var projections = context["projections"][plan.kind]
     var layers = bi.list()
@@ -556,9 +557,9 @@ def causal_model_read_weights_binding(checkpoint: PythonObject, plan: PythonObje
             var key = entry[0]
             var name = entry[1]
             var rows = entry[2]
-            var packed = String(format) != "float32" and Bool(py=projections.__contains__(key))
+            var packed = String(format) != "float32" and py_contains(projections, key)
             if packed and String(format) == "bfloat16" and String(infos[name].dtype) == "BF16" and rows is None and len(infos[name].shape) == 2:
-                weights[key] = checkpoint_read_binding(checkpoint, name, PythonObject("bits"), ck)
+                py_setitem(weights, key, checkpoint_read_binding(checkpoint, name, PythonObject("bits"), ck))
                 continue
             var value = _model_f32(checkpoint_read_binding(checkpoint, name, PythonObject("widen"), ck), String(name), context)
             if rows is not None:
@@ -571,15 +572,15 @@ def causal_model_read_weights_binding(checkpoint: PythonObject, plan: PythonObje
                 if end > begin:
                     memcpy(dest=f32_ptr(Int(py=sliced._addr)), src=f32_ptr(Int(py=value._addr)) + begin * cols, count=(end - begin) * cols)
                 value = sliced
-            weights[key] = _model_pack(value, String(format), bindings["linalg"], context) if packed else value
-        layers.append(weights)
-    out["layers"] = layers
+            py_setitem(weights, key, _model_pack(value, String(format), bindings["linalg"], context) if packed else value)
+        _ = py_call(layers.append, weights)
+    py_setitem(out, "layers", layers)
     var unused = bi.list()
-    var names = bi.list(infos)
+    var names = py_call(bi.list, infos)
     for i in range(len(names)):  # driver-loop: over checkpoint metadata names
-        if not Bool(py=need.__contains__(names[i])):
-            unused.append(names[i])
-    out["unused"] = unused
+        if not py_contains(need, names[i]):
+            _ = py_call(unused.append, names[i])
+    py_setitem(out, "unused", unused)
     return out
 
 
@@ -604,7 +605,7 @@ def causal_model_load_binding(cls: PythonObject, path_value: PythonObject, optio
         _ = checkpoint_close_binding(checkpoint)
         raise error
     _ = checkpoint_close_binding(checkpoint)
-    var model = bi.object.__new__(cls)
+    var model = py_call(bi.object.__new__, cls)
     _ = causal_model_init_binding(model, plan, weights, options, context)
     return model
 
