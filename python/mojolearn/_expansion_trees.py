@@ -704,11 +704,11 @@ def _trees_member_session(member, X, row_major, x_finite=False, default="0"):
 
 # lane/apple-fast-trees-ensembles (2026-10-02): the Apple FAST switches of
 # this module are BUILD-TIME defines of the x_trees binding (`-D
-# MOJOLEARN_TE_<NAME>_OFF` turns one off; xtrees/api.mojo `x_trees_fast_switches` is the bit
+# MOJOLEARN_TE_<NAME>_OFF` turns one off; xtrees/api_pyapi.mojo `x_trees_fast_switches` is the bit
 # set the FAST + Apple build fills, 0 in every other build), read through
 # the binding once per fit: no env read. IDENTICAL (the default) runs the
 # code above and below them unchanged. Each is ON by default in the FAST +
-# Apple build since the M3 A/B (xtrees/api.mojo XTREES_FAST_SWITCHES):
+# Apple build since the M3 A/B (xtrees/api_pyapi.mojo XTREES_FAST_SWITCHES):
 #   MOJOLEARN_TE_NATIVE_SPLITS  the cv fold bookkeeping of Stacking /
 #     CalibratedClassifierCV, OneVsRest's targets and MultiOutputClassifier's
 #     label columns leave their Python row loops (`_trees_native_folds`,
@@ -742,7 +742,7 @@ _PSHAP_DELTA = 32
 #     MOJOLEARN_IDN_ADA_SESSION_OFF clears it): the AdaBoost members fit the
 #     one staged device copy of X through the EXACT session. Moves no bit.
 #     Bit 128 since the 2026-10-05 merge (was 32 on the IDENTICAL branch;
-#     main took 32 for PSHAP_DELTA; xtrees/api.mojo XTREES_FAST_SWITCHES).
+#     main took 32 for PSHAP_DELTA; xtrees/api_pyapi.mojo XTREES_FAST_SWITCHES).
 _IDN_ADA_SESSION = 128
 # TOMBSTONE: MOJOLEARN_PSHAP_FAST_OVERLAP (DROPPED-slower: permutation-shap taxi +26.6%, verdicts batch 6) deleted 2026-10-09
 # on lane/owed-deletions-D1 (next chunk's delta rows + download overlapped with the model); code recoverable at b639a2bd2.
@@ -5001,7 +5001,7 @@ class KernelExplainer(_AgnosticExplainer):
 
     def _schedule(self, M, nsamples):
         """shap `KernelExplainer.explain`'s coalition schedule, built in Mojo
-        (`x_trees_kshap_schedule`, xtrees/api.mojo; lane cgr4-py-compute):
+        (`x_trees_kshap_schedule`, xtrees/api_pyapi.mojo; lane cgr4-py-compute):
         (m, nfixed, nfull, npaired, tables, L, wrand_bits) with tables =
         (size_off Int64, size_w float64, cdf float64). Every mask is made on
         the device from these (xtrees/agnostic.mojo kshap_mask_unit)."""

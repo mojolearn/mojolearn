@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The trees lane's element-wise glue on the device (lane cpu2-l5-trees).
 
-`xtrees/api.mojo` ran these entries through the serial host loops of
+`xtrees/api_pyapi.mojo` ran these entries through the serial host loops of
 `xtrees/ops.mojo` on every GPU build: gathers, the vote accumulators,
 argmax, the scalings, the margin, softmax / normalize / logit, the weight
 checks, the scatter, the RNG draws, the one-hot leaf embedding and the

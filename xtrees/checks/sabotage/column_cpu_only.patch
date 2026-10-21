@@ -41,10 +41,10 @@ index 13b5a797d..e7737ffce 100644
              # THE SABOTAGE ARM: one extra draw on every keyed stream, so
              # every threshold (`draw_threshold_device`, `uniform_threshold`)
              # and every rescue pick is the stream's SECOND value. Wrong on
-diff --git a/xtrees/api.mojo b/xtrees/api.mojo
+diff --git a/xtrees/api_pyapi.mojo b/xtrees/api_pyapi.mojo
 index 1304504fd..0676dc0a2 100644
---- a/xtrees/api.mojo
-+++ b/xtrees/api.mojo
+--- a/xtrees/api_pyapi.mojo
++++ b/xtrees/api_pyapi.mojo
 @@ -6,6 +6,7 @@
  Every buffer is a caller-owned address; `params` is a Python list of ints and
  floats. Nothing is retained."""

@@ -73,7 +73,7 @@ FAMILIES = (
             "PermutationExplainer",
         ),
         display="the trees expansion lane's ensemble glue",
-        host_modules=("xtrees/ops.mojo", "xtrees/api.mojo", "xtrees/shap.mojo", "xtrees/agnostic.mojo", "xtrees/agnostic_host.mojo",
+        host_modules=("xtrees/ops.mojo", "xtrees/api_pyapi.mojo", "xtrees/api_kernels.mojo", "xtrees/shap.mojo", "xtrees/agnostic.mojo", "xtrees/agnostic_host.mojo",
                       "xtrees/dart_units.mojo", "xtrees/dart_host.mojo"),
         exports=(
             "x_trees_host_numeric_mode", "x_trees_host_vendor", "x_trees_host_column", "x_trees_host_sabotage",

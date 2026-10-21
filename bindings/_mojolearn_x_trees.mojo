@@ -2,14 +2,14 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The trees expansion lane's binding (algorithm expansion
 lane 7): the ensemble glue of `xtrees/ops.mojo`, registered by
-`xtrees/api.mojo::register`. The trees themselves are fitted through the
+`xtrees/api_pyapi.mojo::register`. The trees themselves are fitted through the
 existing `_mojolearn_rf` / `_mojolearn_gbdt` entry points."""
 from std.os import abort
 from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from xtrees.api import register, tree_shap_cache_values_args
+from xtrees.api_pyapi import register, tree_shap_cache_values_args
 from xtrees import shap_device as shap_dev
 from xtrees.shap_device import shap_prepare, shap_prepare_retain, tree_shap_values, shap_pair_count
 from xtrees.dart_device import DART_DEVICE, dart_open, dart_step, dart_add, dart_close, dart_predict
