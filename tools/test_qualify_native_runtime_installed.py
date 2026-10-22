@@ -188,7 +188,7 @@ class InstalledNativeAudit(unittest.TestCase):
             q.installed_module_inventory(modules, prefix, payload, tests)
 
     def test_public_owner_and_host_scopes_exclude_private_array_candidate(self):
-        names = ("test_native_owner_qualification.py", "test_sequence_shutdown_native.py",
+        names = ("test_native_owner_qualification.py", "test_sequence_shutdown_native.py", "test_training_rms_public_native.py",
                  "test_training_device_native_finalizer.py", "test_training_device_native_rollback.py",
                  "test_robust_scaler_native_lifecycle.py", "test_scaler_rows_snapshot_native.py",
                  "test_robust_scaler_native_transport.py",

@@ -24,6 +24,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_TESTS = {
+    "test_training_rms_public_native.py": "Public RMS forward/backward preparation, scalar options, consumed results and native refusals",
     "test_training_linear_public_native.py": "Public linear forward/backward input preparation, output ownership and native failure paths",
     "test_maxabs_scaler_native_transport.py": "MaxAbsScaler scratch, mapped outputs, resident transport and operation-owned slot cleanup",
     "test_robust_scaler_native_lifecycle.py": "RobustScaler lifecycle, options, inputs, state and native boundary refusals",
@@ -165,6 +166,9 @@ def test_applicability(selected, vendor):
                          coverage_limit="Native qualification covers audited prediction/transform, preparation and attributes; inherited fit/score cases check compatibility only")
         if name == "test_host_kde_native.py":
             scope["coverage_limit"] = "Native qualification covers score_samples/score and their state/input admission; inherited construction/fit/save/hash remain outside this migration slice"
+        if name == "test_training_rms_public_native.py":
+            scope.update(execution_route="public training RMS operations through the selected CPU or GPU training binding",
+                         coverage_limit="Exact preparation/output checks use retained numerical entries; independent primitive checks are separate. NumPy scalar-option coverage follows the installed NumPy version.")
         result[name] = scope
     return result
 

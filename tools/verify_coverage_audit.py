@@ -1394,14 +1394,15 @@ for _new_entry in ("host_svr_attribute_call", "host_svc_attribute_call", "optimi
         "admission for this entry remains pending; static lane reachability does not establish it.")
 
 
-# The public linear owner retains these existing numerical entries at import.
+# The public linear/RMS owners retain these existing numerical entries at import.
 # Source reach is distinct from execution of the new native preparation route.
 for _src in ("bindings/_mojolearn_training.mojo", "bindings/_mojolearn_training_host.mojo"):
-    for _entry in ("linear_forward", "linear_backward"):
+    for _entry in ("linear_forward", "linear_backward", "rms_norm_forward", "rms_norm_backward"):
+        _owner = "training_rms_operation" if _entry.startswith("rms_") else "training_linear_operation"
         ANNOTATIONS_BY_SRC[(_entry, _src)] = (
             "covered", ["training-primitives"],
             "Source reach: public training." + _entry + " -> optimizer_native -> "
-            "training_linear_operation -> retained numerical entry. The existing training-primitives "
+            + _owner + " -> retained numerical entry. The existing training-primitives "
             "lane consumes these results; current native preparation, installed-package and "
             "matching reference/fault qualification remain separately pending.")
 for _entry in ("linear_forward_dev", "linear_backward_dev"):
