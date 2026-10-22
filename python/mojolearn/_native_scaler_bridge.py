@@ -60,6 +60,10 @@ def register_subclass(cls, context):
     # glue: register an ordinary class layout at class definition time
     from ._native_classical_bridge import _layout
     context["classical_public_layouts"][cls] = _layout(cls, context["classical_attribute_descriptor"])
+    for base in type.__dict__["__mro__"].__get__(cls)[1:]:  # glue: preserve explicit CPU scope through ordinary subclasses
+        if base in context["scaler_host_contexts"]:
+            context["scaler_host_contexts"][cls] = context["scaler_host_contexts"][base]
+            break
 
 
 def connect_host(cls, context, prep, xprep, training):
