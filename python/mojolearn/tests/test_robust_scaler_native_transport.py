@@ -13,7 +13,7 @@ from mojolearn._verify_native_runtime import audit_native_call
 
 
 def _ranges():
-    binding = _backend.binding('_mojolearn_x_prep', 'identical')
+    binding = _backend.binding('_mojolearn_x_prep', _backend._DEFAULT_MODE)
     try:
         binding.x_prep_run_ranges
         binding.x_prep_dev_live
@@ -89,7 +89,7 @@ def test_every_owned_release_is_attempted_and_primary_error_is_retained(primary_
     binding = _ranges()
     monkeypatch.setenv('MOJOLEARN_ARENA_RANGES', '1')
     from mojolearn import _expansion_prep
-    entries = _expansion_prep._ROBUST_CONTEXT['scaler_bindings']['identical']
+    entries = _expansion_prep._ROBUST_CONTEXT['scaler_bindings'][_backend._DEFAULT_MODE]
     base = Array.from_list([[1.,2.],[3.,4.]], '<f4')
     source = _arena_io.DeviceRows(base, Array.from_list([99 if primary_failure else 0], '<i8'), None)
     initial = int(binding.x_prep_dev_live())
