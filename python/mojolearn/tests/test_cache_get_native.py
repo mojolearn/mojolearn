@@ -470,3 +470,50 @@ def test_lookup_rejects_transitive_numpy_metadata_hooks(kind):
                     break
             fields['dtype'] = saved
     _refused(audit, calls)
+
+
+@pytest.mark.parametrize('base', [int, float, complex, str, bytes, bytearray])
+@pytest.mark.parametrize('field', ['_addr', 'itemsize'])
+def test_lookup_preserves_benign_inherited_builtin_metadata(base, field):
+    class Native(base):
+        pass
+    class Nested(Native):
+        pass
+    number = 4 if field == 'itemsize' else 8
+    value = Nested(str(number).encode()) if base in (bytes, bytearray) else Nested(number)
+    source = _source()
+    setattr(source, field, value)
+    cache = _cache()
+    cache._entries[(8, 3)] = (19, None)
+    try:
+        if source.itemsize != 4:
+            raise ValueError('DeviceCache: a store slot holds 4-byte words')
+        expected = cache._entries.get((int(source._addr), int(source.size)))
+        expected = None if expected is None else expected[0]
+        failure = None
+    except Exception as error:
+        failure = error
+    audit = audit_native_call(cache.get, source)
+    if failure is None:
+        assert audit.assert_native() == expected
+    else:
+        assert type(audit.exception) is type(failure), audit.report()
+        assert str(audit.exception) == str(failure)
+        assert not audit.report()['python_frames'] and not audit.report()['forbidden_native_calls']
+
+
+@pytest.mark.parametrize('base,hook,field', [(int, '__int__', '_addr'),
+    (float, '__int__', '_addr'), (int, '__index__', '_addr'),
+    (str, '__int__', '_addr'), (str, '__repr__', '_addr'),
+    (bytes, '__repr__', '_addr'), (float, '__eq__', 'itemsize'),
+    (complex, '__ne__', 'itemsize')])
+def test_lookup_refuses_overridden_primitive_protocols_before_execution(base, hook, field):
+    calls = []
+    def forbidden(*args, **kwargs):
+        calls.append(hook)
+        raise AssertionError('primitive protocol callback ran')
+    Native = type('Native', (base,), {hook: forbidden})
+    value = Native(b'bad') if base is bytes else Native('bad') if base is str else Native(4)
+    source = _source()
+    setattr(source, field, value)
+    _refused(audit_native_call(_cache().get, source), calls)

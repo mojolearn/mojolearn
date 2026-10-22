@@ -71,6 +71,8 @@ class NativeWeakrefConnectionTests(unittest.TestCase):
                          (type(None), bool, int, float, complex, str, bytes, bytearray, list, tuple, dict, set, frozenset))
         self.assertIs(context['cache_scalar_context']['modules'], sys.modules)
         self.assertIs(context['cache_deprecation_warning'], DeprecationWarning)
+        self.assertEqual(context['cache_primitive_bases'], (int, float, complex, str, bytes, bytearray))
+        self.assertEqual(context['cache_type_flags'](Cache), Cache.__flags__)
 
     def test_cache_statistics_retain_native_attribute_and_thread_local_entries(self):
         context = connect()
