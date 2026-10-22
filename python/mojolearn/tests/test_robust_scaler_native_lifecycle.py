@@ -106,6 +106,57 @@ def test_native_quantile_metadata_and_unit_variance_are_preserved(quantiles):
     assert actual.tobytes() == expected.tobytes()
 
 
+@pytest.mark.parametrize('kind', ['object', 'str', 'bytes', 'f2', 'longdouble', 'complex', 'strided', 'bigendian', 'halfview'])
+def test_native_quantile_buffers_preserve_supported_scalar_kinds(kind):
+    source = dict(object=lambda: np.array([10., 90.], dtype=object),
+                  str=lambda: np.array(['10', '90']), bytes=lambda: np.array([b'10', b'90']),
+                  f2=lambda: np.array([10., 90.], dtype='f2'),
+                  longdouble=lambda: np.array([10., 90.], dtype='g'),
+                  complex=lambda: np.array([10.+1j, 90.+2j]),
+                  strided=lambda: np.array([90., 10.])[::-1],
+                  bigendian=lambda: np.array([10., 90.], dtype='>f8'),
+                  halfview=lambda: memoryview(np.array([10., 90.], dtype='f2')))[kind]()
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        actual = audit_native_call(ml.RobustScaler(quantile_range=source).fit_transform, _data()).assert_native()
+    expected = ml.RobustScaler(quantile_range=(10., 90.)).fit_transform(_data())
+    assert actual.tobytes() == expected.tobytes()
+    assert len(caught) == (2 if kind == 'complex' else 0)
+    if kind == 'complex':
+        assert all(record.category is np.exceptions.ComplexWarning for record in caught)
+
+
+@pytest.mark.parametrize('storage', ['object', 'structured', 'object_view', 'structured_view', 'ndarray_subclass', 'foreign_buffer'])
+def test_quantile_storage_refuses_before_element_or_exporter_hooks(storage):
+    calls = []
+    class Hook:
+        def __float__(self):
+            calls.append('float')
+            return 10.
+    class Foreign:
+        def __buffer__(self, flags):
+            calls.append('buffer')
+            return memoryview(np.array([10., 90.]))
+        def __release_buffer__(self, view):
+            calls.append('release')
+    class Subclass(np.ndarray):
+        def __getitem__(self, key):
+            calls.append('getitem')
+            return super().__getitem__(key)
+    if storage == 'foreign_buffer':
+        source = memoryview(Foreign())
+    elif storage == 'ndarray_subclass':
+        source = np.array([10., 90.]).view(Subclass)
+    else:
+        source = np.empty(2, dtype=[('q', object)] if 'structured' in storage else object)
+        source[:] = [(Hook(),), (90.,)] if 'structured' in storage else [Hook(), 90.]
+        if storage.endswith('_view'):
+            source = memoryview(source)
+    calls.clear()  # Construction by the application precedes product execution.
+    _refused(audit_native_call(ml.RobustScaler(quantile_range=source).fit, _data()))
+    assert not calls
+
+
 @pytest.mark.parametrize('options', [dict(quantile_range=(-1., 75.)), dict(quantile_range=(80., 20.)), dict(unit_variance=True, quantile_range=(0., 100.))])
 def test_invalid_quantiles_are_refused_natively(options):
     _refused(audit_native_call(ml.RobustScaler(**options).fit, _data()), ValueError)

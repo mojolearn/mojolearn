@@ -8,11 +8,13 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout, classical_getattribute
-from bindings.classical_arrays import classical_typed, classical_is_array
+from bindings.classical_arrays import classical_typed, classical_is_array, classical_input
+from bindings.native_numpy_metadata import native_numpy_dtype
+from bindings.classical_warnings import classical_warning
 from bindings.classical_metadata import classical_is_fitted
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
-from bindings.sequential_admission import _one_of
+from bindings.sequential_admission import _one_of, sequential_admit_value
 from bindings.maxabs_native import _values, _target
 from bindings.scaler_native import _input, _ptr, _stage, _copy_row
 from bindings.scaler_lifecycle_native import _run, _entries, _public_result
@@ -33,7 +35,38 @@ def _number(value: PythonObject, context: PythonObject) raises -> Float64:
     var cls = py_type(value)
     if cls is b.bool or cls is b.int or cls is b.float or cls is b.str or cls is b.bytes or _one_of(cls,context["scalar_types"]):
         return Float64(py=py_call(b.float,value))
+    if py_get(context,"ndarray") is not None:
+        var constructor = native_numpy_dtype(context)
+        for code in ["S", "U", "g", "c8", "c16", "G"]:  # small-loop(params: supported native quantile scalar kinds)
+            if cls is py_call(constructor,code).type:
+                if code == "c8" or code == "c16" or code == "G":
+                    var module = py_get(context["modules"],"numpy.exceptions")
+                    if module is None:
+                        module = py_get(context["modules"],"numpy")
+                    if module is None or py_type(module) is not py_type(Python.import_module("sys")):
+                        raise Error("TypeError: complex quantiles require native NumPy warning metadata")
+                    var category = py_get(py_fields(module),"ComplexWarning")
+                    classical_warning("Casting complex values to real discards the imaginary part",category,context,PythonObject(None))
+                    return Float64(py=py_call(b.float,value.real))
+                return Float64(py=py_call(b.float,value))
     raise Error("TypeError: RobustScaler quantiles require native numbers; Python conversion hooks cannot execute")
+
+
+def _quantile_array(value: PythonObject, context: PythonObject) raises:
+    # Exact ndarray alone is insufficient: user DTypes can own element
+    # access. Match the descriptor's exact native class before dtype fields
+    # or __getitem__. Object elements are admitted separately by _number.
+    var dtype = value.dtype
+    var constructor = native_numpy_dtype(context)
+    var admitted = False
+    for code in ["?","i1","u1","i2","u2","i4","u4","i8","u8","f2","f4","f8","g","c8","c16","G","S","U","O"]:  # small-loop(params: builtin native quantile descriptor kinds)
+        if py_type(dtype) is py_type(py_call(constructor,code)):
+            admitted = True
+            break
+    if not admitted:
+        raise Error("TypeError: RobustScaler quantiles require native numeric, string or object storage; custom and structured dtypes cannot execute")
+    if Int(py=value.ndim) != 1:
+        raise Error("TypeError: RobustScaler quantile_range requires one-dimensional scalar metadata")
 
 
 def _quantiles(value: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -41,9 +74,30 @@ def _quantiles(value: PythonObject, context: PythonObject) raises -> PythonObjec
     var cls = py_type(value)
     var source = value
     if classical_is_array(value,context):
+        if Int(py=value.ndim) != 1:
+            raise Error("TypeError: RobustScaler quantile_range requires one-dimensional scalar metadata")
         source = value._mv
+    if py_type(source) is b.memoryview:
+        # Admission checks the exact exporter before any native buffer
+        # acquisition/release or element access. Object/structured formats
+        # are refused before they can produce callback-bearing scalars.
+        sequential_admit_value(source,context)
+        var format = String(source.format)
+        if format.byte_length() == 2 and (format.startswith("@") or format.startswith("=") or format.startswith("<") or format.startswith(">") or format.startswith("!")):
+            format = String(format[byte=1:2])
+        if format != "?" and format != "b" and format != "B" and format != "h" and format != "H" and format != "i" and format != "I" and format != "l" and format != "L" and format != "q" and format != "Q" and format != "n" and format != "N" and format != "e" and format != "f" and format != "d":
+            raise Error("TypeError: RobustScaler quantile buffers require native numeric formats")
+        if Int(py=source.ndim) != 1:
+            raise Error("TypeError: RobustScaler quantile_range requires one-dimensional scalar metadata")
+        if py_get(context,"ndarray") is not None:
+            # Native ndarray buffer access also preserves half and endian
+            # formats that CPython memoryview scalar indexing cannot read.
+            source = classical_input(source,context)
+    if py_type(source) is py_get(context,"ndarray"):
+        _quantile_array(source,context)
     elif cls is not b.list and cls is not b.tuple and cls is not b.range and cls is not b.str and cls is not b.bytes and cls is not b.memoryview and cls is not py_get(context,"ndarray"):
-        raise Error("TypeError: RobustScaler quantile_range requires native sequence metadata")
+        if not classical_is_array(value,context):
+            raise Error("TypeError: RobustScaler quantile_range requires native sequence metadata")
     if len(source) != 2:
         raise Error("RobustScaler quantile_range must contain two values")
     return Python.tuple(_number(source[0],context),_number(source[1],context))
