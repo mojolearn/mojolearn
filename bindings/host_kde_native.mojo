@@ -9,7 +9,7 @@ from bindings.classical_pandas import _pd_type_fields
 from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_is_f32, classical_c_order, classical_kind
 from bindings.host_archive_native import host_archive_typed
-from bindings.host_inference_scalars import host_inference_scalar
+from bindings.host_inference_scalars import host_inference_scalar, host_inference_primitive_number
 from bindings.host_inference_features import host_inference_feature_names
 from bindings.host_kernel_inference_native import _kernel_entry, _kernel_buffer
 from bindings.host_svc_native import _svc_input
@@ -66,7 +66,7 @@ def host_kde_admit_state(fields: PythonObject, context: PythonObject) raises:
             _ = _kde_option_value(fields[names[i]], context)
     var bandwidth = py_get(fields, "bandwidth")
     if bandwidth is not None:
-        _ = _kde_option_value(bandwidth, context, True)
+        _ = _kde_option_value(host_inference_primitive_number(bandwidth, context), context, True)
     var buffers = Python.tuple("_x", "_w")
     for i in range(len(buffers)):  # driver-loop: fixed saved KDE buffers
         var value = py_get(fields, buffers[i])
@@ -105,7 +105,9 @@ def host_kde_inference(model: PythonObject, fields: PythonObject, source: Python
         weights = _kernel_buffer(weight, count, "<f4", context)
     # Derive the fixed native constructor from a C-created scalar. A patched
     # builtins.float must never install a callback on this numerical boundary.
-    var bandwidth_value = _kde_option_value(classical_getattribute(model, PythonObject("bandwidth"), context), context, True)
+    var bandwidth_value = host_inference_primitive_number(
+        classical_getattribute(model, PythonObject("bandwidth"), context), context)
+    bandwidth_value = _kde_option_value(bandwidth_value, context, True)
     var bandwidth = py_call(py_type(PythonObject(Float64(0.0))), bandwidth_value)
     var kernel = _kde_option_value(classical_getattribute(model, PythonObject("kernel"), context), context)
     var metric = _kde_option_value(classical_getattribute(model, PythonObject("metric"), context), context)

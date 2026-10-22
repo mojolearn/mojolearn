@@ -87,6 +87,76 @@ def test_kde_bandwidth_native_scalar_forms_preserve_results(tmp_path, kind, meth
     _check(model, _input(2, "float32"), method)
 
 
+_PRIMITIVE_BANDWIDTHS = [
+    ("?", True, "scalar"), ("i1", 1, "scalar"), ("u1", 1, "scalar"),
+    ("i2", 1, "array"), ("u2", 1, "array"), ("i4", 1, "swapped"),
+    ("u4", 1, "swapped"), ("i8", 1, "scalar"), ("u8", 2**64 - 1, "scalar"),
+    ("q", 1, "scalar"), ("Q", 1, "scalar"), ("f2", .75, "scalar"),
+    ("f4", .75, "scalar"), ("f8", .75, "swapped"),
+    ("g", .75, "scalar"), ("g", .75, "swapped"),
+    ("f4", 0., "array"), ("f8", -0., "scalar"), ("f4", -1., "scalar"),
+    ("f4", float("nan"), "scalar"), ("f8", float("inf"), "array"),
+    ("f4", np.nextafter(np.float32(0), np.float32(1)), "scalar"),
+]
+
+
+def _primitive_bandwidth(code, number, form):
+    value = np.array(number, dtype=code)
+    if form == "scalar":
+        return value[()]
+    if form == "swapped":
+        value = value.astype(value.dtype.newbyteorder(">"))
+    value.flags.writeable = False
+    return value
+
+
+def _check_primitive_bandwidth(model, x, method, value):
+    original = value.tobytes()
+    state = _state(vars(model))
+    failure = None
+    with warnings.catch_warnings(record=True) as old:
+        warnings.simplefilter("always")
+        try:
+            expected = legacy.kde(model, x, method == "score")
+        except Exception as error:
+            failure = type(error), str(error)
+    with warnings.catch_warnings(record=True) as new:
+        warnings.simplefilter("always")
+        audit = audit_native_call(getattr(model, method), x)
+    if failure:
+        _refused(audit, failure[0])
+        assert str(audit.exception) == failure[1]
+    else:
+        actual = audit.assert_native()
+        assert _state(actual) == _state(expected)
+    assert [(type(w.message), str(w.message)) for w in new] == [(type(w.message), str(w.message)) for w in old]
+    assert model.bandwidth is value and value.tobytes() == original
+    assert _state(vars(model)) == state
+
+
+@pytest.mark.parametrize("method", METHODS)
+@pytest.mark.parametrize("code,number,form", _PRIMITIVE_BANDWIDTHS)
+def test_kde_primitive_bandwidth_buffer_decode_preserves_consumed_bits(tmp_path, method, code, number, form):
+    model = _model(tmp_path)
+    value = _primitive_bandwidth(code, number, form)
+    model.bandwidth = value
+    _check_primitive_bandwidth(model, _input(2, "float32"), method, value)
+
+
+@pytest.mark.parametrize("method", METHODS)
+@pytest.mark.parametrize("code,form", [("q", "scalar"), ("Q", "scalar"),
+                                       ("g", "scalar"), ("g", "swapped")])
+def test_kde_primitive_bandwidth_native_slots_preserve_alias_ownership(tmp_path, method, code, form):
+    class NativeBandwidthSlot(host.HostKernelDensity):
+        __slots__ = ("bandwidth",)
+    model = object.__new__(NativeBandwidthSlot)
+    vars(model).update(vars(_model(tmp_path)))
+    vars(model).pop("bandwidth")
+    value = _primitive_bandwidth(code, 1, form)
+    model.bandwidth = value
+    _check_primitive_bandwidth(model, _input(2, "float32"), method, value)
+
+
 @pytest.mark.parametrize("field", ["n_features_in_", "_mojolearn_fitted", "_mojolearn_fitting"])
 def test_kde_native_scalar_metadata_preserves_results(tmp_path, field):
     model = _model(tmp_path)
