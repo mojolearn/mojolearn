@@ -31,7 +31,6 @@ MOJOLEARN_METRICS_EPILOGUE=python reference arm are gone). That is bitwise the s
 is scikit-learn's own precision for the same step.
 """
 import array
-import ctypes
 import itertools
 from . import _portable_math as _math
 import numbers
@@ -79,15 +78,6 @@ def _sq(v):
     return v * v
 
 
-def _optional_metrics_entry(binding, name):
-    """Optional optimizations may be absent on an otherwise complete CPU facade."""
-    binding.x_metrics_run  # Do not conceal a missing mandatory family binding.
-    try:
-        return getattr(binding, name)
-    except (AttributeError, ImportError):
-        return None
-
-
 def _binding(numeric_mode):
     if numeric_mode is not None and (
         not isinstance(numeric_mode, str)
@@ -101,10 +91,6 @@ def _binding(numeric_mode):
 def _arena_view(arena):
     """A float32 memoryview over a program's arena."""
     return memoryview(arena)
-
-
-def _new_arena(size):
-    return array.array("f", bytes(4 * max(size, 1)))
 
 
 def _i32_c(codes):
@@ -187,7 +173,7 @@ class _Prog:
     def put(self, arr):
         """A float32 C-contiguous Array (or anything as_f32_c takes) -> offset.
         A float32 `_arena_io.DeviceRows` (a fold's rows, lane cpu4-misc) is
-        kept as it is: `_execute` gathers it on the device, or copies its
+        kept as it is: `run` gathers it on the device, or copies its
         host rows when the binding cannot."""
         if isinstance(arr, _arena_io.DeviceRows) and arr.dtype != "<f4":
             arr = arr.materialize()
@@ -222,7 +208,11 @@ class _Prog:
                             + [0] * (_PARAMS - len(params)))
 
     def run(self, numeric_mode):
-        return _execute(self, numeric_mode)
+        """Run the program on the x_metrics binding (GPU, or the host binding
+        on a CPU-only install): one native call that owns the arena, the
+        input copies, resident and device-gathered inputs, the range
+        descriptors and the run (bindings/arena_prog_native.mojo)."""
+        return _PROG_CALL(self, "x_metrics_run", (numeric_mode,), _PROG_CONTEXT)
 
     def want(self, off, n, count=None, mult=1):
         """Declare [off, off + n) an OUTPUT the caller reads (lane
@@ -254,30 +244,6 @@ class _Prog:
                 return
         raise AssertionError(f"x_metrics: arena [{off}, {off + n}) was read but never declared an output")
 
-    def _download(self):
-        """The disjoint ascending [lo, hi) ranges the device brings back:
-        the declared outputs, else the arena less the inputs and scratch;
-        None = the whole arena."""
-        if self._outs is not None:
-            merged = []
-            for lo, hi, cn, mult in sorted(o for o in self._outs if o[2] < 0):  # glue: merges the declared output ranges
-                if merged and lo <= merged[-1][1]:
-                    merged[-1][1] = max(merged[-1][1], hi)
-                else:
-                    merged.append([lo, hi, -1, 1])
-            return merged + [list(o) for o in self._outs if o[2] >= 0]  # glue: the counted output ranges
-        if not self._skip:
-            return None
-        merged = []
-        at = 0
-        for lo, hi in sorted(self._skip):  # glue: merges the input and scratch ranges
-            if lo > at:
-                merged.append([at, lo])
-            at = max(at, hi)
-        if at < self.size:
-            merged.append([at, self.size])
-        return [r + [-1, 1] for r in merged]  # glue: marks the download ranges uncounted
-
     def floats(self, off, n):
         """Python floats (exact images of the Float32 results)."""
         self._check(off, n)
@@ -304,67 +270,6 @@ class _Prog:
             n *= s
         self._check(off, n)
         return Array._owned(self.arena[off:off + n], shape, "<f4", "C")
-
-
-def _execute(prog, numeric_mode):
-    """Run a program on the x_metrics binding (GPU, or the host binding on
-    a CPU-only install). A module-level function, not only a method, so the
-    lane selector (tools/lane_select.py follows file-local functions, not
-    classes) sees every caller reach `x_metrics_run`."""
-    arena = _new_arena(prog.size)
-    base = arena.buffer_info()[0]
-    stages = array.array("i", [v for s in prog._stages for v in s] or [0])  # glue: packs the stage parameter words
-    b = _binding(numeric_mode)
-    merged = prog._download()
-    run_ranges = _optional_metrics_entry(b, "x_metrics_run_ranges") if _arena_io.ranges_enabled() else None
-    spans = []
-    direct, gathered = None, []
-    for off, arr in prog._inputs:  # glue: copies each program input once
-        if not arr.size:
-            continue
-        if isinstance(arr, _arena_io.DeviceRows):
-            # device-rows input (lane cpu4-misc): gathered on the device out
-            # of the base put once into this binding's store
-            slot = None
-            if run_ranges is not None:
-                if direct is None and _arena_io.DeviceCache.supports(b, "x_metrics"):
-                    direct = _arena_io.DeviceCache(b, "x_metrics")
-                slot = _arena_io.rows_slot(b, "x_metrics", arr, direct)
-            if slot is not None:
-                gathered.append(slot)
-                spans.append((off, off + arr.size, slot))
-                continue
-            arr = arr.materialize()
-        cache = _arena_io.active_cache(b, "x_metrics", arr.size) if run_ranges is not None else None
-        if cache is not None:
-            # resident (lane py-shared): the device copies it from the store;
-            # the host arena's words stay zero and are never read (`_check`)
-            spans.append((off, off + arr.size, cache.id_of(arr)))
-            continue
-        ctypes.memmove(base + 4 * off, addr_ro(arr, name="input"), 4 * arr.size)
-        spans.append((off, off + arr.size, -1))
-    run_out = _optional_metrics_entry(b, "x_metrics_run_out") if merged is not None else None
-    if run_ranges is not None:
-        # the shared ranges runner (lane py-shared, core/arena_io.mojo): only
-        # the inputs go up, only the outputs come back
-        ins = _arena_io.input_ranges(spans)
-        outs = [list(r) for r in merged] if merged is not None else [[0, prog.size, -1, 1]]  # glue: the download range descriptors
-        ia, oa = _arena_io.pack_ins(ins), _arena_io.pack_outs(outs)
-        try:
-            run_ranges(base, stages.buffer_info()[0], (prog.size, len(prog._stages), len(ins), len(outs)),
-                       ia.buffer_info()[0], oa.buffer_info()[0])
-        finally:
-            for slot in gathered:  # glue: frees each fold-rows slot
-                b.x_metrics_dev_free(slot)
-            if direct is not None:
-                direct.close()
-    elif run_out is not None:
-        outs = array.array("i", [v for r in merged for v in r] or [0, 0, -1, 1])  # glue: packs the download range descriptors
-        run_out(base, prog.size, stages.buffer_info()[0], len(prog._stages), outs.buffer_info()[0], len(merged))
-    else:
-        b.x_metrics_run(base, prog.size, stages.buffer_info()[0], len(prog._stages))
-    prog.arena = arena
-    return prog
 
 
 def _group(prog, key, n, m, *, values=_NONE, vstride=1, weights=_NONE, width=1):
@@ -531,7 +436,7 @@ class _Sums:
         self.tail = None
         prog.rows = None if w is None else (match, W, n)
         keep = tail(prog, groups) if tail is not None else None
-        _execute(prog, numeric_mode)
+        prog.run(numeric_mode)
         self.prog, self.groups = prog, groups
         res = []
         for eo in eos:  # glue: reads each staged epilogue's flags, scalars and values
@@ -873,7 +778,7 @@ def _confusion(true, pred, w, order, numeric_mode, tail):
     W = _NONE if w is None else prog.put(w)
     off, out = _group(prog, key, n, k * k, weights=W)
     keep = tail(prog, off if w is None else out, 0 if w is None else 1)
-    _execute(prog, numeric_mode)
+    prog.run(numeric_mode)
     return prog, keep
 
 
@@ -1097,7 +1002,7 @@ def _support_total(support, numeric_mode):
     src = prog.put(support) if weighted else prog.put_i32(support)
     out = prog.want(prog.alloc(2), 2)
     prog.stage("cm_epi", 1, _CM_TOTAL, src, k, 1 if weighted else 0, out)
-    _execute(prog, numeric_mode)
+    prog.run(numeric_mode)
     return prog.words(out, 2, "d" if weighted else "q")[0]
 
 
@@ -1300,7 +1205,7 @@ class _Reg:
     def result(self, out, numeric_mode, check=None):
         """Run the program, let `check(prog)` raise on its flags, then the
         answer: a float, or the per-output Float64 Array for raw_values."""
-        _execute(self.prog, numeric_mode)
+        self.prog.run(numeric_mode)
         if check is not None:
             check(self.prog)
         if self.mo == "raw_values":
@@ -1310,7 +1215,7 @@ class _Reg:
     def scalar(self, out, numeric_mode, check=None):
         """Run the program; the one binary64 word pair at `out` (single output)."""
         self.prog.want(out, 2)
-        _execute(self.prog, numeric_mode)
+        self.prog.run(numeric_mode)
         if check is not None:
             check(self.prog)
         return float(self.prog.words(out, 2, "d")[0])
@@ -1414,7 +1319,7 @@ def max_error(y_true, y_pred, *, numeric_mode=None):
     prog.stage("reg_term", r.n, Y, P, t, 1, _TERM["abs"], Y, 0)
     out = prog.want(prog.alloc(1), 1)
     prog.stage("col_max", 1, t, r.n, 1, out)
-    _execute(prog, numeric_mode)
+    prog.run(numeric_mode)
     return float(prog.floats(out, 1)[0])
 
 
@@ -1487,7 +1392,7 @@ def _r2_sums_of(r, numeric_mode):
     r.program()
     num, den = _r2_parts(r)
     words = r.prog.want(num, 2), r.prog.want(den, 2)
-    _execute(r.prog, numeric_mode)
+    r.prog.run(numeric_mode)
     return float(r.prog.words(words[0], 2, "d")[0]), float(r.prog.words(words[1], 2, "d")[0])
 
 
@@ -1743,7 +1648,7 @@ def _curves(scores, flags, w, n, problems, numeric_mode, *, stride=1, thresholds
                 prog.want(b + t * n, n, count=cnt + t)
     prog.stage("bin_curve", problems, S, stride, POS, W, n, order, fps, tps, thr, cnt,
                keep, 1 if flagged else 0, CF, CM)
-    _execute(prog, numeric_mode)
+    prog.run(numeric_mode)
     counts = prog.ints(CM if compact else cnt, problems)
     if compact:
         return [_DevCurve(prog, CF + t * n, CF + N + t * n, CF + 2 * N + t * n if thresholds else _NONE,
@@ -1823,7 +1728,7 @@ def _fold_curves(scores, flags, w, n, problems, numeric_mode, *, stride=1, fold=
     out = _fold_stages(prog, S, stride, POS, W, n, problems, auc, max_fpr)
     if tail is not None:
         tail(prog, S, W, C, out, n, problems)
-    _execute(prog, numeric_mode)
+    prog.run(numeric_mode)
     holder = {}
 
     def redo():
@@ -1931,7 +1836,7 @@ def _curve_out(y_true, y_score, pos_label, sample_weight, numeric_mode, caller, 
         prog.want(OUT + 2 * b * (n + 1), 2 * (n + 1), count=LEN, mult=2)
     src = (CF, CF + n, CF + 2 * n, CM) if roc_drop else (fps, tps, thr, cnt)
     prog.stage("curve_out", 1, kind, n, *src, 1 if (drop and kind != _CO_ROC) else 0, OUT, LEN)
-    _execute(prog, numeric_mode)
+    prog.run(numeric_mode)
     m, status = prog.ints(LEN, 2)
     if status == _CO_EMPTY:
         raise ValueError("mojolearn metrics: an empty curve has no thresholds")
@@ -2048,7 +1953,7 @@ def auc(x, y):
     Y = prog.put_i32(_f64_array_words(ya))
     OUT = prog.want(prog.alloc(3), 3)
     prog.stage("auc_xy", 1, n, X, Y, OUT, _AX_CHUNK)
-    _execute(prog, None)
+    prog.run(None)
     flags = prog.ints(OUT + 2, 1)[0]
     if (flags & _AX_NEG) and (flags & _AX_POS):
         raise ValueError(f"x is neither increasing nor decreasing : {xa.tolist()}.")
@@ -2156,7 +2061,7 @@ class _OvrTail:
         SC = _f64_bits(p2, sc)
         SUP = p2.put_i32(prog.words(self.sup, 2 * k, "i"))
         res = _stage_average(p2, SC, SUP, k, self.average)
-        _execute(p2, self.numeric_mode)
+        p2.run(self.numeric_mode)
         return p2.words(res, 2, "d")[0]
 
 
@@ -2272,7 +2177,7 @@ def _ovo_native(true, index, s, n, k, numeric_mode, average):
             PS, PREV = prog.want(prog.alloc(2 * m), 2 * m), prog.want(prog.alloc(2 * m), 2 * m)
         prog.stage("rank_epi", m, _RANK_OVO_PAIR, SC, off, k, n, g0, m, PS, PREV)
         res = _stage_average(prog, PS, PREV, P, average) if last_only else _NONE
-        _execute(prog, numeric_mode)
+        prog.run(numeric_mode)
         if g0 == 0:
             if _flag_set(prog, rows):
                 raise ValueError(_ROWS_MSG)
@@ -2288,7 +2193,7 @@ def _ovo_native(true, index, s, n, k, numeric_mode, average):
         g0 += m
     p2 = _Prog()
     res = _stage_average(p2, p2.put_i32(ps_words), p2.put_i32(prev_words), P, average)
-    _execute(p2, numeric_mode)
+    p2.run(numeric_mode)
     return p2.words(res, 2, "d")[0]
 
 
@@ -2448,7 +2353,7 @@ def top_k_accuracy_score(y_true, y_score, *, k=2, normalize=True, sample_weight=
     W = _NONE if w is None else prog.put(w)
     tot = _group(prog, zero, n, 1, values=hit, weights=W)[1]
     sw = _group(prog, zero, n, 1, weights=W)[1] if w is not None else None
-    _execute(prog, numeric_mode)
+    prog.run(numeric_mode)
     hits = prog.floats(tot, 1)[0]
     if not normalize:
         return float(hits)
@@ -2490,7 +2395,7 @@ def _row_mean(S, cols, Y, n, kind, w, numeric_mode, *, K=0, Dt=_NONE, prog=None,
     res = prog.alloc(2)
     prog.stage("rank_epi", 1, _RANK_MEAN, tot, n, _NONE if sw is None else sw, int(bool(normalize)),
                int(bool(half)), res)
-    _execute(prog, numeric_mode)
+    prog.run(numeric_mode)
     for check in after:  # glue: the program's flag checks
         check(prog)
     return prog.words(res, 2, "d")[0]
@@ -2597,7 +2502,7 @@ def _d2_proba(y_true, y_proba, sample_weight, labels, pos_label, numeric_mode, c
         prog.stage("rank_epi", 1, _RANK_D2_LOG, tot, PER, weighted, k, res)
     else:
         prog.stage("rank_epi", 1, _RANK_D2_BRIER, tot, n, _NONE if sw is None else sw, PER, weighted, k, res)
-    _execute(prog, numeric_mode)
+    prog.run(numeric_mode)
     _proba_check(prog, flags, caller)
     return float(prog.words(res, 2, "d")[0])
 
@@ -2744,7 +2649,7 @@ def ndcg_score(y_true, y_score, *, k=None, sample_weight=None, ignore_ties=False
     sw = _group(prog, zero, n, 1, weights=W)[1] if w is not None else None
     res = prog.alloc(2)
     prog.stage("rank_epi", 1, _RANK_MEAN, tot, n, _NONE if sw is None else sw, 1, 0, res)
-    _execute(prog, numeric_mode)
+    prog.run(numeric_mode)
     if _flag_set(prog, neg):
         raise ValueError("ndcg_score should not be used on negative y_true values.")
     return float(prog.words(res, 2, "d")[0])
@@ -2827,7 +2732,7 @@ def _contingency(a, b, ca, cb, numeric_mode, eps=None, mi=False, emi=False):
     MI = prog.want(prog.alloc(2), 2) if mi else _NONE
     EMI = prog.want(prog.alloc(2), 2) if emi else _NONE
     prog.stage("cont_stats", 1, off, ka, kb, kk, EPS, C, F, R, K, P, E, MI, EMI, n)
-    _execute(prog, numeric_mode)
+    prog.run(numeric_mode)
     r = _Contingency()
     r.ka, r.kb = ka, kb
     r.C = Array._owned(prog.words(C, 2 * cells, "q"), (ka, kb), "<i8", "C")
@@ -2978,7 +2883,7 @@ def _cluster_score(X, labels, numeric_mode, caller, db):
         inner = prog.scratch(2 * k)
         prog.stage("cl_epi", k, _CL_CH_ROW, CB, gsum, n, d, k, inner)
         prog.stage("cl_epi", 1, _CL_CH_FIN, off, inner, per, n, k, res)
-    _execute(prog, numeric_mode)
+    prog.run(numeric_mode)
     return float(prog.words(res, 2, "d")[0])
 
 
@@ -3063,7 +2968,7 @@ class CounterRng:
             words.append(v - (1 << 32) if v >= 1 << 31 else v)
         prog.stage("approx_mode", k, k, C, _NONE, n_train, out, _NONE, used, *words)
         prog.stage("approx_mode", k, k, C, out, n_test, out + k, used, used + 1, *words)
-        _execute(prog, numeric_mode)
+        prog.run(numeric_mode)
         drew = prog.ints(used, 2)
         self.draws += drew[0] + drew[1]
         both = prog.ints(out, 2 * k)
@@ -3077,7 +2982,7 @@ class CounterRng:
             outs.append((prog.want(self.permute_stage(prog, n), n), n))
         if not outs:
             return []
-        _execute(prog, numeric_mode)
+        prog.run(numeric_mode)
         return [prog.ints(o, n) for o, n in outs]  # glue: reads each requested draw's words
 
     def permutation(self, n, numeric_mode=None):
@@ -3097,7 +3002,7 @@ class CounterRng:
             outs.append((w, n))
         if not outs:
             return []
-        _execute(prog, numeric_mode)
+        prog.run(numeric_mode)
         return [prog.words(w, 2 * n, "q") for w, n in outs]  # glue: reads each requested draw's words
 
 
@@ -3133,7 +3038,7 @@ def _fold_rows_run(prog, n, k, code, order, numeric_mode):
     out = prog.want(prog.alloc(2 * n * k), 2 * n * k)
     sz = prog.want(prog.alloc(k), k)
     prog.stage("fold_rows", 1, n, k, code, order, out, sz)
-    _execute(prog, numeric_mode)
+    prog.run(numeric_mode)
     sizes = prog.ints(sz, k)
     res = []
     for f in range(k):  # glue: wraps each fold's result views
@@ -3207,7 +3112,7 @@ def regression_report(y_true, y_pred, *, sample_weight=None,
     y_mean = r.fin(r.sums(r.Y), f32=True)[1]
     denominator = _centered(r, r.Y, y_mean, mean=False)
     r2 = _assemble(r, r.fin(squared_sums, 0), denominator, force_finite)
-    _execute(r.prog, numeric_mode)
+    r.prog.run(numeric_mode)
     def result(offset):
         if r.mo == "raw_values":
             return Array._owned(r.prog.words(offset, 2*r.D, "d"), (r.D,), "<f8", "C")
@@ -3268,7 +3173,7 @@ def ranking_report(y_true, y_score, *, pos_label=None, sample_weight=None,
             prog.stage("curve_out", 1, _CO_ROC if fold == 0 else _CO_PR, n,
                        fps, tps, thr, count, 0, output, lengths)
             curve_outputs.append((output, lengths))
-    _execute(prog, numeric_mode)
+    prog.run(numeric_mode)
     auc_out, auc_flag = scalar_outputs[0]
     ap_out, ap_flag = scalar_outputs[1]
     if prog.ints(auc_flag, 1)[0] == 1:
@@ -3289,3 +3194,8 @@ def ranking_report(y_true, y_score, *, pos_label=None, sample_weight=None,
                                        (size,), "<f8", "C"))
         result["roc_curve" if kind == 0 else "precision_recall_curve"] = tuple(arrays)
     return result
+
+
+# Import-time connection; `_Prog.run` hands each program off once to Mojo.
+from ._native_arena_prog import connect as _connect_arena_prog
+_PROG_CALL, _PROG_CONTEXT = _connect_arena_prog("x_metrics", _Prog)
