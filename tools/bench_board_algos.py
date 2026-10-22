@@ -201,13 +201,19 @@ def _preload_cuda_libs(names):
 #   quality the conductor's metric; infer the timed inference call or None
 # ---------------------------------------------------------------------------
 
-def _E(name, ours_kw=None, **kw):
+def _E(name, ours_kw=None, sk_kw=None, **kw):
     """A nested estimator, resolved per library (ours: mojolearn.<name>).
     `ours_kw` holds ours-only keywords (a parameter the other library does not
-    have, e.g. a tree's n_bins), merged into ours' instance only."""
+    have, e.g. a tree's n_bins), merged into ours' instance only. `sk_kw`
+    (measure-coverage, 2026-10-22) holds scikit-learn-only keywords naming the
+    same algorithm under scikit-learn's spelling (Ridge: ours solver='eig' runs the
+    Cholesky normal equations, scikit-learn's solver='cholesky'; bench_board_more
+    LANE_CONFIG['ridge'])."""
     e = {"__est__": name, "kw": kw}
     if ours_kw:
         e["ours_kw"] = dict(ours_kw)
+    if sk_kw:
+        e["sk_kw"] = dict(sk_kw)
     return e
 
 
@@ -1072,6 +1078,83 @@ _add("cross-val-score", xlane="model_selection", ours=("cross_val_score",
      other={"sklearn-cpu": "sklearn"},
      notes=["5 unshuffled k-fold splits (KFold, no seed on either side) of the reg block's "
             "1,000,000 fit rows, LinearRegression refit per fold, R2 on the held-out fold"])
+
+# measure-coverage (2026-10-22, Andrew: every exposed API measured against its peer): the rest of
+# mojolearn.model_selection, each against sklearn.model_selection with the same estimator, cv, grid and
+# scoring. The estimator is Ridge(alpha, fit_intercept=True): ours constructed solver='eig' (its IDENTICAL fit
+# is the Cholesky normal equations), scikit-learn solver='cholesky', the same algorithm (bench_board_more
+# LANE_CONFIG['ridge']). Ours takes n_jobs None (one fit at a time, on the GPU); scikit-learn n_jobs=-1 (every
+# CPU core), as the cross-val-score lane.
+_MS_RIDGE = _E("Ridge", ours_kw={"solver": "eig"}, sk_kw={"solver": "cholesky"}, alpha=1.0,
+               fit_intercept=True)
+_MS_ALPHAS = [0.1, 1.0, 10.0, 100.0]
+_MS_MISM = ["n_jobs: ours None (its folds fit one at a time on the GPU), scikit-learn -1 (every CPU core)",
+            "Ridge solver: ours solver='eig' (IDENTICAL: Cholesky of the centered normal equations), "
+            "scikit-learn solver='cholesky' (the same algorithm)"]
+_MS_NOTE = ("the reg block's 1,000,000 fit rows; 5 unshuffled k-fold splits (KFold, no seed on either side); "
+            "Ridge(alpha, fit_intercept=True) refit per fold; R2")
+_add("grid-search-cv", xlane="model_selection", ours=("model_selection.GridSearchCV", "GridSearchCV"),
+     kind="fn", task="grid-search", block="reg",
+     params=dict(estimator=_MS_RIDGE, param_grid={"alpha": list(_MS_ALPHAS)}, cv=5, scoring="r2",
+                 refit=True),
+     other={"sklearn-cpu": "sklearn"}, mism=list(_MS_MISM),
+     notes=[_MS_NOTE + "; GridSearchCV(...).fit(X, y) over alpha in %s, then the refit on all rows"
+            % _MS_ALPHAS])
+_add("randomized-search-cv", xlane="model_selection",
+     ours=("model_selection.RandomizedSearchCV", "RandomizedSearchCV"),
+     kind="fn", task="random-search", block="reg",
+     params=dict(estimator=_MS_RIDGE, param_distributions={"alpha": [0.01, 0.1, 1.0, 10.0, 100.0, 1000.0]},
+                 n_iter=3, cv=5, scoring="r2", refit=True, random_state=SEED),
+     other={"sklearn-cpu": "sklearn"},
+     mism=list(_MS_MISM) + ["the 3 sampled alphas are each library's own draw from its generator seeded 7 "
+                            "(ParameterSampler without replacement), so the candidates may differ; quality "
+                            "compares best_score_ and the score of every candidate both sampled"],
+     notes=[_MS_NOTE + "; RandomizedSearchCV(n_iter=3, random_state=7).fit(X, y) over a list of 6 alphas, "
+            "then the refit"])
+_add("cross-validate", xlane="model_selection", ours=("model_selection.cross_validate", "cross_validate"),
+     kind="fn", task="cv-validate", block="reg",
+     params=dict(estimator=_MS_RIDGE, cv=5, scoring="r2", return_train_score=True),
+     other={"sklearn-cpu": "sklearn"}, mism=list(_MS_MISM),
+     notes=[_MS_NOTE + "; cross_validate(return_train_score=True): test and train R2 per fold"])
+_add("cross-val-predict", xlane="model_selection",
+     ours=("model_selection.cross_val_predict", "cross_val_predict"),
+     kind="fn", task="cv-predict", block="reg",
+     params=dict(estimator=_MS_RIDGE, cv=5, method="predict"),
+     other={"sklearn-cpu": "sklearn"}, mism=list(_MS_MISM),
+     notes=[_MS_NOTE + "; cross_val_predict(method='predict'): every row's held-out prediction"])
+_add("learning-curve", xlane="model_selection", ours=("model_selection.learning_curve", "learning_curve"),
+     kind="fn", task="learning-curve", block="reg",
+     params=dict(estimator=_MS_RIDGE, train_sizes=[0.1, 0.325, 0.55, 0.775, 1.0], cv=5, scoring="r2",
+                 shuffle=False),
+     other={"sklearn-cpu": "sklearn"}, mism=list(_MS_MISM),
+     notes=[_MS_NOTE + "; learning_curve at 5 explicit train-size fractions, shuffle=False (25 fits)"])
+_add("validation-curve", xlane="model_selection",
+     ours=("model_selection.validation_curve", "validation_curve"),
+     kind="fn", task="validation-curve", block="reg",
+     params=dict(estimator=_MS_RIDGE, param_name="alpha", param_range=list(_MS_ALPHAS), cv=5,
+                 scoring="r2"),
+     other={"sklearn-cpu": "sklearn"}, mism=list(_MS_MISM),
+     notes=[_MS_NOTE + "; validation_curve over alpha in %s (20 fits)" % _MS_ALPHAS])
+_add("permutation-test-score", xlane="model_selection",
+     ours=("model_selection.permutation_test_score", "permutation_test_score"),
+     kind="fn", task="perm-test-score", block="reg", sub={"X": SUB["mid"]},
+     params=dict(estimator=_MS_RIDGE, cv=5, n_permutations=100, scoring="r2", random_state=SEED),
+     other={"sklearn-cpu": "sklearn"},
+     mism=list(_MS_MISM) + ["each library permutes y with its own generator seeded 7, so the permuted "
+                            "scores and the p-value agree to Monte Carlo error, not bit for bit; the "
+                            "unpermuted score is the same computation"],
+     notes=["100,000 stride fit rows of the reg block; 5 unshuffled folds; Ridge; 100 permutations of y "
+            "(505 fits)"])
+_add("train-test-split", xlane="model_selection",
+     ours=("model_selection.train_test_split", "train_test_split"),
+     kind="fn", task="split", block="reg",
+     params=dict(test_size=0.25, random_state=SEED, shuffle=True),
+     other={"sklearn-cpu": "sklearn"},
+     mism=["each library draws its shuffle from its own generator seeded 7 (scikit-learn ShuffleSplit "
+           "on numpy RandomState(7)), so the rows in each part differ; quality is the part sizes and the "
+           "parts' column means against the population's"],
+     notes=["train_test_split(X, y) of the reg block's 1,000,000 fit rows, test_size=0.25, shuffled; the "
+            "permutation and the four gathers are timed"])
 
 # ---- lane sequence --------------------------------------------------------
 _TORCH = "torch"      # opponents: torch at every fast setting of the box (bench_board_neural)
@@ -2112,7 +2195,15 @@ def fit_text(lane):
         return {"bootstrap": "bootstrap(y): every resample and the interval",
                 "permutation": "permutation_test(x, y): every permutation and the p-value",
                 "resample": "resample(X, y): the index draw and both gathers",
-                "cv": "cross_val_score(LinearRegression(), X, y, cv=5): 5 fits and scores"}[t]
+                "cv": "cross_val_score(LinearRegression(), X, y, cv=5): 5 fits and scores",
+                "grid-search": "GridSearchCV(Ridge, 4 alphas, cv=5).fit(X, y): 20 fits, scores and the refit",
+                "random-search": "RandomizedSearchCV(Ridge, n_iter=3, cv=5).fit(X, y): 15 fits and the refit",
+                "cv-validate": "cross_validate(Ridge, X, y, cv=5, return_train_score=True)",
+                "cv-predict": "cross_val_predict(Ridge, X, y, cv=5): 5 fits and every held-out prediction",
+                "learning-curve": "learning_curve(Ridge, X, y, 5 sizes, cv=5): 25 fits and scores",
+                "validation-curve": "validation_curve(Ridge, X, y, alpha x 4, cv=5): 20 fits and scores",
+                "perm-test-score": "permutation_test_score(Ridge, X, y, cv=5, 100 permutations): 505 fits",
+                "split": "train_test_split(X, y): the shuffle and the four gathers"}[t]
     if s.get("fit_predict"):
         return "fit_predict(X)"
     if s.get("timed_op") == "fit_transform":
@@ -2191,6 +2282,14 @@ QUALITY_TEXT = {
     "permutation": "statistic and p-value; |p - scipy's p|",
     "resample": "max |resampled column mean - population mean| / column std",
     "cv": "mean fold R2; max |fold score - scikit-learn's|",
+    "grid-search": "best_score_ and best alpha; max |mean_test_score - scikit-learn's|",
+    "random-search": "best_score_; |best_score_ - scikit-learn's|; max |score| difference on the alphas both sampled",
+    "cv-validate": "mean test and train R2; max |fold score - scikit-learn's|",
+    "cv-predict": "R2 of the held-out predictions; max |prediction - scikit-learn's| / std(y)",
+    "learning-curve": "test R2 per size; max |mean test score - scikit-learn's|",
+    "validation-curve": "test R2 per alpha; max |mean test score - scikit-learn's|",
+    "perm-test-score": "score and p-value; |score - scikit-learn's| and |p - scikit-learn's p|",
+    "split": "part sizes vs scikit-learn's; max |part column mean - population mean| / column std",
     "kernel-shap": "relative error vs the exact linear-model SHAP values",
     "permutation-shap": "relative error vs the exact linear-model SHAP values",
 }
@@ -3219,7 +3318,7 @@ def _resolve(v, lib):
             cls = getattr(ml, name)
             return cls(**dict(v["kw"], **v.get("ours_kw", {})))
         cls = _imp(SK_BASE[name])
-        return cls(**v["kw"])
+        return cls(**dict(v["kw"], **v.get("sk_kw", {})))
     if isinstance(v, list):
         return [_resolve(x, lib) for x in v]
     if isinstance(v, tuple):
@@ -6343,6 +6442,72 @@ def _build_linalg(lane, arm, D):
 
 # ---- function calls (resampling, cross-validation) -------------------------
 
+#: measure-coverage (2026-10-22): the model_selection lanes' tasks run by _ms_run, the same call shape on ours
+#: and scikit-learn (scikit-learn's name of each callable)
+_MS_TASKS = {"grid-search": "GridSearchCV", "random-search": "RandomizedSearchCV",
+             "cv-validate": "cross_validate", "cv-predict": "cross_val_predict",
+             "learning-curve": "learning_curve", "validation-curve": "validation_curve",
+             "perm-test-score": "permutation_test_score", "split": "train_test_split"}
+
+
+def _ms_run(t, call, X, y, p, lib):
+    """One model_selection call with the lane's explicit parameters -> its outputs (numpy, float64).
+    `lib` 'ours' or 'sklearn' resolves the estimator; scikit-learn adds n_jobs=-1 where the call takes it."""
+    np = _np()
+    jobs = {"n_jobs": -1} if lib == "sklearn" else {}
+    if t == "split":
+        Xa, Xb, ya, yb = call(X, y, test_size=p["test_size"], random_state=p["random_state"],
+                              shuffle=p["shuffle"])
+        Xa, Xb = _arr(Xa, np.float64), _arr(Xb, np.float64)
+        return {"sizes": np.array([Xa.shape[0], Xb.shape[0]], dtype=np.float64),
+                "train_mean": Xa.mean(0), "test_mean": Xb.mean(0),
+                "ymeans": np.array([_arr(ya, np.float64).mean(), _arr(yb, np.float64).mean()])}
+    est = _resolve(p["estimator"], lib)
+    if t in ("grid-search", "random-search"):
+        kw = dict(cv=p["cv"], scoring=p["scoring"], refit=p["refit"], **jobs)
+        if t == "grid-search":
+            search = call(est, param_grid=p["param_grid"], **kw)
+        else:
+            search = call(est, param_distributions=p["param_distributions"], n_iter=p["n_iter"],
+                          random_state=p["random_state"], **kw)
+        search.fit(X, y)
+        cvr = search.cv_results_
+        alphas = [float(a["alpha"]) for a in cvr["params"]]
+        return {"best_score": np.array([float(search.best_score_)]),
+                "best_alpha": np.array([float(search.best_params_["alpha"])]),
+                "alphas": np.array(alphas), "mean_test": _arr(cvr["mean_test_score"], np.float64)}
+    if t == "cv-validate":
+        r = call(est, X, y, cv=p["cv"], scoring=p["scoring"], return_train_score=p["return_train_score"], **jobs)
+        return {"test": _arr(r["test_score"], np.float64), "train": _arr(r["train_score"], np.float64)}
+    if t == "cv-predict":
+        return {"pred": _arr(call(est, X, y, cv=p["cv"], method=p["method"], **jobs), np.float64)}
+    if t == "learning-curve":
+        sizes, train, test = call(est, X, y, train_sizes=p["train_sizes"], cv=p["cv"], scoring=p["scoring"],
+                                  shuffle=p["shuffle"], **jobs)[:3]
+        return {"sizes": _arr(sizes, np.float64), "mean_test": _arr(test, np.float64).mean(1),
+                "mean_train": _arr(train, np.float64).mean(1)}
+    if t == "validation-curve":
+        train, test = call(est, X, y, param_name=p["param_name"], param_range=p["param_range"], cv=p["cv"],
+                           scoring=p["scoring"], **jobs)
+        return {"mean_test": _arr(test, np.float64).mean(1), "mean_train": _arr(train, np.float64).mean(1)}
+    if t == "perm-test-score":
+        score, perm, pv = call(est, X, y, cv=p["cv"], n_permutations=p["n_permutations"], scoring=p["scoring"],
+                               random_state=p["random_state"], **jobs)
+        return {"score": np.array([float(score)]), "p": np.array([float(pv)]),
+                "perm_mean": np.array([float(_arr(perm, np.float64).mean())])}
+    raise ValueError("unknown model_selection task %r" % (t,))
+
+
+def _ms_record(p):
+    """The lane's parameters for the read-back, the estimator by its constructed keywords."""
+    rec = {}
+    for k, v in p.items():
+        if isinstance(v, dict) and "__est__" in v:
+            rec[k] = "%s(%s)" % (v["__est__"], ", ".join("%s=%r" % kv for kv in sorted(v["kw"].items())))
+        else:
+            rec[k] = v
+    return rec
+
 def _scipy_rng_kw(fn):
     """scipy's seed argument: `rng` from 1.15, `random_state` before it."""
     import inspect
@@ -6375,11 +6540,14 @@ def _build_fn(lane, arm, D):
             elif t == "resample":
                 Xr, yr = fn(X, y, **kw)
                 S["o"] = {"xmean": _arr(Xr, np.float64).mean(0), "ymean": np.array([_arr(yr, np.float64).mean()])}
+            elif t in _MS_TASKS:
+                S["o"] = _ms_run(t, fn, X, y, p, "ours")
             else:                           # cross_val_score clones the estimator per fold
                 est = _resolve(p["estimator"], "ours")
                 S["o"] = {"scores": _arr(fn(est, X, y, cv=p["cv"], scoring=p["scoring"]),
                                          np.float64)}
-        rec = {k: ("LinearRegression" if k == "estimator" else v) for k, v in p.items()}
+        rec = (_ms_record(p) if t in _MS_TASKS else
+               {k: ("LinearRegression" if k == "estimator" else v) for k, v in p.items()})
         rec["__library__"] = "mojolearn"
         return Runner(info, fit, lambda: S["o"], record=rec)
     lib = s["other"][arm]
@@ -6419,6 +6587,17 @@ def _build_fn(lane, arm, D):
             rec = dict(statistic="diff_means", n_resamples=p["n_resamples"],
                        alternative=p["alternative"], random_state=p["random_state"],
                        permutation_type=p["permutation_type"])
+    elif t in _MS_TASKS:
+        import sklearn
+        import sklearn.model_selection as skms
+        info["version"] = sklearn.__version__
+        call = getattr(skms, _MS_TASKS[t])
+        rec = _ms_record(p)
+        info["config"] = "sklearn.model_selection.%s(%s, n_jobs=-1 where taken)" % (
+            _MS_TASKS[t], ", ".join("%s=%r" % kv for kv in sorted(rec.items())))
+
+        def fit():
+            S["o"] = _ms_run(t, call, X, y, p, "sklearn")
     else:
         if t == "resample":
             from sklearn.utils import resample as skresample
@@ -7925,6 +8104,46 @@ def quality(lane, D, outs):
                 e["mean_r2"] = float(np.mean(o["scores"]))
                 if ref is not None and arm != "sklearn-cpu" and ref["scores"].shape == o["scores"].shape:
                     e["max_fold_score_diff_vs_sklearn"] = float(np.max(np.abs(o["scores"] - ref["scores"])))
+            elif qk in _MS_TASKS:
+                # measure-coverage (2026-10-22): the model_selection lanes, each against scikit-learn's call
+                other = ref if (ref is not None and arm != "sklearn-cpu") else None
+                if qk in ("grid-search", "random-search"):
+                    e.update(best_score=float(o["best_score"][0]), best_alpha=float(o["best_alpha"][0]))
+                    if other is not None:
+                        e["abs_best_score_diff_vs_sklearn"] = float(abs(o["best_score"][0] - other["best_score"][0]))
+                        both = [(a, m) for a, m in zip(o["alphas"], o["mean_test"]) if a in set(other["alphas"])]
+                        if both:
+                            om = dict(zip(other["alphas"], other["mean_test"]))
+                            e["max_mean_test_score_diff_vs_sklearn"] = float(max(abs(m - om[a]) for a, m in both))
+                elif qk == "cv-validate":
+                    e.update(mean_test_r2=float(o["test"].mean()), mean_train_r2=float(o["train"].mean()))
+                    if other is not None and other["test"].shape == o["test"].shape:
+                        e["max_fold_score_diff_vs_sklearn"] = float(np.max(np.abs(o["test"] - other["test"])))
+                elif qk == "cv-predict":
+                    yy = D["y"].astype(np.float64)
+                    e["r2_held_out"] = float(1.0 - np.sum((o["pred"] - yy) ** 2) / np.sum((yy - yy.mean()) ** 2))
+                    if other is not None and other["pred"].shape == o["pred"].shape:
+                        e["max_pred_diff_over_std_y_vs_sklearn"] = float(
+                            np.max(np.abs(o["pred"] - other["pred"])) / max(float(yy.std()), 1e-30))
+                elif qk in ("learning-curve", "validation-curve"):
+                    e.update(mean_test_r2_first=float(o["mean_test"][0]), mean_test_r2_last=float(o["mean_test"][-1]))
+                    if other is not None and other["mean_test"].shape == o["mean_test"].shape:
+                        e["max_mean_test_score_diff_vs_sklearn"] = float(
+                            np.max(np.abs(o["mean_test"] - other["mean_test"])))
+                elif qk == "perm-test-score":
+                    e.update(score=float(o["score"][0]), pvalue=float(o["p"][0]))
+                    if other is not None:
+                        e["abs_score_diff_vs_sklearn"] = float(abs(o["score"][0] - other["score"][0]))
+                        e["abs_pvalue_diff_vs_sklearn"] = float(abs(o["p"][0] - other["p"][0]))
+                elif qk == "split":
+                    X = D["X"].astype(np.float64)
+                    sd = np.maximum(X.std(0), 1e-12)
+                    e.update(train_rows=int(o["sizes"][0]), test_rows=int(o["sizes"][1]))
+                    e["max_part_mean_shift_over_std"] = float(max(
+                        np.max(np.abs(o["train_mean"] - X.mean(0)) / sd),
+                        np.max(np.abs(o["test_mean"] - X.mean(0)) / sd)))
+                    if other is not None:
+                        e["sizes_equal_sklearn"] = bool(np.array_equal(o["sizes"], other["sizes"]))
             elif qk in ("kernel-shap", "permutation-shap"):
                 e["rel_error_vs_exact"] = _relfro(o["phi"], o["exact"])
         except Exception as exc:  # noqa: BLE001
