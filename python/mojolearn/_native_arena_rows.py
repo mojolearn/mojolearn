@@ -6,6 +6,8 @@ def connect():
     # glue: retain native entry and immutable slot identities during import
     from types import BuiltinFunctionType, ModuleType, MemberDescriptorType
     import struct
+    import sys
+    from ._native_classical_warnings import connect_warnings
     from . import _arena_io, model_selection
     from ._buffer import _native
     from ._array import Array
@@ -47,5 +49,20 @@ def connect():
                    cache_local_getattribute=type(_arena_io._LOCAL).__getattribute__,
                    cache_attribute_error=AttributeError,
                    cache_hash_types=(type(None), bool, int, float, complex, str, bytes))
+    # glue: fixed scalar metadata/warning connection; no optional NumPy import
+    scalar_context = dict(modules=sys.modules, module_type=ModuleType,
+                          training_scalar_warnings=connect_warnings(),
+                          training_scalar_locations={"cache_get": (_arena_io.DeviceCache.get.__code__.co_filename,
+                                                                    _arena_io.DeviceCache.get.__code__.co_firstlineno,
+                                                                    _arena_io.__name__)})
+    context.update(cache_scalar_context=scalar_context,
+                   cache_key_descriptor=vars(_arena_io.DeviceCache)["_key"],
+                   cache_key_function=_arena_io.DeviceCache._key,
+                   cache_little_endian=sys.byteorder == "little",
+                   cache_deprecation_warning=DeprecationWarning,
+                   cache_integer_types=(type(None), bool, int, float, complex, str, bytes,
+                                        bytearray, list, tuple, dict, set, frozenset),
+                   cache_itemsize_types=(type(None), object, bool, int, float, complex, str, bytes,
+                                         bytearray, list, tuple, dict, set, frozenset, memoryview))
     _arena_io._ROWS_CALL = call
     _arena_io._ROWS_CONTEXT = context
