@@ -180,3 +180,12 @@ def test_sequence_int64_state_conversion_preserves_direct_float32_rounding(sign)
     audit_native_call(opt.load_state_dict, saved).assert_native()
     for actual in audit_native_call(opt.state_dict).assert_native()["state"]:
         assert actual.tobytes() == expected
+
+
+@pytest.mark.parametrize("cls", CLASSES)
+def test_sequence_state_setter_preserves_native_tuple_containers(cls):
+    opt = cls(np.ones(3, dtype="f4"), numeric_mode="identical")
+    state = tuple(opt.state)
+    audit_native_call(O._ResidentState.state.fset, opt, state).assert_native()
+    assert audit_native_call(O._ResidentState.state.fget, opt).assert_native() is state
+    audit_native_call(opt.step, np.ones(3, dtype="f4")).assert_native()
