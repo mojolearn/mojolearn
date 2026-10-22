@@ -1,0 +1,11 @@
+--- a/core/scaler_fit_impl.mojo
++++ b/core/scaler_fit_impl.mojo
+@@ -26,6 +26,8 @@ def scaler_cast(addr: Int, s0: Int, s1: Int, rows: Int, cols: Int, item: Int, ki
+             for k in range(item):
+                 raw |= UInt64(bytes[k if native else item - 1 - k]) << UInt64(k * 8)
+             dest[r * cols + c] = bitcast[DType.float32](classical_f32_bits(raw, kind, item))
++    if rows > 0 and cols > 0:  # SABOTAGE (coverage arm): the first cast value one unit high
++        dest[0] = dest[0] + Float32(1.0)
+ 
+ 
+ def scaler_all_finite(x: F32P, size: Int) -> Bool:

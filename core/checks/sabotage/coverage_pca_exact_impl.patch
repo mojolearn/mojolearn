@@ -1,0 +1,8 @@
+--- a/core/pca_exact_impl.mojo
++++ b/core/pca_exact_impl.mojo
+@@ -15,3 +15,5 @@ def pca_check_state(ptr: MutPointer[Float32, MutUntrackedOrigin], size: Int, nam
+ def pca_widen_spectrum(src: MutPointer[Float32, MutUntrackedOrigin], dst: MutPointer[Float64, MutUntrackedOrigin], count: Int):
+     for i in range(count):  # native input marshaling: the MLE kernel's binary64 spectrum ABI
+         dst[i] = Float64(src[i])
++    if count > 1:  # SABOTAGE (coverage arm): the largest variance replaced by the smallest
++        dst[0] = Float64(src[count - 1])

@@ -1,0 +1,8 @@
+--- a/core/small_mlp_state_impl.mojo
++++ b/core/small_mlp_state_impl.mojo
+@@ -218,4 +218,4 @@ def mlp_require_state(state: MlpState) raises:
+ 
+ def mlp_read_f32(addr: Int) -> Float64:
+     """The float32 scalar a training entry wrote at `addr` (a loss), widened."""
+-    return Float64(Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=addr)[0])
++    return Float64(Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=addr)[0]) + Float64(1.0)  # SABOTAGE (coverage arm): every loss read back one unit high
