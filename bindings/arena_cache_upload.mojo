@@ -5,7 +5,7 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.arena_cache_stats import _attribute, _mapping, _hash_key
 from bindings.arena_cache_get import arena_cache_key
-from bindings.optimizer_public_words import stash_python_error
+from bindings.optimizer_public_words import stash_python_error, PENDING_PYTHON_ERROR, PYTHON_ERROR_PENDING
 
 
 def _entries(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -25,7 +25,23 @@ def _increment(value: PythonObject, context: PythonObject) raises -> PythonObjec
     # integer constructor. No NumPy arithmetic/conversion or Python __add__.
     var b = context["arena_native_types"]
     if py_type(value) is not b["int"] and py_type(value) is not b["bool"]:
-        raise Error("TypeError: DeviceCache counters require native integers")
+        # Preserve the incumbent native float/complex counter forms and
+        # ordinary builtin error text. Exact retained builtin slots cannot
+        # invoke application numeric hooks; NumPy arithmetic is not admitted.
+        var types = context["cache_counter_types"]
+        var admitted = False
+        for i in range(len(types)):  # driver-loop: fixed native counter/value-error identities
+            admitted = admitted or py_type(value) is types[i]
+        if not admitted:
+            raise Error("TypeError: DeviceCache counters require native builtin values without Python arithmetic hooks")
+        ref cpy = Python().cpython()
+        var one = PythonObject(1)
+        var pointer = cpy.lib.get_function[PyObjectPtr]("PyNumber_InPlaceAdd")(value._obj_ptr,one._obj_ptr)
+        _ = one^
+        if not pointer:
+            var failure = stash_python_error()
+            raise failure^
+        return PythonObject(from_owned=pointer)
     ref cpy = Python().cpython()
     var pointer = cpy.lib.get_function[PyObjectPtr]("PyNumber_ToBase")(value._obj_ptr,Int32(2))
     if not pointer:
@@ -92,8 +108,16 @@ def _hit(model: PythonObject, key: PythonObject, context: PythonObject) raises -
     # Match the established order: increment before indexing the hit. A
     # malformed empty entry still increments the hit counter then raises.
     var next_hits = _counter_next(model,"hits",context)
-    if py_type(hit) is not context["arena_native_types"]["tuple"] and py_type(hit) is not context["arena_native_types"]["list"]:
-        raise Error("TypeError: DeviceCache entries require native slot/owner sequences")
+    var types = context["cache_entry_types"]
+    var admitted = False
+    for i in range(len(types)):  # driver-loop: native indexing and ordinary non-subscriptable error slots
+        admitted = admitted or py_type(hit) is types[i]
+    if not admitted:
+        raise Error("TypeError: DeviceCache entries require native indexing without Python hooks")
+    if py_type(hit) is context["arena_native_types"]["dict"]:
+        var keys = py_call(context["arena_native_types"]["list"],hit)
+        for i in range(len(keys)):  # driver-loop: native dictionary indexing cannot compare foreign keys
+            _hash_key(keys[i],context)
     _counter_set(model,"hits",next_hits)
     ref cpy = Python().cpython()
     var zero = PythonObject(0)
@@ -135,6 +159,28 @@ def _native_call(entry: PythonObject, args: PythonObject) raises -> PythonObject
     return PythonObject(from_owned=result)
 
 
+def _take_pending(error: Error) raises -> List[Int]:
+    var saved = List[Int](length=3,fill=0)
+    if String(error) == PYTHON_ERROR_PENDING:
+        var pending = PENDING_PYTHON_ERROR.get_or_create_ptr()
+        saved = pending[].words.copy()
+        pending[].words = List[Int](length=3,fill=0)
+    return saved^
+
+
+def _drop_pending(saved: List[Int]) raises:
+    ref cpy = Python().cpython()
+    for i in range(3):  # driver-loop: release an owned native exception triple exactly once
+        if saved[i]:
+            cpy.lib.get_function[NoneType]("Py_DecRef")(saved[i])
+
+
+def _restore_pending(var saved: List[Int]) raises:
+    if saved[0]:
+        var pending = PENDING_PYTHON_ERROR.get_or_create_ptr()
+        pending[].words = saved^
+
+
 def _publish(model: PythonObject, source: PythonObject, key: PythonObject,
              slot: PythonObject, route: PythonObject, context: PythonObject,
              mut published: Bool) raises:
@@ -174,12 +220,19 @@ def arena_cache_id_of(model: PythonObject, args: PythonObject, context: PythonOb
         _publish(model,source,key,slot,route,context,published)
     except error:
         if not published:
+            # Cleanup releases the GIL. The primary exception must be owned
+            # locally, not left in the shared native boundary's pending slot
+            # where an unrelated thread's operation could overwrite it.
+            var primary = _take_pending(error)
             try:
                 # Use the originally admitted free entry, even if the
                 # cache was reinitialized while upload released the GIL.
-                # py_call does not overwrite a stashed primary exception.
-                _ = py_call(route[1],slot)
+                _ = _native_call(route[1],Python.tuple(slot))
             except cleanup_error:
+                var cleanup = _take_pending(cleanup_error)
+                _drop_pending(primary)
+                _drop_pending(cleanup)
                 raise Error("RuntimeError: DeviceCache publication failed: "+String(error)+"; unpublished slot "+String(slot)+" cleanup also failed: "+String(cleanup_error))
+            _restore_pending(primary^)
         raise error^
     return slot

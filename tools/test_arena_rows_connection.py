@@ -69,6 +69,12 @@ class NativeWeakrefConnectionTests(unittest.TestCase):
         context = connect()
         self.assertEqual(context['cache_store_routes'], ())
         self.assertIs(context['cache_object_setattr'], object.__setattr__)
+        self.assertEqual(context['cache_counter_types'],
+                         (type(None), float, complex, str, bytes, bytearray,
+                          list, tuple, dict, set, frozenset, range))
+        self.assertEqual(context['cache_entry_types'],
+                         (bool, int, float, complex, str, bytes, bytearray,
+                          list, tuple, dict, set, frozenset, range))
 
     def test_cache_lookup_retains_key_and_scalar_metadata_without_calling_it(self):
         context = connect()
