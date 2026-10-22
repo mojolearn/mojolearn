@@ -5,6 +5,7 @@ from std.collections import Dict
 from gbdt.models.model_text import load_model_text
 from gbdt.models.ctr_value_table import column_plan
 from gbdt.models.oblivious_model import BIN_SPLIT_TAKE_BIN
+from gbdt.ctrs.ctr import ctr_type_name
 
 
 @fieldwise_init
@@ -53,7 +54,7 @@ def host_archive_gbdt_text(text: String) raises -> HostArchiveGBDT:
     if n_tables and n_tensors:
         raise Error("combined simple-CTR and tensor-CTR model apply needs a composed column plan")
     if saved.ctr_column_count != n_tables:
-        raise Error("saved GBDT CTR columns and apply-time tables disagree")
+        raise Error("a model with " + String(saved.ctr_column_count) + " CTR columns and " + String(n_tables) + " CTR tables cannot score a new row")
     var n_input = features
     if n_tensors:
         n_input = saved.tensor_ctr_registry.first_model_column
@@ -72,7 +73,7 @@ def host_archive_gbdt_text(text: String) raises -> HostArchiveGBDT:
     for i in range(n_tables):
         ref table = saved.ctr_tables[i]
         if table.ctr_type != 0 and table.ctr_type != 4 and table.ctr_type != 5:
-            raise Error("saved GBDT CTR table has no prediction-time formula")
+            raise Error("saved GBDT CTR table type " + ctr_type_name(table.ctr_type) + " has no prediction-time formula")
         ctr_ints.append(table.column)
         ctr_ints.append(table.source_feature)
         ctr_ints.append(table.ctr_type)

@@ -1502,34 +1502,8 @@ def host_archive_forest(cls: PythonObject, arrays: PythonObject, fmt: String,
     return model
 
 
-def host_archive_gbdt(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
-    var estimator = _archive_string(arrays, "estimator", context)
-    var loss = _archive_string(arrays, "loss", context)
-    var losses = context["host_archive_gbdt_estimators"][estimator]
-    if losses is not None and not py_contains(losses, loss):
-        raise Error("mojolearn: a " + String(estimator) + " archive with loss " + String(loss) + "; that class saves " + String(py=py_call(PythonObject(", ").join, losses)) + " only, the file is corrupt")
-    var meta = _archive_exact(arrays, "meta", "<i8", context)
-    if Int(py=meta.ndim) != 1 or Int(py=meta.size) < 3:
-        raise Error("saved gradient boosting metadata needs at least three fields")
-    var bias = _archive_exact(arrays, "bias", "<f8", context)
-    if Int(py=bias.size) < 1:
-        raise Error("saved gradient boosting bias is empty")
-    var stored = _archive_exact(arrays, "model", "<u1", context)
-    var raw = py_call(Python.import_module("builtins").bytes, stored._mv)
-    var text = py_call(raw.decode, "utf-8")
+def host_archive_gbdt_state(text: PythonObject, context: PythonObject) raises -> PythonObject:
     var parsed = host_archive_gbdt_text(String(text))
-    if classical_i64(meta, 0) != parsed.metadata["n_input_features"] or classical_i64(meta, 1) != parsed.metadata["dim"]:
-        raise Error("saved gradient boosting metadata disagrees with its model text")
-    if classical_f64(bias, 0) != parsed.bias:
-        raise Error("saved gradient boosting bias disagrees with its model text")
-    var module = context["host_archive_forest_binding"]
-    if module is None:
-        raise Error("ImportError: " + String(context["host_archive_forest_binding_error"]))
-    var mode = PythonObject(None)
-    if py_contains(arrays, "numeric_mode"):
-        mode = _archive_string(arrays, "numeric_mode", context)
-        if String(mode) != "fast" and String(mode) != "identical":
-            raise Error("invalid saved numeric_mode")
     var state = Python.dict()
     for entry in parsed.metadata.items():  # driver-loop: native parsed model dimensions
         py_setitem(state, entry.key, entry.value)
@@ -1547,6 +1521,37 @@ def host_archive_gbdt(cls: PythonObject, arrays: PythonObject, context: PythonOb
         py_setitem(state, entry.key, array)
     py_setitem(state, "bias", parsed.bias)
     py_setitem(state, "non_symmetric", parsed.non_symmetric)
+    return state
+
+
+def host_archive_gbdt(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
+    var estimator = _archive_string(arrays, "estimator", context)
+    var loss = _archive_string(arrays, "loss", context)
+    var losses = context["host_archive_gbdt_estimators"][estimator]
+    if losses is not None and not py_contains(losses, loss):
+        raise Error("mojolearn: a " + String(estimator) + " archive with loss " + String(loss) + "; that class saves " + String(py=py_call(PythonObject(", ").join, losses)) + " only, the file is corrupt")
+    var meta = _archive_exact(arrays, "meta", "<i8", context)
+    if Int(py=meta.ndim) != 1 or Int(py=meta.size) < 3:
+        raise Error("saved gradient boosting metadata needs at least three fields")
+    var bias = _archive_exact(arrays, "bias", "<f8", context)
+    if Int(py=bias.size) < 1:
+        raise Error("saved gradient boosting bias is empty")
+    var stored = _archive_exact(arrays, "model", "<u1", context)
+    var raw = py_call(Python.import_module("builtins").bytes, stored._mv)
+    var text = py_call(raw.decode, "utf-8")
+    var state = host_archive_gbdt_state(text, context)
+    if classical_i64(meta, 0) != Int(py=state["n_input_features"]) or classical_i64(meta, 1) != Int(py=state["dim"]):
+        raise Error("saved gradient boosting metadata disagrees with its model text")
+    if classical_f64(bias, 0) != Float64(py=state["bias"]):
+        raise Error("saved gradient boosting bias disagrees with its model text")
+    var module = context["host_archive_forest_binding"]
+    if module is None:
+        raise Error("ImportError: " + String(context["host_archive_forest_binding_error"]))
+    var mode = PythonObject(None)
+    if py_contains(arrays, "numeric_mode"):
+        mode = _archive_string(arrays, "numeric_mode", context)
+        if String(mode) != "fast" and String(mode) != "identical":
+            raise Error("invalid saved numeric_mode")
     var model = host_archive_allocate(cls, context)
     var fields = sequential_fields(model)
     py_setitem(fields, "estimator", estimator)
@@ -1554,10 +1559,10 @@ def host_archive_gbdt(cls: PythonObject, arrays: PythonObject, context: PythonOb
     py_setitem(fields, "numeric_mode", mode)
     py_setitem(fields, "model_", text)
     py_setitem(fields, "_arrays", state)
-    py_setitem(fields, "n_features_in_", parsed.metadata["n_input_features"])
-    py_setitem(fields, "n_model_columns_", parsed.metadata["n_features"])
-    py_setitem(fields, "approx_dim_", parsed.metadata["dim"])
-    py_setitem(fields, "bias_", parsed.bias)
+    py_setitem(fields, "n_features_in_", state["n_input_features"])
+    py_setitem(fields, "n_model_columns_", state["n_features"])
+    py_setitem(fields, "approx_dim_", state["dim"])
+    py_setitem(fields, "bias_", state["bias"])
     py_setitem(fields, "n_classes_", PythonObject(None) if classical_i64(meta, 2) < 0 else PythonObject(classical_i64(meta, 2)))
     py_setitem(fields, "is_classifier", py_contains(context["host_archive_gbdt_classification_losses"], loss))
     py_setitem(fields, "has_proba", py_contains(context["host_archive_gbdt_proba_losses"], loss))

@@ -128,50 +128,9 @@ class HostForest:
     def __init__(self, *, estimator, offsets, colid, quesval, left_child, leaves,
                  n_features, n_trees, num_outputs, classes=None, device=None,
                  inference_engine='sequential'):
-        if estimator not in _ESTIMATORS:
-            raise ValueError(f"mojolearn: {estimator!r} is not a forest estimator this loader reads")
-        if inference_engine not in _ENGINES:
-            raise ValueError(f"mojolearn: inference_engine must be one of {_ENGINES}, got {inference_engine!r}")
-        self.estimator = estimator
-        self.family, self.is_classifier = _ESTIMATORS[estimator]
-        self.device = device
-        self._inference_engine = inference_engine
-        self._groves = None
-        arrays = dict(offsets=offsets, colid=colid, quesval=quesval,
-                      left_child=left_child, leaves=leaves)
-        for name, dtype in _MODEL_ARRAYS:
-            a = arrays[name]
-            if not isinstance(a, Array) or a.dtype != dtype or a.ndim != 1 or a.order != 'C':
-                raise ValueError(f"mojolearn: model array {name!r} must be a 1-D C-order {dtype} Array")
-        for name, value in (('n_features', n_features), ('n_trees', n_trees), ('num_outputs', num_outputs)):
-            if isinstance(value, bool) or not isinstance(value, int) or value < 1:
-                raise ValueError(f"mojolearn: {name} must be a positive int")
-        nodes = colid.size
-        if (offsets.size != n_trees + 1 or nodes < n_trees or quesval.size != nodes
-                or left_child.size != nodes or leaves.size != nodes * num_outputs
-                or int(offsets[0]) != 0 or int(offsets[-1]) != nodes):
-            raise ValueError("mojolearn: forest model array shapes do not match metadata")
-        if self.is_classifier:
-            if classes is None or len(classes) != num_outputs:
-                raise ValueError("mojolearn: a classifier archive must carry num_outputs classes")
-            self.classes_ = list(classes)
-            self.n_classes_ = len(self.classes_)
-        elif num_outputs != 1:
-            raise ValueError("mojolearn: a regressor archive must carry one output")
-        self._offsets = offsets
-        self._colid = colid
-        self._quesval = quesval
-        self._left_child = left_child
-        self._leaves = leaves
-        self.n_features_in_ = int(n_features)
-        self._n_trees = int(n_trees)
-        self._num_outputs = int(num_outputs)
-        self._binding = _load()
-        if inference_engine == 'parallel_groves' and not callable(
-                getattr(self._binding, 'forest_host_groves_prepare', None)):
-            raise RuntimeError(
-                f"mojolearn: {binary_path()} predates the parallel_groves host engine; "
-                "rebuild it with bindings/build_forest_host.sh")
+        return _native_host_archive(self, "host_tree_init_forest",
+            (estimator, offsets, colid, quesval, left_child, leaves,
+             n_features, n_trees, num_outputs, classes, device, inference_engine), _ARCHIVE_CONTEXT)
 
     @classmethod
     def from_file(cls, path):

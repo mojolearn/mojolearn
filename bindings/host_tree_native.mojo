@@ -9,7 +9,9 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_is_f32, classical_cast_kind, classical_c_order, classical_wrap_array
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, native_pandas_f32
 from bindings.native_torch_admission import native_torch_numpy
-from bindings.host_archive_native import host_archive_check_layout, host_archive_typed
+from bindings.host_archive_native import host_archive_check_layout, host_archive_typed, host_archive_allocate, host_archive_class_values, host_archive_gbdt_state
+from bindings.host_archive_lifetime import host_archive_finalize
+from bindings.native_numpy_metadata import native_numpy_dtype
 from core.scaler_fit_impl import scaler_cast
 from core.host_tree_impl import host_tree_widen, host_tree_argmax, host_tree_column_copy
 from core.sha256 import Sha256
@@ -219,9 +221,168 @@ def host_gbdt_predict(fields: PythonObject, source: PythonObject, context: Pytho
     return out
 
 
+def host_tree_constructor_fields(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    host_archive_check_layout(py_type(model), context)
+    var fields = sequential_fields(model)
+    var b = Python.import_module("builtins")
+    var keys = py_call(b.list, fields.keys())
+    for i in range(len(keys)):  # driver-loop: native constructor dictionary admission
+        if py_type(keys[i]) is not b.str:
+            raise Error("TypeError: tree state names must be native strings")
+    return fields
+
+
+def host_tree_scalar(value: PythonObject, context: PythonObject) raises:
+    # Conversions below call only native scalar slots. Container formatting
+    # can transitively invoke element repr hooks and is not a scalar contract.
+    var b = Python.import_module("builtins")
+    var cls = py_type(value)
+    if not _one_of(cls, Python.tuple(b.str, b.bytes, b.bytearray, b.int, b.float, b.bool, py_type(PythonObject(None)))) and not _one_of(cls, context["scalar_types"]):
+        raise Error("TypeError: tree scalar options require native scalar values without Python conversion hooks")
+
+
+def host_tree_initialize_forest(model: PythonObject, args: PythonObject, context: PythonObject) raises:
+    var fields = host_tree_constructor_fields(model, context)
+    var b = Python.import_module("builtins")
+    var estimator = args[0]
+    var engine = args[11]
+    if py_type(estimator) is not b.str or not py_contains(context["host_archive_forest_estimators"], estimator):
+        raise Error("not a forest estimator this loader reads")
+    if py_type(engine) is not b.str or (String(engine) != "sequential" and String(engine) != "parallel_groves"):
+        raise Error("inference_engine must be sequential or parallel_groves")
+    var metadata = context["host_archive_forest_estimators"][estimator]
+    var classifier = Bool(py=metadata[1])
+    var names = Python.tuple("_offsets", "_colid", "_quesval", "_left_child", "_leaves")
+    var arrays = Python.dict()
+    for i in range(5):  # driver-loop: fixed constructor buffer fields
+        py_setitem(arrays, names[i], args[i + 1])
+        _ = host_tree_array(arrays, String(names[i]), "<f4" if i == 2 or i == 4 else "<i4", context)
+    for i in range(6, 9):  # driver-loop: positive constructor dimensions
+        if py_type(args[i]) is not b.int or Bool(py=args[i] < PythonObject(1)):
+            raise Error("forest features, trees and outputs must be positive ints")
+    var features = Int(py=args[6])
+    var trees = Int(py=args[7])
+    var outputs = Int(py=args[8])
+    var nodes = Int(py=args[2].size)
+    if Int(py=args[1].size) != trees + 1 or nodes < trees or Int(py=args[3].size) != nodes or Int(py=args[4].size) != nodes or Int(py=args[5].size) // outputs != nodes or Int(py=args[5].size) % outputs != 0:
+        raise Error("forest model array shapes do not match metadata")
+    if Int(py=args[1]._mv[0]) != 0 or Int(py=args[1]._mv[trees]) != nodes:
+        raise Error("forest model array shapes do not match metadata")
+    var classes = Python.list()
+    if classifier:
+        var labels = args[9]
+        if labels is None:
+            raise Error("a classifier archive must carry num_outputs classes")
+        if py_type(labels) is context["array_class"]:
+            if Int(py=labels.ndim) != 1:
+                raise Error("forest class labels must be a native vector")
+            classes = host_archive_class_values(labels, context)
+        elif py_type(labels) is b.list or py_type(labels) is b.tuple or py_type(labels) is b.str or py_type(labels) is b.bytes or py_type(labels) is b.bytearray or py_type(labels) is py_get(context, "ndarray"):
+            # Exact ndarray indexing and native sequence indexing hold element
+            # references; they do not run Array.__iter__ or user protocols.
+            for i in range(len(labels)):  # driver-loop: distinct constructor class labels
+                var label = labels[i]
+                classical_admit_value(label, context)
+                _ = py_call(classes.append, label)
+        else:
+            raise Error("TypeError: class labels require a native sequence or array")
+        if len(classes) != outputs:
+            raise Error("a classifier archive must carry num_outputs classes")
+    elif outputs != 1:
+        raise Error("a regressor archive must carry one output")
+    var module = context["host_archive_forest_binding"]
+    if module is None:
+        raise Error("ImportError: " + String(context["host_archive_forest_binding_error"]))
+    if String(engine) == "parallel_groves" and not Bool(py=context["host_archive_forest_has_groves"]):
+        raise Error("RuntimeError: forest host binding predates the parallel_groves engine")
+    # Reinitialization drops a previous native grove snapshot exactly once.
+    host_archive_finalize(model, context)
+    py_setitem(fields, "estimator", estimator)
+    py_setitem(fields, "family", metadata[0])
+    py_setitem(fields, "is_classifier", classifier)
+    py_setitem(fields, "device", args[10])
+    py_setitem(fields, "_inference_engine", engine)
+    py_setitem(fields, "_groves", PythonObject(None))
+    _ = py_call(fields.update, arrays)
+    py_setitem(fields, "n_features_in_", features)
+    py_setitem(fields, "_n_trees", trees)
+    py_setitem(fields, "_num_outputs", outputs)
+    py_setitem(fields, "_binding", module)
+    if classifier:
+        py_setitem(fields, "classes_", classes)
+        py_setitem(fields, "n_classes_", len(classes))
+
+
+def host_tree_initialize_gbdt(model: PythonObject, args: PythonObject, context: PythonObject) raises:
+    var fields = host_tree_constructor_fields(model, context)
+    var b = Python.import_module("builtins")
+    var estimator = args[7]
+    if py_type(estimator) is not b.str or not py_contains(context["host_archive_gbdt_estimators"], estimator):
+        raise Error("not a gradient boosting class this loader reads")
+    for i in range(5):  # driver-loop: native constructor scalar conversions
+        host_tree_scalar(args[i], context)
+    host_tree_scalar(args[6], context)
+    var loss = py_call(b.str, args[0])
+    var text = py_call(b.str, args[1])
+    var losses = context["host_archive_gbdt_estimators"][estimator]
+    if losses is not None and not py_contains(losses, loss):
+        raise Error("a " + String(estimator) + " archive with loss " + String(loss) + "; that class saves " + String(py=py_call(PythonObject(", ").join, losses)) + " only")
+    var state = host_archive_gbdt_state(text, context["output_context"])
+    if Int(py=py_call(b.int, args[2])) != Int(py=state["n_input_features"]):
+        raise Error("archive feature count disagrees with model text")
+    if Int(py=py_call(b.int, args[3])) != Int(py=state["dim"]):
+        raise Error("archive approx_dim disagrees with model text")
+    if args[6] is not None and Float64(py=py_call(b.float, args[6])) != Float64(py=state["bias"]):
+        raise Error("archive bias disagrees with model text")
+    var classes = PythonObject(None) if args[4] is None else py_call(b.int, args[4])
+    var module = context["host_archive_forest_binding"]
+    if module is None:
+        raise Error("ImportError: " + String(context["host_archive_forest_binding_error"]))
+    py_setitem(fields, "estimator", estimator)
+    py_setitem(fields, "loss", loss)
+    py_setitem(fields, "numeric_mode", args[5])
+    py_setitem(fields, "model_", text)
+    py_setitem(fields, "_arrays", state)
+    py_setitem(fields, "n_features_in_", state["n_input_features"])
+    py_setitem(fields, "n_model_columns_", state["n_features"])
+    py_setitem(fields, "approx_dim_", state["dim"])
+    py_setitem(fields, "bias_", state["bias"])
+    py_setitem(fields, "n_classes_", classes)
+    py_setitem(fields, "is_classifier", py_contains(context["host_archive_gbdt_classification_losses"], loss))
+    py_setitem(fields, "has_proba", py_contains(context["host_archive_gbdt_proba_losses"], loss))
+    py_setitem(fields, "_binding", module)
+
+
 def host_tree_operation(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
+    # NumPy string/byte labels also expose native scalar slots. Connect their
+    # exact loaded types without a Python setup callback or ndarray iteration.
+    var numpy = py_get(context["modules"], "numpy")
+    if numpy is not None and py_type(numpy) is context["native_module_type"]:
+        var scalars = py_call(Python.import_module("builtins").list, context["scalar_types"])
+        var dtype_class = native_numpy_dtype(context)
+        var codes = Python.tuple("U", "S")
+        for i in range(2):  # driver-loop: fixed native label scalar ABI types
+            var cls = py_call(dtype_class, codes[i]).type
+            if not _one_of(cls, context["scalar_types"]):
+                _ = py_call(scalars.append, cls)
+        py_setitem(context, "scalar_types", py_call(Python.import_module("builtins").tuple, scalars))
     classical_admit_value(args, context)
+    if operation == "host_tree_init_forest":
+        host_tree_initialize_forest(model, args, context)
+        return PythonObject(None)
+    if operation == "host_tree_init_gbdt":
+        host_tree_initialize_gbdt(model, args, context)
+        return PythonObject(None)
+    if operation == "host_tree_parse" or operation == "host_tree_ctr_dim":
+        host_tree_scalar(args[0], context)
+        var text = py_call(Python.import_module("builtins").str, args[0])
+        var state = host_archive_gbdt_state(text, context["output_context"])
+        return state["dim"] if operation == "host_tree_ctr_dim" else state
+    if operation == "host_tree_ctr_predict":
+        var restored = host_archive_allocate(context["host_tree_classes"][1], context)
+        host_tree_initialize_gbdt(restored, Python.tuple(args[1], args[2], args[3], args[4], args[5], PythonObject(None), PythonObject(None), args[6]), context)
+        return host_gbdt_predict(sequential_fields(restored), args[0], context)
     if operation == "host_tree_setstate":
         host_archive_check_layout(py_type(model), context)
         if py_type(args[0]) is not Python.import_module("builtins").dict:
