@@ -75,6 +75,7 @@ def test_public_rms_preparation_and_output_match_retained_kernel(operation, case
 
 
 EPSILON_CASES = ["float", "int", "bool", "str", "bytes", "bytearray", "memoryview", "f16", "f32", "f64", "longdouble", "int64", "longlong", "complex64", "complex128", "clongdouble", "array-f32", "array-int", "array-longlong", "array-longdouble", "array-object", "array-str", "array-bytes", "array-complex", "array-datetime-ns", "array-datetime-D", "array-timedelta-ns", "array-timedelta-D", "array-1d"]
+EPSILON_CASES += ["array-void", "array-record"]
 if hasattr(np.dtypes, "StringDType"):
     EPSILON_CASES.append("array-string")
 
@@ -93,6 +94,7 @@ def epsilon_value(case):
             "array-complex": np.array(1e-5 + 0.25j, dtype="c8"),
             "array-datetime-ns": np.array(1, dtype="datetime64[ns]"), "array-datetime-D": np.array(1, dtype="datetime64[D]"),
             "array-timedelta-ns": np.array(1, dtype="timedelta64[ns]"), "array-timedelta-D": np.array(1, dtype="timedelta64[D]"),
+            "array-void": np.zeros((), dtype="V4"), "array-record": np.zeros((), dtype=[("value", "f4")]),
             "array-str": np.array("1e-5"), "array-bytes": np.array(b"1e-5"),
             "array-1d": np.array([1e-5], dtype="f4")}[case]
 
