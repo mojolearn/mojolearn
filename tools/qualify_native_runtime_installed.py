@@ -52,6 +52,7 @@ PUBLIC_TESTS = {
     "test_native_scalar_decode_public.py": "Native numeric scalar and 0-D preparation through HostIsolationForest.fit; cache.get and other NumPy numeric call sites remain separate work",
     "test_optimizer_native_step_errors.py": "Public optimizer step exception categories, unchanged refused state and native entry admission",
     "test_training_rms_public_native.py": "Public RMS forward/backward preparation, scalar options, consumed results and native refusals",
+    "test_training_scalar_buffer_native.py": "Public RMS, embedding and cross-entropy primitive NumPy scalar/size-one array decoding, consumed outputs, warnings and native refusals",
     "test_training_linear_public_native.py": "Public linear forward/backward input preparation, output ownership and native failure paths",
     "test_maxabs_scaler_native_transport.py": "MaxAbsScaler scratch, mapped outputs, resident transport and operation-owned slot cleanup",
     "test_robust_scaler_native_lifecycle.py": "RobustScaler lifecycle, options, inputs, state and native boundary refusals",
@@ -96,6 +97,12 @@ TEST_DEPENDENCIES = {
 }
 CPU_RESIDENT_SKIP = "the CPU binding has no resident tensor pool"
 CPU_NOT_APPLICABLE = {
+    "test_training_scalar_buffer_native.py": {
+        "test_device_loss_scalar_conversion_and_failure_remain_native[label_smoothing-g-0.125-swapped]": "resident cross-entropy scalar options require the GPU training pool",
+        "test_device_loss_scalar_conversion_and_failure_remain_native[ignore_index-c8-(-100+1j)-scalar]": "resident cross-entropy scalar options require the GPU training pool",
+        "test_device_loss_scalar_conversion_and_failure_remain_native[num_items-g-3.75-swapped]": "resident cross-entropy scalar options require the GPU training pool",
+        "test_device_loss_scalar_conversion_and_failure_remain_native[num_items-g-nan-scalar]": "resident cross-entropy scalar options require the GPU training pool",
+    },
     "test_optimizer_native_scalar_constructors.py": {
         "test_device_scalar_controls_use_retained_native_integer[reshape]": "device scalar controls require a GPU training pool",
         "test_device_scalar_controls_use_retained_native_integer[param_device]": "device scalar controls require a GPU training pool",
@@ -276,6 +283,10 @@ def test_applicability(selected, vendor):
         if name == "test_training_rms_public_native.py":
             scope.update(execution_route="public training RMS operations through the selected CPU or GPU training binding",
                          coverage_limit="Exact preparation/output checks use retained numerical entries; independent primitive checks are separate. NumPy scalar-option coverage follows the installed NumPy version.")
+        if name == "test_training_scalar_buffer_native.py":
+            scope.update(execution_route="public RMS, embedding and cross entropy on selected host buffers; resident loss cases require GPU device owners",
+                         operation_mode="identical (explicit fixture configuration)",
+                         coverage_limit="Selected primitive NumPy numeric scalar and size-one array conversion only; consumed outputs reuse unchanged numerical kernels and rank/warning/error contracts follow the installed NumPy version. Text, void, object and StringDType branches, other numeric conversion sites, full-model training and cross-vendor identity/fault qualification remain separate")
         if name == "test_training_embedding_public_native.py":
             scope.update(execution_route="public embedding operations through the selected CPU or GPU training binding",
                          coverage_limit="Native preparation and retained kernel outputs only; NumPy scalar-option coverage follows the installed version, and full-model training remains separate")

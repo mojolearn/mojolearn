@@ -284,6 +284,33 @@ class InstalledNativeAudit(unittest.TestCase):
         with self.assertRaises(ValueError):
             q.selected_files(test_nodes=[node, node])
 
+    def test_public_training_scalar_buffer_scope_is_version_and_operation_bounded(self):
+        name = "test_training_scalar_buffer_native.py"
+        self.assertIn(name, q.PUBLIC_TESTS)
+        self.assertTrue((q.ROOT / "python/mojolearn/tests" / name).is_file())
+        self.assertEqual(q.test_dependencies([name]), ["numpy", "pytest"])
+        for vendor in ("cpu", "metal", "cuda", "hip"):
+            scope = q.test_applicability([name], vendor)[name]
+            self.assertIn("public RMS, embedding and cross entropy", scope["execution_route"])
+            self.assertIn("installed NumPy version", scope["coverage_limit"])
+            self.assertIn("Text, void, object and StringDType", scope["coverage_limit"])
+            self.assertIn("cross-vendor identity/fault", scope["coverage_limit"])
+            self.assertEqual(scope["operation_mode"], "identical (explicit fixture configuration)")
+            self.assertEqual(len(scope["cpu_not_applicable_cases"]), 4 if vendor == "cpu" else 0)
+
+    def test_public_training_scalar_buffer_cpu_exclusions_are_exact_device_cases(self):
+        name = "test_training_scalar_buffer_native.py"
+        prefix = "test_device_loss_scalar_conversion_and_failure_remain_native"
+        cases = {prefix + "[" + case + "]" for case in (
+            "label_smoothing-g-0.125-swapped", "ignore_index-c8-(-100+1j)-scalar",
+            "num_items-g-3.75-swapped", "num_items-g-nan-scalar")}
+        self.assertEqual(set(q.CPU_NOT_APPLICABLE[name]), cases)
+        host = "test_loss_integer_range_preserves_downstream_error_or_consumed_result[u8-18446744073709551615-scalar]"
+        self.assertNotIn(host, q.CPU_NOT_APPLICABLE[name])
+        self.assertEqual(q.selected_files(test_nodes=[name + "::" + host]), [name])
+        with self.assertRaises(ValueError):
+            q.selected_files(test_nodes=[name + "::" + host] * 2)
+
     def test_public_archive_unicode_scope_preserves_warning_limitation(self):
         name = "test_archive_unicode_native.py"
         self.assertIn(name, q.PUBLIC_TESTS)
