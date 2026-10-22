@@ -16,6 +16,44 @@ from bindings.native_owner_lifetime import native_release_admit
 from bindings.optimizer_public_words import stash_python_error
 
 
+def _density_save_plain(value: PythonObject, context: PythonObject, depth: Int = 0) raises -> Bool:
+    # str/repr of exact builtin scalar/container storage stays in CPython C
+    # slots. Admit every nested element before allowing that recursive slot.
+    if depth > 64:
+        return False
+    var cls = py_type(value)
+    var native = context["owner_native_types"]
+    var scalar_names = Python.tuple("str", "bytes", "bytearray", "bool", "int", "float", "complex")
+    if value is None:
+        return True
+    for i in range(len(scalar_names)):  # driver-loop: fixed native scalar formatting types
+        if cls is native[scalar_names[i]]:
+            return True
+    if cls is native["list"] or cls is native["tuple"]:
+        for i in range(len(value)):  # driver-loop: all native formatted sequence elements
+            if not _density_save_plain(value[i], context, depth + 1):
+                return False
+        return True
+    if cls is native["dict"]:
+        var pairs = py_call(native["list"], value.items())
+        for i in range(len(pairs)):  # driver-loop: all native formatted mapping keys and values
+            if not _density_save_plain(pairs[i][0], context, depth + 1) or not _density_save_plain(pairs[i][1], context, depth + 1):
+                return False
+        return True
+    return False
+
+
+def _density_save_repr(value: PythonObject, context: PythonObject) raises -> String:
+    if not _density_save_plain(value, context):
+        return _if_fit_repr(value, context)
+    ref cpy = Python().cpython()
+    var pointer = cpy.lib.get_function[PyObjectPtr]("PyObject_Repr")(value._obj_ptr)
+    if not pointer:
+        var failure = stash_python_error()
+        raise failure^
+    return String(PythonObject(from_owned=pointer))
+
+
 def _density_save_array_layout(context: PythonObject) raises:
     # Metadata vectors use the connected Array allocation and slots. Inspect
     # every assignment target before creating a result whose initialization or
@@ -55,7 +93,19 @@ def _density_save_attribute(model: PythonObject, name: String, context: PythonOb
 def _density_save_text(value: PythonObject, context: PythonObject) raises -> PythonObject:
     # Valid kernel/metric names include native NumPy Unicode and benign
     # Unicode subclasses. Their contents are copied without __str__ hooks.
-    return _kde_option_value(value, context)
+    try:
+        return _kde_option_value(value, context)
+    except error:
+        if not String(error).startswith("TypeError:") or not _density_save_plain(value, context):
+            raise error^
+    # The old save stringified assigned builtin values even if a later load
+    # would reject that kernel/metric name. Keep those archive bytes too.
+    ref cpy = Python().cpython()
+    var pointer = cpy.lib.get_function[PyObjectPtr]("PyObject_Str")(value._obj_ptr)
+    if not pointer:
+        var failure = stash_python_error()
+        raise failure^
+    return PythonObject(from_owned=pointer)
 
 
 def _density_save_mode(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -72,7 +122,7 @@ def _density_save_mode(model: PythonObject, context: PythonObject) raises -> Pyt
         text = py_call(py_call(text.strip).lower)
         if String(text) == "identical" or String(text) == "fast":
             return text
-    raise Error("mojolearn: cannot save invalid numeric_mode " + _if_fit_repr(mode, context))
+    raise Error("mojolearn: cannot save invalid numeric_mode " + _density_save_repr(mode, context))
 
 
 def _density_save_vector(values: PythonObject, integer: Bool, context: PythonObject) raises -> PythonObject:

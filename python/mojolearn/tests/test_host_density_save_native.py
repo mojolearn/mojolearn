@@ -157,6 +157,30 @@ def test_density_save_retains_native_text_option_conversion(field, form):
     assert output.getvalue() == expected
 
 
+@pytest.mark.parametrize("field", ["kernel", "metric"])
+@pytest.mark.parametrize("value", [None, 3, True, 2 + 3j, ["gaussian"], ("euclidean",), {"name": "gaussian"}])
+def test_density_save_keeps_builtin_assigned_option_archive_bytes(field, value):
+    model = _prepared("kde")
+    setattr(model, field, value)
+    expected = _oracle(model, "kde")
+    output = io.BytesIO()
+    audit_native_call(model.save, output).assert_native()
+    assert output.getvalue() == expected
+
+
+@pytest.mark.parametrize("family", ["kde", "iforest"])
+@pytest.mark.parametrize("mode", [["identical"], {"mode": "identical"}, ("identical",), bytearray(b"identical")])
+def test_density_save_invalid_native_container_mode_preserves_error(family, mode):
+    model = _prepared(family)
+    model.numeric_mode = mode
+    with pytest.raises(ValueError) as expected:
+        _oracle(model, family)
+    audit = audit_native_call(model.save, io.BytesIO())
+    _refused(audit, ValueError)
+    assert type(audit.exception) is type(expected.value)
+    assert str(audit.exception) == str(expected.value)
+
+
 @pytest.mark.parametrize("form", [1, np.float32(.75), np.float64(.75), np.asarray(.75), "0.75", b"0.75"])
 def test_density_save_retains_native_bandwidth_scalar_conversion(form):
     model = _prepared("kde")
