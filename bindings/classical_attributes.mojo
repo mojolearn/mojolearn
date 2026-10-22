@@ -8,6 +8,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_field
 from bindings.native_error_class import error_without_class
 from bindings.sequential_admission import sequential_admit_value
 from bindings.sequential_inputs import sequential_input
+from bindings.native_numpy_metadata import native_numpy_type
 
 
 def _type_fields(cls: PythonObject) raises -> PythonObject:
@@ -140,8 +141,11 @@ def classical_connect_numpy(context: PythonObject) raises:
     # Python hook. All dtype construction below uses NumPy's C dtype type.
     var fields = py_fields(numpy)
     var b = Python.import_module("builtins")
-    var dtype_class = fields["dtype"]
-    var ndarray = fields["ndarray"]
+    # Check both factory identities before invoking or publishing either.
+    # A late NumPy import must not turn first-call metadata setup into a call
+    # to an arbitrary Python replacement of numpy.dtype or numpy.ndarray.
+    var dtype_class = native_numpy_type("dtype", context)
+    var ndarray = native_numpy_type("ndarray", context)
     var numeric = Python.dict()
     var classes = Python.dict()
     var scalars = py_call(b.list)
