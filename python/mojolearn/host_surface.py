@@ -2276,8 +2276,8 @@ FAMILIES = (
             "rf_regressor_fit_session_export", "rf_regressor_fit_session_rows_export",
             "rf_classifier_fit_weighted_session_export",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
-            "rf_classifier_fit_aux_export", "rf_regressor_fit_aux_export", "rf_classifier_fit_oob_export",
-            "rf_regressor_fit_oob_export", "rf_regressor_fit_dart_export",
+            "rf_classifier_fit_aux_export", "rf_regressor_fit_aux_export",
+            "rf_regressor_fit_dart_export",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
