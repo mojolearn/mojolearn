@@ -24,6 +24,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_TESTS = {
+    "test_not_fitted_native_lifetime.py": "Public NotFittedError reduction payload, caller-owned pickle compatibility and native singleton ownership",
     "test_cache_key_native.py": "Public DeviceCache.get and resident.stats native tuple-key admission, deep nesting and callback refusals",
     "test_archive_unicode_native.py": "Public archive strict Unicode errors, loaded state, partial save bytes and connected codec identity refusals",
     "test_classical_archive_reader_native.py": "Public linear archive loading, compressed state, native helper identities, file errors and input/output ownership",
@@ -193,6 +194,10 @@ def test_applicability(selected, vendor):
     for name in selected:
         scope = dict(package_vendor=vendor, execution_route="selected package backend",
                      operation_mode="test-specific configuration", cpu_not_applicable_cases={})
+        if name == "test_not_fitted_native_lifetime.py":
+            scope.update(execution_route="native fitted-error reduction on every package backend; no GPU kernel",
+                         operation_mode="identical public unfitted refusal and bound exception reduction",
+                         coverage_limit="Only public NotFittedError.__reduce__ and its payload; pickle is caller-owned. CPython 3.11 is required to expose borrowed-None lifetime loss; immortal-None interpreters cover payload and native calls only. The ordinary optional-package fixture does not qualify an installed sklearn release.")
         if name in CPU_NOT_APPLICABLE:
             scope["operation_mode"] = "identical (explicit fixture configuration)"
             scope["execution_route"] = ("resident GPU tensor pool" if name == "test_sequence_shutdown_native.py"
