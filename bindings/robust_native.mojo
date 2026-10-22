@@ -1,6 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 # RobustScaler owns its existing x_prep stage sequence and public lifecycle.
-from std.memory import memcpy
 from std.os import getenv
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -10,17 +9,16 @@ from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout, classical_getattribute
 from bindings.classical_arrays import classical_typed, classical_is_array, classical_input
 from bindings.native_numpy_metadata import native_numpy_dtype
-from bindings.classical_warnings import classical_warning
+from bindings.classical_warnings import classical_warning, _warning_fields
 from bindings.classical_metadata import classical_is_fitted
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.sequential_admission import _one_of, sequential_admit_value
-from bindings.maxabs_native import _values, _target
-from bindings.scaler_native import _input, _ptr, _stage, _copy_row
-from bindings.scaler_lifecycle_native import _run, _entries, _public_result
-
-alias F32P = MutPointer[Float32, MutUntrackedOrigin]
-
+from bindings.maxabs_native import _target
+from bindings.scaler_native import _input, _ptr, _stage
+from bindings.scaler_lifecycle_native import _entries, _public_result
+from bindings.x_prep_native_owner import xprep_r3, xprep_storage, xprep_take, xprep_values, xprep_run
+from gemm.f16_widen import f16_bits_to_f32
 
 def _truth(value: PythonObject, context: PythonObject) raises -> Bool:
     var b = Python.import_module("builtins")
@@ -28,6 +26,28 @@ def _truth(value: PythonObject, context: PythonObject) raises -> Bool:
     if value is None or cls is b.bool or cls is b.int or cls is b.float or cls is b.complex or cls is b.str or cls is b.bytes or cls is b.list or cls is b.tuple or cls is b.dict or cls is b.range or _one_of(cls,context["scalar_types"]):
         return Bool(py=value)
     raise Error("TypeError: RobustScaler options require native values; Python truth hooks cannot execute")
+
+
+def _complex_warning(context: PythonObject) raises:
+    var b = Python.import_module("builtins")
+    var module = py_get(context["modules"],"numpy.exceptions")
+    if module is None:
+        module = py_get(context["modules"],"numpy")
+    if module is None or py_type(module) is not py_type(Python.import_module("sys")):
+        raise Error("TypeError: complex quantiles require native NumPy warning metadata")
+    var category = py_get(_warning_fields(py_fields(module)),"ComplexWarning")
+    if py_type(category) is not b.type:
+        raise Error("TypeError: complex quantiles require a native warning category")
+    var ancestry = py_call(b.type.__dict__["__mro__"].__get__,category)
+    for i in range(len(ancestry)):  # driver-loop: admit warning class metadata before its native slot guard
+        var mapping = py_call(b.type.__dict__["__dict__"].__get__,ancestry[i])
+        var keys = py_call(b.list,mapping)
+        for k in range(len(keys)):  # driver-loop: class keys may otherwise invoke Python equality during lookup
+            if py_type(keys[k]) is not b.str:
+                raise Error("TypeError: complex quantile warning keys require native strings")
+    if py_type(py_call(b.type.__getattribute__,category,"__name__")) is not b.str:
+        raise Error("TypeError: complex quantile warning names require native strings")
+    classical_warning("Casting complex values to real discards the imaginary part",category,context,PythonObject(None))
 
 
 def _number(value: PythonObject, context: PythonObject) raises -> Float64:
@@ -40,13 +60,7 @@ def _number(value: PythonObject, context: PythonObject) raises -> Float64:
         for code in ["S", "U", "g", "c8", "c16", "G"]:  # small-loop(params: supported native quantile scalar kinds)
             if cls is py_call(constructor,code).type:
                 if code == "c8" or code == "c16" or code == "G":
-                    var module = py_get(context["modules"],"numpy.exceptions")
-                    if module is None:
-                        module = py_get(context["modules"],"numpy")
-                    if module is None or py_type(module) is not py_type(Python.import_module("sys")):
-                        raise Error("TypeError: complex quantiles require native NumPy warning metadata")
-                    var category = py_get(py_fields(module),"ComplexWarning")
-                    classical_warning("Casting complex values to real discards the imaginary part",category,context,PythonObject(None))
+                    _complex_warning(context)
                     return Float64(py=py_call(b.float,value.real))
                 return Float64(py=py_call(b.float,value))
     raise Error("TypeError: RobustScaler quantiles require native numbers; Python conversion hooks cannot execute")
@@ -74,9 +88,28 @@ def _quantiles(value: PythonObject, context: PythonObject) raises -> PythonObjec
     var cls = py_type(value)
     var source = value
     if classical_is_array(value,context):
-        if Int(py=value.ndim) != 1:
-            raise Error("TypeError: RobustScaler quantile_range requires one-dimensional scalar metadata")
-        source = value._mv
+        var shape = py_call(context["array_fields"]["shape"],value,context["array_class"])
+        var dtype = py_call(context["array_fields"]["dtype"],value,context["array_class"])
+        var order = py_call(context["array_fields"]["order"],value,context["array_class"])
+        if py_type(dtype) is not b.str:
+            raise Error("TypeError: RobustScaler quantile Array dtype must be native metadata")
+        if py_type(shape) is not b.tuple or len(shape) != 1 or py_type(shape[0]) is not b.int or py_type(order) is not b.str or (String(order) != "C" and String(order) != "F"):
+            raise Error("TypeError: RobustScaler quantile Array shape and order must be native metadata")
+        var code = String(dtype)
+        if code != "<f2" and code != "<f4" and code != "<f8" and code != "<i1" and code != "<i4" and code != "<i8" and code != "<u1" and code != "<u2" and code != "<u4":
+            raise Error("TypeError: RobustScaler quantile Array requires supported numeric storage")
+        source = py_call(context["array_fields"]["_mv"],value,context["array_class"])
+        if py_type(source) is not b.memoryview:
+            raise Error("TypeError: RobustScaler quantile Array requires a native memoryview")
+        sequential_admit_value(source,context)
+        if py_get(context,"ndarray") is not None:
+            source = classical_input(value,context)
+        elif code == "<f2":
+            if String(source.format) != "H":
+                raise Error("TypeError: RobustScaler half quantile Array requires native half-word storage")
+            if len(source) != 2:
+                raise Error("RobustScaler quantile_range must contain two values")
+            return Python.tuple(Float64(f16_bits_to_f32(UInt16(Int(py=source[0])))),Float64(f16_bits_to_f32(UInt16(Int(py=source[1])))))
     if py_type(source) is b.memoryview:
         # Admission checks the exact exporter before any native buffer
         # acquisition/release or element access. Object/structured formats
@@ -106,9 +139,11 @@ def _quantiles(value: PythonObject, context: PythonObject) raises -> PythonObjec
 def robust_fit(model: PythonObject, source: PythonObject, target: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
     # Preserve the public wrapper's input/target validation before fit begins.
-    var values = _values(source,context)
-    var n = Int(py=values.shape[0])
-    var d = Int(py=values.shape[1])
+    var mode = context["backend_fields"]["_DEFAULT_MODE"]
+    var entries = _entries(mode,context)
+    var values = xprep_values(source,entries,context)
+    var n = Int(py=values[3])
+    var d = Int(py=values[4])
     _target(target,n,context)
     var quantiles = _quantiles(fields["quantile_range"],context)
     var lo = Float64(py=quantiles[0])
@@ -131,8 +166,6 @@ def robust_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
         raise Error("mojolearn: RobustScaler(unit_variance=True) needs 0 < q_min < q_max < 100 (norm.ppf of 0 or 1 is infinite)")
     var centering = _truth(fields["with_centering"],context)
     var scaling = _truth(fields["with_scaling"],context)
-    var mode = context["backend_fields"]["_DEFAULT_MODE"]
-    var entries = _entries(mode,context)
     var select = False
     if String(mode) == "fast" and Bool(py=context["robust_qselect"]) and not py_contains(entries,"x_prep_host_column"):
         var vendor = py_get(entries,"x_prep_vendor")
@@ -141,22 +174,31 @@ def robust_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
     # quantile selection; no benchmark dimension selects a route.
     var blocked = String(getenv("MOJOLEARN_XPREP_BLOCKED","1").strip()) != "0"
     var blocks = (n+2047)//2048
+    var work = xprep_r3("work")
+    var sort_words = 0 if select else n*d
+    var part_words = 5*blocks*d if blocked else 0
+    var scratch = sort_words+part_words if work else 0
     var sorted = n*d
-    var stats = sorted+(0 if select else n*d)
+    var stats = n*d+(0 if work else sort_words)
     var fractions = stats+6*d
     var q = fractions+3
     var center = q+3*d
     var scale = center+d
+    var host = scale+d+(0 if work else part_words)
     var part = scale+d
-    var size = part+(5*blocks*d if blocked else 0)
-    if size > 2147483647:
+    if work:
+        sorted = host
+        part = host+sort_words
+    if host+scratch > 2147483647:
         raise Error("x_prep: the program exceeds the native Int32 indexing bound")
-    var arena = List[Float32](length=size,fill=0)
-    var ap = F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
-    memcpy(dest=ap,src=_ptr(values),count=n*d)
-    ap[fractions] = Float32(lo/100.0)
-    ap[fractions+1] = 0.5
-    ap[fractions+2] = Float32(hi/100.0)
+    var device_scratch = scratch > 0 and (py_get(entries,"x_prep_run_out") is not None or py_get(entries,"x_prep_run_scratch") is not None)
+    var arena = xprep_storage(host+(0 if device_scratch else scratch),context)
+    var fraction_values = classical_typed(Python.tuple(3),"<f4",context["output_context"])
+    var fp = _ptr(fraction_values)
+    fp[0] = Float32(lo/100.0)
+    fp[1] = 0.5
+    fp[2] = Float32(hi/100.0)
+    var inputs = Python.tuple(Python.tuple(0,values),Python.tuple(fractions,Python.tuple(0,fraction_values,PythonObject(None),3,1)))
     var program = List[Int32]()
     if not select:
         _stage(program,0,d,0,n,d,sorted,0)
@@ -169,9 +211,9 @@ def robust_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
     _stage(program,4,d,q,3,d,center,scale,0,0,2,1)
     if unit:
         _stage(program,73,d,scale,fractions)
-    _run(arena,program,entries)
-    py_setitem(fields,"center_",_copy_row(ap+center,d,context) if centering else PythonObject(None))
-    py_setitem(fields,"scale_",_copy_row(ap+scale,d,context) if scaling else PythonObject(None))
+    xprep_run(arena,host,scratch,PythonObject(None),0,program,inputs,entries,context)
+    py_setitem(fields,"center_",xprep_take(arena[0],center,d,0,context["output_context"]) if centering else PythonObject(None))
+    py_setitem(fields,"scale_",xprep_take(arena[0],scale,d,0,context["output_context"]) if scaling else PythonObject(None))
     py_setitem(fields,"numeric_mode_",mode)
     py_setitem(fields,"n_features_in_",d)
     py_setitem(fields,"_mojolearn_fitted",True)
@@ -189,9 +231,10 @@ def robust_transform(model: PythonObject, source: PythonObject, context: PythonO
     var fields = py_fields(model)
     if not py_contains(fields,"n_features_in_"):
         raise Error("RuntimeError: mojolearn: this RobustScaler instance is not fitted yet")
-    var values = _values(source,context)
-    var n = Int(py=values.shape[0])
-    var d = Int(py=values.shape[1])
+    var entries = _entries(fields["numeric_mode_"],context)
+    var values = xprep_values(source,entries,context)
+    var n = Int(py=values[3])
+    var d = Int(py=values[4])
     if py_type(fields["n_features_in_"]) is not Python.import_module("builtins").int or Int(py=fields["n_features_in_"]) != d:
         raise Error("RobustScaler input feature count differs from fit")
     var center = fields["center_"]
@@ -204,21 +247,25 @@ def robust_transform(model: PythonObject, source: PythonObject, context: PythonO
         scale = _input(scale,1,False,context)
         if Int(py=scale.size) != d:
             raise Error("RobustScaler scale_ must hold one divisor per feature")
-    var dest = n*d+2*d
+    var center_at = n*d if center is not None else -1
+    var scale_at = n*d+(d if center is not None else 0) if scale is not None else -1
+    var dest = n*d+(d if center is not None else 0)+(d if scale is not None else 0)
     if dest+n*d > 2147483647:
         raise Error("x_prep: the program exceeds the native Int32 indexing bound")
-    var arena = List[Float32](length=dest+n*d,fill=0)
-    var ap = F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
-    memcpy(dest=ap,src=_ptr(values),count=n*d)
+    var dev_out = n*d >= 134217728 and py_get(entries,"x_prep_run_out") is not None and String(getenv("MOJOLEARN_XPREP_OUT","1")) != "0"
+    var host = dest+(0 if dev_out else n*d)
+    var arena = xprep_storage(host,context)
+    var output_store = xprep_storage(n*d,context) if dev_out else PythonObject(None)
+    var inputs = Python.list()
+    _ = py_call(inputs.append,Python.tuple(0,values))
     if center is not None:
-        memcpy(dest=ap+n*d,src=_ptr(center),count=d)
+        _ = py_call(inputs.append,Python.tuple(center_at,Python.tuple(0,center,PythonObject(None),d,1)))
     if scale is not None:
-        memcpy(dest=ap+n*d+d,src=_ptr(scale),count=d)
+        _ = py_call(inputs.append,Python.tuple(scale_at,Python.tuple(0,scale,PythonObject(None),d,1)))
     var program = List[Int32]()
-    _stage(program,3,n*d,0,n*d,d,n*d if center is not None else -1,n*d+d if scale is not None else -1,dest)
-    _run(arena,program,_entries(fields["numeric_mode_"],context))
-    var output = classical_typed(Python.tuple(n,d),"<f4",context["output_context"])
-    memcpy(dest=_ptr(output),src=ap+dest,count=n*d)
+    _stage(program,3,n*d,0,n*d,d,center_at,scale_at,dest)
+    xprep_run(arena,host,0,output_store,n*d if dev_out else 0,program,inputs,entries,context,n*d if n*d >= 134217728 else 0)
+    var output = xprep_take(output_store[0] if dev_out else arena[0],0 if dev_out else dest,n,d,context["output_context"])
     _ = arena^
     _ = values^
     return output
