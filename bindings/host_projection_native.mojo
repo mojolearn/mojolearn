@@ -91,6 +91,9 @@ def host_projection_inference(model: PythonObject, fields: PythonObject, pca: Bo
     var samples = 0
     if whiten:
         singular = _projection_buffer(fields["singular_values_"], components, 1, False, True, context)
+        # The established public check inspects variance metadata only. The
+        # whitening ABI consumes singular values, not explained variance;
+        # retain that distinction for caller-assigned native model state.
         variance = _projection_buffer(fields["explained_variance_"], components, 1, False, True, context)
         samples = Int(py=fields["n_samples_"])
         if samples < 2:

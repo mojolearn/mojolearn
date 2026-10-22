@@ -247,6 +247,20 @@ def test_whitening_invalid_state_is_refused_before_prediction(tmp_path, fault, m
     _refused(audit_native_call(getattr(model, method), _query(method)))
 
 
+@pytest.mark.parametrize("variance", [-1., np.nan, np.inf])
+@pytest.mark.parametrize("method", METHODS)
+def test_whitening_preserves_metadata_only_explained_variance_contract(tmp_path, variance, method):
+    # The old _validate_whiten_state checks this field's dtype/shape/order.
+    # Its values are not consumed: whitening uses singular_values_, and the
+    # CPU ABI receives no explained_variance_ pointer. Preserve that behavior
+    # separately from the required singular-value/mean refusal tests above.
+    model = _model(tmp_path, "whiten")
+    model.explained_variance_ = np.asarray([variance, 1.], dtype=np.float32)
+    x = _query(method)
+    expected = _expected(model, x, "whiten", method)
+    assert _state(audit_native_call(getattr(model, method), x).assert_native()) == _state(expected)
+
+
 @pytest.mark.parametrize("case", ["pca", "tsvd"])
 @pytest.mark.parametrize("method", METHODS)
 def test_unwhitened_components_keep_existing_fortran_physical_layout(tmp_path, case, method):
