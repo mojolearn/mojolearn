@@ -173,3 +173,75 @@ def test_builtin_schedule_public_operations_and_optimizer_use_are_native(schedul
         assert audit_native_call(clone.lr_values, 7).assert_native().tobytes() == values.tobytes()
     else:
         assert audit_native_call(schedule.lrs, 7).assert_native() == values.tolist()
+
+
+def test_checkpoint_initialized_count_refused_before_modifying_state():
+    optimizer = T.SGD(np.ones(2, dtype="f4"), numeric_mode="identical", resident=False)
+    state = {"t": 12, "exp_avg": [0.1, 0.2], "exp_avg_sq": [0.3, 0.4],
+             "buf_initialized": [0, 0]}
+    error = refused_without_python(optimizer.load_state_dict, state)
+    assert "buf_initialized" in str(error) and optimizer.t == 0
+
+
+@pytest.mark.parametrize("value,error_type", [(float("nan"), ValueError),
+                                             (float("inf"), OverflowError),
+                                             (2147483648, OverflowError)])
+def test_checkpoint_int32_refusal_preserves_error_class(value, error_type):
+    optimizer = T.SGD(np.ones(2, dtype="f4"), numeric_mode="identical", resident=False)
+    state = {"t": 0, "exp_avg": [0., 0.], "exp_avg_sq": [0., 0.], "buf_initialized": [value]}
+    assert isinstance(refused_without_python(optimizer.load_state_dict, state), error_type)
+
+
+def test_partial_device_array_finalization_is_native_and_idempotent():
+    owner = object.__new__(T.TrainDeviceArray)
+    audit_native_call(T.TrainDeviceArray.__del__, owner).assert_native()
+    audit_native_call(T.TrainDeviceArray.__del__, owner).assert_native()
+    assert vars(owner) == {}
+
+
+@pytest.mark.parametrize("strided", [False, True])
+def test_consumed_device_outputs_and_release_are_native(strided):
+    from mojolearn import _backend
+    import gc
+    import weakref
+    if _backend.vendor() == "cpu":
+        pytest.skip("device arrays require the GPU training pool")
+    host = np.arange(12, dtype="f4").reshape(3, 4)
+    source = host[:, ::2] if strided else host
+    device = audit_native_call(T.train_to_device, source, numeric_mode="identical").assert_native()
+    assert audit_native_call(device.to_host).assert_native().shape == source.shape
+    assert np.asarray(audit_native_call(device.to_host).assert_native()).tobytes() == source.tobytes()
+    view = audit_native_call(device.reshape, (source.size,)).assert_native()
+    retained = weakref.ref(device)
+    handle, binding = device.h, vars(device)["_b"]
+    del device
+    gc.collect()
+    assert retained() is not None, "view must retain its root device allocation"
+    assert np.asarray(audit_native_call(view.to_host).assert_native()).tobytes() == source.tobytes()
+    # A view's finalizer never closes the root allocation.
+    audit_native_call(T.TrainDeviceArray.__del__, view).assert_native()
+    root = retained()
+    del view
+    gc.collect()
+    audit_native_call(T.TrainDeviceArray.__del__, root).assert_native()
+    audit_native_call(T.TrainDeviceArray.__del__, root).assert_native()
+    assert vars(root)["_b"] is None
+    output = np.empty(source.size, dtype="f4")
+    with pytest.raises(Exception, match="handle|closed|not open|unknown|invalid"):
+        binding.train_dev_get(handle, output.ctypes.data, source.size)
+
+
+def test_optimizer_parameter_device_consumed_output_is_native():
+    from mojolearn import _backend
+    if _backend.vendor() == "cpu":
+        pytest.skip("resident optimizer parameters require the GPU pool")
+    params = np.arange(6, dtype="f4").reshape(2, 3)
+    optimizer = audit_native_call(T.AdamW, params, numeric_mode="identical").assert_native()
+    if not audit_native_call(optimizer.params_resident_available).assert_native():
+        pytest.skip("this build disables resident optimizer parameters")
+    audit_native_call(optimizer.params_to_device).assert_native()
+    output = audit_native_call(optimizer.param_device, 0).assert_native()
+    downloaded = audit_native_call(output.to_host).assert_native()
+    assert np.asarray(downloaded).tobytes() == params.tobytes()
+    audit_native_call(T.TrainDeviceArray.__del__, output).assert_native()
+    audit_native_call(optimizer.params_to_host).assert_native()

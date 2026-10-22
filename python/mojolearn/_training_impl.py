@@ -1879,35 +1879,21 @@ class TrainDeviceArray(object):
     pool). Make one with `train_to_device`; read it with `to_host()`."""
 
     def __init__(self, binding, handle, shape, base=None):
-        self._b = binding
-        self.h = int(handle)
-        self.shape = tuple(shape)
-        self.size = nelems(self.shape)
-        self._base = base  # a reshaped view keeps its owner alive
+        return _OPT_NATIVE("device_construct", self, (binding, handle, shape, base), None, _OPT_CONTEXT)
 
     @staticmethod
     def _new(binding, shape):
-        shape = tuple(shape)
-        return TrainDeviceArray(binding, binding.train_dev_alloc(int(nelems(shape))), shape)
+        return _OPT_NATIVE("device_new", None, (binding, shape), None, _OPT_CONTEXT)
 
     def reshape(self, shape):
-        shape = tuple(shape)
-        if nelems(shape) != self.size:
-            raise ValueError("mojolearn.TrainDeviceArray.reshape: %r does not hold %d floats" % (shape, self.size))
-        return TrainDeviceArray(self._b, self.h, shape, base=self if self._base is None else self._base)
+        return _OPT_NATIVE("device_reshape", self, (shape,), None, _OPT_CONTEXT)
 
     def to_host(self):
         """The array as a host `mojolearn.Array` (one download)."""
-        out = _buffers.empty(self.shape, '<f4')
-        self._b.train_dev_get(self.h, _addr(out), int(self.size))
-        return out
+        return _OPT_NATIVE("device_host", self, (), None, _OPT_CONTEXT)
 
     def __del__(self):
-        if getattr(self, "_base", None) is None and getattr(self, "_b", None) is not None:
-            try:
-                self._b.train_dev_free(self.h)
-            except Exception:
-                pass
+        return _OPT_NATIVE("device_finalize", self, (), None, _OPT_CONTEXT)
 
 
 def _is_dev(x):
@@ -1916,13 +1902,7 @@ def _is_dev(x):
 
 def train_to_device(a, numeric_mode=None):
     """float32 array `a` as a `TrainDeviceArray` (uploaded once, here)."""
-    if _is_dev(a):
-        return a
-    binding = _dev_binding(numeric_mode, "train_to_device")
-    a = _c32(a, "a", "train_to_device")
-    out = TrainDeviceArray._new(binding, a.shape)
-    binding.train_dev_put(out.h, _addr_ro(a), int(out.size))
-    return out
+    return _OPT_NATIVE("device_upload", None, (a,), numeric_mode, _OPT_CONTEXT)
 
 
 def _all_dev(where, **named):
