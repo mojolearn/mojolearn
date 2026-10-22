@@ -193,3 +193,43 @@ def test_reinitialization_refuses_nested_dtype_metadata_without_releasing_it():
     rows.base = None
     rows.dtype = None
     assert calls == ['finalizer']
+
+
+@pytest.mark.parametrize('layout', ['structured', 'subarray', 'metadata', 'object', 'structured_object'])
+def test_reinitialization_preserves_native_dtype_layouts_and_owned_metadata(layout):
+    dtype = {
+        'structured': np.dtype([('left', '<i4'), ('right', '<f8')]),
+        'subarray': np.dtype([('vector', '<f8', (2,))]),
+        'metadata': np.dtype('<f4', metadata={'shape': (2, 3), 'units': ['native', np.int32(1)]}),
+        'object': np.dtype('O'),
+        'structured_object': np.dtype([('name', 'O'), ('weight', '<f8')]),
+    }[layout]
+    base = np.zeros((2, 3), dtype=dtype)
+    if layout == 'object':
+        base[0, 0] = {'values': [1, 2.5, None, np.longdouble(3), np.complex64(2j), np.str_('native')]}
+    elif layout == 'structured_object':
+        base['name'][0, 0] = ['native', 3]
+    rows = DeviceRows(base, np.array([1], dtype='i8'), None)
+    del base, dtype  # rows owns the old buffer and dtype references
+    replacement = np.arange(4, dtype='f8').reshape(2, 2)
+    indices = np.array([0], dtype='i8')
+    assert audit_native_call(rows.__init__, replacement, indices, None).assert_native() is None
+    assert rows.base is replacement and rows.indices is indices
+    assert rows.dtype == np.dtype('f8') and rows.shape == (1, 2)
+
+
+def test_reinitialization_refuses_owned_object_buffer_finalizers():
+    calls = []
+    class Finalizer:
+        def __del__(self):
+            calls.append('finalizer')
+    rows = DeviceRows(np.zeros((2, 3), dtype='O'), np.array([1], dtype='i8'), None)
+    rows.base[0, 0] = Finalizer()
+    previous_base_id = id(rows.base)
+    replacement = np.zeros((2, 2), dtype='f8')
+    audit = audit_native_call(rows.__init__, replacement, np.array([0], dtype='i8'), None)
+    assert isinstance(audit.exception, TypeError), audit.report()
+    assert not calls and id(rows.base) == previous_base_id
+    assert not audit.report()['python_frames'] and not audit.report()['forbidden_native_calls']
+    rows.base = None
+    assert calls == ['finalizer']
