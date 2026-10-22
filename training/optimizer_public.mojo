@@ -35,7 +35,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from training.accumulate_multi_gpu import parallel_accumulate_host
 from training.clip_multi_gpu import parallel_clip_grad_norm_host
-from training.dev_tensors import IDN_TRAIN_DEV_TENSORS, train_dev_alloc, train_dev_copy, train_dev_view
+from training.dev_tensors import IDN_TRAIN_DEV_TENSORS, train_dev_alloc, train_dev_copy, train_dev_view, train_dev_free
 from training.estimator import (
     IDN_MAXIMIZE_DEV, IDN_OPT_PARAMS_RESIDENT, OPT_IO_ALL,
     identical_clip_grad_norm_addrs_host,
@@ -642,7 +642,14 @@ def public_io(
         var off = Int(op[tensor])
         var n_j = Int(op[tensor + 1]) - off
         var dh = train_dev_alloc(ctx, n_j)
-        _ = resident_copy_dev(ctx, h, 0, dh, off, n_j, 1)
+        try:
+            _ = resident_copy_dev(ctx, h, 0, dh, off, n_j, 1)
+        except error:
+            try:
+                train_dev_free(ctx, dh)
+            except:
+                pass
+            raise error^
         return (h, dh)
     var which = 0 if (op_code == IO_PARAMS_UP or op_code == IO_PARAMS_DOWN) else 1
     sizes_check(req.g_bytes, req.j, req.n_total)
