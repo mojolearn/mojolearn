@@ -75,7 +75,7 @@ def test_public_rms_preparation_and_output_match_retained_kernel(operation, case
 
 
 EPSILON_CASES = ["float", "int", "bool", "str", "bytes", "bytearray", "memoryview", "f16", "f32", "f64", "longdouble", "int64", "longlong", "complex64", "complex128", "clongdouble", "array-f32", "array-int", "array-longlong", "array-longdouble", "array-object", "array-str", "array-bytes", "array-complex", "array-datetime-ns", "array-datetime-D", "array-timedelta-ns", "array-timedelta-D", "array-1d"]
-EPSILON_CASES += ["array-void", "array-record"]
+EPSILON_CASES += ["array-void", "array-record", "array-void-text", "array-void-badtext", "void-text", "void-badtext"]
 if hasattr(np.dtypes, "StringDType"):
     EPSILON_CASES.append("array-string")
 
@@ -95,6 +95,8 @@ def epsilon_value(case):
             "array-datetime-ns": np.array(1, dtype="datetime64[ns]"), "array-datetime-D": np.array(1, dtype="datetime64[D]"),
             "array-timedelta-ns": np.array(1, dtype="timedelta64[ns]"), "array-timedelta-D": np.array(1, dtype="timedelta64[D]"),
             "array-void": np.zeros((), dtype="V4"), "array-record": np.zeros((), dtype=[("value", "f4")]),
+            "array-void-text": np.array(b"1e-5", dtype="V4"), "array-void-badtext": np.array(b"bad", dtype="V3"),
+            "void-text": np.void(b"1e-5"), "void-badtext": np.void(b"bad"),
             "array-str": np.array("1e-5"), "array-bytes": np.array(b"1e-5"),
             "array-1d": np.array([1e-5], dtype="f4")}[case]
 
