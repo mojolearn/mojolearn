@@ -1021,6 +1021,9 @@ def main(argv=None):
                     help="PyPI wheel manifest from tools/pypi_wheel_install.py (bench_board.py setup writes "
                          "<out>/wheel-manifest.json); required to measure")
     ap.add_argument("--plan-only", action="store_true")
+    ap.add_argument("--keep-going", action="store_true",
+                    help="after a line fails (its evidence retained), record it and start the next line instead "
+                         "of stopping; an evidence upload failure still stops (tools/gate_smoke_box.py measure)")
     ap.add_argument("--cpu-fallback", action="store_true",
                     help="the board's plan: CPU opponents where this vendor has no GPU library, and recipes with no "
                          "opponent (ours alone); default is the GPU-opponent plan")
@@ -1076,7 +1079,8 @@ def main(argv=None):
         raise ValueError("campaign directory already exists; preserve it and select remaining work in a new manifest")
     state = dict(vendor=args.vendor, source_commit=B.repo_commit(), started=time.time(),
                  stop_at=args.stop_at, expected=len(plan),
-                 scope="explicit missing-evidence recipes; one excluded warmup and one scored sample; no Apple",
+                 scope=("explicit recipes; one excluded warmup and one scored sample per arm; no Apple"
+                        + ("; keep going past a failed line" if args.keep_going else "")),
                  recipes={r["id"]: dict(status="pending", recipe=r) for r in plan})
     E.write(path, state)
     if args.plan_only:
@@ -1137,12 +1141,21 @@ def main(argv=None):
         # race record. Preserve that work and stop before another measurement.
         # An explicit preflight refusal has not entered the timed driver.
         if row["preflight"] != "REFUSED" and (rc != 0 or not board.get("races")):
-            state["stop_reason"] = "controller failed or result missing; inspect and retain existing work before continuing"
+            why = "controller failed or result missing; inspect and retain existing work before continuing"
+            if getattr(args, "keep_going", False):
+                # --keep-going (the release gate's whole-plan measurement, 2026-10-22): this line's log,
+                # preflight, board.json and row are already retained above (retain_recipe), so its work is
+                # preserved; it is recorded as failed and the next line starts. Retention failures still stop.
+                row["controller_failure"] = why
+                state.setdefault("failed_recipes", []).append(race["id"])
+                E.write(path, state)
+                continue
+            state["stop_reason"] = why
             controller_failed = True
             break
     state["finished"] = time.time()
     E.write(path, state)
-    return 1 if controller_failed else 0
+    return 1 if controller_failed or state.get("failed_recipes") else 0
 
 
 if __name__ == "__main__":
