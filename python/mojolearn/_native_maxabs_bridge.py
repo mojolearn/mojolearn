@@ -46,7 +46,7 @@ def connect(scaler_class):
                    arena_scope_class=_Scope, arena_cache_class=DeviceCache,
                    arena_scope_dict=vars(_Scope)['__dict__'], arena_cache_dict=vars(DeviceCache)['__dict__'],
                    scaler_bindings=connected, scaler_class=scaler_class, scaler_host_contexts={},
-                   maxabs_rows_class=DeviceRows, maxabs_gather_rows=gather,
+                   maxabs_rows_class=DeviceRows, maxabs_rows_dict=vars(DeviceRows)['__dict__'], maxabs_gather_rows=gather,
                    maxabs_finite_f32=finite32, maxabs_finite_f64=finite64, classical_getframe=sys._getframe)
     descriptor = door.classical_attribute_descriptor(MethodType(attribute, context))
     scaler_class.__getattribute__ = descriptor

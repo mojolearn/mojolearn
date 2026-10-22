@@ -10,6 +10,57 @@ from mojolearn._verify_native_runtime import audit_native_call
 
 
 @pytest.mark.parametrize('estimator', ['MaxAbsScaler', 'RobustScaler'])
+@pytest.mark.parametrize('ranges', ['0', '1'])
+@pytest.mark.parametrize('field', ['base', 'indices', 'dtype', '_host'])
+def test_row_metadata_keys_are_refused_before_python_equality(estimator, ranges, field, monkeypatch):
+    monkeypatch.setenv('MOJOLEARN_ARENA_RANGES', ranges)
+    calls = []
+    class ForeignKey(str):
+        __hash__ = str.__hash__
+        def __eq__(self, other):
+            calls.append('equality')
+            return str.__eq__(self, other)
+    rows = DeviceRows(Array.from_list([[1.,2.],[3.,4.]], '<f4'), Array.from_list([0], '<i8'), None)
+    value = rows.__dict__.pop(field)
+    rows.__dict__[ForeignKey(field)] = value
+    calls.clear()
+    audit = audit_native_call(getattr(ml, estimator)().fit, rows)
+    assert isinstance(audit.exception, TypeError), audit.report()
+    assert 'metadata keys' in str(audit.exception)
+    assert not calls
+    assert not audit.report()['python_frames'] and not audit.report()['forbidden_native_calls']
+
+
+@pytest.mark.parametrize('estimator', ['MaxAbsScaler', 'RobustScaler'])
+@pytest.mark.parametrize('hook', ['descriptor', 'getattribute', 'finalizer'])
+def test_row_class_layout_is_refused_before_dictionary_or_lifecycle_hooks(estimator, hook, monkeypatch):
+    from mojolearn import _expansion_prep
+    context = getattr(_expansion_prep, '_MAXABS_CONTEXT' if estimator == 'MaxAbsScaler' else '_ROBUST_CONTEXT')
+    calls = []
+    def forbidden(*args):
+        calls.append(hook)
+        raise AssertionError('Python row metadata hook ran')
+    rows = DeviceRows(Array.from_list([[1.,2.],[3.,4.]], '<f4'), Array.from_list([0], '<i8'), None)
+    model = getattr(ml, estimator)()
+    with monkeypatch.context() as patch:
+        if hook == 'descriptor':
+            # CPython does not allow replacing an existing class's __dict__
+            # member. Simulate a wrongly connected class retaining a Python
+            # property; the retained native descriptor must reject it.
+            class ForeignRows:
+                __dict__ = property(forbidden)
+            rows = object.__new__(ForeignRows)
+            patch.setitem(context, 'maxabs_rows_class', ForeignRows)
+        else:
+            patch.setattr(DeviceRows, '__getattribute__' if hook == 'getattribute' else '__del__', forbidden, raising=False)
+        audit = audit_native_call(model.fit, rows)
+    # Restore finalizer metadata while the source is still retained.
+    assert isinstance(audit.exception, TypeError), audit.report()
+    assert not calls
+    assert not audit.report()['python_frames'] and not audit.report()['forbidden_native_calls']
+
+
+@pytest.mark.parametrize('estimator', ['MaxAbsScaler', 'RobustScaler'])
 @pytest.mark.parametrize('preexisting', [False, True])
 def test_host_rows_snapshot_survives_base_and_index_mutation(estimator, preexisting, monkeypatch):
     # This explicitly selects the established host-materialization path on
