@@ -97,6 +97,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
 import bincache  # noqa: E402  the build's own Mojo import resolver
 from mojo_registrations import registered_functions, sole_registration
+from import_metadata_effects import metadata_only_call
 PKG = os.path.join("python", "mojolearn")
 HARNESS = os.path.join("tools", "identity_break.py")
 MANIFEST = os.path.join(PKG, "host_surface.py")
@@ -4787,11 +4788,13 @@ def python_edit_lanes(ref, path, sources=None, rev=None, why_map=None):
         return keep("top-level statements were reordered")
     old_modules = {(n.level, n.module) for n in old_tree.body if isinstance(n, ast.ImportFrom)}
     affected = set()
+    metadata_stable = True
     for k in old_keys:
         if k in new_by:
             continue
         node = old_by[k]
         if k[0] == "def":
+            metadata_stable &= isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
             affected.add(node.name)               # removed: its callers break
         else:
             return keep(f"a top-level statement was removed (line {node.lineno})")
@@ -4800,6 +4803,7 @@ def python_edit_lanes(ref, path, sources=None, rev=None, why_map=None):
         old = old_by.get(k)
         if old is not None and ast.dump(old) == ast.dump(node):
             continue
+        metadata_stable &= isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
         if k[0] == "def":
             if old is None:
                 if not _runs_nothing_when_defined(node):
@@ -4839,7 +4843,7 @@ def python_edit_lanes(ref, path, sources=None, rev=None, why_map=None):
     for rel in _python_files():
         if rel != path and star.search(_read(rel)):
             return keep(f"{rel} star-imports it")
-    closed = _module_closure(path, new_tree, affected)
+    closed = _module_closure(path, new_tree, affected, metadata_stable=metadata_stable)
     if isinstance(closed, str):
         return keep(closed)
     closed, runs = closed
@@ -4856,7 +4860,7 @@ def python_edit_lanes(ref, path, sources=None, rev=None, why_map=None):
                 continue
             tree = _parse(user)
             got = _module_closure(user, _strip_docstrings(tree) if tree else None, used,
-                                  runs=used & rel_runs)
+                                  runs=used & rel_runs, metadata_stable=metadata_stable)
             if isinstance(got, str):
                 # Its import-time code runs changed code: every lane that
                 # loads it, by the map.
@@ -4875,7 +4879,7 @@ def python_edit_lanes(ref, path, sources=None, rev=None, why_map=None):
     return sorted(affected), lanes & set(sources) & rev.get(path, set())
 
 
-def _module_closure(rel, tree, names, runs=None):
+def _module_closure(rel, tree, names, runs=None, metadata_stable=False):
     """The names of file `rel` that reach `names`: the names themselves, every
     top-level def or class whose source names one, every top-level assignment
     whose value names one (an alias or a table holding it), to a fixpoint.
@@ -4932,7 +4936,8 @@ def _module_closure(rel, tree, names, runs=None):
             if bad:
                 return f"the header of `{node.name}` runs `{bad}` at import"
         elif not isinstance(node, (ast.Import, ast.ImportFrom)):
-            bad = _import_time_hits(node, affected, run_names, run_methods)
+            bad = _import_time_hits(node, affected, run_names, run_methods,
+                                    rel=rel if metadata_stable else None)
             if bad:
                 return f"line {node.lineno} runs `{bad}` at import"
     return affected, run_names
@@ -5008,7 +5013,167 @@ def _run_closure(tree, runs, classes):
     return run_names, run_methods
 
 
-def _import_time_hits(node, affected, runs, run_methods):
+def _metadata_registry_guard(rel, name, mutators):
+    """Prove the current optional expansion step adds no unknown classes.
+
+    A future expansion provider or a different module getter invalidates this
+    proof and retains broad selection. The docstring examples of providers
+    are not definitions. Neither the connector name nor a glue comment is a
+    permission to assume a registry still has its literal initial contents.
+    """
+    if rel != 'python/mojolearn/_classical_host.py' or name != '_FORMATS' or len(mutators) != 1:
+        return False
+    expected = '''def _merge_expansion_doors():
+    import importlib
+    from . import host_surface
+    for lane in host_surface.EXPANSION_LANES:
+        door = importlib.import_module(f"{__package__}._expansion_{lane}")
+        for family, basename in getattr(door, "CLASSICAL_HOST_BASENAMES", {}).items():
+            if family in _HOST_BASENAMES:
+                raise RuntimeError(f"mojolearn: {door.__name__} reroutes {family}")
+            _HOST_BASENAMES[family] = basename
+        formats = getattr(door, "classical_host_formats", None)
+        for fmt, estimators in (formats() if formats else {}).items():
+            if fmt in _FORMATS:
+                raise RuntimeError(f"mojolearn: {door.__name__} redeclares the saved format {fmt!r}")
+            _FORMATS[fmt] = dict(estimators)
+    '''
+    if ast.dump(_strip_docstrings(mutators[0])) != ast.dump(ast.parse(expected).body[0]):
+        return False
+    surface = _parse('python/mojolearn/host_surface.py')
+    rows = [node.value for node in surface.body if isinstance(node, ast.Assign)
+            and any(isinstance(target, ast.Name) and target.id == 'EXPANSION_LANES' for target in node.targets)]
+    if len(rows) != 1:
+        return False
+    try:
+        lanes = ast.literal_eval(rows[0])
+    except (ValueError, TypeError):
+        return False
+    if not isinstance(lanes, tuple) or any(not isinstance(lane, str) for lane in lanes):
+        return False
+    for lane in lanes:
+        tree = _parse('python/mojolearn/_expansion_' + lane + '.py')
+        if tree is None:
+            return False
+        tree = _strip_docstrings(tree)
+        # Unknown providers, star imports and dynamic module writes require a
+        # new proof. Class/instance methods do not execute when this getter
+        # asks the already imported module for one fixed name.
+        for node in tree.body:
+            if isinstance(node, ast.ImportFrom) and any(alias.name == '*' for alias in node.names):
+                return False
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                if node.name == 'classical_host_formats':
+                    return False
+                continue
+            for part in ast.walk(node):
+                if isinstance(part, ast.Name) and part.id in ('classical_host_formats', '__getattr__'):
+                    return False
+                if isinstance(part, ast.Call) and isinstance(part.func, ast.Name) and part.func.id in (
+                        'exec', 'eval', 'globals', 'locals', 'setattr'):
+                    return False
+        getters = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == '__getattr__']
+        if not getters:
+            continue
+        if len(getters) != 1 or getters[0].decorator_list or len(getters[0].args.args) != 1:
+            return False
+        getter = getters[0]
+        from import_metadata_effects import Source
+        source = Source(_parse, lambda *args: False)
+        if source.lookup('python/mojolearn/_expansion_' + lane + '.py', 'AttributeError') is not None:
+            return False
+        first = getter.body[0]
+        if not (isinstance(first, ast.If) and isinstance(first.test, ast.Compare)
+                and isinstance(first.test.left, ast.Name) and first.test.left.id == getter.args.args[0].arg
+                and len(first.test.ops) == 1 and isinstance(first.test.ops[0], ast.NotIn)
+                and isinstance(first.test.comparators[0], ast.Name)
+                and len(first.body) == 1 and isinstance(first.body[0], ast.Raise)):
+            return False
+        table_name = first.test.comparators[0].id
+        if not source.registry_unchanged('python/mojolearn/_expansion_' + lane + '.py', table_name):
+            return False
+        tables = [node.value for node in tree.body if isinstance(node, ast.Assign)
+                  and any(isinstance(target, ast.Name) and target.id == table_name for target in node.targets)]
+        if len(tables) != 1:
+            return False
+        try:
+            table = ast.literal_eval(tables[0])
+        except (ValueError, TypeError):
+            return False
+        if not isinstance(table, (dict, tuple, list, set)) or 'classical_host_formats' in table:
+            return False
+        # The rejected-name arm must only construct the normal AttributeError,
+        # with no hook-bearing formatting or helper invocation before raising.
+        error = first.body[0].exc
+        if not (isinstance(error, ast.Call) and isinstance(error.func, ast.Name)
+                and error.func.id == 'AttributeError' and len(error.args) == 1 and not error.keywords):
+            return False
+        for part in ast.walk(error.args[0]):
+            if isinstance(part, (ast.Call, ast.Attribute, ast.Subscript)):
+                return False
+            if isinstance(part, ast.Name) and part.id not in ('__name__', getter.args.args[0].arg):
+                return False
+    return True
+
+
+def _native_metadata_factory(rel, call, function):
+    """A connected native factory proved to wrap, without calling, its entry.
+
+    PyInstanceMethod_New is the documented CPython lazy descriptor factory.
+    Resolve the real export and inspect its body; a name or glue comment alone
+    cannot exempt a Python callback or an altered native implementation.
+    """
+    if not isinstance(call, ast.Attribute) or not isinstance(call.value, ast.Name):
+        return False
+    assignments = [node.value for node in ast.walk(function) if isinstance(node, ast.Assign)
+                   and any(isinstance(t, ast.Name) and t.id == call.value.id for t in node.targets)]
+    if len(assignments) != 1:
+        return False
+    value = assignments[0]
+    if not (isinstance(value, ast.Attribute) and value.attr == '_module'
+            and isinstance(value.value, ast.Call) and isinstance(value.value.func, ast.Name)):
+        return False
+    from import_metadata_effects import Source
+    source = Source(_parse, lambda *args: False)
+    target = source.target(rel, value.value.func, function.body)
+    if not target or target[0] != 'python/mojolearn/tokenizer.py' or getattr(target[1], 'name', None) != '_binding':
+        return False
+    src = 'bindings/_mojolearn_tokenizer_host.mojo'
+    implementation = _binding_exports(src).get(call.attr)
+    if implementation is None:
+        return False
+    graph = _MojoDefGraph()
+    roots = graph.resolve(src, implementation)
+    if len(roots) != 1:
+        return False
+    text = '\n'.join(line.split('#', 1)[0] for line in graph.text(next(iter(roots))).splitlines())
+    # Deliberately prove this small complete recipe, not a list of approved
+    # call names: an allowed local function variable could otherwise be
+    # rebound to PyObject_Call and execute the supplied function. An altered
+    # body stays wide until its effects have been reviewed here as well.
+    recipe = f'''def {implementation}(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
+        try:
+            ref cpy = Python().cpython()
+            var function = cpy.PyTuple_GetItem(args_ptr, 0)
+            if not function:
+                raise cpy.unsafe_get_error()
+            var value = PythonObject(from_borrowed=function)
+            var b = Python.import_module("builtins")
+            var types = Python.import_module("types")
+            if py_type(value) is not types.MethodType or py_type(value.__func__) is not types.BuiltinFunctionType:
+                raise Error("native attribute descriptor requires a bound compiled entry")
+            var make_descriptor = cpy.lib.get_function[PyObjectPtr]("PyInstanceMethod_New")
+            var descriptor = make_descriptor(function)
+            if not descriptor:
+                raise cpy.unsafe_get_error()
+            return descriptor
+        except error:
+            return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
+    '''
+    return ' '.join(text.split()) == ' '.join(recipe.split())
+
+
+def _import_time_hits(node, affected, runs, run_methods, rel=None):
     """For a top-level statement that is not a def or class: what it RUNS at
     import that can run changed code, or None.
 
@@ -5034,10 +5199,16 @@ def _import_time_hits(node, affected, runs, run_methods):
                 return sub.func.attr
             pure = isinstance(sub.func, ast.Name) and sub.func.id in PURE_CALL_BUILTINS
             if not pure:
+                argument_hits = []
                 for arg in list(sub.args) + [k.value for k in sub.keywords]:
                     for x in ast.walk(arg):
                         if isinstance(x, ast.Name) and isinstance(x.ctx, ast.Load) and x.id in affected:
-                            return x.id
+                            argument_hits.append(x.id)
+                if argument_hits:
+                    if rel is not None and metadata_only_call(
+                            rel, sub, affected, _parse, _native_metadata_factory, _metadata_registry_guard):
+                        continue
+                    return argument_hits[0]
     if isinstance(node, (ast.For, ast.AsyncFor, ast.While, ast.If, ast.With, ast.AsyncWith, ast.Try)):
         loads = {x.id for x in ast.walk(node) if isinstance(x, ast.Name) and isinstance(x.ctx, ast.Load)}
         calls = [c for c in ast.walk(node) if isinstance(c, ast.Call) and not (
