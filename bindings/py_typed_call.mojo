@@ -17,7 +17,11 @@ def typed_python_error() -> Error:
     (subclasses included) keeps its bare message. Clears the indicator.
     The caller MUST know an exception is pending."""
     ref cpy = Python().cpython()
-    var kind = cpy.lib.get_function[PyObjectPtr]("PyErr_Occurred")()
+    var kind: PyObjectPtr
+    try:
+        kind = cpy.lib.get_function[PyObjectPtr]("PyErr_Occurred")()
+    except e:
+        return e^
     if not kind:
         return Error("mojolearn: a Python call failed without an exception")
     # PyErr_Occurred borrows the class; keep it across the fetch below.
