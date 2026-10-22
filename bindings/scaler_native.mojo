@@ -148,9 +148,14 @@ def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonO
             var scalar = Int(py=raw.ndim) == 0
             weight = _input(weight_source, 0 if scalar else 1, False, context)
             if scalar:
-                var first = _ptr(weight)[0]
+                # The raw pointer does not retain its Python buffer owner.
+                # Keep the scalar buffer alive while allocating and filling
+                # its broadcast replacement.
+                var scalar_weight = weight
+                var first = _ptr(scalar_weight)[0]
                 weight = classical_typed(Python.tuple(n), "<f4", context["output_context"])
                 scaler_fill(_ptr(weight), n, first)
+                _ = scalar_weight^
             elif Int(py=weight.size) != n:
                 raise Error("sample_weight length differs from X")
         var wo = n*d if weighted else -1

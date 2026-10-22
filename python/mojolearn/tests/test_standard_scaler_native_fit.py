@@ -1,7 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
 """Whole-fit boundary and preserved scaler semantics; test oracles stay here."""
-import array
-import os
 import subprocess
 import sys
 
