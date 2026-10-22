@@ -14,10 +14,34 @@ def sequence_array_errstate(context: PythonObject) raises -> PythonObject:
     if module is None or py_type(module) is not context["module_type"]:
         raise Error("TypeError: array output requires NumPy's native error-state metadata")
     var entry = py_get(py_fields(module), "_get_extobj_dict")
+    var legacy = entry is None
+    if legacy:
+        entry = py_get(py_fields(module), "geterrobj")
     var warning = context["sequence_array_warnings"]
-    if entry is None or py_type(entry) is not warning["warning_native_function"] or String(entry.__name__) != "_get_extobj_dict" or entry.__self__ is not module:
+    var name = String("geterrobj") if legacy else String("_get_extobj_dict")
+    if entry is None or py_type(entry) is not warning["warning_native_function"] or String(entry.__name__) != name or entry.__self__ is not module:
         raise Error("TypeError: NumPy error-state metadata must use its native entry")
-    return _warning_fields(py_call(entry))
+    var stored = py_call(entry)
+    if not legacy:
+        return _warning_fields(stored)
+    # NumPy 1.26's native getter returns [buffer_size, error_mask, callback].
+    # Each base-8 digit is a documented error action, in divide/over/under/
+    # invalid order. Decode the metadata here instead of calling np.geterr,
+    # whose wrapper executes Python. See NumPy 1.26 geterrobj API contract.
+    var b = Python.import_module("builtins")
+    if py_type(stored) is not b.list or len(stored) != 3 or py_type(stored[1]) is not b.int:
+        raise Error("TypeError: NumPy error-state metadata requires a native mask")
+    var mask = Int(py=stored[1])
+    var result = Python.dict()
+    var actions: List[String] = ["ignore", "warn", "raise", "call", "print", "log"]
+    var names: List[String] = ["over", "under", "invalid"]
+    for i in range(3):  # driver-loop: decode the three native cast-status mask fields
+        var action = (mask >> (3 * (i + 1))) & 7
+        if action >= len(actions):
+            raise Error("TypeError: NumPy error-state mask has an unsupported action")
+        py_setitem(result, PythonObject(names[i]), PythonObject(actions[action]))
+    py_setitem(result, "call", stored[2])
+    return result
 
 
 def sequence_array_report(status: Int, settings: PythonObject, context: PythonObject) raises:
