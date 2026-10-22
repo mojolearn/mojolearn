@@ -189,7 +189,7 @@ class InstalledNativeAudit(unittest.TestCase):
 
     def test_public_owner_and_host_scopes_exclude_private_array_candidate(self):
         names = ("test_native_owner_qualification.py", "test_sequence_shutdown_native.py",
-                 "test_host_inference_native.py", "test_host_kernel_inference_native.py")
+                 "test_host_inference_native.py", "test_host_kernel_inference_native.py", "test_host_projection_native.py")
         for name in names:
             self.assertIn(name, q.PUBLIC_TESTS)
             self.assertTrue((q.ROOT / "python/mojolearn/tests" / name).is_file())
