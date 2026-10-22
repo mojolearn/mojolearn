@@ -2,6 +2,8 @@
 
 These checks do not qualify the public SequenceDeviceTensor.__array__ wrapper.
 """
+import warnings
+
 import numpy as np
 import pytest
 
@@ -174,3 +176,19 @@ def test_negative_storage_refuses_exception_hooks_before_allocation(resident, mo
     _assert_no_runtime_callbacks(audit)
     assert type(audit.exception) is TypeError, audit.report()
     assert not calls
+
+
+@pytest.mark.parametrize("schema", ["1f4", ("f4", 1)])
+def test_scalar_size_one_preserves_versioned_warning_and_output(resident, schema):
+    values, tensor = resident
+    with warnings.catch_warnings(record=True) as expected_warnings:
+        warnings.simplefilter("always")
+        expected = values.astype(schema, copy=False)
+    with warnings.catch_warnings(record=True) as actual_warnings:
+        warnings.simplefilter("always")
+        actual = _candidate(tensor, schema).assert_native()
+    assert actual.dtype == expected.dtype
+    assert actual.shape == expected.shape
+    assert actual.tobytes() == expected.tobytes()
+    assert [(type(w.message), str(w.message)) for w in actual_warnings] == [
+        (type(w.message), str(w.message)) for w in expected_warnings]

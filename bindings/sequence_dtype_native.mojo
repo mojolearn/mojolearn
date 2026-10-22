@@ -208,7 +208,7 @@ def sequence_dtype_pair(base: PythonObject, shape: PythonObject, classes: Python
                 var warning = context["sequence_array_warnings"]
                 # NumPy 1.26 preserves its deprecated scalar-size-one alias;
                 # explicit tuple (1,) already means a one-element subarray.
-                sequence_array_warn("Passing (type, 1) or '1type' as a synonym of type is deprecated; in a future version of numpy, it will be understood as (type, (1,)) / '(1,)type'.", warning, "DeprecationWarning")
+                sequence_array_warn("Passing (type, 1) or '1type' as a synonym of type is deprecated; in a future version of numpy, it will be understood as (type, (1,)) / '(1,)type'.", warning, "FutureWarning")
                 return base
     return sequence_dtype_create(Python.tuple(base, dimensions), context, aligned)
 
