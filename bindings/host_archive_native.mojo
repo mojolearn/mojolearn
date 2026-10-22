@@ -796,26 +796,162 @@ def host_archive_neighbor_metric(metric: PythonObject, p: Float64, rbc: Bool,
     return Python.tuple(code, arg)
 
 
+def host_archive_float_repr(value: Float64) raises -> String:
+    """repr(value) of a Python float, as the loaders' f-strings print it."""
+    return _archive_builtin_repr(PythonObject(value))
+
+
+def host_archive_rbc_metric(cls_name: String, metric: PythonObject, p: Float64,
+                            context: PythonObject) raises -> PythonObject:
+    """`neighbors._resolve_rbc_metric(cls_name, metric, p)` for a saved
+    metric name: `(metric_value, metric_arg)`, or the same refusal, by name
+    and in the same order."""
+    var b = Python.import_module("builtins")
+    var head = "mojolearn " + cls_name + ": "
+    var shown = _archive_builtin_repr(metric)
+    if py_type(metric) is not b.str:
+        raise Error(head + "metric must be a name, got " + shown)
+    var key = py_call(metric.lower)
+    var name = String(key)
+    var table = context["host_archive_rbc_metrics"]
+    if name == "sqeuclidean":
+        raise Error(head + "metric='sqeuclidean' is REFUSED on the "
+            + "random ball cover. The pruning here IS THE TRIANGLE "
+            + "INEQUALITY on the landmark radii "
+            + "(neighbors/impl/ball_cover/common.mojo, DEVIATION "
+            + "565), and SQUARED Euclidean distance does not satisfy it even "
+            + "though Euclidean distance does: on three collinear points at "
+            + "unit spacing it gives 4 against 1 + 1. A cover built on it "
+            + "would prune away true neighbours silently. Ask for "
+            + "metric='euclidean' and square the returned distances, which "
+            + "is the same answer and is exact.")
+    if name == "cosine":
+        raise Error(head + "metric='cosine' is REFUSED on the "
+            + "random ball cover. The pruning here IS THE TRIANGLE "
+            + "INEQUALITY on the landmark radii, and `1 - cos` does not "
+            + "satisfy it: three unit vectors at 0, 60 and 120 degrees give "
+            + "1.5 against 0.5 + 0.5. It also fails identity of "
+            + "indiscernibles, d(x, 2x) = 0, so a landmark radius stops "
+            + "bounding its ball. A cover built on it would prune away true "
+            + "neighbours silently rather than return them slowly. Use "
+            + "NearestNeighbors with algorithm='brute', which needs no "
+            + "inequality and honors every implemented metric.")
+    if py_contains(context["host_archive_unsupported_metrics"], key):
+        raise Error(head + "metric=" + shown + " is in cuML's "
+            + "VALID_METRICS['brute'] but is NOT IMPLEMENTED "
+            + "(neighbors/NOT_IMPLEMENTED.tsv)")
+    if py_contains(context["host_archive_neighbor_metrics"], key) and not py_contains(table, key):
+        raise Error(head + "metric=" + shown + " is computed by brute "
+            + "force only (NearestNeighbors(algorithm='brute')). The random "
+            + "ball cover's pruning is the triangle inequality on its "
+            + "landmark radii and its kernels carry the Minkowski family; "
+            + "cuML's own VALID_METRICS['rbc'] is {euclidean, haversine, l2}")
+    if not py_contains(table, key):
+        var admitted = py_call(PythonObject(", ").join, py_call(b.sorted, table))
+        raise Error(head + "unknown metric " + shown + ". The random "
+            + "ball cover admits: " + String(admitted))
+    var value = Int(py=table[key])
+    var arg = Float64(2.0)
+    if value != 9:
+        # `_refuse_inert_p`: only metric='minkowski'/'lp' reads p.
+        if p != 2.0:
+            raise Error(head + "p is read only by metric='minkowski' "
+                + "(or 'lp'); metric=" + shown + " never reads it, so p=" + host_archive_float_repr(p) + " would "
+                + "change nothing. Leave p at its default (2) or ask for "
+                + "metric='minkowski'.")
+    else:
+        arg = p
+        # `arg != arg or arg == float("inf")`: NaN or +infinity.
+        if arg != arg or (arg > 0.0 and not isfinite(arg)):
+            raise Error(head + "metric='minkowski' needs a finite "
+                + "p >= 1, got " + host_archive_float_repr(p) + ". p = infinity is metric='chebyshev', "
+                + "which IS admitted here.")
+        if arg < 1.0:
+            raise Error(head + "metric='minkowski' with p=" + host_archive_float_repr(p) + " is "
+                + "REFUSED on the random ball cover. The pruning here IS THE "
+                + "TRIANGLE INEQUALITY on the landmark radii "
+                + "(neighbors/impl/ball_cover/common.mojo, "
+                + "DEVIATION 564), and |x|^p is not subadditive below p = 1, "
+                + "so Lp at p < 1 is not a metric at all: at p = 1/2 the "
+                + "points (0,0), (1,0), (1,1) give a direct distance of 4 "
+                + "against a two-leg path of 1 + 1. p >= 1 is admitted and "
+                + "p = 1 is Manhattan. Use NearestNeighbors with "
+                + "algorithm='brute' for p < 1, which is exact brute force "
+                + "and needs no inequality.")
+    return Python.tuple(value, arg)
+
+
+def host_archive_radius(cls: PythonObject, arrays: PythonObject, path: PythonObject,
+                        context: PythonObject) raises -> PythonObject:
+    """RadiusNeighbors.load: the object, attributes and refusals (wording
+    and order) of the Python loader it replaced."""
+    var where = host_archive_where(path, context)
+    var meta = host_archive_meta(arrays, "meta", 2, path, context)
+    var saved_radius = _archive_exact(arrays, "radius", "<f8", context)
+    var saved_p = _archive_exact(arrays, "p", "<f8", context)
+    if Int(py=saved_radius.size) != 1 or Int(py=saved_p.size) != 1:
+        raise Error(where + " radius and p must hold one value each")
+    var radius = classical_f64(saved_radius, 0)
+    var metric = _archive_string(arrays, "metric", context)
+    var algorithm = _archive_string(arrays, "algorithm", context)
+    var p = classical_f64(saved_p, 0)
+    var model = host_archive_object(cls, arrays, context)
+    var fields = sequential_fields(model)
+    # The constructor's attributes, in its order.
+    py_setitem(fields, "radius", radius)
+    py_setitem(fields, "metric", metric)
+    py_setitem(fields, "algorithm", algorithm)
+    py_setitem(fields, "p", p)
+    py_setitem(fields, "_index", PythonObject(None))
+    py_setitem(fields, "_metric_value", PythonObject(None))
+    py_setitem(fields, "_metric_arg", PythonObject(None))
+    host_archive_mode(arrays, fields, context)
+    # `_check_refusals`: the metric, then the algorithm, then the radius.
+    var resolved = host_archive_rbc_metric(String(cls.__name__), metric, p, context)
+    py_setitem(fields, "_metric_value", resolved[0])
+    py_setitem(fields, "_metric_arg", resolved[1])
+    if String(algorithm) != "auto" and String(algorithm) != "rbc":
+        raise Error("mojolearn RadiusNeighbors: algorithm=" + _archive_builtin_repr(algorithm) + " is "
+            + "refused. The index here is cuVS's RANDOM BALL COVER, which "
+            + "is none of scikit-learn's three: it is not 'brute' (there "
+            + "is an index and it prunes), and it is neither 'ball_tree' "
+            + "nor 'kd_tree' (it is a one-level cover over sqrt(n) "
+            + "landmarks, not a tree). Naming any of them would describe "
+            + "the wrong algorithm, so 'auto' and 'rbc' -- the "
+            + "algorithm's own name -- are the two accepted. The "
+            + "results are exact either way")
+    if not isfinite(radius) or radius <= 0:
+        raise Error("mojolearn RadiusNeighbors: radius=" + host_archive_float_repr(radius) + " is "
+            + "refused; it must be positive and finite")
+    var nf = classical_i64(meta, 0)
+    var ns = classical_i64(meta, 1)
+    var index = _archive_exact(arrays, "index", "<f4", context)
+    if Int(py=index.ndim) != 2 or Int(py=index.shape[0]) != ns or Int(py=index.shape[1]) != nf or ns < 1 or nf < 1:
+        raise Error(where + " index has shape " + _archive_builtin_repr(index.shape) + ", meta says ("
+            + String(ns) + ", " + String(nf) + ")")
+    py_setitem(fields, "_index", index)
+    py_setitem(fields, "n_samples_fit_", ns)
+    py_setitem(fields, "n_features_in_", nf)
+    return model
+
+
 def host_archive_neighbors(cls: PythonObject, arrays: PythonObject, kind: Int,
                            context: PythonObject) raises -> PythonObject:
-    # kind: 0 nearest, 1 classifier, 2 regressor, 3 radius.
-    var radius = kind == 3
-    var meta = host_archive_count(arrays, "meta", "<i8", 2 if radius else 6, context, True)
+    # kind: 0 nearest, 1 classifier, 2 regressor (RadiusNeighbors is
+    # host_archive_radius).
+    var meta = host_archive_count(arrays, "meta", "<i8", 6, context, True)
     var parameter = host_archive_count(arrays, "p", "<f8", 1, context, True)
     var p = classical_f64(parameter, 0)
     var nf = classical_i64(meta, 0)
     var n = classical_i64(meta, 1)
     var metric = _archive_string(arrays, "metric", context)
     var algorithm = _archive_string(arrays, "algorithm", context)
-    var rbc = radius or String(algorithm) == "rbc"
-    if radius:
-        if String(algorithm) != "auto" and String(algorithm) != "rbc":
-            raise Error("RadiusNeighbors requires auto or rbc search")
-    elif String(algorithm) != "auto" and String(algorithm) != "brute" and String(algorithm) != "rbc":
+    var rbc = String(algorithm) == "rbc"
+    if String(algorithm) != "auto" and String(algorithm) != "brute" and String(algorithm) != "rbc":
         raise Error("saved neighbors require brute, auto or rbc search")
     if rbc and (kind == 1 or kind == 2):
         raise Error("saved neighbor classifiers and regressors require brute search")
-    var resolved = host_archive_neighbor_metric(metric, p, rbc, context)
+    _ = host_archive_neighbor_metric(metric, p, rbc, context)
     var weights = PythonObject(None)
     if kind == 1 or kind == 2:
         weights = _archive_string(arrays, "weights", context)
@@ -835,15 +971,6 @@ def host_archive_neighbors(cls: PythonObject, arrays: PythonObject, kind: Int,
     py_setitem(fields, "_index", index)
     py_setitem(fields, "n_samples_fit_", n)
     py_setitem(fields, "n_features_in_", nf)
-    if radius:
-        var saved_radius = host_archive_count(arrays, "radius", "<f8", 1, context, True)
-        var r = classical_f64(saved_radius, 0)
-        if not isfinite(r) or r <= 0:
-            raise Error("RadiusNeighbors radius must be positive and finite")
-        py_setitem(fields, "radius", r)
-        py_setitem(fields, "_metric_value", resolved[0])
-        py_setitem(fields, "_metric_arg", resolved[1])
-        return model
     py_setitem(fields, "n_neighbors", classical_i64(meta, 2))
     py_setitem(fields, "query_tile", classical_i64(meta, 3))
     if kind == 0:
@@ -1726,7 +1853,7 @@ def host_archive_build(path: PythonObject, context: PythonObject,
     elif fmt == "mojolearn-hdbscan-2":
         model = host_archive_hdbscan(cls, arrays, context)
     elif fmt == "mojolearn-radius-1":
-        model = host_archive_neighbors(cls, arrays, 3, context)
+        model = host_archive_radius(cls, arrays, path, context)
     elif fmt == "mojolearn-knn-1":
         model = host_archive_neighbors(cls, arrays, 0 if String(estimator) == "NearestNeighbors" else (1 if String(estimator) == "KNeighborsClassifier" else 2), context)
         # Native equivalent of the original loader's _mojolearn_after_fit:

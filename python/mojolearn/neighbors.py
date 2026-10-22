@@ -16,7 +16,7 @@ cover. Every search is exact, never approximate.
 
 from . import _portable_math as math
 
-from . import _mojolearn, _serialize
+from . import _mojolearn, _native_archive_bridge, _serialize
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_f32_dense_c, as_i64_c, empty
 from ._labels import decode_labels, encode_labels, sorted_classes
@@ -52,6 +52,14 @@ _KNN_META_FIELDS = 6  # n_features_in_, n_samples_fit_, n_neighbors, query_tile,
 #: queries it on a CPU through the core host binding's
 #: radius_neighbors_count and radius_neighbors_fill.
 _RADIUS_FORMAT = "mojolearn-radius-1"
+
+# The compiled saved-model owner, connected once at import: RadiusNeighbors'
+# `save` and `load` are one native call each (bindings/archive_schema_native.mojo
+# writes the schema registered below the class; host_archive_native.mojo
+# builds the loaded model with `load`'s refusals). The k-NN classes keep
+# their Python save/load: `NearestNeighbors.__del__` releases the device
+# index, and a class with a Python finalizer is not built natively.
+_ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
 
 def _knn_arrays(est):
@@ -1854,19 +1862,7 @@ class RadiusNeighbors(NumericModeMixin):
         RuntimeError
             If the model is not fitted.
         """
-        if self._index is None:
-            raise RuntimeError("this estimator is not fitted yet")
-        return _serialize.write_npz(path, {
-            "format": _RADIUS_FORMAT,
-            "estimator": type(self).__name__,
-            "numeric_mode": _saved_mode(self),
-            "metric": str(self.metric),
-            "algorithm": str(self.algorithm),
-            "radius": Array.from_list([float(self.radius)], "<f8"),
-            "p": Array.from_list([float(self.p)], "<f8"),
-            "index": self._index,
-            "meta": Array.from_list([int(self.n_features_in_), int(self.n_samples_fit_)], "<i8"),
-        })
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -1885,33 +1881,7 @@ class RadiusNeighbors(NumericModeMixin):
         RadiusNeighbors
             A fitted model, ready for `radius_neighbors`.
         """
-        arrays = _serialize.read_npz(path, _RADIUS_FORMAT)
-        _check_saved_by(arrays, path, cls)
-        meta = _serialize.exact(arrays, "meta", "<i8")
-        if meta.size != 2:
-            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 2 are needed")
-        radius = _serialize.exact(arrays, "radius", "<f8")
-        p = _serialize.exact(arrays, "p", "<f8")
-        if radius.size != 1 or p.size != 1:
-            raise ValueError(f"mojolearn: {path!r} radius and p must hold one value each")
-        obj = cls(
-            radius=float(radius[0]),
-            metric=_serialize.scalar_str(arrays, "metric"),
-            algorithm=_serialize.scalar_str(arrays, "algorithm"),
-            p=float(p[0]),
-        )
-        _restore_mode(obj, arrays)
-        obj._check_refusals()
-        nf, ns = int(meta[0]), int(meta[1])
-        index = _serialize.exact(arrays, "index", "<f4")
-        if index.ndim != 2 or tuple(index.shape) != (ns, nf) or ns < 1 or nf < 1:
-            raise ValueError(
-                f"mojolearn: {path!r} index has shape {tuple(index.shape)}, meta says ({ns}, {nf})"
-            )
-        obj._index = index
-        obj.n_samples_fit_ = ns
-        obj.n_features_in_ = nf
-        return obj
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
     # DEVIATION 2375: the containers are Python lists of Arrays, where they
     # were object-dtype ndarrays of ndarrays. The self-edge under X=None is
@@ -2051,6 +2021,23 @@ class RadiusNeighbors(NumericModeMixin):
         if return_distance:
             return dst, ind
         return ind
+
+
+_native_archive_bridge.register(
+    RadiusNeighbors, _RADIUS_FORMAT, (
+        ("need_set", "_index", "RuntimeError", "this estimator is not fitted yet"),
+        *_native_archive_bridge.head(_RADIUS_FORMAT),
+        ("str", "metric", "metric"),
+        ("str", "algorithm", "algorithm"),
+        ("f8", "radius", (("float", "radius"),)),
+        ("f8", "p", (("float", "p"),)),
+        ("array", "index", "_index"),
+        ("i8", "meta", (("int", "n_features_in_"), ("int", "n_samples_fit_"))),
+    ),
+    host_archive_neighbor_metrics=dict(_METRIC_TABLE),
+    host_archive_rbc_metrics=dict(_RBC_METRIC_TABLE),
+    host_archive_unsupported_metrics=tuple(_UNSUPPORTED_METRICS),
+)
 
 
 # scikit-learn keeps more estimators in this module than it defines; they resolve from
