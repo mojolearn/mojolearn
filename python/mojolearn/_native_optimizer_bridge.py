@@ -84,3 +84,45 @@ def connect_sequence(training, sequence):
     guards = tuple((cls, cls.__mro__, vars(cls), tuple((name, vars(cls).get(name)) for name in names))  # glue: retain fixed native metadata layouts at module import
                    for cls in guarded)  # glue: register only fixed built-in schedule classes at import
     context["guards"] += guards
+
+
+def connect_sequence_optimizers(training, optim, device):
+    # glue: connect sequence optimizer ABI symbols and exact owner layouts at import
+    from types import BuiltinFunctionType
+    from . import _backend
+    context = training._OPT_CONTEXT
+    classes = (optim.RMSprop, optim.Adagrad, optim.Lion, optim.Adamax,
+               optim.NAdam, optim.Adafactor, optim.LAMB)
+    context["sequence_owners"] = classes
+    context["sequence_device_class"] = device.SequenceDeviceTensor
+    slots = tuple(device.SequenceDeviceTensor.__slots__)
+    names = slots + ("__dict__", "__getattribute__", "__getattr__", "__setattr__")
+    guarded = (optim._ResidentState, optim._SeqOptimizer, device.SequenceDeviceTensor) + classes
+    context["guards"] += tuple((cls, cls.__mro__, vars(cls), tuple((name, vars(cls).get(name)) for name in names))  # glue: connect fixed native descriptor identities at import
+                                for cls in guarded)  # glue: snapshot sequence native owner layouts
+    context["sequence_device_getters"] = {name: vars(device.SequenceDeviceTensor)[name].__get__ for name in slots}  # glue: retain native slot getters at import
+    context["sequence_device_setters"] = {name: vars(device.SequenceDeviceTensor)[name].__set__ for name in slots if name != "__weakref__"}  # glue: retain native slot setters at import
+    bindings = {}
+    required = ("seq_optimizer_init", "seq_optimizer_step", "seq_lamb_step", "seq_adafactor_step",
+                "seq_optimizer_state", "seq_optimizer_export", "seq_optimizer_import", "seq_optimizer_close")
+    optional = ("seq_tensor_alloc", "seq_tensor_free", "seq_tensor_upload", "seq_tensor_download", "seq_tensor_copy",
+                "optimizer_resident_open", "optimizer_resident_close", "optimizer_resident_move", "optimizer_resident_step", "optimizer_resident_step_dev",
+                "adafactor_resident_open", "adafactor_resident_step", "adafactor_resident_step_dev",
+                "lamb_resident_open", "lamb_resident_step", "lamb_resident_step_dev")
+    for mode in ("identical", "fast"):  # glue: connect supported sequence numeric-mode ABI symbols at import
+        try:
+            binding = _backend.binding("_mojolearn_x_sequence", mode)
+            cells = {"module": binding}
+            for name in required + optional:  # glue: retain fixed compiled symbols at import
+                entry = getattr(binding, name, None)
+                if entry is None and name in optional:
+                    continue
+                if not isinstance(entry, BuiltinFunctionType):
+                    raise TypeError(f"sequence optimizer requires compiled {name}")
+                cells[name] = entry
+            bindings[mode] = cells
+        except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, NotImplementedError) as error:
+            bindings[mode] = type(error).__name__ + ": " + str(error)
+    context["sequence_bindings"] = bindings
+    context["sequence_device_io_off"] = device._DEVICE_IO_OFF
+    return training._OPT_NATIVE, context
