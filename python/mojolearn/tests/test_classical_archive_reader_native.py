@@ -386,19 +386,89 @@ def test_public_load_error_refuses_nested_foreign_name_hooks(tmp_path, kind, nam
         value.close()
 
 
-def test_public_load_error_bounds_deep_native_name_recursion(tmp_path):
-    value = _input(tmp_path, _payload(estimator="Bogus"), "fileio")
-    name = []
-    for _ in range(2 * sys.getrecursionlimit()):
-        name = [name]
-    value.name = name
+@pytest.mark.parametrize("kind", ["fileio", "buffered"])
+@pytest.mark.parametrize("nested", [False, True])
+@pytest.mark.parametrize("key_kind", ["foreign", "str_subclass"])
+def test_public_load_error_refuses_file_name_dictionary_key_hooks(tmp_path, kind, nested, key_kind):
+    raw = _input(tmp_path, _payload(estimator="Bogus"), "fileio")
+    value = raw if kind == "fileio" else io.BufferedReader(raw)
+    peer = io.FileIO(tmp_path / "peer.bin", "w+") if nested else raw
+    touched = []
+    class Foreign:
+        def __hash__(self):
+            return hash("name")
+        def __eq__(self, other):
+            touched.append("comparison")
+            return other == "name"
+    class NativeSubclass(str):
+        __hash__ = Foreign.__hash__
+        __eq__ = Foreign.__eq__
+    key = Foreign() if key_kind == "foreign" else NativeSubclass("name")
+    del peer.name
+    peer.__dict__[key] = "hidden-name"
+    if nested:
+        raw.name = [peer]
+    touched.clear()
     try:
-        with pytest.raises(RecursionError):
-            repr(value)
-        _refused(audit_native_call(HostLinearRegression.load, value), RecursionError)
+        _refused(audit_native_call(HostLinearRegression.load, value), TypeError)
+        assert touched == []
     finally:
-        value.name = "restored"
+        peer.__dict__.clear()
+        peer.name = "restored"
+        raw.name = "restored"
         value.close()
+        if nested:
+            peer.close()
+
+
+def test_public_load_error_bounds_deep_native_name_recursion(tmp_path):
+    # CPython 3.14 guards native recursion by C stack, independently of the
+    # Python recursion-limit setting. Discover an actual native repr refusal
+    # in an isolated process; a fixed 2*sys.getrecursionlimit() was not one.
+    # The search bound is a fixture memory budget, never a product depth cap.
+    path = tmp_path / "deep.npz"
+    path.write_bytes(_payload(estimator="Bogus"))
+    code = r'''
+import io, json, sys
+from mojolearn._classical_host import HostLinearRegression
+from mojolearn._verify_native_runtime import audit_native_call
+value = io.FileIO(sys.argv[1], "rb")
+try:
+    for exponent in range(7, 19):
+        name = []
+        for _ in range(2**exponent):
+            name = [name]
+        value.name = name
+        try:
+            repr(value)
+        except RecursionError:
+            depth = 2**exponent
+            break
+    else:
+        raise AssertionError("native repr guard not reached within fixture memory budget")
+    audit = audit_native_call(HostLinearRegression.load, value)
+    assert type(audit.exception) is RecursionError, audit.report()
+    assert audit.result is None
+    report = audit.report()
+    assert not any(report[key] for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads")), report
+    # Unwinding must leave the supported recursion guard balanced. A shallow
+    # exact display immediately after the refusal must still succeed.
+    value.name = [[1], [2]]
+    expected = f"mojolearn: {value!r} was saved by Bogus, not HostLinearRegression"
+    audit = audit_native_call(HostLinearRegression.load, value)
+    assert type(audit.exception) is ValueError, audit.report()
+    assert str(audit.exception) == expected
+    report = audit.report()
+    assert not any(report[key] for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads")), report
+    print(json.dumps({"native_oracle_depth": depth, "python_recursion_limit": sys.getrecursionlimit()}))
+finally:
+    value.name = "restored"
+    value.close()
+'''
+    result = subprocess.run([sys.executable, "-c", code, str(path)], text=True,
+                            capture_output=True, timeout=60, check=False)
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["native_oracle_depth"] > 0
 
 
 @pytest.mark.parametrize("cls", [LinearRegression, Ridge, HostLinearRegression, HostRidge])

@@ -157,6 +157,17 @@ def _archive_read_repr_body(value: PythonObject, context: PythonObject, trail: P
                 raise Error("RuntimeError: reentrant call inside _io." + label + ".__repr__")
         var child_trail = py_call(list_type, trail)
         _ = py_call(child_trail.append, value)
+        # Buffered .name delegates to its exact native FileIO owner. The raw
+        # file dictionary is mutable: even native attribute lookup can call a
+        # foreign key's __eq__. Admit storage and keys before looking up name.
+        var raw_file = value if i == 1 else value.raw
+        var file_fields = _archive_model_fields(raw_file)
+        if py_type(file_fields) is not py_type(Python.dict()):
+            raise Error("TypeError: archive file names require native dictionary storage")
+        var file_keys = py_call(list_type, file_fields)
+        for key in range(len(file_keys)):  # driver-loop: native FileIO metadata keys
+            if py_type(file_keys[key]) is not py_type(PythonObject("")):
+                raise Error("TypeError: archive file metadata requires exact string keys without Python comparison hooks")
         var stored_name = PythonObject(None)
         try:
             stored_name = value.name
