@@ -425,37 +425,58 @@ def host_archive_kmeans(cls: PythonObject, arrays: PythonObject, path: PythonObj
     return model
 
 
-def host_archive_mixture(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
-    var meta = host_archive_count(arrays, "ints", "<i8", 6, context, True)
-    var reals = host_archive_count(arrays, "reals", "<f8", 3, context, True)
+def host_archive_vector(arrays: PythonObject, name: String, count: Int, where: String,
+                        context: PythonObject) raises -> PythonObject:
+    """A 1-D float32 member of `count` values, refused as
+    `{path!r} {name} holds {n} values, {count} are needed`."""
+    var value = _archive_exact(arrays, name, "<f4", context)
+    if Int(py=value.ndim) != 1 or Int(py=value.size) != count:
+        raise Error(where + " " + name + " holds " + String(Int(py=value.size)) + " values, "
+                    + String(count) + " are needed")
+    return value
+
+
+def host_archive_mixture(cls: PythonObject, arrays: PythonObject, path: PythonObject,
+                         context: PythonObject) raises -> PythonObject:
+    # The refusals keep GaussianMixture.load's wording and order.
+    var where = host_archive_where(path, context)
+    var meta = _archive_exact(arrays, "ints", "<i8", context)
+    var reals = _archive_exact(arrays, "reals", "<f8", context)
+    if Int(py=meta.size) != 6 or Int(py=reals.size) != 3:
+        raise Error(where + " holds " + String(Int(py=meta.size)) + " ints and " + String(Int(py=reals.size))
+                    + " reals, 6 and 3 are needed")
     var k = classical_i64(meta, 0)
     var d = classical_i64(meta, 1)
     if k < 1 or d < 1:
-        raise Error("saved GaussianMixture holds an empty model")
+        raise Error(where + " holds an empty model")
+    var covariance_type = _archive_string(arrays, "covariance_type", context)
+    var init_params = _archive_string(arrays, "init_params", context)
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
-    host_archive_mode(arrays, fields, context)
     py_setitem(fields, "n_components", k)
-    py_setitem(fields, "covariance_type", _archive_string(arrays, "covariance_type", context))
+    py_setitem(fields, "covariance_type", covariance_type)
     py_setitem(fields, "tol", classical_f64(reals, 1))
     py_setitem(fields, "reg_covar", classical_f64(reals, 2))
     py_setitem(fields, "max_iter", classical_i64(meta, 4))
-    py_setitem(fields, "init_params", _archive_string(arrays, "init_params", context))
+    py_setitem(fields, "init_params", init_params)
     py_setitem(fields, "random_state", classical_i64(meta, 5))
     py_setitem(fields, "n_init", 1)
     py_setitem(fields, "warm_start", False)
     py_setitem(fields, "means_init", PythonObject(None))
     py_setitem(fields, "weights_init", PythonObject(None))
     py_setitem(fields, "precisions_init", PythonObject(None))
+    host_archive_mode(arrays, fields, context)
+    var weights = host_archive_vector(arrays, "weights", k, where, context)
+    var means = host_archive_vector(arrays, "means", k * d, where, context)
+    var covariance = host_archive_vector(arrays, "covariances", k * d * d, where, context)
+    var precision = host_archive_vector(arrays, "precisions_cholesky", k * d * d, where, context)
+    var log_det = host_archive_vector(arrays, "log_det_chol", k, where, context)
     py_setitem(fields, "n_features_in_", d)
-    py_setitem(fields, "weights_", host_archive_shape(arrays, "weights", "<f4", Python.tuple(k), context))
-    var means = host_archive_shape(arrays, "means", "<f4", Python.tuple(k * d), context)
-    var covariance = host_archive_shape(arrays, "covariances", "<f4", Python.tuple(k * d * d), context)
-    var precision = host_archive_shape(arrays, "precisions_cholesky", "<f4", Python.tuple(k * d * d), context)
+    py_setitem(fields, "weights_", weights)
     py_setitem(fields, "means_", classical_wrap_array(means._store, Python.tuple(k, d), "<f4", "C", context))
     py_setitem(fields, "covariances_", classical_wrap_array(covariance._store, Python.tuple(k, d, d), "<f4", "C", context))
     py_setitem(fields, "precisions_cholesky_", classical_wrap_array(precision._store, Python.tuple(k, d, d), "<f4", "C", context))
-    py_setitem(fields, "log_det_chol_", host_archive_shape(arrays, "log_det_chol", "<f4", Python.tuple(k), context))
+    py_setitem(fields, "log_det_chol_", log_det)
     py_setitem(fields, "n_iter_", classical_i64(meta, 2))
     py_setitem(fields, "converged_", classical_i64(meta, 3) != 0)
     py_setitem(fields, "lower_bound_", classical_f64(reals, 0))
@@ -1739,7 +1760,7 @@ def host_archive_build(path: PythonObject, context: PythonObject,
     elif fmt == "mojolearn-kmeans-1":
         model = host_archive_kmeans(cls, arrays, path, context)
     elif fmt == "mojolearn-gmm-1":
-        model = host_archive_mixture(cls, arrays, context)
+        model = host_archive_mixture(cls, arrays, path, context)
     elif fmt == "mojolearn-kde-1" or fmt == "mojolearn-dbscan-1":
         model = host_archive_density(cls, arrays, fmt == "mojolearn-kde-1", context)
     elif fmt == "mojolearn-agglomerative-1":
