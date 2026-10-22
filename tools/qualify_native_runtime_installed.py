@@ -28,6 +28,7 @@ PUBLIC_TESTS = {
     "test_training_linear_public_native.py": "Public linear forward/backward input preparation, output ownership and native failure paths",
     "test_maxabs_scaler_native_transport.py": "MaxAbsScaler scratch, mapped outputs, resident transport and operation-owned slot cleanup",
     "test_robust_scaler_native_lifecycle.py": "RobustScaler lifecycle, options, inputs, state and native boundary refusals",
+    "test_scaler_complex_warning_native.py": "Native scaler warning categories, filter actions and Python hook refusals",
     "test_scaler_rows_snapshot_native.py": "RobustScaler and MaxAbsScaler retained typed DeviceRows snapshots",
     "test_robust_scaler_native_transport.py": "RobustScaler scratch, mapped outputs, resident transport and operation-owned slots",
     "test_training_device_native_rollback.py": "Training device allocation and optimizer parameter copy rollback with real native failures",

@@ -190,7 +190,7 @@ class InstalledNativeAudit(unittest.TestCase):
     def test_public_owner_and_host_scopes_exclude_private_array_candidate(self):
         names = ("test_native_owner_qualification.py", "test_sequence_shutdown_native.py", "test_training_rms_public_native.py",
                  "test_training_device_native_finalizer.py", "test_training_device_native_rollback.py",
-                 "test_robust_scaler_native_lifecycle.py", "test_scaler_rows_snapshot_native.py",
+                 "test_robust_scaler_native_lifecycle.py", "test_scaler_rows_snapshot_native.py", "test_scaler_complex_warning_native.py",
                  "test_robust_scaler_native_transport.py",
                  "test_training_linear_public_native.py", "test_maxabs_scaler_native_transport.py",
                  "test_host_inference_native.py", "test_host_kernel_inference_native.py", "test_host_projection_native.py",
@@ -198,7 +198,7 @@ class InstalledNativeAudit(unittest.TestCase):
         for name in names:
             self.assertIn(name, q.PUBLIC_TESTS)
             self.assertTrue((q.ROOT / "python/mojolearn/tests" / name).is_file())
-        for name in ("test_sequence_array_native_candidate.py", "test_sequence_array_native_guards.py"):
+        for name in ("test_sequence_array_native_candidate.py", "test_sequence_array_native_guards.py", "test_scaler_native_descriptor_lifetime.py"):
             self.assertNotIn(name, q.PUBLIC_TESTS)
         scope = q.test_applicability(names, "cuda")
         self.assertIn("explicit CPU host", scope["test_host_inference_native.py"]["execution_route"])

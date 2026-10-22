@@ -1,8 +1,8 @@
 {
   "schema": "mojolearn.runtime-takeover-status.v1",
-  "updated": "2026-10-22T06:17:43.350733+00:00",
+  "updated": "2026-10-22T06:26:25.352602+00:00",
   "release": "HELD",
-  "integration_before_report": "ada52ef531909be0809f665145740e1a0950227a",
+  "integration_before_report": "505b246aec5b4b82e7eec38ae0042b5761879b4c",
   "evidence_root": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021",
   "test_policy": "Rerun failures, new tests and directly affected regression checks; reuse accepted unchanged results. Counts from different scopes are not interchangeable.",
   "completed": {
@@ -212,9 +212,9 @@
     }
   },
   "remaining": [
-    "3ede RobustScaler complex-quantile warning guard fails one CPU and one Metal case; shared arena-range lifetime failure affects 57 further Metal and31 FAST cases. Both repairs are active; original logs and exact failing node IDs retained.",
+    "3ede scaler failures repaired in source505b246ae: range lists/command program stay alive through native call, builtin warning base constructors admitted by exact identity. Runtime proof pending next freeze; original58Metal/1CPU/31FAST failures retained.",
     "Linear202+9f, MaxAbs transport60bf, row-callback guard3c6 and HostKDE2dc are reviewed and integrated after3ede for the next freeze; candidate runtime execution remains pending. Selector74+dd is integrated with focused lane tooling evidence.",
-    "RMS public training and HostIsolationForest inference remain isolated source lanes. Resident scope/cache/DeviceRows construction and materialization still include Python product orchestration.",
+    "RMS public training and HostIsolationForest inference are now integrated for the next freeze. Embedding preparation, HostKernelDensity.fit, and resident scope/cache/DeviceRows construction/materialization remain active followup work.",
     "Public __array__ managed String ownership/callback contract, cold sklearn tags, remaining API/option/fault/reference/installed/Linux/NVIDIA/AMD qualification remain open."
   ],
   "limitations": [
@@ -302,5 +302,16 @@
     "source": "3ede5addb940b3b5d5672b5737365575b497aab2",
     "scope": "SVC591 and SVR12 eachCPU/Metal, selected optimizer finalizer/rollback and NumPy text formatting tests passed; no whole-library qualification claim",
     "evidence": "runtime-selection-verdict-3ede5addb.json"
+  },
+  "next_freeze": {
+    "reuse_build": "3ede5addb940b3b5d5672b5737365575b497aab2",
+    "source_changes": [
+      "Robust/MaxAbs ABI range and command-buffer lifetimes",
+      "Exact native warning base constructor admission",
+      "MaxAbs scratch/resident/mapped transport and row callback guards",
+      "Public linear/RMS native preparation and output ownership",
+      "Explicit CPU KDE and IsolationForest inference/score"
+    ],
+    "validation": "Source reviewed; new candidate runtime execution pending. Reuse unchanged numerical source/binaries; failing/new/directly affected checks only."
   }
 }
