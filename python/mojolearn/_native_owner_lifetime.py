@@ -4,7 +4,7 @@
 
 def connect_owner_context(context):
     # glue: retain supported native slot/weak-reference identities at import
-    from types import BuiltinFunctionType, GetSetDescriptorType, MemberDescriptorType, MethodType
+    from types import BuiltinFunctionType, MemberDescriptorType, MethodType
     import mmap
     import weakref
     from ._array import Array
@@ -15,7 +15,9 @@ def connect_owner_context(context):
     if type(weakref.getweakrefs) is not BuiltinFunctionType:
         raise TypeError("native owner admission requires native weak-reference inspection")
     callback = vars(weakref.ReferenceType)["__callback__"]
-    if type(callback) is not GetSetDescriptorType:
+    if (type(callback) is not MemberDescriptorType
+            or callback.__objclass__ is not weakref.ReferenceType
+            or callback.__name__ != "__callback__"):
         raise TypeError("native owner admission requires the native weak-reference callback descriptor")
     context.update(owner_array_slots=slots, owner_getweakrefs=weakref.getweakrefs,
                    owner_weakref_class=weakref.ReferenceType, owner_weakref_callback=callback,
