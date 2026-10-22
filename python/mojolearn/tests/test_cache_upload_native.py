@@ -234,9 +234,23 @@ def test_cache_id_of_real_native_upload_failure_preserves_empty_state(prefix, ki
     source = _source(address=0 if kind == "null" else 2**100 if kind == "address_overflow" else 8,
                      size=2**100 if kind == "size_overflow" else 3)
     audit = audit_native_call(cache.id_of, source)
-    assert type(audit.exception) is (Exception if kind == "null" else OverflowError), audit.report()
+    # The retained pre-migration public id_of and the direct x_prep/x_metrics
+    # entries both raise Exception for Int(py=...) ABI overflow, with this
+    # exact message/args (3b5991a57, CPython 3.11 and 3.14). The original
+    # OverflowError expectation was a fixture error; native propagation must
+    # preserve the actual public contract rather than invent a new category.
+    assert type(audit.exception) is Exception, audit.report()
     _no_work(audit)
-    if kind == "null": assert "non-null address" in str(audit.exception)
+    if kind == "null":
+        assert "non-null address" in str(audit.exception)
+    else:
+        expected = "Python int too large to convert to C ssize_t"
+        assert str(audit.exception) == expected
+        assert audit.exception.args == (expected,)
+        direct = audit_native_call(cache._put, source._addr, source.size)
+        _no_work(direct)
+        assert type(direct.exception) is type(audit.exception)
+        assert direct.exception.args == audit.exception.args
     assert cache._entries == {} and (cache.uploads, cache.hits) == (0, 0)
     assert cache.live() == base
 
