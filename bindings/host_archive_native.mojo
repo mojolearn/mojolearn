@@ -567,29 +567,16 @@ def host_archive_class_values(value: PythonObject, context: PythonObject) raises
     return result
 
 
-def host_archive_logistic(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
-    var meta = host_archive_count(arrays, "meta", "<i8", 2, context, True)
+def host_archive_logistic(cls: PythonObject, arrays: PythonObject, path: PythonObject,
+                          context: PythonObject) raises -> PythonObject:
+    # The refusals keep LogisticRegression.load's wording and order; the
+    # fields follow the constructor's, then the loader's, assignments.
+    var where = host_archive_where(path, context)
+    var meta = host_archive_meta(arrays, "meta", 2, path, context)
     var nf = classical_i64(meta, 0)
     var intercept = classical_i64(meta, 1) != 0
-    if nf < 0:
-        raise Error("saved LogisticRegression feature count cannot be negative")
-    var classes = host_archive_class_values(arrays["classes"], context)
-    if len(classes) < 2:
-        raise Error("saved LogisticRegression must carry at least two classes")
-    var targets = 1 if len(classes) == 2 else len(classes)
-    var w = _archive_exact(arrays, "w", "<f4", context)
-    var words = Int(py=w.size)
-    if Int(py=w.ndim) != 1 or words % targets != 0 or words // targets - (1 if intercept else 0) != nf:
-        raise Error("saved LogisticRegression weights do not match features and class count")
-    var coef = host_archive_typed(Python.tuple(targets, nf), "<f4", context)
-    var bias = classical_array(targets, 0, context)
-    host_archive_copy_f32(Int(py=classical_address(w)), 4, targets * 4, targets, nf, Int(py=classical_address(coef)))
-    if intercept:
-        host_archive_copy_f32(Int(py=classical_address(w)) + targets * nf * 4, 4, 4,
-                              targets, 1, Int(py=classical_address(bias)))
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
-    host_archive_mode(arrays, fields, context)
     py_setitem(fields, "penalty", "l2")
     py_setitem(fields, "tol", 0.0001)
     py_setitem(fields, "C", 1.0)
@@ -599,6 +586,22 @@ def host_archive_logistic(cls: PythonObject, arrays: PythonObject, context: Pyth
     py_setitem(fields, "linesearch_max_iter", 50)
     py_setitem(fields, "l1_ratio", PythonObject(None))
     py_setitem(fields, "solver", "qn")
+    host_archive_mode(arrays, fields, context)
+    if not py_contains(arrays, "classes"):
+        raise Error(where + " has no classes member")
+    var classes = host_archive_class_values(arrays["classes"], context)
+    if len(classes) < 2:
+        raise Error(where + " must carry at least two classes")
+    var targets = 1 if len(classes) == 2 else len(classes)
+    var w = _archive_exact(arrays, "w", "<f4", context)
+    if nf < 0 or Int(py=w.ndim) != 1 or Int(py=w.size) != (nf + (1 if intercept else 0)) * targets:
+        raise Error(where + " w does not match n_features_in_, fit_intercept and the class count")
+    var coef = host_archive_typed(Python.tuple(targets, nf), "<f4", context)
+    var bias = classical_array(targets, 0, context)
+    host_archive_copy_f32(Int(py=classical_address(w)), 4, targets * 4, targets, nf, Int(py=classical_address(coef)))
+    if intercept:
+        host_archive_copy_f32(Int(py=classical_address(w)) + targets * nf * 4, 4, 4,
+                              targets, 1, Int(py=classical_address(bias)))
     py_setitem(fields, "classes_", classes)
     py_setitem(fields, "_w", w)
     py_setitem(fields, "coef_", coef)
@@ -1733,7 +1736,7 @@ def host_archive_build(path: PythonObject, context: PythonObject,
     elif fmt == "mojolearn-agglomerative-1":
         model = host_archive_agglomerative(cls, arrays, context)
     elif fmt == "mojolearn-logistic-1":
-        model = host_archive_logistic(cls, arrays, context)
+        model = host_archive_logistic(cls, arrays, path, context)
     elif fmt == "mojolearn-arima-1" or fmt == "mojolearn-arima-2":
         model = host_archive_arima(cls, arrays, fmt == "mojolearn-arima-2", context)
     elif fmt == "mojolearn-holtwinters-1":

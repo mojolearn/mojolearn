@@ -30,6 +30,14 @@
 #   ("i8" | "i4" | "f8" | "f4", member, items)
 #                                      one packed vector, an item per element
 #   ("when", field, value, steps)      run steps when field == value
+#   ("classes", member, field, integral, real)
+#                                      a classifier's class table as
+#                                      `_labels.classes_member` wrote it: <i8
+#                                      for integer (or all-bool) labels, <f8
+#                                      for real labels, a list of str (a <U
+#                                      member) for str labels; `integral` and
+#                                      `real` are numbers.Integral and
+#                                      numbers.Real, fixed at register
 #
 # An item is ("int", field), ("bool", field), ("const", number),
 # ("dim", field, axis), ("size", field), ("len", field), ("none", field, sentinel),
@@ -257,6 +265,86 @@ def _schema_mode(fields: PythonObject, prefix: PythonObject, context: PythonObje
     return folded
 
 
+def _schema_label_kind(label: PythonObject, integral: PythonObject, real: PythonObject,
+                       context: PythonObject) raises -> Int:
+    """0 bool (`_labels.is_bool`), 1 integer, 2 real, 3 str, 4 another label.
+    Builtin and NumPy scalars are told by type; any other label by the
+    numbers ABCs, as `_labels.label_kind` did."""
+    var b = Python.import_module("builtins")
+    var cls = py_type(label)
+    if cls is b.bool:
+        return 0
+    if cls is b.int:
+        return 1
+    if cls is b.float:
+        return 2
+    if cls is b.str:
+        return 3
+    if String(cls.__name__) == "bool_":
+        return 0
+    var scalars = py_get(context, "scalar_types")
+    if scalars is not None and py_contains(scalars, cls):
+        var kind = String(label.dtype.kind)
+        if kind == "i" or kind == "u":
+            return 1
+        if kind == "f":
+            return 2
+    if Bool(py=py_call(b.isinstance, label, b.str)):
+        return 3
+    if Bool(py=py_call(b.isinstance, label, integral)):
+        return 1
+    if Bool(py=py_call(b.isinstance, label, real)):
+        return 2
+    return 4
+
+
+def _schema_label_store(values: PythonObject, code: String, dtype: String, context: PythonObject) raises -> PythonObject:
+    """`Array.from_list(values, dtype)` for a flat list of builtin numbers,
+    with its refusal of a value the dtype cannot hold."""
+    var store = PythonObject(None)
+    try:
+        store = py_call(context["array_type"], code, values)
+    except error:
+        raise Error("TypeError: mojolearn: cannot build a " + dtype + " Array from these values: " + String(error))
+    return classical_wrap_array(store, Python.tuple(len(values)), dtype, "C", context)
+
+
+def _schema_classes(value: PythonObject, integral: PythonObject, real: PythonObject,
+                    context: PythonObject) raises -> PythonObject:
+    """`_labels.classes_member(value)`: int64 when every label is an integer
+    (bools excluded) or every label is a bool, float64 when every label is a
+    real number (bools excluded), the list of str when every label is a str."""
+    var b = Python.import_module("builtins")
+    var labels = py_call(b.list, value)
+    var count = len(labels)
+    var integers = True
+    var reals = True
+    var bools = True
+    var texts = True
+    for i in range(count):  # driver-loop: over the distinct class labels' kinds
+        var kind = _schema_label_kind(labels[i], integral, real, context)
+        bools = bools and kind == 0
+        integers = integers and kind == 1
+        reals = reals and (kind == 1 or kind == 2)
+        texts = texts and kind == 3
+    var packed = Python.list()
+    if integers or bools:
+        for i in range(count):  # driver-loop: over the distinct class labels
+            _ = py_call(packed.append, py_call(b.int, labels[i]))
+        return _schema_label_store(packed, "q", "<i8", context)
+    if reals:
+        for i in range(count):  # driver-loop: over the distinct class labels
+            _ = py_call(packed.append, py_call(b.float, labels[i]))
+        return _schema_label_store(packed, "d", "<f8", context)
+    if texts:
+        # str.__str__ gives the exact str of a str subclass without its hooks.
+        var exact = b.str.__dict__["__str__"]
+        for i in range(count):  # driver-loop: over the distinct class labels
+            _ = py_call(packed.append, py_call(exact, labels[i]))
+        return packed
+    raise Error("ValueError: mojolearn: classes_ holds labels no model file can carry")
+
+
 def _schema_run(model: PythonObject, fields: PythonObject, steps: PythonObject, values: PythonObject,
                 name: String, context: PythonObject) raises:
     var b = Python.import_module("builtins")
@@ -309,6 +397,8 @@ def _schema_run(model: PythonObject, fields: PythonObject, steps: PythonObject, 
         elif kind == "i8" or kind == "i4" or kind == "f8" or kind == "f4":
             var dtype = String("<") + kind
             py_setitem(values, step[1], _schema_vector(fields, dtype, step[2], name, context))
+        elif kind == "classes":
+            py_setitem(values, step[1], _schema_classes(_schema_value(fields, step[2], name), step[3], step[4], context))
         elif kind == "when":
             if _schema_has(fields, step[1]) and Bool(py=_schema_value(fields, step[1], name) == step[2]):
                 _schema_run(model, fields, step[3], values, name, context)

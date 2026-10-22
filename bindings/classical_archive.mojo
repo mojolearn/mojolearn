@@ -187,6 +187,29 @@ def _archive_npy(value: PythonObject, context: PythonObject) raises -> PythonObj
         raw = archive_utf32_encode(value, context)
         if len(value) == 0:
             raw = py_call(context["archive_bytes_type"], 4)
+    elif py_type(value) is py_type(Python.list()):
+        # A flat list of str (a classifier's str class table): the
+        # `<U{width}` member `_serialize._describe_list` wrote, every element
+        # padded to the longest (at least one code point); an empty list is
+        # the empty <f8 vector it wrote.
+        var count = len(value)
+        shape = Python.tuple(count)
+        if count == 0:
+            descr = "<f8"
+            raw = py_call(context["archive_bytes_type"])
+        else:
+            var width = 1
+            for i in range(count):  # driver-loop: over the str elements of one saved label table
+                if py_type(value[i]) is not py_type(PythonObject("")):
+                    raise Error("TypeError: mojolearn: cannot serialize a list of mixed kinds")
+                width = max(width, len(value[i]))
+            descr = "<U" + String(width)
+            var joined = py_call(context["archive_bytearray_type"])
+            for i in range(count):  # driver-loop: over the str elements of one saved label table
+                var word = archive_utf32_encode(value[i], context)
+                _ = py_call(joined.extend, word)
+                _ = py_call(joined.extend, py_call(context["archive_bytes_type"], 4 * width - len(word)))
+            raw = py_call(context["archive_bytes_type"], joined)
     else:
         classical_admit_value(value, context)
         var array = value if classical_is_array(value, context) or py_type(value) is py_get(context, "ndarray") else classical_input(value, context)
