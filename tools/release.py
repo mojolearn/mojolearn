@@ -150,7 +150,14 @@ THE STEPS
                      pip download of the Linux file, sha256 compared (Linux), and
                      the package set pip resolves for `mojolearn`,
                      `mojolearn-nvidia` and `mojolearn-amd` (Linux)
-  record             bench/results/release_verification/<date>_pypi_<v>/, committed
+  gate-nvidia        } THE RELEASE GATE (2026-10-22), after that vendor's publish: tools/release_lq_smoke.py
+  gate-amd           }   --gate runs tools/gate_smoke_box.py <vendor> <version> ... all ON the held lq box
+                         (never the Mac, nothing rented): the 5 s smoke over the WHOLE plan, the autograd
+                         smoke, then one scored run per arm of every plan line vs its peers (opponents from
+                         the box's store when already scored); only the reports come home to
+                         <version>/<commit12>/gate-<vendor>/. Done only on verdict PASS
+  record             bench/results/release_verification/<date>_pypi_<v>/, committed; waits for both
+                     gates and refuses while a published Linux vendor has no passing gate
 
 Nothing is published without `--publish none|testpypi|pypi`; without it both
 pipelines stop at their publish step and say so.
@@ -920,6 +927,17 @@ LQ_COLUMN_BOX = {"nvidia": os.environ.get("MOJOLEARN_RELEASE_NV_BOX", "nv"),
 HOPPER_NOT_RUN = "not run (no Hopper box held)"
 PUBLISH_STEPS = tuple(pipeline["publish"] for pipeline in PIPELINES.values())
 AFTER["finish-line"] = list(PUBLISH_STEPS)
+# THE RELEASE GATE (2026-10-22, Andrew: every exposed API "measured if appropriate with apples-to-apples
+# comparison against peers, and the measurements should be in the smoke test"): after a vendor's plugin is on
+# PyPI, tools/gate_smoke_box.py ... all runs ON that vendor's held lq box (tools/release_lq_smoke.py --gate;
+# a box job, never a Mac job, nothing rented): setup from the published wheels, the 5 s smoke over the WHOLE
+# plan, the autograd smoke, and one scored run per arm of every plan line (opponents from the box's store when
+# already scored). The record step waits for both gates to settle and refuses to record a published Linux
+# vendor whose gate did not PASS, so a release cannot skip it.
+GATE_VENDORS = {"nvidia": "publish-nvidia", "amd": "publish-amd"}
+STEP_TABLE[STEP_TABLE.index(next(r for r in STEP_TABLE if r[0] == "finish-line")):0] = [
+    ("gate-" + v, "finish", [pub], None) for v, pub in GATE_VENDORS.items()]
+AFTER["record"] = ["gate-" + v for v in GATE_VENDORS]
 
 PIPELINE_OF = {s: p for s, p, _, _ in STEP_TABLE}
 NEEDS = {s: n for s, _, n, _ in STEP_TABLE}
@@ -2460,12 +2478,68 @@ class Release:
                     tooling_commit=self.tooling_commit, earlier_commits=self.state.get("earlier_commits", []),
                     published=self.published_platforms(), legs=legs, columns=cols)
 
+    # ------------------------------------------------------------ the release gate
+    def gate_out(self, vendor):
+        return self.rel / f"gate-{vendor}"
+
+    def gate_ok(self, vendor):
+        """(ok, why): the gate report that came home for this version and vendor says PASS."""
+        doc = read_json(self.gate_out(vendor) / "gate-smoke.json")
+        if not doc:
+            return False, f"no gate report at {self.gate_out(vendor) / 'gate-smoke.json'}"
+        if doc.get("version") != self.version or doc.get("vendor") != vendor:
+            return False, f"the gate report is for {doc.get('vendor')} {doc.get('version')}"
+        sys.path.insert(0, str(ROOT / "tools"))
+        from gate_smoke_box import gate_verdict
+        verdict, why = gate_verdict(doc)
+        if verdict != "PASS" or doc.get("verdict") != "PASS":
+            return False, f"verdict {verdict}: " + "; ".join(why or doc.get("verdict_reasons") or [])
+        m = doc.get("measure") or {}
+        return True, (f"PASS: smoke {doc.get('smoke_lines')} lines {doc.get('counts')}, measured "
+                      f"{m.get('expected')} lines (board {m.get('board')})")
+
+    def run_gate(self, vendor):
+        if self.args.publish != "pypi":
+            return "skipped (the gate installs the PyPI wheels; not published to PyPI)"
+        ok, why = self.gate_ok(vendor)
+        if ok:
+            return why
+        box = LQ_COLUMN_BOX[vendor]
+        work = self.rel / "gates"
+        cmd = [PY, "tools/release_lq_smoke.py", "--gate", vendor, self.version, "--box", box,
+               "--tag", f"rel-{self.version}-gate-{vendor}",
+               "--remote-dir", f"/root/release-gate/{self.version}/{vendor}",
+               "--out", str(self.gate_out(vendor)), "--state", str(work / f"{vendor}.lq.json"),
+               "--branch", getattr(self.args, "smoke_branch", None) or "main",
+               "--max-job-hours", "40", "--max-wait-hours", "72"]
+        if not self.dry:
+            work.mkdir(parents=True, exist_ok=True)
+        self.must(cmd, log=work / f"gate-{vendor}.log", what=f"the {vendor} release gate on lq box {box}")
+        if self.dry:
+            return None
+        ok, why = self.gate_ok(vendor)
+        if not ok:
+            raise StepFailed(f"the {vendor} release gate did not pass: {why}")
+        return why
+
+    def step_gate_nvidia(self):
+        return self.run_gate("nvidia")
+
+    def step_gate_amd(self):
+        return self.run_gate("amd")
+
     def step_record(self):
         if self.args.publish != "pypi":
             return "skipped (not published to PyPI)"
         published = self.published_platforms()
         if not published:
             return "nothing published yet", dict(platforms=[])
+        # THE RELEASE GATE cannot be skipped: every published Linux vendor needs its gate PASS
+        ungated = [f"{v} ({self.gate_ok(v)[1]})" for v in GATE_VENDORS
+                   if v in published and not self.dry and not self.gate_ok(v)[0]]
+        if ungated:
+            raise StepFailed("published vendor(s) without a passing release gate: " + "; ".join(ungated)
+                             + ". Rerun `release` to run the gate (tools/gate_smoke_box.py on the held lq box).")
         date = changelog_date(ROOT, self.version, text=file_at(self.commit, "CHANGELOG.md") or "") \
             or dt.date.today().isoformat()
         rec = ROOT / "bench" / "results" / "release_verification" / f"{date}_pypi_{self.version.replace('.', '')}"
@@ -2674,7 +2748,7 @@ class Release:
                     line = f"{name}: not published ({pub} {status[pub]})"
             lines.append(line)
             self.say("   " + line)
-        for s in ("finish-line", "record"):
+        for s in ("finish-line", *("gate-" + v for v in GATE_VENDORS), "record"):
             if status[s] in ("done",) and self.recorded(s):
                 self.say(f"   {s}: {self.recorded(s).get('result', '')}")
             elif status[s] not in ("skipped",):
