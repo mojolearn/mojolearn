@@ -143,6 +143,20 @@ def test_archive_file_errors_preserve_native_class_and_attributes(tmp_path, kind
             old_path.close(); actual_path.close()
 
 
+@pytest.mark.parametrize("cls", [Path, PurePosixPath])
+def test_archive_writer_file_error_preserves_double_slash_root(tmp_path, cls):
+    model = _model()
+    value = cls("//" + str(tmp_path).lstrip("/") + "/missing/model.npz")
+    with pytest.raises(FileNotFoundError) as expected:
+        io.open(value, "wb")
+    audit = audit_native_call(model.save, value)
+    _refused(audit, FileNotFoundError)
+    assert type(audit.exception.filename) is str
+    assert audit.exception.filename == expected.value.filename
+    assert audit.exception.errno == expected.value.errno
+    assert str(audit.exception) == str(expected.value)
+
+
 def test_archive_path_protocols_are_refused_before_callbacks(tmp_path):
     touched = []
     class ForeignPath:
