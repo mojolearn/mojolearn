@@ -4,7 +4,6 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.optimizer_admission import opt_exact, opt_value
-from bindings.optimizer_public_door import TensorView, tensor_view
 from bindings.optimizer_public_words import stash_python_error
 from bindings.native_numpy_metadata import native_numpy_type
 from bindings.sequence_dtype_native import sequence_dtype_classes, sequence_dtype_instance, sequence_dtype_create
@@ -13,13 +12,37 @@ from bindings.training_scalar_native import training_scalar_warning
 
 
 def loss_native_item(value: PythonObject, key: PythonObject) raises -> PythonObject:
-    # Callers first admit the exact builtin ndarray/void dtype and key.
+    # Callers first admit the exact native memoryview or ndarray/void dtype
+    # and key; no user indexing protocol reaches this public CPython slot.
     ref cpy = Python().cpython()
     var result = cpy.lib.get_function[PyObjectPtr]("PyObject_GetItem")(value._obj_ptr, key._obj_ptr)
     if not result:
         var failure = stash_python_error()
         raise failure^
     return PythonObject(from_owned=result)
+
+
+def loss_array_truth(value: PythonObject, context: PythonObject) raises -> Bool:
+    # Array.__bool__ uses the single stored value, regardless of rank, and
+    # refuses both empty and multi-element arrays. Read retained native slots
+    # and the admitted memoryview; do not invoke Array._values or __bool__.
+    opt_value(value, context)
+    var getters = context["array_getters"]
+    if Int(py=py_call(getters["size"], value)) != 1:
+        raise Error("ValueError: mojolearn: the truth value of an Array with more than one element is ambiguous")
+    var view = py_call(getters["_mv"], value)
+    var scalar = loss_native_item(view, PythonObject(0))
+    var dtype = String(py_call(getters["dtype"], value))
+    if dtype == "<f2":
+        # Array stores binary16 as native unsigned words. Both signed zero
+        # encodings are false; all other values, including NaNs, are true.
+        return (Int(py=scalar) & 0x7fff) != 0
+    ref cpy = Python().cpython()
+    var result = cpy.lib.get_function[Int32]("PyObject_IsTrue")(scalar._obj_ptr)
+    if result < 0:
+        var failure = stash_python_error()
+        raise failure^
+    return result != 0
 
 
 def loss_truth(value: PythonObject, context: PythonObject, depth: Int = 0) raises -> Bool:
@@ -33,11 +56,7 @@ def loss_truth(value: PythonObject, context: PythonObject, depth: Int = 0) raise
         opt_value(value, context)
         admitted = True
     if cls is context["array_class"]:
-        var view = TensorView()
-        _ = tensor_view(value, view)
-        if len(view.shape) == 0:
-            raise Error("TypeError: len() of unsized object")
-        return view.shape[0] != 0
+        return loss_array_truth(value, context)
     if not admitted:
         var numpy = py_get(context["modules"], "numpy")
         if numpy is None:

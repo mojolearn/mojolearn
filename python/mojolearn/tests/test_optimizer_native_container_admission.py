@@ -1,5 +1,6 @@
 """Mutable builtin names cannot admit Python container or scalar hooks."""
 import builtins
+import dis
 
 import numpy as np
 import pytest
@@ -33,6 +34,15 @@ def assert_native_refusal(audit, calls, expected=TypeError, message=None):
         assert not audit.report()[key], audit.report()
 
 
+def pin_observer_constructor(patch, name):
+    # The auditor disassembles wrappers before the measured product call.
+    # CPython dis constructs dict/set objects and then indexes/iterates them;
+    # poisoning those observer objects fails before product execution. Pin
+    # only dis's own globals, while builtins remains poisoned for the product.
+    if name in ("dict", "set"):
+        patch.setattr(dis, name, getattr(builtins, name), raising=False)
+
+
 @pytest.mark.parametrize("name", ["list", "dict", "bytearray", "memoryview"])
 @pytest.mark.parametrize("operation", ["rms_norm_forward", "rms_norm_backward"])
 def test_scalar_configuration_never_admits_replaced_builtin_containers(monkeypatch, name, operation):
@@ -43,6 +53,7 @@ def test_scalar_configuration_never_admits_replaced_builtin_containers(monkeypat
     weight = np.ones(3, dtype="f4")
     args = (x, weight) if operation.endswith("forward") else (x.copy(), x, weight)
     with monkeypatch.context() as patch:
+        pin_observer_constructor(patch, name)
         patch.setattr(builtins, name, cls)
         audit = audit_native_call(getattr(T, operation), *args, eps=value,
                                   numeric_mode="identical")
@@ -82,6 +93,7 @@ def test_loss_truth_never_admits_replaced_builtin_container(monkeypatch, name):
     x = np.ones((2, 3), dtype="f4")
     target = np.array([0, 1], dtype="i4")
     with monkeypatch.context() as patch:
+        pin_observer_constructor(patch, name)
         patch.setattr(builtins, name, cls)
         audit = audit_native_call(T.cross_entropy, x, target, return_grad=value,
                                   numeric_mode="identical")

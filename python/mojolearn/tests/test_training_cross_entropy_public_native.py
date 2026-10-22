@@ -352,6 +352,49 @@ def test_public_cross_entropy_native_truth_configuration_matches_builtin_contrac
     assert [(type(w.message),str(w.message)) for w in actual_warnings] == [(type(w.message),str(w.message)) for w in expected_warnings]
 
 
+@pytest.mark.parametrize('dtype', ['f2', 'f4', 'f8', 'i1', 'i4', 'i8', 'u1', 'u2', 'u4'])
+@pytest.mark.parametrize('shape,nonzero', [pytest.param((), False, id='scalar-zero'),
+    pytest.param((1,), True, id='vector-nonzero'),
+    pytest.param((1, 1), False, id='matrix-zero'),
+    pytest.param((1, 1, 1), True, id='rank3-nonzero')])
+def test_public_cross_entropy_array_truth_reads_single_value(dtype, shape, nonzero):
+    number = (-1 if dtype.startswith(('f', 'i')) else 1) if nonzero else 0
+    value = Array.from_buffer(np.full(shape, number, dtype=dtype))
+    # Independent existing public contract, outside the native-call audit.
+    want = bool(value)
+    assert want is nonzero
+    x, y, _ = prepared('logits:c')
+    audit = audit_native_call(T.cross_entropy, x, y, return_grad=value, numeric_mode='identical')
+    compare_output(audit.assert_native(), reference(x, y, {'return_grad': want}))
+
+
+@pytest.mark.parametrize('dtype', ['f2', 'f4', 'f8'])
+@pytest.mark.parametrize('number', [-0.0, -1.5, np.inf, -np.inf, np.nan],
+                         ids=['negative-zero', 'negative', 'inf', 'negative-inf', 'nan'])
+def test_public_cross_entropy_array_truth_preserves_float_values(dtype, number):
+    value = Array.from_buffer(np.array(number, dtype=dtype))
+    want = bool(value)
+    assert want is bool(number)
+    x, y, _ = prepared('logits:c')
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        audit = audit_native_call(T.cross_entropy, x, y, return_grad=value, numeric_mode='identical')
+    compare_output(audit.assert_native(), reference(x, y, {'return_grad': want}))
+    assert not caught
+
+
+@pytest.mark.parametrize('shape', [(0,), (1, 0), (2,), (1, 2)],
+                         ids=['empty', 'matrix-empty', 'vector-many', 'matrix-many'])
+def test_public_cross_entropy_array_truth_preserves_ambiguous_error(shape):
+    value = Array.from_buffer(np.zeros(shape, dtype='f4'))
+    with pytest.raises(ValueError) as expected:
+        bool(value)
+    x, y, _ = prepared('logits:c')
+    audit = audit_native_call(T.cross_entropy, x, y, return_grad=value, numeric_mode='identical')
+    assert_refusal(audit, ValueError)
+    assert str(audit.exception) == str(expected.value)
+
+
 @pytest.mark.parametrize('arm', ['arm_lossgrad','arm_lossvalue'])
 def test_existing_cross_entropy_analytic_contract(arm):
     from mojolearn.tests import test_training_surface as existing
