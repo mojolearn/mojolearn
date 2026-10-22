@@ -1,5 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Native buffer scalar conversion through the public IsolationForest fit."""
+"""Native buffer scalar conversion through public fit and archive output."""
+import io
+import struct
+
 import numpy as np
 import pytest
 
@@ -56,3 +59,34 @@ def test_fit_nonfinite_integer_conversion_keeps_error_class_and_text(dtype, valu
     assert str(audit.exception) == str(expected.value)
     assert not audit.report()['python_frames'] and not audit.report()['forbidden_native_calls']
     assert _state(vars(model)) == _state(vars(old))
+
+
+@pytest.mark.parametrize('dtype,bits,array', [
+    pytest.param('f4', 0x7f800001, False, id='f4-snan'),
+    pytest.param('f8', 0x7ff0000000000001, False, id='f8-snan'),
+    pytest.param('f4', 0x80000000, False, id='f4-negative-zero'),
+    pytest.param('f8', 1, False, id='f8-smallest-subnormal'),
+    pytest.param('u8', 0xffffffffffffffff, False, id='u8-max'),
+    pytest.param('i8', 0x8000000000000000, False, id='i8-min'),
+    pytest.param('f4', 0x7f800001, True, id='zero-d-f4-snan'),
+    pytest.param('f8', 0x8000000000000000, True, id='zero-d-f8-negative-zero'),
+])
+def test_save_consumes_exact_native_scalar_conversion_bytes(dtype, bits, array):
+    from mojolearn.tests.test_host_density_save_native import _prepared
+
+    # Raw storage preserves signaling NaNs until the conversion under test.
+    storage_type = np.dtype(dtype).newbyteorder('<')
+    scalar = np.frombuffer(bits.to_bytes(storage_type.itemsize, 'little'),
+                           dtype=storage_type).copy()[0]
+    value = np.array(scalar) if array else scalar
+    expected = struct.pack('<d', float(value))
+    model = _prepared('kde')
+    model.bandwidth = value
+    output = io.BytesIO()
+    audit = audit_native_call(model.save, output)
+    assert audit.assert_native() is output
+    assert model.bandwidth is value
+    # Save accepts these metadata values; inference/load validation is a
+    # separate interface. Consume the saved bytes, not just error/truth state.
+    with np.load(io.BytesIO(output.getvalue()), allow_pickle=False) as saved:
+        assert saved['bandwidth'].tobytes() == expected
