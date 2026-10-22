@@ -3,7 +3,60 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem, py_contains
 from bindings.native_numpy_metadata import native_numpy_dtype
-from bindings.sequence_array_warnings import sequence_array_warn
+from bindings.sequence_array_warnings import sequence_array_warn, sequence_array_category
+from bindings.optimizer_public_words import stash_python_error
+
+
+def sequence_dtype_create(value: PythonObject, context: PythonObject, aligned: Bool,
+                          metadata: PythonObject) raises -> PythonObject:
+    # The verified native dtype constructor reports specific public exception
+    # classes. Preserve its CPython exception triple across the Mojo door;
+    # converting it to a plain Mojo Error loses ValueError/OverflowError.
+    ref cpy = Python().cpython()
+    var constructor = native_numpy_dtype(context)
+    var arguments = Python.tuple(value)
+    var keywords = Python.dict(align=PythonObject(aligned))
+    if metadata is not None:
+        py_setitem(keywords, "metadata", metadata)
+    var result = cpy.PyObject_Call(constructor._obj_ptr, arguments._obj_ptr, keywords._obj_ptr)
+    _ = arguments^
+    _ = keywords^
+    _ = constructor^
+    if not result:
+        var failure = stash_python_error()
+        raise failure^
+    return PythonObject(from_owned=result)
+
+
+def sequence_dtype_create(value: PythonObject, context: PythonObject, aligned: Bool = False) raises -> PythonObject:
+    return sequence_dtype_create(value, context, aligned, PythonObject(None))
+
+
+def sequence_dtype_syntax(repeats: PythonObject) raises:
+    # Empty compact-shape components have the same native SyntaxError
+    # contract as NumPy's literal parser, without invoking its Python AST
+    # wrapper. Preserve the source information carried by that exception.
+    ref cpy = Python().cpython()
+    var category = sequence_array_category("SyntaxError")
+    var text = String(repeats)
+    var offset = 1
+    var empty = True
+    for i in range(text.byte_length()):  # driver-loop: locate an empty compact-shape component in native parser text
+        var character = UInt8(text.unsafe_ptr()[i])
+        if character == 32 or character == 40:
+            continue
+        if character == 44:
+            if empty:
+                offset = i + 1
+                break
+            empty = True
+        else:
+            empty = False
+    var details = Python.tuple("<unknown>", 1, offset, repeats, 1, offset + 1)
+    var exception = py_call(category, "invalid syntax", details)
+    cpy.lib.get_function[NoneType]("PyErr_SetObject")(category._obj_ptr, exception._obj_ptr)
+    var failure = stash_python_error()
+    raise failure^
 
 
 def sequence_dtype_classes(context: PythonObject) raises -> PythonObject:
@@ -13,7 +66,7 @@ def sequence_dtype_classes(context: PythonObject) raises -> PythonObject:
         return stored
     var result = Python.list()
     for code in ["?", "i1", "u1", "i2", "u2", "i4", "u4", "i8", "u8", "f2", "f4", "f8", "g", "c8", "c16", "G", "O", "S", "U", "V", "M8", "m8"]:  # driver-loop: connect fixed native dtype metadata
-        var item = py_call(dtype, code)
+        var item = sequence_dtype_create(PythonObject(code), context)
         py_call(result.append, Python.tuple(py_type(item), item.type))
     py_setitem(context, "sequence_dtype_classes", result)
     return result
@@ -32,21 +85,36 @@ def sequence_dtype_integer(value: PythonObject, classes: PythonObject, context: 
         return
     for i in range(len(classes)):  # driver-loop: admit native integer metadata before index conversion
         if py_type(value) is classes[i][1]:
-            var dtype = py_call(native_numpy_dtype(context), classes[i][1])
+            var dtype = sequence_dtype_create(classes[i][1], context)
             var kind = String(dtype.kind)
             if kind == "i" or kind == "u":
                 return
     raise Error("TypeError: dtype dimensions and offsets require native integers")
 
 
+def sequence_dtype_dimension(value: PythonObject, classes: PythonObject, context: PythonObject) raises:
+    var b = Python.import_module("builtins")
+    var kind = py_type(value)
+    if value is None or kind is b.str or kind is b.bytes or kind is b.float or kind is b.complex or kind is b.list or kind is b.tuple or kind is b.dict:
+        raise Error("ValueError: invalid shape in fixed-type tuple.")
+    for i in range(len(classes)):  # driver-loop: reject native non-integer scalar dimensions without protocol calls
+        if kind is classes[i][1]:
+            var dtype = sequence_dtype_create(classes[i][1], context)
+            var code = String(dtype.kind)
+            if code != "i" and code != "u":
+                raise Error("ValueError: invalid shape in fixed-type tuple.")
+            return
+    sequence_dtype_integer(value, classes, context)
+
+
 def sequence_dtype_shape(value: PythonObject, classes: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
     if py_type(value) is b.tuple or py_type(value) is b.list:
         for i in range(len(value)):  # driver-loop: validate dtype subarray dimensions
-            sequence_dtype_integer(value[i], classes, context)
+            sequence_dtype_dimension(value[i], classes, context)
         return py_call(b.tuple, value)
     else:
-        sequence_dtype_integer(value, classes, context)
+        sequence_dtype_dimension(value, classes, context)
         return Python.tuple(value)
 
 
@@ -68,8 +136,8 @@ def sequence_dtype_pair(base: PythonObject, shape: PythonObject, classes: Python
             var spelling = String(base.byteorder) + kind + String(Int(py=shape))
             var metadata = base.metadata
             if metadata is not None:
-                return py_call(dtype, spelling, align=PythonObject(aligned), metadata=py_call(b.dict, metadata))
-            return py_call(dtype, spelling, align=PythonObject(aligned))
+                return sequence_dtype_create(PythonObject(spelling), context, aligned, py_call(b.dict, metadata))
+            return sequence_dtype_create(PythonObject(spelling), context, aligned)
         if py_type(shape) is not b.bool and shape == PythonObject(1):
             var module = py_get(context["modules"], "numpy._core._multiarray_umath")
             if module is None:
@@ -85,7 +153,7 @@ def sequence_dtype_pair(base: PythonObject, shape: PythonObject, classes: Python
                 # explicit tuple (1,) already means a one-element subarray.
                 sequence_array_warn("Passing (type, 1) or '1type' as a synonym of type is deprecated; in a future version of numpy, it will be understood as (type, (1,)) / '(1,)type'.", warning, "DeprecationWarning")
                 return base
-    return py_call(dtype, Python.tuple(base, dimensions), align=PythonObject(aligned))
+    return sequence_dtype_create(Python.tuple(base, dimensions), context, aligned)
 
 
 def sequence_dtype_title(value: PythonObject, depth: Int = 0) raises:
@@ -115,7 +183,7 @@ def sequence_dtype_text(value: PythonObject, classes: PythonObject, context: Pyt
     if mapped is not None:
         return sequence_dtype_normalize(mapped, classes, context, depth + 1, aligned)
     if py_call(context["sequence_dtype_fullmatch"], context["sequence_dtype_pattern"], text) is not None:
-        return py_call(dtype, text, align=PythonObject(aligned))
+        return sequence_dtype_create(text, context, aligned)
 
     var spelling = String(text)
     var first = 0
@@ -180,7 +248,7 @@ def sequence_dtype_text(value: PythonObject, classes: PythonObject, context: Pyt
                     if len(part) > 0:
                         py_call(dimensions.append, py_call(b.int, part))
                     elif i + 1 < len(parts):
-                        raise Error("ValueError: dtype shape is not recognized")
+                        sequence_dtype_syntax(PythonObject(String(raw_repeats.strip())))
                 shape = py_call(b.tuple, dimensions)
             else:
                 shape = py_call(b.int, PythonObject(repeats))
@@ -191,7 +259,7 @@ def sequence_dtype_text(value: PythonObject, classes: PythonObject, context: Pyt
     if len(formats) == 0:
         raise Error("TypeError: dtype text is not understood")
     if record:
-        return py_call(dtype, fields, align=PythonObject(aligned))
+        return sequence_dtype_create(fields, context, aligned)
     return formats[0]
 
 
@@ -280,7 +348,7 @@ def sequence_dtype_dict(value: PythonObject, classes: PythonObject, context: Pyt
     if native_fields and py_contains(value, "itemsize"):
         sequence_dtype_integer(value["itemsize"], classes, context)
         py_setitem(result, "itemsize", value["itemsize"])
-    return py_call(native_numpy_dtype(context), result, align=PythonObject(alignment))
+    return sequence_dtype_create(result, context, alignment)
 
 
 def sequence_dtype_normalize(value: PythonObject, classes: PythonObject, context: PythonObject, depth: Int = 0, aligned: Bool = False) raises -> PythonObject:
@@ -294,10 +362,10 @@ def sequence_dtype_normalize(value: PythonObject, classes: PythonObject, context
     if kind is b.str or kind is b.bytes:
         return sequence_dtype_text(value, classes, context, depth, aligned)
     if value is None or value is b.float or value is b.int or value is b.bool or value is b.complex or value is b.str or value is b.bytes or value is b.object:
-        return py_call(dtype, value, align=PythonObject(aligned))
+        return sequence_dtype_create(value, context, aligned)
     for i in range(len(classes)):  # driver-loop: admit exact native scalar classes
         if value is classes[i][1]:
-            return py_call(dtype, value, align=PythonObject(aligned))
+            return sequence_dtype_create(value, context, aligned)
     if kind is b.tuple and len(value) == 2:
         var base = sequence_dtype_normalize(value[0], classes, context, depth + 1, aligned)
         var shape = value[1]
@@ -306,7 +374,7 @@ def sequence_dtype_normalize(value: PythonObject, classes: PythonObject, context
             shape = normalized_shape^
         else:
             return sequence_dtype_pair(base, shape, classes, context, aligned)
-        return py_call(dtype, Python.tuple(base, shape), align=PythonObject(aligned))
+        return sequence_dtype_create(Python.tuple(base, shape), context, aligned)
     if kind is b.list:
         var fields = Python.list()
         for i in range(len(value)):  # driver-loop: normalize explicit field records and their subarrays
@@ -326,7 +394,7 @@ def sequence_dtype_normalize(value: PythonObject, classes: PythonObject, context
                 py_call(fields.append, Python.tuple(name, shaped))
             else:
                 py_call(fields.append, Python.tuple(name, format))
-        return py_call(dtype, fields, align=PythonObject(aligned))
+        return sequence_dtype_create(fields, context, aligned)
     if kind is b.dict:
         return sequence_dtype_dict(value, classes, context, depth, aligned)
     raise Error("TypeError: dtype requires a built-in native dtype/schema; Python dtype protocols cannot execute")
