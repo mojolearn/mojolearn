@@ -18,6 +18,8 @@ from bindings.host_archive_native import host_archive_build
 from bindings.host_tree_native import host_tree_operation
 from bindings.host_inference_native import host_inference_operation
 from bindings.host_kde_fit_native import host_kde_fit
+from bindings.host_iforest_fit_native import host_iforest_fit
+from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.host_density_constructor_native import host_density_initialize
 from bindings.classical_exceptions import classical_require_fitted, classical_error_restore, classical_error_reduce
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
@@ -106,6 +108,9 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             return reduced.steal_data()
         if operation == "host_kde_fit":
             var result = host_kde_fit(model, args, context["host_inference_context"])
+            return result.steal_data()
+        if operation == "host_iforest_fit":
+            var result = host_iforest_fit(model, args, context["host_inference_context"])
             return result.steal_data()
         if operation == "host_density_initialize":
             var result = host_density_initialize(model, args, context["host_inference_context"])
@@ -227,6 +232,8 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             raise Error("unknown private classical operation")
         return result.steal_data()
     except error:
+        if String(error) == PYTHON_ERROR_PENDING:
+            return optimizer_python_error(error^)
         if String(error).startswith("HostIForestKernelError:"):
             return raise_python_exception(error_without_class(error, "HostIForestKernelError"))
         if String(error).startswith("HostKDEKernelError:"):
