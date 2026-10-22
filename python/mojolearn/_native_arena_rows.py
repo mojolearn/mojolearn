@@ -72,6 +72,7 @@ def connect():
     # connection; the CPU facade legitimately has no resident device store.
     # Do not admit arbitrary builtin callables by their type alone.
     store_routes = []
+    live_entries = []
     for module_name, prefix in (("_mojolearn_x_prep", "x_prep"),  # glue: fixed import-time resident-store ABI
                                 ("_mojolearn_x_metrics", "x_metrics")):
         for mode in ("identical", "fast"):  # glue: fixed supported numeric-mode connections
@@ -83,8 +84,14 @@ def connect():
             if type(put) is not BuiltinFunctionType or type(free) is not BuiltinFunctionType:
                 raise TypeError("DeviceCache requires compiled native resident-store entries")
             store_routes.append((put, free))
+            live = getattr(module, prefix + "_dev_live", None)
+            if live is not None:
+                if type(live) is not BuiltinFunctionType:
+                    raise TypeError("DeviceCache requires a compiled native live-slot entry")
+                live_entries.append(live)
     context.update(cache_scalar_context=scalar_context,
-                   cache_store_routes=tuple(store_routes), cache_object_setattr=object.__setattr__,
+                   cache_store_routes=tuple(store_routes), cache_live_entries=tuple(live_entries),
+                   cache_object_setattr=object.__setattr__,
                    cache_runtime_error=runtime_error,
                    cache_counter_types=(type(None), float, complex, str, bytes, bytearray,
                                         list, tuple, dict, set, frozenset, range),

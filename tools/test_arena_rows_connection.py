@@ -33,7 +33,7 @@ class Cache:
         raise AssertionError("import metadata must never call get")
 
 
-def connect(native_entry=len):
+def connect(native_entry=len, store_binding=None):
     package = ModuleType('mojolearn')
     package.__path__ = [str(ROOT / 'python/mojolearn')]
     arena = ModuleType('mojolearn._arena_io')
@@ -51,7 +51,7 @@ def connect(native_entry=len):
     tokenizer = ModuleType('mojolearn.tokenizer')
     tokenizer._binding = lambda: SimpleNamespace(_module=SimpleNamespace(arena_rows_native_call=len))
     backend = ModuleType('mojolearn._backend')
-    backend.binding = lambda name, mode: SimpleNamespace()
+    backend.binding = lambda name, mode: SimpleNamespace() if store_binding is None else store_binding
     modules = {'mojolearn': package, 'mojolearn._arena_io': arena,
                'mojolearn._array': arrays, 'mojolearn._native_classical_bridge': bridge,
                'mojolearn.tokenizer': tokenizer, 'mojolearn.model_selection': selection,
@@ -96,9 +96,27 @@ class NativeWeakrefConnectionTests(unittest.TestCase):
                 self.assertEqual(failure, "DeviceCache requires the immutable native RuntimeError builtin")
         self.assertEqual(touched, [])
 
+    def test_cache_live_retains_connected_native_counter(self):
+        binding = SimpleNamespace(x_prep_dev_put=len, x_prep_dev_free=abs,
+                                  x_prep_dev_live=hash)
+        context = connect(store_binding=binding)
+        self.assertEqual(context["cache_live_entries"], (hash, hash))
+
+    def test_cache_live_refuses_import_time_python_counter(self):
+        touched = []
+        def foreign():
+            touched.append("counter")
+            return 0
+        binding = SimpleNamespace(x_prep_dev_put=len, x_prep_dev_free=abs,
+                                  x_prep_dev_live=foreign)
+        with self.assertRaisesRegex(TypeError, "compiled native live-slot entry"):
+            connect(store_binding=binding)
+        self.assertEqual(touched, [])
+
     def test_cpu_cache_upload_retains_empty_store_registry_and_native_setter(self):
         context = connect()
         self.assertEqual(context['cache_store_routes'], ())
+        self.assertEqual(context['cache_live_entries'], ())
         self.assertIs(context['cache_object_setattr'], object.__setattr__)
         self.assertIs(context['cache_runtime_error'], RuntimeError)
         self.assertEqual(context['cache_counter_types'],
