@@ -6374,13 +6374,6 @@ def _pred_f64(v):
     return Array._owned(array.array("d", vals), (len(vals),), "<f8", "C")
 
 
-def _f64_words(pr, value):
-    """A Python float as its binary64 word (two int32 words) -> offset."""
-    w = array.array("i")
-    w.frombytes(array.array("d", [float(value)]).tobytes())
-    return pr.put_words(Array._owned(w, (2,), "<i4", "C"))
-
-
 def _key_words(values, d):
     """(int32 words, c2_key64 KIND) of d values: a float32 / float64 / int32 /
     int64 buffer as its own words; anything else (a user score function's
@@ -6436,19 +6429,7 @@ class _SelectorMixin(_PrepBase):
         array of shape (n_samples, n_selected_features)
             The selected columns, float32.
         """
-        self._check_fitted()
-        arr = _x2d(X)
-        self._check_width(arr)
-        n, d = arr.shape
-        keep = [j for j, m in enumerate(self._mask) if m]  # glue: kept column index list (_mask-sized: feature support mask)
-        if not keep:
-            raise ValueError("mojolearn: no features were selected")
-        pr = _Prog()
-        xo, ko = pr.put(arr), pr.put_list(keep)
-        out = pr.alloc(n * len(keep))
-        pr.stage("gather_cols", n * len(keep), xo, n, d, ko, len(keep), out)
-        pr.run(self.numeric_mode_)
-        return pr.get(out, (n, len(keep)))
+        return _STATELESS_CALL(self, "transform", (X,), _STATELESS_CONTEXT)
 
 
 # At threshold 0 the variance is min(variance, max - min), so a constant
@@ -6490,29 +6471,17 @@ class VarianceThreshold(_SelectorMixin):
         self.threshold = threshold
 
     def fit(self, X, y=None):
-        arr = _x2d(X)
-        n, d = arr.shape
-        mode = _mode()
-        pr = _Prog()
-        xo = pr.put(arr)
-        st, var = pr.alloc(6 * d), pr.alloc(d)
-        _cs(pr, mode, xo, n, d, st)
-        pr.stage("var_ptp", d, st, d, var, 1 if self.threshold == 0 else 0)
-        # lane cpu2-l3-prep: variance > threshold on the device, in binary64 (c2_key64, c2_gt)
-        key, mask = pr.work(2 * d), pr.alloc(d)
-        pr.stage("c2_key64", d, var, 0, key)
-        pr.stage("c2_gt", d, key, _f64_words(pr, self.threshold), mask)
-        pr.run(mode)
-        self.variances_ = pr.get(var, d)
-        self._mask = _mask_list(pr, mask, d)
-        if not any(self._mask):
-            # scikit-learn's wording, with its one-sample note
-            msg = f"No feature in X meets the variance threshold {self.threshold:.5f}"
-            if n == 1:
-                msg += " (X contains only one sample)"
-            raise ValueError(msg)
-        self.numeric_mode_, self.n_features_in_ = mode, d
-        return self
+        return _STATELESS_CALL(self, "fit", (X, y), _STATELESS_CONTEXT)
+
+    def fit_transform(self, X, y=None, **fit_params):
+        """Fit to ``X``, then keep only the selected columns of ``X``.
+
+        Returns
+        -------
+        array
+            The selected columns, float32.
+        """
+        return _STATELESS_CALL(self, "fit_transform", (X, y), _STATELESS_CONTEXT)
 
 
 def _scores_classif(X, y, kind):
@@ -7484,4 +7453,5 @@ _PROG_CALL, _PROG_CONTEXT = _connect_arena_prog(
 # each public operation off once to Mojo (bindings/prep_stateless_native.mojo).
 from ._native_prep_stateless_bridge import connect as _connect_stateless
 _STATELESS_CALL, _STATELESS_CONTEXT = _connect_stateless(
-    {Binarizer: "binarizer", Normalizer: "normalizer", PolynomialFeatures: "polynomial"})
+    {Binarizer: "binarizer", Normalizer: "normalizer", PolynomialFeatures: "polynomial",
+     VarianceThreshold: "variance_threshold", _SelectorMixin: "selector"})

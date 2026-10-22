@@ -6,7 +6,7 @@
 # Python `_Prog` built) and runs it through the shared transport
 # (bindings/x_prep_native_owner.mojo `xprep_run`). fit_transform converts X once
 # and runs the one transform program.
-from std.memory import memcpy
+from std.memory import memcpy, bitcast
 from std.os import getenv
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -19,7 +19,8 @@ from bindings.classical_arrays import classical_address, classical_typed, classi
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.scaler_native import _stage, _ptr
 from bindings.scaler_lifecycle_native import _entries
-from bindings.x_prep_native_owner import xprep_storage, xprep_take, xprep_values, xprep_run
+from bindings.x_prep_native_owner import xprep_storage, xprep_take, xprep_values, xprep_run, xprep_r3
+from bindings.py_typed_call import py_call_typed
 
 alias F32P = MutPointer[Float32, MutUntrackedOrigin]
 alias I64P = MutPointer[Int64, MutUntrackedOrigin]
@@ -29,6 +30,19 @@ comptime OP_BINARIZE = 12
 comptime OP_NORMALIZE = 47
 comptime OP_POLY = 48
 comptime OP_TRANSPOSE = 209
+comptime OP_COL_STATS = 1
+comptime OP_GATHER_COLS = 61
+comptime OP_VAR_PTP = 62
+comptime OP_COLB_PART = 124
+comptime OP_COLB_FOLD = 125
+comptime OP_COLB_SS = 126
+comptime OP_COLB_VAR = 127
+comptime OP_KEY64 = 253
+comptime OP_GT = 255
+# Row blocks of the blocked column statistics (_expansion_prep._XB).
+comptime ROW_BLOCK = 2048
+# x_prep_idn_fam bit 1: IDN_STATS_BLOCKED.
+comptime IDN_STATS_BLOCKED = 1
 # `_Prog.output`: below this many words the output is plain arena words.
 comptime OUT_MIN_WORDS = 134217728
 
@@ -43,7 +57,7 @@ def _kind(model: PythonObject, context: PythonObject) raises -> String:
         var kind = py_get(kinds, mro[k])
         if kind is not None:
             return String(kind)
-    raise Error("TypeError: the native stateless prep owner requires a Binarizer, Normalizer or PolynomialFeatures")
+    raise Error("TypeError: the native prep owner does not serve this class")
 
 
 def _name(model: PythonObject) raises -> String:
@@ -257,6 +271,160 @@ def _transform(model: PythonObject, kind: String, values: PythonObject, context:
     return result
 
 
+struct PrepLayout(Movable):
+    """A program's arena words and device scratch words, in allocation order
+    (`_Prog.alloc` / `_Prog.work`): scratch offsets are taken past the host
+    words when the program runs, so they are resolved with `scratch_at`."""
+    var host: Int
+    var scratch: Int
+    var work: Bool
+
+    def __init__(out self, host: Int):
+        self.host = host
+        self.scratch = 0
+        self.work = xprep_r3("work")
+
+    def alloc(mut self, words: Int) -> Int:
+        var offset = self.host
+        self.host += max(words, 0)
+        return offset
+
+    def work_words(mut self, words: Int) -> Int:
+        # A stage word -(k + 2) marks scratch word k (-1 is the stages' "none").
+        if not self.work:
+            return self.alloc(words)
+        var offset = self.scratch
+        self.scratch += max(words, 0)
+        return -(offset + 2)
+
+
+def _col_stats(mut program: List[Int32], mut layout: PrepLayout, mode: PythonObject, entries: PythonObject,
+               xo: Int, n: Int, d: Int, out: Int) raises:
+    """`_expansion_prep._cs` with var=True: the blocked order under
+    IDN_STATS_BLOCKED on the IDENTICAL tier, else one thread per column."""
+    var blocked = String(getenv("MOJOLEARN_XPREP_BLOCKED", "1").strip()) != "0"
+    var fam = 0
+    if String(mode) == "identical":
+        var entry = py_get(entries, "x_prep_idn_fam")
+        if entry is not None:
+            fam = Int(py=py_call_typed(entry))
+    if blocked and (fam & IDN_STATS_BLOCKED) != 0:
+        var nb = (n + ROW_BLOCK - 1) // ROW_BLOCK
+        var part = layout.work_words(5 * nb * d)
+        _stage(program, OP_COLB_PART, nb * d, xo, n, d, part, nb)
+        _stage(program, OP_COLB_FOLD, d, part, nb, d, out)
+        var ss = layout.work_words(nb * d)
+        _stage(program, OP_COLB_SS, nb * d, xo, n, d, out, ss, nb)
+        _stage(program, OP_COLB_VAR, d, ss, nb, d, out)
+    else:
+        _stage(program, OP_COL_STATS, d, xo, n, d, out)
+
+
+def _place_scratch(mut program: List[Int32], host: Int):
+    # A stage word -(k + 2) is scratch word k, at host + k.
+    for i in range(len(program) // 16):  # driver-loop: over the program's stages
+        for k in range(2, 16):  # small-loop(params: the fixed fourteen-word stage ABI)
+            var word = Int(program[i * 16 + k])
+            if word < -1:
+                program[i * 16 + k] = Int32(host - word - 2)
+
+
+def _f64_input(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    # A Python float as its binary64 word, two 4-byte words (`_f64_words`).
+    var words = classical_typed(Python.tuple(2), "<f4", context["output_context"])
+    var bits = MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(words)))
+    bits[0] = bitcast[DType.uint64](Float64(py=py_call(Python.import_module("builtins").float, value)))
+    return words
+
+
+def _variance_fit(model: PythonObject, values: PythonObject, context: PythonObject) raises:
+    """VarianceThreshold.fit: column statistics, var_ptp, then variance >
+    threshold compared in binary64 on the device (c2_key64, c2_gt): the
+    stages, operands and order of the Python program."""
+    var b = Python.import_module("builtins")
+    var fields = py_fields(model)
+    var n = Int(py=values[3])
+    var d = Int(py=values[4])
+    var mode = context["backend_fields"]["_DEFAULT_MODE"]
+    var entries = _entries(mode, context)
+    var threshold = fields["threshold"]
+    var layout = PrepLayout(n * d)
+    var st = layout.alloc(6 * d)
+    var variance = layout.alloc(d)
+    var program = List[Int32]()
+    _col_stats(program, layout, mode, entries, 0, n, d, st)
+    _stage(program, OP_VAR_PTP, d, st, d, variance, 1 if Bool(py=threshold == PythonObject(0)) else 0)
+    var key = layout.work_words(2 * d)
+    var mask = layout.alloc(d)
+    var limit = layout.alloc(2)
+    _stage(program, OP_KEY64, d, variance, 0, key)
+    _stage(program, OP_GT, d, key, limit, mask)
+    if layout.host + layout.scratch > 2147483647:
+        raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
+    _place_scratch(program, layout.host)
+    var words = _f64_input(threshold, context)
+    var inputs = Python.list(Python.tuple(0, values), Python.tuple(limit, Python.tuple(0, words, PythonObject(None), 2, 1)))
+    var device_scratch = layout.scratch > 0 and (py_get(entries, "x_prep_run_out") is not None or py_get(entries, "x_prep_run_scratch") is not None)
+    var arena = xprep_storage(layout.host + (0 if device_scratch else layout.scratch), context)
+    xprep_run(arena, layout.host, layout.scratch, PythonObject(None), 0, program^, inputs, entries, context)
+    py_setitem(fields, "variances_", xprep_take(arena[0], variance, d, 0, context["output_context"]))
+    var base = F32P(unsafe_from_address=Int(py=arena[1]))
+    var support = Python.list()
+    var any_kept = False
+    for j in range(d):  # driver-loop: over the fitted support mask (feature metadata)
+        var kept = base[mask + j] != 0
+        any_kept = any_kept or kept
+        _ = py_call(support.append, PythonObject(kept))
+    py_setitem(fields, "_mask", support)
+    _ = words^
+    _ = arena^
+    if not any_kept:
+        # scikit-learn's wording, with its one-sample note
+        var message = "No feature in X meets the variance threshold " + String(py_call(b.format, threshold, ".5f"))
+        if n == 1:
+            message += " (X contains only one sample)"
+        raise Error(message)
+    py_setitem(fields, "numeric_mode_", mode)
+    py_setitem(fields, "n_features_in_", d)
+
+
+def _select_transform(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
+    """_SelectorMixin.transform: the fitted support's columns of X, by one
+    gather_cols stage."""
+    var fields = py_fields(model)
+    if not py_contains(fields, "n_features_in_"):
+        raise Error("RuntimeError: mojolearn: this " + _name(model) + " instance is not fitted yet")
+    var n = Int(py=values[3])
+    var d = Int(py=values[4])
+    var fitted = fields["n_features_in_"]
+    if py_type(fitted) is not Python.import_module("builtins").int or Int(py=fitted) != d:
+        raise Error("mojolearn: X has " + String(d) + " features, " + _name(model) + " was fitted with " + String(py_call(Python.import_module("builtins").str, fitted)))
+    var mask = py_call(Python.import_module("builtins").list, fields["_mask"])
+    var keep = List[Int]()
+    for j in range(len(mask)):  # driver-loop: over the fitted support mask (feature metadata)
+        if Bool(py=mask[j]):
+            keep.append(j)
+    if len(keep) == 0:
+        raise Error("mojolearn: no features were selected")
+    var k = len(keep)
+    var entries = _entries(fields["numeric_mode_"], context)
+    var columns = _words(keep, context)
+    var ko = n * d
+    var out = ko + k
+    var host = out + n * k
+    if host > 2147483647:
+        raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
+    var program = List[Int32]()
+    _stage(program, OP_GATHER_COLS, n * k, 0, n, d, ko, k, out)
+    var inputs = Python.list(Python.tuple(0, values), Python.tuple(ko, Python.tuple(0, columns, PythonObject(None), k, 1)))
+    var arena = xprep_storage(host, context)
+    xprep_run(arena, host, 0, PythonObject(None), 0, program^, inputs, entries, context)
+    var result = xprep_take(arena[0], out, n, k, context["output_context"])
+    _ = columns^
+    _ = arena^
+    return result
+
+
 def prep_stateless_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var call = PythonObject(from_borrowed=args_ptr)
@@ -275,14 +443,20 @@ def prep_stateless_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> Py
                     raise Error("RuntimeError: mojolearn: this " + _name(model) + " instance is not fitted yet")
                 mode = fields["numeric_mode_"]
             var values = xprep_values(args[0], _entries(mode, context), context)
+            var selector = kind == "variance_threshold" or kind == "selector"
             if operation == "transform":
-                result = _transform(model, kind, values, context)
+                result = _select_transform(model, values, context) if selector else _transform(model, kind, values, context)
+            elif kind == "selector":
+                raise Error("TypeError: this selector's fit is not a native stateless operation")
             else:
-                _fit(model, kind, values, context)
+                if kind == "variance_threshold":
+                    _variance_fit(model, values, context)
+                else:
+                    _fit(model, kind, values, context)
                 result = model
                 if operation == "fit_transform":
                     # The X converted for the fit is the transform's input.
-                    result = _transform(model, kind, values, context)
+                    result = _select_transform(model, values, context) if selector else _transform(model, kind, values, context)
             _ = values^
         else:
             raise Error("unknown native stateless prep operation")

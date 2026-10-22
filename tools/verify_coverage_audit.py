@@ -1495,10 +1495,11 @@ ANNOTATIONS_BY_SRC[("robust_scaler_native_call", "bindings/_mojolearn_tokenizer_
 
 # The stateless x_prep owner is new; these lanes consume its public outputs.
 ANNOTATIONS_BY_SRC[("prep_stateless_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
-    "owed", ["x-prep-binarizer", "x-prep-normalizer", "x-prep-polynomial-features"],
-    "Public Binarizer, Normalizer and PolynomialFeatures fit/transform/fit_transform call "
-    "prep_stateless_c, which builds the existing binarize/normalize/poly/p2m_transpose x_prep "
-    "programs natively. New source only: runtime execution and identity admission remain pending.")
+    "owed", ["x-prep-binarizer", "x-prep-normalizer", "x-prep-polynomial-features",
+             "x-prep-variance-threshold", "x-prep-select-kbest", "x-prep-rfe"],
+    "Public Binarizer, Normalizer, PolynomialFeatures and VarianceThreshold fit/transform/fit_transform "
+    "and the selectors' transform call prep_stateless_c, which builds the existing binarize/normalize/"
+    "poly/p2m_transpose, col_stats/var_ptp/c2_key64/c2_gt and gather_cols x_prep programs natively. New source only: runtime execution and identity admission remain pending.")
 
 
 # Static lane reachability is not an execution/installed/fault receipt for a
