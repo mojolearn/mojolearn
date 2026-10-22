@@ -12,7 +12,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_input, classical_address, classical_typed, classical_is_array, classical_is_f32, classical_cast_kind, classical_c_order
 from core.scaler_fit_impl import scaler_cast, scaler_all_finite, scaler_check_stats, scaler_fill, scaler_check_missing, scaler_counts
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, native_pandas_f32
-from bindings.sequential_admission import _ordinary_torch
+from bindings.sequential_admission import _ordinary_torch, _one_of
 from bindings.native_torch_admission import native_torch_numpy
 
 alias F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -145,8 +145,18 @@ def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonO
         if weighted:
             classical_admit_value(weight_source, context)
             var raw = classical_input(weight_source, context, "sample_weight")
-            var scalar = Int(py=raw.ndim) == 0
-            weight = _input(weight_source, 0 if scalar else 1, False, context)
+            var scalar_rank = Int(py=raw.ndim) == 0
+            var weight_type = py_type(weight_source)
+            if weight_type is b.bool:
+                raise Error("sample_weight must be one-dimensional")
+            var scalar = weight_type is b.int or weight_type is b.float
+            var scalar_types = py_get(context, "scalar_types")
+            var bool_types = py_get(context, "bool_types")
+            if scalar_types is not None and bool_types is not None:
+                scalar = scalar or (_one_of(weight_type, scalar_types) and weight_type is not bool_types[1])
+            # Real numeric scalars broadcast. A zero-dimensional buffer is
+            # still a one-element weight vector, matching the existing API.
+            weight = _input(weight_source, 0 if scalar_rank else 1, False, context)
             if scalar:
                 # The raw pointer does not retain its Python buffer owner.
                 # Keep the scalar buffer alive while allocating and filling

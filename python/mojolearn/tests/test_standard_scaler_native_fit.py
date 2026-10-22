@@ -122,3 +122,15 @@ assert "numpy" not in sys.modules
 '''
     run = subprocess.run([sys.executable, "-c", code], text=True, capture_output=True)
     assert run.returncode == 0, run.stdout + run.stderr
+
+
+def test_scalar_weights_keep_the_buffer_and_boolean_distinction():
+    x = np.arange(6, dtype=np.float32).reshape(3, 2)
+    for weight in (True, np.bool_(True), np.array(2, np.float32), np.array(2, np.float64)):
+        with pytest.raises(ValueError):
+            ml.StandardScaler().fit(x, sample_weight=weight)
+    one = ml.StandardScaler()
+    audit_native_call(one.fit, x[:1], sample_weight=np.array(2, np.float32)).assert_native()
+    assert one.n_samples_seen_ == 2.0
+    with pytest.raises(ValueError):
+        one.fit(x[:1], sample_weight=True)
