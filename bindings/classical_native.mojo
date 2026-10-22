@@ -129,7 +129,10 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             var archive_context = py_get(context, "host_archive_context")
             if archive_context is None:
                 raise Error("RuntimeError: native host archive schemas are not connected")
-            classical_admit_value(args, archive_context)
+            # Checkpoint input admission belongs to the archive reader: its
+            # exact native file descriptors and standard path layouts include
+            # BytesIO/FileIO/buffered streams, which numeric-array admission
+            # correctly refuses for unrelated estimator operations.
             var restored = host_archive_build(args[0], archive_context, model if operation == "host_archive_load" else PythonObject(None), operation == "host_archive_classical_model")
             return restored.steal_data()
         if operation == "host_model":

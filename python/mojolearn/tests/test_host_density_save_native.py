@@ -3,7 +3,7 @@
 import io
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import subprocess
 import sys
 
@@ -122,6 +122,60 @@ def test_density_historic_tag_admission_keeps_exact_family_bounds(family, tag):
     output = io.BytesIO()
     legacy.write_npz(output, fields)
     _refused(audit_native_call(host_model, io.BytesIO(output.getvalue())), ValueError)
+
+
+def _archive_route(route):
+    return host.HostKernelDensity.load if route == "class" else host.host_model if route == "classical" else host_model
+
+
+@pytest.mark.parametrize("route", ["class", "classical", "generic"])
+@pytest.mark.parametrize("kind", ["str", "bytes", "path", "pure_path", "bytesio", "fileio", "buffered"])
+def test_density_load_admits_archive_inputs_at_the_native_reader(tmp_path, route, kind):
+    original = _prepared("kde", weighted=True)
+    payload = _oracle(original, "kde")
+    filename = tmp_path / "model.npz"
+    filename.write_bytes(payload)
+    value = {"str": str(filename), "bytes": os.fsencode(filename), "path": filename,
+             "pure_path": PurePosixPath(filename), "bytesio": io.BytesIO(payload)}.get(kind)
+    if kind == "fileio": value = io.FileIO(filename, "rb")
+    elif kind == "buffered": value = io.open(filename, "rb")
+    try:
+        restored = audit_native_call(_archive_route(route), value).assert_native()
+        if kind in ("bytesio", "fileio", "buffered"):
+            assert not value.closed
+            assert value.tell() > 0
+    finally:
+        if kind in ("bytesio", "fileio", "buffered"): value.close()
+    query = np.asarray([[.5, -.25], [.125, .75]], dtype="f4")
+    expected = original.score_samples(query)
+    actual = audit_native_call(restored.score_samples, query).assert_native()
+    assert _state(actual) == _state(expected)
+
+
+@pytest.mark.parametrize("route", ["class", "classical", "generic"])
+@pytest.mark.parametrize("kind", ["protocol", "bytesio_subclass", "path_subclass", "buffered_raw"])
+def test_density_load_archive_admission_refuses_python_file_protocols(tmp_path, route, kind):
+    touched = []
+    class Foreign:
+        def __fspath__(self): touched.append("fspath"); return str(tmp_path / "model.npz")
+        def read(self, *args): touched.append("read"); return b""
+        def seek(self, *args): touched.append("seek"); return 0
+    class ForeignBytesIO(io.BytesIO):
+        def read(self, *args): touched.append("read"); return super().read(*args)
+    class ForeignPath(type(tmp_path)):
+        def __fspath__(self): touched.append("fspath"); return super().__fspath__()
+    class ForeignRaw(io.FileIO):
+        def read(self, *args): touched.append("read"); return super().read(*args)
+        def seek(self, *args): touched.append("seek"); return super().seek(*args)
+    filename = tmp_path / "model.npz"
+    filename.write_bytes(_oracle(_prepared("kde"), "kde"))
+    value = Foreign() if kind == "protocol" else ForeignBytesIO(filename.read_bytes()) if kind == "bytesio_subclass" else ForeignPath(filename) if kind == "path_subclass" else io.BufferedReader(ForeignRaw(filename, "rb"))
+    touched.clear()  # construction is test setup, outside the public operation.
+    try:
+        _refused(audit_native_call(_archive_route(route), value), TypeError)
+        assert touched == []
+    finally:
+        if kind in ("bytesio_subclass", "buffered_raw"): value.close()
 
 
 @pytest.mark.parametrize("family", ["kde", "iforest"])
