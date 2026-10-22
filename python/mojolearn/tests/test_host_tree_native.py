@@ -14,7 +14,7 @@ from mojolearn.tests.test_host_archive_native import _state
 from mojolearn.tests.test_host_model_native_router import _forest_archive, GBDT_CASES, FLOAT_TEXT
 
 
-def _forest_pair(tmp_path, estimator, engine="sequential", labels=None):
+def _forest_options(tmp_path, estimator, engine="sequential", labels=None):
     classifier = forest._ESTIMATORS[estimator][1]
     # One actual split and two distinct leaves exercise both traversals and
     # class selection, rather than only the constant-output leaf case.
@@ -29,6 +29,11 @@ def _forest_pair(tmp_path, estimator, engine="sequential", labels=None):
     options = dict(estimator=estimator, n_features=2, n_trees=1, num_outputs=2 if classifier else 1,
         classes=list(labels) if labels is not None else members["classes"].tolist() if classifier else None,
         device="fixture", inference_engine=engine, **arrays)
+    return options
+
+
+def _forest_pair(tmp_path, estimator, engine="sequential", labels=None):
+    options = _forest_options(tmp_path, estimator, engine, labels)
     return forest.HostForest(**options), LegacyHostForest(**options)
 
 
@@ -164,9 +169,9 @@ def test_gbdt_hash_and_properties_are_native():
 
 
 def test_tree_prediction_and_state_methods_are_one_native_call():
-    for module, clsname, names in ((forest, "HostForest", {"predict", "predict_proba", "_predict_with_proba", "_vote",
+    for module, clsname, names in ((forest, "HostForest", {"__init__", "predict", "predict_proba", "_predict_with_proba", "_vote",
             "_groves_handle", "__getstate__", "__setstate__", "model_sha256", "n_trees", "inference_engine"}),
-            (gbdt, "HostGBDT", {"predict", "predict_proba", "model_sha256", "n_trees", "inference_engine"})):
+            (gbdt, "HostGBDT", {"__init__", "predict", "predict_proba", "model_sha256", "n_trees", "inference_engine"})):
         cls = next(n for n in ast.parse(Path(module.__file__).read_text()).body if isinstance(n, ast.ClassDef) and n.name == clsname)
         for method in cls.body:
             if not isinstance(method, ast.FunctionDef) or method.name not in names:
