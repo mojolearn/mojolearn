@@ -51,8 +51,8 @@ class WeightSource:
                 raise TypeError(f"{what}: source='safetensors' takes the path of a .safetensors file "
                                 "or of a checkpoint directory")
             from .models.safetensors import Checkpoint
-            self._ckpt = Checkpoint.open(os.fsdecode(obj))  # cpu-route: the native Mojo host safetensors reader call
-            self._names = self._ckpt.names()  # cpu-route: the native Mojo host safetensors reader call
+            self._ckpt = Checkpoint.open(os.fsdecode(obj))
+            self._names = self._ckpt.names()
             self._map = None
         else:
             if _is_path(obj) or not (hasattr(obj, "keys") and hasattr(obj, "__getitem__")):

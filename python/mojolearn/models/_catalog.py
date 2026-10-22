@@ -78,14 +78,14 @@ def _sha256_file(path):
     """The SHA-256 of the file at ``path``, 64 lowercase hex digits (read and hashed in Mojo)."""
     from .. import _backend
     b = _backend.binding("_mojolearn_x_sequence")
-    sha, _size = b.verify_file_sha256(os.fspath(path))  # cpu-route: the native Mojo host file hash call
+    sha, _size = b.verify_file_sha256(os.fspath(path))
     return str(sha)
 
 
 def _sha256_bytes(data):
     """The SHA-256 of ``data``, 64 lowercase hex digits (core/sha256.mojo)."""
     from .. import _backend
-    return str(_backend.load_host_module("_mojolearn_tokenizer_host").sha256_hex(data))  # cpu-route: the native Mojo host hash call
+    return str(_backend.load_host_module("_mojolearn_tokenizer_host").sha256_hex(data))
 
 
 def _download(url, dest):
