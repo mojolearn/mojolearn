@@ -676,6 +676,28 @@ class HostIsolationForest(_NativeArchiveLoad, _HostBound, IsolationForest):
                                   max_features, bootstrap, contamination, random_state, warm_start,
                                   n_jobs, verbose, output_type, numeric_mode), _CLASSICAL)
 
+    @_native_host_fit_method
+    def fit(self, X, y=None):
+        """Fit a seeded isolation forest to finite dense training samples.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Dense training samples, converted to float32 when necessary.
+        y : array-like, default=None
+            Optional target validated for compatibility and otherwise ignored.
+
+        Returns
+        -------
+        self
+            The fitted isolation forest with its learned anomaly threshold.
+
+        Examples
+        --------
+        >>> model = model.fit(X)
+        """
+        return _native_classical(self, "host_iforest_fit", (X, y), _CLASSICAL)
+
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         _register_host_inference_class(cls)
@@ -1335,7 +1357,8 @@ except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as _mi
 
 # Import-time connection of complete explicit CPU prediction owners.
 def _connect_host_inference():
-    from types import BuiltinFunctionType, MethodType, FunctionType, MemberDescriptorType
+    from types import BuiltinFunctionType, MethodType, FunctionType, MemberDescriptorType, ModuleType
+    from _contextvars import ContextVar
     from ._native_owner_lifetime import connect_owner_context
     from ._labels import ClassLabels
     from .tokenizer import _binding
@@ -1357,6 +1380,7 @@ def _connect_host_inference():
     # CPU training is public. Replace only this complete native fit after
     # mixin class setup; inherited/overridden operations keep their guards.
     HostKernelDensity.fit = _NATIVE_HOST_FITS["HostKernelDensity.fit"]
+    HostIsolationForest.fit = _NATIVE_HOST_FITS["HostIsolationForest.fit"]
     HostKernelDensity.__init__ = _NATIVE_HOST_INITIALIZERS["HostKernelDensity.__init__"]
     HostIsolationForest.__init__ = _NATIVE_HOST_INITIALIZERS["HostIsolationForest.__init__"]
     context = dict(_CLASSICAL["host_tree_context"])
@@ -1365,6 +1389,9 @@ def _connect_host_inference():
                    host_kde_sequence_types=(list, tuple, range),
                    host_kde_bytearray_type=bytearray,
                    host_kde_bytes_type=bytes,
+                   host_iforest_memoryview_type=memoryview,
+                   host_iforest_module_type=ModuleType, host_iforest_module_dict=vars(ModuleType)["__dict__"].__get__,
+                   host_iforest_context_type=ContextVar, host_iforest_context_get=ContextVar.get,
                    host_density_object_setattr=vars(object)["__setattr__"],
                    host_density_member_type=MemberDescriptorType,
                    host_density_function_type=FunctionType, host_density_attribute_error=AttributeError,
