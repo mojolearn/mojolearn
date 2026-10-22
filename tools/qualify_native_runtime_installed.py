@@ -24,6 +24,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_TESTS = {
+    "test_training_device_native_rollback.py": "Training device allocation and optimizer parameter copy rollback with real native failures",
     "test_training_device_native_finalizer.py": "Automatic training device owner cleanup, views, rollback guards and shutdown",
     "test_samba_step_native.py": "SambaStack.train_step, optimizer owners, rollback and native schedule refusal",
     "test_samba_inference_native.py": "SambaStack.forward/loss/allocate_state/step and consumed full states",
@@ -53,6 +54,14 @@ TEST_DEPENDENCIES = {
 }
 CPU_RESIDENT_SKIP = "the CPU binding has no resident tensor pool"
 CPU_NOT_APPLICABLE = {
+    "test_training_device_native_rollback.py": {
+        'test_native_device_allocation_refusal_destroys_prepared_owner_without_python': "training device rollback requires the GPU binding",
+        'test_native_upload_failure_releases_real_allocation': "training device rollback requires the GPU binding",
+        'test_native_parameter_copy_failure_releases_real_allocation': "training device rollback requires the GPU binding",
+        'test_native_allocation_refuses_python_ownership_entries[train_dev_alloc]': "training device rollback requires the GPU binding",
+        'test_native_allocation_refuses_python_ownership_entries[train_dev_put]': "training device rollback requires the GPU binding",
+        'test_native_allocation_refuses_python_ownership_entries[train_dev_free]': "training device rollback requires the GPU binding"
+    },
     "test_training_device_native_finalizer.py": {
         'test_native_training_automatic_cleanup_releases_last_device_owner[False]': "training device arrays require the GPU binding",
         'test_native_training_automatic_cleanup_releases_last_device_owner[True]': "training device arrays require the GPU binding",
@@ -88,6 +97,9 @@ def test_applicability(selected, vendor):
             scope["coverage_limit"] = "Owner lifecycle checks do not qualify the public __array__ conversion protocol"
             if vendor == "cpu":
                 scope["cpu_not_applicable_cases"] = dict(CPU_NOT_APPLICABLE[name])
+        if name == "test_training_device_native_rollback.py":
+            scope.update(execution_route="GPU device allocation, upload and resident optimizer parameter copy",
+                         coverage_limit="Retained native failure paths only; native heap exhaustion is not injected")
         if name == "test_training_device_native_finalizer.py":
             scope.update(execution_route="training GPU owner cleanup; partial-owner and guard checks also apply on CPU",
                          coverage_limit="Explicit cleanup checks verify release; process shutdown only checks exit status and stderr")

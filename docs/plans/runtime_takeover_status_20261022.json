@@ -1,8 +1,8 @@
 {
   "schema": "mojolearn.runtime-takeover-status.v1",
-  "updated": "2026-10-22T05:21:10.622897+00:00",
+  "updated": "2026-10-22T05:42:32.409011+00:00",
   "release": "HELD",
-  "integration_before_report": "f51475c48",
+  "integration_before_report": "3ce93814fde00d4d483dd96d8d4e4309e9edfe3c",
   "evidence_root": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021",
   "test_policy": "Rerun failures, new tests and directly affected regression checks; reuse accepted unchanged results. Counts from different scopes are not interchangeable.",
   "completed": {
@@ -198,41 +198,52 @@
       ],
       "evidence": "runtime-selection-verdict-ad8dd52fe.json",
       "scope": "Selected native inference, class labels, warnings and guards; other methods and installed/cross-vendor qualification remain separate."
+    },
+    "ad8_fixture_corrections": {
+      "numpy253_passed": 71,
+      "numpy126_passed": 71,
+      "implementation_change": false,
+      "evidence": "failure-disposition-ad8-fixture-corrections.json"
+    },
+    "svr_extra_support_cases": {
+      "cpu_passed": 4,
+      "metal_passed": 4,
+      "evidence": "svr-support-regressions-fd334-on-57d/RESULT.json"
     }
   },
   "remaining": [
-    "Three NumPy 1.26 cases remain explicitly tracked: UInt16 undefined-result fixture correction is integrated but not executed; temporal signaling-NaN warning contract review is underway.",
-    "Private array bool/half signaling repair integrated as 9e7db10c4; no rebuilt candidate yet. Public __array__ remains Python.",
-    "SVR, training linear functions, and RobustScaler native migration source remains in agent lanes.",
-    "Cold sklearn tags import contract.",
-    "Remaining API/option/fault coverage, references, installed wheel, and applicable Linux/NVIDIA/AMD qualification."
+    "SVR object-array state needs TypeError before numeric validation; precise source repair e679 integrated,12 selected reruns owed. Other171 SVR cases per vendor and4 extra support cases per vendor passed.",
+    "NumPy1.26 U32/S8 random formatting differs at539/4096 values; native version-format repair under investigation. Five other cast arms including f2 pass independently on unchanged57d.",
+    "MaxAbs typed DeviceRows cached snapshot and scratch/resident cache semantics under repair with RobustScaler; proposed scaler source remains unintegrated.",
+    "Training finalizer ff1 and ownership195 integrated, not rebuilt; training linear functions remain in a separate draft.",
+    "Public __array__ managed String ownership/callback contract, cold sklearn tags, remaining API/option/fault/reference/installed/Linux/NVIDIA/AMD qualification."
   ],
   "limitations": [
     "No claim that every public API, option, checkpoint or failure path is fully migrated/qualified.",
     "No performance improvement claim from correctness tests.",
     "Static census categories are not independently demonstrated runtime defects."
   ],
-  "latest_compiled_runtime": "ad8dd52fe32c92c584c2b282bac5f0d6f82016b8",
-  "latest_runtime_summary": "runtime-selection-verdict-ad8dd52fe.json",
+  "latest_compiled_runtime": "57d96358e9d3695d3fbb25df760539b95fb30e4e",
+  "latest_runtime_summary": "runtime-selection-verdict-57d96358e.json",
   "latest_targeted_tests": {
     "cpu": {
-      "expected": 261,
-      "passed": 261,
-      "failed": 0,
+      "expected": 179,
+      "passed": 177,
+      "failed": 2,
       "errors": 0,
       "skipped": 0
     },
     "metal": {
-      "expected": 335,
-      "passed": 335,
-      "failed": 0,
+      "expected": 237,
+      "passed": 235,
+      "failed": 2,
       "errors": 0,
       "skipped": 0
     },
     "numpy126-metal": {
-      "expected": 35,
-      "passed": 35,
-      "failed": 0,
+      "expected": 52,
+      "passed": 51,
+      "failed": 1,
       "errors": 0,
       "skipped": 0
     }
