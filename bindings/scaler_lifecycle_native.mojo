@@ -16,6 +16,7 @@ from bindings.classical_archive_read import classical_archive_read, _archive_exa
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.classical_pandas import native_pandas_exact, classical_admit_value
+from bindings.scaler_tags_native import scaler_tags
 from bindings.sequential_inputs import sequential_input
 from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
@@ -570,6 +571,8 @@ def scaler_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
                 _ = py_call(fields.clear)
                 _ = scaler_initialize(model,values)
             result = model
+        elif op == "tags":
+            result = scaler_tags(model,context)
         elif op == "is_fitted":
             result = PythonObject(_fitted(py_fields(model)))
         elif op == "transform":
@@ -598,6 +601,8 @@ def scaler_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
                 return raise_python_exception(nested)
         if String(error).startswith("TypeError:"):
             return raise_python_exception(error_without_class(error,"TypeError"),ExceptionType.TypeError)
+        if String(error).startswith("AttributeError:"):
+            return raise_python_exception(error_without_class(error,"AttributeError"),ExceptionType("PyExc_AttributeError"))
         if String(error).startswith("ImportError:"):
             return raise_python_exception(error_without_class(error,"ImportError"),ExceptionType("PyExc_ImportError"))
         if String(error).startswith("RuntimeError:"):
