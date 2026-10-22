@@ -307,7 +307,7 @@ def _schema_classes(value: PythonObject, name: String, context: PythonObject) ra
         var items = Python.list()
         for i in range(count):  # driver-loop: over the distinct class labels of one fitted model
             _ = py_call(items.append, Python.tuple("const", labels[i]))
-        return _schema_vector(Python.dict(), "<i8" if all_int or all_bool else "<f8", items, name, context)
+        return _schema_vector(Python.dict(), String("<i8") if all_int or all_bool else String("<f8"), items, name, context)
     if all_str:
         return labels
     raise Error("ValueError: mojolearn: classes_ holds labels no model file can carry")
@@ -350,7 +350,7 @@ def _schema_forest_engine(fields: PythonObject, context: PythonObject) raises ->
     if not valid or (text != "auto" and text != "sequential" and text != "parallel_groves"):
         raise Error("ValueError: inference_engine must be 'auto', 'sequential' or 'parallel_groves'")
     if text == "auto":
-        return "parallel_groves" if Bool(py=_schema_forest_mode(fields, context) == PythonObject("fast")) else "sequential"
+        return String("parallel_groves") if Bool(py=_schema_forest_mode(fields, context) == PythonObject("fast")) else String("sequential")
     return text
 
 
