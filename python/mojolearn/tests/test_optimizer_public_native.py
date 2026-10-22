@@ -50,14 +50,18 @@ def test_clip_and_accumulation_are_native(kind):
         first, second = array.array("f", raw), array.array("f", raw[::-1])
     else:
         first, second = Array.from_buffer(raw), Array.from_buffer(raw[::-1].copy())
-    combined = audit_native_call(T.accumulate_grads, [first, second], tokens=4,
+    combined = audit_native_call(T.accumulate_grads, [first, second], tokens=1024,
                                 numeric_mode="identical").assert_native()
     assert isinstance(combined, Array)
     assert combined.shape == (4,)
     norm = audit_native_call(T.clip_grad_norm_, [first], 0.5,
                             numeric_mode="identical").assert_native()
     assert norm > 0.5
-    assert audit_native_call(T.accumulation_is_aligned, 4, 2,
+    assert not audit_native_call(T.accumulation_is_aligned, 4, 2,
+                                 numeric_mode="identical").assert_native()
+    refused_without_python(T.accumulate_grads, [first, second], tokens=4,
+                           numeric_mode="identical")
+    assert audit_native_call(T.accumulation_is_aligned, 1024, 2,
                              numeric_mode="identical").assert_native()
 
 
@@ -66,7 +70,7 @@ def test_accumulated_step_and_nested_checkpoint_input_are_native():
     optimizer = audit_native_call(T.AdamW, params, accumulation_steps=2,
                                  numeric_mode="identical", resident=False).assert_native()
     gradient = np.array([0.2, -0.1], dtype="f4")
-    audit_native_call(optimizer.step_accumulated, [gradient, gradient], 4).assert_native()
+    audit_native_call(optimizer.step_accumulated, [gradient, gradient], 1024).assert_native()
     state = {"t": 1, "exp_avg": [0.01, -0.01], "exp_avg_sq": [0.001, 0.001],
              "buf_initialized": [1]}
     audit_native_call(optimizer.load_state_dict, state).assert_native()
@@ -155,7 +159,9 @@ def test_scalar_callback_is_refused_without_float_or_bool():
 ])
 def test_builtin_schedule_public_operations_and_optimizer_use_are_native(schedule_name, args):
     import mojolearn
-    cls = getattr(mojolearn, schedule_name)
+    from mojolearn import training
+    namespace = training if schedule_name in ("ConstantLR", "WarmupLinearLR", "WarmupCosineLR") else mojolearn
+    cls = getattr(namespace, schedule_name)
     schedule = audit_native_call(cls, *args).assert_native()
     values = audit_native_call(schedule.lr_values, 7).assert_native()
     for step in (1, 3, 7):
