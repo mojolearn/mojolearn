@@ -24,6 +24,12 @@ from core.host_svr_impl import host_svr_bias, host_svr_indices
 
 
 def host_svr_admit_state(fields: PythonObject, context: PythonObject) raises:
+    var buffers = Python.tuple("dual_coef_", "support_vectors_")
+    for i in range(len(buffers)):  # driver-loop: refuse callback-bearing storage before numeric shape validation
+        var value = py_get(fields, buffers[i])
+        if py_get(context, "ndarray") is not None and py_type(value) is context["ndarray"]:
+            if classical_kind(value, context) == "O":
+                raise Error("TypeError: saved SVR coefficients and support vectors require native numeric storage, not Python objects")
     var names = Python.tuple("n_features_in_", "n_support_", "_gamma", "_hp_cache_size", "_hp_degree", "_hp_coef0")
     for i in range(len(names)):  # driver-loop: fixed scalar fields consumed by the SVM ABI
         if py_contains(fields, names[i]):
