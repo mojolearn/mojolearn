@@ -8,6 +8,7 @@ from bindings.optimizer_public_door import TensorView, tensor_view, base_format,
 from bindings.sequence_optimizer_native import seq_binding, seq_device, seq_device_get, seq_cast
 from bindings.classical_arrays import classical_input, classical_typed, classical_address
 from bindings.classical_attributes import classical_connect_numpy
+from bindings.sequence_array_native import sequence_array_cast
 
 
 def seq_device_entries(binding: PythonObject, context: PythonObject, required: Bool = True) raises -> PythonObject:
@@ -141,13 +142,13 @@ def sequence_device_operation(operation: String, owner: PythonObject, values: Py
         return PythonObject(n)
     if operation == "seqdev_ndim":
         return PythonObject(len(shape))
-    if operation == "seqdev_host":
+    if operation == "seqdev_host" or operation == "seqdev_array":
         var input = context["input_context"]
         classical_connect_numpy(input)
         var result = classical_typed(py_ints(shape), "<f4", input)
         if n > 0:
             _ = py_call(entries["seq_tensor_download"], handle, classical_address(result), n)
-        return result
+        return result if operation == "seqdev_host" else sequence_array_cast(result, values[0], context)
     if operation == "seqdev_upload":
         var input = seq_device_input(values[0], False, context)
         if not same_shape(device_shape(input.shape, context), shape):
