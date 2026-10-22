@@ -97,8 +97,7 @@ FAMILIES = (
         exports=(
             "x_prep_host_numeric_mode", "x_prep_host_vendor", "x_prep_host_column", "x_prep_host_sabotage",
             "x_prep_run", "x_prep_numeric_mode", "x_prep_vendor",
-            "x_prep_ii_rows", "x_prep_ii_gather", "x_prep_ii_scatter", "x_prep_ii_conv",
-            "x_prep_strat_folds", "x_prep_kfold_folds", "x_prep_py2mojo",
+            "x_prep_py2mojo",
             "x_prep_label_present", "x_prep_idn_int",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "x_prep_idn_fam", "x_prep_classical_shared", "x_prep_c08_routes",

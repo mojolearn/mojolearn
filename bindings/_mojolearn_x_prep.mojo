@@ -15,7 +15,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from x_prep.device import run_program_device, run_program_device_ranges, x_prep_ctx, X_PREP_STORE, X_PREP_POOL_ARENA
-from x_prep.folds import I32P, kfold_folds, strat_folds
+from x_prep.folds import I32P
 from x_prep.fastnb_csr import NB_TEXT_CSR, IDN_NB_CSR
 from x_prep.fastnb_csr_pyapi import nb_csr_fit_py, nb_csr_jll_py, nb_csr_fit_int_py, nb_csr_jll_chk_py
 from x_prep.blocked import IDN_NB_ONEPASS, IDN_NB_CSR_DENSE
@@ -146,32 +146,6 @@ def dev_live_binding() raises -> PythonObject:
 def _seed(v: PythonObject) raises -> UInt64:
     """(lo, hi) 32-bit halves -> the 64-bit seed."""
     return (UInt64(Int(py=v[1])) << 32) | UInt64(Int(py=v[0]))
-
-
-def strat_folds_binding(codes_addr: PythonObject, out_addr: PythonObject, ints: PythonObject,
-                        seed: PythonObject) raises -> PythonObject:
-    """TargetEncoder's stratified fold assignment on the host (x_prep/folds.mojo).
-    ints = (n, n_classes, n_folds, shuffle); seed = (lo, hi). Returns 0, or -1
-    when every class has fewer rows than n_folds."""
-    var ca = Int(py=codes_addr)
-    var oa = Int(py=out_addr)
-    var n = Int(py=ints[0])
-    if ca == 0 or oa == 0 or n < 0:
-        raise Error("x_prep: invalid fold buffers")
-    var r = strat_folds(I32P(unsafe_from_address=ca), n, Int(py=ints[1]), Int(py=ints[2]), _seed(seed),
-                        Int(py=ints[3]) != 0, I32P(unsafe_from_address=oa))
-    return PythonObject(r)
-
-
-def kfold_folds_binding(out_addr: PythonObject, ints: PythonObject, seed: PythonObject) raises -> PythonObject:
-    """TargetEncoder's K-fold assignment on the host (x_prep/folds.mojo).
-    ints = (n, n_folds, shuffle); seed = (lo, hi)."""
-    var oa = Int(py=out_addr)
-    var n = Int(py=ints[0])
-    if oa == 0 or n < 0:
-        raise Error("x_prep: invalid fold buffers")
-    kfold_folds(n, Int(py=ints[1]), _seed(seed), Int(py=ints[2]) != 0, I32P(unsafe_from_address=oa))
-    return PythonObject(0)
 
 
 def maxabs_pool_binding() raises -> PythonObject:
@@ -399,8 +373,6 @@ def build__mojolearn_x_prep() -> PythonObject:
         m.def_function[dev_free_binding]("x_prep_dev_free")
         m.def_function[dev_live_binding]("x_prep_dev_live")
         m.def_function[dev_take_rows_binding]("x_prep_dev_take_rows")
-        m.def_function[strat_folds_binding]("x_prep_strat_folds")
-        m.def_function[kfold_folds_binding]("x_prep_kfold_folds")
         comptime if PREP3_MAXABS:
             m.def_function[maxabs_fit_direct_binding]("x_prep_maxabs_fit_direct")
         m.def_function[maxabs_pool_binding]("x_prep_maxabs_pool")
