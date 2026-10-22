@@ -29,6 +29,12 @@ parallel_forecasting	multi-GPU: physical qualification pending
 parallel_gaussian_process	multi-GPU: physical qualification pending
 parallel_ivf	multi-GPU: physical qualification pending
 parallel_model_selection	multi-GPU: physical qualification pending
+parallel_classical	multi-GPU: physical qualification pending (par-* lanes recorded on one device per vendor)
+parallel_ensemble	multi-GPU: physical qualification pending (par-* lanes recorded on one device per vendor)
+parallel_graph	multi-GPU: physical qualification pending (par-* lanes recorded on one device per vendor)
+parallel_neighbors	multi-GPU: physical qualification pending (par-* lanes recorded on one device per vendor)
+parallel_neighbors_reference	multi-GPU: physical qualification pending (par-* lanes recorded on one device per vendor)
+parallel_preprocessing	multi-GPU: physical qualification pending (par-* lanes recorded on one device per vendor)
 DistributedIVFIndex	multi-GPU: physical qualification pending
 ExperimentalTwoLevelFeatureFreq	name marks it experimental (unfinished)
 OrderedRMSE	needs installed-artifact qualification (unverified)
