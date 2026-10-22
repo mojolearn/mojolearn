@@ -17,4 +17,4 @@ def host_inference_feature_names(model: PythonObject, fields: PythonObject, cont
     var module = py_get(frame.f_globals, "__name__", "")
     if py_type(module) is not b.str:
         module = PythonObject("")
-    classical_warning(message, b.UserWarning, context, Python.tuple(frame.f_code.co_filename, frame.f_lineno, module))
+    classical_warning(message, b.UserWarning, context, Python.tuple(frame.f_code.co_filename, frame.f_lineno, module), "HostInferenceWarning")

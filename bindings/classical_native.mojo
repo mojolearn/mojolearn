@@ -233,8 +233,13 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
                 return causal_set_exception(Error(String(message[byte=16:])), cls)
             except nested:
                 return raise_python_exception(nested)
-        if String(error).startswith("UserWarning:"):
-            return raise_python_exception(error_without_class(error, "UserWarning"), ExceptionType("PyExc_UserWarning"))
+        if String(error).startswith("HostInferenceWarning:"):
+            try:
+                var call = PythonObject(from_borrowed=args_ptr)
+                var category = call[3]["host_inference_context"]["warning_category"]
+                return causal_set_exception(error_without_class(error, "HostInferenceWarning"), category)
+            except nested:
+                return raise_python_exception(nested)
         if String(error).startswith("TypeError:"):
             return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
         if String(error).startswith("NotImplementedError:"):

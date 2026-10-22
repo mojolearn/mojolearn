@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Native handling for the established column-vector target warning. The
+# Native handling for established classical validation warnings. The
 # warnings module's Python display and formatting hooks are never invoked.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
@@ -36,7 +36,14 @@ def _warning_category(context: PythonObject) raises -> PythonObject:
         var loaded = py_get(py_call(b.object.__getattribute__, module, "__dict__"), "DataConversionWarning")
         if loaded is not None:
             cls = loaded
-    py_setitem(context, "warning_category", cls)
+    return cls
+
+
+def _warning_admit_category(cls: PythonObject, context: PythonObject) raises:
+    # Every category, including a supplied UserWarning, must be admitted
+    # before reading its metadata or constructing a warning instance.
+    # A C exception entry can otherwise invoke Python subclass hooks.
+    var b = Python.import_module("builtins")
     _ = _warning_class_fields(cls)
     var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
     var names = Python.tuple("__new__", "__init__", "__str__", "__getattribute__")
@@ -51,7 +58,6 @@ def _warning_category(context: PythonObject) raises -> PythonObject:
                 break
         if found is not context["warning_category_slots"][names[k]]:
             raise Error("TypeError: custom warning exception hooks are not native")
-    return cls
 
 
 def _warning_match(pattern: PythonObject, text: PythonObject, context: PythonObject) raises -> Bool:
@@ -93,7 +99,9 @@ def classical_warn_column(context: PythonObject) raises:
     classical_warning(COLUMN_WARNING, _warning_category(context), context)
 
 
-def classical_warning(message: String, category: PythonObject, context: PythonObject, location: PythonObject = PythonObject(None)) raises:
+def classical_warning(message: String, category: PythonObject, context: PythonObject, location: PythonObject = PythonObject(None), error_prefix: String = "DataConversionWarning") raises:
+    _warning_admit_category(category, context)
+    py_setitem(context, "warning_category", category)
     var b = Python.import_module("builtins")
     var fields = _warning_fields(context["warning_fields"])
     # Preserve the old stacklevel=4 location in _guard_cpu_training; warning
@@ -148,7 +156,7 @@ def classical_warning(message: String, category: PythonObject, context: PythonOb
     if mode == "ignore":
         return
     if mode == "error":
-        raise Error(category_name + ": " + message)
+        raise Error(error_prefix + ": " + message)
     if mode != "always" and mode != "all" and mode != "default" and mode != "module" and mode != "once":
         raise Error("RuntimeError: unrecognized warning filter action")
     var key = Python.tuple(message, category, PythonObject(None) if mode == "once" else module, PythonObject(lineno if mode == "default" else 0))
