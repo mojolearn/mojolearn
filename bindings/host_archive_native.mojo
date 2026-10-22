@@ -1476,9 +1476,9 @@ def host_archive_umap(cls: PythonObject, arrays: PythonObject, path: PythonObjec
         raise Error("ValueError: UMAP learning_rate must be positive")
     if repulsion < 0:
         raise Error("ValueError: UMAP repulsion_strength must be nonnegative")
-    if not (0 <= min_dist and min_dist <= spread) or spread <= 0:
+    if not (min_dist >= 0 and min_dist <= spread) or spread <= 0:
         raise Error("ValueError: UMAP requires 0 <= min_dist <= spread and spread > 0")
-    if not (0 <= mix and mix <= 1):
+    if not (mix >= 0 and mix <= 1):
         raise Error("ValueError: UMAP set_op_mix_ratio must be in [0, 1]")
     if connectivity < 0:
         raise Error("ValueError: UMAP local_connectivity must be >= 0")
