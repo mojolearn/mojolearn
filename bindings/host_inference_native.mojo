@@ -12,6 +12,7 @@ from bindings.host_inference_preparation import host_inference_pandas_finite
 from bindings.host_kernel_inference_native import host_kernel_inference, host_kernel_admit_state
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.host_projection_native import host_projection_inference, host_projection_admit_state
+from bindings.host_svr_native import host_svr_admit_state, host_svr_predict
 from bindings.host_logistic_native import host_logistic_classes, host_logistic_inference
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.classical_arrays import classical_input, classical_address, classical_is_f32, classical_is_array, classical_c_order, classical_kind
@@ -62,6 +63,9 @@ def host_inference_operation(model: PythonObject, operation: String, args: Pytho
         host_projection_admit_state(fields, String(kind) == "pca", context)
     if logistic and py_contains(fields, "fit_intercept"):
         host_inference_scalar(fields["fit_intercept"], context, True)
+    var svr = String(kind) == "svr"
+    if svr:
+        host_svr_admit_state(fields, context)
     var method = "inverse_transform" if operation == "host_infer_inverse_transform" else ("transform" if operation == "host_infer_transform" else "predict")
     if operation == "host_infer_decision_function":
         method = "decision_function"
@@ -77,6 +81,8 @@ def host_inference_operation(model: PythonObject, operation: String, args: Pytho
         return host_kernel_inference(model, fields, String(kind), args[0], context, public)
     if projection:
         return host_projection_inference(model, fields, String(kind) == "pca", operation == "host_infer_inverse_transform", args[0], context, public)
+    if svr:
+        return host_svr_predict(model, fields, args[0], context, public)
     if logistic:
         return host_logistic_inference(model, fields, labels, operation, args[0], context, public)
     classical_admit_value(args, context)

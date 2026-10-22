@@ -420,9 +420,37 @@ class HostIsolationForest(_NativeArchiveLoad, _HostBound, IsolationForest):
 
 
 class HostSVR(_NativeArchiveLoad, _HostBound, SVR):
-    """`SVR.predict` from a saved model through
-    `_mojolearn_svm_host.svr_predict` (lane/inference-svm, 2026-09-15)."""
+    """Predict regression targets from a saved support vector model on the CPU."""
     _HOST_ARRAYS = ("dual_coef_", "support_vectors_", "intercept_")
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        # glue: ordinary subclass layout is recorded only at class definition.
+        context = _CLASSICAL.get("host_inference_context")
+        if context is not None:
+            context["classical_public_layouts"][cls] = _native_classical_bridge._layout(
+                cls, context["host_svr_attribute_descriptor"])
+
+    @_native_host_inference_method
+    def predict(self, X):
+        """Return support vector regression predictions on the CPU.
+
+        Parameters
+        ----------
+        X : array-like or sparse matrix of shape (n_samples, n_features)
+            Query samples. A precomputed kernel uses one column per fitted
+            training sample, in the original training order.
+
+        Returns
+        -------
+        predictions : array of shape (n_samples,)
+            Weighted support-vector kernel values plus the fitted intercept.
+
+        Examples
+        --------
+        >>> predictions = model.predict(X)
+        """
+        return _native_classical(self, "host_infer_predict", (X,), _CLASSICAL)
 
 
 class HostDBSCAN(_NativeArchiveLoad, _HostBound, DBSCAN):
@@ -992,6 +1020,7 @@ def _connect_host_inference():
     for basename, names in (("_mojolearn_estimators_host", ("cd_predict", "kernel_ridge_predict", "nystroem_transform", "rbf_sampler_transform",
                                                           "tsvd_transform", "pca_transform", "inverse_transform", "pca_whiten_transform", "pca_whiten_inverse_transform",
                                                           "qn_decision_function", "qn_predict_binary", "qn_sigmoid", "qn_softmax", "py2mojo_rows", "py2mojo_linear_flags")),  # glue: fixed CPU prediction ABI
+                            ("_mojolearn_svm_host", ("svr_predict", "svc_pair_epilogue", "svc_dual_gemv")),
                             ("_mojolearn_core_host", ("kmeans_predict", "kmeans_transform"))):
         try:
             module = _backend.load_host_module(basename)
@@ -1007,7 +1036,7 @@ def _connect_host_inference():
                    host_inference_class_labels=ClassLabels,
                    host_inference_kinds={HostElasticNet: "cd", HostLasso: "cd", HostKMeans: "kmeans",
                                          HostKernelRidge: "kernel_ridge", HostNystroem: "nystroem", HostRBFSampler: "rbf_sampler",
-                                         HostPCA: "pca", HostTruncatedSVD: "tsvd", HostLogisticRegression: "logistic"})
+                                         HostPCA: "pca", HostTruncatedSVD: "tsvd", HostLogisticRegression: "logistic", HostSVR: "svr"})
     # The established native attribute entry is schema-neutral: it admits
     # the supplied class layout and preserves internal Array/public ndarray
     # publication. It does not select scaler bindings or execute scaler work.
@@ -1021,6 +1050,16 @@ def _connect_host_inference():
     for cls in (HostElasticNet, HostLasso, HostKMeans, HostKernelRidge, HostNystroem, HostRBFSampler, HostPCA, HostTruncatedSVD, HostLogisticRegression):  # glue: fixed native prediction class layouts
         cls.__getattribute__ = descriptor
         context["classical_public_layouts"][cls] = _native_classical_bridge._layout(cls, descriptor)
+    # SVR's existing coef_ property is computed natively rather than invoking
+    # its Python descriptor. Every other attribute keeps the ordinary schema.
+    svr_attribute = module.host_svr_attribute_call
+    if not isinstance(svr_attribute, BuiltinFunctionType):
+        raise TypeError("explicit CPU SVR attributes require a native binding entry")
+    svr_descriptor = module.classical_attribute_descriptor(MethodType(svr_attribute, context))
+    context.update(host_svr_attribute_descriptor=svr_descriptor,
+                   host_svr_coefficient_property=vars(SVR)["coef_"])
+    HostSVR.__getattribute__ = svr_descriptor
+    context["classical_public_layouts"][HostSVR] = _native_classical_bridge._layout(HostSVR, svr_descriptor)
     _CLASSICAL["host_inference_context"] = context
 
 
