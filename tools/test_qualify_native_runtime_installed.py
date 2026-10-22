@@ -194,7 +194,7 @@ class InstalledNativeAudit(unittest.TestCase):
                  "test_robust_scaler_native_transport.py",
                  "test_training_linear_public_native.py", "test_maxabs_scaler_native_transport.py",
                  "test_host_inference_native.py", "test_host_kernel_inference_native.py", "test_host_projection_native.py",
-                 "test_host_logistic_native.py", "test_host_svr_native.py", "test_host_svc_native.py", "test_host_kde_native.py")
+                 "test_host_logistic_native.py", "test_host_svr_native.py", "test_host_svc_native.py", "test_host_kde_native.py", "test_host_iforest_native.py")
         for name in names:
             self.assertIn(name, q.PUBLIC_TESTS)
             self.assertTrue((q.ROOT / "python/mojolearn/tests" / name).is_file())
