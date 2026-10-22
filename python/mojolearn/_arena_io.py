@@ -2,16 +2,17 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Shared transfer plumbing for arena-style bindings (lane py-shared).
 
-Two APIs every family can call:
+Three pieces every arena family shares:
 
-1. THE RANGES RUNNER (`input_ranges`, `output_ranges`, `pack_ins`,
-   `pack_outs`, `complement`): an arena program names its INPUT words and
-   its OUTPUT words, and a binding entry built on `core/arena_io.mojo`
+1. THE RANGES RUNNER: an arena program names its INPUT words and its OUTPUT
+   words, and a binding entry built on `core/arena_io.mojo`
    (`upload_ranges`, `download_ranges`) moves only those: the other words
    are zeroed on the device (as the host arena's words arrive zeroed) and
    never come back. x_metrics (`x_metrics_run_ranges`) and x_prep
    (`x_prep_run_ranges`) run on it; `MOJOLEARN_ARENA_RANGES=0` sends both
-   back to the whole-arena entries (the A/B arm).
+   back to the whole-arena entries (the A/B arm). The range descriptors are
+   laid out by the native program runner, `bindings/arena_prog_native.mojo`
+   (lane migrate-prog-staging), which every `_Prog.run` calls once.
 
 2. RESIDENT INPUTS (`DeviceCache`, `resident`): a device copy of a host
    buffer, uploaded once and named by an id in the binding's
@@ -28,88 +29,33 @@ Two APIs every family can call:
 
    Inside `resident()` the caller promises not to write into a buffer it
    has already handed to a binding: the cache sees the same address and
-   byte count and re-uses the device copy. A family binding with its own
-   state (optimizer moments, LM weights, an index) uses `DeviceCache`
-   directly: `cache = DeviceCache(binding, "x_foo")`, `cache.id_of(arr)`,
+   byte count and re-uses the device copy. The native runner creates the
+   scope's per-binding caches. A family binding with its own state
+   (optimizer moments, LM weights, an index) uses `DeviceCache` directly:
+   `cache = DeviceCache(binding, "x_foo")`, `cache.id_of(arr)`,
    `cache.close()`.
 
-3. DEVICE-ROWS INPUT (`DeviceRows`, `rows_slot`; lane cpu4-misc): a fold
-   view of a host float32 C-contiguous 2-D Array (the base and an int64
-   index Array), handed by model_selection to an estimator that opts in
-   (class attribute `_mojolearn_device_rows = True`). An arena runner that
-   meets one puts the base ONCE into its own binding's store (the active
-   `resident()` scope's cache, identity-keyed, so every fold and candidate
-   shares the upload) and gathers the fold rows on the device
-   (`<prefix>_dev_take_rows`); the rows never come to the host. A runner
-   without a device store (the host column, a CPU-only install) calls
-   `materialize()`: the fold rows as a host Array, as before.
+3. DEVICE-ROWS INPUT (`DeviceRows`; lane cpu4-misc): a fold view of a host
+   float32 C-contiguous 2-D Array (the base and an int64 index Array),
+   handed by model_selection to an estimator that opts in (class attribute
+   `_mojolearn_device_rows = True`). The native runner puts the base ONCE
+   into its own binding's store (the active `resident()` scope's cache,
+   identity-keyed, so every fold and candidate shares the upload) and
+   gathers the fold rows on the device (`<prefix>_dev_take_rows`); the rows
+   never come to the host. A runner without a device store (the host
+   column, a CPU-only install) copies the fold rows' host snapshot.
 
 Where a word travels moves no bit. The Python here only lays out Int32
 range lists; a CPU-only install never reaches it (host bindings run the
 arena in place).
 """
-import array
-import os
 import threading
 
-__all__ = ["DeviceCache", "DeviceRows", "resident", "ranges_enabled", "input_ranges", "output_ranges",
-           "complement", "pack_ins", "pack_outs", "RESIDENT_MIN_WORDS", "rows_slot"]
+__all__ = ["DeviceCache", "DeviceRows", "resident", "RESIDENT_MIN_WORDS"]
 
 #: Inputs below this many words always go up from the host arena: a
 #: put costs one synchronized copy, which pays only on a big buffer.
 RESIDENT_MIN_WORDS = 1 << 16
-
-
-def ranges_enabled():
-    """False when MOJOLEARN_ARENA_RANGES=0 (the whole-arena A/B arm)."""
-    return os.environ.get("MOJOLEARN_ARENA_RANGES", "1").strip() != "0"
-
-
-def input_ranges(spans):
-    """[(lo, hi, src)] ascending, disjoint, empty spans dropped, adjacent
-    HOST spans (src -1) merged. `spans` are (lo, hi, src) in any order;
-    overlapping inputs are a layout bug and raise."""
-    out = []
-    for lo, hi, src in sorted((int(a), int(b), int(c)) for a, b, c in spans if int(b) > int(a)):  # glue: orders arena layout spans
-        if out and lo < out[-1][1]:
-            raise AssertionError(f"arena ranges: inputs overlap at [{lo}, {hi})")
-        if out and src < 0 and out[-1][2] < 0 and lo == out[-1][1]:
-            out[-1][1] = hi
-        else:
-            out.append([lo, hi, src])
-    return out
-
-
-def complement(ranges, size):
-    """The [lo, hi) pairs of [0, size) outside `ranges` (pairs or longer rows)."""
-    out = []
-    at = 0
-    for r in sorted((int(r[0]), int(r[1])) for r in ranges):  # glue: orders arena layout ranges
-        if r[0] > at:
-            out.append([at, r[0]])
-        at = max(at, r[1])
-    if at < size:
-        out.append([at, size])
-    return out
-
-
-def output_ranges(pairs):
-    """[lo, hi, -1, 1] quads (whole ranges, merged) for `pairs`."""
-    merged = []
-    for lo, hi in sorted((int(a), int(b)) for a, b in pairs if int(b) > int(a)):  # glue: orders arena layout ranges
-        if merged and lo <= merged[-1][1]:
-            merged[-1][1] = max(merged[-1][1], hi)
-        else:
-            merged.append([lo, hi])
-    return [[lo, hi, -1, 1] for lo, hi in merged]  # glue: arena range descriptor quads
-
-
-def pack_ins(triples):
-    return array.array("i", [v for t in triples for v in t] or [0, 0, -1])  # glue: packs arena range descriptors
-
-
-def pack_outs(quads):
-    return array.array("i", [v for q in quads for v in q] or [0, 0, -1, 1])  # glue: packs arena range descriptors
 
 
 class DeviceCache:
@@ -175,15 +121,6 @@ class _Scope:
         self.min_words = min_words
         self.caches = {}
 
-    def cache(self, binding, prefix):
-        key = (id(binding), prefix)
-        c = self.caches.get(key)
-        if c is None:
-            if not DeviceCache.supports(binding, prefix):
-                return None
-            c = self.caches[key] = (DeviceCache(binding, prefix), binding)
-        return c[0]
-
     def close(self):
         caches, self.caches = self.caches, {}
         for c, _ in caches.values():  # glue: closes each arena cache
@@ -221,15 +158,6 @@ class resident:
         return _ROWS_CALL(_LOCAL, "resident_stats", (), _ROWS_CONTEXT)
 
 
-def active_cache(binding, prefix, n_words):
-    """The active `resident()` scope's cache for `binding`, when there is a
-    scope, the binding has a store and the input is big enough; else None."""
-    scope = getattr(_LOCAL, "scope", None)
-    if scope is None or n_words < scope.min_words:
-        return None
-    return scope.cache(binding, prefix)
-
-
 class DeviceRows:
     """Rows `indices` (a C-contiguous int64 Array) of `base` (a float32
     C-contiguous 2-D Array): a fold's X with no host gather. shape, dtype,
@@ -246,27 +174,3 @@ class DeviceRows:
 
     def materialize(self):
         return _ROWS_CALL(self, "materialize", (), _ROWS_CONTEXT)
-
-
-def rows_slot(binding, prefix, rows, direct):
-    """The store id (in `binding`'s own store) of `rows`' device gather, or
-    None when the binding cannot gather (no `<prefix>_dev_take_rows` or no
-    store): the caller then copies `rows.materialize()`. The base goes up
-    once through the active `resident()` scope's cache (any size), else
-    through `direct` (a DeviceCache the caller closes after its run). The
-    returned slot belongs to the caller, who frees it with
-    `<prefix>_dev_free` after the run."""
-    try:
-        take = getattr(binding, prefix + "_dev_take_rows")
-    except (AttributeError, ImportError):  # an older build, or a host facade
-        return None
-    if take is None or not rows.size or not DeviceCache.supports(binding, prefix):
-        return None
-    scope = getattr(_LOCAL, "scope", None)
-    cache = scope.cache(binding, prefix) if scope is not None else None
-    if cache is None:
-        cache = direct
-    if cache is None:
-        return None
-    base_id = cache.id_of(rows.base)
-    return int(take(base_id, rows.row_words, int(rows.indices._addr), int(rows.indices.size)))

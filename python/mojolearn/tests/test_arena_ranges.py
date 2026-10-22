@@ -24,20 +24,6 @@ from mojolearn import _expansion_metrics as XM
 from mojolearn import _expansion_prep as XP
 
 
-def test_range_helpers():
-    assert _arena_io.input_ranges([(10, 20, -1), (0, 5, -1), (5, 10, -1), (20, 20, -1), (30, 40, 3)]) == \
-        [[0, 20, -1], [30, 40, 3]]
-    assert _arena_io.input_ranges([(0, 5, 1), (5, 10, 2)]) == [[0, 5, 1], [5, 10, 2]]
-    with pytest.raises(AssertionError):
-        _arena_io.input_ranges([(0, 5, -1), (4, 8, -1)])
-    assert _arena_io.complement([[2, 4, -1], [6, 9, 0]], 12) == [[0, 2], [4, 6], [9, 12]]
-    assert _arena_io.complement([], 3) == [[0, 3]]
-    assert _arena_io.complement([[0, 3, -1]], 3) == []
-    assert _arena_io.output_ranges([(5, 9), (0, 2), (2, 3)]) == [[0, 3, -1, 1], [5, 9, -1, 1]]
-    assert list(_arena_io.pack_ins([])) == [0, 0, -1]
-    assert list(_arena_io.pack_outs([[1, 2, -1, 1]])) == [1, 2, -1, 1]
-
-
 def _digest(v):
     h = hashlib.sha256()
     for x in v:
