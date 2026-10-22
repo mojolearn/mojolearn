@@ -283,7 +283,7 @@ def test_density_constructor_numpy_absent_and_late_import_are_native(family, ord
     assert json.loads(done.stdout) == {"mode": "fast", "keys": sorted((*DEFAULTS[family], "numeric_mode"))}
 
 
-@pytest.mark.parametrize("family", ["HostKernelDensity", "HostIsolationForest", "HostElasticNet", "HostKMeans", "HostStandardScaler"])
+@pytest.mark.parametrize("family", ["HostKernelDensity", "HostIsolationForest", "HostElasticNet", "HostKMeans", "HostStandardScaler", "HostLinearRegression"])
 def test_native_unset_member_keeps_attribute_error_and_default_lookup(family):
     cls = type("UnsetNativeSlot", (getattr(host, family),), {"__slots__": ("native_probe",)})
     model = object.__new__(cls)
