@@ -272,6 +272,12 @@ class _Prog:
         return Array._owned(self.arena[off:off + n], shape, "<f4", "C")
 
 
+def _run(prog, numeric_mode):
+    """`prog.run(numeric_mode)` as a module function, so a helper that takes
+    a program as a parameter names its native call statically."""
+    return _PROG_CALL(prog, "x_metrics_run", (numeric_mode,), _PROG_CONTEXT)
+
+
 def _group(prog, key, n, m, *, values=_NONE, vstride=1, weights=_NONE, width=1):
     """Stable counting sort of rows by `key` (int32 offset, -1 = dropped),
     then one PairSum per (group, column). Returns (OFF, OUT) offsets."""
@@ -436,7 +442,7 @@ class _Sums:
         self.tail = None
         prog.rows = None if w is None else (match, W, n)
         keep = tail(prog, groups) if tail is not None else None
-        prog.run(numeric_mode)
+        _run(prog, numeric_mode)
         self.prog, self.groups = prog, groups
         res = []
         for eo in eos:  # glue: reads each staged epilogue's flags, scalars and values
@@ -778,7 +784,7 @@ def _confusion(true, pred, w, order, numeric_mode, tail):
     W = _NONE if w is None else prog.put(w)
     off, out = _group(prog, key, n, k * k, weights=W)
     keep = tail(prog, off if w is None else out, 0 if w is None else 1)
-    prog.run(numeric_mode)
+    _run(prog, numeric_mode)
     return prog, keep
 
 
@@ -1002,7 +1008,7 @@ def _support_total(support, numeric_mode):
     src = prog.put(support) if weighted else prog.put_i32(support)
     out = prog.want(prog.alloc(2), 2)
     prog.stage("cm_epi", 1, _CM_TOTAL, src, k, 1 if weighted else 0, out)
-    prog.run(numeric_mode)
+    _run(prog, numeric_mode)
     return prog.words(out, 2, "d" if weighted else "q")[0]
 
 
@@ -1205,7 +1211,7 @@ class _Reg:
     def result(self, out, numeric_mode, check=None):
         """Run the program, let `check(prog)` raise on its flags, then the
         answer: a float, or the per-output Float64 Array for raw_values."""
-        self.prog.run(numeric_mode)
+        _run(self.prog, numeric_mode)
         if check is not None:
             check(self.prog)
         if self.mo == "raw_values":
@@ -1215,7 +1221,7 @@ class _Reg:
     def scalar(self, out, numeric_mode, check=None):
         """Run the program; the one binary64 word pair at `out` (single output)."""
         self.prog.want(out, 2)
-        self.prog.run(numeric_mode)
+        _run(self.prog, numeric_mode)
         if check is not None:
             check(self.prog)
         return float(self.prog.words(out, 2, "d")[0])
@@ -1319,7 +1325,7 @@ def max_error(y_true, y_pred, *, numeric_mode=None):
     prog.stage("reg_term", r.n, Y, P, t, 1, _TERM["abs"], Y, 0)
     out = prog.want(prog.alloc(1), 1)
     prog.stage("col_max", 1, t, r.n, 1, out)
-    prog.run(numeric_mode)
+    _run(prog, numeric_mode)
     return float(prog.floats(out, 1)[0])
 
 
@@ -1392,7 +1398,7 @@ def _r2_sums_of(r, numeric_mode):
     r.program()
     num, den = _r2_parts(r)
     words = r.prog.want(num, 2), r.prog.want(den, 2)
-    r.prog.run(numeric_mode)
+    _run(r.prog, numeric_mode)
     return float(r.prog.words(words[0], 2, "d")[0]), float(r.prog.words(words[1], 2, "d")[0])
 
 
@@ -1648,7 +1654,7 @@ def _curves(scores, flags, w, n, problems, numeric_mode, *, stride=1, thresholds
                 prog.want(b + t * n, n, count=cnt + t)
     prog.stage("bin_curve", problems, S, stride, POS, W, n, order, fps, tps, thr, cnt,
                keep, 1 if flagged else 0, CF, CM)
-    prog.run(numeric_mode)
+    _run(prog, numeric_mode)
     counts = prog.ints(CM if compact else cnt, problems)
     if compact:
         return [_DevCurve(prog, CF + t * n, CF + N + t * n, CF + 2 * N + t * n if thresholds else _NONE,
@@ -1728,7 +1734,7 @@ def _fold_curves(scores, flags, w, n, problems, numeric_mode, *, stride=1, fold=
     out = _fold_stages(prog, S, stride, POS, W, n, problems, auc, max_fpr)
     if tail is not None:
         tail(prog, S, W, C, out, n, problems)
-    prog.run(numeric_mode)
+    _run(prog, numeric_mode)
     holder = {}
 
     def redo():
@@ -1836,7 +1842,7 @@ def _curve_out(y_true, y_score, pos_label, sample_weight, numeric_mode, caller, 
         prog.want(OUT + 2 * b * (n + 1), 2 * (n + 1), count=LEN, mult=2)
     src = (CF, CF + n, CF + 2 * n, CM) if roc_drop else (fps, tps, thr, cnt)
     prog.stage("curve_out", 1, kind, n, *src, 1 if (drop and kind != _CO_ROC) else 0, OUT, LEN)
-    prog.run(numeric_mode)
+    _run(prog, numeric_mode)
     m, status = prog.ints(LEN, 2)
     if status == _CO_EMPTY:
         raise ValueError("mojolearn metrics: an empty curve has no thresholds")
@@ -1953,7 +1959,7 @@ def auc(x, y):
     Y = prog.put_i32(_f64_array_words(ya))
     OUT = prog.want(prog.alloc(3), 3)
     prog.stage("auc_xy", 1, n, X, Y, OUT, _AX_CHUNK)
-    prog.run(None)
+    _run(prog, None)
     flags = prog.ints(OUT + 2, 1)[0]
     if (flags & _AX_NEG) and (flags & _AX_POS):
         raise ValueError(f"x is neither increasing nor decreasing : {xa.tolist()}.")
@@ -2061,7 +2067,7 @@ class _OvrTail:
         SC = _f64_bits(p2, sc)
         SUP = p2.put_i32(prog.words(self.sup, 2 * k, "i"))
         res = _stage_average(p2, SC, SUP, k, self.average)
-        p2.run(self.numeric_mode)
+        _run(p2, self.numeric_mode)
         return p2.words(res, 2, "d")[0]
 
 
@@ -2177,7 +2183,7 @@ def _ovo_native(true, index, s, n, k, numeric_mode, average):
             PS, PREV = prog.want(prog.alloc(2 * m), 2 * m), prog.want(prog.alloc(2 * m), 2 * m)
         prog.stage("rank_epi", m, _RANK_OVO_PAIR, SC, off, k, n, g0, m, PS, PREV)
         res = _stage_average(prog, PS, PREV, P, average) if last_only else _NONE
-        prog.run(numeric_mode)
+        _run(prog, numeric_mode)
         if g0 == 0:
             if _flag_set(prog, rows):
                 raise ValueError(_ROWS_MSG)
@@ -2193,7 +2199,7 @@ def _ovo_native(true, index, s, n, k, numeric_mode, average):
         g0 += m
     p2 = _Prog()
     res = _stage_average(p2, p2.put_i32(ps_words), p2.put_i32(prev_words), P, average)
-    p2.run(numeric_mode)
+    _run(p2, numeric_mode)
     return p2.words(res, 2, "d")[0]
 
 
@@ -2353,7 +2359,7 @@ def top_k_accuracy_score(y_true, y_score, *, k=2, normalize=True, sample_weight=
     W = _NONE if w is None else prog.put(w)
     tot = _group(prog, zero, n, 1, values=hit, weights=W)[1]
     sw = _group(prog, zero, n, 1, weights=W)[1] if w is not None else None
-    prog.run(numeric_mode)
+    _run(prog, numeric_mode)
     hits = prog.floats(tot, 1)[0]
     if not normalize:
         return float(hits)
@@ -2395,7 +2401,7 @@ def _row_mean(S, cols, Y, n, kind, w, numeric_mode, *, K=0, Dt=_NONE, prog=None,
     res = prog.alloc(2)
     prog.stage("rank_epi", 1, _RANK_MEAN, tot, n, _NONE if sw is None else sw, int(bool(normalize)),
                int(bool(half)), res)
-    prog.run(numeric_mode)
+    _run(prog, numeric_mode)
     for check in after:  # glue: the program's flag checks
         check(prog)
     return prog.words(res, 2, "d")[0]
@@ -2502,7 +2508,7 @@ def _d2_proba(y_true, y_proba, sample_weight, labels, pos_label, numeric_mode, c
         prog.stage("rank_epi", 1, _RANK_D2_LOG, tot, PER, weighted, k, res)
     else:
         prog.stage("rank_epi", 1, _RANK_D2_BRIER, tot, n, _NONE if sw is None else sw, PER, weighted, k, res)
-    prog.run(numeric_mode)
+    _run(prog, numeric_mode)
     _proba_check(prog, flags, caller)
     return float(prog.words(res, 2, "d")[0])
 
@@ -2649,7 +2655,7 @@ def ndcg_score(y_true, y_score, *, k=None, sample_weight=None, ignore_ties=False
     sw = _group(prog, zero, n, 1, weights=W)[1] if w is not None else None
     res = prog.alloc(2)
     prog.stage("rank_epi", 1, _RANK_MEAN, tot, n, _NONE if sw is None else sw, 1, 0, res)
-    prog.run(numeric_mode)
+    _run(prog, numeric_mode)
     if _flag_set(prog, neg):
         raise ValueError("ndcg_score should not be used on negative y_true values.")
     return float(prog.words(res, 2, "d")[0])
@@ -2732,7 +2738,7 @@ def _contingency(a, b, ca, cb, numeric_mode, eps=None, mi=False, emi=False):
     MI = prog.want(prog.alloc(2), 2) if mi else _NONE
     EMI = prog.want(prog.alloc(2), 2) if emi else _NONE
     prog.stage("cont_stats", 1, off, ka, kb, kk, EPS, C, F, R, K, P, E, MI, EMI, n)
-    prog.run(numeric_mode)
+    _run(prog, numeric_mode)
     r = _Contingency()
     r.ka, r.kb = ka, kb
     r.C = Array._owned(prog.words(C, 2 * cells, "q"), (ka, kb), "<i8", "C")
@@ -2883,7 +2889,7 @@ def _cluster_score(X, labels, numeric_mode, caller, db):
         inner = prog.scratch(2 * k)
         prog.stage("cl_epi", k, _CL_CH_ROW, CB, gsum, n, d, k, inner)
         prog.stage("cl_epi", 1, _CL_CH_FIN, off, inner, per, n, k, res)
-    prog.run(numeric_mode)
+    _run(prog, numeric_mode)
     return float(prog.words(res, 2, "d")[0])
 
 
@@ -2968,7 +2974,7 @@ class CounterRng:
             words.append(v - (1 << 32) if v >= 1 << 31 else v)
         prog.stage("approx_mode", k, k, C, _NONE, n_train, out, _NONE, used, *words)
         prog.stage("approx_mode", k, k, C, out, n_test, out + k, used, used + 1, *words)
-        prog.run(numeric_mode)
+        _run(prog, numeric_mode)
         drew = prog.ints(used, 2)
         self.draws += drew[0] + drew[1]
         both = prog.ints(out, 2 * k)
@@ -2982,7 +2988,7 @@ class CounterRng:
             outs.append((prog.want(self.permute_stage(prog, n), n), n))
         if not outs:
             return []
-        prog.run(numeric_mode)
+        _run(prog, numeric_mode)
         return [prog.ints(o, n) for o, n in outs]  # glue: reads each requested draw's words
 
     def permutation(self, n, numeric_mode=None):
@@ -3002,7 +3008,7 @@ class CounterRng:
             outs.append((w, n))
         if not outs:
             return []
-        prog.run(numeric_mode)
+        _run(prog, numeric_mode)
         return [prog.words(w, 2 * n, "q") for w, n in outs]  # glue: reads each requested draw's words
 
 
@@ -3038,7 +3044,7 @@ def _fold_rows_run(prog, n, k, code, order, numeric_mode):
     out = prog.want(prog.alloc(2 * n * k), 2 * n * k)
     sz = prog.want(prog.alloc(k), k)
     prog.stage("fold_rows", 1, n, k, code, order, out, sz)
-    prog.run(numeric_mode)
+    _run(prog, numeric_mode)
     sizes = prog.ints(sz, k)
     res = []
     for f in range(k):  # glue: wraps each fold's result views
@@ -3112,7 +3118,7 @@ def regression_report(y_true, y_pred, *, sample_weight=None,
     y_mean = r.fin(r.sums(r.Y), f32=True)[1]
     denominator = _centered(r, r.Y, y_mean, mean=False)
     r2 = _assemble(r, r.fin(squared_sums, 0), denominator, force_finite)
-    r.prog.run(numeric_mode)
+    _run(r.prog, numeric_mode)
     def result(offset):
         if r.mo == "raw_values":
             return Array._owned(r.prog.words(offset, 2*r.D, "d"), (r.D,), "<f8", "C")
@@ -3173,7 +3179,7 @@ def ranking_report(y_true, y_score, *, pos_label=None, sample_weight=None,
             prog.stage("curve_out", 1, _CO_ROC if fold == 0 else _CO_PR, n,
                        fps, tps, thr, count, 0, output, lengths)
             curve_outputs.append((output, lengths))
-    prog.run(numeric_mode)
+    _run(prog, numeric_mode)
     auc_out, auc_flag = scalar_outputs[0]
     ap_out, ap_flag = scalar_outputs[1]
     if prog.ints(auc_flag, 1)[0] == 1:
