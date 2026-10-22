@@ -124,3 +124,42 @@ def projection(model, X, name, inverse=False):
         binding.tsvd_transform(addr_ro(x, name="X"), addr_ro(model.components_, name="components_"),
             addr(out, name="out"), [rows, features, components])
     return out
+
+
+def logistic(model, X, method):
+    """Frozen 32011bb32 CPU logistic decision/link/label orchestration."""
+    from mojolearn._labels import decode_labels, argmax_rows
+    binding = model._bind("_mojolearn_estimators")
+    x, _ = as_f32_c(X, ndim=2, name="X")
+    n, d = x.shape
+    nc = len(model.classes_)
+    targets = 1 if nc == 2 else nc
+    if d != model.n_features_in_:
+        raise ValueError("LogisticRegression feature count differs from fit")
+    if method == "predict" and targets == 1:
+        codes = empty((n,), "<i8")
+        binding.qn_predict_binary(addr_ro(x, name="X"), addr_ro(model._w, name="coef_"),
+            addr(codes, name="codes"), [n, d, int(bool(model.fit_intercept))])
+        return decode_labels(model.classes_, codes)
+    scores = empty((n,) if targets == 1 else (n, targets), "<f4")
+    params = [n, d, int(bool(model.fit_intercept))]
+    if targets != 1:
+        params.append(targets)
+    binding.qn_decision_function(addr_ro(x, name="X"), addr_ro(model._w, name="coef_"),
+        addr(scores, name="scores"), params)
+    if method == "decision_function":
+        return scores
+    if method == "predict":
+        return decode_labels(model.classes_, argmax_rows(scores))
+    probabilities = empty((n, nc), "<f8")
+    if targets == 1:
+        binding.qn_sigmoid(addr_ro(scores, name="scores"), addr(probabilities, name="probabilities"), [n])
+    else:
+        binding.qn_softmax(addr_ro(scores, name="scores"), addr(probabilities, name="probabilities"), [n, nc])
+    if method == "predict_proba":
+        return probabilities
+    if not binding.py2mojo_linear_flags() & 2:
+        raise RuntimeError("estimators binding predates py2mojo_rows")
+    out = empty((n, nc), "<f8")
+    binding.py2mojo_rows(1, addr_ro(probabilities, name="probabilities"), addr(out, name="log probabilities"), [n * nc, 1])
+    return out

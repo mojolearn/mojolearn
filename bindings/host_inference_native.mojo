@@ -12,6 +12,7 @@ from bindings.host_inference_preparation import host_inference_pandas_finite
 from bindings.host_kernel_inference_native import host_kernel_inference, host_kernel_admit_state
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.host_projection_native import host_projection_inference, host_projection_admit_state
+from bindings.host_logistic_native import host_logistic_classes, host_logistic_inference
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.classical_arrays import classical_input, classical_address, classical_is_f32, classical_is_array, classical_c_order, classical_kind
 from bindings.host_archive_native import host_archive_typed
@@ -41,9 +42,14 @@ def host_inference_operation(model: PythonObject, operation: String, args: Pytho
             break
     if kind is None:
         raise Error("TypeError: no native explicit CPU prediction owner for this class")
+    var logistic = String(kind) == "logistic"
+    var labels = PythonObject(None)
+    if logistic and py_contains(fields, "classes_"):
+        labels = host_logistic_classes(fields["classes_"], context)
     var keys = py_call(b.list, fields.keys())
     for i in range(len(keys)):  # driver-loop: admitted stored model values
-        classical_admit_value(fields[keys[i]], context)
+        if not logistic or String(keys[i]) != "classes_":
+            classical_admit_value(fields[keys[i]], context)
     host_inference_scalar(py_get(fields, "_mojolearn_fitted", False), context, True)
     host_inference_scalar(py_get(fields, "_mojolearn_fitting", False), context, True)
     if py_contains(fields, "n_features_in_"):
@@ -54,7 +60,15 @@ def host_inference_operation(model: PythonObject, operation: String, args: Pytho
     var projection = String(kind) == "pca" or String(kind) == "tsvd"
     if projection:
         host_projection_admit_state(fields, String(kind) == "pca", context)
+    if logistic and py_contains(fields, "fit_intercept"):
+        host_inference_scalar(fields["fit_intercept"], context, True)
     var method = "inverse_transform" if operation == "host_infer_inverse_transform" else ("transform" if operation == "host_infer_transform" else "predict")
+    if operation == "host_infer_decision_function":
+        method = "decision_function"
+    elif operation == "host_infer_predict_proba":
+        method = "predict_proba"
+    elif operation == "host_infer_predict_log_proba":
+        method = "predict_log_proba"
     classical_require_fitted(model, False, method, error_context)
     var mode = py_get(fields, "numeric_mode")
     if mode is not None and (py_type(mode) is not b.str or String(mode) != "identical"):
@@ -63,6 +77,8 @@ def host_inference_operation(model: PythonObject, operation: String, args: Pytho
         return host_kernel_inference(model, fields, String(kind), args[0], context, public)
     if projection:
         return host_projection_inference(model, fields, String(kind) == "pca", operation == "host_infer_inverse_transform", args[0], context, public)
+    if logistic:
+        return host_logistic_inference(model, fields, labels, operation, args[0], context, public)
     classical_admit_value(args, context)
     var cd = String(kind) == "cd"
     if cd and not py_contains(fields, "coef_"):

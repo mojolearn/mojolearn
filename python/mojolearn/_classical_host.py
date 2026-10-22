@@ -228,6 +228,92 @@ def _native_host_inference_method(method):
 class HostLogisticRegression(_NativeArchiveLoad, _HostBound, LogisticRegression):
     _HOST_ARRAYS = ("_w",)
 
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        _register_host_inference_class(cls)
+
+    @_native_host_inference_method
+    def decision_function(self, X):
+        """Return fitted linear class scores on the CPU.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Samples with the fitted feature count.
+
+        Returns
+        -------
+        scores : float32 array of shape (n_samples,) or (n_samples, n_classes)
+            One score per binary sample or one score per class otherwise.
+
+        Examples
+        --------
+        >>> scores = model.decision_function(X)
+        """
+        return _native_classical(self, "host_infer_decision_function", (X,), _CLASSICAL)
+
+    @_native_host_inference_method
+    def predict(self, X):
+        """Return fitted class labels for samples on the CPU.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Samples with the fitted feature count.
+
+        Returns
+        -------
+        labels : array or list of length n_samples
+            Integer labels use int64, real labels float64; other labels use a
+            list. Binary positive scores select the second class; multiclass
+            score ties select the first matching class.
+
+        Examples
+        --------
+        >>> labels = model.predict(X)
+        """
+        return _native_classical(self, "host_infer_predict", (X,), _CLASSICAL)
+
+    @_native_host_inference_method
+    def predict_proba(self, X):
+        """Return class probabilities in fitted class order on the CPU.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Samples with the fitted feature count.
+
+        Returns
+        -------
+        probabilities : float64 array of shape (n_samples, n_classes)
+            The binary sigmoid or multiclass softmax of the fitted scores.
+
+        Examples
+        --------
+        >>> probabilities = model.predict_proba(X)
+        """
+        return _native_classical(self, "host_infer_predict_proba", (X,), _CLASSICAL)
+
+    @_native_host_inference_method
+    def predict_log_proba(self, X):
+        """Return natural logarithms of class probabilities on the CPU.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Samples with the fitted feature count.
+
+        Returns
+        -------
+        log_probabilities : float64 array of shape (n_samples, n_classes)
+            Natural log probabilities, with negative infinity for exact zero.
+
+        Examples
+        --------
+        >>> log_probabilities = model.predict_log_proba(X)
+        """
+        return _native_classical(self, "host_infer_predict_log_proba", (X,), _CLASSICAL)
+
     def _host_refusals(self):
         """A model with more than two classes needs the softmax link
         (`qn_softmax`, lane/logistic-multiclass, 2026-09-14); a host build
@@ -900,10 +986,12 @@ except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as _mi
 # Import-time connection of complete explicit CPU prediction owners.
 def _connect_host_inference():
     from types import BuiltinFunctionType, MethodType
+    from ._labels import ClassLabels
     from .tokenizer import _binding
     entries = {}
     for basename, names in (("_mojolearn_estimators_host", ("cd_predict", "kernel_ridge_predict", "nystroem_transform", "rbf_sampler_transform",
-                                                          "tsvd_transform", "pca_transform", "inverse_transform", "pca_whiten_transform", "pca_whiten_inverse_transform")),  # glue: fixed CPU prediction ABI
+                                                          "tsvd_transform", "pca_transform", "inverse_transform", "pca_whiten_transform", "pca_whiten_inverse_transform",
+                                                          "qn_decision_function", "qn_predict_binary", "qn_sigmoid", "qn_softmax", "py2mojo_rows", "py2mojo_linear_flags")),  # glue: fixed CPU prediction ABI
                             ("_mojolearn_core_host", ("kmeans_predict", "kmeans_transform"))):
         try:
             module = _backend.load_host_module(basename)
@@ -916,9 +1004,10 @@ def _connect_host_inference():
             entries[name] = entry
     context = dict(_CLASSICAL["host_tree_context"])
     context.update(host_inference_entries=entries,
+                   host_inference_class_labels=ClassLabels,
                    host_inference_kinds={HostElasticNet: "cd", HostLasso: "cd", HostKMeans: "kmeans",
                                          HostKernelRidge: "kernel_ridge", HostNystroem: "nystroem", HostRBFSampler: "rbf_sampler",
-                                         HostPCA: "pca", HostTruncatedSVD: "tsvd"})
+                                         HostPCA: "pca", HostTruncatedSVD: "tsvd", HostLogisticRegression: "logistic"})
     # The established native attribute entry is schema-neutral: it admits
     # the supplied class layout and preserves internal Array/public ndarray
     # publication. It does not select scaler bindings or execute scaler work.
@@ -929,7 +1018,7 @@ def _connect_host_inference():
     descriptor = module.classical_attribute_descriptor(MethodType(attribute, context))
     context.update(classical_attribute_descriptor=descriptor, classical_public_layouts={},
                    classical_public_installed=True)
-    for cls in (HostElasticNet, HostLasso, HostKMeans, HostKernelRidge, HostNystroem, HostRBFSampler, HostPCA, HostTruncatedSVD):  # glue: fixed native prediction class layouts
+    for cls in (HostElasticNet, HostLasso, HostKMeans, HostKernelRidge, HostNystroem, HostRBFSampler, HostPCA, HostTruncatedSVD, HostLogisticRegression):  # glue: fixed native prediction class layouts
         cls.__getattribute__ = descriptor
         context["classical_public_layouts"][cls] = _native_classical_bridge._layout(cls, descriptor)
     _CLASSICAL["host_inference_context"] = context
