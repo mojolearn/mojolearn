@@ -11,6 +11,7 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.arena_cache_release import FirstFailure
+from bindings.arena_cache_upload import _native_call
 from bindings.arena_materialize_native import arena_resident_take, arena_resident_entry
 
 
@@ -72,7 +73,8 @@ def _checked(key: PythonObject, entry: PythonObject, context: PythonObject) rais
 
 def _free(sid: PythonObject, context: PythonObject) raises:
     if Int(py=sid) >= 0:
-        _ = py_call(context["arena_msel_free"], sid)
+        # The backend's own exception (type and text) is retained unchanged.
+        _ = _native_call(context["arena_msel_free"], Python.tuple(sid))
 
 
 def _republish(fields: PythonObject, failed: PythonObject, context: PythonObject) raises:
