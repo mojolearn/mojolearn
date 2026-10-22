@@ -33,6 +33,14 @@ def scope_statements(body):
                     yield from scope_statements(value)
 
 
+def literal_index(node):
+    try:
+        value = ast.literal_eval(node)
+    except (ValueError, TypeError):
+        return None
+    return value if type(value) is int else None
+
+
 def merge(values):
     values = list(values)
     if not values:
@@ -295,12 +303,9 @@ class Source:
             return Value("dict", merge(values), False, slots)
         if isinstance(node, ast.Subscript):
             value = self.shape(rel, node.value, env, body, depth + 1)
-            if (
-                value.kind == "tuple"
-                and isinstance(node.slice, ast.Constant)
-                and isinstance(node.slice.value, int)
-            ):
-                return value.item[node.slice.value] if 0 <= node.slice.value < len(value.item) else UNKNOWN
+            index = literal_index(node.slice)
+            if value.kind == "tuple" and index is not None:
+                return value.item[index] if -len(value.item) <= index < len(value.item) else UNKNOWN
             if value.kind == "dict" and isinstance(node.slice, ast.Constant):
                 return dict(value.slots).get(node.slice.value, value.item)
         if isinstance(node, (ast.Tuple, ast.List)):
@@ -410,8 +415,8 @@ class Effects:
                     else value.item
                 )
                 return replace(item, hot=value.hot or item.hot)
-            if value.kind == "tuple" and isinstance(node.slice, ast.Constant) and type(node.slice.value) is int:
-                index = node.slice.value
+            index = literal_index(node.slice)
+            if value.kind == "tuple" and index is not None:
                 if -len(value.item) <= index < len(value.item):
                     item = value.item[index]
                     return replace(item, hot=value.hot or item.hot)
