@@ -218,13 +218,18 @@ def test_reinitialization_preserves_native_dtype_layouts_and_owned_metadata(layo
     assert rows.dtype == np.dtype('f8') and rows.shape == (1, 2)
 
 
-def test_reinitialization_refuses_owned_object_buffer_finalizers():
+@pytest.mark.parametrize('structured', [False, True])
+def test_reinitialization_refuses_owned_object_buffer_finalizers(structured):
     calls = []
     class Finalizer:
         def __del__(self):
             calls.append('finalizer')
-    rows = DeviceRows(np.zeros((2, 3), dtype='O'), np.array([1], dtype='i8'), None)
-    rows.base[0, 0] = Finalizer()
+    dtype = np.dtype([('owner', 'O'), ('value', 'f8')]) if structured else np.dtype('O')
+    rows = DeviceRows(np.zeros((2, 3), dtype=dtype), np.array([1], dtype='i8'), None)
+    if structured:
+        rows.base['owner'][0, 0] = Finalizer()
+    else:
+        rows.base[0, 0] = Finalizer()
     previous_base_id = id(rows.base)
     replacement = np.zeros((2, 2), dtype='f8')
     audit = audit_native_call(rows.__init__, replacement, np.array([0], dtype='i8'), None)

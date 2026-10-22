@@ -129,6 +129,31 @@ def _released_dtype(value: PythonObject, context: PythonObject, depth: Int) rais
     return False
 
 
+def _native_item(value: PythonObject, index: PythonObject) raises -> PythonObject:
+    # Callers admit the exact ndarray (or its native flat iterator), dtype
+    # and native integer/field-name index before this public CPython API.
+    ref cpy = Python().cpython()
+    var result = cpy.lib.get_function[PyObjectPtr]("PyObject_GetItem")(value._obj_ptr,index._obj_ptr)
+    if not result:
+        raise cpy.unsafe_get_error()
+    return PythonObject(from_owned=result)
+
+
+def _released_object_elements(value: PythonObject, context: PythonObject, depth: Int) raises:
+    # Follow field views without following their .base back to the array:
+    # dtype ownership and the original buffer owner are checked separately.
+    var dtype = value.dtype
+    if dtype.fields is not None:
+        var names = dtype.names
+        for i in range(len(names)):  # driver-loop: structured fields retain object owners independently of native numeric bytes
+            var field = _native_item(value,names[i])
+            _released_object_elements(field,context,depth+1)
+    elif Bool(py=dtype.hasobject):
+        var flattened = value.flat
+        for i in range(Int(py=value.size)):  # driver-loop: object-array indexing returns the retained object reference, without conversion
+            _released_owner(_native_item(flattened,PythonObject(i)),context,depth+1)
+
+
 def _released_owner(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
     # Reinitialization decrements the previous fields' references. Admit the
     # complete owners that could be destroyed before replacing any field.
@@ -170,11 +195,7 @@ def _released_owner(value: PythonObject, context: PythonObject, depth: Int = 0) 
         if not _released_dtype(dtype,context,depth+1):
             raise Error("TypeError: DeviceRows reinitialization requires an admitted native dtype")
         if Bool(py=dtype.hasobject):
-            # ndarray.item is NumPy's immutable native descriptor. It returns
-            # object references (or a structured tuple), never their protocols;
-            # the ndarray retains them throughout this admission pass.
-            for i in range(Int(py=value.size)):  # driver-loop: object-buffer ownership must be checked before release
-                _released_owner(py_call(value.item,i),context,depth+1)
+            _released_object_elements(value,context,depth+1)
         _released_owner(value.base,context,depth+1)
         return
     if _released_dtype(value,context,depth):
