@@ -59,6 +59,12 @@ def _cases():
             meta=_i64([3, 17, 1]), feature_range=_f64([-2, 3]),
             data_min=_f32([1, 2, 3]), data_max=_f32([3, 4, 5]),
             data_range=_f32([2, 2, 2]), scale=_f32([2.5, 2.5, 2.5]), min=_f32([-4.5, -7, -9.5]))),
+        "Cholesky": ("mojolearn-cholesky-1", dict(
+            meta=_i64([2, 0, 16]), scalars=_f64([1.5, .0001]),
+            jitter_param=_f64([-1]), L=_f32([[1, 0], [.25, 2]]))),
+        "Embedding": ("mojolearn-embedding-1", dict(
+            meta=_i64([3, 2, -1]), plan="auto",
+            weight=_f32([[1, 2], [3, 4], [5, 6]]))),
     }
 
 

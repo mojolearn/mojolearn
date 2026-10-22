@@ -368,7 +368,7 @@ class HostGaussianProcessClassifier(GaussianProcessClassifier):
 _LINALG_HOST_BASENAME = "_mojolearn_linalg_host"
 
 
-class HostCholesky(Cholesky):
+class HostCholesky(_NativeArchiveLoad, Cholesky):
     """`Cholesky` bound to `_mojolearn_linalg_host` on any box, a GPU box
     included, so a GPU factor and a CPU solve can be compared in one
     process (`mojolearn.host_model` returns this for a saved factor).
@@ -535,7 +535,7 @@ class HostIVFIndex(_HostBound, IVFIndex):
     _HOST_ARRAYS = ("centers_", "center_norms_", "list_offsets_", "list_indices_", "list_data_")
 
 
-class HostEmbedding(_HostBound, Embedding):
+class HostEmbedding(_NativeArchiveLoad, _HostBound, Embedding):
     """A saved embedding table on the lookup inference binding, which
     exports `embedding_forward` and no backward."""
     _HOST_ARRAYS = ("weight",)

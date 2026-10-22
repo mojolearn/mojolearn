@@ -6,7 +6,8 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.sequential_description import sequential_fields
 from bindings.classical_archive_read import classical_archive_read, classical_archive_build, _archive_exact, _archive_string
-from bindings.classical_arrays import classical_i64, classical_f64, classical_wrap_array
+from bindings.classical_arrays import classical_i64, classical_f64, classical_wrap_array, classical_array, classical_address
+from core.host_archive_impl import host_archive_copy_f32
 
 
 def host_archive_count(arrays: PythonObject, name: String, dtype: String, count: Int,
@@ -212,6 +213,60 @@ def host_archive_minmax(cls: PythonObject, arrays: PythonObject, context: Python
     return model
 
 
+def host_archive_cholesky(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
+    var meta = host_archive_count(arrays, "meta", "<i8", 3, context, True)
+    var scalars = host_archive_count(arrays, "scalars", "<f8", 2, context, True)
+    var jp = host_archive_count(arrays, "jitter_param", "<f8", 1, context, True)
+    var n = classical_i64(meta, 0)
+    if n < 1:
+        raise Error("model Cholesky factor dimension must be positive")
+    var factor = host_archive_shape(arrays, "L", "<f4", Python.tuple(n, n), context)
+    var model = host_archive_object(cls, arrays, context)
+    var fields = sequential_fields(model)
+    host_archive_mode(arrays, fields, context)
+    var jitter = classical_f64(jp, 0)
+    py_setitem(fields, "jitter", PythonObject(None) if jitter == -1.0 else PythonObject(jitter))
+    py_setitem(fields, "n_", n)
+    py_setitem(fields, "L_", factor)
+    py_setitem(fields, "info_", classical_i64(meta, 1))
+    py_setitem(fields, "nb_", classical_i64(meta, 2))
+    py_setitem(fields, "_logdet", classical_f64(scalars, 0))
+    py_setitem(fields, "jitter_", classical_f64(scalars, 1))
+    return model
+
+
+def host_archive_embedding(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
+    var meta = host_archive_count(arrays, "meta", "<i8", 3, context, True)
+    var v = classical_i64(meta, 0)
+    var d = classical_i64(meta, 1)
+    var pad = classical_i64(meta, 2)
+    if v < 1 or d < 1:
+        raise Error("Embedding dimensions must be positive")
+    if pad != -1 and (pad < -v or pad >= v):
+        raise Error("Embedding padding_idx is outside the vocabulary")
+    var plan = _archive_string(arrays, "plan", context)
+    if String(plan) != "auto" and String(plan) != "scan" and String(plan) != "sort":
+        raise Error("Embedding plan must be auto, scan or sort")
+    var saved = host_archive_shape(arrays, "weight", "<f4", Python.tuple(v, d), context)
+    var weight = classical_array(v, d, context)
+    host_archive_copy_f32(Int(py=classical_address(saved)), Int(py=saved.strides[0]),
+                          Int(py=saved.strides[1]), v, d, Int(py=classical_address(weight)))
+    _ = saved^
+    var model = host_archive_object(cls, arrays, context)
+    var fields = sequential_fields(model)
+    host_archive_mode(arrays, fields, context)
+    py_setitem(fields, "num_embeddings", v)
+    py_setitem(fields, "embedding_dim", d)
+    py_setitem(fields, "padding_idx", PythonObject(None) if pad == -1 else PythonObject(v + pad if pad < 0 else pad))
+    py_setitem(fields, "max_norm", PythonObject(None))
+    py_setitem(fields, "norm_type", 2.0)
+    py_setitem(fields, "scale_grad_by_freq", False)
+    py_setitem(fields, "sparse", False)
+    py_setitem(fields, "plan", plan)
+    py_setitem(fields, "weight", weight)
+    return model
+
+
 def host_archive_build(path: PythonObject, context: PythonObject,
                        requested_class: PythonObject = PythonObject(None)) raises -> PythonObject:
     # This deliberately separate private entry allows each schema to be
@@ -250,6 +305,10 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         model = host_archive_kernel(cls, arrays, 0 if fmt == "mojolearn-kernel-ridge-1" else (1 if fmt == "mojolearn-nystroem-1" else 2), context)
     elif fmt == "mojolearn-scaler-1" and String(estimator) == "MinMaxScaler":
         model = host_archive_minmax(cls, arrays, context)
+    elif fmt == "mojolearn-cholesky-1":
+        model = host_archive_cholesky(cls, arrays, context)
+    elif fmt == "mojolearn-embedding-1":
+        model = host_archive_embedding(cls, arrays, context)
     else:
         raise Error("native host archive schema has not been implemented: " + fmt + "/" + String(estimator))
     if requested_class is None:

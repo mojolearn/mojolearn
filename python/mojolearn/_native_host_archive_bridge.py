@@ -10,12 +10,12 @@ def connect(context, formats):
 
     archive = dict(context)
     archive.update(_numpy_free_context())
-    for key in ("ndarray", "scalar_type", "integer", "numeric_dtypes",
+    for key in ("ndarray", "scalar_type", "integer", "numeric_dtypes",  # glue: remove optional NumPy ABI metadata once at package connection
                 "class_dtypes", "float_types", "float32", "float64", "int64"):
         archive.pop(key, None)
     archive["archive_npy_dtypes"] = _archive_npy_dtypes()
     archive["host_archive_dict_descriptor_type"] = GetSetDescriptorType
     archive["host_archive_formats"] = {
-        fmt: dict(classes) for fmt, classes in formats.items()
+        fmt: dict(classes) for fmt, classes in formats.items()  # glue: copy the fixed native class registry once at package connection
     }
     context["host_archive_context"] = archive
