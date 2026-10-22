@@ -10,7 +10,7 @@ from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_input, classical_address, classical_typed, classical_is_array, classical_is_f32, classical_cast_kind, classical_c_order
-from bindings.classical_cast import classical_f32_bits
+from core.scaler_fit_impl import scaler_cast, scaler_all_finite, scaler_check_stats, scaler_fill, scaler_check_missing, scaler_counts
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, native_pandas_f32
 from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
@@ -20,14 +20,6 @@ alias F32P = MutPointer[Float32, MutUntrackedOrigin]
 
 def _ptr(value: PythonObject) raises -> F32P:
     return F32P(unsafe_from_address=Int(py=classical_address(value)))
-
-
-def _finite(value: Float32) -> Bool:
-    return (bitcast[DType.uint32](value) & UInt32(0x7f800000)) != UInt32(0x7f800000)
-
-
-def _inf(value: Float32) -> Bool:
-    return (bitcast[DType.uint32](value) & UInt32(0x7fffffff)) == UInt32(0x7f800000)
 
 
 def _input(source: PythonObject, ndim: Int, strict: Bool, context: PythonObject) raises -> PythonObject:
@@ -63,13 +55,7 @@ def _input(source: PythonObject, ndim: Int, strict: Bool, context: PythonObject)
     var addr = Int(py=classical_address(value))
     var s0 = Int(py=value.strides[0]) if rank else 0
     var s1 = Int(py=value.strides[1]) if rank == 2 else 0
-    for r in range(rows):  # native buffer marshaling; no Python element loop
-        for c in range(cols):
-            var bytes = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr + r * s0 + c * s1)
-            var raw = UInt64(0)
-            for k in range(item):
-                raw |= UInt64(bytes[k if native else item - 1 - k]) << UInt64(k * 8)
-            dest[r * cols + c] = bitcast[DType.float32](classical_f32_bits(raw, kind, item))
+    scaler_cast(addr, s0, s1, rows, cols, item, kind, native, dest)
     _ = value^
     _ = prepared^
     return output
@@ -78,9 +64,9 @@ def _input(source: PythonObject, ndim: Int, strict: Bool, context: PythonObject)
 def _stage(mut program: List[Int32], op: Int, total: Int, *params: Int):
     program.append(Int32(op))
     program.append(Int32(total))
-    for i in range(len(params)):
+    for i in range(len(params)):  # small-loop(params: at most fourteen native stage arguments)
         program.append(Int32(params[i]))
-    for i in range(14 - len(params)):
+    for i in range(14 - len(params)):  # small-loop(params: pad the fixed fourteen-word stage ABI)
         program.append(0)
 
 
@@ -117,7 +103,7 @@ def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonO
     # Preserve refit's invalidation semantics, including failure after a valid
     # configuration. Use only the native dict operations, never model hooks.
     var names = py_call(b.list, fields)
-    for i in range(len(names)):
+    for i in range(len(names)):  # driver-loop: over the fitted attribute names being invalidated
         if String(names[i]).endswith("_"):
             _ = py_call(fields.pop, names[i])
     var entries = context["scaler_bindings"][mode]
@@ -135,11 +121,11 @@ def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonO
     var finite = True
     var weighted = weight_source is not None
     var direct = py_get(entries, "standard_fit_direct")
-    if not weighted and direct is not None and getenv("MOJOLEARN_SCALER_DIRECT", "1").strip() != "0":
+    var direct_switch = getenv("MOJOLEARN_SCALER_DIRECT", "1")
+    if not weighted and direct is not None and String(direct_switch.strip()) != "0":
         finite = Int(py=py_call(direct, classical_address(x), classical_address(output), Python.list(n, d, Int(with_mean), Int(with_std)))) != 0
     else:
-        for i in range(n * d):
-            finite = finite and _finite(xp[i])
+        finite = scaler_all_finite(xp, n*d)
         if finite and not weighted:
             _ = py_call(entries["standard_fit"], classical_address(x), classical_address(output), Python.list(n, d, Int(with_mean), Int(with_std)))
     var seen = PythonObject(n)
@@ -147,9 +133,7 @@ def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonO
     var variance = PythonObject(None)
     var scale = PythonObject(None)
     if finite and not weighted:
-        for j in range(d):
-            if not _finite(stats[j]) or not _finite(stats[d+j]) or not _finite(stats[2*d+j]) or stats[d+j] < 0 or stats[2*d+j] <= 0:
-                raise Error("StandardScaler statistics are nonfinite, variance negative, or scale nonpositive in Float32")
+        scaler_check_stats(stats, stats+d, stats+2*d, d)
         mean = _copy_row(stats, d, context)
         variance = _copy_row(stats + d, d, context)
         scale = _copy_row(stats + 2*d, d, context)
@@ -166,8 +150,7 @@ def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonO
             if scalar:
                 var first = _ptr(weight)[0]
                 weight = classical_typed(Python.tuple(n), "<f4", context["output_context"])
-                for i in range(n):
-                    _ptr(weight)[i] = first
+                scaler_fill(_ptr(weight), n, first)
             elif Int(py=weight.size) != n:
                 raise Error("sample_weight length differs from X")
         var wo = n*d if weighted else -1
@@ -194,14 +177,7 @@ def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonO
         _ = py_call(entries["x_prep_run"], Int(arena.unsafe_ptr()), size, Int(program.unsafe_ptr()), 5 if weighted else 3)
         if weighted and bitcast[DType.int32](arena[wc+nch]) != 0:
             raise Error("sample_weight must be finite")
-        var all_same = True
-        for j in range(d):
-            if _inf(arena[st+3*d+j]) or _inf(arena[st+4*d+j]):
-                raise Error("Scaler input contains infinity; only NaN may be missing")
-            if arena[out+j] != 0:
-                if not _finite(arena[out+d+j]) or not _finite(arena[out+2*d+j]) or not _finite(arena[sc+j]) or arena[out+2*d+j] < 0 or arena[sc+j] <= 0:
-                    raise Error("StandardScaler statistics are nonfinite, variance negative, or scale nonpositive in Float32")
-            all_same = all_same and arena[out+j] == arena[out]
+        var all_same = scaler_check_missing(arena.unsafe_ptr(), st, out, sc, d)
         mean = _copy_row(arena.unsafe_ptr()+out+d, d, context)
         variance = _copy_row(arena.unsafe_ptr()+out+2*d, d, context)
         scale = _copy_row(arena.unsafe_ptr()+sc, d, context)
@@ -212,8 +188,7 @@ def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonO
         else:
             seen = classical_typed(Python.tuple(d), "<i8", context["output_context"])
             var counts = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(seen)))
-            for j in range(d):
-                counts[j] = Int64(arena[out+j])
+            scaler_counts(arena.unsafe_ptr()+out, counts, d)
         _ = weight^
     py_setitem(fields, "mean_", mean if with_mean or with_std else PythonObject(None))
     py_setitem(fields, "var_", variance if with_std else PythonObject(None))
