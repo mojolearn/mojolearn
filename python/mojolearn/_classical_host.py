@@ -243,11 +243,57 @@ class HostLogisticRegression(_NativeArchiveLoad, _HostBound, LogisticRegression)
                 )
 
 
-class HostTruncatedSVD(_NativeArchiveLoad, _HostBound, TruncatedSVD):
+class _HostProjection(_HostBound):
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        _register_host_inference_class(cls)
+
+    @_native_host_inference_method
+    def transform(self, X):
+        """Project samples onto the fitted components on the CPU.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Samples in the original feature space.
+
+        Returns
+        -------
+        Z : array of shape (n_samples, n_components), float32
+            Projected samples, whitened when the fitted PCA requests it.
+
+        Examples
+        --------
+        >>> reduced = model.transform(X)
+        """
+        return _native_classical(self, "host_infer_transform", (X,), _CLASSICAL)
+
+    @_native_host_inference_method
+    def inverse_transform(self, X):
+        """Reconstruct projected samples in the original feature space.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_components)
+            Samples in the fitted component space.
+
+        Returns
+        -------
+        X_original : array of shape (n_samples, n_features), float32
+            Reconstructed samples, undoing PCA whitening when requested.
+
+        Examples
+        --------
+        >>> reconstructed = model.inverse_transform(reduced)
+        """
+        return _native_classical(self, "host_infer_inverse_transform", (X,), _CLASSICAL)
+
+
+class HostTruncatedSVD(_NativeArchiveLoad, _HostProjection, TruncatedSVD):
     _HOST_ARRAYS = ("components_", "singular_values_")
 
 
-class HostPCA(_NativeArchiveLoad, _HostBound, PCA):
+class HostPCA(_NativeArchiveLoad, _HostProjection, PCA):
     _HOST_ARRAYS = ("components_", "mean_", "singular_values_")
 
     def _whiten_binding(self):
@@ -830,7 +876,8 @@ def _connect_host_inference():
     from types import BuiltinFunctionType, MethodType
     from .tokenizer import _binding
     entries = {}
-    for basename, names in (("_mojolearn_estimators_host", ("cd_predict", "kernel_ridge_predict", "nystroem_transform", "rbf_sampler_transform")),  # glue: fixed CPU prediction ABI
+    for basename, names in (("_mojolearn_estimators_host", ("cd_predict", "kernel_ridge_predict", "nystroem_transform", "rbf_sampler_transform",
+                                                          "tsvd_transform", "pca_transform", "inverse_transform", "pca_whiten_transform", "pca_whiten_inverse_transform")),  # glue: fixed CPU prediction ABI
                             ("_mojolearn_core_host", ("kmeans_predict", "kmeans_transform"))):
         try:
             module = _backend.load_host_module(basename)
@@ -844,7 +891,8 @@ def _connect_host_inference():
     context = dict(_CLASSICAL["host_tree_context"])
     context.update(host_inference_entries=entries,
                    host_inference_kinds={HostElasticNet: "cd", HostLasso: "cd", HostKMeans: "kmeans",
-                                         HostKernelRidge: "kernel_ridge", HostNystroem: "nystroem", HostRBFSampler: "rbf_sampler"})
+                                         HostKernelRidge: "kernel_ridge", HostNystroem: "nystroem", HostRBFSampler: "rbf_sampler",
+                                         HostPCA: "pca", HostTruncatedSVD: "tsvd"})
     # The established native attribute entry is schema-neutral: it admits
     # the supplied class layout and preserves internal Array/public ndarray
     # publication. It does not select scaler bindings or execute scaler work.
@@ -855,7 +903,7 @@ def _connect_host_inference():
     descriptor = module.classical_attribute_descriptor(MethodType(attribute, context))
     context.update(classical_attribute_descriptor=descriptor, classical_public_layouts={},
                    classical_public_installed=True)
-    for cls in (HostElasticNet, HostLasso, HostKMeans, HostKernelRidge, HostNystroem, HostRBFSampler):  # glue: fixed native prediction class layouts
+    for cls in (HostElasticNet, HostLasso, HostKMeans, HostKernelRidge, HostNystroem, HostRBFSampler, HostPCA, HostTruncatedSVD):  # glue: fixed native prediction class layouts
         cls.__getattribute__ = descriptor
         context["classical_public_layouts"][cls] = _native_classical_bridge._layout(cls, descriptor)
     _CLASSICAL["host_inference_context"] = context

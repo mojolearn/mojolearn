@@ -11,6 +11,7 @@ from bindings.host_inference_features import host_inference_feature_names
 from bindings.host_inference_preparation import host_inference_pandas_finite
 from bindings.host_kernel_inference_native import host_kernel_inference, host_kernel_admit_state
 from bindings.host_inference_scalars import host_inference_scalar
+from bindings.host_projection_native import host_projection_inference, host_projection_admit_state
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.classical_arrays import classical_input, classical_address, classical_is_f32, classical_is_array, classical_c_order, classical_kind
 from bindings.host_archive_native import host_archive_typed
@@ -50,12 +51,18 @@ def host_inference_operation(model: PythonObject, operation: String, args: Pytho
     var kernel = String(kind) == "kernel_ridge" or String(kind) == "nystroem" or String(kind) == "rbf_sampler"
     if kernel:
         host_kernel_admit_state(fields, String(kind), context)
-    classical_require_fitted(model, False, "transform" if operation == "host_infer_transform" else "predict", error_context)
+    var projection = String(kind) == "pca" or String(kind) == "tsvd"
+    if projection:
+        host_projection_admit_state(fields, String(kind) == "pca", context)
+    var method = "inverse_transform" if operation == "host_infer_inverse_transform" else ("transform" if operation == "host_infer_transform" else "predict")
+    classical_require_fitted(model, False, method, error_context)
     var mode = py_get(fields, "numeric_mode")
     if mode is not None and (py_type(mode) is not b.str or String(mode) != "identical"):
         raise Error("explicit host models run identical mode only")
     if kernel:
         return host_kernel_inference(model, fields, String(kind), args[0], context, public)
+    if projection:
+        return host_projection_inference(model, fields, String(kind) == "pca", operation == "host_infer_inverse_transform", args[0], context, public)
     classical_admit_value(args, context)
     var cd = String(kind) == "cd"
     if cd and not py_contains(fields, "coef_"):

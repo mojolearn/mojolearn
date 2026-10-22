@@ -88,3 +88,39 @@ def kernel_model(model, X, name, public=True):
              addr_ro(x, name="X"), addr(out, name="transform")],
             [d, q, gamma, seed, model.sigma_, model.scale_, m])
     return out.reshape((m, q))
+
+
+def projection(model, X, name, inverse=False):
+    """Frozen 32011bb32 decomposition preparation and CPU kernel contract."""
+    # Test-only oracle: use the unchanged numerical bindings while retaining
+    # the original dense expansion and launch order independently of the owner.
+    if hasattr(X, "toarray") and hasattr(X, "nnz") and hasattr(X, "format"):
+        X = X.toarray()
+    x, _ = as_f32_c(X, ndim=2, name="X")
+    rows, features, components = x.shape[0], model.n_features_in_, model.n_components_
+    if x.shape[1] != (components if inverse else features):
+        raise ValueError("projection input width differs from fitted state")
+    out = empty((rows, features if inverse else components), "<f4")
+    binding = model._bind("_mojolearn_estimators")
+    if name == "PCA" and model.whiten:
+        model._validate_whiten_state()
+        if inverse:
+            binding.pca_whiten_inverse_transform(addr_ro(x, name="z"),
+                addr_ro(model.components_, name="components_"), addr_ro(model.singular_values_, name="singular_values_"),
+                addr_ro(model.mean_, name="mean_"), addr(out, name="out"),
+                [rows, features, components, model.n_samples_])
+        else:
+            binding.pca_whiten_transform(addr_ro(x, name="X"), addr_ro(model.mean_, name="mean_"),
+                addr_ro(model.components_, name="components_"), addr_ro(model.singular_values_, name="singular_values_"),
+                addr(out, name="out"), [rows, features, components, model.n_samples_])
+    elif inverse:
+        binding.inverse_transform(addr_ro(x, name="z"), addr_ro(model.components_, name="components_"),
+            addr_ro(model.mean_ if name == "PCA" else model.components_, name="mean_"),
+            addr(out, name="out"), [rows, features, components, int(name == "PCA")])
+    elif name == "PCA":
+        binding.pca_transform(addr_ro(x, name="X"), addr_ro(model.mean_, name="mean_"),
+            addr_ro(model.components_, name="components_"), addr(out, name="out"), [rows, features, components])
+    else:
+        binding.tsvd_transform(addr_ro(x, name="X"), addr_ro(model.components_, name="components_"),
+            addr(out, name="out"), [rows, features, components])
+    return out
