@@ -61,6 +61,17 @@ def test_native_flags_and_scalar_weights(with_mean, with_std):
     assert model.n_samples_seen_ == 24.0
 
 
+def test_disabled_direct_entry_stays_native_and_preserves_bits(monkeypatch):
+    x = np.random.default_rng(102).normal(size=(521, 7)).astype(np.float32)
+    monkeypatch.setenv("MOJOLEARN_SCALER_DIRECT", "1")
+    direct = ml.StandardScaler().fit(x)
+    monkeypatch.setenv("MOJOLEARN_SCALER_DIRECT", " 0 ")
+    model = ml.StandardScaler()
+    audit_native_call(model.fit, x).assert_native()
+    for name in ("mean_", "var_", "scale_"):
+        assert np.asarray(getattr(model, name)).tobytes() == np.asarray(getattr(direct, name)).tobytes()
+
+
 @pytest.mark.parametrize("bad,exception", [
     (np.ones((4, 2), np.float64), TypeError),
     (np.ones((4, 2), np.int32), TypeError),
