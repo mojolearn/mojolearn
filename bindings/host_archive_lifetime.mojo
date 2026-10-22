@@ -28,7 +28,17 @@ def host_archive_finalize(model: PythonObject, context: PythonObject) raises:
     for i in range(len(keys)):  # driver-loop: native dictionary admission
         if py_type(keys[i]) is not b.str:
             return
-    var cached = py_get(fields, "_resident")
+    var groves = len(plan) > 2 and String(plan[2]) == "groves"
+    var cached = py_get(fields, "_groves" if groves else "_resident")
+    if groves:
+        if cached is None or py_type(cached) is not b.tuple or len(cached) != 2 or py_type(cached[0]) is not b.int or cached[1] is not None:
+            return
+        var family = py_get(fields, "family")
+        if py_type(family) is not b.str or (String(family) != "rf" and String(family) != "et"):
+            return
+        py_setitem(fields, "_groves", PythonObject(None))
+        _ = py_call(plan[0], cached[0], 0 if String(family) == "rf" else 1)
+        return
     if cached is None or py_type(cached) is not b.tuple or len(cached) != 3:
         return
     var token = cached[1]

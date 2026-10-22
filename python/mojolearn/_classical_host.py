@@ -676,6 +676,7 @@ def _host_archive_forest_metadata():
     forest_formats = tuple(formats)
     formats[_gbdt_host.GBDT_FORMAT] = {name: _gbdt_host.HostGBDT for name in _gbdt_host.GBDT_ESTIMATORS}  # glue: fixed GBDT archive names
     return dict(host_archive_extra_formats=formats, host_archive_forest_formats=forest_formats,
+                host_tree_classes=(_forest_host.HostForest, _gbdt_host.HostGBDT),
                 host_archive_forest_estimators=dict(_forest_host._ESTIMATORS),
                 host_archive_forest_binding=module, host_archive_forest_binding_error=error,
                 host_archive_forest_has_groves=isinstance(getattr(module, "forest_host_groves_prepare", None), BuiltinFunctionType),

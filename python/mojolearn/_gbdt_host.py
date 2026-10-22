@@ -675,19 +675,19 @@ class HostGBDT:
     @property
     def n_trees(self):
         """Number of trees in the model."""
-        return self._arrays['n_trees']
+        return _native_host_archive(self, "host_tree_count", (), _ARCHIVE_CONTEXT)
 
     @property
     def inference_engine(self):
         """Name of the prediction engine, ``'sequential'``."""
-        return 'sequential'
+        return _native_host_archive(self, "host_tree_engine", (), _ARCHIVE_CONTEXT)
 
     def model_sha256(self):
         """Return the SHA-256 hex digest of the model text (UTF-8).
 
         It equals the digest of the archive's ``model`` member.
         """
-        return hashlib.sha256(self.model_.encode('utf-8')).hexdigest()
+        return _native_host_archive(self, "host_tree_hash", (), _ARCHIVE_CONTEXT)
 
     def predict(self, X):
         """Return raw float32 scores, as ``GradientBoosting.predict`` does.
@@ -711,43 +711,7 @@ class HostGBDT:
         # every float32 bit pattern, NaN payloads included, arrives
         # unchanged", `bindings/_mojolearn.mojo:765-768`); the bytes the
         # binding reads are therefore the GPU path's by that contract.
-        Xc, _ = as_f32_c(X, ndim=2, name='X')
-        n_rows, n_features = Xc.shape
-        if n_features != self.n_features_in_:
-            raise ValueError(
-                f"mojolearn: model was fitted on {self.n_features_in_} features, got {n_features}")
-        a = self._arrays
-        dim = self.approx_dim_
-        n_cols = self.n_model_columns_
-        row_major = not (a['n_ctr_tables'] or a['n_tensor_tables'])
-        Xa = Xc if row_major else Xc._as_order('F')
-        if a['n_ctr_tables'] or a['n_tensor_tables']:
-            expanded = empty((n_rows * n_cols,), '<f4')
-            names = ('ctr_ints', 'ctr_floats', 'tensor_ints', 'tensor_floats', 'ctr_counts',
-                     'border_offsets', 'borders', 'one_hot')
-            wrote = self._binding.forest_host_gbdt_expand_ctr(
-                [addr_ro(Xa, name='X')] + [addr_ro(a[name], name=name) for name in names]
-                + [addr(expanded, name='expanded')],
-                [int(n_rows), int(n_features), n_cols, a['n_ctr_tables'], a['n_ctr_ints'],
-                 a['n_ctr_floats'], a['n_tensor_tables'], a['n_tensor_ints'], a['n_tensor_floats'],
-                 a['n_ctr_counts'], a['n_borders']])
-            if int(wrote) != n_cols:
-                raise RuntimeError(f"forest_host_gbdt_expand_ctr wrote {wrote} of {n_cols} columns")
-            Xa, n_features = expanded, n_cols
-        out = empty((n_rows * dim,), '<f4')
-        names = ('border_offsets', 'borders', 'fold_counts', 'one_hot', 'nan_treatment',
-                 'tree_offsets', 'split_feature', 'split_bin', 'split_take_bin',
-                 'node_left', 'node_right', 'leaf_offsets', 'leaves')
-        addresses = [addr_ro(a[name], name=name) for name in names]
-        addresses += [addr_ro(Xa, name='X'), addr(out, name='out')]
-        wrote = self._binding.forest_host_gbdt_predict(
-            addresses,
-            [int(n_rows), int(n_features), a['n_trees'], dim, 1 if a['non_symmetric'] else 0,
-             a['n_splits'], a['n_leaf_values'], a['n_borders'], 1 if row_major else 0],
-            float(self.bias_))
-        if int(wrote) != n_rows:
-            raise RuntimeError(f"forest_host_gbdt_predict wrote {wrote} of {n_rows} rows")
-        return out if dim == 1 else out.reshape((n_rows, dim))
+        return _native_host_archive(self, "host_tree_predict", (X,), _ARCHIVE_CONTEXT)
 
     def predict_proba(self, X):
         """Return float64 class probabilities ``[1 - p, p]`` for ``Logloss`` and ``CrossEntropy`` models.
@@ -765,27 +729,7 @@ class HostGBDT:
         mojolearn.Array
             Shape ``(n_samples, 2)``.
         """
-        if self.loss in _MULTI_LOSSES:
-            raise NotImplementedError(
-                f"mojolearn: HostGBDT.predict_proba does not carry the {self.loss} "
-                "transform; the GPU binding applies it in gbdt_predict_multi and no host "
-                "restatement has been measured")
-        if not self.has_proba:
-            raise ValueError(
-                f"mojolearn: predict_proba is defined for Logloss and CrossEntropy; this "
-                f"model was fitted with {self.loss!r}")
-        raw = self.predict(X).astype('<f8')
-        n_rows = raw.shape[0]
-        # DEVIATION 2902 (lane/infer-speed-trees, 2026-09-17): both columns
-        # from the binding in one pass (`p`, then one double subtraction per
-        # row). The Python `[1 - p, p]` fallback for a binding without the
-        # entry is deleted (lane apple-fast-py2mojo-trees): every
-        # `_mojolearn_forest_host` registers forest_host_gbdt_sigmoid_pair.
-        out = empty((n_rows, 2), '<f8')
-        wrote = self._binding.forest_host_gbdt_sigmoid_pair(addr_ro(raw, name='raw'), addr(out, name='proba'), n_rows)
-        if int(wrote) != n_rows:
-            raise RuntimeError(f"forest_host_gbdt_sigmoid_pair wrote {wrote} of {n_rows} rows")
-        return out
+        return _native_host_archive(self, "host_tree_proba", (X,), _ARCHIVE_CONTEXT)
 
 
 # CPU-only entries the gbdt `_HostBinding` serves beside the host binding's

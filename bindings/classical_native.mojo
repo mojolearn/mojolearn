@@ -15,6 +15,7 @@ from bindings.classical_attributes import classical_check_layout, classical_geta
 from bindings.classical_archive import classical_archive_save
 from bindings.classical_archive_read import classical_archive_load, classical_host_model
 from bindings.host_archive_native import host_archive_build
+from bindings.host_tree_native import host_tree_operation
 from bindings.classical_exceptions import classical_require_fitted, classical_error_restore, classical_error_reduce
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.classical_pandas import classical_admit_value
@@ -100,6 +101,9 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         if operation == "reduce_not_fitted":
             var reduced = classical_error_reduce(model, context)
             return reduced.steal_data()
+        if operation.startswith("host_tree_"):
+            var result = host_tree_operation(model, operation, args, context["host_tree_context"])
+            return result.steal_data()
         if operation == "host_archive_model" or operation == "host_archive_load" or operation == "host_archive_classical_model":
             var archive_context = py_get(context, "host_archive_context")
             if archive_context is None:

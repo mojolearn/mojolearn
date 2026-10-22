@@ -17,6 +17,7 @@ from mojolearn._buffer import frombytes
 from mojolearn._verify_native_runtime import audit_native_call
 from mojolearn.tests.test_host_archive_native import CASES, _archive, _state
 from mojolearn.tests.test_gbdt_host_ctr import CTR_TEXT, TENSOR_TEXT
+from mojolearn.tests._legacy_host_trees import LegacyHostForest, LegacyHostGBDT
 
 
 @pytest.mark.parametrize("name", CASES)
@@ -102,7 +103,7 @@ def _forest_archive(tmp_path, estimator, engine="sequential", override=None):
 def _legacy_forest(members, engine):
     arrays = {name: frombytes(members[name].tobytes(), dtype, members[name].shape)
               for name, dtype in forest._MODEL_ARRAYS}
-    return forest.HostForest(estimator=members["estimator"], n_features=int(members["meta"][0]),
+    return LegacyHostForest(estimator=members["estimator"], n_features=int(members["meta"][0]),
         n_trees=int(members["meta"][1]), num_outputs=int(members["meta"][2]),
         classes=members["classes"].tolist() if "classes" in members else None,
         device=members.get("device"), inference_engine=engine, **arrays)
@@ -150,7 +151,7 @@ def _gbdt_archive(tmp_path, text, features, estimator="GradientBoosting", loss="
 def test_public_gbdt_routes_preserve_full_layout_and_consumed_predictions(tmp_path, case, estimator):
     text, features, queries, predictions = GBDT_CASES[case]
     path = _gbdt_archive(tmp_path, text, features, estimator)
-    expected = gbdt.HostGBDT(loss="RMSE", text=text, n_features_in=features, approx_dim=1,
+    expected = LegacyHostGBDT(loss="RMSE", text=text, n_features_in=features, approx_dim=1,
                             numeric_mode="identical", bias=0., estimator=estimator)
     actual = audit_native_call(mojolearn.host_model, path).assert_native()
     direct = audit_native_call(gbdt.HostGBDT.from_file, path).assert_native()

@@ -70,4 +70,22 @@ def connect(context, formats, cleanup_entries, forest_metadata):
                     raise TypeError("saved host model release requires a compiled native entry")
                 archive["host_archive_lifetime_layouts"][cls] = (release, field_descriptor)
                 cls.__del__ = descriptor
+        forest_cls = forest_metadata["host_tree_classes"][0]
+        forest_binding = forest_metadata["host_archive_forest_binding"]
+        release = getattr(forest_binding, "forest_host_groves_release", None)
+        if release is not None and not isinstance(release, BuiltinFunctionType):
+            raise TypeError("forest grove cleanup requires a compiled native entry")
+        archive["host_archive_lifetime_layouts"][forest_cls] = (release, forest_cls.__dict__["__dict__"], "groves")
+        forest_cls.__del__ = descriptor
+    entries = {}
+    for name in ("forest_host_rf_predict_proba", "forest_host_rf_predict_reg", "forest_host_et_predict",  # glue: fixed CPU inference entry points
+                 "forest_host_groves_prepare", "forest_host_groves_predict", "forest_host_groves_release",
+                 "forest_host_gbdt_expand_ctr", "forest_host_gbdt_predict", "forest_host_gbdt_sigmoid_pair"):
+        entry = getattr(forest_metadata["host_archive_forest_binding"], name, None)
+        if entry is not None and not isinstance(entry, BuiltinFunctionType):
+            raise TypeError("CPU tree inference requires compiled native entry points")
+        entries[name] = entry
+    prediction = dict(archive)
+    prediction.update(host_tree_entries=entries, host_tree_entry_type=BuiltinFunctionType, output_context=archive)
+    context["host_tree_context"] = prediction
     context["host_archive_context"] = archive
