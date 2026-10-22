@@ -272,6 +272,58 @@ class InstalledNativeAudit(unittest.TestCase):
         self.assertEqual(scope["not_applicable_count"], 1)
         self.assertEqual(summary["skipped"][0]["classname"], "mojolearn.tests.test_native_owner_qualification")
 
+    def test_exact_selection_rejects_duplicates_paths_empty_and_mixed_scopes(self):
+        name = "test_host_kde_fit_native.py"
+        node = name + "::test_case[1]"
+        self.assertEqual(q.selected_files(test_nodes=[node]), [name])
+        for nodes in ([], [node, node], ["../" + node], [name], [name + "::"],
+                      ["unregistered.py::test_case"], [node + "\n"]):
+            with self.assertRaises(ValueError):
+                q.selected_files(test_nodes=nodes)
+        with self.assertRaises(ValueError):
+            q.selected_files([name], [node])
+
+    def test_exact_receipts_reject_missing_extra_duplicate_and_unidentified_cases(self):
+        name = "test_host_kde_fit_native.py"
+        node = name + "::test_case[1]"
+        case = dict(name="test_case[1]", classname="mojolearn.tests." + Path(name).stem,
+                    outcome="passed", skip_reason="", exact_node=node)
+        self.assertTrue(q.test_scope_summary(dict(cases=[case]), [name], "cpu", [node])["complete"])
+        for cases in ([], [case, case], [dict(case, exact_node="")],
+                      [case, dict(case, exact_node=name + "::test_case[2]")]):
+            self.assertFalse(q.test_scope_summary(dict(cases=cases), [name], "cpu", [node])["complete"])
+
+    def test_exact_pytest_guard_runs_one_parameter_and_refuses_expanded_selection_before_calls(self):
+        name = "test_host_kde_fit_native.py"
+        node = name + "::test_case[1]"
+        (self.root / name).write_text(
+            "import pytest\nfrom pathlib import Path\n"
+            "@pytest.mark.parametrize('value', [1, 2])\n"
+            "def test_case(value):\n    Path('executed').write_text(str(value))\n")
+        (self.root / "expected.json").write_text(json.dumps([node]))
+        (self.root / "conftest.py").write_text(
+            "import importlib.util, json\nfrom pathlib import Path\n"
+            "spec = importlib.util.spec_from_file_location('q', " + repr(q.__file__) + ")\n"
+            "q = importlib.util.module_from_spec(spec)\nspec.loader.exec_module(q)\n"
+            "guard = q.ExactNodeGuard(Path(__file__).parent, json.loads(Path('expected.json').read_text()))\n"
+            "pytest_collection_finish = guard.pytest_collection_finish\n")
+        env = dict(q.os.environ, PYTEST_DISABLE_PLUGIN_AUTOLOAD="1")
+        for selector, expected, label in ((node, 0, "exact"), (name + "::test_case", 3, "expanded")):
+            marker = self.root / "executed"
+            marker.unlink(missing_ok=True)
+            with (self.root / (label + ".log")).open("wb") as log:
+                run = subprocess.run([q.sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider",
+                                      "--junitxml=" + str(self.root / (label + ".xml")), selector],
+                                     cwd=self.root, env=env, stdout=log, stderr=subprocess.STDOUT)
+            self.assertEqual(run.returncode, expected, (self.root / (label + ".log")).read_text()[-1600:])
+            if label == "exact":
+                self.assertEqual(marker.read_text(), "1")
+                summary = q.junit_summary(self.root / "exact.xml")
+                self.assertEqual(summary["cases"][0]["exact_node"], node)
+                self.assertTrue(q.test_scope_summary(summary, [name], "cpu", [node])["complete"])
+            else:
+                self.assertFalse(marker.exists())
+
     def worker_fixture(self, *, final_error=None, never_load=False):
         prefix, payload, tests, modules = self.modules()
         package = modules["mojolearn"]
