@@ -51,7 +51,7 @@ def connect(scaler_class):
     return call, context
 
 
-def connect_host(cls, context, prep, xprep):
+def connect_host(cls, context, prep, xprep, training):
     # glue: only _classical_host supplies the explicit CPU API's fixed entries
     from types import BuiltinFunctionType
     host = dict(context)
@@ -61,5 +61,18 @@ def connect_host(cls, context, prep, xprep):
                "x_prep_numeric_mode": xprep.x_prep_numeric_mode}
     if any(not isinstance(entry, BuiltinFunctionType) for entry in entries.values()):  # glue: host ABI identity
         raise TypeError("HostMinMaxScaler requires compiled CPU entries")
+    if isinstance(training, str):
+        entries["scaler_training_error"] = training
+    else:
+        try:
+            entry = training.minmax_fit
+            if not isinstance(entry, BuiltinFunctionType):
+                raise TypeError("HostMinMaxScaler requires compiled minmax_fit")
+            if training.preprocessing_numeric_mode() != 1 or training.preprocessing_vendor() != "cpu":
+                raise ValueError("HostMinMaxScaler training requires the CPU identical binding")
+            entries["minmax_fit"] = entry
+        except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
+            entries["scaler_training_error"] = type(error).__name__ + ": " + str(error)
+
     host.update(scaler_explicit_host=True, scaler_bindings={"identical": entries})
     context["scaler_host_contexts"][cls] = host

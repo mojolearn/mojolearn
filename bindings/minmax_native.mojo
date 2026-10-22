@@ -129,6 +129,8 @@ def minmax_fit(model: PythonObject, source: PythonObject, context: PythonObject)
         if String(names[k]).endswith("_"):
             _ = py_call(fields.pop,names[k])
     var entries = _minmax_entries(mode,context)
+    if py_get(entries,"minmax_fit") is None:
+        raise Error("ImportError: HostMinMaxScaler training requires _mojolearn_preprocessing_host: " + String(py_get(entries,"scaler_training_error","minmax_fit is unavailable")))
     var direct = _direct(entries,"minmax_fit_direct")
     var values = _input(source,2,True,context)
     var n = Int(py=values.shape[0])
@@ -286,8 +288,6 @@ def minmax_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         var host = py_get(context["scaler_host_contexts"],cls)
         if host is not None:
             context = host
-            if operation == "fit" or operation == "partial_fit" or operation == "fit_transform":
-                raise Error("RuntimeError: HostMinMaxScaler supports inference only; fit a MinMaxScaler on a supported GPU")
         classical_connect_numpy(context)
         classical_check_layout(model,context)
         var result = PythonObject(None)

@@ -100,6 +100,8 @@ def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonO
     mode = py_call(py_call(mode.strip).lower)
     if String(mode) != "fast" and String(mode) != "identical":
         raise Error("numeric_mode must be fast, identical or None")
+    if Bool(py=py_get(context,"scaler_explicit_host",False)) and String(mode) != "identical":
+        raise Error("HostStandardScaler runs identical only on the host")
     # Preserve refit's invalidation semantics, including failure after a valid
     # configuration. Use only the native dict operations, never model hooks.
     var names = py_call(b.list, fields)
@@ -109,6 +111,8 @@ def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonO
     var entries = context["scaler_bindings"][mode]
     if py_type(entries) is b.str:
         raise Error("ImportError: " + String(entries))
+    if py_get(entries,"standard_fit") is None:
+        raise Error("ImportError: HostStandardScaler training requires _mojolearn_preprocessing_host: " + String(py_get(entries,"scaler_training_error","standard_fit is unavailable")))
     var expected = 1 if String(mode) == "identical" else 0
     if Int(py=py_call(entries["preprocessing_numeric_mode"])) != expected or Int(py=py_call(entries["x_prep_numeric_mode"])) != expected:
         raise Error("RuntimeError: Scaler native numeric mode disagrees with requested mode")
@@ -229,10 +233,12 @@ def scaler_fit_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
         if len(args) != 5:
             raise Error("TypeError: StandardScaler.fit requires model, X, y, sample_weight and context")
         classical_check_layout(args[0], args[4])
-        var hosts = py_get(args[4], "scaler_host_contexts")
-        if hosts is not None and py_get(hosts, py_type(args[0])) is not None:
-            raise Error("RuntimeError: HostStandardScaler supports inference only; fit a StandardScaler on a supported GPU")
-        return scaler_fit(args[0], args[1], args[3], args[4]).steal_data()
+        var context = args[4]
+        var hosts = py_get(context, "scaler_host_contexts")
+        var host = py_get(hosts, py_type(args[0])) if hosts is not None else PythonObject(None)
+        if host is not None:
+            context = host
+        return scaler_fit(args[0], args[1], args[3], context).steal_data()
     except error:
         if String(error).startswith("TypeError:"):
             return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
