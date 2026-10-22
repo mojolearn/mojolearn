@@ -152,14 +152,21 @@ def sequence_dtype_allocation_shape(shape: PythonObject, dtype: PythonObject, co
     var category = py_get(py_fields(module), "_ArrayMemoryError")
     if category is None or py_type(category) is not b.type:
         raise Error("TypeError: array allocation exceptions require an ordinary native class layout")
+    var fields = py_call(b.type.__dict__["__dict__"].__get__, category)
+    var keys = py_call(b.list, fields)
+    for i in range(len(keys)):  # driver-loop: refuse foreign class keys before any class dictionary lookup
+        if py_type(keys[i]) is not b.str:
+            raise Error("TypeError: array allocation exceptions require native class dictionary keys")
     var bases = py_call(b.type.__getattribute__, category, "__bases__")
     if len(bases) != 1 or bases[0] is not base:
         raise Error("TypeError: array allocation exceptions require the native MemoryError base")
-    var fields = py_call(b.type.__dict__["__dict__"].__get__, category)
     var module_name = py_get(fields, "__module__")
     if py_type(module_name) is not b.str:
         raise Error("TypeError: array allocation exceptions require native module-name metadata")
-    if module_name != PythonObject("numpy.core._exceptions") or py_call(b.type.__getattribute__, category, "__qualname__") != PythonObject("_ArrayMemoryError"):
+    var qualified_name = py_call(b.type.__getattribute__, category, "__qualname__")
+    if py_type(qualified_name) is not b.str:
+        raise Error("TypeError: array allocation exceptions require native qualified-name metadata")
+    if module_name != PythonObject("numpy.core._exceptions") or qualified_name != PythonObject("_ArrayMemoryError"):
         raise Error("TypeError: array allocation exceptions require NumPy's exception identity")
     for name in ["__new__", "__del__", "__getattribute__", "__getattr__", "__setattr__", "__delattr__", "__dict__", "__slots__"]:  # driver-loop: refuse hooks before native exception allocation or field storage
         if py_contains(fields, PythonObject(name)):

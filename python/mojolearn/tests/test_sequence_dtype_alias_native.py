@@ -123,7 +123,7 @@ def test_negative_storage_bypasses_python_exception_initializer(resident, monkey
     assert not calls
 
 
-@pytest.mark.parametrize("hook", ["__new__", "__del__", "__getattribute__", "__getattr__", "__setattr__", "__dict__", "foreign_module_name", "metaclass"])
+@pytest.mark.parametrize("hook", ["__new__", "__del__", "__getattribute__", "__getattr__", "__setattr__", "__dict__", "foreign_module_name", "foreign_qualname", "foreign_class_key", "metaclass"])
 def test_negative_storage_refuses_exception_hooks_before_allocation(resident, monkeypatch, hook):
     _, tensor = resident
     module, _ = _legacy_allocation_exception()
@@ -137,6 +137,19 @@ def test_negative_storage_refuses_exception_hooks_before_allocation(resident, mo
         def __eq__(self, other):
             return callback()
 
+    class ForeignQualname(str):
+        def __ne__(self, other):
+            return callback()
+
+    class ForeignKey(str):
+        def __hash__(self):
+            calls.append("key hash")
+            return hash("__bases__")
+
+        def __eq__(self, other):
+            calls.append("key equality")
+            return False
+
     class Meta(type):
         def __getattribute__(self, name):
             return callback()
@@ -144,6 +157,10 @@ def test_negative_storage_refuses_exception_hooks_before_allocation(resident, mo
     fields = {"__module__": "numpy.core._exceptions", "__qualname__": "_ArrayMemoryError"}
     if hook == "foreign_module_name":
         fields["__module__"] = ForeignName()
+    elif hook == "foreign_qualname":
+        fields["__qualname__"] = ForeignQualname("_ArrayMemoryError")
+    elif hook == "foreign_class_key":
+        fields[ForeignKey("foreign_metadata")] = None
     elif hook == "__dict__":
         fields[hook] = property(callback)
     elif hook != "metaclass":
