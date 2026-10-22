@@ -11,6 +11,15 @@ from mojolearn._verify_native_runtime import audit_native_call
 
 @pytest.mark.parametrize("operation", ["rms", "linear", "construct", "accumulate"])
 def test_native_output_storage_does_not_call_mutable_memoryview(monkeypatch, operation):
+    _native_output_storage_audit(monkeypatch, operation, "memoryview")
+
+
+@pytest.mark.parametrize("operation", ["rms", "linear", "construct", "accumulate"])
+def test_native_output_storage_does_not_call_mutable_object(monkeypatch, operation):
+    _native_output_storage_audit(monkeypatch, operation, "object")
+
+
+def _native_output_storage_audit(monkeypatch, operation, constructor):
     source = np.arange(12, dtype="f4").reshape(4, 3) / 8
     weight = np.ones(3, dtype="f4")
     params = np.ones(3, dtype="f4")
@@ -28,9 +37,11 @@ def test_native_output_storage_does_not_call_mutable_memoryview(monkeypatch, ope
     calls = []
     def hook(*args, **kwargs):
         calls.append(args)
-        raise AssertionError("mutable memoryview constructor entered")
+        raise AssertionError("mutable output constructor entered")
+    class ReplacedObject:
+        __new__ = staticmethod(hook)
     with monkeypatch.context() as scope:
-        scope.setattr(builtins, "memoryview", hook)
+        scope.setattr(builtins, constructor, ReplacedObject if constructor == "object" else hook)
         audit = audit_native_call(method, *args, **kwargs)
     result = audit.assert_native()
     assert not calls
@@ -67,6 +78,15 @@ def test_native_checkpoint_arrays_own_their_storage_after_publication():
 
 @pytest.mark.parametrize("strided", [False, True])
 def test_native_device_download_does_not_call_mutable_memoryview(monkeypatch, strided):
+    _native_device_download_audit(monkeypatch, strided, "memoryview")
+
+
+@pytest.mark.parametrize("strided", [False, True])
+def test_native_device_download_does_not_call_mutable_object(monkeypatch, strided):
+    _native_device_download_audit(monkeypatch, strided, "object")
+
+
+def _native_device_download_audit(monkeypatch, strided, constructor):
     from mojolearn import _backend
     if _backend.vendor() == "cpu":
         pytest.skip("device downloads require the GPU training pool")
@@ -77,9 +97,11 @@ def test_native_device_download_does_not_call_mutable_memoryview(monkeypatch, st
     calls = []
     def hook(*args, **kwargs):
         calls.append(args)
-        raise AssertionError("mutable memoryview constructor entered")
+        raise AssertionError("mutable output constructor entered")
+    class ReplacedObject:
+        __new__ = staticmethod(hook)
     with monkeypatch.context() as scope:
-        scope.setattr(builtins, "memoryview", hook)
+        scope.setattr(builtins, constructor, ReplacedObject if constructor == "object" else hook)
         result = audit_native_call(device.to_host)
     value = result.assert_native()
     assert not calls

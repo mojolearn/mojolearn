@@ -32,6 +32,7 @@ from std.memory import memcpy
 from std.math import isfinite
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from bindings.native_buffer_owner import native_storage_allocate
 
 from bindings.optimizer_public_words import optimizer_python_error, stash_python_error
 from bindings.py_balanced import py_call, py_setattr, py_setitem, py_type, py_get, py_fields
@@ -212,7 +213,9 @@ def new_array(dims: List[Int], dtype: String) raises -> PythonObject:
         step *= dims[i]
         size *= dims[i]
     var store = py_call(d[].arrays, PythonObject("f" if dtype == "<f4" else "i"), py_call(b.bytes, size * 4))
-    var result = py_call(b.object.__new__, d[].array_cls)
+    # The connected, guarded Array has ordinary heap storage. Use the public
+    # allocator directly; a replaced builtins.object must never run a hook.
+    var result = native_storage_allocate(d[].array_cls)
     py_setattr(result, "_store", store)
     py_setattr(result, "_base", PythonObject(None))
     py_setattr(result, "_pin", PythonObject(None))
