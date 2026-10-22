@@ -6,7 +6,6 @@ The emptied state is published before the first GIL-releasing free, every
 slot is attempted, the first failure is raised unchanged, failed entries stay
 published for a retry, and the owners are released last (after every free),
 so an Arrow-backed owner's finalizer sees a closed cache."""
-import array
 import gc
 from types import SimpleNamespace
 
@@ -149,8 +148,8 @@ def test_error_order_first_failure_all_slots_attempted_failed_retained(prefix, o
     binding = _real(prefix)
     cache = arena.DeviceCache(binding, prefix)
     base = cache.live()
-    sources = [_source() for _ in range(4)]  # driver-loop: test fixture slots
-    slots = [cache.id_of(s) for s in sources]  # driver-loop: test fixture slots
+    sources = [_source() for _ in range(4)]
+    slots = [cache.id_of(s) for s in sources]
     free = getattr(binding, prefix + '_dev_free')
     free(slots[0])
     free(slots[3])
@@ -186,12 +185,13 @@ def test_arrow_owner_finalizer_runs_after_every_free(prefix):
     base = cache.live()
     seen = []
 
-    class Foreign:
+    class Foreign(bytearray):
+        # The hidden Python owner of an Arrow PyBuffer (not visible through
+        # any public Arrow owner API).
         def __del__(self):
             seen.append((dict(cache._entries), cache.live()))
 
-    storage = array.array('f', [1., 2., 3., 4.] * 1024)
-    buffer = pa.foreign_buffer(storage.buffer_info()[0], 4 * len(storage), base=Foreign())
+    buffer = pa.py_buffer(Foreign(4 * 4096))
     source = Array.from_buffer(memoryview(buffer).cast('B').cast('f'))
     cache.id_of(source)
     cache.id_of(_source())
@@ -201,7 +201,6 @@ def test_arrow_owner_finalizer_runs_after_every_free(prefix):
     cache.close()
     gc.collect()
     assert seen == [({}, base)]
-    del storage
 
 
 @pytest.mark.parametrize('prefix', ['x_prep', 'x_metrics'])
