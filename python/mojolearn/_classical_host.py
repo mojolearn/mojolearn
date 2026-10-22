@@ -565,6 +565,11 @@ class _HostKernelMethod(_HostBound):
 
     _BINDING = "_mojolearn_kernel_methods"
 
+    def __init_subclass__(cls, **kwargs):
+        # glue: register ordinary subclass layouts only at class definition
+        super().__init_subclass__(**kwargs)
+        _register_host_inference_class(cls)
+
     def _host_refusals(self):
         from .kernel_methods import (KERNEL_LINEAR, KERNEL_RBF, KERNEL_POLYNOMIAL,
                                      KERNEL_SIGMOID, KERNEL_LAPLACIAN)
@@ -577,15 +582,80 @@ class _HostKernelMethod(_HostBound):
 class HostKernelRidge(_NativeArchiveLoad, _HostKernelMethod, KernelRidge):
     _HOST_ARRAYS = ("X_fit_", "dual_coef_")
 
+    @_native_host_inference_method
+    def predict(self, X):
+        """Predict responses for dense or sparse rows using the fitted kernel.
+
+        Parameters
+        ----------
+        X : array-like or sparse matrix of shape (n_queries, n_features)
+            Query rows with the fitted number of features.
+
+        Returns
+        -------
+        predictions : ndarray
+            Float64 responses, one-dimensional for a single fitted target.
+
+        Examples
+        --------
+        >>> predictions = model.predict([[1.0, 2.0]])
+        """
+        return _native_classical(self, "host_infer_predict", (X,), _CLASSICAL)
+
 
 class HostNystroem(_NativeArchiveLoad, _HostKernelMethod, Nystroem):
     _HOST_ARRAYS = ("components_", "component_indices_", "normalization_",
                     "eigenvalues_", "eigenvectors_")
 
+    @_native_host_inference_method
+    def transform(self, X):
+        """Map dense or sparse rows to the fitted approximate kernel features.
+
+        Parameters
+        ----------
+        X : array-like or sparse matrix of shape (n_rows, n_features)
+            Rows with the fitted number of features.
+
+        Returns
+        -------
+        features : ndarray of shape (n_rows, n_components)
+            Float32 approximate kernel features.
+
+        Examples
+        --------
+        >>> features = model.transform([[1.0, 2.0]])
+        """
+        return _native_classical(self, "host_infer_transform", (X,), _CLASSICAL)
+
 
 class HostRBFSampler(_NativeArchiveLoad, _HostBound, RBFSampler):
     _BINDING = "_mojolearn_kernel_methods"
     _HOST_ARRAYS = ("random_weights_", "random_offset_")
+
+    def __init_subclass__(cls, **kwargs):
+        # glue: register ordinary subclass layouts only at class definition
+        super().__init_subclass__(**kwargs)
+        _register_host_inference_class(cls)
+
+    @_native_host_inference_method
+    def transform(self, X):
+        """Map dense or sparse rows to the fitted random Fourier features.
+
+        Parameters
+        ----------
+        X : array-like or sparse matrix of shape (n_rows, n_features)
+            Rows with the fitted number of features.
+
+        Returns
+        -------
+        features : ndarray of shape (n_rows, n_components)
+            Float32 random Fourier features.
+
+        Examples
+        --------
+        >>> features = model.transform([[1.0, 2.0]])
+        """
+        return _native_classical(self, "host_infer_transform", (X,), _CLASSICAL)
 
 
 class HostIVFIndex(_NativeArchiveLoad, _HostBound, IVFIndex):
@@ -760,7 +830,7 @@ def _connect_host_inference():
     from types import BuiltinFunctionType, MethodType
     from .tokenizer import _binding
     entries = {}
-    for basename, names in (("_mojolearn_estimators_host", ("cd_predict",)),  # glue: fixed CPU prediction ABI
+    for basename, names in (("_mojolearn_estimators_host", ("cd_predict", "kernel_ridge_predict", "nystroem_transform", "rbf_sampler_transform")),  # glue: fixed CPU prediction ABI
                             ("_mojolearn_core_host", ("kmeans_predict", "kmeans_transform"))):
         try:
             module = _backend.load_host_module(basename)
@@ -773,7 +843,8 @@ def _connect_host_inference():
             entries[name] = entry
     context = dict(_CLASSICAL["host_tree_context"])
     context.update(host_inference_entries=entries,
-                   host_inference_kinds={HostElasticNet: "cd", HostLasso: "cd", HostKMeans: "kmeans"})
+                   host_inference_kinds={HostElasticNet: "cd", HostLasso: "cd", HostKMeans: "kmeans",
+                                         HostKernelRidge: "kernel_ridge", HostNystroem: "nystroem", HostRBFSampler: "rbf_sampler"})
     # The established native attribute entry is schema-neutral: it admits
     # the supplied class layout and preserves internal Array/public ndarray
     # publication. It does not select scaler bindings or execute scaler work.
@@ -784,7 +855,7 @@ def _connect_host_inference():
     descriptor = module.classical_attribute_descriptor(MethodType(attribute, context))
     context.update(classical_attribute_descriptor=descriptor, classical_public_layouts={},
                    classical_public_installed=True)
-    for cls in (HostElasticNet, HostLasso, HostKMeans):  # glue: fixed native prediction class layouts
+    for cls in (HostElasticNet, HostLasso, HostKMeans, HostKernelRidge, HostNystroem, HostRBFSampler):  # glue: fixed native prediction class layouts
         cls.__getattribute__ = descriptor
         context["classical_public_layouts"][cls] = _native_classical_bridge._layout(cls, descriptor)
     _CLASSICAL["host_inference_context"] = context

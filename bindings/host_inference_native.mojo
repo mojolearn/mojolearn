@@ -9,6 +9,7 @@ from bindings.sequential_admission import _ordinary_torch
 from bindings.classical_exceptions import classical_require_fitted
 from bindings.host_inference_features import host_inference_feature_names
 from bindings.host_inference_preparation import host_inference_pandas_finite
+from bindings.host_kernel_inference_native import host_kernel_inference
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.classical_arrays import classical_input, classical_address, classical_is_f32, classical_is_array, classical_c_order, classical_kind
 from bindings.host_archive_native import host_archive_typed
@@ -28,7 +29,6 @@ def host_inference_entry(name: String, context: PythonObject) raises -> PythonOb
 
 def host_inference_operation(model: PythonObject, operation: String, args: PythonObject, context: PythonObject, error_context: PythonObject, public: Bool) raises -> PythonObject:
     classical_connect_numpy(context)
-    classical_admit_value(args, context)
     var fields = host_tree_constructor_fields(model, context)
     var b = Python.import_module("builtins")
     var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
@@ -46,6 +46,9 @@ def host_inference_operation(model: PythonObject, operation: String, args: Pytho
     var mode = py_get(fields, "numeric_mode")
     if mode is not None and (py_type(mode) is not b.str or String(mode) != "identical"):
         raise Error("explicit host models run identical mode only")
+    if String(kind) == "kernel_ridge" or String(kind) == "nystroem" or String(kind) == "rbf_sampler":
+        return host_kernel_inference(model, fields, String(kind), args[0], context, public)
+    classical_admit_value(args, context)
     var cd = String(kind) == "cd"
     if cd and not py_contains(fields, "coef_"):
         raise Error("call fit before predict")
