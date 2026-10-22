@@ -310,11 +310,12 @@ def test_density_save_metadata_allocation_refuses_replaced_array_hooks(family, s
     # Class-slot changes, including finalization flags, stay in an isolated
     # child. Product allocation must refuse before it publishes any Array.
     script = r'''
-import io,json,sys
+import io,json,runpy,sys
 from mojolearn import Array
-from mojolearn.tests.test_host_density_save_native import _prepared
 from mojolearn._verify_native_runtime import audit_native_call
-model=_prepared(sys.argv[1]);name=sys.argv[2];calls=[]
+# Tests are external to an installed wheel. Load this retained test file only
+# for fixture preparation, before the audited public save operation.
+model=runpy.run_path(sys.argv[3])['_prepared'](sys.argv[1]);name=sys.argv[2];calls=[]
 old=vars(Array).get(name);present=name in vars(Array)
 def hook(*args):calls.append(name)
 replacement=property(lambda self: calls.append(name),lambda self,value:calls.append(name)) if name=='shape' else hook
@@ -330,7 +331,8 @@ assert not any(report[k] for k in ('python_frames','forbidden_native_calls','unr
 print(json.dumps({'refused':True,'calls':calls}))
 '''
     env = dict(os.environ, PYTHONPATH=str(Path(sys.modules["mojolearn"].__file__).resolve().parents[1]))
-    child = subprocess.run([sys.executable, "-c", script, family, slot], env=env, capture_output=True, text=True)
+    child = subprocess.run([sys.executable, "-c", script, family, slot, str(Path(__file__).resolve())],
+                           env=env, capture_output=True, text=True)
     assert child.returncode == 0, child.stdout + child.stderr
     assert json.loads(child.stdout) == {"refused": True, "calls": []}
 
