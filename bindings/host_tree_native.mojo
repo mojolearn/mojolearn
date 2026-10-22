@@ -129,6 +129,11 @@ def host_tree_vote(fields: PythonObject, source: PythonObject, context: PythonOb
         _ = py_call(addresses.append, classical_address(out))
         wrote = py_call(host_tree_entry(context, entry), addresses,
             Python.list(rows, features, fields["_n_trees"], outputs, fields["_colid"].size))
+    # Pointer lists do not retain the buffers they name. In particular, x
+    # can be the sole owner of a native cast/copy, rather than a caller's
+    # ndarray. Its lifetime must include the consuming native call.
+    _ = x^
+    _ = fields^
     if Int(py=wrote) != rows:
         raise Error("RuntimeError: forest prediction did not write every input row")
     return out
@@ -137,6 +142,7 @@ def host_tree_vote(fields: PythonObject, source: PythonObject, context: PythonOb
 def host_tree_wide(value: PythonObject, context: PythonObject) raises -> PythonObject:
     var out = host_archive_typed(value.shape, "<f8", context["output_context"])
     host_tree_widen(Int(py=classical_address(value)), Int(py=value.size), Int(py=classical_address(out)))
+    _ = value^
     return out
 
 
@@ -163,6 +169,7 @@ def host_tree_labels(classes: PythonObject, vote: PythonObject, context: PythonO
             fits = fits and Bool(py=value >= PythonObject(-9223372036854775807 - 1)) and Bool(py=value <= PythonObject(9223372036854775807))
     var rows = Int(py=vote.shape[0])
     var indices = host_tree_argmax(Int(py=classical_address(vote)), rows, Int(py=vote.shape[1]))
+    _ = vote^
     if (integers and fits) or (numbers and not integers):
         var out = host_archive_typed(Python.tuple(rows), "<i8" if integers else "<f8", context["output_context"])
         for i in range(rows):  # driver-loop: publish completed native label selections
@@ -188,8 +195,10 @@ def host_gbdt_predict(fields: PythonObject, source: PythonObject, context: Pytho
     var columns = Int(py=fields["n_model_columns_"])
     var row_major = Int(py=a["n_ctr_tables"]) == 0 and Int(py=a["n_tensor_tables"]) == 0
     if not row_major:
+        var input_owner = x
         var column = host_archive_typed(Python.tuple(rows * features), "<f4", context["output_context"])
         host_tree_column_copy(Int(py=classical_address(x)), rows, features, Int(py=classical_address(column)))
+        _ = input_owner^
         var expanded = host_archive_typed(Python.tuple(rows * columns), "<f4", context["output_context"])
         var addresses = Python.list(classical_address(column))
         var names = Python.tuple("ctr_ints", "ctr_floats", "tensor_ints", "tensor_floats", "ctr_counts", "border_offsets", "borders", "one_hot")
@@ -200,6 +209,9 @@ def host_gbdt_predict(fields: PythonObject, source: PythonObject, context: Pytho
         var wrote = py_call(host_tree_entry(context, "forest_host_gbdt_expand_ctr"), addresses,
             Python.list(rows, features, columns, a["n_ctr_tables"], a["n_ctr_ints"], a["n_ctr_floats"],
                 a["n_tensor_tables"], a["n_tensor_ints"], a["n_tensor_floats"], a["n_ctr_counts"], a["n_borders"]))
+        # The address envelope owns only integers, not this transposed
+        # allocation. Retain the column storage until expansion completes.
+        _ = column^
         if Int(py=wrote) != columns:
             raise Error("RuntimeError: GBDT expansion did not write every model column")
         x = expanded
@@ -216,6 +228,12 @@ def host_gbdt_predict(fields: PythonObject, source: PythonObject, context: Pytho
     var wrote = py_call(host_tree_entry(context, "forest_host_gbdt_predict"), addresses,
         Python.list(rows, features, a["n_trees"], dim, 1 if Bool(py=a["non_symmetric"]) else 0,
             a["n_splits"], a["n_leaf_values"], a["n_borders"], 1 if row_major else 0), fields["bias_"])
+    # Retain both the prepared/expanded input and the parsed model arrays
+    # through the last native pointer consumer, including helper-created
+    # models that have no reference held by the Python caller.
+    _ = x^
+    _ = a^
+    _ = fields^
     if Int(py=wrote) != rows:
         raise Error("RuntimeError: GBDT prediction did not write every input row")
     return out
@@ -435,6 +453,7 @@ def host_tree_operation(model: PythonObject, operation: String, args: PythonObje
         var rows = Int(py=raw.shape[0])
         var out = host_archive_typed(Python.tuple(rows, 2), "<f8", context["output_context"])
         var wrote = py_call(host_tree_entry(context, "forest_host_gbdt_sigmoid_pair"), classical_address(wide), classical_address(out), rows)
+        _ = wide^
         if Int(py=wrote) != rows:
             raise Error("RuntimeError: GBDT probability conversion did not write every row")
         return out
