@@ -1601,7 +1601,7 @@ FAMILIES = (
             "neural_prefill_call", "parallel_byte_call", "parallel_causal_call",
             "parallel_mlp_call", "parallel_neural_call", "pca_native_call",
             "samba_config_call", "samba_native_call", "sequential_native_call",
-            "small_mlp_call",
+            "small_mlp_call", "standard_scaler_fit_native",
             "tokenizer_host_numeric_mode", "tokenizer_host_vendor",
             "tokenizer_host_column", "tokenizer_host_sabotage", "bpe_load",
             "bpe_n_vocab", "bpe_max_token_bytes", "bpe_encode", "bpe_encode_batch",

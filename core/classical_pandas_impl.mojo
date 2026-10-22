@@ -31,11 +31,11 @@ def pd_mask_check(base: Int, rows: Int, stride: Int, size: Int, native: Bool) ra
 def pd_scatter_numeric(
     base: Int, size: Int, native: Bool, kind: Int, row_stride: Int, col_stride: Int,
     col: Int, dest: Int, rows: Int, cols: Int, double_round: Bool,
-    output: MutPointer[Float32, MutUntrackedOrigin],
+    output: MutPointer[Float32, MutUntrackedOrigin], allow_nonfinite: Bool = False,
 ) raises:
     for row in range(rows):  # native input marshaling: numeric conversion preserves pandas promotion before float32
         var raw = pd_raw_at(base, row * row_stride + col * col_stride, size, native)
         var bits = f64_to_f32_bits(bitcast[DType.uint64](_pd_double(raw, kind, size))) if double_round else classical_f32_bits(raw, kind, size)
-        if (bits & UInt32(0x7F800000)) == UInt32(0x7F800000):
+        if not allow_nonfinite and (bits & UInt32(0x7F800000)) == UInt32(0x7F800000):
             raise Error("Input contains NaN or infinity")
         output[row * cols + dest] = bitcast[DType.float32](bits)

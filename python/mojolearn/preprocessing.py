@@ -810,40 +810,7 @@ class StandardScaler(_ScalerProtocol):
         ValueError
             If ``X`` holds infinity or the statistics overflow float32.
         """
-        _require_training(self)
-        self._configuration()
-        for name in list(self.__dict__):  # glue: drops stale fitted attributes
-            if name.endswith('_'):
-                del self.__dict__[name]
-        mode = (self.numeric_mode if self.numeric_mode is not None else _backend.default_mode()).strip().lower()
-        direct = _direct_entry(self._binding(mode), "standard_fit_direct") if sample_weight is None else None
-        values, finite = self._input(X, allow_nan=True, scan=direct is None)
-        n, d = values.shape
-        output = None
-        if finite is None:
-            output = empty((3, d), '<f4')
-            finite = bool(int(direct(_addr_ro(values), _addr(output),
-                                     [n, d, int(self.with_mean), int(self.with_std)])))
-        elif finite and sample_weight is None:
-            output = empty((3, d), '<f4')
-            self._binding(mode).standard_fit(_addr_ro(values), _addr(output),
-                [n, d, int(self.with_mean), int(self.with_std)])
-        if finite and sample_weight is None:
-            if not all_finite(output) or output[1].min() < 0 or output[2].min() <= 0:
-                raise ValueError('StandardScaler statistics are nonfinite, variance negative, or scale nonpositive in Float32')
-            self._keep(output[0].copy(), output[1].copy(), output[2].copy(), n, d, mode)
-            return self
-        weight = _sample_weight(sample_weight, n) if sample_weight is not None else None
-        self._binding(mode)
-        count, mean, var, scale = _standard_stats(mode, values, weight)
-        seen = count.tolist()
-        live = [c for c in range(d) if seen[c] != 0]  # glue: live column index list from device counts (d-sized: feature count)
-        m, v, sc = mean.tolist(), var.tolist(), scale.tolist()
-        if any(not (math.isfinite(m[c]) and math.isfinite(v[c]) and math.isfinite(sc[c])) or v[c] < 0 or sc[c] <= 0
-               for c in live):  # glue: raises on nonfinite device statistics (live-sized: live column indices)
-            raise ValueError('StandardScaler statistics are nonfinite, variance negative, or scale nonpositive in Float32')
-        self._keep(mean, var, scale, _seen(seen, weight is not None), d, mode)
-        return self
+        return _STANDARD_FIT(self, X, y, sample_weight, _STANDARD_CONTEXT)
 
     # MOJOLEARN_X_PREP_FAST_FIT_TRANSFORM_FUSED (a fast + Apple build's
     # experiment, default off; lane apple-fast-round2): the binding's
@@ -1159,3 +1126,7 @@ class StandardScaler(_ScalerProtocol):
 from ._sklearn_modules import LAYOUT as _SKLEARN_LAYOUT, lazy_exports as _lazy_exports  # noqa: E402
 __getattr__ = _lazy_exports("preprocessing")
 __all__ += _SKLEARN_LAYOUT["preprocessing"]
+
+
+from ._native_scaler_bridge import connect as _connect_standard_scaler
+_STANDARD_FIT, _STANDARD_CONTEXT = _connect_standard_scaler()

@@ -144,7 +144,7 @@ def _pd_locations(block: PythonObject, context: PythonObject) raises -> PythonOb
     return result
 
 
-def native_pandas_f32(value: PythonObject, context: PythonObject) raises -> PythonObject:
+def native_pandas_f32(value: PythonObject, context: PythonObject, strict_f32: Bool = False, allow_nonfinite: Bool = False) raises -> PythonObject:
     var b = Python.import_module("builtins")
     if not native_pandas_exact(value):
         raise Error("TypeError: pandas input requires an exact DataFrame or Series")
@@ -200,6 +200,8 @@ def native_pandas_f32(value: PythonObject, context: PythonObject) raises -> Pyth
             _promote(common_kind, common_size, kind, Int(py=data.dtype.itemsize))
             booleans = booleans or kind == "b"
             numbers = numbers or kind != "b"
+    if strict_f32 and (objects or booleans or common_kind != "f" or common_size != 4):
+        raise Error("TypeError: Scaler input must have dtype float32")
     # pandas deliberately uses object promotion for bool mixed with numbers.
     var double_round = objects or (booleans and numbers) or (common_kind == "f" and common_size == 8)
     var result = sequential_array(Python.tuple(rows) if series else Python.tuple(rows, cols), context["float32"], context)
@@ -225,12 +227,12 @@ def native_pandas_f32(value: PythonObject, context: PythonObject) raises -> Pyth
                 for row in range(rows):  # cpu-route: Python objects marshaled one element at a time before the runtime
                     var item = data[row] if rank == 1 else data[Python.tuple(col, row)]
                     var bits = _pd_object_bits(item, context)
-                    if (bits & UInt32(0x7F800000)) == UInt32(0x7F800000):
+                    if not allow_nonfinite and (bits & UInt32(0x7F800000)) == UInt32(0x7F800000):
                         raise Error("Input contains NaN or infinity")
                     output[row * cols + dest] = bitcast[DType.float32](bits)
             else:
                 pd_scatter_numeric(Int(py=sequential_address(data)), size, Bool(py=data.dtype.isnative), kind,
-                                   row_stride, col_stride, col, dest, rows, cols, double_round, output)
+                                   row_stride, col_stride, col, dest, rows, cols, double_round, output, allow_nonfinite)
         _ = data^
     _ = owned^
     _ = placements^
