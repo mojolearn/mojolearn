@@ -490,6 +490,25 @@ class HostKernelDensity(_NativeArchiveLoad, _HostBound, KernelDensity):
         """
         return _native_classical(self, "host_kde_fit", (X, y, sample_weight), _CLASSICAL)
 
+    def save(self, path):
+        """Write the fitted model and its options to a deterministic NPZ archive.
+
+        Parameters
+        ----------
+        path : str, path-like or binary file
+            Destination for the fitted training rows and model metadata.
+
+        Returns
+        -------
+        path
+            The supplied destination, ready for ``host_model`` or ``load``.
+
+        Examples
+        --------
+        >>> model.save("model.npz")
+        """
+        return _native_classical(self, "host_density_save", ("kde", path), _CLASSICAL)
+
     @_native_host_inference_method
     def score_samples(self, X):
         """Return the log density at each query sample.
@@ -701,6 +720,25 @@ class HostIsolationForest(_NativeArchiveLoad, _HostBound, IsolationForest):
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         _register_host_inference_class(cls)
+
+    def save(self, path):
+        """Write the fitted model and its options to a deterministic NPZ archive.
+
+        Parameters
+        ----------
+        path : str, path-like or binary file
+            Destination for the fitted training rows and model metadata.
+
+        Returns
+        -------
+        path
+            The supplied destination, ready for ``host_model`` or ``load``.
+
+        Examples
+        --------
+        >>> model.save("model.npz")
+        """
+        return _native_classical(self, "host_density_save", ("iforest", path), _CLASSICAL)
 
     @_native_host_inference_method
     def score_samples(self, X):
