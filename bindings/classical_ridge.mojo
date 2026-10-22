@@ -2,7 +2,8 @@
 # The existing Ridge route and arithmetic stay in their selected native
 # kernels. This owner replaces only Python preparation and launch decisions.
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_call_typed
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem
+from bindings.py_typed_call import py_call_typed
 from std.memory import memcpy
 from core.classical_ridge_impl import classical_widen_f32_f64
 from bindings.classical_arrays import classical_array, classical_host_f32, classical_word, classical_address

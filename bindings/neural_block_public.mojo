@@ -5,7 +5,8 @@ from core.neural_block_public_impl import neural_copy_row_prefixes
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
-from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type, py_call_typed
+from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
+from bindings.py_typed_call import py_call_typed
 from std.memory import memcpy
 from std.os import getenv
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints

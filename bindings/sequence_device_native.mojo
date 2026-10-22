@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native sequence tensor ownership, buffer IO and consumed float32 outputs.
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_call_typed
+from bindings.py_balanced import py_call, py_type, py_get
+from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_admission import opt_scalar, opt_value
 from bindings.optimizer_device_native import device_shape, shape_count
 from bindings.optimizer_public_door import TensorView, tensor_view, base_format, same_shape, py_ints

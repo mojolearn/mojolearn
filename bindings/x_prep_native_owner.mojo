@@ -5,7 +5,8 @@ from std.memory import memcpy
 from std.os import getenv
 from std.time import perf_counter_ns
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_setattr, py_call_typed
+from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_setattr
+from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_address, classical_is_array, classical_c_order, classical_wrap_array
 from bindings.sequential_admission import sequential_admit_value
 from bindings.x_prep_native_inputs import _dense_values, _values, _rows_fields

@@ -3,7 +3,8 @@
 from std.memory import bitcast
 from std.math import isfinite
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_call_typed, py_type, py_fields, py_setitem
+from bindings.py_balanced import py_call, py_type, py_fields, py_setitem
+from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_admission import opt_scalar, opt_value, opt_schedule, opt_exact
 from bindings.optimizer_public_door import schedule_spec
 

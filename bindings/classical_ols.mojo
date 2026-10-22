@@ -3,7 +3,8 @@
 # publication, owned by Mojo. All fitting arithmetic stays in selected C ABI
 # entries; this module never calls the Python _M/_Kit driver.
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_call_typed
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem
+from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_array, classical_word, classical_address
 from bindings.classical_validate import classical_check_x, classical_check_y, classical_check_weights_input, classical_estimator_name
 from bindings.classical_ridge import classical_means, classical_center

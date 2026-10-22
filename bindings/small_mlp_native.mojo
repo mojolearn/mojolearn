@@ -27,7 +27,8 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, py_ints
-from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type, py_call_typed
+from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
+from bindings.py_typed_call import py_call_typed
 from bindings.native_json import native_json_parse, native_json_parse_unique, native_path
 from bindings.native_transport import _transport_json
 from core.parallel_mlp_native_impl import mlp_targets_into

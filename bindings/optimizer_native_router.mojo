@@ -3,7 +3,8 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains, py_call_typed
+from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
+from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_public_words import optimizer_python_error, stash_python_error
 from bindings.optimizer_admission import opt_guards, opt_owner, opt_value, opt_scalar, opt_schedule, opt_exact
 from bindings.optimizer_public_door import door_ready, refuse_kwargs, new_array, TensorView, tensor_view, resident_entry

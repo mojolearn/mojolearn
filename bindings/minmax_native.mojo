@@ -7,7 +7,8 @@ from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_pyth
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
-from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains, py_call_typed
+from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
+from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
 from bindings.classical_arrays import classical_address, classical_typed, classical_is_array, classical_c_order
 from bindings.classical_pandas import classical_admit_value

@@ -13,7 +13,8 @@ from bindings.native_error_class import error_without_class
 from std.memory import bitcast, memcpy
 from std.math import isfinite
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, py_ints
-from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type, py_call_typed
+from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
+from bindings.py_typed_call import py_call_typed
 from bindings.native_json import native_json_parse
 from bindings.native_transport import _transport_json, transport_initialize
 from training.parallel_byte_impl import (

@@ -6,7 +6,8 @@
 from std.memory import memcpy, bitcast
 from core.pca_exact_impl import pca_check_state, pca_widen_spectrum
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type, py_call_typed
+from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
+from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_array, classical_host_f32, classical_word
 from bindings.sequential_inputs import sequential_input
 from bindings.sequential_arrays import sequential_array, sequential_address

@@ -11,7 +11,8 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
-from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type, py_call_typed
+from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
+from bindings.py_typed_call import py_call_typed
 from std.memory import memcpy
 from bindings.generation_buffers import (
     GENERATION_BOUNDARY, generation_array, generation_address, generation_copy,

@@ -9,7 +9,8 @@ from bindings.parallel_byte_native import PARALLEL_BYTE_BOUNDARY, _parallel_shap
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array
 from bindings.byte_checkpoint_io import ByteCheckpointIOError, byte_checkpoint_io
 from bindings.sha256_door import sha256_update, sha256_hexdigest, sha256_digest_of
-from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type, py_call_typed
+from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
+from bindings.py_typed_call import py_call_typed
 from core.sha256 import Sha256
 
 

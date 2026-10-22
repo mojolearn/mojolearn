@@ -3,7 +3,8 @@
 # The existing model checkpoint format and native model ABI remain unchanged.
 from std.collections.string import chr
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_call_typed
+from bindings.py_balanced import py_call, py_contains, py_get, py_setitem
+from bindings.py_typed_call import py_call_typed
 from bindings.native_json import native_path
 from bindings.sequential_description import sequential_fields, sequential_append, sequential_program, sequential_table
 from bindings.sequential_execution import sequential_entries, sequential_forward

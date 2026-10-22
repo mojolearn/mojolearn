@@ -3,7 +3,8 @@
 # schedule evaluation and state/output handling execute natively here.
 from std.os import getenv
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem, py_call_typed
+from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem
+from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_admission import opt_exact, opt_scalar, opt_value, opt_schedule
 from bindings.optimizer_public_door import TensorView, tensor_view, base_format, same_shape, py_ints
 from bindings.optimizer_device_native import device_shape, shape_count
