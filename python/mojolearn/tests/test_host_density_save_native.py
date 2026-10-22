@@ -310,11 +310,14 @@ def test_density_save_metadata_allocation_refuses_replaced_array_hooks(family, s
     # Class-slot changes, including finalization flags, stay in an isolated
     # child. Product allocation must refuse before it publishes any Array.
     script = r'''
-import io,json,runpy,sys
+import io,json,runpy,sys,types
+from pathlib import Path
 from mojolearn import Array
 from mojolearn._verify_native_runtime import audit_native_call
 # Tests are external to an installed wheel. Load this retained test file only
 # for fixture preparation, before the audited public save operation.
+tests=types.ModuleType('mojolearn.tests');tests.__path__=[str(Path(sys.argv[3]).parent)]
+sys.modules['mojolearn.tests']=tests
 model=runpy.run_path(sys.argv[3])['_prepared'](sys.argv[1]);name=sys.argv[2];calls=[]
 old=vars(Array).get(name);present=name in vars(Array)
 def hook(*args):calls.append(name)
