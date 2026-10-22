@@ -1,8 +1,8 @@
 {
   "schema": "mojolearn.runtime-takeover-status.v1",
-  "updated": "2026-10-22T04:17:22.049705+00:00",
+  "updated": "2026-10-22T04:46:24.350929+00:00",
   "release": "HELD",
-  "integration_before_report": "db5a97623f0f490facb33c2fec019bf2b1e85b54",
+  "integration_before_report": "e1215659cc16d85d3f3453e9bd2c643950a70738",
   "evidence_root": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021",
   "test_policy": "Rerun failures, new tests and directly affected regression checks; reuse accepted unchanged results. Counts from different scopes are not interchangeable.",
   "completed": {
@@ -64,38 +64,6 @@
         "errors": 0
       }
     },
-    "latest_targeted_tests": {
-      "cpu": {
-        "total": 154,
-        "passed": 154,
-        "failed": 0,
-        "skipped": 0,
-        "groups": {
-          "mojolearn.tests.test_host_inference_native": 120,
-          "mojolearn.tests.test_classical_warning_native_owner": 30,
-          "mojolearn.tests.test_host_model_kmeans": 4
-        },
-        "junit": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-tests-cpu-a5ab22094.junit.xml",
-        "junit_sha256": "9fabfae72211be8e7bc7b3da141f2b8b456cecd9a6d7540d1365059adf518d5d",
-        "receipt": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-tests-cpu-a5ab22094.json"
-      },
-      "metal": {
-        "total": 237,
-        "passed": 237,
-        "failed": 0,
-        "skipped": 0,
-        "groups": {
-          "mojolearn.tests.test_host_inference_native": 120,
-          "mojolearn.tests.test_classical_warning_native_owner": 30,
-          "mojolearn.tests.test_host_model_kmeans": 4,
-          "mojolearn.tests.test_sequence_array_native_candidate": 75,
-          "mojolearn.tests.test_sequence_array_native_guards": 8
-        },
-        "junit": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-tests-metal-a5ab22094.junit.xml",
-        "junit_sha256": "0f042663d23904b83c71d43a4988c6022944bcbb229ba62edb45e39abdf798c9",
-        "receipt": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-tests-metal-a5ab22094.json"
-      }
-    },
     "tree_owner_repairs": {
       "cpu_passed": 146,
       "metal_passed": 145,
@@ -138,6 +106,51 @@
       "fault_checker_passed": 5,
       "evidence": "native-owner-lifecycle-lane/PROVENANCE_HANDOFF.json",
       "scope": "Actual loaded origins required. Old receipts unchanged; scope audit links independent build evidence."
+    },
+    "previous_a5_targeted_tests": {
+      "cpu": {
+        "total": 154,
+        "passed": 154,
+        "failed": 0,
+        "skipped": 0,
+        "groups": {
+          "mojolearn.tests.test_host_inference_native": 120,
+          "mojolearn.tests.test_classical_warning_native_owner": 30,
+          "mojolearn.tests.test_host_model_kmeans": 4
+        },
+        "junit": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-tests-cpu-a5ab22094.junit.xml",
+        "junit_sha256": "9fabfae72211be8e7bc7b3da141f2b8b456cecd9a6d7540d1365059adf518d5d",
+        "receipt": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-tests-cpu-a5ab22094.json"
+      },
+      "metal": {
+        "total": 237,
+        "passed": 237,
+        "failed": 0,
+        "skipped": 0,
+        "groups": {
+          "mojolearn.tests.test_host_inference_native": 120,
+          "mojolearn.tests.test_classical_warning_native_owner": 30,
+          "mojolearn.tests.test_host_model_kmeans": 4,
+          "mojolearn.tests.test_sequence_array_native_candidate": 75,
+          "mojolearn.tests.test_sequence_array_native_guards": 8
+        },
+        "junit": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-tests-metal-a5ab22094.junit.xml",
+        "junit_sha256": "0f042663d23904b83c71d43a4988c6022944bcbb229ba62edb45e39abdf798c9",
+        "receipt": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-tests-metal-a5ab22094.json"
+      }
+    },
+    "shutdown_35": {
+      "passed": 15,
+      "scope": "Metal shutdown,partial owner,retry,and allocation release checks"
+    },
+    "malformed_dtype_numpy253_35": {
+      "passed": 18,
+      "scope": "NumPy2.5.3 native exception checks;NumPy1.26 differences separately under repair"
+    },
+    "installed_runner_controller": {
+      "passed": 26,
+      "scope": "25 unique runner controller checks plus1 projection registration check;no installed-wheel runtime qualification",
+      "evidence": "installed-owner-scope-lane/HANDOFF.json"
     }
   },
   "remaining": [
@@ -157,9 +170,9 @@
     {
       "id": "sequence-array-conversion",
       "owner": "optimizer_native",
-      "state": "ordinary-repairs-pass-other-contract-work-open",
-      "details": "All eight prior failures fixed;83 affected checks pass,92 unchanged retain43. StringDType, nativeNumPy1.26, seven malformed exception mismatches and shutdown cleanup open. Public __array__ unchanged.",
-      "source_commit": "a5ab2209444a7e1adb7b303611a93352fb34df7e"
+      "state": "string-and-numpy126-repairs-await-successor",
+      "details": "35 build passed;13 String cases and87 NumPy1.26 cases failed. String status/class and1.26 alias repairs integrated. Shared malformed exception and cross-version followups pending.15 cleanup and18 NumPy2 malformed checks passed. Public __array__ unchanged.",
+      "source_commit": "e1215659cc16d85d3f3453e9bd2c643950a70738"
     },
     {
       "id": "selector-import-metadata",
@@ -189,9 +202,9 @@
     {
       "id": "other-host-native-inference",
       "owner": "host_model_native",
-      "state": "three-class-runtime-pass-next-group-pending",
-      "source_commit": "db5a97623",
-      "details": "ElasticNet/Lasso.predict and KMeans.predict/transform pass120 new+30 warnings+4 roundtrips per vendor on a5. KernelRidge.predict and Nystroem/RBFSampler.transform source pending build/runtime.15 other predictor owners before kernel group qualifies; other API work tracked separately."
+      "state": "sparse-repair-and-projection-await-successor",
+      "source_commit": "e1215659cc16d85d3f3453e9bd2c643950a70738",
+      "details": "35 dense kernel/scalar checks pass;155 sparse cases per vendor fail exact-class admission. Repair integrated;175 failing/new/affected sparse cases selected. PCA/TruncatedSVD245 new checks pending;LogisticRegression successor in progress. Previous ElasticNet/Lasso/KMeans checks retained."
     }
   ],
   "limitations": [
@@ -199,5 +212,30 @@
     "No performance improvement claim from correctness tests.",
     "Static census categories are not independently demonstrated runtime defects."
   ],
-  "latest_compiled_runtime": "a5ab2209444a7e1adb7b303611a93352fb34df7e"
+  "latest_compiled_runtime": "35baa19d5d2474a8677a403f45de5c99edbdefd2",
+  "latest_runtime_summary": "runtime-targeted-35baa19d5-summary.json",
+  "latest_targeted_tests": {
+    "cpu": {
+      "total": 314,
+      "passed": 159,
+      "failed": 155,
+      "skipped": 0,
+      "errors": 0
+    },
+    "metal": {
+      "total": 580,
+      "passed": 412,
+      "failed": 168,
+      "skipped": 0,
+      "errors": 0
+    },
+    "numpy126_metal": {
+      "total": 118,
+      "passed": 31,
+      "failed": 87,
+      "skipped": 0,
+      "errors": 0
+    },
+    "scope": "New/affected selected scopes;three failure clusters under repair. Original logs,JUnit and binary provenance retained."
+  }
 }
