@@ -418,7 +418,7 @@ def _schema_mode(fields: PythonObject, prefix: PythonObject, context: PythonObje
     return folded
 
 
-def _schema_shown(value: PythonObject) raises -> String:
+def _schema_repr_shown(value: PythonObject) raises -> String:
     """repr(value) for a builtin scalar; `<type>` for anything whose repr
     would run Python code."""
     var b = Python.import_module("builtins")
@@ -482,7 +482,7 @@ def _schema_forest_mode(fields: PythonObject, context: PythonObject) raises -> P
     var captured = py_get(fields, "_fit_numeric_mode")
     if captured is not None:
         if requested is not None and not Bool(py=requested == captured):
-            raise Error("ValueError: This forest was fitted with numeric_mode=" + _schema_shown(captured)
+            raise Error("ValueError: This forest was fitted with numeric_mode=" + _schema_repr_shown(captured)
                         + "; refit or use set_params before changing numeric_mode")
         return captured
     if requested is not None:
