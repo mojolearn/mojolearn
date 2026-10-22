@@ -329,7 +329,7 @@
     "Full public SequenceDeviceTensor.__array__ ownership contract and cold sklearn tags behavior.",
     "Linux NVIDIA sm89/sm80 and AMD gfx942 current-source builds, installed execution, matching cross-vendor identity/reference/fault evidence. Older binaries are not current qualification.",
     "Complete API/options/failure-path evidence mapping; static endpoint counts do not prove runtime coverage. Seven later fault arms still lack records in the reviewed retained55-arm ledgers.",
-    "Matching installed followup for changed04dd archive/owner paths; accepted c1 and c297 installed results retain their exact original source scope."
+    "Exact88-case installed public followup for changed04dd archive/owner paths is being staged; accepted c1 and c297 installed results retain their exact original source scope."
   ],
   "limitations": [
     "No claim that every public API, option, checkpoint or failure path is fully migrated/qualified.",
@@ -466,7 +466,7 @@
     }
   },
   "worktree_cleanup": {
-    "removed": 45,
+    "removed": 48,
     "evidence": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/worktree-cleanup",
     "branches_retained": true,
     "measurement_dirty_patch": "All three changed files already byte-match main; original dirty worktree retained. See measurement-smoke-reconciliation/reconciled.json.",
