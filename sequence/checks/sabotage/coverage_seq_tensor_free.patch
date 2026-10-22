@@ -1,0 +1,13 @@
+--- a/sequence/seq_tensor.mojo
++++ b/sequence/seq_tensor.mojo
+@@ -96,8 +96,8 @@
+     var ctx = sequence_ctx()
+     ctx.synchronize()
+     var pool = _SEQ_TENSORS.get_or_create_ptr()
+-    pool[].bufs[h - 1] = ctx.enqueue_create_buffer[DType.float32](1)
+-    pool[].n[h - 1] = 0
++    # Fault: retain the live allocation and its open marker.
++    pool[].n[h - 1] = pool[].n[h - 1]
+     return h
+ 
+ 

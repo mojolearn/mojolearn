@@ -907,6 +907,9 @@ TRAINING_LANE_NAMES = {
     # embedding and GEMM oracles and the RMSNorm kernels' statements with
     # the caller's eps). On the M4, one core: all 36 train, 9 infer and 18
     # batch cells IDENTICAL x4 before the gate ran.
+    "native-schedule-series": "native learning-rate arrays and lists",
+    "optim-owner-lifecycle": "bare optimizer moment replacement, checkpoint resume and zeroing",
+    "optim-io-capability": "native optimizer IO query and unavailable-transfer refusal",
     "optim-sgd": "SGD with momentum, Nesterov and dampening",
     "training-chunked-lm-head": "the chunked language-model head loss and its gradients",
     "training-mlp-sessions": "the multi-session MLP inference",
@@ -1714,6 +1717,7 @@ FAMILIES = (
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=(
+            "native-schedule-series",
             "knn", "knn-clf", "knn-reg", "kmeans", "kmeans-random", "kmeans-array",
             "kmeans-weighted", "knn-sqeuclidean", "knn-clf-distance", "knn-reg-distance",
             "knn-manhattan", "knn-chebyshev", "knn-cosine", "knn-minkowski-p3", "knn-rbc",
@@ -2728,7 +2732,7 @@ FAMILIES = (
         routes="_mojolearn_training",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("mlp", "optim-sgd", "optim-adam-clip", "optim-maximize", "cross-entropy-arms", "training-primitives", "ordered-gradient-sum", "par-mlp",
+        training_lanes=("optim-owner-lifecycle", "optim-io-capability", "mlp", "optim-sgd", "optim-adam-clip", "optim-maximize", "cross-entropy-arms", "training-primitives", "ordered-gradient-sum", "par-mlp",
                         "samba", "samba-untied-dropout-accum", "par-samba", "par-samba-clip",
                         "mlp-bf16w", "mlp-int8w", "samba-bf16w", "samba-int8w",
                         # lane/laneless-public-classes (2026-09-19)
@@ -3484,6 +3488,12 @@ PUBLIC_PENDING_STALE_REASONS = ("stale reference",)
 #: were PUBLIC that morning. A fixture change recreates this reason on the
 #: same day it is declared resolved.
 PUBLIC_PENDING_LANES = {
+    # New owner lanes: no execution/reference admission is implied by registration.
+    "native-schedule-series": "no reference",
+    "optim-owner-lifecycle": "no reference",
+    "optim-io-capability": "no reference",
+    "optim-resident-io": "no reference",
+    "sequence-device-release": "no reference",
     # THIRTEEN LANES LEFT THIS TABLE ON 2026-09-20, on a watched run and not
     # on an argument (lane/verifier-full-exposure). The promotion rule in
     # `public_reference_lanes()` is "a covered lane, in a release record's

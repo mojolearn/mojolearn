@@ -1,0 +1,11 @@
+--- a/bindings/optimizer_public_door.mojo
++++ b/bindings/optimizer_public_door.mojo
+@@ -1107,7 +1107,7 @@
+     _upload[K](module, opt, write_addr(m, "exp_avg"), write_addr(v, "exp_avg_sq"))
+     set_field(opt, "_host_fresh", PythonObject(True))
+     set_field(opt, "buf_initialized", bi if truth(c3) else copy_array(bi))
+-    set_field(opt, "t", t)
++    set_field(opt, "t", PythonObject(Int(py=t) + 1))
+     return PythonObject(None)
+ 
+ 

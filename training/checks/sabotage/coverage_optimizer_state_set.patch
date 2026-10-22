@@ -1,0 +1,19 @@
+--- a/bindings/optimizer_public_door.mojo
++++ b/bindings/optimizer_public_door.mojo
+@@ -1065,13 +1065,13 @@
+     opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
+     opt_value(value, OPT_DOOR.get_or_create_ptr()[].context)
+     var name = String("exp_avg") if which == STATE_EXP_AVG else String("exp_avg_sq")
+-    set_field(opt, String("_m") if which == STATE_EXP_AVG else String("_v"), value)
++    set_field(opt, String("_v") if which == STATE_EXP_AVG else String("_m"), value)
+     set_field(opt, "_pristine", PythonObject(False))
+     var a = 0 if value is None else write_addr(value, name)
+     if which == STATE_EXP_AVG:
++        _upload[K](module, opt, 0, a)
++    else:
+         _upload[K](module, opt, a, 0)
+-    else:
+-        _upload[K](module, opt, 0, a)
+     return PythonObject(None)
+ 
+ 
