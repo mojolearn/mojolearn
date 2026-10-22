@@ -96,20 +96,35 @@ def _released_weakrefs(value: PythonObject, context: PythonObject) raises:
             raise Error("TypeError: DeviceRows reinitialization cannot release weak-reference callbacks")
 
 
-def _released_dtype(value: PythonObject, context: PythonObject) raises -> Bool:
+def _released_dtype(value: PythonObject, context: PythonObject, depth: Int) raises -> Bool:
     if py_get(context,"ndarray") is None:
         return False
     var classes = py_get(context,"arena_dtype_classes")
     if classes is None:
         classes = Python.list()
+        var scalars = Python.list()
         var factory = native_numpy_dtype(context)
-        for code in ["?", "i1", "u1", "i2", "u2", "i4", "u4", "i8", "u8", "f2", "f4", "f8", "g", "c8", "c16", "G", "S", "U", "V", "M8", "m8"]:  # driver-loop: fixed immutable NumPy dtype classes, excluding object/custom owners
-            _ = py_call(classes.append,py_type(py_call(factory,code)))
+        for code in ["?", "i1", "u1", "i2", "u2", "i4", "u4", "i8", "u8", "f2", "f4", "f8", "g", "c8", "c16", "G", "O", "S", "U", "V", "M8", "m8"]:  # driver-loop: fixed immutable NumPy dtype classes before their retained owners are inspected
+            var dtype = py_call(factory,code)
+            _ = py_call(classes.append,py_type(dtype))
+            if code != "O" and code != "V":
+                _ = py_call(scalars.append,dtype.type)
         py_setitem(context,"arena_dtype_classes",classes)
+        py_setitem(context,"arena_dtype_scalars",scalars)
     for i in range(len(classes)):  # driver-loop: admit exact native dtype classes before inspecting their C descriptors
         if py_type(value) is classes[i]:
-            if Bool(py=value.hasobject) or value.metadata is not None or value.fields is not None or value.subdtype is not None:
-                raise Error("TypeError: DeviceRows reinitialization requires dtype owners without object or custom metadata")
+            # A structured/subarray dtype and its native metadata do not
+            # imply a Python callback. Admit their actual retained owners,
+            # including field titles and metadata values, without hashing
+            # application-controlled dictionary keys.
+            for mapping in [value.metadata, value.fields]:  # driver-loop: NumPy-owned dictionary proxies
+                if mapping is not None:
+                    var pairs = py_call(Python.import_module("builtins").list,mapping.items())
+                    for j in range(len(pairs)):  # driver-loop: native dtype key/value ownership, no key lookups
+                        _released_owner(pairs[j][0],context,depth+1)
+                        _released_owner(pairs[j][1],context,depth+1)
+            _released_owner(value.names,context,depth+1)
+            _released_owner(value.subdtype,context,depth+1)
             return True
     return False
 
@@ -152,13 +167,23 @@ def _released_owner(value: PythonObject, context: PythonObject, depth: Int = 0) 
         return
     if cls is py_get(context,"ndarray"):
         var dtype = value.dtype
-        if Bool(py=dtype.hasobject) or dtype.metadata is not None or dtype.fields is not None or dtype.subdtype is not None:
-            raise Error("TypeError: DeviceRows reinitialization requires numeric buffer owners without object or dtype metadata callbacks")
-        _released_owner(dtype,context,depth+1)
+        if not _released_dtype(dtype,context,depth+1):
+            raise Error("TypeError: DeviceRows reinitialization requires an admitted native dtype")
+        if Bool(py=dtype.hasobject):
+            # ndarray.item is NumPy's immutable native descriptor. It returns
+            # object references (or a structured tuple), never their protocols;
+            # the ndarray retains them throughout this admission pass.
+            for i in range(Int(py=value.size)):  # driver-loop: object-buffer ownership must be checked before release
+                _released_owner(py_call(value.item,i),context,depth+1)
         _released_owner(value.base,context,depth+1)
         return
-    if _released_dtype(value,context):
+    if _released_dtype(value,context,depth):
         return
+    var scalars = py_get(context,"arena_dtype_scalars")
+    if scalars is not None:
+        for i in range(len(scalars)):  # driver-loop: exact primitive NumPy scalars own no application objects
+            if cls is scalars[i]:
+                return
     raise Error("TypeError: DeviceRows reinitialization cannot release Python-owned metadata; retain the same owner or release it in application code first")
 
 
