@@ -134,6 +134,7 @@ def connect_sequence_device(training, device):
     from ._native_classical_warnings import connect_warnings
     import re
     context = training._OPT_CONTEXT
+    context["sequence_attribute_error"] = AttributeError  # glue: fixed native missing-member category
     context["sequence_print_context_type"] = ContextVar
     context["sequence_print_context_get"] = ContextVar.get
     warning = connect_warnings()

@@ -1,5 +1,31 @@
 # Sequence device array protocol: native candidate
 
+Current boundary review (2026-10-22): public activation remains blocked by
+preserving managed-string descriptor ownership for ordinary structured-void
+and ndarray missing-value metadata without invoking NumPy's Python hooks.
+The later frozen test receipts under the evidence root supersede the earlier
+qualification snapshots below; none qualifies the unchanged public method.
+The separate missing-member repair replaces live `builtins.getattr` with public
+`PyObject_GenericGetAttr` after exact static StringDType admission, and uses
+connected scalar/container identities for sentinel admission. Its nine new
+candidate callback/independent-output checks await the parent's native build.
+This repair neither changes the public wrapper nor admits the unresolved forms.
+
+The additional [public memory-management documentation](https://numpy.org/doc/stable/reference/c-api/data_memory.html#what-happens-when-deallocating-if-there-is-no-policy-set)
+describes manually enabling OWNDATA on external buffers as backward
+compatibility: the array has no attached memory policy, deallocation uses
+`free`, and `NUMPY_WARN_IF_NO_MEM_POLICY` may produce a warning. That does not
+supply the same owned allocation/resize/error contract. No flags, descriptor
+layout, allocator policies or toolchain internals are modified here.
+
+The concrete upstream request is a supported allocation or descriptor-clone
+entry that preserves an existing StringDType's `na_object`, `coerce` and
+computed metadata without running comparison/text protocols, returns ordinary
+owned array storage, and carries the normal destruction/resize policy. Existing
+public creation alternatives and their retained failure evidence are listed
+below. No missing Mojo/Modular facility has been demonstrated, and the absence
+of a verified path is not proof that such a public NumPy API is impossible.
+
 The public `SequenceDeviceTensor.__array__` still downloads through `.numpy()`
 and uses Python/NumPy for dtype conversion. It is **not migrated** by this
 candidate. The new internal `seqdev_array` operation lets the orchestrator
