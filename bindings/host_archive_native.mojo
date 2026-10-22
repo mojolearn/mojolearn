@@ -433,10 +433,12 @@ def host_archive_mixture(cls: PythonObject, arrays: PythonObject, context: Pytho
     return model
 
 
-def host_archive_density(cls: PythonObject, arrays: PythonObject, kde: Bool,
+def host_archive_density(cls: PythonObject, arrays: PythonObject, kde: Bool, path: PythonObject,
                          context: PythonObject) raises -> PythonObject:
+    if not kde:
+        return host_archive_dbscan(cls, arrays, path, context)
     var meta = host_archive_count(arrays, "meta", "<i8", 3, context, True)
-    var parameter = host_archive_count(arrays, "bandwidth" if kde else "eps", "<f8", 1, context, True)
+    var parameter = host_archive_count(arrays, "bandwidth", "<f8", 1, context, True)
     var nf = classical_i64(meta, 0)
     var n = classical_i64(meta, 1)
     var metric = _archive_string(arrays, "metric", context)
@@ -446,40 +448,65 @@ def host_archive_density(cls: PythonObject, arrays: PythonObject, kde: Bool,
     py_setitem(fields, "metric", metric)
     py_setitem(fields, "n_features_in_", nf)
     py_setitem(fields, "n_samples_fit_", n)
-    if kde:
-        var bandwidth = classical_f64(parameter, 0)
-        if not bandwidth > 0.0:
-            raise Error("KernelDensity bandwidth must be positive")
-        py_setitem(fields, "bandwidth", bandwidth)
-        py_setitem(fields, "kernel", _archive_string(arrays, "kernel", context))
-        py_setitem(fields, "algorithm", "auto")
-        py_setitem(fields, "atol", 0)
-        py_setitem(fields, "rtol", 0)
-        py_setitem(fields, "breadth_first", True)
-        py_setitem(fields, "leaf_size", 40)
-        py_setitem(fields, "metric_params", PythonObject(None))
-        py_setitem(fields, "_x", host_archive_shape(arrays, "x", "<f4", Python.tuple(n, nf), context))
-        if classical_i64(meta, 2) != 0:
-            py_setitem(fields, "_w", host_archive_shape(arrays, "weights", "<f4", Python.tuple(n), context))
-        else:
-            if py_contains(arrays, "weights"):
-                raise Error("KernelDensity archive carries weights its meta says it lacks")
-            py_setitem(fields, "_w", PythonObject(None))
+    var bandwidth = classical_f64(parameter, 0)
+    if not bandwidth > 0.0:
+        raise Error("KernelDensity bandwidth must be positive")
+    py_setitem(fields, "bandwidth", bandwidth)
+    py_setitem(fields, "kernel", _archive_string(arrays, "kernel", context))
+    py_setitem(fields, "algorithm", "auto")
+    py_setitem(fields, "atol", 0)
+    py_setitem(fields, "rtol", 0)
+    py_setitem(fields, "breadth_first", True)
+    py_setitem(fields, "leaf_size", 40)
+    py_setitem(fields, "metric_params", PythonObject(None))
+    py_setitem(fields, "_x", host_archive_shape(arrays, "x", "<f4", Python.tuple(n, nf), context))
+    if classical_i64(meta, 2) != 0:
+        py_setitem(fields, "_w", host_archive_shape(arrays, "weights", "<f4", Python.tuple(n), context))
     else:
-        if not py_contains(context["host_archive_dbscan_metrics"], metric):
-            raise Error("saved DBSCAN metric is unsupported")
-        py_setitem(fields, "eps", classical_f64(parameter, 0))
-        py_setitem(fields, "min_samples", classical_i64(meta, 2))
-        py_setitem(fields, "algorithm", _archive_string(arrays, "algorithm", context))
-        py_setitem(fields, "max_mbytes_per_batch", PythonObject(None))
-        py_setitem(fields, "max_iterations", PythonObject(None))
-        py_setitem(fields, "prediction_data", True)
-        var indices = _archive_exact(arrays, "core_sample_indices", "<i4", context)
-        var nc = Int(py=indices.size)
-        py_setitem(fields, "components_", host_archive_shape(arrays, "components", "<f4", Python.tuple(nc, nf), context))
-        py_setitem(fields, "core_sample_indices_", indices)
-        py_setitem(fields, "_core_labels", host_archive_count(arrays, "core_labels", "<i4", nc, context))
-        py_setitem(fields, "labels_", host_archive_count(arrays, "labels", "<i4", n, context))
+        if py_contains(arrays, "weights"):
+            raise Error("KernelDensity archive carries weights its meta says it lacks")
+        py_setitem(fields, "_w", PythonObject(None))
+    return model
+
+
+def host_archive_dbscan(cls: PythonObject, arrays: PythonObject, path: PythonObject,
+                        context: PythonObject) raises -> PythonObject:
+    """DBSCAN.load: the refusals keep the Python loader's wording and order."""
+    var where = host_archive_where(path, context)
+    var meta = host_archive_meta(arrays, "meta", 3, path, context)
+    var eps = host_archive_sized(arrays, "eps", "<f8", 1, where + " eps must hold one value", context)
+    var nf = classical_i64(meta, 0)
+    var n = classical_i64(meta, 1)
+    var metric = _archive_string(arrays, "metric", context)
+    var algorithm = _archive_string(arrays, "algorithm", context)
+    var model = host_archive_object(cls, arrays, context)
+    var fields = sequential_fields(model)
+    py_setitem(fields, "eps", classical_f64(eps, 0))
+    py_setitem(fields, "min_samples", classical_i64(meta, 2))
+    py_setitem(fields, "metric", metric)
+    py_setitem(fields, "algorithm", algorithm)
+    py_setitem(fields, "max_mbytes_per_batch", PythonObject(None))
+    py_setitem(fields, "max_iterations", PythonObject(None))
+    py_setitem(fields, "prediction_data", True)
+    host_archive_mode(arrays, fields, context)
+    if not py_contains(context["host_archive_dbscan_metrics"], metric):
+        raise Error(where + " metric " + _archive_builtin_repr(metric) + " is not one DBSCAN serves")
+    var components = _archive_exact(arrays, "components", "<f4", context)
+    var indices = _archive_exact(arrays, "core_sample_indices", "<i4", context)
+    var core_labels = _archive_exact(arrays, "core_labels", "<i4", context)
+    var labels = _archive_exact(arrays, "labels", "<i4", context)
+    var nc = Int(py=indices.size)
+    if Int(py=components.ndim) != 2 or Int(py=components.shape[0]) != nc or Int(py=components.shape[1]) != nf:
+        raise Error(where + " components shape " + _archive_builtin_repr(components.shape)
+                    + " is not (" + String(nc) + ", " + String(nf) + ")")
+    if Int(py=core_labels.size) != nc or Int(py=labels.size) != n:
+        raise Error(where + " core labels or labels do not match the saved counts")
+    py_setitem(fields, "components_", components)
+    py_setitem(fields, "core_sample_indices_", indices)
+    py_setitem(fields, "_core_labels", core_labels)
+    py_setitem(fields, "labels_", labels)
+    py_setitem(fields, "n_features_in_", nf)
+    py_setitem(fields, "n_samples_fit_", n)
     return model
 
 
@@ -1712,7 +1739,7 @@ def host_archive_build(path: PythonObject, context: PythonObject,
     elif fmt == "mojolearn-gmm-1":
         model = host_archive_mixture(cls, arrays, context)
     elif fmt == "mojolearn-kde-1" or fmt == "mojolearn-dbscan-1":
-        model = host_archive_density(cls, arrays, fmt == "mojolearn-kde-1", context)
+        model = host_archive_density(cls, arrays, fmt == "mojolearn-kde-1", path, context)
     elif fmt == "mojolearn-agglomerative-1":
         model = host_archive_agglomerative(cls, arrays, context)
     elif fmt == "mojolearn-logistic-1":
