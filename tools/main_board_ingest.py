@@ -150,7 +150,7 @@ INFRA = ("not_ready", "NO-RECORD", "NO-OURS-CELL")
 #: Lane-settings keys that change what a race measures (bench_board_algos.lane_config,
 #: bench_board_more.LANE_CONFIG); descriptive text keys are not compared.
 SETTINGS_KEYS = ("params", "dataset_params", "block", "task", "kind", "stride_subsets", "sklearn", "cuml", "rows")
-PRIORITY = {"paired": 4, "json": 3, "algos": 2, "gridbb": 2, "previous": 1}
+PRIORITY = {"paired": 4, "gate": 4, "json": 3, "algos": 2, "gridbb": 2, "previous": 1}
 OB_FIELDS = ("column", "vendor", "box", "job", "sha", "ct", "kind", "family", "lane", "dataset", "race_id",
              "status_raw", "status", "infra", "median_ms", "quality", "digest", "comparability", "evidence",
              "measured", "tag", "reason", "hardware", "version", "gpu_recorded", "measured_cell", "paired_race", "paired_box")
@@ -616,6 +616,42 @@ def retained_opponent_problems(race, ours, opponent):
     return sorted(set(bad))
 
 
+def _paired_race(rr, resolve):
+    """(race with its retained-opponent checks, ours, source sha, problem or None) of one race of a paired
+    session board. A problem means the race is not a verified pair (the caller refuses or degrades)."""
+    rr = copy.deepcopy(rr)
+    cells = rr.get("cells") or []
+    ours = next((c for c in cells if c.get("library") == "mojolearn" and c.get("mode") == "identical"), None)
+    measured = [c for c in cells if c.get("status") in ("ok", "not-scored", "recompiled-in-clock")]
+    if not ours or ours.get("rows_tag") not in (None, "full") or rr.get("params_check") != "MATCHED":
+        return rr, ours, None, "paired board lacks a full-recipe, parameter-checked own arm"
+    m = ours.get("measurement") or {}
+    for c in measured:
+        cm = c.get("measurement") or {}
+        if c.get("mode") == "opponent" and c.get("stored"):
+            # FAIRNESS FIX (2026-10-13 audit): valid historical store
+            # hits were rejected because their source/host/UUID was
+            # not ours. Retain their actual bytes and provenance;
+            # compare settings, GPU kind and derivable clocks instead.
+            problems = retained_opponent_problems(rr, ours, c)
+            rr.setdefault("retained_opponent_checks", {})[c["arm"]] = dict(
+                measurement_id=cm.get("id"), problems=problems)
+            if problems:
+                ex = rr.setdefault("opponents_excluded", {"arms": [], "why": {}})
+                ex["arms"] = sorted(set(ex.get("arms", [])) | {c["arm"]})
+                ex.setdefault("why", {})[c["arm"]] = "retained opponent evidence: " + "; ".join(problems)
+                ex["reason"] = "; ".join("%s: %s" % item for item in sorted(ex["why"].items()))
+            continue
+        if (cm.get("completeness") != "complete" or not cm.get("id")
+                or any((cm.get(k) or {}).get("status") != "verified" for k in ("source", "artifacts"))
+                or cm.get("hardware") != m.get("hardware") or cm.get("source") != m.get("source")):
+            return rr, ours, None, "paired board has incomplete or mixed worker evidence"
+    sha = (m.get("source") or {}).get("commit")
+    if not sha or not resolve.on_main(sha):
+        return rr, ours, sha, "paired source freeze is not on main"
+    return rr, ours, sha, None
+
+
 def paired_observations(BB, specs, resolve, skips):
     """Import an actual paired session, retaining its opponents across rebuilds.
 
@@ -626,36 +662,10 @@ def paired_observations(BB, specs, resolve, skips):
     for box, path in _pairs(specs or []):
         board = BB.load_result(path)
         for rid, rr in (board.get("races") or {}).items():
-            rr = copy.deepcopy(rr)
-            cells = rr.get("cells") or []
-            ours = next((c for c in cells if c.get("library") == "mojolearn" and c.get("mode") == "identical"), None)
-            measured = [c for c in cells if c.get("status") in ("ok", "not-scored", "recompiled-in-clock")]
-            if not ours or ours.get("rows_tag") not in (None, "full") or rr.get("params_check") != "MATCHED":
-                raise ValueError("paired board lacks a full-recipe, parameter-checked own arm: " + rid)
+            rr, ours, sha, problem = _paired_race(rr, resolve)
+            if problem:
+                raise ValueError(problem + ": " + rid)
             m = ours.get("measurement") or {}
-            for c in measured:
-                cm = c.get("measurement") or {}
-                if c.get("mode") == "opponent" and c.get("stored"):
-                    # FAIRNESS FIX (2026-10-13 audit): valid historical store
-                    # hits were rejected because their source/host/UUID was
-                    # not ours. Retain their actual bytes and provenance;
-                    # compare settings, GPU kind and derivable clocks instead.
-                    problems = retained_opponent_problems(rr, ours, c)
-                    rr.setdefault("retained_opponent_checks", {})[c["arm"]] = dict(
-                        measurement_id=cm.get("id"), problems=problems)
-                    if problems:
-                        ex = rr.setdefault("opponents_excluded", {"arms": [], "why": {}})
-                        ex["arms"] = sorted(set(ex.get("arms", [])) | {c["arm"]})
-                        ex.setdefault("why", {})[c["arm"]] = "retained opponent evidence: " + "; ".join(problems)
-                        ex["reason"] = "; ".join("%s: %s" % item for item in sorted(ex["why"].items()))
-                    continue
-                if (cm.get("completeness") != "complete" or not cm.get("id")
-                        or any((cm.get(k) or {}).get("status") != "verified" for k in ("source", "artifacts"))
-                        or cm.get("hardware") != m.get("hardware") or cm.get("source") != m.get("source")):
-                    raise ValueError("paired board has incomplete or mixed worker evidence: " + rid)
-            sha = (m.get("source") or {}).get("commit")
-            if not sha or not resolve.on_main(sha):
-                raise ValueError("paired source freeze is not on main: " + rid)
             ob = make_ob(BB, resolve, skips, kind="paired", vendor=(board.get("box", {}).get("gpu") or {}).get("vendor"), box=box,
                 job="paired-" + m["id"], head=sha, family=rr["family"], lane=rr["lane"], dataset=rr["dataset"],
                 status_raw=ours.get("status"), median_ms=ours.get("median_ms"), quality=ours.get("quality"),
@@ -665,6 +675,48 @@ def paired_observations(BB, specs, resolve, skips):
                 raise ValueError("paired source commit or hardware refused: " + rid)
             ob.update(measured_cell=copy.deepcopy(ours), paired_race=copy.deepcopy(rr),
                       paired_box=copy.deepcopy(board.get("box")), version=ours.get("library_version"))
+            out.append(ob)
+    return out
+
+
+def gate_observations(BB, specs, resolve, skips):
+    """THE RELEASE GATE'S BOARD (tools/gate_smoke_box.py measure, 2026-10-22): `--gate-board BOX=PATH`, the merged
+    board of one gate run (every plan line, one scored run per arm, ours from the PyPI wheel). A race that is a
+    verified pair (parameter-checked own arm, complete worker evidence, source on main) enters exactly as a
+    `--paired-board` race, its own opponents kept. Any other race is NOT refused wholesale (a whole-plan run
+    always holds refused lines): its own cell of ours enters with its measured cell and clock span (input_home,
+    upload_ms_separate: the opponent-clocks rule), the race's opponents are left out and the stored opponent
+    boards are copied as for any other observation, and the reason is a skip note."""
+    out = []
+    for box, path in _pairs(specs or []):
+        board = BB.load_result(path) or {}
+        bbox = board.get("box") or {}
+        vendor, gpu = (bbox.get("gpu") or {}).get("vendor"), (bbox.get("gpu") or {}).get("name")
+        for rid, rr0 in sorted((board.get("races") or {}).items()):
+            rr, ours, sha, problem = _paired_race(rr0, resolve)
+            if ours is None or ours.get("rows_tag") not in (None, "full"):
+                skips.add("gate: race without a full-size IDENTICAL cell of ours", "%s %s" % (path, rid))
+                continue
+            m = ours.get("measurement") or {}
+            if sha is None:
+                sha = (m.get("source") or {}).get("commit") or (bbox.get("repo") or {}).get("commit")
+            if not sha or not resolve.on_main(sha):
+                skips.add("gate: source commit not on main", "%s %s %s" % (path, rid, str(sha)[:9]))
+                continue
+            job = "gate-" + (m.get("id") or hashlib.sha256((path + rid).encode()).hexdigest()[:16])
+            ob = make_ob(BB, resolve, skips, kind="gate", vendor=vendor, box=box, job=job, head=sha,
+                         family=rr["family"], lane=rr["lane"], dataset=rr["dataset"],
+                         status_raw=ours.get("status"), median_ms=ours.get("median_ms"),
+                         quality=ours.get("quality"), digest=(ours.get("hash") or "")[:DIGEST_CHARS] or None,
+                         evidence=path, comparability=ours.get("comparability"), measured=rr.get("finished"),
+                         gpu_recorded=ours.get("device_name") or gpu)
+            if ob is None or ob["status_raw"] == "REFUSED(hardware mismatch)":
+                continue
+            ob.update(measured_cell=copy.deepcopy(ours), version=ours.get("library_version") or ob.get("version"))
+            if problem is None:
+                ob.update(paired_race=copy.deepcopy(rr), paired_box=copy.deepcopy(bbox))
+            else:
+                skips.add("gate: own cell only, opponents from the stored boards (%s)" % problem, rid)
             out.append(ob)
     return out
 
@@ -794,6 +846,43 @@ def choose(observations):
             ledger.append(dict(column=key[0], race=key[1], reason=reason, failed=failed, replaced=short(o),
                                replaced_by=short(win) if win else None))
     return winners, failures, ledger
+
+
+def _input_home(ob):
+    span = ((ob.get("comparability") or {}).get("span")) or {}
+    if not span.get("input_home"):
+        span = (((ob.get("measured_cell") or {}).get("comparability") or {}).get("span")) or {}
+    return span if span.get("input_home") else None
+
+
+def fill_input_home(winners, observations):
+    """THE OPPONENT-CLOCKS RULE for OUR cell (CLAUDE.md item 6; 2026-10-22): an lq ALGOS / GRIDBB summary line
+    carries no clock span, so 147 of 194 algos NVIDIA cells had input_home None and their two-clock ratio was not
+    derivable. When the winning observation has no span and another observation of the SAME column, race and
+    commit (a campaign or gate board, a JSON job board) recorded one, the winner takes its LABELS only
+    (input_home, inside_clock, pre_clock_fit: what the driver's code puts in or out of our clock at that commit),
+    marked `input_home_source`. Times (upload_ms_separate, upload_ms_untimed) belong to their own run and are
+    never copied; nothing is invented when no observation has a span. Returns the number filled."""
+    spans = {}
+    for ob in observations:
+        span = _input_home(ob)
+        if span is not None:
+            spans.setdefault((ob["column"], ob["race_id"], ob["sha"]), (ob, span))
+    n = 0
+    for key, win in winners.items():
+        if _input_home(win) is not None:
+            continue
+        hit = spans.get((key[0], key[1], win["sha"]))
+        if hit is None:
+            continue
+        src, span = hit
+        comp = copy.deepcopy(win.get("comparability") or {})
+        comp["span"] = dict({k: span[k] for k in ("input_home", "inside_clock", "pre_clock_fit") if k in span},
+                            input_home_source="%s run %s/%s of the same commit main@%s (labels only, no times)"
+                            % (source_kind(src), src["box"], src["job"], win["sha"][:9]))
+        win["comparability"] = comp
+        n += 1
+    return n
 
 
 def identity_index(observations):
@@ -1089,6 +1178,10 @@ def assemble(BB, column, winners, ledger, idx, sources, inputs, generated, failu
             original["main_board"]["newer_failed"] = cell["main_board"]["newer_failed"]
         # neural lanes: the headline is ours IDENTICAL over torch's fastest bf16 arm, the fp32 twin beside it
         # (tools/bench_board.py neural_headline; render_board draws the table and each race's headline line)
+        # 2026-10-22: a retained or preserved race keeps its own cells; an opponent its lane refuses by name is
+        # withdrawn there too, and the ratios are recomputed, so a refused arm never stands as best opponent
+        if BB.refuse_lane_arm_cells(ob["lane"], rr.get("cells") or [], ob["family"]):
+            rr["cells"] = BB.add_ratios(rr["cells"])
         hl = BB.neural_headline(rr)
         if hl is not None:
             rr["neural_headline"] = hl
@@ -1263,6 +1356,7 @@ def collect(BB, args, resolve, skips):
                 obs.append(ob)
     obs.extend(json_observations(BB, args.json_dir, jobs, args.branch, skip_tag_re, resolve, skips))
     obs.extend(paired_observations(BB, getattr(args, "paired_board", None), resolve, skips))
+    obs.extend(gate_observations(BB, getattr(args, "gate_board", None), resolve, skips))
     return obs
 
 
@@ -1332,6 +1426,9 @@ def build_parser():
     p.add_argument("--grid-logs", action="append", help="BOX=PATH grid-logs file with GRIDBB lines (repeatable)")
     p.add_argument("--json-dir", help="directory of bench_board board.json files from lq jobs (optional)")
     p.add_argument("--paired-board", action="append", help="BOX=PATH verified paired board; preserves its actual opponents")
+    p.add_argument("--gate-board", action="append",
+                   help="BOX=PATH the release gate's merged board (tools/gate_smoke_box.py measure): verified pairs "
+                        "keep their opponents, other races enter as our cell with its clock span")
     p.add_argument("--opponents", action="append", help="COLUMN=LABEL=PATH stored opponent board, priority order")
     p.add_argument("--columns", default=",".join(COLUMN_GPU))
     p.add_argument("--opponent-archive", default=OPPONENT_ARCHIVE,
@@ -1358,7 +1455,8 @@ def run(argv=None, BB=None, resolve=None, out=sys.stdout):
     fresh = collect(BB, args, resolve, skips)
     generated = now_utc()
     inputs = {"results": args.results, "grid_logs": args.grid_logs, "json_dir": args.json_dir,
-              "paired_boards": args.paired_board, "branch": args.branch, "generated": generated}
+              "paired_boards": args.paired_board, "gate_boards": getattr(args, "gate_board", None),
+              "branch": args.branch, "generated": generated}
     columns = [c for c in args.columns.split(",") if c]
     prevs, all_obs = {}, list(fresh)
     for column in columns:
@@ -1380,6 +1478,9 @@ def run(argv=None, BB=None, resolve=None, out=sys.stdout):
             ob["version"] = resolve.version(ob["sha"])
     obs = dedupe(all_obs)
     winners, failures, ledger = choose(obs)
+    filled = fill_input_home(winners, obs)
+    if filled:
+        skips.add("our clock span labels taken from a same-commit campaign/JSON run", "%d cells" % filled)
     idx = identity_index(obs)
     summary = {}
     for column in columns:

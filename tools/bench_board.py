@@ -327,15 +327,15 @@ def refused_lane_arm(lane, arm, family=None):
     if family in (None, "classical"):
         why = classical_refused_arms().get((lane, arm))
         if why:
-            return "DIFFERENT-ALGORITHM (2026-10-13 audit): " + why
+            return "refused by name (2026-10-13 audit): " + why
     if family in (None, "classical2"):
         why = MORE.REFUSED.get((lane, arm))
         if why:
-            return "DIFFERENT-ALGORITHM (2026-10-13 audit): " + why
+            return "refused by name (2026-10-13 audit): " + why
     if family in (None, "algos"):
         why = ((ALGOS.LANES.get(lane) or {}).get("refused") or {}).get(arm)
         if why:
-            return "DIFFERENT-ALGORITHM (2026-10-13 audit): " + why
+            return "refused by name (2026-10-13 audit): " + why
     return None
 
 
