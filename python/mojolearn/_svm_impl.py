@@ -2320,16 +2320,6 @@ class SVR(NumericModeMixin):
         return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
 
-def _svc_layout_entry():
-    # glue: the compiled one-vs-one layout entry a multiclass `SVC.load`
-    # reads (svm/impl/svc_ovo_layout.mojo, the CPU host binding), fixed
-    # once at import; None on an install without it.
-    try:
-        return _backend.load_host_module("_mojolearn_svm_host").svc_ovo_layout
-    except (ImportError, AttributeError):
-        return None
-
-
 _native_archive_bridge.register(
     SVC, _SVC_FORMAT, (
         _native_archive_bridge.fitted("dual_coef_"),
@@ -2376,7 +2366,6 @@ _native_archive_bridge.register(
     host_archive_svm_kernels=dict(_SVC_KERNELS),
     host_archive_svm_refused=dict(_SVC_REFUSED_KERNELS),
     host_archive_svr_refused=dict(_SVR_REFUSED_KERNELS),
-    host_archive_svc_layout=_svc_layout_entry(),
 )
 _native_archive_bridge.register(
     SVR, _SVR_FORMAT, (

@@ -1519,6 +1519,61 @@ def host_archive_svm_check(fields: PythonObject, classifier: Bool, context: Pyth
         py_setitem(fields, "_hp_break_ties", False)
 
 
+def host_archive_svc_layout(support: PythonObject, dual: PythonObject, meta: PythonObject, k: Int, rows: Int,
+                            cap: Int, out_support: PythonObject, out_counts: PythonObject,
+                            out_dual: PythonObject) raises -> Int:
+    """scikit-learn's one-vs-one attributes from the saved pair machines,
+    the rules of `svm/host/svc_ovo_host.mojo::ovo_layout_host` (the layout
+    `SVC._set_ovo` runs at fit): a support row's class is its pair side (i
+    when its dual is negative, j otherwise); `support_` is class-major,
+    ascending row within a class; `dual_coef_[j - 1 if side == i else i][col]
+    = -d`, every other cell 0.0. Integer placement only. Returns n_SV."""
+    var sp = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(support)))
+    var dp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(dual)))
+    var support_words = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out_support)))
+    var count_words = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out_counts)))
+    var dual_words = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out_dual)))
+    var side_of = List[Int](length=max(1, rows), fill=-1)
+    var offset = 0
+    var q = 0
+    for i in range(k):  # driver-loop: saved one-vs-one class machines
+        for j in range(i + 1, k):  # driver-loop: saved one-vs-one class machines
+            var m = classical_i64(meta, 4 * q + 2)
+            for e in range(m):  # driver-loop: load-time layout of one saved pair's support rows
+                var r = Int(sp[offset + e])
+                if r < 0 or r >= rows:
+                    raise Error("saved SVC support row is outside its layout bound")
+                side_of[r] = i if dp[offset + e] < Float32(0.0) else j
+            offset += m
+            q += 1
+    var column_of = List[Int](length=max(1, rows), fill=-1)
+    var n_sv = 0
+    for c in range(k):  # driver-loop: saved classes, class-major support order
+        var start = n_sv
+        for r in range(rows):  # driver-loop: load-time layout over the saved support row bound
+            if side_of[r] == c:
+                if n_sv >= cap:
+                    raise Error("saved SVC support rows exceed their layout bound")
+                column_of[r] = n_sv
+                support_words[n_sv] = Int32(r)
+                n_sv += 1
+        count_words[c] = Int32(n_sv - start)
+    for t in range((k - 1) * n_sv):  # driver-loop: load-time zero fill of the saved dual layout
+        dual_words[t] = Float32(0.0)
+    offset = 0
+    q = 0
+    for i in range(k):  # driver-loop: saved one-vs-one class machines
+        for j in range(i + 1, k):  # driver-loop: saved one-vs-one class machines
+            var m = classical_i64(meta, 4 * q + 2)
+            for e in range(m):  # driver-loop: load-time layout of one saved pair's dual coefficients
+                var d = dp[offset + e]
+                var row = (j - 1) if d < Float32(0.0) else i
+                dual_words[row * n_sv + column_of[Int(sp[offset + e])]] = -d
+            offset += m
+            q += 1
+    return n_sv
+
+
 def host_archive_svm_ovo(fields: PythonObject, arrays: PythonObject, features: Int, path: PythonObject,
                         context: PythonObject) raises:
     """`SVC._load_ovo`: the per-pair machines, then the public attributes
@@ -1546,8 +1601,6 @@ def host_archive_svm_ovo(fields: PythonObject, arrays: PythonObject, features: I
     var vectors = host_archive_reshape_f32(raw_vectors, Python.tuple(total, features), context)
     var bias_flat = host_archive_reshape_f32(bias, Python.tuple(pair_count), context)
     var pairs = Python.list()
-    var support_addresses = Python.list()
-    var dual_addresses = Python.list()
     var out_bias = host_archive_typed(Python.tuple(pair_count), "<f4", context)
     var out_iterations = host_archive_typed(Python.tuple(pair_count), "<i4", context)
     var bias_words = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out_bias)))
@@ -1581,8 +1634,6 @@ def host_archive_svm_ovo(fields: PythonObject, arrays: PythonObject, features: I
             py_setitem(pair, "b", bias_value)
             py_setitem(pair, "n_iter", iterations)
             _ = py_call(pairs.append, pair)
-            _ = py_call(support_addresses.append, Int(py=classical_address(ps)) if n else 0)
-            _ = py_call(dual_addresses.append, Int(py=classical_address(pd)) if n else 0)
             bias_words[q] = -Float32(bias_value)
             iteration_words[q] = Int32(iterations)
             offset += n
@@ -1597,21 +1648,11 @@ def host_archive_svm_ovo(fields: PythonObject, arrays: PythonObject, features: I
     py_setitem(fields, "_hp_break_ties", fields["break_ties"])
     # `_set_ovo`: the layout `fit` builds, with the row bound max(support) + 1.
     var rows = host_archive_support_bound(Int(py=classical_address(support)), total, -1)
-    var layout_meta = Python.list(k, rows, pair_count)
-    q = 0
-    for i in range(k):  # driver-loop: saved one-vs-one class machines
-        for j in range(i + 1, k):  # driver-loop: saved one-vs-one class machines
-            _ = py_call(layout_meta.extend, Python.tuple(i, j, classical_i64(meta, 4 * q + 2)))
-            q += 1
     var cap = min(rows, total)
     var public_support = host_archive_typed(Python.tuple(max(1, cap)), "<i4", context)
     var public_counts = host_archive_typed(Python.tuple(k), "<i4", context)
     var public_dual = host_archive_typed(Python.tuple(max(1, (k - 1) * cap)), "<f4", context)
-    var layout = py_get(context, "host_archive_svc_layout")
-    if layout is None or py_type(layout) is not Python.import_module("types").BuiltinFunctionType:
-        raise Error("ImportError: saved multiclass SVC needs the compiled CPU layout entry")
-    var n_sv = Int(py=py_call(layout, support_addresses, dual_addresses, layout_meta,
-        Python.list(Int(py=classical_address(public_support)), Int(py=classical_address(public_counts)), Int(py=classical_address(public_dual)), cap)))
+    var n_sv = host_archive_svc_layout(support, dual, meta, k, rows, cap, public_support, public_counts, public_dual)
     if n_sv < 0 or n_sv > cap:
         raise Error("saved SVC native layout returned an invalid row count")
     var result_support = host_archive_slice_words(public_support, 0, n_sv, Python.tuple(n_sv), "<i4", context)
