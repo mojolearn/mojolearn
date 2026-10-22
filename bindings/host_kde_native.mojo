@@ -72,9 +72,9 @@ def host_kde_inference(model: PythonObject, fields: PythonObject, source: Python
         # The public validation wrapper normalizes only plain native
         # nonfinite errors; other CPU kernel failures remain builtin Exception.
         var text = String(error)
-        if (text.contains("NaN") or text.contains("Infinit") or text.contains("infinit")
-                or text.contains("nonfinite") or text.contains("non-finite")
-                or text.contains("not finite") or text.contains("requires finite") or text.contains("must be finite")):
+        if ("NaN" in text or "Infinit" in text or "infinit" in text
+                or "nonfinite" in text or "non-finite" in text
+                or "not finite" in text or "requires finite" in text or "must be finite" in text):
             var name = py_call(Python.import_module("builtins").type.__dict__["__name__"].__get__, py_type(model))
             raise Error("Input X contains NaN or infinity (" + String(name) + ": " + text + ")")
         raise Error("HostKDEKernelError: " + text)

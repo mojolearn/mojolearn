@@ -150,9 +150,9 @@ def host_iforest_inference(model: PythonObject, fields: PythonObject, source: Py
         _ = py_call(entry, classical_address(train), classical_address(query), classical_address(out) if want != 2 else PythonObject(0), classical_address(out) if want == 2 else PythonObject(0), classical_address(info), params)
     except error:
         var text = String(error)
-        if (text.contains("NaN") or text.contains("Infinit") or text.contains("infinit")
-                or text.contains("nonfinite") or text.contains("non-finite")
-                or text.contains("not finite") or text.contains("requires finite") or text.contains("must be finite")):
+        if ("NaN" in text or "Infinit" in text or "infinit" in text
+                or "nonfinite" in text or "non-finite" in text
+                or "not finite" in text or "requires finite" in text or "must be finite" in text):
             raise Error("Input X contains NaN or infinity (" + String(name) + ": " + text + ")")
         raise Error("HostIForestKernelError: " + text)
     _ = train^
