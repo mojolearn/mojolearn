@@ -794,7 +794,8 @@ FIT_IDS = {i for i in NEURAL_IDS if "/higgs/" in i or "/sequential-fit/" in i or
 NO_MLX_IDS = {i for i in NEURAL_IDS if "/sequential-predict/" in i}
 #: decode lanes with no torch carried-state twin race ours alone (bench_board_neural.DECODE_LANES
 #: minus DECODE_TORCH_TWIN); transformer-decode's twin is a per-token loop, never compiled
-NO_TWIN_DECODE = ("mamba1-decode", "mamba2-decode", "mamba3-decode", "samba-decode")
+# 2026-10-22 (lane measure-coverage): mamba1-decode and mamba2-decode race mamba_ssm's step (MAMBA_SSM_DECODE_LANES)
+NO_TWIN_DECODE = ("mamba3-decode", "samba-decode")
 #: the *-infer lanes and lm-host-train-step run OUR CPU binding: never raced (Oct 2 2026)
 GPU_ARMS = {
     "nvidia": ["torch-eager-fp32", "torch-eager-tf32", "torch-compile-fp32", "torch-compile-tf32",
@@ -836,7 +837,9 @@ def test_plan_neural_fast_on_apple_only(vendor):
             want = [a for a in want if "-compile-" not in a]
         if r["lane"] in NO_TWIN_DECODE:
             want = []
-        if r["lane"] in ("mamba1-forward", "mamba2-forward", "mamba3-forward"):
+        if r["lane"] in ("mamba1-decode", "mamba2-decode"):
+            want = []          # the torch references have no carried-state step; mamba_ssm's step below
+        if r["lane"] in ("mamba1-forward", "mamba2-forward", "mamba3-forward", "mamba1-decode", "mamba2-decode"):
             # FAIRNESS FIX (2026-10-13 audit): mamba_ssm's fused kernels, the real Mamba opponent
             # (the torch references are planned and refused by name at race time)
             want = want + {"nvidia": ["mamba-ssm-fp32", "mamba-ssm-tf32"],
@@ -865,7 +868,8 @@ def test_plan_neural_fast_on_apple_only(vendor):
     # + sequential-predict (a fit lane without MLX: apple ours-fast + 4 torch +5, amd +5, nvidia +7) and the two
     # causal-lm-generate lanes (eager torch only: apple ours + ours-fast + 2 +4 each, amd ours + 2 +3 each,
     # nvidia ours + 3 +4 each), 2026-10-19 lane ag-inference-board; totals regenerated from the planner 2026-10-20
-    assert cells == {"apple": 190, "amd": 158, "nvidia": 221}[vendor]
+    # + mamba_ssm's step on mamba1-decode and mamba2-decode (2026-10-22, lane measure-coverage): nvidia +4, amd +2
+    assert cells == {"apple": 190, "amd": 160, "nvidia": 225}[vendor]
     assert bb.plan_summary(races)["by_family"] == {"neural": {"races": 37, "cells": cells}}
 
 
@@ -916,8 +920,8 @@ def test_fast_for_neural_is_the_apple_tier(env):
 # 2026-10-19 (lanes ag-board-twins + ag-inference-board): + sequential-fit and ops-session-step (apple +12, nvidia
 # +14, amd +10) and sequential-predict + the two causal-lm-generate lanes (apple +13, nvidia +15, amd +11); +5 races
 @pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 443, 128, 190),
-                                                      ("nvidia", 395, 88, 221),
-                                                      ("amd", 324, 84, 158)])
+                                                      ("nvidia", 399, 88, 225),
+                                                      ("amd", 326, 84, 160)])
 def test_dry_run_counts_per_vendor(vendor, cells, more, neural, capsys):
     assert bb.main(["--dry-run", "--vendor", vendor, "--no-cpu-arm",
                     "--families", "trees,classical,classical2,neural"]) == 0
