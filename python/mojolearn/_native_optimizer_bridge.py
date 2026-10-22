@@ -119,6 +119,7 @@ def connect_sequence_device(training, device):
     context["sequence_dtype_separator"] = re.compile(r"\s*,\s*")
     context["sequence_dtype_space"] = re.compile(r"\s+$")
     context["sequence_device_class"] = device.SequenceDeviceTensor
+    context["sequence_finalizer_types"] = (tuple, dict, int, BuiltinFunctionType)
     slots = tuple(device.SequenceDeviceTensor.__slots__)
     names = slots + ("__dict__", "__getattribute__", "__getattr__", "__setattr__")
     guarded = (device.SequenceDeviceTensor,)
