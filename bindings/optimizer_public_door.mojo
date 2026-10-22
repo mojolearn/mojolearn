@@ -558,7 +558,7 @@ def as_seq(x: PythonObject, name: String, where: String) raises -> PythonObject:
         return one
     var out: PythonObject
     try:
-        out = py_call(_bi().list, x)
+        out = py_call(OPT_DOOR.get_or_create_ptr()[].context["container_types"][0], x)
     except:
         raise Error(
             "TypeError: mojolearn." + where + ": " + name + " must be a float32 array (a numpy array, an "
@@ -663,7 +663,7 @@ def refuse_kwargs(kwargs: PythonObject, where: String) raises:
     by name."""
     var d = OPT_DOOR.get_or_create_ptr()
     opt_value(kwargs, d[].context)
-    var keys = py_call(d[].bi.list, kwargs)
+    var keys = py_call(d[].context["container_types"][0], kwargs)
     for i in range(len(keys)):  # driver-loop: over keyword argument names
         var k = String(py=keys[i])
         if k == "dropout":
@@ -826,7 +826,7 @@ def door_step[K: OptKernels](
     opt_value(grads, d[].context)
     opt_scalar(tokens, d[].context)
     if op == OP_STEP_ACCUMULATED:
-        parts = py_call(bi.list, grads)
+        parts = py_call(d[].context["container_types"][0], grads)
         var want = Int(py=py_fields(opt)["accumulation_steps"])
         if len(parts) != want:
             raise Error(
@@ -871,7 +871,7 @@ def door_step[K: OptKernels](
                 req.g_bytes.append(views[k].nbytes)
     elif p_dev and not (grads is None) and (
         is_instance(grads, d[].dev_cls) or (
-            (is_instance(grads, bi.list) or is_instance(grads, bi.tuple)) and len(grads) > 0
+            (py_type(grads) is d[].context["container_types"][0] or py_type(grads) is d[].context["container_types"][1]) and len(grads) > 0
             and is_instance(grads[0], d[].dev_cls))):
         var gs = grads
         if is_instance(grads, d[].dev_cls):
@@ -1181,7 +1181,7 @@ def door_accumulate[K: OptKernels](microbatch_grads: PythonObject, tokens: Pytho
     var bi = _bi()
     opt_value(microbatch_grads, OPT_DOOR.get_or_create_ptr()[].context)
     opt_scalar(tokens, OPT_DOOR.get_or_create_ptr()[].context)
-    var parts = py_call(bi.list, microbatch_grads)
+    var parts = py_call(OPT_DOOR.get_or_create_ptr()[].context["container_types"][0], microbatch_grads)
     if len(parts) == 0:
         raise Error("ValueError: mojolearn.accumulate_grads: no microbatches")
     var first = TensorView()

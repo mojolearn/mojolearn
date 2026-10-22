@@ -100,3 +100,56 @@ def test_optimizer_state_uses_retained_list_constructor(monkeypatch):
     assert state["t"] == 0
     assert np.asarray(state["exp_avg"]).tobytes() == np.zeros(3, dtype="f4").tobytes()
     assert np.asarray(state["exp_avg_sq"]).tobytes() == np.zeros(3, dtype="f4").tobytes()
+
+
+@pytest.mark.parametrize("operation", ["construct", "set_params", "step", "step_accumulated",
+                                       "accumulate-flat", "accumulate-nested"])
+def test_native_optimizer_preparation_uses_retained_list_constructor(monkeypatch, operation):
+    params = np.array([0.5, -0.25, 1.0], dtype="f4")
+    gradient = np.array([0.125, -0.5, 0.25], dtype="f4")
+    calls = []
+    cls = replacement("list", calls)
+    owner = T.AdamW([params.copy()], resident=False, numeric_mode="identical",
+                    accumulation_steps=2 if operation == "step_accumulated" else 1)
+    expected = T.AdamW([params.copy()], resident=False, numeric_mode="identical",
+                       accumulation_steps=owner.accumulation_steps)
+    if operation == "construct":
+        method, args = T.AdamW, ([params.copy()],)
+        kwargs = {"resident": False, "numeric_mode": "identical"}
+        reference = None
+    elif operation == "set_params":
+        method, args, kwargs = owner.set_params, (), {"lr": 0.002}
+        reference = expected.set_params(**kwargs)
+    elif operation in ("step", "step_accumulated"):
+        method, kwargs = getattr(owner, operation), {}
+        args = ([gradient.copy()],) if operation == "step" else ([gradient.copy(), gradient.copy()], 1024)
+        reference = getattr(expected, operation)(*args)
+    else:
+        pieces = [gradient.copy(), gradient.copy()]
+        if operation == "accumulate-nested":
+            pieces = [[value] for value in pieces]
+        method, args = T.accumulate_grads, (pieces, 1024)
+        kwargs = {"numeric_mode": "identical"}
+        reference = T.accumulate_grads(*args, **kwargs)
+    with monkeypatch.context() as patch:
+        patch.setattr(builtins, "list", cls)
+        audit = audit_native_call(method, *args, **kwargs)
+    result = audit.assert_native()
+    assert not calls
+    if operation == "construct":
+        assert np.asarray(result.params[0]).tobytes() == params.tobytes()
+        assert result.t == 0
+    elif operation == "set_params":
+        assert result is owner and owner.lr == expected.lr and owner.t == 0
+    elif operation.startswith("accumulate"):
+        actual = result[0] if operation.endswith("nested") else result
+        oracle = reference[0] if operation.endswith("nested") else reference
+        assert np.asarray(actual).tobytes() == np.asarray(oracle).tobytes()
+    else:
+        assert result == reference
+        assert owner.t == expected.t
+        assert np.asarray(owner.params[0]).tobytes() == np.asarray(expected.params[0]).tobytes()
+        state = audit_native_call(owner.state_dict).assert_native()
+        expected_state = expected.state_dict()
+        for name in ("exp_avg", "exp_avg_sq", "buf_initialized"):
+            assert np.asarray(state[name]).tobytes() == np.asarray(expected_state[name]).tobytes()
