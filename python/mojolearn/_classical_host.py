@@ -667,3 +667,15 @@ def host_model(path):
     model._host_refusals()
     model.estimator = estimator
     return model
+
+
+# HostStandardScaler owns fixed CPU entries even on a GPU installation. Connect
+# them only in this explicit host surface; ordinary scalers retain GPU entries.
+from .preprocessing import _STANDARD_CONTEXT as _SCALER_CONTEXT
+from ._native_scaler_bridge import connect_host as _connect_scaler_host, connect_host_unavailable as _scaler_host_unavailable
+try:
+    _connect_scaler_host(HostStandardScaler, _SCALER_CONTEXT,
+                         _backend.load_host_module("_mojolearn_estimators_host"),
+                         _backend.load_host_module("_mojolearn_x_prep_host"))
+except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as _scaler_error:
+    _scaler_host_unavailable(HostStandardScaler, _SCALER_CONTEXT, _scaler_error)
