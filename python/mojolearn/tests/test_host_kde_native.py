@@ -278,6 +278,24 @@ def test_kde_temporal_calendar_range_and_versioned_day_width_preserve_contract(t
     _check_primitive_bandwidth(model, _input(2, "float32"), "score", value)
 
 
+@pytest.mark.parametrize("code,ticks", [
+    ("M8[2D]", (2**63 - 1) // 2), ("M8[2D]", 2**62),
+    ("M8[2D]", -((2**63 - 1) // 2)), ("M8[2D]", -(2**62)),
+    ("M8[3Y]", (2**63 - 1) // 3 + 1),
+    ("M8[3W]", -((2**63 - 1) // 3) - 1),
+    ("M8[3us]", (2**63 - 1) // 3 + 1),
+    ("M8[3ns]", 2**63 - 1), ("M8[2D]", -(2**63)),
+    ("m8[2D]", 2**62), ("m8[2D]", -(2**62)),
+    ("m8[3us]", (2**63 - 1) // 3 + 1),
+])
+@pytest.mark.parametrize("form", ["scalar", "swapped"])
+def test_kde_temporal_unit_overflow_preserves_versioned_boundaries(tmp_path, code, ticks, form):
+    value = _temporal_bandwidth(code, ticks, form)
+    model = _model(tmp_path)
+    model.bandwidth = value
+    _check_primitive_bandwidth(model, _input(2, "float32"), "score_samples", value)
+
+
 @pytest.mark.parametrize("code", ["M8[ns]", "m8[us]", "m8[3ns]"])
 @pytest.mark.parametrize("action", ["always", "ignore", "error"])
 def test_kde_temporal_singleton_rank_warning_precedes_conversion(tmp_path, code, action):

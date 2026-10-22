@@ -2,6 +2,7 @@
 # Native temporal scalar boxing policy, without constructing datetime objects.
 # Calendar/timedelta bounds are Python's supported range. Fixed-width wrap and
 # the pre-NumPy2.2 day narrowing preserve the historical conversion contract.
+# NumPy2.5 checks coarse datetime unit multiplication before calendar boxing.
 # Sources: numpy/core/src/multiarray/datetime.c (v1.26.4) and
 # numpy/_core/src/multiarray/datetime.c (v2.2.0), convert_*_to_pyobject.
 from std.memory import bitcast
@@ -12,14 +13,22 @@ def temporal_wrap_product(value: Int, multiplier: Int) -> Int:
 
 
 def temporal_result_kind(ticks: Int, datetime: Bool, unit: String,
-                        multiplier: Int, old_day_width: Bool) -> Int:
-    # 0 raw integer, 1 None, 2 date, 3 datetime, 4 timedelta.
+                        multiplier: Int, old_day_width: Bool,
+                        checked_datetime_units: Bool) -> Int:
+    # 0 raw integer, 1 None, 2 date, 3 datetime, 4 timedelta, 5 overflow.
     if UInt64(ticks) == (UInt64(1) << 63) or (datetime and unit == "generic"):
         return 1
     if unit == "ns" or unit == "ps" or unit == "fs" or unit == "as":
         return 0
     if not datetime and (unit == "generic" or unit == "Y" or unit == "M"):
         return 0
+    if datetime and checked_datetime_units and multiplier > 1:
+        # The reserved NaT word is excluded from both signed limits. NumPy's
+        # v2.5 _datetime_scale_with_overflow_check uses this symmetric range;
+        # fine-resolution values returned as raw ticks bypass scaling above.
+        var limit = Int(9223372036854775807) // multiplier
+        if ticks > limit or ticks < -limit:
+            return 5
     var value = temporal_wrap_product(ticks, multiplier)
     if datetime and unit == "Y":
         var year = Int(bitcast[DType.int64](UInt64(value) + UInt64(1970)))
