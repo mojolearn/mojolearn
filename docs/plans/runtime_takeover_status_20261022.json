@@ -1,8 +1,8 @@
 {
   "schema": "mojolearn.runtime-takeover-status.v1",
-  "updated": "2026-10-22T07:21:12.251155+00:00",
+  "updated": "2026-10-22T08:25:48.391103+00:00",
   "release": "HELD",
-  "integration_before_report": "8910c90fbc65f82f27b626824550106a3f881d01",
+  "integration_before_report": "ea246bca103c35d8c322153d8578d89035a9323f",
   "evidence_root": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021",
   "test_policy": "Rerun failures, new tests and directly affected regression checks; reuse accepted unchanged results. Counts from different scopes are not interchangeable.",
   "completed": {
@@ -209,25 +209,80 @@
       "cpu_passed": 4,
       "metal_passed": 4,
       "evidence": "svr-support-regressions-fd334-on-57d/RESULT.json"
+    },
+    "native_buffer_kde_rows_embedding": {
+      "source": "6b69a5636bdfcfa93347ab482e0041716c962b2d",
+      "original_selected": {
+        "cpu": {
+          "passed": 731,
+          "failed": 2,
+          "total": 733
+        },
+        "metal": {
+          "passed": 748,
+          "failed": 3,
+          "total": 751
+        },
+        "numpy126_metal": {
+          "passed": 371,
+          "failed": 1,
+          "skipped": 2,
+          "total": 374
+        }
+      },
+      "missing_sparse_checks": {
+        "passed": 2,
+        "failed": 0,
+        "skipped": 0,
+        "native_source_unchanged": true,
+        "evidence": "kde-scipy126-missing-on-6b69/RESULT.json"
+      },
+      "repair_round_5ec": {
+        "cpu": {
+          "passed": 29,
+          "failed": 1,
+          "total": 30
+        },
+        "metal": {
+          "passed": 35,
+          "failed": 1,
+          "total": 36
+        },
+        "numpy126_metal": {
+          "passed": 5,
+          "failed": 0,
+          "total": 5
+        }
+      },
+      "final_repair_ea246": {
+        "cpu_passed": 11,
+        "metal_passed": 11,
+        "failed": 0,
+        "skipped": 0
+      },
+      "disposition": "All ten original failure/skip records across the retained 6b69 and 5ec selections have matching passed followups. Original receipts remain unchanged. Counts overlap and are not additive.",
+      "evidence": "runtime-failure-disposition-through-ea246bca1.json",
+      "build": "Seven stages passed; final round rebuilt tokenizer and proved six unchanged build closures.",
+      "scope": "Native Array ownership, HostKDE.fit, DeviceRows metadata, embedding preparation, shared buffer admission, and Samba resident module ownership. Selected public-operation evidence only."
     }
   },
   "remaining": [
-    "Execute the frozen shared-buffer, KDEfit, DeviceRows metadata and embedding batch; no candidate execution claimed yet.",
-    "Host density constructors, cross-entropy preparation, and resident materialization/context lifecycle continue in isolated successor lanes.",
-    "Public __array__ ownership/callback contract, cold sklearn tags, remaining public constructors/fit/save/hash paths and complete installed/reference/fault/vendor qualification remain open."
+    "Native density constructors, cross entropy, training device allocation, optimizer container/scalar admission and configuration ordering, KDE option inheritance, and neutral owner helper are staged separately and uncompiled.",
+    "DeviceRows materialization is under source review. Resident/context lifecycle, public __array__ ownership and callback contracts, cold sklearn tags, IsolationForest.fit and remaining public constructors/fit/save/hash paths remain open.",
+    "Matching installed-package/reference/fault accounting and Linux/NVIDIA/AMD qualification remain incomplete. Apple selected passes do not establish complete API coverage or cross-vendor identity."
   ],
   "limitations": [
     "No claim that every public API, option, checkpoint or failure path is fully migrated/qualified.",
     "No performance improvement claim from correctness tests.",
     "Static census categories are not independently demonstrated runtime defects."
   ],
-  "latest_compiled_runtime": "e97e32b8f6bf4bb0f1812a13f1b95c30d3e486b5",
-  "latest_runtime_summary": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-selection-verdict-e97e32b8f.json",
+  "latest_compiled_runtime": "ea246bca103c35d8c322153d8578d89035a9323f",
+  "latest_runtime_summary": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-selection-verdict-ea246bca1.json",
   "latest_targeted_tests": {
     "cpu": {
-      "expected": 62,
-      "total": 62,
-      "passed": 62,
+      "expected": 11,
+      "total": 11,
+      "passed": 11,
       "failed": 0,
       "errors": 0,
       "skipped": 0,
@@ -236,20 +291,9 @@
       "exit_code": 0
     },
     "metal": {
-      "expected": 63,
-      "total": 63,
-      "passed": 63,
-      "failed": 0,
-      "errors": 0,
-      "skipped": 0,
-      "source_matches": true,
-      "coverage_complete": true,
-      "exit_code": 0
-    },
-    "numpy126-metal": {
-      "expected": 65,
-      "total": 65,
-      "passed": 65,
+      "expected": 11,
+      "total": 11,
+      "passed": 11,
       "failed": 0,
       "errors": 0,
       "skipped": 0,
@@ -283,16 +327,18 @@
     "scope": "New/affected selected scopes;three failure clusters under repair. Original logs,JUnit and binary provenance retained."
   },
   "latest_failure_disposition": {
-    "source_repairs": "All selected optimizer exception, rawvoid scalar and CPython3.11 warning failures pass on e97; no skipped or missing selected cases.",
-    "fixture_repairs": "IForest one CPU/one Metal and row-finalizer six CPU/two Metal/two FAST followups pass on unchanged b638; original failures retained.",
-    "original_passing_cases": "Retain unchanged b638 and earlier accepted results; no blanket rerun.",
-    "release": "HELD; partial runtime qualification only."
+    "evidence": "runtime-failure-disposition-through-ea246bca1.json",
+    "resolved_records": 10,
+    "unresolved_records": 0,
+    "scope": "Current selected batch only; unchanged passing results retained across source freezes.",
+    "release": "HELD; remaining runtime and vendor/package qualification is separate."
   },
   "active_frozen_build": null,
   "last_failed_build": {
-    "source": "e5d5be7a7",
-    "state": "tokenizer parse failed before tests",
-    "repair": "dc495+b638 supported String membership and list literals"
+    "source": "a4580cc4b690696ff0b327fbc50a50cd112f1764",
+    "state": "Five stages passed; FAST base import smoke failed on weak-reference descriptor admission; no runtime selection executed.",
+    "repair": "6b69 admits the actual native member descriptor. Five passed-stage artifacts were reused only after source/toolchain/artifact proof; both FAST stages rebuilt and passed.",
+    "evidence": "runtime-build-a4580cc4b/PASSED-STAGES.json"
   },
   "last_completed_repairs": {
     "source": "3ede5addb940b3b5d5672b5737365575b497aab2",
@@ -300,27 +346,17 @@
     "evidence": "runtime-selection-verdict-3ede5addb.json"
   },
   "next_freeze": {
-    "tree": "/Users/andrewhendel/mojolearn-wt/runtime-array-kde-embedding-build",
-    "status": "Source reviewed; compile and all new/affected runtime execution pending",
-    "scope": [
-      "Shared native Array allocation and first-operation owner identities",
-      "HostKernelDensity.fit preparation/state/inherited options and shared buffer constructors",
-      "DeviceRows constructor/length/reinitialization with transitive owner admission",
-      "Embedding forward/backward input preparation and shared native scalar unboxing"
-    ],
-    "reuse_source": "e97e32b8f6bf4bb0f1812a13f1b95c30d3e486b5",
-    "reuse_tree": "/Users/andrewhendel/mojolearn-wt/runtime-native-error-repairs-build",
-    "expected_selected_cases": {
-      "cpu": 733,
-      "metal": 751,
-      "numpy126-metal": 374
-    },
-    "selection_policy": "New cases and directly affected regressions only; retain unrelated accepted evidence. Source closure proofs control compilation reuse."
+    "tree": "/Users/andrewhendel/mojolearn-wt/runtime-density-resident-integration",
+    "status": "Separately staged source; pending final source review and precise affected-test union. Not compiled or runtime-qualified.",
+    "reuse_source": "ea246bca103c35d8c322153d8578d89035a9323f",
+    "reuse_tree": "/Users/andrewhendel/mojolearn-wt/runtime-kde-layout-repair-build",
+    "scope": "Only new or directly affected regression checks. Do not repeat the unchanged previous selected suite."
   },
   "latest_followups": {
     "b638_stronger_cleanup": "2 identical and 2 FAST passed",
     "b638_maxabs_parity": "20/20 exact CPU full-result and fitted-state byte comparisons passed",
-    "e97_static_checks": "Production no-host-routes, no-Python-kernels, no-compute-shells, lane selfcheck and lane accounting all exit0"
+    "e97_static_checks": "Production no-host-routes, no-Python-kernels, no-compute-shells, lane selfcheck and lane accounting all exit0",
+    "6b69_static_checks": "Production no-host-routes, no-Python-kernels, no-compute-shells, lane selfcheck and lane accounting all exit 0."
   },
   "count_correction": "MaxAbs complete selection91GPU/82CPU+9N/A,58new+33existing; earlier107 was arithmetic error. Correction receipt retained."
 }
