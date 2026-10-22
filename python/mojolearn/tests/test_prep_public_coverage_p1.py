@@ -227,3 +227,26 @@ def test_scaler_load_refusals(scaler, other, tmp_path):
     other().fit(X).save(other_kind)
     with pytest.raises(ValueError):
         scaler.load(other_kind)
+
+
+# ---------------------------------------------------------------- scikit-learn refusals (lane fix-p1-defects)
+X_INF = X.copy()
+X_INF[3, 2] = np.inf
+
+
+@pytest.mark.parametrize("build,match", [
+    pytest.param(lambda: ml.MaxAbsScaler().fit_transform(X_INF), "infinity", id="MaxAbsScaler-inf"),
+    pytest.param(lambda: ml.MaxAbsScaler().fit(-X_INF), "infinity", id="MaxAbsScaler-neg-inf"),
+    pytest.param(lambda: ml.IterativeImputer().fit(np.where(np.isnan(X_GAPS), np.nan, X_INF)), "infinity",
+                 id="IterativeImputer-inf"),
+    pytest.param(lambda: ml.IterativeImputer(max_iter=-1).fit(X_GAPS), "max_iter", id="IterativeImputer-max_iter"),
+    pytest.param(lambda: ml.GaussianNB(var_smoothing=-1.0).fit(X, Y), "var_smoothing", id="GaussianNB-var_smoothing"),
+])
+def test_sklearn_parameter_and_infinity_refusals(build, match):
+    with pytest.raises(ValueError, match=match):
+        build()
+
+
+def test_maxabs_nan_still_allowed():
+    got = np.asarray(ml.MaxAbsScaler().fit_transform(X_GAPS))
+    assert np.isnan(got[::4, 1]).all()
