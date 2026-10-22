@@ -98,10 +98,28 @@ def _build(cls: PythonObject, values: PythonObject, missing: PythonObject, conte
     return record
 
 
-def scaler_tags(model: PythonObject, context: PythonObject) raises -> PythonObject:
+def _preserved_dtypes(model: PythonObject, fixed_dtypes: PythonObject) raises -> PythonObject:
+    # A fresh list each call. StandardScaler/MinMaxScaler fix ["float32"];
+    # the others read their class's `_sklearn_preserves_dtype` (default none).
+    var b = Python.import_module("builtins")
+    var names = fixed_dtypes
+    if names is None:
+        names = _class_metadata(model, "_sklearn_preserves_dtype", Python.tuple())
+    if py_type(names) is not b.tuple and py_type(names) is not b.list:
+        raise Error("TypeError: _sklearn_preserves_dtype must be a tuple of dtype names")
+    var out = Python.list()
+    for k in range(len(names)):  # driver-loop: over the declared dtype names
+        if py_type(names[k]) is not b.str:
+            raise Error("TypeError: _sklearn_preserves_dtype names must be strings")
+        _ = py_call(out.append, names[k])
+    return out
+
+
+def scaler_tags(model: PythonObject, context: PythonObject, fixed_dtypes: PythonObject) raises -> PythonObject:
     """scikit-learn's `Tags` for a scaler instance: the shared estimator
     answer (estimator type, target/input overrides, requires_fit) with
-    float32-preserving transformer tags."""
+    transformer tags. `fixed_dtypes`: the preserved dtype names when the
+    estimator fixes them, or None to read `_sklearn_preserves_dtype`."""
     var b = Python.import_module("builtins")
     var module = _tags_module()
     if py_type(module) is not context["native_module_type"]:
@@ -129,6 +147,7 @@ def scaler_tags(model: PythonObject, context: PythonObject) raises -> PythonObje
     var input_declared = _type_fields(input_cls)["__dataclass_fields__"]
     var target_overrides = _overrides(_class_metadata(model, "_sklearn_target_tags", Python.dict()), target_declared, "_sklearn_target_tags")
     var input_overrides = _overrides(_class_metadata(model, "_sklearn_input_tags", Python.dict()), input_declared, "_sklearn_input_tags")
+    var preserved = _preserved_dtypes(model, fixed_dtypes)
     var accepts_sparse = context["sklearn_accepts_sparse"]
     if py_type(accepts_sparse) is not b.frozenset:
         raise Error("TypeError: scaler tag metadata lacks the sparse-input class names")
@@ -149,7 +168,7 @@ def scaler_tags(model: PythonObject, context: PythonObject) raises -> PythonObje
             break
     _ = py_call(input_values.update, input_overrides)
     var transformer_values = Python.dict()
-    py_setitem(transformer_values, "preserves_dtype", Python.list("float32"))
+    py_setitem(transformer_values, "preserves_dtype", preserved)
 
     var tag_values = Python.dict()
     py_setitem(tag_values, "estimator_type", kind)

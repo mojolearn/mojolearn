@@ -312,7 +312,7 @@ def minmax_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
                 _ = minmax_initialize(model,values)
             result = model
         elif operation == "tags":
-            result = scaler_tags(model,context)
+            result = scaler_tags(model,context,Python.tuple("float32"))
         elif operation == "is_fitted":
             result = PythonObject(_fitted(py_fields(model)))
         elif operation == "fit":

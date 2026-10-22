@@ -572,7 +572,7 @@ def scaler_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
                 _ = scaler_initialize(model,values)
             result = model
         elif op == "tags":
-            result = scaler_tags(model,context)
+            result = scaler_tags(model,context,Python.tuple("float32"))
         elif op == "is_fitted":
             result = PythonObject(_fitted(py_fields(model)))
         elif op == "transform":
