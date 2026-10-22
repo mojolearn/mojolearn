@@ -24,6 +24,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_TESTS = {
+    "test_cache_get_native.py": "Public DeviceCache.get native lookup, metadata conversion and callback refusals",
     "test_cache_stats_native.py": "Public DeviceCache length and resident.stats native metadata, counters, thread-local semantics and hook refusals",
     "test_optimizer_native_scalar_constructors.py": "Native scalar preparation across public optimizer constructors, updates, checkpoints and device controls",
     "test_late_numpy_native_metadata.py": "Public cold/late NumPy metadata connection, builtin identity preservation and pre-hook factory/key refusals",
@@ -209,6 +210,9 @@ def test_applicability(selected, vendor):
         if name == "test_host_density_constructors_native.py":
             scope.update(execution_route="native explicit CPU host constructor owner, including in GPU packages",
                          coverage_limit="Public KDE and IsolationForest construction/reinitialization only; fit/inference, save/hash and subclass registration remain separate")
+        if name == "test_cache_get_native.py":
+            scope.update(execution_route="native host metadata on CPU and GPU packages; no device slots acquired",
+                         coverage_limit="Only DeviceCache.get; construction/upload/release and resident context lifecycle remain separate migration work")
         if name == "test_cache_stats_native.py":
             scope.update(execution_route="native host metadata on CPU and GPU packages; no device slots acquired",
                          coverage_limit="Only DeviceCache.__len__ and resident.stats; get, construction/upload/release and resident context lifecycle remain separate migration work")

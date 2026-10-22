@@ -153,8 +153,7 @@ class DeviceCache:
 
     def get(self, arr):
         """The id when `arr` is already resident, else None (no upload)."""
-        hit = self._entries.get(self._key(arr))
-        return None if hit is None else hit[0]
+        return _ROWS_CALL(self, "cache_get", (arr,), _ROWS_CONTEXT)
 
     def release(self, arr):
         hit = self._entries.pop(self._key(arr), None)
