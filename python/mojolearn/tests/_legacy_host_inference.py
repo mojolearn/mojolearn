@@ -46,3 +46,45 @@ def public_cd_predict(model, X):
     # of the native prediction owner. NumPy is a testing oracle only here.
     import numpy as np
     return np.asarray(cd_predict(model, X)).astype(np.float64)
+
+
+def kernel_model(model, X, name, public=True):
+    """Frozen 32011bb32 dense/sparse preparation and kernel entry contract."""
+    from mojolearn._buffer import as_f32_dense_c
+    import numpy as np
+    x, _ = as_f32_dense_c(X, ndim=2, name="X")
+    m, d = x.shape
+    ext = model._extension()
+    if name == "KernelRidge":
+        n, t = model.X_fit_.shape[0], model.n_targets_
+        kernel, degree, gamma, coef0, alpha = model._kernel_params
+        dual = model.dual_coef_.reshape((n * t,))
+        out = empty((m * t,), "<f4")
+        ext.kernel_ridge_predict(
+            [addr_ro(model.X_fit_, name="X_fit_"), addr_ro(dual, name="dual_coef_"),
+             addr_ro(x, name="X"), addr(out, name="prediction")],
+            [n, d, t, kernel, degree, gamma, coef0, alpha, model.info_, m])
+        out = out if model._squeeze else out.reshape((m, t))
+        return np.asarray(out).astype(np.float64) if public else out
+    if name == "Nystroem":
+        q = model.components_.shape[0]
+        kernel, degree, gamma, coef0, seed = model._kernel_params
+        out = empty((m * q,), "<f4")
+        components = model.components_.reshape((q * d,))
+        normalization = model.normalization_.reshape((q * q,))
+        eigenvectors = model.eigenvectors_.reshape((q * q,))
+        ext.nystroem_transform(
+            [addr_ro(components, name="components_"), addr_ro(model.component_indices_, name="component_indices_"),
+             addr_ro(normalization, name="normalization_"), addr_ro(model.eigenvalues_, name="eigenvalues_"),
+             addr_ro(eigenvectors, name="eigenvectors_"), addr_ro(x, name="X"), addr(out, name="transform")],
+            [q, d, kernel, degree, gamma, coef0, seed, model.sweeps_, m])
+    else:
+        q = model.random_weights_.shape[1]
+        gamma, seed = model._params
+        out = empty((m * q,), "<f4")
+        weights = model.random_weights_.reshape((d * q,))
+        ext.rbf_sampler_transform(
+            [addr_ro(weights, name="random_weights_"), addr_ro(model.random_offset_, name="random_offset_"),
+             addr_ro(x, name="X"), addr(out, name="transform")],
+            [d, q, gamma, seed, model.sigma_, model.scale_, m])
+    return out.reshape((m, q))
