@@ -25,7 +25,7 @@ def _released_dtype(value: PythonObject, context: PythonObject, depth: Int) rais
         classes = Python.list()
         var scalars = Python.list()
         var factory = native_numpy_dtype(context)
-        for code in ["?", "i1", "u1", "i2", "u2", "i4", "u4", "i8", "u8", "f2", "f4", "f8", "g", "c8", "c16", "G", "O", "S", "U", "V", "M8", "m8"]:  # driver-loop: fixed immutable NumPy dtype classes before their retained owners are inspected
+        for code in ["?", "i1", "u1", "i2", "u2", "i4", "u4", "i8", "u8", "q", "Q", "f2", "f4", "f8", "g", "c8", "c16", "G", "O", "S", "U", "V", "M8", "m8"]:  # driver-loop: fixed immutable NumPy dtype classes, including distinct native long-long aliases
             var dtype = py_call(factory,code)
             _ = py_call(classes.append,py_type(dtype))
             if code != "O" and code != "V":

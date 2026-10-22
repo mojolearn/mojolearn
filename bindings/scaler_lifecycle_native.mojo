@@ -4,6 +4,7 @@
 from std.memory import memcpy, bitcast
 from std.os import getenv
 from std.python import Python, PythonObject
+from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
@@ -585,6 +586,8 @@ def scaler_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
             raise Error("unknown native StandardScaler operation")
         return result.steal_data()
     except error:
+        if String(error) == PYTHON_ERROR_PENDING:
+            return optimizer_python_error(error^)
         if String(error).startswith("NotFittedError:"):
             try:
                 ref cpy = Python().cpython()

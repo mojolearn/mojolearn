@@ -109,6 +109,7 @@ def _numpy_free_context():
     array_fields = {name: vars(Array)[name].__get__ for name in ("_mv", "shape", "dtype", "order")}  # glue: retain native slot descriptors once at package import
     return {
         "mapping_types": (dict, OrderedDict, defaultdict), "defaultdict_class": defaultdict,
+        "native_bytes_type": bytes, "native_bytearray_type": bytearray,
         "native_default_factories": (list, tuple, dict, OrderedDict, defaultdict, bool, int, float, str, bytes, bytearray),
         "native_value_types": (type(None), str, bytes, bytearray, bool, int, float, range, Array, array, PosixPath,
                                PurePosixPath, type(iter([])), type(iter(())), type(iter(range(0))), type(reversed([]))),
@@ -131,6 +132,7 @@ def _state_context():
     import os
     import sys
     import zlib
+    from pathlib import PosixPath, PurePosixPath, Path, PurePath
     from . import _backend
     from .tokenizer import _binding
     from .exceptions import NotFittedError
@@ -159,6 +161,8 @@ def _state_context():
     context.update(classical_tag_plan=None, native_member_descriptor=MemberDescriptorType)
     context.update(connect_warnings())
     archive_types = (io.BytesIO, io.FileIO, io.BufferedReader, io.BufferedWriter, io.BufferedRandom)
+    if not isinstance(io.open, BuiltinFunctionType):
+        raise TypeError("classical archives require native binary file opening")
     archive_methods = []
     for cls in archive_types:  # glue: cache exact native file descriptors at ABI connection
         methods = {}
@@ -192,6 +196,11 @@ def _state_context():
                 or not isinstance(zstd_class.__init__, WrapperDescriptorType)):
             raise TypeError("classical archives require a native Zstandard byte decompressor")
     context.update(archive_file_types=archive_types, archive_file_methods=tuple(archive_methods),
+                   archive_open=io.open, archive_bytes_type=bytes, archive_bytearray_type=bytearray,
+                   archive_memoryview_type=memoryview,
+                   archive_path_types=(PosixPath, PurePosixPath),
+                   archive_path_bases=(PosixPath, PurePosixPath, Path, PurePath, object),
+                   archive_path_member_type=MemberDescriptorType,
                    archive_crc32=zlib.crc32, archive_utf32_encode=_codecs.utf_32_le_encode,
                    archive_utf32_decode=_codecs.utf_32_le_decode, archive_literal_decode=_codecs.unicode_escape_decode,
                    archive_inflate=zlib.decompress, archive_bzip=None if _bz2 is None else _bz2.BZ2Decompressor,

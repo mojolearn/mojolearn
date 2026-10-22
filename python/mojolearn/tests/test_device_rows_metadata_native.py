@@ -8,6 +8,18 @@ from mojolearn._arena_io import DeviceRows
 from mojolearn._verify_native_runtime import audit_native_call
 
 
+@pytest.mark.parametrize('dtype', ['q', 'Q'])
+@pytest.mark.parametrize('storage', ['scalar', 'object_array'])
+def test_reinitialization_preserves_native_longlong_owner_aliases(dtype, storage):
+    scalar = np.dtype(dtype).type(3)
+    old = scalar if storage == 'scalar' else np.array([scalar], dtype=object)
+    base = Array.from_list([[1.]], '<f4')
+    indices = Array.from_list([0], '<i8')
+    rows = DeviceRows(base, indices, old)
+    assert audit_native_call(rows.__init__, base, indices, None).assert_native() is None
+    assert rows.base is base and rows.indices is indices and rows._take is None
+
+
 @pytest.mark.parametrize('source', ['array', 'numpy'])
 @pytest.mark.parametrize('dtype', ['<f4', '<f8', '<i8'])
 @pytest.mark.parametrize('shape', [(4,), (4,3), (4,2,3), (0,3)])

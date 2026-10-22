@@ -91,13 +91,13 @@ def classical_wrap_array(store: PythonObject, shape: PythonObject, typestr: Stri
     py_setattr(array, "_mv", native_buffer_view(store))
     py_setattr(array, "_addr", py_call(store.buffer_info)[0])
     py_setattr(array, "_readonly", PythonObject(False))
-    py_setattr(array, "shape", py_call(b.tuple, shape))
+    py_setattr(array, "shape", py_call(py_type(Python.tuple()), shape))
     py_setattr(array, "dtype", PythonObject(typestr))
     py_setattr(array, "ndim", PythonObject(rank))
     py_setattr(array, "size", PythonObject(size))
     py_setattr(array, "nbytes", PythonObject(size * item))
     py_setattr(array, "itemsize", PythonObject(item))
-    py_setattr(array, "strides", py_call(b.tuple, strides))
+    py_setattr(array, "strides", py_call(py_type(Python.tuple()), strides))
     py_setattr(array, "order", PythonObject(order))
     return array
 
@@ -112,7 +112,7 @@ def classical_typed(shape: PythonObject, typestr: String, context: PythonObject)
     for k in range(len(shape)):  # driver-loop: over array rank metadata
         count *= Int(py=shape[k])
     var width = 4 if typestr == "<f4" else 8
-    var store = py_call(context["array_type"], PythonObject(_store_code(typestr)), py_call(b.bytes, count * width))
+    var store = py_call(context["array_type"], PythonObject(_store_code(typestr)), py_call(context["native_bytes_type"], count * width))
     return classical_wrap_array(store, shape, typestr, "C", context)
 
 

@@ -3,6 +3,7 @@
 # here. The preprocessing and x_prep kernels and their order are unchanged.
 from std.memory import memcpy, bitcast
 from std.python import Python, PythonObject
+from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
@@ -330,6 +331,8 @@ def minmax_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
             raise Error("unknown native MinMaxScaler operation")
         return result.steal_data()
     except error:
+        if String(error) == PYTHON_ERROR_PENDING:
+            return optimizer_python_error(error^)
         if String(error).startswith("NotFittedError:"):
             try:
                 ref cpy = Python().cpython()
