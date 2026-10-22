@@ -260,9 +260,14 @@ def check(arm, clean_path, sab_path, restored_path=None, evidence_path=None, roo
         # Host records key families without the _mojolearn_ prefix or _host suffix.
         expected |= {stem.removeprefix("build_").removesuffix("_host")
                      for stem in arm["bindings"] if stem.endswith("_host")}
-        affected_hashes = {cb[name] for name in expected & set(cb)}
+        # Loaded-native-v2 records name modules by import path
+        # (`mojolearn._sets.identical._mojolearn_training`); the arm names the
+        # binding, so compare on the last path component.
+        def base(name):
+            return name.rsplit(".", 1)[-1]
+        affected_hashes = {cb[name] for name in cb if base(name) in expected}
         allowed = {name for name in cb if cb[name] in affected_hashes}
-        if not changed or not (changed & expected) or changed - allowed:
+        if not changed or not ({base(name) for name in changed} & expected) or changed - allowed:
             raise ValueError("binary changes do not match the arm's declared binding closure")
         options = clean["resume_signature"]["options"]
         requested_fixtures = set(filter(None, str(options.get("fixtures", "")).split(",")))

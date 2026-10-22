@@ -159,3 +159,16 @@ def test_named_inapplicable_property_is_preserved(tmp_path, columns):
     assert run(tmp_path, columns) == 0
     columns[1]["cells"]["demo/base"]["model"] = ["n/a:no-longer-ran"]
     assert run(tmp_path, columns) == 1
+
+
+def test_loaded_import_path_names_match_the_arm_binding(tmp_path, columns):
+    # Real loaded-native-v2 records name modules by import path.
+    for column in columns:
+        column["package"]["bindings"][0]["module"] = "mojolearn._host._mojolearn_core_host"
+    assert run(tmp_path, columns) == 0
+    columns[1]["package"]["bindings"].append(
+        {"module": "mojolearn._mojolearn_rf", "sha256": "f" * 64, "size": 10})
+    for column in (columns[0], columns[2]):
+        column["package"]["bindings"].append(
+            {"module": "mojolearn._mojolearn_rf", "sha256": "9" * 64, "size": 10})
+    assert run(tmp_path, columns) == 1
