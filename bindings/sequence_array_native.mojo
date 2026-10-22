@@ -88,6 +88,26 @@ def sequence_array_address(value: PythonObject) raises -> Int:
     return address
 
 
+def sequence_array_object_reports(context: PythonObject) raises -> Bool:
+    # NumPy 2.3 added NPY_METH_NO_FLOATINGPOINT_ERRORS to any_to_object
+    # (numpy/_core/src/multiarray/dtype_transfer.c). Its 2.0 ABI version
+    # cannot distinguish this change from 2.0--2.2, which still report flags.
+    # Read only exact native module/string metadata; no version helper runs.
+    var module = py_get(context["modules"], "numpy")
+    if module is None or py_type(module) is not context["module_type"]:
+        raise Error("TypeError: array cast compatibility requires NumPy's native module")
+    var version = py_get(py_fields(module), "__version__")
+    if py_type(version) is not Python.import_module("builtins").str:
+        raise Error("TypeError: array cast compatibility requires native NumPy version text")
+    var text = String(version)
+    var parts = text.split(".")
+    if len(parts) < 2:
+        raise Error("TypeError: array cast compatibility requires NumPy major.minor metadata")
+    var major = Int(String(parts[0]))
+    var minor = Int(String(parts[1]))
+    return major < 2 or (major == 2 and minor < 3)
+
+
 def sequence_array_cast(source: PythonObject, requested: PythonObject, context: PythonObject) raises -> PythonObject:
     # No public route is installed until the complete prior dtype contract is
     # qualified; this helper is not an unsupported-dtype Python fallback.
@@ -142,14 +162,27 @@ def sequence_array_cast(source: PythonObject, requested: PythonObject, context: 
     var start = sequence_array_address(source_owner)
     var destination = sequence_array_address(result)
     var status = 0
+    var reports_status = False
     for i in range(len(leaves)):  # driver-loop: over admitted native output field layouts
         var leaf = leaves[i]
-        if String(leaf[0]) == "O":
+        var kind = String(leaf[0])
+        var width = Int(py=leaf[1])
+        # The combined structured transfer reports flags when ANY leaf can
+        # report them. Object boxing still sets invalid status for a later
+        # numeric/String leaf, even when an object-only cast suppresses it.
+        # Numeric copies/byteswaps and legacy S/U formatting also carry
+        # NO_FLOATINGPOINT_ERRORS; other float32 casts do not.
+        if kind == "O":
+            reports_status = reports_status or sequence_array_object_reports(context)
+        elif kind != "S" and kind != "U" and not (kind == "f" and width == 4):
+            reports_status = True
+        if kind == "O":
             status |= sequence_object_leaf(start, destination, count, stride, Int(py=leaf[3]))
-        elif String(leaf[0]) == "T":
+        elif kind == "T":
             status = sequence_string_leaf(start, destination, count, stride, Int(py=leaf[3]), leaf[4], classes, settings, context, status)
         else:
             status |= sequence_cast_leaf(start, destination, count, stride, Int(py=leaf[3]), String(leaf[0]), Int(py=leaf[1]), Bool(py=leaf[2]))
     _ = source_owner^
-    sequence_array_report(status, settings, context)
+    if reports_status:
+        sequence_array_report(status, settings, context)
     return result

@@ -55,6 +55,40 @@ def test_native_object_output_preserves_signaling_status(resident, dtype, mode):
     assert [(type(w.message), str(w.message)) for w in new] == [(type(w.message), str(w.message)) for w in old]
 
 
+@pytest.mark.parametrize("formats", [
+    ("O", "f8"), ("f8", "O"), ("O", "S8"), ("U8", "O"),
+    ("O", "?"), ("c8", "O"), ("O", "V4"),
+], ids=["object-double", "double-object", "object-bytes", "unicode-object",
+        "object-bool", "complex-object", "object-void"])
+@pytest.mark.parametrize("mode", ["ignore", "warn", "raise"])
+def test_native_object_status_follows_combined_field_flags(resident, formats, mode):
+    # NumPy 2.3 suppresses final flags for object-only / object+copy/text
+    # transfers. Other numeric fields still expose the boxing status, and
+    # NumPy1.26 reports it for all these layouts. The installed oracle owns
+    # that version-specific contract; it is not a fixed warning expectation.
+    dtype = {"names": ["first", "second"], "formats": formats}
+    test_native_object_output_preserves_signaling_status(resident, dtype, mode)
+
+
+def test_native_object_status_refuses_version_protocol_before_hooks(resident, monkeypatch):
+    _, tensor = resident
+    calls = []
+
+    class Foreign:
+        def __str__(self):
+            calls.append("str")
+            return "2.5.3"
+
+    monkeypatch.setattr(np, "__version__", Foreign())
+    audit = audit_native_call(_OPT_NATIVE, "seqdev_array", tensor, (object, None), None, _OPT_CONTEXT)
+    assert type(audit.exception) is TypeError
+    assert "version" in str(audit.exception)
+    assert not calls
+    report = audit.report()
+    assert not report["python_frames"] and not report["forbidden_native_calls"], report
+    assert not report["unobserved_existing_threads"], report
+
+
 @pytest.mark.parametrize("name", ["Float32DType", "UInt8DType", "StrDType", "BytesDType", "VoidDType", "DateTime64DType", "TimeDelta64DType"])
 def test_native_legacy_descriptor_classes_preserve_versioned_cast_contract(resident, name):
     # These classes exist on NumPy1.26 too. Keep this qualification outside
