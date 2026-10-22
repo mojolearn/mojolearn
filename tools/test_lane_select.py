@@ -1740,13 +1740,23 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
                                      training-chunked-lm-head, training-mlp-sessions,
                                      samba-optimizer-state. Each reaches the public
                                      neural door; the four previously removed name
-                                     collisions remain excluded."""
+                                     collisions remain excluded.
+
+    REMEASURED 2026-10-22 (lane/verify-gaps-20261022, static reverse_map):
+      forest_host_predict  92 -> 93  saved-model-host-infer-trees (new lane)
+      forest_inference     52 -> 53  the same lane
+      neural_inference.py  49 -> 74  four new lanes (hf-causal-lm-text,
+                                     saved-model-host-infer-trees,
+                                     sequence-layernorm-backward,
+                                     training-device-cross-entropy); the
+                                     other 21 were already on main 551dee1ce
+                                     (70 there) and are owed attribution."""
     rev = lane_select.reverse_map()
     for rel, want in (("cluster/host/kmeans_oracle.mojo", 84),
                       ("core/gbdt_host_predict.mojo", 55),
-                      ("core/forest_host_predict.mojo", 92),
-                      ("core/forest_inference.mojo", 52),
-                      ("python/mojolearn/neural_inference.py", 49)):
+                      ("core/forest_host_predict.mojo", 93),
+                      ("core/forest_inference.mojo", 53),
+                      ("python/mojolearn/neural_inference.py", 74)):
         got = len(rev.get(rel, set()))
         assert got == want, f"{rel} answers {got} lanes, not {want}"
     lanes = len(lane_select.all_lanes())
