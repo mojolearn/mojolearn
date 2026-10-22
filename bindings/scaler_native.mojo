@@ -176,6 +176,9 @@ def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonO
             _stage(program, 270, nch, wo, n, ch, wc)
             _stage(program, 248, 1, wc, nch, wc+nch)
         _ = py_call(entries["x_prep_run"], Int(arena.unsafe_ptr()), size, Int(program.unsafe_ptr()), 5 if weighted else 3)
+        # Integer addresses do not carry ownership across the C ABI. Keep
+        # the instruction storage alive until the synchronous executor returns.
+        _ = program^
         if weighted and bitcast[DType.int32](arena[wc+nch]) != 0:
             raise Error("sample_weight must be finite")
         var all_same = scaler_check_missing(arena_ptr, st, out, sc, d)
@@ -190,6 +193,7 @@ def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonO
             seen = classical_typed(Python.tuple(d), "<i8", context["output_context"])
             var counts = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(seen)))
             scaler_counts(arena_ptr+out, counts, d)
+        _ = arena^
         _ = weight^
     py_setitem(fields, "mean_", mean if with_mean or with_std else PythonObject(None))
     py_setitem(fields, "var_", variance if with_std else PythonObject(None))
