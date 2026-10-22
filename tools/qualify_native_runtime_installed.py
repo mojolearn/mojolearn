@@ -78,6 +78,8 @@ CPU_NOT_APPLICABLE = {
         "test_native_device_download_does_not_call_mutable_memoryview[True]": "device downloads require the GPU training pool",
         "test_native_device_download_does_not_call_mutable_object[False]": "device downloads require the GPU training pool",
         "test_native_device_download_does_not_call_mutable_object[True]": "device downloads require the GPU training pool",
+        "test_native_device_download_does_not_call_mutable_bytes[False]": "device downloads require the GPU training pool",
+        "test_native_device_download_does_not_call_mutable_bytes[True]": "device downloads require the GPU training pool",
     },
     'test_training_linear_public_native.py': {
         'test_public_device_linear_consumed_outputs_are_native[linear_forward-matrix]': 'resident linear operations require the GPU training binding',

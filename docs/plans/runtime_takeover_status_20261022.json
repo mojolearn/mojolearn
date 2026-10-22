@@ -1,8 +1,8 @@
 {
   "schema": "mojolearn.runtime-takeover-status.v1",
-  "updated": "2026-10-22T07:02:05.797694+00:00",
+  "updated": "2026-10-22T07:21:12.251155+00:00",
   "release": "HELD",
-  "integration_before_report": "e97e32b8f6bf4bb0f1812a13f1b95c30d3e486b5",
+  "integration_before_report": "8910c90fbc65f82f27b626824550106a3f881d01",
   "evidence_root": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021",
   "test_policy": "Rerun failures, new tests and directly affected regression checks; reuse accepted unchanged results. Counts from different scopes are not interchangeable.",
   "completed": {
@@ -212,9 +212,9 @@
     }
   },
   "remaining": [
-    "Successor buffer ownership313, HostKDE.fit249 plus168/319 shared constructor repairs, and DeviceRows metadata4fb await integrated native execution; review followups remain active.",
-    "Embedding, resident materialization/context lifecycle, public __array__ ownership/callback contract, cold sklearn tags, and remaining public constructors/fit/save/hash paths remain open.",
-    "Matching installed-package/reference/fault accounting and Linux/NVIDIA/AMD qualification remain incomplete. Apple selected passes do not establish complete API coverage or cross-vendor identity."
+    "Execute the frozen shared-buffer, KDEfit, DeviceRows metadata and embedding batch; no candidate execution claimed yet.",
+    "Host density constructors, cross-entropy preparation, and resident materialization/context lifecycle continue in isolated successor lanes.",
+    "Public __array__ ownership/callback contract, cold sklearn tags, remaining public constructors/fit/save/hash paths and complete installed/reference/fault/vendor qualification remain open."
   ],
   "limitations": [
     "No claim that every public API, option, checkpoint or failure path is fully migrated/qualified.",
@@ -300,11 +300,22 @@
     "evidence": "runtime-selection-verdict-3ede5addb.json"
   },
   "next_freeze": {
-    "tree": "/Users/andrewhendel/mojolearn-wt/runtime-array-kde-integration",
-    "status": "Reviewed completed lanes staged separately; pending constructor/lifetime followups before freeze",
+    "tree": "/Users/andrewhendel/mojolearn-wt/runtime-array-kde-embedding-build",
+    "status": "Source reviewed; compile and all new/affected runtime execution pending",
+    "scope": [
+      "Shared native Array allocation and first-operation owner identities",
+      "HostKernelDensity.fit preparation/state/inherited options and shared buffer constructors",
+      "DeviceRows constructor/length/reinitialization with transitive owner admission",
+      "Embedding forward/backward input preparation and shared native scalar unboxing"
+    ],
     "reuse_source": "e97e32b8f6bf4bb0f1812a13f1b95c30d3e486b5",
     "reuse_tree": "/Users/andrewhendel/mojolearn-wt/runtime-native-error-repairs-build",
-    "scope": "Shared allocation/preparation changes require fresh closure proof and affected checks; numerical kernels unchanged."
+    "expected_selected_cases": {
+      "cpu": 733,
+      "metal": 751,
+      "numpy126-metal": 374
+    },
+    "selection_policy": "New cases and directly affected regressions only; retain unrelated accepted evidence. Source closure proofs control compilation reuse."
   },
   "latest_followups": {
     "b638_stronger_cleanup": "2 identical and 2 FAST passed",
