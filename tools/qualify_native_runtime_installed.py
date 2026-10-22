@@ -24,6 +24,8 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_TESTS = {
+    "test_training_cross_entropy_public_native.py": "Public cross entropy preparation, options, native scalar configuration and consumed host/device outputs",
+    "test_training_device_native_allocator.py": "Native training device owner allocation independent of mutable object constructors",
     "test_host_density_constructors_native.py": "Public host KDE and IsolationForest constructor options, inherited modes and safe reinitialization",
     "test_training_embedding_public_native.py": "Public embedding forward/backward preparation, index conversion, vocabulary options and owned outputs",
     "test_optimizer_native_array_ownership.py": "Native output Array storage, retained checkpoint ownership and device downloads",
@@ -74,6 +76,8 @@ TEST_DEPENDENCIES = {
 }
 CPU_RESIDENT_SKIP = "the CPU binding has no resident tensor pool"
 CPU_NOT_APPLICABLE = {
+    'test_training_cross_entropy_public_native.py': {'test_public_cross_entropy_device_failure_rollback_has_no_python_finalizer': 'training device pool requires GPU', 'test_public_cross_entropy_device_outputs_are_native_and_consumed[mean-False-0.0]': 'training device pool requires GPU', 'test_public_cross_entropy_device_outputs_are_native_and_consumed[mean-True-0.0]': 'training device pool requires GPU', 'test_public_cross_entropy_device_outputs_are_native_and_consumed[none-False-0.2]': 'training device pool requires GPU', 'test_public_cross_entropy_device_outputs_are_native_and_consumed[sum-True-0.2]': 'training device pool requires GPU', 'test_public_cross_entropy_device_preserves_refusal_categories[logits-rank]': 'training device pool requires GPU', 'test_public_cross_entropy_device_preserves_refusal_categories[none-backward]': 'training device pool requires GPU', 'test_public_cross_entropy_device_preserves_refusal_categories[targets-float]': 'training device pool requires GPU', 'test_public_cross_entropy_device_preserves_refusal_categories[targets-rank]': 'training device pool requires GPU'},
+    'test_training_device_native_allocator.py': {'test_training_device_owner_ignores_mutable_object_constructor[upload]': 'training device allocation requires the GPU pool', 'test_training_device_owner_ignores_mutable_object_constructor[reshape]': 'training device allocation requires the GPU pool'},
     "test_optimizer_native_array_ownership.py": {
         "test_native_device_download_does_not_call_mutable_memoryview[False]": "device downloads require the GPU training pool",
         "test_native_device_download_does_not_call_mutable_memoryview[True]": "device downloads require the GPU training pool",
@@ -203,6 +207,12 @@ def test_applicability(selected, vendor):
         if name == "test_training_embedding_public_native.py":
             scope.update(execution_route="public embedding operations through the selected CPU or GPU training binding",
                          coverage_limit="Native preparation and retained kernel outputs only; NumPy scalar-option coverage follows the installed version, and full-model training remains separate")
+        if name == "test_training_cross_entropy_public_native.py":
+            scope.update(execution_route="public cross entropy on selected host buffers or GPU device owners",
+                         coverage_limit="Native preparation and consumed outputs use retained numerical kernels; scalar warning contracts follow the installed NumPy version, and complete model training remains separate")
+        if name == "test_training_device_native_allocator.py":
+            scope.update(execution_route="GPU training owner allocation; layout admission also applies on CPU",
+                         coverage_limit="Constructor callback and layout admission only; numerical behavior, rollback and allocation exhaustion are separate checks")
         result[name] = scope
     return result
 
