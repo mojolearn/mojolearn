@@ -10,6 +10,7 @@ def connect(context, formats, cleanup_entries, forest_metadata):
     from .tokenizer import _binding
     from .cluster import _METRIC_NAMES, _INIT_NAMES
     from .density import _METRICS
+    from ._spectral_impl import _CLUSTER_AFFINITIES
     from ._hierarchy_impl import _ALL_METRICS
     from .neighbors import _METRIC_TABLE, _RBC_METRIC_TABLE
     from ._umap_impl import _METRICS as umap_metrics
@@ -28,6 +29,7 @@ def connect(context, formats, cleanup_entries, forest_metadata):
     archive["host_archive_kmeans_metrics"] = dict(_METRIC_NAMES)
     archive["host_archive_kmeans_starts"] = dict(_INIT_NAMES)
     archive["host_archive_dbscan_metrics"] = tuple(_METRICS)
+    archive["host_archive_spectral_affinities"] = tuple(_CLUSTER_AFFINITIES)
     archive["host_archive_agglo_metrics"] = tuple(_ALL_METRICS)
     archive["host_archive_neighbor_metrics"] = dict(_METRIC_TABLE)
     archive["host_archive_rbc_metrics"] = dict(_RBC_METRIC_TABLE)

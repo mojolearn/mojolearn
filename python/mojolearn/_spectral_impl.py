@@ -23,7 +23,7 @@ The binding lives in `bindings/_mojolearn_metrics.mojo` alongside the
 metrics functions and is loaded through `_metrics_impl._get_binding`.
 """
 
-from . import _backend, _serialize
+from . import _backend, _native_archive_bridge
 from ._mode import ParamsMixin, available_if
 from ._array import Array
 from ._buffer import (
@@ -32,13 +32,19 @@ from ._buffer import (
 from ._expansion_decomp import _Kit, _M
 from ._metrics_impl import _get_binding
 from .density import _check_queries
-from .linear_model import _check_saved_by, _restore_mode, _saved_mode, _shape_of
+from .linear_model import _shape_of
 
 __all__ = ["SpectralClustering", "SpectralEmbedding", "spectral_embedding"]
 
 #: `SpectralClustering.save`'s format tag (lane/spectral-predict,
 #: 2026-09-15): the prediction data of a `prediction_data=True` fit.
 _SPECTRAL_FORMAT = "mojolearn-spectral-1"
+
+# The compiled saved-model owner, connected once at import: `save` and
+# `load` are one native call each (bindings/archive_schema_native.mojo
+# writes the schema registered below the class; host_archive_native.mojo
+# builds the loaded model).
+_ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
 #: The prediction data a `prediction_data=True` fit keeps.
 _PREDICTION_ATTRS = ("_pd_eigenvalues", "_pd_eigenvectors", "_pd_diag", "_pd_centroids", "_fit_X")
@@ -956,37 +962,7 @@ class SpectralClustering(ParamsMixin):
         ValueError
             If it was fitted without ``prediction_data=True``.
         """
-        if not hasattr(self, "labels_"):
-            raise RuntimeError("this estimator is not fitted yet")
-        if getattr(self, "_pd_eigenvalues", None) is None:
-            raise ValueError(
-                "mojolearn SpectralClustering.save: prediction data was not stored; "
-                "fit with SpectralClustering(prediction_data=True). A model without "
-                "it can label no new row, so there is nothing a saved file could serve"
-            )
-        nn = self.affinity == "nearest_neighbors"
-        n_train = int(self._pd_diag.shape[0])
-        arrays = {
-            "format": _SPECTRAL_FORMAT,
-            "estimator": type(self).__name__,
-            "numeric_mode": _saved_mode(self),
-            "affinity": str(self.affinity),
-            "eigenvalues": self._pd_eigenvalues,
-            "eigenvectors": self._pd_eigenvectors,
-            "diag": self._pd_diag,
-            "centroids": self._pd_centroids,
-            "labels": self.labels_,
-            "eigen_tol": Array.from_list([float(self._eigen_tol)], "<f8"),
-            "meta": Array.from_list(
-                [int(self._n_clusters), int(self.n_components_), int(self._n_neighbors),
-                 int(self._n_init), int(self._seed), 1 if self.random_state is None else 0,
-                 n_train, int(self.n_features_in_) if nn else 0],
-                "<i8",
-            ),
-        }
-        if nn:
-            arrays["x"] = self._fit_X
-        return _serialize.write_npz(path, arrays)
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -1011,48 +987,31 @@ class SpectralClustering(ParamsMixin):
             If the file is not a SpectralClustering model or its arrays have
             inconsistent shapes.
         """
-        arrays = _serialize.read_npz(path, _SPECTRAL_FORMAT)
-        _check_saved_by(arrays, path, cls)
-        meta = _serialize.exact(arrays, "meta", "<i8")
-        if meta.size != 8:
-            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 8 are needed")
-        n_clusters, k, n_neighbors, n_init, seed, seed_none, n_train, nf = (int(v) for v in meta.tolist())  # glue: unpacks the fixed meta vector
-        tol = _serialize.exact(arrays, "eigen_tol", "<f8")
-        if tol.size != 1:
-            raise ValueError(f"mojolearn: {path!r} eigen_tol must hold one value")
-        affinity = _serialize.scalar_str(arrays, "affinity")
-        obj = cls(
-            n_clusters=n_clusters, n_components=k, n_neighbors=n_neighbors, n_init=n_init,
-            random_state=None if seed_none else seed, eigen_tol=float(tol[0]),
-            affinity=affinity, prediction_data=True,
-        )
-        obj._validate_params()
-        _restore_mode(obj, arrays)
-        ev = _serialize.exact(arrays, "eigenvalues", "<f4")
-        evec = _serialize.exact(arrays, "eigenvectors", "<f4")
-        dg = _serialize.exact(arrays, "diag", "<f4")
-        cent = _serialize.exact(arrays, "centroids", "<f4")
-        labels = _serialize.exact(arrays, "labels", "<i4")
-        if (ev.size != k or evec.ndim != 2 or tuple(evec.shape) != (n_train, k) or dg.size != n_train
-                or cent.ndim != 2 or tuple(cent.shape) != (n_clusters, k) or labels.size != n_train):
-            raise ValueError(
-                f"mojolearn: {path!r} prediction data shapes do not match n_train={n_train}, "
-                f"n_components={k}, n_clusters={n_clusters}"
-            )
-        obj._fit_X = None
-        if affinity == "nearest_neighbors":
-            x = _serialize.exact(arrays, "x", "<f4")
-            if x.ndim != 2 or tuple(x.shape) != (n_train, nf):
-                raise ValueError(f"mojolearn: {path!r} x shape {tuple(x.shape)} is not ({n_train}, {nf})")
-            obj._fit_X = x
-            obj.n_features_in_ = nf
-        obj._pd_eigenvalues = ev
-        obj._pd_eigenvectors = evec
-        obj._pd_diag = dg
-        obj._pd_centroids = cent
-        obj.labels_ = labels
-        obj.n_components_ = k
-        return obj
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+
+
+_native_archive_bridge.register(SpectralClustering, _SPECTRAL_FORMAT, (
+    _native_archive_bridge.fitted("labels_"),
+    ("need_set", "_pd_eigenvalues", "ValueError",
+     "mojolearn SpectralClustering.save: prediction data was not stored; "
+     "fit with SpectralClustering(prediction_data=True). A model without "
+     "it can label no new row, so there is nothing a saved file could serve"),
+    *_native_archive_bridge.head(_SPECTRAL_FORMAT),
+    ("str", "affinity", "affinity"),
+    ("array", "eigenvalues", "_pd_eigenvalues"),
+    ("array", "eigenvectors", "_pd_eigenvectors"),
+    ("array", "diag", "_pd_diag"),
+    ("array", "centroids", "_pd_centroids"),
+    ("array", "labels", "labels_"),
+    ("f8", "eigen_tol", (("float", "_eigen_tol"),)),
+    ("i8", "meta", (
+        ("int", "_n_clusters"), ("int", "n_components_"), ("int", "_n_neighbors"),
+        ("int", "_n_init"), ("int", "_seed"), ("noneflag", "random_state"),
+        ("dim", "_pd_diag", 0),
+        ("if_eq", "affinity", "nearest_neighbors", ("int", "n_features_in_"), ("const", 0)),
+    )),
+    ("when", "affinity", "nearest_neighbors", (("array", "x", "_fit_X"),)),
+), host_archive_spectral_affinities=tuple(_CLUSTER_AFFINITIES))
 
 
 class _DenseCOO:

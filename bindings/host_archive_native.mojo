@@ -999,9 +999,12 @@ def host_archive_iforest(cls: PythonObject, arrays: PythonObject, context: Pytho
     return model
 
 
-def host_archive_spectral(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
-    var meta = host_archive_count(arrays, "meta", "<i8", 8, context, True)
-    var tolerance = host_archive_count(arrays, "eigen_tol", "<f8", 1, context, True)
+def host_archive_spectral(cls: PythonObject, arrays: PythonObject, path: PythonObject,
+                          context: PythonObject) raises -> PythonObject:
+    """SpectralClustering.load: the refusals keep the Python loader's
+    wording and order, `_validate_params` included."""
+    var where = host_archive_where(path, context)
+    var meta = host_archive_meta(arrays, "meta", 8, path, context)
     var clusters = classical_i64(meta, 0)
     var k = classical_i64(meta, 1)
     var neighbors = classical_i64(meta, 2)
@@ -1010,21 +1013,37 @@ def host_archive_spectral(cls: PythonObject, arrays: PythonObject, context: Pyth
     var seed_none = classical_i64(meta, 5) != 0
     var n = classical_i64(meta, 6)
     var nf = classical_i64(meta, 7)
+    var tolerance = host_archive_sized(arrays, "eigen_tol", "<f8", 1, where + " eigen_tol must hold one value", context)
     var tol = classical_f64(tolerance, 0)
     var affinity = _archive_string(arrays, "affinity", context)
-    if String(affinity) == "rbf" or String(affinity) == "precomputed_nearest_neighbors":
-        raise Error("NotImplementedError: saved spectral prediction data requires nearest_neighbors or precomputed affinity")
-    if String(affinity) != "nearest_neighbors" and String(affinity) != "precomputed":
-        raise Error("unsupported saved SpectralClustering affinity")
+    var name = String(affinity)
+    # SpectralClustering._validate_params, on the values the file holds.
+    var affinities = context["host_archive_spectral_affinities"]
+    if not py_contains(affinities, affinity):
+        raise Error("mojolearn SpectralClustering: affinity=" + _archive_builtin_repr(affinity)
+                    + " is refused; it must be one of "
+                    + _archive_builtin_repr(py_call(Python.import_module("builtins").list, affinities))
+                    + ". A callable or another kernel name builds the affinity outside every identity column.")
+    if name == "rbf" or name == "precomputed_nearest_neighbors":
+        raise Error("NotImplementedError: mojolearn SpectralClustering: prediction_data with affinity="
+                    + _archive_builtin_repr(affinity) + " is refused; the Nystrom predict (DEVIATION 2860) carries the "
+                    + "'nearest_neighbors' and 'precomputed' affinities only")
     if not tol > 0.0:
-        raise Error("SpectralClustering eigen_tol must be positive")
+        raise Error("mojolearn SpectralClustering: eigen_tol must be positive, got "
+                    + _archive_builtin_repr(PythonObject(tol)) + " (DEVIATION 890; see the 'auto' note)")
     if not seed_none and (seed < 0 or seed >= 4294967296):
-        raise Error("SpectralClustering random_state must fit uint32")
-    if clusters < 1 or k < 1 or neighbors < 1 or starts < 1:
-        raise Error("saved spectral cluster, component, neighbor and start counts must be positive")
+        raise Error("mojolearn SpectralClustering: random_state must satisfy 0 <= random_state < 2**32, got "
+                    + String(seed) + " (cuML's check_random_seed refuses the same range)")
+    if clusters < 1:
+        raise Error("mojolearn SpectralClustering: n_clusters must be at least 1")
+    if starts < 1:
+        raise Error("mojolearn SpectralClustering: n_init must be at least 1")
+    if neighbors < 1:
+        raise Error("mojolearn SpectralClustering: n_neighbors must be at least 1")
+    if k < 1:
+        raise Error("mojolearn SpectralClustering: n_components must be at least 1, or None to follow n_clusters")
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
-    host_archive_mode(arrays, fields, context)
     py_setitem(fields, "n_clusters", clusters)
     py_setitem(fields, "n_components", k)
     py_setitem(fields, "random_state", PythonObject(None) if seed_none else PythonObject(seed))
@@ -1047,14 +1066,26 @@ def host_archive_spectral(cls: PythonObject, arrays: PythonObject, context: Pyth
     py_setitem(fields, "_eigen_tol", tol)
     py_setitem(fields, "_gamma", PythonObject(None))
     py_setitem(fields, "_seed", 0 if seed_none else seed)
-    py_setitem(fields, "_pd_eigenvalues", host_archive_count(arrays, "eigenvalues", "<f4", k, context))
-    py_setitem(fields, "_pd_eigenvectors", host_archive_shape(arrays, "eigenvectors", "<f4", Python.tuple(n, k), context))
-    py_setitem(fields, "_pd_diag", host_archive_count(arrays, "diag", "<f4", n, context))
-    py_setitem(fields, "_pd_centroids", host_archive_shape(arrays, "centroids", "<f4", Python.tuple(clusters, k), context))
-    py_setitem(fields, "labels_", host_archive_count(arrays, "labels", "<i4", n, context))
-    py_setitem(fields, "_fit_X", host_archive_shape(arrays, "x", "<f4", Python.tuple(n, nf), context) if String(affinity) == "nearest_neighbors" else PythonObject(None))
-    if String(affinity) == "nearest_neighbors":
+    host_archive_mode(arrays, fields, context)
+    var values = _archive_exact(arrays, "eigenvalues", "<f4", context)
+    var vectors = _archive_exact(arrays, "eigenvectors", "<f4", context)
+    var diag = _archive_exact(arrays, "diag", "<f4", context)
+    var centroids = _archive_exact(arrays, "centroids", "<f4", context)
+    var labels = _archive_exact(arrays, "labels", "<i4", context)
+    if (Int(py=values.size) != k or Int(py=vectors.ndim) != 2 or Int(py=vectors.shape[0]) != n
+            or Int(py=vectors.shape[1]) != k or Int(py=diag.size) != n or Int(py=centroids.ndim) != 2
+            or Int(py=centroids.shape[0]) != clusters or Int(py=centroids.shape[1]) != k or Int(py=labels.size) != n):
+        raise Error(where + " prediction data shapes do not match n_train=" + String(n) + ", n_components="
+                    + String(k) + ", n_clusters=" + String(clusters))
+    py_setitem(fields, "_fit_X", PythonObject(None))
+    if name == "nearest_neighbors":
+        py_setitem(fields, "_fit_X", host_archive_matrix(arrays, "x", "<f4", n, nf, path, context))
         py_setitem(fields, "n_features_in_", nf)
+    py_setitem(fields, "_pd_eigenvalues", values)
+    py_setitem(fields, "_pd_eigenvectors", vectors)
+    py_setitem(fields, "_pd_diag", diag)
+    py_setitem(fields, "_pd_centroids", centroids)
+    py_setitem(fields, "labels_", labels)
     py_setitem(fields, "n_components_", k)
     return model
 
@@ -1781,7 +1812,7 @@ def host_archive_build(path: PythonObject, context: PythonObject,
     elif fmt == "mojolearn-iforest-1":
         model = host_archive_iforest(cls, arrays, context)
     elif fmt == "mojolearn-spectral-1":
-        model = host_archive_spectral(cls, arrays, context)
+        model = host_archive_spectral(cls, arrays, path, context)
     elif fmt == "mojolearn-umap-1":
         model = host_archive_umap(cls, arrays, context)
     elif fmt == "mojolearn-gp-1" or fmt == "mojolearn.gpc.v1":
