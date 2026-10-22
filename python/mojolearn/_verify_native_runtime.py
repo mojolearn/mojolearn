@@ -50,7 +50,12 @@ def _native_call_origin(function):
     if module is None or (type(module) is str and not module):
         owner = type(getattr(function, "__self__", None))
         fields = type.__dict__["__dict__"].__get__(owner)
-        module = _ordinary_field(fields, "__module__")
+        if any(type(name) is not str for name in fields):
+            return None
+        # Built-in owner types compute __module__ rather than storing it in
+        # their dictionaries. Call the retained native type descriptor, not
+        # a metaclass property or custom __getattribute__ implementation.
+        module = type.__dict__["__module__"].__get__(owner)
     return _module_name(module)
 
 
