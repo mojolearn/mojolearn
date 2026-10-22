@@ -60,20 +60,25 @@ def register_subclass(cls, context):
     # glue: register an ordinary class layout at class definition time
     from ._native_classical_bridge import _layout
     context["classical_public_layouts"][cls] = _layout(cls, context["classical_attribute_descriptor"])
-    if getattr(cls, "_HOST_INFERENCE_ONLY", False):
-        from types import BuiltinFunctionType
-        from . import _backend
-        host = dict(context)
-        try:
-            prep = _backend.load_host_module("_mojolearn_estimators_host")
-            xprep = _backend.load_host_module("_mojolearn_x_prep_host")
-            entries = {"standard_transform": prep.standard_transform,
-                       "preprocessing_numeric_mode": prep.estimators_numeric_mode,
-                       "x_prep_run": xprep.x_prep_run,
-                       "x_prep_numeric_mode": xprep.x_prep_numeric_mode}
-            if any(not isinstance(entry, BuiltinFunctionType) for entry in entries.values()):  # glue: host ABI identity
-                raise TypeError("HostStandardScaler requires compiled CPU entries")
-        except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
-            entries = type(error).__name__ + ": " + str(error)
-        host.update(scaler_explicit_host=True, scaler_bindings={"identical": entries})
-        context["scaler_host_contexts"][cls] = host
+
+
+def connect_host(cls, context, prep, xprep):
+    # glue: called only by _classical_host at its explicit CPU API setup
+    from types import BuiltinFunctionType
+    host = dict(context)
+    entries = {"standard_transform": prep.standard_transform,
+               "preprocessing_numeric_mode": prep.estimators_numeric_mode,
+               "x_prep_run": xprep.x_prep_run,
+               "x_prep_numeric_mode": xprep.x_prep_numeric_mode}
+    if any(not isinstance(entry, BuiltinFunctionType) for entry in entries.values()):  # glue: host ABI identity
+        raise TypeError("HostStandardScaler requires compiled CPU entries")
+    host.update(scaler_explicit_host=True, scaler_bindings={"identical": entries})
+    context["scaler_host_contexts"][cls] = host
+
+
+def connect_host_unavailable(cls, context, error):
+    # glue: preserve a missing optional host binary as an import-time ABI result
+    host = dict(context)
+    host.update(scaler_explicit_host=True,
+                scaler_bindings={"identical": type(error).__name__ + ": " + str(error)})
+    context["scaler_host_contexts"][cls] = host
