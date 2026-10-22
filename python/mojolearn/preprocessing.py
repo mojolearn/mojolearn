@@ -375,73 +375,43 @@ class MinMaxScaler(_ScalerProtocol):
     >>> Z = scaler.transform(X)
     """
     _parameters = ('feature_range', 'copy', 'clip', 'numeric_mode')
+    _mojolearn_native_public = True
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        _register_standard_scaler(cls, _MINMAX_CONTEXT)
+
+    def get_params(self, deep=True):
+        return _MINMAX_CALL(self, "get_params", (deep,), _MINMAX_CONTEXT)
+
+    def set_params(self, **params):
+        return _MINMAX_CALL(self, "set_params", (params,), _MINMAX_CONTEXT)
+
+    def __sklearn_is_fitted__(self):
+        return _MINMAX_CALL(self, "is_fitted", (), _MINMAX_CONTEXT)
+
+    def fit_transform(self, X, y=None, **fit_params):
+        """Fit to X and return its values mapped to the configured range.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data, converted to float32.
+        y : ignored
+            Accepted for estimator compatibility.
+        **fit_params
+            No additional fit parameters are supported.
+
+        Returns
+        -------
+        X_scaled : Array of shape (n_samples, n_features), float32
+            The transformed training data.
+        """
+        return _MINMAX_CALL(self, "fit_transform", (X, y, fit_params), _MINMAX_CONTEXT)
 
     def __init__(self, feature_range=(0, 1), *, copy=True, clip=False, numeric_mode=None):
-        self.feature_range = feature_range
-        self.copy = copy
-        self.clip = clip
-        self.numeric_mode = numeric_mode
         # Stored as given; fit and partial_fit check them (`_configuration`), scikit-learn's convention.
-
-    def _configuration(self):
-        if not is_bool(self.copy):
-            raise ValueError('copy must be a bool')
-        if not is_bool(self.clip):
-            raise ValueError('clip must be a bool')
-        if self.numeric_mode is not None and (
-                not isinstance(self.numeric_mode, str) or
-                self.numeric_mode.strip().lower() not in ('fast', 'identical')):
-            raise ValueError('numeric_mode must be fast, identical or None')
-        if not isinstance(self.feature_range, (tuple, list, Array)) and not hasattr(self.feature_range, "__array_interface__"):
-            raise ValueError("feature_range must be a reusable tuple, list or 1D array")
-        if getattr(self.feature_range, "ndim", 1) != 1:
-            raise ValueError("feature_range must be one-dimensional")
-        try:
-            endpoints = tuple(self.feature_range)
-        except TypeError:
-            raise ValueError('feature_range must contain two numeric endpoints') from None
-        if len(endpoints) != 2 or any(
-                is_bool(x) or
-                not isinstance(x, numbers.Real) for x in endpoints):  # glue: checks the two feature_range endpoints
-            raise ValueError('feature_range must contain two numeric endpoints')
-        try:
-            values = [float(x) for x in endpoints]  # glue: converts the two feature_range endpoints
-        except (OverflowError, ValueError):
-            raise ValueError('feature_range endpoints must be finite Float32 values') from None
-        if any(not math.isfinite(x) or abs(x) > 3.4028234663852886e+38 for x in values):  # glue: checks the two feature_range endpoints
-            raise ValueError('feature_range endpoints must be finite Float32 values')
-        lower, upper = (struct.unpack("<f", struct.pack("<f", x))[0] for x in values)  # glue: rounds the two feature_range endpoints
-        if not lower < upper:
-            raise ValueError('feature_range must have lower < upper after Float32 conversion')
-        return lower, upper
-
-    def _fit_extrema(self, binding, values, lower, upper, colnan, mode):
-        """The binding's minmax_fit over `values` (finite), then NaN
-        statistics for the `colnan` columns (int32 words, or None)."""
-        n, d = values.shape
-        output = empty((5, d), '<f4')
-        binding.minmax_fit(_addr_ro(values), _addr(output),
-                           [n, d, float(lower), float(upper)])
-        self._keep_extrema(output, colnan, mode)
-
-    def _keep_extrema(self, output, colnan, mode):
-        """The five fitted rows from `output` (5, d), NaN for the `colnan`
-        columns (int32 words, or None). Lane cpu2-l3-prep: the check (every
-        value finite, every scale positive) and the NaN rows on the device
-        (x_prep c2_mm_keep, one word read back)."""
-        P = _prep()
-        d = output.shape[1]
-        pr = P._Prog()
-        cn = pr.put_words(colnan) if colnan is not None else pr.put_words(full((d,), 0, "<i4"))
-        rows, bad, nbad = pr.alloc(5 * d), pr.alloc(d), pr.alloc(1)
-        pr.stage("c2_mm_keep", d, pr.put(output), d, cn, rows, bad)
-        pr.stage("c2_isum", 1, bad, d, nbad)
-        pr.run(mode)
-        if pr.get_i32(nbad, 1).tolist()[0]:
-            raise ValueError('MinMaxScaler fitted statistics overflowed or scale is not positive in Float32')
-        got = pr.get(rows, (5, d))
-        for i, name in enumerate(('data_min_', 'data_max_', 'data_range_', 'scale_', 'min_')):  # glue: sets five fitted attribute names
-            setattr(self, name, got[i].copy())
+        return _MINMAX_CALL(self, "init", (feature_range, copy, clip, numeric_mode), _MINMAX_CONTEXT)
 
     def fit(self, X, y=None):
         """Compute the per-feature minimum and maximum.
@@ -457,41 +427,7 @@ class MinMaxScaler(_ScalerProtocol):
         self : MinMaxScaler
             The fitted scaler.
         """
-        _require_training(self)
-        lower, upper = self._configuration()
-        # Once a new fit begins, a failed fit cannot expose stale statistics.
-        for name in list(self.__dict__):  # glue: drops stale fitted attributes
-            if name.endswith('_'):
-                del self.__dict__[name]
-        # scikit-learn's MinMaxScaler.fit takes no sample_weight, so neither
-        # does this one: with the parameter in the signature, scikit-learn's
-        # checks (has_fit_parameter) run its weight-equivalence check on it.
-        mode = (self.numeric_mode if self.numeric_mode is not None else _backend.default_mode()).strip().lower()
-        binding = self._binding(mode)
-        direct = _direct_entry(binding, "minmax_fit_direct")
-        values, finite = self._input(X, allow_nan=True, scan=direct is None)
-        n, d = values.shape
-        colnan = None
-        if finite is None:
-            output = empty((5, d), '<f4')
-            if int(direct(_addr_ro(values), _addr(output), [n, d, float(lower), float(upper)])):
-                self._keep_extrema(output, colnan, mode)
-                finite = True
-            else:
-                finite = False
-        elif finite:
-            self._fit_extrema(binding, values, lower, upper, colnan, mode)
-        if not finite:
-            # NaN -> the column's own minimum: min and max are those of its
-            # non-NaN entries, and the binding's arithmetic is unchanged.
-            values, _counts, colnan = _nan_scan_fill(mode, values, 3)
-            self._fit_extrema(binding, values, lower, upper, colnan, mode)
-        self.n_features_in_ = d
-        self.n_samples_seen_ = n
-        self.numeric_mode_ = mode
-        self.feature_range_ = (lower, upper)
-        self.clip_ = bool(self.clip)
-        return self
+        return _MINMAX_CALL(self, "fit", (X, y), _MINMAX_CONTEXT)
 
     def partial_fit(self, X, y=None):
         """Update the running minimum and maximum with a batch of rows.
@@ -516,79 +452,10 @@ class MinMaxScaler(_ScalerProtocol):
             If ``feature_range`` changed since the first batch or the feature
             count differs.
         """
-        _require_training(self)
-        if not self.__sklearn_is_fitted__():
-            return self.fit(X)
-        lower, upper = self._configuration()
-        if (lower, upper) != tuple(self.feature_range_):
-            raise ValueError('MinMaxScaler partial_fit: feature_range changed since the first batch')
-        batch = MinMaxScaler(feature_range=self.feature_range, clip=self.clip,
-                             numeric_mode=self.numeric_mode_).fit(X)
-        d = self.n_features_in_
-        if batch.n_features_in_ != d:
-            raise ValueError('MinMaxScaler input feature count differs from fit')
-        # lane cpu2-l3-prep: the merge rows on the device (x_prep c2_mm_merge: a column
-        # whose old or new minimum is NaN is colnan, its rows 0)
-        P = _prep()
-        pr = P._Prog()
-        rows, cn = pr.alloc(4 * d), pr.alloc(d)
-        pr.stage("c2_mm_merge", d, pr.put(self.data_min_), pr.put(self.data_max_), pr.put(batch.data_min_),
-                 pr.put(batch.data_max_), d, rows, cn)
-        pr.run(self.numeric_mode_)
-        extrema = pr.get(rows, (4, d))
-        self._fit_extrema(self._binding(self.numeric_mode_), extrema, lower, upper, pr.get_i32(cn, d),
-                          self.numeric_mode_)
-        self.n_samples_seen_ = int(self.n_samples_seen_) + int(batch.n_samples_seen_)
-        self.clip_ = bool(self.clip)
-        return self
+        return _MINMAX_CALL(self, "partial_fit", (X, y), _MINMAX_CONTEXT)
 
     def _transform(self, X, inverse):
-        if not self.__sklearn_is_fitted__():
-            raise not_fitted_error('MinMaxScaler is not fitted')
-        binding = self._binding(self.numeric_mode_)
-        # `minmax_transform_direct` (lane apple-fast-prep; lane cpu2-l3-prep: every GPU
-        # binding): X up from its own buffer, the device scans the output (and X when the
-        # output is not finite). The host binding (the host column) has none: its List
-        # route with the host scans
-        direct = _direct_entry(binding, "minmax_transform_direct")
-        values, finite, copied = self._input(X, allow_nan=True, with_copied=True, scan=direct is None)
-        n, d = values.shape
-        if d != self.n_features_in_:
-            raise ValueError('MinMaxScaler input feature count differs from fit')
-        for name in ("scale_", "min_"):  # glue: checks two fitted attribute names
-            statistic = getattr(self, name)
-            if (not isinstance(statistic, Array) or statistic.dtype != "<f4"
-                    or statistic.shape != (d,) or not statistic.flags["C_CONTIGUOUS"]):
-                raise ValueError(f"MinMaxScaler {name} must remain a finite contiguous Float32 feature vector")
-        # a column never seen (NaN statistics) transforms with scale 1, offset 0, then NaN
-        # (lane cpu2-l3-prep: substituted and checked on the device, `_stat_sub`)
-        offset, scale, colnan, nonfinite, nonpos = _stat_sub(self.numeric_mode_, self.min_, self.scale_, 1, 1,
-                                                             0.0, 1.0)
-        if nonfinite:
-            raise ValueError("MinMaxScaler scale_ and min_ must remain finite (NaN: a column never seen)")
-        if nonpos:
-            raise ValueError("MinMaxScaler scale_ must remain positive")
-        params = [n, d, int(inverse), int(self.clip_),
-                  float(self.feature_range_[0]), float(self.feature_range_[1])]
-        output = empty(values.shape, '<f4')
-        if direct is not None:
-            got = int(direct(_addr_ro(values), _addr_ro(scale), _addr_ro(offset), _addr(output), params))
-            if got == 0:
-                raise ValueError('MinMaxScaler transform overflowed in Float32')
-            finite = got == 1
-            if not finite:
-                # X holds NaN: the NaN-filled X through the same entry (an infinity is refused)
-                source = _nan_scan_fill(self.numeric_mode_, values, None)[0]
-                if int(direct(_addr_ro(source), _addr_ro(scale), _addr_ro(offset), _addr(output), params)) != 1:
-                    raise ValueError('MinMaxScaler transform overflowed in Float32')
-        else:
-            source = values if finite else _nan_scan_fill(self.numeric_mode_, values, None)[0]
-            binding.minmax_transform(_addr_ro(source), _addr_ro(scale), _addr_ro(offset), _addr(output), params)
-            if not all_finite(output):
-                raise ValueError('MinMaxScaler transform overflowed in Float32')
-        if not finite or colnan is not None:
-            output = _nan_keep(self.numeric_mode_, values, output, colnan)
-        return _write_back(self.copy, copied, values, X, output)
+        return _MINMAX_CALL(self, "transform", (X, inverse), _MINMAX_CONTEXT)
 
     def transform(self, X):
         """Scale ``X`` to ``feature_range``.
@@ -611,7 +478,7 @@ class MinMaxScaler(_ScalerProtocol):
         ValueError
             If the feature count differs or the result overflows float32.
         """
-        return self._transform(X, False)
+        return _MINMAX_CALL(self, "transform", (X, False), _MINMAX_CONTEXT)
 
     def inverse_transform(self, X):
         """Undo the scaling.
@@ -626,7 +493,7 @@ class MinMaxScaler(_ScalerProtocol):
         X_original : Array of shape (n_samples, n_features), float32
             The data in its original units.
         """
-        return self._transform(X, True)
+        return _MINMAX_CALL(self, "transform", (X, True), _MINMAX_CONTEXT)
 
     def save(self, path):
         """Save the fitted scaler to ``path`` as an ``.npz`` file.
@@ -645,22 +512,7 @@ class MinMaxScaler(_ScalerProtocol):
         RuntimeError
             If the scaler is not fitted.
         """
-        if not self.__sklearn_is_fitted__():
-            raise RuntimeError("this estimator is not fitted yet")
-        arrays = {
-            "format": _SCALER_FORMAT,
-            "estimator": type(self).__name__,
-            "numeric_mode": self.numeric_mode_,
-            "data_min": self.data_min_,
-            "data_max": self.data_max_,
-            "data_range": self.data_range_,
-            "scale": self.scale_,
-            "min": self.min_,
-            "feature_range": Array.from_list([float(v) for v in self.feature_range_], "<f8"),  # glue: packs the two feature_range endpoints
-            "meta": Array.from_list(
-                [int(self.n_features_in_), int(self.n_samples_seen_), int(self.clip_)], "<i8"),
-        }
-        return _serialize.write_npz(path, arrays)
+        return _MINMAX_CALL(self, "save", (path,), _MINMAX_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -684,21 +536,7 @@ class MinMaxScaler(_ScalerProtocol):
         ValueError
             If the file is not a MinMaxScaler or its arrays are inconsistent.
         """
-        arrays = _serialize.read_npz(path, _SCALER_FORMAT)
-        mode, meta = _scaler_header(arrays, path, cls, 3)
-        bounds = _serialize.exact(arrays, "feature_range", "<f8")
-        if bounds.size != 2:
-            raise ValueError(f"mojolearn: {path!r} feature_range must hold two values")
-        obj = cls(feature_range=(float(bounds[0]), float(bounds[1])), clip=bool(int(meta[2])))
-        d = int(meta[0])
-        for name in ("data_min", "data_max", "data_range", "scale", "min"):  # glue: loads five saved statistic names
-            setattr(obj, name + "_", _saved_statistic(arrays, name, d, path))
-        obj.n_features_in_ = d
-        obj.n_samples_seen_ = int(meta[1])
-        obj.numeric_mode_ = mode
-        obj.feature_range_ = (float(bounds[0]), float(bounds[1]))
-        obj.clip_ = bool(int(meta[2]))
-        return obj
+        return _MINMAX_CALL(cls, "load", (path,), _MINMAX_CONTEXT)
 
 
 # Maintainer notes (moved from the docstring): variance is a centered
@@ -962,3 +800,6 @@ __all__ += _SKLEARN_LAYOUT["preprocessing"]
 
 from ._native_scaler_bridge import connect as _connect_standard_scaler, register_subclass as _register_standard_scaler
 _STANDARD_FIT, _STANDARD_CALL, _STANDARD_CONTEXT = _connect_standard_scaler(StandardScaler)
+
+from ._native_minmax_bridge import connect as _connect_minmax_scaler
+_MINMAX_CALL, _MINMAX_CONTEXT = _connect_minmax_scaler(MinMaxScaler)

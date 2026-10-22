@@ -110,6 +110,7 @@ from bindings.classical_attributes import classical_attribute_c, classical_attri
 from bindings.pca_native import pca_c
 from bindings.scaler_native import scaler_fit_c
 from bindings.scaler_lifecycle_native import scaler_lifecycle_c, scaler_attribute_c
+from bindings.minmax_native import minmax_lifecycle_c
 from bindings.generator_draw_native import generator_draw_c
 from checks.kernel_matrix import (
     COLUMN_CPU,
@@ -1446,6 +1447,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(pca_c, "pca_native_call")
         module.def_py_c_function(scaler_fit_c, "standard_scaler_fit_native")
         module.def_py_c_function(scaler_lifecycle_c, "standard_scaler_native_call")
+        module.def_py_c_function(minmax_lifecycle_c, "minmax_scaler_native_call")
         module.def_py_c_function(scaler_attribute_c, "standard_scaler_attribute_call")
         module.def_py_c_function(generator_draw_c, "generator_draw")
         module.def_py_c_function(samba_config_c, "samba_config_call")
