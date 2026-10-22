@@ -147,3 +147,23 @@ def test_recorded_batch_movement_is_value_evidence_not_infrastructure_failure(tr
             cell.update(batch=['abc'], batch_verdict='STABLE')
     sab['cells']['one/base'].update(batch=['BATCH_MOVED:row:0'], batch_verdict='BATCH_MOVED')
     assert run() == 0
+
+
+def test_reviewed_independent_oracle_failure_needs_every_repeat(trial):
+    _, _, sab, _, run = trial
+    errors = ['distributed distances and the independent plain distances differ: 512 bytes']
+    sab['cells']['one/base'] = dict(verdict='DIVERGENT', hashes=[], oracle_errors=errors)
+    assert run() == 1
+    review = {'oracles': {'one/base': dict(errors=errors, product_check='identity_break._same_bytes',
+                                         why_fault_reaches_check='fault changes the distributed merge distances')}}
+    assert run(review) == 0
+    sab['cells']['one/base']['oracle_errors'] = []
+    assert run(review) == 1
+
+
+def test_base_build_script_maps_to_the_base_extension(trial):
+    arm, clean, sab, restored, run = trial
+    arm['bindings'] = ['build']
+    for record in (clean, sab, restored):
+        record['package']['bindings'][0]['module'] = '_mojolearn'
+    assert run() == 0

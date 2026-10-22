@@ -185,6 +185,20 @@ def _refusal_caught(key, cell, evidence):
             bool(proof.get("why_fault_reaches_check")))
 
 
+def _oracle_caught(key, cell, repeats, evidence):
+    """A lane may stop at its independent byte oracle before emitting hashes."""
+    errors = cell.get("oracle_errors")
+    if (cell.get("verdict") != "DIVERGENT" or not isinstance(errors, list) or
+            len(errors) != repeats or not all(isinstance(v, str) and v for v in errors)):
+        return False
+    proof = (evidence.get("oracles") or {}).get(key) or {}
+    if proof.get("errors") != errors:
+        return False
+    # Apply the same infrastructure exclusions as a refused product check.
+    review = {"refusals": {key: dict(proof, error="\n".join(errors))}}
+    return _refusal_caught(key, {"error": "\n".join(errors)}, review)
+
+
 def check(arm, clean_path, sab_path, restored_path=None, evidence_path=None, root=ROOT):
     failures = []
     try:
@@ -230,7 +244,8 @@ def check(arm, clean_path, sab_path, restored_path=None, evidence_path=None, roo
         if set(cb) != set(sb):
             raise ValueError("sabotaged native binding coverage differs from the clean build")
         changed = {name for name in cb if cb[name] != sb[name]}
-        expected = {"_mojolearn_" + stem.removeprefix("build_") for stem in arm["bindings"]}
+        expected = {"_mojolearn" if stem == "build" else "_mojolearn_" + stem.removeprefix("build_")
+                    for stem in arm["bindings"]}
         # Host records key families without the _mojolearn_ prefix or _host suffix.
         expected |= {stem.removeprefix("build_").removesuffix("_host")
                      for stem in arm["bindings"] if stem.endswith("_host")}
@@ -267,6 +282,10 @@ def check(arm, clean_path, sab_path, restored_path=None, evidence_path=None, roo
                         caught += 1
                     else:
                         failures.append(f"{key}: refusal is not evidence of the intended product fault")
+                    continue
+                if _oracle_caught(key, sc, repeats, evidence):
+                    print(f"{key}: independent byte oracle caught the reviewed fault")
+                    caught += 1
                     continue
                 # Missing hash parts are incomplete evidence, not changed values.
                 if (sc.get("verdict") not in ("STABLE", "DIVERGENT") or
