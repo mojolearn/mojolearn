@@ -71,3 +71,89 @@ def test_foreign_dtype_alias_keys_refuse_before_hash_or_equality_hooks(resident,
     report = audit.report()
     for field in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads"):
         assert not report[field], report
+
+
+def _assert_no_runtime_callbacks(audit):
+    report = audit.report()
+    for field in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads"):
+        assert not report[field], report
+
+
+@pytest.mark.parametrize("kind", ["S", "U", "V"])
+def test_negative_flexible_size_preserves_native_exception_fields(resident, kind):
+    values, tensor = resident
+    with pytest.raises(Exception) as oracle:
+        values.astype((kind, -1), copy=False)
+    audit = _candidate(tensor, (kind, -1))
+    _assert_no_runtime_callbacks(audit)
+    actual, expected = audit.exception, oracle.value
+    assert type(actual) is type(expected)
+    assert actual.args == expected.args
+    if isinstance(expected, MemoryError):
+        assert vars(actual) == vars(expected)
+        assert actual.shape == values.shape
+        assert actual.dtype.itemsize < 0
+    else:
+        assert type(actual) is ValueError
+
+
+def _legacy_allocation_exception():
+    if int(np.__version__.split(".")[0]) != 1:
+        pytest.skip("NumPy 1.x alone admits negative flexible descriptors")
+    import numpy.core._exceptions as module
+    return module, module._ArrayMemoryError
+
+
+def test_negative_storage_bypasses_python_exception_initializer(resident, monkeypatch):
+    _, tensor = resident
+    _, category = _legacy_allocation_exception()
+    calls = []
+
+    def initializer(*args, **kwargs):
+        calls.append("init")
+        raise AssertionError("Python exception initializer ran")
+
+    with monkeypatch.context() as patch:
+        patch.setattr(category, "__init__", initializer)
+        audit = _candidate(tensor, ("S", -1))
+    _assert_no_runtime_callbacks(audit)
+    assert type(audit.exception) is category
+    assert audit.exception.args == ((4,), np.dtype("S-1"))
+    assert vars(audit.exception) == {"shape": (4,), "dtype": np.dtype("S-1")}
+    assert not calls
+
+
+@pytest.mark.parametrize("hook", ["__new__", "__del__", "__getattribute__", "__getattr__", "__setattr__", "__dict__", "foreign_module_name", "metaclass"])
+def test_negative_storage_refuses_exception_hooks_before_allocation(resident, monkeypatch, hook):
+    _, tensor = resident
+    module, _ = _legacy_allocation_exception()
+    calls = []
+
+    def callback(*args, **kwargs):
+        calls.append(hook)
+        raise AssertionError("Python exception hook ran")
+
+    class ForeignName:
+        def __eq__(self, other):
+            return callback()
+
+    class Meta(type):
+        def __getattribute__(self, name):
+            return callback()
+
+    fields = {"__module__": "numpy.core._exceptions", "__qualname__": "_ArrayMemoryError"}
+    if hook == "foreign_module_name":
+        fields["__module__"] = ForeignName()
+    elif hook == "__dict__":
+        fields[hook] = property(callback)
+    elif hook != "metaclass":
+        fields[hook] = callback
+    metaclass = Meta if hook == "metaclass" else type
+    category = metaclass("_ArrayMemoryError", (MemoryError,), fields)
+    calls.clear()
+    with monkeypatch.context() as patch:
+        patch.setattr(module, "_ArrayMemoryError", category)
+        audit = _candidate(tensor, ("S", -1))
+    _assert_no_runtime_callbacks(audit)
+    assert type(audit.exception) is TypeError, audit.report()
+    assert not calls
