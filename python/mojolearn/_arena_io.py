@@ -130,7 +130,7 @@ class DeviceCache:
 
     @staticmethod
     def supports(binding, prefix):
-        return hasattr(binding, prefix + "_dev_put") and hasattr(binding, prefix + "_dev_free")
+        return _ROWS_CALL(None, "cache_supports", (binding, prefix), _ROWS_CONTEXT)
 
     @staticmethod
     def _key(arr):

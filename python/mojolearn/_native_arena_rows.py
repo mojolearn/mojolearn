@@ -15,8 +15,15 @@ def connect():
             or native_type.__getattribute__(runtime_error, "__name__") != "RuntimeError"
             or native_type.__getattribute__(runtime_error, "__module__") != "builtins"):
         raise TypeError("DeviceCache requires the immutable native RuntimeError builtin")
+    import_error = ImportError
+    if (native_type(import_error) is not native_type
+            or flags(import_error) & 512 or not flags(import_error) & 256
+            or native_type.__getattribute__(import_error, "__name__") != "ImportError"
+            or native_type.__getattribute__(import_error, "__module__") != "builtins"):
+        raise TypeError("DeviceCache requires the immutable native ImportError builtin")
     from types import BuiltinFunctionType, ModuleType, MemberDescriptorType, SimpleNamespace
     import struct
+    import re
     import sys
     from ._native_classical_warnings import connect_warnings
     from . import _arena_io, model_selection, _backend
@@ -107,5 +114,28 @@ def connect():
                                         bytearray, list, tuple, dict, set, frozenset),
                    cache_itemsize_types=(type(None), object, bool, int, float, complex, str, bytes,
                                          bytearray, list, tuple, dict, set, frozenset, memoryview))
+    # glue: preserve the CPU facade's by-name refusal without running its
+    # Python __getattr__ during a public store capability probe.
+    host_proxy = getattr(_backend, "_HostBinding", None)
+    missing_proxy = getattr(_backend, "_NoGpuBinding", None)
+    templates = ()
+    no_cpu_entry = None
+    if host_proxy is not None and missing_proxy is not None:
+        no_cpu_entry = _backend.NoCpuEntry
+        if type(no_cpu_entry) is not type or no_cpu_entry.__bases__ != (AttributeError,):
+            raise TypeError("DeviceCache requires its ordinary NoCpuEntry exception class")
+        if any(name in vars(no_cpu_entry) for name in ("__new__", "__init__", "__del__", "__getattribute__")):  # glue: never connect a Python exception-construction hook
+            raise TypeError("DeviceCache cannot connect NoCpuEntry constructor hooks")
+        markers = ("\0cache-module\0", "\0cache-entry\0", "\0cache-reason\0", "\0cache-host\0")
+        pattern = "(" + "|".join(re.escape(marker) for marker in markers) + ")"  # glue: tokenize fixed CPU error metadata once during connection
+        templates = tuple(tuple(markers.index(part) if part in markers else part  # glue: tokenize templates before inserting caller strings; marker-like caller text stays literal
+                                for part in re.split(pattern, _backend._no_cpu_implementation(*markers[:3], basename)))  # glue: retain literal segments and slot indexes, not runtime Python formatting
+                          for basename in (markers[3], None))  # glue: the two fixed host/missing-family refusal templates
+    context.update(cache_cpu_host_proxy=host_proxy, cache_cpu_missing_proxy=missing_proxy,
+                   cache_cpu_error_templates=templates, cache_no_cpu_entry=no_cpu_entry,
+                   cache_import_error=import_error, cache_error_new=runtime_error.__mro__[-2].__new__,
+                   cache_str_add=str.__add__,
+                   cache_prefix_error_types=(type(None), bool, int, float, complex, bytes,
+                                             bytearray, list, tuple, dict, set, frozenset, range))
     _arena_io._ROWS_CALL = call
     _arena_io._ROWS_CONTEXT = context

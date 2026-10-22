@@ -21,6 +21,11 @@ def _mapping(cls: PythonObject, context: PythonObject) raises -> PythonObject:
 
 def _attribute(value: PythonObject, name: String, default: PythonObject,
                required: Bool, context: PythonObject) raises -> PythonObject:
+    return _attribute(value,PythonObject(name),default,required,context)
+
+
+def _attribute(value: PythonObject, name: PythonObject, default: PythonObject,
+               required: Bool, context: PythonObject) raises -> PythonObject:
     # GenericGetDict returns actual storage, including ordinary Python-created
     # instance dictionaries, without consulting a replaced __dict__ property.
     # Data descriptors are admitted independently before generic slot lookup.
@@ -91,7 +96,7 @@ def _attribute(value: PythonObject, name: String, default: PythonObject,
             raise Error("TypeError: cache metadata cannot invoke Python or unregistered native descriptors")
         return selected
     if required:
-        raise Error("AttributeError: cache metadata has no '" + name + "' attribute")
+        raise Error("AttributeError: cache metadata has no '" + String(name) + "' attribute")
     return default
 
 
