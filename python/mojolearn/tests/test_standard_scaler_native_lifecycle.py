@@ -107,8 +107,42 @@ def test_partial_fit_and_npz_roundtrip_are_native(missing, weighted, with_mean, 
     archive.seek(0)
     restored = audit_native_call(ml.StandardScaler.load, archive).assert_native()
     for name in ("mean_", "var_", "scale_", "n_samples_seen_"):
-        assert _bits(getattr(restored, name)) == _bits(getattr(model, name)), name
+        expected = getattr(model, name)
+        if name == "n_samples_seen_" and type(expected) is float:
+            # The existing NPZ schema saves a scalar weight sum as float32.
+            # Count-only partial_fit can retain a float64 sum between saves.
+            expected = float(np.float32(expected))
+        assert _bits(getattr(restored, name)) == _bits(expected), name
     assert _bits(audit_native_call(restored.transform, x).assert_native()) == _bits(model.transform(x))
+
+
+def test_count_only_weighted_archive_keeps_existing_float32_storage():
+    x = _data()
+    weights = np.linspace(.5, 1.5, len(x), dtype=np.float32)
+    model = ml.StandardScaler(with_mean=False, with_std=False)
+    for part in (slice(0, 17), slice(17, None)):
+        audit_native_call(model.partial_fit, x[part], sample_weight=weights[part]).assert_native()
+    count = model.n_samples_seen_
+    assert count == 36.999999046325684  # Retained CPU/Metal fixture, before migration.
+    assert count != float(np.float32(count))
+    archive = io.BytesIO()
+    audit_native_call(model.save, archive).assert_native()
+    with np.load(io.BytesIO(archive.getvalue()), allow_pickle=False) as fields:
+        assert fields["n_samples_seen"].dtype == np.dtype("<f4")
+        assert fields["n_samples_seen"].tobytes() == np.array([count], np.float32).tobytes()
+    archive.seek(0)
+    restored = audit_native_call(ml.StandardScaler.load, archive).assert_native()
+    assert restored.n_samples_seen_ == float(np.float32(count))
+
+
+def test_explicit_host_unfitted_error_uses_its_native_exception_context():
+    from mojolearn._classical_host import HostStandardScaler
+    from mojolearn.exceptions import NotFittedError
+    model = audit_native_call(HostStandardScaler).assert_native()
+    audit = audit_native_call(model.transform, _data())
+    assert isinstance(audit.exception, NotFittedError)
+    assert not audit.frames
+    assert not audit.wrapper_work
 
 
 def test_model_protocol_hooks_are_refused_before_they_run():
