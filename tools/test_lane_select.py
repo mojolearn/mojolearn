@@ -1745,12 +1745,39 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
     REMEASURED 2026-10-22 (lane/verify-gaps-20261022, static reverse_map):
       forest_host_predict  92 -> 93  saved-model-host-infer-trees (new lane)
       forest_inference     52 -> 53  the same lane
-      neural_inference.py  49 -> 74  four new lanes (hf-causal-lm-text,
+      neural_inference.py  49 -> 70  already on main 551dee1ce, attributed
+                                     2026-10-22 (lane/lane-select-pin). Every
+                                     new edge is the same real import chain:
+                                     `_training_impl.py` imports
+                                     `_native_samba_bridge.py`, whose
+                                     `_connect_admission` (run by `connect()` when
+                                     `_samba_impl.py` loads, which `__init__.py`
+                                     does eagerly) imports `SambaInference` from
+                                     neural_inference.py for the native admission
+                                     record (2430b2684, 2026-10-20). Not the
+                                     re-export rule; no existing lane widened
+                                     any other way.
+                                     +8  3ce0c0b26 (2026-10-21): _x_sequence_optim.py
+                                         imports _training_impl: sequence-adafactor,
+                                         -adagrad, -adamax, -lamb, -lion, -nadam,
+                                         -optimizer-state, -rmsprop
+                                     +6  e492586c6 (2026-10-21): _x_sequence_device.py
+                                         imports _training_impl: embedding,
+                                         embedding-sort, sequence-device-tensor,
+                                         sequence-layernorm, sequence-moe,
+                                         sequence-moe-backward
+                                     +5  1f1183e21 (2026-10-21), new lanes:
+                                         native-schedule-series, optim-io-capability,
+                                         optim-owner-lifecycle, optim-resident-io,
+                                         sequence-device-release
+                                     +2  50c405ad2 (2026-10-21), new lanes:
+                                         sequence-adafactor-device,
+                                         sequence-lamb-device
+      neural_inference.py  70 -> 74  four new lanes in d332cd33c
+                                     (hf-causal-lm-text,
                                      saved-model-host-infer-trees,
                                      sequence-layernorm-backward,
-                                     training-device-cross-entropy); the
-                                     other 21 were already on main 551dee1ce
-                                     (70 there) and are owed attribution."""
+                                     training-device-cross-entropy)."""
     rev = lane_select.reverse_map()
     for rel, want in (("cluster/host/kmeans_oracle.mojo", 84),
                       ("core/gbdt_host_predict.mojo", 55),
@@ -1946,11 +1973,16 @@ def test_the_public_door_a_name_is_bound_from_is_in_the_map():
         wide = sorted(lanes - naming)
         assert not wide, (f"{rel} answers {len(lanes)} lanes and {wide[:5]} name nothing it "
                           f"binds ({sorted(bound)}); the door rule has gone wide")
-    assert len(rev.get("python/mojolearn/neural_inference.py", ())) == 49, \
-        ("the re-export rule moved neural_inference.py off its measured 49 lanes (40 + hf-checkpoint,"
+    assert len(rev.get("python/mojolearn/neural_inference.py", ())) == 74, \
+        ("the re-export rule moved neural_inference.py off its measured 74 lanes (40 + hf-checkpoint,"
          " 2026-09-23; minus gbdt-tensor-ctr-tables, which fits on the CPU since 2026-09-28;"
          " plus optim-maximize, 2026-09-28; plus four new lanes and minus gbdt-categorical-ctr-tables,"
-         " 2026-10-21; plus five coverage lanes in 63022df0c2, see "
+         " 2026-10-21; plus five coverage lanes in 63022df0c2;"
+         " plus eight sequence optimizer lanes, 3ce0c0b26 2026-10-21, and six sequence device lanes,"
+         " e492586c6 2026-10-21, whose doors now import _training_impl -> _native_samba_bridge ->"
+         " neural_inference (2430b2684);"
+         " plus five new lanes in 1f1183e21 and two in 50c405ad2, 2026-10-21;"
+         " plus four verify-gaps lanes in d332cd33c, 2026-10-22; see "
          "test_the_wider_mojo_walk_did_not_widen_the_narrow_answers)")
 
     # THE FAILING SIDE: with no public rebindings the lane each door is
