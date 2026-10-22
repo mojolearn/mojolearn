@@ -112,12 +112,6 @@ def tokenizer_store_i64(dst: MutPointer[Int64, MutUntrackedOrigin], values: List
         dst[k] = Int64(values[k])
 
 
-def tokenizer_store_i32(dst: MutPointer[Int32, MutUntrackedOrigin], values: List[Int]):
-    """`values` as int32 at `dst`, in order."""
-    for k in range(len(values)):
-        dst[k] = Int32(values[k])
-
-
 def tokenizer_store_u8(dst: MutPointer[UInt8, MutUntrackedOrigin], values: List[UInt8]):
     """`values` at `dst` (one memcpy)."""
     if len(values) > 0:
@@ -852,25 +846,6 @@ def tokens_gather_rows_into(
         var start = lo + (base + b * length) % modulus
         memcpy(dest=dst + b * width, src=src + start, count=width)
     return batch * width
-
-
-def vocab_check_merges(
-    table: RankTable, marena: List[UInt8], mlen: List[Int], n: Int, nm: Int, ignore: Bool
-) raises:
-    """`vocab_load_bytes`'s merges: two byte strings per merge, checked."""
-    var chk = MergeCheck(n)
-    var at = 0
-    for k in range(nm):
-        var a = List[UInt8]()
-        var b = List[UInt8]()
-        for i in range(mlen[2 * k]):
-            a.append(marena[at + i])
-        at += mlen[2 * k]
-        for i in range(mlen[2 * k + 1]):
-            b.append(marena[at + i])
-        at += mlen[2 * k + 1]
-        check_merge(table, a, b, "merge " + String(k), chk)
-    check_loose(table, chk, ignore)
 
 
 def vocab_decode_ids(tok: VocabTokenizer, ids: List[Int]) raises -> List[UInt8]:

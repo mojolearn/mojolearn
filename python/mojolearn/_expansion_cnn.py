@@ -1226,38 +1226,9 @@ class _Linear(_Layer):
         return dx
 
 
-def _softmax_xent(binding, logits, labels):
-    """(mean loss, grad of the mean loss w.r.t. logits, proba)."""
-    np = _np()
-    logits = _f32(logits, "logits")
-    labels = np.ascontiguousarray(labels, dtype=np.int32)
-    grad = np.empty_like(logits)
-    proba = np.empty_like(logits)
-    loss = binding.x_cnn_softmax_xent(logits.ctypes.data, labels.ctypes.data, grad.ctypes.data, proba.ctypes.data,
-                                      list(logits.shape))
-    return float(loss), grad, proba
-
-
-def _sgd(binding, param, grad, buf, lr, momentum, weight_decay, dampening=0.0, nesterov=False, first=False):
-    """In place: PyTorch SGD's step on `param` and its momentum buffer."""
-    grad = _f32(grad, "grad")
-    binding.x_cnn_sgd(param.ctypes.data, grad.ctypes.data, buf.ctypes.data, [param.size],
-                      [float(lr), float(momentum), float(weight_decay), float(dampening), 1.0 if nesterov else 0.0,
-                       1.0 if first else 0.0])
-
-
-def _adam(binding, param, grad, mv, step, lr, betas, eps, weight_decay, decoupled):
-    """In place: torch.optim.Adam / AdamW's step `step` (1-based) on `param`
-    and mv = [exp_avg | exp_avg_sq]; the step's scalars in double, as torch
-    computes them in Python."""
-    grad = _f32(grad, "grad")
-    binding.x_cnn_adam(param.ctypes.data, grad.ctypes.data, mv.ctypes.data, [param.size],
-                       _adam_hyper(step, lr, betas, eps, weight_decay, decoupled, binding))
-
-
 def _adam_hyper(step, lr, betas, eps, weight_decay, decoupled, binding=None):
     """adam_at's hyper block for 1-based step `step` (the scalars in double,
-    as torch computes them in Python); `_adam` and the resident fit share it.
+    as torch computes them in Python) for the resident fit.
     DEVIATION 6900: torch's `beta ** step` calls the platform pow; here it is
     `_pm.powi`, correctly rounded (the platform's bits wherever its pow is),
     the same bits on every host. sqrt is correctly rounded everywhere."""

@@ -877,11 +877,8 @@ ANNOTATIONS = {
                  "public_fast_to_bf16")},
     "ops_shape": ("n/a", [], "the verifier's own native-session boundary probe (_verify_graph)"),
     "covariance": ("n/a", [], "Apple FAST quality probe binding (tools/scoped_gemm_quality.py)"),
-    **{e: ("n/a", [], "no live caller: _expansion_cnn._sgd/_adam/_softmax_xent are never called")
-       for e in ("x_cnn_adam", "x_cnn_sgd", "x_cnn_softmax_xent")},
-    **{e: ("n/a", [], _DEAD_KIT) for e in ("x_decomp_chi2_cdf", "x_decomp_eigh_batch", "x_decomp_knn_select",
-                                           "x_decomp_dev_knn_select", "x_decomp_dev_cd_rows",
-                                           "x_decomp_dev_als_rows", "x_decomp_dev_dict_update")},
+    **{e: ("n/a", [], _DEAD_KIT) for e in ("x_decomp_eigh_batch", "x_decomp_knn_select",
+                                           "x_decomp_dev_cd_rows", "x_decomp_dev_dict_update")},
     "ops_metric": ("n/a", [], "no live caller: Session._metric is never called (accuracy and log_loss "
                               "run through ops_session_call)"),
     "onnx_from_words": ("n/a", [], "the torch.export import path: needs torch, which a verifier run never "

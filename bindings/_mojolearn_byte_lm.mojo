@@ -10,7 +10,7 @@ Outputs are published only after successful computation, validation and
 synchronization; the stateless ABI also tears down its context before return.
 
 DEVIATION 2514 (device-owned step): the `byte_lm_session_*`
-entries below `byte_lm_session_run` make the session's device buffers the
+entries below make the session's device buffers the
 ONLY copy of the model, the optimizer state, the last gradient and the flags
 as long as it is open. State crosses the boundary at `open` (validated on the
 host Lists, uploaded once), at `export_state` / `export_gradients` (pinned
@@ -18,8 +18,7 @@ staging, then `copy_f32` into the caller's arrays) and never per step; a
 step moves the ids in and the loss and the flags out. A failed step is
 rolled back on the device from the shadow the trainer takes before its
 update; `rollback` exposes the same restore for a failure the Python layer
-detects after native success. `byte_lm_session_run` (mirror in, mirror
-out) is kept for the transition and is unchanged.
+detects after native success.
 """
 # DEVIATION 2486: shared byte-preserving host copies.
 from core.hostptr import f32_ptr, i32_ptr, read_f32, copy_f32, list_i32
@@ -719,13 +718,6 @@ def byte_lm_run_configured_binding(addresses: PythonObject, params: PythonObject
     var cfg = _byte_config(shape)
     var session = ByteLMSession()
     return _byte_lm_run(addresses, params, cfg, session)
-
-
-def byte_lm_session_run_binding(session: PythonObject, addresses: PythonObject,
-                                params: PythonObject, shape: PythonObject) raises -> PythonObject:
-    var cfg = _byte_config(shape)
-    var owner = session.downcast_value_ptr[ByteLMSession]()
-    return _byte_lm_run(addresses, params, cfg, owner[], retain=True)
 
 
 # ---------------------------------------------------------------------------
@@ -1471,7 +1463,6 @@ def byte_lm_offload_rollback_binding(session: PythonObject) raises -> PythonObje
     return PythonObject(owner[].completed)
 
 
-
 def byte_lm_session_launch_probe_binding(session: PythonObject, count: PythonObject) raises -> PythonObject:
     """lane/neural-pass43: the per-launch host cost ON THE OPEN SESSION'S
     context (Metal pays per live allocation on every launch, so this reads
@@ -1542,7 +1533,6 @@ def build__mojolearn_byte_lm() -> PythonObject:
         module.def_function[byte_lm_session_close_binding]("byte_lm_session_close")
         module.def_function[byte_lm_session_launch_probe_binding]("byte_lm_session_launch_probe")
         module.def_function[byte_lm_launch_probe_binding]("byte_lm_launch_probe")
-        module.def_function[byte_lm_session_run_binding]("byte_lm_session_run")
         module.def_function[byte_lm_context_keeper_active_binding]("byte_lm_context_keeper_active")
         # DEVIATION 2514: the device-owned session entries.
         module.def_function[byte_lm_session_open_binding]("byte_lm_session_open")

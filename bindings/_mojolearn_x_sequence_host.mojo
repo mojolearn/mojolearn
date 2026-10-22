@@ -32,7 +32,6 @@ from sequence.opt_public_host_pyapi import (
     seq_optimizer_close_host_py,
 )
 from sequence.ops import SEQUENCE_HOST_SABOTAGE
-from sequence.schedule_pyapi import epoch_schedule_py
 from sequence.prophet_prep_pyapi import prophet_changepoints_py, prophet_days_py, prophet_features_py
 from autograd.program_pyapi import ops_program_dynamic_py, ops_program_fit_py, ops_program_execute_py, ops_program_inspect_py, ops_program_fit_native_py
 from autograd.program_control_pyapi import ops_program_control_py
@@ -73,7 +72,7 @@ from autograd.model_checkpoint_pyapi import (
     model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py, ops_load_state_py,
     ops_save_state_py, ops_load_program_py, ops_save_program_py,
 )
-from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, garch_py, prophet_fit_py, prophet_predict_py, moe_forward_py
+from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, lamb_step_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, garch_py, prophet_fit_py, prophet_predict_py, moe_forward_py
 from sequence.pyapi import moe_backward_py
 
 
@@ -108,10 +107,6 @@ def rnn_fit_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) rai
 def rnn_predict_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     var ex = HostExec()
     return rnn_predict_py(ex, addrs, ip)
-
-
-def rnn_n_params_binding(ip: PythonObject) raises -> PythonObject:
-    return rnn_n_params_py(ip)
 
 
 def optimizer_step_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
@@ -218,7 +213,6 @@ def ops_op_packed_binding(sid: PythonObject, code: PythonObject, block: PythonOb
     return ops_op_packed_py[HostExec, OPS_HOST](sid, code, block)
 
 
-
 # captured programs (autograd/program.mojo; OpsSession.capture / run_program)
 def ops_capture_binding(sid: PythonObject, inputs: PythonObject, outputs: PythonObject) raises -> PythonObject:
     return ops_capture_py[HostExec, OPS_HOST](sid, inputs, outputs)
@@ -226,7 +220,6 @@ def ops_capture_binding(sid: PythonObject, inputs: PythonObject, outputs: Python
 
 def ops_program_info_binding(sid: PythonObject, pid: PythonObject) raises -> PythonObject:
     return ops_program_info_py[HostExec, OPS_HOST](sid, pid)
-
 
 
 def ops_partitioned_open_binding(sid: PythonObject, pid: PythonObject, devices: PythonObject,
@@ -249,7 +242,6 @@ def ops_partitioned_load_binding(path: PythonObject, devices: PythonObject, cls:
     executors.append(HostExec())
     var handle = partition_load[HostExec, OPS_HOST](path, ids, executors^)
     return distributed_object(cls, binding, handle)
-
 
 
 def ops_partitioned_fit_binding(id: PythonObject, arrays: PythonObject, targets: PythonObject,
@@ -312,7 +304,6 @@ def ops_distributed_load_binding(path: PythonObject, devices: PythonObject, cls:
     executors.append(HostExec())
     var handle = distributed_load[HostExec, OPS_HOST](path, ids, executors^)
     return distributed_object(cls, binding, handle)
-
 
 
 def ops_distributed_fit_binding(id: PythonObject, arrays: PythonObject, targets: PythonObject,
@@ -607,11 +598,6 @@ def ops_load_state_binding(
     return ops_load_state_py[HostExec, OPS_HOST](sid, path, requires_grad, optimizer)
 
 
-def adafactor_step_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    var ex = HostExec()
-    return adafactor_step_py(ex, addrs, ip, fp)
-
-
 def lamb_step_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
     var ex = HostExec()
     return lamb_step_py(ex, addrs, ip, fp)
@@ -647,10 +633,6 @@ def garch_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     return garch_py(ex, addrs, ip)
 
 
-def epoch_schedule_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
-    return epoch_schedule_py(addrs, ip)
-
-
 def prophet_days_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     return prophet_days_py(addrs, ip)
 
@@ -682,7 +664,6 @@ def moe_forward_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonO
 def moe_backward_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     var ex = HostExec()
     return moe_backward_py(ex, addrs, ip)
-
 
 
 def onnx_read_binding(path: PythonObject) raises -> PythonObject:
@@ -736,7 +717,6 @@ def build__mojolearn_x_sequence_host() -> PythonObject:
         m.def_function[host_vendor_binding]("x_sequence_vendor")
         m.def_function[rnn_fit_binding]("rnn_fit")
         m.def_function[rnn_predict_binding]("rnn_predict")
-        m.def_function[rnn_n_params_binding]("rnn_n_params")
         m.def_function[optimizer_step_binding]("optimizer_step")
         # the public optimizers' one native call per method (sequence/opt_public*.mojo)
         m.def_function[seq_optimizer_init_host_py]("seq_optimizer_init")
@@ -835,7 +815,6 @@ def build__mojolearn_x_sequence_host() -> PythonObject:
         m.def_function[verify_fill_binding]("verify_fill")
         m.def_function[ops_save_state_binding]("ops_save_state")
         m.def_function[ops_load_state_binding]("ops_load_state")
-        m.def_function[adafactor_step_binding]("adafactor_step")
         m.def_function[lamb_step_binding]("lamb_step")
         m.def_function[layer_norm_binding]("layer_norm")
         m.def_function[theta_binding]("theta")
@@ -843,7 +822,6 @@ def build__mojolearn_x_sequence_host() -> PythonObject:
         m.def_function[croston_forecast_binding]("croston_forecast")
         m.def_function[ets_binding]("ets")
         m.def_function[garch_binding]("garch")
-        m.def_function[epoch_schedule_binding]("epoch_schedule")
         m.def_function[prophet_days_binding]("prophet_days")
         m.def_function[prophet_features_binding]("prophet_features")
         m.def_function[prophet_changepoints_binding]("prophet_changepoints")

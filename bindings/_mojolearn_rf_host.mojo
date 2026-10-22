@@ -531,31 +531,6 @@ def rf_regressor_fit_aux_export_binding(
         importance_addr=_index(importance_addr))
 
 
-def rf_classifier_fit_oob_export_binding(
-    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
-    criterion: PythonObject, weights_addr: PythonObject,
-    oob_addr: PythonObject, score_addr: PythonObject,
-) raises -> PythonObject:
-    """T15 host public output ABI, identical buffer shapes to GPU counterpart.
-    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    """
-    if _index(oob_addr) == 0 or _index(score_addr) == 0:
-        raise Error("RF OOB requires nonzero output and score addresses")
-    return _rf_fit[True,True,False](x_addr,y_addr,params,criterion,
-        weights_addr=_index(weights_addr),oob_addr=_index(oob_addr),oob_score_addr=_index(score_addr))
-
-
-def rf_regressor_fit_oob_export_binding(
-    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
-    criterion: PythonObject, oob_addr: PythonObject, score_addr: PythonObject,
-) raises -> PythonObject:
-    """T15 host OOB, same unqualified source status as classifier twin."""
-    if _index(oob_addr) == 0 or _index(score_addr) == 0:
-        raise Error("RF OOB requires nonzero output and score addresses")
-    return _rf_fit[False,True,False](x_addr,y_addr,params,criterion,
-        oob_addr=_index(oob_addr),oob_score_addr=_index(score_addr))
-
-
 def rf_classifier_fit_binding(
     x_addr: PythonObject, y_addr: PythonObject,
     params: PythonObject, criterion: PythonObject,
@@ -1116,8 +1091,6 @@ def build__mojolearn_rf_host() -> PythonObject:
         module.def_function[rf_numeric_mode_binding]("rf_numeric_mode")
         module.def_function[rf_classifier_fit_aux_export_binding]("rf_classifier_fit_aux_export")
         module.def_function[rf_regressor_fit_aux_export_binding]("rf_regressor_fit_aux_export")
-        module.def_function[rf_classifier_fit_oob_export_binding]("rf_classifier_fit_oob_export")
-        module.def_function[rf_regressor_fit_oob_export_binding]("rf_regressor_fit_oob_export")
         module.def_function[rf_classifier_fit_binding]("rf_classifier_fit")
         module.def_function[rf_classifier_fit_export_binding]("rf_classifier_fit_export")
         module.def_function[rf_classifier_fit_rowmajor_binding]("rf_classifier_fit_rowmajor")

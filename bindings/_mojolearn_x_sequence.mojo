@@ -20,7 +20,7 @@ from sequence.exec_device import DeviceExec
 from sequence.fit_team_py import garch_team_py, prophet_fit_team_py
 from sequence.ets_team import ETS_TEAM, IDN_ETS_TEAM
 from sequence.ets_team_py import ets_team_applies, ets_team_py
-from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, prophet_predict_py, moe_forward_py
+from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, lamb_step_py, layer_norm_py, theta_py, croston_py, croston_forecast_py, ets_py, prophet_predict_py, moe_forward_py
 from sequence.opt_resident import AF_RESIDENT
 from sequence.opt_public_pyapi import (
     seq_optimizer_init_py,
@@ -121,10 +121,6 @@ def rnn_fit_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) rai
 def rnn_predict_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     var ex = DeviceExec()
     return rnn_predict_py(ex, addrs, ip)
-
-
-def rnn_n_params_binding(ip: PythonObject) raises -> PythonObject:
-    return rnn_n_params_py(ip)
 
 
 def optimizer_step_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
@@ -300,7 +296,6 @@ def ops_op_packed_binding(sid: PythonObject, code: PythonObject, block: PythonOb
     return ops_op_packed_py[DeviceExec, OPS_DEVICE](sid, code, block)
 
 
-
 # captured programs (autograd/program.mojo; OpsSession.capture / run_program)
 def ops_capture_binding(sid: PythonObject, inputs: PythonObject, outputs: PythonObject) raises -> PythonObject:
     return ops_capture_py[DeviceExec, OPS_DEVICE](sid, inputs, outputs)
@@ -308,7 +303,6 @@ def ops_capture_binding(sid: PythonObject, inputs: PythonObject, outputs: Python
 
 def ops_program_info_binding(sid: PythonObject, pid: PythonObject) raises -> PythonObject:
     return ops_program_info_py[DeviceExec, OPS_DEVICE](sid, pid)
-
 
 
 def ops_partitioned_open_binding(sid: PythonObject, pid: PythonObject, devices: PythonObject,
@@ -325,7 +319,6 @@ def ops_partitioned_load_binding(path: PythonObject, devices: PythonObject, cls:
     var executors = device_executors(ids)
     var handle = partition_load[DeviceExec, OPS_DEVICE](path, ids, executors^)
     return distributed_object(cls, binding, handle)
-
 
 
 def ops_partitioned_fit_binding(id: PythonObject, arrays: PythonObject, targets: PythonObject,
@@ -382,7 +375,6 @@ def ops_distributed_load_binding(path: PythonObject, devices: PythonObject, cls:
     var executors = device_executors(ids)
     var handle = distributed_load[DeviceExec, OPS_DEVICE](path, ids, executors^)
     return distributed_object(cls, binding, handle)
-
 
 
 def ops_distributed_fit_binding(id: PythonObject, arrays: PythonObject, targets: PythonObject,
@@ -677,11 +669,6 @@ def ops_load_state_binding(
     return ops_load_state_py[DeviceExec, OPS_DEVICE](sid, path, requires_grad, optimizer)
 
 
-def adafactor_step_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    var ex = DeviceExec()
-    return adafactor_step_py(ex, addrs, ip, fp)
-
-
 def lamb_step_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
     var ex = DeviceExec()
     return lamb_step_py(ex, addrs, ip, fp)
@@ -807,7 +794,6 @@ def moe_weights_free_binding(h: PythonObject) raises -> PythonObject:
     return PythonObject(0)
 
 
-
 def onnx_read_binding(path: PythonObject) raises -> PythonObject:
     """importers.onnx.read: read and check the model file; returns its handle."""
     return onnx_read_py(path)
@@ -855,7 +841,6 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_function[vendor_binding]("x_sequence_vendor")
         m.def_function[rnn_fit_binding]("rnn_fit")
         m.def_function[rnn_predict_binding]("rnn_predict")
-        m.def_function[rnn_n_params_binding]("rnn_n_params")
         m.def_function[optimizer_step_binding]("optimizer_step")
         m.def_function[stl_binding]("stl")
         m.def_function[var_fit_binding]("var_fit")
@@ -947,7 +932,6 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_function[verify_fill_binding]("verify_fill")
         m.def_function[ops_save_state_binding]("ops_save_state")
         m.def_function[ops_load_state_binding]("ops_load_state")
-        m.def_function[adafactor_step_binding]("adafactor_step")
         m.def_function[lamb_step_binding]("lamb_step")
         # the resident optimizer state (sequence/opt_resident.mojo)
         m.def_function[optimizer_resident_open_binding]("optimizer_resident_open")

@@ -54,7 +54,6 @@ from std.memory import memcpy
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32
 from gaussian_process.host.gp_theta import (
     gp_log64,
-    gp_restart_uniform,
     gp_theta_param,
 )
 from gaussian_process.host.gpr_grad_oracle import gpr_host_lml_grad
@@ -96,12 +95,10 @@ from gaussian_process.host.gp_host_fit_entries import (
     _gpr_predict_cov_run,
     _gpr_sample_y_run,
     gp_log64_list,
-    gp_restart_uniforms_list,
     gp_theta_params_list,
 )
 from bindings.py_lists import py_list_f64
 from bindings.gp_host_predict import (
-    gp_py2mojo_binding,
     gpc_ovr_combine_binding,
     gpc_predict_binding,
     gpr_predict_binding,
@@ -443,8 +440,6 @@ def gpr_lml_grad_binding(
     return PythonObject(info)
 
 
-
-
 def gpr_optimize_binding(
     addrs: PythonObject, params: PythonObject
 ) raises -> PythonObject:
@@ -513,19 +508,6 @@ def gp_theta_params_binding(values: PythonObject) raises -> PythonObject:
     for i in range(len(values)):  # small-loop(theta words: one per kernel hyperparameter)
         vals.append(Float64(py=values[i]))
     return py_list_f64(gp_theta_params_list(vals))
-
-
-def gp_restart_uniforms_binding(params: PythonObject) raises -> PythonObject:
-    """The GPU binding's `gp_restart_uniforms`."""
-    if len(params) != 4:
-        raise Error(
-            "gp_restart_uniforms: params must contain 4 values (n_restarts,"
-            " n_dims, seed_lo, seed_hi), got " + String(len(params))
-        )
-    var nr = Int(py=params[0])
-    var nd = Int(py=params[1])
-    var seed = (UInt64(Int(py=params[3])) << 32) | UInt64(Int(py=params[2]))
-    return py_list_f64(gp_restart_uniforms_list(seed, nr, nd))
 
 
 # ===========================================================================
@@ -618,14 +600,12 @@ def build__mojolearn_gp_host() -> PythonObject:
         module.def_function[gp_numeric_mode_binding]("gp_numeric_mode")
         module.def_function[gpr_fit_binding]("gpr_fit")
         module.def_function[gpr_predict_binding]("gpr_predict")
-        module.def_function[gp_py2mojo_binding]("gp_py2mojo")
         module.def_function[gpr_sample_y_binding]("gpr_sample_y")
         module.def_function[gpr_predict_cov_binding]("gpr_predict_cov")
         module.def_function[gpr_lml_grad_binding]("gpr_lml_grad")
         module.def_function[gpr_optimize_binding]("gpr_optimize")
         module.def_function[gp_log64_binding]("gp_log64")
         module.def_function[gp_theta_params_binding]("gp_theta_params")
-        module.def_function[gp_restart_uniforms_binding]("gp_restart_uniforms")
         module.def_function[gpc_fit_binding]("gpc_fit")
         module.def_function[gpc_predict_binding]("gpc_predict")
         module.def_function[gpc_ovr_combine_binding]("gpc_ovr_combine")

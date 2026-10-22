@@ -106,30 +106,6 @@ def test_all_finite_refuses_null_and_negative(width):
         fn(_addr(buf), -1)
 
 
-def test_probability_validation_and_binary_packing():
-    import numpy as np  # oracle only; implementation uses raw buffers
-    p = np.array([0, 1, .125, .7, np.nextafter(np.float32(0), np.float32(1))], dtype=np.float32)
-    out = np.full((len(p), 2), -99, dtype=np.float32)
-    assert _ext.probability_rows_f32(p.ctypes.data, out.ctypes.data, len(p), 1, 1) == 0
-    expected = np.column_stack((np.float32(1) - p, p))
-    assert out.tobytes() == expected.tobytes()
-    assert _ext.probability_rows_f32(out.ctypes.data, 0, len(p), 2, 0) == 0
-    for bad, code in ((float('nan'), 1), (float('inf'), 1), (-.1, 2), (1.1, 2)):
-        p[2] = bad
-        assert _ext.probability_rows_f32(p.ctypes.data, out.ctypes.data, len(p), 1, 1) == code
-    wrong = np.array([[.1, .2], [.3, .7]], dtype=np.float32)
-    assert _ext.probability_rows_f32(wrong.ctypes.data, 0, 2, 2, 0) == 3
-    # Keep the documented error-category precedence when different worker
-    # shards observe different failures.
-    mixed = np.full((20000, 2), np.float32(.5), dtype=np.float32)
-    mixed[1, 0] = np.nan
-    mixed[-1] = (-.25, .25)
-    assert _ext.probability_rows_f32(mixed.ctypes.data, 0, len(mixed), 2, 0) == 1
-    mixed[1] = (.5, .5)
-    assert _ext.probability_rows_f32(mixed.ctypes.data, 0, len(mixed), 2, 0) == 2
-    assert _ext.probability_rows_f32(0, 0, 0, 1, 1) == 0
-
-
 def test_gather_rows_bytes_checks_and_copies_exactly():
     import numpy as np
     source = np.arange(35, dtype=np.uint8).reshape(5, 7)

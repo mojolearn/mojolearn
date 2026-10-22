@@ -51,12 +51,6 @@ def chi2_quantile_dev(mut k: DKit, dof: Float64, upper: Float64) raises -> Float
     return Float64(Float32(0.5 * (lo + hi)))
 
 
-def chi2_cdf_dev_run(d: Float64, x: Float64) raises -> Float64:
-    """`chi2_cdf_dev_py`'s typed body: one kit, one cdf."""
-    var k = DKit()
-    return chi2_cdf_dev(k, d, x)
-
-
 def consistency_factor_dev(mut k: DKit, p: Float64, alpha: Float64) raises -> Float64:
     """x_decomp/chi2.mojo `consistency_factor` on the device cells."""
     var q = chi2_quantile_dev(k, p, 1.0 - alpha)

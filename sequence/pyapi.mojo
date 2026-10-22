@@ -39,7 +39,6 @@ from sequence.ops_impl import (
     prophet_fit_impl,
     prophet_predict_impl,
     rnn_fit_impl,
-    rnn_n_params_impl,
     rnn_predict_impl,
     stl_impl,
     theta_impl,
@@ -99,11 +98,6 @@ def rnn_predict_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) ra
     return PythonObject(rnn_predict_impl(ex, py_ints(addrs), py_ints(ip)))
 
 
-def rnn_n_params_py(ip: PythonObject) raises -> PythonObject:
-    """The Python door of `rnn_n_params_impl` (sequence/ops_impl.mojo)."""
-    return PythonObject(rnn_n_params_impl(py_ints(ip)))
-
-
 def opt_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
     """The Python door of `opt_step_impl` (sequence/ops_impl.mojo)."""
     return PythonObject(opt_step_impl(ex, py_ints(addrs), py_ints(ip), py_f64s(fp)))
@@ -132,11 +126,6 @@ def mlp_fit_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: Py
 def mlp_predict_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
     """The Python door of `mlp_predict_impl` (sequence/ops_impl.mojo)."""
     return PythonObject(mlp_predict_impl(ex, py_ints(addrs), py_ints(ip)))
-
-
-def adafactor_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
-    """The Python door of `adafactor_step_impl` (sequence/ops_impl.mojo)."""
-    return PythonObject(adafactor_step_impl(ex, py_ints(addrs), py_ints(ip), py_f64s(fp)))
 
 
 def lamb_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:

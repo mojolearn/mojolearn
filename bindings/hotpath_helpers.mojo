@@ -51,30 +51,18 @@ from core.hotpath_impl_rows import (
     assign_fold_i64,
     bincount2_i32,
     bincount_i64,
-    compact_notnan_f32,
     count_fold_hits_i64,
-    dot_rows_f32,
-    draw_rows_without_replacement_i32,
-    epoch_order_i32,
     first_seen_i32,
     fold_pair_f32,
-    gather_keep_neg_i32,
     group_fold_assign_i32,
     mark_split_roles_f32,
-    mean_std_f32,
     normal_init_f32,
-    ocsvm_alpha_init_f32,
-    scale_shift_ftz_f32,
     scatter_rows_bytes_host,
-    split_table_i32,
     strat_alloc_i64,
     strat_fold_assign_i32,
-    strat_group_assign_i32,
     strat_group_plan_i32,
     threshold_labels_i64,
     uniform_init_f32,
-    weighted_draw_rows_i32,
-    weighted_pick_i32,
 )
 from core.hotpath_impl import (
     HOTPATH_SABOTAGE,
@@ -114,9 +102,6 @@ from core.hotpath_impl import (
     select_fold_i64,
     select_mask_u8_i64,
 )
-
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -482,27 +467,6 @@ def threshold_labels_i64_binding(
     return PythonObject(r)
 
 
-def scale_shift_ftz_f32_binding(
-    src_addr: PythonObject, n: PythonObject, a: PythonObject, b: PythonObject,
-    op: PythonObject, dst_addr: PythonObject,
-) raises -> PythonObject:
-    """Elementwise float32, each step one rounding then `ftz` (lane
-    cgr4-py-compute: the GP un-normalization that was a Python
-    comprehension): op 0 dst = ftz(ftz(a * v) + b); op 1 dst =
-    ftz(sqrt(ftz(v * a))); op 2 dst = ftz(v * a). `a`, `b` are float32
-    values. src and dst may be the same buffer."""
-    var count = Int(py=n)
-    var o = Int(py=op)
-    var fa = Float32(Float64(py=a))
-    var fb = Float32(Float64(py=b))
-    var s = Int(py=src_addr)
-    var d = Int(py=dst_addr)
-    var r: Int
-    with GILReleased(Python()):
-        r = scale_shift_ftz_f32(s, count, fa, fb, o, d)
-    return PythonObject(r)
-
-
 # ---------------------------------------------------------------------------
 # lane cgr4-py-compute, round 2: the rest of the per-row Python
 # ---------------------------------------------------------------------------
@@ -550,50 +514,6 @@ def bincount2_i32_host_binding(
     with GILReleased(Python()):
         r = bincount2_i32(a, b, count, ka, kb, ca)
     return PythonObject(r)
-
-
-def compact_notnan_f32_binding(
-    src_addr: PythonObject, n: PythonObject, stride: PythonObject, dst_addr: PythonObject,
-) raises -> PythonObject:
-    """dst = the non-NaN values of src[0], src[stride], ..., src[(n-1)*stride]
-    in order (a column of a row-major block); returns their count."""
-    var count = Int(py=n)
-    var st = Int(py=stride)
-    var s = Int(py=src_addr)
-    var d = Int(py=dst_addr)
-    var r: Int
-    with GILReleased(Python()):
-        r = compact_notnan_f32(s, count, st, d)
-    return PythonObject(r)
-
-
-def gather_keep_neg_i32_binding(
-    table_addr: PythonObject, n_table: PythonObject, src_addr: PythonObject,
-    n: PythonObject, dst_addr: PythonObject,
-) raises -> PythonObject:
-    """dst[i] = table[src[i]] for src[i] >= 0, else src[i] (a negative
-    sentinel, such as a leaf's column id, kept); int32. A non-negative value
-    outside the table raises before any write."""
-    var count = Int(py=n)
-    var nt = Int(py=n_table)
-    var t = Int(py=table_addr)
-    var s = Int(py=src_addr)
-    var d = Int(py=dst_addr)
-    var r: Int
-    with GILReleased(Python()):
-        r = gather_keep_neg_i32(t, nt, s, count, d)
-    return PythonObject(r)
-
-
-def dot_rows_f32_binding(
-    a_addr: PythonObject, x_addr: PythonObject, m: PythonObject, d: PythonObject, dst_addr: PythonObject,
-) raises -> PythonObject:
-    """dst[j] = float32(sum_i a[i] * x[i, j]) over a float32 (m,) and a
-    row-major float32 (m, d) block, the sum in float64 in row order (one
-    fixed fold): SVC's linear coef_ (dual_coef_ @ support_vectors_)."""
-    return PythonObject(
-        dot_rows_f32(Int(py=a_addr), Int(py=x_addr), Int(py=m), Int(py=d), Int(py=dst_addr))
-    )
 
 
 def assign_fold_i64_binding(
@@ -650,27 +570,6 @@ def mark_split_roles_f32_binding(
     var r: Int
     with GILReleased(Python()):
         r = mark_split_roles_f32(ip, count, rows, k, ro, rp)
-    return PythonObject(r)
-
-
-def split_table_i32_binding(
-    perm_addr: PythonObject, m: PythonObject, n_test: PythonObject, n_train: PythonObject,
-    counts_addr: PythonObject, table_addr: PythonObject, sums_addr: PythonObject,
-) raises -> PythonObject:
-    """One GroupShuffleSplit draw as a per-group side table: table[g] =
-    1 for the first n_test groups of the int64 permutation, 0 for the next
-    n_train, 2 for the rest; sums (int64, 2) = [rows on the train side, rows
-    on the test side] from the int64 per-group row counts."""
-    var mm = Int(py=m)
-    var te = Int(py=n_test)
-    var tr = Int(py=n_train)
-    var pp = Int(py=perm_addr)
-    var cp = Int(py=counts_addr)
-    var tp = Int(py=table_addr)
-    var sp = Int(py=sums_addr)
-    var r: Int
-    with GILReleased(Python()):
-        r = split_table_i32(pp, mm, te, tr, cp, tp, sp)
     return PythonObject(r)
 
 
@@ -737,17 +636,6 @@ def normal_init_f32_binding(
     return PythonObject(r)
 
 
-def epoch_order_i32_binding(
-    dst_addr: PythonObject, n: PythonObject, shuffle: PythonObject, state_addr: PythonObject,
-) raises -> PythonObject:
-    """One epoch's row order (sequence/schedule.mojo `fill_epoch_order`):
-    0..n-1, Fisher-Yates permuted from the splitmix64 state at `state`
-    (uint64, advanced in place) when `shuffle`."""
-    return PythonObject(
-        epoch_order_i32(Int(py=dst_addr), Int(py=n), Int(py=shuffle) != 0, Int(py=state_addr))
-    )
-
-
 def adam_hyper_f64_binding(
     dst_addr: PythonObject, step0: PythonObject, nsteps: PythonObject, fp: PythonObject,
 ) raises -> PythonObject:
@@ -766,14 +654,6 @@ def adam_hyper_f64_binding(
             Float64(py=fp[3]), Float64(py=fp[4]), Float64(py=fp[5]),
         )
     )
-
-
-def mean_std_f32_binding(
-    src_addr: PythonObject, n: PythonObject, stride: PythonObject, dst_addr: PythonObject,
-) raises -> PythonObject:
-    """dst (float64, 2) = [mean, population std] of src[0], src[stride], ...,
-    src[(n-1)*stride] (float32), two passes in float64 in row order."""
-    return PythonObject(mean_std_f32(Int(py=src_addr), Int(py=n), Int(py=stride), Int(py=dst_addr)))
 
 
 def first_seen_i32_binding(
@@ -818,28 +698,6 @@ def group_fold_assign_i32_binding(
     )
 
 
-def strat_group_assign_i32_binding(addrs: PythonObject, dims: PythonObject) raises -> PythonObject:
-    """StratifiedGroupKFold's fold of each of the m groups (scikit-learn
-    1.9 `_find_best_fold`): each group's class distribution, the groups
-    (in code order, or permuted by `perm` int64 when nonzero) sorted by the
-    standard deviation of their distribution, descending and stable, each
-    to the fold whose per-class fold shares it perturbs least (the mean over
-    classes of the across-fold std; ties: the fewer rows, then the lower
-    fold). int32 dst[g]; int64 sizes[f] the rows of each fold. yenc: int32
-    class codes in [0, k); gidx: int32 group codes in [0, m). Returns 1 when
-    the largest class has fewer rows than n_folds (the caller refuses), else
-    0. Binary64 sums ascending (lane pyglue-numeric: the Python loops).
-    addrs = [yenc, gidx, perm (0: none), dst, sizes]; dims = [n, k, m, n_folds]."""
-    if len(addrs) != 5 or len(dims) != 4:
-        raise Error("strat_group_assign_i32: addrs [yenc, gidx, perm, dst, sizes], dims [n, k, m, n_folds]")
-    return PythonObject(
-        strat_group_assign_i32(
-            Int(py=addrs[0]), Int(py=addrs[1]), Int(py=addrs[2]), Int(py=addrs[3]), Int(py=addrs[4]),
-            Int(py=dims[0]), Int(py=dims[1]), Int(py=dims[2]), Int(py=dims[3]),
-        )
-    )
-
-
 def strat_group_plan_i32_binding(addrs: PythonObject, dims: PythonObject) raises -> PythonObject:
     """`strat_group_assign_i32` from the group x class table (lane
     cpu4-python): the table is the device's (`bincount2_i32`, int64
@@ -854,76 +712,6 @@ def strat_group_plan_i32_binding(addrs: PythonObject, dims: PythonObject) raises
         strat_group_plan_i32(
             Int(py=addrs[0]), Int(py=addrs[1]), Int(py=addrs[2]), Int(py=addrs[3]),
             Int(py=dims[0]), Int(py=dims[1]), Int(py=dims[2]),
-        )
-    )
-
-
-def draw_rows_without_replacement_i32_binding(
-    n: PythonObject, k: PythonObject, seed_lo: PythonObject, seed_hi: PythonObject, dst_addr: PythonObject,
-) raises -> PythonObject:
-    """k distinct rows of n, ascending, int32 at dst: a splitmix64 partial
-    Fisher-Yates (swap i with i + z % (n - i), i < k) then the first k
-    sorted (QuantileTransformer's subsample; lane pyglue-numeric: the
-    Python `_draw_without_replacement`, the same integers)."""
-    var nn = Int(py=n)
-    var kk = Int(py=k)
-    var state = (UInt64(Int(py=seed_hi)) << 32) | UInt64(Int(py=seed_lo))
-    var d = Int(py=dst_addr)
-    var r: Int
-    with GILReleased(Python()):
-        r = draw_rows_without_replacement_i32(nn, kk, state, d)
-    return PythonObject(r)
-
-
-def weighted_draw_rows_i32_binding(
-    w_addr: PythonObject, n: PythonObject, k: PythonObject, seed_lo: PythonObject, seed_hi: PythonObject,
-    dst_addr: PythonObject,
-) raises -> PythonObject:
-    """k rows drawn with replacement in proportion to the float32 weights:
-    row = the first whose binary64 running sum exceeds u * total, u the
-    53-bit uniform of the next splitmix64 draw, clipped to n - 1 (KBins'
-    weighted subsample; lane pyglue-numeric: the Python `bisect` loop, the
-    same arithmetic). int32 rows at dst, in draw order."""
-    var nn = Int(py=n)
-    var kk = Int(py=k)
-    var state = (UInt64(Int(py=seed_hi)) << 32) | UInt64(Int(py=seed_lo))
-    var w = Int(py=w_addr)
-    var d = Int(py=dst_addr)
-    var r: Int
-    with GILReleased(Python()):
-        r = weighted_draw_rows_i32(w, nn, kk, state, d)
-    return PythonObject(r)
-
-
-def weighted_pick_i32_binding(
-    m_addr: PythonObject, dk: PythonObject, col: PythonObject, k: PythonObject, state_addr: PythonObject,
-    dst_addr: PythonObject,
-) raises -> PythonObject:
-    """IterativeImputer's n_nearest_features draw for feature `col`: k of
-    the dk features drawn without replacement with probability M[:, col]
-    (float32, row-major dk x dk): each draw u = the 53-bit uniform of the
-    next splitmix64 word (`state`, uint64, advanced in place) times the
-    binary64 total of the positive weights not yet drawn, the first such
-    feature whose running sum exceeds u (the last one when none does). The
-    k picks ascending, int32 at dst (lane pyglue-numeric: a Python loop)."""
-    return PythonObject(
-        weighted_pick_i32(
-            Int(py=m_addr), Int(py=dk), Int(py=col), Int(py=k), Int(py=state_addr), Int(py=dst_addr)
-        )
-    )
-
-
-def ocsvm_alpha_init_f32_binding(
-    c_addr: PythonObject, m: PythonObject, nu: PythonObject, weighted: PythonObject, dst_addr: PythonObject,
-) raises -> PythonObject:
-    """libsvm's solve_one_class start: nu_l = nu * m (or, `weighted`, the
-    sum of C_i * nu in sample order, binary64), then alpha_i = min(C_i,
-    nu_l) while nu_l > 0, nu_l reduced by each (the rest 0). float32 C_i
-    in, float32 alpha out (lane pyglue-numeric: a Python loop over the
-    samples, the same arithmetic)."""
-    return PythonObject(
-        ocsvm_alpha_init_f32(
-            Int(py=c_addr), Int(py=m), Float64(py=nu), Int(py=weighted) != 0, Int(py=dst_addr)
         )
     )
 

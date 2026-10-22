@@ -3,9 +3,8 @@
 """The minibatch schedule of the sequence lane's trainers (lane
 cgr4-py-compute: it was numpy in `_x_sequence_rnn.py`): every epoch's row
 order, one Fisher-Yates permutation per epoch from one splitmix64 stream
-(seeded by the caller), or the identity without shuffle, and each step's
-(offset, count) pair into it. Integers only; the same Mojo in both
-bindings, so the same schedule on every column."""
+(seeded by the caller), or the identity without shuffle. Integers only; the
+same Mojo in both bindings, so the same order on every column."""
 comptime I32P = MutPointer[Int32, MutUntrackedOrigin]
 
 
@@ -32,22 +31,3 @@ def fill_epoch_order(op: I32P, n: Int, shuffle: Bool, mut s: UInt64):
             op[j] = t
             i -= 1
 
-
-def epoch_schedule(op: I32P, sp: I32P, n: Int, epochs: Int, bs: Int, shuffle: Bool,
-                   seed: UInt64) raises -> Int:
-    """op = order (epochs * n) int32 out, sp = steps (2 * epochs * ceil(n /
-    bs)) int32 out; the splitmix64 stream starts at `seed`. Returns the
-    number of steps. The Python entry (`epoch_schedule_py`) is
-    `sequence/schedule_pyapi.mojo`'s."""
-    var s = seed
-    if n < 1 or epochs < 0 or bs < 1 or epochs * n >= 2147483647:
-        raise Error("epoch_schedule: needs n >= 1, epochs >= 0, bs >= 1, epochs * n < 2^31 - 1")
-    var per = (n + bs - 1) // bs
-    for e in range(epochs):
-        var base = e * n
-        fill_epoch_order(op + base, n, shuffle, s)
-        for k in range(per):
-            var start = k * bs
-            sp[2 * (e * per + k)] = Int32(base + start)
-            sp[2 * (e * per + k) + 1] = Int32(min(bs, n - start))
-    return epochs * per
