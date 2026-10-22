@@ -38,12 +38,30 @@
 #                                      member) for str labels; `integral` and
 #                                      `real` are numbers.Integral and
 #                                      numbers.Real, fixed at register
+#   ("kernel", field, table, dtype, kinds, params, ls_len, ls)
+#                                      a Gaussian process kernel's postfix node
+#                                      list (`Kernel._nodes()`) as four members:
+#                                      kinds <i4, params `dtype`, ls_len <i4 and
+#                                      the length-scale table `dtype` (one 1.0
+#                                      when empty). `table` maps each kernel
+#                                      class to its node layout: ("leaf", kind,
+#                                      param field or None, scales field or
+#                                      None), ("pair", left, right, op field) or
+#                                      ("nodes", saved node list field)
+#   ("stack", member, field, attr, dtype, item)
+#                                      the storage bytes of `attr` of every
+#                                      element of the list `field`, joined as a
+#                                      (len, item) array of `dtype`
+#   ("each", member, field, attr, dtype)
+#                                      `attr` of every element of the list
+#                                      `field`, as an <i8 or <f8 vector
 #
 # An item is ("int", field), ("bool", field), ("const", number),
 # ("dim", field, axis), ("size", field), ("len", field), ("none", field, sentinel),
 # ("noneflag", field), ("float", field), ("float_or", field, default),
-# ("int_or", field, default), ("bool_or", field, default), ("code", field, table)
-# or ("if_eq", field, value, item, item). A field is an instance-dictionary
+# ("int_or", field, default), ("bool_or", field, default), ("code", field, table),
+# ("if_eq", field, value, item, item), ("mul", item, item) or
+# ("kernel_ls", field, table), the length-scale count of a "kernel" step's kernel. A field is an instance-dictionary
 # name, or a tuple path: a name, then dictionary keys and sequence indices.
 # Messages may name the class as {cls}.
 from std.python import Python, PythonObject
@@ -169,6 +187,15 @@ def _schema_whole(fields: PythonObject, item: PythonObject, name: String,
     if kind == "if_eq":
         var chosen = item[3] if Bool(py=_schema_value(fields, item[1], name) == item[2]) else item[4]
         return _schema_whole(fields, chosen, name, context)
+    if kind == "mul":
+        return _schema_whole(fields, item[1], name, context) * _schema_whole(fields, item[2], name, context)
+    if kind == "kernel_ls":
+        var nodes = Python.list()
+        _schema_kernel_nodes(_schema_value(fields, item[1], name), item[2], nodes)
+        var total = 0
+        for i in range(len(nodes)):  # driver-loop: over the kernel's postfix nodes
+            total += len(nodes[i][2])
+        return total
     raise Error("RuntimeError: unknown saved item kind " + kind)
 
 
@@ -345,6 +372,124 @@ def _schema_classes(value: PythonObject, integral: PythonObject, real: PythonObj
     raise Error("ValueError: mojolearn: classes_ holds labels no model file can carry")
 
 
+def _schema_kernel_layout(kernel: PythonObject, table: PythonObject) raises -> PythonObject:
+    """The node layout of `kernel`'s class or its nearest connected ancestor;
+    a class that defines its own `_nodes` first has none."""
+    var b = Python.import_module("builtins")
+    var cls = py_type(kernel)
+    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    for i in range(len(mro)):  # driver-loop: over the kernel class ancestry metadata
+        if py_contains(table, mro[i]):
+            return table[mro[i]]
+        if py_contains(py_call(b.type.__dict__["__dict__"].__get__, mro[i]), "_nodes"):
+            break
+    raise Error("TypeError: mojolearn: a " + String(cls.__name__) + " kernel has no saved node layout")
+
+
+def _schema_kernel_nodes(kernel: PythonObject, table: PythonObject, nodes: PythonObject) raises:
+    """Append `kernel._nodes()`: postfix (kind, param, length scales) tuples,
+    read from the kernels' instance fields."""
+    var b = Python.import_module("builtins")
+    var layout = _schema_kernel_layout(kernel, table)
+    var fields = py_fields(kernel)
+    var name = String(py_type(kernel).__name__)
+    var how = String(layout[0])
+    if how == "pair":
+        _schema_kernel_nodes(_schema_field(fields, layout[1], name), table, nodes)
+        _schema_kernel_nodes(_schema_field(fields, layout[2], name), table, nodes)
+        _ = py_call(nodes.append, Python.tuple(_schema_field(fields, layout[3], name), PythonObject(Float64(0.0)), Python.list()))
+    elif how == "leaf":
+        var param = PythonObject(Float64(0.0)) if layout[2] is None else _schema_field(fields, layout[2], name)
+        var scales = Python.list() if layout[3] is None else py_call(b.list, _schema_field(fields, layout[3], name))
+        _ = py_call(nodes.append, Python.tuple(layout[1], param, scales))
+    elif how == "nodes":
+        var saved = _schema_field(fields, layout[1], name)
+        for i in range(len(saved)):  # driver-loop: over a saved kernel's postfix nodes
+            var node = saved[i]
+            _ = py_call(nodes.append, Python.tuple(node[0], node[1], py_call(b.list, node[2])))
+    else:
+        raise Error("RuntimeError: unknown kernel node layout " + how)
+
+
+def _schema_kernel(model_fields: PythonObject, step: PythonObject, values: PythonObject, name: String,
+                   context: PythonObject) raises:
+    """The four kernel members of a "kernel" step, as `_kernel_arrays` and
+    GaussianProcessRegressor.save packed them with Array.from_list."""
+    var b = Python.import_module("builtins")
+    var nodes = Python.list()
+    _schema_kernel_nodes(_schema_value(model_fields, step[1], name), step[2], nodes)
+    var dtype = String(step[3])
+    var code = _store_code(dtype)
+    var kinds = Python.list()
+    var params = Python.list()
+    var lengths = Python.list()
+    var scales = Python.list()
+    for i in range(len(nodes)):  # driver-loop: over the kernel's postfix nodes
+        var node = nodes[i]
+        _ = py_call(kinds.append, py_call(b.int, node[0]))
+        _ = py_call(params.append, py_call(b.float, node[1]))
+        _ = py_call(lengths.append, len(node[2]))
+        for j in range(len(node[2])):  # driver-loop: over one node's length scales
+            _ = py_call(scales.append, py_call(b.float, node[2][j]))
+    if len(scales) == 0:
+        _ = py_call(scales.append, PythonObject(Float64(1.0)))
+    py_setitem(values, step[4], _schema_label_store(kinds, "i", "<i4", context))
+    py_setitem(values, step[5], _schema_label_store(params, code, dtype, context))
+    py_setitem(values, step[6], _schema_label_store(lengths, "i", "<i4", context))
+    py_setitem(values, step[7], _schema_label_store(scales, code, dtype, context))
+
+
+def _schema_elements(fields: PythonObject, field: PythonObject, attr: PythonObject,
+                     name: String) raises -> PythonObject:
+    """`attr` of every element of the list field `field`, from each
+    element's instance dictionary."""
+    var b = Python.import_module("builtins")
+    var items = py_call(b.list, _schema_value(fields, field, name))
+    var result = Python.list()
+    for i in range(len(items)):  # driver-loop: over a fitted model's sub-model list
+        var own = py_fields(items[i])
+        _ = py_call(result.append, _schema_field(own, attr, String(py_type(items[i]).__name__)))
+    return result
+
+
+def _schema_stack(fields: PythonObject, step: PythonObject, name: String,
+                  context: PythonObject) raises -> PythonObject:
+    """`_gpc_impl._stacked`: the elements' storage bytes joined and read as
+    one C-order (count, width) array of `dtype`."""
+    var b = Python.import_module("builtins")
+    var parts = _schema_elements(fields, step[2], step[3], name)
+    var dtype = String(step[4])
+    var width = _schema_whole(fields, step[5], name, context)
+    var joined = py_call(b.bytearray)
+    for i in range(len(parts)):  # driver-loop: over a fitted model's sub-model list
+        var part = parts[i]
+        if classical_is_array(part, context):
+            var view = py_call(context["array_fields"]["_mv"], part, context["array_class"])
+            _ = py_call(joined.extend, py_call(view.cast, "B"))
+        else:
+            _ = py_call(joined.extend, _schema_bytes(part, context)[1])
+    var store = py_call(context["array_type"], _store_code(dtype))
+    var shape = Python.tuple(len(parts), width)
+    var need = len(parts) * width * Int(py=store.itemsize)
+    if len(joined) != need:
+        raise Error("ValueError: mojolearn: " + String(len(joined)) + " bytes do not fill shape "
+                    + _archive_builtin_repr(shape) + " of " + dtype + " (" + String(need) + " bytes)")
+    _ = py_call(store.frombytes, joined)
+    return classical_wrap_array(store, shape, dtype, "C", context)
+
+
+def _schema_each(fields: PythonObject, step: PythonObject, name: String,
+                 context: PythonObject) raises -> PythonObject:
+    """`Array.from_list([int|float(e.attr) for e in field], dtype)`."""
+    var b = Python.import_module("builtins")
+    var parts = _schema_elements(fields, step[2], step[3], name)
+    var dtype = String(step[4])
+    var packed = Python.list()
+    for i in range(len(parts)):  # driver-loop: over a fitted model's sub-model list
+        _ = py_call(packed.append, py_call(b.float if dtype == "<f8" else b.int, parts[i]))
+    return _schema_label_store(packed, _store_code(dtype), dtype, context)
+
+
 def _schema_run(model: PythonObject, fields: PythonObject, steps: PythonObject, values: PythonObject,
                 name: String, context: PythonObject) raises:
     var b = Python.import_module("builtins")
@@ -399,6 +544,12 @@ def _schema_run(model: PythonObject, fields: PythonObject, steps: PythonObject, 
             py_setitem(values, step[1], _schema_vector(fields, dtype, step[2], name, context))
         elif kind == "classes":
             py_setitem(values, step[1], _schema_classes(_schema_value(fields, step[2], name), step[3], step[4], context))
+        elif kind == "kernel":
+            _schema_kernel(fields, step, values, name, context)
+        elif kind == "stack":
+            py_setitem(values, step[1], _schema_stack(fields, step, name, context))
+        elif kind == "each":
+            py_setitem(values, step[1], _schema_each(fields, step, name, context))
         elif kind == "when":
             if _schema_has(fields, step[1]) and Bool(py=_schema_value(fields, step[1], name) == step[2]):
                 _schema_run(model, fields, step[3], values, name, context)

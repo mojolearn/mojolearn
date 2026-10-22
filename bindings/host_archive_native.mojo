@@ -1134,35 +1134,6 @@ def host_archive_umap(cls: PythonObject, arrays: PythonObject, context: PythonOb
     return model
 
 
-def host_archive_gp_kernel(arrays: PythonObject, n_ls: Int, classifier: Bool,
-                           context: PythonObject) raises -> PythonObject:
-    var kinds = _archive_exact(arrays, "kinds", "<i4", context)
-    var count = Int(py=kinds.size)
-    var params = host_archive_count(arrays, "kparams" if classifier else "params", "<f4" if classifier else "<f8", count, context, True)
-    var lengths = host_archive_count(arrays, "ls_len", "<i4", count, context, True)
-    var scales = _archive_exact(arrays, "ls", "<f4" if classifier else "<f8", context)
-    if count < 1 or Int(py=kinds.ndim) != 1 or Int(py=scales.ndim) != 1 or n_ls < 0:
-        raise Error("saved Gaussian process kernel specification is malformed")
-    if Int(py=scales.size) != max(n_ls, 1):
-        raise Error("saved Gaussian process length scale table does not match its node lengths")
-    var total = 0
-    var nodes = Python.list()
-    for i in range(count):  # driver-loop: saved postfix kernel node metadata
-        var length = Int(py=lengths._mv[i])
-        if length < 0 or length > n_ls - total:
-            raise Error("saved Gaussian process kernel node length is out of bounds")
-        var node_scales = Python.list()
-        for j in range(length):  # driver-loop: saved kernel node parameter metadata
-            _ = py_call(node_scales.append, scales._mv[total + j])
-        _ = py_call(nodes.append, Python.tuple(kinds._mv[i], params._mv[i], node_scales))
-        total += length
-    if total != n_ls:
-        raise Error("saved Gaussian process length scale counts disagree")
-    var kernel = host_archive_allocate(context["host_archive_gpc_saved_kernel" if classifier else "host_archive_gp_saved_kernel"], context)
-    py_setitem(sequential_fields(kernel), "_node_list" if classifier else "_SavedKernel__nodes", nodes)
-    return kernel
-
-
 def host_archive_reshape_f32(array: PythonObject, shape: PythonObject, context: PythonObject) raises -> PythonObject:
     return host_archive_reshape_words(array, shape, "<f4", context)
 
@@ -1188,77 +1159,173 @@ def host_archive_gp_row(array: PythonObject, row: Int, cols: Int, shape: PythonO
     return result
 
 
-def host_archive_gp(cls: PythonObject, arrays: PythonObject, classifier: Bool,
-                    context: PythonObject) raises -> PythonObject:
-    var meta = host_archive_count(arrays, "meta" if classifier else "ints", "<i8", 6 if classifier else 4, context, True)
+def host_archive_gpr(cls: PythonObject, arrays: PythonObject, path: PythonObject,
+                     context: PythonObject) raises -> PythonObject:
+    # The refusals keep GaussianProcessRegressor.load's wording and order; the
+    # fields follow the constructor's, _validate_params's, then the loader's
+    # assignments.
+    var where = host_archive_where(path, context)
+    var ints = _archive_exact(arrays, "ints", "<i8", context)
+    var reals = _archive_exact(arrays, "reals", "<f8", context)
+    if Int(py=ints.size) != 4 or Int(py=reals.size) != 4:
+        raise Error(where + " holds " + String(Int(py=ints.size)) + " ints and " + String(Int(py=reals.size))
+                    + " reals, 4 and 4 are needed")
+    var d = classical_i64(ints, 0)
+    var info = classical_i64(ints, 1)
+    var norm = classical_i64(ints, 2) != 0
+    var n_ls = classical_i64(ints, 3)
+    var x = _archive_exact(arrays, "X_train", "<f4", context)
+    if Int(py=x.ndim) != 2 or Int(py=x.shape[1]) != d or Int(py=x.shape[0]) < 1:
+        raise Error(where + " X_train has shape " + _archive_builtin_repr(x.shape) + ", ints say " + String(d) + " features")
+    var n = Int(py=x.shape[0])
+    var factor = _archive_exact(arrays, "L", "<f4", context)
+    var dual = _archive_exact(arrays, "alpha", "<f4", context)
+    if Int(py=factor.size) != n * n or Int(py=dual.ndim) != 1 or Int(py=dual.size) != n:
+        raise Error(where + " L or alpha does not match " + String(n) + " training rows")
+    var kinds = _archive_exact(arrays, "kinds", "<i4", context)
+    var params = _archive_exact(arrays, "params", "<f8", context)
+    var lengths = _archive_exact(arrays, "ls_len", "<i4", context)
+    var scales = _archive_exact(arrays, "ls", "<f8", context)
+    var count = Int(py=kinds.size)
+    if count != Int(py=params.size) or count != Int(py=lengths.size) or count < 1:
+        raise Error(where + " carries a malformed kernel spec")
+    var kind_list = py_call(kinds._mv.tolist)
+    var param_list = py_call(params._mv.tolist)
+    var length_list = py_call(lengths._mv.tolist)
+    var table = py_call(scales._mv.tolist)
+    var total = 0
+    for i in range(count):  # driver-loop: saved postfix kernel node metadata
+        total += Int(py=length_list[i])
+    if total != n_ls or Int(py=scales.size) != max(n_ls, 1):
+        raise Error(where + " length scale table does not match its node lengths")
+    var nodes = Python.list()
+    var offset = 0
+    for i in range(count):  # driver-loop: saved postfix kernel node metadata
+        var length = Int(py=length_list[i])
+        var node_scales = Python.list()
+        for j in range(length):  # driver-loop: saved kernel node parameter metadata
+            _ = py_call(node_scales.append, table[offset + j])
+        _ = py_call(nodes.append, Python.tuple(kind_list[i], param_list[i], node_scales))
+        offset += length
+    var kernel = host_archive_allocate(context["host_archive_gp_saved_kernel"], context)
+    py_setitem(sequential_fields(kernel), "_SavedKernel__nodes", nodes)
+    var alpha = classical_f64(reals, 0)
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
-    host_archive_mode(arrays, fields, context)
-    var kernel = host_archive_gp_kernel(arrays, classical_i64(meta, 4 if classifier else 3), classifier, context)
     py_setitem(fields, "kernel", kernel)
-    py_setitem(fields, "_kernel", kernel)
-    py_setitem(fields, "kernel_", kernel)
+    py_setitem(fields, "alpha", alpha)
     py_setitem(fields, "optimizer", PythonObject(None))
     py_setitem(fields, "n_restarts_optimizer", 0)
+    py_setitem(fields, "normalize_y", norm)
     py_setitem(fields, "copy_X_train", True)
+    py_setitem(fields, "n_targets", PythonObject(None))
     py_setitem(fields, "random_state", PythonObject(None))
-    var d = classical_i64(meta, 1 if classifier else 0)
-    var x = _archive_exact(arrays, "x" if classifier else "X_train", "<f4", context)
-    if Int(py=x.ndim) != 2 or Int(py=x.shape[1]) != d:
-        raise Error("saved Gaussian process training shape disagrees with metadata")
-    var n = Int(py=x.shape[0])
-    if n < 1 or (classifier and n != classical_i64(meta, 0)):
-        raise Error("saved Gaussian process training row count is invalid")
+    py_setitem(fields, "numeric_mode", PythonObject(None))
+    py_setitem(fields, "_kernel", kernel)
+    py_setitem(fields, "_alpha", alpha)
+    py_setitem(fields, "_optimizer", PythonObject(None))
+    py_setitem(fields, "_n_restarts_optimizer", 0)
+    py_setitem(fields, "_normalize_y", norm)
+    py_setitem(fields, "_random_state", PythonObject(None))
+    host_archive_mode(arrays, fields, context)
     py_setitem(fields, "X_train_", x)
+    py_setitem(fields, "kernel_", kernel)
     py_setitem(fields, "n_features_in_", d)
-    if not classifier:
-        var reals = host_archive_count(arrays, "reals", "<f8", 4, context, True)
-        var norm = classical_i64(meta, 2) != 0
-        py_setitem(fields, "alpha", classical_f64(reals, 0))
-        py_setitem(fields, "_alpha", classical_f64(reals, 0))
-        py_setitem(fields, "normalize_y", norm)
-        py_setitem(fields, "normalize_y_", norm)
-        py_setitem(fields, "_normalize_y", norm)
-        py_setitem(fields, "n_targets", PythonObject(None))
-        py_setitem(fields, "_optimizer", PythonObject(None))
-        py_setitem(fields, "_random_state", PythonObject(None))
-        py_setitem(fields, "_n_restarts_optimizer", 0)
-        var factor = _archive_exact(arrays, "L", "<f4", context)
-        if Int(py=factor.size) // n != n or Int(py=factor.size) % n != 0:
-            raise Error("saved Gaussian process factor does not match training rows")
-        py_setitem(fields, "L_", host_archive_reshape_f32(factor, Python.tuple(n, n), context))
-        py_setitem(fields, "alpha_", host_archive_shape(arrays, "alpha", "<f4", Python.tuple(n), context))
-        py_setitem(fields, "info_", classical_i64(meta, 1))
-        py_setitem(fields, "_y_train_mean", classical_f64(reals, 1))
-        py_setitem(fields, "_y_train_std", classical_f64(reals, 2))
-        py_setitem(fields, "log_marginal_likelihood_value_", classical_f64(reals, 3))
-        return model
+    py_setitem(fields, "L_", host_archive_reshape_f32(factor, Python.tuple(n, n), context))
+    py_setitem(fields, "alpha_", dual)
+    py_setitem(fields, "info_", info)
+    py_setitem(fields, "normalize_y_", norm)
+    py_setitem(fields, "_y_train_mean", classical_f64(reals, 1))
+    py_setitem(fields, "_y_train_std", classical_f64(reals, 2))
+    py_setitem(fields, "log_marginal_likelihood_value_", classical_f64(reals, 3))
+    return model
+
+
+def host_archive_gpc_rows(arrays: PythonObject, name: String, dtype: String, count: Int, width: Int,
+                          path: PythonObject, context: PythonObject) raises -> PythonObject:
+    """GaussianProcessClassifier.load's `rows`: a (count, width) block, or a
+    (count,) vector when width is 0, refused as `{path!r} {name} has shape {shape}`."""
+    var value = _archive_exact(arrays, name, dtype, context)
+    var shape = Python.tuple(count, width) if width != 0 else Python.tuple(count)
+    if Bool(py=value.shape != shape):
+        raise Error(host_archive_where(path, context) + " " + name + " has shape " + _archive_builtin_repr(value.shape))
+    return value
+
+
+def host_archive_gpc(cls: PythonObject, arrays: PythonObject, path: PythonObject,
+                     context: PythonObject) raises -> PythonObject:
+    # The refusals keep GaussianProcessClassifier.load's wording and order;
+    # the fields follow the constructor's, _validate_params's, then the
+    # loader's and _set_fitted's assignments.
+    var where = host_archive_where(path, context)
+    var mode = Python.dict()
+    host_archive_mode(arrays, mode, context)
+    var meta = host_archive_meta(arrays, "meta", 6, path, context)
+    var n_train = classical_i64(meta, 0)
+    var n_features = classical_i64(meta, 1)
     var n_est = classical_i64(meta, 2)
     var max_iter = classical_i64(meta, 3)
+    var n_ls = classical_i64(meta, 4)
     var n_classes = classical_i64(meta, 5)
-    var classes = host_archive_class_values(arrays["classes"], context)
-    if n_classes < 2 or len(classes) != n_classes or n_est != (1 if n_classes == 2 else n_classes):
-        raise Error("saved Gaussian process classes and binary fit count disagree")
+    var kind_list = py_call(_archive_exact(arrays, "kinds", "<i4", context)._mv.tolist)
+    var param_list = py_call(_archive_exact(arrays, "kparams", "<f4", context)._mv.tolist)
+    var length_list = py_call(_archive_exact(arrays, "ls_len", "<i4", context)._mv.tolist)
+    var table = py_call(_archive_exact(arrays, "ls", "<f4", context)._mv.tolist)
+    var count = len(kind_list)
+    var total = 0
+    for i in range(len(length_list)):  # driver-loop: saved postfix kernel node metadata
+        total += Int(py=length_list[i])
+    if len(param_list) != count or len(length_list) != count or total != n_ls:
+        raise Error(where + " kernel arrays disagree with each other")
+    var b = Python.import_module("builtins")
+    var nodes = Python.list()
+    var offset = 0
+    for i in range(count):  # driver-loop: saved postfix kernel node metadata
+        var length = Int(py=length_list[i])
+        # table[offset:offset + length], Python's slice of the saved table.
+        var part = table[py_call(b.slice, offset, offset + length)]
+        var node_scales = Python.list()
+        for j in range(len(part)):  # driver-loop: saved kernel node parameter metadata
+            _ = py_call(node_scales.append, py_call(b.float, part[j]))
+        _ = py_call(nodes.append, Python.tuple(py_call(b.int, kind_list[i]), py_call(b.float, param_list[i]), node_scales))
+        offset += length
+    var kernel = host_archive_allocate(context["host_archive_gpc_saved_kernel"], context)
+    py_setitem(sequential_fields(kernel), "_node_list", nodes)
     if max_iter < 1:
-        raise Error("GaussianProcessClassifier max_iter_predict must be positive")
+        raise Error("mojolearn GaussianProcessClassifier: max_iter_predict must be at least 1, got " + String(max_iter))
+    var model = host_archive_object(cls, arrays, context)
+    var fields = sequential_fields(model)
+    py_setitem(fields, "kernel", kernel)
+    py_setitem(fields, "optimizer", PythonObject(None))
+    py_setitem(fields, "n_restarts_optimizer", 0)
     py_setitem(fields, "max_iter_predict", max_iter)
-    py_setitem(fields, "_max_iter_predict", max_iter)
     py_setitem(fields, "warm_start", False)
+    py_setitem(fields, "copy_X_train", True)
+    py_setitem(fields, "random_state", PythonObject(None))
     py_setitem(fields, "multi_class", "one_vs_rest")
     py_setitem(fields, "n_jobs", PythonObject(None))
-    py_setitem(fields, "classes_", classes)
-    py_setitem(fields, "n_classes_", n_classes)
-    var ys = host_archive_shape(arrays, "y", "<f4", Python.tuple(n_est, n), context)
-    var factors = _archive_exact(arrays, "L", "<f4", context)
-    if Int(py=factors.ndim) != 2 or Int(py=factors.shape[0]) != n_est:
-        raise Error("saved Gaussian process factor count disagrees with binary fits")
-    if Int(py=factors.shape[1]) // n != n or Int(py=factors.shape[1]) % n != 0:
-        raise Error("saved Gaussian process factor width disagrees with training rows")
-    var pis = host_archive_shape(arrays, "pi", "<f4", Python.tuple(n_est, n), context)
-    var wsrs = host_archive_shape(arrays, "wsr", "<f4", Python.tuple(n_est, n), context)
-    var likelihoods = host_archive_shape(arrays, "lml", "<f8", Python.tuple(n_est), context)
-    var iterations = host_archive_shape(arrays, "n_iter", "<i8", Python.tuple(n_est), context)
-    var panels = host_archive_shape(arrays, "nb", "<i8", Python.tuple(n_est), context)
+    py_setitem(fields, "numeric_mode", mode["numeric_mode"])
+    py_setitem(fields, "_kernel", kernel)
+    py_setitem(fields, "_max_iter_predict", max_iter)
+    var x = _archive_exact(arrays, "x", "<f4", context)
+    if Bool(py=x.shape != Python.tuple(n_train, n_features)):
+        raise Error(where + " x has shape " + _archive_builtin_repr(x.shape) + ", meta says ("
+                    + String(n_train) + ", " + String(n_features) + ")")
+    if not py_contains(arrays, "classes"):
+        raise Error(where + " has no classes member")
+    var classes = host_archive_class_values(arrays["classes"], context)
+    var want = 1 if n_classes == 2 else n_classes
+    if len(classes) != n_classes or n_classes < 2 or n_est != want:
+        raise Error(where + " holds " + String(len(classes)) + " classes and " + String(n_est)
+                    + " binary fits for n_classes " + String(n_classes))
+    var n = n_train
+    var ys = host_archive_gpc_rows(arrays, "y", "<f4", n_est, n, path, context)
+    var factors = host_archive_gpc_rows(arrays, "L", "<f4", n_est, n * n, path, context)
+    var pis = host_archive_gpc_rows(arrays, "pi", "<f4", n_est, n, path, context)
+    var wsrs = host_archive_gpc_rows(arrays, "wsr", "<f4", n_est, n, path, context)
+    var likelihoods = host_archive_gpc_rows(arrays, "lml", "<f8", n_est, 0, path, context)
+    var iterations = host_archive_gpc_rows(arrays, "n_iter", "<i8", n_est, 0, path, context)
+    var panels = host_archive_gpc_rows(arrays, "nb", "<i8", n_est, 0, path, context)
     var fits = Python.list()
     var counts = Python.list()
     for i in range(n_est):  # driver-loop: saved per-class Laplace state reconstruction
@@ -1273,12 +1340,18 @@ def host_archive_gp(cls: PythonObject, arrays: PythonObject, classifier: Bool,
         py_setitem(state, "nb_", classical_i64(panels, i))
         _ = py_call(fits.append, fit)
         _ = py_call(counts.append, classical_i64(iterations, i))
-        if n_est == 1:
-            var aliases = Python.tuple("y_train_", "L_", "pi_", "W_sr_", "n_iter_", "log_marginal_likelihood_value_")
-            for j in range(len(aliases)):  # driver-loop: public binary fit aliases
-                py_setitem(fields, aliases[j], state[aliases[j]])
+    py_setitem(fields, "X_train_", x)
+    py_setitem(fields, "n_features_in_", n_features)
+    py_setitem(fields, "classes_", classes)
+    py_setitem(fields, "n_classes_", n_classes)
     py_setitem(fields, "estimators_", fits)
-    if n_est > 1:
+    py_setitem(fields, "kernel_", kernel)
+    if n_classes == 2:
+        var only = sequential_fields(fits[0])
+        var aliases = Python.tuple("y_train_", "L_", "pi_", "W_sr_", "n_iter_", "log_marginal_likelihood_value_")
+        for j in range(len(aliases)):  # driver-loop: public binary fit aliases
+            py_setitem(fields, aliases[j], only[aliases[j]])
+    else:
         py_setitem(fields, "n_iter_", counts)
         py_setitem(fields, "log_marginal_likelihood_value_", host_archive_mean_f64(Int(py=classical_address(likelihoods)), n_est))
     return model
@@ -1758,8 +1831,10 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         model = host_archive_spectral(cls, arrays, context)
     elif fmt == "mojolearn-umap-1":
         model = host_archive_umap(cls, arrays, context)
-    elif fmt == "mojolearn-gp-1" or fmt == "mojolearn.gpc.v1":
-        model = host_archive_gp(cls, arrays, fmt == "mojolearn.gpc.v1", context)
+    elif fmt == "mojolearn-gp-1":
+        model = host_archive_gpr(cls, arrays, path, context)
+    elif fmt == "mojolearn.gpc.v1":
+        model = host_archive_gpc(cls, arrays, path, context)
     elif fmt == "mojolearn-svc-1" or fmt == "mojolearn-svr-1":
         model = host_archive_svm(cls, arrays, fmt == "mojolearn-svc-1", context)
     elif fmt == "mojolearn-gbdt-1":
