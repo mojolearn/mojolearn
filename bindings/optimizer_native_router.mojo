@@ -4,7 +4,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
-from bindings.optimizer_public_words import optimizer_python_error
+from bindings.optimizer_public_words import optimizer_python_error, stash_python_error
 from bindings.optimizer_admission import opt_guards, opt_owner, opt_value, opt_scalar, opt_schedule, opt_exact
 from bindings.optimizer_public_door import door_ready, refuse_kwargs, new_array, TensorView, tensor_view, resident_entry
 from bindings.classical_attributes import classical_connect_numpy
@@ -35,6 +35,20 @@ def optimizer_entries(mode: PythonObject, context: PythonObject) raises -> Pytho
     if Int(py=py_call(entries["training_numeric_mode"])) != (1 if String(selected) == "identical" else 0):
         raise Error("ImportError: optimizer binary numeric mode disagrees with the requested mode")
     return entries
+
+
+def optimizer_step_entry(entry: PythonObject, arguments: PythonObject, context: PythonObject) raises -> PythonObject:
+    if py_type(entry) is not context["device_finalizer_types"][2]:
+        raise Error("TypeError: optimizer step requires its connected compiled entry")
+    # The inner compiled door has already assigned the public exception
+    # category. Preserve its CPython exception triple across this second
+    # native boundary instead of flattening it to an untyped Mojo Error.
+    ref cpy = Python().cpython()
+    var result = cpy.PyObject_Call(entry._obj_ptr, arguments._obj_ptr, PyObjectPtr())
+    if not result:
+        var failure = stash_python_error()
+        raise failure^
+    return PythonObject(from_owned=result)
 
 
 def optimizer_betas(source: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -265,7 +279,7 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
         var handle = py_call(entries["optimizer_door_io"], owner, 5, PythonObject(None), "params", j)
         return device_adopt(result, binding, handle, release)
     if operation == "step":
-        return py_call(entries["optimizer_door_step"], owner, values[0], values[1], values[2], values[3])
+        return optimizer_step_entry(entries["optimizer_door_step"], Python.tuple(owner, values[0], values[1], values[2], values[3]), context)
     if operation == "state":
         return py_call(entries["optimizer_door_state"], owner, values[0])
     if operation == "state_set":

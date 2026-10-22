@@ -69,7 +69,16 @@ def training_scalar_float(value: PythonObject, operation: String, context: Pytho
                 # NumPy complex scalar, float() rejects it without a warning.
                 raise Error("TypeError: float() argument must be a string or a real number, not 'complex'")
             if String(dtype.kind) == "V":
-                raise Error("TypeError: scalar configuration requires a real number or numeric text, not a void/record value")
+                if dtype.fields is not None:
+                    # A record unboxes to a tuple, which float rejects. Do
+                    # not read arbitrary field values just to reject it.
+                    raise Error("TypeError: float() argument must be a string or a real number, not 'tuple'")
+                # Raw void's native storage is bytes. NumPy's float slot
+                # parses those bytes (e.g. V4(b'1e-5')); keep both successful
+                # text parsing and ValueError for invalid raw bytes.
+                var view = py_call(b.memoryview, value)
+                var raw = py_call(view.tobytes)
+                return training_scalar_float(raw, operation, context, depth + 1)
             var indexes = Python.list()
             for i in range(ndim):  # driver-loop: native scalar index, one zero per singleton axis
                 py_call(indexes.append, 0)
@@ -96,7 +105,11 @@ def training_scalar_float(value: PythonObject, operation: String, context: Pytho
         var dtype = value.dtype
         var kind = String(dtype.kind)
         if kind == "V":
-            raise Error("TypeError: float() argument must be a string or a real number, not 'numpy.void'")
+            if dtype.fields is not None:
+                raise Error("TypeError: float() argument must be a string or a real number, not 'tuple'")
+            var view = py_call(b.memoryview, value)
+            var raw = py_call(view.tobytes)
+            return training_scalar_float(raw, operation, context, depth + 1)
         if kind == "c":
             var exceptions = py_get(context["modules"], "numpy.exceptions")
             if exceptions is None or py_type(exceptions) is not context["module_type"]:
