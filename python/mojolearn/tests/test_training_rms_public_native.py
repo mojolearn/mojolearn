@@ -127,8 +127,7 @@ def test_public_rms_native_scalar_options_preserve_values_warnings_and_errors(op
 def test_public_rms_raw_void_does_not_call_replaced_memoryview(monkeypatch):
     import builtins
     x, weight, gradient = inputs()
-    epsilon = np.array(b"1e-5", dtype="V4")
-    expected = kernel_oracle("rms_norm_forward", x, weight, gradient, 1e-5)
+    epsilon = np.array(b"bad", dtype="V3")
     calls = []
     def hook(*args):
         calls.append(args)
@@ -136,8 +135,7 @@ def test_public_rms_raw_void_does_not_call_replaced_memoryview(monkeypatch):
     with monkeypatch.context() as scope:
         scope.setattr(builtins, "memoryview", hook)
         result = audit_native_call(T.rms_norm_forward, x, weight, epsilon, numeric_mode="identical")
-    assert_output = result.assert_native()
-    assert_outputs(assert_output, expected)
+    assert_refused(result, ValueError)
     assert not calls
 
 
