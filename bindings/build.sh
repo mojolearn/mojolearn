@@ -106,12 +106,9 @@ mkdir -p python/mojolearn
 # the environment variable would, and the Metal compile step never sees it.
 # Measured on a cold cache: every kernel AND `minos 11.0`, together.
 #
-# setup.py's DEFAULT_MACOS_TARGET must equal MACOS_FLOOR or the wheel TAG and
-# the BINARY disagree, which is a published lie in one of two directions: too
-# low and it installs where it cannot load, too high and it is refused by Macs
-# that could have run it. THIS SCRIPT AND bindings/build_gbdt.sh MUST AGREE
-# WITH EACH OTHER TOO -- the two .so files land in one wheel under one tag,
-# and the tag is the lower bound of what is inside it.
+# Keep the linker floor aligned with bindings/build.sh. The wheel platform
+# separately includes every shipped native/Metal deployment minimum and the
+# supported Mojo runtime floor; packaging/macos/compatibility.py checks it.
 MACOS_FLOOR="11.0"
 
 # NOT EXPORTED, DELIBERATELY -- see above. Unset it if the caller had it set,

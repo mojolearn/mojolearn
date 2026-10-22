@@ -1,8 +1,8 @@
 # Distribution metadata for the `mojolearn` package on PyPI.
 #
 # setup.py holds only the two facts PEP 621 cannot express: the wheel is not
-# pure Python, and the macOS platform tag comes from the Mojo compile step
-# rather than from the building machine. Nothing is stated in both files.
+# pure Python, and the macOS platform tag covers shipped native/Metal metadata
+# plus the supported runtime floor rather than the building machine. Nothing is stated in both files.
 
 [build-system]
 requires = ["setuptools>=77", "wheel", "lief==1.0.0"]

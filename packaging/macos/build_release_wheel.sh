@@ -751,29 +751,22 @@ done
 
 
 
-# THE TAG AND THE BINARY MUST AGREE, and nothing else checks this.
-# The wheel filename is what pip compares before it tries to load anything, so
-# a tag above the binary's floor turns installable Macs away and a tag below it
-# installs onto Macs where the extension cannot load. Both are silent on the
-# machine that built the wheel.
-# CHECKED FOR EVERY EXTENSION, not just the first: one wheel carries one tag,
-# and the tag is only honest if it is the floor of EVERYTHING inside.
-TAG_MINOS=$(grep -E '^DEFAULT_MACOS_TARGET' "$here/python/setup.py" | sed 's/[^0-9.]//g')
-for so in $ALL_SOS; do
-    BIN_MINOS=$(otool -l "$so" | awk '/LC_BUILD_VERSION/{f=1} f&&/minos/{print $2; exit}')
-    if [ "$BIN_MINOS" != "$TAG_MINOS" ]; then
-        echo "ERROR: $(basename "$so") minos $BIN_MINOS but setup.py tags $TAG_MINOS" >&2
-        echo "       MACOS_FLOOR in bindings/build.sh and bindings/build_gbdt.sh" >&2
-        echo "       and DEFAULT_MACOS_TARGET in python/setup.py must all match" >&2
-        exit 1
-    fi
-    echo "macOS floor: ${so#$PKG/} minos $BIN_MINOS == wheel tag $TAG_MINOS"
-done
+# The outer Mach-O minimum is insufficient: embedded Metal libraries carry
+# their own platform floor (the 2026-10-22 audit found macOS26 payloads inside
+# minos11 extensions). Derive the tag from all native/Metal metadata and the
+# supported Mojo runtime floor. setup.py repeats this for direct wheel builds
+# and checks the finalized wheel, so this release wrapper is not an exception.
+if [ -n "${MOJOLEARN_MACOS_DEPLOYMENT_TARGET:-}" ]; then
+    pixi run -e pkg python "$here/packaging/macos/compatibility.py" \
+        --package "$PKG" --requested-floor "$MOJOLEARN_MACOS_DEPLOYMENT_TARGET"
+else
+    pixi run -e pkg python "$here/packaging/macos/compatibility.py" --package "$PKG"
+fi
 
 # THE ISA BASELINE, WHICH NO HEADER CAN SEE. arm64 Mach-O cpusubtype stays
 # ARM64_ALL whatever --target-cpu was, so this has to disassemble. Gates the
 # wheel: a binary carrying bf16, i8mm or SME instructions SIGILLs on the Macs
-# the macosx_11_0 tag invites in.
+# the selected wheel platform and portable CPU contract admit.
 # shellcheck disable=SC2086
 pixi run -e pkg python "$here/packaging/isa_baseline.py" $ALL_SOS
 
@@ -791,8 +784,8 @@ pixi run -e pkg python "$here/packaging/isa_baseline.py" $ALL_SOS
 # looks host-like would reopen the hole it was written to close. The exclusion
 # is by the exact names the manifest lists, never by a host-like pattern.
 # Every other consumer of ALL_SOS still sees the host bindings, and must:
-# stage_dylibs.py wipes and rebuilds the one .dylibs directory, the minos loop
-# keeps the wheel tag honest as the floor of everything inside, and
+# stage_dylibs.py wipes and rebuilds the one .dylibs directory, the metadata
+# inspector keeps the wheel tag consistent with all shipped native payloads, and
 # isa_baseline.py is a HOST-code check, which is precisely what they are.
 GPU_SOS=""
 for so in $ALL_SOS; do
