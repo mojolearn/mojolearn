@@ -3756,3 +3756,8 @@ def _y_free(splitter):
     if t in (ShuffleSplit, GroupShuffleSplit):
         return seeded
     return False
+
+
+# Import-time connection; constructing and sizing DeviceRows each hand off once.
+from ._native_arena_rows import connect as _connect_arena_rows
+_connect_arena_rows()

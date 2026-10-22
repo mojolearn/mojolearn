@@ -253,21 +253,10 @@ class DeviceRows:
     at most once."""
 
     def __init__(self, base, indices, take):
-        self.base, self.indices = base, indices
-        self._take = take
-        self._host = None
-        self.shape = (int(indices.size),) + tuple(base.shape[1:])
-        self.dtype = base.dtype
-        self.itemsize = base.itemsize
-        self.ndim = base.ndim
-        n = 1
-        for v in self.shape:  # glue: the product of shape dims
-            n *= v
-        self.size = n
-        self.row_words = (base.size // base.shape[0]) if base.shape[0] else 0
+        _ROWS_CALL(self, "init", (base, indices, take), _ROWS_CONTEXT)
 
     def __len__(self):
-        return self.shape[0]
+        return _ROWS_CALL(self, "len", (), _ROWS_CONTEXT)
 
     def materialize(self):
         if self._host is None:
