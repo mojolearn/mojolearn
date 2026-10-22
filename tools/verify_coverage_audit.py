@@ -773,7 +773,12 @@ NEW_LANES = frozenset({"gp-lml-theta", "cross-vendor-fold", "sequence-moe-backwa
                        "mamba2-decode-session", "mamba3-decode-session", "training-chunked-lm-head",
                        "training-mlp-sessions", "samba-optimizer-state", "sequence-optimizer-state",
                        "x-huber-outliers", "x-sgd-clf-proba", "x-logistic-cv-proba",
-                       "x-decomp-rsvd-rank-deficient"})
+                       "x-decomp-rsvd-rank-deficient",
+                       # lane verify-gaps-20261022
+                       "saved-model-host-infer-trees", "hf-causal-lm-text", "hf-model-surface",
+                       "training-device-cross-entropy", "sequence-layernorm-backward",
+                       "x-metrics-classification-report", "x-metrics-permutation-test-score",
+                       "classical-float16-sequences"})
 
 #: What each new lane is for: the endpoints only it reaches.
 NEW_LANE_PURPOSE = {
@@ -809,6 +814,21 @@ NEW_LANE_PURPOSE = {
     "x-logistic-cv-proba": "LogisticRegressionCV.predict_proba (`py2mojo_rows` ROWS_LRCV_PROBA)",
     "x-decomp-rsvd-rank-deficient": "randomized_svd, PCA and TruncatedSVD (randomized) of a rank-deficient matrix: "
                                     "the live-column compaction (`x_decomp_order_small`, `x_decomp_dev_order_small`)",
+    "saved-model-host-infer-trees": "HostForest and host_predict on saved Extra Trees and default-engine random "
+                                    "forest regressors: `forest_host_et_predict`, `forest_host_rf_predict_reg`",
+    "hf-causal-lm-text": "CausalLM.generate_text, stream_text and _generate_resident with a tokenizer from "
+                         "`Tokenizer(...)`, `_from_json` and `_from_spelled`: `causal_lm_generate_text`, "
+                         "`causal_lm_text_stream`, `causal_lm_resident`, `vocab_json_public`, `vocab_spelled_public`",
+    "hf-model-surface": "HFConfig, ModelPlan, TensorInfo, SafetensorsFile._map, Checkpoint._file and "
+                        "CausalLM._read_weights: `model_config_*`, `model_plan_init`, `tensor_info_*`, "
+                        "`safetensors_map`, `checkpoint_file`, `causal_model_read_weights`",
+    "training-device-cross-entropy": "training.cross_entropy, linear_forward and linear_backward on device arrays "
+                                     "(GPU columns): `ce_loss_dev`, `linear_forward_dev`, `linear_backward_dev`",
+    "sequence-layernorm-backward": "the functional layer_norm_backward",
+    "x-metrics-classification-report": "metrics.classification_report, dict and text",
+    "x-metrics-permutation-test-score": "model_selection.permutation_test_score, with and without groups",
+    "classical-float16-sequences": "LinearRegression and Ridge on a list of float16 rows: the classical input "
+                                   "door's `sequence_widen_halves` / `sequence_narrow_halves`",
 }
 
 

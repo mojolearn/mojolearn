@@ -809,6 +809,372 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 
+# ---------------------------------------------------------------- lane verify-gaps-20261022: the audit's GAP rows
+#
+# docs/plans/VERIFY_COVERAGE_20261022.md: native entries and public methods
+# new or changed since the last release that no lane reached. Each lane below
+# reaches one group through the public door a user calls; they read OWED until
+# a release record admits them.
+
+@lane("saved-model-host-infer-trees")
+def _(ml, X, yc, yr, Xh=None):
+    """Saved Extra Trees (classifier and regressor) and a RandomForestRegressor
+    on its default engine, written with `save` and predicted through
+    `HostForest.from_file` and `host_predict`: the forest host binding's
+    `forest_host_et_predict` and `forest_host_rf_predict_reg`, which the
+    `saved-model-host-infer` lane (a random forest classifier, a GBDT and a
+    groves regressor) never takes. Each host answer is held byte for byte in
+    the cell to the estimator that saved it, and `host_predict` on the file to
+    the loaded object. Parts: the host predictions on training rows and the
+    flags."""
+    d = _coverage_digester(ml)
+    rows = np.ascontiguousarray(X[:4096])
+    held = np.ascontiguousarray((X if Xh is None else Xh)[:512])
+    etc = ml.ExtraTreesClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X, yc)
+    etr = ml.ExtraTreesRegressor(n_estimators=16, max_depth=8, random_state=7).fit(X, yr)
+    rfr = ml.RandomForestRegressor(n_estimators=16, max_depth=8, random_state=7).fit(X, yr)
+    with tempfile.TemporaryDirectory(prefix="ib-saved-model-host-trees-") as tmp:
+        paths = {}
+        for tag, est in (("etc", etc), ("etr", etr), ("rfr", rfr)):  # glue: three saved models
+            paths[tag] = os.path.join(tmp, f"{tag}.npz")
+            est.save(paths[tag])
+        hetc = ml.HostForest.from_file(paths["etc"])
+        hetr = ml.HostForest.from_file(paths["etr"])
+        hrfr = ml.HostForest.from_file(paths["rfr"])
+        one = dict(etr=np.asarray(ml.host_predict(paths["etr"], held)),
+                   rfr=np.asarray(ml.host_predict(paths["rfr"], held)))
+    _same_bytes("HostForest(ExtraTreesClassifier).predict_proba", np.asarray(hetc.predict_proba(held)),
+                "ExtraTreesClassifier.predict_proba", np.asarray(etc.predict_proba(held)))
+    _same_bytes("HostForest(ExtraTreesRegressor).predict", np.asarray(hetr.predict(held)),
+                "ExtraTreesRegressor.predict", np.asarray(etr.predict(held)))
+    _same_bytes("HostForest(RandomForestRegressor).predict", np.asarray(hrfr.predict(held)),
+                "RandomForestRegressor.predict", np.asarray(rfr.predict(held)))
+    flags = np.asarray([
+        one["etr"].tobytes() == np.asarray(hetr.predict(held)).tobytes(),
+        one["rfr"].tobytes() == np.asarray(hrfr.predict(held)).tobytes(),
+        hetc.inference_engine == "sequential", hetr.inference_engine == "sequential",
+        hrfr.inference_engine == "sequential",
+        hetc.n_trees == 16, hetr.n_trees == 16, hrfr.n_trees == 16,
+        list(hetc.classes_) == list(etc.classes_),
+    ], dtype=np.int64)
+    return _fit(dict(etc=d(np.asarray(hetc.predict_proba(rows), dtype=np.float32)),
+                     etc_label=d(np.asarray(hetc.predict(rows), dtype=np.int64)),
+                     etr=d(np.asarray(hetr.predict(rows), dtype=np.float32)),
+                     rfr=d(np.asarray(hrfr.predict(rows), dtype=np.float32)),
+                     flags=d(flags)))
+
+
+#: The 64 byte tokens of the `hf-causal-lm-text` vocabulary: the fixture
+#: model's vocabulary is 64 (HF_LM_VOCAB), and a tokenizer for it must not
+#: hand the model an id at or above 64, nor decode one it cannot spell.
+_COVERAGE_TEXT_ALPHABET = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ."
+
+
+def _coverage_text_tokenizers(ml):
+    """The same 64-token byte-level vocabulary three ways: `Tokenizer(...)`,
+    `Tokenizer._from_json` on its `tokenizer.json` object (`vocab_json_public`)
+    and `Tokenizer._from_spelled` on its GPT-2 spelled vocabulary
+    (`vocab_spelled_public`)."""
+    tk = ml.models.tokenizer
+    tokens = [bytes([c]) for c in _COVERAGE_TEXT_ALPHABET]  # glue: the 64 one-byte tokens
+    spelled = ml.tokenizer._byte_to_char()
+    vocab = {spelled[t[0]]: i for i, t in enumerate(tokens)}  # glue: GPT-2 spelling of each token
+    data = dict(version="1.0", truncation=None, padding=None, added_tokens=[], normalizer=None,
+                pre_tokenizer={"type": "ByteLevel", "add_prefix_space": False, "trim_offsets": True,
+                               "use_regex": True},
+                post_processor=None,
+                decoder={"type": "ByteLevel", "add_prefix_space": False, "trim_offsets": True,
+                         "use_regex": True},
+                model=dict(type="BPE", dropout=None, unk_token=None, continuing_subword_prefix=None,
+                           end_of_word_suffix=None, fuse_unk=False, byte_fallback=False,
+                           ignore_merges=False, vocab=dict(vocab), merges=[]))
+    direct = tk.Tokenizer(tokens, [], pattern="gpt2")
+    from_json = tk.Tokenizer._from_json(data, "coverage-tokenizer.json")
+    from_spelled = tk.Tokenizer._from_spelled(dict(vocab), [], pattern=from_json.pattern, added={},
+                                              normalizer=None, bos_ids=(), eos_ids=(),
+                                              ignore_merges=False, source="coverage-spelled")
+    return direct, from_json, from_spelled
+
+
+@lane("hf-causal-lm-text")
+def _(ml, X, yc, yr, Xh=None):
+    """CausalLM.generate_text and stream_text (`causal_lm_generate_text`,
+    `causal_lm_text_stream`) on the `hf-causal-lm` lane's Llama fixture with a
+    64-token byte-level tokenizer built three ways (`Tokenizer(...)`,
+    `Tokenizer._from_json`, `Tokenizer._from_spelled`); the prompt is the
+    fixture's first 24 bytes spelled in that alphabet. The text continuation is
+    held byte for byte in the cell to the stream read two tokens at a time, to
+    the decoded ids of `generate` on the encoded prompt, and across the three
+    tokenizers; on a build with the resident decode session,
+    `CausalLM._generate_resident` (`causal_lm_resident`) is held to `generate`.
+    Parts: the greedy and sampled texts, the prompt ids and the greedy
+    continuation ids."""
+    from mojolearn import _causal_lm_fixtures as fx
+    d = _coverage_digester(ml)
+    A = ml.Array.from_buffer
+    if len(_COVERAGE_TEXT_ALPHABET) != HF_LM_VOCAB:
+        raise RuntimeError("hf-causal-lm-text: the tokenizer alphabet must be the fixture vocabulary")
+    direct, from_json, from_spelled = _coverage_text_tokenizers(ml)
+    raw = np.frombuffer(np.ascontiguousarray(X).tobytes()[:24], dtype=np.uint8)
+    text = bytes(_COVERAGE_TEXT_ALPHABET[int(b) % 64] for b in raw).decode("ascii")  # glue: 24 prompt bytes
+    prompt = np.asarray([direct.encode(text)], dtype=np.int32)
+    for name, other in (("_from_json", from_json), ("_from_spelled", from_spelled)):  # glue: two loaders
+        _same_bytes(f"Tokenizer.{name} encode", np.asarray([other.encode(text)], dtype=np.int32),
+                    "Tokenizer(...) encode", prompt)
+    cfg, tensors = fx.family_fixture("llama", False)
+    sampling = dict(greedy=False, seed=7, temperature=0.8, top_k=8)
+    with tempfile.TemporaryDirectory(prefix="ib-causal-lm-text-") as tmp:
+        root = fx._write_checkpoint(os.path.join(tmp, "llama"), cfg, tensors)
+        m = ml.models.causal_lm.CausalLM.load(root, numeric_profile="fp32_v1")
+        greedy = m.generate_text(text, HF_LM_NEW, tokenizer=direct)
+        sampled = m.generate_text(text, HF_LM_NEW, tokenizer=direct, **sampling)
+        spelled = m.generate_text(text, HF_LM_NEW, tokenizer=from_spelled)
+        stream = m.stream_text(text, HF_LM_NEW, tokenizer=from_json)
+        pieces = [stream.read(2) for _ in range(-(-HF_LM_NEW // 2) + 1)]  # glue: bounded reads
+        full = np.asarray(m.generate(A(np.ascontiguousarray(prompt)), HF_LM_NEW), dtype=np.int32)
+        resident = m._generate_resident(A(np.ascontiguousarray(prompt)), HF_LM_NEW,
+                                        prompt.shape[1] + HF_LM_NEW)
+    cont = np.ascontiguousarray(full[:, prompt.shape[1]:])
+    _same_bytes("stream_text read two at a time", _hf_text("".join(pieces)),
+                "generate_text", _hf_text(greedy))
+    _same_bytes("generate_text through _from_spelled", _hf_text(spelled), "generate_text", _hf_text(greedy))
+    _same_bytes("decoded generate continuation", _hf_text(direct.decode(cont[0].tolist())),
+                "generate_text", _hf_text(greedy))
+    if resident is not None:
+        _same_bytes("CausalLM._generate_resident", np.asarray(resident, dtype=np.int32),
+                    "CausalLM.generate", full)
+    return _fit(dict(greedy=d(_hf_text(greedy)), sampled=d(_hf_text(sampled)),
+                     prompt=d(prompt), continuation=d(cont)))
+
+
+@lane("hf-model-surface")
+def _(ml, X, yc, yr, Xh=None):
+    """The `mojolearn.models` reader surface no other lane calls: `HFConfig`
+    built from a dict and `HFConfig.from_json` on a written `config.json` with
+    every accessor (`model_config_init`, `model_config_load`,
+    `model_config_access`), `ModelPlan(**fields)` rebuilt from `plan_for`'s
+    plan with `layer_weights` and `checkpoint_names` (`model_plan_init`,
+    `model_layer_weights`, `model_checkpoint_names`), `TensorInfo` built by
+    hand from each header entry with `nbytes` and `size` (`tensor_info_init`,
+    `tensor_info_size`), `SafetensorsFile._map` (`safetensors_map`),
+    `Checkpoint._file` on a shard (`checkpoint_file`) and
+    `CausalLM._read_weights` (`causal_model_read_weights`). The tensors are
+    the fixture's own bytes (F32 values, F16 bit patterns). Parts: the config
+    as JSON text, the plan table, the header table, the mapped file bytes,
+    the shard reads, the top-level weights read and the flags."""
+    from mojolearn import _causal_lm_fixtures as fx
+    d = _coverage_digester(ml)
+    M = ml.models
+    st = M.safetensors
+    raw = np.ascontiguousarray(X).tobytes()
+    bits = np.frombuffer(raw[:512], dtype="<u2")
+    f32 = np.frombuffer(raw[512:512 + 256 * 4], dtype="<f4")
+    tensors = {"t.f32": ("F32", (16, 16), f32.tobytes()), "t.f16": ("F16", (16, 16), bits.tobytes()),
+               "t.f32s": ("F32", (), f32[:1].tobytes())}
+    cfg0 = fx._llama_config()
+    with tempfile.TemporaryDirectory(prefix="ib-hf-model-surface-") as tmp:
+        one = fx._write_checkpoint(os.path.join(tmp, "one"), cfg0, tensors, shards=1)
+        many = fx._write_checkpoint(os.path.join(tmp, "many"), cfg0, tensors, shards=2)
+        built = M.HFConfig(dict(cfg0), os.path.join(one, "config.json"))
+        loaded = M.HFConfig.from_json(one)
+        config_text = json.dumps(loaded.to_dict(), sort_keys=True)
+        plan = M.plan_for(loaded)
+        copy = M.ModelPlan(**dict(vars(plan)))
+        plan_text = json.dumps(_hf_plan_row(copy), sort_keys=True)
+        sf = st.SafetensorsFile(os.path.join(one, "model.safetensors"))
+        ck = st.Checkpoint.open(many)
+        try:
+            names = sorted(sf.names())
+            infos = [sf.info(n) for n in names]  # glue: one header entry per tensor
+            rebuilt = [st.TensorInfo(t.name, t.dtype, t.shape, t.begin, t.end, t.file) for t in infos]  # glue: by hand
+            header = "|".join(f"{t.name},{t.dtype},{t.shape},{t.begin},{t.end},{t.nbytes},{t.size}"
+                              for t in rebuilt)
+            mapped = np.frombuffer(bytes(sf._map()), dtype=np.uint8).copy()
+            shard_bytes = np.concatenate([_hf_bytes(ck._file(ck.info(n).file).read(n)) for n in names])
+            whole_bytes = np.concatenate([_hf_bytes(ck.read(n)) for n in names])
+            flags = np.asarray([
+                built.model_type == loaded.model_type == "llama",
+                built.get("hidden_size") == loaded["hidden_size"] == cfg0["hidden_size"],
+                built.get("no_such_field", 7) == 7,
+                "vocab_size" in loaded and "no_such_field" not in loaded,
+                sorted(loaded.keys()) == sorted(cfg0),
+                built.to_dict() == loaded.to_dict(),
+                _hf_refused(lambda: M.HFConfig([1, 2], None), "JSON object"),
+                _hf_refused(lambda: loaded["no_such_field"], "no_such_field"),
+                copy.checkpoint_names() == plan.checkpoint_names(),
+                all(copy.layer_weights(i) == plan.layer_weights(i) for i in range(plan.n_layers)),
+                all((a.nbytes, a.size) == (b.nbytes, b.size) for a, b in zip(infos, rebuilt)),
+                _hf_refused(lambda: st.TensorInfo("t", "F32", (4,), 0, 15, "f"), "bytes differ"),
+                ck._file(ck.info(names[0]).file) is ck._file(ck.info(names[0]).file),
+                shard_bytes.tobytes() == whole_bytes.tobytes(),
+            ], dtype=np.int64)
+        finally:
+            sf.close()
+            ck.close()
+        lcfg, ltensors = fx.family_fixture("llama", False)
+        root = fx._write_checkpoint(os.path.join(tmp, "llama"), lcfg, ltensors)
+        lck = st.Checkpoint.open(root)
+        try:
+            weights = M.causal_lm.CausalLM._read_weights(lck, M.plan_for(M.HFConfig.from_json(root)), "float32")
+            top = np.concatenate([np.asarray(weights[k], dtype=np.float32).reshape(-1)
+                                  for k in ("embed", "norm", "head") if weights.get(k) is not None])
+        finally:
+            lck.close()
+    return _fit(dict(config=d(_hf_text(config_text)), plan=d(_hf_text(plan_text)),
+                     header=d(_hf_text(header)), mapped=d(mapped), shards=d(shard_bytes),
+                     weights=d(np.ascontiguousarray(top)), flags=d(flags)))
+
+
+@lane("training-device-cross-entropy")
+def _(ml, X, yc, yr, Xh=None):
+    """training.cross_entropy on device-resident logits (`ce_loss_dev`): a
+    64 x 16 activation and a 40 x 16 weight uploaded once
+    (`train_to_device`), the logits made on the device by `linear_forward`
+    (`linear_forward_dev`), the loss and its gradient by `cross_entropy` with
+    `return_grad=True`, and the input and weight gradients by
+    `linear_backward` (`linear_backward_dev`). Every device result is held
+    byte for byte in the cell to the same calls on host arrays, which is the
+    device path's claim (the host entries' own arithmetic). GPU columns only:
+    the CPU training binding has no device pool. Parts: the loss, the logits
+    gradient and both linear gradients."""
+    from mojolearn._training_impl import train_to_device
+    T = ml.training
+    d = _coverage_digester(ml)
+    a = np.ascontiguousarray(X[:64, :16], dtype=np.float32)
+    w = np.ascontiguousarray(X[64:104, :16], dtype=np.float32) * np.float32(0.25)
+    t = np.ascontiguousarray(_ids(X, 1, 64, 40).reshape(-1)).astype(np.int64)
+    logits = np.asarray(T.linear_forward(a, w), dtype=np.float32)
+    loss, grad = T.cross_entropy(logits, t, return_grad=True, label_smoothing=0.1)
+    grad = np.ascontiguousarray(np.asarray(grad, dtype=np.float32))
+    da, dw = T.linear_backward(grad, a, w)
+    a_dev, w_dev = train_to_device(a), train_to_device(w)
+    logits_dev = T.linear_forward(a_dev, w_dev)
+    loss_dev, grad_dev = T.cross_entropy(logits_dev, t, return_grad=True, label_smoothing=0.1)
+    da_dev, dw_dev = T.linear_backward(grad_dev, a_dev, w_dev)
+    host = lambda v: np.asarray(v.to_host(), dtype=np.float32)
+    _same_bytes("device logits", host(logits_dev), "host logits", logits)
+    _same_bytes("device loss", np.asarray([loss_dev], dtype=np.float64), "host loss",
+                np.asarray([loss], dtype=np.float64))
+    _same_bytes("device logits gradient", host(grad_dev), "host logits gradient", grad)
+    _same_bytes("device input gradient", host(da_dev), "host input gradient", np.asarray(da, dtype=np.float32))
+    _same_bytes("device weight gradient", host(dw_dev), "host weight gradient", np.asarray(dw, dtype=np.float32))
+    return _fit(dict(loss=d(np.asarray([loss_dev], dtype=np.float64)), grad=d(host(grad_dev)),
+                     da=d(host(da_dev)), dw=d(host(dw_dev))))
+
+
+GPU_ONLY_LANES["training-device-cross-entropy"] = "the CPU training binding has no device array pool"
+
+
+@lane("sequence-layernorm-backward")
+def _(ml, X, yc, yr, Xh=None):
+    """mojolearn.layer_norm_backward, the functional gradient of
+    `layer_norm_forward`: 256 x 2 x 8 fixture values normalized over (2, 8)
+    with weight and bias (eps 1e-3), and 512 x 16 over the last axis with
+    neither; dy from later fixture rows. The weighted call's dx is held byte
+    for byte in the cell to `LayerNorm.backward` on the same values, which is
+    the functional form's claim. Parts: dx, dweight and dbias of the affine
+    call, dx of the plain one."""
+    d = _coverage_digester(ml)
+    x3 = np.ascontiguousarray(X[:256, :16], dtype=np.float32).reshape(256, 2, 8)
+    dy3 = np.ascontiguousarray(X[256:512, :16], dtype=np.float32).reshape(256, 2, 8)
+    wgt = (np.float32(1.0) + np.float32(0.125) * np.ascontiguousarray(X[600, :16], dtype=np.float32)).reshape(2, 8)
+    bias = np.ascontiguousarray(X[601, :16], dtype=np.float32).reshape(2, 8)
+    dx, dwgt, dbias = ml.layer_norm_backward(dy3, x3, (2, 8), weight=wgt, bias=bias, eps=1e-3)
+    x2 = np.ascontiguousarray(X[:512, :16], dtype=np.float32)
+    dy2 = np.ascontiguousarray(X[512:1024, :16], dtype=np.float32)
+    dx2, nw, nb = ml.layer_norm_backward(dy2, x2)
+    if nw is not None or nb is not None:
+        raise RuntimeError("layer_norm_backward without weight or bias returned their gradients")
+    ln = ml.LayerNorm(16)
+    ln.weight[:] = np.float32(1.0) + np.float32(0.125) * np.ascontiguousarray(X[600, :16], dtype=np.float32)
+    ln.bias[:] = np.ascontiguousarray(X[601, :16], dtype=np.float32)
+    ln(x2)
+    _same_bytes("LayerNorm.backward dx", np.asarray(ln.backward(dy2), dtype=np.float32),
+                "layer_norm_backward dx (weight, bias)",
+                np.asarray(ml.layer_norm_backward(dy2, x2, weight=np.ascontiguousarray(ln.weight),
+                                                  bias=np.ascontiguousarray(ln.bias))[0], dtype=np.float32))
+    return _fit(dict(dx=d(np.asarray(dx, dtype=np.float32)), dweight=d(np.asarray(dwgt, dtype=np.float32)),
+                     dbias=d(np.asarray(dbias, dtype=np.float32)), dx_plain=d(np.asarray(dx2, dtype=np.float32))))
+
+
+@lane("x-metrics-classification-report")
+def _(ml, X, yc, yr, Xh=None):
+    """metrics.classification_report on the `x-metrics-classification` lane's
+    four-class labels and binary targets: the dict form unweighted and
+    weighted, and the text form at four digits with target names. Parts: the
+    dict's numbers in sorted key order and the report text."""
+    d = _coverage_digester(ml)
+    mt = ml.metrics
+    n = 3000
+    yt, yp = _metrics_labels(X, n)
+    w = _metrics_weights(n, "x-metrics-classification-report:w")
+    bt, bp = _metrics_binary(yc, X, n)
+
+    def numbers(report):
+        out = []
+        for key in sorted(report):  # glue: the report's rows in key order
+            row = report[key]
+            if isinstance(row, dict):
+                out.extend(float(row[k]) for k in sorted(row))  # glue: one row's fields
+            else:
+                out.append(float(row))
+        return np.asarray(out, dtype=np.float64)
+
+    parts = dict(dict_u=d(numbers(mt.classification_report(yt, yp, output_dict=True, zero_division=0))),
+                 dict_w=d(numbers(mt.classification_report(yt, yp, sample_weight=w, output_dict=True,
+                                                           zero_division=0))),
+                 binary=d(numbers(mt.classification_report(bt, bp, output_dict=True, zero_division=0))),
+                 text=d(_hf_text(mt.classification_report(yt, yp, digits=4, zero_division=0,
+                                                          target_names=["a", "b", "c", "d"]))))
+    return _fit(parts)
+
+
+@lane("x-metrics-permutation-test-score")
+def _(ml, X, yc, yr, Xh=None):
+    """model_selection.permutation_test_score: a Ridge on 600 fixture rows,
+    three folds, 12 permutations from the counter generator (random_state
+    3), the default score; and the same with groups (permutations within
+    each of four groups). Parts: each call's score, permutation scores and
+    p-value."""
+    d = _coverage_digester(ml)
+    ms = ml.model_selection
+    x = np.ascontiguousarray(X[:600, :8], dtype=np.float32)
+    y = np.ascontiguousarray(yr[:600], dtype=np.float32)
+    groups = (np.arange(600) % 4).astype(np.int64)
+    parts = {}
+    for tag, kw in (("plain", {}), ("groups", dict(groups=groups))):  # glue: two calls
+        score, perm, p = ms.permutation_test_score(ml.Ridge(alpha=1.0), x, y, cv=ms.KFold(3),
+                                                   n_permutations=12, random_state=3, **kw)
+        parts[tag] = d(np.concatenate([np.asarray([score, p], dtype=np.float64),
+                                       np.asarray(perm, dtype=np.float64)]))
+    return _fit(parts)
+
+
+@lane("classical-float16-sequences")
+def _(ml, X, yc, yr, Xh=None):
+    """LinearRegression and Ridge fitted on a Python list of float16 row
+    arrays: the classical input door widens each row's half words
+    (`sequence_widen_halves`) and stores the promoted half matrix
+    (`sequence_narrow_halves`). Each fit is held byte for byte in the cell to
+    the fit on the same values as one float16 ndarray, which is the door's
+    claim. Parts: both models' coefficients, intercepts and predictions."""
+    d = _coverage_digester(ml)
+    xh = np.ascontiguousarray(X[:512, :8], dtype=np.float32).astype(np.float16)
+    rows = [np.ascontiguousarray(r) for r in xh]  # glue: the input as a list of half rows
+    y = np.ascontiguousarray(yr[:512], dtype=np.float32)
+    parts = {}
+    for tag, cls, kw in (("ols", ml.LinearRegression, {}), ("ridge", ml.Ridge, dict(alpha=0.5))):  # glue: two models
+        listed = cls(**kw).fit(rows, y)
+        whole = cls(**kw).fit(xh, y)
+        coef = np.asarray(listed.coef_, dtype=np.float64)
+        _same_bytes(f"{tag} coef_ from a list of float16 rows", coef,
+                    f"{tag} coef_ from a float16 ndarray", np.asarray(whole.coef_, dtype=np.float64))
+        parts[f"{tag}_coef"] = d(coef)
+        parts[f"{tag}_intercept"] = d(np.asarray([listed.intercept_], dtype=np.float64))
+        parts[f"{tag}_predict"] = d(np.asarray(listed.predict(xh[:64].astype(np.float32)), dtype=np.float64))
+    return _fit(parts)
+
+
 _batch_decl("n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; "
             "its outputs are train parts, digested whole)",
             "gp-lml-theta", "cross-vendor-fold", "sequence-moe-backward", "sequence-export-roundtrip",
@@ -818,4 +1184,9 @@ _batch_decl("n/a:coverage-probe (the lane checks one public call path the releas
             "training-mlp-sessions", "samba-optimizer-state", "sequence-optimizer-state",
             "sequence-adafactor-device", "sequence-lamb-device",
             "x-huber-outliers", "x-sgd-clf-proba", "x-logistic-cv-proba",
-            "x-decomp-rsvd-rank-deficient")
+            "x-decomp-rsvd-rank-deficient",
+            # lane verify-gaps-20261022
+            "saved-model-host-infer-trees", "hf-causal-lm-text", "hf-model-surface",
+            "training-device-cross-entropy", "sequence-layernorm-backward",
+            "x-metrics-classification-report", "x-metrics-permutation-test-score",
+            "classical-float16-sequences")
