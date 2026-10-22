@@ -399,26 +399,6 @@ class HostTruncatedSVD(_NativeArchiveLoad, _HostProjection, TruncatedSVD):
 class HostPCA(_NativeArchiveLoad, _HostProjection, PCA):
     _HOST_ARRAYS = ("components_", "mean_", "singular_values_")
 
-    def _whiten_binding(self):
-        """The host binding carries the whitened pair since the kde svc host
-        lane (2026-09-14); an older host build without it is refused by
-        name, as the GPU class refuses an older GPU build."""
-        binding = self._bind("_mojolearn_estimators")
-        if not all(callable(getattr(binding, name, None)) for name in
-                   ("pca_whiten_transform", "pca_whiten_inverse_transform")):
-            raise ImportError(
-                "mojolearn: this build of _mojolearn_estimators_host does not "
-                "export pca_whiten_transform and pca_whiten_inverse_transform; "
-                "rebuild it with bindings/build_estimators_host.sh"
-            )
-        return binding
-
-    def _dense_binding(self):
-        raise ImportError(
-            "mojolearn: no CPU implementation of the dense PCA fit; the host "
-            "PCA transforms a saved model only"
-        )
-
 
 class HostKernelDensity(_NativeArchiveLoad, _HostBound, KernelDensity):
     """Evaluate a saved kernel density model on the CPU."""

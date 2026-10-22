@@ -1,20 +1,46 @@
 # SPDX-License-Identifier: Apache-2.0
-# Incremental private PCA operation owner. No public route is activated here.
+# The native PCA owner: every public PCA operation is one call into pca_c.
 from std.python import Python, PythonObject
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
-from bindings.py_balanced import py_type
+from bindings.py_balanced import py_call, py_get, py_type
 from bindings.sequential_admission import sequential_admit_value
 from bindings.classical_metadata import classical_is_fitted
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.pca_metadata import pca_dictionary, pca_fields, pca_initialize, pca_get_params, pca_set_params, pca_entries
-from bindings.pca_exact import pca_exact_fit, pca_transform
+from bindings.pca_exact import pca_exact_fit, pca_transform, pca_solver_checks
 from bindings.pca_randomized import pca_randomized_fit
 from bindings.pca_archive import pca_archive_save, pca_archive_load
+
+
+def _pca_admitted(model: PythonObject, loading: Bool, context: PythonObject) raises -> Bool:
+    # PCA itself or an ordinary subclass of it (HostPCA, a user's class):
+    # the class's MRO, read through type's own descriptor, holds PCA.
+    var b = Python.import_module("builtins")
+    var cls = model if loading else py_type(model)
+    if py_type(cls) is not b.type:
+        return False
+    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    for k in range(len(mro)):  # driver-loop: over the model class's MRO
+        if mro[k] is context["pca_class"]:
+            return True
+    return False
+
+
+def _pca_host_only(model: PythonObject, context: PythonObject) raises -> Bool:
+    # An explicit host inference class (`_HOST_INFERENCE_ONLY` in its class
+    # dictionaries) transforms a saved model; it never fits.
+    var b = Python.import_module("builtins")
+    var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
+    for k in range(len(mro)):  # driver-loop: over the model class's MRO
+        var class_fields = py_call(b.type.__dict__["__dict__"].__get__, mro[k])
+        if py_get(class_fields, "_HOST_INFERENCE_ONLY") is not None:
+            return True
+    return False
 
 
 def pca_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
@@ -32,8 +58,8 @@ def pca_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         if py_type(context) is not b.dict:
             raise Error("TypeError: native PCA requires connected context")
         var loading = operation == "load"
-        if (model is not context["pca_class"] if loading else py_type(model) is not context["pca_class"]):
-            raise Error("TypeError: the private PCA owner requires an exact PCA instance")
+        if not _pca_admitted(model, loading, context):
+            raise Error("TypeError: the native PCA owner requires a PCA instance")
         classical_connect_numpy(context)
         var result = PythonObject(None)
         if loading:
@@ -60,14 +86,22 @@ def pca_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
                 if not Bool(py=classical_is_fitted(model)):
                     _ = classical_not_fitted_class(context)
                     raise Error("NotFittedError: This PCA instance is not fitted yet. Call 'fit' with appropriate arguments first.")
+            if py_get(context, "ndarray") is None:
+                raise Error("ImportError: mojolearn: PCA requires optional NumPy support. Install it with: "
+                            + 'python -m pip install "mojolearn[numpy]" ("mojolearn[verify]" also includes NumPy).')
             var entries = pca_entries(fields, context)
             if operation == "fit" or operation == "fit_transform":
-                if String(fields["svd_solver"]) == "randomized":
-                    result = pca_randomized_fit(model, args, entries, context)
+                # fit_transform projects inside the fit's one compiled call,
+                # from the X it already holds: no second upload or call.
+                if _pca_host_only(model, context):
+                    raise Error("ImportError: mojolearn: no CPU implementation of the PCA fit on the host class; "
+                                + "the host PCA transforms a saved model only")
+                var project = operation == "fit_transform"
+                var solver = pca_solver_checks(fields, entries)
+                if solver == "randomized":
+                    result = pca_randomized_fit(model, args, project, entries, context)
                 else:
-                    result = pca_exact_fit(model, args, entries, context)
-                if operation == "fit_transform":
-                    result = pca_transform(model, args[0], False, entries, context)
+                    result = pca_exact_fit(model, args, solver, project, entries, context)
             elif operation == "transform" or operation == "inverse_transform":
                 result = pca_transform(model, args[0], operation == "inverse_transform", entries, context)
             elif operation == "numeric_mode_used":
