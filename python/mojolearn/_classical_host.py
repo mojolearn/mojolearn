@@ -316,7 +316,7 @@ class HostGaussianProcessRegressor(_HostBound, GaussianProcessRegressor):
     _HOST_ARRAYS = ("X_train_", "L_", "alpha_")
 
 
-class HostHDBSCAN(_HostBound, HDBSCAN):
+class HostHDBSCAN(_NativeArchiveLoad, _HostBound, HDBSCAN):
     """A saved HDBSCAN that `mojolearn.hdbscan.approximate_predict` accepts,
     predicting through the inference-only hdbscan binding."""
     _HOST_ARRAYS = ("_raw_data", "core_distances_", "labels_")
@@ -528,7 +528,7 @@ class HostRBFSampler(_NativeArchiveLoad, _HostBound, RBFSampler):
     _HOST_ARRAYS = ("random_weights_", "random_offset_")
 
 
-class HostIVFIndex(_HostBound, IVFIndex):
+class HostIVFIndex(_NativeArchiveLoad, _HostBound, IVFIndex):
     """A saved IVF-Flat index on the search inference binding, which exports
     `ivf_flat_search` and no build (lane/inference-embedding-ivf-cholesky,
     2026-09-15)."""
