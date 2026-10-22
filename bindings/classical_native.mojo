@@ -15,6 +15,8 @@ from bindings.classical_attributes import classical_check_layout, classical_geta
 from bindings.classical_archive import classical_archive_save
 from bindings.classical_archive_read import classical_archive_load, classical_host_model
 from bindings.host_archive_native import host_archive_build
+from bindings.archive_schema_native import archive_schema_save
+from bindings.linear_score_native import linear_regressor_score
 from bindings.host_tree_native import host_tree_operation
 from bindings.host_inference_native import host_inference_operation
 from bindings.host_kde_fit_native import host_kde_fit
@@ -139,6 +141,16 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             # correctly refuses for unrelated estimator operations.
             var restored = host_archive_build(args[0], archive_context, model if operation == "host_archive_load" else PythonObject(None), operation == "host_archive_classical_model")
             return restored.steal_data()
+        if operation == "linear_regressor_score":
+            # The linear expansion regressors' one-call score: predict and
+            # R^2 in one native operation.
+            var scored = linear_regressor_score(model, args, context)
+            return scored.steal_data()
+        if operation == "archive_save":
+            # The public estimators' one-call save: the class's connected
+            # schema, written by the deterministic NPZ writer.
+            var saved = archive_schema_save(model, args[0], context)
+            return saved.steal_data()
         if operation == "host_model":
             var host_context = py_get(context, "classical_host_context")
             if host_context is None:
@@ -281,6 +293,8 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             return raise_python_exception(error_without_class(error, "NotImplementedError"), ExceptionType("PyExc_NotImplementedError"))
         if String(error).startswith("ImportError:"):
             return raise_python_exception(error_without_class(error, "ImportError"), ExceptionType("PyExc_ImportError"))
+        if String(error).startswith("IndexError:"):
+            return raise_python_exception(error_without_class(error, "IndexError"), ExceptionType("PyExc_IndexError"))
         if String(error).startswith("AttributeError:"):
             return raise_python_exception(error_without_class(error, "AttributeError"), ExceptionType("PyExc_AttributeError"))
         if String(error).startswith("RuntimeError:"):

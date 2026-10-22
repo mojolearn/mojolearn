@@ -14,8 +14,15 @@ first imported, after the package, so both may rely on every module existing:
                                import `_classical_host` INSIDE it and subclass
                                its `_HostBound`; never import it at module level
 """
+from . import _native_archive_bridge
 from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty
 from ._mode import NumericModeMixin
+
+# The compiled saved-model owner, connected once at import: `save` of
+# CagraIndex, IVFSQIndex and IVFRaBitQIndex is one native call that writes
+# the schema registered at the end of this module
+# (bindings/archive_schema_native.mojo).
+_ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
 __all__ = ["IVFPQIndex", "TSNE", "CagraIndex", "IVFSQIndex", "IVFRaBitQIndex", "refine"]
 
@@ -176,23 +183,11 @@ class _AnnSaved:
         RuntimeError
             If the index has not been fitted.
         """
-        from . import _serialize
-        from ._array import Array
-        from .decomposition import _saved_mode
-        missing = [a for a, _ in self._SAVE_ARRAYS if not hasattr(self, a)]  # glue: saved array attributes by name
-        if missing:
-            raise RuntimeError(f"mojolearn {type(self).__name__}: call fit before save")
-        arrays = {
-            "format": self._SAVE_FORMAT,
-            "estimator": type(self).__name__,
-            "numeric_mode": _saved_mode(self),
-            "params": Array.from_list([self._save_param(p) for p in self._SAVE_PARAMS], "<i8"),  # glue: saved parameters by name
-            "fitted": Array.from_list([int(getattr(self, a)) for a in self._SAVE_FITTED], "<i8"),  # glue: saved parameters by name
-        }
-        for attr, _dtype in self._SAVE_ARRAYS:  # glue: saved array attributes by name
-            arrays[attr.rstrip("_")] = getattr(self, attr)
-        return _serialize.write_npz(path, arrays)
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
+    # load stays Python: `_AnnResident.__del__` (the device handle release)
+    # is a Python finalizer, which native archive loading refuses
+    # (host_archive_check_layout), and no Host* class replaces it.
     @classmethod
     def load(cls, path):
         """Load an index written by `save`.
@@ -385,6 +380,49 @@ class IVFPQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
     def __getstate__(self):
         self._materialize_device_arrays()
         return super().__getstate__()
+
+    # save stays Python for IVFPQIndex: a resident fit holds `codes_` only on
+    # the device, and `hasattr`/`getattr` export it through `__getattr__`
+    # (a Python method calling x_ann_index_export_codes), which a save schema
+    # cannot run.
+    def save(self, path):
+        """Write the fitted index to `path` as an ``.npz`` file.
+
+        The file holds the constructor parameters, the fitted sizes, the index
+        arrays exactly as `fit` left them, and the numeric mode. Reload it with
+        `load`; a loaded index searches without rebuilding.
+
+        Parameters
+        ----------
+        path : str or path-like
+            Destination file.
+
+        Returns
+        -------
+        path : str or path-like
+            The path written.
+
+        Raises
+        ------
+        RuntimeError
+            If the index has not been fitted.
+        """
+        from . import _serialize
+        from ._array import Array
+        from .decomposition import _saved_mode
+        missing = [a for a, _ in self._SAVE_ARRAYS if not hasattr(self, a)]  # glue: saved array attributes by name
+        if missing:
+            raise RuntimeError(f"mojolearn {type(self).__name__}: call fit before save")
+        arrays = {
+            "format": self._SAVE_FORMAT,
+            "estimator": type(self).__name__,
+            "numeric_mode": _saved_mode(self),
+            "params": Array.from_list([self._save_param(p) for p in self._SAVE_PARAMS], "<i8"),  # glue: saved parameters by name
+            "fitted": Array.from_list([int(getattr(self, a)) for a in self._SAVE_FITTED], "<i8"),  # glue: saved parameters by name
+        }
+        for attr, _dtype in self._SAVE_ARRAYS:  # glue: saved array attributes by name
+            arrays[attr.rstrip("_")] = getattr(self, attr)
+        return _serialize.write_npz(path, arrays)
 
     def fit(self, X, y=None):
         """Build the index from `X`.
@@ -855,11 +893,6 @@ class CagraIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         if r < 0:
             raise ValueError("mojolearn CagraIndex: random_state must be None or >= 0")
         return r % 2147483646 + 1
-
-    def _save_param(self, p):
-        if p == "random_state":
-            return -1 if self.random_state is None else self._rs() - 1
-        return super()._save_param(p)
 
     @classmethod
     def _load_param(cls, p, v):
@@ -1516,3 +1549,32 @@ def refine(dataset, queries, candidates, k, numeric_mode=None, metric="sqeuclide
         [n, d, m, k0, k] + ([1] if root else []),
     )
     return dist.reshape((m, k)), idx.reshape((m, k))
+
+
+def _ann_save_schema(cls, items=None):
+    """The save schema of one `_AnnSaved` class, from its fixed tables:
+    every array present ("call fit before save"), the head, the int `params`
+    (each an int and not a bool, as `_ann_int` refused), the `fitted` ints
+    and the arrays as stored, in the members' 0.8.55 order."""
+    items = items or {}
+    return (
+        *(("need", a, "RuntimeError", "mojolearn {cls}: call fit before save")
+          for a, _dtype in cls._SAVE_ARRAYS),  # glue: fixed saved array table, at import
+        *_native_archive_bridge.head(cls._SAVE_FORMAT),
+        ("i8", "params", tuple(items.get(p, ("strict", p, "TypeError", f"mojolearn {{cls}}: {p} must be an int, got {{type}}"))
+                               for p in cls._SAVE_PARAMS)),  # glue: fixed saved parameter table, at import
+        ("i8", "fitted", tuple(("int", a) for a in cls._SAVE_FITTED)),  # glue: fixed fitted table, at import
+        *(("array", a.rstrip("_"), a) for a, _dtype in cls._SAVE_ARRAYS),  # glue: fixed saved array table, at import
+    )
+
+
+# CagraIndex saves random_state as -1 for None, else r % 2147483646 (the
+# kernels' seed word minus one), refusing a non-int and a negative value.
+_CAGRA_SEED = ("none_or", "random_state", -1, ("mod", ("at_least", (
+    "strict", "random_state", "TypeError", "mojolearn CagraIndex: random_state must be an int, got {type}"),
+    0, "ValueError", "mojolearn CagraIndex: random_state must be None or >= 0"), 2147483646))
+
+_native_archive_bridge.register(CagraIndex, CagraIndex._SAVE_FORMAT,
+                                _ann_save_schema(CagraIndex, {"random_state": _CAGRA_SEED}))
+_native_archive_bridge.register(IVFSQIndex, IVFSQIndex._SAVE_FORMAT, _ann_save_schema(IVFSQIndex))
+_native_archive_bridge.register(IVFRaBitQIndex, IVFRaBitQIndex._SAVE_FORMAT, _ann_save_schema(IVFRaBitQIndex))

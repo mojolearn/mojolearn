@@ -115,19 +115,23 @@ import struct
 # that reason turned out not to exist: the kernels were
 # being lost to `MACOSX_DEPLOYMENT_TARGET` in the environment plus a compiler
 # cache that does not key on it, and the basename never mattered.
-from . import _backend, _mojolearn_gbdt, _serialize
+from . import _backend, _mojolearn_gbdt, _native_archive_bridge, _serialize
 from ._mode import NumericModeMixin
 from ._sample_weight import check_sample_weight
 from ._array import Array
 from ._buffer import (
     as_f32_forest_layout,
     addr, addr_ro, all_finite, as_f32_c, as_f32_colmajor, as_i64_c,
-    empty, frombytes, zeros, _native,
+    empty, zeros, _native,
 )
 from ._labels import argmax_rows, finite_integer_codes, flat_view, is_bool
 
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-gbdt-1"
+
+# The compiled saved-model owner, connected once at import: `save` is one
+# native call (the schema registered after `GradientBoosting`).
+_ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
 
 def _model_text_sha256(text):
@@ -2680,46 +2684,7 @@ class GradientBoosting(NumericModeMixin):
         path : str or path-like
             Destination file.
         """
-        if self.model_ is None:
-            raise RuntimeError("mojolearn: save() before fit()")
-        # Persist the tier prediction would use now, including an inherited
-        # process default. Saving None would let a different process silently
-        # turn an IDENTICAL model into FAST arithmetic after loading.
-        mode = getattr(self, "numeric_mode", None) or _backend.default_mode()
-        if not isinstance(mode, str) or mode.strip().lower() not in (
-            "fast", "identical"
-        ):
-            raise ValueError(f"mojolearn: cannot save invalid numeric_mode {mode!r}")
-        mode = mode.strip().lower()
-        # DEVIATION 2334: the members are `Array`s and plain str (which
-        # `_serialize.write_npz` encodes as the `<U` scalar member
-        # `np.asarray(str)` gave). `bias` is a one-element float64 member,
-        # the shape `write_npz` gives a 0-d value anyway (the 0.6.x writer
-        # promoted 0-d to `(1,)` through `np.ascontiguousarray`), so the
-        # file bytes are those of a 0.6.x save of the same model; the
-        # loader on both sides reads the first element.
-        model_bytes = str(self.model_).encode("utf-8")
-        arrays = {
-            "format": _MODEL_FORMAT,
-            "numeric_mode": mode,
-            "estimator": type(self).__name__,
-            "loss": self.loss,
-            "model": frombytes(model_bytes, "<u1", (len(model_bytes),)),
-            "meta": Array.from_list(
-                [
-                    int(self.n_features_in_),
-                    int(self.approx_dim_),
-                    -1 if self.n_classes_ is None else int(self.n_classes_),
-                    -1 if self.best_iteration_ is None
-                    else int(self.best_iteration_),
-                    1 if self.stopped_early_ else 0,
-                ],
-                "<i8",
-            ),
-            # raw float64 bytes, already parsed from the text's BITS half
-            "bias": Array.from_list([float(self.bias_)], "<f8"),
-        }
-        return _serialize.write_npz(path, arrays)
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -2786,6 +2751,28 @@ class GradientBoosting(NumericModeMixin):
         obj.loss_curve_ = None
         obj.test_loss_curve_ = None
         return obj
+
+
+# `save` is one native call: bindings/archive_schema_native.mojo writes this
+# schema, the members, dtypes and refusals of the 0.8.55 Python `save` (the
+# model text as UTF-8 `<u1` bytes, the numeric mode `predict` would use now,
+# the int64 meta and the float64 bias). `load` stays Python: the class
+# defines `__del__` (it releases a device-resident copy), which native archive
+# loading refuses, and the load binds the GBDT binding to read the model's
+# output dimension from its text.
+_native_archive_bridge.register(GradientBoosting, _MODEL_FORMAT, (
+    ("need", "model_", "AttributeError", "'{cls}' object has no attribute 'model_'"),
+    ("need_set", "model_", "RuntimeError", "mojolearn: save() before fit()"),
+    ("format", "format", _MODEL_FORMAT),
+    ("mode", "numeric_mode", "mojolearn: "),
+    ("estimator", "estimator"),
+    ("array", "loss", "loss"),
+    ("utf8", "model", "model_"),
+    ("i8", "meta", (("int", "n_features_in_"), ("int", "approx_dim_"),
+                    ("none", "n_classes_", -1), ("none", "best_iteration_", -1),
+                    ("bool", "stopped_early_"))),
+    ("f8", "bias", (("float", "bias_"),)),
+))
 
 
 def _has_ctr_records(text):

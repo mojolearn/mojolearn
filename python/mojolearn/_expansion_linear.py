@@ -43,6 +43,9 @@ __all__ = ["SGDClassifier", "SGDRegressor", "PoissonRegressor", "GammaRegressor"
            "IsotonicRegression"]
 
 _BINDING = "_mojolearn_x_linear"
+# The native `score` of the regressors, connected once at import.
+from . import _native_linear_score_bridge  # noqa: E402
+_LINEAR_SCORE, _LINEAR_SCORE_CONTEXT = _native_linear_score_bridge.connect()
 ALGO_SGD, ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD = 1, 2, 3, 4, 5
 ALGO_LARS, ALGO_QUANTILE, ALGO_RIDGE, ALGO_ENETCV, ALGO_LOGCV, ALGO_ISOTONIC = 6, 7, 8, 9, 10, 11
 ALGO_ISOTONIC_PREDICT = 12
@@ -375,11 +378,9 @@ class _LinearRegressorMixin:
         score : float
             R^2; 1.0 is a perfect fit.
         """
-        # R^2 on the device (the metrics binding's pinned-sum r2_score)
-        from ._metrics_impl import r2_score
-        pred, _ = as_f32_c(self.predict(X), ndim=1, name="prediction")
-        truth, _ = as_f32_c(y, ndim=1, name="y")
-        return r2_score(truth, pred)
+        # Predict and R^2 in one native call (bindings/linear_score_native.mojo):
+        # the x_linear decision kernel, then the default metrics binding's r2_score.
+        return _LINEAR_SCORE(self, "linear_regressor_score", (X, y), _LINEAR_SCORE_CONTEXT)
 
 
 # ---------------------------------------------------------------------- SGD

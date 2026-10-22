@@ -17,16 +17,21 @@ whoever owns that file decides the public namespace.
 
 import sys
 
-from . import _backend, _expansion_cluster, _mojolearn_solver, _serialize
+from . import _backend, _expansion_cluster, _mojolearn_solver, _native_archive_bridge
 from ._mode import ParamsMixin, available_if
 from ._array import Array
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty, frombytes, zeros
 from .density import _check_queries
-from .linear_model import _check_saved_by, _restore_mode, _saved_mode
 
 #: `AgglomerativeClustering.save`'s format tag
 #: (lane/inference-transductive-predict, 2026-09-15).
 _AGGLOMERATIVE_FORMAT = "mojolearn-agglomerative-1"
+
+# The compiled saved-model owner, connected once at import: `save` and
+# `load` are one native call each (bindings/archive_schema_native.mojo
+# writes the schema registered below the class; host_archive_native.mojo
+# builds the loaded model).
+_ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
 # `cuml/common/distance_type.hpp`, the codes cuML's Python layer passes
 # (`agglomerative.pyx:36-43`).
@@ -667,29 +672,7 @@ class AgglomerativeClustering(ParamsMixin):
         NotImplementedError
             If the linkage or metric has no prediction rule.
         """
-        if not hasattr(self, "labels_"):
-            raise RuntimeError("this estimator is not fitted yet")
-        if not self._predicts():
-            raise NotImplementedError(
-                f"mojolearn AgglomerativeClustering.save: linkage={self.linkage!r}, "
-                f"metric={self.metric!r} has no predict rule to save (DEVIATION 2740)")
-        if getattr(self, "_fit_X", None) is None:
-            raise ValueError(
-                "mojolearn AgglomerativeClustering.save: prediction data was not "
-                "stored; fit with AgglomerativeClustering(prediction_data=True)"
-            )
-        arrays = {
-            "format": _AGGLOMERATIVE_FORMAT,
-            "estimator": type(self).__name__,
-            "numeric_mode": _saved_mode(self),
-            "metric": str(self.metric),
-            "x": self._fit_X,
-            "labels": self.labels_,
-            "meta": Array.from_list(
-                [int(self.n_clusters_), int(self.n_features_in_), int(self.n_leaves_)], "<i8"
-            ),
-        }
-        return _serialize.write_npz(path, arrays)
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -714,25 +697,26 @@ class AgglomerativeClustering(ParamsMixin):
             If the file is not a saved AgglomerativeClustering or its arrays
             are inconsistent.
         """
-        arrays = _serialize.read_npz(path, _AGGLOMERATIVE_FORMAT)
-        _check_saved_by(arrays, path, cls)
-        meta = _serialize.exact(arrays, "meta", "<i8")
-        if meta.size != 3:
-            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 3 are needed")
-        k, nf, n_leaves = (int(v) for v in meta.tolist())  # glue: unpacks the fixed meta vector
-        obj = cls(n_clusters=k, metric=_serialize.scalar_str(arrays, "metric"), prediction_data=True)
-        obj._validate_params()
-        _restore_mode(obj, arrays)
-        x = _serialize.exact(arrays, "x", "<f4")
-        labels = _serialize.exact(arrays, "labels", "<i4")
-        if x.ndim != 2 or tuple(x.shape) != (n_leaves, nf):
-            raise ValueError(f"mojolearn: {path!r} x shape {tuple(x.shape)} is not ({n_leaves}, {nf})")
-        if labels.size != n_leaves:
-            raise ValueError(f"mojolearn: {path!r} labels do not match n_leaves_")
-        obj._fit_X = x
-        obj.labels_ = labels
-        obj.n_clusters_ = k
-        obj.n_leaves_ = n_leaves
-        obj.n_features_in_ = nf
-        return obj
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+
+
+# The saved prediction data, written natively from this schema (bindings/
+# archive_schema_native.mojo) with the bytes `_serialize.write_npz` wrote.
+# The `_predicts` rule (single linkage under a `_METRICS` metric) is two
+# field conditions; the refusals keep the former Python save's wording and order.
+_PREDICT_RULE_REFUSAL = ("mojolearn AgglomerativeClustering.save: linkage={0}, metric={1} has no "
+                         "predict rule to save (DEVIATION 2740)")
+_native_archive_bridge.register(AgglomerativeClustering, _AGGLOMERATIVE_FORMAT, (
+    _native_archive_bridge.fitted("labels_"),
+    ("need_eq", "linkage", "single", "NotImplementedError", _PREDICT_RULE_REFUSAL, ("linkage", "metric")),
+    ("need_in", "metric", dict(_METRICS), "NotImplementedError", _PREDICT_RULE_REFUSAL, ("linkage", "metric")),
+    ("need_set", "_fit_X", "ValueError",
+     "mojolearn AgglomerativeClustering.save: prediction data was not stored; fit with "
+     "AgglomerativeClustering(prediction_data=True)"),
+    *_native_archive_bridge.head(_AGGLOMERATIVE_FORMAT),
+    ("str", "metric", "metric"),
+    ("array", "x", "_fit_X"),
+    ("array", "labels", "labels_"),
+    ("i8", "meta", (("int", "n_clusters_"), ("int", "n_features_in_"), ("int", "n_leaves_"))),
+), host_archive_agglo_metrics=tuple(_ALL_METRICS))
 

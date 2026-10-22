@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """GPU dimensionality reduction."""
 
-from . import _backend, _mojolearn_estimators, _serialize
+from . import _backend, _mojolearn_estimators, _native_archive_bridge, _serialize
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty
 from ._mode import NumericModeMixin
@@ -13,6 +13,12 @@ from ._mode import NumericModeMixin
 #: reads plus the fitted spectrum a user reads back.
 _PCA_FORMAT = "mojolearn-pca-1"
 _TSVD_FORMAT = "mojolearn-tsvd-1"
+
+# The compiled saved-model owner, connected once at import: `save` and
+# `load` are one native call each (bindings/archive_schema_native.mojo
+# writes the schema registered below each class; host_archive_native.mojo
+# builds the loaded model).
+_ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
 
 def _saved_mode(est):
@@ -40,14 +46,6 @@ def _check_saved_by(arrays, path, cls):
     if saved_as not in (c.__name__ for c in cls.__mro__):  # glue: checks the saved class name
         raise ValueError(
             f"mojolearn: {path!r} was saved by {saved_as}, not {cls.__name__}"
-        )
-
-
-def _check_components(path, components, nc, nf):
-    if components.ndim != 2 or tuple(components.shape) != (nc, nf):
-        raise ValueError(
-            f"mojolearn: {path!r} components shape {tuple(components.shape)} is "
-            f"not ({nc}, {nf})"
         )
 
 
@@ -642,26 +640,7 @@ class PCA(NumericModeMixin):
         RuntimeError
             If the model is not fitted.
         """
-        if not hasattr(self, "components_"):
-            raise RuntimeError("this estimator is not fitted yet")
-        arrays = {
-            "format": _PCA_FORMAT,
-            "estimator": type(self).__name__,
-            "numeric_mode": _saved_mode(self),
-            "svd_solver": str(self.svd_solver),
-            "components": self.components_,
-            "mean": self.mean_,
-            "singular_values": self.singular_values_,
-            "explained_variance": self.explained_variance_,
-            "explained_variance_ratio": self.explained_variance_ratio_,
-            "noise_variance": Array.from_list([float(self.noise_variance_)], "<f8"),
-            "meta": Array.from_list(
-                [int(self.n_components_), int(self.n_features_in_),
-                 int(self.n_samples_), 1 if self.whiten else 0],
-                "<i8",
-            ),
-        }
-        return _serialize.write_npz(path, arrays)
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -684,35 +663,7 @@ class PCA(NumericModeMixin):
         ValueError
             If the file is not a PCA model or its arrays are inconsistent.
         """
-        arrays = _serialize.read_npz(path, _PCA_FORMAT)
-        _check_saved_by(arrays, path, cls)
-        meta = _serialize.exact(arrays, "meta", "<i8")
-        if meta.size != 4:
-            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 4 are needed")
-        nc, nf = int(meta[0]), int(meta[1])
-        obj = cls(n_components=nc, whiten=bool(int(meta[3])),
-                  svd_solver=_serialize.scalar_str(arrays, "svd_solver"))
-        _restore_mode(obj, arrays)
-        obj.components_ = _serialize.exact(arrays, "components", "<f4")
-        _check_components(path, obj.components_, nc, nf)
-        obj.mean_ = _serialize.exact(arrays, "mean", "<f4")
-        obj.singular_values_ = _serialize.exact(arrays, "singular_values", "<f4")
-        obj.explained_variance_ = _serialize.exact(arrays, "explained_variance", "<f4")
-        obj.explained_variance_ratio_ = _serialize.exact(arrays, "explained_variance_ratio", "<f4")
-        for name in ("mean_",):  # glue: loops over saved attribute names
-            if getattr(obj, name).size != nf:
-                raise ValueError(f"mojolearn: {path!r} {name} does not match n_features_in_")
-        for name in ("singular_values_", "explained_variance_", "explained_variance_ratio_"):  # glue: loops over saved attribute names
-            if getattr(obj, name).size != nc:
-                raise ValueError(f"mojolearn: {path!r} {name} does not match n_components_")
-        noise = _serialize.exact(arrays, "noise_variance", "<f8")
-        if noise.size != 1:
-            raise ValueError(f"mojolearn: {path!r} noise_variance must hold one value")
-        obj.noise_variance_ = float(noise[0])
-        obj.n_components_ = nc
-        obj.n_features_in_ = nf
-        obj.n_samples_ = int(meta[2])
-        return obj
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
 
 # Maintainer notes (moved from the docstring). Reference: cuML's tsvdFit
@@ -998,20 +949,7 @@ class TruncatedSVD(NumericModeMixin):
         RuntimeError
             If the model is not fitted.
         """
-        if not hasattr(self, "components_"):
-            raise RuntimeError("this estimator is not fitted yet")
-        arrays = {
-            "format": _TSVD_FORMAT,
-            "estimator": type(self).__name__,
-            "numeric_mode": _saved_mode(self),
-            "algorithm": str(self.algorithm),
-            "components": self.components_,
-            "singular_values": self.singular_values_,
-            "meta": Array.from_list(
-                [int(self.n_components_), int(self.n_features_in_)], "<i8"
-            ),
-        }
-        return _serialize.write_npz(path, arrays)
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -1034,22 +972,30 @@ class TruncatedSVD(NumericModeMixin):
         ValueError
             If the file is not a TruncatedSVD model or its arrays are inconsistent.
         """
-        arrays = _serialize.read_npz(path, _TSVD_FORMAT)
-        _check_saved_by(arrays, path, cls)
-        meta = _serialize.exact(arrays, "meta", "<i8")
-        if meta.size != 2:
-            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 2 are needed")
-        nc, nf = int(meta[0]), int(meta[1])
-        obj = cls(n_components=nc, algorithm=_serialize.scalar_str(arrays, "algorithm"))
-        _restore_mode(obj, arrays)
-        obj.components_ = _serialize.exact(arrays, "components", "<f4")
-        _check_components(path, obj.components_, nc, nf)
-        obj.singular_values_ = _serialize.exact(arrays, "singular_values", "<f4")
-        if obj.singular_values_.size != nc:
-            raise ValueError(f"mojolearn: {path!r} singular_values does not match n_components_")
-        obj.n_components_ = nc
-        obj.n_features_in_ = nf
-        return obj
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+
+
+_native_archive_bridge.register(PCA, _PCA_FORMAT, (
+    _native_archive_bridge.fitted("components_"),
+    *_native_archive_bridge.head(_PCA_FORMAT),
+    ("str", "svd_solver", "svd_solver"),
+    ("array", "components", "components_"),
+    ("array", "mean", "mean_"),
+    ("array", "singular_values", "singular_values_"),
+    ("array", "explained_variance", "explained_variance_"),
+    ("array", "explained_variance_ratio", "explained_variance_ratio_"),
+    ("f8", "noise_variance", (("float", "noise_variance_"),)),
+    ("i8", "meta", (("int", "n_components_"), ("int", "n_features_in_"),
+                    ("int", "n_samples_"), ("bool", "whiten"))),
+))
+_native_archive_bridge.register(TruncatedSVD, _TSVD_FORMAT, (
+    _native_archive_bridge.fitted("components_"),
+    *_native_archive_bridge.head(_TSVD_FORMAT),
+    ("str", "algorithm", "algorithm"),
+    ("array", "components", "components_"),
+    ("array", "singular_values", "singular_values_"),
+    ("i8", "meta", (("int", "n_components_"), ("int", "n_features_in_"))),
+))
 
 
 # scikit-learn keeps more estimators in this module than it defines; they resolve from

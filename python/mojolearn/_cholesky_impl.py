@@ -45,8 +45,8 @@ purpose (its header, point 3).
 
 NO SPEED CLAIM. The lane has no published number and this door adds none.
 """
-from . import _backend, _serialize
-from ._buffer import Array, addr, addr_ro, as_f32_c, empty
+from . import _backend, _native_archive_bridge
+from ._buffer import addr, addr_ro, as_f32_c, empty
 from ._mode import NumericModeMixin
 
 #: `checks/numerics.mojo` codes, duplicated from `_backend._MODE_CODE` on
@@ -56,6 +56,12 @@ _MODE_CODE = {"fast": 0, "identical": 1}
 
 #: The saved-model format tag (`save`, `load`, `mojolearn.host_model`).
 _CHOLESKY_FORMAT = "mojolearn-cholesky-1"
+
+# The compiled saved-model owner, connected once at import: `save` and
+# `load` are one native call each (bindings/archive_schema_native.mojo
+# writes the schema registered after the class; host_archive_native.mojo
+# builds the loaded model).
+_ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
 #: The GPU binding and the host route. A CPU-only install binds the linalg
 #: route because its host binding ships; the gp host binding does not.
@@ -281,29 +287,7 @@ class Cholesky(NumericModeMixin):
         A failed factor saves too; its `solve` still refuses. Raises `RuntimeError` before
         `fit`.
         """
-        if not hasattr(self, "L_"):
-            raise RuntimeError("mojolearn Cholesky: call fit before save")
-        mode = getattr(self, "numeric_mode", None) or _backend.default_mode()
-        if not isinstance(mode, str) or mode.strip().lower() not in _MODE_CODE:
-            raise ValueError(f"mojolearn Cholesky: cannot save invalid numeric_mode {mode!r}")
-        l_arr = self.L_ if isinstance(self.L_, Array) else as_f32_c(self.L_, ndim=2, name="L_")[0]
-        if l_arr.dtype != "<f4" or tuple(l_arr.shape) != (self.n_, self.n_):
-            raise ValueError(
-                f"mojolearn Cholesky: L_ must be float32 ({self.n_}, {self.n_}), "
-                f"got {l_arr.dtype} {tuple(l_arr.shape)}"
-            )
-        arrays = {
-            "format": _CHOLESKY_FORMAT,
-            "estimator": "Cholesky",
-            "numeric_mode": mode.strip().lower(),
-            "L": l_arr,
-            "meta": Array.from_list([int(self.n_), int(self.info_), int(self.nb_)], "<i8"),
-            "scalars": Array.from_list([float(self._logdet), float(self.jitter_)], "<f8"),
-            # -1.0 means "the profile's ridge" (None); the fitted ridge is
-            # in `scalars` either way.
-            "jitter_param": Array.from_list([-1.0 if self.jitter is None else float(self.jitter)], "<f8"),
-        }
-        return _serialize.write_npz(path, arrays)
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -313,35 +297,25 @@ class Cholesky(NumericModeMixin):
         refactor. A file saved by another estimator, or with mismatched shapes or dtypes,
         raises `ValueError`.
         """
-        arrays = _serialize.read_npz(path, _CHOLESKY_FORMAT)
-        saved_as = _serialize.scalar_str(arrays, "estimator")
-        if saved_as not in (c.__name__ for c in cls.__mro__):  # glue: checks the saved class name
-            raise ValueError(f"mojolearn: {path!r} was saved by {saved_as}, not {cls.__name__}")
-        mode = _serialize.scalar_str(arrays, "numeric_mode")
-        if mode not in _MODE_CODE:
-            raise ValueError(f"mojolearn: invalid saved numeric_mode {mode!r}")
-        meta = _serialize.exact(arrays, "meta", "<i8")
-        scalars = _serialize.exact(arrays, "scalars", "<f8")
-        jp = _serialize.exact(arrays, "jitter_param", "<f8")
-        if meta.size != 3 or scalars.size != 2 or jp.size != 1:
-            raise ValueError(
-                f"mojolearn: {path!r} holds meta {meta.size}, scalars {scalars.size} and "
-                f"jitter_param {jp.size} fields; 3, 2 and 1 are needed"
-            )
-        n = int(meta[0])
-        l_arr = _serialize.exact(arrays, "L", "<f4")
-        if n < 1 or tuple(l_arr.shape) != (n, n):
-            raise ValueError(f"mojolearn: {path!r} L has shape {tuple(l_arr.shape)}, the factor is {n} x {n}")
-        jitter = float(jp[0])
-        obj = cls(jitter=None if jitter == -1.0 else jitter)
-        obj.numeric_mode = mode
-        obj.n_ = n
-        obj.L_ = l_arr
-        obj.info_ = int(meta[1])
-        obj.nb_ = int(meta[2])
-        obj._logdet = float(scalars[0])
-        obj.jitter_ = float(scalars[1])
-        return obj
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+
+
+# The 0.8.55 writer's members and refusals, in its order: the fit check, the
+# numeric mode, the factor's dtype and shape, then the field vectors. The
+# saved estimator is always "Cholesky"; -1.0 in jitter_param means "the
+# profile's ridge" (None), the fitted ridge is in `scalars` either way.
+_native_archive_bridge.register(Cholesky, _CHOLESKY_FORMAT, (
+    ("need", "L_", "RuntimeError", "mojolearn Cholesky: call fit before save"),
+    ("format", "format", _CHOLESKY_FORMAT),
+    ("format", "estimator", "Cholesky"),
+    ("mode", "numeric_mode", "mojolearn Cholesky: "),
+    ("check_array", "L_", "<f4", (("int", "n_"), ("int", "n_")), "ValueError",
+     "mojolearn Cholesky: L_ must be float32 {want}, got {dtype} {shape}"),
+    ("array", "L", "L_"),
+    ("i8", "meta", (("int", "n_"), ("int", "info_"), ("int", "nb_"))),
+    ("f8", "scalars", (("float", "_logdet"), ("float", "jitter_"))),
+    ("f8", "jitter_param", (("none_real", "jitter", -1.0),)),
+))
 
 
 __all__ = ["Cholesky"]

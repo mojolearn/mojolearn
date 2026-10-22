@@ -73,7 +73,8 @@ class GbdtModeSerializationTests(unittest.TestCase):
 
     def test_none_pins_effective_default_at_save(self):
         obj = fitted(OrderedRMSE, None)
-        with patch.object(_backend, 'default_mode', return_value='identical'):
+        # The native save reads the process default the backend settled.
+        with patch.object(_backend, '_DEFAULT_MODE', 'identical'):
             obj.save(self.path)
         arrays = _serialize.read_npz(self.path, _MODEL_FORMAT)
         self.assertEqual(_serialize.scalar_str(arrays, 'numeric_mode'), 'identical')
