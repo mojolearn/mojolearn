@@ -1,7 +1,0 @@
-4345 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x514440000000, nodemask=1)
-4345 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x191600000000, nodemask=2)
-# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
-4403 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x79dd40000000, nodemask=2)
-# verify --all: cuda (nvidia), 2 lanes x 1 fixtures, harness wheel copy, table /root/pargmm-venv/lib/python3.11/site-packages/mojolearn/verify_reference/table.json
-# STALE REFERENCE, not compared (2): gmm, gmm-sample
-#   their fixture moved (identity_break LANE_REVISIONS) past the reference this table carries; the next release record regenerates it
