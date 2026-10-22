@@ -5,6 +5,7 @@ import csv
 import hashlib
 import importlib.util
 import io
+import json
 from pathlib import Path
 import tempfile
 import subprocess
@@ -12,6 +13,7 @@ import shutil
 import tarfile
 import types
 import unittest
+from unittest.mock import patch
 import zipfile
 
 SPEC = importlib.util.spec_from_file_location("installed_native_audit", Path(__file__).with_name("qualify_native_runtime_installed.py"))
@@ -252,6 +254,70 @@ class InstalledNativeAudit(unittest.TestCase):
         scope = q.test_scope_summary(summary, ["test_native_owner_qualification.py"], "cpu")
         self.assertEqual(scope["not_applicable_count"], 1)
         self.assertEqual(summary["skipped"][0]["classname"], "mojolearn.tests.test_native_owner_qualification")
+
+    def worker_fixture(self, *, final_error=None, never_load=False):
+        prefix, payload, tests, modules = self.modules()
+        package = modules["mojolearn"]
+        path = Path(package.runtime.__file__)
+        del package.runtime  # Initial import is genuinely lazy in this fixture.
+        package.vendor = lambda: "cpu"
+        backend = types.ModuleType("mojolearn._backend")
+        backend.default_mode = lambda: "identical"
+        package._backend = backend
+        verification = types.ModuleType("mojolearn._verify")
+        runner = types.ModuleType("pytest")
+        calls, state = [], dict(ran=False)
+
+        def artifacts(*, require_loaded=True):
+            calls.append(dict(require_loaded=require_loaded, after_tests=state["ran"]))
+            if require_loaded and final_error:
+                raise RuntimeError(final_error)
+            if not state["ran"] or never_load:
+                return []
+            return [dict(module="mojolearn._host._mojolearn_example", file=str(path),
+                         sha256=q.digest(path), size=path.stat().st_size, path_source="__spec__.origin")]
+
+        def run(*args, plugins):
+            state["ran"] = True
+            plugins[0].pytest_runtest_teardown(None, None)
+            return 0
+
+        verification.binding_artifacts, runner.main = artifacts, run
+        modules.update({"mojolearn._backend": backend, "mojolearn._verify": verification, "pytest": runner})
+        out = self.root / "run"; (out / "work").mkdir(parents=True)
+        request = out / "request.json"
+        request.write_text(json.dumps(dict(out=str(out), tests=str(tests), payload=payload,
+                                          test_files=["test_native_owner_qualification.py"],
+                                          vendor="cpu", numeric_mode="identical", generation_device="cpu")))
+        with patch.dict(q.sys.modules, modules), patch.object(q.sys, "prefix", str(prefix)), \
+             patch.object(q.Path, "cwd", return_value=out / "work"), \
+             patch.dict(q.os.environ, {"MOJOLEARN_GENERATION_DEVICE": "cpu"}):
+            code = q.worker(request)
+        return code, json.loads((out / "installed-modules.json").read_text()), calls
+
+    def test_lazy_initial_import_requires_native_witnesses_only_after_tests(self):
+        code, receipt, calls = self.worker_fixture()
+        self.assertEqual(code, 0)
+        self.assertEqual(receipt["pytest_exit"], 0)
+        self.assertEqual(receipt["inventory_errors"], [])
+        self.assertEqual(len(receipt["bindings"]), 1)
+        self.assertEqual(calls[0], dict(require_loaded=False, after_tests=False))
+        self.assertEqual(calls[-1], dict(require_loaded=True, after_tests=True))
+
+    def test_final_origin_failure_keeps_original_test_exit_and_error_receipt(self):
+        code, receipt, _ = self.worker_fixture(final_error="loaded extension origin is unresolved")
+        self.assertEqual(code, 1)
+        self.assertEqual(receipt["pytest_exit"], 0)
+        self.assertEqual(receipt["inventory_errors"][0]["phase"], "final")
+        self.assertIn("origin is unresolved", receipt["inventory_errors"][0]["error"])
+        self.assertEqual(len(receipt["bindings"]), 1)  # Earlier valid observation remains retained.
+
+    def test_empty_final_inventory_cannot_qualify_a_metadata_only_run(self):
+        code, receipt, _ = self.worker_fixture(never_load=True)
+        self.assertEqual(code, 1)
+        self.assertEqual(receipt["pytest_exit"], 0)
+        self.assertEqual(receipt["bindings"], [])
+        self.assertIn("no loaded native binding witnesses", receipt["inventory_errors"][0]["error"])
 
     def archive_fixture(self, *, exclude_product=False):
         repo = self.root / "archive-repo"; repo.mkdir()
