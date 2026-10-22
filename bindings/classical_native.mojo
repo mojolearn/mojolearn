@@ -17,6 +17,7 @@ from bindings.classical_archive_read import classical_archive_load, classical_ho
 from bindings.host_archive_native import host_archive_build
 from bindings.archive_schema_native import archive_schema_save
 from bindings.linear_score_native import linear_regressor_score
+from bindings.family_native import family_operation
 from bindings.host_tree_native import host_tree_operation
 from bindings.host_inference_native import host_inference_operation
 from bindings.host_kde_fit_native import host_kde_fit
@@ -141,6 +142,9 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             # correctly refuses for unrelated estimator operations.
             var restored = host_archive_build(args[0], archive_context, model if operation == "host_archive_load" else PythonObject(None), operation == "host_archive_classical_model")
             return restored.steal_data()
+        if operation.startswith("family_"):
+            var family = family_operation(model, operation, args, context)
+            return family.steal_data()
         if operation == "linear_regressor_score":
             # The linear expansion regressors' one-call score: predict and
             # R^2 in one native operation.
