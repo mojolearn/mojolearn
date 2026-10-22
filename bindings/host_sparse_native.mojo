@@ -116,6 +116,17 @@ def _sparse_scalar_word(value: PythonObject, kind: Int, width: Int, context: Pyt
         if Bool(py=value < 0):
             source_kind = 1
             word = bitcast[DType.uint64](Int64(py=value))
+        elif Bool(py=value > PythonObject(9223372036854775807)):
+            # LIL stores uint64 data as exact Python integers. Its high bit
+            # must survive preparation: converting through a signed index
+            # raises before duplicate assignment and the final dtype guard.
+            # int's native byte export reads the full supported word without
+            # invoking a Python protocol or changing last-assignment semantics.
+            if Int(py=py_call(value.bit_length)) > 64:
+                raise Error("OverflowError: int too big to convert")
+            var bytes = py_call(value.to_bytes, 8, "little")
+            for i in range(8):  # driver-loop: bytes of one admitted native integer storage item
+                word |= UInt64(py=bytes[i]) << UInt64(8 * i)
         else:
             word = UInt64(py=value)
     elif cls is b.float:
