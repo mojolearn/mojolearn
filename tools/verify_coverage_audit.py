@@ -1324,10 +1324,11 @@ ANNOTATIONS_BY_SRC.update({
         "Source accounting only; reference and execution admission stay separate.")
        for src in ("bindings/_mojolearn.mojo", "bindings/_mojolearn_core_host.mojo")},
     **{("lr_schedule_series", src): (
-        "owed", [],
-        "Native schedule_values/schedule_list calls this retained entry, but the existing "
-        "sequence-lr-schedulers lane hashes only scalar bits_at calls. Add consumed lr_values/lrs "
-        "identity coverage; native unit-test success alone does not supply that lane/reference.")
+        "owed", ["native-schedule-series"],
+        "New source route: schedule lr_values/lrs -> native schedule_values/schedule_list -> "
+        "retained lr_schedule_series. The new lane consumes both outputs over phase boundaries "
+        "and empty series; coverage-native-schedule-series faults returned values. Actual runs, "
+        "clean/fault/restored records, cross-vendor references and installed-package admission pending.")
        for src in ("bindings/_mojolearn.mojo", "bindings/_mojolearn_core_host.mojo")},
     **{(entry, src): (
         "covered", [lane],
@@ -1341,16 +1342,18 @@ ANNOTATIONS_BY_SRC.update({
            ("optimizer_door_clip", "optim-adam-clip", "training.clip_grad_norm_", "clip"),
            ("optimizer_door_accumulate", "grad-accumulation", "training.accumulate_grads", "accumulate"))},
     **{(entry, src): (
-        "owed", [],
-        "Native public optimizer route " + route + " calls this retained entry; the existing "
-        "bare-optimizer lanes do not exercise this operation. Samba and sequence optimizer "
-        "checkpoint lanes use different owners/entries. Add a lane consuming this operation's "
-        "state or output; accepted public-operation unit tests remain separate evidence.")
+        "owed", lanes,
+        "New source route: native public optimizer " + route + " -> retained " + entry + ". "
+        "The named new lanes consume the actual bare owner operation. CPU IO scope is query "
+        "and refusal only; optim-resident-io qualifies GPU transfers. Independent new sabotage "
+        "arms are authored. Execution/restoration, reference and installed-package admission pending.")
        for src in ("bindings/_mojolearn_training.mojo", "bindings/_mojolearn_training_host.mojo")
-       for entry, route in (("optimizer_door_io", "io/raw_io/param_device"),
-                            ("optimizer_door_state_set", "state_set"),
-                            ("optimizer_door_load_state", "load"),
-                            ("optimizer_door_zero", "zero"))},
+       for entry, route, lanes in (
+           ("optimizer_door_io", "io/raw_io/param_device",
+            ["optim-io-capability"] + (["optim-resident-io"] if src.endswith("_training.mojo") else [])),
+           ("optimizer_door_state_set", "state_set", ["optim-owner-lifecycle"]),
+           ("optimizer_door_load_state", "load", ["optim-owner-lifecycle"]),
+           ("optimizer_door_zero", "zero", ["optim-owner-lifecycle"]))},
     **{(entry, "bindings/_mojolearn_x_sequence.mojo"): (
         "covered", ["sequence-device-tensor"],
         "Source reach on a GPU column: sequence-device-tensor consumes to_device, tensor.copy "
@@ -1359,10 +1362,11 @@ ANNOTATIONS_BY_SRC.update({
         "Source accounting only; retained execution/reference/fault scopes remain separate.")
        for entry in ("seq_tensor_upload", "seq_tensor_download", "seq_tensor_copy")},
     ("seq_tensor_free", "bindings/_mojolearn_x_sequence.mojo"): (
-        "owed", [],
-        "Native sequence-device close/finalization and exception cleanup release this handle. "
-        "The existing round-trip lane hashes values, not proof that releases occurred. Retained "
-        "lifecycle unit tests do not replace release/failure-path fault qualification."),
+        "owed", ["sequence-device-release"],
+        "New GPU-only source route: native sequence finalization and failed upload/copy cleanup "
+        "-> retained seq_tensor_free. The new lane independently checks pool closure after explicit, "
+        "repeated, GC and forced native-operation failures; a no-op free fault is authored. CPU has "
+        "no resident pool. Execution/restoration, reference and installed-package admission pending."),
 })
 
 

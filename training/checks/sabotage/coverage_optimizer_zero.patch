@@ -1,0 +1,11 @@
+--- a/bindings/optimizer_public_door.mojo
++++ b/bindings/optimizer_public_door.mojo
+@@ -985,7 +985,7 @@
+     var addrs = List[Int]()
+     var nbytes = List[Int]()
+     _addrs_of(views, addrs, nbytes)
+-    zero_tensors(addrs, nbytes)
++    # Fault: leave caller gradients unchanged.
+     return PythonObject(None)
+ 
+ 

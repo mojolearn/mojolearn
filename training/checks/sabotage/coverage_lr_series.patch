@@ -1,0 +1,11 @@
+--- a/bindings/lr_table_helpers.mojo
++++ b/bindings/lr_table_helpers.mojo
+@@ -238,6 +238,8 @@
+         var style = Int(py=args[3])
+         var out = py_call(Python.import_module("array").array, PythonObject("f"), py_call(bi.bytes, PythonObject(4 * n)))
+         var r = lr_spec_fill(_spec(ip, args[1]), 1, n, F32P(unsafe_from_address=Int(py=out.buffer_info()[0])))
++        if n > 0:
++            F32P(unsafe_from_address=Int(py=out.buffer_info()[0]))[0] = Float32(0.0)
+         if r[0] != 0:
+             raise _lr_refusal(r[0], 1 + r[1], style, Int(py=ip[3]))
+         return out.steal_data()

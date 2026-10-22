@@ -1,0 +1,10 @@
+--- a/training/optimizer_public.mojo
++++ b/training/optimizer_public.mojo
+@@ -651,6 +651,7 @@
+         _ = resident_put(ctx, h, which, f.ptr(), req.n_total)
+     else:
+         _ = resident_get(ctx, h, which, f.ptr(), req.n_total)
++        f.ptr()[0] = f.ptr()[0] + Float32(1.0)
+         scatter(f, req.g_addr, req.g_bytes, 0, req.j)
+     _ = f^
+     return (h, req.n_total)

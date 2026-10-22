@@ -58,7 +58,6 @@ sequence/opt_resident.mojo:adafactor_resident_open	its zero-filled moments are o
 sequence/opt_resident.mojo:opt_resident_close	lifecycle close
 sequence/prophet_prep.mojo:_f32p	returns a pointer after a null check
 sequence/prophet_prep.mojo:_f64p	returns a pointer after a null check
-sequence/seq_tensor.mojo:seq_tensor_free	lifecycle free
 autograd/import_reader.mojo:OnnxInfo	a container struct that computes no value
 autograd/import_reader.mojo:OnnxInfo.__init__	a container constructor
 autograd/import_reader.mojo:_w_tensor	structure words only (name, dtype, dims, byte range)
