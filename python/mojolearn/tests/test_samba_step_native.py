@@ -147,6 +147,13 @@ def test_native_step_preserves_rebound_optimizer_parameter_owners(monkeypatch, r
         assert all(a is b for a, b in zip(actual.optimizer.params, aliases))
         for a, b in zip(actual.optimizer.params, expected.optimizer.params):
             assert a.tobytes() == b.tobytes()
+        if actual.optimizer._res is not None:
+            assert actual.optimizer._res_binding is bridge.CONTEXT["entries"].optimizer_resident_open.__self__
+        for state in (training._STATE_EXP_AVG, training._STATE_EXP_AVG_SQ):
+            # Audit the native property entry, including a required resident
+            # download. The public property checks below remain unchanged.
+            audit_native_call(training._OPT_NATIVE, "state", actual.optimizer,
+                              (state,), None, training._OPT_CONTEXT).assert_native()
         assert actual.optimizer.exp_avg.tobytes() == expected.optimizer.exp_avg.tobytes()
         assert actual.optimizer.exp_avg_sq.tobytes() == expected.optimizer.exp_avg_sq.tobytes()
         assert actual.generator.state_dict() == expected.generator.state_dict()
