@@ -222,7 +222,13 @@ def test_iforest_query_protocol_and_saved_object_buffer_refuse_hooks(tmp_path):
             touched.append("float")
             return 1.
     _refused(audit_native_call(model.score_samples, Input()), TypeError)
-    model._x = np.full((3, 2), Input(), dtype=object)
+    # np.full converts its fill value through __array__ before the audit.
+    # Scalar object assignment installs the hostile payload without hooks.
+    storage = np.empty((3, 2), dtype=object)
+    for index in np.ndindex(storage.shape):
+        storage[index] = Input()
+    assert touched == []
+    model._x = storage
     _refused(audit_native_call(model.score_samples, [[1., 2.]]), TypeError)
     assert touched == []
 
