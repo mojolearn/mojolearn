@@ -108,12 +108,20 @@ explicitly rejects new-style dtypes. A remaining supported alternative to
 investigate is public `PyArray_NewFromDescr` with an externally owned data
 buffer: [`ctors.c`](https://github.com/numpy/numpy/blob/v2.5.3/numpy/_core/src/multiarray/ctors.c#L619)
 skips descriptor finalization when data is supplied. Safe managed-string
-destruction, buffer/base lifetime, and ordinary missing-value semantics would
-have to be established before using that alternative. If it cannot preserve
-those contracts, the precise upstream need is a supported native descriptor
-clone/allocation operation that retains supplied missing-value metadata
-without invoking comparison or text protocols. This investigation does not
-establish a Mojo/Modular compiler limitation or authorize a public refusal.
+storage was exercised with the public acquire/pack/pack-null/release API in a
+two-case controller probe, retained as `stringdtype-external-buffer-probe.json`.
+Both structured-void and ndarray sentinels produced matching strings with
+zero Python frames, but external-buffer outputs had `owndata=False` versus
+the prior result's `True`, and resizing failed. No Mojo owner/destructor was
+implemented for that probe. NumPy's `arrayobject.c` lines 432–444 explicitly
+warn against arbitrarily setting OWNDATA without a memory policy; the
+candidate does not do that. Safe lifetime/destruction and preservation of
+ordinary ownership and missing-value behavior remain unverified. The precise
+upstream capability needed if no supported ownership-preserving route is
+available is native descriptor clone/allocation retaining supplied
+missing-value metadata without invoking comparison or text protocols.
+This investigation does not establish a Mojo/Modular compiler limitation or
+authorize a public refusal.
 
 References: [Mojo's supported libc/variadic FFI](https://mojolang.static.modular.com/docs/manual/c-ffi/)
 and [NumPy's cast-warning and undefined-result notes](https://numpy.org/doc/1.24/release/1.24.0-notes.html#numpy-now-gives-floating-point-errors-in-casts).
