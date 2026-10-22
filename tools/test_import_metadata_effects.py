@@ -173,7 +173,14 @@ def test_a_native_factory_that_executes_its_argument_is_not_storage(monkeypatch)
     )
 
 
-@pytest.mark.parametrize("mutation", ["FORMATS.update(unknown_mapping())", "unknown_callback(FORMATS)"])
+@pytest.mark.parametrize(
+    "mutation",
+    [
+        "FORMATS.update(unknown_mapping())",
+        "unknown_callback(FORMATS)",
+        "alias = FORMATS\nalias.update(unknown_mapping())",
+    ],
+)
 def test_a_mutated_registry_is_not_proved_by_its_initial_literal(mutation):
     caller = CALLER.replace(
         "connector.connect(CONTEXT, FORMATS)", mutation + "\nconnector.connect(CONTEXT, FORMATS)"
@@ -181,7 +188,10 @@ def test_a_mutated_registry_is_not_proved_by_its_initial_literal(mutation):
     assert not proof("context['formats'] = dict(formats)", caller)
 
 
-@pytest.mark.parametrize("mutation", ["provider", "getter"])
+@pytest.mark.parametrize(
+    "mutation",
+    ["provider", "getter", "imported_provider", "imported_getter", "local_installer", "imported_installer"],
+)
 def test_new_expansion_providers_and_module_hooks_invalidate_the_registry_proof(monkeypatch, mutation):
     original = ls._parse
     rel, call = real_connector_call()
@@ -189,9 +199,35 @@ def test_new_expansion_providers_and_module_hooks_invalidate_the_registry_proof(
     text = ls._read(path)
     if mutation == "provider":
         text += "\ndef classical_host_formats():\n    return unknown_mapping()\n"
+    elif mutation == "imported_provider":
+        text += "\nfrom .unknown import builder as classical_host_formats\n"
+    elif mutation == "imported_getter":
+        text += "\nfrom .unknown import lookup as __getattr__\n"
+    elif mutation == "local_installer":
+        text += (
+            "\ndef install():\n    globals()['classical_host_formats'] = lambda: unknown_mapping()\n"
+            "install()\n"
+        )
+    elif mutation == "imported_installer":
+        text += "\nfrom .unknown import install\ninstall()\n"
     else:
         text = text.replace("def __getattr__(name):", "def __getattr__(name):\n    unknown_callback(name)")
     changed = ast.parse(text)
+    monkeypatch.setattr(ls, "_parse", lambda p: changed if p == path else original(p))
+    assert not metadata_only_call(
+        rel, call, {"_FORMATS"}, ls._parse, ls._native_metadata_factory, ls._metadata_registry_guard
+    )
+
+
+def test_changing_an_existing_imported_connector_invalidates_import_review(monkeypatch):
+    original = ls._parse
+    rel, call = real_connector_call()
+    path = "python/mojolearn/_native_maxabs_bridge.py"
+    changed = ast.parse(
+        ls._read(path).replace(
+            "def connect(scaler_class):", "def connect(scaler_class):\n    unknown_installer()"
+        )
+    )
     monkeypatch.setattr(ls, "_parse", lambda p: changed if p == path else original(p))
     assert not metadata_only_call(
         rel, call, {"_FORMATS"}, ls._parse, ls._native_metadata_factory, ls._metadata_registry_guard

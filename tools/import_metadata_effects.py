@@ -65,19 +65,35 @@ class Source:
     def registry_unchanged(self, rel, name):
         """A literal alone does not prove the shape of a mutated registry."""
         tree = self.parse(rel)
+        aliases = {name}
+        changed = True
+        while changed:
+            changed = False
+            for node in ast.walk(tree):
+                if (
+                    isinstance(node, ast.Assign)
+                    and isinstance(node.value, ast.Name)
+                    and node.value.id in aliases
+                ):
+                    for target in node.targets:
+                        if isinstance(target, ast.Name) and target.id not in aliases:
+                            aliases.add(target.id)
+                            changed = True
         mutators = []
         for statement in tree.body:
             if self.call_site and rel == self.call_site[0] and statement.lineno >= self.call_site[1]:
                 continue
             writes = False
             for node in ast.walk(statement):
-                if isinstance(node, ast.Global) and name in node.names:
+                if isinstance(node, ast.Global) and aliases.intersection(node.names):
                     writes = True
                 if isinstance(node, ast.Subscript) and isinstance(node.ctx, ast.Store):
-                    if any(isinstance(part, ast.Name) and part.id == name for part in ast.walk(node.value)):
+                    if any(
+                        isinstance(part, ast.Name) and part.id in aliases for part in ast.walk(node.value)
+                    ):
                         writes = True
                 if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
-                    if isinstance(node.func.value, ast.Name) and node.func.value.id == name:
+                    if isinstance(node.func.value, ast.Name) and node.func.value.id in aliases:
                         writes = True
                 if not isinstance(statement, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
                     if (
@@ -88,7 +104,7 @@ class Source:
                     ):
                         continue
                     if isinstance(node, ast.Call) and any(
-                        isinstance(part, ast.Name) and part.id == name
+                        isinstance(part, ast.Name) and part.id in aliases
                         for arg in node.args + [kw.value for kw in node.keywords]
                         for part in ast.walk(arg)
                     ):

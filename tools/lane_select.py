@@ -5038,6 +5038,24 @@ def _run_closure(tree, runs, classes):
     return run_names, run_methods
 
 
+def _expansion_import_effects(tree):
+    """Source fingerprint of the reviewed expansion import execution.
+
+    Preserve executable statements, definition headers and class setup. A
+    method body is deferred, except construction/lifetime hooks; `_holders`
+    is the one local helper executed by the decomp lifetime probe at import.
+    Every new call (including a newly imported installer) changes this shape.
+    """
+    import copy
+    import hashlib
+    tree = _strip_docstrings(copy.deepcopy(tree))
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name not in (
+                '_holders', '__init__', '__new__', '__del__', '__init_subclass__', '__set_name__'):
+            node.body = [ast.Pass()]
+    return hashlib.sha256(ast.dump(tree).encode()).hexdigest()
+
+
 def _metadata_registry_guard(rel, name, mutators):
     """Prove the current optional expansion step adds no unknown classes.
 
@@ -5076,11 +5094,44 @@ def _metadata_registry_guard(rel, name, mutators):
         return False
     if not isinstance(lanes, tuple) or any(not isinstance(lane, str) for lane in lanes):
         return False
+    # The one package connector called by these modules is imported, so its
+    # executable source must also remain the reviewed native ABI connection.
+    # Changes in its called helpers are independently followed by the normal
+    # import/caller walk; this check never exempts a changed executing callee.
+    import hashlib
+    bridge = _parse('python/mojolearn/_native_maxabs_bridge.py')
+    if bridge is None or hashlib.sha256(ast.dump(_strip_docstrings(bridge)).encode()).hexdigest() != (
+            '156e05fa832e4dfde42ccfa0dba6acc19a0116421a37e329fee393411fa7057c'):
+        return False
     for lane in lanes:
-        tree = _parse('python/mojolearn/_expansion_' + lane + '.py')
+        door_path = 'python/mojolearn/_expansion_' + lane + '.py'
+        tree = _parse(door_path)
         if tree is None:
             return False
         tree = _strip_docstrings(tree)
+        # These anchors are deliberately source-specific, not permission for
+        # a call name. They bind the already-reviewed import setup (literal
+        # containers/environment reads, decomp lifetime probe, array/thread
+        # primitives and MaxAbs's fixed ABI connection). A new installer or
+        # changed import execution must retain broad selection until reviewed.
+        reviewed_imports = {
+            'linear': 'e41b2da314b715db13f45113af881a2ad89c1ab71834dd3d510e1aef5413389f',
+            'cluster': '16db7377a502b6cb0ea4c998b35c592c61eb3d422531c69935cecc939eed5635',
+            'neighbors': '4cc645a6832be7a1c65ffde3f08b39f32d49e89932d0c5a412f02ddb59c38eda',
+            'decomp': '188949b119e4ac5c225a9f8fa0532fb95a287bdcf26bf3162694757517d48f6e',
+            'prep': '1ee7364a160dcc0c8d714e40a102b10cc003034c6ede49cb7a01f14f940f161a',
+            'sequence': 'e0bec9187e5784b4d1251bbbfee02214bc2ad92f8dde3d99647ad4b37a3a537f',
+            'trees': '9c63b5496f4ca49af62e8d2f088f794cea761ece271555c6abf986946bb7d81d',
+            'cnn': '1b7533816e61ef6a6cb39dd0dd63a3fd91110d4da56681554091523ccec79765',
+            'ann': '966a3f4e1d48e862d1356c59c7bf728a8e9134573eaf628b8483061ac4d36db4',
+            'metrics': 'ef96519a0d94f262f497326fce1306f472c1c7e5746a3322b296355eda4df724',
+        }
+        if _expansion_import_effects(tree) != reviewed_imports.get(lane):
+            return False
+        from import_metadata_effects import Source
+        source = Source(_parse, lambda *args: False)
+        if source.lookup(door_path, 'classical_host_formats') is not None:
+            return False
         # Unknown providers, star imports and dynamic module writes require a
         # new proof. Class/instance methods do not execute when this getter
         # asks the already imported module for one fixed name.
@@ -5098,14 +5149,15 @@ def _metadata_registry_guard(rel, name, mutators):
                         'exec', 'eval', 'globals', 'locals', 'setattr'):
                     return False
         getters = [node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == '__getattr__']
+        getter_binding = source.lookup(door_path, '__getattr__')
         if not getters:
+            if getter_binding is not None:
+                return False
             continue
         if len(getters) != 1 or getters[0].decorator_list or len(getters[0].args.args) != 1:
             return False
         getter = getters[0]
-        from import_metadata_effects import Source
-        source = Source(_parse, lambda *args: False)
-        if source.lookup('python/mojolearn/_expansion_' + lane + '.py', 'AttributeError') is not None:
+        if getter_binding != (door_path, getter) or source.lookup(door_path, 'AttributeError') is not None:
             return False
         first = getter.body[0]
         if not (isinstance(first, ast.If) and isinstance(first.test, ast.Compare)
@@ -5115,7 +5167,7 @@ def _metadata_registry_guard(rel, name, mutators):
                 and len(first.body) == 1 and isinstance(first.body[0], ast.Raise)):
             return False
         table_name = first.test.comparators[0].id
-        if not source.registry_unchanged('python/mojolearn/_expansion_' + lane + '.py', table_name):
+        if not source.registry_unchanged(door_path, table_name):
             return False
         tables = [node.value for node in tree.body if isinstance(node, ast.Assign)
                   and any(isinstance(target, ast.Name) and target.id == table_name for target in node.targets)]
