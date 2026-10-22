@@ -4879,6 +4879,32 @@ def python_edit_lanes(ref, path, sources=None, rev=None, why_map=None):
     return sorted(affected), lanes & set(sources) & rev.get(path, set())
 
 
+def _module_names_changed(rel, node, names, words):
+    """Keep unknown attributes conservative; resolve known foreign globals.
+
+    `_forest_host._FORMATS` is not the local `_FORMATS`. Treating both as
+    the same registry tainted the unrelated forest metadata provider and
+    prevented the class-registry storage proof from being used.
+    """
+    from import_metadata_effects import Source
+    source = Source(_parse, lambda *args: False)
+    body = node.body if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) else None
+    for part in ast.walk(node):
+        if isinstance(part, ast.Name) and part.id in names:
+            return True
+        if isinstance(part, ast.Constant) and isinstance(part.value, str) and words.search(part.value):
+            return True
+        if isinstance(part, ast.Attribute) and part.attr in names:
+            local = source.target(rel, ast.Name(id=part.attr, ctx=ast.Load()))
+            remote = source.target(rel, part, body)
+            definitions = (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef, ast.Dict,
+                           ast.Tuple, ast.List, ast.Constant)
+            if (not local or not remote or local == remote
+                    or not isinstance(local[1], definitions) or not isinstance(remote[1], definitions)):
+                return True
+    return False
+
+
 def _module_closure(rel, tree, names, runs=None, metadata_stable=False):
     """The names of file `rel` that reach `names`: the names themselves, every
     top-level def or class whose source names one, every top-level assignment
@@ -4910,8 +4936,7 @@ def _module_closure(rel, tree, names, runs=None, metadata_stable=False):
                 # unrelated qr/helper edit to every lane. Read code from the
                 # stripped AST; ordinary string literals still count for
                 # getattr and table dispatch.
-                seg = ast.unparse(node)
-                if words.search(seg):
+                if _module_names_changed(rel, node, affected, words):
                     affected.add(node.name)
                     changed = True
                 continue
