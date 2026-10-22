@@ -401,3 +401,52 @@ def test_logistic_inherited_fit_state_and_nested_score_keep_results(count):
         result = audit_native_call(getattr(model, method), x).assert_native()
         assert hashlib.sha256(result.tobytes()).hexdigest() == _FITTED_OUTPUT_HASHES[count][method]
     assert model.score(x, y) == {2: .5, 3: .625}[count]
+
+
+@pytest.mark.parametrize("scalar", [complex, np.complex64, np.complex128, np.clongdouble])
+@pytest.mark.parametrize("container", ["list", "tuple", "ClassLabels", "ndarray"])
+def test_logistic_complex_class_labels_preserve_native_objects(tmp_path, scalar, container):
+    model = _model(tmp_path, 2)
+    labels = [scalar(1 + 2j), scalar(-3 + 4j)]
+    if container == "tuple":
+        labels = tuple(labels)
+    elif container == "ClassLabels":
+        labels = ClassLabels(labels)
+    elif container == "ndarray":
+        # Primitive complex dtype indexing stays native, including the
+        # platform's extended complex scalar. No numeric label conversion.
+        labels = np.asarray([labels[0], labels[1], labels[1], labels[0]])[::2]
+    model.classes_ = labels
+    x = _input(2, "float32")
+    expected = _expected(model, x, "predict")
+    result = audit_native_call(model.predict, x).assert_native()
+    assert type(result) is list
+    assert result == expected
+    assert [type(v) for v in result] == [type(v) for v in expected]
+
+
+@pytest.mark.parametrize("scalar", [complex, np.complex64, np.complex128, np.clongdouble])
+def test_logistic_complex_subclasses_are_refused_without_hooks(tmp_path, scalar):
+    touched = []
+    class Label(scalar):
+        def __complex__(self):
+            touched.append("complex")
+            return 1 + 2j
+        def __float__(self):
+            touched.append("float")
+            return 1.
+        def __str__(self):
+            touched.append("str")
+            return "complex label"
+    model = _model(tmp_path, 2)
+    model.classes_ = [Label(1 + 2j), Label(-3 + 4j)]
+    _refused(audit_native_call(model.predict, _input(2, "float32")), TypeError)
+    assert touched == []
+
+
+@pytest.mark.parametrize("method", METHODS)
+def test_logistic_complex_label_support_keeps_complex_input_refusal(tmp_path, method):
+    model = _model(tmp_path, 2)
+    model.classes_ = [1 + 2j, -3 + 4j]
+    x = _input(2, "float32").astype(np.complex64)
+    _refused(audit_native_call(getattr(model, method), x))

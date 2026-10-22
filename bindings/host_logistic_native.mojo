@@ -27,13 +27,13 @@ def _logistic_label_kind(value: PythonObject, context: PythonObject) raises -> I
         return 1
     if cls is b.float:
         return 2
-    if _one_of(cls, Python.tuple(b.bool, b.str, b.bytes, py_type(PythonObject(None)))):
+    if _one_of(cls, Python.tuple(b.bool, b.str, b.bytes, b.complex, py_type(PythonObject(None)))):
         return 0
     if _one_of(cls, context["scalar_types"]):
         var kind = String(value.dtype.kind)
         return 1 if kind == "i" or kind == "u" else (2 if kind == "f" else 0)
     if py_get(context, "ndarray") is not None:
-        var aliases = Python.tuple("q", "Q", "g", "U", "S")
+        var aliases = Python.tuple("q", "Q", "g", "U", "S", "F", "D", "G")
         var constructor = native_numpy_dtype(context)
         for i in range(len(aliases)):  # driver-loop: exact native scalar aliases
             if cls is py_call(constructor, aliases[i]).type:
@@ -48,12 +48,12 @@ def _logistic_label_dtype(dtype: PythonObject, context: PythonObject) raises:
     for i in range(len(types)):  # driver-loop: primitive native dtype identities before scalar reads
         if py_type(dtype) is py_type(types[i]):
             return
-    var aliases = Python.tuple("q", "Q", "g", "U", "S", "O")
+    var aliases = Python.tuple("q", "Q", "g", "U", "S", "O", "F", "D", "G")
     var constructor = native_numpy_dtype(context)
     for i in range(len(aliases)):  # driver-loop: native class-label storage dtypes
         if py_type(dtype) is py_type(py_call(constructor, aliases[i])):
             return
-    raise Error("TypeError: class labels require native numeric, string or object storage")
+    raise Error("TypeError: class labels require native numeric, complex, string or object storage")
 
 
 def host_logistic_classes(source: PythonObject, context: PythonObject) raises -> PythonObject:
