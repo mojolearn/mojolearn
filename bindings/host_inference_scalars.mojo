@@ -5,6 +5,27 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.sequential_admission import _one_of
 from bindings.native_numpy_metadata import native_numpy_dtype
+from bindings.native_scalar_decode import native_scalar_buffer
+
+
+def host_inference_primitive_number(value: PythonObject, context: PythonObject,
+                                   integer: Bool = False) raises -> PythonObject:
+    # Convert only exact admitted primitive owners. Other values remain for
+    # the caller's established text/option admission and parsing; this helper
+    # never asks an unknown object for dtype or invokes a conversion protocol.
+    var cls = py_type(value)
+    var numeric = _one_of(cls, context["scalar_types"])
+    if cls is py_get(context, "ndarray"):
+        host_inference_scalar(value, context)
+        numeric = True
+    if not numeric and py_get(context, "ndarray") is not None:
+        var constructor = native_numpy_dtype(context)
+        var aliases = Python.tuple("q", "Q", "g")
+        for i in range(len(aliases)):  # driver-loop: exact native primitive scalar aliases
+            numeric = numeric or cls is py_call(constructor, aliases[i]).type
+    if numeric:
+        return native_scalar_buffer(value).to_python_number(integer)
+    return value
 
 
 def host_inference_scalar(value: PythonObject, context: PythonObject, truth: Bool = False) raises:
