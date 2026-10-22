@@ -11,7 +11,7 @@ from bindings.classical_arrays import classical_input, classical_address, classi
 from bindings.host_archive_native import host_archive_typed
 from bindings.host_inference_scalars import host_inference_scalar, host_inference_primitive_number
 from bindings.host_inference_features import host_inference_feature_names
-from bindings.host_kde_bandwidth_native import kde_complex_code, kde_complex_bandwidth
+from bindings.host_kde_bandwidth_native import kde_bandwidth_code, kde_native_bandwidth
 from bindings.host_kernel_inference_native import _kernel_entry, _kernel_buffer
 from bindings.host_svc_native import _svc_input
 
@@ -66,7 +66,7 @@ def host_kde_admit_state(fields: PythonObject, context: PythonObject) raises:
         if py_contains(fields, names[i]):
             _ = _kde_option_value(fields[names[i]], context)
     var bandwidth = py_get(fields, "bandwidth")
-    if bandwidth is not None and kde_complex_code(bandwidth, context) == "":
+    if bandwidth is not None and kde_bandwidth_code(bandwidth, context) == "":
         _ = _kde_option_value(host_inference_primitive_number(bandwidth, context), context, True)
     var buffers = Python.tuple("_x", "_w")
     for i in range(len(buffers)):  # driver-loop: fixed saved KDE buffers
@@ -107,9 +107,9 @@ def host_kde_inference(model: PythonObject, fields: PythonObject, source: Python
     # Derive the fixed native constructor from a C-created scalar. A patched
     # builtins.float must never install a callback on this numerical boundary.
     var bandwidth_value = classical_getattribute(model, PythonObject("bandwidth"), context)
-    var complex_code = kde_complex_code(bandwidth_value, context)
-    if complex_code != "":
-        bandwidth_value = kde_complex_bandwidth(bandwidth_value, complex_code, context)
+    var code = kde_bandwidth_code(bandwidth_value, context)
+    if code != "":
+        bandwidth_value = kde_native_bandwidth(bandwidth_value, code, context)
     else:
         bandwidth_value = host_inference_primitive_number(bandwidth_value, context)
     bandwidth_value = _kde_option_value(bandwidth_value, context, True)

@@ -230,6 +230,129 @@ def test_kde_complex_warning_category_refuses_python_hooks(tmp_path, monkeypatch
     assert touched == []
 
 
+_TEMPORAL_UNITS = [None, "Y", "M", "W", "D", "h", "m", "s", "ms", "us", "ns", "ps", "fs", "as", "3ns"]
+_TEMPORAL_BOUNDARIES = [
+    ("M8[Y]", -1969), ("M8[Y]", -1970), ("M8[Y]", 8029), ("M8[Y]", 8030),
+    ("M8[M]", -23628), ("M8[M]", -23629),
+    ("M8[D]", -719162), ("M8[D]", -719163),
+    ("M8[D]", 2932896), ("M8[D]", 2932897),
+    ("M8[us]", 253402300799999999), ("M8[us]", 253402300800000000),
+    ("m8[D]", 999999999), ("m8[D]", 1000000000),
+    ("m8[D]", -999999999), ("m8[D]", -1000000000),
+    ("m8[W]", 2**63 - 1), ("m8[D]", 2**63 - 1),
+    ("m8[m]", 2**63 - 1), ("m8[s]", -(2**63) + 1),
+    ("M8[3D]", 2**63 - 1), ("m8[7h]", -(2**63) + 1),
+    ("M8[ns]", 2**53 + 1), ("m8[ns]", 2**63 - 1),
+]
+
+
+def _temporal_bandwidth(code, ticks, form):
+    value = np.array(ticks, dtype="i8").view(code)
+    if form == "scalar":
+        return value[()]
+    if form == "swapped":
+        value = value.astype(value.dtype.newbyteorder(">"))
+    elif form == "singleton":
+        value = value.reshape(1, 1)
+    value.flags.writeable = False
+    return value
+
+
+@pytest.mark.parametrize("kind", ["M8", "m8"])
+@pytest.mark.parametrize("unit", _TEMPORAL_UNITS)
+@pytest.mark.parametrize("ticks", [1, -(2**63)])
+def test_kde_temporal_bandwidth_preserves_units_nat_and_consumed_results(tmp_path, kind, unit, ticks):
+    code = kind if unit is None else f"{kind}[{unit}]"
+    value = _temporal_bandwidth(code, ticks, "scalar" if ticks == 1 else "array")
+    model = _model(tmp_path)
+    model.bandwidth = value
+    _check_primitive_bandwidth(model, _input(2, "float32"), "score_samples", value)
+
+
+@pytest.mark.parametrize("code,ticks", _TEMPORAL_BOUNDARIES)
+@pytest.mark.parametrize("form", ["scalar", "swapped"])
+def test_kde_temporal_calendar_range_and_versioned_day_width_preserve_contract(tmp_path, code, ticks, form):
+    value = _temporal_bandwidth(code, ticks, form)
+    model = _model(tmp_path)
+    model.bandwidth = value
+    _check_primitive_bandwidth(model, _input(2, "float32"), "score", value)
+
+
+@pytest.mark.parametrize("code", ["M8[ns]", "m8[us]", "m8[3ns]"])
+@pytest.mark.parametrize("action", ["always", "ignore", "error"])
+def test_kde_temporal_singleton_rank_warning_precedes_conversion(tmp_path, code, action):
+    value = _temporal_bandwidth(code, 1, "singleton")
+    model = _model(tmp_path)
+    model.bandwidth = value
+    failure = None
+    with warnings.catch_warnings(record=True) as old:
+        warnings.simplefilter(action)
+        try:
+            expected = legacy.kde(model, _input(2, "float32"))
+        except Exception as error:
+            failure = type(error), str(error)
+    with warnings.catch_warnings(record=True) as new:
+        warnings.simplefilter(action)
+        result = audit_native_call(model.score_samples, _input(2, "float32"))
+    if failure:
+        _refused(result, failure[0])
+        assert str(result.exception) == failure[1]
+    else:
+        assert _state(result.assert_native()) == _state(expected)
+    assert [(type(w.message), str(w.message)) for w in new] == [(type(w.message), str(w.message)) for w in old]
+    assert model.bandwidth is value
+
+
+@pytest.mark.parametrize("code", ["f4", "g", "q", "u8"])
+@pytest.mark.parametrize("shape", [(1,), (1, 1), (0,), (2,)])
+def test_kde_numeric_array_rank_preserves_versioned_conversion_contract(tmp_path, code, shape):
+    value = np.ones(shape, dtype=code)
+    model = _model(tmp_path)
+    model.bandwidth = value
+    _check_primitive_bandwidth(model, _input(2, "float32"), "score_samples", value)
+
+
+@pytest.mark.parametrize("code", ["M8[ns]", "m8[us]"])
+def test_kde_temporal_array_subclass_refuses_hooks_before_dtype_or_buffer(tmp_path, code):
+    touched = []
+    class Foreign(np.ndarray):
+        @property
+        def dtype(self):
+            touched.append("dtype")
+            return np.dtype(code)
+        def __float__(self):
+            touched.append("float")
+            return 1.
+    value = _temporal_bandwidth(code, 1, "array").view(Foreign)
+    model = _model(tmp_path)
+    model.bandwidth = value
+    result = audit_native_call(model.score_samples, _input(2, "float32"))
+    _refused(result, TypeError)
+    assert touched == []
+
+
+@pytest.mark.parametrize("code,ticks", [("M8[ns]", 1), ("m8[us]", 1), ("M8[ns]", -(2**63))])
+def test_kde_temporal_buffer_owners_release_after_results_and_refusals(tmp_path, code, ticks):
+    value = _temporal_bandwidth(code, ticks, "swapped")
+    model = _model(tmp_path)
+    model.bandwidth = value
+    x = _input(2, "float32")
+    method = model.score_samples
+    for _ in range(2):
+        audit_native_call(method, x)
+    gc.collect()
+    before = sys.getrefcount(value)
+    for _ in range(5):
+        result = audit_native_call(method, x)
+        if code == "M8[ns]" and ticks == 1:
+            result.assert_native()
+        else:
+            _refused(result, TypeError)
+        del result
+    gc.collect()
+    assert sys.getrefcount(value) == before
+
+
 @pytest.mark.parametrize("field", ["n_features_in_", "_mojolearn_fitted", "_mojolearn_fitting"])
 def test_kde_native_scalar_metadata_preserves_results(tmp_path, field):
     model = _model(tmp_path)
