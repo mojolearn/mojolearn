@@ -56,7 +56,7 @@ def optimizer_step_entry(entry: PythonObject, arguments: PythonObject, context: 
 def optimizer_betas(source: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
     opt_value(source, context)
-    if py_type(source) is b.tuple or py_type(source) is b.list:
+    if py_type(source) is context["container_types"][1] or py_type(source) is context["container_types"][0]:
         opt_scalar(source, context)
         if len(source) != 2:
             raise Error("ValueError: betas must be a pair (beta1, beta2)")
@@ -169,7 +169,7 @@ def optimizer_set_params(owner: PythonObject, updates: PythonObject, context: Py
     if len(updates) == 0:
         return owner
     var config = optimizer_params(owner, context)
-    var keys = py_call(b.list, updates)
+    var keys = py_call(context["container_types"][0], updates)
     for i in range(len(keys)):  # driver-loop: over public parameter updates
         var key = keys[i]
         if py_type(key) is not b.str:
@@ -185,7 +185,7 @@ def optimizer_set_params(owner: PythonObject, updates: PythonObject, context: Py
             raise Error("TypeError: optimizer nested Python set_params hooks cannot execute; pass a complete native schedule or buffer configuration")
         py_setitem(config, key, updates[key])
     var fields = py_fields(owner)
-    var field_names = py_call(b.list, fields)
+    var field_names = py_call(context["container_types"][0], fields)
     for i in range(len(field_names)):  # driver-loop: over retained owner fields before replacement
         var name = String(field_names[i])
         if name == "lr_schedule":
