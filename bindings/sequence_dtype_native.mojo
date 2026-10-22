@@ -374,8 +374,16 @@ def sequence_dtype_normalize(value: PythonObject, classes: PythonObject, context
         if value is classes[i][1]:
             return sequence_dtype_create(value, context, aligned)
         if value is classes[i][0]:
-            # Native dtype descriptor classes are interpreted as object,
-            # unlike their scalar classes or descriptor instances.
+            # astype accepts a concrete DType class as its top-level target;
+            # np.dtype(class), including inside a field schema, instead
+            # interprets that class as object. Parametric legacy classes
+            # cannot all be instantiated with class(), so use their native
+            # scalar's default descriptor; StringDType's scalar is str and
+            # needs its distinct managed-string descriptor.
+            if depth == 0:
+                if value is sequence_string_class(context):
+                    return sequence_dtype_create(PythonObject("T"), context, aligned)
+                return sequence_dtype_create(classes[i][1], context, aligned)
             return sequence_dtype_create(b.object, context, aligned)
     if kind is b.tuple and len(value) == 2:
         var base = sequence_dtype_normalize(value[0], classes, context, depth + 1, aligned)

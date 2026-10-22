@@ -225,12 +225,18 @@ def sequence_string_nan_info(dtype: PythonObject, classes: PythonObject, context
 
 
 def sequence_string_leaf(source: Int, destination: Int, count: Int, stride: Int, offset: Int,
-                         dtype: PythonObject, classes: PythonObject, settings: PythonObject, context: PythonObject) raises -> Int:
+                         dtype: PythonObject, classes: PythonObject, settings: PythonObject, context: PythonObject, initial_status: Int) raises -> Int:
     var storage = SequenceStringStorage(dtype, context)
     var missing = sequence_string_nan_info(dtype, classes, context)
     var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=source)
-    var status = 0
+    var status = initial_status
     for i in range(count):  # driver-loop: store each completed native string through NumPy's public allocation API
+        if (missing & 2) != 0:
+            # A built-in complex NaN sentinel dispatches native scalar
+            # equality through NumPy's equal ufunc. Each call clears earlier
+            # FP flags, including flags from prior fields/elements. Only
+            # that equality's final status survives to the outer cast.
+            status = 0
         if (missing & 1) != 0 and (sequence_signaling(words[i]) or (missing & 4) != 0):
             status |= SEQ_CAST_INVALID
             if (missing & 2) != 0:
