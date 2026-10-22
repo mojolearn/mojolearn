@@ -496,6 +496,14 @@ class _Optimizer(NumericModeMixin):
     def __del__(self):
         return _optimizer_finalize_native(self)
 
+    def get_params(self, deep=True):
+        """Return constructor parameters for inspection or cloning."""
+        return _OPT_NATIVE("get_params", self, (deep,), None, _OPT_CONTEXT)
+
+    def set_params(self, **params):
+        """Rebuild with updated constructor parameters and reset optimizer state."""
+        return _OPT_NATIVE("set_params", self, (params,), None, _OPT_CONTEXT)
+
     def state_dict(self):
         """Everything a resumed run needs, and nothing that is not state.
 

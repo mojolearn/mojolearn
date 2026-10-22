@@ -111,3 +111,56 @@ def test_sequence_public_state_properties_and_empty_finalizer_are_native():
         assert value.shape == (3,)
     empty = object.__new__(O.Adamax)
     audit_native_call(empty.__del__).assert_native()
+
+
+def test_sequence_to_device_cpu_fallback_is_native():
+    from mojolearn._x_sequence_device import to_device, SequenceDeviceTensor
+    source = np.arange(12, dtype="f4").reshape(3, 4)[:, ::2]
+    result = audit_native_call(to_device, source, numeric_mode="identical").assert_native()
+    if type(result) is SequenceDeviceTensor:
+        result = audit_native_call(result.numpy).assert_native()
+    assert result.tobytes() == source.copy().tobytes()
+    refused(to_device, source.astype("f8"), numeric_mode="identical")
+
+
+@pytest.mark.parametrize("cls", CLASSES)
+def test_sequence_device_owner_step_consumed_outputs_and_finalizers_are_native(cls):
+    from mojolearn._x_sequence_device import to_device, SequenceDeviceTensor
+    import weakref
+    source = np.arange(12, dtype="f4").reshape(3, 4) / 16
+    device = audit_native_call(to_device, source, numeric_mode="identical").assert_native()
+    if type(device) is not SequenceDeviceTensor:
+        pytest.skip("native device tensor ABI is not present in this CPU build")
+    assert audit_native_call(to_device, device).assert_native() is device
+    assert audit_native_call(SequenceDeviceTensor.size.fget, device).assert_native() == 12
+    assert audit_native_call(SequenceDeviceTensor.ndim.fget, device).assert_native() == 2
+    copy = audit_native_call(device.copy).assert_native()
+    view = audit_native_call(copy.reshape, (2, -1)).assert_native()
+    weak = weakref.ref(copy)
+    del copy
+    assert weak() is not None
+    host = audit_native_call(view.numpy).assert_native()
+    assert host.shape == (2, 6) and host.tobytes() == source.tobytes()
+    opt = audit_native_call(cls, [device], numeric_mode="identical").assert_native()
+    host_param = source.copy()
+    reference = cls([host_param], numeric_mode="identical")
+    gradient = np.arange(24, dtype="f4").reshape(3, 8)[:, ::2] / 32
+    audit_native_call(opt.step, [gradient]).assert_native()
+    reference.step([gradient.copy()])
+    assert audit_native_call(device.numpy).assert_native().tobytes() == host_param.tobytes()
+    audit_native_call(device.upload, gradient).assert_native()
+    assert audit_native_call(device.numpy).assert_native().tobytes() == gradient.copy().tobytes()
+    # Explicitly finalize only independent owners; a view keeps its base alive.
+    root = weak()
+    audit_native_call(view.__del__).assert_native()
+    del view
+    audit_native_call(root.__del__).assert_native()
+    audit_native_call(opt.__del__).assert_native()
+    audit_native_call(device.__del__).assert_native()
+    audit_native_call(device.__del__).assert_native()
+
+
+def test_sequence_device_partial_owner_finalizer_is_native():
+    from mojolearn._x_sequence_device import SequenceDeviceTensor
+    empty = object.__new__(SequenceDeviceTensor)
+    audit_native_call(empty.__del__).assert_native()
