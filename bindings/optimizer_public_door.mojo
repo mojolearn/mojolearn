@@ -212,7 +212,10 @@ def new_array(dims: List[Int], dtype: String) raises -> PythonObject:
         strides[i] = step
         step *= dims[i]
         size *= dims[i]
-    var store = py_call(d[].arrays, PythonObject("f" if dtype == "<f4" else "i"), py_call(b.bytes, size * 4))
+    # The import connection retains exact native scalar types. A live
+    # builtins.bytes replacement must not become a zero-storage callback.
+    var bytes_type = d[].context["scalar_types"][6]
+    var store = py_call(d[].arrays, PythonObject("f" if dtype == "<f4" else "i"), py_call(bytes_type, size * 4))
     # The connected, guarded Array has ordinary heap storage. Use the public
     # allocator directly; a replaced builtins.object must never run a hook.
     var result = native_storage_allocate(d[].array_cls)
