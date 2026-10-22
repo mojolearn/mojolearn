@@ -13,20 +13,20 @@ from bindings.optimizer_public_words import optimizer_python_error, PYTHON_ERROR
 
 
 def _rows_metadata_fields(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = context["arena_native_types"]
     var cls = py_type(value)
-    if py_type(cls) is not b.type:
+    if py_type(cls) is not b["type"]:
         raise Error("TypeError: DeviceRows requires a native metadata class")
-    var ancestry = py_call(b.type.__dict__["__mro__"].__get__,cls)
+    var ancestry = py_call(b["type"].__dict__["__mro__"].__get__,cls)
     var expected = context["maxabs_rows_class"]
     var descriptor = context["maxabs_rows_dict"]
-    if len(ancestry) < 2 or ancestry[len(ancestry)-2] is not expected or ancestry[len(ancestry)-1] is not b.object:
+    if len(ancestry) < 2 or ancestry[len(ancestry)-2] is not expected or ancestry[len(ancestry)-1] is not b["object"]:
         raise Error("TypeError: DeviceRows requires its ordinary class or a subclass without mixed-in protocols")
     for i in range(len(ancestry)-1):  # driver-loop: admit ordinary subclass layouts without invoking their descriptors
-        var mapping = py_call(b.type.__dict__["__dict__"].__get__,ancestry[i])
-        var keys = py_call(b.list,mapping)
+        var mapping = py_call(b["type"].__dict__["__dict__"].__get__,ancestry[i])
+        var keys = py_call(b["list"],mapping)
         for j in range(len(keys)):  # driver-loop: class keys precede lookup that could invoke application equality
-            if py_type(keys[j]) is not b.str:
+            if py_type(keys[j]) is not b["str"]:
                 raise Error("TypeError: DeviceRows class keys must be native strings")
         if py_get(mapping,"__del__") is not None or py_get(mapping,"__getattribute__") is not None:
             raise Error("TypeError: DeviceRows cannot invoke attribute or lifecycle hooks")
@@ -34,11 +34,11 @@ def _rows_metadata_fields(value: PythonObject, context: PythonObject) raises -> 
         if dictionary is not None and dictionary is not descriptor:
             raise Error("TypeError: DeviceRows requires its native dictionary descriptor")
     var fields = py_call(descriptor.__get__,value,expected)
-    if py_type(fields) is not b.dict:
+    if py_type(fields) is not b["dict"]:
         raise Error("TypeError: DeviceRows requires a native metadata dictionary")
-    var keys = py_call(b.list,fields)
+    var keys = py_call(b["list"],fields)
     for i in range(len(keys)):  # driver-loop: reject metadata key protocols before field lookup or replacement
-        if py_type(keys[i]) is not b.str:
+        if py_type(keys[i]) is not b["str"]:
             raise Error("TypeError: DeviceRows metadata keys must be native strings")
     return fields
 
@@ -62,10 +62,10 @@ def _rows_initialize(model: PythonObject, args: PythonObject, context: PythonObj
     # Keep the existing opaque take field without invoking it. Its explicit
     # materialization operation owns callback admission separately.
     var proposed = Python.dict(base=args[0],indices=args[1],_take=args[2],_host=PythonObject(None),
-        shape=py_call(Python.import_module("builtins").tuple,shape),dtype=base["dtype"],
+        shape=py_call(context["arena_native_types"]["tuple"],shape),dtype=base["dtype"],
         itemsize=base["itemsize"],ndim=base["ndim"],size=size,
         row_words=Int(py=base["size"])//first if first != 0 else 0)
-    var names = py_call(Python.import_module("builtins").list,proposed)
+    var names = py_call(context["arena_native_types"]["list"],proposed)
     for i in range(len(names)):  # driver-loop: admit every replaced owner before the first state mutation
         var previous = py_get(fields,names[i])
         var replacement = proposed[names[i]]
@@ -96,8 +96,8 @@ def arena_rows_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
             result = arena_materialize(_rows_metadata_fields(model,context),context)
         elif operation == "len":
             var shape = _rows_metadata_fields(model,context)["shape"]
-            var b = Python.import_module("builtins")
-            if py_type(shape) is not b.tuple or len(shape) == 0 or py_type(shape[0]) is not b.int:
+            var b = context["arena_native_types"]
+            if py_type(shape) is not b["tuple"] or len(shape) == 0 or py_type(shape[0]) is not b["int"]:
                 raise Error("TypeError: DeviceRows length requires native shape metadata")
             result = shape[0]
         else:

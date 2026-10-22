@@ -5,18 +5,18 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 
 
 def arena_array_metadata(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = context["arena_native_types"]
     var cls = py_type(value)
     var metadata = Python.dict()
     var names = Python.tuple("shape", "size", "dtype", "itemsize", "ndim")
     if cls is context["array_class"]:
-        var ancestry = py_call(b.type.__dict__["__mro__"].__get__,cls)
-        if len(ancestry) != 2 or ancestry[1] is not b.object:
+        var ancestry = py_call(b["type"].__dict__["__mro__"].__get__,cls)
+        if len(ancestry) != 2 or ancestry[1] is not b["object"]:
             raise Error("TypeError: DeviceRows Array metadata cannot inherit lifecycle hooks")
-        var mapping = py_call(b.type.__dict__["__dict__"].__get__,cls)
-        var keys = py_call(b.list,mapping)
+        var mapping = py_call(b["type"].__dict__["__dict__"].__get__,cls)
+        var keys = py_call(b["list"],mapping)
         for i in range(len(keys)):  # driver-loop: reject application key equality before class metadata lookups
-            if py_type(keys[i]) is not b.str:
+            if py_type(keys[i]) is not b["str"]:
                 raise Error("TypeError: DeviceRows requires native Array class keys")
         if py_get(mapping,"__del__") is not None or py_get(mapping,"__getattribute__") is not None:
             raise Error("TypeError: DeviceRows cannot invoke Array lifecycle or attribute hooks")
@@ -25,7 +25,7 @@ def arena_array_metadata(value: PythonObject, context: PythonObject) raises -> P
             if py_get(mapping,names[i]) is not descriptor:
                 raise Error("TypeError: DeviceRows requires the connected native Array slots")
             py_setitem(metadata,names[i],py_call(descriptor.__get__,value,cls))
-        if py_type(metadata["dtype"]) is not b.str:
+        if py_type(metadata["dtype"]) is not b["str"]:
             raise Error("TypeError: DeviceRows Array dtype must be a native string")
     elif cls is py_get(context,"ndarray"):
         # An exact ndarray exposes these fields through NumPy's native
@@ -38,11 +38,11 @@ def arena_array_metadata(value: PythonObject, context: PythonObject) raises -> P
     else:
         raise Error("TypeError: DeviceRows requires ordinary Array or ndarray metadata; Python buffer protocols are not supported")
     var shape = metadata["shape"]
-    if py_type(shape) is not b.tuple or py_type(metadata["size"]) is not b.int or py_type(metadata["itemsize"]) is not b.int or py_type(metadata["ndim"]) is not b.int:
+    if py_type(shape) is not b["tuple"] or py_type(metadata["size"]) is not b["int"] or py_type(metadata["itemsize"]) is not b["int"] or py_type(metadata["ndim"]) is not b["int"]:
         raise Error("TypeError: DeviceRows requires native shape and extent metadata")
     var count = 1
     for i in range(len(shape)):  # driver-loop: construct and validate rank metadata without invoking shape protocols
-        if py_type(shape[i]) is not b.int:
+        if py_type(shape[i]) is not b["int"]:
             raise Error("TypeError: DeviceRows dimensions must be native integers")
         var extent = Int(py=shape[i])
         if extent < 0 or (count > 0 and extent > 9223372036854775807//count):

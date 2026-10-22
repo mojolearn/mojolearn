@@ -25,7 +25,12 @@ def connect():
     # glue: describe the existing native half codec once; product copies use
     # Mojo bit operations and never call struct or convert through Python floats
     half_copy_canonical = struct.pack('<e', struct.unpack('<e', b'\x01\x7c')[0]) == b'\x00\x7e'
-    context.update(native_module_type=ModuleType, arena_memoryview=memoryview, arena_id=id,
+    # glue: retain native builtin constructors and exact scalar identities;
+    # mutable builtins module names must never become product callbacks
+    native_types = dict(type=type, object=object, list=list, tuple=tuple, dict=dict,
+                        str=str, bytes=bytes, bytearray=bytearray, int=int,
+                        float=float, bool=bool)
+    context.update(arena_native_types=native_types, native_module_type=ModuleType, arena_memoryview=memoryview, arena_id=id,
                    arena_half_copy_canonical=half_copy_canonical,
                    arena_resident_class=model_selection._Resident,
                    arena_resident_dict=vars(model_selection._Resident)['__dict__'],

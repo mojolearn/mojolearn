@@ -8,7 +8,6 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
 from bindings.arena_array_metadata import arena_array_metadata
 from bindings.classical_arrays import _store_code
-from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.optimizer_public_words import stash_python_error
 from core.array_helpers_impl import strided_copy_bytes
 
@@ -36,20 +35,20 @@ def _address(view: PythonObject) raises -> Int:
 
 
 def _array_layout(context: PythonObject) raises:
-    var b = Python.import_module("builtins")
+    var b = context["arena_native_types"]
     var cls = context["array_class"]
-    var ancestry = py_call(b.type.__dict__["__mro__"].__get__,cls)
-    if len(ancestry) != 2 or ancestry[1] is not b.object:
+    var ancestry = py_call(b["type"].__dict__["__mro__"].__get__,cls)
+    if len(ancestry) != 2 or ancestry[1] is not b["object"]:
         raise Error("TypeError: native row materialization requires the ordinary Array layout")
-    var mapping = py_call(b.type.__dict__["__dict__"].__get__,cls)
-    var keys = py_call(b.list,mapping)
+    var mapping = py_call(b["type"].__dict__["__dict__"].__get__,cls)
+    var keys = py_call(b["list"],mapping)
     for i in range(len(keys)):  # driver-loop: class lookup cannot invoke application key equality
-        if py_type(keys[i]) is not b.str:
+        if py_type(keys[i]) is not b["str"]:
             raise Error("TypeError: native row materialization requires native Array class keys")
     if py_get(mapping,"__del__") is not None or py_get(mapping,"__getattribute__") is not None:
         raise Error("TypeError: native row materialization cannot invoke Array lifecycle hooks")
     var slots = context["owner_array_slots"]
-    var names = py_call(b.list,slots)
+    var names = py_call(b["list"],slots)
     for i in range(len(names)):  # driver-loop: retained slot setters bypass application __setattr__ and descriptors
         if py_get(mapping,names[i]) is not slots[names[i]]:
             raise Error("TypeError: native row materialization requires the connected Array slots")
@@ -70,7 +69,7 @@ def _itemsize(dtype: String) raises -> Int:
 def _array(shape: PythonObject, dtype: String, view: PythonObject, store: PythonObject,
            pin: PythonObject, context: PythonObject, base: PythonObject) raises -> PythonObject:
     _array_layout(context)
-    var b = Python.import_module("builtins")
+    var b = context["arena_native_types"]
     var item = _itemsize(dtype)
     var size = 1
     var strides = List[Int](length=len(shape),fill=0)
@@ -88,9 +87,9 @@ def _array(shape: PythonObject, dtype: String, view: PythonObject, store: Python
         _ = py_call(steps.append,strides[i])
     var fields = Python.dict(_store=store,_base=base,_pin=pin,_mv=view,
         _addr=_address(view),_readonly=view.readonly,shape=shape,dtype=PythonObject(dtype),
-        ndim=len(shape),size=size,nbytes=size*item,itemsize=item,strides=py_call(b.tuple,steps),order="C")
+        ndim=len(shape),size=size,nbytes=size*item,itemsize=item,strides=py_call(b["tuple"],steps),order="C")
     var result = native_storage_allocate(context["array_class"])
-    var names = py_call(b.list,fields)
+    var names = py_call(b["list"],fields)
     for i in range(len(names)):  # driver-loop: initialize fresh native slots; no old owners can be released
         _ = py_call(context["owner_array_slots"][names[i]].__set__,result,fields[names[i]])
     return result
@@ -108,17 +107,17 @@ def _empty(shape: PythonObject, dtype: String, context: PythonObject) raises -> 
         if extent < 0 or (count > 0 and extent > 9223372036854775807//item//count):
             raise Error("ValueError: native row output exceeds indexing bounds")
         count *= extent
-    var store = py_call(context["array_type"],_store_code(dtype),py_call(Python.import_module("builtins").bytes,count*item))
+    var store = py_call(context["array_type"],_store_code(dtype),py_call(context["arena_native_types"]["bytes"],count*item))
     return _owned(store,shape,dtype,context)
 
 
 def _buffer_owner(view: PythonObject, context: PythonObject) raises:
-    var b = Python.import_module("builtins")
+    var b = context["arena_native_types"]
     if py_type(view) is not context["arena_memoryview"]:
         raise Error("TypeError: native row materialization requires a native backing memoryview")
     var owner = view.obj
     var cls = py_type(owner)
-    if owner is None or cls is b.bytes or cls is b.bytearray or cls is context["array_type"] or cls is context["owner_mmap_class"] or cls is py_get(context,"ndarray"):
+    if owner is None or cls is b["bytes"] or cls is b["bytearray"] or cls is context["array_type"] or cls is context["owner_mmap_class"] or cls is py_get(context,"ndarray"):
         return
     raise Error("TypeError: native row materialization cannot invoke a Python buffer exporter")
 
@@ -157,7 +156,7 @@ def _prepared_info(array: PythonObject, context: PythonObject) raises -> PythonO
     var view = _slot(array,"_mv",context)
     _buffer_owner(view,context)
     var order = _slot(array,"order",context)
-    if py_type(order) is not Python.import_module("builtins").str or String(order) != "C" or String(view.format) != _store_code(String(metadata["dtype"])) or not Bool(py=view.c_contiguous):
+    if py_type(order) is not context["arena_native_types"]["str"] or String(order) != "C" or String(view.format) != _store_code(String(metadata["dtype"])) or not Bool(py=view.c_contiguous):
         raise Error("TypeError: resident entries require prepared contiguous native storage")
     var item = _itemsize(String(metadata["dtype"]))
     if Int(py=metadata["itemsize"]) != item or Int(py=metadata["size"]) > 9223372036854775807//item:
@@ -210,8 +209,8 @@ def _native_item(value: PythonObject, index: PythonObject) raises -> PythonObjec
 
 
 def _objects(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
-    var factory = native_numpy_dtype(context)
+    var b = context["arena_native_types"]
+    var factory = context["native_numpy_dtype"]
     var real_classes = Python.list()
     for code in ["i1","u1","i2","u2","i4","u4","i8","u8","f2","f4","f8","g","q","Q"]:  # driver-loop: exact native real scalar interfaces, excluding object/custom classes
         _ = py_call(real_classes.append,py_call(factory,code).type)
@@ -221,13 +220,13 @@ def _objects(value: PythonObject, context: PythonObject) raises -> PythonObject:
     for i in range(Int(py=value.size)):  # driver-loop: inspect object references before using a native scalar conversion
         var atom = _native_item(flat,PythonObject(i))
         var cls = py_type(atom)
-        var real = cls is b.int or cls is b.bool or cls is b.float
+        var real = cls is b["int"] or cls is b["bool"] or cls is b["float"]
         var numpy = False
         for k in range(len(real_classes)):  # driver-loop: fixed native scalar identity set
             numpy = numpy or cls is real_classes[k]
         if not real and not numpy:
             raise Error("TypeError: native row materialization requires ordinary real numeric object elements; Python protocols cannot execute")
-        wide = wide or cls is b.float or numpy
+        wide = wide or cls is b["float"] or numpy
         _ = py_call(values.append,atom)
     var dtype = String("<f8") if wide else String("<i8")
     var result = _empty(value.shape,dtype,context)
@@ -252,7 +251,7 @@ def _objects(value: PythonObject, context: PythonObject) raises -> PythonObject:
 
 def _numpy_copy(value: PythonObject, view: PythonObject, kind: String, item: Int,
                 context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = context["arena_native_types"]
     var dtype = "<"+kind+String(item)
     var target = dtype
     var code = String()
@@ -314,13 +313,13 @@ def _numpy_copy(value: PythonObject, view: PythonObject, kind: String, item: Int
 
 def _prepare(value: PythonObject, context: PythonObject) raises -> PythonObject:
     var metadata = arena_array_metadata(value,context)
-    var b = Python.import_module("builtins")
+    var b = context["arena_native_types"]
     if py_type(value) is context["array_class"]:
         _array_layout(context)
         var view = py_call(context["owner_array_slots"]["_mv"].__get__,value,context["array_class"])
         _buffer_owner(view,context)
         var order = py_call(context["owner_array_slots"]["order"].__get__,value,context["array_class"])
-        if py_type(order) is not b.str or (String(order) != "C" and String(order) != "F"):
+        if py_type(order) is not b["str"] or (String(order) != "C" and String(order) != "F"):
             raise Error("TypeError: native row materialization requires native Array order metadata")
         var dtype = String(metadata["dtype"])
         var code = _store_code(dtype)
@@ -354,7 +353,7 @@ def _prepare(value: PythonObject, context: PythonObject) raises -> PythonObject:
         _ = descriptor^
         return output
     var dtype = value.dtype
-    var factory = native_numpy_dtype(context)
+    var factory = context["native_numpy_dtype"]
     var known = False
     for code in ["?","i1","u1","i2","u2","i4","u4","i8","u8","f2","f4","f8","O","c8","c16","q","Q"]:  # driver-loop: exact native dtype classes precede dtype access or buffer acquisition
         known = known or py_type(dtype) is py_type(py_call(factory,code))
@@ -387,24 +386,24 @@ def _prepare(value: PythonObject, context: PythonObject) raises -> PythonObject:
 
 
 def _resident_fields(owner: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = context["arena_native_types"]
     if py_type(owner) is not context["arena_resident_class"]:
         raise Error("TypeError: native row materialization requires the ordinary model-selection resident owner")
     var cls = context["arena_resident_class"]
-    var ancestry = py_call(b.type.__dict__["__mro__"].__get__,cls)
-    if len(ancestry) != 2 or ancestry[1] is not b.object:
+    var ancestry = py_call(b["type"].__dict__["__mro__"].__get__,cls)
+    if len(ancestry) != 2 or ancestry[1] is not b["object"]:
         raise Error("TypeError: native row materialization requires the ordinary resident layout")
-    var mapping = py_call(b.type.__dict__["__dict__"].__get__,cls)
-    var keys = py_call(b.list,mapping)
+    var mapping = py_call(b["type"].__dict__["__dict__"].__get__,cls)
+    var keys = py_call(b["list"],mapping)
     for i in range(len(keys)):  # driver-loop: class keys precede lifetime/descriptor lookup
-        if py_type(keys[i]) is not b.str:
+        if py_type(keys[i]) is not b["str"]:
             raise Error("TypeError: resident metadata requires native string keys")
     if py_get(mapping,"__dict__") is not context["arena_resident_dict"] or py_get(mapping,"__del__") is not None or py_get(mapping,"__getattribute__") is not None:
         raise Error("TypeError: native row materialization cannot invoke resident owner hooks")
     var fields = py_call(context["arena_resident_dict"].__get__,owner,cls)
-    keys = py_call(b.list,fields)
+    keys = py_call(b["list"],fields)
     for i in range(len(keys)):  # driver-loop: resident dictionary lookups cannot run key equality
-        if py_type(keys[i]) is not b.str:
+        if py_type(keys[i]) is not b["str"]:
             raise Error("TypeError: resident metadata requires native string keys")
     if fields["_put"] is not context["arena_msel_put"] or fields["_free"] is not context["arena_msel_free"] or fields["_take"] is not context["arena_msel_take_rows"]:
         raise Error("TypeError: native row materialization requires its connected native resident entries")
@@ -412,15 +411,15 @@ def _resident_fields(owner: PythonObject, context: PythonObject) raises -> Pytho
 
 
 def _entry(values: PythonObject, entries: PythonObject, indices: Bool, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = context["arena_native_types"]
     var key = py_call(context["arena_id"],values)
     var hit = py_get(entries,key)
     if hit is not None:
-        if py_type(hit) is not b.tuple or len(hit) != 3:
+        if py_type(hit) is not b["tuple"] or len(hit) != 3:
             raise Error("TypeError: native resident entries require their native owner tuple")
         if hit[0] is values:
             _ = _prepared_info(hit[1],context)
-            if py_type(hit[2]) is not b.int:
+            if py_type(hit[2]) is not b["int"]:
                 raise Error("TypeError: native resident entries require an integer store id")
             return hit
         raise Error("TypeError: resident identity entry does not retain its original input")
@@ -457,12 +456,12 @@ def arena_materialize(fields: PythonObject, context: PythonObject) raises -> Pyt
         raise Error("TypeError: DeviceRows.materialize requires model_selection._Resident.take; Python gather callbacks cannot execute")
     var owner = take.__self__
     var entries = _resident_fields(owner,context)["_entries"]
-    var b = Python.import_module("builtins")
-    if py_type(entries) is not b.dict:
+    var b = context["arena_native_types"]
+    if py_type(entries) is not b["dict"]:
         raise Error("TypeError: resident entries require a native dictionary")
-    var keys = py_call(b.list,entries)
+    var keys = py_call(b["list"],entries)
     for i in range(len(keys)):  # driver-loop: identity-keyed cache lookups must not invoke application equality
-        if py_type(keys[i]) is not b.int:
+        if py_type(keys[i]) is not b["int"]:
             raise Error("TypeError: resident entries require native identity keys")
     var base_entry = _entry(fields["base"],entries,False,context)
     var index_entry = _entry(fields["indices"],entries,True,context)
@@ -472,7 +471,7 @@ def arena_materialize(fields: PythonObject, context: PythonObject) raises -> Pyt
     var base_shape = array["shape"]
     for i in range(1,len(base_shape)):  # driver-loop: generic row shape preserves all trailing dimensions
         _ = py_call(shape.append,base_shape[i])
-    var output = _empty(py_call(b.tuple,shape),String(array["dtype"]),context)
+    var output = _empty(py_call(b["tuple"],shape),String(array["dtype"]),context)
     var n = Int(py=base_shape[0])
     var row_bytes = Int(py=array["nbytes"])//n if n else 0
     if Int(py=indices["size"]) and row_bytes:
