@@ -5,6 +5,7 @@
 def connect(training):
     # glue: connect fixed ABI symbols and native type/descriptor identities once
     import array
+    from collections import OrderedDict
     import mmap
     import sys
     from types import BuiltinFunctionType, ModuleType
@@ -57,7 +58,7 @@ def connect(training):
     context = {
         "schedule_entries": schedule_entries, "owners": owners, "schedules": schedules, "device_class": training.TrainDeviceArray,
         "array_class": Array, "array_type": array.array,
-        "buffer_types": (bytes, bytearray, array.array, mmap.mmap),
+        "buffer_types": (bytes, bytearray, array.array, mmap.mmap), "mapping_types": (dict, OrderedDict),
         "scalar_types": (type(None), bool, int, float, complex, str, bytes),
         "module_type": ModuleType, "modules": sys.modules,
         "type_flags": vars(type)["__flags__"].__get__, "type_mro": vars(type)["__mro__"].__get__,

@@ -91,7 +91,7 @@ def opt_value(value: PythonObject, context: PythonObject, depth: Int = 0) raises
         for i in range(len(value)):  # driver-loop: over caller's native tensor/argument containers
             opt_value(value[i], context, depth + 1)
         return
-    if cls is b.dict:
+    if opt_exact(cls, context["mapping_types"]):
         var keys = py_call(b.list, value)
         for i in range(len(keys)):  # driver-loop: over validate names before keyed native dictionary reads
             if py_type(keys[i]) is not b.str:

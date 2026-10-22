@@ -4,11 +4,12 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.optimizer_public_words import optimizer_python_error
-from bindings.optimizer_admission import opt_guards, opt_owner, opt_value, opt_scalar, opt_schedule
+from bindings.optimizer_admission import opt_guards, opt_owner, opt_value, opt_scalar, opt_schedule, opt_exact
 from bindings.optimizer_public_door import door_ready, refuse_kwargs, new_array, TensorView, tensor_view
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_cast_kind
 from core.optimizer_state_impl import optimizer_state_cast
+from core.classical_pandas_impl import pd_raw_at, _pd_double
 from bindings.optimizer_schedule_native import schedule_operation
 from bindings.optimizer_device_native import device_operation, device_new, device_entries
 
@@ -31,6 +32,30 @@ def optimizer_entries(mode: PythonObject, context: PythonObject) raises -> Pytho
     return entries
 
 
+def optimizer_betas(source: PythonObject, context: PythonObject) raises -> PythonObject:
+    var b = Python.import_module("builtins")
+    opt_value(source, context)
+    if py_type(source) is b.tuple or py_type(source) is b.list:
+        opt_scalar(source, context)
+        if len(source) != 2:
+            raise Error("ValueError: betas must be a pair (beta1, beta2)")
+        return Python.tuple(py_call(b.float, source[0]), py_call(b.float, source[1]))
+    var input = context["input_context"]
+    classical_connect_numpy(input)
+    var value = classical_input(source, input)
+    if Int(py=value.ndim) != 1 or Int(py=value.size) != 2:
+        raise Error("ValueError: betas must be a pair (beta1, beta2)")
+    var item = Int(py=value.itemsize)
+    var kind = classical_cast_kind(value, item, "betas", input)
+    var native = classical_is_array(value, input) or Bool(py=value.dtype.isnative)
+    var addr = Int(py=classical_address(value))
+    var stride = Int(py=value.strides[0])
+    var first = _pd_double(pd_raw_at(addr, 0, item, native), kind, item)
+    var second = _pd_double(pd_raw_at(addr, stride, item, native), kind, item)
+    _ = value^
+    return Python.tuple(first, second)
+
+
 def optimizer_construct(owner: PythonObject, values: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
     # values: params, kind, lr, betas, eps, weight_decay, momentum,
     # dampening, nesterov, schedule, accumulation_steps, maximize, resident, kwargs.
@@ -39,7 +64,7 @@ def optimizer_construct(owner: PythonObject, values: PythonObject, mode: PythonO
     var kind = Int(py=values[1])
     var where = String("SGD") if kind == 0 else (String("Adam") if kind == 1 else String("AdamW"))
     opt_schedule(values[9], context)
-    for i in [2, 3, 4, 5, 6, 7, 8, 10, 11, 12]:  # driver-loop: over scalar constructor configuration words
+    for i in [2, 4, 5, 6, 7, 8, 10, 11, 12]:  # driver-loop: over scalar constructor configuration words
         opt_scalar(values[i], context)
     opt_value(values[0], context)
     opt_value(values[13], context)
@@ -54,9 +79,7 @@ def optimizer_construct(owner: PythonObject, values: PythonObject, mode: PythonO
         raise Error("TypeError: mojolearn." + where + ": maximize must be a bool")
     if kind == 0 and Bool(py=values[8]) and (Float64(py=values[6]) == 0.0 or Float64(py=values[7]) != 0.0):
         raise Error("ValueError: mojolearn.SGD: nesterov=True needs momentum > 0 and dampening == 0")
-    var betas = values[3]
-    if kind != 0 and ((py_type(betas) is not b.tuple and py_type(betas) is not b.list) or len(betas) != 2):
-        raise Error("ValueError: mojolearn." + where + ": betas must be a pair (beta1, beta2)")
+    var betas = values[3] if kind == 0 else optimizer_betas(values[3], context)
     py_setitem(fields, "_where", PythonObject(where))
     py_setitem(fields, "_KIND", PythonObject(kind))
     py_setitem(fields, "numeric_mode", mode)
@@ -154,7 +177,7 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
     if operation == "load":
         var state = values[0]
         opt_value(state, context)
-        if py_type(state) is not b.dict:
+        if not opt_exact(py_type(state), context["mapping_types"]):
             raise Error("TypeError: optimizer checkpoint must be a native dictionary")
         opt_scalar(state["t"], context)
         var t = py_call(b.int, state["t"])
