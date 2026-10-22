@@ -126,8 +126,10 @@ def training_cross_entropy(values: PythonObject, entries: PythonObject, context:
     if device:
         if want_grad:
             gradient = device_allocate(native, shape, context)
+    elif want_grad:
+        gradient = new_array(shape, "<f4")
     else:
-        gradient = new_array(shape if want_grad else [1], "<f4")
+        gradient = new_array([1], "<f4")
     var ignored = training_scalar_number(values[2], "cross_entropy", context, True)
     var divisor = training_scalar_number(PythonObject(0) if values[5] is None else values[5], "cross_entropy", context, True)
     var params = Python.list(rows, vocab, ignored, reduction, divisor, 1 if loss_truth(values[6], context) else 0)
