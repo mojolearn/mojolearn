@@ -104,6 +104,7 @@ from bindings.parallel_neural_native import parallel_neural_c
 from bindings.parallel_causal_native import parallel_causal_c, RemoteStateLifetime
 from bindings.optimizer_lifecycle import optimizer_finalize_binding
 from bindings.optimizer_native_router import optimizer_native_c
+from bindings.optimizer_device_native import device_finalize_c
 from bindings.sequential_native import sequential_c
 from bindings.classical_native import classical_c
 from bindings.classical_attributes import classical_attribute_c, classical_attribute_descriptor_c
@@ -1443,6 +1444,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(parallel_causal_c, "parallel_causal_call")
         module.def_function[optimizer_finalize_binding]("optimizer_finalize")
         module.def_py_c_function(optimizer_native_c, "optimizer_native")
+        module.def_py_c_function(device_finalize_c, "optimizer_device_finalize")
         module.def_py_c_function(sequential_c, "sequential_native_call")
         module.def_py_c_function(classical_c, "classical_native_call")
         module.def_py_c_function(classical_attribute_c, "classical_attribute_call")

@@ -1,9 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native ownership and consumed outputs of training device arrays.
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.optimizer_admission import opt_value, opt_scalar
 from bindings.optimizer_public_door import new_array, TensorView, tensor_view, base_format, contiguous_addr
+from bindings.optimizer_public_words import optimizer_python_error
 
 
 def device_entries(binding: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -59,6 +61,57 @@ def device_new(binding: PythonObject, handle: PythonObject, dims: List[Int], bas
     return result
 
 
+def device_finalize(owner: PythonObject, context: PythonObject) raises -> PythonObject:
+    # A native method descriptor calls this directly when a temporary output
+    # is decref'd during rollback. Retained native types/field access/entries
+    # also work after interpreter shutdown has removed builtins/sys.modules.
+    var types = context["device_finalizer_types"]
+    if py_type(owner) is not context["device_class"]:
+        raise Error("TypeError: training device cleanup requires its exact native owner")
+    var fields = py_call(context["device_fields_getter"], owner, context["device_class"])
+    if py_type(fields) is not types[0]:
+        raise Error("TypeError: training device cleanup requires native metadata")
+    var keys = py_call(types[4], py_call(fields.keys))
+    for i in range(len(keys)):  # driver-loop: over retained device ownership field names
+        if py_type(keys[i]) is not types[3]:
+            raise Error("TypeError: training device cleanup requires native string keys")
+    var binding = py_get(fields, "_b")
+    if binding is None or py_get(fields, "_base") is not None:
+        return PythonObject(None)
+    var handle = py_get(fields, "h")
+    if py_type(handle) is not types[1]:
+        raise Error("TypeError: training device cleanup requires its native integer handle")
+    var entries = PythonObject(None)
+    var bindings = context["bindings"]
+    for mode in ["identical", "fast"]:  # driver-loop: over the two retained native numeric-mode owners
+        var candidate = bindings[PythonObject(mode)]
+        if py_type(candidate) is types[0] and binding is candidate["module"]:
+            entries = candidate
+            break
+    if entries is None:
+        raise Error("TypeError: training device cleanup requires its connected native binding")
+    var release = py_get(entries, "train_dev_free")
+    if py_type(release) is not types[2]:
+        raise Error("TypeError: training device cleanup requires its compiled release entry")
+    try:
+        _ = py_call(release, handle)
+    except:
+        # Preserve the prior best-effort contract and an explicit retry's
+        # ownership information when the native release itself fails.
+        return PythonObject(None)
+    py_setitem(fields, "_b", PythonObject(None))
+    return PythonObject(None)
+
+
+def device_finalize_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
+    try:
+        var args = PythonObject(from_borrowed=args_ptr)
+        _ = device_finalize(args[1], args[0])
+    except error:
+        return optimizer_python_error(error)
+    return PythonObject(None).steal_data()
+
+
 def device_operation(operation: String, owner: PythonObject, values: PythonObject, context: PythonObject,
                      selected: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
@@ -106,19 +159,6 @@ def device_operation(operation: String, owner: PythonObject, values: PythonObjec
     for i in range(len(keys)):  # driver-loop: over stored native device owner field names
         if py_type(keys[i]) is not b.str:
             raise Error("TypeError: training device owner metadata requires native string keys")
-    if operation == "device_finalize":
-        if py_get(fields, "_base") is not None or py_get(fields, "_b") is None:
-            return PythonObject(None)
-        var entries = device_entries(fields["_b"], context)
-        opt_scalar(py_get(fields, "h"), context)
-        try:
-            _ = py_call(entries["train_dev_free"], fields["h"])
-        except:
-            # Match the prior best-effort finalizer. Keep a failed ownership
-            # record available for explicit retry instead of pretending release.
-            return PythonObject(None)
-        py_setitem(fields, "_b", PythonObject(None))
-        return PythonObject(None)
     opt_value(owner, context)
     var entries = device_entries(fields["_b"], context)
     if operation == "device_reshape":
