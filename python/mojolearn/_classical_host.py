@@ -207,6 +207,14 @@ class _NativeArchiveLoad:
         return _native_classical(cls, "host_archive_load", (path,), _CLASSICAL)
 
 
+def _register_host_inference_class(cls):
+    # glue: ordinary subclass layout metadata is connected at class definition.
+    context = _CLASSICAL.get("host_inference_context")
+    if context is not None:
+        context["classical_public_layouts"][cls] = _native_classical_bridge._layout(
+            cls, context["classical_attribute_descriptor"])
+
+
 class HostLogisticRegression(_NativeArchiveLoad, _HostBound, LogisticRegression):
     _HOST_ARRAYS = ("_w",)
 
@@ -300,7 +308,22 @@ class HostKMeans(_NativeArchiveLoad, _HostBound, KMeans):
     `labels_` is in the file and in the hash: it is the fit's assignment of
     the training rows, and it is what a caller checks `predict` against.
     """
+    _mojolearn_native_public = True
     _HOST_ARRAYS = ("cluster_centers_", "labels_")
+
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        _register_host_inference_class(cls)
+
+
+    def predict(self, X):
+        """Return the nearest fitted center index for each input row."""
+        return _native_classical(self, "host_infer_predict", (X,), _CLASSICAL)
+
+    def transform(self, X):
+        """Return distances from each input row to the fitted centers."""
+        return _native_classical(self, "host_infer_transform", (X,), _CLASSICAL)
 
 
 class HostGaussianMixture(_NativeArchiveLoad, _HostBound, GaussianMixture):
@@ -485,11 +508,22 @@ class HostMinMaxScaler(_NativeArchiveLoad, _HostScaler, MinMaxScaler):
 
 
 class _HostCD(_HostBound):
+    _mojolearn_native_public = True
     _BINDING = "_mojolearn_solver"
     _HOST_ARRAYS = ("coef_",)
 
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        _register_host_inference_class(cls)
+
     def _solver(self):
         return self._bind(self._BINDING)
+
+
+    def predict(self, X):
+        """Predict float32 values with the fitted coefficients and intercept."""
+        return _native_classical(self, "host_infer_predict", (X,), _CLASSICAL)
 
 
 class HostElasticNet(_NativeArchiveLoad, _HostCD, ElasticNet):
@@ -719,3 +753,41 @@ try:
                          _backend.load_host_module("_mojolearn_x_prep_host"), _scaler_training)
 except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as _minmax_error:
     _scaler_host_unavailable(HostMinMaxScaler, _MINMAX_CONTEXT, _minmax_error)
+
+
+# Import-time connection of complete explicit CPU prediction owners.
+def _connect_host_inference():
+    from types import BuiltinFunctionType, MethodType
+    from .tokenizer import _binding
+    entries = {}
+    for basename, names in (("_mojolearn_estimators_host", ("cd_predict",)),  # glue: fixed CPU prediction ABI
+                            ("_mojolearn_core_host", ("kmeans_predict", "kmeans_transform"))):
+        try:
+            module = _backend.load_host_module(basename)
+        except ImportError:
+            module = None
+        for name in names:  # glue: record native entry identities once at import
+            entry = getattr(module, name, None)
+            if entry is not None and not isinstance(entry, BuiltinFunctionType):
+                raise TypeError("explicit CPU prediction requires a native binding entry")
+            entries[name] = entry
+    context = dict(_CLASSICAL["host_tree_context"])
+    context.update(host_inference_entries=entries,
+                   host_inference_kinds={HostElasticNet: "cd", HostLasso: "cd", HostKMeans: "kmeans"})
+    # The established native attribute entry is schema-neutral: it admits
+    # the supplied class layout and preserves internal Array/public ndarray
+    # publication. It does not select scaler bindings or execute scaler work.
+    module = _binding()._module
+    attribute = module.standard_scaler_attribute_call
+    if not isinstance(attribute, BuiltinFunctionType):
+        raise TypeError("explicit CPU model attributes require a native binding entry")
+    descriptor = module.classical_attribute_descriptor(MethodType(attribute, context))
+    context.update(classical_attribute_descriptor=descriptor, classical_public_layouts={},
+                   classical_public_installed=True)
+    for cls in (HostElasticNet, HostLasso, HostKMeans):  # glue: fixed native prediction class layouts
+        cls.__getattribute__ = descriptor
+        context["classical_public_layouts"][cls] = _native_classical_bridge._layout(cls, descriptor)
+    _CLASSICAL["host_inference_context"] = context
+
+
+_connect_host_inference()

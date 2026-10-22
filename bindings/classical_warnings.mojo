@@ -90,14 +90,24 @@ def _warning_write(text: String, context: PythonObject) raises:
 
 
 def classical_warn_column(context: PythonObject) raises:
+    classical_warning(COLUMN_WARNING, _warning_category(context), context)
+
+
+def classical_warning(message: String, category: PythonObject, context: PythonObject, location: PythonObject = PythonObject(None)) raises:
     var b = Python.import_module("builtins")
     var fields = _warning_fields(context["warning_fields"])
-    var category = _warning_category(context)
     # Preserve the old stacklevel=4 location in _guard_cpu_training; warning
     # filters and default/module repetition therefore keep their old scope.
     var filename = context["warning_filename"]
     var lineno = Int(py=context["warning_lineno"])
     var module = context["warning_module"]
+    var source_line = context["warning_source_line"]
+    if location is not None:
+        filename = location[0]
+        lineno = Int(py=location[1])
+        module = location[2]
+        source_line = PythonObject("")
+    var category_name = String(py_call(b.type.__getattribute__, category, "__name__"))
     var filters = py_get(fields, "filters")
     var log = PythonObject(None)
     if Bool(py=context["warning_context_enabled"]):
@@ -129,7 +139,7 @@ def classical_warn_column(context: PythonObject) raises:
         var category_match = False
         for j in range(len(mro)):  # driver-loop: over native warning category ancestry
             category_match = category_match or row[2] is mro[j]
-        if category_match and (Int(py=row[4]) == 0 or Int(py=row[4]) == lineno) and _warning_match(row[1], PythonObject(COLUMN_WARNING), context) and _warning_match(row[3], module, context):
+        if category_match and (Int(py=row[4]) == 0 or Int(py=row[4]) == lineno) and _warning_match(row[1], PythonObject(message), context) and _warning_match(row[3], module, context):
             action = row[0]
             break
     if py_type(action) is not b.str:
@@ -138,10 +148,10 @@ def classical_warn_column(context: PythonObject) raises:
     if mode == "ignore":
         return
     if mode == "error":
-        raise Error("DataConversionWarning: " + COLUMN_WARNING)
+        raise Error(category_name + ": " + message)
     if mode != "always" and mode != "all" and mode != "default" and mode != "module" and mode != "once":
         raise Error("RuntimeError: unrecognized warning filter action")
-    var key = Python.tuple(COLUMN_WARNING, category, PythonObject(None) if mode == "once" else module, PythonObject(lineno if mode == "default" else 0))
+    var key = Python.tuple(message, category, PythonObject(None) if mode == "once" else module, PythonObject(lineno if mode == "default" else 0))
     if mode != "always" and mode != "all":
         if Bool(py=py_get(context["warning_seen"], key, False)):
             return
@@ -166,20 +176,20 @@ def classical_warn_column(context: PythonObject) raises:
             raise Error("TypeError: custom warning record finalizers are not native")
         var record = py_call(b.object.__new__, record_class)
         var stored = py_call(context["warning_record_fields"].__get__, record)
-        py_setitem(stored, "message", py_call(category, COLUMN_WARNING))
+        py_setitem(stored, "message", py_call(category, message))
         py_setitem(stored, "category", category)
         py_setitem(stored, "filename", filename)
         py_setitem(stored, "lineno", lineno)
         py_setitem(stored, "file", PythonObject(None))
         py_setitem(stored, "line", PythonObject(None))
         py_setitem(stored, "source", PythonObject(None))
-        py_setitem(stored, "_category_name", "DataConversionWarning")
+        py_setitem(stored, "_category_name", category_name)
         py_call(log.append, record)
         if mode != "always" and mode != "all":
             py_setitem(context["warning_seen"], key, True)
         return
-    var text = String(filename) + ":" + String(lineno) + ": DataConversionWarning: " + COLUMN_WARNING + "\n"
-    var line = String(context["warning_source_line"])
+    var text = String(filename) + ":" + String(lineno) + ": " + category_name + ": " + message + "\n"
+    var line = String(source_line)
     if line.byte_length() > 0:
         text += "  " + line + "\n"
     _warning_write(text, context)
