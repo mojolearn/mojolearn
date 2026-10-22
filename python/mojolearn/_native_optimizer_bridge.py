@@ -27,7 +27,7 @@ def connect(training):
                "optimizer_door_clip", "optimizer_door_accumulate", "training_numeric_mode",
                "train_dev_free", "train_dev_alloc", "train_dev_put", "train_dev_get",
                "linear_forward", "linear_backward", "linear_forward_dev", "linear_backward_dev",
-               "rms_norm_forward", "rms_norm_backward", "accumulation_is_aligned", "optimizer_resident_download", "optimizer_resident_upload")
+               "rms_norm_forward", "rms_norm_backward", "embedding_forward", "embedding_backward", "accumulation_is_aligned", "optimizer_resident_download", "optimizer_resident_upload")
     for mode in ("identical", "fast"):  # glue: connect every supported numeric-mode ABI at import
         try:
             binding = _backend.binding("_mojolearn_training", mode)
@@ -65,18 +65,21 @@ def connect(training):
         "scalar_types": (type(None), bool, int, float, complex, str, bytes),
         "module_type": ModuleType, "modules": sys.modules,
         "type_flags": vars(type)["__flags__"].__get__, "type_mro": vars(type)["__mro__"].__get__,
-        "numpy_names": ("ndarray", "bool_", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "float16", "float32", "float64", "longdouble"),
+        "numpy_names": ("ndarray", "bool_", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "longlong", "ulonglong", "float16", "float32", "float64", "longdouble"),
         "guards": guards, "bindings": bindings, "init": init,
         "backend": vars(_backend), "profile_defaults": _numeric_profile._defaults,
         "profiles": _numeric_profile.PROFILES, "input_context": input_context,
         "array_getters": {name: vars(Array)[name].__get__ for name in Array.__slots__},  # glue: retain fixed native Array slot descriptors at import
     }
+    context["embedding_index_cast"] = _buffer._native("cast_elements")  # glue: retain the existing buffer conversion ABI at import
+    if not isinstance(context["embedding_index_cast"], BuiltinFunctionType):
+        raise TypeError("embedding requires compiled cast_elements")
     context["training_scalar_warnings"] = connect_warnings()
     context["training_scalar_locations"] = {
         name: (getattr(training, name).__code__.co_filename,
                max(line for _, _, line in getattr(training, name).__code__.co_lines() if line is not None),  # glue: retain fixed wrapper source metadata at import
                training.__name__)
-        for name in ("rms_norm_forward", "rms_norm_backward")  # glue: retain public scalar-option warning locations at import
+        for name in ("rms_norm_forward", "rms_norm_backward", "embedding_backward")  # glue: retain public scalar-option warning locations at import
     }
     module = _binding()._module
     native = module.optimizer_native

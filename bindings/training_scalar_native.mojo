@@ -41,8 +41,8 @@ def training_scalar_warning(message: String, category: PythonObject, operation: 
         raise failure^
 
 
-def training_scalar_float(value: PythonObject, operation: String, context: PythonObject,
-                          depth: Int = 0) raises -> PythonObject:
+def training_scalar_number(value: PythonObject, operation: String, context: PythonObject,
+                           integer: Bool, depth: Int = 0) raises -> PythonObject:
     if depth > 64:
         raise Error("TypeError: scalar configuration exceeds native nesting; supply a native number")
     var b = Python.import_module("builtins")
@@ -89,7 +89,7 @@ def training_scalar_float(value: PythonObject, operation: String, context: Pytho
                 # parses those bytes (e.g. V4(b'1e-5')); keep both successful
                 # text parsing and ValueError for invalid raw bytes.
                 var raw = training_void_bytes(value)
-                return training_scalar_float(raw, operation, context, depth + 1)
+                return training_scalar_number(raw, operation, context, integer, depth + 1)
             var indexes = Python.list()
             for i in range(ndim):  # driver-loop: native scalar index, one zero per singleton axis
                 py_call(indexes.append, 0)
@@ -104,7 +104,7 @@ def training_scalar_float(value: PythonObject, operation: String, context: Pytho
                 var failure = stash_python_error()
                 raise failure^
             var scalar = PythonObject(from_owned=pointer)
-            var result = training_scalar_float(scalar, operation, context, depth + 1)
+            var result = training_scalar_number(scalar, operation, context, integer, depth + 1)
             _ = scalar^
             return result
         for i in range(len(classes)):  # driver-loop: exact native scalar class identities
@@ -119,20 +119,24 @@ def training_scalar_float(value: PythonObject, operation: String, context: Pytho
             if dtype.fields is not None:
                 raise Error("TypeError: float() argument must be a string or a real number, not 'tuple'")
             var raw = training_void_bytes(value)
-            return training_scalar_float(raw, operation, context, depth + 1)
+            return training_scalar_number(raw, operation, context, integer, depth + 1)
         if kind == "c":
             var exceptions = py_get(context["modules"], "numpy.exceptions")
             if exceptions is None or py_type(exceptions) is not context["module_type"]:
                 raise Error("TypeError: complex scalar warnings require NumPy's native exception metadata")
             var category = py_get(py_fields(exceptions), "ComplexWarning")
             training_scalar_warning("Casting complex values to real discards the imaginary part", category, operation, context)
-            return training_scalar_float(value.real, operation, context, depth + 1)
+            return training_scalar_number(value.real, operation, context, integer, depth + 1)
     # Only verified native scalar slots reach CPython's public unboxing API.
     # Native long-double slots preserve the platform's supported conversion
     # to Python double without reading private scalar storage or changing ABI.
     ref cpy = Python().cpython()
-    var pointer = cpy.lib.get_function[PyObjectPtr]("PyNumber_Float")(value._obj_ptr)
+    var pointer = cpy.lib.get_function[PyObjectPtr]("PyNumber_Long" if integer else "PyNumber_Float")(value._obj_ptr)
     if not pointer:
         var failure = stash_python_error()
         raise failure^
     return PythonObject(from_owned=pointer)
+
+
+def training_scalar_float(value: PythonObject, operation: String, context: PythonObject) raises -> PythonObject:
+    return training_scalar_number(value, operation, context, False)
