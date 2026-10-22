@@ -705,6 +705,11 @@ def parse_card_comments(path):
 def binding_artifacts(*, require_loaded=True):
     """Every loaded mojolearn binding extension, hashed. DEVIATION 929.
 
+    Include private host/tier aliases and resolve ExtensionFileLoader modules
+    through their spec origin when they omit __file__. An unresolved loaded
+    extension is an error. A controller that delegates all native work may
+    pass require_loaded=False; the merged worker inventory must still exist.
+
     The compiled `.so` artifacts carry NO freshness signal: nothing ties one
     to the commit that built it, and a stale binary raises only when a
     signature happens to have drifted. So provenance records what CAN be
