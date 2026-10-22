@@ -4,7 +4,7 @@
 
 def connect():
     # glue: retain native entry and immutable slot identities during import
-    from types import BuiltinFunctionType, ModuleType
+    from types import BuiltinFunctionType, ModuleType, MemberDescriptorType
     import struct
     from . import _arena_io, model_selection
     from ._buffer import _native
@@ -39,5 +39,13 @@ def connect():
                    arena_msel_take_rows=entries['msel_take_rows'], arena_cast=entries['cast'],
                    maxabs_rows_class=_arena_io.DeviceRows,
                    maxabs_rows_dict=vars(_arena_io.DeviceRows)["__dict__"])
+    # glue: retain ordinary metadata and native TLS access identities at import
+    context.update(cache_type_mro=vars(type)["__mro__"].__get__,
+                   cache_type_dict=vars(type)["__dict__"].__get__,
+                   cache_object_getattribute=object.__getattribute__, cache_member_type=MemberDescriptorType,
+                   cache_local_type=type(_arena_io._LOCAL),
+                   cache_local_getattribute=type(_arena_io._LOCAL).__getattribute__,
+                   cache_attribute_error=AttributeError,
+                   cache_hash_types=(type(None), bool, int, float, complex, str, bytes))
     _arena_io._ROWS_CALL = call
     _arena_io._ROWS_CONTEXT = context
