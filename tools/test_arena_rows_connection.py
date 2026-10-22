@@ -50,10 +50,12 @@ def connect(native_entry=len):
     bridge._numpy_free_context = lambda: {'array_class': Array}
     tokenizer = ModuleType('mojolearn.tokenizer')
     tokenizer._binding = lambda: SimpleNamespace(_module=SimpleNamespace(arena_rows_native_call=len))
+    backend = ModuleType('mojolearn._backend')
+    backend.binding = lambda name, mode: SimpleNamespace()
     modules = {'mojolearn': package, 'mojolearn._arena_io': arena,
                'mojolearn._array': arrays, 'mojolearn._native_classical_bridge': bridge,
                'mojolearn.tokenizer': tokenizer, 'mojolearn.model_selection': selection,
-               'mojolearn._buffer': buffers}
+               'mojolearn._buffer': buffers, 'mojolearn._backend': backend}
     with patch.dict(sys.modules, modules):
         namespace = {'__name__': 'mojolearn._native_arena_rows', '__package__': 'mojolearn'}
         source = ROOT / 'python/mojolearn/_native_arena_rows.py'
@@ -63,6 +65,11 @@ def connect(native_entry=len):
 
 
 class NativeWeakrefConnectionTests(unittest.TestCase):
+    def test_cpu_cache_upload_retains_empty_store_registry_and_native_setter(self):
+        context = connect()
+        self.assertEqual(context['cache_store_routes'], ())
+        self.assertIs(context['cache_object_setattr'], object.__setattr__)
+
     def test_cache_lookup_retains_key_and_scalar_metadata_without_calling_it(self):
         context = connect()
         self.assertIs(context['cache_key_descriptor'], vars(Cache)['_key'])

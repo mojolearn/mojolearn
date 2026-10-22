@@ -139,17 +139,7 @@ class DeviceCache:
         return (int(arr._addr), int(arr.size))
 
     def id_of(self, arr):
-        key = self._key(arr)
-        hit = self._entries.get(key)
-        if hit is not None:
-            self.hits += 1
-            return hit[0]
-        if key[1] < 1:
-            raise ValueError("DeviceCache: an empty buffer has no device copy")
-        slot = int(self._put(key[0], key[1]))
-        self._entries[key] = (slot, arr)
-        self.uploads += 1
-        return slot
+        return _ROWS_CALL(self, "cache_id_of", (arr,), _ROWS_CONTEXT)
 
     def get(self, arr):
         """The id when `arr` is already resident, else None (no upload)."""

@@ -8,7 +8,7 @@ def connect():
     import struct
     import sys
     from ._native_classical_warnings import connect_warnings
-    from . import _arena_io, model_selection
+    from . import _arena_io, model_selection, _backend
     from ._buffer import _native
     from ._array import Array
     from ._native_classical_bridge import _numpy_free_context
@@ -55,7 +55,23 @@ def connect():
                           training_scalar_locations={"cache_get": (_arena_io.DeviceCache.get.__code__.co_filename,
                                                                     _arena_io.DeviceCache.get.__code__.co_firstlineno,
                                                                     _arena_io.__name__)})
+    # glue: retain the actual supported word-store entries once at package
+    # connection; the CPU facade legitimately has no resident device store.
+    # Do not admit arbitrary builtin callables by their type alone.
+    store_routes = []
+    for module_name, prefix in (("_mojolearn_x_prep", "x_prep"),
+                                ("_mojolearn_x_metrics", "x_metrics")):  # glue: fixed public resident-store ABI
+        for mode in ("identical", "fast"):  # glue: fixed supported numeric-mode connections
+            try:
+                module = _backend.binding(module_name, mode)
+                put, free = getattr(module, prefix + "_dev_put"), getattr(module, prefix + "_dev_free")
+            except (AttributeError, ImportError, ValueError):
+                continue
+            if type(put) is not BuiltinFunctionType or type(free) is not BuiltinFunctionType:
+                raise TypeError("DeviceCache requires compiled native resident-store entries")
+            store_routes.append((put, free))
     context.update(cache_scalar_context=scalar_context,
+                   cache_store_routes=tuple(store_routes), cache_object_setattr=object.__setattr__,
                    cache_type_flags=vars(type)["__flags__"].__get__,
                    cache_primitive_bases=(int, float, complex, str, bytes, bytearray),
                    cache_key_descriptor=vars(_arena_io.DeviceCache)["_key"],
