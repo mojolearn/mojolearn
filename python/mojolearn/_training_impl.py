@@ -1994,19 +1994,7 @@ def linear_forward(a, weight, numeric_mode=None):
     -------
     array, shape (M, N)
     """
-    if _is_dev(a) or _is_dev(weight):
-        return _linear_forward_dev(a, weight, numeric_mode)
-    a = _c32(a, "a", "linear_forward")
-    w = _c32(weight, "weight", "linear_forward")
-    m, k = a.reshape((-1, a.shape[-1])).shape
-    n, k2 = w.shape
-    if k != k2:
-        raise ValueError(
-            "mojolearn.linear_forward: a has K=%d, weight has K=%d" % (k, k2))
-    c = _buffers.empty((m, n), '<f4')
-    _load(numeric_mode).linear_forward(
-        [_addr(c), _addr_ro(a), _addr_ro(w)], [int(m), int(n), int(k)])
-    return c.reshape(a.shape[:-1] + (n,))
+    return _OPT_NATIVE("linear_forward", None, (a, weight), numeric_mode, _OPT_CONTEXT)
 
 
 def _optional_samba_head(binding):
@@ -2074,21 +2062,7 @@ def linear_backward(dc, a, weight, numeric_mode=None):
     da : array, shape (M, K)
     dweight : array, shape (N, K)
     """
-    if _is_dev(dc) or _is_dev(a) or _is_dev(weight):
-        return _linear_backward_dev(dc, a, weight, numeric_mode)
-    a = _c32(a, "a", "linear_backward")
-    w = _c32(weight, "weight", "linear_backward")
-    dc = _c32(dc, "dc", "linear_backward")
-    m, k = a.reshape((-1, a.shape[-1])).shape
-    n = w.shape[0]
-    if dc.reshape((-1, dc.shape[-1])).shape != (m, n):
-        raise ValueError("mojolearn.linear_backward: dc must be (M, N)")
-    da = _buffers.empty((m, k), '<f4')
-    dw = _buffers.empty((n, k), '<f4')
-    _load(numeric_mode).linear_backward(
-        [_addr(da), _addr(dw), _addr_ro(dc), _addr_ro(a), _addr_ro(w)],
-        [int(m), int(n), int(k)])
-    return da.reshape(a.shape), dw
+    return _OPT_NATIVE("linear_backward", None, (dc, a, weight), numeric_mode, _OPT_CONTEXT)
 
 
 # ===================================================================
