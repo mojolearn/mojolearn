@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-# Native scalar configuration unboxing; never ndarray computation or casts.
+# Shared scalar configuration admission, parsing and numeric buffer decoding.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_fields, py_get
@@ -10,6 +10,7 @@ from bindings.classical_warnings import classical_warning
 from bindings.native_numpy_metadata import native_numpy_type
 from bindings.sequence_dtype_native import sequence_dtype_classes, sequence_dtype_instance, sequence_dtype_create
 from bindings.sequence_array_native import sequence_array_release
+from bindings.native_scalar_decode import native_scalar_buffer
 
 
 def training_void_bytes(value: PythonObject) raises -> PythonObject:
@@ -81,6 +82,12 @@ def training_scalar_number(value: PythonObject, operation: String, context: Pyth
                 # ndarray's scalar slot boxes a Python complex; unlike a
                 # NumPy complex scalar, float() rejects it without a warning.
                 raise Error("TypeError: float() argument must be a string or a real number, not 'complex'")
+            var kind = String(dtype.kind)
+            if kind == "b" or kind == "i" or kind == "u" or kind == "f":
+                # Decode admitted storage directly. NumPy scalar slots also
+                # perform computation even when they create no Python frame.
+                # Rank/version policy and warnings above remain unchanged.
+                return native_scalar_buffer(value).to_python_number(integer)
             if String(dtype.kind) == "V":
                 if dtype.fields is not None:
                     # A record unboxes to a tuple, which float rejects. Do
@@ -127,10 +134,12 @@ def training_scalar_number(value: PythonObject, operation: String, context: Pyth
                 raise Error("TypeError: complex scalar warnings require NumPy's native exception metadata")
             var category = py_get(py_fields(exceptions), "ComplexWarning")
             training_scalar_warning("Casting complex values to real discards the imaginary part", category, operation, context)
-            return training_scalar_number(value.real, operation, context, integer, depth + 1)
-    # Only verified native scalar slots reach CPython's public unboxing API.
-    # Native long-double slots preserve the platform's supported conversion
-    # to Python double without reading private scalar storage or changing ABI.
+            return native_scalar_buffer(value).to_python_number(integer)
+        if kind == "b" or kind == "i" or kind == "u" or kind == "f":
+            return native_scalar_buffer(value).to_python_number(integer)
+    # Native builtin/text/temporal branches retain their existing parser and
+    # error contract. Primitive NumPy numeric storage returned above without
+    # invoking its numeric conversion slots.
     ref cpy = Python().cpython()
     var pointer = cpy.lib.get_function[PyObjectPtr]("PyNumber_Long" if integer else "PyNumber_Float")(value._obj_ptr)
     if not pointer:
