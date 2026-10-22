@@ -887,6 +887,23 @@ def frombytes(raw, dtype, shape):
 # --------------------------------------------------------------- scanning
 
 
+def shape_of(obj):
+    """The shape of an array-like WITHOUT converting it: `.shape` when the
+    object has one (ndarray, Array, memoryview), the nesting of a list or
+    tuple otherwise. Used only to raise an estimator's own message before
+    the converters here would raise their generic one."""
+    shape = getattr(obj, "shape", None)
+    if shape is not None:
+        return tuple(shape)
+    if isinstance(obj, (list, tuple)):
+        if obj and isinstance(obj[0], (list, tuple)):
+            return (len(obj), len(obj[0]))
+        return (len(obj),)
+    if hasattr(obj, "__len__"):
+        return (len(obj),)
+    return ()
+
+
 def all_finite(arr):
     """True when every element of a float32/float64 Array is finite.
 

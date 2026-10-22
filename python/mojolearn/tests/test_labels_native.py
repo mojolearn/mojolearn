@@ -24,7 +24,7 @@ from mojolearn._labels import (
 
 try:
     from mojolearn._buffer import _native
-    _native("encode_labels_f32")
+    _native("prepare_targets")
     _native("argmax_rows_f32")
     _native("gather_i64")
 except ImportError as exc:  # pragma: no cover - build state
