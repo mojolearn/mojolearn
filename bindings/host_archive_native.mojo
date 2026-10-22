@@ -185,16 +185,29 @@ def host_archive_decomposition(cls: PythonObject, arrays: PythonObject, pca: Boo
     return model
 
 
-def host_archive_cd(cls: PythonObject, arrays: PythonObject, lasso: Bool,
+def host_archive_held(arrays: PythonObject, name: String, dtype: String, count: Int, path: PythonObject,
+                      context: PythonObject) raises -> PythonObject:
+    """An exact-dtype field vector of `count` elements, refused as the
+    loaders refused it: `{path!r} {name} holds {n} fields, {count} are needed`."""
+    var value = _archive_exact(arrays, name, dtype, context)
+    if Int(py=value.size) != count:
+        raise Error(host_archive_where(path, context) + " " + name + " holds " + String(Int(py=value.size))
+                    + " fields, " + String(count) + " are needed")
+    return value
+
+
+def host_archive_cd(cls: PythonObject, arrays: PythonObject, lasso: Bool, path: PythonObject,
                     context: PythonObject) raises -> PythonObject:
-    var meta = host_archive_count(arrays, "meta", "<i8", 4, context, True)
-    var hyper = host_archive_count(arrays, "hyper", "<f8", 3, context, True)
+    # The refusals keep ElasticNet.load's and Lasso.load's wording and order;
+    # the fields follow the constructor's, then the loader's, assignments.
+    var where = host_archive_where(path, context)
+    var meta = host_archive_meta(arrays, "meta", 4, path, context)
+    var hyper = host_archive_held(arrays, "hyper", "<f8", 3, path, context)
     var ratio = classical_f64(hyper, 1)
     if lasso and ratio != 1.0:
-        raise Error("a saved Lasso must carry l1_ratio 1.0")
+        raise Error(where + " carries l1_ratio " + _archive_builtin_repr(PythonObject(ratio)) + ", a Lasso is 1.0")
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
-    host_archive_mode(arrays, fields, context)
     py_setitem(fields, "alpha", classical_f64(hyper, 0))
     py_setitem(fields, "l1_ratio", ratio)
     py_setitem(fields, "fit_intercept", classical_i64(meta, 1) != 0)
@@ -207,10 +220,14 @@ def host_archive_cd(cls: PythonObject, arrays: PythonObject, lasso: Bool,
     py_setitem(fields, "warm_start", False)
     py_setitem(fields, "positive", False)
     py_setitem(fields, "random_state", PythonObject(None))
+    host_archive_mode(arrays, fields, context)
     var nf = classical_i64(meta, 0)
     py_setitem(fields, "n_features_in_", nf)
-    py_setitem(fields, "coef_", host_archive_shape(arrays, "coef", "<f4", Python.tuple(nf), context))
-    var intercept = host_archive_count(arrays, "intercept", "<f8", 1, context, True)
+    var coef = _archive_exact(arrays, "coef", "<f4", context)
+    if Int(py=coef.ndim) != 1 or Int(py=coef.size) != nf:
+        raise Error(where + " coef does not match n_features_in_")
+    py_setitem(fields, "coef_", coef)
+    var intercept = host_archive_sized(arrays, "intercept", "<f8", 1, where + " intercept must hold one value", context)
     py_setitem(fields, "intercept_", classical_f64(intercept, 0))
     py_setitem(fields, "n_iter_", classical_i64(meta, 3))
     return model
@@ -1696,7 +1713,7 @@ def host_archive_build(path: PythonObject, context: PythonObject,
     elif fmt == "mojolearn-pca-1" or fmt == "mojolearn-tsvd-1":
         model = host_archive_decomposition(cls, arrays, fmt == "mojolearn-pca-1", path, context)
     elif fmt == "mojolearn-cd-1":
-        model = host_archive_cd(cls, arrays, String(estimator) == "Lasso", context)
+        model = host_archive_cd(cls, arrays, String(estimator) == "Lasso", path, context)
     elif fmt == "mojolearn-kernel-ridge-1" or fmt == "mojolearn-nystroem-1" or fmt == "mojolearn-rbf-sampler-1":
         model = host_archive_kernel(cls, arrays, 0 if fmt == "mojolearn-kernel-ridge-1" else (1 if fmt == "mojolearn-nystroem-1" else 2), context)
     elif fmt == "mojolearn-scaler-1" and String(estimator) == "MinMaxScaler":

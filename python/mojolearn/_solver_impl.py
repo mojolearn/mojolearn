@@ -12,12 +12,11 @@ These classes are not re-exported from `mojolearn/__init__.py` by this file;
 whoever owns that file decides the public namespace.
 """
 
-from . import _mojolearn_solver, _serialize
-from ._array import Array
+from . import _mojolearn_solver, _native_archive_bridge
 from ._mode import ParamsMixin
 from ._buffer import addr, addr_ro, as_f32_c, as_f32_colmajor, empty, zeros, _materialize
 from ._sample_weight import check_sample_weight
-from .linear_model import _check_saved_by, _r2_host, _restore_mode, _saved_mode, _shape_of
+from .linear_model import _r2_host, _shape_of
 
 # cuML's `loss_funct` / DistanceType style codes this surface uses.
 _SELECTION_SHUFFLE = {"cyclic": 0, "random": 1}
@@ -25,6 +24,12 @@ _SELECTION_SHUFFLE = {"cyclic": 0, "random": 1}
 #: The saved-model format of ElasticNet and Lasso (lane/inference-linear-svm,
 #: 2026-09-15): `mojolearn.host_model(path)` predicts from it on a CPU.
 _CD_FORMAT = "mojolearn-cd-1"
+
+# The compiled saved-model owner, connected once at import: `save` and
+# `load` are one native call each (bindings/archive_schema_native.mojo
+# writes the schema registered below; host_archive_native.mojo builds the
+# loaded model).
+_ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
 
 # THE IMPORT-TIME MODE GUARD THAT STOOD HERE IS DELETED. DEVIATION 1931,
@@ -490,21 +495,7 @@ class ElasticNet(ParamsMixin):
         RuntimeError
             If the model is not fitted.
         """
-        if not hasattr(self, "coef_"):
-            raise RuntimeError("this estimator is not fitted yet")
-        arrays = {
-            "format": _CD_FORMAT,
-            "estimator": type(self).__name__,
-            "numeric_mode": _saved_mode(self),
-            "coef": self.coef_,
-            "intercept": Array.from_list([float(self.intercept_)], "<f8"),
-            "hyper": Array.from_list(
-                [float(self.alpha), float(self.l1_ratio), float(self.tol)], "<f8"),
-            "meta": Array.from_list(
-                [int(self.n_features_in_), 1 if self.fit_intercept else 0,
-                 int(self.max_iter), int(self.n_iter_)], "<i8"),
-        }
-        return _serialize.write_npz(path, arrays)
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -528,32 +519,7 @@ class ElasticNet(ParamsMixin):
             If the file was saved by a different estimator or its fields do
             not match.
         """
-        arrays = _serialize.read_npz(path, _CD_FORMAT)
-        _check_saved_by(arrays, path, cls)
-        meta = _serialize.exact(arrays, "meta", "<i8")
-        if meta.size != 4:
-            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 4 are needed")
-        hyper = _serialize.exact(arrays, "hyper", "<f8")
-        if hyper.size != 3:
-            raise ValueError(f"mojolearn: {path!r} hyper holds {hyper.size} fields, 3 are needed")
-        kwargs = dict(alpha=float(hyper[0]), fit_intercept=bool(int(meta[1])),
-                      max_iter=int(meta[2]), tol=float(hyper[2]))
-        if not issubclass(cls, Lasso):
-            kwargs["l1_ratio"] = float(hyper[1])
-        elif float(hyper[1]) != 1.0:
-            raise ValueError(f"mojolearn: {path!r} carries l1_ratio {float(hyper[1])}, a Lasso is 1.0")
-        obj = cls(**kwargs)
-        _restore_mode(obj, arrays)
-        obj.n_features_in_ = int(meta[0])
-        obj.coef_ = _serialize.exact(arrays, "coef", "<f4")
-        if obj.coef_.ndim != 1 or obj.coef_.size != obj.n_features_in_:
-            raise ValueError(f"mojolearn: {path!r} coef does not match n_features_in_")
-        intercept = _serialize.exact(arrays, "intercept", "<f8")
-        if intercept.size != 1:
-            raise ValueError(f"mojolearn: {path!r} intercept must hold one value")
-        obj.intercept_ = float(intercept[0])
-        obj.n_iter_ = int(meta[3])
-        return obj
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
     # `linear_model._r2_host` (formerly a sequential float64 host reduction,
     # DEVIATION 2365).
@@ -635,3 +601,20 @@ class Lasso(ElasticNet):
             precompute=precompute, copy_X=copy_X, warm_start=warm_start,
             positive=positive, random_state=random_state,
         )
+
+
+# The file: `coef_` as fitted, the intercept <f8, `hyper` <f8 [alpha,
+# l1_ratio, tol] and `meta` <i8 [n_features_in_, fit_intercept, max_iter,
+# n_iter_]. Lasso registers the same schema so its file names Lasso and
+# its load applies the l1_ratio refusal.
+_CD_SCHEMA = (
+    _native_archive_bridge.fitted("coef_"),
+    *_native_archive_bridge.head(_CD_FORMAT),
+    ("array", "coef", "coef_"),
+    ("f8", "intercept", (("float", "intercept_"),)),
+    ("f8", "hyper", (("float", "alpha"), ("float", "l1_ratio"), ("float", "tol"))),
+    ("i8", "meta", (("int", "n_features_in_"), ("bool", "fit_intercept"),
+                    ("int", "max_iter"), ("int", "n_iter_"))),
+)
+_native_archive_bridge.register(ElasticNet, _CD_FORMAT, _CD_SCHEMA)
+_native_archive_bridge.register(Lasso, _CD_FORMAT, _CD_SCHEMA)
