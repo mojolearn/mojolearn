@@ -138,14 +138,14 @@ def sequence_long_float(bits: UInt32, destination: Int, width: Int, little: Bool
 
 
 def sequence_cast_leaf(source: Int, destination: Int, count: Int, stride: Int, offset: Int,
-                       kind: String, width: Int, little: Bool, software_half: Bool = False) raises -> Int:
+                       kind: String, width: Int, little: Bool, software_half: Bool = False, print_mode: Int = 2147483647) raises -> Int:
     var input = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=source)
     var status = 0
     for index in range(count):
         var bits = input[index]
         var address = destination + index * stride + offset
         if kind == "U" or kind == "S":
-            sequence_write_text(bits, address, width, kind == "U", little)
+            sequence_write_text(bits, address, width, kind == "U", little, print_mode)
         elif kind == "V":
             var target = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=address)
             for i in range(width):

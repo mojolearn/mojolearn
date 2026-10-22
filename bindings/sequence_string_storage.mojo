@@ -152,8 +152,8 @@ struct SequenceStringStorage(Movable):
         _ = self.capsule^
         _ = self.module^
 
-    def write(self, bits: UInt32, destination: Int) raises:
-        var text = sequence_float_text(bits)
+    def write(self, bits: UInt32, destination: Int, print_mode: Int) raises:
+        var text = sequence_float_text(bits, print_mode)
         var data = StringStoragePointer(unsafe_from_address=Int(text.unsafe_ptr()))
         if self.pack(self.allocator, StringStoragePointer(unsafe_from_address=destination), data, c_size_t(text.byte_length())) < 0:
             sequence_array_exception("MemoryError", "native string output could not pack UTF-8 data")
@@ -225,7 +225,7 @@ def sequence_string_nan_info(dtype: PythonObject, classes: PythonObject, context
 
 
 def sequence_string_leaf(source: Int, destination: Int, count: Int, stride: Int, offset: Int,
-                         dtype: PythonObject, classes: PythonObject, settings: PythonObject, context: PythonObject, initial_status: Int) raises -> Int:
+                         dtype: PythonObject, classes: PythonObject, settings: PythonObject, context: PythonObject, initial_status: Int, print_mode: Int) raises -> Int:
     var storage = SequenceStringStorage(dtype, context)
     var missing = sequence_string_nan_info(dtype, classes, context)
     var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=source)
@@ -245,6 +245,6 @@ def sequence_string_leaf(source: Int, destination: Int, count: Int, stride: Int,
                 # Suppress that intermediate native error without swallowing
                 # callback-admission failures or altering warning delivery.
                 sequence_array_report(SEQ_CAST_INVALID, settings, context, "equal", True)
-        storage.write(words[i], destination + i * stride + offset)
+        storage.write(words[i], destination + i * stride + offset, print_mode)
     _ = storage^
     return status

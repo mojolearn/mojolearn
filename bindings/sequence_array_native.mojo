@@ -7,6 +7,7 @@ from std.sys.info import CompilationTarget
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.classical_attributes import classical_connect_numpy
 from core.sequence_array_cast import sequence_cast_leaf, sequence_wide_word, sequence_signaling, SEQ_CAST_INVALID
+from bindings.sequence_print_options import sequence_print_mode
 from bindings.sequence_array_warnings import sequence_array_errstate, sequence_array_report
 from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.sequence_dtype_native import sequence_dtype_classes, sequence_dtype_instance, sequence_dtype_normalize, sequence_dtype_allocation_shape
@@ -168,10 +169,13 @@ def sequence_array_cast(source: PythonObject, requested: PythonObject, context: 
     var destination = sequence_array_address(result)
     var status = 0
     var reports_status = False
+    var print_mode = -1
     for i in range(len(leaves)):  # driver-loop: over admitted native output field layouts
         var leaf = leaves[i]
         var kind = String(leaf[0])
         var width = Int(py=leaf[1])
+        if print_mode == -1 and (kind == "S" or kind == "U" or kind == "T"):
+            print_mode = sequence_print_mode(context, sequence_array_release(context))
         # The combined structured transfer reports flags when ANY leaf can
         # report them. Object boxing still sets invalid status for a later
         # numeric/String leaf, even when an object-only cast suppresses it.
@@ -184,7 +188,7 @@ def sequence_array_cast(source: PythonObject, requested: PythonObject, context: 
         if kind == "O":
             status |= sequence_object_leaf(start, destination, count, stride, Int(py=leaf[3]))
         elif kind == "T":
-            status = sequence_string_leaf(start, destination, count, stride, Int(py=leaf[3]), leaf[4], classes, settings, context, status)
+            status = sequence_string_leaf(start, destination, count, stride, Int(py=leaf[3]), leaf[4], classes, settings, context, status, print_mode)
         else:
             var software_half = False
             comptime if CompilationTarget.has_neon():
@@ -194,7 +198,7 @@ def sequence_array_cast(source: PythonObject, requested: PythonObject, context: 
                 # status; this is a dtype/version contract, not a shape rule.
                 if kind == "f" and width == 2:
                     software_half = sequence_array_release(context) < 204
-            status |= sequence_cast_leaf(start, destination, count, stride, Int(py=leaf[3]), kind, width, Bool(py=leaf[2]), software_half)
+            status |= sequence_cast_leaf(start, destination, count, stride, Int(py=leaf[3]), kind, width, Bool(py=leaf[2]), software_half, print_mode)
     _ = source_owner^
     if reports_status:
         sequence_array_report(status, settings, context)
