@@ -2,6 +2,7 @@
 # Saved-state layout copies preserve every stored float32 bit, including
 # NaN payloads. They perform no numerical normalization or validation.
 from std.builtin.sort import sort
+from core.hotpath_impl import reduce_stat, HP_F64, HP_SUM
 
 
 def host_archive_copy_f32(source: Int, stride0: Int, stride1: Int, rows: Int, cols: Int,
@@ -24,3 +25,20 @@ def host_archive_unique_i32(source: Int, stride: Int, count: Int) -> List[Int32]
         if i == 0 or labels[i] != labels[i - 1]:
             result.append(labels[i])
     return result^
+
+
+def host_archive_mean_f64(source: Int, count: Int) raises -> Float64:
+    # Reuse Array.sum's ascending binary64 reduction and sabotage arm.
+    return reduce_stat(source, HP_F64, count, HP_SUM).f / Float64(count)
+
+
+def host_archive_reorder_f32(source: Int, shape: List[Int], strides: List[Int], count: Int,
+                             destination: Int):
+    var dst = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=destination)
+    for i in range(count):
+        var index = i
+        var offset = 0
+        for d in range(len(shape) - 1, -1, -1):
+            offset += (index % shape[d]) * strides[d]
+            index //= shape[d]
+        dst[i] = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=source + offset)[0]

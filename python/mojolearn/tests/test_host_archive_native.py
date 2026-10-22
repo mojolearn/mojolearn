@@ -132,6 +132,15 @@ def _cases():
             eigenvalues=_f32([1, 2]), eigenvectors=_f32([[1, 0], [0, 1], [1, 1]]), diag=_f32([1, 1, 2]),
             centroids=_f32([[1, 0], [0, 1]]), labels=np.asarray([0, 1, 0], dtype="<i4"),
             x=_f32([[1, 2], [3, 4], [5, 6]]))),
+        "GaussianProcessRegressor": ("mojolearn-gp-1", dict(
+            ints=_i64([2, 0, 1, 1]), reals=_f64([2**-20, .5, 1.5, -3.25]),
+            X_train=_f32([[1, 2], [3, 4]]), L=_f32([1, 0, .25, 1]), alpha=_f32([.5, -.5]),
+            kinds=np.asarray([0], dtype="<i4"), params=_f64([1]), ls_len=np.asarray([1], dtype="<i4"), ls=_f64([2]))),
+        "GaussianProcessClassifier": ("mojolearn.gpc.v1", dict(
+            meta=_i64([2, 2, 1, 100, 1, 2]), kinds=np.asarray([0], dtype="<i4"), kparams=_f32([1]),
+            ls_len=np.asarray([1], dtype="<i4"), ls=_f32([2]), x=_f32([[1, 2], [3, 4]]),
+            classes=np.asarray(["cold", "warm"]), y=_f32([[0, 1]]), L=_f32([[1, 0, .25, 1]]),
+            pi=_f32([[.25, .75]]), wsr=_f32([[.5, .5]]), lml=_f64([-3.25]), n_iter=_i64([5]), nb=_i64([32]))),
         "UMAP": ("mojolearn-umap-1", dict(
             meta=_i64([3, 2, 0, 7, 5, 1, 1]), controls=_f32([.1, 1., 1., 1., 1., 1.]),
             init="spectral", metric="euclidean", training=np.arange(12, dtype="<f4").reshape(4, 3),
@@ -158,6 +167,8 @@ def _state(value):
     if isinstance(value, np.ndarray):
         return ("Array", value.dtype.str, value.shape,
                 "F" if value.flags.f_contiguous and not value.flags.c_contiguous else "C", value.tobytes())
+    if type(value).__name__ in ("_SavedKernel", "_BinaryLaplace"):
+        return (type(value).__module__, type(value).__name__, _state(vars(value)))
     if type(value) is dict:
         return {key: _state(item) for key, item in value.items()}
     if type(value) in (tuple, list):
@@ -431,6 +442,39 @@ def test_saved_embedding_configuration_refusals(tmp_path, name, changes, error):
         getattr(host, name).load.__func__(cls, path)
     audit = audit_native_call(cls.load, path)
     assert isinstance(audit.exception, error), audit.report()
+    report = audit.report()
+    assert not any(report[key] for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads")), report
+
+
+@pytest.mark.parametrize("name,changes", [
+    ("GaussianProcessRegressor", {"ints": _i64([2, 0, 0, 0]), "ls_len": np.asarray([0], dtype="<i4"), "ls": _f64([1])}),
+    ("GaussianProcessClassifier", {"meta": _i64([2, 2, 3, 100, 1, 3]), "classes": np.asarray([1, 2, 3], dtype="<i8"),
+        "y": _f32([[0, 1], [1, 0], [0, 0]]), "L": np.asfortranarray(_f32([[1, 0, .25, 1]] * 3)),
+        "pi": _f32([[.25, .75]] * 3), "wsr": _f32([[.5, .5]] * 3),
+        "lml": _f64([-1e16, 1e16, -3.25]), "n_iter": _i64([5, 6, 7]), "nb": _i64([32, 32, 32])}),
+])
+def test_saved_gaussian_process_nodes_and_multiclass_fit_layout(tmp_path, name, changes):
+    path = _archive(tmp_path, name, override=changes)
+    cls = getattr(host, "Host" + name)
+    original = getattr(host, name).load.__func__(cls, path)
+    restored = audit_native_call(cls.load, path).assert_native()
+    assert _state(vars(restored)) == _state(vars(original))
+
+
+@pytest.mark.parametrize("name,changes", [
+    ("GaussianProcessRegressor", {"ls_len": np.asarray([2], dtype="<i4")}),
+    ("GaussianProcessRegressor", {"L": _f32([1, 2, 3])}),
+    ("GaussianProcessClassifier", {"meta": _i64([2, 2, 1, 0, 1, 2])}),
+    ("GaussianProcessClassifier", {"classes": np.asarray([1, 2, 3], dtype="<i8")}),
+    ("GaussianProcessClassifier", {"y": _f32([0, 1])}),
+])
+def test_saved_gaussian_process_schema_refusals(tmp_path, name, changes):
+    path = _archive(tmp_path, name, override=changes)
+    cls = getattr(host, "Host" + name)
+    with pytest.raises(ValueError):
+        getattr(host, name).load.__func__(cls, path)
+    audit = audit_native_call(cls.load, path)
+    assert isinstance(audit.exception, ValueError), audit.report()
     report = audit.report()
     assert not any(report[key] for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads")), report
 
