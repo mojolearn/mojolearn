@@ -90,3 +90,30 @@ def test_save_consumes_exact_native_scalar_conversion_bytes(dtype, bits, array):
     # separate interface. Consume the saved bytes, not just error/truth state.
     with np.load(io.BytesIO(output.getvalue()), allow_pickle=False) as saved:
         assert saved['bandwidth'].tobytes() == expected
+
+
+@pytest.mark.parametrize('value', ['negative_zero', 'adjacent_half', 'smallest_normal'])
+def test_save_consumes_non_native_longdouble_scalar_bytes(value):
+    from mojolearn.tests.test_host_density_save_native import _prepared
+
+    scalar = (np.longdouble('-0') if value == 'negative_zero' else
+              np.nextafter(np.longdouble('.5'), np.longdouble(1)) if value == 'adjacent_half' else
+              np.finfo(np.longdouble).tiny)
+    supplied = np.asarray(scalar, dtype=np.dtype('g').newbyteorder('>'))
+    expected = struct.pack('<d', float(supplied))
+    before = supplied.tobytes()
+    model = _prepared('kde')
+    model.bandwidth = supplied
+    output = io.BytesIO()
+    assert audit_native_call(model.save, output).assert_native() is output
+    assert model.bandwidth is supplied and supplied.tobytes() == before
+    with np.load(io.BytesIO(output.getvalue()), allow_pickle=False) as saved:
+        assert saved['bandwidth'].tobytes() == expected
+
+
+@pytest.mark.parametrize('dtype,value', [('g', '-0'), ('g', '.5'), ('G', 1j), ('G', 0j)])
+def test_fit_truth_decodes_non_native_extended_components(dtype, value):
+    supplied = np.asarray(value, dtype=np.dtype(dtype).newbyteorder('>'))
+    before = supplied.tobytes()
+    _pair(_x(), bootstrap=supplied)
+    assert supplied.tobytes() == before
