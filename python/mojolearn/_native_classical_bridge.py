@@ -128,6 +128,7 @@ def _state_context():
     # glue: connect compiled entries and exact native buffer classes once
     from types import BuiltinFunctionType, MethodDescriptorType, WrapperDescriptorType, ModuleType, MemberDescriptorType
     import _codecs
+    import unicodedata
     import io
     import os
     import sys
@@ -172,7 +173,7 @@ def _state_context():
                 raise TypeError(f"classical archives require native {cls.__name__}.{name}")
             methods[name] = entry
         archive_methods.append(methods)
-    codec_entries = (zlib.crc32, zlib.decompress, _codecs.utf_32_le_encode, _codecs.utf_32_le_decode,
+    codec_entries = (zlib.crc32, zlib.decompress, unicodedata.lookup, _codecs.utf_32_le_encode, _codecs.utf_32_le_decode,
                      _codecs.unicode_escape_decode)
     if _lzma is not None:
         codec_entries += (_lzma._decode_filter_properties,)
@@ -203,6 +204,8 @@ def _state_context():
                    archive_path_member_type=MemberDescriptorType,
                    archive_crc32=zlib.crc32, archive_utf32_encode=_codecs.utf_32_le_encode,
                    archive_utf32_decode=_codecs.utf_32_le_decode, archive_literal_decode=_codecs.unicode_escape_decode,
+                   archive_unicode_lookup=unicodedata.lookup, archive_unicode_key_error=KeyError,
+                   archive_unicode_decode_error=UnicodeDecodeError, archive_unicode_encode_error=UnicodeEncodeError,
                    archive_inflate=zlib.decompress, archive_bzip=None if _bz2 is None else _bz2.BZ2Decompressor,
                    archive_lzma=None if _lzma is None else _lzma.LZMADecompressor,
                    archive_lzma_properties=None if _lzma is None else _lzma._decode_filter_properties,
