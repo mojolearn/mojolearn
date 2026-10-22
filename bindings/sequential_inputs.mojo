@@ -4,6 +4,7 @@
 # serialization are host ABI work; existing kernels still own model math.
 from std.memory import bitcast
 from std.python import Python, PythonObject
+from bindings.native_buffer_owner import native_buffer_view
 from bindings.py_balanced import py_call, py_type, py_get
 from core.sequential_inputs_impl import sequence_widen_halves, sequence_narrow_halves
 from gemm.f16_widen import f16_bits_to_f32
@@ -44,7 +45,7 @@ def _promote(mut kind: String, mut size: Int, incoming: String, width: Int) rais
 
 def _buffer(value: PythonObject, context: PythonObject, samples: Bool) raises -> PythonObject:
     var b = Python.import_module("builtins")
-    var view = py_call(b.memoryview, value)
+    var view = native_buffer_view(value)
     if samples and Int(py=view.ndim) > 2 and not Bool(py=view.c_contiguous):
         raise Error("X with more than two dimensions must be C-contiguous")
     var format = view.format
@@ -106,7 +107,7 @@ def _leaf_shape(shape: PythonObject, depth: Int, mut dims: List[Int], mut leaf_d
 def _array_values(value: PythonObject, depth: Int, mut dims: List[Int], mut values: PythonObject,
                   mut kind: String, mut size: Int, mut leaf_depth: Int, context: PythonObject) raises:
     var b = Python.import_module("builtins")
-    var view = py_call(b.memoryview, value)
+    var view = native_buffer_view(value)
     _leaf_shape(view.shape, depth, dims, leaf_depth)
     var dtype = value.dtype
     var incoming = String(dtype.kind)

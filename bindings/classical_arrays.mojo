@@ -10,6 +10,7 @@
 # The kernels see the same element values either way, so both installs
 # compute the same bits.
 from std.python import Python, PythonObject
+from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
 from bindings.py_balanced import py_call, py_type, py_get, py_setattr
 from core.cast_in import cast_in_kind, NPY_HALF, NPY_FLOAT, NPY_DOUBLE
 from core.classical_arrays_impl import classical_cast_rows, classical_check_weights
@@ -83,11 +84,11 @@ def classical_wrap_array(store: PythonObject, shape: PythonObject, typestr: Stri
     var strides = Python.list()
     for k in range(rank):  # driver-loop: over array rank metadata
         py_call(strides.append, steps[k])
-    var array = py_call(b.object.__new__, context["array_class"])
+    var array = native_storage_allocate(context["array_class"])
     py_setattr(array, "_store", store)
     py_setattr(array, "_base", PythonObject(None))
     py_setattr(array, "_pin", PythonObject(None))
-    py_setattr(array, "_mv", py_call(b.memoryview, store))
+    py_setattr(array, "_mv", native_buffer_view(store))
     py_setattr(array, "_addr", py_call(store.buffer_info)[0])
     py_setattr(array, "_readonly", PythonObject(False))
     py_setattr(array, "shape", py_call(b.tuple, shape))
@@ -165,7 +166,7 @@ def classical_input(value: PythonObject, context: PythonObject, name: String = "
         return value
     var b = Python.import_module("builtins")
     if py_type(value) is b.memoryview or py_type(value) is context["array_type"] or py_type(value) is b.bytearray:
-        var view = py_call(b.memoryview, value)
+        var view = native_buffer_view(value)
         var typestr = _buffer_typestr(view, name)
         # memoryview.tobytes packs any strides in C order, in C.
         var store = py_call(context["array_type"], PythonObject(_store_code(typestr)), py_call(view.tobytes, "C"))
@@ -232,7 +233,7 @@ def classical_c_bytes(value: PythonObject, name: String, context: PythonObject) 
         if not classical_c_order(value, context):
             raise Error("TypeError: " + name + " must be a C-ordered Array to be saved without NumPy")
         return b.bytes() if Int(py=value.nbytes) == 0 else py_call(value._mv.cast, "B")
-    var view = py_call(b.memoryview, value)
+    var view = native_buffer_view(value)
     if Int(py=value.nbytes) == 0:
         return b.bytes()
     return py_call(view.cast, "B") if Bool(py=value.flags.c_contiguous) else py_call(view.tobytes, "C")
