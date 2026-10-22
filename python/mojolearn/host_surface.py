@@ -1619,7 +1619,7 @@ FAMILIES = (
             "native_codec_call", "native_process_call", "native_transport_call",
             "neural_prefill_call", "parallel_byte_call", "parallel_causal_call",
             "parallel_mlp_call", "parallel_neural_call", "pca_native_call",
-            "samba_config_call", "samba_native_call", "sequential_native_call",
+            "samba_config_call", "samba_native_call", "sequential_native_call", "xseq_native_call",
             "small_mlp_call", "standard_scaler_fit_native", "standard_scaler_native_call", "minmax_scaler_native_call", "maxabs_scaler_native_call", "robust_scaler_native_call", "arena_prog_native_call", "standard_scaler_attribute_call",
             "tokenizer_host_numeric_mode", "tokenizer_host_vendor",
             "tokenizer_host_column", "tokenizer_host_sabotage", "bpe_load",
