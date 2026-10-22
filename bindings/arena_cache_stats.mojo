@@ -29,12 +29,20 @@ def _attribute(value: PythonObject, name: String, default: PythonObject,
     if py_type(cls) is not b["type"]:
         raise Error("TypeError: cache metadata cannot invoke a custom metaclass")
     var ancestry = py_call(context["cache_type_mro"],cls)
+    var namespace = False
+    for i in range(len(ancestry)):  # driver-loop: a retained native namespace slot applies only to its own owner ancestry
+        namespace = namespace or ancestry[i] is context["cache_namespace_class"]
     var selected = PythonObject(None)
     var found = False
     for i in range(len(ancestry)):  # driver-loop: ordinary attribute lookup without calling Python hooks
         var mapping = _mapping(ancestry[i],context)
         var hook = py_get(mapping,"__getattribute__")
-        if (hook is not None and hook is not context["cache_object_getattribute"]) or py_get(mapping,"__getattr__") is not None:
+        # CPython 3.11 exposes a distinct native SimpleNamespace wrapper;
+        # newer CPython inherits object's wrapper. Both perform ordinary
+        # native lookup. Never admit arbitrary C descriptors by type/name,
+        # or a namespace wrapper transplanted onto an unrelated class.
+        var native_hook = hook is None or hook is context["cache_object_getattribute"] or (namespace and hook is context["cache_namespace_getattribute"])
+        if not native_hook or py_get(mapping,"__getattr__") is not None:
             raise Error("TypeError: cache metadata requires native attribute access; Python hooks cannot execute")
         if not found and py_contains(mapping,PythonObject(name)):
             selected = mapping[PythonObject(name)]

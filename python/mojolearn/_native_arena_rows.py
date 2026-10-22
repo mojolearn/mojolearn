@@ -4,7 +4,7 @@
 
 def connect():
     # glue: retain native entry and immutable slot identities during import
-    from types import BuiltinFunctionType, ModuleType, MemberDescriptorType
+    from types import BuiltinFunctionType, ModuleType, MemberDescriptorType, SimpleNamespace
     import struct
     import sys
     from ._native_classical_warnings import connect_warnings
@@ -45,6 +45,8 @@ def connect():
     context.update(cache_type_mro=vars(type)["__mro__"].__get__,
                    cache_type_dict=vars(type)["__dict__"].__get__,
                    cache_object_getattribute=object.__getattribute__, cache_member_type=MemberDescriptorType,
+                   cache_namespace_class=SimpleNamespace,
+                   cache_namespace_getattribute=SimpleNamespace.__getattribute__,
                    cache_local_type=type(_arena_io._LOCAL),
                    cache_local_getattribute=type(_arena_io._LOCAL).__getattribute__,
                    cache_attribute_error=AttributeError,

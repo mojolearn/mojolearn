@@ -77,6 +77,8 @@ class NativeWeakrefConnectionTests(unittest.TestCase):
     def test_cache_statistics_retain_native_attribute_and_thread_local_entries(self):
         context = connect()
         self.assertIs(context['cache_object_getattribute'], object.__getattribute__)
+        self.assertIs(context['cache_namespace_class'], SimpleNamespace)
+        self.assertIs(context['cache_namespace_getattribute'], SimpleNamespace.__getattribute__)
         self.assertIs(context['cache_member_type'], MemberDescriptorType)
         self.assertIs(context['cache_local_type'], type(threading.local()))
         self.assertIs(context['cache_local_getattribute'], type(threading.local()).__getattribute__)
