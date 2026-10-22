@@ -98,6 +98,11 @@ class NativeRuntimeAuditTests(unittest.TestCase):
         self.assertEqual(called, [])
         self.assertEqual(result.report()["unresolved_native_calls"],
                          [{"function": "fabs", "calls": 1}])
+        # Legacy refusal checks use these existing signals without consulting
+        # audit.passed or the newly added unresolved-origin detail.
+        self.assertEqual(result.report()["forbidden_native_calls"],
+                         [{"function": "<unresolved-origin>.fabs", "calls": 1}])
+        self.assertTrue(result.forbidden_native)
 
     def test_module_name_subclass_is_unresolved_without_string_hooks(self):
         called = []
