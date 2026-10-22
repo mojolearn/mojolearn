@@ -68,6 +68,15 @@ def scaler_refuse_infinite_columns(arena: F32P, stats_base: Int, d: Int) raises:
             raise Error("Scaler input contains infinity; only NaN may be missing")
 
 
+def scaler_refuse_infinite(x: F32P, size: Int, message: String) raises:
+    # Refuses an infinite entry of a fitted statistic (NaN is a missing
+    # value and passes): a column maximum |x| is infinite exactly when the
+    # column holds an infinity, so the d statistics decide for the n*d input.
+    for j in range(size):
+        if scaler_inf(x[j]):
+            raise Error(message)
+
+
 def scaler_feature_indices(dest: F32P, d: Int):
     for j in range(d):
         dest[j] = Float32(j)
