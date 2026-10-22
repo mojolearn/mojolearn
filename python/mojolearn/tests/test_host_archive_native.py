@@ -98,6 +98,17 @@ def _cases():
             initialization_method="estimated", components=np.arange(18, dtype="<f4"),
             sse=_f32([1, 2]), alpha=_f32([.2, .3]), beta=_f32([.1, .2]), gamma=_f32([.2, .4]),
             n_iter=np.asarray([4, 5], dtype="<i4"), criterion=np.asarray([0, 1], dtype="<i4"))),
+        "IVFIndex": ("mojolearn-ivf-flat-1", dict(
+            meta=_i64([3, 2, 2, 0, 1, 2, 10, 4]), centers=_f32([[1, 2], [3, 4]]),
+            center_norms=_f32([5, 25]), list_offsets=np.asarray([0, 2, 3], dtype="<i4"),
+            list_indices=np.asarray([0, 2, 1], dtype="<i4"), list_data=_f32([[1, 2], [5, 6], [3, 4]]))),
+        "HDBSCAN": ("mojolearn-hdbscan-2", dict(
+            ints=_i64([2, 1, 1, 2, 2, 3, 2, -1, 0, 1, 1]), reals=_f64([1., .25]),
+            metric="euclidean", cluster_selection_method="eom", raw_data=_f32([[1, 2], [3, 4], [5, 6]]),
+            core_distances=_f32([1, 2, 3]), labels=np.asarray([0, 0, -1], dtype="<i4"),
+            parents=np.asarray([3, 3, 3], dtype="<i4"), lambdas=_f32([1, 1, .5]), deaths=_f32([1, .5]),
+            selected_clusters=np.asarray([3], dtype="<i4"), index_into_children=np.asarray([0, 1, 2, 3], dtype="<i4"),
+            exemplar_idx=np.asarray([0], dtype="<i4"), exemplar_label_offsets=np.asarray([0, 1], dtype="<i4"))),
     }
 
 

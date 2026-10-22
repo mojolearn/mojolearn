@@ -618,6 +618,78 @@ def host_archive_holtwinters(cls: PythonObject, arrays: PythonObject, context: P
     return model
 
 
+def host_archive_ivf(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
+    var meta = host_archive_count(arrays, "meta", "<i8", 8, context, True)
+    var n = classical_i64(meta, 0)
+    var d = classical_i64(meta, 1)
+    var lists = classical_i64(meta, 2)
+    var metric = classical_i64(meta, 3)
+    if metric != 0 and metric != 1:
+        raise Error("unsupported saved IVF metric code")
+    var model = host_archive_object(cls, arrays, context)
+    var fields = sequential_fields(model)
+    host_archive_mode(arrays, fields, context)
+    py_setitem(fields, "n_lists", lists)
+    py_setitem(fields, "n_probes", classical_i64(meta, 4))
+    py_setitem(fields, "n_neighbors", classical_i64(meta, 5))
+    py_setitem(fields, "kmeans_n_iters", classical_i64(meta, 6))
+    py_setitem(fields, "metric", "sqeuclidean" if metric == 0 else "euclidean")
+    py_setitem(fields, "random_state", classical_i64(meta, 7))
+    py_setitem(fields, "centers_", host_archive_shape(arrays, "centers", "<f4", Python.tuple(lists, d), context))
+    py_setitem(fields, "center_norms_", host_archive_shape(arrays, "center_norms", "<f4", Python.tuple(lists), context))
+    py_setitem(fields, "list_offsets_", host_archive_shape(arrays, "list_offsets", "<i4", Python.tuple(lists + 1), context))
+    py_setitem(fields, "list_indices_", host_archive_shape(arrays, "list_indices", "<i4", Python.tuple(n), context))
+    py_setitem(fields, "list_data_", host_archive_shape(arrays, "list_data", "<f4", Python.tuple(n, d), context))
+    py_setitem(fields, "n_features_in_", d)
+    py_setitem(fields, "n_rows_", n)
+    py_setitem(fields, "n_lists_", lists)
+    py_setitem(fields, "metric_code_", metric)
+    return model
+
+
+def host_archive_hdbscan(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
+    var meta = host_archive_count(arrays, "ints", "<i8", 11, context, True)
+    var reals = host_archive_count(arrays, "reals", "<f8", 2, context, True)
+    var d = classical_i64(meta, 0)
+    var selected = classical_i64(meta, 1)
+    var condensed = classical_i64(meta, 4)
+    var edges = classical_i64(meta, 5)
+    var exemplars = classical_i64(meta, 10)
+    var raw = _archive_exact(arrays, "raw_data", "<f4", context)
+    if Int(py=raw.ndim) != 2 or Int(py=raw.shape[1]) != d or Int(py=raw.shape[0]) < 2:
+        raise Error("HDBSCAN raw_data shape does not match saved features")
+    var n = Int(py=raw.shape[0])
+    var model = host_archive_object(cls, arrays, context)
+    var fields = sequential_fields(model)
+    host_archive_mode(arrays, fields, context)
+    py_setitem(fields, "min_cluster_size", classical_i64(meta, 6))
+    var samples = classical_i64(meta, 7)
+    py_setitem(fields, "min_samples", PythonObject(None) if samples == -1 else PythonObject(samples))
+    py_setitem(fields, "cluster_selection_epsilon", classical_f64(reals, 1))
+    py_setitem(fields, "max_cluster_size", classical_i64(meta, 8))
+    py_setitem(fields, "metric", _archive_string(arrays, "metric", context))
+    py_setitem(fields, "alpha", classical_f64(reals, 0))
+    py_setitem(fields, "cluster_selection_method", _archive_string(arrays, "cluster_selection_method", context))
+    py_setitem(fields, "allow_single_cluster", classical_i64(meta, 9) != 0)
+    py_setitem(fields, "prediction_data", True)
+    py_setitem(fields, "n_features_in_", d)
+    py_setitem(fields, "labels_", host_archive_shape(arrays, "labels", "<i4", Python.tuple(n), context))
+    py_setitem(fields, "core_distances_", host_archive_shape(arrays, "core_distances", "<f4", Python.tuple(n), context))
+    py_setitem(fields, "n_clusters_", selected)
+    py_setitem(fields, "n_outliers_", classical_i64(meta, 2))
+    py_setitem(fields, "n_boruvka_rounds_", classical_i64(meta, 3))
+    py_setitem(fields, "n_condensed_clusters_", condensed)
+    py_setitem(fields, "_raw_data", raw)
+    var prediction = Python.dict(n_edges=edges, n_condensed=condensed, n_exemplars=exemplars)
+    var names = Python.tuple("parents", "lambdas", "deaths", "selected_clusters", "index_into_children", "exemplar_idx", "exemplar_label_offsets")
+    var dtypes = Python.tuple("<i4", "<f4", "<f4", "<i4", "<i4", "<i4", "<i4")
+    var sizes = Python.tuple(edges, edges, condensed, max(selected, 1), edges + 1, max(exemplars, 1), selected + 1)
+    for i in range(len(names)):  # driver-loop: seven saved prediction-data arrays
+        py_setitem(prediction, names[i], host_archive_shape(arrays, String(names[i]), String(dtypes[i]), Python.tuple(sizes[i]), context))
+    py_setitem(fields, "_prediction_data", prediction)
+    return model
+
+
 def host_archive_build(path: PythonObject, context: PythonObject,
                        requested_class: PythonObject = PythonObject(None)) raises -> PythonObject:
     # This deliberately separate private entry allows each schema to be
@@ -676,6 +748,10 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         model = host_archive_arima(cls, arrays, fmt == "mojolearn-arima-2", context)
     elif fmt == "mojolearn-holtwinters-1":
         model = host_archive_holtwinters(cls, arrays, context)
+    elif fmt == "mojolearn-ivf-flat-1":
+        model = host_archive_ivf(cls, arrays, context)
+    elif fmt == "mojolearn-hdbscan-2":
+        model = host_archive_hdbscan(cls, arrays, context)
     else:
         raise Error("native host archive schema has not been implemented: " + fmt + "/" + String(estimator))
     if requested_class is None:
