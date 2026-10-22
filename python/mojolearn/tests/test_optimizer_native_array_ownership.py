@@ -1,5 +1,8 @@
 """Native Array owners acquire storage without a mutable constructor callback."""
 import builtins
+import json
+import subprocess
+import sys
 
 import numpy as np
 import pytest
@@ -7,6 +10,48 @@ import pytest
 from mojolearn import _training_impl as T
 from mojolearn._array import Array
 from mojolearn._verify_native_runtime import audit_native_call
+
+
+@pytest.mark.parametrize("owner", ["storage", "layout"])
+def test_native_first_operation_keeps_connected_storage_owners(owner):
+    # A fresh interpreter is necessary: the lazy shared door otherwise
+    # already holds its storage/type references from an earlier test.
+    program = r'''
+import array, json, sys
+import numpy as np
+from mojolearn import _array, _training_impl as T
+from mojolearn._verify_native_runtime import audit_native_call
+source = np.ones((4, 3), dtype='f4')
+weight = np.ones(3, dtype='f4')
+array_class = _array.Array
+calls = []
+def hook(*args, **kwargs):
+    calls.append('array constructor')
+    raise AssertionError('mutable native storage constructor entered')
+class Replacement:
+    def __setattr__(self, name, value):
+        calls.append(name)
+        raise AssertionError('mutable Array layout setter entered')
+module, name, replacement = (array, 'array', hook) if sys.argv[1] == 'storage' else (_array, 'Array', Replacement)
+original = getattr(module, name)
+setattr(module, name, replacement)
+try:
+    audit = audit_native_call(T.rms_norm_forward, source, weight, 1e-5, numeric_mode='identical')
+finally:
+    setattr(module, name, original)
+result = audit.assert_native()
+assert not calls
+assert type(result) is array_class
+assert result._mv.obj is result._store
+assert np.asarray(result).shape == (4, 3)
+assert np.allclose(np.asarray(result), 1 / np.sqrt(1 + 1e-5), rtol=1e-6)
+print(json.dumps({'native': audit.report(), 'calls': calls, 'shape': result.shape}))
+'''
+    child = subprocess.run([sys.executable, "-c", program, owner], capture_output=True, text=True, timeout=90)
+    assert child.returncode == 0, (child.stdout, child.stderr)
+    report = json.loads(child.stdout.strip().splitlines()[-1])
+    assert report["native"]["passed"] and not report["calls"]
+    assert report["shape"] == [4, 3]
 
 
 @pytest.mark.parametrize("operation", ["rms", "linear", "construct", "accumulate"])
