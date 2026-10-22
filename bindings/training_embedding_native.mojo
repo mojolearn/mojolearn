@@ -9,6 +9,7 @@ from bindings.optimizer_public_door import TensorView, tensor_view, new_array, c
 from bindings.optimizer_device_native import shape_count
 from bindings.training_rms_native import rms_host_view
 from bindings.training_scalar_native import training_scalar_number
+from bindings.native_numpy_metadata import native_numpy_type
 from bindings.sequence_dtype_native import sequence_dtype_classes, sequence_dtype_instance, sequence_dtype_create
 from gemm.f16_widen import f16_bits_to_f32
 from core.training_embedding_inputs import embedding_pack, embedding_cast_refusal
@@ -86,7 +87,7 @@ def embedding_leaves(value: PythonObject, mut dims: List[Int], depth: Int,
     if opt_numpy(cls, context):
         # Only exact ndarray has a nonempty native shape; NumPy scalar shape
         # is empty and its scalar class is retained as a leaf below.
-        native_array = cls is context["modules"]["numpy"].ndarray
+        native_array = cls is native_numpy_type("ndarray", context)
     if cls is b.list or cls is b.tuple or native_array:
         if native_array and Int(py=value.ndim) == 0:
             raise Error("TypeError: iteration over a 0-d array")
@@ -138,19 +139,26 @@ def embedding_leaf_store(leaves: PythonObject, object_array: Bool, context: Pyth
         if not builtin and not numpy:
             raise Error("TypeError: embedding indices require native real numbers without Python conversion hooks")
         if numpy:
+            if cls is native_numpy_type("ndarray", context):
+                # An ndarray stored inside an object array is not a real
+                # scalar. Never invoke its conversion protocol as a leaf.
+                raise Error("TypeError: embedding object indices require real scalar values")
             var kind = String(value.dtype.kind)
             if kind != "b" and kind != "i" and kind != "u" and kind != "f":
                 raise Error("TypeError: embedding indices require real numbers")
         # The previous list door inferred f64 only from Python float or its
         # native float64 subtype. Object buffers with any NumPy real scalar
         # used f64; retain that distinct promotion before the int32 cast.
-        floating = floating or cls is b.float or (numpy and (object_array or Bool(py=py_call(b.isinstance, value, b.float))))
+        floating = floating or cls is b.float or (numpy and (object_array or cls is native_numpy_type("float64", context)))
     if not floating:
         for i in range(len(leaves)):  # driver-loop: preserve the list door's integer-leaf admission
             var cls = py_type(leaves[i])
             if cls is not b.int and cls is not b.bool:
                 raise Error("TypeError: embedding index lists require native Python integers or a floating-point leaf")
-    var store = embedding_native_call(context["array_type"], Python.tuple("d" if floating else "q", leaves), True)
+    var constructor = context["array_type"]
+    if constructor is not context["buffer_types"][2]:
+        raise Error("TypeError: embedding index storage requires the connected native array constructor")
+    var store = embedding_native_call(constructor, Python.tuple("d" if floating else "q", leaves), True)
     return Python.tuple(store, 1 if floating else 3)
 
 

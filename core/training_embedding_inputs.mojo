@@ -8,7 +8,7 @@ from core.hotpath_impl import _refused
 def embedding_pack(addr: Int, shape: List[Int], strides: List[Int], item: Int,
                    swapped: Bool, code: Int, count: Int) raises -> List[UInt8]:
     var width = 4 if code == 9 else item
-    if count > Int.MAX // width:
+    if count > 9223372036854775807 // width:
         raise Error("OverflowError: embedding input byte count exceeds the native address range")
     var result = List[UInt8](length=count * width, fill=0)
     var source = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr)

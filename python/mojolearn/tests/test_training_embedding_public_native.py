@@ -213,14 +213,16 @@ def test_public_embedding_refuses_python_hooks_before_execution(slot):
     assert not calls
 
 
-@pytest.mark.parametrize('entry', ['embedding_forward', 'embedding_backward', 'cast_elements'])
+@pytest.mark.parametrize('entry', ['embedding_forward', 'embedding_backward', 'cast_elements', 'array_type'])
 def test_public_embedding_refuses_replaced_native_entries(monkeypatch, entry):
     calls = []
     def hook(*args): calls.append(args)
-    if entry == 'cast_elements': monkeypatch.setitem(T._OPT_CONTEXT, 'embedding_index_cast', hook)
+    if entry == 'array_type': monkeypatch.setitem(T._OPT_CONTEXT, 'array_type', hook)
+    elif entry == 'cast_elements': monkeypatch.setitem(T._OPT_CONTEXT, 'embedding_index_cast', hook)
     else: monkeypatch.setitem(T._OPT_CONTEXT['bindings']['identical'], entry, hook)
     operation = 'embedding_backward' if entry == 'embedding_backward' else 'embedding_forward'
     source, ids = np.ones((4, 3), dtype='f4'), np.array([2, 0, 2, 1], dtype='i8')
+    if entry == 'array_type': ids = [2, 0, 2, 1]
     args = (source, ids, 4) if operation == 'embedding_backward' else (source, ids)
     assert_refused(audit_native_call(getattr(T, operation), *args, numeric_mode='identical'), TypeError)
     assert not calls
@@ -241,6 +243,34 @@ def test_public_embedding_does_not_reenter_python_preparation(monkeypatch, opera
 
 def test_public_embedding_backward_row_count_guard():
     assert_refused(audit_native_call(T.embedding_backward, np.ones((2, 3), dtype='f4'), [0], 4, numeric_mode='identical'), ValueError)
+
+
+@pytest.mark.parametrize('operation', ['embedding_forward', 'embedding_backward'])
+@pytest.mark.parametrize('layout', ['c', 'fortran', 'negative', 'strided', 'array'])
+def test_public_embedding_preserves_nonfinite_source_refusal(operation, layout):
+    source = np.ones((4, 3), dtype='f4')
+    source.view('u4')[0, 0] = 0x7f800001
+    if layout == 'fortran': source = np.asfortranarray(source)
+    elif layout == 'negative': source = source[::-1]
+    elif layout == 'strided':
+        base = np.ones((4, 6), dtype='f4')
+        base[:, ::2] = source
+        source = base[:, ::2]
+    elif layout == 'array': source = Array.from_buffer(source)
+    ids = np.array([2, 0, 2, 1], dtype='i4')
+    args = (source, ids, 4) if operation == 'embedding_backward' else (source, ids)
+    # Existing CPU and GPU entries reject every nonfinite source. Layout
+    # preparation must preserve that refusal, not publish NaN output bits.
+    assert_refused(audit_native_call(getattr(T, operation), *args, numeric_mode='identical'), Exception)
+
+
+@pytest.mark.parametrize('operation', ['embedding_forward', 'embedding_backward'])
+def test_public_embedding_object_indices_require_real_scalar_leaves(operation):
+    ids = np.empty(4, dtype=object)
+    ids[:] = [np.array(2), np.array(0), np.array(2), np.array(1)]
+    source = np.ones((4, 3), dtype='f4')
+    args = (source, ids, 4) if operation == 'embedding_backward' else (source, ids)
+    assert_refused(audit_native_call(getattr(T, operation), *args, numeric_mode='identical'), TypeError)
 
 
 def test_existing_embedding_primitive_contract():
