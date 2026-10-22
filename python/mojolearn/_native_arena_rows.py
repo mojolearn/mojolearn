@@ -59,8 +59,8 @@ def connect():
     # connection; the CPU facade legitimately has no resident device store.
     # Do not admit arbitrary builtin callables by their type alone.
     store_routes = []
-    for module_name, prefix in (("_mojolearn_x_prep", "x_prep"),
-                                ("_mojolearn_x_metrics", "x_metrics")):  # glue: fixed public resident-store ABI
+    for module_name, prefix in (("_mojolearn_x_prep", "x_prep"),  # glue: fixed import-time resident-store ABI
+                                ("_mojolearn_x_metrics", "x_metrics")):
         for mode in ("identical", "fast"):  # glue: fixed supported numeric-mode connections
             try:
                 module = _backend.binding(module_name, mode)
