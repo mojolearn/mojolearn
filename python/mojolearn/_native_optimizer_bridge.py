@@ -24,7 +24,8 @@ def connect(training):
     entries = ("optimizer_door_step", "optimizer_door_io", "optimizer_door_state",
                "optimizer_door_state_set", "optimizer_door_load_state", "optimizer_door_zero",
                "optimizer_door_clip", "optimizer_door_accumulate", "training_numeric_mode",
-               "train_dev_free", "train_dev_alloc", "train_dev_put", "train_dev_get", "accumulation_is_aligned", "optimizer_resident_download", "optimizer_resident_upload")
+               "train_dev_free", "train_dev_alloc", "train_dev_put", "train_dev_get",
+               "linear_forward", "linear_backward", "linear_forward_dev", "linear_backward_dev", "accumulation_is_aligned", "optimizer_resident_download", "optimizer_resident_upload")
     for mode in ("identical", "fast"):  # glue: connect every supported numeric-mode ABI at import
         try:
             binding = _backend.binding("_mojolearn_training", mode)
@@ -33,7 +34,7 @@ def connect(training):
                 try:
                     entry = getattr(binding, name)
                 except (ImportError, AttributeError, NotImplementedError):
-                    if name.startswith("train_dev_"):
+                    if name.startswith("train_dev_") or name in ("linear_forward_dev", "linear_backward_dev"):
                         continue
                     raise
                 if not isinstance(entry, BuiltinFunctionType):

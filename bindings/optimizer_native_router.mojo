@@ -2,6 +2,7 @@
 # Native public-operation routing, constructors, state preparation and resident IO.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
+from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.optimizer_public_words import optimizer_python_error
 from bindings.optimizer_admission import opt_guards, opt_owner, opt_value, opt_scalar, opt_schedule, opt_exact
@@ -14,6 +15,7 @@ from bindings.sequence_device_native import sequence_device_operation, sequence_
 from bindings.sequence_optimizer_native import sequence_optimizer_operation
 from bindings.optimizer_schedule_native import schedule_operation
 from bindings.optimizer_device_native import device_operation, device_new, device_entries, device_finalize, device_adopt, device_release_entry
+from bindings.training_linear_native import training_linear_operation
 
 
 def optimizer_entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -233,6 +235,8 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
     if operation == "set_params":
         return optimizer_set_params(owner, values[0], context)
     var entries = optimizer_entries(selected_mode, context)
+    if operation == "linear_forward" or operation == "linear_backward":
+        return training_linear_operation(operation, values, entries, context)
     if operation == "binding":
         return entries["module"]
     if operation == "raw_io":
@@ -315,4 +319,7 @@ def optimizer_native_c(py_self: PyObjectPtr, packed: PyObjectPtr) abi("C") -> Py
             raise Error("TypeError: optimizer_native expects five arguments")
         return optimizer_native(String(py=args[0]), args[1], args[2], args[3], args[4]).steal_data()
     except error:
+        var message = String(error)
+        if message.startswith("IndexError: "):
+            return raise_python_exception(Error(message[byte=12:]), ExceptionType("PyExc_IndexError"))
         return optimizer_python_error(error)
