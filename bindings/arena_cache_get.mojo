@@ -320,11 +320,7 @@ def _integer(value: PythonObject, context: PythonObject, depth: Int = 0) raises 
     raise Error("TypeError: cache integer metadata requires native scalar values without Python conversion hooks")
 
 
-def arena_cache_get(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = context["arena_native_types"]
-    var entries = _attribute(model,"_entries",PythonObject(None),True,context)
-    if py_type(entries) is not b["dict"]:
-        raise Error("TypeError: DeviceCache entries require a native dictionary")
+def arena_cache_key(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
     # The old method resolved self._key. Its ordinary fixed implementation is
     # now native; a subclass callback must be refused rather than ignored.
     var ancestry = py_call(context["cache_type_mro"],py_type(model))
@@ -332,7 +328,7 @@ def arena_cache_get(model: PythonObject, args: PythonObject, context: PythonObje
         var mapping = _mapping(ancestry[i],context)
         if py_contains(mapping,"_key"):
             if mapping["_key"] is not context["cache_key_descriptor"]:
-                raise Error("TypeError: DeviceCache.get cannot invoke a custom key callback")
+                raise Error("TypeError: DeviceCache cannot invoke a custom key callback")
             break
     ref cpy = Python().cpython()
     var fields_pointer = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetDict")(model._obj_ptr,PyObjectPtr())
@@ -342,22 +338,29 @@ def arena_cache_get(model: PythonObject, args: PythonObject, context: PythonObje
     var fields = PythonObject(from_owned=fields_pointer)
     _string_keys(fields,context)
     if py_contains(fields,"_key") and fields["_key"] is not context["cache_key_function"]:
-        raise Error("TypeError: DeviceCache.get cannot invoke an instance key callback")
-    var source = args[0]
+        raise Error("TypeError: DeviceCache cannot invoke an instance key callback")
     if not _itemsize_four(_attribute(source,"itemsize",PythonObject(4),False,context),context):
         raise Error("ValueError: DeviceCache: a store slot holds 4-byte words")
-    var scalar = context["cache_scalar_context"]
     var address = _integer(_attribute(source,"_addr",PythonObject(None),True,context),context)
     var size = _integer(_attribute(source,"size",PythonObject(None),True,context),context)
+    return py_call(context["arena_native_types"]["tuple"],Python.list(address,size))
+
+
+def arena_cache_get(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    var b = context["arena_native_types"]
+    var entries = _attribute(model,"_entries",PythonObject(None),True,context)
+    if py_type(entries) is not b["dict"]:
+        raise Error("TypeError: DeviceCache entries require a native dictionary")
+    var key = arena_cache_key(model,args[0],context)
     var keys = py_call(b["list"],entries)
     for i in range(len(keys)):  # driver-loop: prevent resident dictionary equality from dispatching to custom stored keys
         _hash_key(keys[i],context)
-    var key = py_call(b["tuple"],Python.list(address,size))
     var entry = py_get(entries,key)
     if entry is None:
         return PythonObject(None)
     if py_type(entry) is not b["tuple"] and py_type(entry) is not b["list"]:
         raise Error("TypeError: DeviceCache entries require native slot/owner sequences")
+    ref cpy = Python().cpython()
     var index = PythonObject(0)
     var pointer = cpy.lib.get_function[PyObjectPtr]("PyObject_GetItem")(entry._obj_ptr,index._obj_ptr)
     _ = index^
