@@ -3,7 +3,7 @@
 # kernels remain unchanged; this owner prepares all dense/sparse inputs,
 # retains buffers through their consumers and publishes the completed result.
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get
+from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_is_f32, classical_c_order, classical_kind
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact
 from bindings.sequential_admission import _ordinary_torch
@@ -13,6 +13,7 @@ from bindings.host_tree_native import host_tree_input, host_tree_wide
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
 from bindings.host_inference_features import host_inference_feature_names
 from bindings.host_inference_preparation import host_inference_pandas_finite
+from bindings.host_inference_scalars import host_inference_scalar
 from core.host_inference_impl import host_inference_raw_finite
 from core.host_sparse_impl import host_sparse_uint64_bound
 
@@ -32,6 +33,23 @@ def _kernel_entry(name: String, context: PythonObject) raises -> PythonObject:
     if py_type(entry) is not context["host_tree_entry_type"]:
         raise Error("TypeError: explicit CPU inference requires a fixed native entry")
     return entry
+
+
+def host_kernel_admit_state(fields: PythonObject, kind: String, context: PythonObject) raises:
+    var b = Python.import_module("builtins")
+    var name = "_params" if kind == "rbf_sampler" else "_kernel_params"
+    if py_contains(fields, name):
+        var params = fields[name]
+        if py_type(params) is not b.tuple or len(params) != (2 if kind == "rbf_sampler" else 5):
+            raise Error("TypeError: stored kernel parameters require their fixed native tuple")
+        for i in range(len(params)):  # driver-loop: declared scalar fields of the kernel ABI
+            host_inference_scalar(params[i], context)
+    var names = Python.tuple("n_targets_", "info_") if kind == "kernel_ridge" else (Python.tuple("sweeps_") if kind == "nystroem" else Python.tuple("sigma_", "scale_"))
+    for i in range(len(names)):  # driver-loop: per-model native scalar metadata
+        if py_contains(fields, names[i]):
+            host_inference_scalar(fields[names[i]], context)
+    if kind == "kernel_ridge" and py_contains(fields, "_squeeze"):
+        host_inference_scalar(fields["_squeeze"], context, True)
 
 
 def host_kernel_inference(model: PythonObject, fields: PythonObject, kind: String, source: PythonObject, context: PythonObject, public: Bool) raises -> PythonObject:
