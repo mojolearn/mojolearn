@@ -1194,7 +1194,7 @@ def host_archive_slice_words(array: PythonObject, offset: Int, count: Int, shape
     if offset < 0 or count < 0 or offset > Int(py=array.size) or count > Int(py=array.size) - offset:
         raise Error("saved model block lies outside its archive array")
     var result = classical_typed(shape, dtype, context)
-    host_archive_copy_words(classical_address(array) + offset * 4, count, classical_address(result))
+    host_archive_copy_words(Int(py=classical_address(array)) + offset * 4, count, Int(py=classical_address(result)))
     return result
 
 
@@ -1216,15 +1216,15 @@ def host_archive_svm_ovo(fields: PythonObject, arrays: PythonObject, features: I
     var support = host_archive_reshape_words(raw_support, Python.tuple(total), "<i4", context)
     var dual = host_archive_reshape_f32(raw_dual, Python.tuple(total), context)
     var vectors = host_archive_reshape_f32(raw_vectors, Python.tuple(total, features), context)
-    var rows = host_archive_support_bound(classical_address(support), total, features if String(fields["_hp_kernel"]) == "precomputed" else -1)
+    var rows = host_archive_support_bound(Int(py=classical_address(support)), total, features if String(fields["_hp_kernel"]) == "precomputed" else -1)
     var pairs = Python.list()
     var support_addresses = Python.list()
     var dual_addresses = Python.list()
     var layout_meta = Python.list(k, rows, pair_count)
     var out_bias = classical_typed(Python.tuple(pair_count), "<f4", context)
     var out_iterations = classical_typed(Python.tuple(pair_count), "<i4", context)
-    var bias_words = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=classical_address(out_bias))
-    var iteration_words = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=classical_address(out_iterations))
+    var bias_words = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out_bias)))
+    var iteration_words = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out_iterations)))
     var offset = 0
     var q = 0
     for i in range(k):  # driver-loop: saved one-vs-one class machines
@@ -1247,8 +1247,8 @@ def host_archive_svm_ovo(fields: PythonObject, arrays: PythonObject, features: I
             py_setitem(pair, "b", bias._mv[q])
             py_setitem(pair, "n_iter", iterations)
             _ = py_call(pairs.append, pair)
-            _ = py_call(support_addresses.append, classical_address(ps) if n else 0)
-            _ = py_call(dual_addresses.append, classical_address(pd) if n else 0)
+            _ = py_call(support_addresses.append, Int(py=classical_address(ps)) if n else 0)
+            _ = py_call(dual_addresses.append, Int(py=classical_address(pd)) if n else 0)
             _ = py_call(layout_meta.extend, Python.tuple(i, j, n))
             bias_words[q] = -Float32(Float64(py=bias._mv[q]))
             iteration_words[q] = Int32(iterations)
@@ -1264,14 +1264,14 @@ def host_archive_svm_ovo(fields: PythonObject, arrays: PythonObject, features: I
     if layout is None or py_type(layout) is not Python.import_module("types").BuiltinFunctionType:
         raise Error("ImportError: saved multiclass SVC needs the compiled CPU layout entry")
     var n_sv = Int(py=py_call(layout, support_addresses, dual_addresses, layout_meta,
-        Python.list(classical_address(public_support), classical_address(public_counts), classical_address(public_dual), cap)))
+        Python.list(Int(py=classical_address(public_support)), Int(py=classical_address(public_counts)), Int(py=classical_address(public_dual)), cap)))
     if n_sv < 0 or n_sv > cap:
         raise Error("saved SVC native layout returned an invalid row count")
     var result_support = host_archive_slice_words(public_support, 0, n_sv, Python.tuple(n_sv), "<i4", context)
     var result_dual = host_archive_slice_words(public_dual, 0, (k - 1) * n_sv, Python.tuple(k - 1, n_sv), "<f4", context)
     var result_vectors = classical_typed(Python.tuple(n_sv, features), "<f4", context)
-    host_archive_svc_gather(classical_address(support), total, classical_address(vectors), features,
-                            classical_address(result_support), n_sv, classical_address(result_vectors))
+    host_archive_svc_gather(Int(py=classical_address(support)), total, Int(py=classical_address(vectors)), features,
+                            Int(py=classical_address(result_support)), n_sv, Int(py=classical_address(result_vectors)))
     var shape = String(_archive_string(arrays, "shape", context))
     var ties = host_archive_count(arrays, "break_ties", "<i8", 1, context, True)
     py_setitem(fields, "decision_function_shape", "ovo" if shape == "ovo" else "ovr")
@@ -1364,8 +1364,8 @@ def host_archive_svm(cls: PythonObject, arrays: PythonObject, classifier: Bool,
             var pairs = Python.list()
             var a = classical_typed(Python.tuple((count + 1) // 2), "<f8", context)
             var b = classical_typed(Python.tuple(count // 2), "<f8", context)
-            var ap = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=classical_address(a))
-            var bp = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=classical_address(b))
+            var ap = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(a)))
+            var bp = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(b)))
             for i in range(count // 2):  # driver-loop: saved per-pair calibration coefficients
                 ap[i] = classical_f64(probability, 2 * i)
                 bp[i] = classical_f64(probability, 2 * i + 1)
@@ -1394,7 +1394,7 @@ def host_archive_svm(cls: PythonObject, arrays: PythonObject, classifier: Bool,
     py_setitem(fields, "support_vectors_", host_archive_shape(arrays, "support_vectors", "<f4", Python.tuple(n, nf), context))
     var support = host_archive_shape(arrays, "support", "<i4", Python.tuple(n), context)
     if String(kernel) == "precomputed":
-        _ = host_archive_support_bound(classical_address(support), n, nf)
+        _ = host_archive_support_bound(Int(py=classical_address(support)), n, nf)
     py_setitem(fields, "support_", support)
     py_setitem(fields, "intercept_", host_archive_shape(arrays, "intercept", "<f4", Python.tuple(1), context))
     py_setitem(fields, "n_support_", n)
