@@ -44,3 +44,17 @@ def test_native_warning_slot_allowlist_still_refuses_python_hooks(hook, monkeypa
     assert isinstance(audit.exception, TypeError), audit.report()
     assert not calls and not caught
     assert not audit.report()['python_frames'] and not audit.report()['forbidden_native_calls']
+
+
+@pytest.mark.parametrize('slot,entry', [('__new__', object.__new__), ('__init__', dict.__init__)])
+def test_native_warning_slot_allowlist_refuses_unrelated_builtin_slots(slot, entry, monkeypatch):
+    category = type('ForeignNativeSlotWarning', (RuntimeWarning,), {slot: entry})
+    monkeypatch.setattr(np.exceptions, 'ComplexWarning', category)
+    model = ml.RobustScaler(quantile_range=np.array([10+1j,90+2j]))
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter('always')
+        audit = audit_native_call(model.fit, np.arange(35,dtype='f4').reshape(7,5))
+    assert isinstance(audit.exception, TypeError), audit.report()
+    assert 'custom warning exception hooks' in str(audit.exception)
+    assert not caught
+    assert not audit.report()['python_frames'] and not audit.report()['forbidden_native_calls']
