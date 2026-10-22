@@ -114,6 +114,19 @@
 #
 # Two more items: ("mul", item, item) and ("kernel_ls", field, table), the
 # length-scale count of a "kernel" step's kernel. A field is an instance-dictionary
+#   ("when_in", field, values, steps)  run steps when field is held and equals one of values
+#   ("when_none", field, steps)        run steps when field is absent or None
+#   ("rows", member, dtype, field, items)
+#                                      one packed vector of dtype ("<i8", "<i4",
+#                                      "<f8", "<f4"): for each element of the list
+#                                      field, its items in order; an item's field
+#                                      paths start at "_", the element
+#   ("concat", member, dtype, field, key)
+#                                      the C-order elements of element[key] for each
+#                                      element of the list field, in order, as one flat
+#                                      dtype vector (4-byte dtypes)
+# One more item: ("sum", field, key), the int sum of element[key] over the
+# list field.
 # name, or a tuple path: a name, then dictionary keys and sequence indices.
 # ("noneflag", field) is 1 when field is None, ("setflag", field) 1 when it
 # is not. Messages may name the class as {cls}.
@@ -198,6 +211,12 @@ def _schema_choice(fields: PythonObject, step: PythonObject, name: String) raise
         var text = String(step[8]).replace("{value}", shown).replace("{code}", String(py_call(b.repr, code)))
         _schema_fail(step[6], PythonObject(text), name)
     py_setitem(fields, step[2], Python.tuple(saved[code], code))
+def _schema_list(value: PythonObject, label: String) raises -> PythonObject:
+    """A list or tuple field, refused otherwise (no Python iteration protocol runs)."""
+    var b = Python.import_module("builtins")
+    if py_type(value) is not b.list and py_type(value) is not b.tuple:
+        raise Error("TypeError: saved field " + label + " must be a list")
+    return value
 
 
 def _schema_int(value: PythonObject, label: String) raises -> Int:
@@ -314,6 +333,11 @@ def _schema_whole(fields: PythonObject, item: PythonObject, name: String,
         var total = 0
         for i in range(len(nodes)):  # driver-loop: over the kernel's postfix nodes
             total += len(nodes[i][2])
+    if kind == "sum":
+        var elements = _schema_list(_schema_value(fields, item[1], name), _schema_label(item[1]))
+        var total = 0
+        for i in range(len(elements)):  # driver-loop: over the fitted sub-models of one list field
+            total += _schema_int(elements[i][item[2]], String(item[2]))
         return total
     raise Error("RuntimeError: unknown saved item kind " + kind)
 
@@ -322,34 +346,84 @@ def _schema_vector(fields: PythonObject, dtype: String, items: PythonObject, nam
                    context: PythonObject) raises -> PythonObject:
     """One packed metadata vector, an Array of `dtype` as Array.from_list made it."""
     var count = len(items)
+    var vector = _schema_zeros(dtype, count, context)
+    var address = Int(py=classical_address(vector))
+    for i in range(count):  # driver-loop: over the fixed elements of one saved metadata vector
+        _schema_put(address, i, dtype, fields, items[i], name, context)
+    return vector
+
+
+def _schema_zeros(dtype: String, count: Int, context: PythonObject) raises -> PythonObject:
+    """A zeroed C-order Array of `count` elements of `dtype`."""
     var store = py_call(context["array_type"], _store_code(dtype))
     var raw = py_call(Python.import_module("builtins").bytes, count * Int(py=store.itemsize))
     _ = py_call(store.frombytes, raw)
-    var vector = classical_wrap_array(store, Python.tuple(count), dtype, "C", context)
+    return classical_wrap_array(store, Python.tuple(count), dtype, "C", context)
+
+
+def _schema_put(address: Int, i: Int, dtype: String, fields: PythonObject, item: PythonObject,
+                name: String, context: PythonObject) raises:
+    """Element `i` of the packed vector at `address`: one item, as
+    Array.from_list(..., dtype) stores it."""
+    if dtype == "<i8":
+        var i64 = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=address)
+        i64[i] = Int64(_schema_whole(fields, item, name, context))
+    elif dtype == "<i4":
+        var i32 = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=address)
+        var whole = _schema_whole(fields, item, name, context)
+        if whole < -2147483648 or whole > 2147483647:
+            raise Error("OverflowError: saved int32 field is out of range")
+        i32[i] = Int32(whole)
+    elif dtype == "<f8":
+        var f64 = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=address)
+        f64[i] = _schema_real(fields, item, name, context)
+    elif dtype == "<f4":
+        # Array.from_list(..., "<f4") stores through the C (float) cast:
+        # one round-to-nearest of the binary64 value.
+        var f32 = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address)
+        f32[i] = Float32(_schema_real(fields, item, name, context))
+    else:
+        raise Error("RuntimeError: unknown saved vector dtype " + dtype)
+
+
+def _schema_rows(fields: PythonObject, dtype: String, path: PythonObject, items: PythonObject,
+                 name: String, context: PythonObject) raises -> PythonObject:
+    """The items of every element of a list field, element by element, as
+    one packed vector (a "rows" step)."""
+    var elements = _schema_list(_schema_value(fields, path, name), _schema_label(path))
+    var width = len(items)
+    var vector = _schema_zeros(dtype, len(elements) * width, context)
     var address = Int(py=classical_address(vector))
-    var i64 = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=address)
-    var i32 = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=address)
-    var f64 = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=address)
-    var f32 = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address)
-    for i in range(count):  # driver-loop: over the fixed elements of one saved metadata vector
-        var item = items[i]
-        if dtype == "<i8":
-            i64[i] = Int64(_schema_whole(fields, item, name, context))
-        elif dtype == "<i4":
-            var whole = _schema_whole(fields, item, name, context)
-            if whole < -2147483648 or whole > 2147483647:
-                raise Error("OverflowError: saved int32 field is out of range")
-            i32[i] = Int32(whole)
-        elif dtype == "<f8":
-            f64[i] = _schema_real(fields, item, name, context)
-        elif dtype == "<f4":
-            # Array.from_list(..., "<f4") stores through the C (float) cast:
-            # one round-to-nearest of the binary64 value.
-            f32[i] = Float32(_schema_real(fields, item, name, context))
-        else:
-            raise Error("RuntimeError: unknown saved vector dtype " + dtype)
-    _ = store^
+    for e in range(len(elements)):  # driver-loop: over the fitted sub-models of one list field
+        var row = Python.dict()
+        py_setitem(row, "_", elements[e])
+        for k in range(width):  # driver-loop: over the fixed items of one saved row
+            _schema_put(address, e * width + k, dtype, row, items[k], name, context)
     return vector
+
+
+def _schema_concat(fields: PythonObject, dtype: String, path: PythonObject, key: PythonObject,
+                   name: String, context: PythonObject) raises -> PythonObject:
+    """element[key] of every element of a list field, C-order elements
+    concatenated into one flat `dtype` vector (a "concat" step)."""
+    var elements = _schema_list(_schema_value(fields, path, name), _schema_label(path))
+    var joined = py_call(context["archive_bytearray_type"])
+    for e in range(len(elements)):  # driver-loop: over the fitted sub-models of one list field
+        var element = elements[e]
+        var block = _schema_field(element, key, name) if py_type(element) is Python.import_module("builtins").dict else element[key]
+        var parts = _schema_bytes(block, context)
+        if String(parts[0]) != dtype:
+            raise Error("TypeError: saved block " + String(key) + " holds " + String(parts[0]) + ", the format stores " + dtype)
+        _ = py_call(joined.extend, parts[1])
+    var width = Int(py=py_call(context["array_type"], _store_code(dtype)).itemsize)
+    return _schema_copy(joined, dtype, 0, len(joined) // width, context)
+
+
+def _schema_packed(values: PythonObject, dtype: String, context: PythonObject) raises -> PythonObject:
+    """A list of builtin numbers as Array.from_list(values, dtype) stores
+    them (the array module's C conversion and range checks)."""
+    var store = py_call(context["array_type"], _store_code(dtype), values)
+    return classical_wrap_array(store, Python.tuple(len(values)), dtype, "C", context)
 
 
 def _schema_bytes(value: PythonObject, context: PythonObject) raises -> Tuple[String, PythonObject]:
@@ -813,6 +887,16 @@ def _schema_run(model: PythonObject, fields: PythonObject, steps: PythonObject, 
         elif kind == "unless":
             if _schema_has(fields, step[1]) and not Bool(py=_schema_value(fields, step[1], name) == step[2]):
                 _schema_run(model, fields, step[3], values, name, context)
+        elif kind == "when_in":
+            if _schema_has(fields, step[1]) and py_contains(step[2], _schema_value(fields, step[1], name)):
+                _schema_run(model, fields, step[3], values, name, context)
+        elif kind == "when_none":
+            if not _schema_has(fields, step[1]) or _schema_value(fields, step[1], name) is None:
+                _schema_run(model, fields, step[2], values, name, context)
+        elif kind == "rows":
+            py_setitem(values, step[1], _schema_rows(fields, String(step[2]), step[3], step[4], name, context))
+        elif kind == "concat":
+            py_setitem(values, step[1], _schema_concat(fields, String(step[2]), step[3], step[4], name, context))
         else:
             raise Error("RuntimeError: unknown save step " + kind)
 
