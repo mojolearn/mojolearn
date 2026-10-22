@@ -36,9 +36,8 @@ transforms from a saved model on a CPU without a GPU.
 # `1 / n_features`, one Python division, correctly rounded on every host.
 # No speed claim: the lane has no published number and this door adds none.
 
-from . import _backend, _serialize
+from . import _backend, _native_archive_bridge
 from ._scale_gamma import scale_gamma, scale_gamma_x
-from ._array import Array
 from ._sample_weight import check_sample_weight
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, as_f64_c, empty, full
 from ._lazy_out import _empty_out, _mapped_out
@@ -51,32 +50,12 @@ _KERNEL_RIDGE_FORMAT = "mojolearn-kernel-ridge-1"
 _NYSTROEM_FORMAT = "mojolearn-nystroem-1"
 _RBF_SAMPLER_FORMAT = "mojolearn-rbf-sampler-1"
 
+# The compiled saved-model owner, connected once at import: `save` and
+# `load` are one native call each (bindings/archive_schema_native.mojo
+# writes the schema registered after each class; host_archive_native.mojo
+# builds the loaded model).
+_ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
-def _km_header(arrays, path, cls, meta_fields, hyper_fields):
-    """The estimator, `meta` `<i8` and `hyper` `<f8` checks the three loads
-    share; returns `(meta, hyper)`."""
-    from .linear_model import _check_saved_by
-    _check_saved_by(arrays, path, cls)
-    meta = _serialize.exact(arrays, "meta", "<i8")
-    if meta.size != meta_fields:
-        raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, {meta_fields} are needed")
-    hyper = _serialize.exact(arrays, "hyper", "<f8")
-    if hyper.size != hyper_fields:
-        raise ValueError(f"mojolearn: {path!r} hyper holds {hyper.size} fields, {hyper_fields} are needed")
-    return meta, hyper
-
-
-def _km_array(arrays, name, dtype, shape, path):
-    value = _serialize.exact(arrays, name, dtype)
-    if tuple(value.shape) != tuple(shape):
-        raise ValueError(f"mojolearn: {path!r} {name} shape {tuple(value.shape)} is not {tuple(shape)}")
-    return value
-
-
-def _km_write(est, path, fmt, arrays):
-    from .linear_model import _saved_mode
-    arrays.update(format=fmt, estimator=type(est).__name__, numeric_mode=_saved_mode(est))
-    return _serialize.write_npz(path, arrays)
 
 #: `checks/numerics.mojo` codes, duplicated on purpose (the GP's reason):
 #: the read-back must not share a table with the thing it checks.
@@ -425,17 +404,7 @@ class KernelRidge(RegressorScoreMixin, _KernelMethodBase):
         RuntimeError
             If the model has not been fitted.
         """
-        if not hasattr(self, "dual_coef_"):
-            raise RuntimeError("this estimator is not fitted yet")
-        kernel, degree, gamma, coef0, alpha = self._kernel_params
-        n, t = self.X_fit_.shape[0], self.n_targets_
-        return _km_write(self, path, _KERNEL_RIDGE_FORMAT, {
-            "x_fit": self.X_fit_,
-            "dual": self.dual_coef_.reshape((n * t,)),
-            "hyper": Array.from_list([float(gamma), float(coef0), float(alpha)], "<f8"),
-            "meta": Array.from_list([int(n), int(self.n_features_in_), int(t), int(kernel), int(degree),
-                                     int(self.info_), 1 if self._squeeze else 0], "<i8"),
-        })
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -451,22 +420,8 @@ class KernelRidge(RegressorScoreMixin, _KernelMethodBase):
         KernelRidge
             A fitted model, ready to predict, with the saved numeric mode.
         """
-        from .linear_model import _restore_mode
-        arrays = _serialize.read_npz(path, _KERNEL_RIDGE_FORMAT)
-        meta, hyper = _km_header(arrays, path, cls, 7, 3)
-        n, d, t, kernel, degree, info, squeeze = (int(v) for v in meta.tolist())  # glue: seven saved meta fields
-        gamma, coef0, alpha = (float(v) for v in hyper.tolist())  # glue: three saved hyperparameters
-        obj = cls(alpha=alpha, kernel=kernel, gamma=gamma, degree=degree, coef0=coef0)
-        _restore_mode(obj, arrays)
-        obj.X_fit_ = _km_array(arrays, "x_fit", "<f4", (n, d), path)
-        dual = _km_array(arrays, "dual", "<f4", (n * t,), path)
-        obj.n_features_in_ = d
-        obj.n_targets_ = t
-        obj._squeeze = bool(squeeze)
-        obj.dual_coef_ = dual if squeeze else dual.reshape((n, t))
-        obj.info_ = info
-        obj._kernel_params = (kernel, degree, gamma, coef0, alpha)
-        return obj
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+
 
 
 # Maintainer notes: `random_state` seeds `km_basis_indices`, the device
@@ -687,19 +642,7 @@ class Nystroem(_KernelMethodBase):
         RuntimeError
             If the transformer has not been fitted.
         """
-        if not hasattr(self, "components_"):
-            raise RuntimeError("this estimator is not fitted yet")
-        kernel, degree, gamma, coef0, seed = self._kernel_params
-        q, d = self.components_.shape
-        return _km_write(self, path, _NYSTROEM_FORMAT, {
-            "components": self.components_,
-            "component_indices": self.component_indices_,
-            "normalization": self.normalization_,
-            "eigenvalues": self.eigenvalues_,
-            "eigenvectors": self.eigenvectors_,
-            "hyper": Array.from_list([float(gamma), float(coef0)], "<f8"),
-            "meta": Array.from_list([int(q), int(d), int(kernel), int(degree), int(seed), int(self.sweeps_)], "<i8"),
-        })
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -716,22 +659,8 @@ class Nystroem(_KernelMethodBase):
             A fitted transformer, ready to transform, with the saved
             numeric mode.
         """
-        from .linear_model import _restore_mode
-        arrays = _serialize.read_npz(path, _NYSTROEM_FORMAT)
-        meta, hyper = _km_header(arrays, path, cls, 6, 2)
-        q, d, kernel, degree, seed, sweeps = (int(v) for v in meta.tolist())  # glue: six saved meta fields
-        gamma, coef0 = (float(v) for v in hyper.tolist())  # glue: two saved hyperparameters
-        obj = cls(kernel=kernel, gamma=gamma, degree=degree, coef0=coef0, n_components=q, random_state=seed)
-        _restore_mode(obj, arrays)
-        obj.n_features_in_ = d
-        obj.components_ = _km_array(arrays, "components", "<f4", (q, d), path)
-        obj.component_indices_ = _km_array(arrays, "component_indices", "<i4", (q,), path)
-        obj.normalization_ = _km_array(arrays, "normalization", "<f4", (q, q), path)
-        obj.eigenvalues_ = _km_array(arrays, "eigenvalues", "<f4", (q,), path)
-        obj.eigenvectors_ = _km_array(arrays, "eigenvectors", "<f4", (q, q), path)
-        obj.sweeps_ = sweeps
-        obj._kernel_params = (kernel, degree, gamma, coef0, seed)
-        return obj
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+
 
 
 # Maintainer notes: gamma <= 0 is refused on the Mojo host. gamma='scale' uses
@@ -948,16 +877,7 @@ class RBFSampler(_KernelMethodBase):
         RuntimeError
             If the sampler has not been fitted.
         """
-        if not hasattr(self, "random_weights_"):
-            raise RuntimeError("this estimator is not fitted yet")
-        gamma, seed = self._params
-        d, q = self.random_weights_.shape
-        return _km_write(self, path, _RBF_SAMPLER_FORMAT, {
-            "random_weights": self.random_weights_,
-            "random_offset": self.random_offset_,
-            "hyper": Array.from_list([float(gamma), float(self.sigma_), float(self.scale_)], "<f8"),
-            "meta": Array.from_list([int(d), int(q), int(seed)], "<i8"),
-        })
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -974,20 +894,47 @@ class RBFSampler(_KernelMethodBase):
             A fitted sampler with the saved weights (nothing is drawn
             again), ready to transform, with the saved numeric mode.
         """
-        from .linear_model import _restore_mode
-        arrays = _serialize.read_npz(path, _RBF_SAMPLER_FORMAT)
-        meta, hyper = _km_header(arrays, path, cls, 3, 3)
-        d, q, seed = (int(v) for v in meta.tolist())  # glue: three saved meta fields
-        gamma, sigma, scale = (float(v) for v in hyper.tolist())  # glue: three saved hyperparameters
-        obj = cls(gamma=gamma, n_components=q, random_state=seed)
-        _restore_mode(obj, arrays)
-        obj.n_features_in_ = d
-        obj.random_weights_ = _km_array(arrays, "random_weights", "<f4", (d, q), path)
-        obj.random_offset_ = _km_array(arrays, "random_offset", "<f4", (q,), path)
-        obj.sigma_ = sigma
-        obj.scale_ = scale
-        obj._params = (gamma, seed)
-        return obj
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+
+
+
+_bridge = _native_archive_bridge
+# Every save writes its arrays, then the format, the class name and the
+# numeric mode (the 0.8.55 writer's refusal order; members are written sorted).
+_bridge.register(KernelRidge, _KERNEL_RIDGE_FORMAT, (
+    _bridge.fitted("dual_coef_"),
+    ("array", "x_fit", "X_fit_"),
+    ("flat", "dual", "dual_coef_"),
+    ("f8", "hyper", (("float", ("_kernel_params", 2)), ("float", ("_kernel_params", 3)),
+                     ("float", ("_kernel_params", 4)))),
+    ("i8", "meta", (("dim", "X_fit_", 0), ("int", "n_features_in_"), ("int", "n_targets_"),
+                    ("int", ("_kernel_params", 0)), ("int", ("_kernel_params", 1)),
+                    ("int", "info_"), ("bool", "_squeeze"))),
+    *_bridge.head(_KERNEL_RIDGE_FORMAT),
+))
+_bridge.register(Nystroem, _NYSTROEM_FORMAT, (
+    _bridge.fitted("components_"),
+    ("array", "components", "components_"),
+    ("array", "component_indices", "component_indices_"),
+    ("array", "normalization", "normalization_"),
+    ("array", "eigenvalues", "eigenvalues_"),
+    ("array", "eigenvectors", "eigenvectors_"),
+    ("f8", "hyper", (("float", ("_kernel_params", 2)), ("float", ("_kernel_params", 3)))),
+    ("i8", "meta", (("dim", "components_", 0), ("dim", "components_", 1),
+                    ("int", ("_kernel_params", 0)), ("int", ("_kernel_params", 1)),
+                    ("int", ("_kernel_params", 4)), ("int", "sweeps_"))),
+    *_bridge.head(_NYSTROEM_FORMAT),
+))
+_bridge.register(RBFSampler, _RBF_SAMPLER_FORMAT, (
+    _bridge.fitted("random_weights_"),
+    ("array", "random_weights", "random_weights_"),
+    ("array", "random_offset", "random_offset_"),
+    ("f8", "hyper", (("float", ("_params", 0)), ("float", "sigma_"), ("float", "scale_"))),
+    ("i8", "meta", (("dim", "random_weights_", 0), ("dim", "random_weights_", 1),
+                    ("int", ("_params", 1)))),
+    *_bridge.head(_RBF_SAMPLER_FORMAT),
+))
+del _bridge
 
 
 __all__ = ["KernelRidge", "Nystroem", "RBFSampler"]

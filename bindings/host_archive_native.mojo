@@ -216,12 +216,39 @@ def host_archive_cd(cls: PythonObject, arrays: PythonObject, lasso: Bool,
     return model
 
 
-def host_archive_kernel(cls: PythonObject, arrays: PythonObject, kind: Int,
+def host_archive_fields(arrays: PythonObject, name: String, dtype: String, count: Int, path: PythonObject,
+                        context: PythonObject) raises -> PythonObject:
+    """An exact-dtype field vector refused as the kernel-method loaders
+    refused it: `{path!r} {name} holds {n} fields, {count} are needed`."""
+    var value = _archive_exact(arrays, name, dtype, context)
+    if Int(py=value.size) != count:
+        raise Error(host_archive_where(path, context) + " " + name + " holds " + String(Int(py=value.size))
+                    + " fields, " + String(count) + " are needed")
+    return value
+
+
+def host_archive_tuple_shape(arrays: PythonObject, name: String, dtype: String, shape: PythonObject,
+                             path: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A member whose shape is exactly `shape` (a tuple), refused as
+    `{path!r} {name} shape {shape} is not {want}`."""
+    var b = Python.import_module("builtins")
+    var value = _archive_exact(arrays, name, dtype, context)
+    var got = py_call(b.tuple, value.shape)
+    if not Bool(py=got == shape):
+        raise Error(host_archive_where(path, context) + " " + name + " shape " + _archive_builtin_repr(got)
+                    + " is not " + _archive_builtin_repr(shape))
+    return value
+
+
+def host_archive_kernel(cls: PythonObject, arrays: PythonObject, kind: Int, path: PythonObject,
                         context: PythonObject) raises -> PythonObject:
     # kind: 0 KernelRidge, 1 Nystroem, 2 RBFSampler. These are model
     # schemas, unrelated to benchmark shapes or device execution routes.
-    var meta = host_archive_count(arrays, "meta", "<i8", 7 if kind == 0 else (6 if kind == 1 else 3), context, True)
-    var hyper = host_archive_count(arrays, "hyper", "<f8", 2 if kind == 1 else 3, context, True)
+    # The refusals keep KernelRidge.load's, Nystroem.load's and
+    # RBFSampler.load's wording and order: meta, hyper, numeric_mode, then
+    # the arrays in the order the loaders read them.
+    var meta = host_archive_fields(arrays, "meta", "<i8", 7 if kind == 0 else (6 if kind == 1 else 3), path, context)
+    var hyper = host_archive_fields(arrays, "hyper", "<f8", 2 if kind == 1 else 3, path, context)
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
     host_archive_mode(arrays, fields, context)
@@ -234,8 +261,8 @@ def host_archive_kernel(cls: PythonObject, arrays: PythonObject, kind: Int,
         py_setitem(fields, "n_components", q)
         py_setitem(fields, "random_state", seed)
         py_setitem(fields, "n_features_in_", d)
-        py_setitem(fields, "random_weights_", host_archive_shape(arrays, "random_weights", "<f4", Python.tuple(d, q), context))
-        py_setitem(fields, "random_offset_", host_archive_shape(arrays, "random_offset", "<f4", Python.tuple(q), context))
+        py_setitem(fields, "random_weights_", host_archive_tuple_shape(arrays, "random_weights", "<f4", Python.tuple(d, q), path, context))
+        py_setitem(fields, "random_offset_", host_archive_tuple_shape(arrays, "random_offset", "<f4", Python.tuple(q), path, context))
         py_setitem(fields, "sigma_", classical_f64(hyper, 1))
         py_setitem(fields, "scale_", classical_f64(hyper, 2))
         py_setitem(fields, "_params", Python.tuple(gamma, seed))
@@ -253,11 +280,11 @@ def host_archive_kernel(cls: PythonObject, arrays: PythonObject, kind: Int,
         var t = classical_i64(meta, 2)
         var alpha = classical_f64(hyper, 2)
         var squeeze = classical_i64(meta, 6) != 0
-        var dual = host_archive_shape(arrays, "dual", "<f4", Python.tuple(n * t), context)
+        py_setitem(fields, "alpha", alpha)
+        py_setitem(fields, "X_fit_", host_archive_tuple_shape(arrays, "x_fit", "<f4", Python.tuple(n, d), path, context))
+        var dual = host_archive_tuple_shape(arrays, "dual", "<f4", Python.tuple(n * t), path, context)
         if not squeeze:
             dual = classical_wrap_array(dual._store, Python.tuple(n, t), "<f4", "C", context)
-        py_setitem(fields, "alpha", alpha)
-        py_setitem(fields, "X_fit_", host_archive_shape(arrays, "x_fit", "<f4", Python.tuple(n, d), context))
         py_setitem(fields, "n_targets_", t)
         py_setitem(fields, "_squeeze", squeeze)
         py_setitem(fields, "dual_coef_", dual)
@@ -267,11 +294,11 @@ def host_archive_kernel(cls: PythonObject, arrays: PythonObject, kind: Int,
         var seed = classical_i64(meta, 4)
         py_setitem(fields, "n_components", n)
         py_setitem(fields, "random_state", seed)
-        py_setitem(fields, "components_", host_archive_shape(arrays, "components", "<f4", Python.tuple(n, d), context))
-        py_setitem(fields, "component_indices_", host_archive_shape(arrays, "component_indices", "<i4", Python.tuple(n), context))
-        py_setitem(fields, "normalization_", host_archive_shape(arrays, "normalization", "<f4", Python.tuple(n, n), context))
-        py_setitem(fields, "eigenvalues_", host_archive_shape(arrays, "eigenvalues", "<f4", Python.tuple(n), context))
-        py_setitem(fields, "eigenvectors_", host_archive_shape(arrays, "eigenvectors", "<f4", Python.tuple(n, n), context))
+        py_setitem(fields, "components_", host_archive_tuple_shape(arrays, "components", "<f4", Python.tuple(n, d), path, context))
+        py_setitem(fields, "component_indices_", host_archive_tuple_shape(arrays, "component_indices", "<i4", Python.tuple(n), path, context))
+        py_setitem(fields, "normalization_", host_archive_tuple_shape(arrays, "normalization", "<f4", Python.tuple(n, n), path, context))
+        py_setitem(fields, "eigenvalues_", host_archive_tuple_shape(arrays, "eigenvalues", "<f4", Python.tuple(n), path, context))
+        py_setitem(fields, "eigenvectors_", host_archive_tuple_shape(arrays, "eigenvectors", "<f4", Python.tuple(n, n), path, context))
         py_setitem(fields, "sweeps_", classical_i64(meta, 5))
         py_setitem(fields, "_kernel_params", Python.tuple(kernel, degree, gamma, coef0, seed))
     return model
@@ -1698,7 +1725,7 @@ def host_archive_build(path: PythonObject, context: PythonObject,
     elif fmt == "mojolearn-cd-1":
         model = host_archive_cd(cls, arrays, String(estimator) == "Lasso", context)
     elif fmt == "mojolearn-kernel-ridge-1" or fmt == "mojolearn-nystroem-1" or fmt == "mojolearn-rbf-sampler-1":
-        model = host_archive_kernel(cls, arrays, 0 if fmt == "mojolearn-kernel-ridge-1" else (1 if fmt == "mojolearn-nystroem-1" else 2), context)
+        model = host_archive_kernel(cls, arrays, 0 if fmt == "mojolearn-kernel-ridge-1" else (1 if fmt == "mojolearn-nystroem-1" else 2), path, context)
     elif fmt == "mojolearn-scaler-1" and String(estimator) == "MinMaxScaler":
         model = host_archive_minmax(cls, arrays, context)
     elif fmt == "mojolearn-scaler-1" and String(estimator) == "StandardScaler":
