@@ -163,7 +163,7 @@ def seq_slots(fields: PythonObject, kind: Int, context: PythonObject, padded: Bo
     if kind == 5:
         var states = fields["_af_state"]
         var params = fields["params"]
-        if py_type(states) is not b.list or len(states) != len(params):
+        if (py_type(states) is not b.list and py_type(states) is not b.tuple) or len(states) != len(params):
             raise Error("ValueError: Adafactor state must have one native dictionary per parameter")
         for i in range(len(states)):  # driver-loop: over factored state slots per parameter tensor
             var state = states[i]
@@ -179,7 +179,7 @@ def seq_slots(fields: PythonObject, kind: Int, context: PythonObject, padded: Bo
     else:
         var states = fields["_state"]
         var expected = 2 if kind == 6 else 3
-        if py_type(states) is not b.list or len(states) != expected:
+        if (py_type(states) is not b.list and py_type(states) is not b.tuple) or len(states) != expected:
             raise Error("ValueError: sequence optimizer state slot count changed")
         for i in range(expected):  # driver-loop: over two or three optimizer state slots
             _ = py_call(result.append, seq_addr(states[i], Int(py=fields["n_total"]), context))
