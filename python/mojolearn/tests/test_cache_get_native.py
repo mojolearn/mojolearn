@@ -71,6 +71,52 @@ def test_cache_get_preserves_ordinary_metadata_layouts(kind):
     assert audit_native_call(cache.get, _source(999)).assert_native() is None
 
 
+@pytest.mark.parametrize('kind', ['exact', 'subclass', 'nested_subclass'])
+def test_cache_get_preserves_native_namespace_attribute_slots(kind):
+    class Namespace(SimpleNamespace):
+        pass
+    class Nested(Namespace):
+        pass
+    cls = {'exact': SimpleNamespace, 'subclass': Namespace, 'nested_subclass': Nested}[kind]
+    source = cls(_addr=8, size=3, itemsize=4)
+    cache = _cache()
+    cache._entries[(8, 3)] = (19, source)
+    assert audit_native_call(cache.get, source).assert_native() == 19
+    assert audit_native_call(cache.get, cls(_addr=9, size=3)).assert_native() is None
+    assert cache._entries[(8, 3)][1] is source
+    assert audit_native_call(cache.__len__).assert_native() == 1
+
+
+@pytest.mark.parametrize('hook', ['__getattribute__', '__getattr__', '_addr'])
+def test_cache_get_refuses_namespace_subclass_hooks_before_execution(hook):
+    calls = []
+    def forbidden(*args):
+        calls.append(hook)
+        raise AssertionError('namespace application hook ran')
+    namespace = type('Namespace', (SimpleNamespace,),
+                     {hook: property(forbidden) if hook == '_addr' else forbidden})
+    source = namespace(_addr=8, size=3, itemsize=4)
+    audit = audit_native_call(_cache().get, source)
+    _refused(audit, calls)
+
+
+def test_cache_get_keeps_foreign_namespace_descriptor_owner_check():
+    class Foreign:
+        __getattribute__ = SimpleNamespace.__getattribute__
+    source = Foreign()
+    source._addr, source.size = 8, 3
+    cache = _cache()
+    cache._entries[(8, 3)] = (19, None)
+    # 3.11's namespace-owned wrapper requires the correct owner type;
+    # newer CPython exposes object's ordinary inherited descriptor.
+    if SimpleNamespace.__getattribute__ is object.__getattribute__:
+        assert audit_native_call(cache.get, source).assert_native() == 19
+    else:
+        with pytest.raises(TypeError):
+            _ = source._addr
+        _refused(audit_native_call(cache.get, source), [])
+
+
 @pytest.mark.parametrize('kind', ['int', 'float', 'str', 'bytes', 'numpy_int', 'numpy_float',
                                   'numpy_longlong', 'numpy_0d', 'numpy_object_0d', 'raw_void'])
 def test_cache_get_preserves_native_integer_conversion(kind):
