@@ -112,6 +112,31 @@ def test_svr_precomputed_support_column_selection_retains_order(tmp_path, kind):
     assert _state(audit_native_call(model.predict, x).assert_native()) == _state(_expected(model, x))
 
 
+@pytest.mark.parametrize("kind", ["owned", "positive_slice", "negative_slice", "readonly_buffer"])
+def test_svr_precomputed_support_array_storage_is_contiguous(tmp_path, kind):
+    from mojolearn import Array
+
+    if kind == "positive_slice":
+        support = Array.from_buffer(np.asarray([1, 99, 0, 99], dtype=np.int32))[::2]
+    elif kind == "negative_slice":
+        support = Array.from_buffer(np.asarray([0, 1], dtype=np.int32))[::-1]
+    else:
+        source = np.asarray([1, 0], dtype=np.int32)
+        if kind == "readonly_buffer":
+            source.flags.writeable = False
+        support = Array.from_buffer(source)
+        if kind == "owned":
+            support = support.copy()
+    # Ordinary Array slicing copies its selection; the saved support ABI
+    # therefore consumes contiguous int32 words even for reversed slices.
+    assert support.strides == (4,)
+    model = _model(tmp_path, "precomputed")
+    model.support_ = support
+    x = _input(2, "float32")
+    expected = _expected(model, x)
+    assert _state(audit_native_call(model.predict, x).assert_native()) == _state(expected)
+
+
 @pytest.mark.parametrize("kernel", KERNELS)
 def test_svr_internal_prediction_and_coefficient_owners_survive_calls(tmp_path, kernel):
     model = _model(tmp_path, kernel)
