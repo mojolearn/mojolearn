@@ -97,6 +97,22 @@ class count is derived from them, as their `TClassificationTargetHelper`
 derives it.
 """
 
+# The public names: the boosting estimators and their option tables defined here, and
+# scikit-learn's ensemble names resolved lazily from the package (_sklearn_modules.LAYOUT).
+__all__ = [
+    'GradientBoosting', 'GradientBoostingClassifier', 'GradientBoostingRegressor', 'OrderedRMSE',
+    'ExperimentalTwoLevelFeatureFreq', 'catboost_auto_learning_rate', 'LOSSES',
+    'MULTI_OUTPUT_LOSSES', 'MULTI_REGRESSION_LOSSES', 'BORDER_TYPES', 'BOOTSTRAP_TYPES',
+    'BOOSTING_TYPES', 'LEAF_ESTIMATION_GRADIENT', 'LEAF_ESTIMATION_NEWTON', 'LEAF_ESTIMATION_EXACT',
+    'LEAF_ESTIMATION_SIMPLE', 'SCORE_FUNCTION_SOLAR_L2', 'SCORE_FUNCTION_COSINE',
+    'SCORE_FUNCTION_NEWTON_L2', 'SCORE_FUNCTION_NEWTON_COSINE', 'SCORE_FUNCTION_LOO_L2',
+    'SCORE_FUNCTION_SAT_L2', 'SCORE_FUNCTION_L2', 'SCORE_FUNCTIONS', 'GROW_POLICIES', 'NAN_MODES',
+    'OD_TYPES', 'AdaBoostClassifier', 'AdaBoostRegressor', 'BaggingClassifier', 'BaggingRegressor',
+    'ExtraTreesClassifier', 'ExtraTreesRegressor', 'IsolationForest', 'RandomForestClassifier',
+    'RandomForestRegressor', 'RandomTreesEmbedding', 'StackingClassifier', 'StackingRegressor',
+    'VotingClassifier', 'VotingRegressor',
+]
+
 import hashlib
 import itertools
 import numbers
@@ -487,21 +503,54 @@ def _c_round(number, precision):
 
 def catboost_auto_learning_rate(loss, n_rows, iterations, use_best_model,
                                 boost_from_average, table=None):
-    """`TAutoLRParamsGuesser::GetLearningRate` (`options_helper.cpp:252-262`)
-    for the GPU learner, or None where their `NeedToUpdate` (`:245-249`) has
-    no row for the key.
+    """The learning rate ``GradientBoosting`` picks when ``learning_rate`` is unset.
 
-        customIterationConstant  = exp(C * log(iterations) + D)
-        defaultIterationConstant = exp(C * log(1000) + D)
-        defaultLearningRate      = exp(A * log(n_rows) + B)
-        learning_rate = Round(min(default * custom / defaultIter, 0.5), 6)
+    It is CatBoost's automatic learning rate for its GPU learner:
+    ``exp(A * log(n_rows) + B)``, scaled by the iteration count, capped at 0.5
+    and rounded to six decimals, with coefficients for the ``'RMSE'``,
+    ``'Logloss'`` and ``'MultiClass'`` losses.
 
-    stored in their `TOption<float>` (`boosting_options.h:26`), so the fit
-    receives it rounded to float32. `exp` and `log` are this package's
-    portable binary64 routines rather than the host libm theirs call, so a
-    value within one ulp of a sixth-decimal rounding boundary could round the
-    other way; no such key was found on the checked grid.
+    Parameters
+    ----------
+    loss : str
+        Loss name, for example ``'Logloss'``.
+    n_rows : int
+        Number of training rows.
+    iterations : int
+        Number of boosting iterations (``n_estimators``).
+    use_best_model : bool
+        Whether the fit keeps the best iteration on an evaluation set.
+    boost_from_average : bool
+        Whether the fit starts from the target average.
+    table : dict, optional
+        Coefficient table to use instead of the GPU learner's.
+
+    Returns
+    -------
+    float or None
+        The learning rate, or ``None`` when CatBoost has no automatic rate for
+        this loss and setting (``GradientBoosting`` then uses 0.03).
+
+    Example
+    -------
+    >>> from mojolearn import ensemble
+    >>> ensemble.catboost_auto_learning_rate('Logloss', 10000, 1000, False, False)
+    0.029701
     """
+    # `TAutoLRParamsGuesser::GetLearningRate` (`options_helper.cpp:252-262`)
+    # for the GPU learner, or None where their `NeedToUpdate` (`:245-249`) has
+    # no row for the key.
+    #
+    #     customIterationConstant  = exp(C * log(iterations) + D)
+    #     defaultIterationConstant = exp(C * log(1000) + D)
+    #     defaultLearningRate      = exp(A * log(n_rows) + B)
+    #     learning_rate = Round(min(default * custom / defaultIter, 0.5), 6)
+    #
+    # stored in their `TOption<float>` (`boosting_options.h:26`), so the fit
+    # receives it rounded to float32. `exp` and `log` are this package's
+    # portable binary64 routines rather than the host libm theirs call, so a
+    # value within one ulp of a sixth-decimal rounding boundary could round the
+    # other way; no such key was found on the checked grid.
     target = {"Logloss": "Logloss", "MultiClass": "MultiClass",
               "RMSE": "RMSE"}.get(loss)
     if target is None:

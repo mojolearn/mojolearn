@@ -47,6 +47,7 @@ Mamba3Block.install_owned_weights	owned-weights build only; raises RuntimeError 
 Mamba3Block.export_owned_weights	owned-weights build only; raises RuntimeError elsewhere
 Mamba3Block.release_owned_weights	owned-weights build only; raises RuntimeError elsewhere
 resample.fast_defines	internal build switches, no meaning to users
+ensemble.catboost_auto_learning_rate	host scalar helper behind GradientBoosting's automatic learning rate; no verifier lane calls it directly
 parallel_causal_lm.ParallelCausalLM	multi-GPU layer ownership: no cross-vendor qualification
 linalg_fast.has_bf16	experimental Apple BF16 candidate; installed-release qualification pending
 linalg_fast.to_bf16	experimental Apple BF16 candidate; installed-release qualification pending
