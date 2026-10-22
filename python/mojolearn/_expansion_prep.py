@@ -3195,7 +3195,14 @@ class GaussianNB(_Classifier):
         self.priors = priors
         self.var_smoothing = var_smoothing
 
+    def _refuse(self):
+        vs = self.var_smoothing
+        if isinstance(vs, bool) or not isinstance(vs, numbers.Real) or not vs >= 0:
+            raise ValueError("The 'var_smoothing' parameter of GaussianNB must be a float in the range "
+                             f"[0.0, inf). Got {vs!r} instead.")
+
     def fit(self, X, y, sample_weight=None):
+        self._refuse()
         arr = _x2d(X)
         n, d = arr.shape
         codes = self._encode_y(y, n)
@@ -3229,6 +3236,7 @@ class GaussianNB(_Classifier):
         return self
 
     def partial_fit(self, X, y, classes=None, sample_weight=None):
+        self._refuse()
         arr = _x2d(X)
         n, d = arr.shape
         first, codes = _partial_codes(self, y, classes, n, defer=True)
@@ -5975,6 +5983,9 @@ class _NeighbourDraws:
 # < tol * max|X_observed|. Every draw (random order, neighbours, posterior
 # samples) comes from random_state by splitmix64 (sklearn draws numpy's; None
 # is seed 0).
+_INF = float("inf")
+
+
 class IterativeImputer(_PrepBase):
     """Impute missing values by modeling each feature from the others, round by round.
 
@@ -6082,6 +6093,10 @@ class IterativeImputer(_PrepBase):
         self.keep_empty_features = keep_empty_features
 
     def _refuse(self):
+        mi = self.max_iter
+        if isinstance(mi, bool) or not isinstance(mi, numbers.Integral) or mi < 0:
+            raise ValueError("The 'max_iter' parameter of IterativeImputer must be an int in the range "
+                             f"[0, inf). Got {mi!r} instead.")
         if self.imputation_order not in ("ascending", "descending", "roman", "arabic", "random"):
             raise ValueError(f"mojolearn: invalid imputation_order {self.imputation_order!r}")
         nnf = self.n_nearest_features
@@ -6187,6 +6202,10 @@ class IterativeImputer(_PrepBase):
                 pr.stage("c2_ii_ord", dk, missd, dk, pos, R, ordw, lens)
         pr.run(mode)
         scale = pr.values(sc, 1)[0]
+        if scale == _INF:
+            # the device's largest |observed value| (c2_colmax) is infinite
+            # exactly when an observed entry is; scikit-learn refuses it
+            raise ValueError("Input X contains infinity or a value too large for dtype('float64').")
         self._indicator = [j for j, c in enumerate(pr.values(st, d)) if int(c) < n] if self.add_indicator else []  # glue: indicator column index list from device counts (d-sized: feature count)
         ln = pr.get_i32(lens, R).tolist() if dk else [0] * R
         ow = pr.get_i32(ordw, R * dk).tolist() if dk else []

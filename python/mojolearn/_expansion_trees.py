@@ -4404,6 +4404,7 @@ class CalibratedClassifierCV(ClassifierScoreMixin, _TreesWrapperBase):
         pr.stage("cal_lofo_merge", FK * d, cnt_fk, mean_fk, var_fk, F, K, d, tcnt, theta, var)
         ntr, cmean, cvar = pr.work(F), pr.work(F * d), pr.work(F * d)
         pr.stage("cal_lofo_merge", F * d, cnt_f, mean_f, var_f, F, 1, d, ntr, cmean, cvar)
+        base._refuse()
         eps, vs = pr.alloc(F), pr.put_scalar(base.var_smoothing)
         pr.stage("cal_eps_folds", F, cvar, F, d, eps, vs)
         prior, const = pr.alloc(FK), pr.alloc(FK)
