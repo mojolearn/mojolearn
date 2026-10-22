@@ -198,6 +198,19 @@ class InstalledNativeAudit(unittest.TestCase):
             self.assertIn("pickle is caller-owned", scope["coverage_limit"])
             self.assertIn("no GPU kernel", scope["execution_route"])
 
+    def test_exception_bridge_selection_retains_sklearn_dependency_and_scope(self):
+        name = "test_classical_exceptions_native_owner.py"
+        nodes = [name + "::test_native_error_bridge_pickle_and_repeated_refusals_keep_type_identity[" + cls + "]"
+                 for cls in ("LinearRegression", "Ridge")]
+        self.assertEqual(q.selected_files(test_nodes=nodes), [name])
+        self.assertIn("scikit-learn", q.test_dependencies([name]))
+        for vendor in ("cpu", "metal", "cuda", "hip"):
+            scope = q.test_applicability([name], vendor)[name]
+            self.assertEqual(scope["cpu_not_applicable_cases"], {})
+            self.assertIn("pickle is caller-owned", scope["coverage_limit"])
+            self.assertIn("Direct native entry checks", scope["coverage_limit"])
+            self.assertIn("CPython 3.11", scope["coverage_limit"])
+
     def test_cache_lookup_scope_excludes_mutation_and_context_lifecycle(self):
         name = "test_cache_get_native.py"
         self.assertIn(name, q.PUBLIC_TESTS)

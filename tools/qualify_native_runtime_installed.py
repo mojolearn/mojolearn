@@ -24,6 +24,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_TESTS = {
+    "test_classical_exceptions_native_owner.py": "Fitted-state exception compatibility through native estimator entries and connected reduction/restoration bridges, with caller-owned pickle",
     "test_not_fitted_native_lifetime.py": "Public NotFittedError reduction payload, caller-owned pickle compatibility and native singleton ownership",
     "test_cache_upload_native.py": "Public DeviceCache.id_of native hit/miss preparation, upload publication, retained owners and failure cleanup",
     "test_cache_key_native.py": "Public DeviceCache.get and resident.stats native tuple-key admission, deep nesting and callback refusals",
@@ -87,6 +88,7 @@ PUBLIC_TESTS = {
 # Candidate array tests call _OPT_NATIVE directly. Keep them outside this public
 # registry until tests actually exercise the public __array__ protocol.
 TEST_DEPENDENCIES = {
+    "test_classical_exceptions_native_owner.py": ("scikit-learn",),
     "test_host_kde_fit_native.py": ("pandas", "scipy", "torch"),
     "test_host_iforest_fit_native.py": ("pandas", "scipy", "torch"),
     "test_host_inference_native.py": ("pandas",),
@@ -221,6 +223,10 @@ def test_applicability(selected, vendor):
             scope.update(execution_route="native fitted-error reduction on every package backend; no GPU kernel",
                          operation_mode="identical public unfitted refusal and bound exception reduction",
                          coverage_limit="Only public NotFittedError.__reduce__ and its payload; pickle is caller-owned. CPython 3.11 is required to expose borrowed-None lifetime loss; immortal-None interpreters cover payload and native calls only. The ordinary optional-package fixture does not qualify an installed sklearn release.")
+        if name == "test_classical_exceptions_native_owner.py":
+            scope.update(execution_route="native unfitted estimator entries and connected exception bridges; no GPU kernel",
+                         operation_mode="test-specific unfitted refusals and exception reduction/restoration",
+                         coverage_limit="Selected exception identity, sklearn relationship and bridge cases only; pickle is caller-owned. Direct native entry checks do not qualify every public estimator wrapper or exception path. Borrowed-None lifetime needs separate CPython 3.11 execution.")
         if name in CPU_NOT_APPLICABLE:
             scope["operation_mode"] = "identical (explicit fixture configuration)"
             scope["execution_route"] = ("resident GPU tensor pool" if name == "test_sequence_shutdown_native.py"
