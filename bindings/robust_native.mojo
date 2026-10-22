@@ -117,7 +117,8 @@ def _quantiles(value: PythonObject, context: PythonObject) raises -> PythonObjec
         sequential_admit_value(source,context)
         var format = String(source.format)
         if format.byte_length() == 2 and (format.startswith("@") or format.startswith("=") or format.startswith("<") or format.startswith(">") or format.startswith("!")):
-            format = String(format[byte=1:2])
+            var scalar_format = String(format[byte=1:2])
+            format = scalar_format
         if format != "?" and format != "b" and format != "B" and format != "h" and format != "H" and format != "i" and format != "I" and format != "l" and format != "L" and format != "q" and format != "Q" and format != "n" and format != "N" and format != "e" and format != "f" and format != "d":
             raise Error("TypeError: RobustScaler quantile buffers require native numeric formats")
         if Int(py=source.ndim) != 1:
@@ -148,7 +149,7 @@ def robust_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
     var quantiles = _quantiles(fields["quantile_range"],context)
     var lo = Float64(py=quantiles[0])
     var hi = Float64(py=quantiles[1])
-    if not (0 <= lo and lo <= hi and hi <= 100):
+    if not (0.0 <= lo and lo <= hi and hi <= 100.0):
         var b = Python.import_module("builtins")
         var given = fields["quantile_range"]
         # Only exact builtin sequence/scalar repr is allowed on this error
@@ -162,7 +163,7 @@ def robust_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
                 raise Error("mojolearn: invalid quantile range " + String(py_call(b.repr,given)))
         raise Error("mojolearn: invalid quantile range")
     var unit = _truth(fields["unit_variance"],context)
-    if unit and not (0 < lo and lo < hi and hi < 100):
+    if unit and not (0.0 < lo and lo < hi and hi < 100.0):
         raise Error("mojolearn: RobustScaler(unit_variance=True) needs 0 < q_min < q_max < 100 (norm.ppf of 0 or 1 is infinite)")
     var centering = _truth(fields["with_centering"],context)
     var scaling = _truth(fields["with_scaling"],context)
