@@ -123,6 +123,57 @@ def sequence_dtype_shape(value: PythonObject, classes: PythonObject, context: Py
         return Python.tuple(value)
 
 
+def sequence_dtype_version(context: PythonObject) raises -> Int:
+    var module = py_get(context["modules"], "numpy._core._multiarray_umath")
+    if module is None:
+        module = py_get(context["modules"], "numpy.core._multiarray_umath")
+    if module is None or py_type(module) is not context["module_type"]:
+        raise Error("TypeError: dtype compatibility requires NumPy's native version metadata")
+    var entry = py_get(py_fields(module), "_get_ndarray_c_version")
+    var warning = context["sequence_array_warnings"]
+    if entry is None or py_type(entry) is not warning["warning_native_function"] or String(entry.__name__) != "_get_ndarray_c_version" or entry.__self__ is not module:
+        raise Error("TypeError: dtype compatibility requires NumPy's native version entry")
+    return Int(py=py_call(entry))
+
+
+def sequence_dtype_allocation_shape(shape: PythonObject, dtype: PythonObject, context: PythonObject) raises:
+    if Int(py=dtype.itemsize) >= 0:
+        return
+    # NumPy 1.26 accepts negative flexible descriptors, then fails allocation.
+    # Its _ArrayMemoryError has a Python __init__/__str__. Allocate through the
+    # immutable builtin MemoryError.__new__, fill the native instance dictionary
+    # and preserve the exception triple without invoking either Python method.
+    # This rejects impossible storage before asking the ndarray allocator.
+    var b = Python.import_module("builtins")
+    var base = sequence_array_category("MemoryError")
+    var module = py_get(context["modules"], "numpy.core._exceptions")
+    if module is None or py_type(module) is not context["module_type"]:
+        raise Error("TypeError: negative dtype storage requires NumPy's native exception metadata")
+    var category = py_get(py_fields(module), "_ArrayMemoryError")
+    if category is None or py_type(category) is not b.type:
+        raise Error("TypeError: array allocation exceptions require an ordinary native class layout")
+    var bases = py_call(b.type.__getattribute__, category, "__bases__")
+    if len(bases) != 1 or bases[0] is not base:
+        raise Error("TypeError: array allocation exceptions require the native MemoryError base")
+    var fields = py_call(b.type.__dict__["__dict__"].__get__, category)
+    var module_name = py_get(fields, "__module__")
+    if py_type(module_name) is not b.str:
+        raise Error("TypeError: array allocation exceptions require native module-name metadata")
+    if module_name != PythonObject("numpy.core._exceptions") or py_call(b.type.__getattribute__, category, "__qualname__") != PythonObject("_ArrayMemoryError"):
+        raise Error("TypeError: array allocation exceptions require NumPy's exception identity")
+    for name in ["__new__", "__del__", "__getattribute__", "__getattr__", "__setattr__", "__delattr__", "__dict__", "__slots__"]:  # driver-loop: refuse hooks before native exception allocation or field storage
+        if py_contains(fields, PythonObject(name)):
+            raise Error("TypeError: array allocation exception hooks cannot execute; use NumPy's ordinary exception metadata")
+    var exception = py_call(base.__new__, category, shape, dtype)
+    var stored = py_fields(exception)
+    py_setitem(stored, "shape", shape)
+    py_setitem(stored, "dtype", dtype)
+    ref cpy = Python().cpython()
+    cpy.lib.get_function[NoneType]("PyErr_SetObject")(category._obj_ptr, exception._obj_ptr)
+    var failure = stash_python_error()
+    raise failure^
+
+
 def sequence_dtype_pair(base: PythonObject, shape: PythonObject, classes: PythonObject,
                         context: PythonObject, aligned: Bool) raises -> PythonObject:
     var b = Python.import_module("builtins")
@@ -136,7 +187,9 @@ def sequence_dtype_pair(base: PythonObject, shape: PythonObject, classes: Python
             # subarray shape. Construct the same native descriptor directly;
             # passing a scalar in a dtype tuple invokes npy_ctypes_check.
             var limit = 2147483647 // 4 if kind == "U" else 2147483647
-            if py_type(shape) is b.bool or shape < PythonObject(0) or shape > PythonObject(limit):
+            if py_type(shape) is b.bool or shape > PythonObject(limit):
+                raise Error("ValueError: invalid itemsize in generic type tuple")
+            if shape < PythonObject(0) and sequence_dtype_version(context) >= 0x02000000:
                 raise Error("ValueError: invalid itemsize in generic type tuple")
             var spelling = String(base.byteorder) + kind + String(Int(py=shape))
             var metadata = base.metadata
@@ -144,16 +197,8 @@ def sequence_dtype_pair(base: PythonObject, shape: PythonObject, classes: Python
                 return sequence_dtype_create(PythonObject(spelling), context, aligned, py_call(b.dict, metadata))
             return sequence_dtype_create(PythonObject(spelling), context, aligned)
         if py_type(shape) is not b.bool and shape == PythonObject(1):
-            var module = py_get(context["modules"], "numpy._core._multiarray_umath")
-            if module is None:
-                module = py_get(context["modules"], "numpy.core._multiarray_umath")
-            if module is None or py_type(module) is not context["module_type"]:
-                raise Error("TypeError: dtype compatibility requires NumPy's native version metadata")
-            var entry = py_get(py_fields(module), "_get_ndarray_c_version")
-            var warning = context["sequence_array_warnings"]
-            if entry is None or py_type(entry) is not warning["warning_native_function"] or String(entry.__name__) != "_get_ndarray_c_version" or entry.__self__ is not module:
-                raise Error("TypeError: dtype compatibility requires NumPy's native version entry")
-            if Int(py=py_call(entry)) < 0x02000000:
+            if sequence_dtype_version(context) < 0x02000000:
+                var warning = context["sequence_array_warnings"]
                 # NumPy 1.26 preserves its deprecated scalar-size-one alias;
                 # explicit tuple (1,) already means a one-element subarray.
                 sequence_array_warn("Passing (type, 1) or '1type' as a synonym of type is deprecated; in a future version of numpy, it will be understood as (type, (1,)) / '(1,)type'.", warning, "DeprecationWarning")

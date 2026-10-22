@@ -8,7 +8,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from core.sequence_array_cast import sequence_cast_leaf, sequence_wide_word, sequence_signaling, SEQ_CAST_INVALID
 from bindings.sequence_array_warnings import sequence_array_errstate, sequence_array_report
 from bindings.native_numpy_metadata import native_numpy_dtype
-from bindings.sequence_dtype_native import sequence_dtype_classes, sequence_dtype_instance, sequence_dtype_normalize
+from bindings.sequence_dtype_native import sequence_dtype_classes, sequence_dtype_instance, sequence_dtype_normalize, sequence_dtype_allocation_shape
 from bindings.sequence_string_storage import sequence_string_admit, sequence_string_leaf
 
 
@@ -100,6 +100,7 @@ def sequence_array_cast(source: PythonObject, requested: PythonObject, context: 
         raise Error("TypeError: the ndarray protocol requires NumPy's native array type to be connected")
     var classes = sequence_dtype_classes(context)
     var dtype = sequence_dtype_normalize(requested, classes, context)
+    sequence_dtype_allocation_shape(source.shape, dtype, context)
     if (String(dtype.kind) == "S" or String(dtype.kind) == "U") and Int(py=dtype.itemsize) == 0:
         dtype = py_call(dtype_constructor, String(dtype.kind) + "32")
     if String(dtype.kind) == "V" and Int(py=dtype.itemsize) == 0 and dtype.fields is None:
