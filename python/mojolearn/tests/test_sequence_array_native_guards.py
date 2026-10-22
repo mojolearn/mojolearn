@@ -76,7 +76,8 @@ def test_native_array_refuses_python_warning_display(resident):
     assert_refused(result, calls)
 
 
-def test_native_array_text_preserves_callers_numeric_locale(resident):
+@pytest.mark.parametrize("dtype", ["S32", "U32"])
+def test_native_array_text_preserves_callers_numeric_locale(resident, dtype):
     values, tensor = resident
     previous = locale.setlocale(locale.LC_NUMERIC)
     selected = None
@@ -89,8 +90,19 @@ def test_native_array_text_preserves_callers_numeric_locale(resident):
                 pass
         if selected is None:
             pytest.skip("no non-default numeric locale is installed")
-        result = audit(tensor, "U32").assert_native()
-        np.testing.assert_array_equal(result, values.astype("U32"))
+        result = audit(tensor, dtype).assert_native()
+        np.testing.assert_array_equal(result, values.astype(dtype))
         assert locale.setlocale(locale.LC_NUMERIC) == selected
     finally:
         locale.setlocale(locale.LC_NUMERIC, previous)
+
+
+def test_native_array_refuses_replaced_dtype_version_entry(resident, monkeypatch):
+    _, tensor = resident
+    calls = []
+    def replaced():
+        calls.append("version")
+        return 0x01000009
+    core = np.__dict__.get("_core", np.__dict__.get("core"))
+    monkeypatch.setattr(core._multiarray_umath, "_get_ndarray_c_version", replaced)
+    assert_refused(audit(tensor, ("f4", 1)), calls)
