@@ -65,6 +65,25 @@ def _cases():
         "Embedding": ("mojolearn-embedding-1", dict(
             meta=_i64([3, 2, -1]), plan="auto",
             weight=_f32([[1, 2], [3, 4], [5, 6]]))),
+        "KMeans": ("mojolearn-kmeans-1", dict(
+            meta=_i64([2, 2, 3, 4, 0, 0, 20, 1, 4]),
+            reals=_f64([.5, 1., 1., .0001, 2.]), metric="euclidean", init="k-means++",
+            centers=_f32([[1, 2], [3, 4]]), labels=np.asarray([0, 1, 0], dtype="<i4"))),
+        "GaussianMixture": ("mojolearn-gmm-1", dict(
+            ints=_i64([2, 2, 7, 1, 20, 4]), reals=_f64([-.5, .001, .00001]),
+            covariance_type="full", init_params="kmeans", weights=_f32([.5, .5]),
+            means=_f32([1, 2, 3, 4]), covariances=_f32([1, 0, 0, 1] * 2),
+            precisions_cholesky=_f32([1, 0, 0, 1] * 2), log_det_chol=_f32([0, 0]))),
+        "KernelDensity": ("mojolearn-kde-1", dict(
+            meta=_i64([2, 3, 1]), bandwidth=_f64([.75]), kernel="gaussian", metric="euclidean",
+            x=_f32([[1, 2], [3, 4], [5, 6]]), weights=_f32([1, 2, 1]))),
+        "DBSCAN": ("mojolearn-dbscan-1", dict(
+            meta=_i64([2, 3, 2]), eps=_f64([.5]), metric="euclidean", algorithm="brute",
+            components=_f32([[1, 2], [3, 4]]), core_sample_indices=np.asarray([0, 1], dtype="<i4"),
+            core_labels=np.asarray([0, 1], dtype="<i4"), labels=np.asarray([0, 1, -1], dtype="<i4"))),
+        "AgglomerativeClustering": ("mojolearn-agglomerative-1", dict(
+            meta=_i64([2, 2, 3]), metric="euclidean", x=_f32([[1, 2], [3, 4], [5, 6]]),
+            labels=np.asarray([0, 1, 1], dtype="<i4"))),
     }
 
 
@@ -122,7 +141,8 @@ def test_host_load_does_not_call_constructor_or_serialize_helpers(tmp_path, name
 
 @pytest.mark.parametrize("name", CASES)
 def test_host_load_rejects_wrong_dtype_and_metadata_natively(tmp_path, name):
-    path = _archive(tmp_path, name, override={"meta": np.asarray([1], dtype="<f8")})
+    key = "meta" if "meta" in CASES[name][1] else "ints"
+    path = _archive(tmp_path, name, override={key: np.asarray([1], dtype="<f8")})
     audit = audit_native_call(getattr(host, "Host" + name).load, path)
     assert isinstance(audit.exception, ValueError), audit.report()
     report = audit.report()
