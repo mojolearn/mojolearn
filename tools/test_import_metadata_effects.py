@@ -196,3 +196,20 @@ def test_new_expansion_providers_and_module_hooks_invalidate_the_registry_proof(
     assert not metadata_only_call(
         rel, call, {"_FORMATS"}, ls._parse, ls._native_metadata_factory, ls._metadata_registry_guard
     )
+
+
+def test_foreign_registry_attributes_do_not_taint_the_local_registry(monkeypatch):
+    rel = "python/mojolearn/local.py"
+    modules = {
+        rel: ast.parse(
+            "from . import foreign\n_FORMATS = {}\n"
+            "def other():\n    return foreign._FORMATS\n"
+            "def local():\n    return _FORMATS\n"
+            "def unknown(obj):\n    return obj._FORMATS\n"
+        ),
+        "python/mojolearn/foreign.py": ast.parse("_FORMATS = {}\n"),
+    }
+    monkeypatch.setattr(ls, "_parse", modules.get)
+    names, _ = ls._module_closure(rel, modules[rel], {"_FORMATS"}, runs=set())
+    assert "local" in names and "unknown" in names
+    assert "other" not in names
