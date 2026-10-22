@@ -33,7 +33,7 @@ from std.math import isfinite
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 
-from bindings.optimizer_public_words import optimizer_python_error
+from bindings.optimizer_public_words import optimizer_python_error, stash_python_error
 from bindings.py_balanced import py_call, py_setattr, py_setitem, py_type, py_get, py_fields
 from bindings.optimizer_admission import opt_guards, opt_owner, opt_value, opt_scalar, opt_schedule
 from sequence.lr_table import LrSpec
@@ -216,7 +216,15 @@ def new_array(dims: List[Int], dtype: String) raises -> PythonObject:
     py_setattr(result, "_store", store)
     py_setattr(result, "_base", PythonObject(None))
     py_setattr(result, "_pin", PythonObject(None))
-    py_setattr(result, "_mv", py_call(b.memoryview, store))
+    # Acquire the native store's buffer through CPython's public API. The
+    # mutable builtins.memoryview module field is not a runtime constructor.
+    ref cpy = Python().cpython()
+    var view_ptr = cpy.lib.get_function[PyObjectPtr]("PyMemoryView_FromObject")(store._obj_ptr)
+    if not view_ptr:
+        var failure = stash_python_error()
+        raise failure^
+    var view = PythonObject(from_owned=view_ptr)
+    py_setattr(result, "_mv", view)
     py_setattr(result, "_addr", py_call(store.buffer_info)[0])
     py_setattr(result, "_readonly", PythonObject(False))
     py_setattr(result, "shape", py_ints(dims))
