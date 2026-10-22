@@ -358,25 +358,46 @@ def host_archive_embedding(cls: PythonObject, arrays: PythonObject, context: Pyt
     return model
 
 
-def host_archive_kmeans(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
-    var meta = host_archive_count(arrays, "meta", "<i8", 9, context, True)
-    var reals = host_archive_count(arrays, "reals", "<f8", 5, context, True)
+def host_archive_sorted(table: PythonObject) raises -> String:
+    """repr(sorted(table)): the list of names a loader's refusal shows."""
+    var b = Python.import_module("builtins")
+    return String(py_call(b.repr, py_call(b.sorted, table)))
+
+
+def host_archive_kmeans(cls: PythonObject, arrays: PythonObject, path: PythonObject,
+                        context: PythonObject) raises -> PythonObject:
+    # The refusals keep KMeans.load's wording and order.
+    var where = host_archive_where(path, context)
+    var meta = _archive_exact(arrays, "meta", "<i8", context)
+    var reals = _archive_exact(arrays, "reals", "<f8", context)
+    if Int(py=meta.size) != 9 or Int(py=reals.size) != 5:
+        raise Error(where + " holds " + String(Int(py=meta.size)) + " meta fields and " + String(Int(py=reals.size))
+                    + " reals, 9 and 5 are needed")
     var k = classical_i64(meta, 0)
     var d = classical_i64(meta, 1)
     var n = classical_i64(meta, 2)
     if k < 1 or d < 1:
-        raise Error("saved KMeans holds an empty model")
+        raise Error(where + " holds an empty model (" + String(k) + " centers of " + String(d) + " features)")
     var metric = _archive_string(arrays, "metric", context)
     var start = _archive_string(arrays, "init", context)
     var metrics = context["host_archive_kmeans_metrics"]
     var starts = context["host_archive_kmeans_starts"]
-    if not py_contains(metrics, metric) or Int(py=metrics[metric]) != classical_i64(meta, 4):
-        raise Error("saved KMeans metric and code do not match")
-    if not py_contains(starts, start) or Int(py=starts[start]) != classical_i64(meta, 5):
-        raise Error("saved KMeans init and code do not match")
+    if not py_contains(metrics, metric):
+        raise Error(where + " metric " + _archive_builtin_repr(metric) + " is not one KMeans serves ("
+                    + host_archive_sorted(metrics) + ")")
+    var metric_code = Int(py=metrics[metric])
+    if metric_code != classical_i64(meta, 4):
+        raise Error(where + " names metric " + _archive_builtin_repr(metric) + " (code " + String(metric_code)
+                    + ") but its meta holds code " + String(classical_i64(meta, 4)))
+    if not py_contains(starts, start):
+        raise Error(where + " init " + _archive_builtin_repr(start) + " is not one KMeans serves ("
+                    + host_archive_sorted(starts) + ")")
+    var start_code = Int(py=starts[start])
+    if start_code != classical_i64(meta, 5):
+        raise Error(where + " names init " + _archive_builtin_repr(start) + " (code " + String(start_code)
+                    + ") but its meta holds code " + String(classical_i64(meta, 5)))
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
-    host_archive_mode(arrays, fields, context)
     py_setitem(fields, "n_clusters", k)
     py_setitem(fields, "init", start)
     py_setitem(fields, "n_init", classical_i64(meta, 7))
@@ -386,8 +407,16 @@ def host_archive_kmeans(cls: PythonObject, arrays: PythonObject, context: Python
     py_setitem(fields, "init_centroids", PythonObject(None))
     py_setitem(fields, "metric", metric)
     py_setitem(fields, "oversampling_factor", classical_f64(reals, 4))
-    py_setitem(fields, "cluster_centers_", host_archive_shape(arrays, "centers", "<f4", Python.tuple(k, d), context))
-    py_setitem(fields, "labels_", host_archive_shape(arrays, "labels", "<i4", Python.tuple(n), context))
+    host_archive_mode(arrays, fields, context)
+    var centers = _archive_exact(arrays, "centers", "<f4", context)
+    if Int(py=centers.ndim) != 2 or Int(py=centers.shape[0]) != k or Int(py=centers.shape[1]) != d:
+        raise Error(where + " centers shape " + _archive_builtin_repr(centers.shape) + " is not (" + String(k)
+                    + ", " + String(d) + "); the centroid count and the dimensionality disagree")
+    var labels = _archive_exact(arrays, "labels", "<i4", context)
+    if Int(py=labels.ndim) != 1 or Int(py=labels.size) != n:
+        raise Error(where + " labels hold " + String(Int(py=labels.size)) + " values, the fit had " + String(n) + " rows")
+    py_setitem(fields, "cluster_centers_", centers)
+    py_setitem(fields, "labels_", labels)
     py_setitem(fields, "n_features_in_", d)
     py_setitem(fields, "n_iter_", classical_i64(meta, 3))
     py_setitem(fields, "inertia_", classical_f64(reals, 0))
@@ -396,37 +425,58 @@ def host_archive_kmeans(cls: PythonObject, arrays: PythonObject, context: Python
     return model
 
 
-def host_archive_mixture(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
-    var meta = host_archive_count(arrays, "ints", "<i8", 6, context, True)
-    var reals = host_archive_count(arrays, "reals", "<f8", 3, context, True)
+def host_archive_vector(arrays: PythonObject, name: String, count: Int, where: String,
+                        context: PythonObject) raises -> PythonObject:
+    """A 1-D float32 member of `count` values, refused as
+    `{path!r} {name} holds {n} values, {count} are needed`."""
+    var value = _archive_exact(arrays, name, "<f4", context)
+    if Int(py=value.ndim) != 1 or Int(py=value.size) != count:
+        raise Error(where + " " + name + " holds " + String(Int(py=value.size)) + " values, "
+                    + String(count) + " are needed")
+    return value
+
+
+def host_archive_mixture(cls: PythonObject, arrays: PythonObject, path: PythonObject,
+                         context: PythonObject) raises -> PythonObject:
+    # The refusals keep GaussianMixture.load's wording and order.
+    var where = host_archive_where(path, context)
+    var meta = _archive_exact(arrays, "ints", "<i8", context)
+    var reals = _archive_exact(arrays, "reals", "<f8", context)
+    if Int(py=meta.size) != 6 or Int(py=reals.size) != 3:
+        raise Error(where + " holds " + String(Int(py=meta.size)) + " ints and " + String(Int(py=reals.size))
+                    + " reals, 6 and 3 are needed")
     var k = classical_i64(meta, 0)
     var d = classical_i64(meta, 1)
     if k < 1 or d < 1:
-        raise Error("saved GaussianMixture holds an empty model")
+        raise Error(where + " holds an empty model")
+    var covariance_type = _archive_string(arrays, "covariance_type", context)
+    var init_params = _archive_string(arrays, "init_params", context)
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
-    host_archive_mode(arrays, fields, context)
     py_setitem(fields, "n_components", k)
-    py_setitem(fields, "covariance_type", _archive_string(arrays, "covariance_type", context))
+    py_setitem(fields, "covariance_type", covariance_type)
     py_setitem(fields, "tol", classical_f64(reals, 1))
     py_setitem(fields, "reg_covar", classical_f64(reals, 2))
     py_setitem(fields, "max_iter", classical_i64(meta, 4))
-    py_setitem(fields, "init_params", _archive_string(arrays, "init_params", context))
+    py_setitem(fields, "init_params", init_params)
     py_setitem(fields, "random_state", classical_i64(meta, 5))
     py_setitem(fields, "n_init", 1)
     py_setitem(fields, "warm_start", False)
     py_setitem(fields, "means_init", PythonObject(None))
     py_setitem(fields, "weights_init", PythonObject(None))
     py_setitem(fields, "precisions_init", PythonObject(None))
+    host_archive_mode(arrays, fields, context)
+    var weights = host_archive_vector(arrays, "weights", k, where, context)
+    var means = host_archive_vector(arrays, "means", k * d, where, context)
+    var covariance = host_archive_vector(arrays, "covariances", k * d * d, where, context)
+    var precision = host_archive_vector(arrays, "precisions_cholesky", k * d * d, where, context)
+    var log_det = host_archive_vector(arrays, "log_det_chol", k, where, context)
     py_setitem(fields, "n_features_in_", d)
-    py_setitem(fields, "weights_", host_archive_shape(arrays, "weights", "<f4", Python.tuple(k), context))
-    var means = host_archive_shape(arrays, "means", "<f4", Python.tuple(k * d), context)
-    var covariance = host_archive_shape(arrays, "covariances", "<f4", Python.tuple(k * d * d), context)
-    var precision = host_archive_shape(arrays, "precisions_cholesky", "<f4", Python.tuple(k * d * d), context)
+    py_setitem(fields, "weights_", weights)
     py_setitem(fields, "means_", classical_wrap_array(means._store, Python.tuple(k, d), "<f4", "C", context))
     py_setitem(fields, "covariances_", classical_wrap_array(covariance._store, Python.tuple(k, d, d), "<f4", "C", context))
     py_setitem(fields, "precisions_cholesky_", classical_wrap_array(precision._store, Python.tuple(k, d, d), "<f4", "C", context))
-    py_setitem(fields, "log_det_chol_", host_archive_shape(arrays, "log_det_chol", "<f4", Python.tuple(k), context))
+    py_setitem(fields, "log_det_chol_", log_det)
     py_setitem(fields, "n_iter_", classical_i64(meta, 2))
     py_setitem(fields, "converged_", classical_i64(meta, 3) != 0)
     py_setitem(fields, "lower_bound_", classical_f64(reals, 0))
@@ -483,17 +533,23 @@ def host_archive_density(cls: PythonObject, arrays: PythonObject, kde: Bool,
     return model
 
 
-def host_archive_agglomerative(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
-    var meta = host_archive_count(arrays, "meta", "<i8", 3, context, True)
+def host_archive_agglomerative(cls: PythonObject, arrays: PythonObject, path: PythonObject,
+                               context: PythonObject) raises -> PythonObject:
+    # The refusals keep AgglomerativeClustering.load's wording and order
+    # (the metric refusal is its constructor check's).
+    var where = host_archive_where(path, context)
+    var meta = host_archive_meta(arrays, "meta", 3, path, context)
     var k = classical_i64(meta, 0)
     var nf = classical_i64(meta, 1)
     var n = classical_i64(meta, 2)
     var metric = _archive_string(arrays, "metric", context)
-    if not py_contains(context["host_archive_agglo_metrics"], metric):
-        raise Error("NotImplementedError: saved AgglomerativeClustering metric is unsupported")
+    var metrics = context["host_archive_agglo_metrics"]
+    if not py_contains(metrics, metric):
+        raise Error("NotImplementedError: mojolearn AgglomerativeClustering: metric=" + _archive_builtin_repr(metric)
+                    + " is refused by name; one of " + host_archive_sorted(metrics) + ". A callable metric would "
+                    + "compute the dissimilarities outside every identity column. See x_cluster/NOT_IMPLEMENTED.tsv")
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
-    host_archive_mode(arrays, fields, context)
     py_setitem(fields, "n_clusters", k)
     py_setitem(fields, "metric", metric)
     py_setitem(fields, "connectivity", PythonObject(None))
@@ -506,8 +562,15 @@ def host_archive_agglomerative(cls: PythonObject, arrays: PythonObject, context:
     py_setitem(fields, "prediction_data", True)
     py_setitem(fields, "_connectivity", "pairwise")
     py_setitem(fields, "_compute_distances", False)
-    py_setitem(fields, "_fit_X", host_archive_shape(arrays, "x", "<f4", Python.tuple(n, nf), context))
-    py_setitem(fields, "labels_", host_archive_count(arrays, "labels", "<i4", n, context))
+    host_archive_mode(arrays, fields, context)
+    var x = _archive_exact(arrays, "x", "<f4", context)
+    var labels = _archive_exact(arrays, "labels", "<i4", context)
+    if Int(py=x.ndim) != 2 or Int(py=x.shape[0]) != n or Int(py=x.shape[1]) != nf:
+        raise Error(where + " x shape " + _archive_builtin_repr(x.shape) + " is not (" + String(n) + ", " + String(nf) + ")")
+    if Int(py=labels.size) != n:
+        raise Error(where + " labels do not match n_leaves_")
+    py_setitem(fields, "_fit_X", x)
+    py_setitem(fields, "labels_", labels)
     py_setitem(fields, "n_clusters_", k)
     py_setitem(fields, "n_leaves_", n)
     py_setitem(fields, "n_features_in_", nf)
@@ -1708,13 +1771,13 @@ def host_archive_build(path: PythonObject, context: PythonObject,
     elif fmt == "mojolearn-embedding-1":
         model = host_archive_embedding(cls, arrays, context)
     elif fmt == "mojolearn-kmeans-1":
-        model = host_archive_kmeans(cls, arrays, context)
+        model = host_archive_kmeans(cls, arrays, path, context)
     elif fmt == "mojolearn-gmm-1":
-        model = host_archive_mixture(cls, arrays, context)
+        model = host_archive_mixture(cls, arrays, path, context)
     elif fmt == "mojolearn-kde-1" or fmt == "mojolearn-dbscan-1":
         model = host_archive_density(cls, arrays, fmt == "mojolearn-kde-1", context)
     elif fmt == "mojolearn-agglomerative-1":
-        model = host_archive_agglomerative(cls, arrays, context)
+        model = host_archive_agglomerative(cls, arrays, path, context)
     elif fmt == "mojolearn-logistic-1":
         model = host_archive_logistic(cls, arrays, context)
     elif fmt == "mojolearn-arima-1" or fmt == "mojolearn-arima-2":

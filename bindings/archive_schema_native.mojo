@@ -18,6 +18,25 @@
 #   ("refuse_set", field, exc, msg)    raise exc(msg) when field is held and not None
 #   ("refuse_in", field, values, exc, msg)
 #                                      raise exc(msg) when field equals one of values
+#   ("need_eq", field, value, exc, msg, shown)
+#                                      raise exc(msg) unless field == value
+#   ("need_in", field, values, exc, msg, shown)
+#                                      raise exc(msg) unless field is in values
+#                                      (msg's {0}, {1}, ... are repr() of the
+#                                      fields named in the tuple `shown`)
+#   ("choice", field, key, names, saved, fallback, exc, name_msg, code_msg)
+#                                      a (name, code) pair under the derived
+#                                      field `key` (read later through the
+#                                      path (key, 0) or (key, 1)): a str field
+#                                      is its own name, refused by name_msg
+#                                      unless it is in the table `names`
+#                                      (name -> code); with a fallback (name,
+#                                      code) pair, a callable, a bool or a
+#                                      non-int field takes the fallback;
+#                                      otherwise code = int(field), refused by
+#                                      code_msg unless it is in the table
+#                                      `saved` (code -> name). Messages carry
+#                                      {value} (repr of the field) and {code}.
 #   ("format", member, text)           a constant text member
 #   ("estimator", member)              the class name
 #   ("mode", member, prefix)           the numeric mode a predict would use now
@@ -91,6 +110,40 @@ def _schema_value(fields: PythonObject, path: PythonObject, name: String) raises
             raise Error("TypeError: saved field path " + String(path[0]) + " requires native containers")
         value = value[path[i]]
     return value
+
+
+def _schema_shown(fields: PythonObject, msg: PythonObject, shown: PythonObject, name: String) raises -> PythonObject:
+    """`msg` with {0}, {1}, ... replaced by repr() of the fields `shown` names."""
+    var b = Python.import_module("builtins")
+    var text = String(msg)
+    for i in range(len(shown)):  # driver-loop: over the fixed fields one refusal message names
+        var shown_value = _schema_value(fields, shown[i], name)
+        text = text.replace("{" + String(i) + "}", String(py_call(b.repr, shown_value)))
+    return PythonObject(text)
+
+
+def _schema_choice(fields: PythonObject, step: PythonObject, name: String) raises:
+    """The ("choice", ...) step: stores (name, code) under the derived field."""
+    var b = Python.import_module("builtins")
+    var value = _schema_value(fields, step[1], name)
+    var names = step[3]
+    var saved = step[4]
+    var fallback = step[5]
+    var shown = String(py_call(b.repr, value))
+    if py_type(value) is b.str:
+        if not py_contains(names, value):
+            _schema_fail(step[6], PythonObject(String(step[7]).replace("{value}", shown)), name)
+        py_setitem(fields, step[2], Python.tuple(value, names[value]))
+        return
+    if fallback is not None:
+        if Bool(py=py_call(b.callable, value)) or py_type(value) is b.bool or not Bool(py=py_call(b.isinstance, value, b.int)):
+            py_setitem(fields, step[2], fallback)
+            return
+    var code = py_call(b.int, value)
+    if not py_contains(saved, code):
+        var text = String(step[8]).replace("{value}", shown).replace("{code}", String(py_call(b.repr, code)))
+        _schema_fail(step[6], PythonObject(text), name)
+    py_setitem(fields, step[2], Python.tuple(saved[code], code))
 
 
 def _schema_int(value: PythonObject, label: String) raises -> Int:
@@ -314,6 +367,14 @@ def _schema_run(model: PythonObject, fields: PythonObject, steps: PythonObject, 
         elif kind == "refuse_in":
             if _schema_has(fields, step[1]) and py_contains(step[2], _schema_value(fields, step[1], name)):
                 _schema_fail(step[3], step[4], name)
+        elif kind == "need_eq":
+            if not Bool(py=_schema_value(fields, step[1], name) == step[2]):
+                _schema_fail(step[3], _schema_shown(fields, step[4], step[5], name), name)
+        elif kind == "need_in":
+            if not py_contains(step[2], _schema_value(fields, step[1], name)):
+                _schema_fail(step[3], _schema_shown(fields, step[4], step[5], name), name)
+        elif kind == "choice":
+            _schema_choice(fields, step, name)
         elif kind == "format":
             py_setitem(values, step[1], step[2])
         elif kind == "estimator":
@@ -357,7 +418,8 @@ def archive_schema_save(model: PythonObject, path: PythonObject, context: Python
         raise Error("TypeError: " + String(cls.__name__) + " has no connected save schema")
     # A fitted field may be an ndarray when the caller loaded NumPy.
     classical_connect_numpy(context)
-    var fields = py_fields(model)
+    # A shallow copy: "choice" steps add derived fields, never to the model.
+    var fields = py_call(Python.import_module("builtins").dict, py_fields(model))
     var values = Python.dict()
     _schema_run(model, fields, steps, values, String(cls.__name__), context)
     return classical_archive_write(path, values, context)
