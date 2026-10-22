@@ -17,7 +17,6 @@ from x_decomp.resident import (
     dev_project_run,
     dev_rand_run,
     dev_trisolve_run,
-    dev_knn_select_run,
     dev_colsum_run,
     dev_rowsum_run,
     dev_sqdist_run,
@@ -26,7 +25,6 @@ from x_decomp.resident import (
     dev_orth_diag_run,
     dev_lda_rows_run,
     dev_lda_bound_run,
-    dev_als_rows_run,
     dev_cd_rows_run,
     dev_svd_run,
     dev_lu_run,
@@ -146,15 +144,6 @@ def dev_trisolve_py(lu: PythonObject, idx: PythonObject, src: PythonObject, dst:
     return PythonObject(dev_trisolve_run(_id(lu), _id(idx), _id(src), _id(dst), n, nrhs, trans))
 
 
-def dev_knn_select_py(dmat: PythonObject, dist: PythonObject, idx: PythonObject, p: PythonObject) raises -> PythonObject:
-    """`knn_select_py` on device ids, enqueued (no sync)."""
-    var n = _n(p, 0)
-    var m = _n(p, 1)
-    var k = _n(p, 2)
-    var ex = _n(p, 3)
-    return PythonObject(dev_knn_select_run(_id(dmat), _id(dist), _id(idx), n, m, k, ex))
-
-
 def dev_colsum_py(a: PythonObject, dst: PythonObject, p: PythonObject) raises -> PythonObject:
     return PythonObject(dev_colsum_run(_id(a), _id(dst), _n(p, 0), _n(p, 1)))
 
@@ -231,23 +220,6 @@ def dev_lda_bound_py(
     var v = _n(p, 2)
     var floor = Float64(py=f[0])
     return PythonObject(dev_lda_bound_run(_id(x), _id(ddt), _id(dcomp), _id(dst), n, k, v, floor))
-
-
-def dev_als_rows_py(
-    c: PythonObject, y: PythonObject, yty: PythonObject, x: PythonObject, flags: PythonObject, p: PythonObject,
-    reg: PythonObject,
-) raises -> PythonObject:
-    """`x_decomp_als_rows` on device matrices. p = [n, m, f, su, si, c_len]."""
-    var n = _n(p, 0)
-    var m = _n(p, 1)
-    var f = _n(p, 2)
-    var su = _n(p, 3)
-    var si = _n(p, 4)
-    var cl = _n(p, 5)
-    var rg = Float64(py=reg)
-    return PythonObject(
-        dev_als_rows_run(_id(c), _id(y), _id(yty), _id(x), _id(flags), n, m, f, su, si, cl, rg)
-    )
 
 
 def dev_cd_rows_py(

@@ -37,26 +37,6 @@ def gather(src: F32Ptr, idx: I32Ptr, m: Int, dst: F32Ptr):
         dst.unsafe_store(a, src.unsafe_load(Int(idx.unsafe_load(a))))
 
 
-def scatter(dst: F32Ptr, idx: I32Ptr, m: Int, src: F32Ptr):
-    for a in range(m):
-        dst.unsafe_store(Int(idx.unsafe_load(a)), src.unsafe_load(a))
-
-
-def triu_nonzero(dis: F32Ptr, n: Int, pos: I32Ptr, mir: I32Ptr) -> Int:
-    """`[i * n + j for i in range(n) for j in range(i + 1, n) if dis[i * n + j] != 0]`
-    into `pos` (and each one's mirror `j * n + i` into `mir`); returns the count.
-    `!= 0` is Python's: NaN is kept, -0.0 is dropped."""
-    var m = 0
-    for i in range(n):
-        for j in range(i + 1, n):
-            var v = dis.unsafe_load(i * n + j)
-            if v != Float32(0):
-                pos.unsafe_store(m, Int32(i * n + j))
-                mir.unsafe_store(m, Int32(j * n + i))
-                m += 1
-    return m
-
-
 def argsort_f32(x: F32Ptr, m: Int, dst: I32Ptr) raises:
     """`sorted(range(m), key=lambda i: x[i])` (stable: ties in index order)."""
     var keys = List[UInt64](capacity=m)
@@ -65,31 +45,6 @@ def argsort_f32(x: F32Ptr, m: Int, dst: I32Ptr) raises:
     sort(keys)
     for a in range(m):
         dst.unsafe_store(a, Int32(Int(keys[a] & UInt64(0xFFFFFFFF))))
-
-
-def iso_order(x: F32Ptr, y: F32Ptr, xorder: I32Ptr, m: Int, dst: I32Ptr) raises:
-    """`sorted(range(m), key=lambda i: (x[i], y[i]))` given `xorder`, the
-    stable order by x alone: each run of equal x is re-sorted by (y, index)."""
-    var a = 0
-    var keys = List[UInt64]()
-    while a < m:
-        var xa = x.unsafe_load(Int(xorder.unsafe_load(a)))
-        var b = a + 1
-        while b < m and x.unsafe_load(Int(xorder.unsafe_load(b))) == xa:
-            b += 1
-        if b - a == 1:
-            dst.unsafe_store(a, xorder.unsafe_load(a))
-        else:
-            keys.clear()
-            for t in range(a, b):
-                var i = Int(xorder.unsafe_load(t))
-                keys.append((UInt64(f32_key(y.unsafe_load(i))) << 32) | UInt64(i))
-            sort(keys)
-            for t in range(b - a):
-                dst.unsafe_store(a + t, Int32(Int(keys[t] & UInt64(0xFFFFFFFF))))
-        a = b
-    for t in range(m):
-        _ = f32_key(y.unsafe_load(t))          # a NaN y is refused as the full sort would meet it
 
 
 # ---- lane apple-fast-py2mojo-decomp (2026-10-03): the rest of the decomp
@@ -294,12 +249,6 @@ def argmin_all(x: F32Ptr, m: Int, dst: F32Ptr) -> Int:
             dst.unsafe_store(c, Float32(i))
             c += 1
     return c
-
-
-def sign_labels(x: F32Ptr, m: Int, dst: I32Ptr):
-    """`[1 if v >= 0 else -1 for v in x]` (NaN is -1)."""
-    for i in range(m):
-        dst.unsafe_store(i, Int32(1) if x.unsafe_load(i) >= Float32(0) else Int32(-1))
 
 
 comptime F64Ptr = MutPointer[Float64, MutAnyOrigin]

@@ -17,8 +17,8 @@ from x_decomp.kit import mat_from
 from x_decomp.mcd import fast_mcd
 from x_decomp.lda_online import lda_online_pass
 from x_decomp.moves import (
-    F64Ptr, accuracy, argmin_all, dsum_sq_host, gather, move_host, order_f, scatter, select_smallest, sign_labels,
-    topn_desc, triu_nonzero,
+    F64Ptr, accuracy, argmin_all, dsum_sq_host, gather, move_host, order_f, select_smallest,
+    topn_desc,
 )
 from x_decomp.tsqr_core import TS_MAX_N
 from x_decomp.pca_mle import mle_scratch_words, pca_mle_rank_host
@@ -453,20 +453,6 @@ def gather_run(ps: F32Ptr, pi: I32Ptr, n: Int, pd: F32Ptr) raises:
     gather(ps, pi, n, pd)
 
 
-def scatter_run(pd: F32Ptr, pi: I32Ptr, n: Int, ps: F32Ptr) raises:
-    """`scatter_py`'s typed entry: dst[idx[a]] = src[a] for a < n, in order."""
-    if n < 0:
-        raise Error("x_decomp: negative scatter count")
-    scatter(pd, pi, n, ps)
-
-
-def triu_nonzero_run(pd: F32Ptr, nn: Int, pp: I32Ptr, pm: I32Ptr) raises -> Int:
-    """`triu_nonzero_py`'s typed entry: the Int32 bound, then the count."""
-    if nn < 0 or nn * nn > 2147483647:
-        raise Error("x_decomp: triu_nonzero exceeds the Int32 index bound")
-    return triu_nonzero(pd, nn, pp, pm)
-
-
 def move_run(
     op: Int, ps: F32Ptr, pi: F32Ptr, pd: F32Ptr, count: Int, a1: Int, a2: Int, a3: Int, ist: Int, ioff: Int,
     nsrc: Int, ndst: Int, nidx: Int,
@@ -504,12 +490,6 @@ def argmin_all_run(xa: Int, n: Int, da: Int) raises -> Int:
     if n <= 0:
         return 0
     return argmin_all(_fp(xa), n, _fp(da))
-
-
-def sign_labels_run(xa: Int, n: Int, da: Int) raises:
-    """`sign_labels_py`'s typed entry; the buffers are read only when n > 0."""
-    if n > 0:
-        sign_labels(_fp(xa), n, _ip(da))
 
 
 def accuracy_run(ya: Int, pa: Int, wa: Int, n: Int) raises -> Tuple[Float64, Float64]:
