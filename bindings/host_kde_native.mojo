@@ -2,8 +2,11 @@
 # Explicit CPU KDE keeps its existing serial kernel and fixed sum order;
 # query preparation, stored-buffer ownership and result publication are native.
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.classical_attributes import classical_getattribute
+from bindings.classical_pandas import _pd_type_fields
+from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_is_f32, classical_c_order, classical_kind
 from bindings.host_archive_native import host_archive_typed
 from bindings.host_inference_scalars import host_inference_scalar
@@ -12,15 +15,58 @@ from bindings.host_kernel_inference_native import _kernel_entry, _kernel_buffer
 from bindings.host_svc_native import _svc_input
 
 
+def _kde_option_value(value: PythonObject, context: PythonObject, numeric: Bool = False) raises -> PythonObject:
+    var cls = py_type(value)
+    var native_str = py_type(PythonObject(""))
+    var native_bytes = context["host_kde_bytes_type"]
+    var numpy_str = PythonObject(None)
+    var numpy_bytes = PythonObject(None)
+    if py_get(context, "ndarray") is not None:
+        var constructor = native_numpy_dtype(context)
+        numpy_str = py_call(constructor, "U").type
+        numpy_bytes = py_call(constructor, "S").type
+    var text = cls is native_str or cls is numpy_str
+    if not text and py_type(cls) is py_type(native_str):
+        var mro = py_call(py_type(native_str).__dict__["__mro__"].__get__, cls)
+        for i in range(len(mro)):  # driver-loop: native string ancestry without value protocols
+            if mro[i] is native_str:
+                text = True
+                break
+        if text:
+            var native_string_slot = native_str.__dict__["__str__"]
+            for i in range(len(mro)):  # driver-loop: refuse overridden string/numeric hooks before conversion
+                if mro[i] is native_str:
+                    break
+                var fields = _pd_type_fields(mro[i])
+                var slot = py_get(fields, "__str__")
+                if (slot is not None and slot is not native_string_slot) or py_contains(fields, "__del__") or (numeric and (py_contains(fields, "__float__") or py_contains(fields, "__index__"))):
+                    raise Error("TypeError: KDE option strings cannot invoke Python conversion hooks")
+    if text:
+        # CPython copies Unicode subclass contents directly. Neither __str__
+        # nor another Python value protocol participates in this conversion.
+        ref cpy = Python().cpython()
+        var result = cpy.lib.get_function[PyObjectPtr]("PyUnicode_FromObject")(value._obj_ptr)
+        if not result:
+            raise cpy.unsafe_get_error()
+        return PythonObject(from_owned=result)
+    if cls is native_bytes or cls is numpy_bytes or cls is py_get(context, "host_kde_bytearray_type"):
+        # The old numeric entry stringified byte options before reporting its
+        # unknown kernel/metric error; bandwidth instead parsed their bytes.
+        return value if numeric else py_call(native_str, value)
+    if numeric:
+        host_inference_scalar(value, context)
+        return value
+    raise Error("TypeError: KDE kernel and metric require native strings without Python conversion hooks")
+
+
 def host_kde_admit_state(fields: PythonObject, context: PythonObject) raises:
-    var b = Python.import_module("builtins")
     var names = Python.tuple("kernel", "metric")
     for i in range(len(names)):  # driver-loop: fixed KDE kernel/metric names
-        if py_contains(fields, names[i]) and py_type(fields[names[i]]) is not b.str:
-            raise Error("TypeError: KDE kernel and metric require exact native strings")
+        if py_contains(fields, names[i]):
+            _ = _kde_option_value(fields[names[i]], context)
     var bandwidth = py_get(fields, "bandwidth")
-    if bandwidth is not None and py_type(bandwidth) is not b.str:
-        host_inference_scalar(bandwidth, context)
+    if bandwidth is not None:
+        _ = _kde_option_value(bandwidth, context, True)
     var buffers = Python.tuple("_x", "_w")
     for i in range(len(buffers)):  # driver-loop: fixed saved KDE buffers
         var value = py_get(fields, buffers[i])
@@ -59,14 +105,10 @@ def host_kde_inference(model: PythonObject, fields: PythonObject, source: Python
         weights = _kernel_buffer(weight, count, "<f4", context)
     # Derive the fixed native constructor from a C-created scalar. A patched
     # builtins.float must never install a callback on this numerical boundary.
-    var bandwidth_value = classical_getattribute(model, PythonObject("bandwidth"), context)
-    if py_type(bandwidth_value) is not py_type(PythonObject("")):
-        host_inference_scalar(bandwidth_value, context)
+    var bandwidth_value = _kde_option_value(classical_getattribute(model, PythonObject("bandwidth"), context), context, True)
     var bandwidth = py_call(py_type(PythonObject(Float64(0.0))), bandwidth_value)
-    var kernel = classical_getattribute(model, PythonObject("kernel"), context)
-    var metric = classical_getattribute(model, PythonObject("metric"), context)
-    if py_type(kernel) is not py_type(PythonObject("")) or py_type(metric) is not py_type(PythonObject("")):
-        raise Error("TypeError: KDE kernel and metric require exact native strings")
+    var kernel = _kde_option_value(classical_getattribute(model, PythonObject("kernel"), context), context)
+    var metric = _kde_option_value(classical_getattribute(model, PythonObject("metric"), context), context)
     var out = host_archive_typed(Python.tuple(rows), "<f4", context["output_context"])
     # The explicit host entry has no resident-fit registry. Each call uses
     # the supplied saved buffers, as the original CPU path did.

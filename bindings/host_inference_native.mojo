@@ -48,12 +48,17 @@ def host_inference_operation(model: PythonObject, operation: String, args: Pytho
         raise Error("TypeError: no native explicit CPU prediction owner for this class")
     var logistic = String(kind) == "logistic"
     var svc = String(kind) == "svc"
+    var kde = String(kind) == "kde"
     var labels = PythonObject(None)
     if (logistic or svc) and py_contains(fields, "classes_"):
         labels = host_logistic_classes(fields["classes_"], context)
     var keys = py_call(b.list, fields.keys())
     for i in range(len(keys)):  # driver-loop: admitted stored model values
-        if not (logistic or svc) or String(keys[i]) != "classes_":
+        var name = String(keys[i])
+        # KDE's option owner admits native Unicode/byte scalar subclasses
+        # before conversion; ordinary container admission cannot classify them.
+        var kde_option = kde and (name == "bandwidth" or name == "kernel" or name == "metric")
+        if not kde_option and (not (logistic or svc) or name != "classes_"):
             classical_admit_value(fields[keys[i]], context)
     host_inference_scalar(py_get(fields, "_mojolearn_fitted", False), context, True)
     host_inference_scalar(py_get(fields, "_mojolearn_fitting", False), context, True)
@@ -72,7 +77,6 @@ def host_inference_operation(model: PythonObject, operation: String, args: Pytho
     var iforest = String(kind) == "iforest"
     if iforest:
         host_iforest_admit_state(fields, context)
-    var kde = String(kind) == "kde"
     if kde:
         host_kde_admit_state(fields, context)
     var svr = String(kind) == "svr"
