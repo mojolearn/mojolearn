@@ -56,7 +56,9 @@ def host_kde_inference(model: PythonObject, fields: PythonObject, source: Python
     var weights = PythonObject(None)
     if weight is not None:
         weights = _kernel_buffer(weight, count, "<f4", context)
-    var bandwidth = py_call(Python.import_module("builtins").float, fields["bandwidth"])
+    # Derive the fixed native constructor from a C-created scalar. A patched
+    # builtins.float must never install a callback on this numerical boundary.
+    var bandwidth = py_call(py_type(PythonObject(Float64(0.0))), fields["bandwidth"])
     var out = host_archive_typed(Python.tuple(rows), "<f4", context["output_context"])
     # The explicit host entry has no resident-fit registry. Each call uses
     # the supplied saved buffers, as the original CPU path did.

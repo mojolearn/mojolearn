@@ -18,10 +18,12 @@ def _iforest_resolve(fields: PythonObject, context: PythonObject) raises:
     # A fitted instance assembled without a resolved seed historically resolves
     # its constructor knobs on first score. Resolve exactly those stored options.
     var b = Python.import_module("builtins")
+    var native_int = py_type(PythonObject(0))
+    var native_float = py_type(PythonObject(Float64(0.0)))
     var names = Python.tuple("n_estimators", "max_samples", "max_depth", "max_features", "bootstrap", "contamination", "random_state", "warm_start", "verbose")
     for i in range(len(names)):  # driver-loop: fixed constructor scalar fields
         host_inference_scalar(fields[names[i]], context, String(names[i]) == "bootstrap" or String(names[i]) == "warm_start" or String(names[i]) == "verbose")
-    var trees = Int(py=py_call(b.int, fields["n_estimators"]))
+    var trees = Int(py=py_call(native_int, fields["n_estimators"]))
     if trees < 1:
         raise Error("IsolationForest n_estimators must be at least one")
     var samples = fields["max_samples"]
@@ -34,20 +36,20 @@ def _iforest_resolve(fields: PythonObject, context: PythonObject) raises:
     elif _one_of(py_type(samples), py_get(context, "bool_types", Python.tuple(b.bool))):
         raise Error("IsolationForest max_samples cannot be a bool")
     elif _one_of(py_type(samples), context["integer_types"]):
-        var count = Int(py=py_call(b.int, samples))
+        var count = Int(py=py_call(native_int, samples))
         if count < 1:
             raise Error("IsolationForest max_samples must be positive")
         py_setitem(fields, "_max_samples_mode", 1)
         py_setitem(fields, "_max_samples_int", count)
         py_setitem(fields, "_max_samples_frac", 1.0)
     else:
-        var fraction = Float64(py=py_call(b.float, samples))
+        var fraction = Float64(py=py_call(native_float, samples))
         if not (fraction > 0.0 and fraction <= 1.0):
             raise Error("IsolationForest fractional max_samples must be in (0, 1]")
         py_setitem(fields, "_max_samples_mode", 2)
         py_setitem(fields, "_max_samples_int", 256)
         py_setitem(fields, "_max_samples_frac", fraction)
-    var depth = -1 if fields["max_depth"] is None else Int(py=py_call(b.int, fields["max_depth"]))
+    var depth = -1 if fields["max_depth"] is None else Int(py=py_call(native_int, fields["max_depth"]))
     py_setitem(fields, "_max_depth", depth)
     if fields["max_depth"] is not None and depth < 1:
         raise Error("IsolationForest max_depth must be None or positive")
@@ -55,14 +57,14 @@ def _iforest_resolve(fields: PythonObject, context: PythonObject) raises:
     if _one_of(py_type(features), py_get(context, "bool_types", Python.tuple(b.bool))):
         raise Error("IsolationForest max_features cannot be a bool")
     if _one_of(py_type(features), context["integer_types"]):
-        var count = Int(py=py_call(b.int, features))
+        var count = Int(py=py_call(native_int, features))
         if count < 1:
             raise Error("IsolationForest integer max_features must be positive")
         py_setitem(fields, "_max_features_mode", 1)
         py_setitem(fields, "_max_features_int", count)
         py_setitem(fields, "_max_features_frac", 1.0)
     else:
-        var fraction = Float64(py=py_call(b.float, features))
+        var fraction = Float64(py=py_call(native_float, features))
         if not (fraction > 0.0 and fraction <= 1.0):
             raise Error("IsolationForest fractional max_features must be in (0, 1]")
         py_setitem(fields, "_max_features_mode", 0)
@@ -75,12 +77,12 @@ def _iforest_resolve(fields: PythonObject, context: PythonObject) raises:
         py_setitem(fields, "_contamination_auto", True)
         py_setitem(fields, "_contamination", 0.0)
     else:
-        var fraction = Float64(py=py_call(b.float, contamination))
+        var fraction = Float64(py=py_call(native_float, contamination))
         if not (fraction > 0.0 and fraction <= 0.5):
             raise Error("IsolationForest contamination must be auto or in (0, .5]")
         py_setitem(fields, "_contamination_auto", False)
         py_setitem(fields, "_contamination", fraction)
-    var seed = 0 if fields["random_state"] is None else Int(py=py_call(b.int, fields["random_state"]))
+    var seed = 0 if fields["random_state"] is None else Int(py=py_call(native_int, fields["random_state"]))
     if seed < 0 or seed > 4294967295:
         raise Error("IsolationForest random_state must fit uint32")
     if Bool(py=fields["warm_start"]):
