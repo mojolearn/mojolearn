@@ -87,19 +87,25 @@ def _attribute(value: PythonObject, name: String, default: PythonObject,
     return default
 
 
-def _hash_key(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
-    if depth > 64:
-        raise Error("TypeError: cache keys exceed native nesting bounds")
-    var cls = py_type(value)
+def _hash_key(value: PythonObject, context: PythonObject) raises:
+    # Exact tuples cannot form a cycle without a non-tuple container. Walk
+    # them iteratively so admission does not impose an arbitrary depth limit
+    # before CPython performs the actual native hashing/equality operation.
+    var pending = List[PythonObject]()
+    pending.append(value)
     var types = context["cache_hash_types"]
-    for i in range(len(types)):  # driver-loop: exact immutable builtin hashing and equality slots
-        if cls is types[i]:
-            return
-    if cls is context["arena_native_types"]["tuple"]:
-        for i in range(len(value)):  # driver-loop: tuple hashing must not dispatch to an application key
-            _hash_key(value[i],context,depth+1)
-        return
-    raise Error("TypeError: cache keys require native immutable values without Python equality or hash hooks")
+    while len(pending):  # driver-loop: explicit native work stack over immutable key metadata
+        var item = pending.pop()
+        var cls = py_type(item)
+        var native = False
+        for i in range(len(types)):  # driver-loop: exact immutable builtin hashing and equality slots
+            native = native or cls is types[i]
+        if native:
+            continue
+        if cls is not context["arena_native_types"]["tuple"]:
+            raise Error("TypeError: cache keys require native immutable values without Python equality or hash hooks")
+        for i in range(len(item)):  # driver-loop: tuple hashing must not dispatch to an application key
+            pending.append(item[i])
 
 
 def arena_cache_stats(model: PythonObject, operation: String, args: PythonObject,
