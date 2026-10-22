@@ -135,5 +135,3 @@ def native_release_admit(value: PythonObject, context: PythonObject, depth: Int 
             if cls is scalars[i]:
                 return
     raise Error("TypeError: native owner reinitialization cannot release Python-owned metadata; retain the same owner or release it in application code first")
-
-
