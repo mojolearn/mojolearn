@@ -32,9 +32,9 @@ def linear_dimensions(a: List[Int], weight: List[Int], grad: List[Int], backward
         for i in range(len(grad)):  # driver-loop: over gradient shape words before counting
             if grad[i] < 0:
                 raise Error("ValueError: linear gradient dimensions must be nonnegative")
-        if grad[len(grad) - 1] != n or shape_count(grad) != shape_count(List[Int](m, n)):
+        if grad[len(grad) - 1] != n or shape_count(grad) != shape_count([m, n]):
             raise Error("ValueError: mojolearn.linear_backward: dc must be (M, N)")
-    return List[Int](m, n, k)
+    return [m, n, k]
 
 
 def linear_host_view(value: PythonObject, name: String, where: String, mut view: TensorView) raises:
@@ -132,7 +132,7 @@ def training_linear_operation(operation: String, values: PythonObject, entries: 
         # matrix shape. Preserve safe rank-one/oversized native buffers,
         # including promoted NumPy scalars when K=1. Refuse a short buffer
         # before the unchanged raw-pointer kernel can read beyond it.
-        kernel_weight_shape = List[Int](wv.shape[0], av.shape[len(av.shape) - 1])
+        kernel_weight_shape = [wv.shape[0], av.shape[len(av.shape) - 1]]
         if shape_count(wv.shape) < shape_count(kernel_weight_shape):
             raise Error("ValueError: linear backward weight buffer is shorter than N*K")
     var dims = linear_dimensions(av.shape, kernel_weight_shape, gv.shape, backward)

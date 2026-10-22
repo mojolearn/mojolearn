@@ -66,7 +66,7 @@ def training_rms_operation(operation: String, values: PythonObject, entries: Pyt
         return result
     var ga = contiguous_addr(gradient, gv, keep)
     var dx = new_array(xv.shape, "<f4")
-    var dw = new_array(List[Int](width), "<f4")
+    var dw = new_array([width], "<f4")
     _ = py_call(entry, Python.list(dx._addr, dw._addr, ga, xa, wa), params)
     _ = keep^
     _ = x^
