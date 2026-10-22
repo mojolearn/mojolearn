@@ -9,7 +9,7 @@ from bindings.parallel_byte_native import PARALLEL_BYTE_BOUNDARY, _parallel_shap
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array
 from bindings.byte_checkpoint_io import ByteCheckpointIOError, byte_checkpoint_io
 from bindings.sha256_door import sha256_update, sha256_hexdigest, sha256_digest_of
-from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
+from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type, py_call_typed
 from core.sha256 import Sha256
 
 
@@ -95,7 +95,7 @@ def byte_checkpoint_validate(metadata: PythonObject, entries: PythonObject) rais
         var n = Int(py=shape["n_tensors"] if i == 3 else shape["n_total"])
         if String(entry["name"]) != names[i] or String(entry["dtype"]) != ("<i4" if i == 3 else "<f4") or py_type(entry["shape"]) is not bi.list or len(entry["shape"]) != 1 or cv_int(entry["shape"][0], "array shape") != n or cv_int(entry["nbytes"], "array bytes") != 4 * n or py_type(entry["sha256"]) is not bi.str or len(entry["sha256"]) != 64:
             raise Error("Byte-LM checkpoint array descriptor mismatch")
-        var hex = py_call(entry["sha256"].encode, "ascii")
+        var hex = py_call_typed(entry["sha256"].encode, "ascii")
         for j in range(64):  # small-loop(the 64 hex characters of one digest word)
             var ch = Int(py=hex[j])
             if not (ch >= 48 and ch <= 57) and not (ch >= 97 and ch <= 102):

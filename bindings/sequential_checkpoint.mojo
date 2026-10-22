@@ -3,7 +3,7 @@
 # The existing model checkpoint format and native model ABI remain unchanged.
 from std.collections.string import chr
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_contains, py_get, py_setitem
+from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_call_typed
 from bindings.native_json import native_path
 from bindings.sequential_description import sequential_fields, sequential_append, sequential_program, sequential_table
 from bindings.sequential_execution import sequential_entries, sequential_forward
@@ -27,19 +27,19 @@ def _report_array(value: PythonObject, name: String, input: Bool, entries: Pytho
     result += "]"
     if input:
         result += ",\"dtype\":\"float32\""
-    var digest = py_call(entries["verify_digest"], sequential_address(value), value.nbytes)
+    var digest = py_call_typed(entries["verify_digest"], sequential_address(value), value.nbytes)
     return result + ",\"digest\":" + _quote(String(digest)) + "}"
 
 
 def _sidecar(model: PythonObject, path: PythonObject, entries: PythonObject, context: PythonObject) raises:
     var fields = sequential_fields(model)
     var x = sequential_array(Python.tuple(16, fields["n_features_in_"]), context["float32"], context)
-    _ = py_call(entries["verify_fill"], sequential_address(x), x.size, PythonObject(0), PythonObject(0))
+    _ = py_call_typed(entries["verify_fill"], sequential_address(x), x.size, PythonObject(0), PythonObject(0))
     var output = sequential_forward(model, x, 0, PythonObject(None), entries, context)
     var input_json = _report_array(x, "X", True, entries)
     var output_json = _report_array(output, "output", False, entries)
-    var sha = py_call(entries["verify_file_sha256"], path)
-    var info = py_call(entries["verify_model_info"], path)
+    var sha = py_call_typed(entries["verify_file_sha256"], path)
+    var info = py_call_typed(entries["verify_model_info"], path)
     var file = String(path)
     var parts = file.split("/")
     var uname = context["uname"]()
@@ -85,7 +85,7 @@ def sequential_save(model: PythonObject, path: PythonObject, export: Bool, conte
     var program = sequential_program(model, fields["n_features_in_"], PythonObject(None))
     var entries = sequential_entries(model, context)
     var normalized = native_path(path)
-    _ = py_call(entries["model_save_checkpoint"], normalized, addresses, program, ip, fp, descriptor)
+    _ = py_call_typed(entries["model_save_checkpoint"], normalized, addresses, program, ip, fp, descriptor)
     _sidecar(model, normalized, entries, context)
     _ = fields^
     _ = classes^
@@ -103,7 +103,7 @@ def sequential_load_checkpoint(cls: PythonObject, path: PythonObject, mode: Pyth
     py_setitem(fields, "_options", PythonObject(None))
     var entries = sequential_entries(model, context)
     var normalized = native_path(path)
-    var description = py_call(entries["model_checkpoint_info"], normalized)
+    var description = py_call_typed(entries["model_checkpoint_info"], normalized)
     var export = Bool(py=description[0])
     var layers = description[1]
     var ip = description[2]
@@ -147,7 +147,7 @@ def sequential_load_checkpoint(cls: PythonObject, path: PythonObject, mode: Pyth
         py_setitem(addresses, 2, sequential_address(v))
         py_setitem(addresses, 3, sequential_address(state))
         py_setitem(addresses, 4, sequential_address(curve))
-    _ = py_call(entries["model_load_checkpoint"], normalized, addresses)
+    _ = py_call_typed(entries["model_load_checkpoint"], normalized, addresses)
     py_setitem(fields, "params_", params)
     py_setitem(fields, "n_features_in_", ip[9])
     py_setitem(fields, "n_outputs_", ip[10])

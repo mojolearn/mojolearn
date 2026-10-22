@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native Sequential orchestration of the existing model numerical ABI."""
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_contains, py_get, py_setitem
+from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_call_typed
 from bindings.sequential_description import sequential_fields, sequential_sample, sequential_program, sequential_table, _integer
 from bindings.sequential_arrays import sequential_array, sequential_address, sequential_input, sequential_descriptor, sequential_x, sequential_curve
 
@@ -40,7 +40,7 @@ def sequential_targets(model: PythonObject, source: PythonObject, n: Int, n_out:
     if classification:
         var classes = sequential_array(Python.tuple(n), y.dtype, context)
         var codes = sequential_array(Python.tuple(n), context["int32"], context)
-        var count = Int(py=py_call(entries["model_labels"], descriptor, sequential_address(classes), sequential_address(codes)))
+        var count = Int(py=py_call_typed(entries["model_labels"], descriptor, sequential_address(classes), sequential_address(codes)))
         var selected = py_call(context["ndarray"], Python.tuple(count), dtype=y.dtype, buffer=classes)
         py_setitem(fields, "classes_", selected)
         if loss == "cross_entropy":
@@ -100,7 +100,7 @@ def sequential_fit(model: PythonObject, args: PythonObject, context: PythonObjec
     var program = sequential_program(model, PythonObject(d), sample)
     var table = sequential_table(model)
     var entries = sequential_entries(model, context)
-    var counts = py_call(entries["model_n_params"], program, table)
+    var counts = py_call_typed(entries["model_n_params"], program, table)
     var n_params = Int(py=counts[0])
     var n_out = Int(py=counts[1])
     var target_data = sequential_targets(model, args[1], n, n_out, String(options["loss"]), entries, context)
@@ -160,7 +160,7 @@ def sequential_fit(model: PythonObject, args: PythonObject, context: PythonObjec
         _ = py_call(addresses.extend, Python.tuple(vxd, sequential_descriptor(vy, "validation y"), classes,
                     sequential_address(val_curve), sequential_address(val_info)))
         _ = py_call(ip.append, 1 if restore_best else 0)
-    var n_iter = Int(py=py_call(entries["model_fit"], addresses, program, ip, fp))
+    var n_iter = Int(py=py_call_typed(entries["model_fit"], addresses, program, ip, fp))
     # Raw addresses never own data. Keep every source alive through the
     # synchronous native model call, including temporary sequence buffers.
     _ = x^
@@ -214,7 +214,7 @@ def sequential_forward(model: PythonObject, source: PythonObject, transform: Int
     var output_width = fields["n_outputs_"] if width is None else width
     var out = sequential_array(Python.tuple(xd[3], output_width), context["float32"], context)
     var params = fields["params_"]
-    _ = py_call(entries["model_predict"], Python.list(xd, sequential_address(params), sequential_address(out)),
+    _ = py_call_typed(entries["model_predict"], Python.list(xd, sequential_address(params), sequential_address(out)),
         sequential_program(model, fields["n_features_in_"], sample), sequential_table(model),
         Python.list(xd[3], 4096, transform))
     _ = x^
@@ -239,7 +239,7 @@ def sequential_predict(model: PythonObject, source: PythonObject, probabilities:
         var codes = sequential_forward(model, source, 4 if loss == "cross_entropy" else 5, PythonObject(1), entries, context)
         var classes = fields["classes_"]
         var labels = sequential_array(Python.tuple(codes.shape[0]), classes.dtype, context)
-        _ = py_call(entries["model_gather_labels"], Python.list(sequential_address(codes), sequential_address(classes), sequential_address(labels)),
+        _ = py_call_typed(entries["model_gather_labels"], Python.list(sequential_address(codes), sequential_address(classes), sequential_address(labels)),
             Python.list(codes.shape[0], classes.shape[0], classes.dtype.itemsize))
         _ = codes^
         _ = classes^

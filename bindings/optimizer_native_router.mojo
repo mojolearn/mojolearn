@@ -3,7 +3,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains, py_call_typed
 from bindings.optimizer_public_words import optimizer_python_error, stash_python_error
 from bindings.optimizer_admission import opt_guards, opt_owner, opt_value, opt_scalar, opt_schedule, opt_exact
 from bindings.optimizer_public_door import door_ready, refuse_kwargs, new_array, TensorView, tensor_view, resident_entry
@@ -34,7 +34,7 @@ def optimizer_entries(mode: PythonObject, context: PythonObject) raises -> Pytho
     var entries = context["bindings"][selected]
     if py_type(entries) is b.str:
         raise Error("ImportError: " + String(entries))
-    if Int(py=py_call(entries["training_numeric_mode"])) != (1 if String(selected) == "identical" else 0):
+    if Int(py=py_call_typed(entries["training_numeric_mode"])) != (1 if String(selected) == "identical" else 0):
         raise Error("ImportError: optimizer binary numeric mode disagrees with the requested mode")
     return entries
 
@@ -263,7 +263,7 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
         return entries["module"]
     if operation == "raw_io":
         opt_value(values, context)
-        return py_call(entries["optimizer_door_io"], owner, values[0], values[1], values[2], values[3])
+        return py_call_typed(entries["optimizer_door_io"], owner, values[0], values[1], values[2], values[3])
     if operation == "param_device":
         var fields = py_fields(owner)
         if not Bool(py=py_get(fields, "_p_dev", False)):
@@ -281,15 +281,15 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
         var result = device_new(PythonObject(None), PythonObject(None), view.shape, PythonObject(None), context)
         var release = device_release_entry(native, context)
         var binding = entries["module"]
-        var handle = py_call(entries["optimizer_door_io"], owner, 5, PythonObject(None), "params", j)
+        var handle = py_call_typed(entries["optimizer_door_io"], owner, 5, PythonObject(None), "params", j)
         return device_adopt(result, binding, handle, release)
     if operation == "step":
         return optimizer_step_entry(entries["optimizer_door_step"], Python.tuple(owner, values[0], values[1], values[2], values[3]), context)
     if operation == "state":
-        return py_call(entries["optimizer_door_state"], owner, values[0])
+        return py_call_typed(entries["optimizer_door_state"], owner, values[0])
     if operation == "state_set":
         opt_value(values[1], context)
-        return py_call(entries["optimizer_door_state_set"], owner, values[0], values[1])
+        return py_call_typed(entries["optimizer_door_state_set"], owner, values[0], values[1])
     if operation == "load":
         var state = values[0]
         opt_value(state, context)
@@ -300,9 +300,9 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
         var m = optimizer_state_array(state["exp_avg"], False, context)
         var v = optimizer_state_array(state["exp_avg_sq"], False, context)
         var initialized = optimizer_state_array(state["buf_initialized"], True, context)
-        return py_call(entries["optimizer_door_load_state"], owner, t, m, True, v, True, initialized, True)
+        return py_call_typed(entries["optimizer_door_load_state"], owner, t, m, True, v, True, initialized, True)
     if operation == "zero":
-        return py_call(entries["optimizer_door_zero"], owner, values[0])
+        return py_call_typed(entries["optimizer_door_zero"], owner, values[0])
     if operation == "resident":
         var fields = py_fields(owner)
         return PythonObject(py_get(fields, "_res") is not None and not Bool(py=py_get(fields, "_res_host", False)))
@@ -315,7 +315,7 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
             tensors = fields["params"]
         if op == 2 and not Bool(py=py_get(fields, "_p_dev", False)):
             return fields["params"]
-        var result = py_call(entries["optimizer_door_io"], owner, op, tensors, values[2], values[3])
+        var result = py_call_typed(entries["optimizer_door_io"], owner, op, tensors, values[2], values[3])
         if op == 0:
             return py_call(context["scalar_types"][1], result)
         if op == 1 or op == 3:
@@ -325,12 +325,12 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
             return tensors
         return result
     if operation == "clip":
-        return py_call(entries["optimizer_door_clip"], values[0], values[1], values[2], values[3], values[4])
+        return py_call_typed(entries["optimizer_door_clip"], values[0], values[1], values[2], values[3], values[4])
     if operation == "accumulate":
-        return py_call(entries["optimizer_door_accumulate"], values[0], values[1])
+        return py_call_typed(entries["optimizer_door_accumulate"], values[0], values[1])
     if operation == "aligned":
         opt_scalar(values, context)
-        return py_call(context["scalar_types"][1], py_call(entries["accumulation_is_aligned"], Python.list(py_call(context["scalar_types"][2], values[0]), py_call(context["scalar_types"][2], values[1]))))
+        return py_call(context["scalar_types"][1], py_call_typed(entries["accumulation_is_aligned"], Python.list(py_call(context["scalar_types"][2], values[0]), py_call(context["scalar_types"][2], values[1]))))
     raise Error("TypeError: unknown optimizer native operation")
 
 

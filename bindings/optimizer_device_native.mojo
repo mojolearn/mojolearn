@@ -2,7 +2,7 @@
 # Native ownership and consumed outputs of training device arrays.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
+from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_call_typed
 from bindings.optimizer_admission import opt_value, opt_scalar
 from bindings.optimizer_public_door import new_array, TensorView, tensor_view, base_format, contiguous_addr
 from bindings.optimizer_public_words import optimizer_python_error
@@ -225,6 +225,6 @@ def device_operation(operation: String, owner: PythonObject, values: PythonObjec
     if operation == "device_host":
         var dims = device_shape(fields["shape"], context)
         var result = new_array(dims, "<f4")
-        _ = py_call(entries["train_dev_get"], fields["h"], result._addr, fields["size"])
+        _ = py_call_typed(entries["train_dev_get"], fields["h"], result._addr, fields["size"])
         return result
     raise Error("TypeError: unknown training device operation")

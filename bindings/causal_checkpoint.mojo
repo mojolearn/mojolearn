@@ -6,7 +6,7 @@ from std.memory import bitcast
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
-from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
+from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type, py_call_typed
 from bindings.native_json import native_json_parse, native_json_read, native_path, native_path_exists
 from gemm.f16_widen import f16_bits_to_f32
 
@@ -264,7 +264,7 @@ def checkpoint_open_binding(cls: PythonObject, input_path: PythonObject, context
         else:
             var entries = py_call(Python.import_module("os").listdir, path)
             for i in range(len(entries)):  # driver-loop: over checkpoint directory entries
-                if Bool(py=py_call(entries[i].endswith, ".safetensors")):
+                if Bool(py=py_call_typed(entries[i].endswith, ".safetensors")):
                     _ = py_call(files.append, py_call(path.rstrip, "/") + PythonObject("/") + entries[i])
             if len(files) != 1:
                 raise Error("FileNotFoundError: checkpoint holds neither model.safetensors nor model.safetensors.index.json (shard files alone are not an index)")

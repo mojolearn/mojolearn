@@ -7,7 +7,7 @@ from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_pyth
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
-from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains, py_call_typed
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
 from bindings.classical_arrays import classical_address, classical_typed, classical_is_array, classical_c_order
 from bindings.classical_pandas import classical_admit_value
@@ -145,11 +145,11 @@ def minmax_fit(model: PythonObject, source: PythonObject, context: PythonObject)
     else:
         finite = scaler_all_finite(_ptr(values),n*d)
         if finite:
-            _ = py_call(entries["minmax_fit"],classical_address(values),classical_address(output),params)
+            _ = py_call_typed(entries["minmax_fit"],classical_address(values),classical_address(output),params)
     if not finite:
         var filled = _fit_fill(values,entries,context)
         colnan = filled[1]
-        _ = py_call(entries["minmax_fit"],classical_address(filled[0]),classical_address(output),params)
+        _ = py_call_typed(entries["minmax_fit"],classical_address(filled[0]),classical_address(output),params)
         _ = filled^
     _keep_extrema(fields,output,colnan,entries,context)
     py_setitem(fields,"n_features_in_",d)
@@ -191,7 +191,7 @@ def minmax_partial_fit(model: PythonObject, source: PythonObject, context: Pytho
     _run(arena,program,entries)
     var output = classical_typed(Python.tuple(5,d),"<f4",context["output_context"])
     var colnan = _copy_row(ap+8*d,d,context)
-    _ = py_call(entries["minmax_fit"],Int(ap+4*d),classical_address(output),Python.list(4,d,configuration[1],configuration[2]))
+    _ = py_call_typed(entries["minmax_fit"],Int(ap+4*d),classical_address(output),Python.list(4,d,configuration[1],configuration[2]))
     _keep_extrema(fields,output,colnan,entries,context)
     if py_type(fields["n_samples_seen_"]) is not b.int or py_type(fresh["n_samples_seen_"]) is not b.int:
         raise Error("TypeError: MinMaxScaler n_samples_seen_ must remain a native integer")
@@ -252,7 +252,7 @@ def minmax_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
     else:
         finite = scaler_all_finite(_ptr(values), n*d)
         var filled = values if finite else _nan_fill(values, entries, context)
-        _ = py_call(entries["minmax_transform"], classical_address(filled), Int(ap+3*d), Int(ap+2*d), classical_address(output), params)
+        _ = py_call_typed(entries["minmax_transform"], classical_address(filled), Int(ap+3*d), Int(ap+2*d), classical_address(output), params)
         if not scaler_all_finite(_ptr(output), n*d):
             raise Error("MinMaxScaler transform overflowed in Float32")
         _ = filled^

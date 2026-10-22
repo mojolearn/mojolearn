@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native sequence tensor ownership, buffer IO and consumed float32 outputs.
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get
+from bindings.py_balanced import py_call, py_type, py_get, py_call_typed
 from bindings.optimizer_admission import opt_scalar, opt_value
 from bindings.optimizer_device_native import device_shape, shape_count
 from bindings.optimizer_public_door import TensorView, tensor_view, base_format, same_shape, py_ints
@@ -132,7 +132,7 @@ def sequence_device_operation(operation: String, owner: PythonObject, values: Py
         var entries = seq_device_entries(values[0], context)
         var shape = device_shape(values[1], context)
         opt_scalar(values[2], context)
-        var handle = py_call(entries["seq_tensor_alloc"], max(1, shape_count(shape)), Int(Bool(py=values[2])))
+        var handle = py_call_typed(entries["seq_tensor_alloc"], max(1, shape_count(shape)), Int(Bool(py=values[2])))
         return seq_device_make(entries["module"], shape, handle, PythonObject(None), context)
     if operation == "seqdev_to" or operation == "seqdev_wrap":
         var source = values[0] if operation == "seqdev_to" else values[1]
@@ -147,12 +147,12 @@ def sequence_device_operation(operation: String, owner: PythonObject, values: Py
             return input
         var shape = device_shape(input.shape, context)
         var n = shape_count(shape)
-        var handle = py_call(entries["seq_tensor_alloc"], max(n, 1), 0)
+        var handle = py_call_typed(entries["seq_tensor_alloc"], max(n, 1), 0)
         try:
             if n > 0:
-                _ = py_call(entries["seq_tensor_upload"], handle, classical_address(input), n)
+                _ = py_call_typed(entries["seq_tensor_upload"], handle, classical_address(input), n)
         except error:
-            _ = py_call(entries["seq_tensor_free"], handle)
+            _ = py_call_typed(entries["seq_tensor_free"], handle)
             raise error^
         _ = input^
         return seq_device_make(entries["module"], shape, handle, PythonObject(None), context)
@@ -177,25 +177,25 @@ def sequence_device_operation(operation: String, owner: PythonObject, values: Py
         classical_connect_numpy(input)
         var result = classical_typed(py_ints(shape), "<f4", input)
         if n > 0:
-            _ = py_call(entries["seq_tensor_download"], handle, classical_address(result), n)
+            _ = py_call_typed(entries["seq_tensor_download"], handle, classical_address(result), n)
         return result if operation == "seqdev_host" else sequence_array_cast(result, values[0], context)
     if operation == "seqdev_upload":
         var input = seq_device_input(values[0], False, context)
         if not same_shape(device_shape(input.shape, context), shape):
             raise Error("ValueError: uploaded array shape does not match the device tensor")
         if n > 0:
-            _ = py_call(entries["seq_tensor_upload"], handle, classical_address(input), n)
+            _ = py_call_typed(entries["seq_tensor_upload"], handle, classical_address(input), n)
         _ = input^
         return owner
     if operation == "seqdev_copy":
         if py_get(entries, "seq_tensor_copy") is None:
             raise Error("RuntimeError: native binding has no device-to-device tensor copy")
-        var result_handle = py_call(entries["seq_tensor_alloc"], max(n, 1), 0)
+        var result_handle = py_call_typed(entries["seq_tensor_alloc"], max(n, 1), 0)
         try:
             if n > 0:
-                _ = py_call(entries["seq_tensor_copy"], result_handle, handle, n)
+                _ = py_call_typed(entries["seq_tensor_copy"], result_handle, handle, n)
         except error:
-            _ = py_call(entries["seq_tensor_free"], result_handle)
+            _ = py_call_typed(entries["seq_tensor_free"], result_handle)
             raise error^
         return seq_device_make(binding, shape, result_handle, PythonObject(None), context)
     if operation == "seqdev_reshape":

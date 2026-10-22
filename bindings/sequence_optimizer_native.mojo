@@ -3,7 +3,7 @@
 # schedule evaluation and state/output handling execute natively here.
 from std.os import getenv
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem
+from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem, py_call_typed
 from bindings.optimizer_admission import opt_exact, opt_scalar, opt_value, opt_schedule
 from bindings.optimizer_public_door import TensorView, tensor_view, base_format, same_shape, py_ints
 from bindings.optimizer_device_native import device_shape, shape_count
@@ -335,7 +335,7 @@ def seq_construct(owner: PythonObject, values: PythonObject, mode: PythonObject,
     var ip = Python.list(2 if kind == 5 else (1 if kind == 6 else 0), len(params))
     _ = py_call(ip.extend, sizes)
     _ = py_call(ip.extend, extra)
-    var n = Int(py=py_call(selected["seq_optimizer_init"], classical_address(words), ip))
+    var n = Int(py=py_call_typed(selected["seq_optimizer_init"], classical_address(words), ip))
     if kind < 5 and n < 1:
         raise Error("ValueError: sequence optimizer has no parameters")
     py_setitem(fields, "n_total", PythonObject(n))
@@ -444,7 +444,7 @@ def seq_step(owner: PythonObject, fields: PythonObject, gradients: PythonObject,
     else:
         _ = py_call(fp.extend, Python.tuple(fields["betas"][0], fields["betas"][1], fields["eps"], fields["weight_decay"], 1.0 if fields["max_grad_norm"] is None else fields["max_grad_norm"]))
     py_setitem(fields, "_res_b", entries["module"])
-    _ = py_call(entries["seq_adafactor_step" if kind == 5 else ("seq_lamb_step" if kind == 6 else "seq_optimizer_step")], words, handles, addrs, ip, fp)
+    _ = py_call_typed(entries["seq_adafactor_step" if kind == 5 else ("seq_lamb_step" if kind == 6 else "seq_optimizer_step")], words, handles, addrs, ip, fp)
     _ = keep^
     return owner
 
@@ -479,7 +479,7 @@ def sequence_optimizer_operation(operation: String, owner: PythonObject, values:
         return PythonObject(w[index] != 0) if Bool(py=values[1]) else PythonObject(Int(w[index]))
     if operation == "seq_finalize":
         try:
-            _ = py_call(entries["seq_optimizer_close"], words, handles, nh)
+            _ = py_call_typed(entries["seq_optimizer_close"], words, handles, nh)
         except:
             return PythonObject(None)
         py_setitem(fields, "_res_b", PythonObject(None))
@@ -520,7 +520,7 @@ def sequence_optimizer_operation(operation: String, owner: PythonObject, values:
         var slots = seq_slots(fields, kind, context, True)
         if operation == "seq_slots":
             return slots
-        _ = py_call(entries["seq_optimizer_state"], words, handles, slots)
+        _ = py_call_typed(entries["seq_optimizer_state"], words, handles, slots)
         var state = fields["_af_state" if kind == 5 else "_state"]
         if operation == "seq_slot":
             opt_scalar(values[0], context)
@@ -571,7 +571,7 @@ def sequence_optimizer_operation(operation: String, owner: PythonObject, values:
         for i in range(len(out)):  # driver-loop: over state copy buffer addresses
             _ = py_call(addrs.append, classical_address(out[i]))
         _ = py_call(addrs.extend, Python.tuple(sc_addr, classical_address(sc)))
-        _ = py_call(entries["seq_optimizer_export" if operation == "seq_export" else "seq_optimizer_import"], words, handles, addrs,
+        _ = py_call_typed(entries["seq_optimizer_export" if operation == "seq_export" else "seq_optimizer_import"], words, handles, addrs,
                     Python.list(k, n, sc_len, len(out), t, Int(sc_given), sc_t))
         if operation == "seq_import":
             return owner
