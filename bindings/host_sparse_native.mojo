@@ -4,6 +4,7 @@
 from std.memory import bitcast
 from std.math import isfinite
 from std.python import Python, PythonObject
+from bindings.native_buffer_owner import native_buffer_view
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.classical_pandas import _pd_type_fields
 from bindings.classical_arrays import classical_address
@@ -124,7 +125,7 @@ def _sparse_scalar_word(value: PythonObject, kind: Int, width: Int, context: Pyt
     elif _one_of(cls, context["scalar_types"]) or cls is _sparse_aliases(context)[0].type or cls is _sparse_aliases(context)[1].type:
         source_width = Int(py=value.dtype.itemsize)
         source_kind = cast_in_kind(Int(py=value.dtype.num), source_width, "sparse scalar")
-        var view = py_call(b.memoryview, value)
+        var view = native_buffer_view(value)
         var bytes = py_call(view.tobytes)
         var native = Bool(py=value.dtype.isnative)
         for i in range(source_width):  # driver-loop: bytes of one native scalar storage item

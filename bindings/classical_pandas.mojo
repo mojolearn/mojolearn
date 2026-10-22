@@ -4,6 +4,7 @@
 # A caller imports pandas; runtime admission only reads its loaded modules.
 from std.memory import bitcast
 from std.python import Python, PythonObject
+from bindings.native_buffer_owner import native_buffer_view
 from core.cast_in import cast_in_kind, cast_w64_bits, f64_to_f32_bits
 from core.classical_pandas_impl import pd_raw_at, _pd_double, pd_mask_check, pd_scatter_numeric
 from bindings.sequential_inputs import _promote
@@ -89,7 +90,7 @@ def _pd_object_bits(value: PythonObject, context: PythonObject) raises -> UInt32
     elif _one_of(cls, context["scalar_types"]):
         # Scalar buffer metadata is native. Never call an object's __float__
         # or NumPy array/scalar conversion routine to obtain numeric storage.
-        var view = py_call(b.memoryview, value)
+        var view = native_buffer_view(value)
         var array = py_call(context["ndarray"], Python.tuple(), dtype=value.dtype, buffer=view)
         var size = Int(py=array.dtype.itemsize)
         var kind = cast_in_kind(Int(py=array.dtype.num), size, "pandas scalar")
