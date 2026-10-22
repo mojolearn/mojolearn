@@ -7,13 +7,16 @@
 # a CPU-only install's by-name refusal, a user callable's own exception) is
 # stashed and restored unchanged at the door (`stash_python_error`), so the
 # caller sees the class and message it saw before the migration.
-from std.math import isfinite
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 from bindings.classical_arrays import classical_address, classical_host_f32, classical_wrap_array, _store_code
 from bindings.classical_validate import classical_view, RESHAPE_HINT
 from bindings.optimizer_public_words import stash_python_error
+from core.family_weights_impl import (
+    family_fill_f32, family_weight_status, FAMILY_WEIGHTS_NONFINITE, FAMILY_WEIGHTS_NEGATIVE,
+    FAMILY_WEIGHTS_ALL_ZERO,
+)
 
 comptime FAMILY_F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime FAMILY_F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -186,9 +189,7 @@ def family_sample_weight(source: PythonObject, n: Int, allow_negative: Bool, con
     if family_is_real(source) or zero_d:
         var value = Float32(Float64(py=family_call(b.float, source)))
         weights = family_array(Python.tuple(n), "<f4", context)
-        var out = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(weights)))
-        for i in range(n):  # native input marshaling: a scalar weight fills every row
-            out[i] = value
+        family_fill_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(weights))), n, value)
     else:
         var view = classical_view(source, context, "sample_weight")
         if Int(py=view.size) == 0:
@@ -207,20 +208,12 @@ def family_sample_weight(source: PythonObject, n: Int, allow_negative: Bool, con
         _ = view^
     # prepare_targets' weight checks: finiteness, then the minimum, then
     # the maximum, over the float32 words.
-    var w = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(weights)))
-    for i in range(n):  # native input marshaling: weight finiteness scan
-        if not isfinite(w[i]):
-            raise Error(FAMILY_NONFINITE_WEIGHTS)
-    var lo = Float32(0)
-    var hi = Float32(0)
-    for i in range(n):  # native input marshaling: weight minimum and maximum
-        if i == 0 or w[i] < lo:
-            lo = w[i]
-        if i == 0 or w[i] > hi:
-            hi = w[i]
-    if not allow_negative and lo < 0:
+    var status = family_weight_status(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(weights))), n, allow_negative)
+    if status == FAMILY_WEIGHTS_NONFINITE:
+        raise Error(FAMILY_NONFINITE_WEIGHTS)
+    if status == FAMILY_WEIGHTS_NEGATIVE:
         raise Error(FAMILY_NEGATIVE_WEIGHTS)
-    if not (hi > 0 or lo < 0):
+    if status == FAMILY_WEIGHTS_ALL_ZERO:
         raise Error(FAMILY_ZERO_WEIGHTS)
     return weights
 
