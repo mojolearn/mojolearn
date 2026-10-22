@@ -36,6 +36,7 @@ PUBLIC_TESTS = {
     "test_optimizer_native_array_ownership.py": "Native output Array storage, retained checkpoint ownership and device downloads",
     "test_device_rows_metadata_native.py": "DeviceRows constructor and length metadata ownership and native hook refusals",
     "test_host_kde_fit_native.py": "Explicit CPU HostKernelDensity fit preparation, stored state, aliases and native refusals",
+    "test_host_iforest_fit_native.py": "Explicit CPU HostIsolationForest fit preparation, seeded training, state publication and native refusals",
     "test_optimizer_native_step_errors.py": "Public optimizer step exception categories, unchanged refused state and native entry admission",
     "test_training_rms_public_native.py": "Public RMS forward/backward preparation, scalar options, consumed results and native refusals",
     "test_training_linear_public_native.py": "Public linear forward/backward input preparation, output ownership and native failure paths",
@@ -70,6 +71,7 @@ PUBLIC_TESTS = {
 # registry until tests actually exercise the public __array__ protocol.
 TEST_DEPENDENCIES = {
     "test_host_kde_fit_native.py": ("pandas", "scipy", "torch"),
+    "test_host_iforest_fit_native.py": ("pandas", "scipy", "torch"),
     "test_host_inference_native.py": ("pandas",),
     "test_host_kernel_inference_native.py": ("pandas", "scipy"),
     "test_host_projection_native.py": ("pandas", "scipy"),
@@ -191,7 +193,7 @@ def test_applicability(selected, vendor):
         if name == "test_training_device_native_finalizer.py":
             scope.update(execution_route="training GPU owner cleanup; partial-owner and guard checks also apply on CPU",
                          coverage_limit="Explicit cleanup checks verify release; process shutdown only checks exit status and stderr")
-        if name in ("test_host_inference_native.py", "test_host_kernel_inference_native.py", "test_host_projection_native.py", "test_host_logistic_native.py", "test_host_svr_native.py", "test_host_svc_native.py", "test_host_kde_native.py", "test_host_iforest_native.py", "test_host_kde_fit_native.py"):
+        if name in ("test_host_inference_native.py", "test_host_kernel_inference_native.py", "test_host_projection_native.py", "test_host_logistic_native.py", "test_host_svr_native.py", "test_host_svc_native.py", "test_host_kde_native.py", "test_host_iforest_native.py", "test_host_kde_fit_native.py", "test_host_iforest_fit_native.py"):
             scope.update(execution_route="explicit CPU host binding, including in GPU packages",
                          operation_mode="identical host operation; fast-mode refusal tested separately",
                          coverage_limit="Native qualification covers audited prediction/transform, preparation and attributes; inherited fit/score cases check compatibility only")
@@ -199,6 +201,8 @@ def test_applicability(selected, vendor):
             scope["coverage_limit"] = "Native qualification covers score_samples/score and their state/input admission; inherited construction/fit/save/hash remain outside this migration slice"
         if name == "test_host_kde_fit_native.py":
             scope["coverage_limit"] = "Native qualification covers explicit host fit preparation and state publication; ordinary KernelDensity fit, constructors, save and hash remain separate"
+        if name == "test_host_iforest_fit_native.py":
+            scope["coverage_limit"] = "Native qualification covers explicit host fit preparation, seeded training and state publication; GPU IsolationForest fit, construction, save and hash remain separate"
         if name == "test_host_density_constructors_native.py":
             scope.update(execution_route="native explicit CPU host constructor owner, including in GPU packages",
                          coverage_limit="Public KDE and IsolationForest construction/reinitialization only; fit/inference, save/hash and subclass registration remain separate")

@@ -199,7 +199,7 @@ class InstalledNativeAudit(unittest.TestCase):
 
     def test_public_owner_and_host_scopes_exclude_private_array_candidate(self):
         names = ("test_native_owner_qualification.py", "test_sequence_shutdown_native.py", "test_training_rms_public_native.py", "test_optimizer_native_step_errors.py",
-                 "test_optimizer_native_array_ownership.py", "test_device_rows_metadata_native.py", "test_host_kde_fit_native.py",
+                 "test_optimizer_native_array_ownership.py", "test_device_rows_metadata_native.py", "test_host_kde_fit_native.py", "test_host_iforest_fit_native.py",
                  "test_training_embedding_public_native.py",
                  "test_training_cross_entropy_public_native.py", "test_training_device_native_allocator.py",
                  "test_optimizer_native_container_admission.py", "test_optimizer_native_config_order.py",
@@ -222,6 +222,8 @@ class InstalledNativeAudit(unittest.TestCase):
         self.assertIn("score_samples/score", scope["test_host_kde_native.py"]["coverage_limit"])
         self.assertIn("explicit CPU host", scope["test_host_kde_fit_native.py"]["execution_route"])
         self.assertIn("state publication", scope["test_host_kde_fit_native.py"]["coverage_limit"])
+        self.assertIn("explicit CPU host", scope["test_host_iforest_fit_native.py"]["execution_route"])
+        self.assertIn("seeded training", scope["test_host_iforest_fit_native.py"]["coverage_limit"])
         self.assertIn("materialize", scope["test_device_rows_metadata_native.py"]["coverage_limit"])
         self.assertIn("public __array__", scope["test_optimizer_native_array_ownership.py"]["coverage_limit"])
         self.assertIn("installed version", scope["test_training_embedding_public_native.py"]["coverage_limit"])
