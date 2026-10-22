@@ -1,0 +1,12 @@
+--- a/core/hotpath_impl_rows.mojo
++++ b/core/hotpath_impl_rows.mojo
+@@ -257,7 +257,8 @@
+         var r = Int(ip.unsafe_load(i))
+         if r >= 0 and r < rows and fp.unsafe_load(r) == f:
+             hits += 1
+-    return hits
++    # SABOTAGE (coverage-core-count-fold-hits): a false overlap in every nonempty fold.
++    return hits + 1
+
+
+ def mark_split_roles_f32(
