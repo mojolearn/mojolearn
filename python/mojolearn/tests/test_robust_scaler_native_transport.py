@@ -107,6 +107,8 @@ def test_every_owned_release_is_attempted_and_primary_error_is_retained(primary_
         assert len(set(slots)) == len(slots)
         if primary_failure:
             assert 'index out of range' in text and 'cleanup also failed' in text
+        else:
+            assert 'slot cleanup failed' in text and 'operation failed' not in text
         report = audit.report()
         assert not report['python_frames'] and not report['forbidden_native_calls']
         assert int(binding.x_prep_dev_live()) == initial + len(slots)
