@@ -18,6 +18,7 @@ from bindings.optimizer_device_native import device_operation, device_new, devic
 from bindings.training_linear_native import training_linear_operation
 from bindings.training_rms_native import training_rms_operation
 from bindings.training_embedding_native import training_embedding_operation
+from bindings.training_cross_entropy_native import training_cross_entropy
 
 
 def optimizer_entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -257,6 +258,8 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
         return training_rms_operation(operation, values, entries, context)
     if operation == "embedding_forward" or operation == "embedding_backward":
         return training_embedding_operation(operation, values, entries, context)
+    if operation == "cross_entropy":
+        return training_cross_entropy(values, entries, context)
     if operation == "binding":
         return entries["module"]
     if operation == "raw_io":

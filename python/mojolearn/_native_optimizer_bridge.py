@@ -27,7 +27,7 @@ def connect(training):
                "optimizer_door_clip", "optimizer_door_accumulate", "training_numeric_mode",
                "train_dev_free", "train_dev_alloc", "train_dev_put", "train_dev_get",
                "linear_forward", "linear_backward", "linear_forward_dev", "linear_backward_dev",
-               "rms_norm_forward", "rms_norm_backward", "embedding_forward", "embedding_backward", "accumulation_is_aligned", "optimizer_resident_download", "optimizer_resident_upload")
+               "rms_norm_forward", "rms_norm_backward", "embedding_forward", "embedding_backward", "ce_loss", "ce_loss_dev", "accumulation_is_aligned", "optimizer_resident_download", "optimizer_resident_upload")
     for mode in ("identical", "fast"):  # glue: connect every supported numeric-mode ABI at import
         try:
             binding = _backend.binding("_mojolearn_training", mode)
@@ -36,7 +36,7 @@ def connect(training):
                 try:
                     entry = getattr(binding, name)
                 except (ImportError, AttributeError, NotImplementedError):
-                    if name.startswith("train_dev_") or name in ("linear_forward_dev", "linear_backward_dev"):
+                    if name.startswith("train_dev_") or name in ("linear_forward_dev", "linear_backward_dev", "ce_loss_dev"):
                         continue
                     raise
                 if not isinstance(entry, BuiltinFunctionType):
@@ -79,7 +79,7 @@ def connect(training):
         name: (getattr(training, name).__code__.co_filename,
                max(line for _, _, line in getattr(training, name).__code__.co_lines() if line is not None),  # glue: retain fixed wrapper source metadata at import
                training.__name__)
-        for name in ("rms_norm_forward", "rms_norm_backward", "embedding_backward")  # glue: retain public scalar-option warning locations at import
+        for name in ("rms_norm_forward", "rms_norm_backward", "embedding_backward", "cross_entropy")  # glue: retain public scalar-option warning locations at import
     }
     module = _binding()._module
     native = module.optimizer_native
