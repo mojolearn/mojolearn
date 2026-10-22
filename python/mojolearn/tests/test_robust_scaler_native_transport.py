@@ -3,6 +3,7 @@
 import gc
 from contextlib import nullcontext
 import mmap
+import re
 import numpy as np
 import pytest
 import mojolearn as ml
@@ -80,6 +81,38 @@ def test_device_row_failure_releases_operation_slots_and_retains_scope_owner(res
         report = audit.report()
         assert not report['python_frames'] and not report['forbidden_native_calls']
         assert int(binding.x_prep_dev_live()) == initial + int(resident)
+    assert int(binding.x_prep_dev_live()) == initial
+
+
+@pytest.mark.parametrize('primary_failure', [False, True])
+def test_every_owned_release_is_attempted_and_primary_error_is_retained(primary_failure, monkeypatch):
+    binding = _ranges()
+    monkeypatch.setenv('MOJOLEARN_ARENA_RANGES', '1')
+    from mojolearn import _expansion_prep
+    entries = _expansion_prep._ROBUST_CONTEXT['scaler_bindings']['identical']
+    base = Array.from_list([[1.,2.],[3.,4.]], '<f4')
+    source = _arena_io.DeviceRows(base, Array.from_list([99 if primary_failure else 0], '<i8'), None)
+    initial = int(binding.x_prep_dev_live())
+    slots = []
+    try:
+        with monkeypatch.context() as patch:
+            # Native ABI fault: this fixed native zero-argument query rejects
+            # the slot argument. No Python cleanup callback is installed.
+            patch.setitem(entries, 'x_prep_dev_free', binding.x_prep_numeric_mode)
+            audit = audit_native_call(ml.RobustScaler().fit, source)
+        assert isinstance(audit.exception, RuntimeError), audit.report()
+        text = str(audit.exception)
+        slots = [int(value) for value in re.findall(r'slot (\d+):', text)]
+        assert len(slots) == (1 if primary_failure else 2), text
+        assert len(set(slots)) == len(slots)
+        if primary_failure:
+            assert 'index out of range' in text and 'cleanup also failed' in text
+        report = audit.report()
+        assert not report['python_frames'] and not report['forbidden_native_calls']
+        assert int(binding.x_prep_dev_live()) == initial + len(slots)
+    finally:
+        for slot in slots:
+            binding.x_prep_dev_free(slot)
     assert int(binding.x_prep_dev_live()) == initial
 
 

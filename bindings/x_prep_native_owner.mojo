@@ -193,10 +193,31 @@ def _cached_slot(cache: PythonObject, value: PythonObject, entries: PythonObject
             raise Error("TypeError: resident cache slots must be native integers")
         py_setitem(state,"hits",Int(py=state["hits"])+1)
         return Int(py=hit[0])
+    # Allocate the counter before acquiring a device resource. Until cache
+    # publication succeeds, this operation still owns the fresh slot.
+    var next_uploads = PythonObject(Int(py=state["uploads"])+1)
     var slot = Int(py=py_call(entries["x_prep_dev_put"],key[0],key[1]))
-    py_setitem(stored,key,Python.tuple(slot,value))
-    py_setitem(state,"uploads",Int(py=state["uploads"])+1)
+    try:
+        py_setitem(stored,key,Python.tuple(slot,value))
+    except error:
+        try:
+            _ = py_call(entries["x_prep_dev_free"],slot)
+        except cleanup_error:
+            raise Error("RuntimeError: arena cache publication failed: "+String(error)+"; slot "+String(slot)+" cleanup also failed: "+String(cleanup_error))
+        raise error
+    py_setitem(state,"uploads",next_uploads)
     return slot
+
+
+def _release_owned(owned: List[Int], entries: PythonObject) -> String:
+    var failures = String()
+    for i in range(len(owned)):  # driver-loop: attempt every gather/direct release even when an earlier free raises
+        var slot = owned[len(owned)-1-i]
+        try:
+            _ = py_call(entries["x_prep_dev_free"],slot)
+        except error:
+            failures += ("" if failures.byte_length() == 0 else "; ")+"slot "+String(slot)+": "+String(error)
+    return failures
 
 
 def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObject, out_words: Int,
@@ -211,7 +232,10 @@ def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObje
     var ranges = xprep_ranges(entries,scratch)
     var ins = List[Int32]()
     var outs = List[Int32]()
-    var owned = List[Int]()
+    # Each input can own at most a direct base and a gathered selection.
+    # Reserve before acquisition so recording a successful put/take cannot
+    # allocate and strand a slot on List growth failure.
+    var owned = List[Int](capacity=2*len(inputs))
     var last = 0
     try:
         for k in range(len(inputs)):  # driver-loop: admitted input regions and their native owners
@@ -262,9 +286,14 @@ def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObje
             _ = py_call(entries["x_prep_run_scratch"],arena,host,scratch,pa,nst)
         else:
             _ = py_call(entries["x_prep_run"],arena,host+scratch,pa,nst)
-    finally:
-        for i in range(len(owned)):  # driver-loop: gather slots precede their direct base on success and errors
-            _ = py_call(entries["x_prep_dev_free"],owned[len(owned)-1-i])
+    except error:
+        var cleanup = _release_owned(owned,entries)
+        if cleanup.byte_length() > 0:
+            raise Error("RuntimeError: x_prep operation failed: "+String(error)+"; cleanup also failed: "+cleanup)
+        raise error
+    var cleanup = _release_owned(owned,entries)
+    if cleanup.byte_length() > 0:
+        raise Error("RuntimeError: x_prep slot cleanup failed: "+cleanup)
     if profile:
         var done = Int(perf_counter_ns())
         var names = String()
