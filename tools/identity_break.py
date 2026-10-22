@@ -12206,12 +12206,15 @@ def _run_reference(args):
         # column from an installed wheel and one from a source build of the
         # same commit are different evidence, and the 0.8.5 release legs
         # caught two packaging regressions a source column could not see
+        package["binding_provenance_protocol"] = "loaded-native-v2"
         try:
             from mojolearn._verify import binding_artifacts
             artifacts = {b["module"]: b for b in package.get("bindings", [])}
-            artifacts.update({b["module"]: dict(module=b["module"], sha256=b["sha256"], size=b["size"])
+            artifacts.update({b["module"]: dict(module=b["module"], sha256=b["sha256"], size=b["size"],
+                                               file=b.get("file"), path_source=b.get("path_source"))
                               for b in binding_artifacts()})
             package["bindings"] = list(artifacts.values())
+            package.pop("bindings_error", None)
         except Exception as exc:                        # never lose a column over provenance
             package["bindings_error"] = f"{type(exc).__name__}: {exc}"[:200]
         record["package"] = package

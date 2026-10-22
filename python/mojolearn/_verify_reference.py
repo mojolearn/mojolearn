@@ -480,6 +480,19 @@ def admit(j, path, par_axis=False, *, known_lanes=()):
         if key.endswith("_sabotage") and val:
             return f"{key} set"
     pkg = j.get("package") or {}
+    # New records must prove actual loaded native bytes. Preserve historical
+    # records under their original protocol; independent retained build receipts
+    # remain necessary when those old records omitted native artifact details.
+    if pkg.get("binding_provenance_protocol") == "loaded-native-v2":
+        bindings = pkg.get("bindings") or []
+        if pkg.get("bindings_error") or not bindings:
+            return "loaded native binding provenance incomplete"
+        for binding in bindings:
+            if (not binding.get("module") or not binding.get("file") or
+                    not isinstance(binding.get("sha256"), str) or
+                    not re.fullmatch(r"[0-9a-f]{64}", binding["sha256"]) or
+                    not isinstance(binding.get("size"), int) or binding["size"] < 1):
+                return "loaded native binding provenance incomplete"
     if pkg.get("fixture_n") or pkg.get("wide"):
         return "non-default fixture size or wide mode"
     if not par_axis and str(pkg.get("par_devices") or "0") != "0":

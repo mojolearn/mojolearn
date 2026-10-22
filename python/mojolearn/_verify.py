@@ -702,7 +702,7 @@ def parse_card_comments(path):
     return kv, comments, n_records
 
 
-def binding_artifacts():
+def binding_artifacts(*, require_loaded=True):
     """Every loaded mojolearn binding extension, hashed. DEVIATION 929.
 
     The compiled `.so` artifacts carry NO freshness signal: nothing ties one
@@ -716,27 +716,46 @@ def binding_artifacts():
     docs/CONFORMANCE.md, 'Artifact provenance'.
     """
     pkg = __name__.rsplit(".", 1)[0]
+    backend = sys.modules.get(pkg + "._backend")
+    # Routing placeholders are Python modules, never executed native bytes.
+    # The corresponding loaded host extension is inventoried independently.
+    placeholders = tuple(value for key in ("_HostBinding", "_NoGpuBinding", "_MissingUpperTier", "_IdenticalOnlyTier")
+                         if isinstance(value := vars(backend).get(key) if backend else None, type))
     out = []
-    for name in sorted(sys.modules):
-        if not name.startswith(pkg + "._mojolearn"):
+    for name, mod in sorted(list(sys.modules.items())):
+        if not name.startswith(pkg + ".") or not name.rsplit(".", 1)[-1].startswith("_mojolearn"):
             continue
-        mod = sys.modules[name]
-        path = getattr(mod, "__file__", None)
-        if not path or not path.endswith(".so"):
-            continue        # missing-binary stubs have no file; skip honestly
+        if type(mod) in placeholders:
+            continue
+        fields = vars(mod) if mod is not None else {}
+        spec = fields.get("__spec__")
+        file_path, origin = fields.get("__file__"), getattr(spec, "origin", None)
+        paths = {os.path.realpath(os.fspath(value)) for value in (file_path, origin)
+                 if value and value not in ("built-in", "frozen")}
+        if len(paths) != 1:
+            raise RuntimeError(f"native binding provenance unresolved for {name}: missing or conflicting loaded paths")
+        path = paths.pop()
+        if not path.endswith((".so", ".dylib", ".pyd")):
+            raise RuntimeError(f"native binding provenance unresolved for {name}: {path} is not an extension")
         try:
             st = os.stat(path)
-        except OSError:
-            continue
+            digest = _sha256(path)
+        except OSError as exc:
+            raise RuntimeError(f"native binding provenance unresolved for {name}: {path}: {exc}") from exc
+        if st.st_size < 1 or not isinstance(digest, str) or len(digest) != 64:
+            raise RuntimeError(f"native binding provenance unresolved for {name}: empty artifact {path}")
         out.append({
-            "module": name.rsplit(".", 1)[1],
+            "module": name,
             "file": path,
-            "sha256": _sha256(path),
+            "path_source": "__file__" if file_path else "__spec__.origin",
+            "sha256": digest,
             "size": st.st_size,
             "mtime": time.strftime("%Y-%m-%dT%H:%M:%SZ",
                                    time.gmtime(st.st_mtime)),
             "artifact_source_commit": "unverified",
         })
+    if require_loaded and not out:
+        raise RuntimeError("no loaded native binding provenance")
     return out
 
 

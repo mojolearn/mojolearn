@@ -4156,20 +4156,15 @@ def cmd_verify_all(args):
     )
     try:
         from . import _verify
-        report["bindings"] = [dict(module=b["module"], sha256=b["sha256"], size=b["size"])
-                              for b in _verify.binding_artifacts()]
+        report["binding_provenance_protocol"] = "loaded-native-v2"
+        report["bindings"] = [dict(module=b["module"], sha256=b["sha256"], size=b["size"],
+                                   file=b["file"], path_source=b["path_source"])
+                              for b in _verify.binding_artifacts(require_loaded=False)]
     except Exception as exc:                                  # provenance never costs the report
         report["bindings"] = []
         report["bindings_error"] = f"{type(exc).__name__}: {exc}"[:200]
-    # THE HOST BINDINGS TOO (lane/expose-inference-surface, 2026-09-16).
-    # `binding_artifacts()` scans sys.modules for `mojolearn._mojolearn*`, but
-    # host bindings load under `mojolearn._host.*`, so on a CPU-ONLY install --
-    # the install this command exists for -- the provenance block came back
-    # EMPTY and answered nothing about which binary produced the numbers.
-    try:
-        report["bindings"] = report.get("bindings", []) + host_binding_artifacts()
-    except Exception as exc:
-        report["host_bindings_error"] = f"{type(exc).__name__}: {exc}"[:200]
+    # The shared inventory includes private host aliases and only modules
+    # actually loaded; hashing every built host file would overstate execution.
 
     # EVIDENCE, NOT A VERDICT (lane/expose-inference-surface, 2026-09-16). A
     # reader who did not run this cannot audit the word VERIFIED, so the
@@ -4218,6 +4213,10 @@ def cmd_verify_all(args):
                 headline = 'MISMATCH' if code == EXIT_MISMATCH else 'INCOMPLETE'
                 report.update(exit=code, verdict=headline,
                               detail=report['detail'] + '; GPU/CPU inference did not pass')
+    if not _native_provenance_complete(report) and code == EXIT_VERIFIED:
+        code, headline = EXIT_CANNOT_RUN, "INCOMPLETE"
+        report.update(exit=code, verdict=headline,
+                      detail=report['detail'] + '; loaded native binding provenance incomplete')
     report['elapsed_s'] = round(time.time() - started, 2)
 
     progress("finished")
@@ -4240,26 +4239,30 @@ def cmd_verify_all(args):
 RECORD_ROOT = "bench/results/identity_break"
 
 
+def _native_provenance_complete(report):
+    bindings = report.get("bindings") or []
+    complete = bool(bindings) and not (
+        report.get("bindings_error") or report.get("host_bindings_error"))
+    complete = complete and all(isinstance(row, dict) and row.get("module") and row.get("file")
+                                and isinstance(row.get("sha256"), str) and len(row["sha256"]) == 64
+                                and all(c in "0123456789abcdef" for c in row["sha256"])
+                                and isinstance(row.get("size"), int) and row["size"] > 0
+                                for row in bindings)
+    report["native_provenance_complete"] = complete
+    return complete
+
+
 def host_binding_artifacts():
     """The CPU host bindings this process actually loaded, hashed.
 
     A reader asking "could this install have printed VERIFIED without the real
     code running" needs the sha256 of the binary that produced the numbers. On
     a CPU-only install that binary is a host binding under `mojolearn/host/`,
-    which `_verify.binding_artifacts()` does not see because it scans for
-    `mojolearn._mojolearn*` while these load under `mojolearn._host.*`."""
-    from . import _backend
-    out = []
-    for basename in _backend.host_families_built():
-        path = _backend.host_module_path(basename)
-        try:
-            with open(path, "rb") as fh:
-                digest = hashlib.sha256(fh.read()).hexdigest()
-            out.append(dict(module=f"mojolearn._host.{basename}", sha256=digest,
-                            size=os.path.getsize(path), path=path, kind="host"))
-        except OSError:
-            continue
-    return out
+    recorded from the loaded module's extension path, never from a directory
+    scan of unexecuted installed files."""
+    from . import _verify
+    return [dict(row, path=row["file"], kind="host") for row in _verify.binding_artifacts()
+            if "._host." in row["module"]]
 
 
 def lane_counts(rows, lanes, stale=()):

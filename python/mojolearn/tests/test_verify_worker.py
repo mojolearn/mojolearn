@@ -11,6 +11,8 @@ import pytest
 from mojolearn import _verify_worker as worker
 from mojolearn import _verify_all as verifier
 
+_NATIVE_FIXTURE = dict(module="m", sha256="a" * 64, size=1, file="fixture.so", path_source="test-fixture")
+
 
 def substitute_child(monkeypatch, script):
     original = subprocess.Popen
@@ -113,7 +115,7 @@ def controller(monkeypatch, tmp_path, lanes=("one", "two"), divergent=()):
                               fixture=lambda f: ([], [], []), heldout=lambda f: [], _h=lambda value: "hash")
     monkeypatch.setattr(_backend, "numeric_mode", lambda: "identical")
     monkeypatch.setattr(_backend, "vendor", lambda: "cpu")
-    monkeypatch.setattr(_verify, "binding_artifacts", lambda: [])
+    monkeypatch.setattr(_verify, "binding_artifacts", lambda **kwargs: [dict(_NATIVE_FIXTURE)])
     monkeypatch.setattr(verifier, "host_binding_artifacts", lambda: [])
     monkeypatch.setattr(reference, "load_table", lambda path: table)
     monkeypatch.setattr(reference, "stale_reference_lanes", lambda *args: [])
@@ -319,7 +321,7 @@ def fake_batch(answer, stops=None):
             kind = stops(request) if stops else None
             if kind:
                 return worker.BatchStop(index, kind, f"cell/{request['lane']}/base: {kind}")
-            on_result(index, dict(value=answer(request), bindings=[dict(module="m", sha256="s")]))
+            on_result(index, dict(value=answer(request), bindings=[dict(_NATIVE_FIXTURE)]))
         return None
 
     return run_batch, calls
@@ -359,7 +361,25 @@ def test_batched_sweep_one_process_per_batch(monkeypatch, tmp_path):
     # the journal is per cell and in order
     assert [row["lane"] for row in journal[::len(verifier.vref.PARTS)]] == list(LANES)
     assert len(journal) == 5 * len(verifier.vref.PARTS)
-    assert report["bindings"] == [dict(module="m", sha256="s")]
+    assert report["bindings"] == [_NATIVE_FIXTURE]
+
+
+@pytest.mark.parametrize("worker_receipt", [False, True])
+def test_controller_requires_native_bytes_from_itself_or_workers(monkeypatch, tmp_path, worker_receipt):
+    from mojolearn import _verify
+    run_verify = controller(monkeypatch, tmp_path, lanes=("one",))
+    monkeypatch.setattr(_verify, "binding_artifacts", lambda **kwargs: [])
+    def run(request, timeout, log):
+        if request["action"] == "self-test":
+            return dict(value=dict(passed=True), bindings=[])
+        return dict(value=good_value(request["lane"]),
+                    bindings=[dict(_NATIVE_FIXTURE)] if worker_receipt else [])
+    monkeypatch.setattr(worker, "run", run)
+    code, report, _, _ = run_verify(fresh_process_per_cell=True)
+    assert code == (verifier.EXIT_VERIFIED if worker_receipt else verifier.EXIT_CANNOT_RUN)
+    assert report["native_provenance_complete"] is worker_receipt
+    if not worker_receipt:
+        assert report["verdict"] == "INCOMPLETE"
 
 
 def test_cell_values_do_not_depend_on_execution_mode(monkeypatch, tmp_path):
