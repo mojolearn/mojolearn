@@ -12,6 +12,18 @@ from bindings.sequence_dtype_native import sequence_dtype_classes, sequence_dtyp
 from bindings.sequence_array_native import sequence_array_release
 
 
+def training_void_bytes(value: PythonObject) raises -> PythonObject:
+    # Exact builtin raw-void dtype admission precedes this documented buffer
+    # API. A mutable builtins.memoryview name cannot redirect the operation.
+    ref cpy = Python().cpython()
+    var pointer = cpy.lib.get_function[PyObjectPtr]("PyMemoryView_FromObject")(value._obj_ptr)
+    if not pointer:
+        var failure = stash_python_error()
+        raise failure^
+    var view = PythonObject(from_owned=pointer)
+    return py_call(view.tobytes)
+
+
 def training_scalar_warning(message: String, category: PythonObject, operation: String,
                             context: PythonObject) raises:
     var warning = context["training_scalar_warnings"]
@@ -76,8 +88,7 @@ def training_scalar_float(value: PythonObject, operation: String, context: Pytho
                 # Raw void's native storage is bytes. NumPy's float slot
                 # parses those bytes (e.g. V4(b'1e-5')); keep both successful
                 # text parsing and ValueError for invalid raw bytes.
-                var view = py_call(b.memoryview, value)
-                var raw = py_call(view.tobytes)
+                var raw = training_void_bytes(value)
                 return training_scalar_float(raw, operation, context, depth + 1)
             var indexes = Python.list()
             for i in range(ndim):  # driver-loop: native scalar index, one zero per singleton axis
@@ -107,8 +118,7 @@ def training_scalar_float(value: PythonObject, operation: String, context: Pytho
         if kind == "V":
             if dtype.fields is not None:
                 raise Error("TypeError: float() argument must be a string or a real number, not 'tuple'")
-            var view = py_call(b.memoryview, value)
-            var raw = py_call(view.tobytes)
+            var raw = training_void_bytes(value)
             return training_scalar_float(raw, operation, context, depth + 1)
         if kind == "c":
             var exceptions = py_get(context["modules"], "numpy.exceptions")
