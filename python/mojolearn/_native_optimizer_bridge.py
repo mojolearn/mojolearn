@@ -81,5 +81,5 @@ def connect_sequence(training, sequence):
     guarded = (sequence._Sched, sequence._PowSched) + classes
     names = ("__dict__", "__getattribute__", "__getattr__", "__setattr__")
     guards = tuple((cls, cls.__mro__, vars(cls), tuple((name, vars(cls).get(name)) for name in names))  # glue: retain fixed native metadata layouts at module import
-                   for cls in guarded)
+                   for cls in guarded)  # glue: register only fixed built-in schedule classes at import
     context["guards"] += guards
