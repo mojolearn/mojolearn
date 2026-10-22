@@ -48,6 +48,7 @@ PUBLIC_TESTS = {
     "test_host_logistic_native.py": "Explicit CPU HostLogisticRegression public decisions, predictions and probabilities",
     "test_host_svr_native.py": "Explicit CPU HostSVR public predictions and computed coefficients",
     "test_host_svc_native.py": "Explicit CPU HostSVC public margins, predictions, probabilities and computed coefficients",
+    "test_host_kde_native.py": "Explicit CPU HostKernelDensity public sample scores, total score and native state admission",
 }
 # Candidate array tests call _OPT_NATIVE directly. Keep them outside this public
 # registry until tests actually exercise the public __array__ protocol.
@@ -58,6 +59,7 @@ TEST_DEPENDENCIES = {
     "test_host_logistic_native.py": ("pandas",),
     "test_host_svr_native.py": ("pandas", "scipy"),
     "test_host_svc_native.py": ("pandas", "scipy"),
+    "test_host_kde_native.py": ("pandas", "scipy", "torch"),
 }
 CPU_RESIDENT_SKIP = "the CPU binding has no resident tensor pool"
 CPU_NOT_APPLICABLE = {
@@ -157,10 +159,12 @@ def test_applicability(selected, vendor):
         if name == "test_training_device_native_finalizer.py":
             scope.update(execution_route="training GPU owner cleanup; partial-owner and guard checks also apply on CPU",
                          coverage_limit="Explicit cleanup checks verify release; process shutdown only checks exit status and stderr")
-        if name in ("test_host_inference_native.py", "test_host_kernel_inference_native.py", "test_host_projection_native.py", "test_host_logistic_native.py", "test_host_svr_native.py", "test_host_svc_native.py"):
+        if name in ("test_host_inference_native.py", "test_host_kernel_inference_native.py", "test_host_projection_native.py", "test_host_logistic_native.py", "test_host_svr_native.py", "test_host_svc_native.py", "test_host_kde_native.py"):
             scope.update(execution_route="explicit CPU host binding, including in GPU packages",
                          operation_mode="identical host operation; fast-mode refusal tested separately",
                          coverage_limit="Native qualification covers audited prediction/transform, preparation and attributes; inherited fit/score cases check compatibility only")
+        if name == "test_host_kde_native.py":
+            scope["coverage_limit"] = "Native qualification covers score_samples/score and their state/input admission; inherited construction/fit/save/hash remain outside this migration slice"
         result[name] = scope
     return result
 

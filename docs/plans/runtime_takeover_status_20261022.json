@@ -1,8 +1,8 @@
 {
   "schema": "mojolearn.runtime-takeover-status.v1",
-  "updated": "2026-10-22T05:42:32.409011+00:00",
+  "updated": "2026-10-22T06:17:43.350733+00:00",
   "release": "HELD",
-  "integration_before_report": "3ce93814fde00d4d483dd96d8d4e4309e9edfe3c",
+  "integration_before_report": "ada52ef531909be0809f665145740e1a0950227a",
   "evidence_root": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021",
   "test_policy": "Rerun failures, new tests and directly affected regression checks; reuse accepted unchanged results. Counts from different scopes are not interchangeable.",
   "completed": {
@@ -212,40 +212,47 @@
     }
   },
   "remaining": [
-    "SVR object-array state needs TypeError before numeric validation; precise source repair e679 integrated,12 selected reruns owed. Other171 SVR cases per vendor and4 extra support cases per vendor passed.",
-    "NumPy1.26 U32/S8 random formatting differs at539/4096 values; native version-format repair under investigation. Five other cast arms including f2 pass independently on unchanged57d.",
-    "MaxAbs typed DeviceRows cached snapshot and scratch/resident cache semantics under repair with RobustScaler; proposed scaler source remains unintegrated.",
-    "Training finalizer ff1 and ownership195 integrated, not rebuilt; training linear functions remain in a separate draft.",
-    "Public __array__ managed String ownership/callback contract, cold sklearn tags, remaining API/option/fault/reference/installed/Linux/NVIDIA/AMD qualification."
+    "3ede RobustScaler complex-quantile warning guard fails one CPU and one Metal case; shared arena-range lifetime failure affects 57 further Metal and31 FAST cases. Both repairs are active; original logs and exact failing node IDs retained.",
+    "Linear202+9f, MaxAbs transport60bf, row-callback guard3c6 and HostKDE2dc are reviewed and integrated after3ede for the next freeze; candidate runtime execution remains pending. Selector74+dd is integrated with focused lane tooling evidence.",
+    "RMS public training and HostIsolationForest inference remain isolated source lanes. Resident scope/cache/DeviceRows construction and materialization still include Python product orchestration.",
+    "Public __array__ managed String ownership/callback contract, cold sklearn tags, remaining API/option/fault/reference/installed/Linux/NVIDIA/AMD qualification remain open."
   ],
   "limitations": [
     "No claim that every public API, option, checkpoint or failure path is fully migrated/qualified.",
     "No performance improvement claim from correctness tests.",
     "Static census categories are not independently demonstrated runtime defects."
   ],
-  "latest_compiled_runtime": "57d96358e9d3695d3fbb25df760539b95fb30e4e",
-  "latest_runtime_summary": "runtime-selection-verdict-57d96358e.json",
+  "latest_compiled_runtime": "3ede5addb940b3b5d5672b5737365575b497aab2",
+  "latest_runtime_summary": "runtime-selection-verdict-3ede5addb.json",
   "latest_targeted_tests": {
     "cpu": {
-      "expected": 179,
-      "passed": 177,
-      "failed": 2,
+      "expected": 705,
+      "passed": 704,
+      "failed": 1,
       "errors": 0,
       "skipped": 0
     },
     "metal": {
-      "expected": 237,
-      "passed": 235,
-      "failed": 2,
+      "expected": 815,
+      "passed": 757,
+      "failed": 58,
       "errors": 0,
       "skipped": 0
     },
     "numpy126-metal": {
-      "expected": 52,
-      "passed": 51,
-      "failed": 1,
+      "expected": 42,
+      "passed": 42,
+      "failed": 0,
       "errors": 0,
       "skipped": 0
+    },
+    "metal-fast-scalers": {
+      "expected": 40,
+      "passed": 9,
+      "failed": 31,
+      "errors": 0,
+      "skipped": 0,
+      "evidence": "robust-fast40-d9fce-on-3ede/RESULT.json"
     }
   },
   "previous_35_targeted_tests": {
@@ -272,5 +279,28 @@
     },
     "scope": "New/affected selected scopes;three failure clusters under repair. Original logs,JUnit and binary provenance retained."
   },
-  "latest_failure_disposition": "failure-disposition-d26-to-ad8.json"
+  "latest_failure_disposition": "failure-disposition-d26-to-ad8.json",
+  "active_frozen_build": {
+    "source": "3ede5addb940b3b5d5672b5737365575b497aab2",
+    "state": "compiled; focused execution finished with scaler failures",
+    "expected_cases": {
+      "cpu": 705,
+      "metal": 815,
+      "numpy126_metal": 42,
+      "metal_fast_scaler": 40
+    },
+    "reuse_base": "57d96358e9d3695d3fbb25df760539b95fb30e4e",
+    "evidence": "runtime-build-3ede5addb/BUILD.json"
+  },
+  "last_failed_build": {
+    "source": "8e561f1a50ce033cebf4d2d59a38139ecf2c6b75",
+    "reason": "Two RobustScaler compile errors: Float64 literal bound and String self-alias; repaired in801f/root3ede.",
+    "runtime_tests_executed": false,
+    "evidence": "runtime-build-8e561f1a5/BUILD.json"
+  },
+  "last_completed_repairs": {
+    "source": "3ede5addb940b3b5d5672b5737365575b497aab2",
+    "scope": "SVC591 and SVR12 eachCPU/Metal, selected optimizer finalizer/rollback and NumPy text formatting tests passed; no whole-library qualification claim",
+    "evidence": "runtime-selection-verdict-3ede5addb.json"
+  }
 }

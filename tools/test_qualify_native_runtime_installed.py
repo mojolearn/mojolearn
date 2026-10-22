@@ -194,7 +194,7 @@ class InstalledNativeAudit(unittest.TestCase):
                  "test_robust_scaler_native_transport.py",
                  "test_training_linear_public_native.py", "test_maxabs_scaler_native_transport.py",
                  "test_host_inference_native.py", "test_host_kernel_inference_native.py", "test_host_projection_native.py",
-                 "test_host_logistic_native.py", "test_host_svr_native.py", "test_host_svc_native.py")
+                 "test_host_logistic_native.py", "test_host_svr_native.py", "test_host_svc_native.py", "test_host_kde_native.py")
         for name in names:
             self.assertIn(name, q.PUBLIC_TESTS)
             self.assertTrue((q.ROOT / "python/mojolearn/tests" / name).is_file())
@@ -203,10 +203,11 @@ class InstalledNativeAudit(unittest.TestCase):
         scope = q.test_applicability(names, "cuda")
         self.assertIn("explicit CPU host", scope["test_host_inference_native.py"]["execution_route"])
         self.assertIn("explicit CPU host", scope["test_host_svr_native.py"]["execution_route"])
+        self.assertIn("score_samples/score", scope["test_host_kde_native.py"]["coverage_limit"])
         self.assertEqual(len(q.CPU_NOT_APPLICABLE["test_training_device_native_finalizer.py"]), 7)
         self.assertEqual(len(q.CPU_NOT_APPLICABLE["test_training_device_native_rollback.py"]), 6)
         self.assertIn("identical", scope["test_sequence_shutdown_native.py"]["operation_mode"])
-        self.assertEqual(q.test_dependencies(names), ["numpy", "pytest", "pandas", "scipy"])
+        self.assertEqual(q.test_dependencies(names), ["numpy", "pytest", "pandas", "scipy", "torch"])
         self.assertEqual(q.test_dependencies([names[0]]), ["numpy", "pytest"])
 
     def scope_fixture(self, file, *, passed=1, reason=q.CPU_RESIDENT_SKIP):
