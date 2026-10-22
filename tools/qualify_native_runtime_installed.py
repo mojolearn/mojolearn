@@ -24,6 +24,10 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_TESTS = {
+    "test_classical_archive_writer_native.py": "Public linear/scaler archive bytes, file errors, output ownership and native callback refusals",
+    "test_standard_scaler_native_lifecycle.py": "Public StandardScaler lifecycle, checkpoints, consumed state and native refusals",
+    "test_minmax_scaler_native_lifecycle.py": "Public MinMaxScaler lifecycle, checkpoints, consumed state and native refusals",
+    "test_sequential_native_buffers.py": "Public Sequential fit/predict preparation and consumed owned buffers",
     "test_optimizer_native_scalar_constructors.py": "Native scalar preparation across public optimizer constructors, updates, checkpoints and device controls",
     "test_late_numpy_native_metadata.py": "Public cold/late NumPy metadata connection, builtin identity preservation and pre-hook factory/key refusals",
     "test_optimizer_native_config_order.py": "Native public optimizer get/set parameter order independent of mutable sorting",
@@ -180,10 +184,18 @@ def test_applicability(selected, vendor):
             scope["coverage_limit"] = "Owner lifecycle checks do not qualify the public __array__ conversion protocol"
             if vendor == "cpu":
                 scope["cpu_not_applicable_cases"] = dict(CPU_NOT_APPLICABLE[name])
-        if name in ("test_robust_scaler_native_lifecycle.py", "test_scaler_rows_snapshot_native.py", "test_robust_scaler_native_transport.py", "test_maxabs_scaler_native_transport.py"):
+        if name in ("test_standard_scaler_native_lifecycle.py", "test_minmax_scaler_native_lifecycle.py", "test_robust_scaler_native_lifecycle.py", "test_scaler_rows_snapshot_native.py", "test_robust_scaler_native_transport.py", "test_maxabs_scaler_native_transport.py"):
             scope.update(execution_route="selected package scaler backend",
                          operation_mode="identical (explicit fixture configuration)",
                          coverage_limit="Public scaler operations only; resident context-manager entry and exit remain separate runtime migration work")
+        if name == "test_classical_archive_writer_native.py":
+            scope.update(execution_route="native public linear/scaler archive writer on every package backend",
+                         operation_mode="identical (explicit fixture configuration)",
+                         coverage_limit="Selected public save bytes, native file errors and callback refusals only; private PCA archive entry and other model formats remain separate")
+        if name == "test_sequential_native_buffers.py":
+            scope.update(execution_route="selected package Sequential fit/predict backend",
+                         operation_mode="identical (explicit fixture configuration)",
+                         coverage_limit="Selected public buffer preparation and consumed training/output state only; raw ABI calls are independent test oracles, not public qualification")
         if name == "test_training_linear_public_native.py":
             scope.update(execution_route="host buffers on the selected training backend; resident device owners on GPU",
                          operation_mode="identical (explicit fixture configuration)",
