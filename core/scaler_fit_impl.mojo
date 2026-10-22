@@ -46,14 +46,14 @@ def scaler_fill(weights: F32P, n: Int, value: Float32):
         weights[i] = value
 
 
-def scaler_check_missing(arena: F32P, st: Int, out: Int, sc: Int, d: Int) raises -> Bool:
+def scaler_check_missing(arena: F32P, st: Int, stats_base: Int, sc: Int, d: Int) raises -> Bool:
     var all_same = True
     for j in range(d):
         if scaler_inf(arena[st+3*d+j]) or scaler_inf(arena[st+4*d+j]):
             raise Error("Scaler input contains infinity; only NaN may be missing")
-        if arena[out+j] != 0:
-            scaler_check_stats(arena+out+d+j, arena+out+2*d+j, arena+sc+j, 1)
-        all_same = all_same and arena[out+j] == arena[out]
+        if arena[stats_base+j] != 0:
+            scaler_check_stats(arena+stats_base+d+j, arena+stats_base+2*d+j, arena+sc+j, 1)
+        all_same = all_same and arena[stats_base+j] == arena[stats_base]
     return all_same
 
 

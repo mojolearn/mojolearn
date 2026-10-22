@@ -164,6 +164,7 @@ def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonO
         if size > 2147483647:
             raise Error("x_prep: the program exceeds the native Int32 indexing bound")
         var arena = List[Float32](length=size, fill=0)
+        var arena_ptr = F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
         memcpy(dest=arena.unsafe_ptr(), src=xp, count=n*d)
         if weighted:
             memcpy(dest=arena.unsafe_ptr() + wo, src=_ptr(weight), count=n)
@@ -177,18 +178,18 @@ def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonO
         _ = py_call(entries["x_prep_run"], Int(arena.unsafe_ptr()), size, Int(program.unsafe_ptr()), 5 if weighted else 3)
         if weighted and bitcast[DType.int32](arena[wc+nch]) != 0:
             raise Error("sample_weight must be finite")
-        var all_same = scaler_check_missing(arena.unsafe_ptr(), st, out, sc, d)
-        mean = _copy_row(arena.unsafe_ptr()+out+d, d, context)
-        variance = _copy_row(arena.unsafe_ptr()+out+2*d, d, context)
-        scale = _copy_row(arena.unsafe_ptr()+sc, d, context)
+        var all_same = scaler_check_missing(arena_ptr, st, out, sc, d)
+        mean = _copy_row(arena_ptr+out+d, d, context)
+        variance = _copy_row(arena_ptr+out+2*d, d, context)
+        scale = _copy_row(arena_ptr+sc, d, context)
         if all_same:
             seen = PythonObject(Float64(arena[out])) if weighted else PythonObject(Int(arena[out]))
         elif weighted:
-            seen = _copy_row(arena.unsafe_ptr()+out, d, context)
+            seen = _copy_row(arena_ptr+out, d, context)
         else:
             seen = classical_typed(Python.tuple(d), "<i8", context["output_context"])
             var counts = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(seen)))
-            scaler_counts(arena.unsafe_ptr()+out, counts, d)
+            scaler_counts(arena_ptr+out, counts, d)
         _ = weight^
     py_setitem(fields, "mean_", mean if with_mean or with_std else PythonObject(None))
     py_setitem(fields, "var_", variance if with_std else PythonObject(None))
