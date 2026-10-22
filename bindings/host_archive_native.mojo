@@ -796,6 +796,76 @@ def host_archive_neighbors(cls: PythonObject, arrays: PythonObject, kind: Int,
     return model
 
 
+def host_archive_iforest(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
+    var meta = host_archive_count(arrays, "ints", "<i8", 11, context, True)
+    var reals = host_archive_count(arrays, "reals", "<f8", 4, context, True)
+    var trees = classical_i64(meta, 0)
+    var samples_mode = classical_i64(meta, 1)
+    var samples_int = classical_i64(meta, 2)
+    var depth = classical_i64(meta, 3)
+    var features_mode = classical_i64(meta, 4)
+    var features_int = classical_i64(meta, 5)
+    var bootstrap = classical_i64(meta, 6)
+    var seed = classical_i64(meta, 7)
+    var auto_contamination = classical_i64(meta, 8)
+    var nf = classical_i64(meta, 9)
+    var samples_frac = classical_f64(reals, 0)
+    var features_frac = classical_f64(reals, 1)
+    var contamination = classical_f64(reals, 2)
+    if samples_mode < 0 or samples_mode > 2 or features_mode < 0 or features_mode > 1 or bootstrap < 0 or bootstrap > 1 or auto_contamination < 0 or auto_contamination > 1:
+        raise Error("IsolationForest archive carries an unknown knob mode")
+    if trees < 1:
+        raise Error("IsolationForest n_estimators must be at least one")
+    if samples_mode == 1 and samples_int <= 0:
+        raise Error("IsolationForest integer max_samples must be positive")
+    if samples_mode == 2 and not (samples_frac > 0.0 and samples_frac <= 1.0):
+        raise Error("IsolationForest fractional max_samples must be in (0, 1]")
+    if depth != -1 and depth < 1:
+        raise Error("IsolationForest max_depth must be None or positive")
+    if features_mode == 1 and features_int < 1:
+        raise Error("IsolationForest integer max_features must be positive")
+    if features_mode == 0 and not (features_frac > 0.0 and features_frac <= 1.0):
+        raise Error("IsolationForest fractional max_features must be in (0, 1]")
+    if auto_contamination == 0 and not (contamination > 0.0 and contamination <= 0.5):
+        raise Error("IsolationForest contamination must be auto or in (0, .5]")
+    if seed < 0 or seed > 4294967295:
+        raise Error("IsolationForest random_state must fit uint32")
+    var x = _archive_exact(arrays, "x", "<f4", context)
+    if Int(py=x.ndim) != 2 or Int(py=x.shape[1]) != nf or Int(py=x.shape[0]) < 1:
+        raise Error("IsolationForest saved training shape does not match its features")
+    var model = host_archive_object(cls, arrays, context)
+    var fields = sequential_fields(model)
+    host_archive_mode(arrays, fields, context)
+    py_setitem(fields, "n_estimators", trees)
+    py_setitem(fields, "max_samples", PythonObject("auto") if samples_mode == 0 else (PythonObject(samples_int) if samples_mode == 1 else PythonObject(samples_frac)))
+    py_setitem(fields, "max_depth", PythonObject(None) if depth == -1 else PythonObject(depth))
+    py_setitem(fields, "max_features", PythonObject(features_int) if features_mode == 1 else PythonObject(features_frac))
+    py_setitem(fields, "bootstrap", bootstrap != 0)
+    py_setitem(fields, "contamination", PythonObject("auto") if auto_contamination != 0 else PythonObject(contamination))
+    py_setitem(fields, "random_state", seed)
+    py_setitem(fields, "warm_start", False)
+    py_setitem(fields, "n_jobs", PythonObject(None))
+    py_setitem(fields, "verbose", False)
+    py_setitem(fields, "output_type", PythonObject(None))
+    py_setitem(fields, "_max_samples_mode", samples_mode)
+    py_setitem(fields, "_max_samples_int", samples_int if samples_mode == 1 else 256)
+    py_setitem(fields, "_max_samples_frac", samples_frac if samples_mode == 2 else Float64(1.0))
+    py_setitem(fields, "_max_depth", depth)
+    py_setitem(fields, "_max_features_mode", features_mode)
+    py_setitem(fields, "_max_features_int", features_int if features_mode == 1 else 0)
+    py_setitem(fields, "_max_features_frac", Float64(1.0) if features_mode == 1 else features_frac)
+    py_setitem(fields, "_contamination_auto", auto_contamination != 0)
+    py_setitem(fields, "_contamination", Float64(0.0) if auto_contamination != 0 else contamination)
+    py_setitem(fields, "_n_estimators", trees)
+    py_setitem(fields, "_bootstrap", bootstrap != 0)
+    py_setitem(fields, "_seed", seed)
+    py_setitem(fields, "_x", x)
+    py_setitem(fields, "n_features_in_", nf)
+    py_setitem(fields, "offset_", classical_f64(reals, 3))
+    py_setitem(fields, "max_samples_", classical_i64(meta, 10))
+    return model
+
+
 def host_archive_build(path: PythonObject, context: PythonObject,
                        requested_class: PythonObject = PythonObject(None)) raises -> PythonObject:
     # This deliberately separate private entry allows each schema to be
@@ -862,6 +932,8 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         model = host_archive_neighbors(cls, arrays, 3, context)
     elif fmt == "mojolearn-knn-1":
         model = host_archive_neighbors(cls, arrays, 0 if String(estimator) == "NearestNeighbors" else (1 if String(estimator) == "KNeighborsClassifier" else 2), context)
+    elif fmt == "mojolearn-iforest-1":
+        model = host_archive_iforest(cls, arrays, context)
     else:
         raise Error("native host archive schema has not been implemented: " + fmt + "/" + String(estimator))
     if requested_class is None:

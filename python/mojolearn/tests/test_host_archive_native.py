@@ -5,6 +5,7 @@ The legacy base-class loader is an independent preparation oracle; only the
 public Host*.load call is audited. No fit or inference is hidden in setup.
 """
 import ast
+import struct
 from pathlib import Path
 
 import numpy as np
@@ -123,6 +124,9 @@ def _cases():
         "RadiusNeighbors": ("mojolearn-radius-1", dict(
             meta=_i64([2, 3]), radius=_f64([1.5]), p=_f64([2]), metric="euclidean", algorithm="auto",
             index=_f32([[1, 2], [3, 4], [5, 6]]))),
+        "IsolationForest": ("mojolearn-iforest-1", dict(
+            ints=_i64([10, 0, 256, -1, 0, 0, 1, 7, 1, 2, 3]),
+            reals=_f64([1, 1, 0, -.5]), x=_f32([[1, 2], [3, 4], [5, 6]]))),
     }
 
 
@@ -149,6 +153,10 @@ def _state(value):
         return {key: _state(item) for key, item in value.items()}
     if type(value) in (tuple, list):
         return type(value)(_state(item) for item in value)
+    if type(value) is float:
+        return ("float", struct.pack("=d", value))
+    if type(value) in (bool, int, str):
+        return (type(value).__name__, value)
     return value
 
 
@@ -313,6 +321,30 @@ def test_neighbor_archive_refuses_inconsistent_configuration_natively(tmp_path, 
     with pytest.raises(ValueError):
         getattr(host, name).load.__func__(cls, path)
     audit = audit_native_call(cls.load, path)
+    assert isinstance(audit.exception, ValueError), audit.report()
+    report = audit.report()
+    assert not any(report[key] for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads")), report
+
+
+@pytest.mark.parametrize("sample_mode", [0, 1, 2])
+@pytest.mark.parametrize("feature_mode", [0, 1])
+def test_isolation_forest_saved_integer_fractional_and_auto_controls(tmp_path, sample_mode, feature_mode):
+    path = _archive(tmp_path, "IsolationForest", override={
+        "ints": _i64([13, sample_mode, 2, 4, feature_mode, 1, 0, 4294967295, 0, 2, 2]),
+        "reals": _f64([.5, .75, .2, -.25])})
+    original = host.IsolationForest.load.__func__(host.HostIsolationForest, path)
+    restored = audit_native_call(host.HostIsolationForest.load, path).assert_native()
+    assert _state(vars(restored)) == _state(vars(original))
+
+
+@pytest.mark.parametrize("index,value", [(0, 0), (1, 3), (3, 0), (4, 2), (6, 2), (7, 4294967296), (8, 2)])
+def test_isolation_forest_invalid_saved_controls_are_refused(tmp_path, index, value):
+    meta = CASES["IsolationForest"][1]["ints"].copy()
+    meta[index] = value
+    path = _archive(tmp_path, "IsolationForest", override={"ints": meta})
+    with pytest.raises(ValueError):
+        host.IsolationForest.load.__func__(host.HostIsolationForest, path)
+    audit = audit_native_call(host.HostIsolationForest.load, path)
     assert isinstance(audit.exception, ValueError), audit.report()
     report = audit.report()
     assert not any(report[key] for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads")), report
