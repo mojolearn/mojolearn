@@ -9,7 +9,7 @@
 # records returned are always scikit-learn's own dataclass types. No dataclass
 # constructor, default factory, setattr or Python tag callback runs.
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_contains, py_setitem
 from bindings.classical_attributes import _type_fields, _type_mro
 
 
@@ -136,7 +136,7 @@ def scaler_tags(model: PythonObject, context: PythonObject) raises -> PythonObje
     # TargetTags: a required target for classifiers and regressors, then the
     # class's own overrides.
     var target_values = Python.dict()
-    target_values["required"] = PythonObject(kind_name == "classifier" or kind_name == "regressor")
+    py_setitem(target_values, "required", PythonObject(kind_name == "classifier" or kind_name == "regressor"))
     _ = py_call(target_values.update, target_overrides)
     # InputTags: the shared sparse-input class names (_sk_validate's
     # input_tag_overrides), then the class's own overrides.
@@ -145,18 +145,18 @@ def scaler_tags(model: PythonObject, context: PythonObject) raises -> PythonObje
     for k in range(len(bases)):  # driver-loop: over the estimator class ancestry
         var name = py_call(b.type.__dict__["__name__"].__get__, bases[k])
         if py_contains(accepts_sparse, name):
-            input_values["sparse"] = PythonObject(True)
+            py_setitem(input_values, "sparse", PythonObject(True))
             break
     _ = py_call(input_values.update, input_overrides)
     var transformer_values = Python.dict()
-    transformer_values["preserves_dtype"] = Python.list("float32")
+    py_setitem(transformer_values, "preserves_dtype", Python.list("float32"))
 
     var tag_values = Python.dict()
-    tag_values["estimator_type"] = kind
-    tag_values["target_tags"] = _build(target_cls, target_values, missing, context)
-    tag_values["input_tags"] = _build(input_cls, input_values, missing, context)
-    tag_values["transformer_tags"] = _build(transformer_cls, transformer_values, missing, context)
-    tag_values["classifier_tags"] = _build(classifier_cls, Python.dict(), missing, context) if kind_name == "classifier" else PythonObject(None)
-    tag_values["regressor_tags"] = _build(regressor_cls, Python.dict(), missing, context) if kind_name == "regressor" else PythonObject(None)
-    tag_values["requires_fit"] = requires_fit
+    py_setitem(tag_values, "estimator_type", kind)
+    py_setitem(tag_values, "target_tags", _build(target_cls, target_values, missing, context))
+    py_setitem(tag_values, "input_tags", _build(input_cls, input_values, missing, context))
+    py_setitem(tag_values, "transformer_tags", _build(transformer_cls, transformer_values, missing, context))
+    py_setitem(tag_values, "classifier_tags", _build(classifier_cls, Python.dict(), missing, context) if kind_name == "classifier" else PythonObject(None))
+    py_setitem(tag_values, "regressor_tags", _build(regressor_cls, Python.dict(), missing, context) if kind_name == "regressor" else PythonObject(None))
+    py_setitem(tag_values, "requires_fit", requires_fit)
     return _build(tags_cls, tag_values, missing, context)
