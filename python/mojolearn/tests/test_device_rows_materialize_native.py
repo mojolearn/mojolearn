@@ -203,7 +203,17 @@ def test_materialize_refuses_application_hooks_before_execution(owner, hook, mon
         elif hook == 'array_slot':
             patch.setattr(Array, '_mv', property(forbidden))
         elif hook == 'row_key':
-            vars(rows)[ForeignKey('base')] = vars(rows).pop('base')
+            # An instance's shared-key dictionary can retain the ordinary
+            # 'base' key after pop, so reinsertion itself calls __eq__ before
+            # the product boundary. Build the malformed dictionary afresh,
+            # keeping the foreign key first, and retain the actual no-hook
+            # rejection check below against the public materialize call.
+            malformed = {ForeignKey('base'): rows.base}
+            malformed.update((key, value) for key, value in vars(rows).items()
+                             if key != 'base')
+            object.__setattr__(rows, '__dict__', malformed)
+            assert type(next(iter(vars(rows)))) is ForeignKey
+            assert calls == []
         else:
             owner._entries[ForeignIdentity(id(base))] = None
         calls.clear()
