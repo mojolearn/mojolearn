@@ -67,6 +67,20 @@ class NativeWeakrefConnectionTests(unittest.TestCase):
                             ('arena_msel_put', 'arena_msel_free', 'arena_msel_take_rows', 'arena_cast')))
         self.assertIs(type(context['arena_half_copy_canonical']), bool)
 
+    def test_resident_owner_metadata_preserves_native_timezone_and_container_identities(self):
+        import datetime
+        from types import GetSetDescriptorType
+        context = connect()
+        self.assertIs(context['arena_set'], set)
+        self.assertIs(context['arena_frozenset'], frozenset)
+        self.assertIs(context['arena_slice'], slice)
+        self.assertIs(context['arena_getset_descriptor'], GetSetDescriptorType)
+        self.assertIs(context['arena_datetime_types'][4], datetime.timezone)
+        self.assertIs(context['arena_timezone_name'], datetime.timezone.tzname)
+        specifications = dict(context['arena_pandas_owner_specs'])
+        self.assertIn('DataFrame', specifications['pandas'])
+        self.assertIn('ZoneInfo', specifications['zoneinfo'])
+
     def test_python_resident_entry_is_refused_before_invocation(self):
         calls = []
         def forbidden(*args):

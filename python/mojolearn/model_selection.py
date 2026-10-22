@@ -133,10 +133,7 @@ class _Resident:
     has handed here while the entry lives."""
 
     def __init__(self):
-        self._put = _native('msel_put')
-        self._free = _native('msel_free')
-        self._take = _native('msel_take_rows')
-        self._entries = {}
+        return _RESIDENT_CALL(self, 'resident_init', (), _RESIDENT_CONTEXT)
 
     def _entry(self, values, dtype=None):
         hit = self._entries.get(id(values))
@@ -165,24 +162,16 @@ class _Resident:
         return out
 
     def release(self, values):
-        hit = self._entries.get(id(values))
-        if hit is not None and hit[0] is values:
-            del self._entries[id(values)]
-            if hit[2] >= 0:
-                self._free(hit[2])
+        return _RESIDENT_CALL(self, 'resident_release', (values,), _RESIDENT_CONTEXT)
 
     def close(self):
-        entries, self._entries = self._entries, {}
-        for _, _, sid in entries.values():  # glue: frees each resident id
-            if sid >= 0:
-                self._free(sid)
+        return _RESIDENT_CALL(self, 'resident_close', (), _RESIDENT_CONTEXT)
 
     def __enter__(self):
-        return self
+        return _RESIDENT_CALL(self, 'resident_enter', (), _RESIDENT_CONTEXT)
 
     def __exit__(self, *exc):
-        self.close()
-        return False
+        return _RESIDENT_CALL(self, 'resident_exit', (), _RESIDENT_CONTEXT)
 
 
 def _take_rows(values, indices):

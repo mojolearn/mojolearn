@@ -9,6 +9,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.native_owner_lifetime import native_release_admit, native_release_weakrefs
 from bindings.arena_array_metadata import arena_array_metadata
 from bindings.arena_materialize_native import arena_materialize
+from bindings.arena_resident_native import arena_resident_operation
 from bindings.optimizer_public_words import optimizer_python_error, PYTHON_ERROR_PENDING
 
 
@@ -90,7 +91,9 @@ def arena_rows_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
         var context = call[3]
         classical_connect_numpy(context)
         var result = PythonObject(None)
-        if operation == "init":
+        if operation.startswith("resident_"):
+            result = arena_resident_operation(model,operation,args,context)
+        elif operation == "init":
             _rows_initialize(model,args,context)
         elif operation == "materialize":
             result = arena_materialize(_rows_metadata_fields(model,context),context)

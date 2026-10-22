@@ -32,6 +32,7 @@ PUBLIC_TESTS = {
     "test_training_device_native_allocator.py": "Native training device owner allocation independent of mutable object constructors",
     "test_host_density_constructors_native.py": "Public host KDE and IsolationForest constructor options, inherited modes and safe reinitialization",
     "test_device_rows_materialize_native.py": "Public DeviceRows materialization, typed resident snapshots, cache aliases, conversion failures and native hook refusals",
+    "test_resident_lifecycle_native.py": "Model-selection resident construction, reinitialization, release, close and context lifetime with retained-owner admission",
     "test_native_owner_builtin_identity.py": "Public DeviceRows reinitialization preserves native retained-owner builtin identities",
     "test_training_embedding_public_native.py": "Public embedding forward/backward preparation, index conversion, vocabulary options and owned outputs",
     "test_optimizer_native_array_ownership.py": "Native output Array storage, retained checkpoint ownership and device downloads",
@@ -70,6 +71,7 @@ PUBLIC_TESTS = {
 # Candidate array tests call _OPT_NATIVE directly. Keep them outside this public
 # registry until tests actually exercise the public __array__ protocol.
 TEST_DEPENDENCIES = {
+    "test_resident_lifecycle_native.py": ("pandas", "pyarrow"),
     "test_host_kde_fit_native.py": ("pandas", "scipy", "torch"),
     "test_host_inference_native.py": ("pandas",),
     "test_host_kernel_inference_native.py": ("pandas", "scipy"),
@@ -206,7 +208,11 @@ def test_applicability(selected, vendor):
         if name == "test_device_rows_materialize_native.py":
             scope.update(execution_route="selected package backend, established identical base-binding resident store",
                          operation_mode="identical base-binding transport, independent of estimator numeric mode",
-                         coverage_limit="Public DeviceRows.materialize only; _Resident construction/close and resident scope/cache orchestration remain separate migration work")
+                         coverage_limit="Public DeviceRows.materialize only; _Resident lifetime has a separate selected scope; resident take/preparation and arena scope/cache orchestration remain separate")
+        if name == "test_resident_lifecycle_native.py":
+            scope.update(execution_route="selected package backend, established identical base-binding model-selection store",
+                         operation_mode="identical base-binding lifetime, independent of estimator numeric mode",
+                         coverage_limit="_Resident constructor/reinitialization, release/close and enter/exit only; ordinary Arrow compatibility is required by this scope; _entry/take preparation and arena resident scopes/DeviceCache remain separate")
         if name == "test_optimizer_native_scalar_constructors.py":
             scope.update(execution_route="native optimizer preparation; device controls require a GPU training pool",
                          coverage_limit="Selected scalar constructor routes only; other public callbacks, package/reference/fault qualification and cross-vendor identity remain separate")
