@@ -72,6 +72,10 @@ def connect():
             store_routes.append((put, free))
     context.update(cache_scalar_context=scalar_context,
                    cache_store_routes=tuple(store_routes), cache_object_setattr=object.__setattr__,
+                   cache_counter_types=(type(None), float, complex, str, bytes, bytearray,
+                                        list, tuple, dict, set, frozenset, range),
+                   cache_entry_types=(bool, int, float, complex, str, bytes, bytearray,
+                                      list, tuple, dict, set, frozenset, range),
                    cache_type_flags=vars(type)["__flags__"].__get__,
                    cache_primitive_bases=(int, float, complex, str, bytes, bytearray),
                    cache_key_descriptor=vars(_arena_io.DeviceCache)["_key"],
