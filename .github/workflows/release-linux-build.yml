@@ -99,7 +99,9 @@ jobs:
           IN_SETS: ${{ inputs.sets }}
           IN_SHARDS: ${{ inputs.shards }}
         run: |
-          set -eu
+          # pipefail: without it tee hides the planner's refusal, the plan job
+          # passes with no matrix and the run fails with no job named (run 39840375353)
+          set -euo pipefail
           python3 tooling/tools/release_github_build.py plan --src src --sets "$IN_SETS" --shards "$IN_SHARDS" \
             --json plan.json --github-output "$GITHUB_OUTPUT" | tee -a "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
