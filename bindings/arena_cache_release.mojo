@@ -72,7 +72,7 @@ def _cache_pairs(entries: PythonObject, context: PythonObject) raises -> PythonO
     var pairs = py_call(b["list"],py_call(entries.items))
     for i in range(len(pairs)):  # driver-loop: admit every (slot, source) entry before releasing the first slot
         var entry = pairs[i][1]
-        if py_type(entry) is not b["tuple"] or len(entry) != 2:
+        if (py_type(entry) is not b["tuple"] and py_type(entry) is not b["list"]) or len(entry) != 2:
             raise Error("TypeError: DeviceCache entries require native (slot, source) pairs")
     return pairs
 
@@ -117,7 +117,7 @@ def _cache_release(model: PythonObject, source: PythonObject, context: PythonObj
     if hit is None:
         return
     var b = context["arena_native_types"]
-    if py_type(hit) is not b["tuple"] or len(hit) != 2:
+    if (py_type(hit) is not b["tuple"] and py_type(hit) is not b["list"]) or len(hit) != 2:
         raise Error("TypeError: DeviceCache entries require native (slot, source) pairs")
     var route = _route(model,context)
     # Unpublish before the GIL-releasing free: no other thread can be handed
