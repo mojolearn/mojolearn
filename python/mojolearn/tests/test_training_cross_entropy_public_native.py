@@ -245,6 +245,23 @@ def test_public_cross_entropy_warning_hook_is_refused(monkeypatch):
     assert not calls
 
 
+@pytest.mark.parametrize('case', ['record', 'tuple-record', 'tuple-foreign'])
+def test_public_cross_entropy_reduction_never_hashes_embedded_python_objects(case):
+    calls = []
+    class Foreign:
+        def __hash__(self): calls.append('hash'); return 123
+        def __eq__(self, other): calls.append('eq'); return False
+    record = np.empty((), dtype=[('field', object)])
+    record['field'][()] = Foreign()
+    record.flags.writeable = False
+    scalar = record[()]
+    reduction = scalar if case == 'record' else ((scalar,) if case == 'tuple-record' else (Foreign(),))
+    x, y, options = prepared('logits:c')
+    options['reduction'] = reduction
+    assert_refusal(audit_native_call(T.cross_entropy, x, y, **options), TypeError)
+    assert not calls
+
+
 @pytest.mark.parametrize('reduction,want,smoothing', [('mean',False,0.),('mean',True,0.),
     ('sum',True,.2),('none',False,.2)])
 def test_public_cross_entropy_device_outputs_are_native_and_consumed(reduction, want, smoothing):

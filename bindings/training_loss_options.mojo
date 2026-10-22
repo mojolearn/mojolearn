@@ -118,6 +118,9 @@ def loss_reduction(value: PythonObject, context: PythonObject) raises -> Int:
         if name == "mean":
             return 2
         raise Error("ValueError: cross_entropy reduction must be 'none', 'sum' or 'mean'")
+    # In particular, opt_value refuses np.void and recursively refuses it
+    # inside tuples. A readonly structured scalar can hash object fields;
+    # it must never reach the generic hash slot below.
     opt_value(value, context)
     # Match dictionary membership's native unhashable errors without letting
     # an unadmitted Python __hash__/__eq__ enter the operation.
