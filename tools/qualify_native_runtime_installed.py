@@ -210,7 +210,7 @@ def test_applicability(selected, vendor):
             scope.update(execution_route="native optimizer preparation; device controls require a GPU training pool",
                          coverage_limit="Selected scalar constructor routes only; other public callbacks, package/reference/fault qualification and cross-vendor identity remain separate")
         if name == "test_late_numpy_native_metadata.py":
-            scope.update(execution_route="native public DeviceRows constructor on every package backend",
+            scope.update(execution_route="native public DeviceRows constructor and StandardScaler fit/attribute admission on every package backend",
                          coverage_limit="Cold/late NumPy connection only; successful constructor output and refusal paths are checked in fresh subprocesses")
         if name == "test_device_rows_metadata_native.py":
             scope.update(execution_route="native DeviceRows metadata owner on every package backend",
