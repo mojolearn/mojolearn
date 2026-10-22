@@ -133,56 +133,27 @@ class _Resident:
     has handed here while the entry lives."""
 
     def __init__(self):
-        self._put = _native('msel_put')
-        self._free = _native('msel_free')
-        self._take = _native('msel_take_rows')
-        self._entries = {}
+        return _RESIDENT_CALL(self, 'msel_resident_init', (), _RESIDENT_CONTEXT)
 
     def _entry(self, values, dtype=None):
-        hit = self._entries.get(id(values))
-        if hit is not None and hit[0] is values:
-            return hit
-        arr = _materialize(values, 'fold data')[0]
-        if dtype is not None and arr.dtype != dtype:
-            arr = arr.astype(dtype)
-        arr = arr._as_c()
-        sid = int(self._put(_addr_ro(arr), arr.nbytes)) if arr.nbytes else -1
-        entry = (values, arr, sid)
-        self._entries[id(values)] = entry
-        return entry
+        return _RESIDENT_CALL(self, 'msel_resident_entry', (values, dtype), _RESIDENT_CONTEXT)
 
     def take(self, values, indices):
         """Rows `indices` (an int64 index Array) of `values`, gathered on
         the device."""
-        _, arr, sid = self._entry(values)
-        _, idx, iid = self._entry(indices, '<i8')
-        n_idx = idx.size
-        out = empty((n_idx, *arr.shape[1:]), arr.dtype)
-        n = len(arr)
-        row_bytes = arr.nbytes // n if n else 0
-        if n_idx and row_bytes:
-            self._take(sid, n, row_bytes, iid, n_idx, _addr(out))
-        return out
+        return _RESIDENT_CALL(self, 'msel_resident_take', (values, indices), _RESIDENT_CONTEXT)
 
     def release(self, values):
-        hit = self._entries.get(id(values))
-        if hit is not None and hit[0] is values:
-            del self._entries[id(values)]
-            if hit[2] >= 0:
-                self._free(hit[2])
+        return _RESIDENT_CALL(self, 'msel_resident_release', (values,), _RESIDENT_CONTEXT)
 
     def close(self):
-        entries, self._entries = self._entries, {}
-        for _, _, sid in entries.values():  # glue: frees each resident id
-            if sid >= 0:
-                self._free(sid)
+        return _RESIDENT_CALL(self, 'msel_resident_close', (), _RESIDENT_CONTEXT)
 
     def __enter__(self):
-        return self
+        return _RESIDENT_CALL(self, 'msel_resident_enter', (), _RESIDENT_CONTEXT)
 
     def __exit__(self, *exc):
-        self.close()
-        return False
+        return _RESIDENT_CALL(self, 'msel_resident_exit', exc, _RESIDENT_CONTEXT)
 
 
 def _take_rows(values, indices):

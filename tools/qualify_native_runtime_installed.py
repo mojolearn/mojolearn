@@ -30,6 +30,8 @@ PUBLIC_TESTS = {
     "test_cache_lifecycle_native.py": "Public DeviceCache.live connected native store counts and identity-preserving context entry",
     "test_cache_upload_native.py": "Public DeviceCache.id_of native hit/miss preparation, upload publication, retained owners and failure cleanup",
     "test_cache_key_native.py": "Public DeviceCache.get and resident.stats native tuple-key admission, deep nesting and callback refusals",
+    "test_cache_release_native.py": "Public DeviceCache constructor/reinitialization, release, close and context exit, and resident scope enter/exit, with first-failure error order and owners released after every free",
+    "test_resident_lifecycle_native.py": "model_selection resident constructor/reinitialization, take, release, close and context exit for NumPy, pandas and Arrow-backed pandas owners, with first-failure error order",
     "test_archive_unicode_native.py": "Public archive strict Unicode errors, loaded state, partial save bytes and connected codec identity refusals",
     "test_classical_archive_reader_native.py": "Public linear archive loading, compressed state, native helper identities, file errors and input/output ownership",
     "test_host_density_save_native.py": "Public host KDE and IsolationForest save bytes, native configuration, partial state, loaded state and callback refusals",
@@ -91,6 +93,8 @@ PUBLIC_TESTS = {
 # registry until tests actually exercise the public __array__ protocol.
 TEST_DEPENDENCIES = {
     "test_classical_exceptions_native_owner.py": ("scikit-learn",),
+    "test_cache_release_native.py": ("pyarrow",),
+    "test_resident_lifecycle_native.py": ("pandas", "pyarrow"),
     "test_host_kde_fit_native.py": ("pandas", "scipy", "torch"),
     "test_host_iforest_fit_native.py": ("pandas", "scipy", "torch"),
     "test_host_inference_native.py": ("pandas",),
@@ -104,6 +108,32 @@ TEST_DEPENDENCIES = {
 }
 CPU_RESIDENT_SKIP = "the CPU binding has no resident tensor pool"
 CPU_NOT_APPLICABLE = {
+    "test_cache_release_native.py": {
+        'test_real_slots_are_freed_by_one_native_call[close-x_prep]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
+        'test_real_slots_are_freed_by_one_native_call[exit-x_prep]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
+        'test_real_slots_are_freed_by_one_native_call[reinit-x_prep]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
+        'test_real_slots_are_freed_by_one_native_call[release-x_prep]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
+        'test_error_order_first_failure_all_slots_attempted_failed_retained[close-x_prep]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
+        'test_error_order_first_failure_all_slots_attempted_failed_retained[exit-x_prep]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
+        'test_error_order_first_failure_all_slots_attempted_failed_retained[reinit-x_prep]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
+        'test_repeated_close_and_close_after_release[x_prep]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
+        'test_context_exit_on_error_frees_and_propagates[x_prep]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
+        'test_failed_release_retains_the_entry[x_prep]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
+        'test_arrow_owner_finalizer_runs_after_every_free[x_prep]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
+        'test_resident_scope_exit_frees_scope_caches[x_prep]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
+        'test_real_slots_are_freed_by_one_native_call[close-x_metrics]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
+        'test_real_slots_are_freed_by_one_native_call[exit-x_metrics]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
+        'test_real_slots_are_freed_by_one_native_call[reinit-x_metrics]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
+        'test_real_slots_are_freed_by_one_native_call[release-x_metrics]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
+        'test_error_order_first_failure_all_slots_attempted_failed_retained[close-x_metrics]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
+        'test_error_order_first_failure_all_slots_attempted_failed_retained[exit-x_metrics]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
+        'test_error_order_first_failure_all_slots_attempted_failed_retained[reinit-x_metrics]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
+        'test_repeated_close_and_close_after_release[x_metrics]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
+        'test_context_exit_on_error_frees_and_propagates[x_metrics]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
+        'test_failed_release_retains_the_entry[x_metrics]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
+        'test_arrow_owner_finalizer_runs_after_every_free[x_metrics]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
+        'test_resident_scope_exit_frees_scope_caches[x_metrics]': 'real word-store slots require a GPU package; explicitly excluded from CPU selection',
+    },
     "test_cache_lifecycle_native.py": {
         'test_cache_live_matches_real_store_count_after_consumed_allocations[0-x_prep]': "real live-slot counter requires a GPU package; explicitly excluded from CPU selection",
         'test_cache_live_matches_real_store_count_after_consumed_allocations[0-x_metrics]': "real live-slot counter requires a GPU package; explicitly excluded from CPU selection",
@@ -309,6 +339,14 @@ def test_applicability(selected, vendor):
             scope.update(execution_route="native DeviceCache.supports metadata on CPU and GPU; no device allocation or computation",
                          operation_mode="identical (explicit fixture configuration)",
                          coverage_limit="Only public capability lookup and its CPU refusal/prefix contracts; constructor, release, close and resident scope cleanup remain separate")
+        if name == "test_cache_release_native.py":
+            scope.update(execution_route="native DeviceCache constructor/release/close/exit and resident scope enter/exit on CPU/GPU; real x_prep/x_metrics store slots on GPU",
+                         operation_mode="identical (explicit fixture configuration)",
+                         coverage_limit="Only the DeviceCache and resident scope lifecycle; id_of, get, live and stats have their own scopes")
+        if name == "test_resident_lifecycle_native.py":
+            scope.update(execution_route="native model_selection resident lifecycle and take on every package backend, established identical base-binding store",
+                         operation_mode="identical base-binding transport, independent of estimator numeric mode",
+                         coverage_limit="Only the model-selection resident lifecycle and take; foreign owners (pandas, Arrow-backed pandas) keep the established input-preparation step")
         if name == "test_cache_lifecycle_native.py":
             scope.update(execution_route="native DeviceCache.live metadata and __enter__ on CPU/GPU; real x_prep/x_metrics store counters on GPU",
                          operation_mode="identical (explicit fixture configuration)",
