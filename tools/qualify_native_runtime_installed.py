@@ -449,13 +449,57 @@ def junit_summary(path):
     return dict(total=len(cases), passed=len(cases)-len(failed)-len(skipped),
                 failures=failed, skipped=skipped,
                 cases=[dict(name=c.get("name"), classname=c.get("classname"),
+                            exact_node=next((p.get("value", "") for p in c.findall("properties/property")
+                                             if p.get("name") == "installed_exact_node"), ""),
                             outcome="failed" if c.find("failure") is not None or c.find("error") is not None
                             else "skipped" if c.find("skipped") is not None else "passed",
                             skip_reason=c.find("skipped").get("message", "") if c.find("skipped") is not None else "")
                        for c in cases])
 
 
-def test_scope_summary(summary, selected, vendor):
+def selected_files(test_files=None, test_nodes=None):
+    """Exact nodes supplement retained runs without claiming whole-file coverage."""
+    require(not (test_files and test_nodes), "select whole files OR exact nodes")
+    if test_nodes is None:
+        return test_files or list(PUBLIC_TESTS)
+    require(bool(test_nodes), "exact node selection must not be empty")
+    require(len(set(test_nodes)) == len(test_nodes), "duplicate exact test node")
+    names = []
+    for node in test_nodes:
+        name, separator, case = node.partition("::")
+        require(name in PUBLIC_TESTS and separator and case and
+                not any(ord(c) < 32 for c in node), "invalid exact test node: " + node)
+        if name not in names:
+            names.append(name)
+    return names
+
+
+def exact_node_summary(expected, observed):
+    return dict(expected_count=len(expected), observed_count=len(observed),
+                missing=sorted(set(expected) - set(observed)),
+                unexpected=sorted(set(observed) - set(expected)),
+                duplicates=sorted({node for node in observed if observed.count(node) > 1}),
+                complete=len(expected) == len(observed) and set(expected) == set(observed)
+                and len(set(observed)) == len(observed))
+
+
+class ExactNodeGuard:
+    def __init__(self, tests, expected):
+        self.tests, self.expected = tests, expected
+        self.collected = []
+
+    def pytest_collection_finish(self, session):
+        # Check before any product call. A function-wide selector that expands
+        # to several parameters is not an exact node, even if all cases pass.
+        self.collected = [Path(item.path).resolve().relative_to(self.tests.resolve()).as_posix()
+                          + "::" + item.nodeid.partition("::")[2] for item in session.items]
+        require(exact_node_summary(self.expected, self.collected)["complete"],
+                "collected tests differ from requested exact nodes")
+        for item, node in zip(session.items, self.collected):
+            item.user_properties.append(("installed_exact_node", node))
+
+
+def test_scope_summary(summary, selected, vendor, exact_nodes=None):
     """Only exact CPU resident cases are N/A; all other skips remain incomplete."""
     scopes = {name: dict(total=0, passed=0, failures=0, not_applicable=[], unexpected_skips=[])
               for name in selected}
@@ -480,11 +524,16 @@ def test_scope_summary(summary, selected, vendor):
     for scope in scopes.values():
         scope["status"] = ("failed-or-incomplete" if not scope["total"] or scope["failures"] or scope["unexpected_skips"]
                            else "passed" if scope["passed"] else "not-applicable")
-    return dict(scopes=scopes, unmatched_cases=unmatched,
+    result = dict(scopes=scopes, unmatched_cases=unmatched,
                 applicable_passed=sum(row["passed"] for row in scopes.values()),
                 not_applicable_count=sum(len(row["not_applicable"]) for row in scopes.values()),
                 complete=bool(scopes) and not unmatched and all(row["status"] != "failed-or-incomplete"
                                                                for row in scopes.values()))
+    if exact_nodes is not None:
+        result["exact_nodes"] = exact_node_summary(exact_nodes, [c.get("exact_node", "")
+                                                               for c in summary.get("cases", [])])
+        result["complete"] = result["complete"] and result["exact_nodes"]["complete"]
+    return result
 
 
 def selected_test_status(pytest_exit, summary, scope, receipt_exists):
@@ -558,14 +607,17 @@ def worker(request_path):
         def pytest_runtest_teardown(self, item, nextitem):
             require(observe("test-teardown"), "installed product inventory refused during test teardown")
 
+    nodes = request.get("test_nodes")
+    selected_files(request["test_files"] if nodes is None else None, nodes)
+    exact_guard = ExactNodeGuard(tests, nodes) if nodes is not None else None
     code, worker_error = None, None
     try:
         require(observe("initial"), "initial installed product inventory refused")
         code = int(pytest.main(["--import-mode=importlib", "-q", "-ra", "--confcutdir=" + str(tests),
                                "--junitxml=" + str(out / "tests.xml"),
                                "--basetemp=" + str(out / "test-tmp")]
-                              + [str(tests / name) for name in request["test_files"]],
-                              plugins=[InstalledGuard()]))
+                              + [str(tests / name) for name in (nodes or request["test_files"])],
+                              plugins=[InstalledGuard()] + ([exact_guard] if exact_guard else [])))
     except Exception as error:
         worker_error = type(error).__name__ + ": " + str(error)
     finally:
@@ -576,7 +628,9 @@ def worker(request_path):
             binding_provenance_protocol="loaded-native-v2", bindings=list(native.values()),
             generation_test_device=request["generation_device"],
             observed_generation_test_devices=test_devices, pytest_exit=code,
-            inventory_errors=inventory_errors, worker_error=worker_error), indent=2) + "\n")
+            inventory_errors=inventory_errors, worker_error=worker_error,
+            exact_node_collection=exact_node_summary(nodes, exact_guard.collected)
+            if exact_guard else None), indent=2) + "\n")
     return code if code is not None and not inventory_errors and worker_error is None else 1
 
 
@@ -598,12 +652,16 @@ def main():
     parser.add_argument("--native-proof", type=Path, action="append", default=[])
     parser.add_argument("--vendor", choices=("cpu", "metal", "cuda", "hip"), required=True)
     parser.add_argument("--numeric-mode", choices=("identical", "fast"), default="identical")
-    parser.add_argument("--test-file", choices=tuple(PUBLIC_TESTS), action="append")
+    selection = parser.add_mutually_exclusive_group()
+    selection.add_argument("--test-file", choices=tuple(PUBLIC_TESTS), action="append")
+    selection.add_argument("--test-node", action="append",
+                           help="Exact registered filename::test[parameter] node; repeat for each case")
     parser.add_argument("--dependency", action="append", default=[])
     parser.add_argument("--python", default=sys.executable)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--timeout", type=int, default=900)
     args = parser.parse_args()
+    selected = selected_files(args.test_file, args.test_node)
     source, out = args.source_root.resolve(), args.out.resolve()
     git_root = (args.git_root or source).resolve()
     require(not out.exists() and not out.is_relative_to(source), "output must be new and outside source")
@@ -664,7 +722,8 @@ def main():
                 require(committed.get("python/mojolearn/tests/" + rel) == blob,
                         "uncommitted frozen test: " + rel)
                 report["test_hashes"][rel] = hashlib.sha256(raw).hexdigest()
-        selected = args.test_file or list(PUBLIC_TESTS)
+        report["test_selection_kind"] = "exact-nodes" if args.test_node else "whole-files"
+        report["selected_test_nodes"] = args.test_node
         report["selected_public_scope"] = {name:PUBLIC_TESTS[name] for name in selected}
         report["selected_test_applicability"] = test_applicability(selected, args.vendor)
         report["test_dependencies"] = test_dependencies(selected, args.dependency)
@@ -680,6 +739,7 @@ def main():
         run_command("pip-freeze", [str(python), "-m", "pip", "freeze", "--all"], out, cwd=out, env=env)
         shutil.copyfile(__file__, out / "controller.py")
         request = dict(out=str(out), tests=str(tests), payload=payload, test_files=selected,
+                       test_nodes=args.test_node,
                        vendor=args.vendor, numeric_mode=args.numeric_mode,
                        generation_device=env["MOJOLEARN_GENERATION_DEVICE"])
         (out / "request.json").write_text(json.dumps(request, indent=2) + "\n")
@@ -699,7 +759,7 @@ def main():
             report["tests"] = junit_summary(out / "tests.xml")
         report["installed_guard_receipt"] = str(out / "installed-modules.json")
         tests_summary = report.get("tests", {})
-        report["test_scope_summary"] = test_scope_summary(tests_summary, selected, args.vendor)
+        report["test_scope_summary"] = test_scope_summary(tests_summary, selected, args.vendor, args.test_node)
         scope = report["test_scope_summary"]
         report["status"] = selected_test_status(result.returncode, tests_summary, scope,
                                                (out / "installed-modules.json").is_file())
