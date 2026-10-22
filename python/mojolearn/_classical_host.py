@@ -426,7 +426,7 @@ class HostRadiusNeighbors(_HostBound, RadiusNeighbors):
     _HOST_AUX_BINDINGS = ("_mojolearn_x_neighbors",)
 
 
-class HostARIMA(_HostBound, ARIMA):
+class HostARIMA(_NativeArchiveLoad, _HostBound, ARIMA):
     """A saved ARIMA model on the forecast inference binding, which exports
     `arima_predict` and `arima_forecast` and no `arima_fit`.
 
@@ -437,7 +437,7 @@ class HostARIMA(_HostBound, ARIMA):
     _HOST_ARRAYS = ("_y", "params_", "_exog")
 
 
-class HostExponentialSmoothing(_HostBound, ExponentialSmoothing):
+class HostExponentialSmoothing(_NativeArchiveLoad, _HostBound, ExponentialSmoothing):
     """A saved Holt-Winters model on the forecast inference binding, which
     exports `holtwinters_forecast` and `holtwinters_predict` and no
     `holtwinters_fit` (lane/inference-holtwinters, 2026-09-15)."""

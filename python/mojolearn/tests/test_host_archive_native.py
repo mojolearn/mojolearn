@@ -87,6 +87,17 @@ def _cases():
         "LogisticRegression": ("mojolearn-logistic-1", dict(
             meta=_i64([2, 1]), classes=np.asarray(["a", "b", "c"]),
             w=_f32([1, 2, 3, 4, 5, 6, .1, .2, .3]))),
+        "ARIMA": ("mojolearn-arima-1", dict(
+            meta=_i64([1, 0, 0, 0, 0, 0, 0, 1, 2, 4, 30, 1]), trend="none", method="ML",
+            y=_f32([[1, 2, 3, 4], [4, 5, 6, 7]]), params=_f32([[.5, 1, 2], [.25, 2, 1]]),
+            x=_f32([[.5, 1, 2], [.25, 2, 1]]), x0=_f32([[0, 0, 1], [0, 0, 1]]),
+            fx=_f32([2, 3]), n_iter=np.asarray([4, 5], dtype="<i4"), retcode=np.asarray([0, 0], dtype="<i4"),
+            llf=_f64([-2, -3]), aic=_f64([4, 6]), bic=_f64([5, 7]))),
+        "ExponentialSmoothing": ("mojolearn-holtwinters-1", dict(
+            meta=_i64([5, 2, 2, 2]), eps=_f64([.00224]), seasonal="additive",
+            initialization_method="estimated", components=np.arange(18, dtype="<f4"),
+            sse=_f32([1, 2]), alpha=_f32([.2, .3]), beta=_f32([.1, .2]), gamma=_f32([.2, .4]),
+            n_iter=np.asarray([4, 5], dtype="<i4"), criterion=np.asarray([0, 1], dtype="<i4"))),
     }
 
 
@@ -207,6 +218,44 @@ def test_logistic_saved_label_types_and_coefficient_layout(tmp_path, labels, int
     before = restored._w.tobytes()
     restored.coef_._mv[0] = -999
     assert restored._w.tobytes() == before
+
+
+def test_arima_exogenous_archive_state_and_shape_refusal(tmp_path):
+    changes = dict(format="mojolearn-arima-2",
+                   meta=_i64([1, 0, 0, 0, 0, 0, 0, 1, 2, 4, 30, 1, 1]),
+                   exog=np.ones((2, 4, 1), dtype="<f4"),
+                   params=np.ones((2, 4), dtype="<f4"),
+                   x=np.ones((2, 4), dtype="<f4"), x0=np.ones((2, 4), dtype="<f4"))
+    path = _archive(tmp_path, "ARIMA", override=changes)
+    original = host.ARIMA.load.__func__(host.HostARIMA, path)
+    restored = audit_native_call(host.HostARIMA.load, path).assert_native()
+    assert _state(vars(restored)) == _state(vars(original))
+    changes["exog"] = np.ones((2, 4), dtype="<f4")
+    path = _archive(tmp_path, "ARIMA", override=changes)
+    audit = audit_native_call(host.HostARIMA.load, path)
+    assert isinstance(audit.exception, ValueError), audit.report()
+    report = audit.report()
+    assert not any(report[key] for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads")), report
+
+
+@pytest.mark.parametrize("name,changes,error", [
+    ("ARIMA", {"trend": "n"}, ValueError),
+    ("ARIMA", {"trend": "ct"}, NotImplementedError),
+    ("ARIMA", {"method": "unknown"}, ValueError),
+    ("ARIMA", {"exog": np.ones((2, 4, 1), dtype="<f4")}, ValueError),
+    ("ExponentialSmoothing", {"seasonal": "bad"}, ValueError),
+    ("ExponentialSmoothing", {"initialization_method": "bad"}, ValueError),
+    ("ExponentialSmoothing", {"components": np.ones(17, dtype="<f4")}, ValueError),
+])
+def test_forecast_archive_rejects_inconsistent_configuration_natively(tmp_path, name, changes, error):
+    path = _archive(tmp_path, name, override=changes)
+    cls = getattr(host, "Host" + name)
+    with pytest.raises(error):
+        getattr(host, name).load.__func__(cls, path)
+    audit = audit_native_call(cls.load, path)
+    assert isinstance(audit.exception, error), audit.report()
+    report = audit.report()
+    assert not any(report[key] for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads")), report
 
 
 def test_native_load_wrapper_is_one_binding_call():

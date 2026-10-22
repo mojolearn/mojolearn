@@ -471,7 +471,10 @@ def host_archive_logistic(cls: PythonObject, arrays: PythonObject, context: Pyth
     if len(classes) < 2:
         raise Error("saved LogisticRegression must carry at least two classes")
     var targets = 1 if len(classes) == 2 else len(classes)
-    var w = host_archive_shape(arrays, "w", "<f4", Python.tuple((nf + (1 if intercept else 0)) * targets), context)
+    var w = _archive_exact(arrays, "w", "<f4", context)
+    var words = Int(py=w.size)
+    if Int(py=w.ndim) != 1 or words % targets != 0 or words // targets - (1 if intercept else 0) != nf:
+        raise Error("saved LogisticRegression weights do not match features and class count")
     var coef = classical_typed(Python.tuple(targets, nf), "<f4", context)
     var bias = classical_array(targets, 0, context)
     host_archive_copy_f32(Int(py=classical_address(w)), 4, targets * 4, targets, nf, Int(py=classical_address(coef)))
@@ -495,6 +498,123 @@ def host_archive_logistic(cls: PythonObject, arrays: PythonObject, context: Pyth
     py_setitem(fields, "coef_", coef)
     py_setitem(fields, "intercept_", bias)
     py_setitem(fields, "n_features_in_", nf)
+    return model
+
+
+def host_archive_arima(cls: PythonObject, arrays: PythonObject, exog: Bool,
+                       context: PythonObject) raises -> PythonObject:
+    var meta = host_archive_count(arrays, "meta", "<i8", 13 if exog else 12, context, True)
+    for i in range(7):  # driver-loop: fixed ARIMA order fields
+        if classical_i64(meta, i) < 0:
+            raise Error("ARIMA order entries must be non-negative integers")
+    var p = classical_i64(meta, 0)
+    var d = classical_i64(meta, 1)
+    var q = classical_i64(meta, 2)
+    var sp = classical_i64(meta, 3)
+    var sd = classical_i64(meta, 4)
+    var sq = classical_i64(meta, 5)
+    var period = classical_i64(meta, 6)
+    var k = classical_i64(meta, 7)
+    var batch = classical_i64(meta, 8)
+    var n = classical_i64(meta, 9)
+    var nx = classical_i64(meta, 12) if exog else 0
+    if exog and nx < 1:
+        raise Error("ARIMA exogenous format requires at least one exogenous column")
+    if not exog and py_contains(arrays, "exog"):
+        raise Error("ARIMA archive carries exog under the non-exogenous format")
+    var trend = _archive_string(arrays, "trend", context)
+    var trend_arg = PythonObject(None) if String(trend) == "none" else trend
+    var expected_k = 0 if d + sd else 1
+    if trend_arg is not None:
+        var lower = String(py=py_call(trend.lower))
+        if lower != "n" and lower != "c":
+            raise Error("NotImplementedError: ARIMA trend must be None, n or c; use native exogenous data for a time trend")
+        expected_k = 1 if lower == "c" else 0
+    if k != expected_k:
+        raise Error("ARIMA saved intercept count does not match its trend")
+    var method = py_call(_archive_string(arrays, "method", context).lower)
+    if String(method) != "ml" and String(method) != "css" and String(method) != "css-ml":
+        raise Error("unknown saved ARIMA method")
+    var complexity = p + q + sp + sq + k + 1 + nx
+    var model = host_archive_object(cls, arrays, context)
+    var fields = sequential_fields(model)
+    host_archive_mode(arrays, fields, context)
+    py_setitem(fields, "order", Python.tuple(p, d, q))
+    py_setitem(fields, "seasonal_order", Python.tuple(sp, sd, sq, period))
+    py_setitem(fields, "trend", trend_arg)
+    py_setitem(fields, "k_", k)
+    py_setitem(fields, "method", method)
+    py_setitem(fields, "maxiter", classical_i64(meta, 10))
+    py_setitem(fields, "verbose", False)
+    py_setitem(fields, "output_type", PythonObject(None))
+    py_setitem(fields, "batch_size_", batch)
+    py_setitem(fields, "n_obs_", n)
+    py_setitem(fields, "input_copied_", classical_i64(meta, 11) != 0)
+    py_setitem(fields, "n_exog_", nx)
+    py_setitem(fields, "complexity_", complexity)
+    py_setitem(fields, "_exog", host_archive_shape(arrays, "exog", "<f4", Python.tuple(batch, n, nx), context) if exog else PythonObject(None))
+    py_setitem(fields, "_y", host_archive_shape(arrays, "y", "<f4", Python.tuple(batch, n), context))
+    var coefficients = Python.tuple("params", "x", "x0")
+    for i in range(len(coefficients)):  # driver-loop: three saved coefficient states
+        var name = String(coefficients[i])
+        py_setitem(fields, name + "_", host_archive_shape(arrays, name, "<f4", Python.tuple(batch, complexity), context))
+    py_setitem(fields, "fx_", host_archive_shape(arrays, "fx", "<f4", Python.tuple(batch), context))
+    py_setitem(fields, "n_iter_", host_archive_shape(arrays, "n_iter", "<i4", Python.tuple(batch), context))
+    py_setitem(fields, "retcode_", host_archive_shape(arrays, "retcode", "<i4", Python.tuple(batch), context))
+    var scores = Python.tuple("llf", "aic", "bic")
+    for i in range(len(scores)):  # driver-loop: three saved fit criterion arrays
+        var name = String(scores[i])
+        py_setitem(fields, name + "_", host_archive_shape(arrays, name, "<f8", Python.tuple(batch), context))
+    return model
+
+
+def host_archive_holtwinters(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
+    var meta = host_archive_count(arrays, "meta", "<i8", 4, context, True)
+    var eps = host_archive_count(arrays, "eps", "<f8", 1, context, True)
+    var n = classical_i64(meta, 0)
+    var batch = classical_i64(meta, 1)
+    var period = classical_i64(meta, 2)
+    var start = classical_i64(meta, 3)
+    var seasonal = _archive_string(arrays, "seasonal", context)
+    if String(seasonal) != "additive" and String(seasonal) != "add" and String(seasonal) != "multiplicative" and String(seasonal) != "mul":
+        raise Error("unsupported saved ExponentialSmoothing seasonal type")
+    var initialization = _archive_string(arrays, "initialization_method", context) if py_contains(arrays, "initialization_method") else PythonObject("heuristic")
+    if String(initialization) != "estimated" and String(initialization) != "heuristic" and String(initialization) != "cuml":
+        raise Error("unsupported saved ExponentialSmoothing initialization method")
+    if batch < 1 or n <= period:
+        raise Error("saved ExponentialSmoothing rows and season period are inconsistent")
+    var rows = n - period
+    var cl = rows * batch
+    var comps = host_archive_shape(arrays, "components", "<f4", Python.tuple(3 * cl), context)
+    var model = host_archive_object(cls, arrays, context)
+    var fields = sequential_fields(model)
+    host_archive_mode(arrays, fields, context)
+    py_setitem(fields, "endog", PythonObject(None))
+    py_setitem(fields, "initialization_method", initialization)
+    py_setitem(fields, "seasonal", seasonal)
+    py_setitem(fields, "seasonal_periods", period)
+    py_setitem(fields, "start_periods", start)
+    py_setitem(fields, "ts_num", batch)
+    py_setitem(fields, "eps", classical_f64(eps, 0))
+    py_setitem(fields, "n", n)
+    py_setitem(fields, "_components_len", cl)
+    py_setitem(fields, "_comps", comps)
+    py_setitem(fields, "_comp_layout", Python.tuple(cl, batch, rows))
+    var time_major = Python.dict()
+    var names = Python.tuple("level", "trend", "season")
+    for i in range(len(names)):  # driver-loop: three named saved component blocks
+        var copy = classical_typed(Python.tuple(rows, batch), "<f4", context)
+        host_archive_copy_f32(Int(py=classical_address(comps)) + i * cl * 4, batch * 4, 4,
+                              rows, batch, Int(py=classical_address(copy)))
+        py_setitem(time_major, names[i], copy)
+    py_setitem(fields, "_time_major", time_major)
+    var stats = Python.tuple("sse", "alpha", "beta", "gamma")
+    for i in range(len(stats)):  # driver-loop: four saved per-series fit statistics
+        var name = String(stats[i])
+        py_setitem(fields, name + "_", host_archive_shape(arrays, name, "<f4", Python.tuple(batch), context))
+    py_setitem(fields, "n_iter_", host_archive_shape(arrays, "n_iter", "<i4", Python.tuple(batch), context))
+    py_setitem(fields, "criterion_", host_archive_shape(arrays, "criterion", "<i4", Python.tuple(batch), context))
+    py_setitem(fields, "fit_executed_flag", True)
     return model
 
 
@@ -552,6 +672,10 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         model = host_archive_agglomerative(cls, arrays, context)
     elif fmt == "mojolearn-logistic-1":
         model = host_archive_logistic(cls, arrays, context)
+    elif fmt == "mojolearn-arima-1" or fmt == "mojolearn-arima-2":
+        model = host_archive_arima(cls, arrays, fmt == "mojolearn-arima-2", context)
+    elif fmt == "mojolearn-holtwinters-1":
+        model = host_archive_holtwinters(cls, arrays, context)
     else:
         raise Error("native host archive schema has not been implemented: " + fmt + "/" + String(estimator))
     if requested_class is None:
