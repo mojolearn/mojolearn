@@ -536,3 +536,68 @@ print(json.dumps({"native":True,"numpy_absent":True}))
                             env=env, capture_output=True, text=True)
     assert result.returncode == 0, result.stdout + result.stderr
     assert json.loads(result.stdout) == dict(native=True, numpy_absent=True)
+
+
+@pytest.mark.parametrize("kind", ["fileio", "buffered"])
+@pytest.mark.parametrize("shape", ["alias", "list_cycle", "dict_cycle", "tuple_cycle", "file_cycle"])
+def test_public_load_error_preserves_path_graph_aliases_and_cycles(tmp_path, kind, shape):
+    raw = _input(tmp_path, _payload(estimator="Bogus"), "fileio")
+    value = raw if kind == "fileio" else io.BufferedReader(raw)
+    path = PurePosixPath("//a/./b")
+    if shape == "alias":
+        shared = [path, 2j]
+        name = [shared, shared]
+    elif shape == "dict_cycle":
+        name = {"path": path}
+        name["cycle"] = name
+    elif shape == "tuple_cycle":
+        shared = [path]
+        name = (shared,)
+        shared.append(name)
+    elif shape == "file_cycle":
+        name = [path, value]
+    else:
+        name = [path]
+        name.append(name)
+    raw.name = name
+    try:
+        if shape == "file_cycle":
+            with pytest.raises(RuntimeError) as expected:
+                repr(value)
+            error_type, message = RuntimeError, str(expected.value)
+        else:
+            error_type = ValueError
+            message = f"mojolearn: {value!r} was saved by Bogus, not HostLinearRegression"
+        audit = audit_native_call(HostLinearRegression.load, value)
+        _refused(audit, error_type)
+        assert str(audit.exception) == message
+        assert raw.name is name
+    finally:
+        raw.name = "restored"
+        value.close()
+        if shape == "tuple_cycle":
+            shared.clear()
+        elif isinstance(name, (dict, list)):
+            name.clear()
+
+
+@pytest.mark.parametrize("kind", ["fileio", "buffered"])
+@pytest.mark.parametrize("depth", [64, 256])
+def test_public_load_error_formats_deep_supported_path_names(tmp_path, kind, depth):
+    raw = _input(tmp_path, _payload(estimator="Bogus"), "fileio")
+    value = raw if kind == "fileio" else io.BufferedReader(raw)
+    name = PurePosixPath("//a/./b")
+    for _ in range(depth):
+        name = [name]
+    raw.name = name
+    try:
+        # These depths are valid for both retained CPython versions. The test
+        # requires the original exact display, not merely successful traversal.
+        message = f"mojolearn: {value!r} was saved by Bogus, not HostLinearRegression"
+        audit = audit_native_call(HostLinearRegression.load, value)
+        _refused(audit, ValueError)
+        assert str(audit.exception) == message
+        assert raw.name is name
+    finally:
+        raw.name = "restored"
+        value.close()

@@ -198,7 +198,7 @@ def _state_context():
             raise TypeError("classical archives require a native Zstandard byte decompressor")
     context.update(archive_file_types=archive_types, archive_file_methods=tuple(archive_methods),
                    archive_open=io.open, archive_bytes_type=bytes, archive_bytearray_type=bytearray,
-                   archive_memoryview_type=memoryview,
+                   archive_memoryview_type=memoryview, archive_attribute_error=AttributeError,
                    archive_path_types=(PosixPath, PurePosixPath),
                    archive_path_bases=(PosixPath, PurePosixPath, Path, PurePath, object),
                    archive_path_member_type=MemberDescriptorType,
