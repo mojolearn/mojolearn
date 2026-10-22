@@ -35,21 +35,28 @@ THE RUN (orchestrator; a lane never compiles):
     python3 tools/coverage_sabotage.py list
     python3 tools/coverage_sabotage.py apply-check       # every patch still applies to this tree
     python3 tools/coverage_sabotage.py plan --arm NAME   # the commands for one arm
-    python3 tools/coverage_sabotage.py check --arm NAME --clean C.json --sabotaged S.json
+    python3 tools/coverage_sabotage.py check --arm NAME --clean C.json --sabotaged S.json --restored R.json
 
-`check` reads two identity_break JSON records of the arm's lanes, one from
-a clean build and one from the sabotaged build of the same commit, and
+`check` reads three identity_break JSON records of the arm's lanes, from
+clean, sabotaged and restored builds of the same commit and device, and
 prints one line per lane and fixture, then `ARM <name> CAUGHT|MISSED`. It
-exits 1 unless every lane moved or refused on at least one fixture and no
-lane's clean record refused.
+requires complete matching fixtures, stable clean results, and restoration.
+Every lane must move on at least one fixture. A refusal counts only with an
+explicit --refusals JSON review: cell -> {error: exact full error, reason:
+why this is caused by the injected fault}. Infrastructure failures never count.
+This checks recorded metadata, not source-to-binary build attestation.
 """
 from __future__ import annotations
 
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
+
+from verification_evidence import PARTS, same_cell_context
+from verification_matrix import negative_control_moves, stable_digest
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MANIFEST = os.path.join(ROOT, "tools", "identity_lanes", "coverage_sabotage.tsv")
@@ -77,48 +84,130 @@ def arms(path=MANIFEST):
     return out
 
 
-def _cells(path):
+def _record(path):
     with open(path, encoding="utf-8") as fh:
-        return json.load(fh).get("cells", {})
+        return json.load(fh)
 
 
 def _signature(cell):
     """What a cell answered: its verdict and every hash it carries."""
     sig = {}
-    for key in ("hashes", "infer", "model", "batch"):
+    for key in ("hashes", *PARTS[1:]):
         if key in cell:
-            sig[key] = json.dumps(cell[key], sort_keys=True)
+            verdict = "verdict" if key == "hashes" else key + "_verdict"
+            sig[key] = (cell.get(verdict), cell[key])
     return cell.get("verdict"), sig
 
 
-def check(arm, clean_path, sab_path):
-    clean, sab = _cells(clean_path), _cells(sab_path)
+def _clean_cell(cell, repeats):
+    if not stable_digest(cell, "train"):
+        return False
+    if len(cell["hashes"]) != repeats:
+        return False
+    for part in PARTS[1:]:
+        if part not in cell:
+            continue
+        if not isinstance(cell[part], list) or len(cell[part]) != repeats:
+            return False
+        if stable_digest(cell, part):
+            continue
+        values = cell[part]
+        if (cell.get(part + "_verdict") != "N/A" or not isinstance(values, list)
+                or not values or not all(isinstance(v, str) and v.startswith("n/a:") for v in values)):
+            return False
+    return True
+
+
+def _reviewed_refusal(cell, review):
+    error = cell.get("error", "")
+    # An unavailable execution environment is not detection of a value fault,
+    # even if someone accidentally includes its message in the review file.
+    infrastructure = r"ModuleNotFoundError|ImportError|no module named|missing.*(?:binding|binary)|cannot load|library not loaded|undefined symbol|out of memory|timed? out"
+    return bool(isinstance(review, dict) and isinstance(error, str) and error
+                and review.get("error") == error and str(review.get("reason", "")).strip()
+                and not re.search(infrastructure, error, re.I))
+
+
+def check(arm, clean_path, sab_path, restored_path=None, refusals=None):
+    if restored_path is None:
+        print("restored clean record required; detection alone is incomplete")
+        return 1
+    records = [_record(p) for p in (clean_path, sab_path, restored_path)]
+    baseline = records[0]
+    for label, record in zip(("clean", "sabotaged", "restored"), records):
+        if (not isinstance(record, dict) or record.get("complete") is not True
+                or not isinstance(record.get("cells"), dict)
+                or not isinstance(record.get("fixtures"), dict) or not record["fixtures"]
+                or not record.get("vendor")
+                or not isinstance(record.get("repeats"), int) or record["repeats"] < 1
+                or not re.fullmatch(r"[0-9a-f]{40}", str(record.get("commit", "")))
+                or record.get("mode") != "identical"):
+            print(f"{label}: incomplete record or missing source/device/input metadata")
+            return 1
+        for field in ("vendor", "platform", "repeats", "fixtures", "heldout",
+                      "parts_collected", "parts_omitted", "batch_revisions"):
+            if record.get(field) != baseline.get(field):
+                print(f"{label}: {field} differs from clean")
+                return 1
+    clean, sab, restored = (r["cells"] for r in records)
     ok = True
     for lane in arm["lanes"]:
-        keys = sorted(k for k in clean if k.split("/")[0] == lane)
-        if not keys:
-            print(f"{lane}: no clean cell in {clean_path}")
-            ok = False
-            continue
+        keys = [f"{lane}/{fixture}" for fixture in baseline["fixtures"]]
         caught = 0
         for key in keys:
-            cv, cs = _signature(clean[key])
-            if cv == "REFUSED":
-                print(f"{key}: the CLEAN build refused; the arm proves nothing until it runs")
+            if any(key not in cells for cells in (clean, sab, restored)):
+                print(f"{key}: missing clean, sabotaged or restored cell")
                 ok = False
                 continue
-            if key not in sab:
-                print(f"{key}: no sabotaged cell")
+            if not all(isinstance(cells[key], dict) for cells in (clean, sab, restored)):
+                print(f"{key}: malformed cell")
+                ok = False
                 continue
-            sv, ss = _signature(sab[key])
-            if sv == "REFUSED":
-                print(f"{key}: REFUSED")
-                caught += 1
-            elif ss != cs:
-                print(f"{key}: MOVED ({', '.join(k for k in cs if ss.get(k) != cs[k])})")
+            if (not _clean_cell(clean[key], baseline["repeats"])
+                    or not _clean_cell(restored[key], baseline["repeats"])):
+                print(f"{key}: clean/restored result is not a valid stable baseline")
+                ok = False
+                continue
+            parts = [p for p in PARTS if ("hashes" if p == "train" else p) in clean[key]]
+            if not all(same_cell_context(baseline, r, key, p) for r in records[1:] for p in parts):
+                print(f"{key}: source, inputs, lane revision or protocol differ")
+                ok = False
+                continue
+            if _signature(restored[key]) != _signature(clean[key]):
+                print(f"{key}: restored output differs from clean")
+                ok = False
+                continue
+            if sab[key].get("verdict") == "REFUSED":
+                if not _reviewed_refusal(sab[key], (refusals or {}).get(key)):
+                    print(f"{key}: refusal requires fault-specific review; not admitted")
+                    ok = False
+                    continue
+                print(f"{key}: REFUSED (reviewed)")
                 caught += 1
             else:
-                print(f"{key}: unmoved")
+                if any(("hashes" if p == "train" else p) not in sab[key] for p in parts):
+                    print(f"{key}: sabotaged result is missing collected parts")
+                    ok = False
+                    continue
+                moved = [p for p in parts if negative_control_moves(sab[key], clean[key], p)]
+                invalid = []
+                for p in parts:
+                    field = "hashes" if p == "train" else p
+                    verdict = "verdict" if p == "train" else p + "_verdict"
+                    values = sab[key][field]
+                    if (not isinstance(values, list) or len(values) != baseline["repeats"]
+                            or (stable_digest(clean[key], p) is not None
+                                and not stable_digest(sab[key], p) and p not in moved)
+                            or (stable_digest(clean[key], p) is None
+                                and (values != clean[key][field]
+                                     or sab[key].get(verdict) != clean[key].get(verdict)))):
+                        invalid.append(p)
+                if invalid:
+                    print(f"{key}: invalid sabotaged parts: {', '.join(invalid)}")
+                    ok = False
+                    continue
+                print(f"{key}: MOVED ({', '.join(moved)})" if moved else f"{key}: unmoved")
+                caught += bool(moved)
         if not caught:
             ok = False
     print(f"ARM {arm['arm']} {'CAUGHT' if ok else 'MISSED'}")
@@ -145,7 +234,8 @@ def plan(arm):
         print(f"MOJOLEARN_COMPILE_JOBS=1 sh bindings/{b}.sh   # device binding, into this scratch tree")
     print(f"MOJOLEARN_HOST_DIR={'$SAB' if host else '$CLEAN'} python3 tools/identity_break.py --lanes {lanes} "
           "--repeats 1 --json sab.json")
-    print(f"python3 tools/coverage_sabotage.py check --arm {arm['arm']} --clean clean.json --sabotaged sab.json")
+    print("# 4. restore the clean source and binding set, then rerun the same command into restored.json")
+    print(f"python3 tools/coverage_sabotage.py check --arm {arm['arm']} --clean clean.json --sabotaged sab.json --restored restored.json")
 
 
 def apply_check(table):
@@ -170,6 +260,8 @@ def main(argv=None):
     c.add_argument("--arm", required=True)
     c.add_argument("--clean", required=True)
     c.add_argument("--sabotaged", required=True)
+    c.add_argument("--restored", required=True)
+    c.add_argument("--refusals", help="JSON of exact fault-caused refusal errors and review reasons")
     args = ap.parse_args(argv)
     table = arms()
     if args.cmd == "list":
@@ -183,7 +275,8 @@ def main(argv=None):
     if args.cmd == "plan":
         plan(table[args.arm])
         return 0
-    return check(table[args.arm], args.clean, args.sabotaged)
+    return check(table[args.arm], args.clean, args.sabotaged, args.restored,
+                 _record(args.refusals) if args.refusals else None)
 
 
 if __name__ == "__main__":
