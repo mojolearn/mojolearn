@@ -8,7 +8,11 @@ from ._optional_numpy import require_numpy
 from ._mode import ParamsMixin
 np = require_numpy('_x_sequence_stl')
 
-from . import _backend
+from . import _native_xseq_bridge
+
+# Package-import connection: fit is ONE call into the compiled owner
+# (bindings/xseq_forecast_native.mojo), which builds the result object too.
+_XSEQ, _XSEQ_CONTEXT = _native_xseq_bridge.connect()
 
 
 class DecomposeResult:
@@ -147,17 +151,7 @@ class STL(ParamsMixin):
             ``observed``, ``seasonal``, ``trend``, ``resid`` and ``weights``,
             each shaped like ``endog``.
         """
-        if inner_iter is None:
-            inner_iter = 2 if self.robust else 5
-        if outer_iter is None:
-            outer_iter = 15 if self.robust else 0
-        B, n = self._endog.shape
-        outs = [np.zeros((B, n), dtype=np.float32) for _ in range(4)]  # glue: the four output buffers
-        b = _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
-        b.stl([self._endog.ctypes.data] + [o.ctypes.data for o in outs],  # glue: the four output buffer addresses
-              [B, n, self.period, self.seasonal, self.trend, self.low_pass,
-               self.seasonal_deg + 2 * self.trend_deg + 4 * self.low_pass_deg,
-               self.seasonal_jump, self.trend_jump, self.low_pass_jump, int(inner_iter), int(outer_iter)])
-        season, trend, weights, resid = (o[0] if self._one else o for o in outs)  # glue: the four output buffers
-        observed = self._endog[0] if self._one else self._endog
-        return DecomposeResult(observed, season, trend, resid, weights)
+        return _XSEQ(self, "stl_fit", (inner_iter, outer_iter), _XSEQ_CONTEXT)
+
+
+_native_xseq_bridge.register(xseq_decompose_result=DecomposeResult)
