@@ -42,11 +42,7 @@ def linear_host_view(value: PythonObject, name: String, where: String, mut view:
         raise Error("TypeError: mojolearn." + where + ": " + name + " must be float32")
     if shape_count(view.shape) == 0:
         raise Error("ValueError: mojolearn." + where + ": " + name + " must be nonempty")
-    if len(view.shape) == 0:
-        if view.is_array:
-            # _materialize retained an Array's scalar shape; indexing its
-            # missing final axis raised IndexError before the old kernel call.
-            raise Error("IndexError: tuple index out of range")
+    if len(view.shape) == 0 and not view.is_array:
         # _materialize promoted scalar buffer exports to one element, while
         # retaining existing Array shapes. Preserve that supported distinction.
         view.shape.append(1)
@@ -124,7 +120,22 @@ def training_linear_operation(operation: String, values: PythonObject, entries: 
     linear_host_view(weight, "weight", operation, wv)
     if backward:
         linear_host_view(gradient, "dc", operation, gv)
-    var dims = linear_dimensions(av.shape, wv.shape, gv.shape, backward)
+    if len(av.shape) == 0:
+        # Input indexing preceded weight unpacking in both host wrappers.
+        raise Error("IndexError: tuple index out of range")
+    var kernel_weight_shape = wv.shape.copy()
+    if backward:
+        if len(wv.shape) == 0 or len(gv.shape) == 0:
+            raise Error("IndexError: tuple index out of range")
+        # The old host backward wrapper read N from weight.shape[0] and
+        # consumed its first N*K contiguous values; it did not unpack a
+        # matrix shape. Preserve safe rank-one/oversized native buffers,
+        # including promoted NumPy scalars when K=1. Refuse a short buffer
+        # before the unchanged raw-pointer kernel can read beyond it.
+        kernel_weight_shape = List[Int](wv.shape[0], av.shape[len(av.shape) - 1])
+        if shape_count(wv.shape) < shape_count(kernel_weight_shape):
+            raise Error("ValueError: linear backward weight buffer is shorter than N*K")
+    var dims = linear_dimensions(av.shape, kernel_weight_shape, gv.shape, backward)
     var keep = List[List[Float32]]()
     var aa = contiguous_addr(a, av, keep)
     var wa = contiguous_addr(weight, wv, keep)
@@ -139,7 +150,7 @@ def training_linear_operation(operation: String, values: PythonObject, entries: 
         return result
     var ga = contiguous_addr(gradient, gv, keep)
     var da = new_array(av.shape, "<f4")
-    var dw = new_array(wv.shape, "<f4")
+    var dw = new_array(kernel_weight_shape, "<f4")
     _ = py_call(entry, Python.list(da._addr, dw._addr, ga, aa, wa), py_ints(dims))
     _ = keep^
     _ = a^
