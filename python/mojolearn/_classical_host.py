@@ -215,6 +215,16 @@ def _register_host_inference_class(cls):
             cls, context["classical_attribute_descriptor"])
 
 
+def _native_host_inference_method(method):
+    # glue: only these complete native methods own fitted/input validation
+    # and result publication. Keep ordinary mixin setup for every other
+    # inherited method and for overrides on an application subclass.
+    method._mojolearn_public_out = True
+    method._mojolearn_needs_fit = True
+    method._mojolearn_validates = True
+    return method
+
+
 class HostLogisticRegression(_NativeArchiveLoad, _HostBound, LogisticRegression):
     _HOST_ARRAYS = ("_w",)
 
@@ -308,7 +318,6 @@ class HostKMeans(_NativeArchiveLoad, _HostBound, KMeans):
     `labels_` is in the file and in the hash: it is the fit's assignment of
     the training rows, and it is what a caller checks `predict` against.
     """
-    _mojolearn_native_public = True
     _HOST_ARRAYS = ("cluster_centers_", "labels_")
 
 
@@ -317,10 +326,12 @@ class HostKMeans(_NativeArchiveLoad, _HostBound, KMeans):
         _register_host_inference_class(cls)
 
 
+    @_native_host_inference_method
     def predict(self, X):
         """Return the nearest fitted center index for each input row."""
         return _native_classical(self, "host_infer_predict", (X,), _CLASSICAL)
 
+    @_native_host_inference_method
     def transform(self, X):
         """Return distances from each input row to the fitted centers."""
         return _native_classical(self, "host_infer_transform", (X,), _CLASSICAL)
@@ -508,7 +519,6 @@ class HostMinMaxScaler(_NativeArchiveLoad, _HostScaler, MinMaxScaler):
 
 
 class _HostCD(_HostBound):
-    _mojolearn_native_public = True
     _BINDING = "_mojolearn_solver"
     _HOST_ARRAYS = ("coef_",)
 
@@ -521,6 +531,7 @@ class _HostCD(_HostBound):
         return self._bind(self._BINDING)
 
 
+    @_native_host_inference_method
     def predict(self, X):
         """Predict float32 values with the fitted coefficients and intercept."""
         return _native_classical(self, "host_infer_predict", (X,), _CLASSICAL)

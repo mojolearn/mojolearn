@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Explicit CPU prediction owners retain original bits and native boundaries."""
 import ast
+import builtins
 import warnings
 from pathlib import Path
 
@@ -231,3 +232,112 @@ def test_dataframe_finite_float64_overflow_preserves_old_cast_semantics(tmp_path
     x = pd.DataFrame([[1e300, 1., 2.], [-1e300, 1., 2.]], dtype="float64")
     expected = legacy.public_cd_predict(model, x)
     assert _state(audit_native_call(model.predict, x).assert_native()) == _state(expected)
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_application_subclass_keeps_constructor_fit_and_score_guards(name):
+    # Application overrides remain ordinary application code. Migrating the
+    # package's prediction methods must not disable the inherited setup of
+    # constructor options, fit validation/tracking or score fitted checks.
+    calls = []
+    class Custom(getattr(host, "Host" + name)):
+        def __init__(self):
+            pass
+        def fit(self, X, y=None):
+            calls.append(vars(self).get("_mojolearn_fitting"))
+            return self
+        def score(self, X, y=None):
+            return 123
+    model = Custom(numeric_mode="identical") if name == "KMeans" else Custom()
+    if name == "KMeans":
+        assert vars(model)["numeric_mode"] == "identical"
+    with pytest.raises(ValueError, match="not fitted"):
+        model.score([[1., 2.]])
+    with pytest.raises(ValueError):
+        model.fit(np.asarray([1., 2.]), np.asarray([0., 1.]))
+    assert calls == []
+    assert model.fit(np.asarray([[1., 2.], [3., 4.]]), np.asarray([0., 1.])) is model
+    assert calls == [1]
+    assert vars(model)["_mojolearn_fitted"] is True
+    assert "_mojolearn_fitting" not in vars(model)
+    assert model.n_features_in_ == 2
+    assert model.score([[1., 2.]]) == 123
+
+
+@pytest.mark.parametrize("method", ["fit", "fit_predict", "fit_transform"])
+def test_kmeans_inherited_fit_operations_keep_state_and_prediction_bits(method):
+    # Frozen CPU baseline 32011bb32, before this prediction-owner migration.
+    # These inherited training operations remain existing runtime debt; this
+    # regression checks that native method installation preserves their guards
+    # and the predictions/distances they consume.
+    x = np.asarray([[-2., -1.], [-1., -2.], [0., 0.], [.5, .25],
+                    [2., 1.], [1., 2.], [3., 3.], [4., 3.]], dtype="<f4")
+    model = host.HostKMeans(n_clusters=2, n_init=1, max_iter=4, init="random",
+                            random_state=5, numeric_mode="identical")
+    result = getattr(model, method)(x)
+    if method == "fit":
+        assert result is model
+        result = model.predict(x)
+    result = np.asarray(result)
+    if method == "fit_transform":
+        assert result.dtype == np.dtype("<f4")
+        assert result.shape == (8, 2)
+        expected = ("0080f6410080fe3f0080f2410080ee3f0000354100005d3f0000004100400940"
+                    "0000e83f00d01b410000144000d01d410000503f00e8d5410000344000f40b42")
+    else:
+        assert result.dtype == np.dtype("<i4")
+        assert result.shape == (8,)
+        expected = "0100000001000000010000000100000000000000000000000000000000000000"
+    assert result.tobytes().hex() == expected
+    assert vars(model)["_mojolearn_fitted"] is True
+    assert "_mojolearn_fitting" not in vars(model)
+    assert model.n_features_in_ == 2
+
+
+@pytest.mark.parametrize("name", NAMES)
+@pytest.mark.parametrize("hook", ["function", "init", "str", "del", "metaclass"])
+def test_host_warning_category_hooks_are_refused_before_native_publication(tmp_path, name, hook, monkeypatch):
+    model = _model(tmp_path, name)
+    model.feature_names_in_ = np.asarray([str(i) for i in range(model.n_features_in_)], dtype=object)
+    touched = []
+    original = builtins.UserWarning
+    if hook == "function":
+        def category(*args, **kwargs):
+            touched.append("function")
+            return original(*args, **kwargs)
+    elif hook == "metaclass":
+        class Meta(type):
+            def __getattribute__(self, name):
+                touched.append("metaclass")
+                return super().__getattribute__(name)
+        class category(original, metaclass=Meta):
+            pass
+    else:
+        def callback(self, *args, **kwargs):
+            touched.append(hook)
+            return "warning" if hook == "str" else None
+        category = type("HookedWarning", (original,), {"__" + hook + "__": callback})
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always")
+        with monkeypatch.context() as patch:
+            patch.setattr(builtins, "UserWarning", category)
+            audit = audit_native_call(model.predict, _input(model.n_features_in_, "float32"))
+    _refused(audit, TypeError)
+    assert touched == []
+    assert caught == []
+
+
+@pytest.mark.parametrize("name", NAMES)
+def test_native_warning_subclass_identity_survives_error_filter(tmp_path, name, monkeypatch):
+    model = _model(tmp_path, name)
+    model.feature_names_in_ = np.asarray([str(i) for i in range(model.n_features_in_)], dtype=object)
+    class NativeWarning(UserWarning):
+        pass
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", Warning)
+        with monkeypatch.context() as patch:
+            patch.setattr(builtins, "UserWarning", NativeWarning)
+            audit = audit_native_call(model.predict, _input(model.n_features_in_, "float32"))
+    _refused(audit, NativeWarning)
+    assert type(audit.exception) is NativeWarning
+    assert "was fitted with feature names" in str(audit.exception)
