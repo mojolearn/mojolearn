@@ -24,8 +24,8 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contai
 from bindings.arena_cache_stats import _attribute, _mapping, _string_keys
 from bindings.arena_cache_get import arena_cache_key
 from bindings.arena_cache_binding import cache_binding_attribute, _cache_entry_name
-from bindings.arena_cache_upload import (_entries, _route, _native_call, _counter_set,
-    CachePendingError, _take_pending, _drop_pending, _restore_pending)
+from bindings.arena_cache_upload import _entries, _route, _native_call, _counter_set
+from bindings.arena_cache_upload import CachePendingError, _take_pending, _drop_pending, _restore_pending
 
 
 struct FirstFailure(Movable):
