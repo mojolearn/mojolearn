@@ -209,7 +209,7 @@ class InstalledNativeAudit(unittest.TestCase):
         self.assertIn("state publication", scope["test_host_kde_fit_native.py"]["coverage_limit"])
         self.assertIn("materialize", scope["test_device_rows_metadata_native.py"]["coverage_limit"])
         self.assertIn("public __array__", scope["test_optimizer_native_array_ownership.py"]["coverage_limit"])
-        self.assertEqual(len(q.CPU_NOT_APPLICABLE["test_optimizer_native_array_ownership.py"]), 2)
+        self.assertEqual(len(q.CPU_NOT_APPLICABLE["test_optimizer_native_array_ownership.py"]), 4)
         self.assertEqual(len(q.CPU_NOT_APPLICABLE["test_training_device_native_finalizer.py"]), 7)
         self.assertEqual(len(q.CPU_NOT_APPLICABLE["test_training_device_native_rollback.py"]), 6)
         self.assertIn("identical", scope["test_sequence_shutdown_native.py"]["operation_mode"])
