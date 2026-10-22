@@ -1,8 +1,8 @@
 {
   "schema": "mojolearn.runtime-takeover-status.v1",
-  "updated": "2026-10-22T03:40:40.377523+00:00",
+  "updated": "2026-10-22T03:52:56.703144+00:00",
   "release": "HELD",
-  "integration_before_report": "9b39c40eb",
+  "integration_before_report": "8faa65e9a",
   "evidence_root": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021",
   "test_policy": "Rerun failures, new tests and directly affected regression checks; reuse accepted unchanged results. Counts from different scopes are not interchangeable.",
   "completed": {
@@ -96,6 +96,12 @@
         "passed": 1,
         "evidence": "cpu-gbdt-modes-math-repair-32011bb32.json"
       }
+    },
+    "prior_failure_disposition": {
+      "cpu_same_node_now_passed": 100,
+      "metal_same_node_now_passed": 123,
+      "late_numpy_replaced_fixture_passed_per_vendor": 4,
+      "evidence": "failure-disposition-320-to-43.json"
     }
   },
   "remaining": [
@@ -115,14 +121,15 @@
     {
       "id": "sequence-array-conversion",
       "owner": "optimizer_native",
-      "state": "eight-targeted-failures-under-repair",
-      "details": "Private native candidate plus new guards:151/159 passed on Metal43; four subarray Python callbacks, one zero-size subarray mismatch, two exception-category typing failures and one numeric-locale failure remain. StringDType and version qualification also pending. Public __array__ remains Python."
+      "state": "eight-failure-repair-integrated-awaiting-build",
+      "details": "754 repair covers all8observed failures and16new regression cases. Next explicit Metal selection83cases;92unaffected candidate/guard cases retain43evidence. StringDType and NumPy1.26native execution remain pending. Public __array__ remains Python.",
+      "source_commit": "cafe3724c"
     },
     {
       "id": "selector-import-metadata",
       "owner": "scaler_lifecycle_native",
-      "state": "integrated-with-lane-evidence",
-      "details": "Lane e63a32945:39/39 targeted tests passed, including original helper/qr regressions and adversarial callbacks/installers. Initialization changes conservatively select broad coverage. Integration-specific helper/qr checks pending.",
+      "state": "integrated-helper-regression-under-repair",
+      "details": "Lane e63 had39/39passes. Integration9b helper/qr check:qrpassed,helperfailed519/542. Minimal tuple/class metadata shape repair57089bdcc is under agent validation; retain broad fallback and unchanged pins.",
       "source_commit": "9b39c40eb"
     },
     {
@@ -146,9 +153,9 @@
     {
       "id": "other-host-native-inference",
       "owner": "host_model_native",
-      "state": "three-class-source-checkpoint-awaiting-freeze",
-      "source_commit": "1c3d11e48",
-      "details": "18 inherited Python predictor owners identified; ElasticNet/Lasso/KMeans native source checkpoint covers3classes/4operations but is not yet compiled.15other predictor classes plus operation-specific fit/state/transform/score/proba/decision accounting remain. Sparse-preserving next slice in progress."
+      "state": "three-class-repair-integrated-awaiting-build",
+      "source_commit": "8faa65e9a",
+      "details": "Native ElasticNet/Lasso.predict and KMeans.predict/transform now integrated, including per-method guard ownership and admitted warning categories.120new checks plus shared warnings and4KMeans roundtrip cases await compile/execution.15other inherited predictor owners and other operation-specific runtime debt remain."
     }
   ],
   "limitations": [
