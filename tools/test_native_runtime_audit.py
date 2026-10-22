@@ -16,6 +16,43 @@ SPEC.loader.exec_module(AUDIT)
 
 
 class NativeRuntimeAuditTests(unittest.TestCase):
+    def test_bound_native_builtins_keep_computed_module_origin(self):
+        values = []
+        self.assertIsNone(AUDIT.audit_native_call(values.append, 4).assert_native())
+        self.assertEqual(values, [4])
+        self.assertEqual(AUDIT.audit_native_call("/".join, ["a", "b"]).assert_native(), "a/b")
+        self.assertEqual(AUDIT.audit_native_call({"a": 3}.get, "a").assert_native(), 3)
+
+    def test_bound_native_origin_bypasses_metaclass_property(self):
+        called = []
+        class Meta(type):
+            @property
+            def __module__(self):
+                called.append("property")
+                return "numpy"
+        class Values(list, metaclass=Meta):
+            pass
+        values = Values()
+        self.assertIsNone(AUDIT.audit_native_call(values.append, 4).assert_native())
+        self.assertEqual(values, [4])
+        self.assertEqual(called, [])
+
+    def test_bound_native_origin_rejects_class_key_equality_hooks(self):
+        called = []
+        class Key(str):
+            __hash__ = str.__hash__
+            def __eq__(self, other):
+                called.append("eq")
+                return str.__eq__(self, other)
+        values = type("Values", (list,), {Key("__module__"): "native_probe"})()
+        called.clear()
+        result = AUDIT.audit_native_call(values.append, 4)
+        self.assertIsNone(result.exception)
+        self.assertEqual(values, [4])
+        self.assertFalse(result.passed)
+        self.assertEqual(called, [])
+        self.assertTrue(result.unresolved_native)
+
     def test_native_module_object_origin_preserves_native_call(self):
         with patch.object(math.fabs, "__module__", math):
             result = AUDIT.audit_native_call(math.fabs, -2.0)
