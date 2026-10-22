@@ -62,6 +62,8 @@ def connect(training):
         "schedule_entries": schedule_entries, "owners": owners, "schedules": schedules, "device_class": training.TrainDeviceArray,
         "array_class": Array, "array_type": array.array,
         "buffer_types": (bytes, bytearray, array.array, mmap.mmap), "mapping_types": (dict, OrderedDict),
+        # Fixed native identities; mutable builtins names cannot admit hooks.
+        "container_types": (list, tuple, dict, set, frozenset, memoryview),
         "scalar_types": (type(None), bool, int, float, complex, str, bytes),
         "module_type": ModuleType, "modules": sys.modules,
         "type_flags": vars(type)["__flags__"].__get__, "type_mro": vars(type)["__mro__"].__get__,

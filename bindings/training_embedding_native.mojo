@@ -78,7 +78,6 @@ def embedding_array_leaves(value: PythonObject, mut dims: List[Int], depth: Int,
 
 def embedding_leaves(value: PythonObject, mut dims: List[Int], depth: Int,
                      mut leaf_depth: Int, leaves: PythonObject, context: PythonObject) raises:
-    var b = Python.import_module("builtins")
     var cls = py_type(value)
     if cls is context["array_class"]:
         embedding_array_leaves(value, dims, depth, leaf_depth, leaves)
@@ -88,7 +87,7 @@ def embedding_leaves(value: PythonObject, mut dims: List[Int], depth: Int,
         # Only exact ndarray has a nonempty native shape; NumPy scalar shape
         # is empty and its scalar class is retained as a leaf below.
         native_array = cls is native_numpy_type("ndarray", context)
-    if cls is b.list or cls is b.tuple or native_array:
+    if cls is context["container_types"][0] or cls is context["container_types"][1] or native_array:
         if native_array and Int(py=value.ndim) == 0:
             raise Error("TypeError: iteration over a 0-d array")
         if native_array:
@@ -204,7 +203,7 @@ def embedding_indices(value: PythonObject, context: PythonObject) raises -> Pyth
                 var indexes = Python.list()
                 for j in range(len(words)):  # driver-loop: assemble the native scalar index tuple
                     py_call(indexes.append, words[j])
-                var index = py_call(b.tuple, indexes)
+                var index = py_call(context["container_types"][1], indexes)
                 var item = cpy.lib.get_function[PyObjectPtr]("PyObject_GetItem")(value._obj_ptr, index._obj_ptr)
                 _ = index^
                 if not item:

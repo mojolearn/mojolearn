@@ -28,8 +28,8 @@ def loss_truth(value: PythonObject, context: PythonObject, depth: Int = 0) raise
     var cls = py_type(value)
     var b = Python.import_module("builtins")
     var admitted = opt_exact(cls, context["scalar_types"]) or opt_exact(cls, context["buffer_types"])
-    admitted = admitted or cls is b.list or cls is b.tuple or cls is b.dict or cls is b.set or cls is b.frozenset
-    if cls is b.memoryview:
+    admitted = admitted or opt_exact(cls, context["container_types"])
+    if cls is context["container_types"][5]:
         opt_value(value, context)
         admitted = True
     if cls is context["array_class"]:
@@ -73,7 +73,7 @@ def loss_truth(value: PythonObject, context: PythonObject, depth: Int = 0) raise
                 var indexes = Python.list()
                 for i in range(Int(py=value.ndim)):  # driver-loop: one native singleton coordinate per rank
                     py_call(indexes.append, 0)
-                var key = py_call(b.tuple, indexes)
+                var key = py_call(context["container_types"][1], indexes)
                 var scalar = loss_native_item(value, key)
                 var result = loss_truth(scalar, context, depth + 1)
                 _ = scalar^
