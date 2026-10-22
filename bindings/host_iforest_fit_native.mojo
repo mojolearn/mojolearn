@@ -17,6 +17,7 @@ from bindings.host_archive_native import host_archive_typed
 from bindings.host_sparse_native import host_sparse_format
 from bindings.native_owner_lifetime import native_release_admit
 from bindings.native_buffer_owner import native_buffer_view
+from bindings.native_scalar_decode import native_scalar_buffer
 from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.optimizer_public_words import stash_python_error
 from bindings.sequential_admission import _one_of
@@ -65,6 +66,12 @@ def _if_fit_repr(value: PythonObject, context: PythonObject) raises -> String:
 
 def _if_fit_number(value: PythonObject, context: PythonObject, integer: Bool = False) raises -> PythonObject:
     var admitted = value if _if_fit_alias(value, context) else _kde_option_value(value, context, True)
+    var cls = py_type(admitted)
+    if cls is py_get(context, "ndarray") or _one_of(cls, context["scalar_types"]) or _if_fit_alias(admitted, context):
+        # Admission above establishes exact primitive scalar/buffer storage.
+        # Numeric conversion belongs in Mojo, even when NumPy's C number
+        # slot would execute without a Python frame.
+        return native_scalar_buffer(admitted).to_python_number(integer)
     ref cpy = Python().cpython()
     var pointer = cpy.lib.get_function[PyObjectPtr]("PyNumber_Long" if integer else "PyNumber_Float")(admitted._obj_ptr)
     if not pointer:
@@ -94,11 +101,13 @@ def _if_fit_truth(value: PythonObject, context: PythonObject) raises -> Bool:
         return result
     if py_type(value) is py_get(context, "ndarray"):
         host_inference_scalar(value, context, True)
-        return Bool(py=value)
+        return native_scalar_buffer(value).truth()
     if cls is py_type(Python.list()) or cls is py_type(Python.tuple()) or _one_of(cls, context["mapping_types"]):
         classical_admit_value(value, context)
         return Bool(py=value)
     var admitted = value if _if_fit_alias(value, context) else _kde_option_value(value, context, True)
+    if _one_of(py_type(admitted), context["scalar_types"]) or _if_fit_alias(admitted, context):
+        return native_scalar_buffer(admitted).truth()
     _ = admitted^
     return Bool(py=value)
 
