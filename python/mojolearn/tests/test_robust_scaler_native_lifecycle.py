@@ -1,0 +1,184 @@
+# SPDX-License-Identifier: Apache-2.0
+"""Public RobustScaler lifecycle; inherited sklearn tags are separate scope."""
+import os
+import subprocess
+import sys
+import warnings
+
+import numpy as np
+import pytest
+
+import mojolearn as ml
+from mojolearn._array import Array
+from mojolearn._arena_io import DeviceRows
+from mojolearn._verify_native_runtime import audit_native_call
+
+
+def _data(rows=19):
+    x = np.random.default_rng(741).normal(size=(rows, 5)).astype('f4')
+    x[:, -1] = 3
+    x[::3, 0] = np.nan
+    x[:, 1] = np.nan
+    return x
+
+
+def _refused(audit, category=TypeError):
+    assert isinstance(audit.exception, category), audit.report()
+    report = audit.report()
+    for name in ('python_frames', 'forbidden_native_calls', 'wrapper_work', 'unobserved_existing_threads'):
+        assert not report[name], report
+
+
+def test_constructor_parameter_and_fitted_state_lifecycle_is_native():
+    model = audit_native_call(ml.RobustScaler, copy=False).assert_native()
+    assert audit_native_call(model.get_params).assert_native() == dict(
+        copy=False, with_centering=True, with_scaling=True,
+        quantile_range=(25., 75.), unit_variance=False)
+    assert not audit_native_call(model.__sklearn_is_fitted__).assert_native()
+    audit_native_call(model.fit, _data()).assert_native()
+    before = model.scale_.tobytes()
+    assert audit_native_call(model.set_params, with_centering=False).assert_native() is model
+    assert audit_native_call(model.__sklearn_is_fitted__).assert_native()
+    assert model.scale_.tobytes() == before  # set_params preserves existing fitted state.
+    _refused(audit_native_call(model.set_params, unknown=True), ValueError)
+
+
+@pytest.mark.parametrize('blocked', ['0', '1'])
+@pytest.mark.parametrize('center,scale', [(False, False), (False, True), (True, False), (True, True)])
+@pytest.mark.parametrize('rows', [19, 2049])
+def test_public_fit_and_transform_keep_quantiles_nan_and_constant_columns(blocked, center, scale, rows, monkeypatch):
+    monkeypatch.setenv('MOJOLEARN_XPREP_BLOCKED', blocked)
+    x = _data(rows)
+    before = x.tobytes()
+    model = ml.RobustScaler(with_centering=center, with_scaling=scale, copy=False)
+    actual = audit_native_call(model.fit_transform, x).assert_native()
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore', RuntimeWarning)
+        quantiles = np.nanpercentile(x, [25., 50., 75.], axis=0)
+    # The existing x_prep quantile kernel returns zero when a feature has no
+    # observed samples; its zero scale then becomes one. Preserve that contract.
+    quantiles[:, np.isnan(x).all(axis=0)] = 0
+    expected_center = quantiles[1].astype('f4') if center else None
+    expected_scale = (quantiles[2] - quantiles[0]).astype('f4') if scale else None
+    if scale:
+        expected_scale[expected_scale < 10 * np.finfo('f4').eps] = 1
+        np.testing.assert_allclose(model.scale_, expected_scale, rtol=2e-6, atol=2e-6)
+    else:
+        assert model.scale_ is None
+    if center:
+        np.testing.assert_allclose(model.center_, expected_center, rtol=2e-6, atol=2e-6)
+    else:
+        assert model.center_ is None
+    expected = x.copy()
+    if center:
+        expected -= expected_center
+    if scale:
+        expected /= expected_scale
+    np.testing.assert_allclose(actual, expected, rtol=2e-6, atol=2e-6)
+    assert np.array_equal(np.isnan(actual), np.isnan(x))
+    assert actual is not x and x.tobytes() == before
+    assert actual.tobytes() == audit_native_call(model.transform, x).assert_native().tobytes()
+
+
+@pytest.mark.parametrize('layout', ['f64', 'integer', 'fortran', 'strided', 'readonly', 'memoryview', 'array', 'list', 'bigendian'])
+def test_ordinary_input_preparation_and_consumed_outputs_are_native(layout):
+    x = np.nan_to_num(_data())
+    if layout == 'integer':
+        x = np.round(x).astype('i8')
+    sources = dict(f64=lambda: x.astype('f8'), integer=lambda: x,
+                   fortran=lambda: np.asfortranarray(x),
+                   strided=lambda: np.repeat(x, 2, axis=0)[::2], readonly=lambda: x.copy(),
+                   memoryview=lambda: memoryview(x), array=lambda: Array.from_list(x.tolist(), '<f4'),
+                   list=lambda: x.tolist(), bigendian=lambda: x.astype('>f4'))
+    source = sources[layout]()
+    if layout == 'readonly':
+        source.flags.writeable = False
+    actual = audit_native_call(ml.RobustScaler().fit_transform, source).assert_native()
+    expected = ml.RobustScaler().fit_transform(x.astype('f4'))
+    assert actual.tobytes() == expected.tobytes()
+
+
+@pytest.mark.parametrize('quantiles', [(10., 90.), [10, 90], np.asarray([10., 90.]), Array.from_list([10., 90.], '<f8')])
+def test_native_quantile_metadata_and_unit_variance_are_preserved(quantiles):
+    model = ml.RobustScaler(quantile_range=quantiles, unit_variance=True)
+    actual = audit_native_call(model.fit_transform, _data()).assert_native()
+    expected = ml.RobustScaler(quantile_range=(10., 90.), unit_variance=True).fit_transform(_data())
+    assert actual.tobytes() == expected.tobytes()
+
+
+@pytest.mark.parametrize('options', [dict(quantile_range=(-1., 75.)), dict(quantile_range=(80., 20.)), dict(unit_variance=True, quantile_range=(0., 100.))])
+def test_invalid_quantiles_are_refused_natively(options):
+    _refused(audit_native_call(ml.RobustScaler(**options).fit, _data()), ValueError)
+
+
+def test_target_width_and_unfitted_checks_are_native():
+    model = ml.RobustScaler()
+    from mojolearn.exceptions import NotFittedError
+    _refused(audit_native_call(model.transform, _data()), NotFittedError)
+    _refused(audit_native_call(model.fit, _data(), [1, 2]), ValueError)
+    audit_native_call(model.fit, _data(), np.arange(19)).assert_native()
+    _refused(audit_native_call(model.transform, np.ones((3, 2), dtype='f4')), ValueError)
+
+
+@pytest.mark.parametrize('position', ['input', 'quantiles', 'truth'])
+def test_python_protocols_refuse_before_their_hooks(position):
+    calls = []
+    class Hook:
+        def __array__(self, *args, **kwargs):
+            calls.append('array')
+            return _data()
+        def __float__(self):
+            calls.append('float')
+            return 25.
+        def __bool__(self):
+            calls.append('bool')
+            return True
+    model = ml.RobustScaler(quantile_range=(Hook(), 75.)) if position == 'quantiles' else ml.RobustScaler(with_centering=Hook()) if position == 'truth' else ml.RobustScaler()
+    _refused(audit_native_call(model.fit, Hook() if position == 'input' else _data()))
+    assert not calls
+
+
+def test_native_row_gather_does_not_call_application_take_hook():
+    x = _data()
+    calls = []
+    def take(*args):
+        calls.append(True)
+        raise AssertionError('Python row gather ran')
+    indices = [0, 3, 11, 2]
+    rows = DeviceRows(Array.from_list(x.tolist(), '<f4'), Array.from_list(indices, '<i8'), take)
+    actual = audit_native_call(ml.RobustScaler().fit_transform, rows).assert_native()
+    expected = ml.RobustScaler().fit_transform(x[indices])
+    assert actual.tobytes() == expected.tobytes()
+    assert not calls
+
+
+def test_application_subclass_overrides_keep_guards_and_are_not_called_from_native():
+    calls = []
+    class Child(ml.RobustScaler):
+        def fit(self, X, y=None):
+            calls.append('fit')
+            return self
+    assert Child.fit._mojolearn_tracks_fit
+    child = Child()
+    _refused(audit_native_call(child.fit_transform, _data()))
+    assert not calls
+    with pytest.raises(ValueError):
+        child.fit(_data(), [1, 2])
+    assert not calls
+
+
+def test_numpy_free_public_lifecycle_does_not_import_numpy():
+    script = '''
+import sys
+from array import array
+import mojolearn as ml
+from mojolearn._verify_native_runtime import audit_native_call
+assert 'numpy' not in sys.modules
+x=memoryview(array('f',[1,2,3,4,5,6])).cast('B').cast('f',(3,2))
+m=audit_native_call(ml.RobustScaler).assert_native()
+y=audit_native_call(m.fit_transform,x).assert_native()
+assert y.shape==(3,2) and y.tolist()==[[-1.,-1.],[0.,0.],[1.,1.]]
+assert 'numpy' not in sys.modules
+'''
+    result = subprocess.run([sys.executable, '-c', script], capture_output=True, text=True, env=os.environ)
+    assert result.returncode == 0, result.stderr[-4000:]

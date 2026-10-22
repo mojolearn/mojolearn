@@ -1374,6 +1374,16 @@ ANNOTATIONS_BY_SRC.update({
 
 
 #: (public, op) -> (status, lanes, why) for the public methods.
+# RobustScaler's native owner is new; these existing lanes consume its public
+# fit/transform outputs but do not supply current-freeze qualification yet.
+ANNOTATIONS_BY_SRC[("robust_scaler_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", ["x-prep-robust-scaler", "x-prep-robust-scaler-unit-variance"],
+    "Public RobustScaler lifecycle calls robust_lifecycle_c, which prepares native buffers and "
+    "runs the existing x_prep quantile/scale/affine stages. Existing lanes consume center_, scale_ "
+    "and transformed outputs; new public lifecycle/refusal tests are authored. New source only: "
+    "current runtime execution, fault/restoration, installed-wheel and matching reference admission remain pending.")
+
+
 PY_ANNOTATIONS = {
     ("mojolearn.models.ParallelCausalLM", "generate"): (
         "covered", ["hf-causal-lm", "par-causal-lm"],

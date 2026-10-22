@@ -53,6 +53,7 @@ from . import _labels
 from . import _arena_io
 from ._labels import flatten_labels, sorted_classes, label_kind
 from ._mode import SklearnTagsMixin, available_if
+from ._native_robust_bridge import native_method as _native_robust_method
 
 __all__ = ["f_classif", "f_regression", "r_regression", "chi2", "mutual_info_classif", "mutual_info_regression", "RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
            "GaussianNB", "MultinomialNB", "BernoulliNB",
@@ -806,6 +807,8 @@ class RobustScaler(_PrepBase):
     non-NaN entries. NaN values are ignored during fit and kept as NaN by transform. A scale smaller than
     ten float32 epsilons is replaced by one. Input and output are float32.
 
+    In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
+
     Parameters
     ----------
     with_centering : bool, default True
@@ -842,57 +845,39 @@ class RobustScaler(_PrepBase):
     _sklearn_input_tags = {"allow_nan": True}
     _parameters = ("with_centering", "with_scaling", "quantile_range", "copy", "unit_variance")
 
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        _register_robust_scaler(cls, _ROBUST_CONTEXT)
+
     def __init__(self, *, with_centering=True, with_scaling=True, quantile_range=(25.0, 75.0), copy=True,
                  unit_variance=False):
-        self.with_centering = with_centering
-        self.with_scaling = with_scaling
-        self.quantile_range = quantile_range
-        self.copy = copy
-        self.unit_variance = unit_variance
+        return _ROBUST_CALL(self, "init", (with_centering, with_scaling, quantile_range, copy, unit_variance), _ROBUST_CONTEXT)
 
+    def get_params(self, deep=True):
+        """Return this scaler's constructor parameters as a dictionary."""
+        return _ROBUST_CALL(self, "get_params", (deep,), _ROBUST_CONTEXT)
+
+    def set_params(self, **params):
+        """Set constructor parameters and return this scaler."""
+        return _ROBUST_CALL(self, "set_params", (params,), _ROBUST_CONTEXT)
+
+    def __sklearn_is_fitted__(self):
+        return _ROBUST_CALL(self, "is_fitted", (), _ROBUST_CONTEXT)
+
+    @_native_robust_method
     def fit(self, X, y=None):
-        lo, hi = (float(v) for v in self.quantile_range)  # glue: unpacks the two quantile_range values
-        if not 0 <= lo <= hi <= 100:
-            raise ValueError(f"mojolearn: invalid quantile range {self.quantile_range!r}")
-        if self.unit_variance and not 0 < lo < hi < 100:
-            raise ValueError("mojolearn: RobustScaler(unit_variance=True) needs 0 < q_min < q_max < 100 "
-                             "(norm.ppf of 0 or 1 is infinite)")
-        arr = _x2d(X)
-        n, d = arr.shape
-        mode = _mode()
-        pr = _Prog()
-        xo = pr.put(arr)
-        qsel = _prep2_qselect(mode, 3)
-        so = pr.work(n * d) if not qsel else 0
-        st = pr.alloc(6 * d)
-        qf = pr.put_list([lo / 100.0, 0.5, hi / 100.0])
-        q = pr.alloc(3 * d)
-        center = pr.alloc(d)
-        scale = pr.alloc(d)
-        if not qsel:
-            pr.stage("sort_cols", d, xo, n, d, so, 0)
-        # the quantile stage reads the count row only: an exact integer in
-        # the blocked order too (lane gap-prep2), so the same words
-        _col_stats(pr, xo, n, d, st, var=False)
-        if qsel:
-            # the three quantiles by radix select over the unsorted X (`_prep2_qselect`)
-            pr.stage("quantile", 3 * d, xo, n, d, qf, 3, q, st, 1)
-        else:
-            pr.stage("quantile", 3 * d, so, n, d, qf, 3, q, st)
-        pr.stage("scale_params", d, q, 3, d, center, scale, 0, 0, 2, 1)
-        if self.unit_variance:
-            pr.stage("robust_uv", d, scale, qf)
-        pr.run(mode)
-        self.center_ = pr.get(center, d) if self.with_centering else None
-        self.scale_ = pr.get(scale, d) if self.with_scaling else None
-        self.numeric_mode_, self.n_features_in_ = mode, d
-        return self
+        """Learn the feature medians and interquantile scales from X; return self."""
+        return _ROBUST_CALL(self, "fit", (X, y), _ROBUST_CONTEXT)
 
+    @_native_robust_method
+    def fit_transform(self, X, y=None, **fit_params):
+        """Fit on X and return a new float32 array of scaled features."""
+        return _ROBUST_CALL(self, "fit_transform", (X, y, fit_params), _ROBUST_CONTEXT)
+
+    @_native_robust_method
     def transform(self, X):
-        self._check_fitted()
-        arr = _x2d(X)
-        self._check_width(arr)
-        return _affine(self.numeric_mode_, arr, self.center_, self.scale_)
+        """Return X centered and scaled by the learned feature statistics."""
+        return _ROBUST_CALL(self, "transform", (X,), _ROBUST_CONTEXT)
 
 
 class MaxAbsScaler(_PrepBase):
@@ -7595,3 +7580,9 @@ def _fit_categories_with_codes(mode, arr):
 from ._native_maxabs_bridge import connect as _connect_maxabs_scaler
 from ._native_scaler_bridge import register_subclass as _register_maxabs_scaler
 _MAXABS_CALL, _MAXABS_CONTEXT = _connect_maxabs_scaler(MaxAbsScaler)
+
+
+# Import-time native metadata; the public operations hand off once to Mojo.
+from ._native_robust_bridge import connect as _connect_robust_scaler
+from ._native_scaler_bridge import register_subclass as _register_robust_scaler
+_ROBUST_CALL, _ROBUST_CONTEXT = _connect_robust_scaler(RobustScaler, _X_PREP2_QSELECT)
