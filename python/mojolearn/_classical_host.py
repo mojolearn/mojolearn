@@ -309,7 +309,7 @@ class HostGaussianMixture(_NativeArchiveLoad, _HostBound, GaussianMixture):
     _HOST_ARRAYS = ("weights_", "means_", "covariances_", "precisions_cholesky_", "log_det_chol_")
 
 
-class HostGaussianProcessRegressor(_HostBound, GaussianProcessRegressor):
+class HostGaussianProcessRegressor(_NativeArchiveLoad, _HostBound, GaussianProcessRegressor):
     """The predictive mean and std of a saved GaussianProcessRegressor through
     the inference-only gp binding; normalize_y's scale-back is the GPU
     class's own `predict`."""
@@ -332,7 +332,7 @@ _GPC_HOST_BASENAME = "_mojolearn_gp_host"
 #: families, as the CPU identity gate makes).
 _GPC_HOST_INFERENCE_BASENAME = "_mojolearn_gp_infer_host"
 
-class HostGaussianProcessClassifier(GaussianProcessClassifier):
+class HostGaussianProcessClassifier(_NativeArchiveLoad, GaussianProcessClassifier):
     """`GaussianProcessClassifier` bound to `_mojolearn_gp_infer_host` (or,
     when only the reference set is built, `_mojolearn_gp_host`) on any box,
     a GPU box included, so a GPU fit and a CPU prediction compare in one

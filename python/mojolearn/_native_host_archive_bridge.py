@@ -14,6 +14,8 @@ def connect(context, formats, cleanup_entries):
     from .neighbors import _METRIC_TABLE, _RBC_METRIC_TABLE
     from ._umap_impl import _METRICS as umap_metrics
     from ._mode import SklearnTagsMixin
+    from ._gp_impl import _SavedKernel as gp_saved_kernel
+    from ._gpc_impl import _SavedKernel as gpc_saved_kernel, _BinaryLaplace
 
     archive = dict(context)
     archive.update(_numpy_free_context())
@@ -29,6 +31,9 @@ def connect(context, formats, cleanup_entries):
     archive["host_archive_neighbor_metrics"] = dict(_METRIC_TABLE)
     archive["host_archive_rbc_metrics"] = dict(_RBC_METRIC_TABLE)
     archive["host_archive_umap_metrics"] = dict(umap_metrics)
+    archive["host_archive_gp_saved_kernel"] = gp_saved_kernel
+    archive["host_archive_gpc_saved_kernel"] = gpc_saved_kernel
+    archive["host_archive_binary_laplace"] = _BinaryLaplace
     archive["host_archive_formats"] = {
         fmt: dict(classes) for fmt, classes in formats.items()  # glue: copy the fixed native class registry once at package connection
     }
