@@ -189,6 +189,7 @@ class InstalledNativeAudit(unittest.TestCase):
 
     def test_public_owner_and_host_scopes_exclude_private_array_candidate(self):
         names = ("test_native_owner_qualification.py", "test_sequence_shutdown_native.py",
+                 "test_training_device_native_finalizer.py",
                  "test_host_inference_native.py", "test_host_kernel_inference_native.py", "test_host_projection_native.py",
                  "test_host_logistic_native.py", "test_host_svr_native.py")
         for name in names:
@@ -199,6 +200,7 @@ class InstalledNativeAudit(unittest.TestCase):
         scope = q.test_applicability(names, "cuda")
         self.assertIn("explicit CPU host", scope["test_host_inference_native.py"]["execution_route"])
         self.assertIn("explicit CPU host", scope["test_host_svr_native.py"]["execution_route"])
+        self.assertEqual(len(q.CPU_NOT_APPLICABLE["test_training_device_native_finalizer.py"]), 7)
         self.assertIn("identical", scope["test_sequence_shutdown_native.py"]["operation_mode"])
         self.assertEqual(q.test_dependencies(names), ["numpy", "pytest", "pandas", "scipy"])
         self.assertEqual(q.test_dependencies([names[0]]), ["numpy", "pytest"])
