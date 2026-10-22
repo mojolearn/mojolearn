@@ -4,6 +4,17 @@
 
 def connect():
     # glue: retain native entry and immutable slot identities during import
+    # The compound upload-error path constructs this exception natively.
+    # Admit the immutable CPython builtin before retaining it: a replacement
+    # installed before package import must never become a constructor hook.
+    native_type = (0).__class__.__class__
+    runtime_error = RuntimeError
+    flags = native_type.__dict__["__flags__"].__get__
+    if (native_type(runtime_error) is not native_type
+            or flags(runtime_error) & 512 or not flags(runtime_error) & 256
+            or native_type.__getattribute__(runtime_error, "__name__") != "RuntimeError"
+            or native_type.__getattribute__(runtime_error, "__module__") != "builtins"):
+        raise TypeError("DeviceCache requires the immutable native RuntimeError builtin")
     from types import BuiltinFunctionType, ModuleType, MemberDescriptorType, SimpleNamespace
     import struct
     import sys
@@ -74,7 +85,7 @@ def connect():
             store_routes.append((put, free))
     context.update(cache_scalar_context=scalar_context,
                    cache_store_routes=tuple(store_routes), cache_object_setattr=object.__setattr__,
-                   cache_runtime_error=RuntimeError,
+                   cache_runtime_error=runtime_error,
                    cache_counter_types=(type(None), float, complex, str, bytes, bytearray,
                                         list, tuple, dict, set, frozenset, range),
                    cache_entry_types=(bool, int, float, complex, str, bytes, bytearray,
