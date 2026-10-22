@@ -10,7 +10,7 @@ def sequential_array(shape: PythonObject, dtype: PythonObject, context: PythonOb
     var count = 1
     for k in range(len(shape)):  # driver-loop: over array rank metadata
         count *= Int(py=shape[k])
-    var storage = py_call(b.bytearray, count * Int(py=dtype.itemsize))
+    var storage = py_call(context["native_bytearray_type"], count * Int(py=dtype.itemsize))
     return py_call(context["ndarray"], shape, dtype=dtype, buffer=storage)
 
 

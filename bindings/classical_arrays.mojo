@@ -112,7 +112,7 @@ def classical_typed(shape: PythonObject, typestr: String, context: PythonObject)
     for k in range(len(shape)):  # driver-loop: over array rank metadata
         count *= Int(py=shape[k])
     var width = 4 if typestr == "<f4" else 8
-    var store = py_call(context["array_type"], PythonObject(_store_code(typestr)), py_call(b.bytes, count * width))
+    var store = py_call(context["array_type"], PythonObject(_store_code(typestr)), py_call(context["native_bytes_type"], count * width))
     return classical_wrap_array(store, shape, typestr, "C", context)
 
 

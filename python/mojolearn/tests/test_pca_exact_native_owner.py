@@ -256,6 +256,33 @@ def test_archive_bytes_legacy_roundtrip_and_native_continuation(tmp_path, whiten
     assert_state_equal(PCA.load(io.BytesIO(actual)), model)
 
 
+@pytest.mark.parametrize("kind", ["missing_parent", "directory", "readonly"])
+def test_private_archive_owner_preserves_native_file_exception(tmp_path, kind):
+    model = PCA(2, numeric_mode="identical")
+    model.__dict__.update(n_components_=2, n_features_in_=3, n_samples_=8,
+        components_=np.asarray([[1., 0., 0.], [0., 1., 0.]], dtype="f4"),
+        mean_=np.zeros(3, dtype="f4"), singular_values_=np.asarray([3., 2.], dtype="f4"),
+        explained_variance_=np.asarray([2., 1.], dtype="f4"),
+        explained_variance_ratio_=np.asarray([.6, .3], dtype="f4"), noise_variance_=.25)
+    path = str(tmp_path / "missing" / "model.npz") if kind == "missing_parent" else str(tmp_path)
+    if kind == "readonly":
+        filename = tmp_path / "readonly.npz"
+        filename.write_bytes(b"")
+        path = io.FileIO(filename, "rb")
+    try:
+        with pytest.raises(Exception) as expected:
+            model.save(path)
+        audit = audit_native_call(native_save, model, path)
+        clean(audit, type(expected.value))
+        assert type(audit.exception) is type(expected.value)
+        assert str(audit.exception) == str(expected.value)
+        for name in ("errno", "filename", "filename2"):
+            assert getattr(audit.exception, name, None) == getattr(expected.value, name, None)
+    finally:
+        if kind == "readonly":
+            path.close()
+
+
 def test_archive_corruption_does_not_change_a_live_model():
     model = PCA(2).fit(fixture())
     before = np.asarray(model.components_).copy()
