@@ -4594,23 +4594,20 @@ class Normalizer(_PrepBase):
         self.copy = copy
 
     def fit(self, X, y=None):
-        if self.norm not in ("l1", "l2", "max"):
-            raise ValueError(f"mojolearn: invalid norm {self.norm!r}")
-        self.n_features_in_ = _x2d(X).shape[1]
-        self.numeric_mode_ = _mode()
-        return self
+        return _STATELESS_CALL(self, "fit", (X, y), _STATELESS_CONTEXT)
 
     def transform(self, X, copy=None):
-        self._check_fitted()
-        arr = _x2d(X)
-        self._check_width(arr)
-        n, d = arr.shape
-        pr = _Prog()
-        xo = pr.put(arr)
-        out = pr.output(n * d)
-        pr.stage("normalize", n, xo, n, d, {"l1": 0, "l2": 1, "max": 2}[self.norm], out)
-        pr.run(self.numeric_mode_)
-        return pr.get(out, (n, d))
+        return _STATELESS_CALL(self, "transform", (X,), _STATELESS_CONTEXT)
+
+    def fit_transform(self, X, y=None, **fit_params):
+        """Fit to ``X``, then transform ``X``.
+
+        Returns
+        -------
+        array
+            The transformed data.
+        """
+        return _STATELESS_CALL(self, "fit_transform", (X, y), _STATELESS_CONTEXT)
 
 
 # Each output column is the product of its input columns left to right.
@@ -4658,52 +4655,21 @@ class PolynomialFeatures(_PrepBase):
         self.include_bias = include_bias
         self.order = order
 
-    def _combos(self, d):
-        from itertools import chain, combinations, combinations_with_replacement
-        if isinstance(self.degree, numbers.Integral):
-            lo, hi = 0, int(self.degree)
-        else:
-            lo, hi = (int(v) for v in self.degree)  # glue: unpacks the two degree values
-        if hi < 0 or lo < 0 or lo > hi:
-            raise ValueError(f"mojolearn: invalid degree {self.degree!r}")
-        comb = combinations if self.interaction_only else combinations_with_replacement
-        it = chain.from_iterable(comb(range(d), i) for i in range(max(1, lo), hi + 1))  # glue: enumerates polynomial terms of feature indices (d-sized: feature count)
-        if self.include_bias:
-            it = chain(comb(range(d), 0), it)
-        return [tuple(c) for c in it]  # glue: materializes the polynomial term list (it-sized: polynomial terms of feature indices)
-
     def fit(self, X, y=None):
-        if self.order not in ("C", "F"):
-            raise ValueError("mojolearn: PolynomialFeatures order must be 'C' or 'F'")
-        d = _x2d(X).shape[1]
-        self._terms = self._combos(d)
-        self.n_features_in_, self.n_output_features_ = d, len(self._terms)
-        self.powers_ = Array.from_list([[t.count(j) for j in range(d)] for t in self._terms] or [[0] * d], "<i8")  # glue: powers_ table of the polynomial terms (d-sized: feature count)
-        self.numeric_mode_ = _mode()
-        return self
+        return _STATELESS_CALL(self, "fit", (X, y), _STATELESS_CONTEXT)
 
     def transform(self, X):
-        self._check_fitted()
-        arr = _x2d(X)
-        self._check_width(arr)
-        n, d = arr.shape
-        idx, start = [], [0]
-        for t in self._terms:  # glue: flattens term index tables for the program (_terms-sized: polynomial terms of feature indices)
-            idx.extend(t)
-            start.append(len(idx))
-        nout = len(self._terms)
-        pr = _Prog()
-        xo, io, so = pr.put(arr), pr.put_list(idx or [0]), pr.put_list(start)
-        # the output region measured slower here (m4-a: 0.452 -> 0.523 s): arena words
-        out = pr.alloc(n * nout)
-        pr.stage("poly", n * nout, xo, n, d, io, so, nout, out)
-        fo = _p2m_f_stage(pr, out, n, nout) if self.order == "F" else None
-        pr.run(self.numeric_mode_)
-        if fo is not None:
-            return _p2m_f_get(pr, fo, n, nout)
-        if self.order == "F":       # an empty block
-            return Array._owned(array.array("f"), (n, nout), "<f4", "F")
-        return pr.get(out, (n, nout))
+        return _STATELESS_CALL(self, "transform", (X,), _STATELESS_CONTEXT)
+
+    def fit_transform(self, X, y=None, **fit_params):
+        """Fit to ``X``, then transform ``X``.
+
+        Returns
+        -------
+        array
+            The transformed data.
+        """
+        return _STATELESS_CALL(self, "fit_transform", (X, y), _STATELESS_CONTEXT)
 
 
 def _p2m_f_stage(pr, off, n, w):
@@ -5045,21 +5011,20 @@ class Binarizer(_PrepBase):
         self.copy = copy
 
     def fit(self, X, y=None):
-        self.n_features_in_ = _x2d(X).shape[1]
-        self.numeric_mode_ = _mode()
-        return self
+        return _STATELESS_CALL(self, "fit", (X, y), _STATELESS_CONTEXT)
 
     def transform(self, X, copy=None):
-        self._check_fitted()
-        arr = _x2d(X)
-        self._check_width(arr)
-        n, d = arr.shape
-        pr = _Prog()
-        xo, th = pr.put(arr), pr.put_scalar(self.threshold)
-        out = pr.alloc(n * d)
-        pr.stage("binarize", n * d, xo, n * d, th, out)
-        pr.run(self.numeric_mode_)
-        return pr.get(out, (n, d))
+        return _STATELESS_CALL(self, "transform", (X,), _STATELESS_CONTEXT)
+
+    def fit_transform(self, X, y=None, **fit_params):
+        """Fit to ``X``, then transform ``X``.
+
+        Returns
+        -------
+        array
+            The transformed data.
+        """
+        return _STATELESS_CALL(self, "fit_transform", (X, y), _STATELESS_CONTEXT)
 
 
 # ---------------------------------------------------------------- label transformers
@@ -7513,3 +7478,10 @@ _ROBUST_CALL, _ROBUST_CONTEXT = _connect_robust_scaler(RobustScaler, _X_PREP2_QS
 from ._native_arena_prog import connect as _connect_arena_prog
 _PROG_CALL, _PROG_CONTEXT = _connect_arena_prog(
     "x_prep", _Prog, _Scratch, {v: k for k, v in _OPS.items()})  # glue: the stage names of the profiling line, once at import
+
+
+# Import-time connection; Binarizer, Normalizer and PolynomialFeatures hand
+# each public operation off once to Mojo (bindings/prep_stateless_native.mojo).
+from ._native_prep_stateless_bridge import connect as _connect_stateless
+_STATELESS_CALL, _STATELESS_CONTEXT = _connect_stateless(
+    {Binarizer: "binarizer", Normalizer: "normalizer", PolynomialFeatures: "polynomial"})
