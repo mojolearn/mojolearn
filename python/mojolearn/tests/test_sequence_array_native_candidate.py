@@ -160,3 +160,71 @@ def test_native_candidate_refuses_replaced_numpy_dtype_before_call(resident, mon
     assert not calls
     report = audit.report()
     assert not report["python_frames"] and not report["forbidden_native_calls"], report
+
+
+SCHEMAS = [
+    "float32", b"float64", "int32", "2f4", "(2,)f4", "(2,3)>f4", "2,3f4",
+    "()f4", "i4,f4", "i4, f4", "f4,f8,", ">2f4", "2f4 ",
+    ("f4", 2), ("f4", (2, 3)), ("f4", (0,)),
+    [("a", "f4"), ("b", "i4")],
+    [("a", "f4", (2,)), ("b", [("c", ">f4"), ("d", "f8")])],
+    [(("title", "a"), "f4"), ("b", "i4")],
+    {"names": ["a", "b"], "formats": ["f4", "i4"]},
+    {"names": ["a", "b"], "formats": ["f4", "i4"], "offsets": [4, 0]},
+    {"names": ["a", "b"], "formats": ["i1", "i4"], "aligned": True},
+    {"names": ["a"], "formats": [[("x", "i1"), ("y", "i4")]], "aligned": True},
+    {"names": ["a"], "formats": ["f4"], "titles": ["title"], "itemsize": 8},
+    {"a": ("f4", 4), "b": ("i4", 0)},
+    {"a": ("f4", 4, "title"), "b": ("i4", 0), -1: ["a", "b"]},
+]
+
+
+def assert_schema_outputs(actual, expected):
+    assert actual.dtype == expected.dtype
+    assert actual.shape == expected.shape
+    assert actual.flags.writeable == expected.flags.writeable
+    if actual.dtype.names:
+        for name in actual.dtype.names:
+            # Padding bytes are uninitialized in NumPy's original astype;
+            # compare every field and its exact floating words, not padding.
+            assert_schema_outputs(actual[name], expected[name])
+    else:
+        assert actual.tobytes() == expected.tobytes()
+
+
+@pytest.mark.parametrize("schema", SCHEMAS, ids=lambda value: repr(value))
+def test_native_candidate_normalizes_ordinary_dtype_schemas(resident, schema):
+    values, tensor = resident
+    with warnings.catch_warnings(record=True) as old:
+        warnings.simplefilter("always")
+        expected = values.astype(schema, copy=False)
+    with warnings.catch_warnings(record=True) as new:
+        warnings.simplefilter("always")
+        actual = native_candidate(tensor, schema)
+    assert_schema_outputs(actual, expected)
+    assert [(type(w.message), str(w.message)) for w in new] == [(type(w.message), str(w.message)) for w in old]
+
+
+@pytest.mark.parametrize("position", ["shape", "offset", "title"])
+def test_native_candidate_refuses_schema_protocols_before_hooks(resident, position):
+    _, tensor = resident
+    calls = []
+    class Protocol:
+        def __index__(self):
+            calls.append("index")
+            return 2
+        def __hash__(self):
+            calls.append("hash")
+            return 1
+        def __eq__(self, other):
+            calls.append("eq")
+            return False
+    value = Protocol()
+    schema = {"shape": ("f4", (value,)),
+              "offset": {"names": ["a"], "formats": ["f4"], "offsets": [value]},
+              "title": [((value, "a"), "f4")]}[position]
+    audit = audit_native_call(_OPT_NATIVE, "seqdev_array", tensor, (schema, None), None, _OPT_CONTEXT)
+    assert type(audit.exception) is TypeError
+    assert not calls
+    report = audit.report()
+    assert not report["python_frames"] and not report["forbidden_native_calls"], report

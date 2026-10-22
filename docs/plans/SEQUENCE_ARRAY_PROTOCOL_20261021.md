@@ -17,6 +17,11 @@ Implemented candidate work:
 
 - Native fixed dtype metadata admission, field/subarray layout walks and
   native ndarray allocation; only allocation/metadata uses NumPy's C entries.
+- Native normalization of compact record/subarray strings and recursively
+  supplied list/dictionary field schemas. Field offsets are ordered in Mojo;
+  NumPy's Python `_commastring` and `_usefields` helpers are not invoked.
+  Twenty-six additional ordinary schema baselines are retained; candidate
+  execution and malformed-schema compatibility remain pending.
 - Typed output conversion in `core/sequence_array_cast.mojo`: integer, bool,
   half, float, complex, byte order, datetime/timedelta units, void storage and
   extended host floating layouts. NaN payload widening is separate from
@@ -40,10 +45,11 @@ Remaining work before public connection:
    Test-controller prototypes matched 20,008 sampled text conversions and
    20,010 values for each of eleven integer/half/date forms on the ARM Mac;
    these are algorithm screening, not execution of the Mojo implementation.
-2. Preserve additional ordinary dtype input forms, including compact record
-   strings, shaped string descriptions and recursively supplied field-name
-   schemas. NumPy can invoke its Python parser for such descriptions; the
-   native parser must replace that before they can be passed through.
+2. Qualify the native schema normalizer for ordinary and malformed dtype
+   inputs, nested titles/metadata and version-specific parsing behavior.
+   The additional 26-case schema controller baseline uses NumPy 2.4.4; its
+   retained array bytes and dtype objects are in `array-native/` under the
+   evidence directory. It is not native candidate execution evidence.
 3. Investigate NumPy's variable-width `StringDType` separately from fixed
    `S`/`U` storage. Its managed native string storage is not implemented here.
 4. Qualify non-default locales, nested/object schemas, empty/scalar shapes,

@@ -9,71 +9,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from core.sequence_array_cast import sequence_cast_leaf, sequence_wide_word
 from bindings.sequence_array_warnings import sequence_array_errstate, sequence_array_report
 from bindings.native_numpy_metadata import native_numpy_dtype
-
-
-def sequence_dtype_classes(context: PythonObject) raises -> PythonObject:
-    var dtype = native_numpy_dtype(context)
-    var stored = py_get(context, "sequence_dtype_classes")
-    if stored is not None:
-        return stored
-    var result = Python.list()
-    # Only NumPy's fixed built-in scalar dtype schemas are admitted. A user
-    # DType with discovery/casting hooks requires its own native interface.
-    for code in ["?", "i1", "u1", "i2", "u2", "i4", "u4", "i8", "u8", "f2", "f4", "f8", "g", "c8", "c16", "G", "O", "S", "U", "V", "M8", "m8"]:  # driver-loop: over fixed native dtype metadata
-        var item = py_call(dtype, code)
-        py_call(result.append, Python.tuple(py_type(item), item.type))
-    py_setitem(context, "sequence_dtype_classes", result)
-    return result
-
-
-def sequence_dtype_instance(value: PythonObject, classes: PythonObject) raises -> Bool:
-    for i in range(len(classes)):  # driver-loop: over connected native dtype layouts
-        if py_type(value) is classes[i][0]:
-            return True
-    return False
-
-
-def sequence_dtype_spec(value: PythonObject, classes: PythonObject, context: PythonObject, depth: Int = 0) raises:
-    var b = Python.import_module("builtins")
-    if depth > 64:
-        raise Error("TypeError: dtype schema nesting exceeds the native limit")
-    var kind = py_type(value)
-    if value is None or kind is b.int or kind is b.bool:
-        return
-    if kind is b.str or kind is b.bytes:
-        var text = value if kind is b.str else py_call(b.bytes.decode, value, "ascii", "strict")
-        var aliases = py_fields(context["modules"]["numpy"])["sctypeDict"]
-        if py_type(aliases) is not b.dict:
-            raise Error("TypeError: dtype aliases require native dictionary metadata")
-        var keys = py_call(b.list, aliases)
-        for i in range(len(keys)):  # driver-loop: validate dtype alias keys before keyed lookup
-            if py_type(keys[i]) is not b.str:
-                raise Error("TypeError: dtype aliases require native string keys")
-        var mapped = py_get(aliases, text)
-        if mapped is not None:
-            sequence_dtype_spec(mapped, classes, context, depth + 1)
-        elif py_call(context["sequence_dtype_fullmatch"], context["sequence_dtype_pattern"], text) is None:
-            raise Error("TypeError: dtype text requires an explicit native dtype schema")
-        return
-    if value is b.float or value is b.int or value is b.bool or value is b.complex or value is b.str or value is b.bytes or value is b.object:
-        return
-    if sequence_dtype_instance(value, classes):
-        return
-    for i in range(len(classes)):  # driver-loop: over fixed native scalar classes accepted as dtypes
-        if value is classes[i][1]:
-            return
-    if kind is b.tuple or kind is b.list:
-        for i in range(len(value)):  # driver-loop: over nested native dtype schema metadata
-            sequence_dtype_spec(value[i], classes, context, depth + 1)
-        return
-    if kind is b.dict:
-        var keys = py_call(b.list, value)
-        for i in range(len(keys)):  # driver-loop: over native dtype schema fields
-            if py_type(keys[i]) is not b.str:
-                raise Error("TypeError: dtype schema keys must be native strings")
-            sequence_dtype_spec(value[keys[i]], classes, context, depth + 1)
-        return
-    raise Error("TypeError: dtype requires a built-in native dtype/schema; Python dtype protocols cannot execute")
+from bindings.sequence_dtype_native import sequence_dtype_classes, sequence_dtype_instance, sequence_dtype_normalize
 
 
 def sequence_dtype_leaves(dtype: PythonObject, offset: Int, classes: PythonObject,
@@ -138,8 +74,7 @@ def sequence_array_cast(source: PythonObject, requested: PythonObject, context: 
     if py_get(input, "ndarray") is None:
         raise Error("TypeError: the ndarray protocol requires NumPy's native array type to be connected")
     var classes = sequence_dtype_classes(context)
-    sequence_dtype_spec(requested, classes, context)
-    var dtype = py_call(dtype_constructor, requested)
+    var dtype = sequence_dtype_normalize(requested, classes, context)
     if (String(dtype.kind) == "S" or String(dtype.kind) == "U") and Int(py=dtype.itemsize) == 0:
         dtype = py_call(dtype_constructor, String(dtype.kind) + "32")
     var leaves = Python.list()
