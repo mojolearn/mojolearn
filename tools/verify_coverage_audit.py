@@ -1309,6 +1309,61 @@ ANNOTATIONS_BY_SRC.update(
                                                                               'separately')}
 )
 
+
+# Native-owner tables retain their compiled callees at import, so the Python
+# graph cannot see these specific calls. Record only the lane's actual public
+# operation; a step does not exercise state setters, zeroing or checkpoint IO.
+ANNOTATIONS_BY_SRC.update({
+    **{("lr_schedule_at", src): (
+        "covered", ["sequence-lr-schedulers"],
+        "Source reach: sequence-lr-schedulers hashes StepLR/ExponentialLR/OneCycleLR.bits_at; "
+        "_OPT_NATIVE(schedule_bits) -> schedule_operation -> retained lr_schedule_at. "
+        "_lr_native uses the identical base binding (core_host for the CPU package). "
+        "Source accounting only; reference and execution admission stay separate.")
+       for src in ("bindings/_mojolearn.mojo", "bindings/_mojolearn_core_host.mojo")},
+    **{("lr_schedule_series", src): (
+        "owed", [],
+        "Native schedule_values/schedule_list calls this retained entry, but the existing "
+        "sequence-lr-schedulers lane hashes only scalar bits_at calls. Add consumed lr_values/lrs "
+        "identity coverage; native unit-test success alone does not supply that lane/reference.")
+       for src in ("bindings/_mojolearn.mojo", "bindings/_mojolearn_core_host.mojo")},
+    **{(entry, src): (
+        "covered", [lane],
+        "Source reach: " + operation + " -> _OPT_NATIVE(" + route + ") -> optimizer_native "
+        "-> retained " + entry + "; selected training binding maps to training_host on CPU. "
+        "The named lane consumes the changed output. This is not new execution or fault evidence.")
+       for src in ("bindings/_mojolearn_training.mojo", "bindings/_mojolearn_training_host.mojo")
+       for entry, lane, operation, route in (
+           ("optimizer_door_step", "optim-sgd", "SGD.step", "step"),
+           ("optimizer_door_state", "optim-maximize", "SGD.exp_avg", "state"),
+           ("optimizer_door_clip", "optim-adam-clip", "training.clip_grad_norm_", "clip"),
+           ("optimizer_door_accumulate", "grad-accumulation", "training.accumulate_grads", "accumulate"))},
+    **{(entry, src): (
+        "owed", [],
+        "Native public optimizer route " + route + " calls this retained entry; the existing "
+        "bare-optimizer lanes do not exercise this operation. Samba and sequence optimizer "
+        "checkpoint lanes use different owners/entries. Add a lane consuming this operation's "
+        "state or output; accepted public-operation unit tests remain separate evidence.")
+       for src in ("bindings/_mojolearn_training.mojo", "bindings/_mojolearn_training_host.mojo")
+       for entry, route in (("optimizer_door_io", "io/raw_io/param_device"),
+                            ("optimizer_door_state_set", "state_set"),
+                            ("optimizer_door_load_state", "load"),
+                            ("optimizer_door_zero", "zero"))},
+    **{(entry, "bindings/_mojolearn_x_sequence.mojo"): (
+        "covered", ["sequence-device-tensor"],
+        "Source reach on a GPU column: sequence-device-tensor consumes to_device, tensor.copy "
+        "and tensor download through _OPT_NATIVE(seqdev_*) -> sequence_device_operation -> "
+        "retained " + entry + ". CPU's host-array route does not qualify this device entry. "
+        "Source accounting only; retained execution/reference/fault scopes remain separate.")
+       for entry in ("seq_tensor_upload", "seq_tensor_download", "seq_tensor_copy")},
+    ("seq_tensor_free", "bindings/_mojolearn_x_sequence.mojo"): (
+        "owed", [],
+        "Native sequence-device close/finalization and exception cleanup release this handle. "
+        "The existing round-trip lane hashes values, not proof that releases occurred. Retained "
+        "lifecycle unit tests do not replace release/failure-path fault qualification."),
+})
+
+
 #: (public, op) -> (status, lanes, why) for the public methods.
 PY_ANNOTATIONS = {
     ("mojolearn.models.ParallelCausalLM", "generate"): (
@@ -1561,7 +1616,8 @@ def render_markdown(audit, path):
       "helpers and property probes (the harness's shared helpers excluded), the package definitions those name "
       "(resolved through imports, methods of reached classes by attribute name, import-time calls, module tables, "
       "`name + \"_suffix\"` composition), or the public method walk of tools/public_runtime_inventory.py. It is "
-      "static: a reach is a call path, not a run. The new lanes were run; the rest rest on their recorded cells.")
+      "static: a reach is a call path, not a run. New and existing lanes require separately retained execution, "
+      "reference and installed-package records for each claimed target and option; this table does not admit them.")
     w("- A row is ARMED when a definition in its export's closure reads a `MOJOLEARN_*SABOTAGE*` define or is "
       "edited by a `*/sabotage/*.patch`. `CPU gate HOST_SABOTAGE` is the arm the CPU identity gate builds and "
       "requires to move every covered part; family defines and seam patches are their checks' arms; coverage arms "
