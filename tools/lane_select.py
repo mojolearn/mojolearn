@@ -5104,8 +5104,8 @@ def _metadata_registry_guard(rel, name, mutators):
     # are never called during this connection; future source changes still
     # invalidate the proof, including metadata-dependent global side effects.
     reviewed_bridges = {
-        '_native_maxabs_bridge': '9e31eb82df70c139a9716bbdeffdd36bba6b95a3acb8cd9956a2c5733051a015',
-        '_native_robust_bridge': 'ef2caa2953a5f5ccba503db2aab76b1cc76b4829bdce98e4026a96abd336af8f',
+        '_native_maxabs_bridge': '48123dfade33bd12f7bbd588510a8a68e83626ab1af56c7e0187bd95d07d55e5',
+        '_native_robust_bridge': '66c41f8fa81b902ee25affd66f20784e660fedd7f6dd05e87b26c61a8f584b8f',
     }
     for bridge_name, expected_bridge in reviewed_bridges.items():
         bridge = _parse('python/mojolearn/' + bridge_name + '.py')
