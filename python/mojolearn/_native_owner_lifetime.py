@@ -21,4 +21,8 @@ def connect_owner_context(context):
         raise TypeError("native owner admission requires the native weak-reference callback descriptor")
     context.update(owner_array_slots=slots, owner_getweakrefs=weakref.getweakrefs,
                    owner_weakref_class=weakref.ReferenceType, owner_weakref_callback=callback,
-                   owner_mmap_class=mmap.mmap, owner_method_class=MethodType)
+                   owner_mmap_class=mmap.mmap, owner_method_class=MethodType,
+                   owner_native_types=dict(type=type, object=object, list=list, tuple=tuple,
+                                           dict=dict, str=str, bytes=bytes, bytearray=bytearray,
+                                           bool=bool, int=int, float=float, complex=complex,
+                                           memoryview=memoryview))

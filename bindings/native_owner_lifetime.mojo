@@ -40,7 +40,7 @@ def _released_dtype(value: PythonObject, context: PythonObject, depth: Int) rais
             # application-controlled dictionary keys.
             for mapping in [value.metadata, value.fields]:  # driver-loop: NumPy-owned dictionary proxies
                 if mapping is not None:
-                    var pairs = py_call(Python.import_module("builtins").list,mapping.items())
+                    var pairs = py_call(context["owner_native_types"]["list"],mapping.items())
                     for j in range(len(pairs)):  # driver-loop: native dtype key/value ownership, no key lookups
                         native_release_admit(pairs[j][0],context,depth+1)
                         native_release_admit(pairs[j][1],context,depth+1)
@@ -79,42 +79,42 @@ def native_release_admit(value: PythonObject, context: PythonObject, depth: Int 
     # Reinitialization decrements the previous fields' references. Admit the
     # complete owners that could be destroyed before replacing any field.
     # Keeping an identical value is handled by the caller and drops no owner.
-    var b = Python.import_module("builtins")
+    var b = context["owner_native_types"]
     var cls = py_type(value)
-    if value is None or cls is b.str or cls is b.bytes or cls is b.bytearray or cls is b.bool or cls is b.int or cls is b.float or cls is b.complex:
+    if value is None or cls is b["str"] or cls is b["bytes"] or cls is b["bytearray"] or cls is b["bool"] or cls is b["int"] or cls is b["float"] or cls is b["complex"]:
         return
     if depth > 64:
         raise Error("TypeError: native owner reinitialization owner nesting exceeds the native bound")
     native_release_weakrefs(value,context)
-    if cls is b.tuple or cls is b.list:
+    if cls is b["tuple"] or cls is b["list"]:
         for i in range(len(value)):  # driver-loop: old metadata containers may own application finalizers transitively
             native_release_admit(value[i],context,depth+1)
         return
-    if cls is b.dict:
-        var pairs = py_call(b.list,value.items())
+    if cls is b["dict"]:
+        var pairs = py_call(b["list"],value.items())
         for i in range(len(pairs)):  # driver-loop: inspect dictionary owners without key equality lookups
             native_release_admit(pairs[i][0],context,depth+1)
             native_release_admit(pairs[i][1],context,depth+1)
         return
     if cls is context["array_class"]:
-        var ancestry = py_call(b.type.__dict__["__mro__"].__get__,cls)
-        if len(ancestry) != 2 or ancestry[1] is not b.object:
+        var ancestry = py_call(b["type"].__dict__["__mro__"].__get__,cls)
+        if len(ancestry) != 2 or ancestry[1] is not b["object"]:
             raise Error("TypeError: native owner reinitialization cannot inherit Array lifecycle hooks")
-        var mapping = py_call(b.type.__dict__["__dict__"].__get__,cls)
-        var keys = py_call(b.list,mapping)
+        var mapping = py_call(b["type"].__dict__["__dict__"].__get__,cls)
+        var keys = py_call(b["list"],mapping)
         for i in range(len(keys)):  # driver-loop: reject key protocols before class-owner lookup
-            if py_type(keys[i]) is not b.str:
+            if py_type(keys[i]) is not b["str"]:
                 raise Error("TypeError: native owner reinitialization requires native Array class keys")
         if py_get(mapping,"__del__") is not None or py_get(mapping,"__getattribute__") is not None:
             raise Error("TypeError: native owner reinitialization cannot invoke Array lifecycle hooks")
-        var owners = py_call(b.list,context["owner_array_slots"])
+        var owners = py_call(b["list"],context["owner_array_slots"])
         for i in range(len(owners)):  # driver-loop: all Array slots own references, including otherwise unused metadata
             var descriptor = context["owner_array_slots"][owners[i]]
             if py_get(mapping,owners[i]) is not descriptor:
                 raise Error("TypeError: native owner reinitialization requires native Array owner slots")
             native_release_admit(py_call(descriptor.__get__,value,cls),context,depth+1)
         return
-    if cls is b.memoryview:
+    if cls is b["memoryview"]:
         native_release_admit(value.obj,context,depth+1)
         return
     if cls is context["array_type"] or cls is context["owner_mmap_class"]:

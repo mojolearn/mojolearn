@@ -32,6 +32,7 @@ PUBLIC_TESTS = {
     "test_training_device_native_allocator.py": "Native training device owner allocation independent of mutable object constructors",
     "test_host_density_constructors_native.py": "Public host KDE and IsolationForest constructor options, inherited modes and safe reinitialization",
     "test_device_rows_materialize_native.py": "Public DeviceRows materialization, typed resident snapshots, cache aliases, conversion failures and native hook refusals",
+    "test_native_owner_builtin_identity.py": "Public DeviceRows reinitialization preserves native retained-owner builtin identities",
     "test_training_embedding_public_native.py": "Public embedding forward/backward preparation, index conversion, vocabulary options and owned outputs",
     "test_optimizer_native_array_ownership.py": "Native output Array storage, retained checkpoint ownership and device downloads",
     "test_device_rows_metadata_native.py": "DeviceRows constructor and length metadata ownership and native hook refusals",
@@ -215,6 +216,9 @@ def test_applicability(selected, vendor):
         if name == "test_device_rows_metadata_native.py":
             scope.update(execution_route="native DeviceRows metadata owner on every package backend",
                          coverage_limit="Constructor and length only; materialize and resident context lifecycle remain separate")
+        if name == "test_native_owner_builtin_identity.py":
+            scope.update(execution_route="native DeviceRows metadata owner on every package backend",
+                         coverage_limit="Retained-owner release admission during public reinitialization only; cache allocation and resident close remain separate")
         if name == "test_optimizer_native_array_ownership.py":
             scope.update(execution_route="native training output allocation; device downloads only on GPU",
                          coverage_limit="Published Array buffer ownership only; public __array__ protocol and allocation failure injection remain separate")
