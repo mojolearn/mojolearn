@@ -52,7 +52,7 @@ _CHILD = textwrap.dedent('''
                 o.step([np.full((4, 3), 0.1 * (k + 1), dtype=np.float32)])
             out += [p]
         W = np.ones((4, 3), dtype=np.float32)
-        a = ml.Adafactor([W])                                                         # adafactor_step
+        a = ml.Adafactor([W])                                                         # seq_adafactor_step
         for k in range(3):
             a.step([np.full((4, 3), 0.1 * (k + 1), dtype=np.float32)])
         out += [W]
