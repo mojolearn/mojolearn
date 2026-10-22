@@ -403,19 +403,19 @@ class _HostKNN(_HostBound):
     classifier and the regressor refuse 'rbc' in their own `load`."""
 
 
-class HostNearestNeighbors(_HostKNN, NearestNeighbors):
+class HostNearestNeighbors(_NativeArchiveLoad, _HostKNN, NearestNeighbors):
     _HOST_ARRAYS = ("_index",)
 
 
-class HostKNeighborsClassifier(_HostKNN, KNeighborsClassifier):
+class HostKNeighborsClassifier(_NativeArchiveLoad, _HostKNN, KNeighborsClassifier):
     _HOST_ARRAYS = ("_index", "_y_cols")
 
 
-class HostKNeighborsRegressor(_HostKNN, KNeighborsRegressor):
+class HostKNeighborsRegressor(_NativeArchiveLoad, _HostKNN, KNeighborsRegressor):
     _HOST_ARRAYS = ("_index", "_y_cols")
 
 
-class HostRadiusNeighbors(_HostBound, RadiusNeighbors):
+class HostRadiusNeighbors(_NativeArchiveLoad, _HostBound, RadiusNeighbors):
     """`radius_neighbors` of a saved RadiusNeighbors through the core host
     binding's radius_neighbors_count and radius_neighbors_fill (the radius
     training lanes' ball cover restated as an exhaustive scan)."""

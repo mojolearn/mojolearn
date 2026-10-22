@@ -10,6 +10,7 @@ def connect(context, formats):
     from .cluster import _METRIC_NAMES, _INIT_NAMES
     from .density import _METRICS
     from ._hierarchy_impl import _ALL_METRICS
+    from .neighbors import _METRIC_TABLE, _RBC_METRIC_TABLE
 
     archive = dict(context)
     archive.update(_numpy_free_context())
@@ -22,6 +23,8 @@ def connect(context, formats):
     archive["host_archive_kmeans_starts"] = dict(_INIT_NAMES)
     archive["host_archive_dbscan_metrics"] = tuple(_METRICS)
     archive["host_archive_agglo_metrics"] = tuple(_ALL_METRICS)
+    archive["host_archive_neighbor_metrics"] = dict(_METRIC_TABLE)
+    archive["host_archive_rbc_metrics"] = dict(_RBC_METRIC_TABLE)
     archive["host_archive_formats"] = {
         fmt: dict(classes) for fmt, classes in formats.items()  # glue: copy the fixed native class registry once at package connection
     }

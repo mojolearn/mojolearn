@@ -4,11 +4,12 @@
 # router is switched only after every existing format has a native builder.
 from std.python import Python, PythonObject
 from std.memory import bitcast
+from std.math import isfinite
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.sequential_description import sequential_fields
 from bindings.classical_archive_read import classical_archive_read, classical_archive_build, _archive_exact, _archive_string
 from bindings.classical_arrays import classical_i64, classical_f64, classical_wrap_array, classical_array, classical_typed, classical_address
-from core.host_archive_impl import host_archive_copy_f32
+from core.host_archive_impl import host_archive_copy_f32, host_archive_unique_i32
 from bindings.scaler_lifecycle_native import scaler_archive_build
 
 
@@ -690,6 +691,111 @@ def host_archive_hdbscan(cls: PythonObject, arrays: PythonObject, context: Pytho
     return model
 
 
+def host_archive_neighbor_metric(metric: PythonObject, p: Float64, rbc: Bool,
+                                  context: PythonObject) raises -> PythonObject:
+    var table = context["host_archive_rbc_metrics" if rbc else "host_archive_neighbor_metrics"]
+    var key = py_call(metric.lower)
+    if not py_contains(table, key):
+        raise Error("saved neighbor metric is unsupported by its search algorithm")
+    var code = Int(py=table[key])
+    var arg = Float64(2.0)
+    if code == 9:
+        if not isfinite(p) or (p < 1.0 if rbc else p < 1.1754943508222875e-38):
+            raise Error("saved Minkowski p is outside the supported search algorithm range")
+        arg = p
+    elif p != 2.0:
+        raise Error("saved p is read only by the Minkowski metric")
+    return Python.tuple(code, arg)
+
+
+def host_archive_neighbors(cls: PythonObject, arrays: PythonObject, kind: Int,
+                           context: PythonObject) raises -> PythonObject:
+    # kind: 0 nearest, 1 classifier, 2 regressor, 3 radius.
+    var radius = kind == 3
+    var meta = host_archive_count(arrays, "meta", "<i8", 2 if radius else 6, context, True)
+    var parameter = host_archive_count(arrays, "p", "<f8", 1, context, True)
+    var p = classical_f64(parameter, 0)
+    var nf = classical_i64(meta, 0)
+    var n = classical_i64(meta, 1)
+    var metric = _archive_string(arrays, "metric", context)
+    var algorithm = _archive_string(arrays, "algorithm", context)
+    var rbc = radius or String(algorithm) == "rbc"
+    if radius:
+        if String(algorithm) != "auto" and String(algorithm) != "rbc":
+            raise Error("RadiusNeighbors requires auto or rbc search")
+    elif String(algorithm) != "auto" and String(algorithm) != "brute" and String(algorithm) != "rbc":
+        raise Error("saved neighbors require brute, auto or rbc search")
+    if rbc and (kind == 1 or kind == 2):
+        raise Error("saved neighbor classifiers and regressors require brute search")
+    var resolved = host_archive_neighbor_metric(metric, p, rbc, context)
+    var weights = PythonObject(None)
+    if kind == 1 or kind == 2:
+        weights = _archive_string(arrays, "weights", context)
+        if String(weights) != "uniform" and String(weights) != "distance":
+            raise Error("saved neighbor weights must be uniform or distance")
+        if String(weights) == "distance" and String(py=py_call(metric.lower)) == "inner_product":
+            raise Error("distance weights require a distance rather than inner product similarity")
+    if n < 1 or nf < 1:
+        raise Error("saved neighbor index must be nonempty")
+    var index = host_archive_shape(arrays, "index", "<f4", Python.tuple(n, nf), context)
+    var model = host_archive_object(cls, arrays, context)
+    var fields = sequential_fields(model)
+    host_archive_mode(arrays, fields, context)
+    py_setitem(fields, "metric", metric)
+    py_setitem(fields, "algorithm", algorithm)
+    py_setitem(fields, "p", p)
+    py_setitem(fields, "_index", index)
+    py_setitem(fields, "n_samples_fit_", n)
+    py_setitem(fields, "n_features_in_", nf)
+    if radius:
+        var saved_radius = host_archive_count(arrays, "radius", "<f8", 1, context, True)
+        var r = classical_f64(saved_radius, 0)
+        if not isfinite(r) or r <= 0:
+            raise Error("RadiusNeighbors radius must be positive and finite")
+        py_setitem(fields, "radius", r)
+        py_setitem(fields, "_metric_value", resolved[0])
+        py_setitem(fields, "_metric_arg", resolved[1])
+        return model
+    py_setitem(fields, "n_neighbors", classical_i64(meta, 2))
+    py_setitem(fields, "query_tile", classical_i64(meta, 3))
+    py_setitem(fields, "used_query_tile_", PythonObject(None))
+    if kind == 0:
+        return model
+    py_setitem(fields, "weights", weights)
+    var outputs = classical_i64(meta, 5)
+    var y = host_archive_shape(arrays, "y_cols", "<i4" if kind == 1 else "<f4", Python.tuple(outputs, n), context)
+    py_setitem(fields, "_y_cols", y)
+    py_setitem(fields, "outputs_2d_", classical_i64(meta, 4) != 0)
+    if kind == 1:
+        var counts = host_archive_count(arrays, "class_counts", "<i8", outputs, context, True)
+        var saved_classes = _archive_exact(arrays, "classes", "<i8", context)
+        if Int(py=saved_classes.ndim) != 1:
+            raise Error("saved neighbor classes must be a one-dimensional vector")
+        var available = Int(py=saved_classes.size)
+        var restored = Python.list()
+        var off = 0
+        for output in range(outputs):  # driver-loop: saved classifier output columns
+            var count = classical_i64(counts, output)
+            if count < 0 or count > available - off:
+                raise Error("neighbor class_counts does not match saved classes")
+            var unique = host_archive_unique_i32(Int(py=classical_address(y)) + output * Int(py=y.strides[0]),
+                                                 Int(py=y.strides[1]), n)
+            if len(unique) != count:
+                raise Error("saved neighbor classes do not match distinct labels")
+            var labels = Python.list()
+            for i in range(count):  # driver-loop: sorted distinct class label metadata
+                var label = Int(unique[i])
+                if classical_i64(saved_classes, off + i) != label:
+                    raise Error("saved neighbor classes are not the sorted unique labels")
+                _ = py_call(labels.append, label)
+            _ = py_call(restored.append, labels)
+            off += count
+        if off != available:
+            raise Error("neighbor class_counts does not consume saved classes")
+        py_setitem(fields, "_classes_list", restored)
+    return model
+
+
 def host_archive_build(path: PythonObject, context: PythonObject,
                        requested_class: PythonObject = PythonObject(None)) raises -> PythonObject:
     # This deliberately separate private entry allows each schema to be
@@ -752,6 +858,10 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         model = host_archive_ivf(cls, arrays, context)
     elif fmt == "mojolearn-hdbscan-2":
         model = host_archive_hdbscan(cls, arrays, context)
+    elif fmt == "mojolearn-radius-1":
+        model = host_archive_neighbors(cls, arrays, 3, context)
+    elif fmt == "mojolearn-knn-1":
+        model = host_archive_neighbors(cls, arrays, 0 if String(estimator) == "NearestNeighbors" else (1 if String(estimator) == "KNeighborsClassifier" else 2), context)
     else:
         raise Error("native host archive schema has not been implemented: " + fmt + "/" + String(estimator))
     if requested_class is None:
