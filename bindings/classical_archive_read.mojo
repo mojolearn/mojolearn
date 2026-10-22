@@ -57,11 +57,36 @@ def _archive_read_path(value: PythonObject, context: PythonObject) raises -> Pyt
     return normalized if len(normalized) != 0 else PythonObject(".")
 
 
-def _archive_read_repr_seen(value: PythonObject, context: PythonObject, trail: PythonObject) raises -> String:
+def _archive_repr_types() raises -> PythonObject:
+    # Public constructors establish immutable builtin identities without
+    # consulting mutable builtins.complex/set/frozenset module attributes.
+    ref cpy = Python().cpython()
+    var complex_ptr = cpy.lib.get_function[PyObjectPtr]("PyComplex_FromDoubles")(Float64(0), Float64(0))
+    if not complex_ptr:
+        var failure = stash_python_error()
+        raise failure^
+    var complex_value = PythonObject(from_owned=complex_ptr)
+    var set_ptr = cpy.lib.get_function[PyObjectPtr]("PySet_New")(PyObjectPtr())
+    if not set_ptr:
+        var failure = stash_python_error()
+        raise failure^
+    var set_value = PythonObject(from_owned=set_ptr)
+    var frozen_ptr = cpy.lib.get_function[PyObjectPtr]("PyFrozenSet_New")(PyObjectPtr())
+    if not frozen_ptr:
+        var failure = stash_python_error()
+        raise failure^
+    var frozen_value = PythonObject(from_owned=frozen_ptr)
+    return Python.tuple(py_type(complex_value), py_type(set_value), py_type(frozen_value))
+
+
+def _archive_read_repr_body(value: PythonObject, context: PythonObject, trail: PythonObject,
+                            native_types: PythonObject) raises -> String:
     var cls = py_type(value)
     if (cls is py_type(PythonObject("")) or cls is context["archive_bytes_type"]
             or cls is py_type(PythonObject(0)) or cls is py_type(PythonObject(True))
             or cls is py_type(PythonObject(Float64(0)))
+            or cls is native_types[0] or cls is context["archive_bytearray_type"]
+            or cls is context["archive_memoryview_type"]
             or value is None):
         return _archive_builtin_repr(value)
     var paths = context["archive_path_types"]
@@ -69,6 +94,49 @@ def _archive_read_repr_seen(value: PythonObject, context: PythonObject, trail: P
         # pathlib.__repr__ is Python; format the admitted native path text.
         var normalized = _archive_read_path(value, context)
         return ("PosixPath(" if cls is paths[0] else "PurePosixPath(") + _archive_builtin_repr(normalized) + ")"
+    var list_type = py_type(Python.list())
+    var is_list = cls is list_type
+    var is_tuple = cls is py_type(Python.tuple())
+    var is_dict = cls is py_type(Python.dict())
+    var is_set = cls is native_types[1]
+    var is_frozen = cls is native_types[2]
+    if is_list or is_tuple or is_dict or is_set or is_frozen:
+        # Match the builtin container recursion spellings and iteration order.
+        # Format members here so a nested standard Path never calls pathlib's
+        # Python repr, and a foreign member is refused before its own hook.
+        for previous in range(len(trail)):  # driver-loop: current representation ancestry
+            if value is trail[previous]:
+                if is_list:
+                    return "[...]"
+                if is_tuple:
+                    return "(...)"
+                if is_dict:
+                    return "{...}"
+                return "frozenset(...)" if is_frozen else "set(...)"
+        var child_trail = py_call(list_type, trail)
+        _ = py_call(child_trail.append, value)
+        var members = value
+        if is_dict:
+            members = py_call(list_type, py_call(value.items))
+        elif is_set or is_frozen:
+            members = py_call(list_type, value)
+        var size = len(members)
+        if size == 0:
+            return "[]" if is_list else ("()" if is_tuple else ("{}" if is_dict else ("frozenset()" if is_frozen else "set()")))
+        var result = String("[" if is_list else ("(" if is_tuple else ("frozenset({" if is_frozen else "{")))
+        for i in range(size):  # driver-loop: exact native container members in stored order
+            if i:
+                result += ", "
+            if is_dict:
+                result += _archive_read_repr_seen(members[i][0], context, child_trail, native_types)
+                result += ": "
+                result += _archive_read_repr_seen(members[i][1], context, child_trail, native_types)
+            else:
+                result += _archive_read_repr_seen(members[i], context, child_trail, native_types)
+        if is_tuple and size == 1:
+            result += ","
+        result += "]" if is_list else (")" if is_tuple else ("})" if is_frozen else "}"))
+        return result
     var types = context["archive_file_types"]
     if cls is types[0]:
         return _archive_builtin_repr(value)  # BytesIO has no caller-owned name.
@@ -82,11 +150,24 @@ def _archive_read_repr_seen(value: PythonObject, context: PythonObject, trail: P
         # Never let the C file repr dispatch an arbitrary name.__repr__ hook.
         for previous in range(len(trail)):  # driver-loop: native file-name chain
             if value is trail[previous]:
-                # A cycle consists solely of the exact C file types already
-                # admitted here. Let their native repr recursion guard retain
-                # its existing result/error; no Python name hook is reachable.
-                return _archive_builtin_repr(value)
-        _ = py_call(trail.append, value)
+                # CPython's file repr reports this error on Py_ReprEnter.
+                # Re-entering the builtin repr here would revisit unchecked
+                # members in a mixed file/container/Path name graph.
+                var label = "FileIO" if i == 1 else ("BufferedReader" if i == 2 else ("BufferedWriter" if i == 3 else "BufferedRandom"))
+                raise Error("RuntimeError: reentrant call inside _io." + label + ".__repr__")
+        var child_trail = py_call(list_type, trail)
+        _ = py_call(child_trail.append, value)
+        # Buffered .name delegates to its exact native FileIO owner. The raw
+        # file dictionary is mutable: even native attribute lookup can call a
+        # foreign key's __eq__. Admit storage and keys before looking up name.
+        var raw_file = value if i == 1 else value.raw
+        var file_fields = _archive_model_fields(raw_file)
+        if py_type(file_fields) is not py_type(Python.dict()):
+            raise Error("TypeError: archive file names require native dictionary storage")
+        var file_keys = py_call(list_type, file_fields)
+        for key in range(len(file_keys)):  # driver-loop: native FileIO metadata keys
+            if py_type(file_keys[key]) is not py_type(PythonObject("")):
+                raise Error("TypeError: archive file metadata requires exact string keys without Python comparison hooks")
         var stored_name = PythonObject(None)
         try:
             stored_name = value.name
@@ -94,7 +175,7 @@ def _archive_read_repr_seen(value: PythonObject, context: PythonObject, trail: P
             # An exact FileIO can have its ordinary name field deleted. Its
             # native repr then displays the descriptor; no name hook exists.
             return _archive_builtin_repr(value)
-        var name = _archive_read_repr_seen(stored_name, context, trail)
+        var name = _archive_read_repr_seen(stored_name, context, child_trail, native_types)
         if i == 1:
             return "<_io.FileIO name=" + name + " mode=" + _archive_builtin_repr(value.mode) + " closefd=" + ("True" if Bool(py=value.closefd) else "False") + ">"
         var label = "BufferedReader" if i == 2 else ("BufferedWriter" if i == 3 else "BufferedRandom")
@@ -102,8 +183,26 @@ def _archive_read_repr_seen(value: PythonObject, context: PythonObject, trail: P
     raise Error("TypeError: archive error paths require native names without Python repr callbacks")
 
 
+def _archive_read_repr_seen(value: PythonObject, context: PythonObject, trail: PythonObject,
+                            native_types: PythonObject) raises -> String:
+    # Use the interpreter's supported recursion guard, not an arbitrary native
+    # depth cap or an unchecked Mojo recursion through caller-owned metadata.
+    ref cpy = Python().cpython()
+    var location = String(" while getting the repr of an object")
+    if cpy.lib.get_function[Int32]("Py_EnterRecursiveCall")(location.as_c_string_slice().unsafe_ptr()) != 0:
+        var failure = stash_python_error()
+        raise failure^
+    try:
+        var result = _archive_read_repr_body(value, context, trail, native_types)
+        cpy.lib.get_function[NoneType]("Py_LeaveRecursiveCall")()
+        return result
+    except failure:
+        cpy.lib.get_function[NoneType]("Py_LeaveRecursiveCall")()
+        raise failure^
+
+
 def _archive_read_repr(value: PythonObject, context: PythonObject) raises -> String:
-    return _archive_read_repr_seen(value, context, Python.list())
+    return _archive_read_repr_seen(value, context, Python.list(), _archive_repr_types())
 
 
 def _read_uint(raw: PythonObject, at: Int, width: Int) raises -> Int:

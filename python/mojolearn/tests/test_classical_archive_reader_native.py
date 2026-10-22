@@ -268,6 +268,209 @@ def test_public_load_error_preserves_native_file_repr_cycle_exception(tmp_path):
         value.close()
 
 
+@pytest.mark.parametrize("kind", ["fileio", "buffered"])
+@pytest.mark.parametrize("name_kind", [
+    "complex", "complex_special", "bytearray", "memoryview", "list", "tuple",
+    "tuple_singleton", "dict", "set", "frozenset", "empty_list", "empty_tuple",
+    "empty_dict", "empty_set", "empty_frozenset", "nested_paths",
+])
+def test_public_load_error_preserves_builtin_container_names(tmp_path, kind, name_kind):
+    values = {
+        "complex": complex(-0., 1.25), "complex_special": complex(float("inf"), float("nan")),
+        "bytearray": bytearray(b"a\x00\xff"), "memoryview": memoryview(b"owned"),
+        "list": [1, "x", b"\xff", None], "tuple": (1., 2j, False), "tuple_singleton": ("only",),
+        "dict": {"one": [1, 2], 3: (None,)}, "set": {1, 3j, "x"},
+        "frozenset": frozenset((2, 4j, "y")), "empty_list": [], "empty_tuple": (),
+        "empty_dict": {}, "empty_set": set(), "empty_frozenset": frozenset(),
+        "nested_paths": {PurePosixPath("//a/./b"): [Path("a/../b"), {PurePosixPath("c")}]} ,
+    }
+    raw = _input(tmp_path, _payload(estimator="Bogus"), "fileio")
+    value = raw if kind == "fileio" else io.BufferedReader(raw)
+    raw.name = values[name_kind]
+    try:
+        expected = f"mojolearn: {value!r} was saved by Bogus, not HostLinearRegression"
+        audit = audit_native_call(HostLinearRegression.load, value)
+        _refused(audit, ValueError)
+        assert str(audit.exception) == expected
+        assert raw.name is values[name_kind] and not value.closed
+    finally:
+        raw.name = "restored"
+        value.close()
+
+
+@pytest.mark.parametrize("kind", ["fileio", "buffered"])
+@pytest.mark.parametrize("cycle", ["list", "dict", "tuple_list"])
+def test_public_load_error_preserves_native_container_cycles(tmp_path, kind, cycle):
+    raw = _input(tmp_path, _payload(estimator="Bogus"), "fileio")
+    value = raw if kind == "fileio" else io.BufferedReader(raw)
+    name = {} if cycle == "dict" else []
+    if cycle == "dict":
+        name["cycle"] = name
+    else:
+        name.append(name if cycle == "list" else (name,))
+    raw.name = name
+    try:
+        expected = f"mojolearn: {value!r} was saved by Bogus, not HostLinearRegression"
+        audit = audit_native_call(HostLinearRegression.load, value)
+        _refused(audit, ValueError)
+        assert str(audit.exception) == expected
+    finally:
+        raw.name = "restored"
+        value.close()
+        name.clear()
+
+
+@pytest.mark.parametrize("kind", ["fileio", "buffered"])
+@pytest.mark.parametrize("container", [list, dict])
+def test_public_load_error_preserves_file_container_cycle_exception(tmp_path, kind, container):
+    raw = _input(tmp_path, _payload(estimator="Bogus"), "fileio")
+    value = raw if kind == "fileio" else io.BufferedReader(raw)
+    raw.name = [value] if container is list else {"file": value}
+    try:
+        with pytest.raises(RuntimeError) as expected:
+            repr(value)
+        audit = audit_native_call(HostLinearRegression.load, value)
+        _refused(audit, RuntimeError)
+        assert str(audit.exception) == str(expected.value)
+    finally:
+        raw.name = "restored"
+        value.close()
+
+
+@pytest.mark.parametrize("kind", ["fileio", "buffered"])
+def test_public_load_error_repeated_native_file_names_are_not_cycles(tmp_path, kind):
+    raw = _input(tmp_path, _payload(estimator="Bogus"), "fileio")
+    value = raw if kind == "fileio" else io.BufferedReader(raw)
+    peer = io.FileIO(tmp_path / "peer.bin", "w+")
+    peer.name = PurePosixPath("//a/./b")
+    raw.name = [peer, peer]
+    try:
+        expected = f"mojolearn: {value!r} was saved by Bogus, not HostLinearRegression"
+        audit = audit_native_call(HostLinearRegression.load, value)
+        _refused(audit, ValueError)
+        assert str(audit.exception) == expected
+    finally:
+        raw.name = "restored"
+        peer.name = "restored"
+        value.close()
+        peer.close()
+
+
+@pytest.mark.parametrize("kind", ["fileio", "buffered"])
+@pytest.mark.parametrize("name_kind", ["list", "tuple", "dict_key", "dict_value", "set", "frozenset", "list_subclass"])
+def test_public_load_error_refuses_nested_foreign_name_hooks(tmp_path, kind, name_kind):
+    touched = []
+    class Foreign:
+        def __repr__(self):
+            touched.append("repr")
+            return "foreign"
+    class ForeignList(list):
+        def __iter__(self):
+            touched.append("iter")
+            return super().__iter__()
+        def __repr__(self):
+            touched.append("repr")
+            return "foreign-list"
+    foreign = Foreign()
+    names = {"list": [foreign], "tuple": (foreign,), "dict_key": {foreign: 1},
+             "dict_value": {"value": foreign}, "set": {foreign}, "frozenset": frozenset((foreign,)),
+             "list_subclass": ForeignList([1])}
+    raw = _input(tmp_path, _payload(estimator="Bogus"), "fileio")
+    value = raw if kind == "fileio" else io.BufferedReader(raw)
+    raw.name = names[name_kind]
+    try:
+        _refused(audit_native_call(HostLinearRegression.load, value), TypeError)
+        assert touched == [] and not value.closed
+    finally:
+        raw.name = "restored"
+        value.close()
+
+
+@pytest.mark.parametrize("kind", ["fileio", "buffered"])
+@pytest.mark.parametrize("nested", [False, True])
+@pytest.mark.parametrize("key_kind", ["foreign", "str_subclass"])
+def test_public_load_error_refuses_file_name_dictionary_key_hooks(tmp_path, kind, nested, key_kind):
+    raw = _input(tmp_path, _payload(estimator="Bogus"), "fileio")
+    value = raw if kind == "fileio" else io.BufferedReader(raw)
+    peer = io.FileIO(tmp_path / "peer.bin", "w+") if nested else raw
+    touched = []
+    class Foreign:
+        def __hash__(self):
+            return hash("name")
+        def __eq__(self, other):
+            touched.append("comparison")
+            return other == "name"
+    class NativeSubclass(str):
+        __hash__ = Foreign.__hash__
+        __eq__ = Foreign.__eq__
+    key = Foreign() if key_kind == "foreign" else NativeSubclass("name")
+    del peer.name
+    peer.__dict__[key] = "hidden-name"
+    if nested:
+        raw.name = [peer]
+    touched.clear()
+    try:
+        _refused(audit_native_call(HostLinearRegression.load, value), TypeError)
+        assert touched == []
+    finally:
+        peer.__dict__.clear()
+        peer.name = "restored"
+        raw.name = "restored"
+        value.close()
+        if nested:
+            peer.close()
+
+
+def test_public_load_error_bounds_deep_native_name_recursion(tmp_path):
+    # CPython 3.14 guards native recursion by C stack, independently of the
+    # Python recursion-limit setting. Discover an actual native repr refusal
+    # in an isolated process; a fixed 2*sys.getrecursionlimit() was not one.
+    # The search bound is a fixture memory budget, never a product depth cap.
+    path = tmp_path / "deep.npz"
+    path.write_bytes(_payload(estimator="Bogus"))
+    code = r'''
+import io, json, sys
+from mojolearn._classical_host import HostLinearRegression
+from mojolearn._verify_native_runtime import audit_native_call
+value = io.FileIO(sys.argv[1], "rb")
+try:
+    for exponent in range(7, 19):
+        name = []
+        for _ in range(2**exponent):
+            name = [name]
+        value.name = name
+        try:
+            repr(value)
+        except RecursionError:
+            depth = 2**exponent
+            break
+    else:
+        raise AssertionError("native repr guard not reached within fixture memory budget")
+    audit = audit_native_call(HostLinearRegression.load, value)
+    assert type(audit.exception) is RecursionError, audit.report()
+    assert audit.result is None
+    report = audit.report()
+    assert not any(report[key] for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads")), report
+    # Unwinding must leave the supported recursion guard balanced. A shallow
+    # exact display immediately after the refusal must still succeed.
+    value.name = [[1], [2]]
+    expected = f"mojolearn: {value!r} was saved by Bogus, not HostLinearRegression"
+    audit = audit_native_call(HostLinearRegression.load, value)
+    assert type(audit.exception) is ValueError, audit.report()
+    assert str(audit.exception) == expected
+    report = audit.report()
+    assert not any(report[key] for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads")), report
+    print(json.dumps({"native_oracle_depth": depth, "python_recursion_limit": sys.getrecursionlimit()}))
+finally:
+    value.name = "restored"
+    value.close()
+'''
+    result = subprocess.run([sys.executable, "-c", code, str(path)], text=True,
+                            capture_output=True, timeout=60, check=False)
+    assert result.returncode == 0, result.stderr
+    assert json.loads(result.stdout)["native_oracle_depth"] > 0
+
+
 @pytest.mark.parametrize("cls", [LinearRegression, Ridge, HostLinearRegression, HostRidge])
 def test_public_load_allocates_the_connected_model_and_restores_ridge_settings(cls):
     extra = {"alpha": np.array([.375], "<f8")} if cls in (Ridge, HostRidge) else {}
