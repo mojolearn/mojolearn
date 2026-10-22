@@ -145,6 +145,19 @@ def test_explicit_host_unfitted_error_uses_its_native_exception_context():
     assert not audit.wrapper_work
 
 
+@pytest.mark.parametrize("inverse", [False, True])
+@pytest.mark.parametrize("with_mean,with_std", [(True, True), (True, False), (False, True)])
+def test_unseen_column_mask_survives_finite_transform_input(inverse, with_mean, with_std):
+    x = _data()
+    x[:, 1] = np.nan
+    model = ml.StandardScaler(with_mean=with_mean, with_std=with_std).fit(x)
+    source = np.nan_to_num(x)
+    operation = model.inverse_transform if inverse else model.transform
+    result = np.asarray(audit_native_call(operation, source).assert_native())
+    assert np.isnan(result[:, 1]).all()
+    assert np.isfinite(result[:, [0, 2, 3]]).all()
+
+
 def test_model_protocol_hooks_are_refused_before_they_run():
     calls = []
 
