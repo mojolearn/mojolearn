@@ -121,12 +121,7 @@ class DeviceCache:
     entry, `close()` all of them; both free on the device at once."""
 
     def __init__(self, binding, prefix):
-        self._put = getattr(binding, prefix + "_dev_put")
-        self._free = getattr(binding, prefix + "_dev_free")
-        self._live = getattr(binding, prefix + "_dev_live", None)
-        self._entries = {}
-        self.uploads = 0
-        self.hits = 0
+        return _ROWS_CALL(self, "cache_init", (binding, prefix), _ROWS_CONTEXT)
 
     @staticmethod
     def supports(binding, prefix):
@@ -146,14 +141,10 @@ class DeviceCache:
         return _ROWS_CALL(self, "cache_get", (arr,), _ROWS_CONTEXT)
 
     def release(self, arr):
-        hit = self._entries.pop(self._key(arr), None)
-        if hit is not None:
-            self._free(hit[0])
+        return _ROWS_CALL(self, "cache_release", (arr,), _ROWS_CONTEXT)
 
     def close(self):
-        entries, self._entries = self._entries, {}
-        for slot, _ in entries.values():  # glue: frees each cache slot
-            self._free(slot)
+        return _ROWS_CALL(self, "cache_close", (), _ROWS_CONTEXT)
 
     def live(self):
         """The binding store's live slot count (every cache on it)."""
@@ -166,8 +157,7 @@ class DeviceCache:
         return _ROWS_CALL(self, "cache_enter", (), _ROWS_CONTEXT)
 
     def __exit__(self, *exc):
-        self.close()
-        return False
+        return _ROWS_CALL(self, "cache_exit", exc, _ROWS_CONTEXT)
 
 
 class _Scope:
@@ -185,9 +175,7 @@ class _Scope:
         return c[0]
 
     def close(self):
-        caches, self.caches = self.caches, {}
-        for c, _ in caches.values():  # glue: closes each arena cache
-            c.close()
+        return _ROWS_CALL(self, "scope_close", (), _ROWS_CONTEXT)
 
 
 _LOCAL = threading.local()
@@ -204,16 +192,10 @@ class resident:
         self._scope = None
 
     def __enter__(self):
-        if getattr(_LOCAL, "scope", None) is None:
-            self._scope = _LOCAL.scope = _Scope(self.min_words)
-        return self
+        return _ROWS_CALL(self, "scope_enter", (), _ROWS_CONTEXT)
 
     def __exit__(self, *exc):
-        if self._scope is not None:
-            _LOCAL.scope = None
-            self._scope.close()
-            self._scope = None
-        return False
+        return _ROWS_CALL(self, "scope_exit", exc, _ROWS_CONTEXT)
 
     @staticmethod
     def stats():

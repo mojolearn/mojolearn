@@ -137,5 +137,14 @@ def connect():
                    cache_str_add=str.__add__,
                    cache_prefix_error_types=(type(None), bool, int, float, complex, bytes,
                                              bytearray, list, tuple, dict, set, frozenset, range))
+    # glue: retain the lifecycle owners' fixed identities (DeviceCache,
+    # resident scope, thread-local) and the input-preparation step a foreign
+    # fold owner (pandas, list, memoryview) already went through
+    from ._buffer import _materialize
+    context.update(cache_class=_arena_io.DeviceCache, cache_scope_class=_arena_io._Scope,
+                   cache_local=_arena_io._LOCAL, cache_object_new=object.__new__,
+                   arena_fold_materialize=_materialize)
     _arena_io._ROWS_CALL = call
     _arena_io._ROWS_CONTEXT = context
+    model_selection._RESIDENT_CALL = call
+    model_selection._RESIDENT_CONTEXT = context
