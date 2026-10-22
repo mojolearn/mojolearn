@@ -56,11 +56,12 @@ def sequence_array_report(status: Int, settings: PythonObject, context: PythonOb
             raise Error("TypeError: Python NumPy error callbacks cannot execute in array output; use native errstate ignore, warn or raise")
 
 
-def sequence_array_exception(kind: String, message: String) raises:
+def sequence_array_exception(kind: String, var message: String) raises:
     ref cpy = Python().cpython()
     var category = py_fields(Python.import_module("builtins"))[PythonObject(kind)]
     cpy.PyErr_SetString(category._obj_ptr, message.as_c_string_slice().unsafe_ptr().as_unsafe_any_origin())
-    raise stash_python_error()
+    var failure = stash_python_error()
+    raise failure^
 
 
 def sequence_array_warn(message: String, context: PythonObject) raises:

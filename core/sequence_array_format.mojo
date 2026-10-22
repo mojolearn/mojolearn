@@ -9,23 +9,25 @@ from std.math import floor, log10
 struct SequenceNumericLocale(Movable):
     # POSIX newlocale(0, "C", null) creates an independent C locale. uselocale
     # is thread-local; the caller's locale is restored even on formatting errors.
-    var locale: MutPointer[UInt8, MutUntrackedOrigin]
-    var previous: MutPointer[UInt8, MutUntrackedOrigin]
+    var locale: Optional[MutPointer[UInt8, MutUntrackedOrigin]]
+    var previous: Optional[MutPointer[UInt8, MutUntrackedOrigin]]
 
     def __init__(out self) raises:
         var name = String("C")
-        self.locale = external_call["newlocale", MutPointer[UInt8, MutUntrackedOrigin]](
-            c_int(0), name.as_c_string_slice().unsafe_ptr(), MutPointer[UInt8, MutUntrackedOrigin]())
-        self.previous = MutPointer[UInt8, MutUntrackedOrigin]()
+        self.locale = external_call["newlocale", Optional[MutPointer[UInt8, MutUntrackedOrigin]]](
+            c_int(0), name.as_c_string_slice().unsafe_ptr(), Optional[MutPointer[UInt8, MutUntrackedOrigin]](None))
+        self.previous = None
         if not self.locale:
             raise Error("RuntimeError: native float formatting could not create a C locale")
-        self.previous = external_call["uselocale", MutPointer[UInt8, MutUntrackedOrigin]](self.locale)
+        self.previous = external_call["uselocale", Optional[MutPointer[UInt8, MutUntrackedOrigin]]](self.locale.value())
+        if not self.previous:
+            raise Error("RuntimeError: native float formatting could not select its C locale")
 
     def __del__(deinit self):
         if self.previous:
-            _ = external_call["uselocale", MutPointer[UInt8, MutUntrackedOrigin]](self.previous)
+            _ = external_call["uselocale", Optional[MutPointer[UInt8, MutUntrackedOrigin]]](self.previous.value())
         if self.locale:
-            external_call["freelocale", NoneType](self.locale)
+            external_call["freelocale", NoneType](self.locale.value())
 
 
 def sequence_float_text(bits: UInt32) raises -> String:
@@ -73,7 +75,8 @@ def sequence_float_text(bits: UInt32) raises -> String:
     if not scientific:
         if result.find(".") >= 0:
             while result.endswith("0"):
-                result = String(result[byte=0:result.byte_length() - 1])
+                var shortened = String(result[byte=0:result.byte_length() - 1])
+                result = shortened^
             if result.endswith("."):
                 result += "0"
         else:
