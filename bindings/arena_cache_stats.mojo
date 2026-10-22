@@ -50,7 +50,7 @@ def _attribute(value: PythonObject, name: PythonObject, default: PythonObject,
         if not native_hook or py_get(mapping,"__getattr__") is not None:
             raise Error("TypeError: cache metadata requires native attribute access; Python hooks cannot execute")
         if not found and py_contains(mapping,name):
-            selected = mapping[PythonObject(name)]
+            selected = mapping[name]
             found = True
     var member = found and py_type(selected) is context["cache_member_type"]
     var descriptor = False
@@ -65,7 +65,7 @@ def _attribute(value: PythonObject, name: PythonObject, default: PythonObject,
         # Exact native member descriptors never dispatch to Python code. A
         # foreign member raises its normal native owner/type error.
         ref cpy = Python().cpython()
-        var key = PythonObject(name)
+        var key = name
         var pointer = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetAttr")(value._obj_ptr,key._obj_ptr)
         _ = key^
         if not pointer:
@@ -84,8 +84,8 @@ def _attribute(value: PythonObject, name: PythonObject, default: PythonObject,
         if py_type(fields) is not b["dict"]:
             raise Error("TypeError: cache metadata requires an ordinary instance dictionary")
         _string_keys(fields,context)
-        if py_contains(fields,PythonObject(name)):
-            return fields[PythonObject(name)]
+        if py_contains(fields,name):
+            return fields[name]
     elif cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")(context["cache_attribute_error"]._obj_ptr) != 0:
         cpy.lib.get_function[NoneType]("PyErr_Clear")()
     else:
