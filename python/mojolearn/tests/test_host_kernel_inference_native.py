@@ -484,3 +484,23 @@ def test_sparse_mutated_metadata_cannot_enter_python_hooks(tmp_path, storage):
     touched.clear()
     _refused(audit_native_call(model.transform, x), exception)
     assert touched == []
+
+
+@pytest.mark.parametrize("value", [2**63, 2**63 + 1, 2**64 - 1])
+@pytest.mark.parametrize("overwritten", [False, True])
+def test_lil_uint64_high_word_keeps_final_storage_refusal(tmp_path, value, overwritten):
+    sp = pytest.importorskip("scipy.sparse")
+    model = _model(tmp_path, "Nystroem")
+    x = sp.lil_matrix((2, 3), dtype=np.uint64)
+    # LIL stores native Python ints; a duplicate column keeps the last value.
+    # An earlier high word must not cause a premature signed-index failure.
+    x.rows[0] = [0, 0] if overwritten else [0]
+    x.data[0] = [value, 1] if overwritten else [value]
+    x.rows[1], x.data[1] = [1], [2]
+    if overwritten:
+        expected = legacy.kernel_model(model, x, "Nystroem")
+        assert _state(audit_native_call(model.transform, x).assert_native()) == _state(expected)
+    else:
+        with pytest.raises(OverflowError):
+            legacy.kernel_model(model, x, "Nystroem")
+        _refused(audit_native_call(model.transform, x), OverflowError)
