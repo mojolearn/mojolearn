@@ -358,25 +358,46 @@ def host_archive_embedding(cls: PythonObject, arrays: PythonObject, context: Pyt
     return model
 
 
-def host_archive_kmeans(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
-    var meta = host_archive_count(arrays, "meta", "<i8", 9, context, True)
-    var reals = host_archive_count(arrays, "reals", "<f8", 5, context, True)
+def host_archive_sorted(table: PythonObject) raises -> String:
+    """repr(sorted(table)): the list of names a loader's refusal shows."""
+    var b = Python.import_module("builtins")
+    return String(py_call(b.repr, py_call(b.sorted, table)))
+
+
+def host_archive_kmeans(cls: PythonObject, arrays: PythonObject, path: PythonObject,
+                        context: PythonObject) raises -> PythonObject:
+    # The refusals keep KMeans.load's wording and order.
+    var where = host_archive_where(path, context)
+    var meta = _archive_exact(arrays, "meta", "<i8", context)
+    var reals = _archive_exact(arrays, "reals", "<f8", context)
+    if Int(py=meta.size) != 9 or Int(py=reals.size) != 5:
+        raise Error(where + " holds " + String(Int(py=meta.size)) + " meta fields and " + String(Int(py=reals.size))
+                    + " reals, 9 and 5 are needed")
     var k = classical_i64(meta, 0)
     var d = classical_i64(meta, 1)
     var n = classical_i64(meta, 2)
     if k < 1 or d < 1:
-        raise Error("saved KMeans holds an empty model")
+        raise Error(where + " holds an empty model (" + String(k) + " centers of " + String(d) + " features)")
     var metric = _archive_string(arrays, "metric", context)
     var start = _archive_string(arrays, "init", context)
     var metrics = context["host_archive_kmeans_metrics"]
     var starts = context["host_archive_kmeans_starts"]
-    if not py_contains(metrics, metric) or Int(py=metrics[metric]) != classical_i64(meta, 4):
-        raise Error("saved KMeans metric and code do not match")
-    if not py_contains(starts, start) or Int(py=starts[start]) != classical_i64(meta, 5):
-        raise Error("saved KMeans init and code do not match")
+    if not py_contains(metrics, metric):
+        raise Error(where + " metric " + _archive_builtin_repr(metric) + " is not one KMeans serves ("
+                    + host_archive_sorted(metrics) + ")")
+    var metric_code = Int(py=metrics[metric])
+    if metric_code != classical_i64(meta, 4):
+        raise Error(where + " names metric " + _archive_builtin_repr(metric) + " (code " + String(metric_code)
+                    + ") but its meta holds code " + String(classical_i64(meta, 4)))
+    if not py_contains(starts, start):
+        raise Error(where + " init " + _archive_builtin_repr(start) + " is not one KMeans serves ("
+                    + host_archive_sorted(starts) + ")")
+    var start_code = Int(py=starts[start])
+    if start_code != classical_i64(meta, 5):
+        raise Error(where + " names init " + _archive_builtin_repr(start) + " (code " + String(start_code)
+                    + ") but its meta holds code " + String(classical_i64(meta, 5)))
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
-    host_archive_mode(arrays, fields, context)
     py_setitem(fields, "n_clusters", k)
     py_setitem(fields, "init", start)
     py_setitem(fields, "n_init", classical_i64(meta, 7))
@@ -386,8 +407,16 @@ def host_archive_kmeans(cls: PythonObject, arrays: PythonObject, context: Python
     py_setitem(fields, "init_centroids", PythonObject(None))
     py_setitem(fields, "metric", metric)
     py_setitem(fields, "oversampling_factor", classical_f64(reals, 4))
-    py_setitem(fields, "cluster_centers_", host_archive_shape(arrays, "centers", "<f4", Python.tuple(k, d), context))
-    py_setitem(fields, "labels_", host_archive_shape(arrays, "labels", "<i4", Python.tuple(n), context))
+    host_archive_mode(arrays, fields, context)
+    var centers = _archive_exact(arrays, "centers", "<f4", context)
+    if Int(py=centers.ndim) != 2 or Int(py=centers.shape[0]) != k or Int(py=centers.shape[1]) != d:
+        raise Error(where + " centers shape " + _archive_builtin_repr(centers.shape) + " is not (" + String(k)
+                    + ", " + String(d) + "); the centroid count and the dimensionality disagree")
+    var labels = _archive_exact(arrays, "labels", "<i4", context)
+    if Int(py=labels.ndim) != 1 or Int(py=labels.size) != n:
+        raise Error(where + " labels hold " + String(Int(py=labels.size)) + " values, the fit had " + String(n) + " rows")
+    py_setitem(fields, "cluster_centers_", centers)
+    py_setitem(fields, "labels_", labels)
     py_setitem(fields, "n_features_in_", d)
     py_setitem(fields, "n_iter_", classical_i64(meta, 3))
     py_setitem(fields, "inertia_", classical_f64(reals, 0))
@@ -1708,7 +1737,7 @@ def host_archive_build(path: PythonObject, context: PythonObject,
     elif fmt == "mojolearn-embedding-1":
         model = host_archive_embedding(cls, arrays, context)
     elif fmt == "mojolearn-kmeans-1":
-        model = host_archive_kmeans(cls, arrays, context)
+        model = host_archive_kmeans(cls, arrays, path, context)
     elif fmt == "mojolearn-gmm-1":
         model = host_archive_mixture(cls, arrays, context)
     elif fmt == "mojolearn-kde-1" or fmt == "mojolearn-dbscan-1":
