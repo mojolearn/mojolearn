@@ -40,7 +40,12 @@ all: setup, smoke, autograd, measure, then the verdict.
 
 THE VERDICT (gate_verdict; tools/release.py reads the same function): PASS only when the smoke ran with no
 FAILED line, the autograd smoke exited 0, and the measure stage finished every planned line (none pending,
-none with a controller failure, every line's evidence retained). A REFUSED line (an arm refused by name) and
+none with a controller failure, every line's evidence retained), and (Andrew 2026-10-22: measurement enforces
+apples-to-apples comparisons, our identical mode being the only difference) every opponent pair on the gate
+board reads MATCHED (bench_board.pair_report over board_pairing.params_state): an opponent whose explicit
+parameters cannot be read back or differ is refused for that cell, with the reason, the cell shows ours alone,
+and the gate FAILS listing it (gate-smoke.json measure.pairs, the verdict reasons and <board>/pair-check.json).
+A REFUSED line (an arm refused by name) and
 a STARTED smoke line (slow, not broken) do not fail the gate. gate-smoke.json carries every stage's record and
 `verdict`; the exit status is 0 only on PASS (or for a single stage that ran).
 
@@ -92,6 +97,13 @@ def gate_verdict(state):
             why.append("measure: %d line(s) failed: %s" % (len(m["failed"]), ", ".join(m["failed"][:10])))
         if m.get("expected") is not None and m.get("expected") != m.get("planned_whole_plan"):
             why.append("measure: %s of %s plan lines selected" % (m.get("expected"), m.get("planned_whole_plan")))
+        # 2026-10-22: every opponent pair MATCHED; a refusal is listed, never silently dropped
+        pairs = m.get("pairs")
+        if m.get("board") and pairs is None:
+            why.append("measure: gate board has no pair check recorded")
+        for state in ("refused", "unchecked"):
+            for p in (pairs or {}).get(state) or []:
+                why.append("measure: opponent pair %s %s %s: %s" % (state, p.get("race"), p.get("arm"), p.get("reason")))
     if any(w.endswith("not finished") for w in why):
         return "INCOMPLETE", why
     return ("FAIL" if why else "PASS"), why
@@ -231,12 +243,25 @@ class Gate:
         failed = sorted(rid for rid, r in recipes.items() if r.get("controller_failure"))
         pending = sum(1 for r in recipes.values() if r.get("status") in ("pending", "running"))
         board = self.merge_boards(mout)
+        pairs = self.pair_check(board)
         rec = dict(planned_whole_plan=len(ids), expected=camp.get("expected"), statuses=dict(statuses),
                    pending=pending, failed=failed, stop_reason=camp.get("stop_reason"), board=board,
-                   retention=str(mout / "campaign-retention.json"))
+                   pairs=pairs, retention=str(mout / "campaign-retention.json"))
         self.mark(phase="measure", status="done", measure_rc=rc, measure=rec, measure_finished=time.time())
         print("GATE_MEASURE vendor=%s rc=%s lines=%d finished=%d pending=%d failed=%d board=%s" % (
             self.vendor, rc, len(ids), statuses.get("process finished", 0), pending, len(failed), board))
+        if pairs is not None:
+            print("GATE_PAIRS vendor=%s matched=%d unchecked=%d refused=%d" % (
+                self.vendor, pairs["matched"], len(pairs["unchecked"]), len(pairs["refused"])))
+
+    def pair_check(self, board):
+        """bench_board.pair_report of the merged gate board, also written beside it as pair-check.json.
+        None when no line wrote a board."""
+        if not board:
+            return None
+        pairs = self.B.pair_report(self.B.load_result(board) or {})
+        self.E.write(Path(board).parent / "pair-check.json", pairs)
+        return pairs
 
     def merge_boards(self, mout):
         """Every line's board.json (bench_board wrote it) merged into one board through bench_board:
@@ -254,7 +279,7 @@ class Gate:
                 merged = dict(one, races={})
                 merged["gate"] = {"vendor": self.vendor, "version": self.version, "lines": []}
             for rid, rr in (one.get("races") or {}).items():
-                rr = dict(rr, cells=B.add_ratios(list(rr.get("cells") or [])), gate_line=path)
+                rr = dict(rr, cells=B.add_ratios(list(rr.get("cells") or []), race=rr), gate_line=path)
                 merged["races"][rid] = rr
             merged["gate"]["lines"].append(path)
         if merged is None:

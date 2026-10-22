@@ -538,6 +538,25 @@ def _run(env, *extra):
     return bb.main(["--vendor", "apple", "--lanes", "rf,kmeans"] + env["base"] + list(extra))
 
 
+def _unchecked_stub_ratios(rec):
+    """The stub drivers print no BOARD-PARAMS line: every opponent of `rec` is stored refused with no ratio
+    (Andrew 2026-10-22, board_pairing.params_state). Returns {arm: cell} with the ratios recomputed as if
+    the race's parameter check had read MATCHED, so the ratio arithmetic is still checked."""
+    for c in rec["cells"]:
+        if bb.PAIR.is_opponent(c) and c["status"] == "ok":
+            assert c["ratio_ours_identical_over"] is None and c["ratio_ours_fast_over"] is None, c["arm"]
+            assert c["params_pair"]["state"] == "refused", c["arm"]
+            assert c["params_pair"]["reason"], c["arm"]
+    # the stubs read back no implementation either, so race_fairness excluded their arms as harness code
+    race = dict(rec, params_check="MATCHED", params={"arms": {c["arm"]: {} for c in rec["cells"]}},
+                opponents_excluded={})
+    cells = json.loads(json.dumps(rec["cells"]))
+    for c in cells:     # the stub rows' hardware keys differ (annotated at save); the ratio arithmetic is the point
+        c.pop("hardware_key", None)
+        c.pop("hardware_comparable", None)
+    return {c["arm"]: c for c in bb.add_ratios(cells, race=race)}
+
+
 def test_run_schema_ratios_quality_and_board(env):
     assert _run(env) == 0
     res = json.loads((env["out"] / "board.json").read_text())
@@ -562,7 +581,7 @@ def test_run_schema_ratios_quality_and_board(env):
             assert c["status"] == "ok", (rec["id"], c["arm"], c["status"])
             assert len(c["times_ms"]) == 3
             assert c["quality"]
-    rf = {c["arm"]: c for c in res["races"]["trees/rf/taxi/rows=1000"]["cells"]}
+    rf = _unchecked_stub_ratios(res["races"]["trees/rf/taxi/rows=1000"])
     assert rf["ours"]["mode"] == "identical" and rf["ours-ab"]["mode"] == "fast"
     assert rf["ours"]["installed_wheel"] == "wheel"
     assert rf["ours"]["verdict"] == "COMPARABLE"
@@ -1005,7 +1024,7 @@ def test_neural_run_schema_quality_and_board(env):
         for l in bb.NEURAL_LANES if bb.NEURAL.DEVICE_OF.get(l) != "cpu")
     rec = res["races"]["neural/lm-train-step/bytes/shape=small"]
     assert rec["status"] == "done" and rec["shape"] == "small"
-    cells = {c["arm"]: c for c in rec["cells"]}
+    cells = _unchecked_stub_ratios(rec)
     ours, torch = cells["ours"], cells["torch-eager-fp32"]
     assert ours["mode"] == "identical" and ours["mode_witness"] == "identical"
     assert ours["installed_wheel"] == "wheel"
@@ -1317,7 +1336,7 @@ def test_classical2_run_schema_quality_and_board(env):
     assert sum(1 for c in calls if " prep " in c) == 1
     rec = res["races"]["classical2/umap/taxi/rows=1000"]
     assert rec["status"] == "done" and rec["lane_config"]["timed"]
-    cells = {c["arm"]: c for c in rec["cells"]}
+    cells = _unchecked_stub_ratios(rec)
     assert set(cells) == {"ours", "ours-fast", "umap-learn-cpu", "umap-learn-cpu-unseeded"}
     assert cells["ours-fast"]["mode"] == "fast" and cells["ours-fast"]["mode_witness"] == "fast"
     assert cells["ours"]["installed_wheel"] == "wheel"
@@ -1871,3 +1890,119 @@ def test_samba_torch_arms_that_cannot_build_are_excluded_by_name_on_every_vendor
             why = bb._planned_refusal(vendor, "neural/%s" % lane, "torch-eager-fp32")
             assert why and "no library implements Samba" in why
     assert bb._planned_refusal("amd", "neural/mamba1-forward", "torch-eager-fp32") is None
+
+
+# ------------------------------------------------------------------ parameter pairing (Andrew, 2026-10-22)
+# measurement ENFORCES apples-to-apples comparisons: an opponent pair whose parameters are not MATCHED never
+# shows a ratio or a best opponent, and the release gate fails on it
+
+def _pair_race(params_check, problems=(), copied=False):
+    ours = {"arm": "ours", "library": "mojolearn", "mode": "identical", "device": "gpu", "status": "ok",
+            "median_ms": 50.0, "min_ms": 50.0, "max_ms": 50.0, "rounds": 1}
+    opp = {"arm": "cuml-gpu", "library": "cuml", "mode": "opponent", "device": "gpu", "status": "ok",
+           "median_ms": 100.0, "min_ms": 100.0, "max_ms": 100.0, "rounds": 1, "lane": "kmeans",
+           "family": "classical"}
+    if copied:
+        opp["copied_from"] = {"board": "opp-old-board"}
+    rr = {"id": "classical/kmeans/taxi/rows=full", "family": "classical", "lane": "kmeans", "dataset": "taxi",
+          "rows": None, "status": "done", "rc": 0, "cells": [ours, opp], "params_check": params_check}
+    if params_check in ("MATCHED", "REFUSED"):
+        rr["params"] = {"arms": {"ours": {}, "cuml-gpu": {}}, "problems": list(problems),
+                        "verdict": params_check}
+    rr["cells"] = bb.add_ratios(rr["cells"], race=rr)
+    return rr
+
+
+def _gate():
+    spec = importlib.util.spec_from_file_location("gate_smoke_box", os.path.join(HERE, "gate_smoke_box.py"))
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_matched_pair_keeps_its_ratio():
+    rr = _pair_race("MATCHED")
+    opp = rr["cells"][1]
+    assert opp["ratio_ours_identical_over"] == pytest.approx(0.5)
+    assert opp["params_pair"] == {"state": "MATCHED", "reason": None}
+    assert bb.ratio_text(opp, "ratio_ours_identical_over") == "0.500"
+
+
+def test_refused_pair_has_no_ratio_and_shows_the_reason():
+    rr = _pair_race("REFUSED", problems=["cuml-gpu: n_init is 1 (n_init) on ours and 10 (n_init) on cuml-gpu"])
+    opp = rr["cells"][1]
+    assert opp["ratio_ours_identical_over"] is None and opp["ratio_ours_fast_over"] is None
+    assert opp["params_pair"]["state"] == "refused"
+    text = bb.ratio_text(opp, "ratio_ours_identical_over")
+    assert text.startswith("refused: cuml-gpu: n_init is 1")
+    # a race with no read-back at all refuses its opponent too
+    rr = _pair_race("NOT CHECKED (the driver printed no BOARD-PARAMS line)")
+    assert rr["cells"][1]["ratio_ours_identical_over"] is None
+    assert "explicit parameters not read back" in rr["cells"][1]["params_pair"]["reason"]
+    # MATCHED race, but this arm's parameters never read back: refused
+    rr = _pair_race("MATCHED")
+    rr["params"]["arms"].pop("cuml-gpu")
+    rr["cells"] = bb.add_ratios(rr["cells"], race=rr)
+    assert rr["cells"][1]["ratio_ours_identical_over"] is None
+    assert rr["cells"][1]["params_pair"]["reason"] == "explicit parameters of cuml-gpu were not read back"
+
+
+def test_unchecked_legacy_copy_renders_unchecked_and_save_strips_its_ratio(tmp_path):
+    rr = _pair_race("not checked on the main board (our one scored run; opponents copied, never re-run)",
+                    copied=True)
+    opp = rr["cells"][1]
+    assert opp["params_pair"]["state"] == "unchecked" and opp["ratio_ours_identical_over"] is None
+    assert bb.ratio_text(opp, "ratio_ours_identical_over") == "unchecked"
+    # a stored ratio on such a cell (an older board) is dropped on save and never rendered
+    opp["ratio_ours_identical_over"] = 0.5
+    result = {"races": {rr["id"]: rr}}
+    bb.save_result(str(tmp_path / "board.json"), result)
+    saved = json.loads((tmp_path / "board.json").read_text())
+    assert saved["races"][rr["id"]]["cells"][1]["ratio_ours_identical_over"] is None
+    opp["ratio_ours_identical_over"] = 0.5
+    md = bb.render_board(result)
+    row = next(l for l in md.splitlines() if l.startswith("| cuml-gpu |"))
+    # (this fixture records no hardware, so the row reads NOT-COMPARABLE first; never the stored ratio)
+    assert "0.500" not in row
+    rep = bb.pair_report(result)
+    assert rep["matched"] == 0 and rep["unchecked"][0]["arm"] == "cuml-gpu" and not rep["refused"]
+
+
+def test_neural_headline_skips_an_unmatched_torch_arm():
+    ours = {"arm": "ours", "library": "mojolearn", "mode": "identical", "device": "gpu", "status": "ok",
+            "median_ms": 80.0}
+    torch = {"arm": "torch-eager-bf16", "library": "torch", "mode": "opponent", "device": "gpu", "status": "ok",
+             "median_ms": 40.0}
+    rr = {"family": "neural", "lane": "lm-train-step", "cells": [ours, torch], "params_check": "REFUSED",
+          "params": {"arms": {}, "problems": ["torch-eager-bf16: lr differs"]}}
+    assert bb.neural_headline(rr)["bf16"] is None
+    rr.update(params_check="MATCHED", params={"arms": {"ours": {}, "torch-eager-bf16": {}}})
+    assert bb.neural_headline(rr)["bf16"]["arm"] == "torch-eager-bf16"
+
+
+def _gate_state(pairs):
+    return {"smoke_finished": 1, "smoke_rc": 0, "counts": {"MATCHED": 3}, "smoke_cpu_fallback": True,
+            "autograd_finished": 1, "autograd_rc": 0, "measure_finished": 1, "measure_rc": 0,
+            "measure": {"pending": 0, "failed": [], "expected": 3, "planned_whole_plan": 3,
+                        "board": "/x/board.json", "pairs": pairs}}
+
+
+def test_gate_verdict_passes_when_every_pair_is_matched():
+    G = _gate()
+    rep = bb.pair_report({"races": {"r": _pair_race("MATCHED")}})
+    assert rep == {"matched": 1, "unchecked": [], "refused": []}
+    assert G.gate_verdict(_gate_state(rep)) == ("PASS", [])
+
+
+def test_gate_verdict_fails_and_lists_an_unmatched_pair():
+    G = _gate()
+    rr = _pair_race("REFUSED", problems=["cuml-gpu: tol is unset on ours and 0.0001 on cuml-gpu"])
+    rep = bb.pair_report({"races": {rr["id"]: rr}})
+    assert rep["matched"] == 0 and rep["refused"][0]["arm"] == "cuml-gpu"
+    verdict, why = G.gate_verdict(_gate_state(rep))
+    assert verdict == "FAIL"
+    assert any("opponent pair refused classical/kmeans/taxi/rows=full cuml-gpu: cuml-gpu: tol is unset" in w
+               for w in why)
+    # a gate board with no recorded pair check never passes
+    verdict, why = G.gate_verdict(_gate_state(None))
+    assert verdict == "FAIL" and "measure: gate board has no pair check recorded" in why
