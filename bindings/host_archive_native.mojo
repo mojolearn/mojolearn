@@ -107,17 +107,56 @@ def host_archive_object(cls: PythonObject, arrays: PythonObject, context: Python
 def host_archive_mode(arrays: PythonObject, fields: PythonObject, context: PythonObject) raises:
     var mode = _archive_string(arrays, "numeric_mode", context)
     if String(mode) != "identical" and String(mode) != "fast":
-        raise Error("invalid saved numeric_mode")
+        raise Error("mojolearn: invalid saved numeric_mode " + _archive_builtin_repr(mode))
     py_setitem(fields, "numeric_mode", mode)
 
 
-def host_archive_decomposition(cls: PythonObject, arrays: PythonObject, pca: Bool,
+def host_archive_where(path: PythonObject, context: PythonObject) raises -> String:
+    """`mojolearn: {path!r}`, the head of the loaders' refusals."""
+    return "mojolearn: " + _archive_read_repr(path, context)
+
+
+def host_archive_sized(arrays: PythonObject, name: String, dtype: String, count: Int,
+                       message: String, context: PythonObject) raises -> PythonObject:
+    """An exact-dtype member of `count` elements; any other size raises `message`."""
+    var value = _archive_exact(arrays, name, dtype, context)
+    if Int(py=value.size) != count:
+        raise Error(message)
+    return value
+
+
+def host_archive_meta(arrays: PythonObject, name: String, count: Int, path: PythonObject,
+                      context: PythonObject) raises -> PythonObject:
+    """The int64 `meta` vector, refused as the loaders refused it:
+    `{path!r} meta holds {n} fields, {count} are needed`."""
+    var value = _archive_exact(arrays, name, "<i8", context)
+    if Int(py=value.size) != count:
+        raise Error(host_archive_where(path, context) + " " + name + " holds " + String(Int(py=value.size))
+                    + " fields, " + String(count) + " are needed")
+    return value
+
+
+def host_archive_matrix(arrays: PythonObject, name: String, dtype: String, rows: Int, cols: Int,
+                        path: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A 2-D member of shape (rows, cols), refused as
+    `{path!r} {name} shape {shape} is not ({rows}, {cols})`."""
+    var value = _archive_exact(arrays, name, dtype, context)
+    if Int(py=value.ndim) != 2 or Int(py=value.shape[0]) != rows or Int(py=value.shape[1]) != cols:
+        raise Error(host_archive_where(path, context) + " " + name + " shape " + _archive_builtin_repr(value.shape)
+                    + " is not (" + String(rows) + ", " + String(cols) + ")")
+    return value
+
+
+def host_archive_decomposition(cls: PythonObject, arrays: PythonObject, pca: Bool, path: PythonObject,
                                context: PythonObject) raises -> PythonObject:
-    var meta = host_archive_count(arrays, "meta", "<i8", 4 if pca else 2, context, True)
+    # The refusals keep PCA.load's and TruncatedSVD.load's wording.
+    var meta = host_archive_meta(arrays, "meta", 4 if pca else 2, path, context)
     var nc = classical_i64(meta, 0)
     var nf = classical_i64(meta, 1)
+    var where = host_archive_where(path, context)
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
+    var solver = _archive_string(arrays, "svd_solver" if pca else "algorithm", context)
     host_archive_mode(arrays, fields, context)
     py_setitem(fields, "n_components", nc)
     py_setitem(fields, "n_components_", nc)
@@ -126,21 +165,22 @@ def host_archive_decomposition(cls: PythonObject, arrays: PythonObject, pca: Boo
     py_setitem(fields, "n_oversamples", 10)
     py_setitem(fields, "power_iteration_normalizer", "auto")
     py_setitem(fields, "random_state", PythonObject(None))
-    py_setitem(fields, "components_", host_archive_shape(arrays, "components", "<f4", Python.tuple(nc, nf), context))
-    py_setitem(fields, "singular_values_", host_archive_count(arrays, "singular_values", "<f4", nc, context))
+    py_setitem(fields, "components_", host_archive_matrix(arrays, "components", "<f4", nc, nf, path, context))
     if pca:
         py_setitem(fields, "copy", True)
         py_setitem(fields, "whiten", classical_i64(meta, 3) != 0)
-        py_setitem(fields, "svd_solver", _archive_string(arrays, "svd_solver", context))
+        py_setitem(fields, "svd_solver", solver)
         py_setitem(fields, "iterated_power", "auto")
-        py_setitem(fields, "mean_", host_archive_count(arrays, "mean", "<f4", nf, context))
-        py_setitem(fields, "explained_variance_", host_archive_count(arrays, "explained_variance", "<f4", nc, context))
-        py_setitem(fields, "explained_variance_ratio_", host_archive_count(arrays, "explained_variance_ratio", "<f4", nc, context))
-        var noise = host_archive_count(arrays, "noise_variance", "<f8", 1, context, True)
+        py_setitem(fields, "mean_", host_archive_sized(arrays, "mean", "<f4", nf, where + " mean_ does not match n_features_in_", context))
+        py_setitem(fields, "singular_values_", host_archive_sized(arrays, "singular_values", "<f4", nc, where + " singular_values_ does not match n_components_", context))
+        py_setitem(fields, "explained_variance_", host_archive_sized(arrays, "explained_variance", "<f4", nc, where + " explained_variance_ does not match n_components_", context))
+        py_setitem(fields, "explained_variance_ratio_", host_archive_sized(arrays, "explained_variance_ratio", "<f4", nc, where + " explained_variance_ratio_ does not match n_components_", context))
+        var noise = host_archive_sized(arrays, "noise_variance", "<f8", 1, where + " noise_variance must hold one value", context)
         py_setitem(fields, "noise_variance_", classical_f64(noise, 0))
         py_setitem(fields, "n_samples_", classical_i64(meta, 2))
     else:
-        py_setitem(fields, "algorithm", _archive_string(arrays, "algorithm", context))
+        py_setitem(fields, "singular_values_", host_archive_sized(arrays, "singular_values", "<f4", nc, where + " singular_values does not match n_components_", context))
+        py_setitem(fields, "algorithm", solver)
         py_setitem(fields, "n_iter", 5)
     return model
 
@@ -1654,7 +1694,7 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         var probe = host_archive_object(cls, arrays, context)
         model = classical_archive_build(cls, arrays, path, String(estimator) == "Ridge", context)
     elif fmt == "mojolearn-pca-1" or fmt == "mojolearn-tsvd-1":
-        model = host_archive_decomposition(cls, arrays, fmt == "mojolearn-pca-1", context)
+        model = host_archive_decomposition(cls, arrays, fmt == "mojolearn-pca-1", path, context)
     elif fmt == "mojolearn-cd-1":
         model = host_archive_cd(cls, arrays, String(estimator) == "Lasso", context)
     elif fmt == "mojolearn-kernel-ridge-1" or fmt == "mojolearn-nystroem-1" or fmt == "mojolearn-rbf-sampler-1":
