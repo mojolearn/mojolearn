@@ -12,6 +12,7 @@ def connect(context, formats):
     from ._hierarchy_impl import _ALL_METRICS
     from .neighbors import _METRIC_TABLE, _RBC_METRIC_TABLE
     from ._umap_impl import _METRICS as umap_metrics
+    from ._mode import SklearnTagsMixin
 
     archive = dict(context)
     archive.update(_numpy_free_context())
@@ -30,4 +31,8 @@ def connect(context, formats):
     archive["host_archive_formats"] = {
         fmt: dict(classes) for fmt, classes in formats.items()  # glue: copy the fixed native class registry once at package connection
     }
+    archive["host_archive_fitted_estimators"] = tuple(
+        name for classes in formats.values() for name, cls in classes.items()  # glue: fixed fitted-state ownership metadata at import
+        if issubclass(cls, SklearnTagsMixin)
+    )
     context["host_archive_context"] = archive
