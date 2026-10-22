@@ -128,7 +128,7 @@ def _temporal_word(value: PythonObject, context: PythonObject) raises -> Int64:
     var word = UInt64(0)
     for i in range(8):  # driver-loop: datetime/timedelta expose one native signed storage word
         var byte = i if Bool(py=context["cache_little_endian"]) else 7-i
-        word |= UInt64(Int(py=raw[byte])) << (8*i)
+        word |= UInt64(Int(py=raw[byte])) << UInt64(8*i)
     return Int64(word)
 
 
