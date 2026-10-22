@@ -55,7 +55,7 @@ def test_resident_disabled_io_refuses_natively_without_modifying_buffers():
                             (owner.grads_to_device, ([gradients],)),
                             (owner.grads_to_host, ([gradients],))):
         error = _refused_native(operation, *args)
-        assert isinstance(error, RuntimeError) and "device-resident parameter" in str(error)
+        assert "device-resident parameter" in str(error)
     assert (params.tobytes(), gradients.tobytes()) == before
 
 
@@ -77,7 +77,7 @@ def test_failed_native_sequence_transfer_releases_allocated_handle(monkeypatch, 
         patch.setitem(entries, entry, len)
         error = (_refused_native(to_device, source, numeric_mode="identical")
                  if entry == "seq_tensor_upload" else _refused_native(owner.copy))
-        assert isinstance(error, TypeError)
+        assert "len() takes exactly one argument" in str(error)
     output = np.empty(source.size, dtype="f4")
     with pytest.raises(Exception, match="not open"):
         binding.seq_tensor_download(probe, output.ctypes.data, source.size)

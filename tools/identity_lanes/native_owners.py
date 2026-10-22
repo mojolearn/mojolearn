@@ -79,8 +79,10 @@ def _(ml, X, yc, yr, Xh=None):
                             (owner.grads_to_host, ([gradient],))):
         try:
             operation(*args)
-        except RuntimeError as error:
-            observed.append(int("device-resident parameter" in str(error)))
+        except Exception as error:
+            if "device-resident parameter" not in str(error):
+                raise
+            observed.append(1)
         else:
             observed.append(0)
     return _fit(dict(contract=_h(np.asarray(observed, dtype=np.int32)), gradient=_h(gradient)))
@@ -146,7 +148,9 @@ def _native_owner_failure_cleanup(binding, source, operation, owner=None):
                 to_device(source, numeric_mode="identical")
             else:
                 owner.copy()
-        except TypeError:
+        except Exception as error:
+            if "len() takes exactly one argument" not in str(error):
+                raise
             refused = 1
     finally:
         entries[operation] = original
