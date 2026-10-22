@@ -195,6 +195,18 @@ class InstalledNativeAudit(unittest.TestCase):
             self.assertIn("Only DeviceCache.get", scope["coverage_limit"])
             self.assertIn("no device slots", scope["execution_route"])
 
+    def test_iforest_depth_scope_is_public_explicit_host_on_each_package(self):
+        name = "test_iforest_depth_native.py"
+        self.assertIn(name, q.PUBLIC_TESTS)
+        for vendor in ("cpu", "metal", "cuda", "hip"):
+            scope = q.test_applicability([name], vendor)[name]
+            self.assertIn("explicit CPU host", scope["execution_route"])
+            self.assertIn("depth-state arithmetic", scope["coverage_limit"])
+            self.assertIn("separate execution evidence", scope["coverage_limit"])
+            self.assertEqual(scope["cpu_not_applicable_cases"], {})
+        self.assertIn("numpy", q.test_dependencies([name]))
+        self.assertTrue({"pandas", "scipy", "torch"}.isdisjoint(q.test_dependencies([name])))
+
     def test_cache_statistics_scope_does_not_claim_get_or_lifecycle(self):
         name = "test_cache_stats_native.py"
         self.assertIn(name, q.PUBLIC_TESTS)

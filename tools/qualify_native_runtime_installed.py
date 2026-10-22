@@ -24,6 +24,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_TESTS = {
+    "test_iforest_depth_native.py": "Public HostIsolationForest.fit native depth-state promotion, arithmetic, warning phases and consumed state",
     "test_cache_get_native.py": "Public DeviceCache.get native lookup, metadata conversion and callback refusals",
     "test_cache_stats_native.py": "Public DeviceCache length and resident.stats native metadata, counters, thread-local semantics and hook refusals",
     "test_optimizer_native_scalar_constructors.py": "Native scalar preparation across public optimizer constructors, updates, checkpoints and device controls",
@@ -207,6 +208,10 @@ def test_applicability(selected, vendor):
             scope["coverage_limit"] = "Native qualification covers explicit host fit preparation and state publication; ordinary KernelDensity fit, constructors, save and hash remain separate"
         if name == "test_host_iforest_fit_native.py":
             scope["coverage_limit"] = "Native qualification covers explicit host fit preparation, seeded training and state publication; GPU IsolationForest fit, construction, save and hash remain separate"
+        if name == "test_iforest_depth_native.py":
+            scope.update(execution_route="explicit CPU host binding, including in GPU packages",
+                         operation_mode="identical host operation",
+                         coverage_limit="Public HostIsolationForest.fit depth-state arithmetic and publication only; Linux extended formats, GPU IsolationForest and other operations require separate execution evidence")
         if name == "test_host_density_constructors_native.py":
             scope.update(execution_route="native explicit CPU host constructor owner, including in GPU packages",
                          coverage_limit="Public KDE and IsolationForest construction/reinitialization only; fit/inference, save/hash and subclass registration remain separate")
