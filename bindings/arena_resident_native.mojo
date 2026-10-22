@@ -1,12 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
-# Native model-selection resident lifetime. Row preparation remains a separate
-# operation; these entries own constructor state, release and deterministic close.
+# Native model_selection._Resident lifecycle: constructor/reinitialization,
+# entry, take, release, close and context enter/exit, one native call each.
+# Lifetime and error order follow bindings/arena_cache_release.mojo: admission
+# first, the emptied mapping published before the first GIL-releasing free,
+# every slot attempted, the first failure retained, failed entries published
+# again for a retry, and the owners (NumPy, pandas, Arrow-backed pandas, ...)
+# released last, after every free and publication. No owner graph is
+# inspected: an owner's own finalizer runs after the native work and cannot
+# observe a half-closed resident or replace the first error.
 from std.python import Python, PythonObject
-from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
-from bindings.native_owner_lifetime import native_release_admit
-from bindings.pandas_owner_lifetime import resident_release_admit
-from bindings.optimizer_public_words import stash_python_error
+from bindings.arena_cache_release import FirstFailure
+from bindings.arena_materialize_native import arena_resident_take, arena_resident_entry
 
 
 def _resident_fields(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -25,8 +30,8 @@ def _resident_fields(model: PythonObject, context: PythonObject) raises -> Pytho
         for j in range(len(keys)):  # driver-loop: class lookup cannot trigger key equality
             if py_type(keys[j]) is not b["str"]:
                 raise Error("TypeError: resident class keys must be native strings")
-        if py_contains(mapping, "__del__") or py_contains(mapping, "__getattribute__") or py_contains(mapping, "__setattr__"):
-            raise Error("TypeError: resident cannot invoke application attribute or lifecycle hooks")
+        if py_contains(mapping, "__getattribute__") or py_contains(mapping, "__setattr__"):
+            raise Error("TypeError: resident cannot invoke application attribute hooks")
         var dictionary = py_get(mapping, "__dict__")
         if dictionary is not None and dictionary is not descriptor:
             raise Error("TypeError: resident requires its native dictionary descriptor")
@@ -38,6 +43,11 @@ def _resident_fields(model: PythonObject, context: PythonObject) raises -> Pytho
         if py_type(keys[i]) is not b["str"]:
             raise Error("TypeError: resident fields require native string keys")
     return fields
+
+
+def _connected(fields: PythonObject, context: PythonObject) raises:
+    if py_get(fields, "_put") is not context["arena_msel_put"] or py_get(fields, "_free") is not context["arena_msel_free"] or py_get(fields, "_take") is not context["arena_msel_take_rows"]:
+        raise Error("TypeError: resident lifecycle requires its connected native entries")
 
 
 def _entries(fields: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -52,119 +62,121 @@ def _entries(fields: PythonObject, context: PythonObject) raises -> PythonObject
     return entries
 
 
-def _selected(entries: PythonObject, key: PythonObject, all_entries: Bool,
-              context: PythonObject) raises -> PythonObject:
+def _checked(key: PythonObject, entry: PythonObject, context: PythonObject) raises:
     var b = context["arena_native_types"]
-    var pairs = py_call(b["list"], entries.items())
-    var selected = Python.list()
+    if py_type(entry) is not b["tuple"] or len(entry) != 3 or py_type(entry[2]) is not b["int"]:
+        raise Error("TypeError: resident entries require (input, array, native integer id)")
+    if not Bool(py=key == py_call(context["arena_id"], entry[0])):
+        raise Error("TypeError: resident entry identity differs from its retained input")
+
+
+def _free(sid: PythonObject, context: PythonObject) raises:
+    if Int(py=sid) >= 0:
+        _ = py_call(context["arena_msel_free"], sid)
+
+
+def _republish(fields: PythonObject, failed: PythonObject, context: PythonObject) raises:
+    var current = _entries(fields, context)
+    for i in range(len(failed)):  # driver-loop: failed entries keep their owner for a retry
+        if not py_contains(current, failed[i][0]):
+            py_setitem(current, failed[i][0], failed[i][1])
+
+
+def _close(fields: PythonObject, context: PythonObject) raises:
+    var b = context["arena_native_types"]
+    var pairs = py_call(b["list"], py_call(_entries(fields, context).items))
     var slots = List[Int]()
-    for i in range(len(pairs)):  # driver-loop: validate the complete chosen cleanup before releasing its first slot
-        if not all_entries and not Bool(py=pairs[i][0] == key):
-            continue
-        var entry = pairs[i][1]
-        if py_type(entry) is not b["tuple"] or len(entry) != 3 or py_type(entry[2]) is not b["int"]:
-            raise Error("TypeError: resident entries require (input, array, native integer id)")
-        if not Bool(py=pairs[i][0] == py_call(context["arena_id"], entry[0])):
-            raise Error("TypeError: resident entry identity differs from its retained input")
-        var sid = Int(py=entry[2])
-        for j in range(len(slots)):  # driver-loop: malformed duplicate ownership cannot free the same native slot twice
+    for i in range(len(pairs)):  # driver-loop: validate the complete cleanup before releasing its first slot
+        _checked(pairs[i][0], pairs[i][1], context)
+        var sid = Int(py=pairs[i][1][2])
+        for j in range(len(slots)):  # driver-loop: malformed duplicate ownership cannot free one native slot twice
             if sid >= 0 and sid == slots[j]:
                 raise Error("TypeError: resident slots must have unique owners")
         slots.append(sid)
-        _ = py_call(selected.append, Python.tuple(pairs[i][0], entry, Python.tuple(entry[2])))
-    return selected
+    # The old method's swap order: publish the new mapping, then free. An
+    # application holding the old dictionary keeps its unchanged snapshot.
+    py_setitem(fields, "_entries", Python.dict())
+    var first = FirstFailure()
+    var failed = Python.list()
+    for i in range(len(pairs)):  # driver-loop: attempt every independent release
+        try:
+            _free(pairs[i][1][2], context)
+        except error:
+            first.keep(error)
+            _ = py_call(failed.append, pairs[i])
+    if len(failed):
+        try:
+            _republish(fields, failed, context)
+        except error:
+            first.keep(error)
+    # Owners are released here, after every free and publication.
+    _ = failed^
+    _ = pairs^
+    first.finish()
 
 
-def _release_selected(fields: PythonObject, entries: PythonObject, selected: PythonObject,
-                      replace: Bool, context: PythonObject) raises:
-    var guard = resident_release_admit(selected, context)
-    # close/reinitialization replace the mapping, as before. An application
-    # holding the old dictionary keeps its snapshot; release mutates only the
-    # existing dictionary. Failed entries remain in the published new mapping.
-    var remaining = py_call(context["arena_native_types"]["dict"], entries) if replace else entries
-    var entry_name = PythonObject("_entries")
-    # Resolve every public C API before the first store mutation. The first
-    # backend exception has its own three owned references, so a later failure
-    # cannot overwrite the shared pending-exception bridge.
-    ref cpy = Python().cpython()
-    var call = cpy.lib.get_function[PyObjectPtr]("PyObject_CallObject")
-    var fetch = cpy.lib.get_function[NoneType]("PyErr_Fetch")
-    var restore = cpy.lib.get_function[NoneType]("PyErr_Restore")
-    var clear = cpy.lib.get_function[NoneType]("PyErr_Clear")
-    var remove = cpy.lib.get_function[Int32]("PyDict_DelItem")
-    var publish = cpy.lib.get_function[Int32]("PyDict_SetItem")
-    var first = List[Int](length=3, fill=0)
-    var first_ptr = first.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    var free = context["arena_msel_free"]
-    for i in range(len(selected)):  # driver-loop: attempt every independent release, retaining failed entries for a later retry
-        var pair = selected[i]
-        var sid = Int(py=pair[1][2])
-        var freed = True
-        if sid >= 0:
-            var result = call(free._obj_ptr, pair[2]._obj_ptr)
-            if not result:
-                freed = False
-                if first[0] == 0:
-                    fetch(first_ptr, first_ptr + 1, first_ptr + 2)
-                else:
-                    clear()
-            else:
-                var ignored = PythonObject(from_owned=result)
-                _ = ignored^
-        if freed:
-            # Keys and dictionary are exact builtins. Deletion neither hashes
-            # application objects nor releases an unadmitted retained owner.
-            if remove(remaining._obj_ptr, pair[0]._obj_ptr) != 0:
-                if first[0] == 0:
-                    fetch(first_ptr, first_ptr + 1, first_ptr + 2)
-                else:
-                    clear()
-    if replace:
-        if publish(fields._obj_ptr, entry_name._obj_ptr, remaining._obj_ptr) != 0:
-            if first[0] == 0:
-                fetch(first_ptr, first_ptr + 1, first_ptr + 2)
-            else:
-                clear()
-    _ = guard^
-    if first[0] != 0:
-        restore(first[0], first[1], first[2])
-        _ = first^
-        var failure = stash_python_error()
-        raise failure^
-    _ = first^
+def _release(fields: PythonObject, values: PythonObject, context: PythonObject) raises:
+    var entries = _entries(fields, context)
+    var key = py_call(context["arena_id"], values)
+    var hit = py_get(entries, key)
+    if hit is None:
+        return
+    _checked(key, hit, context)
+    if hit[0] is not values:
+        return
+    # Unpublish before the GIL-releasing free; the existing dictionary is
+    # mutated in place, as before.
+    _ = py_call(entries.pop, key)
+    _ = entries^
+    var first = FirstFailure()
+    try:
+        _free(hit[2], context)
+    except error:
+        first.keep(error)
+        try:
+            _republish(fields, Python.list(Python.tuple(key, hit)), context)
+        except republish_error:
+            first.keep(republish_error)
+    _ = hit^
+    first.finish()
 
 
 def arena_resident_operation(model: PythonObject, operation: String, args: PythonObject,
-                            context: PythonObject) raises -> PythonObject:
+                             context: PythonObject) raises -> PythonObject:
     var fields = _resident_fields(model, context)
-    if operation == "resident_enter":
+    if operation == "msel_resident_enter":
         return model
-    if operation == "resident_init":
-        var replacements = Python.dict(_put=context["arena_msel_put"],
-            _free=context["arena_msel_free"], _take=context["arena_msel_take_rows"])
-        for name in ["_put", "_free", "_take"]:  # driver-loop: admit changed entry owners before constructor publication
-            var old = py_get(fields, name)
-            if old is not replacements[name]:
-                native_release_admit(old, context)
-        var fresh = Python.dict()
+    if operation == "msel_resident_init":
         if py_contains(fields, "_entries"):
-            var entries = _entries(fields, context)
-            _release_selected(fields, entries, _selected(entries, PythonObject(None), True, context), True, context)
-        for name in ["_put", "_free", "_take"]:  # driver-loop: publication follows complete old ownership admission and cleanup
-            py_setitem(fields, name, replacements[name])
-        py_setitem(fields, "_entries", fresh)
+            # Reinitialization frees the live entries (the old constructor
+            # lost them). A failed free keeps the old fields and the failed
+            # entries published.
+            if len(_entries(fields, context)):
+                _connected(fields, context)
+                _close(fields, context)
+        py_setitem(fields, "_put", context["arena_msel_put"])
+        py_setitem(fields, "_free", context["arena_msel_free"])
+        py_setitem(fields, "_take", context["arena_msel_take_rows"])
+        py_setitem(fields, "_entries", Python.dict())
         return PythonObject(None)
-    if fields["_put"] is not context["arena_msel_put"] or fields["_free"] is not context["arena_msel_free"] or fields["_take"] is not context["arena_msel_take_rows"]:
-        raise Error("TypeError: resident lifecycle requires its connected native entries")
-    var entries = _entries(fields, context)
-    if operation == "resident_release":
-        var key = py_call(context["arena_id"], args[0])
-        var hit = py_get(entries, key)
-        if hit is not None:
-            var selected = _selected(entries, key, False, context)
-            _release_selected(fields, entries, selected, False, context)
+    _connected(fields, context)
+    if operation == "msel_resident_take":
+        return arena_resident_take(fields, args[0], args[1], context)
+    if operation == "msel_resident_entry":
+        var dtype = args[1]
+        var indices = False
+        if dtype is not None:
+            if py_type(dtype) is not context["arena_native_types"]["str"] or String(py=dtype) != "<i8":
+                raise Error("ValueError: resident entries cast only to the int64 index layout")
+            indices = True
+        return arena_resident_entry(fields, args[0], indices, context)
+    if operation == "msel_resident_release":
+        _release(fields, args[0], context)
         return PythonObject(None)
-    if operation == "resident_close" or operation == "resident_exit":
-        _release_selected(fields, entries, _selected(entries, PythonObject(None), True, context), True, context)
-        return PythonObject(False) if operation == "resident_exit" else PythonObject(None)
+    if operation == "msel_resident_close":
+        _close(fields, context)
+        return PythonObject(None)
+    if operation == "msel_resident_exit":
+        _close(fields, context)
+        return PythonObject(False)
     raise Error("ValueError: unknown native resident lifecycle operation")
