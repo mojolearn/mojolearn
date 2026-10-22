@@ -955,8 +955,10 @@ ANNOTATIONS_BY_SRC = {
         "Source reach requires MOJOLEARN_IDENTITY_HOST_INFER=" + lane +
         ": the lane saves its scaler, host_model loads Host" + estimator +
         ", and the held-out transform uses the estimators_host entry. Ordinary "
-        "CPU records exercise preprocessing_host instead; retained host-infer execution "
-        "and matching installed-package qualification are still owed.")
+        "CPU records exercise preprocessing_host instead. Bounded local CPU host-infer "
+        "execution passed at e7c23510b (base fixture, one repeat; retained "
+        "scaler-host-infer-cpu-e7c23510b.result.json). Matching installed-package and "
+        "reference qualification are still owed; this is not full fixture coverage.")
        for entry, lane, estimator in (("standard_transform", "standard-scaler", "StandardScaler"),
                                      ("minmax_transform", "minmax-scaler", "MinMaxScaler"))},
     **{(e, "bindings/_mojolearn_training_host.mojo"): ("n/a", [], _HOST_SLOT)
