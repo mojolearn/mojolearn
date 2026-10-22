@@ -34,9 +34,10 @@ jobs:
   no-host-routes:
     name: no-host-routes
     runs-on: ubuntu-latest
-    # The regression suite checks many scratch commits against the full tree.
-    # Five minutes cancelled it after the production checker had passed.
-    timeout-minutes: 20
+    # Full-tree scratch-commit regressions reached their success summary at
+    # the 20-minute job deadline on e73a88068, then Actions cancelled cleanup.
+    # Allow checkout and runner variance without truncating checker coverage.
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
