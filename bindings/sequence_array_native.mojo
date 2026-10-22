@@ -104,7 +104,10 @@ def sequence_array_cast(source: PythonObject, requested: PythonObject, context: 
     var result = py_call(input["ndarray"], source.shape, dtype=dtype)
     var count = Int(py=source.size)
     var stride = Int(py=dtype.itemsize)
-    var start = sequence_array_address(source)
+    # Raw integer addresses do not carry a Mojo lifetime. Retain the source
+    # owner explicitly until every conversion loop has consumed its words.
+    var source_owner = source
+    var start = sequence_array_address(source_owner)
     var destination = sequence_array_address(result)
     var status = 0
     for i in range(len(leaves)):  # driver-loop: over admitted native output field layouts
@@ -113,5 +116,6 @@ def sequence_array_cast(source: PythonObject, requested: PythonObject, context: 
             sequence_object_leaf(start, destination, count, stride, Int(py=leaf[3]))
         else:
             status |= sequence_cast_leaf(start, destination, count, stride, Int(py=leaf[3]), String(leaf[0]), Int(py=leaf[1]), Bool(py=leaf[2]))
+    _ = source_owner^
     sequence_array_report(status, settings, context)
     return result
