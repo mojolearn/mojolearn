@@ -1900,10 +1900,6 @@ class TrainDeviceArray(object):
         """The array as a host `mojolearn.Array` (one download)."""
         return _OPT_NATIVE("device_host", self, (), None, _OPT_CONTEXT)
 
-    def __del__(self):
-        return _OPT_NATIVE("device_finalize", self, (), None, _OPT_CONTEXT)
-
-
 def _is_dev(x):
     return isinstance(x, TrainDeviceArray)
 

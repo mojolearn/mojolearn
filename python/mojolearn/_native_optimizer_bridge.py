@@ -8,7 +8,7 @@ def connect(training):
     from collections import OrderedDict
     import mmap
     import sys
-    from types import BuiltinFunctionType, ModuleType
+    from types import BuiltinFunctionType, MethodType, ModuleType
     from . import _backend, _buffer, _numeric_profile
     from .tokenizer import _binding
     from ._array import Array
@@ -68,9 +68,21 @@ def connect(training):
         "profiles": _numeric_profile.PROFILES, "input_context": input_context,
         "array_getters": {name: vars(Array)[name].__get__ for name in Array.__slots__},  # glue: retain fixed native Array slot descriptors at import
     }
-    native = _binding()._module.optimizer_native
+    module = _binding()._module
+    native = module.optimizer_native
     if not isinstance(native, BuiltinFunctionType):
         raise TypeError("optimizer requires compiled optimizer_native")
+    finalizer = module.optimizer_device_finalize
+    descriptor = module.classical_attribute_descriptor
+    if not isinstance(finalizer, BuiltinFunctionType) or not isinstance(descriptor, BuiltinFunctionType):
+        raise TypeError("training device ownership requires compiled finalizer descriptors")
+    context["device_finalizer_types"] = (dict, int, BuiltinFunctionType, str, list)
+    context["device_fields_getter"] = vars(training.TrainDeviceArray)["__dict__"].__get__
+    training.TrainDeviceArray.__del__ = descriptor(MethodType(finalizer, context))
+    context["device_finalizer_descriptor"] = vars(training.TrainDeviceArray)["__del__"]
+    names += ("__del__",)
+    context["guards"] = tuple((cls, cls.__mro__, vars(cls), tuple((name, vars(cls).get(name)) for name in names))  # glue: retain finalizer and layout identities after native descriptor connection
+                              for cls in guarded)  # glue: snapshot admitted owner layouts at import
     return native, context
 
 
