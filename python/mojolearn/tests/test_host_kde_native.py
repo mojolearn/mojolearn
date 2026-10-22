@@ -358,3 +358,20 @@ def test_kde_numpy_absent_and_late_import_preserve_consumed_results(tmp_path, or
                           capture_output=True, env=dict(os.environ), timeout=90)
     assert done.returncode == 0, done.stderr[-6000:]
     assert json.loads(done.stdout) == expected
+
+
+def test_kde_bandwidth_conversion_never_calls_replaced_builtin_float(tmp_path, monkeypatch):
+    import builtins
+    model = _model(tmp_path)
+    model.bandwidth = ".75"
+    x = _input(2, "float32")
+    expected = _state(legacy.kde(model, x))
+    touched = []
+    def callback(value):
+        touched.append("float")
+        return .75
+    with monkeypatch.context() as patch:
+        patch.setattr(builtins, "float", callback)
+        audit = audit_native_call(model.score_samples, x)
+    assert _state(audit.assert_native()) == expected
+    assert touched == []

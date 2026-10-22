@@ -347,3 +347,25 @@ def test_iforest_numpy_absent_and_late_import_preserve_consumed_results(tmp_path
                           capture_output=True, env=dict(os.environ), timeout=90)
     assert done.returncode == 0, done.stderr[-6000:]
     assert json.loads(done.stdout) == expected
+
+
+def test_iforest_resolution_never_calls_replaced_builtin_float(tmp_path, monkeypatch):
+    import builtins
+    model = _model(tmp_path, sample_mode=2, auto=False)
+    del model._seed
+    # Use already admitted native NumPy scalars throughout the stored float
+    # options so this reaches resolution even while builtins.float is patched.
+    for name, value in tuple(vars(model).items()):
+        if type(value) is float:
+            setattr(model, name, np.float64(value))
+    x = _input(2, "float32")
+    expected, state = _oracle(model, x, "score_samples")
+    touched = []
+    def callback(value):
+        touched.append("float")
+        return .5
+    with monkeypatch.context() as patch:
+        patch.setattr(builtins, "float", callback)
+        audit = audit_native_call(model.score_samples, x)
+    assert _state(audit.assert_native()) == _state(expected)
+    assert _state(vars(model)) == state and touched == []
