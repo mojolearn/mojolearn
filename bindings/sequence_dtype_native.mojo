@@ -92,11 +92,11 @@ def sequence_dtype_text(value: PythonObject, classes: PythonObject, context: Pyt
     var formats = Python.list()
     var record = False
     while position < len(text):  # driver-loop: parse each compact dtype field in Mojo
-        var match = py_call(context["sequence_dtype_match"], context["sequence_dtype_compact"], text, position)
-        if match is None or Int(py=py_call(match.end)) <= position:
+        var matched = py_call(context["sequence_dtype_match"], context["sequence_dtype_compact"], text, position)
+        if matched is None or Int(py=py_call(matched.end)) <= position:
             raise Error("ValueError: dtype format is not recognized")
-        var groups = py_call(match.groups)
-        position = Int(py=py_call(match.end))
+        var groups = py_call(matched.groups)
+        position = Int(py=py_call(matched.end))
         if position < len(text):
             if py_call(context["sequence_dtype_match"], context["sequence_dtype_space"], text, position) is not None:
                 position = len(text)
