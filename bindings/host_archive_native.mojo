@@ -8,6 +8,7 @@ from bindings.sequential_description import sequential_fields
 from bindings.classical_archive_read import classical_archive_read, classical_archive_build, _archive_exact, _archive_string
 from bindings.classical_arrays import classical_i64, classical_f64, classical_wrap_array, classical_array, classical_address
 from core.host_archive_impl import host_archive_copy_f32
+from bindings.scaler_lifecycle_native import scaler_archive_build
 
 
 def host_archive_count(arrays: PythonObject, name: String, dtype: String, count: Int,
@@ -461,6 +462,8 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         model = host_archive_kernel(cls, arrays, 0 if fmt == "mojolearn-kernel-ridge-1" else (1 if fmt == "mojolearn-nystroem-1" else 2), context)
     elif fmt == "mojolearn-scaler-1" and String(estimator) == "MinMaxScaler":
         model = host_archive_minmax(cls, arrays, context)
+    elif fmt == "mojolearn-scaler-1" and String(estimator) == "StandardScaler":
+        model = scaler_archive_build(cls, arrays, path, context)
     elif fmt == "mojolearn-cholesky-1":
         model = host_archive_cholesky(cls, arrays, context)
     elif fmt == "mojolearn-embedding-1":
