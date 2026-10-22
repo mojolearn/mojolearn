@@ -207,6 +207,23 @@ class InstalledNativeAudit(unittest.TestCase):
             self.assertEqual(scope["cpu_not_applicable_cases"], {})
             self.assertIn("numpy", q.test_dependencies([name]))
 
+    def test_public_archive_and_buffer_scopes_keep_private_pca_excluded(self):
+        names = ("test_classical_archive_writer_native.py",
+                 "test_standard_scaler_native_lifecycle.py",
+                 "test_minmax_scaler_native_lifecycle.py",
+                 "test_sequential_native_buffers.py")
+        self.assertNotIn("test_pca_exact_native_owner.py", q.PUBLIC_TESTS)
+        for vendor in ("cpu", "metal", "cuda", "hip"):
+            scopes = q.test_applicability(names, vendor)
+            for name in names:
+                self.assertIn(name, q.PUBLIC_TESTS)
+                self.assertTrue((q.ROOT / "python/mojolearn/tests" / name).is_file())
+                self.assertEqual(scopes[name]["cpu_not_applicable_cases"], {})
+                self.assertIn("numpy", q.test_dependencies([name]))
+            self.assertIn("private PCA", scopes[names[0]]["coverage_limit"])
+            self.assertIn("remain separate", scopes[names[1]]["coverage_limit"])
+            self.assertIn("test oracles", scopes[names[3]]["coverage_limit"])
+
     def test_public_owner_and_host_scopes_exclude_private_array_candidate(self):
         names = ("test_native_owner_qualification.py", "test_sequence_shutdown_native.py", "test_training_rms_public_native.py", "test_optimizer_native_step_errors.py",
                  "test_optimizer_native_array_ownership.py", "test_device_rows_metadata_native.py", "test_host_kde_fit_native.py", "test_host_iforest_fit_native.py",
