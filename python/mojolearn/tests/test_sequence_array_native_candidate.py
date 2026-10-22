@@ -136,13 +136,13 @@ def test_native_candidate_preserves_numpy_error_state(resident, mode, dtype):
     assert [str(w.message) for w in new] == [str(w.message) for w in old]
 
 
-def test_native_candidate_shortest_float_strings_and_special_payloads(resident):
+@pytest.mark.parametrize("dtype", ["U32", "S8", ">f4", "f8", "c8", "c16", "f2"])
+def test_native_candidate_shortest_float_strings_and_special_payloads(resident, dtype):
     _, tensor = resident
     values = np.random.default_rng(42).integers(0, 2 ** 32, size=4096, dtype="u4").view("f4")
     device = to_device(values, numeric_mode="identical")
     with np.errstate(all="ignore"):
-        for dtype in ("U32", "S8", ">f4", "f8", "c8", "c16", "f2"):
-            assert_outputs(native_candidate(device, dtype), values.astype(dtype))
+        assert_outputs(native_candidate(device, dtype), values.astype(dtype))
 
 
 def test_native_candidate_refuses_dtype_hooks_before_invoking_them(resident):

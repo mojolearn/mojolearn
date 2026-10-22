@@ -42,9 +42,9 @@ struct SequenceNumericLocale(Movable):
             external_call["freelocale", NoneType](self.locale.value())
 
 
-def sequence_float_text(bits: UInt32) raises -> String:
+def sequence_float_text(bits: UInt32, print_mode: Int = 2147483647) raises -> String:
     """Shortest decimal that round-trips to this binary32, in NumPy's
-    scalar notation: scientific below 1e-4 or from 1e6, fixed otherwise.
+    scalar notation, with its configured legacy print mode.
 
     Each binary32 has a round-tripping decimal with at most nine significant
     digits. libc rounds the exact widened value; the first round-tripping
@@ -62,6 +62,19 @@ def sequence_float_text(bits: UInt32) raises -> String:
     var value = Float64(bitcast[DType.float32](bits))
     var buffer = Array[c_char, 64](uninitialized=True)
     var general = String("%.*g")
+    if print_mode <= 113:
+        # NumPy scalartypes.c.src FLOATPREC_STR=6 in its 1.13 legacy
+        # formatting contract; append .0 only to an integral digit string.
+        var used = external_call["snprintf", c_int, num_fixed_args=3](
+            buffer.unsafe_ptr(), c_size_t(64), general.as_c_string_slice().unsafe_ptr(),
+            c_int(6), value)
+        if used < 0 or used >= 64:
+            raise Error("RuntimeError: native legacy float formatting failed")
+        var result = String(unsafe_from_utf8_ptr=buffer.unsafe_ptr())
+        if result.find(".") < 0 and result.find("e") < 0:
+            result += ".0"
+        _ = numeric_locale^
+        return result
     var significant = 9
     for precision in range(1, 10):
         var used = external_call["snprintf", c_int, num_fixed_args=3](
@@ -73,7 +86,39 @@ def sequence_float_text(bits: UInt32) raises -> String:
         if bitcast[DType.uint32](Float32(Float64(candidate))) == bits:
             significant = precision
             break
-    var scientific = abs(value) < Float64(1e-4) or abs(value) >= Float64(1e6)
+    # NumPy1.26--2.2 used 1e16 for float32;2.3 introduced 1e6 while
+    # retaining 1e16 for legacy<=2.2. This is scalar notation, not a
+    # workload-size threshold or a numerical-kernel dispatch rule.
+    var maximum_fixed = Float64(1e16) if print_mode <= 202 else Float64(1e6)
+    var scientific = abs(value) < Float64(1e-4) or abs(value) >= maximum_fixed
+    if not scientific and abs(value) >= Float64(1e6):
+        # Expanding the shortest rounded decimal preserves its meaningful
+        # digits. Printing the exact float with %.0f would invent extra
+        # low digits (137295995000000.0 vs137295995273216.0).
+        var exponent_format = String("%.*e")
+        var used = external_call["snprintf", c_int, num_fixed_args=3](
+            buffer.unsafe_ptr(), c_size_t(64), exponent_format.as_c_string_slice().unsafe_ptr(),
+            c_int(significant - 1), value)
+        if used < 0 or used >= 64:
+            raise Error("RuntimeError: native positional float formatting failed")
+        var text = String(unsafe_from_utf8_ptr=buffer.unsafe_ptr())
+        var e = text.find("e")
+        var exponent = Int(String(text[byte=e + 1:]))
+        var negative = text.startswith("-")
+        var digits = String("")
+        for i in range(1 if negative else 0, e):
+            if UInt8(text.unsafe_ptr()[i]) != UInt8(46):
+                digits += String(text[byte=i:i + 1])
+        var result = String("-") if negative else String("")
+        var point = exponent + 1
+        for i in range(max(point, digits.byte_length())):
+            if i == point:
+                result += "."
+            result += String(digits[byte=i:i + 1]) if i < digits.byte_length() else String("0")
+        if point >= digits.byte_length():
+            result += ".0"
+        _ = numeric_locale^
+        return result
     var precision = significant - 1
     if not scientific:
         precision = max(0, significant - 1 - Int(floor(log10(abs(value)))))
@@ -97,8 +142,8 @@ def sequence_float_text(bits: UInt32) raises -> String:
     return result
 
 
-def sequence_write_text(bits: UInt32, destination: Int, width: Int, unicode: Bool, little: Bool) raises:
-    var text = sequence_float_text(bits)
+def sequence_write_text(bits: UInt32, destination: Int, width: Int, unicode: Bool, little: Bool, print_mode: Int = 2147483647) raises:
+    var text = sequence_float_text(bits, print_mode)
     var out = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=destination)
     var count = min(text.byte_length(), width // 4 if unicode else width)
     for index in range(width):

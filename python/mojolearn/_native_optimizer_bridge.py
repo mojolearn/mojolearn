@@ -102,10 +102,13 @@ def connect_sequence_optimizers(training, optim, device):
 def connect_sequence_device(training, device):
     # glue: connect sequence buffer/optimizer ABI symbols once at module import
     from types import BuiltinFunctionType
+    from _contextvars import ContextVar
     from . import _backend
     from ._native_classical_warnings import connect_warnings
     import re
     context = training._OPT_CONTEXT
+    context["sequence_print_context_type"] = ContextVar
+    context["sequence_print_context_get"] = ContextVar.get
     warning = connect_warnings()
     code = device.SequenceDeviceTensor.__array__.__code__
     warning.update(warning_filename=code.co_filename,
