@@ -56,6 +56,8 @@ def connect():
                                                                     _arena_io.DeviceCache.get.__code__.co_firstlineno,
                                                                     _arena_io.__name__)})
     context.update(cache_scalar_context=scalar_context,
+                   cache_type_flags=vars(type)["__flags__"].__get__,
+                   cache_primitive_bases=(int, float, complex, str, bytes, bytearray),
                    cache_key_descriptor=vars(_arena_io.DeviceCache)["_key"],
                    cache_key_function=_arena_io.DeviceCache._key,
                    cache_little_endian=sys.byteorder == "little",

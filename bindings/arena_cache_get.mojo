@@ -19,6 +19,33 @@ def _one_of(cls: PythonObject, types: PythonObject) raises -> Bool:
     return False
 
 
+def _inherited_primitive(value: PythonObject, context: PythonObject) raises -> Bool:
+    var cls = py_type(value)
+    if py_type(cls) is not context["arena_native_types"]["type"]:
+        return False
+    # Exact NumPy static scalar classes follow the storage decoder instead.
+    # Python-created subclasses may retain builtin number/string slots when
+    # every intervening class inherits those exact native implementations.
+    if (Int(py=py_call(context["cache_type_flags"],cls)) & 512) == 0:
+        return False
+    var ancestry = py_call(context["cache_type_mro"],cls)
+    var index = -1
+    for i in range(len(ancestry)):  # driver-loop: locate an inherited native primitive base without protocols
+        if _one_of(ancestry[i],context["cache_primitive_bases"]):
+            index = i
+            break
+    if index < 0:
+        return False
+    var base = _mapping(ancestry[index],context)
+    for i in range(index):  # driver-loop: admit only unchanged native conversion/comparison/text slots
+        var mapping = _mapping(ancestry[i],context)
+        for name in ["__int__","__index__","__float__","__trunc__","__eq__","__ne__","__repr__","__str__"]:  # driver-loop: fixed native primitive slot surface
+            var key = PythonObject(name)
+            if py_contains(mapping,key) and mapping[key] is not py_get(base,key):
+                raise Error("TypeError: cache scalar metadata cannot invoke overridden Python conversion, equality or text hooks")
+    return True
+
+
 def _classes(context: PythonObject) raises -> PythonObject:
     var scalar = context["cache_scalar_context"]
     # Connect exact descriptor identities through fixed native dtype metadata.
@@ -109,7 +136,7 @@ def _itemsize_four(value: PythonObject, context: PythonObject, depth: Int = 0) r
     if depth > 64:
         raise Error("TypeError: cache itemsize exceeds native nesting bounds")
     var cls = py_type(value)
-    if _one_of(cls,context["cache_itemsize_types"]):
+    if _one_of(cls,context["cache_itemsize_types"]) or _inherited_primitive(value,context):
         # Exact builtin slots compare only with the fixed builtin int four.
         # Unlike NumPy scalar comparison this cannot dispatch a numeric ufunc.
         ref cpy = Python().cpython()
@@ -176,7 +203,7 @@ def _integer(value: PythonObject, context: PythonObject, depth: Int = 0) raises 
     var scalar = context["cache_scalar_context"]
     if cls is context["arena_memoryview"]:
         native_release_admit(value,context)
-    if _one_of(cls,context["cache_integer_types"]) or cls is context["arena_memoryview"]:
+    if _one_of(cls,context["cache_integer_types"]) or cls is context["arena_memoryview"] or _inherited_primitive(value,context):
         # CPython owns parsing of exact builtin strings and arbitrary-precision
         # integers. No supplied protocol or NumPy number slot reaches it.
         ref cpy = Python().cpython()
