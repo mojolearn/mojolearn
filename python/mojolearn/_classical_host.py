@@ -424,6 +424,23 @@ class HostKernelDensity(_NativeArchiveLoad, _HostBound, KernelDensity):
     """Evaluate a saved kernel density model on the CPU."""
     _HOST_ARRAYS = ("_x", "_w")
 
+    def model_sha256(self):
+        """Hash the stored training rows and optional weights in field-name order.
+
+        Arrays contribute physical storage bytes; NumPy arrays contribute
+        logical C-order bytes. Model options are not included.
+
+        Returns
+        -------
+        str
+            The 64-character hexadecimal SHA-256 digest.
+
+        Examples
+        --------
+        >>> digest = model.model_sha256()
+        """
+        return _native_classical(self, "host_density_hash", ("kde",), _CLASSICAL)
+
     @_native_host_initializer
     def __init__(self, *, bandwidth=1.0, algorithm="auto", kernel="gaussian", metric="euclidean",
                  atol=0, rtol=0, breadth_first=True, leaf_size=40, metric_params=None, numeric_mode=None):
@@ -648,6 +665,23 @@ class HostSVC(_NativeArchiveLoad, _HostBound, SVC):
 class HostIsolationForest(_NativeArchiveLoad, _HostBound, IsolationForest):
     """Score samples with a saved isolation forest on the CPU."""
     _HOST_ARRAYS = ("_x",)
+
+    def model_sha256(self):
+        """Hash the stored training rows without model options or archive metadata.
+
+        Arrays contribute physical storage bytes; NumPy arrays contribute
+        logical C-order bytes.
+
+        Returns
+        -------
+        str
+            The 64-character hexadecimal SHA-256 digest.
+
+        Examples
+        --------
+        >>> digest = model.model_sha256()
+        """
+        return _native_classical(self, "host_density_hash", ("iforest",), _CLASSICAL)
 
     @_native_host_initializer
     def __init__(self, *, n_estimators=100, max_samples="auto", max_depth=None, max_features=1.0,
@@ -1395,7 +1429,7 @@ except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as _mi
 
 # Import-time connection of complete explicit CPU prediction owners.
 def _connect_host_inference():
-    from types import BuiltinFunctionType, MethodType, FunctionType, MemberDescriptorType, ModuleType
+    from types import BuiltinFunctionType, MethodType, FunctionType, MemberDescriptorType, MethodDescriptorType, ModuleType
     from _contextvars import ContextVar
     from ._native_owner_lifetime import connect_owner_context
     from ._labels import ClassLabels
@@ -1421,6 +1455,8 @@ def _connect_host_inference():
     HostIsolationForest.fit = _NATIVE_HOST_FITS["HostIsolationForest.fit"]
     HostKernelDensity.__init__ = _NATIVE_HOST_INITIALIZERS["HostKernelDensity.__init__"]
     HostIsolationForest.__init__ = _NATIVE_HOST_INITIALIZERS["HostIsolationForest.__init__"]
+    if type(list.sort) is not MethodDescriptorType:
+        raise TypeError("explicit CPU model hashes require a native sorting descriptor")
     context = dict(_CLASSICAL["host_tree_context"])
     context.update(host_inference_entries=entries,
                    host_inference_class_labels=ClassLabels,
@@ -1430,6 +1466,11 @@ def _connect_host_inference():
                    host_iforest_module_type=ModuleType, host_iforest_module_dict=vars(ModuleType)["__dict__"].__get__,
                    host_iforest_context_type=ContextVar, host_iforest_context_get=ContextVar.get,
                    host_density_object_setattr=vars(object)["__setattr__"],
+                   host_hash_list_sort=list.sort,
+                   host_hash_field_collection_types=(list, tuple, set, frozenset, dict, str, bytes, bytearray, range),
+                   host_hash_noniterable_types=(int, float, bool, complex, type(None)),
+                   host_hash_name_sort_types=(str, bytes, int, float, bool, complex, type(None)),
+                   host_hash_missing_tobytes_types=(str, bytes, bytearray, list, tuple, dict, set, frozenset, range, int, float, bool, complex),
                    host_density_member_type=MemberDescriptorType,
                    host_density_function_type=FunctionType, host_density_attribute_error=AttributeError,
                    host_kde_sequence_types=(list, tuple, range),

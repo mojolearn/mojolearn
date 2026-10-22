@@ -22,6 +22,7 @@ from bindings.host_iforest_fit_native import host_iforest_fit
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.host_density_constructor_native import host_density_initialize
 from bindings.host_density_archive_native import host_density_save
+from bindings.host_density_hash_native import host_density_hash
 from bindings.classical_exceptions import classical_require_fitted, classical_error_restore, classical_error_reduce
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.classical_pandas import classical_admit_value
@@ -115,6 +116,9 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             return result.steal_data()
         if operation == "host_density_save":
             var result = host_density_save(model, args, context["host_inference_context"])
+            return result.steal_data()
+        if operation == "host_density_hash":
+            var result = host_density_hash(model, args, context["host_inference_context"])
             return result.steal_data()
         if operation == "host_density_initialize":
             var result = host_density_initialize(model, args, context["host_inference_context"])
