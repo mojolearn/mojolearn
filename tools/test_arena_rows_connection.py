@@ -33,7 +33,7 @@ class Cache:
         raise AssertionError("import metadata must never call get")
 
 
-def connect(native_entry=len, store_binding=None):
+def connect(native_entry=len, store_binding=None, backend_fields=None):
     package = ModuleType('mojolearn')
     package.__path__ = [str(ROOT / 'python/mojolearn')]
     arena = ModuleType('mojolearn._arena_io')
@@ -52,6 +52,8 @@ def connect(native_entry=len, store_binding=None):
     tokenizer._binding = lambda: SimpleNamespace(_module=SimpleNamespace(arena_rows_native_call=len))
     backend = ModuleType('mojolearn._backend')
     backend.binding = lambda name, mode: SimpleNamespace() if store_binding is None else store_binding
+    if backend_fields:
+        vars(backend).update(backend_fields)
     modules = {'mojolearn': package, 'mojolearn._arena_io': arena,
                'mojolearn._array': arrays, 'mojolearn._native_classical_bridge': bridge,
                'mojolearn.tokenizer': tokenizer, 'mojolearn.model_selection': selection,
@@ -94,6 +96,49 @@ class NativeWeakrefConnectionTests(unittest.TestCase):
                 # unittest's traceback clearer itself catches RuntimeError;
                 # run that observer only after restoring the poisoned name.
                 self.assertEqual(failure, "DeviceCache requires the immutable native RuntimeError builtin")
+        self.assertEqual(touched, [])
+
+    def test_cache_supports_retains_native_string_and_exception_entries(self):
+        context = connect()
+        self.assertIs(context["cache_str_add"], str.__add__)
+        self.assertIs(context["cache_import_error"], ImportError)
+        self.assertIs(context["cache_error_new"], BaseException.__new__)
+        self.assertEqual(context["cache_cpu_error_templates"], ())
+
+    def test_cache_supports_tokenizes_cpu_templates_before_inserting_values(self):
+        class Host(ModuleType):
+            pass
+        class Missing(ModuleType):
+            pass
+        class NoCpuEntry(AttributeError):
+            pass
+        def message(module, entry, reason, basename=None):
+            return f"{module}.{entry}: {reason}; host {basename or module}"
+        context = connect(backend_fields=dict(_HostBinding=Host, _NoGpuBinding=Missing,
+                                              NoCpuEntry=NoCpuEntry, _no_cpu_implementation=message))
+        values = ("mod\0cache-reason\0", "entry\0cache-module\0", "why\0cache-host\0", "host\0cache-entry\0")
+        for index, template in enumerate(context["cache_cpu_error_templates"]):
+            actual = "".join(part if type(part) is str else values[part] for part in template)
+            expected = message(*values[:3], values[3] if index == 0 else None)
+            self.assertEqual(actual, expected)
+
+    def test_cache_supports_refuses_preimport_import_error_replacement(self):
+        touched = []
+        class Foreign(ImportError):
+            def __new__(cls, *args):
+                touched.append("new")
+                return super().__new__(cls, *args)
+        Foreign.__name__ = "ImportError"
+        Foreign.__module__ = "builtins"
+        for replacement in (Foreign, ValueError, lambda *args: touched.append("function")):
+            with self.subTest(replacement_type=type(replacement)):
+                failure = None
+                with patch("builtins.ImportError", replacement):
+                    try:
+                        connect()
+                    except TypeError as error:
+                        failure = str(error)
+                self.assertEqual(failure, "DeviceCache requires the immutable native ImportError builtin")
         self.assertEqual(touched, [])
 
     def test_cache_live_retains_connected_native_counter(self):
