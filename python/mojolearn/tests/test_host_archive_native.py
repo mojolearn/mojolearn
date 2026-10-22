@@ -132,6 +132,15 @@ def _cases():
             eigenvalues=_f32([1, 2]), eigenvectors=_f32([[1, 0], [0, 1], [1, 1]]), diag=_f32([1, 1, 2]),
             centroids=_f32([[1, 0], [0, 1]]), labels=np.asarray([0, 1, 0], dtype="<i4"),
             x=_f32([[1, 2], [3, 4], [5, 6]]))),
+        "SVC": ("mojolearn-svc-1", dict(
+            meta=_i64([2, 2, 5, -1, 1000, 3]), hyper=_f64([1, .001, 1024, .5]), gamma="auto", kernel="rbf",
+            dual_coef=_f32([[-.5, .5]]), support_vectors=_f32([[1, 2], [3, 4]]),
+            support=np.asarray([0, 1], dtype="<i4"), intercept=_f32([.25]), labels=_f64([0, 1]),
+            classes=np.asarray(["cold", "warm"]))),
+        "SVR": ("mojolearn-svr-1", dict(
+            meta=_i64([2, 2, 5, -1, 1000]), hyper=_f64([1, .1, .001, 1024, .5]), gamma="auto", kernel="rbf",
+            dual_coef=_f32([[-.5, .5]]), support_vectors=_f32([[1, 2], [3, 4]]),
+            support=np.asarray([0, 1], dtype="<i4"), intercept=_f32([.25]))),
         "GaussianProcessRegressor": ("mojolearn-gp-1", dict(
             ints=_i64([2, 0, 1, 1]), reals=_f64([2**-20, .5, 1.5, -3.25]),
             X_train=_f32([[1, 2], [3, 4]]), L=_f32([1, 0, .25, 1]), alpha=_f32([.5, -.5]),
@@ -475,6 +484,58 @@ def test_saved_gaussian_process_schema_refusals(tmp_path, name, changes):
         getattr(host, name).load.__func__(cls, path)
     audit = audit_native_call(cls.load, path)
     assert isinstance(audit.exception, ValueError), audit.report()
+    report = audit.report()
+    assert not any(report[key] for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads")), report
+
+
+@pytest.mark.parametrize("name,changes", [
+    ("SVC", {"kernel": "poly", "coef0": _f64([.25]), "gamma": "0.125"}),
+    ("SVR", {"kernel": "poly", "kernel_params": _f64([2, .5]), "gamma": "scale"}),
+    ("SVR", {"kernel": "sigmoid", "kernel_params": _f64([3, .5])}),
+    ("SVC", {"kernel": "precomputed", "prob_ab": _f64([.5, -.5])}),
+])
+def test_saved_svm_kernel_and_probability_controls(tmp_path, name, changes):
+    path = _archive(tmp_path, name, override=changes)
+    cls = getattr(host, "Host" + name)
+    original = getattr(host, name).load.__func__(cls, path)
+    restored = audit_native_call(cls.load, path).assert_native()
+    assert _state(vars(restored)) == _state(vars(original))
+
+
+def _svc_ovo():
+    return dict(classes=np.asarray(["cold", "warm", "hot"]),
+        pair_meta=_i64([0, 1, 2, 5, 0, 2, 2, 6, 1, 2, 2, 7]), pair_b=_f32([.25, -.5, .75]),
+        pair_support=np.asarray([0, 1, 0, 2, 1, 2], dtype="<i4"),
+        pair_dual=_f32([-.5, .5, -.75, .75, -.25, .25]),
+        pair_sv=_f32([[1, 2], [3, 4], [1, 2], [5, 6], [3, 4], [5, 6]]).reshape(-1),
+        prob_ab=_f64([.5, -.5, 1, -.25, .75, -.75]), shape="ovr", break_ties=_i64([1]))
+
+
+@pytest.mark.parametrize("shape", ["ovo", "ovr"])
+def test_saved_multiclass_svc_pair_and_public_support_layout(tmp_path, shape):
+    changes = _svc_ovo()
+    changes["shape"] = shape
+    path = _archive(tmp_path, "SVC", override=changes)
+    original = host.SVC.load.__func__(host.HostSVC, path)
+    restored = audit_native_call(host.HostSVC.load, path).assert_native()
+    assert _state(vars(restored)) == _state(vars(original))
+
+
+@pytest.mark.parametrize("name,changes,error", [
+    ("SVR", {"kernel": "poly", "kernel_params": _f64([33, 0])}, ValueError),
+    ("SVC", {"kernel": "tanh"}, NotImplementedError),
+    ("SVC", {"gamma": "-1"}, ValueError),
+    ("SVR", {"hyper": _f64([0, .1, .001, 1024, .5])}, ValueError),
+    ("SVC", {"kernel": "precomputed", "support": np.asarray([0, 2], dtype="<i4")}, ValueError),
+    ("SVC", dict(_svc_ovo(), pair_meta=_i64([0, 2, 2, 5, 0, 2, 2, 6, 1, 2, 2, 7])), ValueError),
+])
+def test_saved_svm_invalid_controls_and_supports(tmp_path, name, changes, error):
+    path = _archive(tmp_path, name, override=changes)
+    cls = getattr(host, "Host" + name)
+    with pytest.raises(error):
+        getattr(host, name).load.__func__(cls, path)
+    audit = audit_native_call(cls.load, path)
+    assert isinstance(audit.exception, error), audit.report()
     report = audit.report()
     assert not any(report[key] for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads")), report
 

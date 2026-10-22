@@ -9,7 +9,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contai
 from bindings.sequential_description import sequential_fields
 from bindings.classical_archive_read import classical_archive_read, classical_archive_build, _archive_exact, _archive_string
 from bindings.classical_arrays import classical_i64, classical_f64, classical_wrap_array, classical_array, classical_typed, classical_address
-from core.host_archive_impl import host_archive_copy_f32, host_archive_unique_i32, host_archive_mean_f64, host_archive_reorder_f32
+from core.host_archive_impl import host_archive_copy_f32, host_archive_unique_i32, host_archive_mean_f64, host_archive_reorder_f32, host_archive_copy_words, host_archive_support_bound, host_archive_svc_gather
 from bindings.scaler_lifecycle_native import scaler_archive_build
 
 
@@ -1069,14 +1069,18 @@ def host_archive_gp_kernel(arrays: PythonObject, n_ls: Int, classifier: Bool,
 
 
 def host_archive_reshape_f32(array: PythonObject, shape: PythonObject, context: PythonObject) raises -> PythonObject:
+    return host_archive_reshape_words(array, shape, "<f4", context)
+
+
+def host_archive_reshape_words(array: PythonObject, shape: PythonObject, dtype: String, context: PythonObject) raises -> PythonObject:
     if String(array.order) == "C":
-        return classical_wrap_array(array._store, shape, "<f4", "C", context)
+        return classical_wrap_array(array._store, shape, dtype, "C", context)
     var dimensions = List[Int]()
     var strides = List[Int]()
     for i in range(Int(py=array.ndim)):  # driver-loop: saved array shape metadata
         dimensions.append(Int(py=array.shape[i]))
         strides.append(Int(py=array.strides[i]))
-    var result = classical_typed(shape, "<f4", context)
+    var result = classical_typed(shape, dtype, context)
     host_archive_reorder_f32(classical_address(array), dimensions, strides, Int(py=array.size), classical_address(result))
     return result
 
@@ -1185,6 +1189,219 @@ def host_archive_gp(cls: PythonObject, arrays: PythonObject, classifier: Bool,
     return model
 
 
+def host_archive_slice_words(array: PythonObject, offset: Int, count: Int, shape: PythonObject,
+                             dtype: String, context: PythonObject) raises -> PythonObject:
+    if offset < 0 or count < 0 or offset > Int(py=array.size) or count > Int(py=array.size) - offset:
+        raise Error("saved model block lies outside its archive array")
+    var result = classical_typed(shape, dtype, context)
+    host_archive_copy_words(classical_address(array) + offset * 4, count, classical_address(result))
+    return result
+
+
+def host_archive_svm_ovo(fields: PythonObject, arrays: PythonObject, features: Int,
+                        context: PythonObject) raises:
+    var classes = host_archive_class_values(arrays["classes"], context)
+    var k = len(classes)
+    var pair_count = k * (k - 1) // 2
+    if k < 3:
+        raise Error("saved multiclass SVC must carry at least three classes")
+    var meta = host_archive_count(arrays, "pair_meta", "<i8", 4 * pair_count, context, True)
+    var bias = host_archive_count(arrays, "pair_b", "<f4", pair_count, context, True)
+    var raw_support = _archive_exact(arrays, "pair_support", "<i4", context)
+    var raw_dual = _archive_exact(arrays, "pair_dual", "<f4", context)
+    var raw_vectors = _archive_exact(arrays, "pair_sv", "<f4", context)
+    var total = Int(py=raw_support.size)
+    if features < 0 or Int(py=raw_dual.size) != total or (features != 0 and (Int(py=raw_vectors.size) // features != total or Int(py=raw_vectors.size) % features != 0)) or (features == 0 and Int(py=raw_vectors.size) != 0):
+        raise Error("saved SVC pair arrays disagree with their shapes")
+    var support = host_archive_reshape_words(raw_support, Python.tuple(total), "<i4", context)
+    var dual = host_archive_reshape_f32(raw_dual, Python.tuple(total), context)
+    var vectors = host_archive_reshape_f32(raw_vectors, Python.tuple(total, features), context)
+    var rows = host_archive_support_bound(classical_address(support), total, features if String(fields["_hp_kernel"]) == "precomputed" else -1)
+    var pairs = Python.list()
+    var support_addresses = Python.list()
+    var dual_addresses = Python.list()
+    var layout_meta = Python.list(k, rows, pair_count)
+    var out_bias = classical_typed(Python.tuple(pair_count), "<f4", context)
+    var out_iterations = classical_typed(Python.tuple(pair_count), "<i4", context)
+    var bias_words = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=classical_address(out_bias))
+    var iteration_words = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=classical_address(out_iterations))
+    var offset = 0
+    var q = 0
+    for i in range(k):  # driver-loop: saved one-vs-one class machines
+        for j in range(i + 1, k):  # driver-loop: saved one-vs-one class machines
+            var n = classical_i64(meta, 4 * q + 2)
+            var iterations = classical_i64(meta, 4 * q + 3)
+            if classical_i64(meta, 4 * q) != i or classical_i64(meta, 4 * q + 1) != j or n < 0 or n > total - offset:
+                raise Error("saved SVC pair metadata does not match class order or row count")
+            if iterations < -2147483648 or iterations > 2147483647:
+                raise Error("saved SVC pair iteration count does not fit int32")
+            var pair = Python.dict()
+            var ps = host_archive_slice_words(support, offset, n, Python.tuple(n), "<i4", context)
+            var pd = host_archive_slice_words(dual, offset, n, Python.tuple(1, n), "<f4", context)
+            var pv = host_archive_slice_words(vectors, offset * features, n * features, Python.tuple(n, features), "<f4", context)
+            py_setitem(pair, "i", i)
+            py_setitem(pair, "j", j)
+            py_setitem(pair, "support", ps)
+            py_setitem(pair, "dual", pd)
+            py_setitem(pair, "sv", pv)
+            py_setitem(pair, "b", bias._mv[q])
+            py_setitem(pair, "n_iter", iterations)
+            _ = py_call(pairs.append, pair)
+            _ = py_call(support_addresses.append, classical_address(ps) if n else 0)
+            _ = py_call(dual_addresses.append, classical_address(pd) if n else 0)
+            _ = py_call(layout_meta.extend, Python.tuple(i, j, n))
+            bias_words[q] = -Float32(Float64(py=bias._mv[q]))
+            iteration_words[q] = Int32(iterations)
+            offset += n
+            q += 1
+    if offset != total:
+        raise Error("saved SVC pair metadata does not cover every support row")
+    var cap = min(rows, total)
+    var public_support = classical_typed(Python.tuple(max(1, cap)), "<i4", context)
+    var public_counts = classical_typed(Python.tuple(k), "<i4", context)
+    var public_dual = classical_typed(Python.tuple(max(1, (k - 1) * cap)), "<f4", context)
+    var layout = context["host_archive_svc_layout"]
+    if layout is None or py_type(layout) is not Python.import_module("types").BuiltinFunctionType:
+        raise Error("ImportError: saved multiclass SVC needs the compiled CPU layout entry")
+    var n_sv = Int(py=py_call(layout, support_addresses, dual_addresses, layout_meta,
+        Python.list(classical_address(public_support), classical_address(public_counts), classical_address(public_dual), cap)))
+    if n_sv < 0 or n_sv > cap:
+        raise Error("saved SVC native layout returned an invalid row count")
+    var result_support = host_archive_slice_words(public_support, 0, n_sv, Python.tuple(n_sv), "<i4", context)
+    var result_dual = host_archive_slice_words(public_dual, 0, (k - 1) * n_sv, Python.tuple(k - 1, n_sv), "<f4", context)
+    var result_vectors = classical_typed(Python.tuple(n_sv, features), "<f4", context)
+    host_archive_svc_gather(classical_address(support), total, classical_address(vectors), features,
+                            classical_address(result_support), n_sv, classical_address(result_vectors))
+    var shape = String(_archive_string(arrays, "shape", context))
+    var ties = host_archive_count(arrays, "break_ties", "<i8", 1, context, True)
+    py_setitem(fields, "decision_function_shape", "ovo" if shape == "ovo" else "ovr")
+    py_setitem(fields, "break_ties", classical_i64(ties, 0) != 0 and shape != "ovo")
+    py_setitem(fields, "_hp_break_ties", fields["break_ties"])
+    py_setitem(fields, "classes_", classes)
+    py_setitem(fields, "_pairs", pairs)
+    py_setitem(fields, "support_", result_support)
+    py_setitem(fields, "support_vectors_", result_vectors)
+    py_setitem(fields, "dual_coef_", result_dual)
+    py_setitem(fields, "n_support_", public_counts)
+    py_setitem(fields, "n_iter_", out_iterations)
+    py_setitem(fields, "intercept_", out_bias)
+    py_setitem(fields, "_label0", 0.0)
+    py_setitem(fields, "_label1", 1.0)
+
+
+def host_archive_svm(cls: PythonObject, arrays: PythonObject, classifier: Bool,
+                     context: PythonObject) raises -> PythonObject:
+    var meta = host_archive_count(arrays, "meta", "<i8", 6 if classifier else 5, context, True)
+    var hyper = host_archive_count(arrays, "hyper", "<f8", 4 if classifier else 5, context, True)
+    var kernel = _archive_string(arrays, "kernel", context)
+    var lower = py_call(kernel.lower)
+    var name = String(lower)
+    if py_contains(context["host_archive_svm_refused"], lower):
+        raise Error("NotImplementedError: saved SVM kernel is unsupported: " + name)
+    if not py_contains(context["host_archive_svm_kernels"], lower):
+        raise Error("saved SVM kernel is not a recognized kernel name")
+    var gamma_text = _archive_string(arrays, "gamma", context)
+    var gamma = gamma_text
+    if String(gamma_text) != "auto" and String(gamma_text) != "scale":
+        gamma = py_call(Python.import_module("builtins").float, gamma_text)
+        var value = Float64(py=gamma)
+        if not isfinite(value) or value < 0.0:
+            raise Error("saved SVM gamma must be finite and nonnegative")
+    var degree = classical_i64(meta, 5) if classifier else 3
+    var coef = Float64(0.0)
+    if String(kernel) == "poly" or String(kernel) == "sigmoid":
+        var saved = host_archive_count(arrays, "coef0" if classifier else "kernel_params", "<f8", 1 if classifier else 2, context, True)
+        if not classifier:
+            var value = classical_f64(saved, 0)
+            if not isfinite(value) or value < -9223372036854775808.0 or value >= 9223372036854775808.0:
+                raise Error("saved SVM degree must fit a signed integer")
+            degree = Int(value)
+        coef = classical_f64(saved, 0 if classifier else 1)
+    if name == "poly":
+        if degree < 0 or degree > 32:
+            raise Error("saved polynomial SVM degree must be in [0, 32]")
+    elif degree != 3:
+        raise Error("NotImplementedError: saved SVM degree is only supported for polynomial kernels")
+    if (name == "poly" or name == "sigmoid") and not isfinite(coef):
+        raise Error("saved SVM coef0 must be finite")
+    var penalty = classical_f64(hyper, 0)
+    var tolerance = classical_f64(hyper, 1 if classifier else 2)
+    var cache = classical_f64(hyper, 2 if classifier else 3)
+    var maximum = classical_i64(meta, 3)
+    var unchanged = classical_i64(meta, 4)
+    if not isfinite(penalty) or penalty <= 0.0 or not isfinite(tolerance) or tolerance <= 0.0 or not isfinite(cache) or cache <= 0.0:
+        raise Error("saved SVM C, tolerance and cache size must be positive and finite")
+    if maximum < -1 or maximum == 0 or unchanged < 0:
+        raise Error("saved SVM stopping controls are invalid")
+    var model = host_archive_object(cls, arrays, context)
+    var fields = sequential_fields(model)
+    host_archive_mode(arrays, fields, context)
+    var names = Python.tuple("C", "kernel", "degree", "gamma", "coef0", "tol", "cache_size", "max_iter", "nochange_steps")
+    var values = Python.tuple(penalty, kernel, degree, gamma, coef, tolerance, cache, maximum, unchanged)
+    for i in range(len(names)):  # driver-loop: saved SVM public and normalized controls
+        py_setitem(fields, names[i], values[i])
+        py_setitem(fields, "_hp_" + String(names[i]), lower if i == 1 else values[i])
+    py_setitem(fields, "verbose", False)
+    py_setitem(fields, "output_type", PythonObject(None))
+    py_setitem(fields, "_gamma", classical_f64(hyper, 3 if classifier else 4))
+    var nf = classical_i64(meta, 0)
+    var n = classical_i64(meta, 1)
+    py_setitem(fields, "n_features_in_", nf)
+    if classifier:
+        py_setitem(fields, "random_state", PythonObject(None))
+        py_setitem(fields, "class_weight", PythonObject(None))
+        py_setitem(fields, "decision_function_shape", "ovr")
+        py_setitem(fields, "probability", False)
+        py_setitem(fields, "break_ties", False)
+        py_setitem(fields, "_hp_random_state", PythonObject(None))
+        py_setitem(fields, "_hp_probability", False)
+        py_setitem(fields, "_hp_break_ties", False)
+        if py_contains(arrays, "prob_ab"):
+            var probability = _archive_exact(arrays, "prob_ab", "<f8", context)
+            if Int(py=probability.ndim) != 1:
+                raise Error("saved SVC probability calibration must be a vector")
+            var count = Int(py=probability.size)
+            var pairs = Python.list()
+            var a = classical_typed(Python.tuple((count + 1) // 2), "<f8", context)
+            var b = classical_typed(Python.tuple(count // 2), "<f8", context)
+            var ap = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=classical_address(a))
+            var bp = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=classical_address(b))
+            for i in range(count // 2):  # driver-loop: saved per-pair calibration coefficients
+                ap[i] = classical_f64(probability, 2 * i)
+                bp[i] = classical_f64(probability, 2 * i + 1)
+                _ = py_call(pairs.append, Python.tuple(ap[i], bp[i]))
+            if count % 2:
+                ap[count // 2] = classical_f64(probability, count - 1)
+            py_setitem(fields, "probability", True)
+            py_setitem(fields, "_hp_probability", True)
+            py_setitem(fields, "_prob_ab", pairs)
+            py_setitem(fields, "probA_", a)
+            py_setitem(fields, "probB_", b)
+        if py_contains(arrays, "pair_meta"):
+            host_archive_svm_ovo(fields, arrays, nf, context)
+            return model
+        var classes = host_archive_class_values(arrays["classes"], context)
+        if len(classes) != 2:
+            raise Error("saved binary SVC must carry exactly two classes")
+        var labels = host_archive_count(arrays, "labels", "<f8", 2, context, True)
+        py_setitem(fields, "classes_", classes)
+        py_setitem(fields, "_label0", classical_f64(labels, 0))
+        py_setitem(fields, "_label1", classical_f64(labels, 1))
+    else:
+        py_setitem(fields, "epsilon", classical_f64(hyper, 1))
+        py_setitem(fields, "_hp_epsilon", classical_f64(hyper, 1))
+    py_setitem(fields, "dual_coef_", host_archive_shape(arrays, "dual_coef", "<f4", Python.tuple(1, n), context))
+    py_setitem(fields, "support_vectors_", host_archive_shape(arrays, "support_vectors", "<f4", Python.tuple(n, nf), context))
+    var support = host_archive_shape(arrays, "support", "<i4", Python.tuple(n), context)
+    if String(kernel) == "precomputed":
+        _ = host_archive_support_bound(classical_address(support), n, nf)
+    py_setitem(fields, "support_", support)
+    py_setitem(fields, "intercept_", host_archive_shape(arrays, "intercept", "<f4", Python.tuple(1), context))
+    py_setitem(fields, "n_support_", n)
+    py_setitem(fields, "n_iter_", classical_i64(meta, 2))
+    return model
+
+
 def host_archive_build(path: PythonObject, context: PythonObject,
                        requested_class: PythonObject = PythonObject(None)) raises -> PythonObject:
     # This deliberately separate private entry allows each schema to be
@@ -1262,6 +1479,8 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         model = host_archive_umap(cls, arrays, context)
     elif fmt == "mojolearn-gp-1" or fmt == "mojolearn.gpc.v1":
         model = host_archive_gp(cls, arrays, fmt == "mojolearn.gpc.v1", context)
+    elif fmt == "mojolearn-svc-1" or fmt == "mojolearn-svr-1":
+        model = host_archive_svm(cls, arrays, fmt == "mojolearn-svc-1", context)
     else:
         raise Error("native host archive schema has not been implemented: " + fmt + "/" + String(estimator))
     if py_contains(context["host_archive_fitted_estimators"], estimator):

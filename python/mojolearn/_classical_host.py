@@ -257,7 +257,7 @@ class HostKernelDensity(_NativeArchiveLoad, _HostBound, KernelDensity):
     _HOST_ARRAYS = ("_x", "_w")
 
 
-class HostSVC(_HostBound, SVC):
+class HostSVC(_NativeArchiveLoad, _HostBound, SVC):
     _HOST_ARRAYS = ("dual_coef_", "support_vectors_", "intercept_")
 
 
@@ -269,7 +269,7 @@ class HostIsolationForest(_NativeArchiveLoad, _HostBound, IsolationForest):
     _HOST_ARRAYS = ("_x",)
 
 
-class HostSVR(_HostBound, SVR):
+class HostSVR(_NativeArchiveLoad, _HostBound, SVR):
     """`SVR.predict` from a saved model through
     `_mojolearn_svm_host.svr_predict` (lane/inference-svm, 2026-09-15)."""
     _HOST_ARRAYS = ("dual_coef_", "support_vectors_", "intercept_")
@@ -646,11 +646,15 @@ def _host_archive_cleanup_entries():
     # glue: only IVF's CPU inference binding owns a resident registry entry.
     # The other CPU host bindings keep ordinary array references. Device
     # finalizers stay on their original GPU classes.
-    try:
-        module = _backend.load_host_module("_mojolearn_ivf_search_host")
-    except ImportError:
-        return {}
-    return {"IVFIndex": module.ivf_flat_index_release}
+    entries = {}
+    for basename, key, name in (("_mojolearn_ivf_search_host", "IVFIndex", "ivf_flat_index_release"),  # glue: fixed explicit CPU archive entries
+                                 ("_mojolearn_svm_host", "svc_ovo_layout", "svc_ovo_layout")):
+        try:
+            module = _backend.load_host_module(basename)
+        except ImportError:
+            continue
+        entries[key] = getattr(module, name)
+    return entries
 
 
 _native_host_archive_bridge.connect(_CLASSICAL, _FORMATS, _host_archive_cleanup_entries())

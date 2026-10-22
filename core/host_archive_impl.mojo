@@ -2,6 +2,7 @@
 # Saved-state layout copies preserve every stored float32 bit, including
 # NaN payloads. They perform no numerical normalization or validation.
 from std.builtin.sort import sort
+from std.collections import Dict
 from core.hotpath_impl import reduce_stat, HP_F64, HP_SUM
 
 
@@ -42,3 +43,33 @@ def host_archive_reorder_f32(source: Int, shape: List[Int], strides: List[Int], 
             offset += (index % shape[d]) * strides[d]
             index //= shape[d]
         dst[i] = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=source + offset)[0]
+
+
+def host_archive_copy_words(source: Int, count: Int, destination: Int):
+    var src = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=source)
+    var dst = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=destination)
+    for i in range(count):
+        dst[i] = src[i]
+
+
+def host_archive_support_bound(source: Int, count: Int, columns: Int = -1) raises -> Int:
+    var src = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=source)
+    var bound = 0
+    for i in range(count):
+        var row = Int(src[i])
+        if row < 0 or (columns >= 0 and row >= columns):
+            raise Error("saved precomputed support index is outside the model columns")
+        bound = max(bound, row + 1)
+    return bound
+
+
+def host_archive_svc_gather(pair_support: Int, pair_rows: Int, vectors: Int, columns: Int,
+                            support: Int, rows: Int, destination: Int) raises:
+    var source_indices = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=pair_support)
+    var result_indices = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=support)
+    var positions = Dict[Int, Int]()
+    for i in range(pair_rows):
+        positions[Int(source_indices[i])] = i
+    for i in range(rows):
+        var at = positions[Int(result_indices[i])]
+        host_archive_copy_words(vectors + at * columns * 4, columns, destination + i * columns * 4)
