@@ -1,8 +1,8 @@
 {
   "schema": "mojolearn.runtime-takeover-status.v1",
-  "updated": "2026-10-22T03:52:56.703144+00:00",
+  "updated": "2026-10-22T04:17:22.049705+00:00",
   "release": "HELD",
-  "integration_before_report": "8faa65e9a",
+  "integration_before_report": "db5a97623f0f490facb33c2fec019bf2b1e85b54",
   "evidence_root": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021",
   "test_policy": "Rerun failures, new tests and directly affected regression checks; reuse accepted unchanged results. Counts from different scopes are not interchangeable.",
   "completed": {
@@ -66,18 +66,34 @@
     },
     "latest_targeted_tests": {
       "cpu": {
-        "total": 146,
-        "passed": 146,
+        "total": 154,
+        "passed": 154,
         "failed": 0,
         "skipped": 0,
-        "junit": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-tests-cpu-43b5b5e13.junit.xml"
+        "groups": {
+          "mojolearn.tests.test_host_inference_native": 120,
+          "mojolearn.tests.test_classical_warning_native_owner": 30,
+          "mojolearn.tests.test_host_model_kmeans": 4
+        },
+        "junit": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-tests-cpu-a5ab22094.junit.xml",
+        "junit_sha256": "9fabfae72211be8e7bc7b3da141f2b8b456cecd9a6d7540d1365059adf518d5d",
+        "receipt": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-tests-cpu-a5ab22094.json"
       },
       "metal": {
-        "total": 304,
-        "passed": 296,
-        "failed": 8,
+        "total": 237,
+        "passed": 237,
+        "failed": 0,
         "skipped": 0,
-        "junit": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-tests-metal-43b5b5e13.junit.xml"
+        "groups": {
+          "mojolearn.tests.test_host_inference_native": 120,
+          "mojolearn.tests.test_classical_warning_native_owner": 30,
+          "mojolearn.tests.test_host_model_kmeans": 4,
+          "mojolearn.tests.test_sequence_array_native_candidate": 75,
+          "mojolearn.tests.test_sequence_array_native_guards": 8
+        },
+        "junit": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-tests-metal-a5ab22094.junit.xml",
+        "junit_sha256": "0f042663d23904b83c71d43a4988c6022944bcbb229ba62edb45e39abdf798c9",
+        "receipt": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-tests-metal-a5ab22094.json"
       }
     },
     "tree_owner_repairs": {
@@ -102,6 +118,26 @@
       "metal_same_node_now_passed": 123,
       "late_numpy_replaced_fixture_passed_per_vendor": 4,
       "evidence": "failure-disposition-320-to-43.json"
+    },
+    "array_eight_failure_repairs": {
+      "same_node_now_passed": 7,
+      "locale_successor_cases_passed": 2,
+      "evidence": "failure-disposition-43-to-a5.json"
+    },
+    "bounded_owner_qualification": {
+      "cpu_passed": 7,
+      "cpu_gpu_skips": 2,
+      "metal_passed": 9,
+      "cpu_lanes": 3,
+      "metal_lanes": 5,
+      "scope": "43 runtime, separate harness; one fixture/repeat. Fault builds, references and wheel pending.",
+      "evidence": "native-owner-lifecycle-lane/QUALIFICATION_HANDOFF.json"
+    },
+    "loaded_binary_provenance": {
+      "focused_passed": 35,
+      "fault_checker_passed": 5,
+      "evidence": "native-owner-lifecycle-lane/PROVENANCE_HANDOFF.json",
+      "scope": "Actual loaded origins required. Old receipts unchanged; scope audit links independent build evidence."
     }
   },
   "remaining": [
@@ -121,16 +157,16 @@
     {
       "id": "sequence-array-conversion",
       "owner": "optimizer_native",
-      "state": "eight-failure-repair-integrated-awaiting-build",
-      "details": "754 repair covers all8observed failures and16new regression cases. Next explicit Metal selection83cases;92unaffected candidate/guard cases retain43evidence. StringDType and NumPy1.26native execution remain pending. Public __array__ remains Python.",
-      "source_commit": "cafe3724c"
+      "state": "ordinary-repairs-pass-other-contract-work-open",
+      "details": "All eight prior failures fixed;83 affected checks pass,92 unchanged retain43. StringDType, nativeNumPy1.26, seven malformed exception mismatches and shutdown cleanup open. Public __array__ unchanged.",
+      "source_commit": "a5ab2209444a7e1adb7b303611a93352fb34df7e"
     },
     {
       "id": "selector-import-metadata",
       "owner": "scaler_lifecycle_native",
-      "state": "integrated-helper-regression-under-repair",
-      "details": "Lane e63 had39/39passes. Integration9b helper/qr check:qrpassed,helperfailed519/542. Minimal tuple/class metadata shape repair57089bdcc is under agent validation; retain broad fallback and unchanged pins.",
-      "source_commit": "9b39c40eb"
+      "state": "affected-regressions-pass",
+      "details": "570+d215 repair validated; original helper passes combined8de. Previous qr/new guard results retained. No pins relaxed.",
+      "source_commit": "8deeb2f04"
     },
     {
       "id": "coverage-accounting",
@@ -153,9 +189,9 @@
     {
       "id": "other-host-native-inference",
       "owner": "host_model_native",
-      "state": "three-class-repair-integrated-awaiting-build",
-      "source_commit": "8faa65e9a",
-      "details": "Native ElasticNet/Lasso.predict and KMeans.predict/transform now integrated, including per-method guard ownership and admitted warning categories.120new checks plus shared warnings and4KMeans roundtrip cases await compile/execution.15other inherited predictor owners and other operation-specific runtime debt remain."
+      "state": "three-class-runtime-pass-next-group-pending",
+      "source_commit": "db5a97623",
+      "details": "ElasticNet/Lasso.predict and KMeans.predict/transform pass120 new+30 warnings+4 roundtrips per vendor on a5. KernelRidge.predict and Nystroem/RBFSampler.transform source pending build/runtime.15 other predictor owners before kernel group qualifies; other API work tracked separately."
     }
   ],
   "limitations": [
@@ -163,5 +199,5 @@
     "No performance improvement claim from correctness tests.",
     "Static census categories are not independently demonstrated runtime defects."
   ],
-  "latest_compiled_runtime": "43b5b5e1315a61ad3dab9a725829fae1935cff0f"
+  "latest_compiled_runtime": "a5ab2209444a7e1adb7b303611a93352fb34df7e"
 }
