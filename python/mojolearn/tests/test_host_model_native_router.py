@@ -127,9 +127,16 @@ FLOAT_TEXT = ("format mojolearn-model 2\nfeatures 1 0\ntrees 1\nlosses 0\n"
     "leaf 0 0 0.25/3e800000\nleaf 0 1 0.75/3f400000\n")
 NONSYMMETRIC_TEXT = FLOAT_TEXT.replace("tree 0 depth 1", "ntree 0 nodes 1").replace(
     "split 0 0 0 0", "node 0 0 0 0 1 1")
+ONEHOT_TEXT = FLOAT_TEXT.replace("features 1 0", "features 1 1").replace(
+    "folds 1 one_hot 0 type float", "folds 1 one_hot 1 type cat"
+).replace("split 0 0 0 0", "split 0 0 0 0 split_type take_bin")
+NONSYMMETRIC_ONEHOT_TEXT = ONEHOT_TEXT.replace("tree 0 depth 1", "ntree 0 nodes 1").replace(
+    "split 0 0 0 0 split_type", "node 0 0 0 0 1 1 split_type")
 GBDT_CASES = {
     "float": (FLOAT_TEXT, 1, [[0.], [1.]], [.25, .75]),
     "non_symmetric": (NONSYMMETRIC_TEXT, 1, [[0.], [1.]], [.25, .75]),
+    "one_hot": (ONEHOT_TEXT, 1, [[0.], [1.]], [.75, .25]),
+    "non_symmetric_one_hot": (NONSYMMETRIC_ONEHOT_TEXT, 1, [[0.], [1.]], [.75, .25]),
     "simple_ctr": (CTR_TEXT, 1, [[0.], [2.], [3.]], [1., .5, .25]),
     "tensor_ctr": (TENSOR_TEXT, 2, [[0., 0.], [1., 1.], [2., 0.]], [1., .5, .25]),
 }

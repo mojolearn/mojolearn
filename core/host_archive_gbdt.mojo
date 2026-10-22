@@ -4,6 +4,7 @@
 from std.collections import Dict
 from gbdt.models.model_text import load_model_text
 from gbdt.models.ctr_value_table import column_plan
+from gbdt.models.oblivious_model import BIN_SPLIT_TAKE_BIN
 
 
 @fieldwise_init
@@ -143,7 +144,9 @@ def host_archive_gbdt_text(text: String) raises -> HostArchiveGBDT:
                 ref node = tree.model_structure.nodes[j]
                 split_feature.append(Int(node.feature_id))
                 split_bin.append(Int(node.bin))
-                split_take_bin.append(Int(tree.model_structure.split_types[j]))
+                # The model enum is TakeBin=0/TakeGreater=1; the CPU apply
+                # buffer is a Boolean flag (TakeBin=1/TakeGreater=0).
+                split_take_bin.append(1 if Int(tree.model_structure.split_types[j]) == BIN_SPLIT_TAKE_BIN else 0)
                 node_left.append(Int(node.left_subtree))
                 node_right.append(Int(node.right_subtree))
             leaves.extend(tree.leaf_values.copy())
@@ -154,7 +157,7 @@ def host_archive_gbdt_text(text: String) raises -> HostArchiveGBDT:
             for split in tree.structure.splits:
                 split_feature.append(Int(split.feature_id))
                 split_bin.append(Int(split.bin_idx))
-                split_take_bin.append(Int(split.split_type))
+                split_take_bin.append(1 if Int(split.split_type) == BIN_SPLIT_TAKE_BIN else 0)
                 node_left.append(0)
                 node_right.append(0)
             leaves.extend(tree.leaf_values.copy())
