@@ -57,6 +57,7 @@ def connect_warnings():
                 warning_category=category, warning_category_slots=native_slots,
                 warning_native_new=warning_new, warning_native_init=warning_init, warning_base=Warning,
                 warning_category_default=_sk_validate.DataConversionWarning,
+                warning_deprecation_type=DeprecationWarning,
                 warning_record=record, warning_record_fields=descriptor,
                 warning_context_class=context, warning_context_fields=context_descriptor,
                 warning_global_context=global_context,

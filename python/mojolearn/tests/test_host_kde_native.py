@@ -157,6 +157,79 @@ def test_kde_primitive_bandwidth_native_slots_preserve_alias_ownership(tmp_path,
     _check_primitive_bandwidth(model, _input(2, "float32"), method, value)
 
 
+@pytest.mark.parametrize("method", METHODS)
+@pytest.mark.parametrize("code", ["F", "D", "G"])
+@pytest.mark.parametrize("form", ["scalar", "array", "swapped", "singleton", "empty", "multiple"])
+def test_kde_complex_bandwidth_preserves_consumed_output_and_warnings(tmp_path, method, code, form):
+    value = _primitive_bandwidth(code, .75 + 2j, form)
+    if form in ("singleton", "empty", "multiple"):
+        value = np.full({"singleton": (1, 1), "empty": (0,), "multiple": (2,)}[form], .75 + 2j, dtype=code)
+    model = _model(tmp_path)
+    model.bandwidth = value
+    _check_primitive_bandwidth(model, _input(2, "float32"), method, value)
+
+
+@pytest.mark.parametrize("code,form", [("F", "scalar"), ("G", "array"), ("G", "swapped")])
+@pytest.mark.parametrize("action", ["always", "ignore", "error"])
+def test_kde_complex_warning_filters_preserve_categories_and_native_slots(tmp_path, code, form, action):
+    class NativeBandwidthSlot(host.HostKernelDensity):
+        __slots__ = ("bandwidth",)
+    model = object.__new__(NativeBandwidthSlot)
+    vars(model).update(vars(_model(tmp_path)))
+    vars(model).pop("bandwidth")
+    value = _primitive_bandwidth(code, .75 + 2j, form)
+    model.bandwidth = value
+    x = _input(2, "float32")
+    failure = None
+    with warnings.catch_warnings(record=True) as old:
+        warnings.simplefilter(action)
+        try:
+            expected = legacy.kde(model, x)
+        except Exception as error:
+            failure = type(error), str(error)
+    with warnings.catch_warnings(record=True) as new:
+        warnings.simplefilter(action)
+        result = audit_native_call(model.score_samples, x)
+    if failure:
+        _refused(result, failure[0])
+        assert str(result.exception) == failure[1]
+    else:
+        assert _state(result.assert_native()) == _state(expected)
+    assert [(type(w.message), str(w.message)) for w in new] == [(type(w.message), str(w.message)) for w in old]
+    assert model.bandwidth is value
+
+
+@pytest.mark.parametrize("code,form", [("F", "scalar"), ("G", "array"), ("G", "swapped")])
+@pytest.mark.parametrize("number", [complex(-0., 2), complex(float("nan"), 2), complex(float("inf"), 2)])
+def test_kde_complex_special_values_preserve_consumed_bits(tmp_path, code, form, number):
+    model = _model(tmp_path)
+    value = _primitive_bandwidth(code, number, form)
+    model.bandwidth = value
+    _check_primitive_bandwidth(model, _input(2, "float32"), "score_samples", value)
+
+
+@pytest.mark.parametrize("kind", ["function", "init", "finalizer"])
+def test_kde_complex_warning_category_refuses_python_hooks(tmp_path, monkeypatch, kind):
+    model = _model(tmp_path)
+    model.bandwidth = np.complex128(.75 + 2j)
+    touched = []
+    if kind == "function":
+        def replacement(*args):
+            touched.append("function")
+    else:
+        class replacement(RuntimeWarning):
+            pass
+        def callback(self, *args):
+            touched.append(kind)
+        setattr(replacement, "__init__" if kind == "init" else "__del__", callback)
+    monkeypatch.setattr(np.exceptions, "ComplexWarning", replacement)
+    with warnings.catch_warnings(record=True):
+        warnings.simplefilter("always")
+        result = audit_native_call(model.score_samples, _input(2, "float32"))
+    _refused(result, TypeError)
+    assert touched == []
+
+
 @pytest.mark.parametrize("field", ["n_features_in_", "_mojolearn_fitted", "_mojolearn_fitting"])
 def test_kde_native_scalar_metadata_preserves_results(tmp_path, field):
     model = _model(tmp_path)
