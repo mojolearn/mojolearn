@@ -90,6 +90,26 @@ def classical_check_layout(model: PythonObject, context: PythonObject) raises:
                 raise Error("TypeError: native model dictionary requires exact string keys")
 
 
+def _classical_descriptor_get(binding: PythonObject, model: PythonObject, cls: PythonObject,
+                              plan: PythonObject) raises -> PythonObject:
+    # py_call's generic Mojo error keeps the text, not the CPython class.
+    # An unset native member must remain AttributeError for getattr/hasattr.
+    # Resolve all metadata/functions before the call can set an exception.
+    ref cpy = Python().cpython()
+    var getter = binding[1]
+    var envelope = Python.tuple(model, cls)
+    var attribute_error = plan["attribute_error"]
+    var matches = cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")
+    var result = cpy.PyObject_Call(getter._obj_ptr, envelope._obj_ptr, PyObjectPtr())
+    if not result:
+        var missing = matches(attribute_error._obj_ptr) != 0
+        var error = cpy.unsafe_get_error()
+        if missing:
+            raise Error("AttributeError: " + String(error))
+        raise error^
+    return PythonObject(from_owned=result)
+
+
 def classical_getattribute(model: PythonObject, name: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
     if py_type(name) is not b.str:
@@ -114,7 +134,7 @@ def classical_getattribute(model: PythonObject, name: PythonObject, context: Pyt
     if data_descriptor:
         if not known:
             raise Error("TypeError: Python model property/descriptor hooks are not accepted")
-        return py_call(binding[1], model, cls)
+        return _classical_descriptor_get(binding, model, cls, plan)
     var fields = py_call(plan["fields_get"], model, cls)
     if py_contains(fields, name):
         var value = fields[name]
@@ -131,7 +151,7 @@ def classical_getattribute(model: PythonObject, name: PythonObject, context: Pyt
     if descriptor:
         if not known:
             raise Error("TypeError: unconnected Python model descriptors are not accepted")
-        return py_call(binding[1], model, cls)
+        return _classical_descriptor_get(binding, model, cls, plan)
     return member
 
 

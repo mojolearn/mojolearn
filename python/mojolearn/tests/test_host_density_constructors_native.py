@@ -281,3 +281,20 @@ def test_density_constructor_numpy_absent_and_late_import_are_native(family, ord
                           input=json.dumps(dict(family=family, order=order)), env=dict(os.environ), timeout=60)
     assert done.returncode == 0, done.stderr[-4000:]
     assert json.loads(done.stdout) == {"mode": "fast", "keys": sorted((*DEFAULTS[family], "numeric_mode"))}
+
+
+@pytest.mark.parametrize("family", ["HostKernelDensity", "HostIsolationForest", "HostElasticNet", "HostKMeans", "HostStandardScaler"])
+def test_native_unset_member_keeps_attribute_error_and_default_lookup(family):
+    cls = type("UnsetNativeSlot", (getattr(host, family),), {"__slots__": ("native_probe",)})
+    model = object.__new__(cls)
+    with pytest.raises(AttributeError) as expected:
+        object.__getattribute__(model, "native_probe")
+    audit = audit_native_call(getattr, model, "native_probe")
+    _refused(audit, AttributeError)
+    assert str(audit.exception) == str(expected.value)
+    sentinel = object()
+    assert audit_native_call(getattr, model, "native_probe", sentinel).assert_native() is sentinel
+    assert audit_native_call(hasattr, model, "native_probe").assert_native() is False
+    model.native_probe = 7
+    assert audit_native_call(getattr, model, "native_probe").assert_native() == 7
+    assert audit_native_call(hasattr, model, "native_probe").assert_native() is True
