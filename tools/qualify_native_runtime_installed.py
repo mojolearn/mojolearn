@@ -24,6 +24,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_TESTS = {
+    "test_optimizer_native_container_admission.py": "Native optimizer and training container admission with replaced builtin names",
     "test_training_cross_entropy_public_native.py": "Public cross entropy preparation, options, native scalar configuration and consumed host/device outputs",
     "test_training_device_native_allocator.py": "Native training device owner allocation independent of mutable object constructors",
     "test_host_density_constructors_native.py": "Public host KDE and IsolationForest constructor options, inherited modes and safe reinitialization",
@@ -213,6 +214,10 @@ def test_applicability(selected, vendor):
         if name == "test_training_device_native_allocator.py":
             scope.update(execution_route="GPU training owner allocation; layout admission also applies on CPU",
                          coverage_limit="Constructor callback and layout admission only; numerical behavior, rollback and allocation exhaustion are separate checks")
+        if name == "test_optimizer_native_container_admission.py":
+            scope.update(execution_route="native optimizer and training host-buffer preparation on the selected backend",
+                         operation_mode="identical (explicit fixture configuration)",
+                         coverage_limit="Selected container and scalar hook refusals plus consumed checkpoint state; other public operations and option combinations remain separate")
         result[name] = scope
     return result
 

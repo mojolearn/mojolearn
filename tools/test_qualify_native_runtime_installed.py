@@ -192,6 +192,7 @@ class InstalledNativeAudit(unittest.TestCase):
                  "test_optimizer_native_array_ownership.py", "test_device_rows_metadata_native.py", "test_host_kde_fit_native.py",
                  "test_training_embedding_public_native.py",
                  "test_training_cross_entropy_public_native.py", "test_training_device_native_allocator.py",
+                 "test_optimizer_native_container_admission.py",
                  "test_host_density_constructors_native.py",
                  "test_training_device_native_finalizer.py", "test_training_device_native_rollback.py",
                  "test_robust_scaler_native_lifecycle.py", "test_scaler_rows_snapshot_native.py", "test_scaler_complex_warning_native.py",
