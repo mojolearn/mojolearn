@@ -35,7 +35,13 @@
 # ("dim", field, axis), ("size", field), ("len", field), ("none", field, sentinel),
 # ("noneflag", field), ("float", field), ("float_or", field, default),
 # ("int_or", field, default), ("bool_or", field, default), ("code", field, table)
-# or ("if_eq", field, value, item, item). A field is an instance-dictionary
+# ("if_eq", field, value, item, item), ("strict", field, exc, msg),
+# ("none_or", field, sentinel, item), ("at_least", item, low, exc, msg) or
+# ("mod", item, modulus). "strict" is the field as an int, refused with
+# exc(msg) unless it is an int and not a bool ({type} in msg names the held
+# type); "none_or" is sentinel when field is None, else item; "at_least" is
+# item, refused with exc(msg) below low; "mod" is item % modulus (floored,
+# as Python's %). A field is an instance-dictionary
 # name, or a tuple path: a name, then dictionary keys and sequence indices.
 # Messages may name the class as {cls}.
 from std.python import Python, PythonObject
@@ -161,6 +167,33 @@ def _schema_whole(fields: PythonObject, item: PythonObject, name: String,
     if kind == "if_eq":
         var chosen = item[3] if Bool(py=_schema_value(fields, item[1], name) == item[2]) else item[4]
         return _schema_whole(fields, chosen, name, context)
+    if kind == "strict":
+        # An int and not a bool, as `isinstance(v, int)` after the bool
+        # refusal (bool has no subclasses, so the type test is exact).
+        var b = Python.import_module("builtins")
+        var value = _schema_value(fields, item[1], name)
+        if py_type(value) is b.bool or not Bool(py=py_call(b.isinstance, value, b.int)):
+            var held = String(py_type(value).__name__)
+            raise Error(String(item[2]) + ": " + String(item[3]).replace("{cls}", name).replace("{type}", held))
+        return Int(py=value)
+    if kind == "none_or":
+        if _schema_value(fields, item[1], name) is None:
+            return _schema_int(item[2], "sentinel")
+        return _schema_whole(fields, item[3], name, context)
+    if kind == "at_least":
+        var whole = _schema_whole(fields, item[1], name, context)
+        if whole < _schema_int(item[2], "bound"):
+            raise Error(String(item[3]) + ": " + String(item[4]).replace("{cls}", name))
+        return whole
+    if kind == "mod":
+        var whole = _schema_whole(fields, item[1], name, context)
+        var modulus = _schema_int(item[2], "modulus")
+        if modulus <= 0:
+            raise Error("RuntimeError: a saved modulus must be positive")
+        var rest = whole % modulus
+        if rest < 0:
+            rest += modulus
+        return rest
     raise Error("RuntimeError: unknown saved item kind " + kind)
 
 
