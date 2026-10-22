@@ -124,7 +124,7 @@ def graph_words(g):
     """GraphIR ``g`` as onnx_info's words, strings and floats, plus one
     uint8 view per tensor's bytes (each its own buffer): the graph handed to
     Mojo's onnx_from_words. Description only."""
-    # cpu-route: model graph description handed to Mojo (names, dims, attributes; tensor bytes pass by address)
+    # cpu-route: GraphIR Python objects from torch.export to Mojo words (names, dims, attributes; tensor bytes pass by address)
     strings, index, floats, bufs, body = [""], {"": 0}, [], [], []
 
     def sid(x):
@@ -138,13 +138,13 @@ def graph_words(g):
         a = bytes_view(t.data)
         bufs.append(a)
         body.extend([sid(t.name), _DTYPE_CODE[t.dtype], len(t.shape)])
-        body.extend(int(d) for d in t.shape)  # cpu-route: model graph description handed to Mojo (one per axis)
+        body.extend(int(d) for d in t.shape)  # cpu-route: GraphIR Python objects from torch.export to Mojo words (one per axis)
         body.extend([len(bufs) - 1, 0, 0 if a is None else a.size])
 
     def value(v):
         name, dtype, dims = v
         body.extend([sid(name), _DTYPE_CODE[dtype], len(dims)])
-        for d in dims:  # cpu-route: model graph description handed to Mojo (one per axis)
+        for d in dims:  # cpu-route: GraphIR Python objects from torch.export to Mojo words (one per axis)
             body.extend([1, sid(d)] if isinstance(d, str) else [0, int(d)])
 
     def attr(v):
@@ -160,39 +160,39 @@ def graph_words(g):
             body.extend([_A_INT, int(v)])
         else:
             items = tuple(v)
-            if items and all(isinstance(x, TensorInfo) for x in items):  # cpu-route: model graph description handed to Mojo (attribute list)
+            if items and all(isinstance(x, TensorInfo) for x in items):  # cpu-route: GraphIR Python objects from torch.export to Mojo words (attribute list)
                 body.extend([_A_TENSORS, len(items)])
-                for x in items:  # cpu-route: model graph description handed to Mojo (attribute list)
+                for x in items:  # cpu-route: GraphIR Python objects from torch.export to Mojo words (attribute list)
                     tensor(x)
-            elif items and all(isinstance(x, str) for x in items):  # cpu-route: model graph description handed to Mojo (attribute list)
-                body.extend([_A_STRINGS, len(items)] + [sid(x) for x in items])  # cpu-route: model graph description handed to Mojo (attribute list)
-            elif any(isinstance(x, float) for x in items):  # cpu-route: model graph description handed to Mojo (attribute list)
+            elif items and all(isinstance(x, str) for x in items):  # cpu-route: GraphIR Python objects from torch.export to Mojo words (attribute list)
+                body.extend([_A_STRINGS, len(items)] + [sid(x) for x in items])  # cpu-route: GraphIR Python objects from torch.export to Mojo words (attribute list)
+            elif any(isinstance(x, float) for x in items):  # cpu-route: GraphIR Python objects from torch.export to Mojo words (attribute list)
                 body.extend([_A_FLOATS, len(floats), len(floats) + len(items)])
-                floats.extend(float(x) for x in items)  # cpu-route: model graph description handed to Mojo (attribute list)
+                floats.extend(float(x) for x in items)  # cpu-route: GraphIR Python objects from torch.export to Mojo words (attribute list)
             else:
-                body.extend([_A_INTS, len(items)] + [int(x) for x in items])  # cpu-route: model graph description handed to Mojo (attribute list)
+                body.extend([_A_INTS, len(items)] + [int(x) for x in items])  # cpu-route: GraphIR Python objects from torch.export to Mojo words (attribute list)
 
     body.append(len(g.inputs))
-    for v in g.inputs:  # cpu-route: model graph description handed to Mojo (graph inputs)
+    for v in g.inputs:  # cpu-route: GraphIR Python objects from torch.export to Mojo words (graph inputs)
         value(v)
     body.append(len(g.outputs))
-    for v in g.outputs:  # cpu-route: model graph description handed to Mojo (graph outputs)
+    for v in g.outputs:  # cpu-route: GraphIR Python objects from torch.export to Mojo words (graph outputs)
         value(v)
     body.append(len(g.nodes))
-    for n in g.nodes:  # cpu-route: model graph description handed to Mojo (graph nodes)
+    for n in g.nodes:  # cpu-route: GraphIR Python objects from torch.export to Mojo words (graph nodes)
         body.extend([sid(n.op), sid(n.domain), sid(n.name), len(n.inputs)])
-        body.extend(sid(i) for i in n.inputs)  # cpu-route: model graph description handed to Mojo (node inputs)
+        body.extend(sid(i) for i in n.inputs)  # cpu-route: GraphIR Python objects from torch.export to Mojo words (node inputs)
         body.append(len(n.outputs))
-        body.extend(sid(o) for o in n.outputs)  # cpu-route: model graph description handed to Mojo (node outputs)
+        body.extend(sid(o) for o in n.outputs)  # cpu-route: GraphIR Python objects from torch.export to Mojo words (node outputs)
         body.append(len(n.attrs))
-        for key, v in n.attrs.items():  # cpu-route: model graph description handed to Mojo (node attributes)
+        for key, v in n.attrs.items():  # cpu-route: GraphIR Python objects from torch.export to Mojo words (node attributes)
             body.append(sid(key))
             attr(v)
     body.append(len(g.initializers))
-    for t in g.initializers.values():  # cpu-route: model graph description handed to Mojo (initializers)
+    for t in g.initializers.values():  # cpu-route: GraphIR Python objects from torch.export to Mojo words (initializers)
         tensor(t)
     head = [_MAGIC, _VERSION, 0, int(g.opset), len(bufs)]
-    for a in bufs:  # cpu-route: model graph description handed to Mojo (one per tensor buffer)
+    for a in bufs:  # cpu-route: GraphIR Python objects from torch.export to Mojo words (one per tensor buffer)
         head.extend([_BUF_EXTERNAL, -1, 0 if a is None else a.size])
     return head + body, strings, floats, bufs
 

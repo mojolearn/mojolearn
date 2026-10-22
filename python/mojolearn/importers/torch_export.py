@@ -11,10 +11,12 @@ memory until it is uploaded to the device.
 torch is imported only when :func:`read` is called; importing this module
 never imports torch.
 """
-# cpu-route: model graph description on the host. This module is the explicit
-# input step before the runtime: it walks the exported graph's nodes, names,
-# shapes and integer arguments and hands tensor memory over untouched; it
-# never computes on tensor element values.
+# cpu-route: torch.export ExportedProgram objects stay in Python. The graph is
+# torch's own Python objects (torch.fx.Node, SymInt sizes, FakeTensor meta,
+# torch.Tensor weights), which cannot cross into Mojo; this module is the
+# explicit input step that reads them into the GraphIR (names, shapes,
+# integer arguments) and hands tensor memory over untouched. Everything after
+# it (shape resolution, refusal, lowering) is Mojo's, through onnx_from_words.
 from __future__ import annotations
 
 import operator
@@ -75,7 +77,7 @@ def _target_name(target):
 
 
 def _is_higher_order(target):
-    return any(c.__name__ == "HigherOrderOperator" for c in type(target).__mro__)  # cpu-route: model graph description on the host (class names)
+    return any(c.__name__ == "HigherOrderOperator" for c in type(target).__mro__)  # cpu-route: torch.fx graph Python objects (class names)
 
 
 class _Reader:
@@ -143,7 +145,7 @@ class _Reader:
 
     def const_i(self, vals, shape=None):
         """An int64 constant: a description integer list (shape, axes, sizes, indices)."""
-        vals = [int(v) for v in vals]  # cpu-route: model graph description on the host (integer arguments)
+        vals = [int(v) for v in vals]  # cpu-route: torch.fx graph Python objects (integer arguments)
         name = self.fresh("ints")
         shp = (len(vals),) if shape is None else tuple(shape)
         self.inits[name] = TensorInfo(name, "i64", shp, memoryview(struct.pack(f"<{len(vals)}q", *vals)))
@@ -171,10 +173,10 @@ class _Reader:
         """A list of ints and symbolic sizes as a 1-D int64 value: a constant
         when every entry is an int, else a Concat the shape folding resolves."""
         items = list(items)
-        if not any(self.is_node(v) for v in items):  # cpu-route: model graph description on the host (integer arguments)
+        if not any(self.is_node(v) for v in items):  # cpu-route: torch.fx graph Python objects (integer arguments)
             return self.const_i(items)
         parts = []
-        for v in items:  # cpu-route: model graph description on the host (integer arguments)
+        for v in items:  # cpu-route: torch.fx graph Python objects (integer arguments)
             if self.is_node(v):
                 parts.append(self.emit("Unsqueeze", [self.val(v), self.const_i([0])], [self.fresh(name)],
                                        self.fresh(name)))
@@ -193,20 +195,20 @@ class _Reader:
                           f"int32 and bool)")
         t = t.detach()
         if t.device.type != "cpu":
-            t = t.cpu()  # cpu-route: model graph description on the host (weights handed to the upload)
+            t = t.cpu()  # cpu-route: torch.fx graph Python objects (weights handed to the upload)
         if not t.is_contiguous():
-            t = t.contiguous()  # cpu-route: model graph description on the host (row-major weight memory)
+            t = t.contiguous()  # cpu-route: torch.fx graph Python objects (row-major weight memory)
         raw = t.reshape(-1).view(self.torch.uint8).numpy()
-        return TensorInfo(name, dt, tuple(int(d) for d in t.shape), memoryview(raw))  # cpu-route: model graph description on the host (one per axis)
+        return TensorInfo(name, dt, tuple(int(d) for d in t.shape), memoryview(raw))  # cpu-route: torch.fx graph Python objects (one per axis)
 
 
 def _bind(node):
     """The node's arguments by schema name, defaults filled in."""
     schema = getattr(node.target, "_schema", None)
     if schema is None:
-        return {i: a for i, a in enumerate(node.args)}  # cpu-route: model graph description on the host (node arguments)
+        return {i: a for i, a in enumerate(node.args)}  # cpu-route: torch.fx graph Python objects (node arguments)
     out = {}
-    for i, a in enumerate(schema.arguments):  # cpu-route: model graph description on the host (node arguments)
+    for i, a in enumerate(schema.arguments):  # cpu-route: torch.fx graph Python objects (node arguments)
         if i < len(node.args):
             out[a.name] = node.args[i]
         elif a.name in node.kwargs:
@@ -219,7 +221,7 @@ def _bind(node):
 
 
 def _first(a, *names):
-    for n in names:  # cpu-route: model graph description on the host (argument names)
+    for n in names:  # cpu-route: torch.fx graph Python objects (argument names)
         if n in a:
             return a[n]
     return None
@@ -229,7 +231,7 @@ def _pair(v, n, what):
     """A pool or conv size argument as n ints (one int, or a list of one, means all axes)."""
     if isinstance(v, int):
         return (v,) * n
-    v = tuple(int(x) for x in v)  # cpu-route: model graph description on the host (one per axis)
+    v = tuple(int(x) for x in v)  # cpu-route: torch.fx graph Python objects (one per axis)
     if len(v) == 1:
         return v * n
     if len(v) != n:
@@ -386,7 +388,7 @@ def _h_linear(r, n, a, ov):
 
 
 def _conv(r, n, x, w, b, stride, padding, dilation, groups):
-    k = tuple(int(d) for d in r.shape(w)[2:])  # cpu-route: model graph description on the host (one per axis)
+    k = tuple(int(d) for d in r.shape(w)[2:])  # cpu-route: torch.fx graph Python objects (one per axis)
     sp = len(k)
     pads = _pair(padding, sp, "padding")
     return r.emit("Conv", [r.val(x), r.val(w), r.val(b)] if b is not None else [r.val(x), r.val(w)], [n.name],
@@ -455,14 +457,14 @@ def _h_softmax(op):
 
 def _h_reshape(r, n, a, ov):
     size = list(_first(a, "size", "shape"))
-    if any(not r.is_node(d) and int(d) == 0 for d in size):  # cpu-route: model graph description on the host (one per axis)
+    if any(not r.is_node(d) and int(d) == 0 for d in size):  # cpu-route: torch.fx graph Python objects (one per axis)
         raise _Refuse("a reshape to an empty axis is not supported")
     return r.emit("Reshape", [r.val(a["self"]), r.int_list(size, n.name)], [n.name], n.name)
 
 
 def _h_permute(r, n, a, ov):
     rank = r.rank(a["self"])
-    perm = tuple(int(d) % rank if rank else 0 for d in a["dims"])  # cpu-route: model graph description on the host (one per axis)
+    perm = tuple(int(d) % rank if rank else 0 for d in a["dims"])  # cpu-route: torch.fx graph Python objects (one per axis)
     return r.emit("Transpose", [r.val(a["self"])], [n.name], n.name, perm=perm)
 
 
@@ -488,12 +490,12 @@ def _h_squeeze(r, n, a, ov):
     x = a["self"]
     shp = r.shape(x)
     if ov == "default" or _first(a, "dim") is None:
-        dims = [i for i, d in enumerate(shp) if isinstance(d, int) and d == 1]  # cpu-route: model graph description on the host (one per axis)
+        dims = [i for i, d in enumerate(shp) if isinstance(d, int) and d == 1]  # cpu-route: torch.fx graph Python objects (one per axis)
     else:
         dim = a["dim"]
         dims = [dim] if isinstance(dim, int) else list(dim)
         # torch leaves an axis that is not of size 1 in place; ONNX refuses it
-        dims = [int(d) % len(shp) for d in dims if isinstance(shp[int(d) % len(shp)], int) and shp[int(d) % len(shp)] == 1]  # cpu-route: model graph description on the host (one per axis)
+        dims = [int(d) % len(shp) for d in dims if isinstance(shp[int(d) % len(shp)], int) and shp[int(d) % len(shp)] == 1]  # cpu-route: torch.fx graph Python objects (one per axis)
     if not dims:
         r.alias[n.name] = r.val(x)
         return None
@@ -507,12 +509,12 @@ def _h_unsqueeze(r, n, a, ov):
 def _h_expand(r, n, a, ov):
     # ONNX Expand broadcasts the input against the shape, so torch's -1
     # ("keep this axis") is a 1
-    size = [d if r.is_node(d) or int(d) != -1 else 1 for d in a["size"]]  # cpu-route: model graph description on the host (one per axis)
+    size = [d if r.is_node(d) or int(d) != -1 else 1 for d in a["size"]]  # cpu-route: torch.fx graph Python objects (one per axis)
     return r.emit("Expand", [r.val(a["self"]), r.int_list(size, n.name)], [n.name], n.name)
 
 
 def _h_cat(r, n, a, ov):
-    xs = [r.val(t) for t in a["tensors"]]  # cpu-route: model graph description on the host (the operands)
+    xs = [r.val(t) for t in a["tensors"]]  # cpu-route: torch.fx graph Python objects (the operands)
     return r.emit("Concat", xs, [n.name], n.name, axis=int(a.get("dim", 0)))
 
 
@@ -531,9 +533,9 @@ def _h_split(r, n, a, ov):
         # the piece sizes of an equal split: description integers of the axis length
         sizes = [size] * (total // size) + ([total % size] if total % size else [])
     sizes = list(sizes)
-    if any(r.is_node(s) for s in sizes):  # cpu-route: model graph description on the host (the pieces)
+    if any(r.is_node(s) for s in sizes):  # cpu-route: torch.fx graph Python objects (the pieces)
         raise _Refuse("split sizes computed from the input's shape are not supported")
-    outs = [f"{n.name}.{i}" for i in range(len(sizes))]  # cpu-route: model graph description on the host (the pieces)
+    outs = [f"{n.name}.{i}" for i in range(len(sizes))]  # cpu-route: torch.fx graph Python objects (the pieces)
     r.emit("Split", [r.val(x), r.const_i(sizes)], outs, n.name, axis=dim)
     return dict(enumerate(outs))
 
@@ -564,15 +566,15 @@ def _h_index_select(r, n, a, ov):
 
 def _h_index(r, n, a, ov):
     idx = list(a["indices"])
-    used = [i for i, t in enumerate(idx) if t is not None]  # cpu-route: model graph description on the host (index positions)
+    used = [i for i, t in enumerate(idx) if t is not None]  # cpu-route: torch.fx graph Python objects (index positions)
     if not used:
         raise _Refuse("indexing without an index tensor is not supported")
-    for i in used:  # cpu-route: model graph description on the host (index positions)
+    for i in used:  # cpu-route: torch.fx graph Python objects (index positions)
         if r.meta(idx[i]).dtype == r.torch.bool:
             raise _Refuse("indexing with a boolean mask (a data-dependent shape) is not supported")
     if len(used) == 1:
         return r.emit("Gather", [r.val(a["self"]), r.val(idx[used[0]])], [n.name], n.name, axis=used[0])
-    return _index_nd(r, n, a["self"], [idx[i] for i in used], used)  # cpu-route: model graph description on the host (index positions)
+    return _index_nd(r, n, a["self"], [idx[i] for i in used], used)  # cpu-route: torch.fx graph Python objects (index positions)
 
 
 def _index_nd(r, n, x, tensors, axes):
@@ -582,29 +584,29 @@ def _index_nd(r, n, x, tensors, axes):
     broadcast axes moved to where the first indexed axis stood when the
     indexed axes are consecutive (torch's rule)."""
     rank = r.rank(x)
-    shapes = [r.shape(t) for t in tensors]  # cpu-route: model graph description on the host (the index tensors)
-    if any(not isinstance(d, int) for sh in shapes for d in sh) or any(  # cpu-route: model graph description on the host (one per axis)
-            not isinstance(d, int) for d in r.shape(x)):  # cpu-route: model graph description on the host (one per axis)
+    shapes = [r.shape(t) for t in tensors]  # cpu-route: torch.fx graph Python objects (the index tensors)
+    if any(not isinstance(d, int) for sh in shapes for d in sh) or any(  # cpu-route: torch.fx graph Python objects (one per axis)
+            not isinstance(d, int) for d in r.shape(x)):  # cpu-route: torch.fx graph Python objects (one per axis)
         raise _Refuse("indexing with several index tensors of dynamic shapes is not supported")
-    bshape = tuple(int(d) for d in r.torch.broadcast_shapes(*shapes))  # cpu-route: model graph description on the host (one per axis)
-    others = [d for d in range(rank) if d not in axes]  # cpu-route: model graph description on the host (one per axis)
+    bshape = tuple(int(d) for d in r.torch.broadcast_shapes(*shapes))  # cpu-route: torch.fx graph Python objects (one per axis)
+    others = [d for d in range(rank) if d not in axes]  # cpu-route: torch.fx graph Python objects (one per axis)
     xv = r.val(x)
-    if list(axes) != list(range(len(axes))):  # cpu-route: model graph description on the host (one per axis)
+    if list(axes) != list(range(len(axes))):  # cpu-route: torch.fx graph Python objects (one per axis)
         xv = r.emit("Transpose", [xv], [r.fresh(n.name)], r.fresh(n.name), perm=tuple(list(axes) + others))
     parts = []
-    for t, sh in zip(tensors, shapes):  # cpu-route: model graph description on the host (the index tensors)
+    for t, sh in zip(tensors, shapes):  # cpu-route: torch.fx graph Python objects (the index tensors)
         v = r.val(t)
         if tuple(sh) != bshape:
             v = r.emit("Expand", [v, r.const_i(bshape)], [r.fresh(n.name)], r.fresh(n.name))
         parts.append(r.emit("Unsqueeze", [v, r.const_i([len(bshape)])], [r.fresh(n.name)], r.fresh(n.name)))
     packed = r.emit("Concat", parts, [r.fresh(n.name)], r.fresh(n.name), axis=len(bshape))
     nb = len(bshape)
-    consecutive = list(axes) == list(range(axes[0], axes[0] + len(axes)))  # cpu-route: model graph description on the host (one per axis)
+    consecutive = list(axes) == list(range(axes[0], axes[0] + len(axes)))  # cpu-route: torch.fx graph Python objects (one per axis)
     if not (consecutive and axes[0] > 0 and nb > 0):
         return r.emit("GatherND", [xv, packed], [n.name], n.name, batch_dims=0)
     y = r.emit("GatherND", [xv, packed], [r.fresh(n.name)], r.fresh(n.name), batch_dims=0)
     lead = axes[0]
-    perm = [nb + d for d in range(lead)] + list(range(nb)) + [nb + d for d in range(lead, len(others))]  # cpu-route: model graph description on the host (one per axis)
+    perm = [nb + d for d in range(lead)] + list(range(nb)) + [nb + d for d in range(lead, len(others))]  # cpu-route: torch.fx graph Python objects (one per axis)
     return r.emit("Transpose", [y], [n.name], n.name, perm=tuple(perm))
 
 
@@ -725,8 +727,8 @@ def _h_avg_pool(r, n, a, ov):
 
 
 def _h_adaptive_avg(r, n, a, ov):
-    out = tuple(int(d) for d in a["output_size"])  # cpu-route: model graph description on the host (one per axis)
-    if any(d != 1 for d in out):  # cpu-route: model graph description on the host (one per axis)
+    out = tuple(int(d) for d in a["output_size"])  # cpu-route: torch.fx graph Python objects (one per axis)
+    if any(d != 1 for d in out):  # cpu-route: torch.fx graph Python objects (one per axis)
         raise _Refuse(f"output_size {out} (only a global pool, output size 1, is supported)")
     return r.emit("GlobalAveragePool", [r.val(a["self"])], [n.name], n.name)
 
@@ -804,9 +806,9 @@ def _h_trilu(upper):
 def _h_pad(r, n, a, ov):
     x = a["self"]
     rank = r.rank(x)
-    pad = [int(p) for p in a["pad"]]  # cpu-route: model graph description on the host (one per axis)
+    pad = [int(p) for p in a["pad"]]  # cpu-route: torch.fx graph Python objects (one per axis)
     begin, end = [0] * rank, [0] * rank
-    for i in range(len(pad) // 2):  # cpu-route: model graph description on the host (one per axis)
+    for i in range(len(pad) // 2):  # cpu-route: torch.fx graph Python objects (one per axis)
         axis = rank - 1 - i
         begin[axis], end[axis] = pad[2 * i], pad[2 * i + 1]
     return r.emit("Pad", [r.val(x), r.const_i(begin + end), r.const_f(a.get("value", 0) or 0)], [n.name], n.name,
@@ -819,7 +821,7 @@ def _h_arange(r, n, a, ov):
     if ov == "default":
         start, end = 0, a["end"]
     vals = (start, end, step)
-    if (dt is not None and dt.is_floating_point) or any(isinstance(v, float) for v in vals):  # cpu-route: model graph description on the host (the three bounds)
+    if (dt is not None and dt.is_floating_point) or any(isinstance(v, float) for v in vals):  # cpu-route: torch.fx graph Python objects (the three bounds)
         raise _Refuse("a floating-point arange is not supported (register the positions as a buffer)")
     return r.emit("Range", [r.int_scalar(start), r.int_scalar(end), r.int_scalar(step)], [n.name], n.name)
 
@@ -833,11 +835,11 @@ def _h_sym_numel(r, n, a, ov):
     return r.emit("Size", [r.val(a["self"])], [n.name], n.name)
 
 
-_HANDLERS = {packet: _h_unary(op) for packet, op in _UNARY.items()}  # cpu-route: model graph description on the host (op names)
-_HANDLERS.update({packet: _h_binary(op) for packet, op in _BINARY.items()})  # cpu-route: model graph description on the host (op names)
-_HANDLERS.update({packet: _h_matmul for packet in _MATMUL})  # cpu-route: model graph description on the host (op names)
-_HANDLERS.update({packet: _h_identity for packet in _IDENTITY})  # cpu-route: model graph description on the host (op names)
-_HANDLERS.update({packet: _h_reduce(op) for packet, op in _REDUCE.items()})  # cpu-route: model graph description on the host (op names)
+_HANDLERS = {packet: _h_unary(op) for packet, op in _UNARY.items()}  # cpu-route: torch.fx graph Python objects (op names)
+_HANDLERS.update({packet: _h_binary(op) for packet, op in _BINARY.items()})  # cpu-route: torch.fx graph Python objects (op names)
+_HANDLERS.update({packet: _h_matmul for packet in _MATMUL})  # cpu-route: torch.fx graph Python objects (op names)
+_HANDLERS.update({packet: _h_identity for packet in _IDENTITY})  # cpu-route: torch.fx graph Python objects (op names)
+_HANDLERS.update({packet: _h_reduce(op) for packet, op in _REDUCE.items()})  # cpu-route: torch.fx graph Python objects (op names)
 _HANDLERS.update({
     "aten.add": _h_add_sub("Add"), "aten.sub": _h_add_sub("Sub"), "aten.rsub": _h_rsub, "aten.div": _h_div,
     "aten.true_divide": _h_div, "aten.ne": _h_ne, "aten.pow": _h_pow, "aten.rsqrt": _h_rsqrt,
@@ -880,14 +882,14 @@ _HANDLERS.update({
 
 def supported_targets():
     """The ATen operations (core ATen, after ``run_decompositions``) the reader maps, by name."""
-    return tuple(sorted(_HANDLERS))  # cpu-route: model graph description on the host (op names)
+    return tuple(sorted(_HANDLERS))  # cpu-route: torch.fx graph Python objects (op names)
 
 
 def _live(graph):
     """The FX nodes the graph's output depends on (assertion nodes have no users and drop out)."""
-    out = [n for n in graph.nodes if n.op == "output"]  # cpu-route: model graph description on the host (graph nodes)
+    out = [n for n in graph.nodes if n.op == "output"]  # cpu-route: torch.fx graph Python objects (graph nodes)
     live, stack = set(), list(out)
-    while stack:  # cpu-route: model graph description on the host (graph nodes)
+    while stack:  # cpu-route: torch.fx graph Python objects (graph nodes)
         n = stack.pop()
         if n in live:
             continue
@@ -901,10 +903,10 @@ def _prune(nodes, outputs):
     second result of a node that has two, such as ``max.dim``'s indices)."""
     need = set(outputs)
     keep = []
-    for nd in reversed(nodes):  # cpu-route: model graph description on the host (graph nodes)
-        if any(o in need for o in nd.outputs):  # cpu-route: model graph description on the host (node outputs)
+    for nd in reversed(nodes):  # cpu-route: torch.fx graph Python objects (graph nodes)
+        if any(o in need for o in nd.outputs):  # cpu-route: torch.fx graph Python objects (node outputs)
             keep.append(nd)
-            need.update(i for i in nd.inputs if i)  # cpu-route: model graph description on the host (node inputs)
+            need.update(i for i in nd.inputs if i)  # cpu-route: torch.fx graph Python objects (node inputs)
     keep.reverse()
     return tuple(keep), need
 
@@ -937,10 +939,10 @@ def read(ep):
     sig = ep.graph_signature
     graph = ep.graph_module.graph
     live = _live(graph)
-    specs = {s.arg.name: s for s in sig.input_specs if hasattr(s.arg, "name")}  # cpu-route: model graph description on the host (graph inputs)
+    specs = {s.arg.name: s for s in sig.input_specs if hasattr(s.arg, "name")}  # cpu-route: torch.fx graph Python objects (graph inputs)
     state, consts = ep.state_dict, getattr(ep, "constants", {}) or {}
     inputs = []
-    for n in graph.nodes:  # cpu-route: model graph description on the host (graph nodes)
+    for n in graph.nodes:  # cpu-route: torch.fx graph Python objects (graph nodes)
         if n.op == "output":
             continue
         spec = specs.get(n.name) if n.op == "placeholder" else None
@@ -958,7 +960,7 @@ def read(ep):
                     dt = r.dtypes.get(v.dtype)
                     if dt is None:
                         raise _Refuse(f"input type {v.dtype} is not supported")
-                    dims = tuple(int(d) if isinstance(d, int) else str(d) for d in v.shape)  # cpu-route: model graph description on the host (one per axis)
+                    dims = tuple(int(d) if isinstance(d, int) else str(d) for d in v.shape)  # cpu-route: torch.fx graph Python objects (one per axis)
                     inputs.append((n.name, dt, dims))
                 elif kind in ("PARAMETER", "BUFFER", "CONSTANT_TENSOR"):
                     t = state.get(spec.target) if spec.target in state else consts.get(spec.target)
@@ -980,10 +982,10 @@ def read(ep):
             r.failed.add(n.name)
             r.problems.append((n.name, _target_name(n.target)[0] if n.op == "call_function" else None, str(e)))
     outputs = []
-    out_node = next(n for n in graph.nodes if n.op == "output")  # cpu-route: model graph description on the host (graph nodes)
-    out_kinds = [s.kind.name for s in sig.output_specs]  # cpu-route: model graph description on the host (graph outputs)
+    out_node = next(n for n in graph.nodes if n.op == "output")  # cpu-route: torch.fx graph Python objects (graph nodes)
+    out_kinds = [s.kind.name for s in sig.output_specs]  # cpu-route: torch.fx graph Python objects (graph outputs)
     flat = out_node.args[0] if isinstance(out_node.args[0], (list, tuple)) else (out_node.args[0],)
-    for i, o in enumerate(flat):  # cpu-route: model graph description on the host (graph outputs)
+    for i, o in enumerate(flat):  # cpu-route: torch.fx graph Python objects (graph outputs)
         kind = out_kinds[i] if i < len(out_kinds) else "USER_OUTPUT"
         if kind != "USER_OUTPUT":
             r.problems.append((getattr(o, "name", f"output {i}"), None,
@@ -999,14 +1001,14 @@ def read(ep):
             dt = r.dtypes.get(v.dtype)
             if dt is None:
                 raise _Refuse(f"output type {v.dtype} is not supported")
-            dims = tuple(int(d) if isinstance(d, int) else str(d) for d in v.shape)  # cpu-route: model graph description on the host (one per axis)
+            dims = tuple(int(d) if isinstance(d, int) else str(d) for d in v.shape)  # cpu-route: torch.fx graph Python objects (one per axis)
             outputs.append((name, dt, dims))
         except _Refuse as e:
             r.problems.append((o.name, None, str(e)))
     if r.problems:
         raise UnsupportedModel(SOURCE, r.problems)
-    nodes, need = _prune(r.nodes, [o[0] for o in outputs])  # cpu-route: model graph description on the host (graph outputs)
-    inits = {k: t for k, t in r.inits.items() if k in need}  # cpu-route: model graph description on the host (initializer names)
+    nodes, need = _prune(r.nodes, [o[0] for o in outputs])  # cpu-route: torch.fx graph Python objects (graph outputs)
+    inits = {k: t for k, t in r.inits.items() if k in need}  # cpu-route: torch.fx graph Python objects (initializer names)
     return GraphIR(opset=OPSET, inputs=tuple(inputs), outputs=tuple(outputs), nodes=nodes, initializers=inits,
                    source=SOURCE)
 
@@ -1023,7 +1025,7 @@ def _call(r, n):
         if outs is None:
             raise _Refuse(f"indexes '{src.name}', which has no separate outputs")
         if idx not in outs:
-            raise _Refuse(f"uses output {idx} of '{src.name}' (only {sorted(outs)} are supported)")  # cpu-route: model graph description on the host (output indices)
+            raise _Refuse(f"uses output {idx} of '{src.name}' (only {sorted(outs)} are supported)")  # cpu-route: torch.fx graph Python objects (output indices)
         r.alias[n.name] = outs[idx]
         return
     if target in _SYM_BIN:
