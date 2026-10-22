@@ -273,3 +273,26 @@ def test_mamba3_export_without_snapshot_refuses():
     block.forward(x)
     with pytest.raises(RuntimeError, match="no installed owned snapshot"):
         block.export_owned_weights()
+
+
+def test_mamba3_install_owned_weights_refuses_without_owned_arm():
+    block, x = _mamba3()
+    try:
+        block.install_owned_weights()
+    except RuntimeError:
+        # Refused by name, every time, and nothing is left installed.
+        with pytest.raises(RuntimeError, match="owned weights"):
+            block.install_owned_weights()
+        with pytest.raises(RuntimeError, match="no installed owned snapshot"):
+            block.export_owned_weights()
+        return
+    block.release_owned_weights()
+    pytest.skip("this build provides owned weights; the refusal applies to builds without them")
+
+
+def test_pattern_name_is_total():
+    # No failure path: any other spelling or a non-str is simply not a known pattern.
+    from mojolearn.models.tokenizer import PATTERNS, pattern_name
+    assert pattern_name(PATTERNS["gpt2"][0]) == "gpt2"
+    for other in ("abc", b"abc", 5, None):
+        assert pattern_name(other) is None
