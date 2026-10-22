@@ -449,7 +449,9 @@ def _schema_copy(raw: PythonObject, dtype: String, first: Int, count: Int, conte
     var store = py_call(context["array_type"], _store_code(dtype))
     var width = Int(py=store.itemsize)
     var view = py_call(Python.import_module("builtins").memoryview, raw)
-    var part = py_call(view.__getitem__, py_call(Python.import_module("builtins").slice, first * width, (first + count) * width))
+    var builtins = Python.import_module("builtins")
+    var getitem = py_call(builtins.getattr, view, PythonObject("__getitem__"))
+    var part = py_call(getitem, py_call(builtins.slice, first * width, (first + count) * width))
     _ = py_call(store.frombytes, part)
     return classical_wrap_array(store, Python.tuple(count), dtype, "C", context)
 
@@ -569,7 +571,9 @@ def _schema_forest_engine(fields: PythonObject, context: PythonObject) raises ->
     var b = Python.import_module("builtins")
     var engine = py_get(fields, "inference_engine", PythonObject("sequential"))
     var valid = Bool(py=py_call(b.isinstance, engine, b.str))
-    var text = String(py=py_call(b.str.__str__, engine)) if valid else String("")
+    # str.__str__ (not str()) so a str subclass's own __str__ cannot change the text.
+    var str_str = py_call(b.getattr, b.str, PythonObject("__str__"))
+    var text = String(py=py_call(str_str, engine)) if valid else String("")
     if not valid or (text != "auto" and text != "sequential" and text != "parallel_groves"):
         raise Error("ValueError: inference_engine must be 'auto', 'sequential' or 'parallel_groves'")
     if text == "auto":
