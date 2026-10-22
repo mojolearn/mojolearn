@@ -190,7 +190,7 @@ class InstalledNativeAudit(unittest.TestCase):
     def test_public_owner_and_host_scopes_exclude_private_array_candidate(self):
         names = ("test_native_owner_qualification.py", "test_sequence_shutdown_native.py",
                  "test_host_inference_native.py", "test_host_kernel_inference_native.py", "test_host_projection_native.py",
-                 "test_host_logistic_native.py")
+                 "test_host_logistic_native.py", "test_host_svr_native.py")
         for name in names:
             self.assertIn(name, q.PUBLIC_TESTS)
             self.assertTrue((q.ROOT / "python/mojolearn/tests" / name).is_file())
@@ -198,6 +198,7 @@ class InstalledNativeAudit(unittest.TestCase):
             self.assertNotIn(name, q.PUBLIC_TESTS)
         scope = q.test_applicability(names, "cuda")
         self.assertIn("explicit CPU host", scope["test_host_inference_native.py"]["execution_route"])
+        self.assertIn("explicit CPU host", scope["test_host_svr_native.py"]["execution_route"])
         self.assertIn("identical", scope["test_sequence_shutdown_native.py"]["operation_mode"])
         self.assertEqual(q.test_dependencies(names), ["numpy", "pytest", "pandas", "scipy"])
         self.assertEqual(q.test_dependencies([names[0]]), ["numpy", "pytest"])

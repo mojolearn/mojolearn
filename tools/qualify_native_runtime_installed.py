@@ -39,6 +39,7 @@ PUBLIC_TESTS = {
     "test_host_kernel_inference_native.py": "Explicit CPU HostKernelRidge/HostNystroem/HostRBFSampler public dense/sparse prediction and transform",
     "test_host_projection_native.py": "Explicit CPU HostPCA/HostTruncatedSVD public projection, inverse projection and whitening",
     "test_host_logistic_native.py": "Explicit CPU HostLogisticRegression public decisions, predictions and probabilities",
+    "test_host_svr_native.py": "Explicit CPU HostSVR public predictions and computed coefficients",
 }
 # Candidate array tests call _OPT_NATIVE directly. Keep them outside this public
 # registry until tests actually exercise the public __array__ protocol.
@@ -47,6 +48,7 @@ TEST_DEPENDENCIES = {
     "test_host_kernel_inference_native.py": ("pandas", "scipy"),
     "test_host_projection_native.py": ("pandas", "scipy"),
     "test_host_logistic_native.py": ("pandas",),
+    "test_host_svr_native.py": ("pandas", "scipy"),
 }
 CPU_RESIDENT_SKIP = "the CPU binding has no resident tensor pool"
 CPU_NOT_APPLICABLE = {
@@ -76,7 +78,7 @@ def test_applicability(selected, vendor):
             scope["coverage_limit"] = "Owner lifecycle checks do not qualify the public __array__ conversion protocol"
             if vendor == "cpu":
                 scope["cpu_not_applicable_cases"] = dict(CPU_NOT_APPLICABLE[name])
-        if name in ("test_host_inference_native.py", "test_host_kernel_inference_native.py", "test_host_projection_native.py", "test_host_logistic_native.py"):
+        if name in ("test_host_inference_native.py", "test_host_kernel_inference_native.py", "test_host_projection_native.py", "test_host_logistic_native.py", "test_host_svr_native.py"):
             scope.update(execution_route="explicit CPU host binding, including in GPU packages",
                          operation_mode="identical host operation; fast-mode refusal tested separately",
                          coverage_limit="Native qualification covers audited prediction/transform, preparation and attributes; inherited fit/score cases check compatibility only")
