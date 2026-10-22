@@ -46,7 +46,7 @@ def _text_bytes(data):
 def pretokenize(data, pattern):
     """Pre-token boundaries of `data` (bytes) under `pattern` ("gpt2",
     "llama3" or "qwen2"): `m + 1` offsets, first 0 and last `len(data)`.
-    The cut is the binding's (`tokenizer_pretokenize`)."""
+    The cut is the binding's (`vocab_pretokenize_pattern`)."""
     return _NATIVE.vocab_pretokenize_pattern(data, pattern)
 
 

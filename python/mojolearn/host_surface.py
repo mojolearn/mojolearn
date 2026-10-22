@@ -1610,16 +1610,14 @@ FAMILIES = (
             "bpe_decode", "bpe_train", "bpe_trained_sizes", "bpe_trained_copy",
             "bpe_load_tokens", "bpe_load_spelled", "bpe_ranks_text", "bpe_decode_seq",
             "bpe_decode_batch", "bpe_render", "bpe_encode_corpus", "bpe_train_corpus",
-            "tokens_gather_rows", "tokenizer_pretokenize", "vocab_load_bytes",
-            "vocab_load_spelled", "vocab_info", "vocab_encode", "vocab_pretokenize",
-            "vocab_decode",
+            "tokens_gather_rows",
             # vocabulary identity digest (core/sha256.mojo)
             "sha256_hex",
             # registered 2026-10-20 (f872423a4, a4b0106ee, 12fa2ed0f): the
             # optimizer's resident finalization, the vocabulary fingerprint
             # that binds resumable text state to its tokenizer, and the
             # generation coordinator's setup
-            "optimizer_finalize", "optimizer_native", "optimizer_device_finalize", "vocab_fingerprint", "generation_initialize",
+            "optimizer_finalize", "optimizer_native", "optimizer_device_finalize", "vocab_fingerprint",
             "host_archive_finalize_call", "host_svr_attribute_call", "host_svc_attribute_call",
         ),
         gate="pixi run check-tokenizer and python/mojolearn/tests/test_tokenizer_surface.py",
