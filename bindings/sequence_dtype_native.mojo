@@ -182,8 +182,12 @@ def sequence_dtype_text(value: PythonObject, classes: PythonObject, context: Pyt
         raise Error("TypeError: dtype aliases require native dictionary metadata")
     var keys = py_call(b.list, aliases)
     for i in range(len(keys)):  # driver-loop: validate alias keys before native dictionary lookup
-        if py_type(keys[i]) is not b.str:
-            raise Error("TypeError: dtype aliases require native string keys")
+        # NumPy 1.26's registry includes integer type numbers beside names.
+        # Exact builtin int/str hashing and equality cannot invoke user hooks;
+        # subclasses or other keys must still refuse before looking up text.
+        var key_type = py_type(keys[i])
+        if key_type is not b.str and key_type is not b.int:
+            raise Error("TypeError: dtype aliases require native string or integer keys")
     var mapped = py_get(aliases, text)
     if mapped is not None:
         return sequence_dtype_normalize(mapped, classes, context, depth + 1, aligned)
