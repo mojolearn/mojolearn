@@ -1,8 +1,8 @@
 {
   "schema": "mojolearn.runtime-takeover-status.v1",
-  "updated": "2026-10-22T09:09:57.910910+00:00",
+  "updated": "2026-10-22T10:10:22.631256+00:00",
   "release": "HELD",
-  "integration_before_report": "ea246bca103c35d8c322153d8578d89035a9323f",
+  "integration_before_report": "c297eb9a3cbb04f955e23cbb0443f2ad059155e8",
   "evidence_root": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021",
   "test_policy": "Rerun failures, new tests and directly affected regression checks; reuse accepted unchanged results. Counts from different scopes are not interchangeable.",
   "completed": {
@@ -264,42 +264,68 @@
       "evidence": "runtime-failure-disposition-through-ea246bca1.json",
       "build": "Seven stages passed; final round rebuilt tokenizer and proved six unchanged build closures.",
       "scope": "Native Array ownership, HostKDE.fit, DeviceRows metadata, embedding preparation, shared buffer admission, and Samba resident module ownership. Selected public-operation evidence only."
+    },
+    "density_resident_batch": {
+      "source": "c297eb9a3cbb04f955e23cbb0443f2ad059155e8",
+      "scope": [
+        "DeviceRows materialization",
+        "density constructors",
+        "HostIsolationForest.fit",
+        "cross-entropy public preparation",
+        "optimizer/container/retained-owner repairs",
+        "native scalar formatting"
+      ],
+      "evidence": [
+        "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-selection-verdict-c1e4d35cc.json",
+        "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-selection-verdict-b9a203868.json",
+        "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-selection-verdict-c297eb9a3.json",
+        "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/failure-disposition-308-to-c1.json",
+        "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/failure-disposition-c1-through-c297.json"
+      ],
+      "limit": "Selected runtime checks on Mac CPU/Metal and NumPy1.26; public SequenceDeviceTensor.__array__ remains unresolved."
     }
   },
   "remaining": [
-    "Repair selected308 failures: shared Array allocation, unset density slot exception preservation and cross-entropy Array truth semantics; correct five test setup faults while retaining the intended callback refusals. Candidate source remains outside main.",
-    "Pending reviewed native patches include source-level formatter log10 removal for wheel packaging, StringDType metadata admission and HostIsolationForest.fit. Their compilation and selected runtime checks remain owed.",
-    "Resident/context lifecycle, public __array__ ownership and callback contracts, cold sklearn tags and remaining public constructors/fit/save/hash paths remain open. Cold sklearn startup behavior awaits owner preference.",
-    "Installed wheel assembly failed portable-math import admission before any installed tests. Preserve that failure; compile the source repair before resuming580 CPU-applicable cases. Matching reference/fault accounting and Linux/NVIDIA/AMD qualification remain incomplete."
+    "Resident context/reinit/cleanup with complete supported pandas owners; exact longlong aliases staged separately.",
+    "Native host density save/load and shared native file-operation/exception repairs.",
+    "Full public SequenceDeviceTensor.__array__ ownership contract and cold sklearn tags behavior.",
+    "Matching installed successor wheel execution and deployment-floor repair.",
+    "Linux/NVIDIA/AMD qualification and matching cross-vendor identity/reference/fault evidence.",
+    "Complete API/options/failure-path evidence mapping; static3564-endpoint inventory is not runtime proof."
   ],
   "limitations": [
     "No claim that every public API, option, checkpoint or failure path is fully migrated/qualified.",
     "No performance improvement claim from correctness tests.",
     "Static census categories are not independently demonstrated runtime defects."
   ],
-  "latest_compiled_runtime": "ea246bca103c35d8c322153d8578d89035a9323f",
-  "latest_runtime_summary": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-selection-verdict-ea246bca1.json",
+  "latest_compiled_runtime": "c297eb9a3cbb04f955e23cbb0443f2ad059155e8",
+  "latest_runtime_summary": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-selection-verdict-c297eb9a3.json",
   "latest_targeted_tests": {
     "cpu": {
-      "expected": 11,
-      "total": 11,
-      "passed": 11,
+      "expected": 6,
+      "total": 6,
+      "passed": 6,
       "failed": 0,
       "errors": 0,
       "skipped": 0,
-      "source_matches": true,
-      "coverage_complete": true,
       "exit_code": 0
     },
     "metal": {
-      "expected": 11,
-      "total": 11,
-      "passed": 11,
+      "expected": 6,
+      "total": 6,
+      "passed": 6,
       "failed": 0,
       "errors": 0,
       "skipped": 0,
-      "source_matches": true,
-      "coverage_complete": true,
+      "exit_code": 0
+    },
+    "numpy126-metal": {
+      "expected": 6,
+      "total": 6,
+      "passed": 6,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0,
       "exit_code": 0
     }
   },
@@ -328,18 +354,22 @@
     "scope": "New/affected selected scopes;three failure clusters under repair. Original logs,JUnit and binary provenance retained."
   },
   "latest_failure_disposition": {
-    "evidence": "runtime-failure-disposition-through-ea246bca1.json",
-    "resolved_records": 10,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/failure-disposition-c1-through-c297.json",
+    "resolved_records": {
+      "cpu": 31,
+      "metal": 31,
+      "numpy126-metal": 27
+    },
     "unresolved_records": 0,
-    "scope": "Current selected batch only; unchanged passing results retained across source freezes.",
-    "release": "HELD; remaining runtime and vendor/package qualification is separate."
+    "scope": "Original c1 failures only. Reviewed successor tests plus retained unchanged evidence; not a new full-suite run.",
+    "release": "HELD"
   },
   "active_frozen_build": {
-    "source": "30841c2213a04faac6019c00e24cb3076115cee7",
+    "source": "c297eb9a3cbb04f955e23cbb0443f2ad059155e8",
     "build_stages_passed": 7,
-    "runtime_selection_passed": false,
-    "evidence": "runtime-selection-verdict-30841c221.json",
-    "merged_to_main": false
+    "runtime_selection_passed": true,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-build-c297eb9a3/BUILD.json",
+    "merged_to_main": true
   },
   "last_failed_build": {
     "source": "a4580cc4b690696ff0b327fbc50a50cd112f1764",
@@ -353,7 +383,7 @@
     "evidence": "runtime-selection-verdict-3ede5addb.json"
   },
   "next_freeze": {
-    "status": "Repairs in three isolated lanes; use308 passed compilation as explicit reuse baseline and rebuild only affected closures."
+    "status": "Separate owner alias, resident lifecycle, and archive repairs under development; not yet qualified."
   },
   "latest_followups": {
     "b638_stronger_cleanup": "2 identical and 2 FAST passed",
@@ -363,61 +393,64 @@
   },
   "count_correction": "MaxAbs complete selection91GPU/82CPU+9N/A,58new+33existing; earlier107 was arithmetic error. Correction receipt retained.",
   "verification_only_integration": {
-    "source": "84b830f469b011cc7f296c8e51c6119aad3d69da",
-    "changes": "Native auditor resolves exact module and bound-builtin origins; unresolved native origins fail both qualification and existing refusal guards.",
-    "tests": {
-      "passed": 20,
-      "failed": 0,
-      "skipped": 0,
-      "evidence": "native-audit-main.junit.xml"
-    },
+    "source": "46dfa300799f69f406e484697f566386e4fd4600",
+    "changes": "Exact installed-node collection/JUnit qualification; unresolved native call provenance guards retained.",
+    "tests": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/installed-controller-merged-c297.junit.xml",
     "native_runtime_changed": false
   },
   "latest_candidate_tests": {
     "cpu": {
-      "expected": 723,
-      "total": 723,
-      "passed": 574,
-      "failed": 149,
+      "expected": 6,
+      "total": 6,
+      "passed": 6,
+      "failed": 0,
       "errors": 0,
       "skipped": 0,
-      "coverage_complete": true,
-      "source_matches": true,
-      "exit_code": 1
+      "exit_code": 0
     },
     "metal": {
-      "expected": 744,
-      "total": 744,
-      "passed": 595,
-      "failed": 149,
+      "expected": 6,
+      "total": 6,
+      "passed": 6,
+      "failed": 0,
       "errors": 0,
       "skipped": 0,
-      "coverage_complete": true,
-      "source_matches": true,
-      "exit_code": 1
+      "exit_code": 0
     },
     "numpy126-metal": {
-      "expected": 540,
-      "total": 540,
-      "passed": 498,
-      "failed": 42,
+      "expected": 6,
+      "total": 6,
+      "passed": 6,
+      "failed": 0,
       "errors": 0,
       "skipped": 0,
-      "coverage_complete": true,
-      "source_matches": true,
-      "exit_code": 1
+      "exit_code": 0
     }
   },
   "worktree_cleanup": {
-    "removed": 14,
-    "evidence": "worktree-cleanup/RESULT.json",
+    "removed": 21,
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/worktree-cleanup",
     "branches_retained": true,
-    "measurement_dirty_patch": "All three changed files already byte-match main; original dirty worktree retained. See measurement-smoke-reconciliation/reconciled.json."
+    "measurement_dirty_patch": "All three changed files already byte-match main; original dirty worktree retained. See measurement-smoke-reconciliation/reconciled.json.",
+    "compiled_and_active_trees_retained": true
   },
   "ci_observation": {
-    "source": "e73a88068dc36e1f78091e20f1d5dbba94473ec8",
-    "passed_workflows": 3,
-    "no_host_routes": "Production scan passed; checker test step was cancelled. Not an all-green CI claim.",
-    "evidence": "ci-no-host-routes-e73-final.json"
+    "source": "120381010ff12db216edab397f66a23b8686665a",
+    "passed_workflows": [
+      "Kernel closure compiles without Python",
+      "No Python in kernels, no compute in shells",
+      "No host routes"
+    ],
+    "no_host_routes": "Passed after timeout budget repair; every checker retained. New main commit CI still pending.",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/ci-no-host-routes-120381010.json"
+  },
+  "installed_package_qualification": {
+    "source": "c1e4d35cca14ab9001b6a1f50084dcc5809b6137",
+    "passed": 580,
+    "declared_cpu_not_applicable": 6,
+    "unexpected_skips": 0,
+    "receipt": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/installed-cpu-c1e4d35cc-qualified/receipt.json",
+    "followup": "Six affected installed successor nodes pending; retained580 checks are evidence for the actual original wheel, not relabeled successor bytes.",
+    "packaging_issue": "Outer Mach-O minimum11 does not capture embedded Metal minimum26. Source-only deployment-tag repair in progress; original wheel retained and unpublished."
   }
 }
