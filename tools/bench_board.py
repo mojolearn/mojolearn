@@ -289,20 +289,64 @@ REFUSED_LANE_ARMS = {
 }
 
 
-def refused_lane_arm(lane, arm):
-    """The refusal reason when `lane` refuses opponent `arm` by name (REFUSED_LANE_ARMS), else None."""
+_CLASSICAL_REFUSED = None
+
+
+def classical_refused_arms():
+    """tools/classical_two_datasets.py REFUSED_ARMS ({(lane, arm): reason}), read from its source as a literal
+    (that module imports numpy at load; the board and the main-board ingest are standard library only)."""
+    global _CLASSICAL_REFUSED
+    if _CLASSICAL_REFUSED is None:
+        import ast
+        table = {}
+        try:
+            tree = ast.parse(Path(__file__).with_name("classical_two_datasets.py").read_text())
+            for node in tree.body:
+                if isinstance(node, ast.Assign) and any(getattr(t, "id", None) == "REFUSED_ARMS"
+                                                        for t in node.targets):
+                    table = ast.literal_eval(node.value)
+        except (OSError, SyntaxError, ValueError):
+            table = {}
+        _CLASSICAL_REFUSED = dict(table)
+    return _CLASSICAL_REFUSED
+
+
+def refused_lane_arm(lane, arm, family=None):
+    """The refusal reason when `lane` refuses opponent `arm` by name, else None: REFUSED_LANE_ARMS (trees,
+    by prefix) and, since 2026-10-22, every by-name refusal of the drivers' own tables (exact arm):
+    classical_two_datasets.REFUSED_ARMS (torch-gpu-eigh on ols, harness-written torch k-means / kNN / PCA),
+    bench_board_more.REFUSED (cuML ridge / lasso / elasticnet, scikit-learn linearsvc / linearsvr, tsvd, ...)
+    and each algos lane's `refused`. Before, the main-board ingest copied cells of those arms forward from
+    boards measured before the 2026-10-13 audit and showed them as the best opponent (LinearRegression vs
+    torch-gpu-eigh, Ridge vs cuML: ~/mojolearn-evidence/audit-20261022/measurement_coverage.md section 5).
+    `family` scopes the exact tables when the caller knows it (lane names are unique per family)."""
+    arm = str(arm or "")
     for prefix, why in REFUSED_LANE_ARMS.get(lane, ()):
-        if str(arm or "").startswith(prefix):
+        if arm.startswith(prefix):
             return why
+    if family in (None, "classical"):
+        why = classical_refused_arms().get((lane, arm))
+        if why:
+            return "DIFFERENT-ALGORITHM (2026-10-13 audit): " + why
+    if family in (None, "classical2"):
+        why = MORE.REFUSED.get((lane, arm))
+        if why:
+            return "DIFFERENT-ALGORITHM (2026-10-13 audit): " + why
+    if family in (None, "algos"):
+        why = ((ALGOS.LANES.get(lane) or {}).get("refused") or {}).get(arm)
+        if why:
+            return "DIFFERENT-ALGORITHM (2026-10-13 audit): " + why
     return None
 
 
-def refuse_lane_arm_cells(lane, cells):
+def refuse_lane_arm_cells(lane, cells, family=None):
     """Mark every cell of an arm `lane` refuses REFUSED(reason) (`_refuse_cell`: times and quality
-    withdrawn, kept under `withdrawn`). Returns the number refused."""
+    withdrawn, kept under `withdrawn`). Returns the number refused. Our own cells are never touched."""
     n = 0
     for c in cells or []:
-        why = refused_lane_arm(lane, c.get("arm"))
+        if c.get("library") == "mojolearn" or str(c.get("arm", "")).startswith("ours"):
+            continue
+        why = refused_lane_arm(lane, c.get("arm"), family or c.get("family"))
         if why and not str(c.get("status", "")).startswith("REFUSED"):
             _refuse_cell(c, why)
             n += 1
@@ -2725,6 +2769,11 @@ def add_ratios(cells):
     An opponent row whose hardware differs from ours (tools/board_hardware.py comparable) gets no ratio:
     `hardware_comparable` False, rendered NOT-COMPARABLE (different hardware)."""
     HW.mark(cells)
+    # 2026-10-22: an opponent arm its lane refuses by name never stands as an opponent, whichever board or
+    # store the cell came from (refused_lane_arm); its times are withdrawn before any ratio or best opponent
+    for c in cells:
+        if c.get("lane") and c.get("library") != "mojolearn":
+            refuse_lane_arm_cells(c["lane"], [c], c.get("family"))
     # a "not-scored" cell is timed in full; quality is shown, never gated (Andrew, 2026-10-14)
     # a "recompiled-in-clock" cell too: shown with its ratio, flagged (Andrew, 2026-10-14)
     ok = [c for c in cells if c["status"] in TIMED_STATUSES and c["median_ms"]]
