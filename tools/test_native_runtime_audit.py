@@ -1,9 +1,12 @@
 """Negative controls for whole-operation tracing, independent of native builds."""
 import importlib.util
+import math
 from pathlib import Path
 import sys
 import threading
+from types import ModuleType
 import unittest
+from unittest.mock import patch
 
 
 PATH = Path(__file__).resolve().parents[1] / "python/mojolearn/_verify_native_runtime.py"
@@ -13,6 +16,99 @@ SPEC.loader.exec_module(AUDIT)
 
 
 class NativeRuntimeAuditTests(unittest.TestCase):
+    def test_native_module_object_origin_preserves_native_call(self):
+        with patch.object(math.fabs, "__module__", math):
+            result = AUDIT.audit_native_call(math.fabs, -2.0)
+        self.assertEqual(result.assert_native(), 2.0)
+
+    def test_native_module_object_origin_still_rejects_numpy(self):
+        module = ModuleType("numpy.native_probe")
+        with patch.object(math.fabs, "__module__", module):
+            result = AUDIT.audit_native_call(math.fabs, -2.0)
+        self.assertEqual(result.result, 2.0)
+        self.assertFalse(result.passed)
+        self.assertEqual(result.report()["forbidden_native_calls"],
+                         [{"function": "numpy.native_probe.fabs", "calls": 1}])
+
+    def test_native_module_object_does_not_hide_argument_callback(self):
+        class Value:
+            def __float__(self):
+                return 2.0
+        with patch.object(math.fabs, "__module__", math):
+            result = AUDIT.audit_native_call(math.fabs, Value())
+        self.assertEqual(result.result, 2.0)
+        self.assertFalse(result.passed)
+        self.assertTrue(any("__float__" in row["function"]
+                            for row in result.report()["python_frames"]))
+
+    def test_unknown_native_origin_stays_unqualified_without_hooks(self):
+        called = []
+        class Unknown:
+            def __bool__(self):
+                called.append("bool")
+                return False
+            def __str__(self):
+                called.append("str")
+                return "math"
+            def startswith(self, prefix):
+                called.append("startswith")
+                return False
+        with patch.object(math.fabs, "__module__", Unknown()):
+            result = AUDIT.audit_native_call(math.fabs, -2.0)
+        self.assertEqual(result.result, 2.0)
+        self.assertIsNone(result.exception)
+        self.assertFalse(result.passed)
+        self.assertEqual(called, [])
+        self.assertEqual(result.report()["unresolved_native_calls"],
+                         [{"function": "fabs", "calls": 1}])
+
+    def test_module_name_subclass_is_unresolved_without_string_hooks(self):
+        called = []
+        class Name(str):
+            def startswith(self, prefix):
+                called.append("startswith")
+                return False
+            def __bool__(self):
+                called.append("bool")
+                return True
+        module = ModuleType("native_probe")
+        module.__name__ = Name("math")
+        with patch.object(math.fabs, "__module__", module):
+            result = AUDIT.audit_native_call(math.fabs, -2.0)
+        self.assertFalse(result.passed)
+        self.assertIsNone(result.exception)
+        self.assertEqual(called, [])
+        self.assertTrue(result.unresolved_native)
+
+    def test_module_dictionary_key_does_not_run_equality_hooks(self):
+        called = []
+        class Key(str):
+            __hash__ = str.__hash__
+            def __eq__(self, other):
+                called.append("eq")
+                return str.__eq__(self, other)
+        module = ModuleType("native_probe")
+        del vars(module)["__name__"]
+        vars(module)[Key("__name__")] = "math"
+        with patch.object(math.fabs, "__module__", module):
+            result = AUDIT.audit_native_call(math.fabs, -2.0)
+        self.assertFalse(result.passed)
+        self.assertIsNone(result.exception)
+        self.assertEqual(called, [])
+        self.assertTrue(result.unresolved_native)
+
+    @unittest.skipUnless(sys.platform == "darwin", "actual psutil extension is macOS-only")
+    def test_actual_psutil_module_object_origin(self):
+        try:
+            from psutil import _psutil_osx
+        except ImportError:
+            self.skipTest("psutil is not installed")
+        entry = _psutil_osx.getpagesize
+        if type(entry.__module__) is not ModuleType:
+            self.skipTest("this psutil version uses a string module origin")
+        self.assertIs(entry.__module__, _psutil_osx)
+        self.assertGreater(AUDIT.audit_native_call(entry).assert_native(), 0)
+
     def test_one_wrapper_into_builtin_is_native(self):
         def public(values):
             return sum(values)
