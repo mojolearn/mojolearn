@@ -15,6 +15,7 @@ from bindings.host_projection_native import host_projection_inference, host_proj
 from bindings.host_svr_native import host_svr_admit_state, host_svr_predict
 from bindings.host_svc_native import host_svc_admit_state, host_svc_inference
 from bindings.host_kde_native import host_kde_admit_state, host_kde_inference
+from bindings.host_iforest_native import host_iforest_admit_state, host_iforest_inference
 from bindings.host_logistic_native import host_logistic_classes, host_logistic_inference
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.classical_arrays import classical_input, classical_address, classical_is_f32, classical_is_array, classical_c_order, classical_kind
@@ -68,6 +69,9 @@ def host_inference_operation(model: PythonObject, operation: String, args: Pytho
         host_inference_scalar(fields["fit_intercept"], context, True)
     if svc:
         host_svc_admit_state(fields, context)
+    var iforest = String(kind) == "iforest"
+    if iforest:
+        host_iforest_admit_state(fields, context)
     var kde = String(kind) == "kde"
     if kde:
         host_kde_admit_state(fields, context)
@@ -93,6 +97,8 @@ def host_inference_operation(model: PythonObject, operation: String, args: Pytho
         return host_kernel_inference(model, fields, String(kind), args[0], context, public)
     if projection:
         return host_projection_inference(model, fields, String(kind) == "pca", operation == "host_infer_inverse_transform", args[0], context, public)
+    if iforest:
+        return host_iforest_inference(model, fields, args[0], 2 if operation == "host_infer_predict" else (1 if operation == "host_infer_decision_function" else 0), context, public)
     if kde:
         return host_kde_inference(model, fields, args[0], operation == "host_infer_score", context, public)
     if svc:

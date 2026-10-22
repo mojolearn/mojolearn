@@ -548,11 +548,72 @@ class HostSVC(_NativeArchiveLoad, _HostBound, SVC):
 
 
 class HostIsolationForest(_NativeArchiveLoad, _HostBound, IsolationForest):
-    """`score_samples`, `decision_function` and `predict` of a saved
-    IsolationForest through the svm host binding's iforest_run: the forest
-    rebuilt from the saved training matrix and knobs (DEVIATION 874), as
-    every GPU scoring call rebuilds it, then scored."""
+    """Score samples with a saved isolation forest on the CPU."""
     _HOST_ARRAYS = ("_x",)
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        _register_host_inference_class(cls)
+
+    @_native_host_inference_method
+    def score_samples(self, X):
+        """Return anomaly scores, with lower scores indicating more anomalous samples.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Dense query samples with the fitted feature count.
+
+        Returns
+        -------
+        array-like of shape (n_samples,)
+            Float64 scores, one per input row.
+
+        Examples
+        --------
+        >>> scores = model.score_samples(X)
+        """
+        return _native_classical(self, "host_infer_score_samples", (X,), _CLASSICAL)
+
+    @_native_host_inference_method
+    def decision_function(self, X):
+        """Return scores relative to the fitted anomaly threshold.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Dense query samples with the fitted feature count.
+
+        Returns
+        -------
+        array-like of shape (n_samples,)
+            Float64 decisions; negative values indicate anomalies.
+
+        Examples
+        --------
+        >>> decisions = model.decision_function(X)
+        """
+        return _native_classical(self, "host_infer_decision_function", (X,), _CLASSICAL)
+
+    @_native_host_inference_method
+    def predict(self, X):
+        """Label each sample as an anomaly or inlier.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Dense query samples with the fitted feature count.
+
+        Returns
+        -------
+        array-like of shape (n_samples,)
+            Int32 labels: -1 for anomalies and 1 for inliers.
+
+        Examples
+        --------
+        >>> labels = model.predict(X)
+        """
+        return _native_classical(self, "host_infer_predict", (X,), _CLASSICAL)
 
 
 class HostSVR(_NativeArchiveLoad, _HostBound, SVR):
@@ -1130,7 +1191,7 @@ def _connect_host_inference():
     for basename, names in (("_mojolearn_estimators_host", ("cd_predict", "kde_score_samples", "kernel_ridge_predict", "nystroem_transform", "rbf_sampler_transform",
                                                           "tsvd_transform", "pca_transform", "inverse_transform", "pca_whiten_transform", "pca_whiten_inverse_transform",
                                                           "qn_decision_function", "qn_predict_binary", "qn_sigmoid", "qn_softmax", "py2mojo_rows", "py2mojo_linear_flags")),  # glue: fixed CPU prediction ABI
-                            ("_mojolearn_svm_host", ("svr_predict", "svc_predict", "svc_pair_epilogue", "svc_dual_gemv")),
+                            ("_mojolearn_svm_host", ("svr_predict", "svc_predict", "svc_pair_epilogue", "svc_dual_gemv", "iforest_run")),
                             ("_mojolearn_core_host", ("kmeans_predict", "kmeans_transform"))):
         try:
             module = _backend.load_host_module(basename)
@@ -1146,7 +1207,7 @@ def _connect_host_inference():
                    host_inference_class_labels=ClassLabels,
                    host_inference_kinds={HostElasticNet: "cd", HostLasso: "cd", HostKMeans: "kmeans",
                                          HostKernelRidge: "kernel_ridge", HostNystroem: "nystroem", HostRBFSampler: "rbf_sampler",
-                                         HostPCA: "pca", HostTruncatedSVD: "tsvd", HostLogisticRegression: "logistic", HostSVR: "svr", HostSVC: "svc", HostKernelDensity: "kde"})
+                                         HostPCA: "pca", HostTruncatedSVD: "tsvd", HostLogisticRegression: "logistic", HostSVR: "svr", HostSVC: "svc", HostKernelDensity: "kde", HostIsolationForest: "iforest"})
     # The established native attribute entry is schema-neutral: it admits
     # the supplied class layout and preserves internal Array/public ndarray
     # publication. It does not select scaler bindings or execute scaler work.
@@ -1157,7 +1218,7 @@ def _connect_host_inference():
     descriptor = module.classical_attribute_descriptor(MethodType(attribute, context))
     context.update(classical_attribute_descriptor=descriptor, classical_public_layouts={},
                    classical_public_installed=True)
-    for cls in (HostElasticNet, HostLasso, HostKMeans, HostKernelRidge, HostNystroem, HostRBFSampler, HostPCA, HostTruncatedSVD, HostLogisticRegression, HostKernelDensity):  # glue: fixed native prediction class layouts
+    for cls in (HostElasticNet, HostLasso, HostKMeans, HostKernelRidge, HostNystroem, HostRBFSampler, HostPCA, HostTruncatedSVD, HostLogisticRegression, HostKernelDensity, HostIsolationForest):  # glue: fixed native prediction class layouts
         cls.__getattribute__ = descriptor
         context["classical_public_layouts"][cls] = _native_classical_bridge._layout(cls, descriptor)
     # SVR's existing coef_ property is computed natively rather than invoking

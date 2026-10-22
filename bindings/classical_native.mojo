@@ -219,6 +219,8 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             raise Error("unknown private classical operation")
         return result.steal_data()
     except error:
+        if String(error).startswith("HostIForestKernelError:"):
+            return raise_python_exception(error_without_class(error, "HostIForestKernelError"))
         if String(error).startswith("HostKDEKernelError:"):
             return raise_python_exception(error_without_class(error, "HostKDEKernelError"))
         if String(error).startswith("DataConversionWarning:"):
