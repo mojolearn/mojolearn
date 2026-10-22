@@ -599,6 +599,12 @@ class IVFIndex(NumericModeMixin):
     # npz layout: the five index arrays as `fit` left them, `meta` `<i8`
     # [n_rows, dim, n_lists, metric, n_probes, n_neighbors, kmeans_n_iters,
     # random_state] and the tier; format tag `mojolearn-ivf-flat-1`.
+    # save and load stay Python: a resident build holds `list_data_` only on
+    # the device and `getattr` exports it through `__getattr__` (a Python
+    # method calling ivf_flat_index_export), which a save schema cannot run;
+    # and `IVFIndex.__del__` (the device handle release) is a Python
+    # finalizer, which native archive loading refuses (host_archive_check_layout).
+    # HostIVFIndex loads natively through host_archive_ivf.
     def save(self, path):
         """Write the built index to `path` as an ``.npz`` file.
 
