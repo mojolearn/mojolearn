@@ -6,6 +6,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.native_error_class import error_without_class
 from bindings.classical_attributes import classical_connect_numpy
+from bindings.native_numpy_metadata import native_numpy_dtype
 
 
 def _rows_metadata_fields(value: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -88,6 +89,79 @@ def _array_metadata(value: PythonObject, context: PythonObject) raises -> Python
     return metadata
 
 
+def _released_weakrefs(value: PythonObject, context: PythonObject) raises:
+    var refs = py_call(context["arena_getweakrefs"],value)
+    for i in range(len(refs)):  # driver-loop: releasing an otherwise native owner must not dispatch application callbacks
+        if py_type(refs[i]) is not context["arena_weakref_class"] or py_call(context["arena_weakref_callback"].__get__,refs[i]) is not None:
+            raise Error("TypeError: DeviceRows reinitialization cannot release weak-reference callbacks")
+
+
+def _released_dtype(value: PythonObject, context: PythonObject) raises -> Bool:
+    if py_get(context,"ndarray") is None:
+        return False
+    var classes = py_get(context,"arena_dtype_classes")
+    if classes is None:
+        classes = Python.list()
+        var factory = native_numpy_dtype(context)
+        for code in ["?", "i1", "u1", "i2", "u2", "i4", "u4", "i8", "u8", "f2", "f4", "f8", "g", "c8", "c16", "G", "S", "U", "V", "M8", "m8"]:  # driver-loop: fixed immutable NumPy dtype classes, excluding object/custom owners
+            _ = py_call(classes.append,py_type(py_call(factory,code)))
+        py_setitem(context,"arena_dtype_classes",classes)
+    for i in range(len(classes)):  # driver-loop: admit exact native dtype classes before inspecting their C descriptors
+        if py_type(value) is classes[i]:
+            if Bool(py=value.hasobject) or value.metadata is not None or value.fields is not None or value.subdtype is not None:
+                raise Error("TypeError: DeviceRows reinitialization requires dtype owners without object or custom metadata")
+            return True
+    return False
+
+
+def _released_owner(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
+    # Reinitialization decrements the previous fields' references. Admit the
+    # complete owners that could be destroyed before replacing any field.
+    # Keeping an identical value is handled by the caller and drops no owner.
+    var b = Python.import_module("builtins")
+    var cls = py_type(value)
+    if value is None or cls is b.str or cls is b.bytes or cls is b.bytearray or cls is b.bool or cls is b.int or cls is b.float or cls is b.complex:
+        return
+    if depth > 64:
+        raise Error("TypeError: DeviceRows reinitialization owner nesting exceeds the native bound")
+    _released_weakrefs(value,context)
+    if cls is b.tuple or cls is b.list:
+        for i in range(len(value)):  # driver-loop: old metadata containers may own application finalizers transitively
+            _released_owner(value[i],context,depth+1)
+        return
+    if cls is b.dict:
+        var pairs = py_call(b.list,value.items())
+        for i in range(len(pairs)):  # driver-loop: inspect dictionary owners without key equality lookups
+            _released_owner(pairs[i][0],context,depth+1)
+            _released_owner(pairs[i][1],context,depth+1)
+        return
+    if cls is context["array_class"]:
+        _ = _array_metadata(value,context)
+        var mapping = py_call(b.type.__dict__["__dict__"].__get__,cls)
+        var owners = py_call(b.list,context["arena_array_slots"])
+        for i in range(len(owners)):  # driver-loop: all Array slots own references, including otherwise unused metadata
+            var descriptor = context["arena_array_slots"][owners[i]]
+            if py_get(mapping,owners[i]) is not descriptor:
+                raise Error("TypeError: DeviceRows reinitialization requires native Array owner slots")
+            _released_owner(py_call(descriptor.__get__,value,cls),context,depth+1)
+        return
+    if cls is b.memoryview:
+        _released_owner(value.obj,context,depth+1)
+        return
+    if cls is context["array_type"] or cls is context["arena_mmap_class"]:
+        return
+    if cls is py_get(context,"ndarray"):
+        var dtype = value.dtype
+        if Bool(py=dtype.hasobject) or dtype.metadata is not None or dtype.fields is not None or dtype.subdtype is not None:
+            raise Error("TypeError: DeviceRows reinitialization requires numeric buffer owners without object or dtype metadata callbacks")
+        _released_owner(dtype,context,depth+1)
+        _released_owner(value.base,context,depth+1)
+        return
+    if _released_dtype(value,context):
+        return
+    raise Error("TypeError: DeviceRows reinitialization cannot release Python-owned metadata; retain the same owner or release it in application code first")
+
+
 def _rows_initialize(model: PythonObject, args: PythonObject, context: PythonObject) raises:
     var fields = _rows_metadata_fields(model,context)
     var base = _array_metadata(args[0],context)
@@ -104,18 +178,26 @@ def _rows_initialize(model: PythonObject, args: PythonObject, context: PythonObj
         size *= extent
         _ = py_call(shape.append,base_shape[i])
     var first = Int(py=base_shape[0])
-    py_setitem(fields,"base",args[0])
-    py_setitem(fields,"indices",args[1])
     # Keep the existing opaque take field without invoking it. Its explicit
     # materialization operation owns callback admission separately.
-    py_setitem(fields,"_take",args[2])
-    py_setitem(fields,"_host",PythonObject(None))
-    py_setitem(fields,"shape",py_call(Python.import_module("builtins").tuple,shape))
-    py_setitem(fields,"dtype",base["dtype"])
-    py_setitem(fields,"itemsize",base["itemsize"])
-    py_setitem(fields,"ndim",base["ndim"])
-    py_setitem(fields,"size",size)
-    py_setitem(fields,"row_words",Int(py=base["size"])//first if first != 0 else 0)
+    var proposed = Python.dict(base=args[0],indices=args[1],_take=args[2],_host=PythonObject(None),
+        shape=py_call(Python.import_module("builtins").tuple,shape),dtype=base["dtype"],
+        itemsize=base["itemsize"],ndim=base["ndim"],size=size,
+        row_words=Int(py=base["size"])//first if first != 0 else 0)
+    var names = py_call(Python.import_module("builtins").list,proposed)
+    for i in range(len(names)):  # driver-loop: admit every replaced owner before the first state mutation
+        var previous = py_get(fields,names[i])
+        var replacement = proposed[names[i]]
+        if previous is replacement:
+            continue
+        if py_type(previous) is context["arena_method_class"] and py_type(replacement) is context["arena_method_class"] and previous.__func__ is replacement.__func__ and previous.__self__ is replacement.__self__:
+            # Renewed access to the same ordinary bound method retains both
+            # owners. Only the old method object's weak references can run.
+            _released_weakrefs(previous,context)
+        else:
+            _released_owner(previous,context)
+    for i in range(len(names)):  # driver-loop: publish native constructor metadata after lifetime admission succeeds
+        py_setitem(fields,names[i],proposed[names[i]])
 
 
 def arena_rows_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
