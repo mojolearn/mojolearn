@@ -45,6 +45,20 @@ def test_plain_class_registry_storage_has_no_model_execution():
     """)
 
 
+@pytest.mark.parametrize("index", [0, -1])
+def test_literal_class_tuple_lookup_preserves_effect_tracking(index):
+    prefix = "classes = (formats['format']['Model'],)\n"
+    assert proof(prefix + f"context['class'] = classes[{index}]")
+    assert not proof(prefix + f"classes[{index}].changed()")
+    assert not proof(prefix + f"context['flag'] = len(classes[{index}].__dict__)")
+
+
+@pytest.mark.parametrize("index", ["unknown_index", "2", "object()"])
+def test_unproved_class_tuple_lookup_stays_wide(index):
+    assert not proof("classes = (formats['format']['Model'],)\n"
+                     + f"context['class'] = classes[{index}]")
+
+
 @pytest.mark.parametrize(
     "body",
     [
@@ -126,6 +140,21 @@ def test_actual_archive_connector_is_storage_and_native_descriptor_installation(
     # Erasing the proof of the native descriptor factory must remove admission.
     assert not metadata_only_call(
         rel, call, {"_FORMATS"}, ls._parse, lambda *args: False, ls._metadata_registry_guard
+    )
+
+
+def test_actual_tree_descriptor_installation_requires_a_proved_plain_class(monkeypatch):
+    # The host archive connector gets this foreign class through a keyword
+    # dictionary and tuple. Custom metaclasses can execute attribute writes.
+    original = ls._parse
+    rel, call = real_connector_call()
+    path = "python/mojolearn/_forest_host.py"
+    tree = ast.parse(ls._read(path))
+    cls = next(node for node in tree.body if isinstance(node, ast.ClassDef) and node.name == "HostForest")
+    cls.keywords.append(ast.keyword(arg="metaclass", value=ast.Name(id="UnknownMeta", ctx=ast.Load())))
+    monkeypatch.setattr(ls, "_parse", lambda p: tree if p == path else original(p))
+    assert not metadata_only_call(
+        rel, call, {"_FORMATS"}, ls._parse, ls._native_metadata_factory, ls._metadata_registry_guard
     )
 
 
