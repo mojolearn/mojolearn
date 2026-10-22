@@ -132,16 +132,27 @@ def test_cache_supports_refuses_foreign_lookup_hooks_before_invocation(kind):
             def __eq__(self, other):
                 touched.append('key-equality')
                 return False
-        vars(binding)[Key()] = len
+        poison = Key()
+        vars(binding)[poison] = len
+        assert any(key is poison for key in vars(binding))
     else:
         class Descriptor:
             __get__ = foreign
         class Fields:
             x_dev_put = Descriptor()
         binding = Fields()
+    # A colliding foreign key can run equality during fixture insertion,
+    # before the product boundary. Preserve the preparation snapshot and
+    # require zero additional callbacks while admitting the poisoned mapping.
+    prepared = tuple(touched)
+    if kind not in ('key', 'module_key'):
+        assert prepared == ()
     audit = audit_native_call(arena.DeviceCache.supports, binding, prefix)
     _refused(audit)
-    assert touched == []
+    assert tuple(touched) == prepared
+    if kind in ('key', 'module_key'):
+        assert any(key is poison for key in vars(binding))
+        assert str(audit.exception) == "cache metadata keys must be native strings"
 
 
 @pytest.mark.parametrize("prefix", ['x', '__x', '\udcff', '\0cache-reason\0'])

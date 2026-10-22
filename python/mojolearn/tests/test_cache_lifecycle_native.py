@@ -109,10 +109,21 @@ def test_cache_live_refuses_unregistered_callbacks_before_invocation(kind):
                 touched.append("equality")
                 return False
         del cache._live
-        vars(cache)[Foreign()] = 1
+        poison = Foreign()
+        vars(cache)[poison] = 1
+        assert any(key is poison for key in vars(cache))
+    # Insertion into CPython's shared-key dictionary may compare against the
+    # deleted ordinary key. Retain that preparation count independently of
+    # the public operation; the still-present poisoned key must never run.
+    prepared = tuple(touched)
+    if kind != "key":
+        assert prepared == ()
     audit = audit_native_call(arena.DeviceCache.live.__get__(cache))
     _refused(audit)
-    assert touched == []
+    assert tuple(touched) == prepared
+    if kind == "key":
+        assert any(key is poison for key in vars(cache))
+        assert str(audit.exception) == "cache metadata keys must be native strings"
 
 
 @pytest.mark.parametrize("prefix", ["x_prep", "x_metrics"])
