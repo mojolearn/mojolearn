@@ -87,7 +87,6 @@ from std.os import abort
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32, read_i32
 from gaussian_process.host.gp_theta import (
     gp_log64,
-    gp_restart_uniform,
     gp_theta_param,
 )
 from std.python import Python, PythonObject
@@ -113,7 +112,6 @@ from gaussian_process.gp_binding_entries import (
     _i32_ptr,
     _rebuild_kernel_spec,
     gp_log64_values,
-    gp_restart_uniforms_values,
     gp_theta_params_values,
 )
 
@@ -183,14 +181,6 @@ def gp_numeric_mode_binding() raises -> PythonObject:
     measurement that is correctly labelled by accident is the failure this
     prevents."""
     return PythonObject(GLOBAL_NUMERIC_MODE)
-
-
-def gp_py2mojo_binding() raises -> PythonObject:
-    """1: normalize_y's un-normalization runs in this binding, on the device
-    (lane apple-fast-py2mojo-cluster); 0 under
-    `-D MOJOLEARN_PY2MOJO_cluster_OFF`, and `_gp_impl.py` applies it in
-    Python."""
-    return PythonObject(1 if GP_PY2MOJO else 0)
 
 
 def gp_vendor_binding() raises -> PythonObject:
@@ -1338,21 +1328,6 @@ def gp_theta_params_binding(values: PythonObject) raises -> PythonObject:
     return py_list_f64(gp_theta_params_values(vals))
 
 
-def gp_restart_uniforms_binding(params: PythonObject) raises -> PythonObject:
-    """The restart draws (DEVIATION 2881): `params` = n_restarts, n_dims,
-    random_state low 32 bits, high 32 bits; returns n_restarts * n_dims
-    doubles in [0, 1), restart r's dimension j at r * n_dims + j."""
-    if len(params) != 4:
-        raise Error(
-            "gp_restart_uniforms: params must contain 4 values (n_restarts,"
-            " n_dims, seed_lo, seed_hi), got " + String(len(params))
-        )
-    var nr = Int(py=params[0])
-    var nd = Int(py=params[1])
-    var seed = (UInt64(Int(py=params[3])) << 32) | UInt64(Int(py=params[2]))
-    return py_list_f64(gp_restart_uniforms_values(seed, nr, nd))
-
-
 def gp_parallel_available() raises -> PythonObject:
     return PythonObject(1)
 
@@ -1366,7 +1341,6 @@ def build__mojolearn_gp() -> PythonObject:
         m.def_function[gp_shared_sub_count_py]("gp_shared_sub_count")
         m.def_function[gp_parallel_available]("gp_parallel_available")
         m.def_function[gp_vendor_binding]("gp_vendor")
-        m.def_function[gp_py2mojo_binding]("gp_py2mojo")
         m.def_function[gp_numeric_mode_binding]("gp_numeric_mode")
         m.def_function[gpr_fit_binding]("gpr_fit")
         m.def_function[gpr_predict_binding]("gpr_predict")
@@ -1376,7 +1350,6 @@ def build__mojolearn_gp() -> PythonObject:
         m.def_function[gpr_optimize_binding]("gpr_optimize")
         m.def_function[gp_log64_binding]("gp_log64")
         m.def_function[gp_theta_params_binding]("gp_theta_params")
-        m.def_function[gp_restart_uniforms_binding]("gp_restart_uniforms")
         m.def_function[gpc_fit_binding]("gpc_fit")
         m.def_function[gpc_predict_binding]("gpc_predict")
         m.def_function[gpc_ovr_combine_binding]("gpc_ovr_combine")

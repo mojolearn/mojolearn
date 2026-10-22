@@ -11,12 +11,8 @@ from std.python.bindings import PythonModuleBuilder
 from std.memory import bitcast
 from x_metrics.common import PY2MOJO_CORE_ON
 from x_metrics.cls_epi import IDN_CLS_EPI
-from x_metrics.epilogue import roc_arrays, expected_mi, row_sum_range
-from x_metrics.epilogue import scatter_rows, first_rows_i32, ovo_pair
-from x_metrics.epilogue import (
-    pr_arrays, det_arrays, ndcg_mean, class_sums, auc_xy, mi_contingency, centroids_f32, ch_extra,
-    db_score, contingency_stats,
-)
+from x_metrics.epilogue import expected_mi, row_sum_range
+from x_metrics.epilogue import scatter_rows, first_rows_i32
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_metrics.device import (
@@ -113,119 +109,15 @@ def dev_live_binding() raises -> PythonObject:
     return PythonObject(X_METRICS_STORE.get_or_create_ptr()[].live)
 
 
-def curve_roc_binding(arena: PythonObject, offs: PythonObject, c: PythonObject, drop: PythonObject,
-                      outs: PythonObject) raises -> PythonObject:
-    """x_metrics/epilogue.mojo roc_arrays (lane metrics-apple2): offs =
-    (fps, tps, thr, keep), outs = the three Float64 buffer addresses."""
-    return PythonObject(roc_arrays(
-        Int(py=arena), Int(py=offs[0]), Int(py=offs[1]), Int(py=offs[2]), Int(py=offs[3]), Int(py=c),
-        Int(py=drop) != 0, Int(py=outs[0]), Int(py=outs[1]), Int(py=outs[2]),
-    ))
-
-
-def expected_mi_binding(a: PythonObject, na: PythonObject, b: PythonObject, nb: PythonObject,
-                        n: PythonObject) raises -> PythonObject:
-    """x_metrics/epilogue.mojo expected_mi (lane metrics-apple2)."""
-    return PythonObject(expected_mi(Int(py=a), Int(py=na), Int(py=b), Int(py=nb), Int(py=n)))
-
-
-def row_sum_range_binding(s: PythonObject, n: PythonObject, k: PythonObject, out_addr: PythonObject) raises -> PythonObject:
-    """x_metrics/epilogue.mojo row_sum_range (lane metrics-apple2)."""
-    row_sum_range(Int(py=s), Int(py=n), Int(py=k), Int(py=out_addr))
-    return PythonObject(0)
-
-
 def first_rows_binding(codes: PythonObject, n: PythonObject, k: PythonObject, out_addr: PythonObject) raises -> PythonObject:
     """x_metrics/epilogue.mojo first_rows_i32 (lane metrics-apple3)."""
     first_rows_i32(Int(py=codes), Int(py=n), Int(py=k), Int(py=out_addr))
     return PythonObject(0)
 
 
-def ovo_pair_binding(codes: PythonObject, scores: PythonObject, dims: PythonObject,
-                     outs: PythonObject) raises -> PythonObject:
-    """x_metrics/epilogue.mojo ovo_pair (lane metrics-apple3): dims = (n, k,
-    a, b, m), outs = (scores a, scores b, flags a, flags b) addresses."""
-    return PythonObject(ovo_pair(
-        Int(py=codes), Int(py=scores), Int(py=dims[0]), Int(py=dims[1]), Int(py=dims[2]), Int(py=dims[3]),
-        Int(py=outs[0]), Int(py=outs[1]), Int(py=outs[2]), Int(py=outs[3]), Int(py=dims[4]),
-    ))
-
-
-def scatter_rows_binding(src: PythonObject, dst: PythonObject, idx: PythonObject, n: PythonObject,
-                         n_dst: PythonObject, row_bytes: PythonObject) raises -> PythonObject:
-    """x_metrics/epilogue.mojo scatter_rows (lane metrics-apple3)."""
-    scatter_rows(Int(py=src), Int(py=dst), Int(py=idx), Int(py=n), Int(py=n_dst), Int(py=row_bytes))
-    return PythonObject(0)
-
-
 # lane py-misc-metrics: the rest of DEVIATION 6106's O(n) epilogues
 # (x_metrics/epilogue.mojo); addresses and counts in, a Float64 or a
 # length out. Each raises on any case its Python fallback decides.
-
-
-def curve_pr_binding(arena: PythonObject, offs: PythonObject, c: PythonObject, drop: PythonObject,
-                     outs: PythonObject) raises -> PythonObject:
-    """pr_arrays: offs = (fps, tps, thr), outs = (precision, recall, thresholds) Float64 addresses."""
-    return PythonObject(pr_arrays(
-        Int(py=arena), Int(py=offs[0]), Int(py=offs[1]), Int(py=offs[2]), Int(py=c), Int(py=drop) != 0,
-        Int(py=outs[0]), Int(py=outs[1]), Int(py=outs[2]),
-    ))
-
-
-def curve_det_binding(arena: PythonObject, offs: PythonObject, c: PythonObject, drop: PythonObject,
-                      outs: PythonObject) raises -> PythonObject:
-    """det_arrays: offs = (fps, tps, thr), outs = (fpr, fnr, thresholds) Float64 addresses."""
-    return PythonObject(det_arrays(
-        Int(py=arena), Int(py=offs[0]), Int(py=offs[1]), Int(py=offs[2]), Int(py=c), Int(py=drop) != 0,
-        Int(py=outs[0]), Int(py=outs[1]), Int(py=outs[2]),
-    ))
-
-
-def ndcg_mean_binding(arena: PythonObject, gain: PythonObject, ideal: PythonObject, n: PythonObject,
-                      w: PythonObject) raises -> PythonObject:
-    return PythonObject(ndcg_mean(Int(py=arena), Int(py=gain), Int(py=ideal), Int(py=n), Int(py=w)))
-
-
-def class_sums_binding(codes: PythonObject, w: PythonObject, n: PythonObject, k: PythonObject,
-                       out_addr: PythonObject) raises -> PythonObject:
-    class_sums(Int(py=codes), Int(py=w), Int(py=n), Int(py=k), Int(py=out_addr))
-    return PythonObject(0)
-
-
-def auc_xy_binding(x: PythonObject, y: PythonObject, n: PythonObject) raises -> PythonObject:
-    return PythonObject(auc_xy(Int(py=x), Int(py=y), Int(py=n)))
-
-
-def mi_contingency_binding(c: PythonObject, ka: PythonObject, kb: PythonObject) raises -> PythonObject:
-    return PythonObject(mi_contingency(Int(py=c), Int(py=ka), Int(py=kb)))
-
-
-def contingency_stats_binding(o: PythonObject, dims: PythonObject, eps: PythonObject,
-                              outs: PythonObject) raises -> PythonObject:
-    """x_metrics/epilogue.mojo contingency_stats (lane pyglue-sweep): dims =
-    (ka, kb, kk), outs = (C, C + eps or 0, rows, cols, pairs, entropies)."""
-    contingency_stats(Int(py=o), Int(py=dims[0]), Int(py=dims[1]), Int(py=dims[2]), Float64(py=eps),
-                      Int(py=outs[0]), Int(py=outs[1]), Int(py=outs[2]), Int(py=outs[3]), Int(py=outs[4]),
-                      Int(py=outs[5]))
-    return PythonObject(0)
-
-
-def centroids_binding(arena: PythonObject, sums: PythonObject, counts: PythonObject, k: PythonObject,
-                      d: PythonObject, out_addr: PythonObject) raises -> PythonObject:
-    centroids_f32(Int(py=arena), Int(py=sums), Int(py=counts), Int(py=k), Int(py=d), Int(py=out_addr))
-    return PythonObject(0)
-
-
-def ch_extra_binding(arena: PythonObject, sums: PythonObject, gsum: PythonObject, counts: PythonObject,
-                     k: PythonObject, d: PythonObject, n: PythonObject) raises -> PythonObject:
-    return PythonObject(ch_extra(Int(py=arena), Int(py=sums), Int(py=gsum), Int(py=counts), Int(py=k),
-                                 Int(py=d), Int(py=n)))
-
-
-def db_score_binding(arena: PythonObject, sums: PythonObject, counts: PythonObject, k: PythonObject,
-                     d: PythonObject, per: PythonObject) raises -> PythonObject:
-    return PythonObject(db_score(Int(py=arena), Int(py=sums), Int(py=counts), Int(py=k), Int(py=d),
-                                 Int(py=per)))
 
 
 def numeric_mode_binding() raises -> PythonObject:
@@ -266,22 +158,7 @@ def build__mojolearn_x_metrics() -> PythonObject:
         m.def_function[dev_free_binding]("x_metrics_dev_free")
         m.def_function[dev_live_binding]("x_metrics_dev_live")
         m.def_function[dev_take_rows_binding]("x_metrics_dev_take_rows")
-        m.def_function[curve_roc_binding]("x_metrics_curve_roc")
-        m.def_function[expected_mi_binding]("x_metrics_expected_mi")
-        m.def_function[row_sum_range_binding]("x_metrics_row_sum_range")
-        m.def_function[scatter_rows_binding]("x_metrics_scatter_rows")
         m.def_function[first_rows_binding]("x_metrics_first_rows")
-        m.def_function[ovo_pair_binding]("x_metrics_ovo_pair")
-        m.def_function[curve_pr_binding]("x_metrics_curve_pr")
-        m.def_function[curve_det_binding]("x_metrics_curve_det")
-        m.def_function[ndcg_mean_binding]("x_metrics_ndcg_mean")
-        m.def_function[class_sums_binding]("x_metrics_class_sums")
-        m.def_function[auc_xy_binding]("x_metrics_auc_xy")
-        m.def_function[mi_contingency_binding]("x_metrics_mi_contingency")
-        m.def_function[contingency_stats_binding]("x_metrics_contingency_stats")
-        m.def_function[centroids_binding]("x_metrics_centroids")
-        m.def_function[ch_extra_binding]("x_metrics_ch_extra")
-        m.def_function[db_score_binding]("x_metrics_db_score")
         m.def_function[numeric_mode_binding]("x_metrics_numeric_mode")
         m.def_function[vendor_binding]("x_metrics_vendor")
         m.def_function[py2mojo_core_binding]("x_metrics_py2mojo_core")

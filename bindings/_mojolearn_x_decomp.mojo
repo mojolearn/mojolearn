@@ -9,7 +9,7 @@ from std.python import PythonObject
 from std.python.bindings import PythonModuleBuilder
 
 from x_decomp.api_pyapi import (
-    cd_rows_py, chol_py, colsum_py, eigh_py, eigh_batch_py, lle_local_py, lle_apply_py, ew_py, gemm_py, lu_py, lu_solve_py, trisolve_py, knn_select_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, lars_rows_py, lu_aux_py, omp_rows_py, rand_gamma_py, lda_rows_py, dijkstra_rows_py, barycenter_rows_py, als_rows_py, absmax_sign_py, qr_r_py, geqrf_py, orgqr_py, tsqr_r_py, tsqr_q_py, r_signs_py, rank_above_py, als_cg_rows_py, gather_py, scatter_py, triu_nonzero_py, argsort_f32_py, iso_order_py, py2mojo_py, move_py, dsum_sq_py, order_f_py, select_smallest_py, argmin_all_py, sign_labels_py, accuracy_py, pca_mle_rank_host_py, topn_desc_py, rowsum_py, sqdist_py, vendor_py, fast_defines_py, idn_flags_py, lu_gesv_py, ols_tsqr_r_py,
+    cd_rows_py, chol_py, colsum_py, eigh_py, eigh_batch_py, lle_local_py, lle_apply_py, ew_py, gemm_py, lu_py, lu_solve_py, trisolve_py, knn_select_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, lars_rows_py, lu_aux_py, omp_rows_py, rand_gamma_py, lda_rows_py, dijkstra_rows_py, barycenter_rows_py, als_rows_py, absmax_sign_py, qr_r_py, geqrf_py, orgqr_py, tsqr_r_py, tsqr_q_py, r_signs_py, rank_above_py, als_cg_rows_py, gather_py, argsort_f32_py, py2mojo_py, move_py, dsum_sq_py, order_f_py, select_smallest_py, argmin_all_py, accuracy_py, pca_mle_rank_host_py, topn_desc_py, rowsum_py, sqdist_py, vendor_py, fast_defines_py, idn_flags_py, lu_gesv_py, ols_tsqr_r_py,
 )
 from x_decomp.device import DevExec
 from x_decomp.fa_fast import FA_FAST_APPLE
@@ -43,7 +43,7 @@ from x_decomp.kit_device_pyapi import lda_online_dev_py, mcd_dev_py
 from x_decomp.nmf_dev_pyapi import nmf_nndsvd_dev_py, nmf_solve_dev_py
 from x_decomp.ica_dev_pyapi import ica_solve_dev_py
 from x_decomp.fa_em_pyapi import dsum_f32_py
-from x_decomp.chi2_dev_pyapi import chi2_cdf_dev_py, chi2_quantile_dev_py, consistency_factor_dev_py
+from x_decomp.chi2_dev_pyapi import chi2_quantile_dev_py, consistency_factor_dev_py
 from x_decomp.als_dev_pyapi import als_fit_dev_py
 from x_decomp.mds_dev_pyapi import mds_fit_dev_py
 from x_decomp.lle_iter_dev_pyapi import lle_iterate_dev_py, lle_gemm_ordered_py, lle_lu_ordered_py
@@ -61,14 +61,13 @@ from x_decomp.select_ops_pyapi import order_small_py, reduce_py
 from x_decomp.select_dev_pyapi import (
     dev_argmin_all_py, dev_dsum_sq_py, dev_order_f_py, dev_order_small_py, dev_pca_mle_rank_py, dev_reduce_py, dev_select_smallest_py,
 )
-from x_decomp.mds_iso_dev_pyapi import dev_mds_disp_py, dev_mds_setup_py
 from x_decomp.graph_device_pyapi import (
     dev_graph_knn_py, dev_graph_knn_dense_py, dev_graph_radius_py, dev_graph_radius_geo_py, dev_graph_lle_iw_py, dev_graph_components_py, dev_graph_join_py, dev_graph_dijkstra_py,
 )
 from x_decomp.mcd_bmma import MCD_ORDERED_COV
 from x_decomp.mcd_bmma_pyapi import mcd_cov_reach_py
 from x_decomp.resident_pyapi import (
-    mcd_cov_probe_py, dev_mcd_cov_py, dev_alloc_py, dev_colsum_py, dev_download_py, dev_ew_py, dev_free_py, dev_gemm_py, dev_project_py, dev_rand_py, dev_trisolve_py, dev_knn_select_py, dev_rowsum_py, dev_sqdist_py, dev_upload_py, dev_absmax_py, dev_orth_py, dev_orth_diag_py, dev_lda_rows_py, dev_lda_bound_py, dev_als_rows_py, dev_move_py,
+    mcd_cov_probe_py, dev_mcd_cov_py, dev_alloc_py, dev_colsum_py, dev_download_py, dev_ew_py, dev_free_py, dev_gemm_py, dev_project_py, dev_rand_py, dev_trisolve_py, dev_rowsum_py, dev_sqdist_py, dev_upload_py, dev_absmax_py, dev_orth_py, dev_orth_diag_py, dev_lda_rows_py, dev_lda_bound_py, dev_move_py,
 )
 from x_decomp.resident import GRP_CLS2_ANY, GRP_CLS2_DEVSCAN, GRP_FAST_FUSED
 from x_decomp.resident_pyapi import grp_cls2_py, dev_first_nonfinite_py, grp_fit_fused_py
@@ -176,22 +175,17 @@ def build__mojolearn_x_decomp() -> PythonObject:
             m.def_function[lle_lu_ordered_py]("x_decomp_lle_lu_ordered")
         m.def_function[mds_fit_dev_py]("x_decomp_mds_fit")
         m.def_function[als_fit_dev_py]("x_decomp_als_fit")
-        m.def_function[chi2_cdf_dev_py]("x_decomp_chi2_cdf")
         m.def_function[chi2_quantile_dev_py]("x_decomp_chi2_quantile")
         m.def_function[consistency_factor_dev_py]("x_decomp_consistency_factor")
         m.def_function[ortho_rotation_dev_py]("x_decomp_ortho_rotation")
         m.def_function[gather_py]("x_decomp_gather")
-        m.def_function[scatter_py]("x_decomp_scatter")
-        m.def_function[triu_nonzero_py]("x_decomp_triu_nonzero")
         m.def_function[argsort_f32_py]("x_decomp_argsort_f32")
-        m.def_function[iso_order_py]("x_decomp_iso_order")
         m.def_function[py2mojo_py]("x_decomp_py2mojo")
         m.def_function[move_py]("x_decomp_move")
         m.def_function[dsum_sq_py]("x_decomp_dsum_sq")
         m.def_function[order_f_py]("x_decomp_order_f")
         m.def_function[select_smallest_py]("x_decomp_select_smallest")
         m.def_function[argmin_all_py]("x_decomp_argmin_all")
-        m.def_function[sign_labels_py]("x_decomp_sign_labels")
         m.def_function[accuracy_py]("x_decomp_accuracy")
         m.def_function[pca_mle_rank_host_py]("x_decomp_pca_mle_rank")
         m.def_function[topn_desc_py]("x_decomp_topn_desc")
@@ -206,8 +200,6 @@ def build__mojolearn_x_decomp() -> PythonObject:
         m.def_function[dev_argmin_all_py]("x_decomp_dev_argmin_all")
         m.def_function[dev_select_smallest_py]("x_decomp_dev_select_smallest")
         m.def_function[dev_dsum_sq_py]("x_decomp_dev_dsum_sq")
-        m.def_function[dev_mds_setup_py]("x_decomp_dev_mds_setup")
-        m.def_function[dev_mds_disp_py]("x_decomp_dev_mds_disp")
         # device-resident matrices (x_decomp/resident.mojo; GPU binding only)
         m.def_function[dev_alloc_py]("x_decomp_dev_alloc")
         m.def_function[dev_free_py]("x_decomp_dev_free")
@@ -249,7 +241,6 @@ def build__mojolearn_x_decomp() -> PythonObject:
             m.def_function[dev_lu_solve_py]("x_decomp_dev_lu_solve")
         comptime if LLE_FAST_DEV_LU:
             m.def_function[w4_dev_lu_aux_py]("x_decomp_dev_lu_aux")
-        m.def_function[dev_knn_select_py]("x_decomp_dev_knn_select")
         m.def_function[dev_colsum_py]("x_decomp_dev_colsum")
         m.def_function[dev_rowsum_py]("x_decomp_dev_rowsum")
         m.def_function[dev_sqdist_py]("x_decomp_dev_sqdist")
@@ -261,7 +252,6 @@ def build__mojolearn_x_decomp() -> PythonObject:
         comptime if LDA_FUSED_SS:
             # lane apple-fast-nb: FAST + Apple default (off: -D MOJOLEARN_LDA_FUSED_SS_OFF) (x_decomp/lda_fast.mojo)
             m.def_function[dev_lda_estep_ss_py]("x_decomp_dev_lda_estep_ss")
-        m.def_function[dev_als_rows_py]("x_decomp_dev_als_rows")
         comptime if IDN_CD_RESIDENT:
             # lane fam-decomp: IDENTICAL default (off: -D MOJOLEARN_IDN_CD_RESIDENT_OFF) (x_decomp/resident.mojo)
             m.def_function[dev_cd_rows_py]("x_decomp_dev_cd_rows")

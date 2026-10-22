@@ -311,14 +311,6 @@ def dev_trisolve_run(lu: Int, idx: Int, src: Int, dst: Int, n: Int, nrhs: Int, t
     return n
 
 
-def dev_knn_select_run(dmat: Int, dist: Int, idx: Int, n: Int, m: Int, k: Int, ex: Int) raises -> Int:
-    """`knn_select_py` on device ids, enqueued (no sync)."""
-    if m >= 1 << 24 or n * m > 2147483647:
-        raise Error("x_decomp: knn_select exceeds the index bounds")
-    launch_knn_select(xd_ctx(), _ptr(dmat, n * m), _ptr(dist, n * k), _ptr(idx, n * k), n, m, k, ex)
-    return n
-
-
 def dev_colsum_run(a: Int, dst: Int, n: Int, d: Int) raises -> Int:
     var ns = colsum_scratch(n, d)
     var sid = pool_alloc(ns)
@@ -432,27 +424,6 @@ def dev_lda_bound_run(
         n, k, v, floor,
     )
     return n * v
-
-
-def dev_als_rows_run(
-    c: Int, y: Int, yty: Int, x: Int, flags: Int, n: Int, m: Int, f: Int, su: Int, si: Int, cl: Int,
-    reg: Float64,
-) raises -> Int:
-    """`x_decomp_als_rows` on device matrices (lane gap-lda-als): every row's
-    `als_row` into x (n x f) and flags (n), one block per row; element (u, i)
-    of the confidences at c[u * su + i * si], so the item half-sweep reads the
-    resident user x item matrix with su = 1, si = items (no transpose).
-    p = [n, m, f, su, si, c_len]."""
-    if n == 0:
-        return 0
-    var ns = als_scratch(n, f)
-    var sid = pool_alloc(ns if ns > 0 else 1)
-    launch_als_rows(
-        xd_ctx(), _ptr(c, cl), _ptr(y, m * f), _ptr(yty, f * f), _ptr(x, n * f),
-        _ptr(sid, ns if ns > 0 else 1), _ptr(flags, n), n, m, f, su, si, Float32(reg),
-    )
-    pool_free(sid)
-    return n
 
 
 # ---- lane fam-decomp (2026-10-04): IDN_CD_RESIDENT (IDENTICAL default) ----

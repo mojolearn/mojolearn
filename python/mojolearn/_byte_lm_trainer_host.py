@@ -59,7 +59,7 @@ the owner's order; a native CPU owner in the host binding is owed.
 ABSENT, SO THEY REFUSE BY NAME (an AttributeError naming the entry and this
 file, so `getattr(binding, name, None)` and `hasattr` still read absent): the
 multi-GPU `byte_lm_parallel_*`, `byte_lm_offload_*` and `byte_lm_model_pool_*`
-entries, `byte_lm_session_run`, the context keeper and fault injection
+entries, the context keeper and fault injection
 read-backs, and the attention and step glue arm read-backs
 (`_binding_metadata` records None for both, as for a binding built before
 them).

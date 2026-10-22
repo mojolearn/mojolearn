@@ -112,16 +112,9 @@ FAMILIES = (
         ),
         exports=(
             "x_metrics_host_numeric_mode", "x_metrics_host_vendor", "x_metrics_host_column",
-            "x_metrics_host_sabotage", "x_metrics_run", "x_metrics_run_out", "x_metrics_curve_roc", "x_metrics_expected_mi", "x_metrics_row_sum_range", "x_metrics_numeric_mode", "x_metrics_vendor",
-            # lane py-misc-metrics (2026-09-28): x_metrics/epilogue.mojo
-            "x_metrics_curve_pr", "x_metrics_curve_det", "x_metrics_ndcg_mean", "x_metrics_class_sums",
-            "x_metrics_auc_xy", "x_metrics_mi_contingency", "x_metrics_centroids", "x_metrics_ch_extra",
-            "x_metrics_db_score",
-            # lane metrics-apple3 (2026-09-28): cross_val_predict's row scatter, integer label plumbing
-            "x_metrics_scatter_rows", "x_metrics_encode_small_i64", "x_metrics_first_rows", "x_metrics_ovo_pair",
-            "x_metrics_expected_mi_tasks", "x_metrics_row_sum_range_tasks",
-            # lane pyglue-sweep (2026-10-03): the clustering metrics' contingency epilogue
-            "x_metrics_contingency_stats",
+            "x_metrics_host_sabotage", "x_metrics_run", "x_metrics_run_out", "x_metrics_numeric_mode", "x_metrics_vendor",
+            # lane metrics-apple3 (2026-09-28): integer label plumbing
+            "x_metrics_first_rows",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "x_metrics_py2mojo_core", "x_metrics_idn_fam2",
         ),

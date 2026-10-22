@@ -358,17 +358,29 @@ from ._samba_impl import SambaConfig, SambaStack
 from .parallel_training import ParallelByteLanguageModelTrainer, ParallelNeuralTrainer
 from .model_pool_training import PooledByteLanguageModelTrainer
 from .offload_training import OffloadedByteLanguageModelTrainer
+from . import parallel_classical
+from . import parallel_ensemble
 from . import parallel_forecasting
 from . import parallel_gaussian_process
+from . import parallel_graph
 from . import parallel_ivf
 from . import parallel_model_selection
+from . import parallel_neighbors
+from . import parallel_neighbors_reference
+from . import parallel_preprocessing
 from .parallel_ivf import DistributedIVFIndex
 
 __all__ = [
+    "parallel_classical",
+    "parallel_ensemble",
     "parallel_forecasting",
     "parallel_gaussian_process",
+    "parallel_graph",
     "parallel_ivf",
     "parallel_model_selection",
+    "parallel_neighbors",
+    "parallel_neighbors_reference",
+    "parallel_preprocessing",
     "DistributedIVFIndex",
     "ParallelByteLanguageModelTrainer",
     "ParallelNeuralTrainer",

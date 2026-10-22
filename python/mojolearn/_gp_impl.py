@@ -123,16 +123,6 @@ def _as_length_scale(length_scale, what):
 _FLT_MIN = 1.1754943508222875e-38
 
 
-def _gp_py2mojo(ext):
-    """True when the binding `ext` applies normalize_y's un-normalization
-    itself (lane apple-fast-py2mojo-cluster: the mean, std, covariance and
-    sample_y draws, `gaussian_process/unnorm.mojo`). A
-    `-D MOJOLEARN_PY2MOJO_cluster_OFF` build answers 0 and the Python loops
-    below run (the A/B switch)."""
-    fn = getattr(ext, "gp_py2mojo", None)
-    return fn is not None and int(fn()) == 1
-
-
 def _gpr_ptr(ext):
     """True when the binding fits and predicts from the caller's memory on
     the device (`gpr_fit_ptr` / `gpr_predict_ptr`,

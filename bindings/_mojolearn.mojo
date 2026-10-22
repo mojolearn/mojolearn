@@ -86,7 +86,6 @@ from core.mojolearn_shell_impl import (
     cast_f64_to_f32_host,
     nonzero_f64_count_host,
     nonzero_f64_fill_host,
-    probability_rows_f32_host,
     tiled_transpose_to_f32,
 )
 from core.dense_coo import (
@@ -112,9 +111,9 @@ from core.hotpath_device import (
 from core.label_rows_device import LRD_MAX_N, device_argmax_rows, device_argmax_last_f32
 from bindings.normal_dist_helpers import truncnorm_draws_binding
 from bindings.lr_table_helpers import (
-    lr_decide_binding, lr_onecycle_fill_binding, lr_schedule_values_binding, lr_schedule_exact_binding,
-    lr_onecycle_exact_binding, lr_pow_values_binding, lr_schedule_exact_block_binding,
-    lr_onecycle_exact_block_binding, lr_schedule_at_c, lr_schedule_fill_binding, lr_schedule_series_c,
+    lr_schedule_exact_binding,
+    lr_schedule_exact_block_binding,
+    lr_schedule_at_c, lr_schedule_fill_binding, lr_schedule_series_c,
 )
 from bindings.optimizer_public_door import entry_init
 from bindings.array_helpers import (
@@ -128,24 +127,12 @@ from core.rows_bytes_device import device_gather_rows_bytes, device_scatter_rows
 from core.ic_min_device import device_ic_running_min
 from bindings.hotpath_helpers import (
     next_combination_i64_binding,
-    scale_shift_ftz_f32_binding,
-    compact_notnan_f32_binding,
-    gather_keep_neg_i32_binding,
-    dot_rows_f32_binding,
     assign_fold_i64_binding,
     count_fold_hits_i64_binding,
     mark_split_roles_f32_binding,
-    split_table_i32_binding,
-    epoch_order_i32_binding,
     adam_hyper_f64_binding,
-    mean_std_f32_binding,
     strat_alloc_i64_binding,
-    ocsvm_alpha_init_f32_binding,
-    weighted_pick_i32_binding,
-    draw_rows_without_replacement_i32_binding,
-    weighted_draw_rows_i32_binding,
     group_fold_assign_i32_binding,
-    strat_group_assign_i32_binding,
     strat_group_plan_i32_binding,
 )
 # lane fam2-shared (2026-10-04): these eighteen helpers run on the device in
@@ -1019,7 +1006,6 @@ def rbc_knn_search_binding(
 # ===========================================================================
 
 
-
 def cast_f64_to_f32_binding(
     src_addr: PythonObject, dst_addr: PythonObject, n: PythonObject
 ) raises -> PythonObject:
@@ -1274,44 +1260,8 @@ def all_finite_f64_binding(
     return PythonObject(ok)
 
 
-
-# NumPy-free host input validation and byte gathering. These do no learning:
+# NumPy-free host byte gathering. These do no learning:
 # metric arithmetic and estimator work remain in the GPU bindings.
-def probability_rows_f32_binding(
-    src_addr: PythonObject, dst_addr: PythonObject, rows: PythonObject,
-    cols: PythonObject, binary: PythonObject,
-) raises -> PythonObject:
-    var nr = Int(py=rows)
-    var nc = Int(py=cols)
-    var bin = Int(py=binary)
-    if nr < 0 or nc <= 0 or (bin != 0 and bin != 1):
-        raise Error("probability_rows_f32: invalid dimensions or binary flag")
-    if bin == 1 and nc != 1:
-        raise Error("probability_rows_f32: binary input must have one column")
-    if nr == 0:
-        return PythonObject(0)
-    var src = _f32_ptr(Int(py=src_addr))
-    # Multiclass validation never reads or writes dst.
-    var dst = src
-    if bin == 1:
-        dst = _f32_ptr(Int(py=dst_addr))
-    var nonfinite = False
-    var outside = False
-    var bad_sum = False
-    with GILReleased(Python()):
-        var flags = probability_rows_f32_host(src, dst, nr, nc, bin)
-        nonfinite = flags.nonfinite
-        outside = flags.outside
-        bad_sum = flags.bad_sum
-    if nonfinite:
-        return PythonObject(1)
-    if outside:
-        return PythonObject(2)
-    if bad_sum:
-        return PythonObject(3)
-    return PythonObject(0)
-
-
 def gather_rows_bytes_binding(
     src_addr: PythonObject, dst_addr: PythonObject, indices_addr: PythonObject,
     source_rows: PythonObject, output_rows: PythonObject, row_bytes: PythonObject,
@@ -1994,7 +1944,6 @@ def build__mojolearn() -> PythonObject:
         # DEVIATION 2325: the three host helpers of DEVIATION 2303.
         m.def_function[all_finite_f32_binding]("all_finite_f32")
         m.def_function[all_finite_f64_binding]("all_finite_f64")
-        m.def_function[probability_rows_f32_binding]("probability_rows_f32")
         m.def_function[gather_rows_bytes_binding]("gather_rows_bytes")
         # lane cpu2-l4-modelsel: model selection on the device (host column on the core host binding)
         m.def_function[msel_put_binding]("msel_put")
@@ -2035,30 +1984,18 @@ def build__mojolearn() -> PythonObject:
         m.def_function[ic_running_min_f32_binding]("ic_running_min_f32")
         m.def_function[fold_pair_f32_binding]("fold_pair_f32")
         m.def_function[threshold_labels_i64_binding]("threshold_labels_i64")
-        m.def_function[scale_shift_ftz_f32_binding]("scale_shift_ftz_f32")
         m.def_function[bincount_i64_binding]("bincount_i64")
-        m.def_function[compact_notnan_f32_binding]("compact_notnan_f32")
-        m.def_function[gather_keep_neg_i32_binding]("gather_keep_neg_i32")
-        m.def_function[dot_rows_f32_binding]("dot_rows_f32")
         m.def_function[assign_fold_i64_binding]("assign_fold_i64")
         m.def_function[count_fold_hits_i64_binding]("count_fold_hits_i64")
         m.def_function[mark_split_roles_f32_binding]("mark_split_roles_f32")
-        m.def_function[split_table_i32_binding]("split_table_i32")
         m.def_function[scatter_rows_bytes_binding]("scatter_rows_bytes")
         m.def_function[uniform_init_f32_binding]("uniform_init_f32")
         m.def_function[normal_init_f32_binding]("normal_init_f32")
-        m.def_function[epoch_order_i32_binding]("epoch_order_i32")
         m.def_function[adam_hyper_f64_binding]("adam_hyper_f64")
-        m.def_function[mean_std_f32_binding]("mean_std_f32")
         m.def_function[first_seen_i32_binding]("first_seen_i32")
         m.def_function[strat_fold_assign_i32_binding]("strat_fold_assign_i32")
         m.def_function[strat_alloc_i64_binding]("strat_alloc_i64")
-        m.def_function[ocsvm_alpha_init_f32_binding]("ocsvm_alpha_init_f32")
-        m.def_function[weighted_pick_i32_binding]("weighted_pick_i32")
-        m.def_function[draw_rows_without_replacement_i32_binding]("draw_rows_without_replacement_i32")
-        m.def_function[weighted_draw_rows_i32_binding]("weighted_draw_rows_i32")
         m.def_function[group_fold_assign_i32_binding]("group_fold_assign_i32")
-        m.def_function[strat_group_assign_i32_binding]("strat_group_assign_i32")
         m.def_function[strat_group_plan_i32_binding]("strat_group_plan_i32")
         m.def_function[bincount2_i32_binding]("bincount2_i32")
         m.def_function[strided_copy_bytes_binding]("strided_copy_bytes")
@@ -2069,14 +2006,8 @@ def build__mojolearn() -> PythonObject:
         m.def_function[truncnorm_draws_binding]("truncnorm_draws")
         m.def_function[fsum_f64_binding]("fsum_f64")
         m.def_function[row_stds_f64_binding]("row_stds_f64")
-        m.def_function[lr_schedule_values_binding]("lr_schedule_values")
-        m.def_function[lr_onecycle_fill_binding]("lr_onecycle_fill")
-        m.def_function[lr_decide_binding]("lr_decide")
         m.def_function[lr_schedule_exact_binding]("lr_schedule_exact")
-        m.def_function[lr_onecycle_exact_binding]("lr_onecycle_exact")
-        m.def_function[lr_pow_values_binding]("lr_pow_values")
         m.def_function[lr_schedule_exact_block_binding]("lr_schedule_exact_block")
-        m.def_function[lr_onecycle_exact_block_binding]("lr_onecycle_exact_block")
         m.def_function[lr_schedule_fill_binding]("lr_schedule_fill")
         m.def_py_c_function(lr_schedule_at_c, "lr_schedule_at")
         m.def_py_c_function(lr_schedule_series_c, "lr_schedule_series")

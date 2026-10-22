@@ -87,8 +87,8 @@ from bindings.optimizer_public_door import entry_zero
 from bindings.optimizer_public_pyapi import (
     optimizer_door_accumulate_c, optimizer_door_clip_c, optimizer_door_io_c, optimizer_door_load_state_c,
     optimizer_door_state_c, optimizer_door_state_set_c, optimizer_door_step_c, optimizer_resident_close_binding, optimizer_resident_copy_dev_binding,
-    optimizer_resident_download_binding, optimizer_resident_get_binding, optimizer_resident_open_binding,
-    optimizer_resident_put_binding, optimizer_resident_step_binding, optimizer_resident_step_io_binding,
+    optimizer_resident_download_binding, optimizer_resident_open_binding,
+    optimizer_resident_step_binding, optimizer_resident_step_io_binding,
     optimizer_resident_upload_binding, maximize_dev_available_binding,
 )
 from training.estimator import (
@@ -500,50 +500,6 @@ def clip_grad_norm_binding(
     return PythonObject(n_total)
 
 
-def clip_grad_norm_multi_binding(
-    grad_addrs: PythonObject,
-    offsets_addr: PythonObject,
-    info_addr: PythonObject,
-    params: PythonObject,
-) raises -> PythonObject:
-    """`clip_grad_norm_binding` from the caller's J tensors in place
-    (`grad_addrs` a list of J float32 buffer addresses, tensor j's
-    `offsets[j] .. offsets[j+1]` values), so no flat host copy is packed
-    or unpacked; the same `identical_clip_grad_norm` over the same device
-    buffer (lane/neural-net-experiment). Single device only: a
-    MOJOLEARN_OPTIMIZER_DEVICE_COUNT above 1 is refused here and takes
-    the packed entry."""
-    if len(params) != 2:
-        raise Error(
-            "clip_grad_norm_multi: params must contain 2 values, got "
-            + String(len(params))
-        )
-    if String(getenv("MOJOLEARN_OPTIMIZER_DEVICE_COUNT", "1")) != "1":
-        raise Error("clip_grad_norm_multi: one device only; the packed clip_grad_norm serves several")
-    var n_tensors = Int(py=params[0])
-    if len(grad_addrs) != n_tensors:
-        raise Error(
-            "clip_grad_norm_multi: " + String(len(grad_addrs)) + " addresses for "
-            + String(n_tensors) + " tensors"
-        )
-    var addrs = List[Int]()
-    for j in range(n_tensors):  # small-loop(n_tensors: gradient tensors of the model): one pointer per tensor, not data
-        var a = Int(py=grad_addrs[j])
-        if a == 0:
-            raise Error("clip_grad_norm_multi: null gradient address at " + String(j))
-        addrs.append(a)
-    var op = _i32_ptr(Int(py=offsets_addr))
-    var fp = _f32_ptr(Int(py=info_addr))
-    var max_norm = Float32(Float64(py=params[1]))
-    var n_total = 0
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        n_total = identical_clip_grad_norm_addrs_host(
-            ctx, addrs, op, fp, n_tensors, max_norm,
-        )
-    return PythonObject(n_total)
-
-
 def ce_loss_binding(
     loss_addr: PythonObject,
     row_addr: PythonObject,
@@ -789,21 +745,6 @@ def mlp_resident_open_binding(
         h = mlp_resident_open_host(
             ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]), _f32_ptr(a[3]),
             _f32_ptr(a[4]), _f32_ptr(a[5]), cap_k,
-        )
-    return PythonObject(h)
-
-
-def mlp_resident_upload_binding(
-    handle: PythonObject, addresses: PythonObject,
-) raises -> PythonObject:
-    """addresses = [w1, b1, w2, b2, m, v] (read): replace the session's state."""
-    var a = _addrs(addresses, 6, "mlp_resident_upload")
-    var h = Int(py=handle)
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        mlp_resident_upload_host(
-            ctx, h, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]), _f32_ptr(a[3]),
-            _f32_ptr(a[4]), _f32_ptr(a[5]),
         )
     return PythonObject(h)
 
@@ -1401,8 +1342,6 @@ def build__mojolearn_training() -> PythonObject:
         m.def_function[optimizer_resident_upload_binding]("optimizer_resident_upload")
         m.def_function[optimizer_resident_step_binding]("optimizer_resident_step")
         comptime if IDN_OPT_PARAMS_RESIDENT:
-            m.def_function[optimizer_resident_put_binding]("optimizer_resident_put")
-            m.def_function[optimizer_resident_get_binding]("optimizer_resident_get")
             m.def_function[optimizer_resident_step_io_binding]("optimizer_resident_step_io")
             comptime if IDN_MAXIMIZE_DEV:
                 m.def_function[maximize_dev_available_binding]("optimizer_maximize_dev")
@@ -1417,7 +1356,6 @@ def build__mojolearn_training() -> PythonObject:
             comptime if IDN_OPT_PARAMS_RESIDENT:
                 m.def_function[optimizer_resident_copy_dev_binding]("optimizer_resident_copy_dev")
         m.def_function[clip_grad_norm_binding]("clip_grad_norm")
-        m.def_function[clip_grad_norm_multi_binding]("clip_grad_norm_multi")
         m.def_function[ce_loss_binding]("ce_loss")
         m.def_function[mlp_bias_activation_binding]("mlp_bias_activation")
         m.def_function[mlp_relu_backward_binding]("mlp_relu_backward")
@@ -1426,7 +1364,6 @@ def build__mojolearn_training() -> PythonObject:
         comptime if MLP_RESIDENT:
             # lane afn-mlp: Apple FAST only, behind its define
             m.def_function[mlp_resident_open_binding]("mlp_resident_open")
-            m.def_function[mlp_resident_upload_binding]("mlp_resident_upload")
             m.def_function[mlp_resident_download_binding]("mlp_resident_download")
             m.def_function[mlp_resident_close_binding]("mlp_resident_close")
             m.def_function[mlp_resident_steps_binding]("mlp_resident_step")

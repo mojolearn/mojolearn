@@ -421,7 +421,6 @@ def _forest_out_trees(trees: List[TreeMetaDataNode[DT]]) raises -> PythonObject:
     return out
 
 
-
 def _forest_out(forest: RandomForestMetaData[DT, DT]) raises -> PythonObject:
     return _forest_out_trees(forest.trees)
 
@@ -703,34 +702,6 @@ def rf_regressor_fit_aux_export_binding(
     return _rf_regressor_fit[True](x_addr,y_addr,params,criterion,
         oob_addr=Int(py=oob_addr),oob_score_addr=Int(py=score_addr),
         importance_addr=Int(py=importance_addr))
-
-
-def rf_classifier_fit_oob_export_binding(
-    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
-    criterion: PythonObject, weights_addr: PythonObject,
-    oob_addr: PythonObject, score_addr: PythonObject,
-) raises -> PythonObject:
-    """T15 public OOB: column-major X, Float64 row/output and score buffers.
-
-    NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-    The compile-time T15 switch chooses A/B aggregation; output ownership and
-    bootstrap semantics are common to both arms. No OOB work unless requested.
-    """
-    if Int(py=oob_addr) == 0 or Int(py=score_addr) == 0:
-        raise Error("RF OOB requires nonzero output and score addresses")
-    return _rf_classifier_fit[True](x_addr,y_addr,params,criterion,
-        weights_addr=Int(py=weights_addr),oob_addr=Int(py=oob_addr),oob_score_addr=Int(py=score_addr))
-
-
-def rf_regressor_fit_oob_export_binding(
-    x_addr: PythonObject, y_addr: PythonObject, params: PythonObject,
-    criterion: PythonObject, oob_addr: PythonObject, score_addr: PythonObject,
-) raises -> PythonObject:
-    """T15 native OOB output; same status and ownership as classifier twin."""
-    if Int(py=oob_addr) == 0 or Int(py=score_addr) == 0:
-        raise Error("RF OOB requires nonzero output and score addresses")
-    return _rf_regressor_fit[True](x_addr,y_addr,params,criterion,
-        oob_addr=Int(py=oob_addr),oob_score_addr=Int(py=score_addr))
 
 
 def rf_classifier_fit_binding[EXPORT: Bool = False](
@@ -1846,8 +1817,6 @@ def build__mojolearn_rf() -> PythonObject:
         )
         m.def_function[rf_classifier_fit_aux_export_binding]("rf_classifier_fit_aux_export")
         m.def_function[rf_regressor_fit_aux_export_binding]("rf_regressor_fit_aux_export")
-        m.def_function[rf_classifier_fit_oob_export_binding]("rf_classifier_fit_oob_export")
-        m.def_function[rf_regressor_fit_oob_export_binding]("rf_regressor_fit_oob_export")
         m.def_function[rf_classifier_fit_binding[False]]("rf_classifier_fit")
         m.def_function[rf_classifier_fit_binding[True]]("rf_classifier_fit_export")
         m.def_function[rf_classifier_fit_rowmajor_binding[False]]("rf_classifier_fit_rowmajor")

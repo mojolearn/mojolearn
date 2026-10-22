@@ -25,13 +25,6 @@ from gaussian_process.host.gp_host_entries import (
 )
 
 
-def gp_py2mojo_binding() raises -> PythonObject:
-    """1: normalize_y's un-normalization runs in this binding (lane
-    apple-fast-py2mojo-cluster); 0 under `-D MOJOLEARN_PY2MOJO_cluster_OFF`,
-    and `_gp_impl.py` applies it in Python."""
-    return PythonObject(1 if GP_PY2MOJO else 0)
-
-
 def gpr_predict_binding(
     addrs: PythonObject,
     params: PythonObject,

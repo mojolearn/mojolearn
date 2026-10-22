@@ -546,42 +546,6 @@ def op_row_all_zero(a: Int, res: Int, n: Int, m: Int) raises:
     _items(_item, n)
 
 
-def op_pcs_sketch(x: Int, hidx: Int, hbit: Int, sk: Int, n: Int, d_in: Int, nf: Int, nc: Int, degree: Int, gamma: Float32, coef0: Float32) raises:
-    var p_x = _f(x)
-    var p_hidx = _i(hidx)
-    var p_hbit = _i(hbit)
-    var p_sk = _f(sk)
-    def _item(t: Int) {imm p_x, imm p_hidx, imm p_hbit, imm p_sk, imm n, imm d_in, imm nf, imm nc, imm degree, imm gamma, imm coef0}:
-        pcs_sketch_item(t, p_x, p_hidx, p_hbit, p_sk, n, d_in, nf, nc, degree, gamma, coef0)
-    _items(_item, n * degree)
-    comptime if X_NEIGHBORS_HOST_SABOTAGE:
-        if (n * degree * nc) > 0:
-            _f(sk).unsafe_store(0, _f(sk).unsafe_load(0) + Float32(1e-3))
-
-
-def op_pcs_conv(acc: Int, sk: Int, res: Int, n: Int, nc: Int, degree: Int, p: Int) raises:
-    var p_acc = _f(acc)
-    var p_sk = _f(sk)
-    var p_res = _f(res)
-    def _item(t: Int) {imm p_acc, imm p_sk, imm p_res, imm n, imm nc, imm degree, imm p}:
-        pcs_conv_item(t, p_acc, p_sk, p_res, n, nc, degree, p)
-    _items(_item, n * nc)
-    comptime if X_NEIGHBORS_HOST_SABOTAGE:
-        if (n * nc) > 0:
-            _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
-
-
-def op_pcs_copy0(sk: Int, res: Int, n: Int, nc: Int, degree: Int) raises:
-    var p_sk = _f(sk)
-    var p_res = _f(res)
-    def _item(t: Int) {imm p_sk, imm p_res, imm n, imm nc, imm degree}:
-        pcs_copy0_item(t, p_sk, p_res, n, nc, degree)
-    _items(_item, n * nc)
-    comptime if X_NEIGHBORS_HOST_SABOTAGE:
-        if (n * nc) > 0:
-            _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
-
-
 def op_knn_impute_cells(cells: Int, x: Int, fx: Int, res: Int, n: Int, m: Int, d: Int, k: Int, weights: Int, nc: Int) raises:
     var s_best_d = List[Float32](length=(n * d * k) if (n * d * k) > 0 else 1, fill=Float32(0))
     var s_best_i = List[Int32](length=(n * d * k) if (n * d * k) > 0 else 1, fill=Int32(0))
@@ -812,17 +776,6 @@ def op_p2m_iota(res: Int, count: Int) raises:
     def _item(t: Int) {imm p_res, imm count}:
         p2m_iota_item(t, p_res, count)
     _items(_item, count)
-
-
-def op_p2m_negate(x: Int, res: Int, count: Int) raises:
-    var p_x = _f(x)
-    var p_res = _f(res)
-    def _item(t: Int) {imm p_x, imm p_res, imm count}:
-        p2m_negate_item(t, p_x, p_res, count)
-    _items(_item, count)
-    comptime if X_NEIGHBORS_HOST_SABOTAGE:
-        if (count) > 0:
-            _f(res).unsafe_store(0, _f(res).unsafe_load(0) + Float32(1e-3))
 
 
 def op_p2m_transpose(src: Int, res: Int, r: Int, c: Int) raises:

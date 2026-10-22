@@ -43,9 +43,9 @@ comptime _PY_APPLE_FAST = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_
 #: 2026-10-05, rab10-afnofill): adafactor 393.2 -> 380.1 ms, digest identical
 #: A == B. KEEP: the FAST + Apple default since then; rollback
 #: -D MOJOLEARN_AF_FAST_NOFILL_OFF. No conflict with AF_FAST_RESIDENT (also a
-#: default): the resident step does not go through `adafactor_step_py`, so
-#: with RESIDENT on the Adafactor class no longer reaches this path; NOFILL
-#: covers the direct `adafactor_step` binding and the RESIDENT_OFF rollback.
+#: default): the resident step does not go through `adafactor_step_impl`'s
+#: per-call path, so with RESIDENT on the Adafactor class no longer reaches
+#: it; NOFILL covers the RESIDENT_OFF rollback.
 comptime AF_NOFILL = _PY_APPLE_FAST and not is_defined["MOJOLEARN_AF_FAST_NOFILL_OFF"]()
 #: LN_FAST_NOFILL OUTCOME (M3 afc_ab_def, full board size, 1 run per arm,
 #: 2026-10-04, lane/apple-fast-rec-ab2 @ 40027eb8e): layernorm 48.2 -> 45.5 ms,
@@ -170,10 +170,6 @@ def rnn_predict_impl[E: Exec](mut ex: E, addrs: List[Int], ip: List[Int]) raises
     rnn_predict(ex, net, task, fptr(x_addr, "X"), N, T, fptr(p_addr, "params"),
                 fptr(out_addr, "out"), seq, want, chunk)
     return N * net.O
-
-
-def rnn_n_params_impl(ip: List[Int]) raises -> Int:
-    return net_of(ip).n_params()
 
 
 def opt_slots(cfg: OptConfig) -> Tuple[Bool, Bool, Bool]:

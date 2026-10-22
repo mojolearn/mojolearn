@@ -108,7 +108,6 @@ from bindings.host_helpers import (
     gather_f64_binding,
     gather_i64_binding,
     gather_rows_bytes_binding,
-    probability_rows_f32_binding,
 )
 from bindings.hotpath_helpers import (
     HOTPATH_SABOTAGE,
@@ -136,38 +135,26 @@ from bindings.hotpath_helpers import (
     ic_running_min_f32_host_binding,
     fold_pair_f32_binding,
     threshold_labels_i64_binding,
-    scale_shift_ftz_f32_binding,
     bincount_i64_binding,
-    compact_notnan_f32_binding,
-    gather_keep_neg_i32_binding,
-    dot_rows_f32_binding,
     assign_fold_i64_binding,
     count_fold_hits_i64_binding,
     mark_split_roles_f32_binding,
-    split_table_i32_binding,
     scatter_rows_bytes_host_binding,
     uniform_init_f32_binding,
     normal_init_f32_binding,
-    epoch_order_i32_binding,
     adam_hyper_f64_binding,
-    mean_std_f32_binding,
     first_seen_i32_binding,
     strat_fold_assign_i32_binding,
     strat_alloc_i64_binding,
-    ocsvm_alpha_init_f32_binding,
-    weighted_pick_i32_binding,
-    draw_rows_without_replacement_i32_binding,
-    weighted_draw_rows_i32_binding,
     group_fold_assign_i32_binding,
-    strat_group_assign_i32_binding,
     strat_group_plan_i32_binding,
     bincount2_i32_host_binding,
 )
 from bindings.normal_dist_helpers import truncnorm_draws_binding
 from bindings.lr_table_helpers import (
-    lr_decide_binding, lr_onecycle_fill_binding, lr_schedule_values_binding, lr_schedule_exact_binding,
-    lr_onecycle_exact_binding, lr_pow_values_binding, lr_schedule_exact_block_binding,
-    lr_onecycle_exact_block_binding, lr_schedule_at_c, lr_schedule_fill_binding, lr_schedule_series_c,
+    lr_schedule_exact_binding,
+    lr_schedule_exact_block_binding,
+    lr_schedule_at_c, lr_schedule_fill_binding, lr_schedule_series_c,
 )
 from bindings.optimizer_public_door import entry_init
 from bindings.array_helpers import (
@@ -1249,7 +1236,6 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[argmax_rows_f32_binding]("argmax_rows_f32")
         module.def_function[argmax_rows_f64_binding]("argmax_rows_f64")
         module.def_function[argmax_last_rows_f32_binding]("argmax_last_rows_f32")
-        module.def_function[probability_rows_f32_binding]("probability_rows_f32")
         # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3104): the helpers
         # of bindings/hotpath_helpers.mojo, and the ORDER RULE's encoder the
         # base binding has carried since DEVIATION 2500, so a CPU-only
@@ -1280,30 +1266,18 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[ic_running_min_f32_host_binding]("ic_running_min_f32")
         module.def_function[fold_pair_f32_binding]("fold_pair_f32")
         module.def_function[threshold_labels_i64_binding]("threshold_labels_i64")
-        module.def_function[scale_shift_ftz_f32_binding]("scale_shift_ftz_f32")
         module.def_function[bincount_i64_binding]("bincount_i64")
-        module.def_function[compact_notnan_f32_binding]("compact_notnan_f32")
-        module.def_function[gather_keep_neg_i32_binding]("gather_keep_neg_i32")
-        module.def_function[dot_rows_f32_binding]("dot_rows_f32")
         module.def_function[assign_fold_i64_binding]("assign_fold_i64")
         module.def_function[count_fold_hits_i64_binding]("count_fold_hits_i64")
         module.def_function[mark_split_roles_f32_binding]("mark_split_roles_f32")
-        module.def_function[split_table_i32_binding]("split_table_i32")
         module.def_function[scatter_rows_bytes_host_binding]("scatter_rows_bytes")
         module.def_function[uniform_init_f32_binding]("uniform_init_f32")
         module.def_function[normal_init_f32_binding]("normal_init_f32")
-        module.def_function[epoch_order_i32_binding]("epoch_order_i32")
         module.def_function[adam_hyper_f64_binding]("adam_hyper_f64")
-        module.def_function[mean_std_f32_binding]("mean_std_f32")
         module.def_function[first_seen_i32_binding]("first_seen_i32")
         module.def_function[strat_fold_assign_i32_binding]("strat_fold_assign_i32")
         module.def_function[strat_alloc_i64_binding]("strat_alloc_i64")
-        module.def_function[ocsvm_alpha_init_f32_binding]("ocsvm_alpha_init_f32")
-        module.def_function[weighted_pick_i32_binding]("weighted_pick_i32")
-        module.def_function[draw_rows_without_replacement_i32_binding]("draw_rows_without_replacement_i32")
-        module.def_function[weighted_draw_rows_i32_binding]("weighted_draw_rows_i32")
         module.def_function[group_fold_assign_i32_binding]("group_fold_assign_i32")
-        module.def_function[strat_group_assign_i32_binding]("strat_group_assign_i32")
         # StratifiedGroupKFold's group x class table and group plan (the GPU
         # base binding's bincount2_i32 / strat_group_plan_i32): a CPU-only
         # install refused StratifiedGroupKFold.split without them (lane
@@ -1318,14 +1292,8 @@ def build__mojolearn_core_host() -> PythonObject:
         module.def_function[truncnorm_draws_binding]("truncnorm_draws")
         module.def_function[fsum_f64_binding]("fsum_f64")
         module.def_function[row_stds_f64_binding]("row_stds_f64")
-        module.def_function[lr_schedule_values_binding]("lr_schedule_values")
-        module.def_function[lr_onecycle_fill_binding]("lr_onecycle_fill")
-        module.def_function[lr_decide_binding]("lr_decide")
         module.def_function[lr_schedule_exact_binding]("lr_schedule_exact")
-        module.def_function[lr_onecycle_exact_binding]("lr_onecycle_exact")
-        module.def_function[lr_pow_values_binding]("lr_pow_values")
         module.def_function[lr_schedule_exact_block_binding]("lr_schedule_exact_block")
-        module.def_function[lr_onecycle_exact_block_binding]("lr_onecycle_exact_block")
         module.def_function[lr_schedule_fill_binding]("lr_schedule_fill")
         module.def_py_c_function(lr_schedule_at_c, "lr_schedule_at")
         module.def_py_c_function(lr_schedule_series_c, "lr_schedule_series")
