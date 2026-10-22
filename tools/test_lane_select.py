@@ -1757,15 +1757,16 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
                                      record (2430b2684, 2026-10-20). Not the
                                      re-export rule; no existing lane widened
                                      any other way.
-                                     +8  3ce0c0b26 (2026-10-21): _x_sequence_optim.py
+                                     +9  3ce0c0b26 (2026-10-21): _x_sequence_optim.py
                                          imports _training_impl: sequence-adafactor,
                                          -adagrad, -adamax, -lamb, -lion, -nadam,
-                                         -optimizer-state, -rmsprop
-                                     +6  e492586c6 (2026-10-21): _x_sequence_device.py
+                                         -optimizer-state, -rmsprop, -device-tensor
+                                     +5  e492586c6 (2026-10-21): _x_sequence_device.py
                                          imports _training_impl: embedding,
-                                         embedding-sort, sequence-device-tensor,
-                                         sequence-layernorm, sequence-moe,
-                                         sequence-moe-backward
+                                         embedding-sort, sequence-layernorm,
+                                         sequence-moe, sequence-moe-backward
+                                     (each step measured with reverse_map at
+                                     the commit and its parent: 49, 58, 58, 63)
                                      +5  1f1183e21 (2026-10-21), new lanes:
                                          native-schedule-series, optim-io-capability,
                                          optim-owner-lifecycle, optim-resident-io,
@@ -1978,7 +1979,7 @@ def test_the_public_door_a_name_is_bound_from_is_in_the_map():
          " 2026-09-23; minus gbdt-tensor-ctr-tables, which fits on the CPU since 2026-09-28;"
          " plus optim-maximize, 2026-09-28; plus four new lanes and minus gbdt-categorical-ctr-tables,"
          " 2026-10-21; plus five coverage lanes in 63022df0c2;"
-         " plus eight sequence optimizer lanes, 3ce0c0b26 2026-10-21, and six sequence device lanes,"
+         " plus nine sequence optimizer lanes, 3ce0c0b26 2026-10-21, and five sequence device lanes,"
          " e492586c6 2026-10-21, whose doors now import _training_impl -> _native_samba_bridge ->"
          " neural_inference (2430b2684);"
          " plus five new lanes in 1f1183e21 and two in 50c405ad2, 2026-10-21;"
