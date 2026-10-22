@@ -305,3 +305,67 @@ def test_native_string_refuses_foreign_storage_capsule(resident, monkeypatch):
     audit = candidate(tensor, "T")
     assert type(audit.exception) is TypeError
     assert_native_boundary(audit)
+
+
+@pytest.mark.parametrize("name", ["unset", "none", "float", "complex", "list", "dict", "rawvoid"])
+def test_native_string_missing_member_ignores_replaced_getattr(resident, monkeypatch, name):
+    import builtins
+    import dis
+    from mojolearn import _verify_native_runtime as verifier
+
+    values, tensor = resident
+    metadata = {} if name == "unset" else {"na_object": missing_value(name)}
+    dtype = np.dtypes.StringDType(**metadata)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        expected = values.astype(dtype)
+    calls = []
+    def hook(*args, **kwargs):
+        calls.append("getattr")
+        raise AssertionError("mutable builtin getattr entered")
+    with warnings.catch_warnings(), monkeypatch.context() as patch:
+        warnings.simplefilter("ignore")
+        # Pin only the test observer's metadata lookups. Product native code
+        # still sees the replaced builtins field throughout both conversions.
+        patch.setattr(verifier, "getattr", builtins.getattr, raising=False)
+        patch.setattr(dis, "getattr", builtins.getattr, raising=False)
+        patch.setattr(builtins, "getattr", hook)
+        first_audit = candidate(tensor, dtype)
+        second_audit = candidate(tensor, dtype)
+    first, second = first_audit.assert_native(), second_audit.assert_native()
+    assert not calls
+    assert first.flags.owndata and second.flags.owndata
+    assert first.base is None and second.base is None
+    assert not np.shares_memory(first, second)
+    if metadata:
+        assert first.dtype.na_object is metadata["na_object"]
+        assert second.dtype.na_object is metadata["na_object"]
+    assert_array_values(first, expected)
+    del first
+    # Consuming the other output after the first descriptor/storage dies
+    # checks the same ownership path needed by a future public connection.
+    assert_array_values(second, expected)
+
+
+@pytest.mark.parametrize("constructor", ["float", "complex"])
+def test_native_string_missing_scalar_uses_connected_type(resident, monkeypatch, constructor):
+    import builtins
+    import dis
+    values, tensor = resident
+    dtype = np.dtypes.StringDType(na_object=missing_value(constructor))
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        expected = values.astype(dtype)
+    calls = []
+    def hook(*args, **kwargs):
+        calls.append(constructor)
+        raise AssertionError("mutable scalar constructor entered")
+    with warnings.catch_warnings(), monkeypatch.context() as patch:
+        warnings.simplefilter("ignore")
+        patch.setattr(dis, constructor, getattr(builtins, constructor), raising=False)
+        patch.setattr(builtins, constructor, hook)
+        observed = candidate(tensor, dtype)
+    result = observed.assert_native()
+    assert not calls
+    assert result.dtype.na_object is dtype.na_object
+    assert_array_values(result, expected)

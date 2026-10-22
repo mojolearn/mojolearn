@@ -2,6 +2,7 @@
 # NumPy's public NpyString storage API; formatting remains Mojo code.
 from std.ffi import c_char, c_int, c_uint, c_size_t, external_call
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
 from std.sys import size_of
 from std.sys.info import CompilationTarget
 from std.memory import bitcast
@@ -19,7 +20,6 @@ comptime StringStoragePack = def(StringStoragePointer, StringStoragePointer, Str
 
 
 def sequence_string_class(context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
     var module = py_get(context["modules"], "numpy.dtypes")
     if module is None:
         return PythonObject(None)
@@ -34,10 +34,11 @@ def sequence_string_class(context: PythonObject) raises -> PythonObject:
     return result
 
 
-def sequence_string_na_value(value: PythonObject, classes: PythonObject, seen: PythonObject) raises:
-    var b = Python.import_module("builtins")
+def sequence_string_na_value(value: PythonObject, classes: PythonObject, seen: PythonObject, context: PythonObject) raises:
+    var scalars = context["scalar_types"]
+    var containers = context["container_types"]
     var kind = py_type(value)
-    if value is None or kind is b.str or kind is b.bytes or kind is b.bool or kind is b.int or kind is b.float or kind is b.complex:
+    if value is None or kind is scalars[5] or kind is scalars[6] or kind is scalars[1] or kind is scalars[2] or kind is scalars[3] or kind is scalars[4]:
         return
     for i in range(len(classes)):  # driver-loop: admit native scalar metadata before descriptor copying
         if kind is classes[i][1]:
@@ -47,26 +48,40 @@ def sequence_string_na_value(value: PythonObject, classes: PythonObject, seen: P
             if String(kind.__name__) != "void" or (value.dtype.fields is None and not Bool(py=value.dtype.hasobject)):
                 return
             raise Error("TypeError: structured void missing values require Python dtype/printing hooks; use a native scalar or string sentinel")
-    if kind is b.list or kind is b.tuple or kind is b.dict:
+    if kind is containers[0] or kind is containers[1] or kind is containers[2]:
         for i in range(len(seen)):  # driver-loop: stop native container cycles by identity
             if value is seen[i]:
                 return
         py_call(seen.append, value)
-        var items = py_call(b.list, value) if kind is b.dict else value
+        var items = py_call(containers[0], value) if kind is containers[2] else value
         for i in range(len(items)):  # driver-loop: audit all native missing-value metadata before its native repr
-            sequence_string_na_value(items[i], classes, seen)
-            if kind is b.dict:
-                sequence_string_na_value(value[items[i]], classes, seen)
+            sequence_string_na_value(items[i], classes, seen, context)
+            if kind is containers[2]:
+                sequence_string_na_value(value[items[i]], classes, seen, context)
         return
     raise Error("TypeError: StringDType missing values require native scalar/container metadata; use None, a native number or a string instead of Python hooks")
+
+
+def sequence_string_missing(dtype: PythonObject, context: PythonObject) raises -> PythonObject:
+    # The caller has admitted NumPy's exact static StringDType class. Its
+    # readonly native member descriptor owns na_object; generic lookup never
+    # dispatches a replaceable builtins.getattr or a Python dtype subclass.
+    ref cpy = Python().cpython()
+    var name = PythonObject("na_object")
+    var result = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetAttr")(dtype._obj_ptr, name._obj_ptr)
+    if result:
+        return PythonObject(from_owned=result)
+    if cpy.lib.get_function[c_int]("PyErr_ExceptionMatches")(context["sequence_attribute_error"]._obj_ptr) != 0:
+        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        return PythonObject(None)
+    raise cpy.unsafe_get_error()
 
 
 def sequence_string_admit(dtype: PythonObject, classes: PythonObject, context: PythonObject) raises:
     if py_type(dtype) is not sequence_string_class(context):
         raise Error("TypeError: string output requires NumPy's native StringDType")
-    var b = Python.import_module("builtins")
-    var missing = py_call(b.getattr, dtype, "na_object", PythonObject(None))
-    sequence_string_na_value(missing, classes, Python.list())
+    var missing = sequence_string_missing(dtype, context)
+    sequence_string_na_value(missing, classes, Python.list(), context)
 
 
 def sequence_storage_image(address: Int) raises -> Int:
@@ -188,15 +203,15 @@ def sequence_string_nan_raw(address: Int, width: Int) -> Int:
 
 
 def sequence_string_nan_info(dtype: PythonObject, classes: PythonObject, context: PythonObject) raises -> Int:
-    var b = Python.import_module("builtins")
-    var missing = py_call(b.getattr, dtype, "na_object", PythonObject(None))
+    var scalars = context["scalar_types"]
+    var missing = sequence_string_missing(dtype, context)
     var kind = py_type(missing)
-    if kind is b.float or kind is b.complex:
-        var real = Float64(py=missing.real) if kind is b.complex else Float64(py=missing)
-        var imag = Float64(py=missing.imag) if kind is b.complex else Float64(0)
+    if kind is scalars[3] or kind is scalars[4]:
+        var real = Float64(py=missing.real) if kind is scalars[4] else Float64(py=missing)
+        var imag = Float64(py=missing.imag) if kind is scalars[4] else Float64(0)
         var info = sequence_string_nan_word(bitcast[DType.uint64](real), 0x7FF0000000000000, 0x000FFFFFFFFFFFFF, 0x0008000000000000)
         info |= sequence_string_nan_word(bitcast[DType.uint64](imag), 0x7FF0000000000000, 0x000FFFFFFFFFFFFF, 0x0008000000000000)
-        return info | (2 if info != 0 and kind is b.complex else 0)
+        return info | (2 if info != 0 and kind is scalars[4] else 0)
     for i in range(len(classes)):  # driver-loop: classify native numeric missing-value metadata
         if kind is classes[i][1]:
             var native_dtype = py_call(native_numpy_dtype(context), kind)
