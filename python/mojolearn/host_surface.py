@@ -1245,7 +1245,7 @@ TRAINING_LANE_NAMES = {
     # forest_host_rf_predict_reg) no lane reached; and the classical input
     # door's half-precision sequence conversion
     "saved-model-host-infer-trees": "saved Extra Trees and random forest regressors predicted on the CPU (inference)",
-    "classical-float16-sequences": "LinearRegression and Ridge fitted on a list of float16 rows",
+    "classical-float16-sequences": "linear models, scalers and PCA fitted on a list of float16 rows",
     "lowbit-conversions": "the bf16 and int8 weight-storage conversions",
     "grad-accumulation": "gradient accumulation across microbatches",
 }

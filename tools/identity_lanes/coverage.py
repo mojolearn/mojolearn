@@ -957,11 +957,13 @@ def _(ml, X, yc, yr, Xh=None):
     `model_layer_weights`, `model_checkpoint_names`), `TensorInfo` built by
     hand from each header entry with `nbytes` and `size` (`tensor_info_init`,
     `tensor_info_size`), `SafetensorsFile._map` (`safetensors_map`),
-    `Checkpoint._file` on a shard (`checkpoint_file`) and
-    `CausalLM._read_weights` (`causal_model_read_weights`). The tensors are
-    the fixture's own bytes (F32 values, F16 bit patterns). Parts: the config
-    as JSON text, the plan table, the header table, the mapped file bytes,
-    the shard reads, the top-level weights read and the flags."""
+    `Checkpoint._file` on a shard (`checkpoint_file`),
+    `CausalLM._read_weights` (`causal_model_read_weights`) and `CausalLM(plan,
+    weights)` with a column-major head (`causal_model_init`,
+    `causal_lm_gather_f32`). The tensors are the fixture's own bytes (F32
+    values, F16 bit patterns). Parts: the config as JSON text, the plan
+    table, the header table, the mapped file bytes, the shard reads, the
+    top-level weights read, both models' logits and the flags."""
     from mojolearn import _causal_lm_fixtures as fx
     d = _coverage_digester(ml)
     M = ml.models
@@ -1013,16 +1015,30 @@ def _(ml, X, yc, yr, Xh=None):
             ck.close()
         lcfg, ltensors = fx.family_fixture("llama", False)
         root = fx._write_checkpoint(os.path.join(tmp, "llama"), lcfg, ltensors)
+        lplan = M.plan_for(M.HFConfig.from_json(root))
         lck = st.Checkpoint.open(root)
         try:
-            weights = M.causal_lm.CausalLM._read_weights(lck, M.plan_for(M.HFConfig.from_json(root)), "float32")
-            top = np.concatenate([np.asarray(weights[k], dtype=np.float32).reshape(-1)
-                                  for k in ("embed", "norm", "head") if weights.get(k) is not None])
+            weights = M.causal_lm.CausalLM._read_weights(lck, lplan, "float32")
         finally:
             lck.close()
+    top = np.concatenate([np.asarray(weights[k], dtype=np.float32).reshape(-1)
+                          for k in ("embed", "norm", "head") if weights.get(k) is not None])
+    # The read weights assembled into a model twice: as read, and with the
+    # untied head handed over as a column-major Array, which the model
+    # gathers into C order (`causal_lm_gather_f32`). The two forwards are
+    # separate parts, so a gather that moves a value moves the cell.
+    A = ml.Array.from_buffer
+    ids = _ids(X, HF_LM_BATCH, HF_LM_LEN, HF_LM_VOCAB)
+    fortran = dict(weights)
+    fortran["head"] = A(np.asfortranarray(np.asarray(weights["head"], dtype=np.float32)))
+    logits = np.asarray(M.causal_lm.CausalLM(lplan, weights, numeric_profile="fp32_v1").forward(A(ids)),
+                        dtype=np.float32)
+    gathered = np.asarray(M.causal_lm.CausalLM(lplan, fortran, numeric_profile="fp32_v1").forward(A(ids)),
+                          dtype=np.float32)
     return _fit(dict(config=d(_hf_text(config_text)), plan=d(_hf_text(plan_text)),
                      header=d(_hf_text(header)), mapped=d(mapped), shards=d(shard_bytes),
-                     weights=d(np.ascontiguousarray(top)), flags=d(flags)))
+                     weights=d(np.ascontiguousarray(top)), logits=d(logits), gathered=d(gathered),
+                     flags=d(flags)))
 
 
 @lane("training-device-cross-entropy")
@@ -1152,12 +1168,16 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("classical-float16-sequences")
 def _(ml, X, yc, yr, Xh=None):
-    """LinearRegression and Ridge fitted on a Python list of float16 row
-    arrays: the classical input door widens each row's half words
-    (`sequence_widen_halves`) and stores the promoted half matrix
-    (`sequence_narrow_halves`). Each fit is held byte for byte in the cell to
-    the fit on the same values as one float16 ndarray, which is the door's
-    claim. Parts: both models' coefficients, intercepts and predictions."""
+    """LinearRegression, Ridge, StandardScaler, MinMaxScaler and PCA fitted on
+    a Python list of float16 row arrays: the classical input door widens each
+    row's half words (`sequence_widen_halves`) and stores the promoted half
+    matrix (`sequence_narrow_halves`), and the scalers cast that half matrix
+    to float32 (`scaler_cast`). Each linear fit is held byte for byte in the
+    cell to the fit on the same values as one float16 ndarray, and each
+    scaler to the fit on the float32 ndarray of the same values, which is the
+    door's claim (the half to float32 widening is exact). Parts: the linear
+    models' coefficients, intercepts and predictions, the scalers' statistics
+    and transforms, and the PCA components and transform."""
     d = _coverage_digester(ml)
     xh = np.ascontiguousarray(X[:512, :8], dtype=np.float32).astype(np.float16)
     rows = [np.ascontiguousarray(r) for r in xh]  # glue: the input as a list of half rows
@@ -1172,6 +1192,20 @@ def _(ml, X, yc, yr, Xh=None):
         parts[f"{tag}_coef"] = d(coef)
         parts[f"{tag}_intercept"] = d(np.asarray([listed.intercept_], dtype=np.float64))
         parts[f"{tag}_predict"] = d(np.asarray(listed.predict(xh[:64].astype(np.float32)), dtype=np.float64))
+    x32 = np.ascontiguousarray(xh.astype(np.float32))
+    for tag, cls, attrs in (("standard", ml.StandardScaler, ("mean_", "var_", "scale_")),  # glue: two scalers
+                            ("minmax", ml.MinMaxScaler, ("data_min_", "data_max_", "scale_", "min_"))):
+        listed = cls().fit(rows)
+        whole = cls().fit(x32)
+        stats = np.concatenate([np.asarray(getattr(listed, a), dtype=np.float64).reshape(-1) for a in attrs])
+        _same_bytes(f"{tag} scaler statistics from a list of float16 rows", stats,
+                    f"{tag} scaler statistics from the float32 ndarray",
+                    np.concatenate([np.asarray(getattr(whole, a), dtype=np.float64).reshape(-1) for a in attrs]))
+        parts[f"{tag}_stats"] = d(stats)
+        parts[f"{tag}_transform"] = d(np.asarray(listed.transform(x32[:64]), dtype=np.float32))
+    p = ml.PCA(n_components=3, svd_solver="full").fit(rows)
+    parts["pca_components"] = d(np.asarray(p.components_, dtype=np.float32))
+    parts["pca_transform"] = d(np.asarray(p.transform(x32[:64]), dtype=np.float32))
     return _fit(parts)
 
 

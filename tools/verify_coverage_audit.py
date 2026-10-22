@@ -827,8 +827,9 @@ NEW_LANE_PURPOSE = {
     "sequence-layernorm-backward": "the functional layer_norm_backward",
     "x-metrics-classification-report": "metrics.classification_report, dict and text",
     "x-metrics-permutation-test-score": "model_selection.permutation_test_score, with and without groups",
-    "classical-float16-sequences": "LinearRegression and Ridge on a list of float16 rows: the classical input "
-                                   "door's `sequence_widen_halves` / `sequence_narrow_halves`",
+    "classical-float16-sequences": "LinearRegression, Ridge, StandardScaler, MinMaxScaler and PCA on a list of "
+                                   "float16 rows: the classical input door's `sequence_widen_halves` / "
+                                   "`sequence_narrow_halves` and the scalers' `scaler_cast`",
 }
 
 
