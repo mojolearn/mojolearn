@@ -10,7 +10,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_cast_kind
 from core.optimizer_state_impl import optimizer_state_cast
 from core.classical_pandas_impl import pd_raw_at, _pd_double
-from bindings.sequence_device_native import sequence_device_operation
+from bindings.sequence_device_native import sequence_device_operation, sequence_device_finalize
 from bindings.sequence_optimizer_native import sequence_optimizer_operation
 from bindings.optimizer_schedule_native import schedule_operation
 from bindings.optimizer_device_native import device_operation, device_new, device_entries
@@ -201,6 +201,8 @@ def optimizer_set_params(owner: PythonObject, updates: PythonObject, context: Py
 
 def optimizer_native(operation: String, owner: PythonObject, values: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
     opt_guards(context)
+    if operation == "seqdev_finalize":
+        return sequence_device_finalize(owner, values, context)
     door_ready()
     var b = Python.import_module("builtins")
     if py_type(values) is not b.tuple:

@@ -50,6 +50,52 @@ def seq_device_input(value: PythonObject, strict: Bool, context: PythonObject) r
     return source if base_format(view.fmt) == "f" and view.c_contig else seq_cast(source, context)
 
 
+def sequence_device_finalize(owner: PythonObject, values: PythonObject,
+                             context: PythonObject) raises -> PythonObject:
+    # Finalizers can run after sys.modules["builtins"] has been cleared. Use
+    # only the exact types, native descriptors and ABI entries retained at
+    # connection time; importing or resolving normal operation metadata here
+    # would prevent release during interpreter shutdown.
+    var types = context["sequence_finalizer_types"]
+    if py_type(values) is not types[0]:
+        raise Error("TypeError: optimizer requires native argument tuples")
+    if py_type(owner) is not context["sequence_device_class"]:
+        raise Error("TypeError: sequence device operation requires its exact native owner")
+    var binding = PythonObject(None)
+    var base = PythonObject(None)
+    var handle = PythonObject(None)
+    try:
+        binding = seq_device_get(owner, "b", context)
+        base = seq_device_get(owner, "_base", context)
+        handle = seq_device_get(owner, "h", context)
+    except:
+        # Failed constructors may have installed only some native slots.
+        return PythonObject(None)
+    if binding is None or base is not None:
+        return PythonObject(None)
+    if py_type(handle) is not types[2]:
+        raise Error("TypeError: sequence tensor cleanup requires its native integer handle")
+    var entries = PythonObject(None)
+    var bindings = context["sequence_bindings"]
+    for name in ["identical", "fast"]:  # driver-loop: over two retained compiled numeric-mode owners
+        var candidate = bindings[PythonObject(name)]
+        if py_type(candidate) is types[1] and binding is candidate["module"]:
+            entries = candidate
+            break
+    if entries is None:
+        raise Error("TypeError: sequence device/state requires its connected native binding")
+    var release = py_get(entries, "seq_tensor_free")
+    if py_type(release) is not types[3]:
+        raise Error("TypeError: sequence tensor cleanup requires its compiled release entry")
+    try:
+        _ = py_call(release, handle)
+    except:
+        # Keep ownership intact if release fails; a subsequent attempt can retry.
+        return PythonObject(None)
+    _ = py_call(context["sequence_device_setters"]["b"], owner, PythonObject(None))
+    return PythonObject(None)
+
+
 def sequence_device_operation(operation: String, owner: PythonObject, values: PythonObject,
                               mode: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
@@ -112,27 +158,6 @@ def sequence_device_operation(operation: String, owner: PythonObject, values: Py
         return seq_device_make(entries["module"], shape, handle, PythonObject(None), context)
     if py_type(owner) is not context["sequence_device_class"]:
         raise Error("TypeError: sequence device operation requires its exact native owner")
-    if operation == "seqdev_finalize":
-        # Failed constructors may have installed only some slots. Never inspect
-        # arbitrary hooks, and keep the handle until release actually succeeds.
-        var binding = PythonObject(None)
-        var base = PythonObject(None)
-        try:
-            binding = seq_device_get(owner, "b", context)
-            base = seq_device_get(owner, "_base", context)
-        except:
-            return PythonObject(None)
-        if binding is None or base is not None:
-            return PythonObject(None)
-        var entries = seq_device_entries(binding, context)
-        var handle = seq_device_get(owner, "h", context)
-        opt_scalar(handle, context)
-        try:
-            _ = py_call(entries["seq_tensor_free"], handle)
-        except:
-            return PythonObject(None)
-        _ = py_call(context["sequence_device_setters"]["b"], owner, PythonObject(None))
-        return PythonObject(None)
     _ = seq_device(owner, context)
     var binding = seq_device_get(owner, "b", context)
     var entries = seq_device_entries(binding, context)
