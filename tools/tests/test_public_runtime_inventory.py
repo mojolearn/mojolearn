@@ -321,6 +321,51 @@ def test_summary_counts_families():
     assert "TOTAL" in text and text.splitlines()[1].split()[:7] == ["f", "1", "2", "1", "0", "1", "0"]
 
 
+def test_endpoint_ledger_includes_lifecycle_descriptors_aliases_and_refusals():
+    with tempfile.TemporaryDirectory() as tmp:
+        root = build(Path(tmp))
+        base = root / "python/mojolearn"
+        (base / "__init__.py").write_text("from .lifecycle import Child, Child as Alias\n__all__ = ['Child', 'Alias']\n")
+        (base / "lifecycle.py").write_text(textwrap.dedent('''
+            raise RuntimeError("inventory must never import this module")
+            class Parent:
+                def __init__(self, width, /, *, copy=True):
+                    self.width = width
+                def state_dict(self):
+                    return {"width": self.width}
+                def save(self, path):
+                    raise NotImplementedError("format unavailable")
+                @property
+                def value(self):
+                    return self.width
+                @value.setter
+                def value(self, width):
+                    self.width = width
+                def _private(self):
+                    return None
+            class Child(Parent):
+                checkpoint = Parent.state_dict
+                def backward(self, gradient, *, retain_graph=False):
+                    return gradient
+        '''))
+        report = INV.endpoint_inventory(root)
+        rows = {r["method"]: r for r in report["endpoints"]}
+        assert set(rows) == {"__init__", "state_dict", "save", "value:get", "value:set", "checkpoint", "backward"}
+        assert rows["save"]["always_refuses"]
+        assert rows["__init__"]["kind"] == "constructor"
+        assert rows["checkpoint"]["kind"] == "method_alias"
+        assert rows["__init__"]["parameters"] == [
+            dict(name="width", kind="positional_only", required=True, default=None),
+            dict(name="copy", kind="keyword_only", required=False, default="True")]
+        assert rows["value:get"]["source_ast_sha256"] != rows["value:set"]["source_ast_sha256"]
+        assert all(set(r["aliases"]) == {"mojolearn.Child", "mojolearn.Alias"} for r in rows.values())
+        assert all(e["status"] == "unreviewed" and e["records"] == []
+                   for r in rows.values() for e in r["evidence"].values())
+        out = root / "endpoints.json"
+        assert INV.main(["--root", str(root), "--endpoints-json", str(out)]) == 0
+        assert __import__('json').loads(out.read_text())["summary"]["endpoints"] == 7
+
+
 if __name__ == "__main__":
     for name, test in sorted(globals().items()):
         if name.startswith("test_") and callable(test):

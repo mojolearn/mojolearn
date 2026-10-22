@@ -55,6 +55,7 @@ from __future__ import annotations
 import argparse
 import ast
 import builtins
+import hashlib
 import importlib.util
 import json
 import re
@@ -1123,6 +1124,122 @@ def inventory_rows(root, package="mojolearn"):
     return rows
 
 
+def _public_member(name):
+    return not name.startswith("_") or (name.startswith("__") and name.endswith("__"))
+
+
+def _endpoint_parameters(node):
+    """Keep option names, kinds and defaults, without evaluating product code."""
+    args = node.args
+    positional = [*args.posonlyargs, *args.args]
+    defaults = [None] * (len(positional) - len(args.defaults)) + list(args.defaults)
+    out = []
+    for index, (arg, default) in enumerate(zip(positional, defaults)):
+        if index == 0 and arg.arg in ("self", "cls"):
+            continue
+        out.append(dict(name=arg.arg, kind="positional_only" if index < len(args.posonlyargs)
+                        else "positional_or_keyword", required=default is None,
+                        default=ast.unparse(default) if default is not None else None))
+    for arg, default in zip(args.kwonlyargs, args.kw_defaults):
+        out.append(dict(name=arg.arg, kind="keyword_only", required=default is None,
+                        default=ast.unparse(default) if default is not None else None))
+    for arg, kind in ((args.vararg, "var_positional"), (args.kwarg, "var_keyword")):
+        if arg:
+            out.append(dict(name=arg.arg, kind=kind, required=False, default=None))
+    return out
+
+
+def endpoint_inventory(root, package="mojolearn"):
+    """One static ledger for public operations and their omitted lifecycle surface.
+
+    Evidence is deliberately unclaimed: a syntactic reference or an algorithm's
+    lane cannot establish that a constructor, option or failure path executed.
+    Runtime installers and external base classes require a separate runtime walk.
+    """
+    index, cache, rows, by_definition = Index(root, package), {}, [], {}
+    for canonical, origin, aliases in public_names(root, package):
+        module, _, name = origin.rpartition(".")
+        target = index.resolve_name(module, name) if module else None
+        if target and target[0] in ("module", "const"):
+            continue
+        key = (target[0], target[1].key) if target else ("unresolved", origin)
+        group = by_definition.setdefault(key, dict(target=target, origin=origin, names=set()))
+        group["names"].update([canonical, *aliases])
+
+    def add(group, method, kind, func=None, owner=None):
+        names = sorted(group["names"])
+        public = min(names, key=lambda n: (n.count("."), len(n), n))
+        item = dict(endpoint=public + "." + method, public=public, aliases=names,
+                    method=method, kind=kind, definition=None, source_ast_sha256=None,
+                    parameters=[], static_verdict="unresolved", native_entries=[],
+                    evidence={axis: {"status": "unreviewed", "records": []} for axis in
+                              ("runtime", "correctness", "identity", "fault", "options", "failures")})
+        if func:
+            # Descriptors share a source name; avoid the ordinary method cache
+            # collapsing their getter, setter and deleter into one definition.
+            facts, helpers = measure(index, func, owner, cache)
+            item.update(definition=_where(root, func),
+                        source_ast_sha256=hashlib.sha256(ast.dump(func.node).encode()).hexdigest(),
+                        parameters=_endpoint_parameters(func.node),
+                        static_verdict=verdict(facts, helpers), native_entries=sorted(map(str, facts.entries)),
+                        always_refuses=_refusal(func.node),
+                        unresolved_calls=facts.unresolved, shell_calls=facts.shell)
+        rows.append(item)
+
+    for group in by_definition.values():
+        target = group["target"]
+        if target is None:
+            add(group, "?", "unresolved_export")
+            continue
+        kind, obj = target
+        if kind == "func":
+            add(group, FUNCTION_OP, "function", obj)
+            continue
+        seen = set()
+        for cls in index.mro(obj):
+            members = {}
+            for node in cls.node.body:
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and _public_member(node.name):
+                    members.setdefault(node.name, []).append(node)
+                elif isinstance(node, ast.Assign):
+                    for name in node.targets:
+                        if isinstance(name, ast.Name) and _public_member(name.id):
+                            members.setdefault(name.id, [])
+            for name, nodes in members.items():
+                if name in seen:
+                    continue
+                seen.add(name)
+                found = index.lookup(obj, name)
+                if not nodes:
+                    if found and found[0] == "func":
+                        add(group, name, "method_alias", found[1], obj)
+                    continue
+                for node in nodes:
+                    decorators = [ast.unparse(d) for d in node.decorator_list]
+                    access = next((d.rsplit(".", 1)[-1] for d in decorators
+                                   if d == "property" or d.endswith((".setter", ".getter", ".deleter"))), None)
+                    if access:
+                        suffix = {"property": "get", "getter": "get", "setter": "set", "deleter": "delete"}[access]
+                        func = Func(cls.mod, node, cls=cls)
+                        func.qual += ":" + suffix
+                        func.key = (func.mod.name, func.qual)
+                        add(group, name + ":" + suffix, "property", func, obj)
+                    elif found and found[0] == "func":
+                        add(group, name, "constructor" if name in ("__init__", "__new__") else "method", found[1], obj)
+                        break
+    rows.sort(key=lambda row: row["endpoint"])
+    return dict(schema=1, scope="static public endpoints; no product imports or execution",
+                limitations=["Dynamic native installers and external-base methods need runtime enumeration.",
+                             "Static native-shaped calls do not prove transitive callees avoid Python.",
+                             "Parameters describe declared options, not tested values or combinations.",
+                             "Evidence starts unreviewed; existing results must be linked with their exact scope."],
+                endpoints=rows,
+                summary=dict(endpoints=len(rows), constructors=sum(r["kind"] == "constructor" for r in rows),
+                             properties=sum(r["kind"] == "property" for r in rows),
+                             refusal_only=sum(r.get("always_refuses", False) for r in rows),
+                             declared_parameters=sum(len(r["parameters"]) for r in rows)))
+
+
 def _refusal(node):
     """A method whose body only raises (`save` that is not available) is not an operation."""
     body = [s for s in node.body if not (isinstance(s, ast.Expr) and isinstance(s.value, ast.Constant))]
@@ -1242,12 +1359,21 @@ def main(argv=None):
     parser.add_argument("--package", default="mojolearn")
     parser.add_argument("--out", type=Path, help="write the TSV here instead of stdout")
     parser.add_argument("--summary", action="store_true", help="print only the per-family summary")
+    parser.add_argument("--endpoints-json", type=Path,
+                        help="write all static public lifecycle/option endpoints and unclaimed evidence axes")
     parser.add_argument("--baseline", action="store_true", help="rewrite the committed baseline")
     parser.add_argument("--check", action="store_true", help="fail if the non-native count grows")
     parser.add_argument("--baseline-file", type=Path, default=None)
     parser.add_argument("--explain", metavar="NAME.METHOD",
                         help="print the walk of one method, e.g. mojolearn.KMeans.fit")
     args = parser.parse_args(argv)
+    if args.endpoints_json:
+        if args.check or args.baseline or args.explain:
+            parser.error("--endpoints-json is separate from the historical operation baseline")
+        report = endpoint_inventory(args.root, args.package)
+        args.endpoints_json.write_text(json.dumps(report, indent=2) + "\n")
+        print(json.dumps(report["summary"], sort_keys=True))
+        return 0
     if args.explain:
         public, _, method = args.explain.rpartition(".")
         if not public.startswith(args.package + "."):

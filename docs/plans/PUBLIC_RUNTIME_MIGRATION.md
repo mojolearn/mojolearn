@@ -32,6 +32,18 @@ same operations in the same order.
 
 ## The measure
 
+The operation baseline below remains a regression check, not a completion claim.
+For one broader static ledger, run
+`python3 tools/public_runtime_inventory.py --endpoints-json /path/to/endpoints.json`.
+This uses the same public export and definition resolver, retaining aliases and
+inherited constructors, methods, state/checkpoint operations, property accessors,
+refusal-only endpoints and declared parameter names/defaults. Each definition has
+an AST digest so evidence can be attached to the source it actually exercised.
+Runtime, correctness, identity, fault, options and failures have separate evidence
+fields; all start unreviewed. An algorithm-level lane or a static test reference
+does not fill those fields. Dynamic installers and external-base members still
+need runtime enumeration; native-shaped calls still need transitive tracing.
+
 `tools/public_runtime_inventory.py` is a static triage measure, not runtime certification. It reads the code statically and imports nothing.
 For every public name `mojolearn` exports, it takes these operation methods: `fit`, `partial_fit`,
 `predict`, `predict_proba`, `decision_function`, `transform`, `fit_transform`, `fit_predict`,
