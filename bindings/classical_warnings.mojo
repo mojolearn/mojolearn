@@ -96,10 +96,11 @@ def _warning_write(text: String, context: PythonObject) raises:
 
 
 def classical_warn_column(context: PythonObject) raises:
-    classical_warning(COLUMN_WARNING, _warning_category(context), context)
+    var location = PythonObject(None)
+    classical_warning(COLUMN_WARNING, _warning_category(context), context, location)
 
 
-def classical_warning(message: String, category: PythonObject, context: PythonObject, location: PythonObject = PythonObject(None), error_prefix: String = "DataConversionWarning") raises:
+def classical_warning(message: String, category: PythonObject, context: PythonObject, location: PythonObject, error_prefix: String = "DataConversionWarning") raises:
     _warning_admit_category(category, context)
     py_setitem(context, "warning_category", category)
     var b = Python.import_module("builtins")
