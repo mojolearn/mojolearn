@@ -128,6 +128,7 @@ jobs:
       # METADATA ONLY. Standard PEP517 preparation does not create a wheel.
       # A production wheel requires staged native/Metal deployment metadata;
       # a zero-native build must fail and cannot claim a macOS platform tag.
+      # compatibility.py checks LICENSE/NOTICE/CITATION in finalized real wheels.
       # ------------------------------------------------------------------
       - name: The four files build_release_wheel.sh copies
         run: |

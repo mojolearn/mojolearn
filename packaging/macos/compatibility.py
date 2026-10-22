@@ -163,6 +163,13 @@ def check_wheel(wheel):
     wheel = Path(wheel)
     with tempfile.TemporaryDirectory(prefix="mojolearn-wheel-macos-") as temp, zipfile.ZipFile(wheel) as archive:
         root = Path(temp)
+        metadata = [n for n in archive.namelist() if n.endswith(".dist-info/WHEEL")]
+        if len(metadata) != 1:
+            raise ValueError("wheel must contain one WHEEL metadata member")
+        dist_info = metadata[0].removesuffix("WHEEL")
+        for member in ("mojolearn/CITATION.cff", dist_info + "licenses/LICENSE", dist_info + "licenses/NOTICE"):
+            if member not in archive.namelist():
+                raise ValueError("wheel missing required attribution member: " + member)
         for name in archive.namelist():
             if not name.startswith("mojolearn/") or not name.endswith((".so", ".dylib")):
                 continue
@@ -176,9 +183,6 @@ def check_wheel(wheel):
         if not match:
             raise ValueError("unsupported macOS wheel tag: " + filename_tag)
         report = inspect_package(root / "mojolearn", match[1] + "." + match[2])
-        metadata = [n for n in archive.namelist() if n.endswith(".dist-info/WHEEL")]
-        if len(metadata) != 1:
-            raise ValueError("wheel must contain one WHEEL metadata member")
         tags = re.findall(r"(?m)^Tag: (.+)$", archive.read(metadata[0]).decode())
         if not tags or any(t.rsplit("-", 1)[-1] != filename_tag for t in tags):
             raise ValueError("wheel filename and WHEEL platform tags disagree")

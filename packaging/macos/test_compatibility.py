@@ -139,12 +139,16 @@ class PackageTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "staged native"):
             gate.inspect_package(self.root)
 
-    def wheel(self, floor="26_0", metadata_floor=None):
+    def wheel(self, floor="26_0", metadata_floor=None, omit=None):
         path = self.root / f"mojolearn-0.0.0-py3-none-macosx_{floor}_arm64.whl"
         with zipfile.ZipFile(path, "w") as archive:
             archive.writestr("mojolearn/a.so", library())
             archive.writestr("mojolearn-0.0.0.dist-info/WHEEL", "Wheel-Version: 1.0\nTag: py3-none-macosx_"
                              + (metadata_floor or floor) + "_arm64\n")
+            for member in ("mojolearn/CITATION.cff", "mojolearn-0.0.0.dist-info/licenses/LICENSE",
+                           "mojolearn-0.0.0.dist-info/licenses/NOTICE"):
+                if member != omit:
+                    archive.writestr(member, "fixture attribution")
         return path
 
     def test_final_wheel_checks_shipped_bytes_and_metadata(self):
@@ -154,6 +158,12 @@ class PackageTests(unittest.TestCase):
                 gate.check_wheel(self.wheel("11_0"))
             with self.assertRaisesRegex(ValueError, "tags disagree"):
                 gate.check_wheel(self.wheel("26_0", "11_0"))
+
+    def test_attribution_must_ship_in_the_final_wheel(self):
+        for member in ("mojolearn/CITATION.cff", "mojolearn-0.0.0.dist-info/licenses/LICENSE",
+                       "mojolearn-0.0.0.dist-info/licenses/NOTICE"):
+            with self.subTest(member=member), self.assertRaisesRegex(ValueError, "required attribution"):
+                gate.check_wheel(self.wheel(omit=member))
 
 
 if __name__ == "__main__":
