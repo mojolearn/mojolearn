@@ -66,7 +66,7 @@ def maxabs_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
             ma = st+5*d
             _stage(program,1,d,0,n,d,st)
             _stage(program,4,d,ma,1,d,-1,sc,1)
-        xprep_run(arena,host,scratch,PythonObject(None),0,program,Python.tuple(Python.tuple(0,values)),entries,context)
+        xprep_run(arena,host,scratch,PythonObject(None),0,program^,Python.tuple(Python.tuple(0,values)),entries,context)
         maximum = xprep_take(arena[0],ma,d,0,context["output_context"])
         scale = xprep_take(arena[0],sc,d,0,context["output_context"])
         _ = arena^
@@ -112,7 +112,7 @@ def maxabs_transform(model: PythonObject, source: PythonObject, context: PythonO
         _ = py_call(inputs.append,Python.tuple(n*d,Python.tuple(0,scale,PythonObject(None),d,1)))
     var program = List[Int32]()
     _stage(program,3,n*d,0,n*d,d,-1,n*d if scale is not None else -1,dest)
-    xprep_run(arena,host,0,output_store,n*d if dev_out else 0,program,inputs,entries,context,n*d if n*d >= 134217728 else 0)
+    xprep_run(arena,host,0,output_store,n*d if dev_out else 0,program^,inputs,entries,context,n*d if n*d >= 134217728 else 0)
     var output = xprep_take(output_store[0] if dev_out else arena[0],0 if dev_out else dest,n,d,context["output_context"])
     _ = arena^
     _ = values^
