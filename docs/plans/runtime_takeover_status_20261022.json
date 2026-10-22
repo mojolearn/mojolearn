@@ -1,8 +1,8 @@
 {
   "schema": "mojolearn.runtime-takeover-status.v1",
-  "updated": "2026-10-22T10:10:22.631256+00:00",
+  "updated": "2026-10-22T10:42:17.846320+00:00",
   "release": "HELD",
-  "integration_before_report": "c297eb9a3cbb04f955e23cbb0443f2ad059155e8",
+  "integration_before_report": "28b0c438e4bc8a5842a6ddcef212d6261a34a692",
   "evidence_root": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021",
   "test_policy": "Rerun failures, new tests and directly affected regression checks; reuse accepted unchanged results. Counts from different scopes are not interchangeable.",
   "completed": {
@@ -283,46 +283,84 @@
         "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/failure-disposition-c1-through-c297.json"
       ],
       "limit": "Selected runtime checks on Mac CPU/Metal and NumPy1.26; public SequenceDeviceTensor.__array__ remains unresolved."
+    },
+    "native_archive_owner": {
+      "source": "04dddb70e469be3f76d5a39c2932ab09638bf8ef",
+      "main": "28b0c438e4bc8a5842a6ddcef212d6261a34a692",
+      "selected_tests": {
+        "cpu": {
+          "expected": 93,
+          "total": 93,
+          "passed": 93,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "exit_code": 0
+        },
+        "metal": {
+          "expected": 93,
+          "total": 93,
+          "passed": 93,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "exit_code": 0
+        },
+        "numpy126-metal": {
+          "expected": 65,
+          "total": 65,
+          "passed": 65,
+          "failed": 0,
+          "errors": 0,
+          "skipped": 0,
+          "exit_code": 0
+        }
+      },
+      "exact_selection": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/archive-owner-exact-node-review.json",
+      "scope": "Shared archive exception/byte parity/Fortran/allocator repairs, affected private PCA/scaler/Sequential controls, and NumPy longlong owner aliases. Path-open audit hook callback remains a separate concrete followup.",
+      "original_collection_failure": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-selection-verdict-04dddb70e.json",
+      "dependency_retry": "Independent test dependencies; frozen source/native bytes unchanged; CPU and Metal not rerun."
     }
   },
   "remaining": [
-    "Resident context/reinit/cleanup with complete supported pandas owners; exact longlong aliases staged separately.",
-    "Native host density save/load and shared native file-operation/exception repairs.",
+    "Native pathname archive IO: explicit audit hook callback reproduced; supported native IO repair in progress.",
+    "Public HostKernelDensity/HostIsolationForest save and canonical/historic load tags; baseline evidence retained, source draft not yet qualified.",
+    "Resident context/reinit/cleanup: hidden Arrow owners prevent safe migration of the full existing interface; draft held. Read-only stats/cache operations in a separate active lane.",
     "Full public SequenceDeviceTensor.__array__ ownership contract and cold sklearn tags behavior.",
-    "Matching installed successor wheel execution and deployment-floor repair.",
-    "Linux/NVIDIA/AMD qualification and matching cross-vendor identity/reference/fault evidence.",
-    "Complete API/options/failure-path evidence mapping; static3564-endpoint inventory is not runtime proof."
+    "Linux NVIDIA sm89/sm80 and AMD gfx942 current-source builds, installed execution, matching cross-vendor identity/reference/fault evidence. Older binaries are not current qualification.",
+    "Complete API/options/failure-path evidence mapping; static endpoint counts do not prove runtime coverage. Seven later fault arms still lack records in the reviewed retained55-arm ledgers.",
+    "Matching installed followup for changed04dd archive/owner paths; accepted c1 and c297 installed results retain their exact original source scope."
   ],
   "limitations": [
     "No claim that every public API, option, checkpoint or failure path is fully migrated/qualified.",
     "No performance improvement claim from correctness tests.",
     "Static census categories are not independently demonstrated runtime defects."
   ],
-  "latest_compiled_runtime": "c297eb9a3cbb04f955e23cbb0443f2ad059155e8",
-  "latest_runtime_summary": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-selection-verdict-c297eb9a3.json",
+  "latest_compiled_runtime": "04dddb70e469be3f76d5a39c2932ab09638bf8ef",
+  "latest_runtime_summary": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-selection-verdict-04dddb70e-deps.json",
   "latest_targeted_tests": {
     "cpu": {
-      "expected": 6,
-      "total": 6,
-      "passed": 6,
+      "expected": 93,
+      "total": 93,
+      "passed": 93,
       "failed": 0,
       "errors": 0,
       "skipped": 0,
       "exit_code": 0
     },
     "metal": {
-      "expected": 6,
-      "total": 6,
-      "passed": 6,
+      "expected": 93,
+      "total": 93,
+      "passed": 93,
       "failed": 0,
       "errors": 0,
       "skipped": 0,
       "exit_code": 0
     },
     "numpy126-metal": {
-      "expected": 6,
-      "total": 6,
-      "passed": 6,
+      "expected": 65,
+      "total": 65,
+      "passed": 65,
       "failed": 0,
       "errors": 0,
       "skipped": 0,
@@ -365,10 +403,10 @@
     "release": "HELD"
   },
   "active_frozen_build": {
-    "source": "c297eb9a3cbb04f955e23cbb0443f2ad059155e8",
+    "source": "04dddb70e469be3f76d5a39c2932ab09638bf8ef",
     "build_stages_passed": 7,
     "runtime_selection_passed": true,
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-build-c297eb9a3/BUILD.json",
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-build-04dddb70e/BUILD.json",
     "merged_to_main": true
   },
   "last_failed_build": {
@@ -383,7 +421,7 @@
     "evidence": "runtime-selection-verdict-3ede5addb.json"
   },
   "next_freeze": {
-    "status": "Separate owner alias, resident lifecycle, and archive repairs under development; not yet qualified."
+    "status": "Separate native archive IO, density save and read-only resident/cache source under development. Arrow lifecycle remains held."
   },
   "latest_followups": {
     "b638_stronger_cleanup": "2 identical and 2 FAST passed",
@@ -400,27 +438,27 @@
   },
   "latest_candidate_tests": {
     "cpu": {
-      "expected": 6,
-      "total": 6,
-      "passed": 6,
+      "expected": 93,
+      "total": 93,
+      "passed": 93,
       "failed": 0,
       "errors": 0,
       "skipped": 0,
       "exit_code": 0
     },
     "metal": {
-      "expected": 6,
-      "total": 6,
-      "passed": 6,
+      "expected": 93,
+      "total": 93,
+      "passed": 93,
       "failed": 0,
       "errors": 0,
       "skipped": 0,
       "exit_code": 0
     },
     "numpy126-metal": {
-      "expected": 6,
-      "total": 6,
-      "passed": 6,
+      "expected": 65,
+      "total": 65,
+      "passed": 65,
       "failed": 0,
       "errors": 0,
       "skipped": 0,
@@ -428,7 +466,7 @@
     }
   },
   "worktree_cleanup": {
-    "removed": 21,
+    "removed": 45,
     "evidence": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/worktree-cleanup",
     "branches_retained": true,
     "measurement_dirty_patch": "All three changed files already byte-match main; original dirty worktree retained. See measurement-smoke-reconciliation/reconciled.json.",
@@ -442,7 +480,9 @@
       "No host routes"
     ],
     "no_host_routes": "Passed after timeout budget repair; every checker retained. New main commit CI still pending.",
-    "evidence": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/ci-no-host-routes-120381010.json"
+    "evidence": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/ci-no-host-routes-120381010.json",
+    "latest_source": "28b0c438e4bc8a5842a6ddcef212d6261a34a692",
+    "latest_state": "Kernel closure and no-compute workflows passed; Public runtime and No host routes not yet complete when observed."
   },
   "installed_package_qualification": {
     "source": "c1e4d35cca14ab9001b6a1f50084dcc5809b6137",
@@ -450,7 +490,16 @@
     "declared_cpu_not_applicable": 6,
     "unexpected_skips": 0,
     "receipt": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/installed-cpu-c1e4d35cc-qualified/receipt.json",
-    "followup": "Six affected installed successor nodes pending; retained580 checks are evidence for the actual original wheel, not relabeled successor bytes.",
-    "packaging_issue": "Outer Mach-O minimum11 does not capture embedded Metal minimum26. Source-only deployment-tag repair in progress; original wheel retained and unpublished."
+    "followup": "Six affected installed c297 successor cases all passed, with exact collection and actual loaded wheel-byte proof. Original580 retained under their original wheel; no broad rerun or current04dd installed claim.",
+    "packaging_issue": "Repaired on main: actual embedded Metal minimum26 determines macOS tag; local corrected wheel final platform/math/attribution gates passed. Original tag11 wheel remains retained with its original behavioral evidence; unpublished.",
+    "successor": {
+      "source": "c297eb9a3cbb04f955e23cbb0443f2ad059155e8",
+      "packaging_source": "184f3751bb6acb7f19fb4b7921d1353973e0b27e",
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "receipt": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/installed-cpu-c297eb9a3-qualified/FINAL-REVIEW.json",
+      "wheel_sha256": "2df42ed0a4c762a1be49727b2e2f5a3a03e02f7b3caf7355f7f1bd66a910059b"
+    }
   }
 }
