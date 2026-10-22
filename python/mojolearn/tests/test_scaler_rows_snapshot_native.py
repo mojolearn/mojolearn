@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """A DeviceRows host materialization is a retained snapshot, not a callback."""
+import gc
 import numpy as np
 from array import array
 import pytest
@@ -42,6 +43,11 @@ def test_row_class_layout_is_refused_before_dictionary_or_lifecycle_hooks(estima
         raise AssertionError('Python row metadata hook ran')
     rows = DeviceRows(Array.from_list([[1.,2.],[3.,4.]], '<f4'), Array.from_list([0], '<i8'), None)
     model = getattr(ml, estimator)()
+    # Earlier refusal audits retain exception/frame cycles until collection.
+    # Drain those before installing a class-wide hook: the audit's own
+    # pre-trace collection must not finalize a previous test's DeviceRows
+    # under this test's temporary __del__.
+    gc.collect()
     with monkeypatch.context() as patch:
         if hook == 'descriptor':
             # CPython does not allow replacing an existing class's __dict__
