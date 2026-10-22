@@ -56,9 +56,23 @@ def sequence_array_report(status: Int, settings: PythonObject, context: PythonOb
             raise Error("TypeError: Python NumPy error callbacks cannot execute in array output; use native errstate ignore, warn or raise")
 
 
+def sequence_array_category(kind: String) raises -> PythonObject:
+    var b = Python.import_module("builtins")
+    var category = py_get(py_fields(b), PythonObject(kind))
+    var flags = b.type.__dict__["__flags__"]
+    # Validate before PyErr_SetString or constructing a warning message: both
+    # can instantiate the exception class. Replaced Python classes/functions
+    # therefore must be refused even though the call site itself is native.
+    if category is None or (Int(py=py_call(flags.__get__, category)) & 512) != 0 or (Int(py=py_call(flags.__get__, py_type(category))) & 512) != 0:
+        raise Error("TypeError: array warnings require native built-in exception classes")
+    if String(py_call(b.type.__getattribute__, category, "__name__")) != kind or String(py_call(b.type.__getattribute__, category, "__module__")) != "builtins":
+        raise Error("TypeError: array warnings require native built-in exception identities")
+    return category
+
+
 def sequence_array_exception(kind: String, var message: String) raises:
     ref cpy = Python().cpython()
-    var category = py_fields(Python.import_module("builtins"))[PythonObject(kind)]
+    var category = sequence_array_category(kind)
     cpy.PyErr_SetString(category._obj_ptr, message.as_c_string_slice().unsafe_ptr().as_unsafe_any_origin())
     var failure = stash_python_error()
     raise failure^
@@ -67,7 +81,7 @@ def sequence_array_exception(kind: String, var message: String) raises:
 def sequence_array_warn(message: String, context: PythonObject) raises:
     var b = Python.import_module("builtins")
     var fields = _warning_fields(context["warning_fields"])
-    var category = b.RuntimeWarning
+    var category = sequence_array_category("RuntimeWarning")
     # The existing warning originated at the __array__ public method. Its
     # native metadata retains that location for filtering and repetition.
     var filename = context["warning_filename"]
