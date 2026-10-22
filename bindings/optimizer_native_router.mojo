@@ -2,7 +2,7 @@
 # Native public-operation routing, constructors, state preparation and resident IO.
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
+from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.optimizer_public_words import optimizer_python_error
 from bindings.optimizer_admission import opt_guards, opt_owner, opt_value, opt_scalar, opt_schedule, opt_exact
 from bindings.optimizer_public_door import door_ready, refuse_kwargs, new_array, TensorView, tensor_view, resident_entry
@@ -159,7 +159,7 @@ def optimizer_set_params(owner: PythonObject, updates: PythonObject, context: Py
         else:
             opt_value(updates[key], context)
         var pieces = py_call(key.partition, "__")
-        if not Bool(py=py_call(config.__contains__, pieces[0])):
+        if not py_contains(config, pieces[0]):
             raise Error("ValueError: invalid optimizer parameter '" + String(pieces[0]) + "'")
         if len(pieces[1]) != 0:
             raise Error("TypeError: optimizer nested Python set_params hooks cannot execute; pass a complete native schedule or buffer configuration")
