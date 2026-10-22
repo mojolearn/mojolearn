@@ -109,7 +109,7 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
     if py_type(values) is not b.tuple:
         raise Error("TypeError: optimizer requires native argument tuples")
     if operation.startswith("device_"):
-        var selected = optimizer_entries(mode, context) if operation == "device_upload" else PythonObject(None)
+        var selected = optimizer_entries(mode, context) if operation == "device_upload" and py_type(values[0]) is not context["device_class"] else PythonObject(None)
         return device_operation(operation, owner, values, context, selected)
     if operation.startswith("schedule_"):
         return schedule_operation(operation, owner, values, context)

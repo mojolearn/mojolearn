@@ -102,6 +102,10 @@ def device_operation(operation: String, owner: PythonObject, values: PythonObjec
     if py_type(owner) is not context["device_class"]:
         raise Error("TypeError: training device operation requires its exact native owner")
     var fields = py_fields(owner)
+    var keys = py_call(b.list, fields)
+    for i in range(len(keys)):  # driver-loop: over stored native device owner field names
+        if py_type(keys[i]) is not b.str:
+            raise Error("TypeError: training device owner metadata requires native string keys")
     if operation == "device_finalize":
         if py_get(fields, "_base") is not None or py_get(fields, "_b") is None:
             return PythonObject(None)
