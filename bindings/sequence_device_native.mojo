@@ -9,6 +9,7 @@ from bindings.sequence_optimizer_native import seq_binding, seq_device, seq_devi
 from bindings.classical_arrays import classical_input, classical_typed, classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.sequence_array_native import sequence_array_cast
+from bindings.native_numpy_metadata import native_numpy_dtype
 
 
 def seq_device_entries(binding: PythonObject, context: PythonObject, required: Bool = True) raises -> PythonObject:
@@ -143,6 +144,10 @@ def sequence_device_operation(operation: String, owner: PythonObject, values: Py
     if operation == "seqdev_ndim":
         return PythonObject(len(shape))
     if operation == "seqdev_host" or operation == "seqdev_array":
+        if operation == "seqdev_array":
+            # Validate before classical_connect_numpy's first-call setup can
+            # touch the live numpy.dtype field, including late NumPy import.
+            _ = native_numpy_dtype(context)
         var input = context["input_context"]
         classical_connect_numpy(input)
         var result = classical_typed(py_ints(shape), "<f4", input)
