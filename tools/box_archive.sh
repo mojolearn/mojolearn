@@ -24,7 +24,9 @@ ssh $SO "$@" 'cd /root && { date -u; uname -a; nproc; free -g | head -n 2; nvidi
 # streamed straight to the Mac: no copy on the box (a 7 GB copy once filled nv2's disk, 2026-10-11). Every run directory's
 # logs and results, without its build caches, venvs or files over 50 MB (wheels, binaries and datasets are rebuilt or in R2).
 # shellcheck disable=SC2086
-ssh $SO "$@" 'cd /root && find box-info.txt *.log lq gpu-queue/dispatcher.log ref-* *-fixtures* ols-* live-* measure-* race-* results* mojolearn-evidence -type f -size -50M ! -path "*/cache/*" ! -path "*/venv/*" ! -path "*/.venv/*" ! -path "*/finish-venv/*" ! -name "*.so" ! -name "*.whl" 2>/dev/null | tar czf - -T -' < /dev/null > "$D/archive-lq.tgz" 2>> "$D/remote.txt"
+# box_merged_verify.sh writes /root/out and a top-level .nohup log. Keep them
+# in the teardown safety net as well as the frequent run-retention watcher.
+ssh $SO "$@" 'cd /root && find box-info.txt *.log *.nohup out lq gpu-queue/dispatcher.log ref-* *-fixtures* ols-* live-* measure-* race-* results* mojolearn-evidence -type f -size -50M ! -path "*/cache/*" ! -path "*/venv/*" ! -path "*/.venv/*" ! -path "*/finish-venv/*" ! -name "*.so" ! -name "*.whl" 2>/dev/null | tar czf - -T -' < /dev/null > "$D/archive-lq.tgz" 2>> "$D/remote.txt"
 if ! gzip -t "$D/archive-lq.tgz" 2>/dev/null || [ ! -s "$D/archive-lq.tgz" ]; then
     echo "$(date -u +%H:%MZ) archive $name: FAILED, tarball incomplete ($(tail -c 160 "$D/remote.txt" | tr '\n' ' '))" | tee -a "$LOG"; exit 1
 fi
