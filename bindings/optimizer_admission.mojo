@@ -41,7 +41,6 @@ def opt_guards(context: PythonObject) raises:
 def opt_scalar(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
     if depth > 64:
         raise Error("TypeError: optimizer scalar metadata exceeds the native nesting limit")
-    var b = Python.import_module("builtins")
     var cls = py_type(value)
     if opt_exact(cls, context["scalar_types"]):
         return
@@ -49,7 +48,7 @@ def opt_scalar(value: PythonObject, context: PythonObject, depth: Int = 0) raise
         var numpy = py_fields(context["modules"]["numpy"])
         if cls is not numpy["ndarray"]:
             return
-    if cls is b.tuple or cls is b.list:
+    if cls is context["container_types"][1] or cls is context["container_types"][0]:
         for i in range(len(value)):  # driver-loop: over scalar shape/configuration metadata
             opt_scalar(value[i], context, depth + 1)
         return
@@ -87,18 +86,18 @@ def opt_value(value: PythonObject, context: PythonObject, depth: Int = 0) raises
     var cls = py_type(value)
     if opt_exact(cls, context["scalar_types"]) or opt_exact(cls, context["buffer_types"]) or opt_numpy(cls, context):
         return
-    if cls is b.list or cls is b.tuple:
+    if cls is context["container_types"][0] or cls is context["container_types"][1]:
         for i in range(len(value)):  # driver-loop: over caller's native tensor/argument containers
             opt_value(value[i], context, depth + 1)
         return
     if opt_exact(cls, context["mapping_types"]):
-        var keys = py_call(b.list, value)
+        var keys = py_call(context["container_types"][0], value)
         for i in range(len(keys)):  # driver-loop: over validate names before keyed native dictionary reads
             if py_type(keys[i]) is not b.str:
                 raise Error("TypeError: optimizer state requires native string keys")
             opt_value(value[keys[i]], context, depth + 1)
         return
-    if cls is b.memoryview:
+    if cls is context["container_types"][5]:
         var owner = value.obj
         if owner is None or opt_exact(py_type(owner), context["buffer_types"]) or opt_numpy(py_type(owner), context):
             return
@@ -108,7 +107,7 @@ def opt_value(value: PythonObject, context: PythonObject, depth: Int = 0) raises
         for name in ["shape", "dtype", "order", "_addr", "_readonly", "ndim", "size", "nbytes", "itemsize", "strides"]:  # driver-loop: over fixed native Array metadata slots
             opt_scalar(py_call(getters[PythonObject(name)], value), context, depth + 1)
         var view = py_call(getters["_mv"], value)
-        if py_type(view) is not b.memoryview:
+        if py_type(view) is not context["container_types"][5]:
             raise Error("TypeError: optimizer Array requires native memoryview storage")
         opt_value(view, context, depth + 1)
         return
@@ -125,7 +124,7 @@ def opt_owner(owner: PythonObject, context: PythonObject) raises:
         raise Error("TypeError: optimizer requires an exact SGD, Adam or AdamW native owner")
     var fields = py_fields(owner)
     var b = Python.import_module("builtins")
-    var keys = py_call(b.list, fields)
+    var keys = py_call(context["container_types"][0], fields)
     for i in range(len(keys)):  # driver-loop: over stored field names before native keyed lookup
         if py_type(keys[i]) is not b.str:
             raise Error("TypeError: optimizer metadata requires native string keys")

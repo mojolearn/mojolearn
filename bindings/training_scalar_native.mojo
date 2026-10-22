@@ -47,8 +47,9 @@ def training_scalar_number(value: PythonObject, operation: String, context: Pyth
         raise Error("TypeError: scalar configuration exceeds native nesting; supply a native number")
     var b = Python.import_module("builtins")
     var cls = py_type(value)
-    var admitted = opt_exact(cls, context["scalar_types"]) or cls is b.bytearray or cls is b.list or cls is b.tuple or cls is b.dict
-    if cls is b.memoryview:
+    var containers = context["container_types"]
+    var admitted = opt_exact(cls, context["scalar_types"]) or cls is context["buffer_types"][1] or cls is containers[0] or cls is containers[1] or cls is containers[2]
+    if cls is containers[5]:
         opt_value(value, context)
         admitted = True
     if not admitted:
@@ -93,7 +94,7 @@ def training_scalar_number(value: PythonObject, operation: String, context: Pyth
             var indexes = Python.list()
             for i in range(ndim):  # driver-loop: native scalar index, one zero per singleton axis
                 py_call(indexes.append, 0)
-            var index = py_call(b.tuple, indexes)
+            var index = py_call(containers[1], indexes)
             ref cpy = Python().cpython()
             # Exact ndarray + admitted builtin dtype: this documented native
             # item access only unboxes one scalar. Object/StringDType missing
