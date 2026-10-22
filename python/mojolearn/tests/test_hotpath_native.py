@@ -41,7 +41,7 @@ _HELPERS = (
     "check_indices_i64", "indices_overlap_i64", "fold_ids", "select_fold_i64",
     "encode_labels_i64", "encode_labels_f64", "encode_labels_i32",
     "encode_labels_u8", "encode_labels_f32", "encode_labels_u32",
-    "gather_i64", "gather_f64",
+    "gather_i64", "gather_f64", "prepare_targets",
 )
 try:
     for _key in _HELPERS:
@@ -443,14 +443,14 @@ def _label_lists():
 def test_encode_labels_list_matches_the_order_rule(name):
     y = _label_lists()[name]
     native = name in ("ints", "tuple", "one class", "int64 edge")
-    _same(lambda: _labels.encode_labels(y), ("encode_labels_i64",) if native else (),
+    _same(lambda: _labels.encode_labels(y), ("prepare_targets",) if native else (),
           group="labels")
 
 
 def test_encode_labels_float_list_takes_the_helper():
     for name in ("floats", "zeros a", "zeros b"):
         y = _label_lists()[name]
-        ref = _same(lambda: _labels.encode_labels(y), ("encode_labels_f64",), group="labels")
+        ref = _same(lambda: _labels.encode_labels(y), ("prepare_targets",), group="labels")
         assert ref[0][0] == "ok"
     classes, _ = _labels.encode_labels(_label_lists()["zeros b"])
     assert math.copysign(1.0, classes[0]) == -1.0  # the first-seen zero is kept

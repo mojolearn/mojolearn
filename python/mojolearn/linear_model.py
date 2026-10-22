@@ -83,21 +83,9 @@ def _round_f32(v):
     return array.array("f", (float(v),))[0]
 
 
-def _shape_of(obj):
-    """The shape of an array-like WITHOUT converting it: `.shape` when the
-    object has one (ndarray, Array, memoryview), the nesting of a list or
-    tuple otherwise. Used only to raise the estimator's own message before
-    `_buffer` would raise its generic one."""
-    shape = getattr(obj, "shape", None)
-    if shape is not None:
-        return tuple(shape)
-    if isinstance(obj, (list, tuple)):
-        if obj and isinstance(obj[0], (list, tuple)):
-            return (len(obj), len(obj[0]))
-        return (len(obj),)
-    if hasattr(obj, "__len__"):
-        return (len(obj),)
-    return ()
+# `_shape_of` is the conversion layer's `shape_of` (lane migrate-shared-labels):
+# reading an argument's shape is argument checking, the shell's job.
+from ._buffer import shape_of as _shape_of  # noqa: E402
 
 
 def _labels_1d(y):
