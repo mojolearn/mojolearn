@@ -189,7 +189,10 @@ def test_constructor_refuses_dictionary_key_hooks_before_comparing(tmp_path):
             touched.append("eq")
             return super().__eq__(other)
     actual = object.__new__(forest.HostForest)
-    vars(actual)[Key("estimator")] = "RandomForestRegressor"
+    # An existing shared-key instance dictionary may compare against the
+    # class's interned "estimator" key during fixture insertion. A fresh
+    # dictionary installs the hostile key without invoking it in setup.
+    object.__setattr__(actual, "__dict__", {Key("estimator"): "RandomForestRegressor"})
     options = _forest_options(tmp_path, "RandomForestRegressor")
     _refused(audit_native_call(actual.__init__, **options), TypeError)
     assert touched == []
