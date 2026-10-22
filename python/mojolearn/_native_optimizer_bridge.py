@@ -103,7 +103,17 @@ def connect_sequence_device(training, device):
     # glue: connect sequence buffer/optimizer ABI symbols once at module import
     from types import BuiltinFunctionType
     from . import _backend
+    from ._native_classical_warnings import connect_warnings
+    import re
     context = training._OPT_CONTEXT
+    warning = connect_warnings()
+    code = device.SequenceDeviceTensor.__array__.__code__
+    warning.update(warning_filename=code.co_filename,
+                   warning_lineno=max(line for _, _, line in code.co_lines() if line is not None),  # glue: retain the public array-protocol warning location
+                   warning_module=device.__name__, warning_source_line="")
+    context["sequence_array_warnings"] = warning
+    context["sequence_dtype_pattern"] = re.compile(r"[<>=|]?(?:[?bBhHiIlLqQpPnNefdgFDGOUSVcmM][0-9]*(?:\[[0-9a-zA-Z]+\])?|(?:datetime64|timedelta64)(?:\[[0-9a-zA-Z]+\])?)")
+    context["sequence_dtype_fullmatch"] = re.Pattern.fullmatch
     context["sequence_device_class"] = device.SequenceDeviceTensor
     slots = tuple(device.SequenceDeviceTensor.__slots__)
     names = slots + ("__dict__", "__getattribute__", "__getattr__", "__setattr__")
