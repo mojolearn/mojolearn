@@ -145,15 +145,16 @@ def test_native_string_preserves_alias_and_subarray_layouts(resident, schema):
     compare_cast(values, tensor, schema)
 
 
-@pytest.mark.parametrize("name", ["Float32DType", "UInt8DType", "StringDType"])
-def test_native_descriptor_classes_keep_object_output(resident, name):
+@pytest.mark.parametrize("name", ["Float32DType", "UInt8DType", "StringDType", "StrDType", "BytesDType", "VoidDType", "DateTime64DType", "TimeDelta64DType"])
+def test_native_descriptor_classes_preserve_top_level_cast_semantics(resident, name):
     values, tensor = resident
-    descriptor_class = getattr(np.dtypes, name)
-    expected = values.astype(descriptor_class, copy=False)
-    actual = candidate(tensor, descriptor_class).assert_native()
-    assert actual.dtype == expected.dtype == np.dtype(object)
-    assert actual.shape == expected.shape
-    assert [struct.pack("=d", value) for value in actual] == [struct.pack("=d", value) for value in expected]
+    compare_cast(values, tensor, getattr(np.dtypes, name))
+
+
+@pytest.mark.parametrize("name", ["Float32DType", "StringDType"])
+def test_native_descriptor_classes_inside_schemas_keep_object_semantics(resident, name):
+    values, tensor = resident
+    compare_cast(values, tensor, {"names": ["value"], "formats": [getattr(np.dtypes, name)]})
 
 
 def signaling_missing(name):
@@ -236,17 +237,48 @@ def test_native_string_refuses_metadata_with_transitive_python_hooks(resident, k
     assert_native_boundary(audit)
 
 
-def test_native_string_warning_error_reports_final_cast(resident):
-    values, tensor = resident
+@pytest.mark.parametrize("words", [
+    [0x7f800001, 0x3fa00000], [0x3fa00000, 0x7f800001],
+    [0x7f800001, 0x7f800001], [0x7f800001, 0x7fc00001],
+], ids=["signaling-finite", "finite-signaling", "two-signaling", "signaling-quiet"])
+@pytest.mark.parametrize("mode", ["ignore", "warn", "raise"])
+@pytest.mark.parametrize("action", ["always", "error"])
+def test_native_string_preserves_element_order_and_warning_error_outcome(resident, words, mode, action):
+    # The prior test assumed every complex-NaN cast raises under an error
+    # filter. NumPy clears earlier equality flags at each following element:
+    # terminal and nonterminal sNaNs therefore have different outcomes.
+    values = np.array(words, dtype="u4").view("f4")
+    tensor = to_device(values, numeric_mode="identical")
     dtype = np.dtypes.StringDType(na_object=complex(float("nan"), 0))
-    with warnings.catch_warnings(), np.errstate(invalid="warn"):
-        warnings.simplefilter("error")
-        with pytest.raises(RuntimeWarning) as old:
-            values.astype(dtype)
+    with warnings.catch_warnings(record=True) as old, np.errstate(invalid=mode):
+        warnings.simplefilter(action)
+        try:
+            expected = values.astype(dtype, copy=False)
+            failure = None
+        except Exception as error:
+            failure = error
+    with warnings.catch_warnings(record=True) as new, np.errstate(invalid=mode):
+        warnings.simplefilter(action)
         audit = candidate(tensor, dtype)
-    assert type(audit.exception) is RuntimeWarning
-    assert str(audit.exception) == str(old.value) == "invalid value encountered in cast"
     assert_native_boundary(audit)
+    if failure is None:
+        assert_array_values(audit.assert_native(), expected)
+    else:
+        assert (type(audit.exception), str(audit.exception)) == (type(failure), str(failure))
+    assert [(type(w.message), str(w.message)) for w in new] == [(type(w.message), str(w.message)) for w in old]
+
+
+@pytest.mark.parametrize("layout", ["T_O", "O_T", "T_f2", "f2_T", "T_O_T", "O_T_O"])
+@pytest.mark.parametrize("words", [[0x7f800001, 0x3fa00000], [0x3fa00000, 0x7f800001], [0x60ad78ec, 0x3fa00000]],
+                         ids=["signaling-finite", "finite-signaling", "overflow-finite"])
+def test_native_string_preserves_status_across_structured_fields(resident, layout, words):
+    values = np.array(words, dtype="u4").view("f4")
+    tensor = to_device(values, numeric_mode="identical")
+    strings = np.dtypes.StringDType(na_object=complex(float("nan"), 0))
+    formats = [strings if kind == "T" else kind for kind in layout.split("_")]
+    dtype = {"names": [f"f{i}" for i in range(len(formats))], "formats": formats}
+    with np.errstate(all="warn"):
+        compare_cast(values, tensor, dtype)
 
 
 def test_native_string_refuses_replaced_class_before_hooks(resident, monkeypatch):

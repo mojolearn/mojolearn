@@ -5,7 +5,7 @@ from std.python._cpython import PyObjectPtr
 from std.memory import bitcast
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.classical_attributes import classical_connect_numpy
-from core.sequence_array_cast import sequence_cast_leaf, sequence_wide_word
+from core.sequence_array_cast import sequence_cast_leaf, sequence_wide_word, sequence_signaling, SEQ_CAST_INVALID
 from bindings.sequence_array_warnings import sequence_array_errstate, sequence_array_report
 from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.sequence_dtype_native import sequence_dtype_classes, sequence_dtype_instance, sequence_dtype_normalize
@@ -51,18 +51,25 @@ def sequence_dtype_leaves(dtype: PythonObject, offset: Int, classes: PythonObjec
     py_call(leaves.append, Python.tuple(kind, size, String(dtype.byteorder) != ">", offset, dtype))
 
 
-def sequence_object_leaf(source: Int, destination: Int, count: Int, stride: Int, offset: Int) raises:
+def sequence_object_leaf(source: Int, destination: Int, count: Int, stride: Int, offset: Int) raises -> Int:
     ref cpy = Python().cpython()
     var input = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=source)
+    var status = 0
     for index in range(count):  # driver-loop: box one completed scalar into each native object-array output slot
         var pointer = MutPointer[PyObjectPtr, MutUntrackedOrigin](unsafe_from_address=destination + index * stride + offset)
         # ndarray allocation initializes object fields to None. Only that
         # native singleton is replaced; no user object's finalizer is called.
         var previous = pointer[0]
-        var boxed = PythonObject(bitcast[DType.float64](sequence_wide_word(input[index])))
+        var bits = input[index]
+        if sequence_signaling(bits):
+            # NumPy widens float32 to the boxed native double; quieting a
+            # signaling NaN preserves its payload and sets invalid status.
+            status |= SEQ_CAST_INVALID
+        var boxed = PythonObject(bitcast[DType.float64](sequence_wide_word(bits)))
         pointer[0] = boxed.steal_data()
         if previous:
             cpy.Py_DecRef(previous)
+    return status
 
 
 def sequence_array_address(value: PythonObject) raises -> Int:
@@ -137,9 +144,9 @@ def sequence_array_cast(source: PythonObject, requested: PythonObject, context: 
     for i in range(len(leaves)):  # driver-loop: over admitted native output field layouts
         var leaf = leaves[i]
         if String(leaf[0]) == "O":
-            sequence_object_leaf(start, destination, count, stride, Int(py=leaf[3]))
+            status |= sequence_object_leaf(start, destination, count, stride, Int(py=leaf[3]))
         elif String(leaf[0]) == "T":
-            status |= sequence_string_leaf(start, destination, count, stride, Int(py=leaf[3]), leaf[4], classes, settings, context)
+            status = sequence_string_leaf(start, destination, count, stride, Int(py=leaf[3]), leaf[4], classes, settings, context, status)
         else:
             status |= sequence_cast_leaf(start, destination, count, stride, Int(py=leaf[3]), String(leaf[0]), Int(py=leaf[1]), Bool(py=leaf[2]))
     _ = source_owner^
