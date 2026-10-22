@@ -18,6 +18,7 @@ from bindings.host_sparse_native import host_sparse_format
 from bindings.native_owner_lifetime import native_release_admit
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.native_scalar_decode import native_scalar_buffer
+from bindings.host_iforest_depth_native import host_iforest_depth_admit, host_iforest_depth_truth, host_iforest_depth_step, host_iforest_depth_positive
 from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.optimizer_public_words import stash_python_error
 from bindings.sequential_admission import _one_of
@@ -110,75 +111,6 @@ def _if_fit_truth(value: PythonObject, context: PythonObject) raises -> Bool:
         return native_scalar_buffer(admitted).truth()
     _ = admitted^
     return Bool(py=value)
-
-
-def _if_fit_marker_after(marker: PythonObject, context: PythonObject) raises -> PythonObject:
-    # The Python fit guard incremented then decremented its depth. Preserve
-    # native scalar type promotion and half/single rounding in that state.
-    var value = marker
-    var dtype = PythonObject(None)
-    var ndarray = py_type(marker) is py_get(context, "ndarray")
-    if ndarray:
-        dtype = marker.dtype
-        value = marker.flat[0]
-    elif _one_of(py_type(marker), context["scalar_types"]) or _if_fit_alias(marker, context):
-        dtype = marker.dtype
-    if dtype is None:
-        ref cpy = Python().cpython()
-        var one = PythonObject(1)
-        var incremented = cpy.lib.get_function[PyObjectPtr]("PyNumber_Add")(value._obj_ptr, one._obj_ptr)
-        if not incremented:
-            var failure = stash_python_error()
-            raise failure^
-        var owner = PythonObject(from_owned=incremented)
-        var result = cpy.lib.get_function[PyObjectPtr]("PyNumber_Subtract")(owner._obj_ptr, one._obj_ptr)
-        if not result:
-            var failure = stash_python_error()
-            raise failure^
-        return PythonObject(from_owned=result)
-    var constructor = native_numpy_dtype(context)
-    var numpy = py_get(context["modules"], "numpy")
-    if py_type(numpy) is not context["host_iforest_module_type"]:
-        raise Error("TypeError: IsolationForest fit depth requires native NumPy metadata")
-    var version = py_get(py_call(context["host_iforest_module_dict"], numpy), "__version__")
-    if py_type(version) is not py_type(PythonObject("")):
-        raise Error("TypeError: IsolationForest fit depth requires native NumPy version text")
-    var release = Int(String(String(version).split(".")[0]))
-    var kind = String(dtype.kind)
-    var width = Int(py=dtype.itemsize)
-    var scalar = not ndarray or Int(py=marker.ndim) == 0
-    if kind == "b":
-        dtype = py_call(constructor, "i8")
-        value = PythonObject(Int(Bool(py=value)))
-        kind = "i"
-    elif release < 2 and scalar:
-        # NumPy1's strong scalar promotion predates NumPy2's weak Python int.
-        if kind == "f" and width <= 8 or (kind == "u" and width == 8):
-            dtype = py_call(constructor, "f8")
-            kind = "f"
-            width = 8
-        elif kind == "i" or kind == "u":
-            dtype = py_call(constructor, "i8")
-    var result = value
-    if kind == "f":
-        var number = Float64(py=value)
-        if width == 2:
-            number = Float64(Float16(Float16(number) + Float16(1)) - Float16(1))
-        elif width == 4:
-            number = Float64(Float32(Float32(number) + Float32(1)) - Float32(1))
-        else:
-            number = (number + Float64(1)) - Float64(1)
-        result = py_call(dtype.type, PythonObject(number))
-    elif kind == "i" or kind == "u":
-        result = py_call(dtype.type, value)
-    else:
-        raise Error("TypeError: IsolationForest fit depth requires native real scalar state")
-    if ndarray and not scalar:
-        # A one-item vector/matrix keeps its shape; a 0-D result is a scalar.
-        var array = py_call(context["ndarray"], marker.shape, dtype=dtype)
-        py_setitem(array.flat, 0, result)
-        return array
-    return result
 
 
 def _if_fit_options(model: PythonObject, fields: PythonObject, context: PythonObject) raises:
@@ -341,8 +273,8 @@ def host_iforest_fit(model: PythonObject, args: PythonObject, context: PythonObj
         if py_contains(fields, replacements[i]):
             native_release_admit(fields[replacements[i]], context)
     var marker = py_get(fields, "_mojolearn_fitting", 0)
-    host_inference_scalar(marker, context, True)
-    var nested = Bool(py=marker)
+    host_iforest_depth_admit(marker, context)
+    var nested = host_iforest_depth_truth(marker, context)
     var est = String(py_call(native_type.__dict__["__name__"].__get__, py_type(model)))
     if host_sparse_format(args[0]).byte_length() > 0:
         raise Error("TypeError: Sparse data was passed for X, but dense data is required. Use '.toarray()' to convert to a dense numpy array. (" + est + " takes dense X only.)")
@@ -362,12 +294,14 @@ def host_iforest_fit(model: PythonObject, args: PythonObject, context: PythonObj
     if not nested:
         _kde_y(args[1], Int(py=raw.shape[0]) if described and rank > 0 else -1, est, context)
     var copied = Bool(py=pair[1]) or not classical_is_f32(raw, context) or not classical_c_order(raw, context) or (not classical_is_array(raw, context) and not Bool(py=raw.dtype.isnative))
-    var remaining_depth = _if_fit_marker_after(marker, context)
+    var active_depth = host_iforest_depth_step(marker, False, context)
+    py_setitem(fields, "_mojolearn_fitting", active_depth)
     try:
         _if_fit_body(model, fields, raw, copied, est, context)
     finally:
-        if Bool(py=remaining_depth > 0):
-            fields["_mojolearn_fitting"] = remaining_depth
+        var remaining_depth = host_iforest_depth_step(py_get(fields, "_mojolearn_fitting", 1), True, context)
+        if host_iforest_depth_positive(remaining_depth, context):
+            py_setitem(fields, "_mojolearn_fitting", remaining_depth)
         else:
             _ = py_call(fields.pop, "_mojolearn_fitting", PythonObject(None))
     py_setitem(fields, "_mojolearn_fitted", True)

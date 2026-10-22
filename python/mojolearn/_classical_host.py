@@ -1478,6 +1478,8 @@ def _connect_host_inference():
                                          HostKernelRidge: "kernel_ridge", HostNystroem: "nystroem", HostRBFSampler: "rbf_sampler",
                                          HostPCA: "pca", HostTruncatedSVD: "tsvd", HostLogisticRegression: "logistic", HostSVR: "svr", HostSVC: "svc", HostKernelDensity: "kde", HostIsolationForest: "iforest"})
     connect_owner_context(context)
+    from ._native_iforest_depth import connect as _connect_iforest_depth
+    _connect_iforest_depth(context)
     # The established native attribute entry is schema-neutral: it admits
     # the supplied class layout and preserves internal Array/public ndarray
     # publication. It does not select scaler bindings or execute scaler work.
