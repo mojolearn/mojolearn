@@ -866,6 +866,167 @@ def host_archive_iforest(cls: PythonObject, arrays: PythonObject, context: Pytho
     return model
 
 
+def host_archive_spectral(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
+    var meta = host_archive_count(arrays, "meta", "<i8", 8, context, True)
+    var tolerance = host_archive_count(arrays, "eigen_tol", "<f8", 1, context, True)
+    var clusters = classical_i64(meta, 0)
+    var k = classical_i64(meta, 1)
+    var neighbors = classical_i64(meta, 2)
+    var starts = classical_i64(meta, 3)
+    var seed = classical_i64(meta, 4)
+    var seed_none = classical_i64(meta, 5) != 0
+    var n = classical_i64(meta, 6)
+    var nf = classical_i64(meta, 7)
+    var tol = classical_f64(tolerance, 0)
+    var affinity = _archive_string(arrays, "affinity", context)
+    if String(affinity) == "rbf" or String(affinity) == "precomputed_nearest_neighbors":
+        raise Error("NotImplementedError: saved spectral prediction data requires nearest_neighbors or precomputed affinity")
+    if String(affinity) != "nearest_neighbors" and String(affinity) != "precomputed":
+        raise Error("unsupported saved SpectralClustering affinity")
+    if not tol > 0.0:
+        raise Error("SpectralClustering eigen_tol must be positive")
+    if not seed_none and (seed < 0 or seed >= 4294967296):
+        raise Error("SpectralClustering random_state must fit uint32")
+    if clusters < 1 or k < 1 or neighbors < 1 or starts < 1:
+        raise Error("saved spectral cluster, component, neighbor and start counts must be positive")
+    var model = host_archive_object(cls, arrays, context)
+    var fields = sequential_fields(model)
+    host_archive_mode(arrays, fields, context)
+    py_setitem(fields, "n_clusters", clusters)
+    py_setitem(fields, "n_components", k)
+    py_setitem(fields, "random_state", PythonObject(None) if seed_none else PythonObject(seed))
+    py_setitem(fields, "n_neighbors", neighbors)
+    py_setitem(fields, "n_init", starts)
+    py_setitem(fields, "eigen_tol", tol)
+    py_setitem(fields, "affinity", affinity)
+    py_setitem(fields, "gamma", PythonObject(None))
+    py_setitem(fields, "assign_labels", "kmeans")
+    py_setitem(fields, "prediction_data", True)
+    py_setitem(fields, "eigen_solver", PythonObject(None))
+    py_setitem(fields, "degree", PythonObject(None))
+    py_setitem(fields, "coef0", PythonObject(None))
+    py_setitem(fields, "kernel_params", PythonObject(None))
+    py_setitem(fields, "n_jobs", PythonObject(None))
+    py_setitem(fields, "verbose", False)
+    py_setitem(fields, "_n_clusters", clusters)
+    py_setitem(fields, "_n_neighbors", neighbors)
+    py_setitem(fields, "_n_init", starts)
+    py_setitem(fields, "_eigen_tol", tol)
+    py_setitem(fields, "_gamma", PythonObject(None))
+    py_setitem(fields, "_seed", 0 if seed_none else seed)
+    py_setitem(fields, "_pd_eigenvalues", host_archive_count(arrays, "eigenvalues", "<f4", k, context))
+    py_setitem(fields, "_pd_eigenvectors", host_archive_shape(arrays, "eigenvectors", "<f4", Python.tuple(n, k), context))
+    py_setitem(fields, "_pd_diag", host_archive_count(arrays, "diag", "<f4", n, context))
+    py_setitem(fields, "_pd_centroids", host_archive_shape(arrays, "centroids", "<f4", Python.tuple(clusters, k), context))
+    py_setitem(fields, "labels_", host_archive_count(arrays, "labels", "<i4", n, context))
+    py_setitem(fields, "_fit_X", host_archive_shape(arrays, "x", "<f4", Python.tuple(n, nf), context) if String(affinity) == "nearest_neighbors" else PythonObject(None))
+    if String(affinity) == "nearest_neighbors":
+        py_setitem(fields, "n_features_in_", nf)
+    py_setitem(fields, "n_components_", k)
+    return model
+
+
+def host_archive_umap(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
+    var meta = host_archive_count(arrays, "meta", "<i8", 7, context, True)
+    var controls = host_archive_count(arrays, "controls", "<f4", 6, context, True)
+    var neighbors = classical_i64(meta, 0)
+    var components = classical_i64(meta, 1)
+    var epochs = classical_i64(meta, 2)
+    var seed = classical_i64(meta, 3)
+    var negatives = classical_i64(meta, 4)
+    var automatic_epochs = classical_i64(meta, 5) != 0
+    if neighbors < 2 or components < 1 or components > 32 or seed < 0 or negatives < 0 or negatives > 2147483647:
+        raise Error("saved UMAP integer parameters are outside the supported ranges")
+    if (automatic_epochs and epochs != 0) or (not automatic_epochs and epochs < 1):
+        raise Error("saved UMAP epochs do not match the automatic-epochs flag")
+    var values = controls._mv
+    for i in range(6):  # driver-loop: six saved scalar configuration fields
+        if not isfinite(Float64(py=values[i])):
+            raise Error("saved UMAP controls must be finite float32 values")
+    var min_dist = Float64(py=values[0])
+    var spread = Float64(py=values[1])
+    var mix = Float64(py=values[2])
+    var connectivity = Float64(py=values[3])
+    var rate = Float64(py=values[4])
+    var repulsion = Float64(py=values[5])
+    if rate <= 0 or repulsion < 0 or min_dist < 0 or min_dist > spread or spread <= 0 or mix < 0 or mix > 1 or connectivity < 0:
+        raise Error("saved UMAP scalar configuration is inconsistent")
+    var metric = _archive_string(arrays, "metric", context)
+    var metrics = context["host_archive_umap_metrics"]
+    if not py_contains(metrics, metric):
+        raise Error("unsupported saved UMAP metric")
+    var code = Int(py=metrics[metric])
+    var saved_code = -1
+    var power = Float64(2.0)
+    var a = Float64(0.0)
+    var b = Float64(0.0)
+    if py_contains(arrays, "extras"):
+        var extras = host_archive_count(arrays, "extras", "<f8", 4, context, True)
+        var value = classical_f64(extras, 0)
+        if not isfinite(value) or value < -9223372036854775808.0 or value >= 9223372036854775808.0:
+            raise Error("invalid saved UMAP metric code")
+        saved_code = Int(value)
+        power = classical_f64(extras, 1)
+        a = classical_f64(extras, 2)
+        b = classical_f64(extras, 3)
+    if code != saved_code:
+        raise Error("saved UMAP metric code does not match its metric")
+    if code == 9:
+        if not isfinite(power) or power <= 0 or power > 3.4028234663852886e38 or Float64(Float32(power)) != power:
+            raise Error("saved UMAP Minkowski power must survive float32 validation")
+    elif power != 2.0:
+        raise Error("saved UMAP metric does not read its nondefault power")
+    var have_ab = a > 0 and b > 0
+    if have_ab:
+        if not isfinite(a) or not isfinite(b) or a > 3.4028234663852886e38 or b > 3.4028234663852886e38 or Float64(Float32(a)) != a or Float64(Float32(b)) != b:
+            raise Error("saved UMAP a and b must survive float32 validation")
+    elif a != 0.0 or b != 0.0:
+        raise Error("saved UMAP a and b must be positive together or both absent")
+    var initialization = _archive_string(arrays, "init", context)
+    if String(initialization) == "array":
+        initialization = PythonObject("spectral")
+    if String(initialization) != "spectral" and String(initialization) != "random" and String(initialization) != "pca":
+        raise Error("unsupported saved UMAP initialization")
+    var training = _archive_exact(arrays, "training", "<f4", context)
+    var embedding = _archive_exact(arrays, "embedding", "<f4", context)
+    if Int(py=training.ndim) != 2 or Int(py=embedding.ndim) != 2 or training.shape[0] != embedding.shape[0] or Int(py=embedding.shape[1]) != components:
+        raise Error("saved UMAP training and embedding shapes do not match")
+    var model = host_archive_object(cls, arrays, context)
+    var fields = sequential_fields(model)
+    host_archive_mode(arrays, fields, context)
+    py_setitem(fields, "n_neighbors", neighbors)
+    py_setitem(fields, "n_components", components)
+    py_setitem(fields, "min_dist", min_dist)
+    py_setitem(fields, "spread", spread)
+    py_setitem(fields, "n_epochs", PythonObject(None) if automatic_epochs else PythonObject(epochs))
+    py_setitem(fields, "random_state", seed)
+    py_setitem(fields, "set_op_mix_ratio", mix)
+    py_setitem(fields, "local_connectivity", connectivity)
+    py_setitem(fields, "metric", metric)
+    py_setitem(fields, "init", initialization)
+    py_setitem(fields, "learning_rate", rate)
+    py_setitem(fields, "repulsion_strength", repulsion)
+    py_setitem(fields, "negative_sample_rate", negatives)
+    py_setitem(fields, "a", PythonObject(a) if have_ab else PythonObject(None))
+    py_setitem(fields, "b", PythonObject(b) if have_ab else PythonObject(None))
+    py_setitem(fields, "metric_kwds", Python.dict(p=power) if saved_code == 9 else PythonObject(None))
+    py_setitem(fields, "target_n_neighbors", -1)
+    py_setitem(fields, "target_metric", "categorical")
+    py_setitem(fields, "target_weight", 0.5)
+    py_setitem(fields, "densmap", False)
+    py_setitem(fields, "output_metric", "euclidean")
+    py_setitem(fields, "_transform_training", training)
+    py_setitem(fields, "_transform_embedding", embedding)
+    py_setitem(fields, "_transform_config", Python.tuple(neighbors, components, epochs, min_dist, spread, mix, connectivity, seed, rate, repulsion, negatives, code, power, a if have_ab else Float64(0.0), b if have_ab else Float64(0.0)))
+    py_setitem(fields, "_transform_mode", fields["numeric_mode"])
+    var store = py_call(context["array_type"], "f")
+    _ = py_call(store.frombytes, py_call(embedding._mv.cast, "B"))
+    py_setitem(fields, "embedding_", classical_wrap_array(store, embedding.shape, "<f4", String(embedding.order), context))
+    py_setitem(fields, "n_features_in_", training.shape[1])
+    py_setitem(fields, "input_copied_", classical_i64(meta, 6) != 0)
+    return model
+
+
 def host_archive_build(path: PythonObject, context: PythonObject,
                        requested_class: PythonObject = PythonObject(None)) raises -> PythonObject:
     # This deliberately separate private entry allows each schema to be
@@ -934,6 +1095,10 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         model = host_archive_neighbors(cls, arrays, 0 if String(estimator) == "NearestNeighbors" else (1 if String(estimator) == "KNeighborsClassifier" else 2), context)
     elif fmt == "mojolearn-iforest-1":
         model = host_archive_iforest(cls, arrays, context)
+    elif fmt == "mojolearn-spectral-1":
+        model = host_archive_spectral(cls, arrays, context)
+    elif fmt == "mojolearn-umap-1":
+        model = host_archive_umap(cls, arrays, context)
     else:
         raise Error("native host archive schema has not been implemented: " + fmt + "/" + String(estimator))
     if requested_class is None:
