@@ -13,7 +13,6 @@ from x_neighbors.kfeat_dev import (
     kfeat_first_negative,
     kfeat_flags,
     kfeat_pcs_draw_idn,
-    kfeat_schi2_draw,
     kfeat_schi2_fit,
     kfeat_schi2_fit_idn,
     kfeat_schi2_transform,
@@ -67,18 +66,6 @@ def kfeat_schi2_fit_binding(p: PythonObject, w_out: PythonObject, off_out: Pytho
     var off = Int(py=off_out)
     with GILReleased(Python()):
         kfeat_schi2_fit(seed_word, d, nc, w, off)
-    return PythonObject(0)
-
-
-def kfeat_schi2_draw_binding(p: PythonObject, z_out: PythonObject, off_out: PythonObject) raises -> PythonObject:
-    """p = [seed & 2^32-1, d, n_components]. Returns 0."""
-    var seed_word = Int(py=p[0])
-    var d = Int(py=p[1])
-    var nc = Int(py=p[2])
-    var z = Int(py=z_out)
-    var off = Int(py=off_out)
-    with GILReleased(Python()):
-        kfeat_schi2_draw(seed_word, d, nc, z, off)
     return PythonObject(0)
 
 

@@ -15,8 +15,8 @@ from x_neighbors.eigh_device import op_eigh
 from checks.vendor import COMPILED_VENDOR
 from x_neighbors.device_ops import op_softmax64
 from x_neighbors.proba64_nc import NC_PROBA64
-from x_neighbors.device_ops import op_sqdist, op_nan_sqdist, op_l1dist, op_kernel, op_matmul, op_rowsum, op_colsum, op_unary, op_knn_select, op_knn_sq, op_group_mean, op_take_rows, op_take_cols, op_variance, op_lof_lrd, op_lof_score, op_kpca_center, op_scale_div, op_svd_flip, op_kpca_alpha_scale, op_nc_std, op_nc_shrink_d, op_nc_shrink, op_nc_decision, op_softmax, op_log_softmax, op_pcs, op_achi2, op_skew_weights, op_skew_transform, op_absdiff_sum, op_row_normalize, op_lp_clamp, op_ls_clamp, op_ls_laplacian, op_knn_graph, op_knn_impute, op_col_degree, op_ls_laplacian_deg, op_row_all_zero, op_pcs_sketch, op_pcs_conv, op_pcs_copy0, op_knn_impute_cells, op_pagerank_step, op_cc_step, op_graph_symmetry, op_svgp_var, op_nc_median, op_row_argmax, op_nc_med_std, op_pos_compact, op_p2m_mask_value, op_p2m_zero_cols, op_p2m_nan_indicator, op_p2m_sign_label, op_p2m_relabel, op_p2m_class_counts, op_p2m_const_cols, op_p2m_lp_labels, op_p2m_fill, op_p2m_iota, op_p2m_negate, op_p2m_transpose, op_p2m_transpose_i, op_p2m_row_sort
-from x_neighbors.iter_device import op_nc_stats, op_lp_knn_graph, op_lp_knn_product, op_lp_iterate, op_pr_iterate, op_pr_iterate_sparse, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_cc_iterate_csr, op_nan_cells, op_kpca_transform, op_kernel_matmul, op_svgp_fit_ff, op_svgp_predict, op_lp_iterate_knn
+from x_neighbors.device_ops import op_sqdist, op_nan_sqdist, op_l1dist, op_kernel, op_matmul, op_rowsum, op_colsum, op_unary, op_knn_select, op_knn_sq, op_group_mean, op_take_rows, op_take_cols, op_variance, op_lof_lrd, op_lof_score, op_kpca_center, op_scale_div, op_svd_flip, op_kpca_alpha_scale, op_nc_std, op_nc_shrink_d, op_nc_shrink, op_nc_decision, op_softmax, op_log_softmax, op_pcs, op_achi2, op_skew_weights, op_skew_transform, op_absdiff_sum, op_row_normalize, op_lp_clamp, op_ls_clamp, op_ls_laplacian, op_knn_graph, op_knn_impute, op_col_degree, op_ls_laplacian_deg, op_row_all_zero, op_knn_impute_cells, op_pagerank_step, op_cc_step, op_graph_symmetry, op_svgp_var, op_nc_median, op_row_argmax, op_nc_med_std, op_pos_compact, op_p2m_mask_value, op_p2m_zero_cols, op_p2m_nan_indicator, op_p2m_sign_label, op_p2m_relabel, op_p2m_class_counts, op_p2m_const_cols, op_p2m_lp_labels, op_p2m_fill, op_p2m_iota, op_p2m_transpose, op_p2m_transpose_i, op_p2m_row_sort
+from x_neighbors.iter_device import op_nc_stats, op_lp_knn_graph, op_lp_knn_product, op_lp_iterate, op_pr_iterate_sparse, op_pcs_resident, op_knn_sq_tiled, op_knn_impute_tiled, op_cc_iterate, op_cc_iterate_csr, op_nan_cells, op_kpca_transform, op_kernel_matmul, op_svgp_fit_ff, op_svgp_predict, op_lp_iterate_knn
 from x_neighbors.ocsvm_dev import op_ocsvm
 from x_neighbors.graph_dev import op_louvain, op_pr_csr, op_louvain_csr
 from x_neighbors.dev_pyapi import kpca_resident_binding
@@ -33,7 +33,6 @@ from x_neighbors.kfeat_dev import XN_FAST_SCHI2_LAZYW, XN_KFEAT_ANY
 from x_neighbors.dev_pyapi import (
     kfeat_first_negative_binding,
     kfeat_flags_binding,
-    kfeat_schi2_draw_binding,
     kfeat_schi2_fit_binding,
     kfeat_schi2_transform_binding,
     kfeat_schi2_weights_binding,
@@ -93,18 +92,6 @@ def sqdist_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises 
     var v_d = _n(i_, 2)
     with GILReleased(Python()):
         op_sqdist(v_x, v_y, v_res, v_n, v_m, v_d)
-    return PythonObject(None)
-
-
-def nan_sqdist_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    var v_x = _a(a_, 0)
-    var v_y = _a(a_, 1)
-    var v_res = _a(a_, 2)
-    var v_n = _n(i_, 0)
-    var v_m = _n(i_, 1)
-    var v_d = _n(i_, 2)
-    with GILReleased(Python()):
-        op_nan_sqdist(v_x, v_y, v_res, v_n, v_m, v_d)
     return PythonObject(None)
 
 
@@ -302,15 +289,6 @@ def scale_div_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) rais
     return PythonObject(None)
 
 
-def svd_flip_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    var v_v = _a(a_, 0)
-    var v_n = _n(i_, 0)
-    var v_c = _n(i_, 1)
-    with GILReleased(Python()):
-        op_svd_flip(v_v, v_n, v_c)
-    return PythonObject(None)
-
-
 def kpca_alpha_scale_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
     var v_v = _a(a_, 0)
     var v_w = _a(a_, 1)
@@ -447,15 +425,6 @@ def achi2_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -
     return PythonObject(None)
 
 
-def skew_weights_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    var v_z = _a(a_, 0)
-    var v_res = _a(a_, 1)
-    var v_count = _n(i_, 0)
-    with GILReleased(Python()):
-        op_skew_weights(v_z, v_res, v_count)
-    return PythonObject(None)
-
-
 def skew_transform_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
     var v_lx = _a(a_, 0)
     var v_w = _a(a_, 1)
@@ -575,47 +544,6 @@ def row_all_zero_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) r
     return PythonObject(None)
 
 
-def pcs_sketch_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    var v_x = _a(a_, 0)
-    var v_hidx = _a(a_, 1)
-    var v_hbit = _a(a_, 2)
-    var v_sk = _a(a_, 3)
-    var v_n = _n(i_, 0)
-    var v_d_in = _n(i_, 1)
-    var v_nf = _n(i_, 2)
-    var v_nc = _n(i_, 3)
-    var v_degree = _n(i_, 4)
-    var v_gamma = _f(f_, 0)
-    var v_coef0 = _f(f_, 1)
-    with GILReleased(Python()):
-        op_pcs_sketch(v_x, v_hidx, v_hbit, v_sk, v_n, v_d_in, v_nf, v_nc, v_degree, v_gamma, v_coef0)
-    return PythonObject(None)
-
-
-def pcs_conv_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    var v_acc = _a(a_, 0)
-    var v_sk = _a(a_, 1)
-    var v_res = _a(a_, 2)
-    var v_n = _n(i_, 0)
-    var v_nc = _n(i_, 1)
-    var v_degree = _n(i_, 2)
-    var v_p = _n(i_, 3)
-    with GILReleased(Python()):
-        op_pcs_conv(v_acc, v_sk, v_res, v_n, v_nc, v_degree, v_p)
-    return PythonObject(None)
-
-
-def pcs_copy0_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    var v_sk = _a(a_, 0)
-    var v_res = _a(a_, 1)
-    var v_n = _n(i_, 0)
-    var v_nc = _n(i_, 1)
-    var v_degree = _n(i_, 2)
-    with GILReleased(Python()):
-        op_pcs_copy0(v_sk, v_res, v_n, v_nc, v_degree)
-    return PythonObject(None)
-
-
 def knn_impute_cells_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
     var v_cells = _a(a_, 0)
     var v_x = _a(a_, 1)
@@ -629,30 +557,6 @@ def knn_impute_cells_binding(a_: PythonObject, i_: PythonObject, f_: PythonObjec
     var v_nc = _n(i_, 5)
     with GILReleased(Python()):
         op_knn_impute_cells(v_cells, v_x, v_fx, v_res, v_n, v_m, v_d, v_k, v_weights, v_nc)
-    return PythonObject(None)
-
-
-def pagerank_step_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    var v_q = _a(a_, 0)
-    var v_x = _a(a_, 1)
-    var v_p = _a(a_, 2)
-    var v_dw = _a(a_, 3)
-    var v_dangling = _a(a_, 4)
-    var v_res = _a(a_, 5)
-    var v_n = _n(i_, 0)
-    var v_alpha = _f(f_, 0)
-    with GILReleased(Python()):
-        op_pagerank_step(v_q, v_x, v_p, v_dw, v_dangling, v_res, v_n, v_alpha)
-    return PythonObject(None)
-
-
-def cc_step_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    var v_a = _a(a_, 0)
-    var v_lab = _a(a_, 1)
-    var v_res = _a(a_, 2)
-    var v_n = _n(i_, 0)
-    with GILReleased(Python()):
-        op_cc_step(v_a, v_lab, v_res, v_n)
     return PythonObject(None)
 
 
@@ -832,15 +736,6 @@ def p2m_iota_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raise
     return PythonObject(None)
 
 
-def p2m_negate_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    var v_x = _a(a_, 0)
-    var v_res = _a(a_, 1)
-    var v_count = _n(i_, 0)
-    with GILReleased(Python()):
-        op_p2m_negate(v_x, v_res, v_count)
-    return PythonObject(None)
-
-
 def p2m_transpose_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
     var v_src = _a(a_, 0)
     var v_res = _a(a_, 1)
@@ -938,23 +833,6 @@ def lp_iterate_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) rai
     var v_alpha = _f(f_, 0)
     with GILReleased(Python()):
         op_lp_iterate(v_g, v_ld, v_ystatic, v_unlabeled, v_info, v_n, v_c, v_max_iter, v_variant, v_tol_hi, v_tol_lo, v_alpha)
-    return PythonObject(None)
-
-
-def pr_iterate_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) raises -> PythonObject:
-    var v_q = _a(a_, 0)
-    var v_x = _a(a_, 1)
-    var v_p = _a(a_, 2)
-    var v_dw = _a(a_, 3)
-    var v_dangling = _a(a_, 4)
-    var v_info = _a(a_, 5)
-    var v_n = _n(i_, 0)
-    var v_max_iter = _n(i_, 1)
-    var v_thr_hi = _n(i_, 2)
-    var v_thr_lo = _n(i_, 3)
-    var v_alpha = _f(f_, 0)
-    with GILReleased(Python()):
-        op_pr_iterate(v_q, v_x, v_p, v_dw, v_dangling, v_info, v_n, v_max_iter, v_thr_hi, v_thr_lo, v_alpha)
     return PythonObject(None)
 
 
@@ -1227,7 +1105,6 @@ def louvain_csr_binding(a_: PythonObject, i_: PythonObject, f_: PythonObject) ra
 
 def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[sqdist_binding]("xn_sqdist")
-    m.def_function[nan_sqdist_binding]("xn_nan_sqdist")
     m.def_function[l1dist_binding]("xn_l1dist")
     m.def_function[kernel_binding]("xn_kernel")
     m.def_function[matmul_binding]("xn_matmul")
@@ -1244,7 +1121,6 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[lof_score_binding]("xn_lof_score")
     m.def_function[kpca_center_binding]("xn_kpca_center")
     m.def_function[scale_div_binding]("xn_scale_div")
-    m.def_function[svd_flip_binding]("xn_svd_flip")
     m.def_function[kpca_alpha_scale_binding]("xn_kpca_alpha_scale")
     m.def_function[nc_std_binding]("xn_nc_std")
     m.def_function[nc_shrink_d_binding]("xn_nc_shrink_d")
@@ -1256,7 +1132,6 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[log_softmax_binding]("xn_log_softmax")
     m.def_function[pcs_binding]("xn_pcs")
     m.def_function[achi2_binding]("xn_achi2")
-    m.def_function[skew_weights_binding]("xn_skew_weights")
     m.def_function[skew_transform_binding]("xn_skew_transform")
     m.def_function[absdiff_sum_binding]("xn_absdiff_sum")
     m.def_function[row_normalize_binding]("xn_row_normalize")
@@ -1268,12 +1143,7 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[col_degree_binding]("xn_col_degree")
     m.def_function[ls_laplacian_deg_binding]("xn_ls_laplacian_deg")
     m.def_function[row_all_zero_binding]("xn_row_all_zero")
-    m.def_function[pcs_sketch_binding]("xn_pcs_sketch")
-    m.def_function[pcs_conv_binding]("xn_pcs_conv")
-    m.def_function[pcs_copy0_binding]("xn_pcs_copy0")
     m.def_function[knn_impute_cells_binding]("xn_knn_impute_cells")
-    m.def_function[pagerank_step_binding]("xn_pagerank_step")
-    m.def_function[cc_step_binding]("xn_cc_step")
     m.def_function[graph_symmetry_binding]("xn_graph_symmetry")
     m.def_function[svgp_var_binding]("xn_svgp_var")
     m.def_function[nc_median_binding]("xn_nc_median")
@@ -1290,7 +1160,6 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[p2m_lp_labels_binding]("xn_p2m_lp_labels")
     m.def_function[p2m_fill_binding]("xn_p2m_fill")
     m.def_function[p2m_iota_binding]("xn_p2m_iota")
-    m.def_function[p2m_negate_binding]("xn_p2m_negate")
     m.def_function[p2m_transpose_binding]("xn_p2m_transpose")
     m.def_function[p2m_transpose_i_binding]("xn_p2m_transpose_i")
     m.def_function[p2m_row_sort_binding]("xn_p2m_row_sort")
@@ -1299,7 +1168,6 @@ def _add_ops(mut m: PythonModuleBuilder) raises:
     m.def_function[lp_knn_product_binding]("xn_lp_knn_product")
     m.def_function[lp_iterate_binding]("xn_lp_iterate")
     m.def_function[classical_graph_normalization_binding]("x_neighbors_classical_graph_normalization")
-    m.def_function[pr_iterate_binding]("xn_pr_iterate")
     m.def_function[pr_iterate_sparse_binding]("xn_pr_iterate_sparse")
     m.def_function[pcs_resident_binding]("xn_pcs_resident")
     m.def_function[knn_sq_tiled_binding]("xn_knn_sq_tiled")
@@ -1358,7 +1226,6 @@ def build__mojolearn_x_neighbors() -> PythonObject:
             m.def_function[kfeat_schi2_fit_binding]("x_neighbors_kfeat_schi2_fit")
         # lane apple-fast-w3-kfeat: SkewedChi2Sampler's lazy weights (opt-in)
         comptime if XN_FAST_SCHI2_LAZYW:
-            m.def_function[kfeat_schi2_draw_binding]("x_neighbors_kfeat_schi2_draw")
             m.def_function[kfeat_schi2_weights_binding]("x_neighbors_kfeat_schi2_weights")
             m.def_function[kfeat_schi2_transform_binding]("x_neighbors_kfeat_schi2_transform")
         # lane fix-k1-neighbors: the samplers' counter-based draws (IDENTICAL)

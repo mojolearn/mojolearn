@@ -287,18 +287,6 @@ def kfeat_schi2_fit(seed_word: Int, d: Int, nc: Int, w_out: Int, off_out: Int) r
 # Fit + transform go from three waits to one.
 
 
-def kfeat_schi2_draw(seed_word: Int, d: Int, nc: Int, z_out: Int, off_out: Int) raises:
-    """p = [seed & 2^32-1, d, n_components]: z (d * nc float32 at z_out, the
-    words main hands `skew_weights_kernel`) and `random_offset_` (nc at
-    off_out). Host only: the draw is sklearn's sequential stream."""
-    var seed = UInt32(seed_word & 0xFFFFFFFF)
-    if d <= 0 or nc <= 0:
-        raise Error("x_neighbors_kfeat_schi2_draw: n_features and n_components must be positive")
-    var zp = FP(unsafe_from_address=z_out)
-    var op = FP(unsafe_from_address=off_out)
-    _schi2_draw(seed, d * nc, nc, zp, op)
-
-
 def kfeat_schi2_weights(z_addr: Int, w_addr: Int, count: Int) raises:
     """`random_weights_` (n floats at w_addr) from z (n floats at z_addr):
     main's `skew_weights_kernel`, one wait."""

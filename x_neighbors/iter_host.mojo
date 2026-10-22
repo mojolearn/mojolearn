@@ -101,50 +101,6 @@ def op_lp_iterate(
     _ = s^
 
 
-def op_pr_iterate(
-    q: Int, x: Int, p: Int, dw: Int, dangling: Int, info: Int,
-    n: Int, max_iter: Int, thr_hi: Int, thr_lo: Int, alpha: Float32,
-) raises:
-    var thr = bitcast[DType.float64]((UInt64(thr_hi) << UInt64(32)) | UInt64(thr_lo))
-    var a = List[Float32](length=n if n > 0 else 1, fill=Float32(0))
-    var b = List[Float32](length=n if n > 0 else 1, fill=Float32(0))
-    var s = List[Float32](length=1, fill=Float32(0))
-    var px = FP(unsafe_from_address=x)
-    for i in range(n):
-        a[i] = px.unsafe_load(i)
-    var cur = FP(unsafe_from_address=Int(a.unsafe_ptr()))
-    var nxt = FP(unsafe_from_address=Int(b.unsafe_ptr()))
-    var ps = FP(unsafe_from_address=Int(s.unsafe_ptr()))
-    var pq = FP(unsafe_from_address=q)
-    var pp = FP(unsafe_from_address=p)
-    var pdw = FP(unsafe_from_address=dw)
-    var pdg = IP(unsafe_from_address=dangling)
-    var n_iter = 0
-    var converged = False
-    for it in range(max_iter):
-        for t in range(n):
-            pagerank_step_item(t, pq, cur, pp, pdw, pdg, nxt, n, alpha)
-        absdiff_sum_item(0, nxt, cur, ps, n)
-        var tmp = cur
-        cur = nxt
-        nxt = tmp
-        n_iter = it + 1
-        if Float64(ps.unsafe_load(0)) < thr:
-            converged = True
-            break
-    for i in range(n):
-        px.unsafe_store(i, cur.unsafe_load(i))
-    comptime if _SABOTAGE:
-        if n > 0:
-            px.unsafe_store(0, px.unsafe_load(0) + Float32(1e-3))
-    var inf = IP(unsafe_from_address=info)
-    inf.unsafe_store(0, Int32(n_iter))
-    inf.unsafe_store(1, Int32(1 if converged else 0))
-    _ = a^
-    _ = b^
-    _ = s^
-
-
 
 def op_pr_iterate_sparse(
     a: Int, x: Int, p: Int, dw: Int, info: Int,

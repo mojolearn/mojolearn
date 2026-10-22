@@ -1223,25 +1223,6 @@ def pcs_sketch_kernel(x: FP, hidx: IP, hbit: IP, sk: FP, n_: Int64, d_in_: Int64
         pcs_sketch_item(t, x, hidx, hbit, sk, n, d_in, nf, nc, degree, gamma, coef0)
 
 
-def op_pcs_sketch(x: Int, hidx: Int, hbit: Int, sk: Int, n: Int, d_in: Int, nf: Int, nc: Int, degree: Int, gamma: Float32, coef0: Float32) raises:
-    var ctx = xn_ctx()
-    var d_x = _buf(ctx, x, n * d_in, True)
-    var d_hidx = _buf_i(ctx, hidx, degree * nf, True)
-    var d_hbit = _buf_i(ctx, hbit, degree * nf, True)
-    var d_sk = _buf(ctx, sk, n * degree * nc, False)
-    ctx.enqueue_function[pcs_sketch_kernel](
-        d_x.unsafe_ptr(), d_hidx.unsafe_ptr(), d_hbit.unsafe_ptr(), d_sk.unsafe_ptr(), Int64(n), Int64(d_in), Int64(nf), Int64(nc), Int64(degree), gamma, coef0,
-        grid_dim=_grid(n * degree), block_dim=(BLOCK if n * degree > 1 else 1),
-    )
-    _down(ctx, d_sk, sk, n * degree * nc)
-    ctx.synchronize()
-    _ = d_x^
-    _ = d_hidx^
-    _ = d_hbit^
-    _ = d_sk^
-    _ = ctx^
-
-
 def pcs_conv_kernel(acc: FP, sk: FP, res: FP, n_: Int64, nc_: Int64, degree_: Int64, p_: Int64):
     var n = Int(n_)
     var nc = Int(nc_)
@@ -1252,23 +1233,6 @@ def pcs_conv_kernel(acc: FP, sk: FP, res: FP, n_: Int64, nc_: Int64, degree_: In
         pcs_conv_item(t, acc, sk, res, n, nc, degree, p)
 
 
-def op_pcs_conv(acc: Int, sk: Int, res: Int, n: Int, nc: Int, degree: Int, p: Int) raises:
-    var ctx = xn_ctx()
-    var d_acc = _buf(ctx, acc, n * nc, True)
-    var d_sk = _buf(ctx, sk, n * degree * nc, True)
-    var d_res = _buf(ctx, res, n * nc, False)
-    ctx.enqueue_function[pcs_conv_kernel](
-        d_acc.unsafe_ptr(), d_sk.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(nc), Int64(degree), Int64(p),
-        grid_dim=_grid(n * nc), block_dim=(BLOCK if n * nc > 1 else 1),
-    )
-    _down(ctx, d_res, res, n * nc)
-    ctx.synchronize()
-    _ = d_acc^
-    _ = d_sk^
-    _ = d_res^
-    _ = ctx^
-
-
 def pcs_copy0_kernel(sk: FP, res: FP, n_: Int64, nc_: Int64, degree_: Int64):
     var n = Int(n_)
     var nc = Int(nc_)
@@ -1276,21 +1240,6 @@ def pcs_copy0_kernel(sk: FP, res: FP, n_: Int64, nc_: Int64, degree_: Int64):
     var t = _tid()
     if t < n * nc:
         pcs_copy0_item(t, sk, res, n, nc, degree)
-
-
-def op_pcs_copy0(sk: Int, res: Int, n: Int, nc: Int, degree: Int) raises:
-    var ctx = xn_ctx()
-    var d_sk = _buf(ctx, sk, n * degree * nc, True)
-    var d_res = _buf(ctx, res, n * nc, False)
-    ctx.enqueue_function[pcs_copy0_kernel](
-        d_sk.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(nc), Int64(degree),
-        grid_dim=_grid(n * nc), block_dim=(BLOCK if n * nc > 1 else 1),
-    )
-    _down(ctx, d_res, res, n * nc)
-    ctx.synchronize()
-    _ = d_sk^
-    _ = d_res^
-    _ = ctx^
 
 
 def knn_impute_cells_kernel(cells: IP, x: FP, fx: FP, best_d: FP, best_i: IP, res: FP, n_: Int64, m_: Int64, d_: Int64, k_: Int64, weights_: Int64, nc_: Int64):
@@ -1988,21 +1937,6 @@ def p2m_negate_kernel(x: FP, res: FP, count_: Int64):
     var t = _tid()
     if t < count:
         p2m_negate_item(t, x, res, count)
-
-
-def op_p2m_negate(x: Int, res: Int, count: Int) raises:
-    var ctx = xn_ctx()
-    var d_x = _buf(ctx, x, count, True)
-    var d_res = _buf(ctx, res, count, False)
-    ctx.enqueue_function[p2m_negate_kernel](
-        d_x.unsafe_ptr(), d_res.unsafe_ptr(), Int64(count),
-        grid_dim=_grid(count), block_dim=(BLOCK if count > 1 else 1),
-    )
-    _down(ctx, d_res, res, count)
-    ctx.synchronize()
-    _ = d_x^
-    _ = d_res^
-    _ = ctx^
 
 
 def p2m_transpose_kernel(src: FP, res: FP, r_: Int64, c_: Int64):
