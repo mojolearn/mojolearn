@@ -12,6 +12,9 @@ def connect(scaler_class):
     context = _state_context()
     context["native_module_type"] = ModuleType
     context["output_context"] = _numpy_free_context()
+    # sklearn tags: the shared sparse-input class names (_sk_validate.input_tag_overrides)
+    from ._sk_validate import _ACCEPTS_SPARSE
+    context["sklearn_accepts_sparse"] = _ACCEPTS_SPARSE
     connected = {}
     for mode in ("identical", "fast"):  # glue: fixed numeric-mode ABI connection
         try:

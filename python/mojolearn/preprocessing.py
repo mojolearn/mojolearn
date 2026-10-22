@@ -301,15 +301,6 @@ class _ScalerProtocol(PublicOutputsMixin):
     def __sklearn_is_fitted__(self):
         return hasattr(self, 'scale_') and hasattr(self, 'numeric_mode_')
 
-    def __sklearn_tags__(self):
-        """scikit-learn's tag protocol, read only by scikit-learn: the shared
-        `_mode.ParamsMixin` answer (no estimator type, no required target),
-        with float32-preserving transformer tags from the same tag module."""
-        import sys
-        from ._mode import ParamsMixin
-        tags = ParamsMixin.__sklearn_tags__(self)
-        tags.transformer_tags = sys.modules[type(tags).__module__].TransformerTags(preserves_dtype=['float32'])
-        return tags
 
 
 # Maintainer notes: partial_fit's first batch reproduces fit's bits; statistics
@@ -386,6 +377,9 @@ class MinMaxScaler(_ScalerProtocol):
 
     def set_params(self, **params):
         return _MINMAX_CALL(self, "set_params", (params,), _MINMAX_CONTEXT)
+
+    def __sklearn_tags__(self):
+        return _MINMAX_CALL(self, "tags", (), _MINMAX_CONTEXT)
 
     def __sklearn_is_fitted__(self):
         return _MINMAX_CALL(self, "is_fitted", (), _MINMAX_CONTEXT)
@@ -610,6 +604,9 @@ class StandardScaler(_ScalerProtocol):
 
     def set_params(self, **params):
         return _STANDARD_CALL(self, "set_params", (params,), _STANDARD_CONTEXT)
+
+    def __sklearn_tags__(self):
+        return _STANDARD_CALL(self, "tags", (), _STANDARD_CONTEXT)
 
     def __sklearn_is_fitted__(self):
         return _STANDARD_CALL(self, "is_fitted", (), _STANDARD_CONTEXT)
