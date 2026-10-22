@@ -180,6 +180,37 @@ def test_sparse_subclasses_are_refused_without_input_hooks(tmp_path, format):
     assert touched == []
 
 
+@pytest.mark.parametrize("format", ["csr", "dok", "lil"])
+def test_sparse_custom_metaclasses_are_refused_without_metadata_hooks(tmp_path, format):
+    model = _model(tmp_path, "Nystroem")
+    original = _sparse(format)
+    touched = []
+    class Meta(type(type(original))):
+        def __getattribute__(cls, name):
+            touched.append(name)
+            return super().__getattribute__(name)
+    class Custom(type(original), metaclass=Meta):
+        pass
+    x = Custom(original)
+    touched.clear()  # class construction is test preparation
+    _refused(audit_native_call(model.transform, x), TypeError)
+    assert touched == []
+
+
+@pytest.mark.parametrize("format", ["csr", "lil"])
+def test_exact_sparse_classes_with_python_finalizers_are_refused(tmp_path, format, monkeypatch):
+    model = _model(tmp_path, "Nystroem")
+    x = _sparse(format)
+    touched = []
+    def finalizer(self):
+        touched.append("del")
+    with monkeypatch.context() as patch:
+        patch.setattr(type(x), "__del__", finalizer, raising=False)
+        audit = audit_native_call(model.transform, x)
+    _refused(audit, TypeError)
+    assert touched == []
+
+
 @pytest.mark.parametrize("format", ["dok", "lil"])
 def test_sparse_object_values_are_admitted_before_conversion_hooks(tmp_path, format):
     model = _model(tmp_path, "Nystroem")

@@ -4,8 +4,8 @@
 from std.memory import bitcast
 from std.math import isfinite
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem
-from bindings.classical_pandas import _pd_class, _pd_fields, _pd_type_fields
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
+from bindings.classical_pandas import _pd_type_fields
 from bindings.classical_arrays import classical_address
 from bindings.sequential_admission import _one_of
 from bindings.host_archive_native import host_archive_typed
@@ -16,14 +16,54 @@ from core.scaler_fit_impl import scaler_cast
 from core.host_sparse_impl import host_sparse_place, host_sparse_compressed, host_sparse_coo, host_sparse_dia, host_sparse_uint64_bound
 
 
+def _sparse_class(module_name: String, name: String) raises -> PythonObject:
+    var b = Python.import_module("builtins")
+    var sys = Python.import_module("sys")
+    var module = py_get(sys.modules, module_name)
+    if module is None or py_type(module) is not py_type(sys):
+        return PythonObject(None)
+    var cls = py_get(py_fields(module), name)
+    if py_type(cls) is b.type:
+        return cls
+    # SciPy's ordinary sparse classes use ABCMeta, unlike pandas' classes.
+    # Match its exact loaded identity; never call its __instancecheck__,
+    # __subclasscheck__, attribute hooks or class construction methods.
+    var abc_module = py_get(sys.modules, "abc")
+    if abc_module is not None and py_type(abc_module) is py_type(sys):
+        var abc_meta = py_get(py_fields(abc_module), "ABCMeta")
+        if py_type(abc_meta) is b.type and py_type(cls) is abc_meta:
+            return cls
+    return PythonObject(None)
+
+
 def host_sparse_format(value: PythonObject) raises -> String:
     var cls = py_type(value)
     var formats = Python.tuple("csr", "csc", "coo", "bsr", "dia", "dok", "lil")
     for i in range(len(formats)):  # driver-loop: seven supported native sparse storage schemas
         var name = String(formats[i])
-        if cls is _pd_class("scipy.sparse._" + name, name + "_matrix") or cls is _pd_class("scipy.sparse._" + name, name + "_array"):
+        if cls is _sparse_class("scipy.sparse._" + name, name + "_matrix") or cls is _sparse_class("scipy.sparse._" + name, name + "_array"):
             return name
     return ""
+
+
+def _sparse_fields(value: PythonObject) raises -> PythonObject:
+    # The caller has matched an exact supported SciPy class. Explicit native
+    # type descriptors read its ABCMeta-owned metadata without dispatching any
+    # metaclass or instance attribute hook; only a native dictionary is used.
+    var b = Python.import_module("builtins")
+    var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(value))
+    for i in range(len(mro)):  # driver-loop: admitted sparse class dictionary descriptors
+        var descriptor = py_get(_pd_type_fields(mro[i]), "__dict__")
+        if descriptor is not None and py_type(descriptor) is py_type(b.memoryview.obj):
+            var fields = py_call(descriptor.__get__, value)
+            if py_type(fields) is not b.dict:
+                raise Error("TypeError: sparse storage requires its native instance dictionary")
+            var keys = py_call(b.list, fields.keys())
+            for j in range(len(keys)):  # driver-loop: stored sparse field-name admission before lookup
+                if py_type(keys[j]) is not b.str:
+                    raise Error("TypeError: sparse stored field names must be exact native strings")
+            return fields
+    raise Error("TypeError: sparse storage has no native dictionary descriptor")
 
 
 def _sparse_array(value: PythonObject, rank: Int, context: PythonObject) raises -> PythonObject:
@@ -122,12 +162,14 @@ def _sparse_coordinate(value: PythonObject, limit: Int, context: PythonObject) r
 
 
 def host_sparse_dense(source: PythonObject, format: String, context: PythonObject) raises -> PythonObject:
+    if format.byte_length() == 0 or host_sparse_format(source) != format:
+        raise Error("TypeError: sparse storage requires an exact supported SciPy container")
     var b = Python.import_module("builtins")
     var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(source))
     for i in range(len(mro)):  # driver-loop: refuse sparse finalizers before acquiring storage owners
         if py_get(_pd_type_fields(mro[i]), "__del__") is not None:
             raise Error("TypeError: sparse storage cannot use Python finalizers")
-    var fields = _pd_fields(source)
+    var fields = _sparse_fields(source)
     var shape = fields["_shape"]
     if py_type(shape) is not b.tuple or len(shape) != 2 or py_type(shape[0]) is not b.int or py_type(shape[1]) is not b.int:
         raise Error("sparse input must have a native two-dimensional shape")
