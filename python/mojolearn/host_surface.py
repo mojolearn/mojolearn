@@ -1617,7 +1617,7 @@ FAMILIES = (
             # optimizer's resident finalization, the vocabulary fingerprint
             # that binds resumable text state to its tokenizer, and the
             # generation coordinator's setup
-            "optimizer_finalize", "vocab_fingerprint", "generation_initialize",
+            "optimizer_finalize", "optimizer_native", "vocab_fingerprint", "generation_initialize",
         ),
         gate="pixi run check-tokenizer and python/mojolearn/tests/test_tokenizer_surface.py",
         wheel_note=(

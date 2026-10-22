@@ -16,12 +16,10 @@ What the door does is argument conversion only:
     C-contiguous by `PyBuffer_ToContiguous` into memory this door owns;
   * dtype, emptiness, layout, count and shape are refused with the
     messages the Python glue raised;
-  * the built-in schedule's words come from the schedule's `_lr_spec()`
-    accessor; a caller's OWN schedule object is the one Python call the
-    step makes (`lr_schedule.lr_at(t + 1)`), and its exception reaches the
-    caller unchanged;
+  * built-in schedules supply admitted native configuration words; Python
+    learning-rate callbacks are refused before lookup or invocation;
   * the optimizer state's host mirrors (`exp_avg`, `exp_avg_sq`) are
-    `mojolearn.Array`s made by the Array class itself.
+    `mojolearn.Array`s assembled from native storage and slots.
 
 The kernels are training/optimizer_public.mojo (the GPU binding),
 training/host/optimizer_public_host.mojo (a CPU-only install) and
@@ -30,11 +28,13 @@ names the entries a binding provides. Ownership (docs/MODULAR_ASKS.md):
 every Python call and attribute or item assignment goes through
 bindings/py_balanced.mojo, so no caller object is retained."""
 from std.ffi import _Global
+from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 
-from bindings.optimizer_public_words import optimizer_python_error, stash_python_error
-from bindings.py_balanced import py_call, py_setattr, py_setitem, py_type
+from bindings.optimizer_public_words import optimizer_python_error
+from bindings.py_balanced import py_call, py_setattr, py_setitem, py_type, py_get, py_fields
+from bindings.optimizer_admission import opt_guards, opt_owner, opt_value, opt_scalar, opt_schedule
 from sequence.lr_table import LrSpec
 from training.optimizer_public_common import (
     GRADS_DEVICE, GRADS_HOST, GRADS_RESIDENT, I32P, OptHyper, PublicStep, PublicStepOut, eager_moments,
@@ -97,6 +97,7 @@ trait OptKernels:
 
 
 struct OptDoor(Defaultable, Movable):
+    var context: PythonObject
     var ready: Bool
     var bi: PythonObject
     var array_cls: PythonObject
@@ -106,6 +107,7 @@ struct OptDoor(Defaultable, Movable):
     var refused: PythonObject
 
     def __init__(out self):
+        self.context = PythonObject(None)
         self.ready = False
         self.bi = PythonObject(None)
         self.array_cls = PythonObject(None)
@@ -123,10 +125,13 @@ def door_ready() raises:
     `array` type and the refusal tables once per process."""
     var d = OPT_DOOR.get_or_create_ptr()
     if d[].ready:
+        opt_guards(d[].context)
         return
     d[].bi = Python.import_module("builtins")
     d[].array_cls = Python.import_module("mojolearn._array").Array
     var training = Python.import_module("mojolearn._training_impl")
+    d[].context = py_fields(training)["_OPT_CONTEXT"]
+    opt_guards(d[].context)
     d[].dev_cls = training.TrainDeviceArray
     d[].not_covered = training._NOT_COVERED
     d[].refused = training._REFUSED_KWARGS
@@ -139,20 +144,17 @@ def _bi() raises -> PythonObject:
 
 
 def getattr_or(obj: PythonObject, name: String, default: PythonObject) raises -> PythonObject:
-    return py_call(_bi().getattr, obj, PythonObject(name), default)
+    return py_get(py_fields(obj), PythonObject(name), default)
 
 
 def as_float(value: PythonObject) raises -> Float64:
     """`float(value)`."""
+    opt_scalar(value, OPT_DOOR.get_or_create_ptr()[].context)
     return Float64(py=py_call(_bi().float, value))
 
 
-def method(value: PythonObject, name: String) raises -> PythonObject:
-    """`getattr(value, name)` (a name PythonObject itself also defines)."""
-    return py_call(_bi().getattr, value, PythonObject(name))
-
-
 def truth(value: PythonObject) raises -> Bool:
+    opt_scalar(value, OPT_DOOR.get_or_create_ptr()[].context)
     return Bool(py=py_call(_bi().bool, value))
 
 
@@ -198,10 +200,45 @@ def py_ints(values: List[Int]) raises -> PythonObject:
 
 
 def new_array(dims: List[Int], dtype: String) raises -> PythonObject:
-    """`mojolearn.Array(shape, dtype)`: a zero-filled C-order array made by
-    the Array class itself (the Python glue's `_buffer.zeros`)."""
+    """Assemble an Array from native storage and slots; never call its Python constructor."""
     var d = OPT_DOOR.get_or_create_ptr()
-    return py_call(d[].array_cls, py_ints(dims), PythonObject(dtype))
+    var b = d[].bi
+    var size = 1
+    var strides = List[Int](length=len(dims), fill=0)
+    var step = 4
+    for i in range(len(dims) - 1, -1, -1):  # driver-loop: one native shape/stride word per dimension
+        strides[i] = step
+        step *= dims[i]
+        size *= dims[i]
+    var store = py_call(d[].arrays, PythonObject("f" if dtype == "<f4" else "i"), py_call(b.bytes, size * 4))
+    var result = py_call(b.object.__new__, d[].array_cls)
+    py_setattr(result, "_store", store)
+    py_setattr(result, "_base", PythonObject(None))
+    py_setattr(result, "_pin", PythonObject(None))
+    py_setattr(result, "_mv", py_call(b.memoryview, store))
+    py_setattr(result, "_addr", py_call(store.buffer_info)[0])
+    py_setattr(result, "_readonly", PythonObject(False))
+    py_setattr(result, "shape", py_ints(dims))
+    py_setattr(result, "dtype", PythonObject(dtype))
+    py_setattr(result, "ndim", PythonObject(len(dims)))
+    py_setattr(result, "size", PythonObject(size))
+    py_setattr(result, "nbytes", PythonObject(size * 4))
+    py_setattr(result, "itemsize", PythonObject(4))
+    py_setattr(result, "strides", py_ints(strides))
+    py_setattr(result, "order", PythonObject("C"))
+    return result
+
+
+def set_field(opt: PythonObject, name: String, value: PythonObject) raises:
+    py_setitem(py_fields(opt), PythonObject(name), value)
+
+
+def owner_kind(opt: PythonObject) raises -> Int:
+    var classes = OPT_DOOR.get_or_create_ptr()[].context["owners"]
+    for i in range(len(classes)):  # driver-loop: three native optimizer kinds
+        if py_type(opt) is classes[i]:
+            return i
+    raise Error("TypeError: optimizer requires an exact native optimizer owner")
 
 
 # ---------------------------------------------------------------------------
@@ -354,33 +391,9 @@ def _array_code(t: String) -> String:
 
 
 def dtype_name(obj: PythonObject, fmt: String, itemsize: Int) raises -> String:
-    """`_bufcheck.dtype_name`: NumPy's own `dtype.name` when the object
-    carries one, the Array typestr's name, else the struct code's."""
-    var d = OPT_DOOR.get_or_create_ptr()
-    var dt = getattr_or(obj, "dtype", PythonObject(None))
-    var name = getattr_or(dt, "name", PythonObject(None))
-    if is_instance(name, d[].bi.str):
-        return String(py=name)
-    if is_instance(dt, d[].bi.str):
-        var known = _typestr_name(String(py=dt))
-        if known.byte_length() > 0:
-            return known
+    # Buffer format is native metadata; querying arbitrary dtype properties is
+    # not needed and could call a Python descriptor.
     return _format_name(base_format(fmt), itemsize, fmt)
-
-
-def _is_device_array(obj: PythonObject) raises -> Bool:
-    """`_buffer._device_array_kind(obj) is not None`."""
-    var bi = _bi()
-    if Bool(py=py_call(bi.hasattr, obj, PythonObject("__cuda_array_interface__"))):
-        return True
-    if Bool(py=py_call(bi.hasattr, obj, PythonObject("__dlpack_device__"))):
-        var device_type: Int
-        try:
-            device_type = Int(py=py_call(bi.tuple, py_call(obj.__dlpack_device__))[0])
-        except:
-            return False
-        return device_type != 1 and device_type != 3 and device_type != 10
-    return False
 
 
 def _get_buffer(obj: PythonObject, mut view: List[Int]) raises -> Bool:
@@ -407,6 +420,7 @@ def tensor_view(obj: PythonObject, mut v: TensorView) raises -> Bool:
     returns, as `probe` released it."""
     var d = OPT_DOOR.get_or_create_ptr()
     v = TensorView()
+    opt_value(obj, d[].context)
     if is_instance(obj, d[].array_cls):
         # an Array is read off its own storage fields (`_buffer.Buf._from_array`)
         v.is_array = True
@@ -423,10 +437,10 @@ def tensor_view(obj: PythonObject, mut v: TensorView) raises -> Bool:
         for i in range(len(strides)):  # driver-loop: over stride words
             v.strides.append(Int(py=strides[i]))
         v.has_strides = True
-        v.c_contig = truth(obj.flags["C_CONTIGUOUS"])
+        v.c_contig = _contiguous(v.shape, v.strides, True, v.itemsize)
         v.dtype = dtype_name(obj, v.fmt, v.itemsize)
         return True
-    if _is_device_array(obj):
+    if py_type(obj) is d[].dev_cls:
         return False
     var view = List[Int](length=10, fill=0)
     if not _get_buffer(obj, view):
@@ -639,6 +653,7 @@ def refuse_kwargs(kwargs: PythonObject, where: String) raises:
     """`_refuse_unknown`: every keyword this surface does not have, refused
     by name."""
     var d = OPT_DOOR.get_or_create_ptr()
+    opt_value(kwargs, d[].context)
     var keys = py_call(d[].bi.list, kwargs)
     for i in range(len(keys)):  # driver-loop: over keyword argument names
         var k = String(py=keys[i])
@@ -677,70 +692,61 @@ def _resident_word(value: PythonObject) raises -> Int:
 
 def _state_into(opt: PythonObject, mut req: PublicStep) raises:
     """`_state_words`: handle, resident, pristine and the mirrors' addresses."""
-    var res = opt._res
+    var res = py_fields(opt)["_res"]
     req.handle = -1 if res is None else Int(py=res)
-    req.resident_wanted = _resident_word(opt._resident_wanted)
-    req.pristine = truth(opt._pristine)
-    var m = opt._m
-    var v = opt._v
+    req.resident_wanted = _resident_word(py_fields(opt)["_resident_wanted"])
+    req.pristine = truth(py_fields(opt)["_pristine"])
+    var m = py_fields(opt)["_m"]
+    var v = py_fields(opt)["_v"]
     req.m_addr = 0 if m is None else write_addr(m, "exp_avg")
     req.v_addr = 0 if v is None else write_addr(v, "exp_avg_sq")
 
 
 def host_moments(opt: PythonObject) raises:
     """`_host_moments`: the host mirrors, allocated (zero filled) on first need."""
-    var n = Int(py=opt.n_total)
-    if opt._m is None:
-        py_setattr(opt, "_m", new_array([n], "<f4"))
-    if opt._v is None:
-        py_setattr(opt, "_v", new_array([n], "<f4"))
+    var n = Int(py=py_fields(opt)["n_total"])
+    if py_fields(opt)["_m"] is None:
+        set_field(opt, "_m", new_array([n], "<f4"))
+    if py_fields(opt)["_v"] is None:
+        set_field(opt, "_v", new_array([n], "<f4"))
 
 
 def keep_slot(opt: PythonObject, handle: Int, module: PythonObject, on_host: Bool) raises:
     """`_keep_slot`: record a slot the native call opened, with the extension
     module that owns it (its finalizer closes the slot through it)."""
-    if opt._res is None and handle >= 0:
-        py_setattr(opt, "_res", PythonObject(handle))
-        py_setattr(opt, "_res_binding", module)
-        py_setattr(opt, "_res_host", PythonObject(on_host))
+    if py_fields(opt)["_res"] is None and handle >= 0:
+        set_field(opt, "_res", PythonObject(handle))
+        set_field(opt, "_res_binding", module)
+        set_field(opt, "_res_host", PythonObject(on_host))
 
 
 def _hyper(opt: PythonObject, maximize: Bool, max_norm: Float64) raises -> OptHyper:
     """`_config()` of SGD (kind 0) and Adam / AdamW, as the step's floats."""
-    var kind = Int(py=opt._KIND)
+    var kind = owner_kind(opt)
     if kind == 0:
         return OptHyper(
-            kind, 1 if truth(opt.nesterov) else 0, maximize, as_float(opt.lr), 0.9, 0.999, 1e-8,
-            as_float(opt.weight_decay), as_float(opt.momentum), as_float(opt.dampening), max_norm,
+            kind, 1 if truth(py_fields(opt)["nesterov"]) else 0, maximize, as_float(py_fields(opt)["lr"]), 0.9, 0.999, 1e-8,
+            as_float(py_fields(opt)["weight_decay"]), as_float(py_fields(opt)["momentum"]), as_float(py_fields(opt)["dampening"]), max_norm,
         )
-    var betas = opt.betas
+    var betas = py_fields(opt)["betas"]
     return OptHyper(
-        kind, 0, maximize, as_float(opt.lr), as_float(betas[0]), as_float(betas[1]), as_float(opt.eps),
-        as_float(opt.weight_decay), 0.0, 0.0, max_norm,
+        kind, 0, maximize, as_float(py_fields(opt)["lr"]), as_float(betas[0]), as_float(betas[1]), as_float(py_fields(opt)["eps"]),
+        as_float(py_fields(opt)["weight_decay"]), 0.0, 0.0, max_norm,
     )
 
 
-def _user_lr(schedule: PythonObject, t: Int) raises -> PythonObject:
-    """`float(lr_schedule.lr_at(t))` of a caller's own schedule object: the
-    one Python call of a step. Its exception reaches the caller unchanged."""
-    ref cpy = Python().cpython()
-    var method = py_call(_bi().getattr, schedule, PythonObject("lr_at"))
-    var envelope = cpy.PyTuple_New(1)
-    if not envelope:
-        raise cpy.unsafe_get_error()
-    var step = PythonObject(t)
-    _ = cpy.PyTuple_SetItem(envelope, 0, cpy.Py_NewRef(step._obj_ptr))
-    var result = cpy.PyObject_Call(method._obj_ptr, envelope, PyObjectPtr())
-    cpy.Py_DecRef(envelope)
-    if not result:
-        var pending = stash_python_error()
-        raise pending^
-    var value = PythonObject(from_owned=result)
-    var as_float = cpy.lib.get_function[PyObjectPtr]("PyNumber_Float")(value._obj_ptr)
-    if not as_float:
-        var pending = stash_python_error()
-        raise pending^
-    return PythonObject(from_owned=as_float)
+def schedule_spec(schedule: PythonObject) raises -> LrSpec:
+    var context = OPT_DOOR.get_or_create_ptr()[].context
+    opt_schedule(schedule, context)
+    var fields = py_fields(schedule)
+    var kind = 0
+    var classes = context["schedules"]
+    for i in range(len(classes)):  # driver-loop: three built-in schedule configurations
+        if py_type(schedule) is classes[i]:
+            kind = i
+    var total = fields["total_steps"]
+    return LrSpec(kind, Int(py=fields["warmup_steps"]), -1 if total is None else Int(py=total), 0,
+                  Float64(py=fields["peak_lr"]), Float64(py=fields["min_lr"]), 0.0, 0.0)
 
 
 # ---------------------------------------------------------------------------
@@ -753,9 +759,10 @@ def door_init(opt: PythonObject, params: PythonObject) raises -> PythonObject:
     MOJOLEARN_OPT_LAZY_MOMENTS=0 and SGD's `buf_initialized`. Returns
     n_total."""
     door_ready()
-    var where = String(py=opt._where)
+    opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
+    var where = String(py=py_fields(opt)["_where"])
     var seq = as_seq(params, "params", where)
-    py_setattr(opt, "params", seq)
+    set_field(opt, "params", seq)
     var views = check_tensors(seq, "params", where, True)
     var j = len(seq)
     var nbytes = List[Int]()
@@ -763,16 +770,16 @@ def door_init(opt: PythonObject, params: PythonObject) raises -> PythonObject:
         nbytes.append(views[k].nbytes)
     var offsets = new_array([j + 1], "<i4")
     var n_total = registry_offsets(nbytes, I32P(unsafe_from_address=Int(py=offsets._addr)))
-    py_setattr(opt, "offsets", offsets)
-    py_setattr(opt, "n_total", PythonObject(n_total))
-    py_setattr(opt, "_m", PythonObject(None))
-    py_setattr(opt, "_v", PythonObject(None))
-    py_setattr(opt, "_pristine", PythonObject(True))
+    set_field(opt, "offsets", offsets)
+    set_field(opt, "n_total", PythonObject(n_total))
+    set_field(opt, "_m", PythonObject(None))
+    set_field(opt, "_v", PythonObject(None))
+    set_field(opt, "_pristine", PythonObject(True))
     if eager_moments():
         # MOJOLEARN_OPT_LAZY_MOMENTS=0: the eager pair (the A/B)
         host_moments(opt)
-        py_setattr(opt, "_pristine", PythonObject(False))
-    py_setattr(opt, "buf_initialized", new_array([j], "<i4"))
+        set_field(opt, "_pristine", PythonObject(False))
+    set_field(opt, "buf_initialized", new_array([j], "<i4"))
     return PythonObject(n_total)
 
 
@@ -785,9 +792,10 @@ def door_step[K: OptKernels](
     Python glue, the ONE kernel call, the assignments of its result.
     Returns the pre-clip total norm, or None."""
     door_ready()
+    opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
     var d = OPT_DOOR.get_or_create_ptr()
     var bi = d[].bi
-    var owhere = String(py=opt._where)
+    var owhere = String(py=py_fields(opt)["_where"])
     var where = String("step") if op == OP_STEP else (
         String("step_device") if op == OP_STEP_DEVICE else String("step_accumulated"))
     var p_dev = truth(getattr_or(opt, "_p_dev", PythonObject(False)))
@@ -795,9 +803,11 @@ def door_step[K: OptKernels](
     var t_tokens = -1
     if op == OP_STEP_DEVICE and not p_dev:
         raise Error("RuntimeError: mojolearn." + owhere + ".step_device: call params_to_device() first")
+    opt_value(grads, d[].context)
+    opt_scalar(tokens, d[].context)
     if op == OP_STEP_ACCUMULATED:
         parts = py_call(bi.list, grads)
-        var want = Int(py=opt.accumulation_steps)
+        var want = Int(py=py_fields(opt)["accumulation_steps"])
         if len(parts) != want:
             raise Error(
                 "ValueError: mojolearn." + owhere + ".step_accumulated: " + String(len(parts))
@@ -816,9 +826,9 @@ def door_step[K: OptKernels](
                 "ValueError: mojolearn." + owhere + "." + where + ": max_norm must be > 0 or None, got "
                 + py_repr(max_norm) + "; None is how 'no clipping' is spelled" + _SRC
             )
-    var params = opt.params
+    var params = py_fields(opt)["params"]
     var j = len(params)
-    var n_total = Int(py=opt.n_total)
+    var n_total = Int(py=py_fields(opt)["n_total"])
     var req = PublicStep()
     var keep = List[List[Float32]]()
     req.g_mode = GRADS_HOST
@@ -858,8 +868,8 @@ def door_step[K: OptKernels](
                             + "] must be a device array")
         req.g_mode = GRADS_DEVICE
         for k in range(len(gs)):  # driver-loop: over parameter buffers: one device handle each
-            req.g_addr.append(Int(py=gs[k].h))
-            req.g_bytes.append(Int(py=gs[k].size))
+            req.g_addr.append(Int(py=py_fields(gs[k])["h"]))
+            req.g_bytes.append(Int(py=py_fields(gs[k])["size"]))
     elif p_dev and grads is None:
         req.g_mode = GRADS_RESIDENT
     else:
@@ -878,33 +888,22 @@ def door_step[K: OptKernels](
         # can reshape or resize their own array between steps.
         var pviews = check_tensors(params, "params", owhere, True)
         _addrs_of(pviews, req.p_addr, req.p_bytes)
-    var schedule = opt.lr_schedule
+    var schedule = py_fields(opt)["lr_schedule"]
     req.has_sched = False
     if not (schedule is None):
-        var spec = getattr_or(schedule, "_lr_spec", PythonObject(None))
-        if spec is None:
-            # a caller's own schedule object: its value for this step
-            py_setattr(opt, "lr", _user_lr(schedule, Int(py=opt.t) + 1))
-        else:
-            var words = py_call(spec)
-            var ip = words[0]
-            var fp = words[1]
-            req.has_sched = True
-            req.sched = LrSpec(
-                Int(py=ip[0]), Int(py=ip[1]), Int(py=ip[2]), Int(py=ip[3]),
-                Float64(py=fp[0]), Float64(py=fp[1]), Float64(py=fp[2]), Float64(py=fp[3]),
-            )
-    var resident = opt._resident_wanted
+        req.has_sched = True
+        req.sched = schedule_spec(schedule)
+    var resident = py_fields(opt)["_resident_wanted"]
     if is_instance(resident, bi.bool) and not truth(resident):
         # `resident=False`: the state lives in these host arrays (no slot)
         host_moments(opt)
     var maximize = truth(getattr_or(opt, "maximize", PythonObject(False)))
     req.j = j
-    req.t = Int(py=opt.t)
+    req.t = Int(py=py_fields(opt)["t"])
     req.hyper = _hyper(opt, maximize, mn)
     req.n_total = n_total
-    req.offsets = read_addr(opt.offsets, "offsets")
-    req.init = write_addr(opt.buf_initialized, "buf_initialized")
+    req.offsets = read_addr(py_fields(opt)["offsets"], "offsets")
+    req.init = write_addr(py_fields(opt)["buf_initialized"], "buf_initialized")
     req.tokens = t_tokens
     _state_into(opt, req)
     req.p_dev = p_dev
@@ -913,24 +912,24 @@ def door_step[K: OptKernels](
     var out = K.step(req)
     _ = keep^
     # the assignments of the native result
-    py_setattr(opt, "t", PythonObject(out.t))
+    set_field(opt, "t", PythonObject(out.t))
     keep_slot(opt, out.handle, module, not out.on_device)
-    py_setattr(opt, "_host_fresh", PythonObject(opt._res is None))
+    set_field(opt, "_host_fresh", PythonObject(py_fields(opt)["_res"] is None))
     var total = PythonObject(None)
     if out.clip_ran:
         total = PythonObject(Float64(out.total_norm))
-        py_setattr(opt, "total_norm_", total)
-        py_setattr(opt, "clip_coef_", PythonObject(Float64(out.coef)))
+        set_field(opt, "total_norm_", total)
+        set_field(opt, "clip_coef_", PythonObject(Float64(out.coef)))
     else:
-        py_setattr(opt, "total_norm_", PythonObject(None))
-        py_setattr(opt, "clip_coef_", PythonObject(None))
+        set_field(opt, "total_norm_", PythonObject(None))
+        set_field(opt, "clip_coef_", PythonObject(None))
     var lr = PythonObject(Float64(out.lr))
-    py_setattr(opt, "lr_", lr)
+    set_field(opt, "lr_", lr)
     if req.has_sched:
-        py_setattr(opt, "lr", lr)
+        set_field(opt, "lr", lr)
     if out.packed >= 0:
-        py_setattr(opt, "packed_", PythonObject(out.packed != 0))
-    py_setattr(opt, "_g_dev", PythonObject(out.g_dev))
+        set_field(opt, "packed_", PythonObject(out.packed != 0))
+    set_field(opt, "_g_dev", PythonObject(out.g_dev))
     return total
 
 
@@ -941,9 +940,10 @@ def door_io[K: OptKernels](
     `grads_to_device`, `grads_to_host`, `param_device` and the query.
     Returns the result word."""
     door_ready()
-    var owhere = String(py=opt._where)
-    var j = len(opt.params)
-    var n_total = Int(py=opt.n_total)
+    opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
+    var owhere = String(py=py_fields(opt)["_where"])
+    var j = len(py_fields(opt)["params"])
+    var n_total = Int(py=py_fields(opt)["n_total"])
     var req = PublicStep()
     if not (tensors is None):
         var seq = as_seq(tensors, name, owhere)
@@ -956,7 +956,7 @@ def door_io[K: OptKernels](
         _addrs_of(views, req.g_addr, req.g_bytes)
     req.j = j
     req.n_total = n_total
-    req.offsets = read_addr(opt.offsets, "offsets")
+    req.offsets = read_addr(py_fields(opt)["offsets"], "offsets")
     _state_into(opt, req)
     var r = K.io(req, op_code, tensor)
     keep_slot(opt, r[0], module, False)
@@ -966,7 +966,8 @@ def door_io[K: OptKernels](
 def door_zero(opt: PythonObject, grads: PythonObject) raises -> PythonObject:
     """`zero_grad`: +0.0 into every gradient buffer."""
     door_ready()
-    var owhere = String(py=opt._where)
+    opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
+    var owhere = String(py=py_fields(opt)["_where"])
     var gs = as_seq(grads, "grads", owhere)
     var views = check_tensors(gs, "grads", owhere, True)
     var addrs = List[Int]()
@@ -976,62 +977,85 @@ def door_zero(opt: PythonObject, grads: PythonObject) raises -> PythonObject:
     return PythonObject(None)
 
 
+def resident_entry(owner: PythonObject, name: String) raises -> PythonObject:
+    var context = OPT_DOOR.get_or_create_ptr()[].context
+    if py_type(owner) is not context["module_type"]:
+        raise Error("TypeError: optimizer resident state must retain its owning native extension")
+    var entry = py_get(py_fields(owner), PythonObject(name))
+    if py_type(entry) is not py_type(_bi().len):
+        raise Error("TypeError: optimizer resident state requires a compiled native entry")
+    return entry
+
+
 def _sync_host[K: OptKernels](module: PythonObject, opt: PythonObject) raises:
     """`_download`: the slot's state into the mirrors, when they are stale,
     through the module that owns the slot."""
-    if opt._res is None or truth(opt._host_fresh):
+    if py_fields(opt)["_res"] is None or truth(py_fields(opt)["_host_fresh"]):
         return
     host_moments(opt)
-    var h = Int(py=opt._res)
-    var m = write_addr(opt._m, "exp_avg")
-    var v = write_addr(opt._v, "exp_avg_sq")
-    var n = Int(py=opt.n_total)
-    var owner = opt._res_binding
+    var h = Int(py=py_fields(opt)["_res"])
+    var m = write_addr(py_fields(opt)["_m"], "exp_avg")
+    var v = write_addr(py_fields(opt)["_v"], "exp_avg_sq")
+    var n = Int(py=py_fields(opt)["n_total"])
+    var owner = py_fields(opt)["_res_binding"]
     if owner is module:
         _ = K.download(h, m, v, n)
     else:
-        _ = py_call(owner.optimizer_resident_download, PythonObject(h), PythonObject(m), PythonObject(v), PythonObject(n))
-    py_setattr(opt, "_host_fresh", PythonObject(True))
+        _ = py_call(resident_entry(owner, "optimizer_resident_download"), PythonObject(h), PythonObject(m), PythonObject(v), PythonObject(n))
+    set_field(opt, "_host_fresh", PythonObject(True))
 
 
 def _upload[K: OptKernels](module: PythonObject, opt: PythonObject, m: Int, v: Int) raises:
     """`_upload_one`: assigned moments into the slot (0 leaves that moment)."""
-    if opt._res is None:
+    if py_fields(opt)["_res"] is None:
         return
-    var h = Int(py=opt._res)
-    var n = Int(py=opt.n_total)
-    var owner = opt._res_binding
+    var h = Int(py=py_fields(opt)["_res"])
+    var n = Int(py=py_fields(opt)["n_total"])
+    var owner = py_fields(opt)["_res_binding"]
     if owner is module:
         _ = K.upload(h, m, v, n)
     else:
-        _ = py_call(owner.optimizer_resident_upload, PythonObject(h), PythonObject(m), PythonObject(v), PythonObject(n))
+        _ = py_call(resident_entry(owner, "optimizer_resident_upload"), PythonObject(h), PythonObject(m), PythonObject(v), PythonObject(n))
+
+
+def copy_array(source: PythonObject) raises -> PythonObject:
+    var v = TensorView()
+    if not tensor_view(source, v) or not v.c_contig or v.itemsize != 4:
+        raise Error("TypeError: optimizer state copy requires a contiguous float32/int32 buffer")
+    var result = new_array(v.shape, "<f4" if base_format(v.fmt) == "f" else "<i4")
+    memcpy(dest=BP(unsafe_from_address=Int(py=result._addr)), src=BP(unsafe_from_address=v.addr), count=v.nbytes)
+    _ = source^
+    return result
 
 
 def door_state[K: OptKernels](module: PythonObject, opt: PythonObject, which: Int) raises -> PythonObject:
     """`state_dict()` (which 0) and the `exp_avg` / `exp_avg_sq` readings
     (1 / 2): the slot's state downloaded once per stale read."""
     door_ready()
+    opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
     _sync_host[K](module, opt)
-    py_setattr(opt, "_pristine", PythonObject(False))
+    set_field(opt, "_pristine", PythonObject(False))
     host_moments(opt)
     if which == STATE_EXP_AVG:
-        return opt._m
+        return py_fields(opt)["_m"]
     if which == STATE_EXP_AVG_SQ:
-        return opt._v
+        return py_fields(opt)["_v"]
     var out = Python.dict()
-    py_setitem(out, PythonObject("t"), PythonObject(Int(py=opt.t)))
-    py_setitem(out, PythonObject("exp_avg"), py_call(method(opt._m, "copy")))
-    py_setitem(out, PythonObject("exp_avg_sq"), py_call(method(opt._v, "copy")))
-    py_setitem(out, PythonObject("buf_initialized"), py_call(method(opt.buf_initialized, "copy")))
+    py_setitem(out, PythonObject("t"), PythonObject(Int(py=py_fields(opt)["t"])))
+    py_setitem(out, PythonObject("exp_avg"), copy_array(py_fields(opt)["_m"]))
+    py_setitem(out, PythonObject("exp_avg_sq"), copy_array(py_fields(opt)["_v"]))
+    py_setitem(out, PythonObject("buf_initialized"), copy_array(py_fields(opt)["buf_initialized"]))
     return out
 
 
 def door_state_set[K: OptKernels](module: PythonObject, opt: PythonObject, which: Int, value: PythonObject) raises -> PythonObject:
     """`exp_avg = value` (which 1) and `exp_avg_sq = value` (2)."""
     door_ready()
+    opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
+    opt_value(value, OPT_DOOR.get_or_create_ptr()[].context)
     var name = String("exp_avg") if which == STATE_EXP_AVG else String("exp_avg_sq")
-    py_setattr(opt, String("_m") if which == STATE_EXP_AVG else String("_v"), value)
-    py_setattr(opt, "_pristine", PythonObject(False))
+    set_field(opt, String("_m") if which == STATE_EXP_AVG else String("_v"), value)
+    set_field(opt, "_pristine", PythonObject(False))
     var a = 0 if value is None else write_addr(value, name)
     if which == STATE_EXP_AVG:
         _upload[K](module, opt, a, 0)
@@ -1048,23 +1072,28 @@ def door_load_state[K: OptKernels](
     (`_buffer.as_f32_c` / `as_i32_c`, which may copy): the optimizer keeps
     its own copies, the sizes are checked, the state is uploaded."""
     door_ready()
-    var m = ea if truth(c1) else py_call(method(ea, "copy"))
-    var v = es if truth(c2) else py_call(method(es, "copy"))
-    var n_total = Int(py=opt.n_total)
-    var owhere = String(py=opt._where)
+    opt_owner(opt, OPT_DOOR.get_or_create_ptr()[].context)
+    opt_scalar(t, OPT_DOOR.get_or_create_ptr()[].context)
+    opt_value(ea, OPT_DOOR.get_or_create_ptr()[].context)
+    opt_value(es, OPT_DOOR.get_or_create_ptr()[].context)
+    opt_value(bi, OPT_DOOR.get_or_create_ptr()[].context)
+    var m = ea if truth(c1) else copy_array(ea)
+    var v = es if truth(c2) else copy_array(es)
+    var n_total = Int(py=py_fields(opt)["n_total"])
+    var owhere = String(py=py_fields(opt)["_where"])
     if Int(py=m.size) != n_total:
         raise Error("ValueError: mojolearn." + owhere + ".load_state_dict: exp_avg holds " + String(Int(py=m.size))
                     + " floats, this optimizer's registry is " + String(n_total))
     if Int(py=v.size) != n_total:
         raise Error("ValueError: mojolearn." + owhere + ".load_state_dict: exp_avg_sq holds " + String(Int(py=v.size))
                     + " floats, this optimizer's registry is " + String(n_total))
-    py_setattr(opt, "_m", m)
-    py_setattr(opt, "_v", v)
-    py_setattr(opt, "_pristine", PythonObject(False))
+    set_field(opt, "_m", m)
+    set_field(opt, "_v", v)
+    set_field(opt, "_pristine", PythonObject(False))
     _upload[K](module, opt, write_addr(m, "exp_avg"), write_addr(v, "exp_avg_sq"))
-    py_setattr(opt, "_host_fresh", PythonObject(True))
-    py_setattr(opt, "buf_initialized", bi if truth(c3) else py_call(method(bi, "copy")))
-    py_setattr(opt, "t", t)
+    set_field(opt, "_host_fresh", PythonObject(True))
+    set_field(opt, "buf_initialized", bi if truth(c3) else copy_array(bi))
+    set_field(opt, "t", t)
     return PythonObject(None)
 
 
@@ -1118,6 +1147,8 @@ def door_accumulate[K: OptKernels](microbatch_grads: PythonObject, tokens: Pytho
     strided, combined by the clause 9.2 tree into new arrays."""
     door_ready()
     var bi = _bi()
+    opt_value(microbatch_grads, OPT_DOOR.get_or_create_ptr()[].context)
+    opt_scalar(tokens, OPT_DOOR.get_or_create_ptr()[].context)
     var parts = py_call(bi.list, microbatch_grads)
     if len(parts) == 0:
         raise Error("ValueError: mojolearn.accumulate_grads: no microbatches")
