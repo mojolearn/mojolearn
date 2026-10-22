@@ -210,6 +210,55 @@ def _restore_pending(mut saved: CachePendingError) raises:
         saved.traceback = 0
 
 
+def _pending_reference(address: Int) raises -> PythonObject:
+    if address == 0:
+        return PythonObject(None)
+    # Py_NewRef is public on every supported CPython (3.10+). It only owns a
+    # reference; no exception normalization, repr or user conversion runs.
+    ref cpy = Python().cpython()
+    var pointer = cpy.lib.get_function[PyObjectPtr]("Py_NewRef")(address)
+    return PythonObject(from_owned=pointer)
+
+
+def _pending_state(saved: CachePendingError, error: Error) raises -> PythonObject:
+    if saved.kind:
+        return Python.tuple(_pending_reference(saved.kind), _pending_reference(saved.value),
+                            _pending_reference(saved.traceback))
+    return Python.tuple(PythonObject(None), PythonObject(String(error)), PythonObject(None))
+
+
+def _cleanup_failure(mut primary: CachePendingError, mut cleanup: CachePendingError,
+                     error: Error, cleanup_error: Error, slot: PythonObject,
+                     context: PythonObject) raises -> Error:
+    # A double failure is explicit and keeps inspectable native error states.
+    # Never stringify caller exceptions merely to report failed cleanup. For
+    # CPython errors each attribute is its original (type, value, traceback);
+    # a Mojo-origin error is represented by (None, native message, None).
+    try:
+        ref cpy = Python().cpython()
+        var cls = context["cache_runtime_error"]
+        var message = PythonObject("DeviceCache publication failed and cleanup of the unpublished native slot also failed")
+        var pointer = cpy.lib.get_function[PyObjectPtr]("PyObject_CallOneArg")(cls._obj_ptr,message._obj_ptr)
+        if not pointer:
+            var failure = stash_python_error()
+            raise failure^
+        var wrapper = PythonObject(from_owned=pointer)
+        _counter_set(wrapper,"publication_error_state",_pending_state(primary,error))
+        _counter_set(wrapper,"cleanup_error_state",_pending_state(cleanup,cleanup_error))
+        _counter_set(wrapper,"unpublished_slot",slot)
+        cpy.lib.get_function[NoneType]("PyErr_SetObject")(cls._obj_ptr,wrapper._obj_ptr)
+        var failure = stash_python_error()
+        _drop_pending(primary)
+        _drop_pending(cleanup)
+        return failure^
+    except failure:
+        # The native report itself can fail to allocate. Its error remains
+        # visible and both original owned triples are still released once.
+        _drop_pending(primary)
+        _drop_pending(cleanup)
+        raise failure^
+
+
 def _publish(model: PythonObject, source: PythonObject, key: PythonObject,
              slot: PythonObject, route: PythonObject, context: PythonObject,
              mut published: Bool) raises:
@@ -259,9 +308,8 @@ def arena_cache_id_of(model: PythonObject, args: PythonObject, context: PythonOb
                 _ = _native_call(route[1],Python.tuple(slot))
             except cleanup_error:
                 var cleanup = _take_pending(cleanup_error)
-                _drop_pending(primary)
-                _drop_pending(cleanup)
-                raise Error("RuntimeError: DeviceCache publication failed: "+String(error)+"; unpublished slot "+String(slot)+" cleanup also failed: "+String(cleanup_error))
+                var failure = _cleanup_failure(primary,cleanup,error,cleanup_error,slot,context)
+                raise failure^
             _restore_pending(primary)
         raise error^
     return slot
