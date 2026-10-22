@@ -24,6 +24,9 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_TESTS = {
+    "test_optimizer_native_array_ownership.py": "Native output Array storage, retained checkpoint ownership and device downloads",
+    "test_device_rows_metadata_native.py": "DeviceRows constructor and length metadata ownership and native hook refusals",
+    "test_host_kde_fit_native.py": "Explicit CPU HostKernelDensity fit preparation, stored state, aliases and native refusals",
     "test_optimizer_native_step_errors.py": "Public optimizer step exception categories, unchanged refused state and native entry admission",
     "test_training_rms_public_native.py": "Public RMS forward/backward preparation, scalar options, consumed results and native refusals",
     "test_training_linear_public_native.py": "Public linear forward/backward input preparation, output ownership and native failure paths",
@@ -57,6 +60,7 @@ PUBLIC_TESTS = {
 # Candidate array tests call _OPT_NATIVE directly. Keep them outside this public
 # registry until tests actually exercise the public __array__ protocol.
 TEST_DEPENDENCIES = {
+    "test_host_kde_fit_native.py": ("pandas", "scipy", "torch"),
     "test_host_inference_native.py": ("pandas",),
     "test_host_kernel_inference_native.py": ("pandas", "scipy"),
     "test_host_projection_native.py": ("pandas", "scipy"),
@@ -68,6 +72,10 @@ TEST_DEPENDENCIES = {
 }
 CPU_RESIDENT_SKIP = "the CPU binding has no resident tensor pool"
 CPU_NOT_APPLICABLE = {
+    "test_optimizer_native_array_ownership.py": {
+        "test_native_device_download_does_not_call_mutable_memoryview[False]": "device downloads require the GPU training pool",
+        "test_native_device_download_does_not_call_mutable_memoryview[True]": "device downloads require the GPU training pool",
+    },
     'test_training_linear_public_native.py': {
         'test_public_device_linear_consumed_outputs_are_native[linear_forward-matrix]': 'resident linear operations require the GPU training binding',
         'test_public_device_linear_consumed_outputs_are_native[linear_forward-batch]': 'resident linear operations require the GPU training binding',
@@ -164,12 +172,20 @@ def test_applicability(selected, vendor):
         if name == "test_training_device_native_finalizer.py":
             scope.update(execution_route="training GPU owner cleanup; partial-owner and guard checks also apply on CPU",
                          coverage_limit="Explicit cleanup checks verify release; process shutdown only checks exit status and stderr")
-        if name in ("test_host_inference_native.py", "test_host_kernel_inference_native.py", "test_host_projection_native.py", "test_host_logistic_native.py", "test_host_svr_native.py", "test_host_svc_native.py", "test_host_kde_native.py", "test_host_iforest_native.py"):
+        if name in ("test_host_inference_native.py", "test_host_kernel_inference_native.py", "test_host_projection_native.py", "test_host_logistic_native.py", "test_host_svr_native.py", "test_host_svc_native.py", "test_host_kde_native.py", "test_host_iforest_native.py", "test_host_kde_fit_native.py"):
             scope.update(execution_route="explicit CPU host binding, including in GPU packages",
                          operation_mode="identical host operation; fast-mode refusal tested separately",
                          coverage_limit="Native qualification covers audited prediction/transform, preparation and attributes; inherited fit/score cases check compatibility only")
         if name == "test_host_kde_native.py":
             scope["coverage_limit"] = "Native qualification covers score_samples/score and their state/input admission; inherited construction/fit/save/hash remain outside this migration slice"
+        if name == "test_host_kde_fit_native.py":
+            scope["coverage_limit"] = "Native qualification covers explicit host fit preparation and state publication; ordinary KernelDensity fit, constructors, save and hash remain separate"
+        if name == "test_device_rows_metadata_native.py":
+            scope.update(execution_route="native DeviceRows metadata owner on every package backend",
+                         coverage_limit="Constructor and length only; materialize and resident context lifecycle remain separate")
+        if name == "test_optimizer_native_array_ownership.py":
+            scope.update(execution_route="native training output allocation; device downloads only on GPU",
+                         coverage_limit="Published Array buffer ownership only; public __array__ protocol and allocation failure injection remain separate")
         if name == "test_host_iforest_native.py":
             scope["coverage_limit"] = "Native qualification covers score_samples/decision_function/predict and saved state admission/readback; inherited construction/fit/save/hash remain outside this migration slice"
         if name == "test_training_rms_public_native.py":
