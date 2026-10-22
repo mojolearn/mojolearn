@@ -23,8 +23,10 @@ def replacement(name, calls):
     })
 
 
-def assert_native_refusal(audit, calls):
-    assert audit.exception is not None, audit.report()
+def assert_native_refusal(audit, calls, expected=TypeError, message=None):
+    assert type(audit.exception) is expected, audit.report()
+    if message is not None:
+        assert str(audit.exception) == message, audit.report()
     assert not calls
     for key in ("python_frames", "forbidden_native_calls", "wrapper_work",
                 "unobserved_existing_threads"):
@@ -62,7 +64,14 @@ def test_tensor_preparation_never_admits_replaced_list_type(monkeypatch, operati
     with monkeypatch.context() as patch:
         patch.setattr(builtins, "list", cls)
         audit = audit_native_call(method, *args, **kwargs)
-    assert_native_refusal(audit, calls)
+    if operation == "accumulate":
+        # Retained b638 public refusal: the nested accumulation binding
+        # currently normalizes this exact admission error to Exception.
+        # Preserve its full message; a missing context key cannot qualify.
+        assert_native_refusal(audit, calls, Exception,
+                              "optimizer requires native buffers and lists/tuples; Python protocols and callbacks cannot execute")
+    else:
+        assert_native_refusal(audit, calls)
 
 
 @pytest.mark.parametrize("name", ["list", "dict", "set", "frozenset", "memoryview"])
