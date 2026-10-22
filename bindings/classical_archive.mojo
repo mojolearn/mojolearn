@@ -8,6 +8,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contai
 from bindings.classical_arrays import classical_input, classical_is_array, classical_typed, classical_dtype_str, classical_c_bytes, classical_address
 from bindings.classical_pandas import classical_admit_value
 from bindings.native_buffer_owner import native_buffer_view
+from bindings.archive_unicode_native import archive_utf32_encode
 from bindings.native_buffer_address import native_buffer_address
 from bindings.sequential_description import sequential_fields
 from core.host_archive_impl import host_archive_reorder_bytes
@@ -183,7 +184,7 @@ def _archive_npy(value: PythonObject, context: PythonObject) raises -> PythonObj
         var width = max(len(value), 1)
         descr = "<U" + String(width)
         shape = Python.tuple(1)
-        raw = py_call(context["archive_utf32_encode"], value)[0]
+        raw = archive_utf32_encode(value, context)
         if len(value) == 0:
             raw = py_call(context["archive_bytes_type"], 4)
     else:

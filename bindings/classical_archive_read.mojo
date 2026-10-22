@@ -8,6 +8,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contai
 from bindings.classical_archive import _archive_methods, _archive_path, _archive_file_call
 from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
 from bindings.optimizer_public_words import stash_python_error
+from bindings.archive_unicode_native import archive_utf8, archive_utf32_decode, archive_literal
 from bindings.classical_arrays import classical_numpy, classical_is_array, classical_dtype_str, classical_i64, classical_f64, classical_wrap_array, _store_code
 from core.classical_archive_read_impl import npy_latin1_bytes, npy_peek, npy_skip_ws, npy_string_close, npy_digits_end
 
@@ -161,7 +162,7 @@ struct NpyHeader(Movable):
         if close >= 0:
             var encoded = self.raw[start:close]
             self.at = close + 1
-            return py_call(self.context["archive_literal_decode"], encoded)[0]
+            return archive_literal(encoded, self.context)
         raise Error("unterminated npy header string")
 
     def literal(mut self, text: String) raises:
@@ -316,7 +317,7 @@ def _decode_npy(raw: PythonObject, context: PythonObject) raises -> PythonObject
                 fstride *= dim
         var cell = raw[offset + source * itemsize:offset + (source + 1) * itemsize]
         if unicode:
-            py_call(items.append, py_call(py_call(context["archive_utf32_decode"], cell)[0].rstrip, py_call(py_call(context["archive_bytes_type"], 1).decode, "latin1")))
+            py_call(items.append, py_call(archive_utf32_decode(cell, context).rstrip, py_call(py_call(context["archive_bytes_type"], 1).decode, "latin1")))
         else:
             py_call(items.append, py_call(cell.rstrip, py_call(context["archive_bytes_type"], 1)))
     if count == 1:
@@ -326,7 +327,7 @@ def _decode_npy(raw: PythonObject, context: PythonObject) raises -> PythonObject
 
 def _filename(raw: PythonObject, flags: Int, context: PythonObject) raises -> PythonObject:
     if flags & 2048:
-        return py_call(raw.decode, "utf8")
+        return archive_utf8(raw, context)
     var parts = Python.list()
     for k in range(len(raw)):  # driver-loop: over ZIP member filename bytes using the fixed CP437 table
         py_call(parts.append, context["archive_cp437"][Int(py=raw[k])])
@@ -441,7 +442,7 @@ def _zip_records(file: PythonObject, methods: PythonObject, context: PythonObjec
                     raise Error("truncated ZIP64 member sizes")
             elif tag == 0x7075 and length >= 5 and _read_uint(central, extra_at, 1) == 1:
                 if _read_uint(central, extra_at + 1, 4) == Int(py=py_call(context["archive_crc32"], raw_name)):
-                    name = py_call(central[extra_at + 5:extra_at + length].decode, "utf8")
+                    name = archive_utf8(central[extra_at + 5:extra_at + length], context)
             extra_at += length
         # ZipFile's lookup uses the final entry for a duplicate member name.
         py_setitem(records, name, Python.tuple(flags, method, crc, compressed, unpacked, offset + concat, raw_name))
