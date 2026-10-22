@@ -10,6 +10,7 @@ from bindings.native_owner_lifetime import native_release_admit, native_release_
 from bindings.arena_array_metadata import arena_array_metadata
 from bindings.arena_materialize_native import arena_materialize
 from bindings.arena_cache_stats import arena_cache_stats
+from bindings.arena_cache_get import arena_cache_get
 from bindings.optimizer_public_words import optimizer_python_error, PYTHON_ERROR_PENDING
 
 
@@ -92,6 +93,8 @@ def arena_rows_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
         var result = PythonObject(None)
         if operation == "cache_len" or operation == "resident_stats":
             result = arena_cache_stats(model,operation,args,context)
+        elif operation == "cache_get":
+            result = arena_cache_get(model,args,context)
         else:
             classical_connect_numpy(context)
         if operation == "init":
@@ -104,7 +107,7 @@ def arena_rows_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
             if py_type(shape) is not b["tuple"] or len(shape) == 0 or py_type(shape[0]) is not b["int"]:
                 raise Error("TypeError: DeviceRows length requires native shape metadata")
             result = shape[0]
-        elif operation != "cache_len" and operation != "resident_stats":
+        elif operation != "cache_len" and operation != "resident_stats" and operation != "cache_get":
             raise Error("ValueError: unknown native DeviceRows metadata operation")
         return result.steal_data()
     except error:

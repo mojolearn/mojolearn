@@ -140,14 +140,16 @@ def test_device_cache_frees_deterministically():
         pytest.skip("no GPU binding with the ranges entries in this process")
     mb, _ = b
     from mojolearn._array import Array
+    from mojolearn._verify_native_runtime import audit_native_call
     a = Array.from_list([float(i) for i in range(1000)], "<f4")
     c = _arena_io.DeviceCache(mb, "x_metrics")
     base = c.live()
     i1 = c.id_of(a)
+    assert audit_native_call(c.get, a).assert_native() == i1
     assert c.id_of(a) == i1 and c.hits == 1 and c.uploads == 1
     assert c.live() == base + 1
     c.release(a)
-    assert c.live() == base and c.get(a) is None
+    assert c.live() == base and audit_native_call(c.get, a).assert_native() is None
     with _arena_io.DeviceCache(mb, "x_metrics") as c2:
         c2.id_of(a)
         assert c2.live() == base + 1

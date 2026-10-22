@@ -187,6 +187,14 @@ class InstalledNativeAudit(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "no artifact path"):
             q.installed_module_inventory(modules, prefix, payload, tests)
 
+    def test_cache_lookup_scope_excludes_mutation_and_context_lifecycle(self):
+        name = "test_cache_get_native.py"
+        self.assertIn(name, q.PUBLIC_TESTS)
+        for vendor in ("cpu", "metal", "cuda", "hip"):
+            scope = q.test_applicability([name], vendor)[name]
+            self.assertIn("Only DeviceCache.get", scope["coverage_limit"])
+            self.assertIn("no device slots", scope["execution_route"])
+
     def test_cache_statistics_scope_does_not_claim_get_or_lifecycle(self):
         name = "test_cache_stats_native.py"
         self.assertIn(name, q.PUBLIC_TESTS)

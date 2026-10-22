@@ -24,11 +24,21 @@ class Resident:
         raise AssertionError("import-time metadata must never call take")
 
 
+class Cache:
+    @staticmethod
+    def _key(value):
+        raise AssertionError("import metadata must never call key")
+
+    def get(self, value):
+        raise AssertionError("import metadata must never call get")
+
+
 def connect(native_entry=len):
     package = ModuleType('mojolearn')
     package.__path__ = [str(ROOT / 'python/mojolearn')]
     arena = ModuleType('mojolearn._arena_io')
     arena.DeviceRows = Rows
+    arena.DeviceCache = Cache
     arena._LOCAL = threading.local()
     selection = ModuleType('mojolearn.model_selection')
     selection._Resident = Resident
@@ -53,6 +63,17 @@ def connect(native_entry=len):
 
 
 class NativeWeakrefConnectionTests(unittest.TestCase):
+    def test_cache_lookup_retains_key_and_scalar_metadata_without_calling_it(self):
+        context = connect()
+        self.assertIs(context['cache_key_descriptor'], vars(Cache)['_key'])
+        self.assertIs(context['cache_key_function'], Cache._key)
+        self.assertEqual(context['cache_integer_types'],
+                         (type(None), bool, int, float, complex, str, bytes, bytearray, list, tuple, dict, set, frozenset))
+        self.assertIs(context['cache_scalar_context']['modules'], sys.modules)
+        self.assertIs(context['cache_deprecation_warning'], DeprecationWarning)
+        self.assertEqual(context['cache_primitive_bases'], (int, float, complex, str, bytes, bytearray))
+        self.assertEqual(context['cache_type_flags'](Cache), Cache.__flags__)
+
     def test_cache_statistics_retain_native_attribute_and_thread_local_entries(self):
         context = connect()
         self.assertIs(context['cache_object_getattribute'], object.__getattribute__)
