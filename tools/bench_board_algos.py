@@ -143,7 +143,10 @@ PINS_COMMON = ["statsmodels==0.15.0", "statsforecast==2.1.1", "arch==8.0.0", "pr
                # MixtralSparseMoeBlock (bench_board_neural.TRANSFORMERS_PIN; torchvision for
                # resnet-block comes with torch, tools/bench_board.py DEFAULT_TORCHVISION_SPEC).
                # Results raced before this change were wrong for this lane; apply extra scrutiny.
-               "transformers==5.17.0"]
+               "transformers==5.17.0",
+               # measure-coverage (2026-10-22): the lion and lamb lanes' peers (lion-pytorch's Lion, timm's
+               # Lamb), installed against the board's pinned torch (neither pins torch)
+               "lion-pytorch==0.2.3", "timm==1.0.15"]
 PINS = {"apple": list(PINS_COMMON), "amd": list(PINS_COMMON),
         "nvidia": list(PINS_COMMON)}
 #: installed from the rapids index with the pinned cuml/cuvs set
@@ -1129,7 +1132,10 @@ _OPT_HYPER = {
                   decoupled_weight_decay=False),
     "Adafactor": dict(beta2_decay=-0.8, eps=(None, 1e-3), d=1.0, weight_decay=0.0, maximize=False),
     "Lion": dict(betas=(0.9, 0.99), weight_decay=0.0),
-    "LAMB": dict(betas=(0.9, 0.999), eps=1e-6, weight_decay=0.01),
+    # every keyword of timm's Lamb statement, explicit on both sides (ours' LAMB follows timm's Lamb;
+    # its defaults are timm's: python/mojolearn/_x_sequence_optim.py LAMB.__init__)
+    "LAMB": dict(betas=(0.9, 0.999), eps=1e-6, weight_decay=0.01, bias_correction=True,
+                 grad_averaging=True, max_grad_norm=1.0, trust_clip=False, always_adapt=False),
     # mojolearn.training's three (the LM and Samba trainers' optimizers; top-level
     # mojolearn.SGD / Adam / AdamW), raced from 2026-09-29
     "SGD": dict(momentum=0.9, dampening=0.0, weight_decay=0.0, nesterov=False, maximize=False),
@@ -1153,8 +1159,13 @@ _OURS_OPT_SEMANTICS = {
 }
 for _slug, _cls, _torch in (("rmsprop", "RMSprop", "RMSprop"), ("adagrad", "Adagrad", "Adagrad"),
                             ("adamax", "Adamax", "Adamax"), ("nadam", "NAdam", "NAdam"),
-                            ("adafactor", "Adafactor", "Adafactor"), ("lion", "Lion", None),
-                            ("lamb", "LAMB", None)):
+                            ("adafactor", "Adafactor", "Adafactor"),
+                            # measure-coverage (2026-10-22): Lion and LAMB had no opponent on any vendor. The
+                            # peers are the packages ours' docstrings name as their statement of the update:
+                            # lion-pytorch's Lion and timm's Lamb ("module:Class", imported by the torch builder;
+                            # pinned in PINS_COMMON, installed against the board's torch)
+                            ("lion", "Lion", "lion_pytorch:Lion"),
+                            ("lamb", "LAMB", "timm.optim:Lamb")):
     _add(_slug, xlane="sequence", ours=_cls, kind="optim", task="optim", block="optim",
          datasets=("synthetic",), torch_opt=_torch, params=dict(lr=1e-3, **_OPT_HYPER[_cls]),
          notes=["one fp32 parameter of 16,777,216 values and 10 seed-7 gradients; timed = the 10 "
@@ -2009,8 +2020,8 @@ def not_planned(vendor):
     if vendor != "nvidia":
         out.append("cuML, cuVS, cuGraph, CuPy, implicit-gpu and xgboost-gpu arms: CUDA only; "
                    "the CPU libraries and torch on this box's GPU are the arms")
-    out.append("Lion and LAMB: torch.optim has neither; ours races alone (no pinned reference "
-               "implementation is fast code)")
+    out.append("Lion and LAMB: torch.optim has neither; the peers are lion-pytorch's Lion and timm's Lamb "
+               "(the statements ours follows), eager and compile; no fused kernel exists for either")
     out.append("torch-*-bf16 on optimizers: the fp32 parameter and state are the workload; "
                "torch-*-tf32: no matmul in an optimizer step")
     out.append("openTSNE and hnswlib: not pinned; scikit-learn/cuML t-SNE and FAISS HNSW stand in")
@@ -5963,9 +5974,31 @@ def _build_optim(lane, arm, D):
     mode = arm.split("-")[1]
     info = {"library": "torch", "version": torch.__version__, "device": "gpu" if dev != "cpu" else "cpu",
             "pre_clock_fit": False, "input_home": "device", "setting": arm[len("torch-"):]}
-    ocls = getattr(torch.optim, s["torch_opt"], None)
+    opt_name = s["torch_opt"]
+    if ":" in opt_name:
+        # measure-coverage (2026-10-22): a torch optimizer from another package ("module:Class",
+        # lion_pytorch:Lion, timm.optim:Lamb); the package and its version go into the cell
+        import importlib
+        mod_name, cls_name = opt_name.split(":", 1)
+        dist = {"lion_pytorch": "lion-pytorch", "timm.optim": "timm"}.get(mod_name, mod_name.split(".")[0])
+        try:
+            ocls = getattr(importlib.import_module(mod_name), cls_name, None)
+        except ImportError as exc:
+            raise RuntimeError("REFUSED: %s is not installed (%r); pinned in PINS_COMMON" % (dist, exc))
+        if ocls is None:
+            raise RuntimeError("REFUSED: %s has no %s" % (mod_name, cls_name))
+        try:
+            from importlib import metadata as _md
+            info["peer_package"] = {"name": dist, "version": _md.version(dist)}
+        except Exception as exc:  # noqa: BLE001
+            info["peer_package"] = {"name": dist, "version": None, "error": repr(exc)[:200]}
+        info["library"] = dist
+        info["version"] = info["peer_package"]["version"]
+        info["torch_version"] = torch.__version__
+    else:
+        ocls = getattr(torch.optim, opt_name, None)
     if ocls is None:
-        raise RuntimeError("REFUSED: torch %s has no torch.optim.%s" % (torch.__version__, s["torch_opt"]))
+        raise RuntimeError("REFUSED: torch %s has no torch.optim.%s" % (torch.__version__, opt_name))
     import inspect
     try:
         sig = inspect.signature(ocls).parameters
@@ -6009,6 +6042,11 @@ def _build_optim(lane, arm, D):
     # graph, no autograd through the step; recorded as implementation-only exceptions).
     pinned = {k: v for k, v in semantics.items() if k in sig and k not in hyper}
     pinned.update({k: False for k in ("capturable", "differentiable") if k in sig})
+    # measure-coverage (2026-10-22): the package peers' extra switches pinned to ours' math where the class
+    # takes them: lion-pytorch's plain torch update (use_triton=False; its weight decay p *= 1 - lr * wd,
+    # decoupled_weight_decay=False, as ours) and timm Lamb's plain update (caution=False)
+    pinned.update({k: False for k in ("use_triton", "decoupled_weight_decay", "caution")
+                   if ":" in opt_name and k in sig and k not in hyper})
     try:
         opt = ocls([p], **dict(hyper, **pinned, **impl))
     except (RuntimeError, ValueError, TypeError) as exc:
@@ -7481,7 +7519,7 @@ def independent_reference_arm(lane):
     if arm is None or arm in s.get("refused", {}):
         return None
     if s["kind"] == "optim" and not s.get("torch_opt"):
-        return None                   # lion, lamb: torch has no such optimizer (no opponent at all)
+        return None                   # an optimizer lane without a peer class (no opponent at all)
     if arm == "sklearn-cpu" and not s.get("sk"):
         return None
     if arm in ("networkx-cpu", "statsmodels-cpu") and arm not in s.get("other", {}):
