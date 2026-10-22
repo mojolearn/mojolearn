@@ -169,7 +169,7 @@ def test_archive_array_metadata_refuses_python_hooks(field):
     assert touched == []
 
 
-@pytest.mark.parametrize("poison", [None, "bytes", "bytearray"])
+@pytest.mark.parametrize("poison", [None, "bytes", "bytearray", "tuple"])
 def test_archive_fortran_array_without_numpy_matches_frozen_codec(poison):
     model = _model("fortran_array")
     expected = _expected(model).hex()
