@@ -24,6 +24,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_TESTS = {
+    "test_cache_key_native.py": "Public DeviceCache.get and resident.stats native tuple-key admission, deep nesting and callback refusals",
     "test_archive_unicode_native.py": "Public archive strict Unicode errors, loaded state, partial save bytes and connected codec identity refusals",
     "test_classical_archive_reader_native.py": "Public linear archive loading, compressed state, native helper identities, file errors and input/output ownership",
     "test_host_density_save_native.py": "Public host KDE and IsolationForest save bytes, native configuration, partial state, loaded state and callback refusals",
@@ -242,6 +243,9 @@ def test_applicability(selected, vendor):
         if name == "test_host_density_constructors_native.py":
             scope.update(execution_route="native explicit CPU host constructor owner, including in GPU packages",
                          coverage_limit="Public KDE and IsolationForest construction/reinitialization only; fit/inference, save/hash and subclass registration remain separate")
+        if name == "test_cache_key_native.py":
+            scope.update(execution_route="native cache metadata only; no device slots",
+                         coverage_limit="Selected DeviceCache.get and resident.stats tuple-key admission only; constructor, upload, release and context lifecycle remain separate")
         if name == "test_cache_get_native.py":
             scope.update(execution_route="native host metadata on CPU and GPU packages; no device slots acquired",
                          coverage_limit="Only DeviceCache.get; construction/upload/release and resident context lifecycle remain separate migration work")
