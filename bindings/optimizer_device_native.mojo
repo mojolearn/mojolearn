@@ -6,6 +6,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.optimizer_admission import opt_value, opt_scalar
 from bindings.optimizer_public_door import new_array, TensorView, tensor_view, base_format, contiguous_addr
 from bindings.optimizer_public_words import optimizer_python_error
+from bindings.native_buffer_owner import native_storage_allocate
 
 
 def device_entries(binding: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -56,7 +57,9 @@ def device_set(owner: PythonObject, binding: PythonObject, handle: PythonObject,
 
 
 def device_new(binding: PythonObject, handle: PythonObject, dims: List[Int], base: PythonObject, context: PythonObject) raises -> PythonObject:
-    var result = py_call(Python.import_module("builtins").object.__new__, context["device_class"])
+    # opt_guards has checked the connected ordinary Python heap layout.
+    # Keep allocation independent of the mutable builtins.object field.
+    var result = native_storage_allocate(context["device_class"])
     device_set(result, binding, handle, dims, base)
     return result
 
