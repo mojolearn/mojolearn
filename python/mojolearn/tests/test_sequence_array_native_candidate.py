@@ -4,6 +4,7 @@ These tests deliberately call the internal native candidate. They do not
 qualify the unchanged public SequenceDeviceTensor.__array__ wrapper.
 """
 import warnings
+import struct
 
 import numpy as np
 import pytest
@@ -44,7 +45,8 @@ def assert_outputs(actual, expected):
     assert actual.flags.writeable == expected.flags.writeable
     if actual.dtype.hasobject:
         assert all(type(x) is float for x in actual.ravel())
-        np.testing.assert_equal(actual, expected)
+        assert [struct.pack("=d", x) for x in actual.ravel()] == [
+            struct.pack("=d", x) for x in expected.ravel()]
     else:
         assert actual.tobytes() == expected.tobytes()
 
