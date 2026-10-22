@@ -54,7 +54,7 @@ def kde_bandwidth_array_policy(value: PythonObject, context: PythonObject) raise
             if kde_numpy_release(context) >= 204:
                 raise Error("TypeError: only 0-dimensional arrays can be converted to Python scalars")
         if Int(py=value.size) != 1:
-            raise Error("TypeError: only size-1 arrays can be converted to Python scalars")
+            raise Error("TypeError: only length-1 arrays can be converted to Python scalars")
         if ndim > 0:
             kde_bandwidth_warning("Conversion of an array with ndim > 0 to a scalar is deprecated, and will error in future. Ensure you extract a single element from your array before performing this operation. (Deprecated NumPy 1.25.)",
                 context["warning_deprecation_type"], context)
@@ -91,7 +91,10 @@ def kde_temporal_bandwidth(value: PythonObject, code: String, context: PythonObj
     if status != 0:
         raise cpy.unsafe_get_error()
     try:
-        if view[2] != 8 or view[3] != 8:
+        # Exact NumPy temporal scalars expose their signed word as eight byte
+        # elements; temporal ndarrays expose one eight-byte element. The
+        # admitted dtype fixes the interpretation independently of that view.
+        if view[2] != 8 or (view[3] != 1 and view[3] != 8):
             raise Error("TypeError: temporal scalar decoding requires one native element")
         status = cpy.lib.get_function[Int32]("PyBuffer_ToContiguous")(data, pointer, 8, Int8(67))
         if status != 0:
@@ -102,11 +105,14 @@ def kde_temporal_bandwidth(value: PythonObject, code: String, context: PythonObj
     var word = UInt64(0)
     for i in range(8):  # driver-loop: one signed native temporal word, either byte order
         word |= UInt64(bytes[i]) << UInt64(8 * (i if little else 7 - i))
+    var release = kde_numpy_release(context)
     var kind = temporal_result_kind(Int(bitcast[DType.int64](word)), code == "M", unit,
-                                   multiplier, kde_numpy_release(context) < 202)
+                                   multiplier, release < 202, release >= 205)
     var number = native_scalar_real(data, 0, String("q"), 8, little)
     _ = bytes^
     _ = view^
+    if kind == 5:
+        raise Error("OverflowError: Overflow when converting between datetime64 units")
     if kind != 0:
         var name = String("NoneType") if kind == 1 else String("datetime.date") if kind == 2 else String("datetime.datetime") if kind == 3 else String("datetime.timedelta")
         raise Error("TypeError: float() argument must be a string or a real number, not '" + name + "'")
