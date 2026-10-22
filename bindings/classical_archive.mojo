@@ -12,6 +12,7 @@ from bindings.native_buffer_address import native_buffer_address
 from bindings.sequential_description import sequential_fields
 from core.host_archive_impl import host_archive_reorder_bytes
 from bindings.optimizer_public_words import stash_python_error
+from bindings.archive_posix_native import archive_posix_open, archive_posix_tell, archive_posix_write, archive_posix_close, archive_posix_discard
 
 
 def _archive_file_call(entry: PythonObject, *args: PythonObject) raises -> PythonObject:
@@ -108,9 +109,27 @@ def _archive_open(path: PythonObject, context: PythonObject) raises -> PythonObj
     var types = context["archive_file_types"]
     for k in range(len(types)):  # driver-loop: over connected native binary file types
         if py_type(path) is types[k]:
-            return Python.tuple(path, False)
-    var file = _archive_file_call(context["archive_open"], _archive_path(path, context), "wb")
-    return Python.tuple(file, True)
+            return Python.tuple(path, None)
+    var native_path = _archive_path(path, context)
+    var fd = archive_posix_open(native_path, context)
+    try:
+        return Python.tuple(fd, native_path)
+    except:
+        archive_posix_discard(fd)
+        raise
+
+
+def _archive_tell(file: PythonObject, methods: PythonObject, context: PythonObject) raises -> Int:
+    if methods is None:
+        return archive_posix_tell(Int(py=file), context)
+    return Int(py=_archive_file_call(methods["tell"], file))
+
+
+def _archive_write(file: PythonObject, methods: PythonObject, value: PythonObject, context: PythonObject) raises:
+    if methods is None:
+        archive_posix_write(Int(py=file), value, context)
+    else:
+        _ = _archive_file_call(methods["write"], file, value)
 
 
 def _archive_array(value: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -229,8 +248,9 @@ def _archive_npy(value: PythonObject, context: PythonObject) raises -> PythonObj
 def classical_archive_write(path: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
     var opened = _archive_open(path, context)
     var file = opened[0]
-    var methods = _archive_methods(file, context)
-    var close = Bool(py=opened[1])
+    # None methods identifies an owned POSIX descriptor. Exact native streams
+    # use retained slots and stay open; no new CPython file is constructed.
+    var methods = _archive_methods(file, context) if opened[1] is None else PythonObject(None)
     try:
         if py_type(values) is not py_type(Python.dict()):
             raise Error("TypeError: checkpoint members require a native dictionary")
@@ -253,18 +273,18 @@ def classical_archive_write(path: PythonObject, values: PythonObject, context: P
             if size > 2147483647:
                 raise Error("RuntimeError: File size too large, try using force_zip64")
             var crc = py_call(crc32, payload, py_call(crc32, header))
-            var offset = Int(py=_archive_file_call(methods["tell"], file))
+            var offset = _archive_tell(file, methods, context)
             var local = _archive_header(Python.list(
                 Python.tuple(0x04034B50, 4), Python.tuple(20, 2), Python.tuple(0, 2), Python.tuple(0, 2),
                 Python.tuple(0, 2), Python.tuple(33, 2), Python.tuple(crc, 4), Python.tuple(size, 4),
                 Python.tuple(size, 4), Python.tuple(len(filename), 2), Python.tuple(0, 2)), context)
-            _ = _archive_file_call(methods["write"], file, local)
-            _ = _archive_file_call(methods["write"], file, filename)
-            _ = _archive_file_call(methods["write"], file, header)
-            _ = _archive_file_call(methods["write"], file, payload)
+            _archive_write(file, methods, local, context)
+            _archive_write(file, methods, filename, context)
+            _archive_write(file, methods, header, context)
+            _archive_write(file, methods, payload, context)
             py_call(records.append, Python.tuple(filename, size, crc, offset))
             _ = encoded^
-        var directory = Int(py=_archive_file_call(methods["tell"], file))
+        var directory = _archive_tell(file, methods, context)
         for k in range(len(records)):  # driver-loop: over NPZ central-directory member records
             var record = records[k]
             var offset = Int(py=record[3])
@@ -282,11 +302,11 @@ def classical_archive_write(path: PythonObject, values: PythonObject, context: P
                 Python.tuple(len(record[0]), 2), Python.tuple(len(extra), 2), Python.tuple(0, 2),
                 Python.tuple(0, 2), Python.tuple(0, 2), Python.tuple(0o644 << 16, 4),
                 Python.tuple(0xFFFFFFFF if zip64 else offset, 4)), context)
-            _ = _archive_file_call(methods["write"], file, central)
-            _ = _archive_file_call(methods["write"], file, record[0])
+            _archive_write(file, methods, central, context)
+            _archive_write(file, methods, record[0], context)
             if len(extra):
-                _ = _archive_file_call(methods["write"], file, extra)
-        var end = Int(py=_archive_file_call(methods["tell"], file))
+                _archive_write(file, methods, extra, context)
+        var end = _archive_tell(file, methods, context)
         var directory_size = end - directory
         var count = len(records)
         if count > 65535 or directory > 2147483647 or directory_size > 2147483647:
@@ -296,16 +316,17 @@ def classical_archive_write(path: PythonObject, values: PythonObject, context: P
                 Python.tuple(directory_size, 8), Python.tuple(directory, 8)), context)
             var locator = _archive_header(Python.list(Python.tuple(0x07064B50, 4), Python.tuple(0, 4),
                                                      Python.tuple(end, 8), Python.tuple(1, 4)), context)
-            _ = _archive_file_call(methods["write"], file, wide)
-            _ = _archive_file_call(methods["write"], file, locator)
+            _archive_write(file, methods, wide, context)
+            _archive_write(file, methods, locator, context)
         var footer = _archive_header(Python.list(Python.tuple(0x06054B50, 4), Python.tuple(0, 2), Python.tuple(0, 2),
             Python.tuple(min(count, 65535), 2), Python.tuple(min(count, 65535), 2),
             Python.tuple(min(directory_size, 0xFFFFFFFF), 4), Python.tuple(min(directory, 0xFFFFFFFF), 4), Python.tuple(0, 2)), context)
-        _ = _archive_file_call(methods["write"], file, footer)
-        _ = _archive_file_call(methods["flush"], file)
+        _archive_write(file, methods, footer, context)
+        if methods is not None:
+            _ = _archive_file_call(methods["flush"], file)
     finally:
-        if close:
-            _ = _archive_file_call(methods["close"], file)
+        if methods is None:
+            archive_posix_close(Int(py=file), context)
     return path
 
 

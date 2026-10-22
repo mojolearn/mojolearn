@@ -161,8 +161,8 @@ def _state_context():
     context.update(classical_tag_plan=None, native_member_descriptor=MemberDescriptorType)
     context.update(connect_warnings())
     archive_types = (io.BytesIO, io.FileIO, io.BufferedReader, io.BufferedWriter, io.BufferedRandom)
-    if not isinstance(io.open, BuiltinFunctionType):
-        raise TypeError("classical archives require native binary file opening")
+    if not isinstance(os.strerror, BuiltinFunctionType):
+        raise TypeError("classical archives require native filesystem error messages")
     archive_methods = []
     for cls in archive_types:  # glue: cache exact native file descriptors at ABI connection
         methods = {}
@@ -196,7 +196,8 @@ def _state_context():
                 or not isinstance(zstd_class.__init__, WrapperDescriptorType)):
             raise TypeError("classical archives require a native Zstandard byte decompressor")
     context.update(archive_file_types=archive_types, archive_file_methods=tuple(archive_methods),
-                   archive_open=io.open, archive_bytes_type=bytes, archive_bytearray_type=bytearray,
+                   archive_os_error=OSError, archive_strerror=os.strerror,
+                   archive_bytes_type=bytes, archive_bytearray_type=bytearray,
                    archive_memoryview_type=memoryview,
                    archive_path_types=(PosixPath, PurePosixPath),
                    archive_path_bases=(PosixPath, PurePosixPath, Path, PurePath, object),
