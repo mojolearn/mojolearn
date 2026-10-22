@@ -216,7 +216,7 @@ def test_cache_id_of_real_native_upload_failure_preserves_empty_state(prefix, ki
     source = _source(address=0 if kind == "null" else 2**100 if kind == "address_overflow" else 8,
                      size=2**100 if kind == "size_overflow" else 3)
     audit = audit_native_call(cache.id_of, source)
-    assert isinstance(audit.exception, Exception if kind == "null" else OverflowError), audit.report()
+    assert type(audit.exception) is (Exception if kind == "null" else OverflowError), audit.report()
     _no_work(audit)
     if kind == "null": assert "non-null address" in str(audit.exception)
     assert cache._entries == {} and (cache.uploads, cache.hits) == (0, 0)

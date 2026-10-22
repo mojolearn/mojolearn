@@ -159,26 +159,55 @@ def _native_call(entry: PythonObject, args: PythonObject) raises -> PythonObject
     return PythonObject(from_owned=result)
 
 
-def _take_pending(error: Error) raises -> List[Int]:
-    var saved = List[Int](length=3,fill=0)
+struct CachePendingError(Movable):
+    # Own the fetched triple in fixed fields while cleanup can release the
+    # GIL. Avoid allocating/copying a List after a resident slot needs cleanup.
+    var kind: Int
+    var value: Int
+    var traceback: Int
+
+    def __init__(out self):
+        self.kind = 0
+        self.value = 0
+        self.traceback = 0
+
+
+def _take_pending(error: Error) raises -> CachePendingError:
+    var saved = CachePendingError()
     if String(error) == PYTHON_ERROR_PENDING:
         var pending = PENDING_PYTHON_ERROR.get_or_create_ptr()
-        saved = pending[].words.copy()
-        pending[].words = List[Int](length=3,fill=0)
+        saved.kind = pending[].words[0]
+        saved.value = pending[].words[1]
+        saved.traceback = pending[].words[2]
+        pending[].words[0] = 0
+        pending[].words[1] = 0
+        pending[].words[2] = 0
     return saved^
 
 
-def _drop_pending(saved: List[Int]) raises:
+def _drop_pending(mut saved: CachePendingError) raises:
     ref cpy = Python().cpython()
-    for i in range(3):  # driver-loop: release an owned native exception triple exactly once
-        if saved[i]:
-            cpy.lib.get_function[NoneType]("Py_DecRef")(saved[i])
+    var release = cpy.lib.get_function[NoneType]("Py_DecRef")
+    if saved.kind:
+        release(saved.kind)
+        saved.kind = 0
+    if saved.value:
+        release(saved.value)
+        saved.value = 0
+    if saved.traceback:
+        release(saved.traceback)
+        saved.traceback = 0
 
 
-def _restore_pending(var saved: List[Int]) raises:
-    if saved[0]:
+def _restore_pending(mut saved: CachePendingError) raises:
+    if saved.kind:
         var pending = PENDING_PYTHON_ERROR.get_or_create_ptr()
-        pending[].words = saved^
+        pending[].words[0] = saved.kind
+        pending[].words[1] = saved.value
+        pending[].words[2] = saved.traceback
+        saved.kind = 0
+        saved.value = 0
+        saved.traceback = 0
 
 
 def _publish(model: PythonObject, source: PythonObject, key: PythonObject,
@@ -233,6 +262,6 @@ def arena_cache_id_of(model: PythonObject, args: PythonObject, context: PythonOb
                 _drop_pending(primary)
                 _drop_pending(cleanup)
                 raise Error("RuntimeError: DeviceCache publication failed: "+String(error)+"; unpublished slot "+String(slot)+" cleanup also failed: "+String(cleanup_error))
-            _restore_pending(primary^)
+            _restore_pending(primary)
         raise error^
     return slot
