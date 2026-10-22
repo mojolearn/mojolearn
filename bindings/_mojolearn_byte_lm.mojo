@@ -10,7 +10,7 @@ Outputs are published only after successful computation, validation and
 synchronization; the stateless ABI also tears down its context before return.
 
 DEVIATION 2514 (device-owned step): the `byte_lm_session_*`
-entries below `byte_lm_session_run` make the session's device buffers the
+entries below make the session's device buffers the
 ONLY copy of the model, the optimizer state, the last gradient and the flags
 as long as it is open. State crosses the boundary at `open` (validated on the
 host Lists, uploaded once), at `export_state` / `export_gradients` (pinned
@@ -18,8 +18,7 @@ staging, then `copy_f32` into the caller's arrays) and never per step; a
 step moves the ids in and the loss and the flags out. A failed step is
 rolled back on the device from the shadow the trainer takes before its
 update; `rollback` exposes the same restore for a failure the Python layer
-detects after native success. `byte_lm_session_run` (mirror in, mirror
-out) is kept for the transition and is unchanged.
+detects after native success.
 """
 # DEVIATION 2486: shared byte-preserving host copies.
 from core.hostptr import f32_ptr, i32_ptr, read_f32, copy_f32, list_i32
