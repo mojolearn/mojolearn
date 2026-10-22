@@ -444,7 +444,7 @@ class HostExponentialSmoothing(_NativeArchiveLoad, _HostBound, ExponentialSmooth
     _HOST_ARRAYS = ("_comps",)
 
 
-class HostUMAP(_HostBound, UMAP):
+class HostUMAP(_NativeArchiveLoad, _HostBound, UMAP):
     """A saved UMAP embedding on the metrics host binding. `transform`
     answers the GPU's bytes for a row whatever else is asked in the same
     batch: since lane/umap-batch-fix (2026-09-16) a batch of N is the
@@ -452,7 +452,7 @@ class HostUMAP(_HostBound, UMAP):
     _HOST_ARRAYS = ("_transform_training", "_transform_embedding")
 
 
-class HostSpectralClustering(_HostBound, SpectralClustering):
+class HostSpectralClustering(_NativeArchiveLoad, _HostBound, SpectralClustering):
     """`SpectralClustering.predict` from a saved `prediction_data=True`
     model through `_mojolearn_metrics_host.spectral_predict`, which runs no
     fit (lane/spectral-predict, 2026-09-15, DEVIATION 2860)."""

@@ -127,6 +127,15 @@ def _cases():
         "IsolationForest": ("mojolearn-iforest-1", dict(
             ints=_i64([10, 0, 256, -1, 0, 0, 1, 7, 1, 2, 3]),
             reals=_f64([1, 1, 0, -.5]), x=_f32([[1, 2], [3, 4], [5, 6]]))),
+        "SpectralClustering": ("mojolearn-spectral-1", dict(
+            meta=_i64([2, 2, 2, 3, 7, 0, 3, 2]), eigen_tol=_f64([1e-5]), affinity="nearest_neighbors",
+            eigenvalues=_f32([1, 2]), eigenvectors=_f32([[1, 0], [0, 1], [1, 1]]), diag=_f32([1, 1, 2]),
+            centroids=_f32([[1, 0], [0, 1]]), labels=np.asarray([0, 1, 0], dtype="<i4"),
+            x=_f32([[1, 2], [3, 4], [5, 6]]))),
+        "UMAP": ("mojolearn-umap-1", dict(
+            meta=_i64([3, 2, 0, 7, 5, 1, 1]), controls=_f32([.1, 1., 1., 1., 1., 1.]),
+            init="spectral", metric="euclidean", training=np.arange(12, dtype="<f4").reshape(4, 3),
+            embedding=np.arange(8, dtype="<f4").reshape(4, 2))),
     }
 
 
@@ -346,6 +355,41 @@ def test_isolation_forest_invalid_saved_controls_are_refused(tmp_path, index, va
         host.IsolationForest.load.__func__(host.HostIsolationForest, path)
     audit = audit_native_call(host.HostIsolationForest.load, path)
     assert isinstance(audit.exception, ValueError), audit.report()
+    report = audit.report()
+    assert not any(report[key] for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads")), report
+
+
+@pytest.mark.parametrize("name,changes", [
+    ("SpectralClustering", {"affinity": "precomputed"}),
+    ("SpectralClustering", {"meta": _i64([2, 2, 2, 3, -999, 1, 3, 2])}),
+    ("UMAP", {"metric": "minkowski", "extras": _f64([9, 1.5, 1, 2])}),
+    ("UMAP", {"init": "array", "embedding": np.asfortranarray(np.arange(8, dtype="<f4").reshape(4, 2))}),
+])
+def test_saved_embedding_configuration_and_layout_parity(tmp_path, name, changes):
+    path = _archive(tmp_path, name, override=changes)
+    cls = getattr(host, "Host" + name)
+    original = getattr(host, name).load.__func__(cls, path)
+    restored = audit_native_call(cls.load, path).assert_native()
+    assert _state(vars(restored)) == _state(vars(original))
+
+
+@pytest.mark.parametrize("name,changes,error", [
+    ("SpectralClustering", {"affinity": "rbf"}, NotImplementedError),
+    ("SpectralClustering", {"eigen_tol": _f64([0])}, ValueError),
+    ("SpectralClustering", {"eigenvalues": _f32([1])}, ValueError),
+    ("UMAP", {"metric": "minkowski", "extras": _f64([9, 3.2, 0, 0])}, ValueError),
+    ("UMAP", {"extras": _f64([-1, 2, 1, 0])}, ValueError),
+    ("UMAP", {"controls": _f32([.1, 1, 1, 1, 0, 1])}, ValueError),
+    ("UMAP", {"meta": _i64([3, 2, 0, 7, 5, 0, 1])}, ValueError),
+    ("UMAP", {"embedding": np.ones((3, 2), dtype="<f4")}, ValueError),
+])
+def test_saved_embedding_configuration_refusals(tmp_path, name, changes, error):
+    path = _archive(tmp_path, name, override=changes)
+    cls = getattr(host, "Host" + name)
+    with pytest.raises(error):
+        getattr(host, name).load.__func__(cls, path)
+    audit = audit_native_call(cls.load, path)
+    assert isinstance(audit.exception, error), audit.report()
     report = audit.report()
     assert not any(report[key] for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads")), report
 
