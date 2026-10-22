@@ -62,6 +62,21 @@ def test_host_training_entry_is_fixed_cpu_abi(host, context, name):
     (HostStandardScaler, _STANDARD_CONTEXT, "standard_fit"),
     (HostMinMaxScaler, _MINMAX_CONTEXT, "minmax_fit"),
 ])
+def test_explicit_host_subclass_preserves_cpu_training_scope(host, context, name):
+    class Derived(host):
+        pass
+
+    assert context["scaler_host_contexts"][Derived] is context["scaler_host_contexts"][host]
+    x = _data()
+    model = audit_native_call(Derived).assert_native()
+    audit_native_call(model.fit, x).assert_native()
+    assert _bits(audit_native_call(model.transform, x).assert_native()) == _bits(host().fit(x).transform(x))
+
+
+@pytest.mark.parametrize("host,context,name", [
+    (HostStandardScaler, _STANDARD_CONTEXT, "standard_fit"),
+    (HostMinMaxScaler, _MINMAX_CONTEXT, "minmax_fit"),
+])
 @pytest.mark.parametrize("operation", ["fit", "partial_fit", "fit_transform"])
 def test_missing_training_abi_refuses_natively_and_keeps_inference(host, context, name, operation, monkeypatch):
     x = _data()
