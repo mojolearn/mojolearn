@@ -60,7 +60,7 @@ def _cache_cpu_refusal(fields: PythonObject, name: PythonObject, host: Bool,
     for i in range(len(parts)):  # driver-loop: native concatenation of import-tokenized literals and exact native Unicode values
         var part = parts[i]
         if py_type(part) is not b["str"]:
-            part = values[Int(part)]
+            part = values[Int(py=part)]
         text = py_call(context["cache_str_add"],text,part)
     var category = context["cache_no_cpu_entry"] if host else context["cache_import_error"]
     if host:

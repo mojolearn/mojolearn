@@ -49,7 +49,7 @@ def _attribute(value: PythonObject, name: PythonObject, default: PythonObject,
         var native_hook = hook is None or hook is context["cache_object_getattribute"] or (namespace and hook is context["cache_namespace_getattribute"])
         if not native_hook or py_get(mapping,"__getattr__") is not None:
             raise Error("TypeError: cache metadata requires native attribute access; Python hooks cannot execute")
-        if not found and py_contains(mapping,PythonObject(name)):
+        if not found and py_contains(mapping,name):
             selected = mapping[PythonObject(name)]
             found = True
     var member = found and py_type(selected) is context["cache_member_type"]
