@@ -74,7 +74,7 @@ def seq_shape(value: PythonObject, context: PythonObject) raises -> List[Int]:
     var view = TensorView()
     if not tensor_view(value, view):
         raise Error("TypeError: sequence parameter requires a native float32 buffer")
-    return view.shape^
+    return view.shape.copy()
 
 
 def seq_addr(value: PythonObject, count: Int, context: PythonObject, wide: Bool = False) raises -> Int:
