@@ -24,13 +24,11 @@ facts PEP 621 has no field for.
    has not been run, this tag is a guess and should be reverted to the
    default.**
 
-3. On macOS the platform tag is pinned to the Mojo compile step's deployment
-   target, not the OS of the build machine. The `minos` in the extension's
-   LC_BUILD_VERSION decides where the binary loads; the tag is what pip
-   compares before it tries. A tag that disagrees with the binary is a
-   published lie in one of two directions: too low and it installs onto Macs
-   where it cannot load, too high and it is refused by Macs that could have
-   run it.
+3. On macOS the platform tag includes the supported Mojo runtime floor,
+   every shipped native library's deployment minimum, and embedded Metal
+   library platform versions. The outer Mach-O header alone cannot establish
+   GPU compatibility; the build machine's SDK version is not a deployment
+   minimum. Both direct wheel builds and the release script audit this.
 """
 
 import json
@@ -45,33 +43,15 @@ import sys
 from setuptools import setup
 from setuptools.dist import Distribution
 
-# Must equal the `minos` that `otool -l` reports for LC_BUILD_VERSION on
-# EVERY extension in the wheel -- `_mojolearn.so` and `_mojolearn_gbdt.so` --
-# because one wheel carries one tag and the tag is only honest if it is the
-# floor of everything inside. Nothing here reads the Mach-O header;
-# build_release_wheel.sh compares them after the build, for each, and refuses
-# to continue if any disagrees.
-#
-# THE BUILD SCRIPTS SET IT AT THE LINKER, NOT THROUGH THE ENVIRONMENT, and
-# that is not a style choice. Measured 2026-08-21 on a cold compiler cache:
-# exporting MACOSX_DEPLOYMENT_TARGET at ANY value suppresses ahead-of-time
-# Metal compilation entirely -- `mojo build` writes an empty 134-byte metallib
-# per kernel and the extension dies at the first launch. Passing
-# `-Xlinker -platform_version -Xlinker macos -Xlinker <floor> -Xlinker <sdk>`
-# stamps the same LC_BUILD_VERSION and leaves the Metal step alone. See the
-# comment block at the top of bindings/build.sh.
-#
-# This read 26.0 until 2026-08-20, inherited from the host SDK, which made
-# the wheel installable only on a macOS released weeks earlier.
-DEFAULT_MACOS_TARGET = "11.0"
+# The package inspector combines Mojo1.0's supported runtime floor with
+# actual staged Mach-O and embedded Metal deployment metadata. Existing native
+# link flags remain independent: changing a wheel tag does not rebuild kernels
+# or alter load commands. A lower explicit override is refused by the inspector.
+# https://mojolang.static.modular.com/1.0.0/docs/requirements/
 TARGET_ENV_VAR = "MOJOLEARN_MACOS_DEPLOYMENT_TARGET"
 
-# MACOSX_DEPLOYMENT_TARGET is deliberately NOT consulted. Conda-style
-# environments, which is what pixi gives this build, export it for their own
-# compilers at values unrelated to what the Mojo toolchain emitted.
-# Inheriting it would tag a wheel with a floor its binary does not honor, and
-# that failure only appears on someone else's machine.
-
+# MACOSX_DEPLOYMENT_TARGET belongs to compiler configuration, not packaging.
+# Do not infer a wheel tag from an inherited Conda build environment.
 
 class BinaryDistribution(Distribution):
     def has_ext_modules(self):
@@ -134,11 +114,18 @@ class bdist_wheel(_bdist_wheel):
                 if helper:
                     command += ["--helper", helper]
                 subprocess.run(command, check=True)
+                if sys.platform == "darwin":
+                    inspector = root.parent / "packaging" / "macos" / "compatibility.py"
+                    subprocess.run([sys.executable, str(inspector), "--wheel", filename], check=True)
             except Exception:
                 Path(filename).unlink(missing_ok=True)
                 raise
 
     def get_tag(self):
+        if sys.platform == "darwin":
+            # Metadata preparation needs no native artifact. A real wheel does:
+            # derive its platform only when setuptools actually requests a tag.
+            return ("py3", "none", macos_plat_name())
         _, _, plat = _bdist_wheel.get_tag(self)
         return ("py3", "none", plat)
 
@@ -153,16 +140,13 @@ def macos_plat_name():
             "silicon, the build is running under Rosetta; use a native arm64 "
             "interpreter.".format(arch)
         )
-    target = os.environ.get(TARGET_ENV_VAR, DEFAULT_MACOS_TARGET)
-    return "macosx_{}_{}".format(target.replace(".", "_"), arch)
+    root = Path(__file__).resolve().parent
+    inspector = runpy.run_path(str(root.parent / "packaging" / "macos" / "compatibility.py"))
+    report = inspector["inspect_package"](root / "mojolearn", os.environ.get(TARGET_ENV_VAR))
+    return report["tag"]
 
-
-options = {}
-if sys.platform == "darwin":
-    options["bdist_wheel"] = {"plat_name": macos_plat_name()}
 
 setup(
     distclass=BinaryDistribution,
-    options=options,
     cmdclass={"bdist_wheel": bdist_wheel},
 )

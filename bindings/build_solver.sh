@@ -53,9 +53,9 @@ fi
 # 11.0 (Big Sur) is the first macOS that runs on Apple silicon at all, and it
 # matches the minos of the MAX runtime dylibs this links.
 #
-# setup.py's DEFAULT_MACOS_TARGET and EVERY SIBLING build script must agree
-# with this number: the .so files land in one wheel under one tag, and the tag
-# is the lower bound of what is inside it. All five existing scripts say 11.0.
+# Keep the linker floor aligned with bindings/build.sh. The wheel platform
+# separately includes every shipped native/Metal deployment minimum and the
+# supported Mojo runtime floor; packaging/macos/compatibility.py checks it.
 LINK_FLAGS="-Xlinker -platform_version -Xlinker macos -Xlinker $MACOS_FLOOR -Xlinker $MACOS_SDK"
 [ "$(uname)" = "Darwin" ] || LINK_FLAGS=""
 

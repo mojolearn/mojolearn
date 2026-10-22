@@ -54,9 +54,9 @@
 # in, so a sabotaged build fails at import, loudly, rather than serving
 # sabotaged bits under a green label.
 #
-# MACOS_FLOOR MUST EQUAL setup.py's DEFAULT_MACOS_TARGET AND EVERY SIBLING
-# BUILD SCRIPT'S. The .so files land in one wheel under one tag, and the
-# tag is the lower bound of what is inside it.
+# Keep the linker floor aligned with bindings/build.sh. The wheel platform
+# separately includes every shipped native/Metal deployment minimum and the
+# supported Mojo runtime floor; packaging/macos/compatibility.py checks it.
 set -eu
 
 here=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)

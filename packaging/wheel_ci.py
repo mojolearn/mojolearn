@@ -31,7 +31,8 @@ worth more than one that pretends to build a GPU wheel and never can.
 
     pins <repo-root>
         Every bindings/build_*.sh must pin BOTH cpu baselines, and MACOS_FLOOR
-        must equal setup.py's DEFAULT_MACOS_TARGET. macOS pinned
+        must match the canonical linker floor in bindings/build.sh. The wheel
+        tag separately includes the shipped native/Metal/runtime minima. macOS pinned
         `--target-cpu apple-m1` from 0.1.0; Linux pinned nothing until
         2026-08-31, and that is exactly why 0.3.0's Linux wheel carried
         unconditional AVX-512 and SIGILLed on every host without it. This
@@ -231,7 +232,7 @@ def versions(argv):
 # --------------------------------------------------------------------------
 def pins(argv):
     root = pathlib.Path(argv[0]).resolve()
-    target = _one(r'^DEFAULT_MACOS_TARGET = "([^"]+)"', root / "python/setup.py")
+    target = _one(r'^MACOS_FLOOR="([^"]+)"', root / "bindings/build.sh")
     # build_defines.sh is a sourced helper (MOJOLEARN_BUILD_DEFINES -> flags),
     # not a build script; it compiles nothing and pins nothing.
     scripts = sorted(p for p in (root / "bindings").glob("build*.sh") if p.name != "build_defines.sh")
@@ -268,8 +269,8 @@ def pins(argv):
             print(f"FAIL {s.name}: no MACOS_FLOOR", file=sys.stderr); bad += 1
         elif floor.group(1) != target:
             print(f"FAIL {s.name}: MACOS_FLOOR {floor.group(1)} but "
-                  f"setup.py tags {target}. One wheel carries one tag and the "
-                  f"tag is the floor of everything inside.", file=sys.stderr)
+                  f"bindings/build.sh links for {target}. Artifact deployment "
+                  f"metadata is checked separately before wheel tagging.", file=sys.stderr)
             bad += 1
         # THE LINE THAT WAS MISSING WHEN 0.3.0 SHIPPED. Without it `mojo build`
         # targets the build box's own CPU; four build boxes in a row happened
@@ -281,7 +282,12 @@ def pins(argv):
         # pinning exactly the right baseline. Accepting both spellings weakens
         # the assertion not at all: the variable and the default are still
         # required verbatim.
-        if not re.search(r'--target-cpu "?\$\{MOJOLEARN_LINUX_CPU:-x86-64-v3\}"?', text):
+        # The FAST tokenizer has an explicit Darwin-only refusal and no Linux
+        # compiler invocation. Its platform restriction must remain present;
+        # an ordinary builder still requires the Linux baseline below.
+        apple_only = (s.name == "build_tokenizer_fast.sh" and re.search(
+            r'^\[ "\$\(uname\)" = Darwin \] \|\| \{\n[^}]*^\s*exit 2; \}', text, re.M))
+        if not apple_only and not re.search(r'--target-cpu "?\$\{MOJOLEARN_LINUX_CPU:-x86-64-v3\}"?', text):
             print(f"FAIL {s.name}: does not pin the Linux x86-64 baseline to "
                   f"x86-64-v3. 0.3.0 shipped without this and SIGILLed on "
                   f"every host without AVX-512.", file=sys.stderr)
@@ -292,7 +298,7 @@ def pins(argv):
             bad += 1
     if bad:
         return 1
-    print(f"  pins: {len(scripts)} build scripts, macOS floor {target}, "
+    print(f"  pins: {len(scripts)} build scripts, macOS linker floor {target}, "
           f"Linux baseline x86-64-v3")
     return 0
 

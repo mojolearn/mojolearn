@@ -103,11 +103,9 @@ mkdir -p python/mojolearn
 # the environment variable would, and the Metal compile step never sees it.
 # Measured on a cold cache: 141 AIR blobs AND `minos 11.0`, together.
 #
-# setup.py's DEFAULT_MACOS_TARGET must equal MACOS_FLOOR below or the wheel TAG
-# and the BINARY disagree, which is a published lie in one of two directions:
-# too low and it installs where it cannot load, too high and it is refused by
-# Macs that could have run it. packaging/macos/build_release_wheel.sh checks
-# that they agree by reading the Mach-O header after the build.
+# Keep the linker floor aligned with bindings/build.sh. The wheel platform
+# separately includes every shipped native/Metal deployment minimum and the
+# supported Mojo runtime floor; packaging/macos/compatibility.py checks it.
 MACOS_FLOOR="11.0"
 
 # NOT EXPORTED, DELIBERATELY -- see above. Unset it if the caller had it set,

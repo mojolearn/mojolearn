@@ -54,11 +54,9 @@ cd "$here"
 
 mkdir -p python/mojolearn
 
-# Must equal bindings/build.sh's MACOS_FLOOR and setup.py's
-# DEFAULT_MACOS_TARGET: these .so files land in ONE wheel under ONE tag, and
-# the tag is the lower bound of what is inside it. Disagreement is a
-# published lie in one of two directions -- too low and the wheel installs
-# where it cannot load, too high and Macs that could have run it refuse it.
+# Keep the linker floor aligned with bindings/build.sh. The wheel platform
+# separately includes every shipped native/Metal deployment minimum and the
+# supported Mojo runtime floor; packaging/macos/compatibility.py checks it.
 MACOS_FLOOR="11.0"
 
 # NOT EXPORTED, DELIBERATELY -- see (1) above. Unset it if the caller had it

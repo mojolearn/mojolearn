@@ -92,8 +92,8 @@ jobs:
           echo "arch:  $(uname -m)"
 
       # No pixi and no Mojo anywhere in this job. `python/setup.py` compiles
-      # nothing -- it only fixes the wheel's tags -- so the whole Python side
-      # of the distribution can be built and checked with setuptools alone.
+      # nothing. Standard PEP517 metadata preparation checks the distribution
+      # metadata without pretending a native artifact exists.
       # Dropping pixi is what takes this job from a five-minute failure to a
       # one-minute pass.
       - name: Install python 3.10 through 3.14
@@ -125,12 +125,9 @@ jobs:
             python/mojolearn python/mojolearn_diagnostics.py
 
       # ------------------------------------------------------------------
-      # THE METADATA WHEEL. Same setup.py, same pyproject.toml, same tag
-      # computation as the shipped wheel, and NO EXTENSIONS, because this
-      # runner cannot make one. It is built to be inspected and thrown away;
-      # the step after it proves it is empty so that nobody, and no later
-      # step, can mistake it for a release artifact. It is deliberately NOT
-      # uploaded.
+      # METADATA ONLY. Standard PEP517 preparation does not create a wheel.
+      # A production wheel requires staged native/Metal deployment metadata;
+      # a zero-native build must fail and cannot claim a macOS platform tag.
       # ------------------------------------------------------------------
       - name: The four files build_release_wheel.sh copies
         run: |
@@ -138,72 +135,50 @@ jobs:
           cp LICENSE NOTICE README.md python/
           cp CITATION.cff python/mojolearn/
 
-      - name: Build the metadata-only wheel
+      - name: Prepare and validate PEP517 metadata without native artifacts
         run: |
           set -euo pipefail
           python3 -m venv "$RUNNER_TEMP/pkgvenv"
           "$RUNNER_TEMP/pkgvenv/bin/pip" install --quiet --upgrade \
-            "setuptools>=77" wheel build twine
-          ( cd python && rm -rf dist build ./*.egg-info \
-            && "$RUNNER_TEMP/pkgvenv/bin/python" -m build --wheel --no-isolation )
-          ls -la python/dist/*.whl
+            "setuptools>=77" wheel build "lief==1.0.0" packaging "readme-renderer[md]"
+          "$RUNNER_TEMP/pkgvenv/bin/python" - <<'PY'
+          import os
+          from pathlib import Path
+          import build
+          from packaging.metadata import Metadata
+          from readme_renderer.markdown import render
+          out = Path(os.environ["RUNNER_TEMP"]) / "prepared-metadata"
+          out.mkdir()
+          directory = Path(build.ProjectBuilder("python").prepare("wheel", str(out)))
+          metadata = Metadata.from_email((directory / "METADATA").read_bytes(), validate=True)
+          assert render(metadata.description) is not None, "README does not render"
+          for filename in ("LICENSE", "NOTICE"):
+              assert (directory / "licenses" / filename).is_file(), filename
+          assert Path("python/mojolearn/CITATION.cff").is_file()
+          print("Validated PEP517 metadata, README and license files; no wheel built")
+          PY
 
-      - name: It must contain NO extensions, and say so
+      - name: A zero-native wheel build is refused before claiming a platform
         run: |
           set -euo pipefail
-          WHL=$(ls python/dist/*.whl)
-          n=$(unzip -l "$WHL" | grep -c '\.so$' || true)
-          if [ "$n" != 0 ]; then
-            echo "::error::this job built $n extension(s). It cannot have: the"
-            echo "::error::runner has no GPU. Something is very wrong."
+          if ( cd python && "$RUNNER_TEMP/pkgvenv/bin/python" -m build --wheel --no-isolation ) \
+              > "$RUNNER_TEMP/zero-native-wheel.log" 2>&1; then
+            echo "::error::a zero-native wheel build unexpectedly succeeded"
             exit 1
           fi
-          echo "0 extensions, as intended. THIS WHEEL IS NOT SHIPPABLE."
+          grep -q 'macOS wheel requires staged native payloads before tagging' \
+            "$RUNNER_TEMP/zero-native-wheel.log"
+          test -z "$(find python/dist -name '*.whl' -print 2>/dev/null)"
+          echo "No-native build correctly refused; no wheel platform claim made"
 
-      # The tag is the one claim a GPU-less runner can check completely, and
-      # it is a published lie in one of two directions when it is wrong: too
-      # low and pip installs onto Macs where the binary cannot load, too high
-      # and Macs that could have run it are turned away. `wheel_ci.py pins`
-      # above already tied every MACOS_FLOOR to DEFAULT_MACOS_TARGET; this
-      # ties DEFAULT_MACOS_TARGET to the filename pip actually compares.
-      - name: The wheel tag is macosx_11_0_arm64 and py3-none
-        run: |
-          set -euo pipefail
-          V=$(sed -n 's/^version = "\(.*\)"$/\1/p' python/pyproject.toml | head -1)
-          WANT="mojolearn-$V-py3-none-macosx_11_0_arm64.whl"
-          GOT=$(basename "$(ls python/dist/*.whl)")
-          test "$GOT" = "$WANT" || {
-            echo "::error::wheel is $GOT, expected $WANT"
-            echo "::error::DEFAULT_MACOS_TARGET in python/setup.py decides this"
-            exit 1
-          }
-          echo "tag: $GOT"
-
-      # twine check reads the METADATA the way PyPI does. A README that does
-      # not render is refused at upload, at the end of the release, after the
-      # M4 has spent an hour building.
-      - name: Metadata check
-        run: "$RUNNER_TEMP/pkgvenv/bin/twine check python/dist/*.whl"
-
-      - name: The citation ships inside the package
-        run: |
-          set -euo pipefail
-          unzip -l python/dist/*.whl | grep -q 'mojolearn/CITATION.cff' || {
-            echo "::error::CITATION.cff is not in the wheel. Attribution that"
-            echo "::error::lives only in the git repository does not travel"
-            echo "::error::with the artifact."
-            exit 1
-          }
-          for f in LICENSE NOTICE; do
-            unzip -l python/dist/*.whl | grep -q "licenses/$f" || {
-              echo "::error::$f is not in the wheel"; exit 1; }
-          done
+      - name: macOS artifact metadata gate regression tests
+        run: python3 -m unittest discover -s packaging/macos -p 'test_compatibility.py'
 
       # ------------------------------------------------------------------
       # THE INTERPRETER LOOP, which is the one breadth claim the M4 cannot
-      # make: 3.10 and 3.11 are the floor and are not installed there. Clean
-      # venv per interpreter, install from the wheel, and require the
-      # NO-EXTENSION REFUSAL to be mojolearn's own, by name.
+      # make here. A clean venv per interpreter receives a test-only copy of
+      # the Python package, with no native files. Require the NO-EXTENSION
+      # REFUSAL to be mojolearn's own, by name. This is not wheel-install proof.
       #
       # That refusal is not a technicality. Measured on a rented RTX 4090,
       # 2026-08-29 (_backend.py, `select`): a partial build under `fast` used
@@ -212,14 +187,17 @@ jobs:
       # names the wrong cause and loses every lane that would have worked.
       # The stub that fixed it has never been exercised by any automated
       # test. This is that test, and this runner is the only place in the
-      # project where a zero-extension install happens naturally.
+      # project where a zero-extension testing fixture is exercised.
       # ------------------------------------------------------------------
-      - name: Install and check the refusal on every claimed interpreter
+      - name: Check the missing-binding fixture on every claimed interpreter
         run: |
           set -euo pipefail
-          WHL=$(ls "$PWD"/python/dist/*.whl)
+          export MOJOLEARN_REFUSAL_SOURCE="$PWD/python/mojolearn"
           cat > "$RUNNER_TEMP/refusal.py" <<'PY'
-          import sys, traceback
+          import importlib.util, sys, sysconfig, traceback
+          from pathlib import Path
+          expected = Path(sysconfig.get_paths()["purelib"]) / "mojolearn" / "__init__.py"
+          assert Path(importlib.util.find_spec("mojolearn").origin).resolve() == expected.resolve()
           want = sys.argv[1]
           try:
               import mojolearn
@@ -261,7 +239,7 @@ jobs:
               traceback.print_exc()
               raise SystemExit(1)
           else:
-              raise SystemExit("BAD: fit SUCCEEDED with no extension in the wheel")
+              raise SystemExit("BAD: fit SUCCEEDED with no extension in the testing fixture")
           PY
           V=$(sed -n 's/^version = "\(.*\)"$/\1/p' python/pyproject.toml | head -1)
           fails=0
@@ -273,11 +251,15 @@ jobs:
             fi
             tmp=$(mktemp -d)
             "$py" -m venv "$tmp/venv"
-            # --no-cache-dir so a previously built wheel cannot be reused.
-            "$tmp/venv/bin/pip" install --quiet --no-cache-dir "$WHL"
-            # cd out of the checkout so ./python/mojolearn cannot shadow the
-            # installed package; without this the test can pass on source
-            # that is not in the wheel at all.
+            "$tmp/venv/bin/python" - <<'PY'
+          import os, shutil, sysconfig
+          from pathlib import Path
+          source = Path(os.environ["MOJOLEARN_REFUSAL_SOURCE"])
+          assert not list(source.rglob("*.so")) and not list(source.rglob("*.dylib"))
+          shutil.copytree(source, Path(sysconfig.get_paths()["purelib"]) / "mojolearn",
+                          ignore=shutil.ignore_patterns("__pycache__"))
+          PY
+            # Run outside the checkout and verify the actual fixture origin.
             if ( cd "$tmp" && "$tmp/venv/bin/python" "$RUNNER_TEMP/refusal.py" "$V" ); then
               echo "PASS $py"
             else
@@ -294,12 +276,12 @@ jobs:
             echo "### Wheel CI -- packaging only"
             echo ""
             echo "Verified here, with no GPU and no Mojo: version agreement in"
-            echo "all three places, CPU-baseline pins in all ten build scripts,"
-            echo "import reachability of every shipped module, the wheel tag,"
-            echo "\`twine check\`, LICENSE/NOTICE/CITATION.cff presence, and"
-            echo "install plus refusal-by-name on python 3.10-3.14."
+            echo "all three places, explicit linker/CPU-baseline pins, import"
+            echo "reachability, PEP517 metadata/README/license validation, and"
+            echo "zero-native wheel rejection. Python 3.10-3.14 receive only a"
+            echo "testing fixture for refusal-by-name checks, not an installed wheel."
             echo ""
-            echo "**NOT verified here: anything compiled.** No extension was"
+            echo "**NOT verified here: wheel installation or native compatibility.** No extension was"
             echo "built, no kernel exists, nothing was fitted. A hosted macOS"
             echo "runner cannot build this wheel -- see the header of"
             echo "\`.github/workflows/wheel-ci.yml\`. The wheel that ships is"
