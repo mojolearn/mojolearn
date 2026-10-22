@@ -247,6 +247,17 @@ class InstalledNativeAudit(unittest.TestCase):
         with self.assertRaises(ValueError):
             q.selected_files(test_nodes=nodes + nodes[:1])
 
+    def test_public_archive_unicode_scope_preserves_warning_limitation(self):
+        name = "test_archive_unicode_native.py"
+        self.assertIn(name, q.PUBLIC_TESTS)
+        for vendor in ("cpu", "metal", "cuda", "hip"):
+            scope = q.test_applicability([name], vendor)[name]
+            self.assertEqual(scope["cpu_not_applicable_cases"], {})
+            self.assertEqual(q.test_dependencies([name]), ["numpy", "pytest"])
+            self.assertIn("strict ZIP UTF-8", scope["coverage_limit"])
+            self.assertIn("may still reach Python warning display", scope["coverage_limit"])
+            self.assertIn("complete archive callback closure remains unqualified", scope["coverage_limit"])
+
     def test_public_owner_and_host_scopes_exclude_private_array_candidate(self):
         names = ("test_native_owner_qualification.py", "test_sequence_shutdown_native.py", "test_training_rms_public_native.py", "test_optimizer_native_step_errors.py",
                  "test_optimizer_native_array_ownership.py", "test_device_rows_metadata_native.py", "test_host_kde_fit_native.py", "test_host_iforest_fit_native.py",
