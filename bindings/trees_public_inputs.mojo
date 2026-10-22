@@ -22,12 +22,10 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setit
 from bindings.py_typed_call import py_call_typed
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.classical_arrays import classical_wrap_array, _store_code, _buffer_typestr
-from bindings.classical_cast import classical_f32_bits
 from bindings.classical_pandas import native_pandas_exact, native_pandas_f32, _pd_fields, _pd_get
 from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.sequential_inputs import sequential_sequence
-from core.cast_in import CAST_KIND_SIGNED, CAST_KIND_UNSIGNED, CAST_KIND_FLOAT
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _F64P = MutPointer[Float64, MutUntrackedOrigin]
@@ -118,6 +116,14 @@ def trees_empty(shape: PythonObject, typestr: String, context: PythonObject, ord
 
 def trees_vector(count: Int, typestr: String, context: PythonObject) raises -> PythonObject:
     return trees_empty(Python.tuple(count), typestr, context)
+
+
+def trees_full_f32(count: Int, value: Float64, context: PythonObject) raises -> PythonObject:
+    """`_buffer.full((count,), value, '<f4')`: one float32 conversion of
+    `value`, the store repeated in C (`array.array.__mul__`)."""
+    var one = py_call(context["array_type"], PythonObject("f"), Python.list(PythonObject(value)))
+    var store = py_call(one.__mul__, PythonObject(count))
+    return classical_wrap_array(store, Python.tuple(count), "<f4", "C", context)
 
 
 def trees_reshape(array: PythonObject, shape: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -316,33 +322,40 @@ def trees_check_rank(view: TreesView, ndim: Int, name: String) raises:
                     + " (shape=" + shown + ") while a minimum of 1 is required.")
 
 
-def _cast_kind(typestr: String) raises -> Int:
-    var letter = String(typestr[byte=1:2])
-    if letter == "f":
-        return CAST_KIND_FLOAT
-    if letter == "i":
-        return CAST_KIND_SIGNED
-    return CAST_KIND_UNSIGNED
+def _native_code(typestr: String) raises -> Int:
+    """`_array._NATIVE_CODE`: the core helpers' dtype numbering."""
+    if typestr == "<f4":
+        return 0
+    if typestr == "<f8":
+        return 1
+    if typestr == "<i4":
+        return 2
+    if typestr == "<i8":
+        return 3
+    if typestr == "<u4":
+        return 4
+    if typestr == "<u1":
+        return 5
+    if typestr == "<u2":
+        return 6
+    if typestr == "<i1":
+        return 7
+    if typestr == "<f2":
+        return 8
+    raise Error("TypeError: " + typestr + " has no native element code")
 
 
-def _strided_to_f32(view: TreesView, dst: Int, fortran: Bool) raises:
-    """`Array.astype('<f4')` then `_as_order`: each element converted by the
-    classical integer -> double -> float contract (or the float narrowing),
-    written in the requested order."""
-    var rows = view.shape[0]
-    var cols = view.shape[1] if view.ndim() == 2 else 1
-    var s0 = view.strides[0]
-    var s1 = view.strides[1] if view.ndim() == 2 else 0
-    var kind = _cast_kind(view.typestr)
-    var out = _F32P(unsafe_from_address=dst)
-    for r in range(rows):  # native input marshaling: the input rows, never a model loop
-        for c in range(cols):  # native input marshaling: the input columns
-            var bytes = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=view.addr + r * s0 + c * s1)
-            var raw = UInt64(0)
-            for k in range(view.item):  # native input marshaling: the element's bytes
-                raw |= UInt64(bytes[k]) << UInt64(k * 8)
-            var bits = classical_f32_bits(raw, kind, view.item)
-            out[c * rows + r if fortran else r * cols + c] = bitcast[DType.float32](bits)
+def trees_cast(src: Int, source: String, dst: Int, target: String, count: Int, context: PythonObject) raises:
+    """`Array.astype(target)` of a contiguous block (`_native_astype`): the
+    core helper `cast_elements`, one conversion per element in storage
+    order."""
+    if count == 0:
+        return
+    var refused = Int(py=py_call_typed(trees_helper(context, "cast_elements"), PythonObject(src),
+                                      PythonObject(_native_code(source)), PythonObject(dst),
+                                      PythonObject(_native_code(target)), PythonObject(count)))
+    if refused != 0:
+        raise Error("TypeError: mojolearn: an element does not fit " + target)
 
 
 struct TreesMatrix(Copyable, Movable):
@@ -403,7 +416,18 @@ def trees_f32_view(var view: TreesView, order: String, context: PythonObject) ra
             _ = py_call_typed(trees_helper(context, "cast_f64_to_f32"), PythonObject(view.addr), PythonObject(dst),
                               PythonObject(view.size()))
             return TreesMatrix(out, dst, rows, cols, not want_f)
-    _strided_to_f32(view, dst, want_f and two)
+    # `astype('<f4')` keeps the source's storage order; `_as_order` then
+    # transposes when the requested order differs (the float32 transpose).
+    if not two or view.both_orders() or contiguous_f == want_f:
+        trees_cast(view.addr, view.typestr, dst, "<f4", view.size(), context)
+        return TreesMatrix(out, dst, rows, cols, not want_f)
+    var staged = trees_vector(view.size(), "<f4", context)
+    trees_cast(view.addr, view.typestr, trees_address(staged), "<f4", view.size(), context)
+    var r = cols if contiguous_f else rows
+    var c = rows if contiguous_f else cols
+    _ = py_call_typed(trees_helper(context, "transpose_f32"), PythonObject(trees_address(staged)), PythonObject(dst),
+                      PythonObject(r), PythonObject(c))
+    _ = staged^
     return TreesMatrix(out, dst, rows, cols, not want_f)
 
 
@@ -465,10 +489,7 @@ def trees_check_sample_weight(source: PythonObject, n: Int, context: PythonObjec
         if n:
             trees_prepare_weights(w.addr, n, context)
         return w^
-    var out = trees_vector(n, "<f4", context)
-    var p = _F32P(unsafe_from_address=trees_address(out))
-    for i in range(n):  # native input marshaling: the constant weight vector (`_buffer.full`)
-        p[i] = Float32(value)
+    var out = trees_full_f32(n, value, context)
     if n:
         trees_prepare_weights(trees_address(out), n, context)
     return TreesMatrix(out, trees_address(out), n, 1, True)
@@ -528,22 +549,10 @@ def _native_labels(view: TreesView, bool_source: Bool, context: PythonObject) ra
     var wide_float = view.typestr == "<f4" or view.typestr == "<f8"
     var classes_store = trees_vector(n, "<f8" if wide_float else "<i8", context)
     var codes = trees_vector(n, "<i4", context)
+    # Every view here is contiguous (`_view_of_buffer` linearizes a strided
+    # export; an Array is C or F), so a vector's storage is its logical order.
     var y_addr = view.addr
     var keep = view.keep
-    if not view.c_order():
-        # `_materialize` read a strided vector into one C-order copy.
-        var copy = trees_vector(n, view.typestr, context)
-        var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=trees_address(copy))
-        var step = view.item
-        for axis in range(view.ndim()):  # driver-loop: over array rank metadata
-            if view.shape[axis] == n:
-                step = view.strides[axis]
-        for i in range(n):  # native input marshaling: the label vector's elements
-            var src = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=view.addr + i * step)
-            for k in range(view.item):  # native input marshaling: the element's bytes
-                dst[i * view.item + k] = src[k]
-        y_addr = trees_address(copy)
-        keep = copy
     var k = 0
     try:
         k = Int(py=py_call_typed(trees_helper(context, "prepare_targets"), PythonObject(y_addr),
@@ -655,7 +664,7 @@ def _sorted_classes(labels: PythonObject, context: PythonObject) raises -> Trees
         raise Error("mojolearn: y mixes numeric and str labels; encode one kind before fitting")
     var classes = py_call(b.sorted, py_call(b.dict.fromkeys, labels))
     var index = Python.dict()
-    for i in range(len(classes)):  # glue: class index table (classes-sized: distinct classes)
+    for i in range(len(classes)):  # driver-loop: over class index table (classes-sized: distinct classes)
         py_setitem(index, classes[i], PythonObject(i))
     var codes = trees_vector(n, "<i4", context)
     var p = _I32P(unsafe_from_address=trees_address(codes))
@@ -738,7 +747,7 @@ def trees_label_kind(classes: PythonObject, context: PythonObject) raises -> Str
     var b = trees_builtins()
     var all_int = True
     var all_real = True
-    for i in range(len(classes)):  # glue: kind test of the class labels (classes-sized: distinct classes)
+    for i in range(len(classes)):  # driver-loop: over kind test of the class labels (classes-sized: distinct classes)
         var c = classes[i]
         var t = py_type(c)
         var is_bool = t is b.bool or String(t.__name__) == "bool_"
@@ -764,14 +773,11 @@ def trees_decode_labels(classes: PythonObject, codes: PythonObject, context: Pyt
     var wide_codes = codes
     if String(codes.dtype) == "<i4":
         wide_codes = trees_vector(n, "<i8", context)
-        var src = _I32P(unsafe_from_address=trees_address(codes))
-        var dst = _I64P(unsafe_from_address=trees_address(wide_codes))
-        for i in range(n):  # native output marshaling: widen the codes (Array.astype('<i8'))
-            dst[i] = Int64(src[i])
+        trees_cast(trees_address(codes), "<i4", trees_address(wide_codes), "<i8", n, context)
     if (kind == "int" or kind == "float") and k > 0:
         var table = trees_vector(k, "<i8" if kind == "int" else "<f8", context)
         var fits = True
-        for i in range(k):  # glue: the k class values into the gather table
+        for i in range(k):  # driver-loop: over the k class values into the gather table
             if kind == "int":
                 var v = classes[i]
                 if Bool(py=v < PythonObject(-9223372036854775808)) or Bool(py=v > PythonObject(9223372036854775807)):
@@ -831,26 +837,23 @@ def trees_class_weight_rows(class_weight: PythonObject, labels: TreesLabels, xtr
         _ = py_call_typed(count_entry, PythonObject(trees_address(labels.codes) if n else 0),
                           PythonObject(trees_address(counts)), Python.list(n, k))
         var wide = trees_vector(k, "<i8", context)
-        var c32 = _I32P(unsafe_from_address=trees_address(counts))
-        var c64 = _I64P(unsafe_from_address=trees_address(wide))
-        for i in range(k):  # glue: the k class counts (Array.astype('<i8'))
-            c64[i] = Int64(c32[i])
+        trees_cast(trees_address(counts), "<i4", trees_address(wide), "<i8", k, context)
         var w64 = trees_vector(k, "<f8", context)
         if k and Int(py=py_call_typed(trees_helper(context, "class_ratio_f64"), PythonObject(trees_address(wide)),
                                       PythonObject(k), PythonObject(n), PythonObject(0), PythonObject(trees_address(w64)))):
             raise Error("ZeroDivisionError: division by zero")
         var p = _F64P(unsafe_from_address=trees_address(w64))
-        for i in range(k):  # glue: the k class weights for the argument checks below
+        for i in range(k):  # driver-loop: over the k class weights for the argument checks below
             _ = py_call(objects.append, PythonObject(p[i]))
     else:
         var unknown = py_call(py_call(b.set, class_weight).difference, classes)
         if len(unknown) > 0:
             raise Error("class_weight contains labels absent from y")
-        for i in range(k):  # glue: user class_weight dict per class
+        for i in range(k):  # driver-loop: over user class_weight dict per class
             _ = py_call(objects.append, py_call(class_weight.get, classes[i], PythonObject(1.0)))
     var values = List[Float64]()
     var all_one = True
-    for i in range(k):  # glue: class weight argument checks
+    for i in range(k):  # driver-loop: over class weight argument checks
         var v = objects[i]
         var t = py_type(v)
         if t is b.bool or String(t.__name__) == "bool_" or not Bool(py=py_call(b.isinstance, v, context["trees_real_type"])):
@@ -865,7 +868,7 @@ def trees_class_weight_rows(class_weight: PythonObject, labels: TreesLabels, xtr
     var narrowed = trees_vector(k, "<f4", context)
     var q = _F32P(unsafe_from_address=trees_address(narrowed))
     var top = Float32(0)
-    for i in range(k):  # glue: the k class weights narrowed to float32
+    for i in range(k):  # driver-loop: over the k class weights narrowed to float32
         var f32 = Float32(values[i])
         if not isfinite(f32) or (values[i] > 0 and f32 == 0):
             raise Error("class weights must remain finite and nonzero when positive in Float32")
