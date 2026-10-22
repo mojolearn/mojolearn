@@ -315,3 +315,141 @@ def test_kernel_public_methods_are_single_native_calls():
         call = method.body[1].value
         assert isinstance(call, ast.Call) and isinstance(call.func, ast.Name)
         assert call.func.id == "_native_classical"
+
+
+SCALAR_SLOTS = [
+    ("KernelRidge", "n_features_in_", None), ("KernelRidge", "n_targets_", None),
+    *(('KernelRidge', '_kernel_params', i) for i in range(5)),
+    ("KernelRidge", "info_", None), ("KernelRidge", "_squeeze", None),
+    ("Nystroem", "_kernel_params", 0), ("Nystroem", "_kernel_params", 2),
+    ("Nystroem", "sweeps_", None), ("RBFSampler", "_params", 0),
+    ("RBFSampler", "_params", 1), ("RBFSampler", "sigma_", None), ("RBFSampler", "scale_", None),
+]
+
+
+def _set_scalar_slot(model, field, item, value):
+    if item is None:
+        setattr(model, field, value)
+    else:
+        values = list(vars(model)[field])
+        values[item] = value
+        setattr(model, field, tuple(values))
+
+
+@pytest.mark.parametrize("name,field,item", SCALAR_SLOTS)
+def test_kernel_object_array_scalar_state_is_refused_before_element_hooks(tmp_path, name, field, item):
+    model = _model(tmp_path, name)
+    touched = []
+    class Value:
+        def __int__(self):
+            touched.append("int")
+            return 1
+        def __index__(self):
+            touched.append("index")
+            return 1
+        def __float__(self):
+            touched.append("float")
+            return 1.0
+        def __bool__(self):
+            touched.append("bool")
+            return True
+    value = np.empty((), dtype=object)
+    value[()] = Value()
+    _set_scalar_slot(model, field, item, value)
+    _refused(audit_native_call(_method(model, name), [[1., 2., 3.]]), TypeError)
+    assert touched == []
+
+
+@pytest.mark.parametrize("name", NAMES + ("ElasticNet", "Lasso", "KMeans"))
+@pytest.mark.parametrize("field", ["_mojolearn_fitted", "_mojolearn_fitting"])
+def test_host_fitted_state_object_arrays_never_call_element_truth_hooks(tmp_path, name, field):
+    model = _model(tmp_path, name)
+    features = model.n_features_in_
+    touched = []
+    class Value:
+        def __bool__(self):
+            touched.append("bool")
+            return True
+    value = np.empty((), dtype=object)
+    value[()] = Value()
+    setattr(model, field, value)
+    method = model.predict if name in ("KernelRidge", "ElasticNet", "Lasso", "KMeans") else model.transform
+    _refused(audit_native_call(method, _input(features, "float32")), TypeError)
+    assert touched == []
+
+
+@pytest.mark.parametrize("name,field,item", SCALAR_SLOTS)
+def test_ordinary_zero_dimensional_scalar_state_keeps_legacy_results(tmp_path, name, field, item):
+    model = _model(tmp_path, name)
+    original = vars(model)[field] if item is None else vars(model)[field][item]
+    _set_scalar_slot(model, field, item, np.asarray(original))
+    x = _input(3, "float32")
+    expected = legacy.kernel_model(model, x, name)
+    assert _state(audit_native_call(_method(model, name), x).assert_native()) == _state(expected)
+
+
+@pytest.mark.parametrize("name", NAMES + ("ElasticNet", "Lasso", "KMeans"))
+@pytest.mark.parametrize("dtype,shape", [("bool", ()), ("int32", (1,)), ("complex64", (1, 1))])
+def test_numeric_fitted_flag_arrays_keep_legacy_truth_semantics(tmp_path, name, dtype, shape):
+    model = _model(tmp_path, name)
+    model._mojolearn_fitted = np.ones(shape, dtype=dtype)
+    model._mojolearn_fitting = np.zeros(shape, dtype=dtype)
+    x = _input(model.n_features_in_, "float32")
+    if name in NAMES:
+        expected = legacy.kernel_model(model, x, name)
+    elif name == "KMeans":
+        expected = legacy.kmeans(model, x)
+    else:
+        expected = legacy.public_cd_predict(model, x)
+    method = model.predict if name in ("KernelRidge", "ElasticNet", "Lasso", "KMeans") else model.transform
+    assert _state(audit_native_call(method, x).assert_native()) == _state(expected)
+
+
+@pytest.mark.parametrize("storage", ["shape", "array", "dict", "row_list", "coordinate", "field_key"])
+def test_sparse_mutated_metadata_cannot_enter_python_hooks(tmp_path, storage):
+    model = _model(tmp_path, "Nystroem")
+    x = _sparse("dok" if storage in ("dict", "coordinate") else ("lil" if storage == "row_list" else "csr"))
+    touched = []
+    class Number(int):
+        def __int__(self):
+            touched.append("int")
+            return 1
+        def __index__(self):
+            touched.append("index")
+            return 1
+    exception = TypeError
+    if storage == "shape":
+        vars(x)["_shape"] = (Number(4), 3)
+        exception = ValueError
+    elif storage == "array":
+        class Storage(np.ndarray):
+            def __getattribute__(self, name):
+                touched.append(name)
+                return super().__getattribute__(name)
+        vars(x)["data"] = np.asarray([1.]).view(Storage)
+    elif storage == "dict":
+        class Dictionary(dict):
+            def items(self):
+                touched.append("items")
+                return super().items()
+        vars(x)["_dict"] = Dictionary(vars(x)["_dict"])
+    elif storage == "row_list":
+        class Row(list):
+            def __len__(self):
+                touched.append("len")
+                return super().__len__()
+        vars(x)["data"][0] = Row([1., 2.])
+    elif storage == "coordinate":
+        vars(x)["_dict"] = {(Number(0), 0): 1.}
+    else:
+        class Key(str):
+            __hash__ = str.__hash__
+            def __eq__(self, other):
+                touched.append("eq")
+                return super().__eq__(other)
+        object.__setattr__(x, "__dict__", {Key("_shape"): (4, 3)})
+    # ndarray subclass construction may query __array_finalize__; fixture
+    # construction is outside the audited product operation.
+    touched.clear()
+    _refused(audit_native_call(model.transform, x), exception)
+    assert touched == []

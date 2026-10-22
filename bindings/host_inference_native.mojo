@@ -9,7 +9,8 @@ from bindings.sequential_admission import _ordinary_torch
 from bindings.classical_exceptions import classical_require_fitted
 from bindings.host_inference_features import host_inference_feature_names
 from bindings.host_inference_preparation import host_inference_pandas_finite
-from bindings.host_kernel_inference_native import host_kernel_inference
+from bindings.host_kernel_inference_native import host_kernel_inference, host_kernel_admit_state
+from bindings.host_inference_scalars import host_inference_scalar
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.classical_arrays import classical_input, classical_address, classical_is_f32, classical_is_array, classical_c_order, classical_kind
 from bindings.host_archive_native import host_archive_typed
@@ -42,11 +43,18 @@ def host_inference_operation(model: PythonObject, operation: String, args: Pytho
     var keys = py_call(b.list, fields.keys())
     for i in range(len(keys)):  # driver-loop: admitted stored model values
         classical_admit_value(fields[keys[i]], context)
+    host_inference_scalar(py_get(fields, "_mojolearn_fitted", False), context, True)
+    host_inference_scalar(py_get(fields, "_mojolearn_fitting", False), context, True)
+    if py_contains(fields, "n_features_in_"):
+        host_inference_scalar(fields["n_features_in_"], context)
+    var kernel = String(kind) == "kernel_ridge" or String(kind) == "nystroem" or String(kind) == "rbf_sampler"
+    if kernel:
+        host_kernel_admit_state(fields, String(kind), context)
     classical_require_fitted(model, False, "transform" if operation == "host_infer_transform" else "predict", error_context)
     var mode = py_get(fields, "numeric_mode")
     if mode is not None and (py_type(mode) is not b.str or String(mode) != "identical"):
         raise Error("explicit host models run identical mode only")
-    if String(kind) == "kernel_ridge" or String(kind) == "nystroem" or String(kind) == "rbf_sampler":
+    if kernel:
         return host_kernel_inference(model, fields, String(kind), args[0], context, public)
     classical_admit_value(args, context)
     var cd = String(kind) == "cd"
