@@ -4,7 +4,7 @@
 
 def connect():
     # glue: retain native entry and immutable slot identities during import
-    from types import BuiltinFunctionType, GetSetDescriptorType, MemberDescriptorType, MethodType, ModuleType
+    from types import BuiltinFunctionType, MemberDescriptorType, MethodType, ModuleType
     import mmap
     import weakref
     from . import _arena_io
@@ -21,7 +21,9 @@ def connect():
     if type(weakref.getweakrefs) is not BuiltinFunctionType:
         raise TypeError("DeviceRows requires native weak-reference inspection")
     callback = vars(weakref.ReferenceType)["__callback__"]
-    if type(callback) is not GetSetDescriptorType:
+    if (type(callback) is not MemberDescriptorType
+            or callback.__objclass__ is not weakref.ReferenceType
+            or callback.__name__ != "__callback__"):
         raise TypeError("DeviceRows requires the native weak-reference callback descriptor")
     context = _numpy_free_context()
     context.update(native_module_type=ModuleType, arena_array_slots=slots,
