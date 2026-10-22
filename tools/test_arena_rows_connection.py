@@ -18,11 +18,20 @@ class Rows:
     pass
 
 
-def connect():
+class Resident:
+    def take(self):
+        raise AssertionError("import-time metadata must never call take")
+
+
+def connect(native_entry=len):
     package = ModuleType('mojolearn')
     package.__path__ = [str(ROOT / 'python/mojolearn')]
     arena = ModuleType('mojolearn._arena_io')
     arena.DeviceRows = Rows
+    selection = ModuleType('mojolearn.model_selection')
+    selection._Resident = Resident
+    buffers = ModuleType('mojolearn._buffer')
+    buffers._native = lambda name: native_entry
     arrays = ModuleType('mojolearn._array')
     arrays.Array = Array
     bridge = ModuleType('mojolearn._native_classical_bridge')
@@ -31,7 +40,8 @@ def connect():
     tokenizer._binding = lambda: SimpleNamespace(_module=SimpleNamespace(arena_rows_native_call=len))
     modules = {'mojolearn': package, 'mojolearn._arena_io': arena,
                'mojolearn._array': arrays, 'mojolearn._native_classical_bridge': bridge,
-               'mojolearn.tokenizer': tokenizer}
+               'mojolearn.tokenizer': tokenizer, 'mojolearn.model_selection': selection,
+               'mojolearn._buffer': buffers}
     with patch.dict(sys.modules, modules):
         namespace = {'__name__': 'mojolearn._native_arena_rows', '__package__': 'mojolearn'}
         source = ROOT / 'python/mojolearn/_native_arena_rows.py'
@@ -41,6 +51,21 @@ def connect():
 
 
 class NativeWeakrefConnectionTests(unittest.TestCase):
+    def test_native_resident_entries_are_connected_without_calling_python_take(self):
+        context = connect()
+        self.assertIs(context['arena_resident_take'], Resident.take)
+        self.assertTrue(all(context[key] is len for key in
+                            ('arena_msel_put', 'arena_msel_free', 'arena_msel_take_rows', 'arena_cast')))
+        self.assertIs(type(context['arena_half_copy_canonical']), bool)
+
+    def test_python_resident_entry_is_refused_before_invocation(self):
+        calls = []
+        def forbidden(*args):
+            calls.append(True)
+        with self.assertRaisesRegex(TypeError, 'compiled resident and cast entries'):
+            connect(forbidden)
+        self.assertEqual(calls, [])
+
     def test_real_native_callback_member_is_admitted(self):
         descriptor = vars(weakref.ReferenceType)['__callback__']
         self.assertIs(type(descriptor), MemberDescriptorType)
