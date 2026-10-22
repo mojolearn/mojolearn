@@ -132,3 +132,35 @@ def test_native_text_refuses_replaced_contextvar_before_get(resident, monkeypatc
     assert not calls
     for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads"):
         assert not result.report()[key], result.report()
+
+
+@pytest.mark.parametrize("legacy", [value for value in LEGACY if value != "1.13"])
+@pytest.mark.parametrize("dtype", DTYPES, ids=["unicode", "bytes", "record"] + (["string"] if len(DTYPES) == 4 else []))
+def test_native_text_decimal_precision_at_each_fixed_decade(dtype, legacy):
+    # The fixed formatter uses decimal exponents for these ten decades.
+    # Exercise both signs and the adjacent binary32 words, including decimal
+    # powers whose nearest binary32 lies on the other side of the threshold.
+    values = []
+    for exponent in range(-4, 6):
+        center = np.float32(10.0 ** exponent)
+        lower = np.nextafter(center, np.float32(-np.inf))
+        upper = np.nextafter(center, np.float32(np.inf))
+        values.extend((lower, center, upper, -lower, -center, -upper))
+    values = np.asarray(values, dtype="f4")
+    tensor = to_device(values, numeric_mode="identical")
+    if type(tensor) is not SequenceDeviceTensor:
+        pytest.skip("text output qualification requires a device tensor")
+    with np.printoptions(legacy=legacy), np.errstate(all="ignore"):
+        with warnings.catch_warnings(record=True) as old:
+            warnings.simplefilter("always")
+            expected = values.astype(dtype, copy=False)
+        with warnings.catch_warnings(record=True) as new:
+            warnings.simplefilter("always")
+            actual = call(tensor, dtype).assert_native()
+    assert actual.dtype == expected.dtype and actual.shape == expected.shape
+    assert actual.flags.writeable == expected.flags.writeable
+    if actual.dtype.kind == "T":
+        assert actual.tolist() == expected.tolist()
+    else:
+        assert actual.tobytes() == expected.tobytes()
+    assert [(type(w.message), str(w.message)) for w in new] == [(type(w.message), str(w.message)) for w in old]

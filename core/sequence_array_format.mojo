@@ -3,7 +3,6 @@
 # This is output preparation, not an optimizer/training kernel.
 from std.ffi import c_char, c_int, c_size_t, external_call
 from std.memory import bitcast
-from std.math import floor, log10
 from std.sys.info import CompilationTarget
 
 
@@ -121,7 +120,20 @@ def sequence_float_text(bits: UInt32, print_mode: Int = 2147483647) raises -> St
         return result
     var precision = significant - 1
     if not scientific:
-        precision = max(0, significant - 1 - Int(floor(log10(abs(value)))))
+        # Read the decimal exponent from the same supported libc formatter.
+        # Seventeen significant digits retain this exact widened binary32,
+        # including neighbors of powers of ten. Using its exponent preserves
+        # the old precision decision without an imported platform log10.
+        # The existing thread-local C locale covers this call as well.
+        var exponent_format = String("%.16e")
+        var exponent_used = external_call["snprintf", c_int, num_fixed_args=3](
+            buffer.unsafe_ptr(), c_size_t(64), exponent_format.as_c_string_slice().unsafe_ptr(), value)
+        if exponent_used < 0 or exponent_used >= 64:
+            raise Error("RuntimeError: native decimal exponent formatting failed")
+        var exponent_text = String(unsafe_from_utf8_ptr=buffer.unsafe_ptr())
+        var marker = exponent_text.find("e")
+        var exponent = Int(String(exponent_text[byte=marker + 1:]))
+        precision = max(0, significant - 1 - exponent)
     var format = String("%.*e") if scientific else String("%.*f")
     var used = external_call["snprintf", c_int, num_fixed_args=3](
         buffer.unsafe_ptr(), c_size_t(64), format.as_c_string_slice().unsafe_ptr(),
