@@ -48,7 +48,7 @@ def sequence_dtype_leaves(dtype: PythonObject, offset: Int, classes: PythonObjec
         raise Error("TypeError: dtype requires an explicit native output layout")
     if kind == "T":
         sequence_string_admit(dtype, classes, context)
-    py_call(leaves.append, Python.tuple(kind, size, String(dtype.byteorder) != ">", offset))
+    py_call(leaves.append, Python.tuple(kind, size, String(dtype.byteorder) != ">", offset, dtype))
 
 
 def sequence_object_leaf(source: Int, destination: Int, count: Int, stride: Int, offset: Int) raises:
@@ -112,6 +112,22 @@ def sequence_array_cast(source: PythonObject, requested: PythonObject, context: 
     var result = py_call(input["ndarray"], source.shape, dtype=dtype)
     var count = Int(py=source.size)
     var stride = Int(py=dtype.itemsize)
+    var managed = False
+    for i in range(len(leaves)):  # driver-loop: identify layouts requiring descriptor-owned storage
+        managed = managed or String(leaves[i][0]) == "T"
+    if managed:
+        # NumPy may clone a top-level StringDType, or expand outer subarrays
+        # into result.shape. Derive each allocator descriptor from the actual
+        # allocated base layout, including nested structured String fields.
+        # Requested descriptors and a structured parent are not substitutes
+        # for the descriptor owning the destination's string storage.
+        var allocated = result.dtype
+        var itemsize = Int(py=allocated.itemsize)
+        if itemsize <= 0 or stride % itemsize != 0:
+            raise Error("TypeError: allocated managed dtype has an incompatible native layout")
+        leaves = Python.list()
+        for i in range(stride // itemsize):  # driver-loop: repeat a base layout expanded into outer array dimensions
+            sequence_dtype_leaves(allocated, i * itemsize, classes, leaves, context)
     # Raw integer addresses do not carry a Mojo lifetime. Retain the source
     # owner explicitly until every conversion loop has consumed its words.
     var source_owner = source
@@ -123,7 +139,7 @@ def sequence_array_cast(source: PythonObject, requested: PythonObject, context: 
         if String(leaf[0]) == "O":
             sequence_object_leaf(start, destination, count, stride, Int(py=leaf[3]))
         elif String(leaf[0]) == "T":
-            status |= sequence_string_leaf(start, destination, count, stride, Int(py=leaf[3]), result.dtype, classes, settings, context)
+            status |= sequence_string_leaf(start, destination, count, stride, Int(py=leaf[3]), leaf[4], classes, settings, context)
         else:
             status |= sequence_cast_leaf(start, destination, count, stride, Int(py=leaf[3]), String(leaf[0]), Int(py=leaf[1]), Bool(py=leaf[2]))
     _ = source_owner^

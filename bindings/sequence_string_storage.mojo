@@ -91,6 +91,11 @@ struct SequenceStringStorage(Movable):
     var allocator: StringStoragePointer
 
     def __init__(out self, dtype: PythonObject, context: PythonObject) raises:
+        # NpyString_acquire_allocator requires an actual StringDType
+        # descriptor, never a structured parent or a requested predecessor.
+        # Keep this guard at the C API boundary as well as schema admission.
+        if py_type(dtype) is not sequence_string_class(context):
+            raise Error("TypeError: native string storage requires its exact StringDType descriptor")
         ref cpy = Python().cpython()
         var numpy_dtype = native_numpy_dtype(context)
         var module = py_get(context["modules"], "numpy._core._multiarray_umath")

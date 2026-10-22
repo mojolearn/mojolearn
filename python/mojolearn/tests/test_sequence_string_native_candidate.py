@@ -51,6 +51,57 @@ def missing_value(name):
     raise AssertionError(name)
 
 
+def assert_array_values(actual, expected):
+    # Structured String fields can contain subarrays, while neighboring
+    # numeric/object leaves retain NaN payloads. Compare consumed leaf values.
+    if expected.dtype.fields is not None:
+        for name in expected.dtype.names:
+            assert_array_values(actual[name], expected[name])
+    elif expected.dtype.kind == "T":
+        assert actual.tolist() == expected.tolist()
+    elif expected.dtype.kind == "O":
+        assert [struct.pack("=d", value) for value in actual.flat] == [struct.pack("=d", value) for value in expected.flat]
+    else:
+        assert actual.tobytes() == expected.tobytes()
+
+
+def structured_string_dtype(name):
+    strings = np.dtypes.StringDType(na_object="missing", coerce=False)
+    simple = {"names": ["text"], "formats": [strings]}
+    if name == "field":
+        return simple
+    if name == "list_subarray":
+        return [("text", (strings, (2,)))]
+    if name == "mixed":
+        return {"names": ["text", "number", "object"], "formats": [strings, "f4", "O"]}
+    if name == "nested":
+        return {"names": ["nested"], "formats": [simple]}
+    if name == "nested_subarray":
+        return {"names": ["nested"], "formats": [(simple, (2,))]}
+    if name == "outer_subarray":
+        return (simple, (2,))
+    if name == "distinct_metadata":
+        return {"names": ["left", "right"], "formats": [strings, np.dtypes.StringDType(na_object=None)]}
+    raise AssertionError(name)
+
+
+@pytest.mark.parametrize("name", ["field", "list_subarray", "mixed", "nested", "nested_subarray", "outer_subarray", "distinct_metadata"])
+@pytest.mark.parametrize("copy", [None, False, True])
+def test_native_string_uses_each_allocated_structured_leaf(resident, name, copy):
+    values, tensor = resident
+    dtype = structured_string_dtype(name)
+    first = compare_cast(values, tensor, dtype, copy)
+    # A second allocation may clone a String descriptor. Keep the first
+    # output alive and consume it again after populating the second owner.
+    second = compare_cast(values, tensor, dtype, copy)
+    assert not np.shares_memory(first, second)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        expected = values.astype(dtype, copy=False)
+    assert_array_values(first, expected)
+    assert first.flags.owndata == second.flags.owndata == expected.flags.owndata
+
+
 def compare_cast(values, tensor, dtype, copy=None):
     with warnings.catch_warnings(record=True) as old:
         warnings.simplefilter("always")
@@ -61,7 +112,7 @@ def compare_cast(values, tensor, dtype, copy=None):
     assert actual.dtype == expected.dtype
     assert actual.shape == expected.shape
     assert actual.flags.writeable == expected.flags.writeable
-    assert actual.tolist() == expected.tolist()
+    assert_array_values(actual, expected)
     assert [(type(w.message), str(w.message)) for w in new] == [(type(w.message), str(w.message)) for w in old]
     return actual
 
