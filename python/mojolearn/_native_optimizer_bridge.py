@@ -74,7 +74,7 @@ def connect(training):
     context["training_scalar_warnings"] = connect_warnings()
     context["training_scalar_locations"] = {
         name: (getattr(training, name).__code__.co_filename,
-               max(line for _, _, line in getattr(training, name).__code__.co_lines() if line is not None),
+               max(line for _, _, line in getattr(training, name).__code__.co_lines() if line is not None),  # glue: retain fixed wrapper source metadata at import
                training.__name__)
         for name in ("rms_norm_forward", "rms_norm_backward")  # glue: retain public scalar-option warning locations at import
     }
