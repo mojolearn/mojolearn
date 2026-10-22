@@ -1101,6 +1101,8 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         model = host_archive_umap(cls, arrays, context)
     else:
         raise Error("native host archive schema has not been implemented: " + fmt + "/" + String(estimator))
+    if py_contains(context["host_archive_fitted_estimators"], estimator):
+        py_setitem(sequential_fields(model), "_mojolearn_fitted", True)
     if requested_class is None:
         var fields = sequential_fields(model)
         if fmt == "mojolearn-kernel-ridge-1" or fmt == "mojolearn-nystroem-1":
