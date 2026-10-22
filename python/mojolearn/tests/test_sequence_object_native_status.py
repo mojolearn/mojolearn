@@ -90,7 +90,7 @@ def test_native_object_status_refuses_version_protocol_before_hooks(resident, mo
 
 
 @pytest.mark.parametrize("name", ["Float32DType", "UInt8DType", "StrDType", "BytesDType", "VoidDType", "DateTime64DType", "TimeDelta64DType"])
-def test_native_legacy_descriptor_classes_preserve_versioned_cast_contract(resident, name):
+def test_native_legacy_descriptor_classes_preserve_versioned_cast_contract(resident, name, record_property):
     # These classes exist on NumPy1.26 too. Keep this qualification outside
     # the StringDType module, whose module-level skip requires NumPy2.
     values, tensor = resident
@@ -102,4 +102,14 @@ def test_native_legacy_descriptor_classes_preserve_versioned_cast_contract(resid
         warnings.simplefilter("always")
         actual = audit_native_call(_OPT_NATIVE, "seqdev_array", tensor, (dtype, None), None, _OPT_CONTEXT).assert_native()
     assert_values(actual, expected)
-    assert [(type(w.message), str(w.message)) for w in new] == [(type(w.message), str(w.message)) for w in old]
+    if name in ("DateTime64DType", "TimeDelta64DType"):
+        # Fixture correction, not an implementation change: NumPy1.26's
+        # ARM isnan instruction incidentally warns for signaling NaNs, while
+        # its source explicitly intends NaN -> NaT without a warning.
+        # Keep the exact result and native boundary above, record the old
+        # observable, and require the intended no-warning contract here.
+        # https://github.com/numpy/numpy/blob/v1.26.4/numpy/core/src/multiarray/arraytypes.c.src#L1317-L1327
+        record_property("numpy_nan_to_nat_warnings", repr([(type(w.message).__name__, str(w.message)) for w in old]))
+        assert not new
+    else:
+        assert [(type(w.message), str(w.message)) for w in new] == [(type(w.message), str(w.message)) for w in old]
