@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native input casts only; sequence optimizer update kernels are unchanged.
-from bindings.classical_cast import classical_f32_bits
+# NumPy integer -> float32 inputs round directly. Do not route via float64:
+# int64 values just above a float32 midpoint can double-round differently.
+from core.cast_in import cast_f32_bits
 
 
 def sequence_optimizer_cast(addr: Int, shape: List[Int], strides: List[Int], item: Int,
@@ -18,4 +20,4 @@ def sequence_optimizer_cast(addr: Int, shape: List[Int], strides: List[Int], ite
         var raw = UInt64(0)
         for byte in range(item):
             raw |= UInt64(source[byte if native else item - 1 - byte]) << UInt64(byte * 8)
-        output[i] = classical_f32_bits(raw, kind, item)
+        output[i] = cast_f32_bits(raw, kind, item)
