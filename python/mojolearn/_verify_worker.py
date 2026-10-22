@@ -283,16 +283,11 @@ def execute(request):
         else:
             raise WorkerFailure(f"unknown worker action {action!r}")
     from . import _verify
-    bindings = [dict(module=b["module"], sha256=b["sha256"], size=b["size"])
+    bindings = [dict(module=b["module"], sha256=b["sha256"], size=b["size"],
+                     file=b["file"], path_source=b["path_source"])
                 for b in _verify.binding_artifacts()]
-    # Do not hash every installed host family in every disposable process.
-    # Only bindings actually loaded by this worker contribute provenance.
-    for name, module in tuple(sys.modules.items()):
-        path = getattr(module, "__file__", "") or ""
-        if name.startswith("mojolearn._host.") and path.endswith((".so", ".pyd")):
-            # Memoized per process (a batched worker hashes each file once).
-            digest = _verify._sha256(path)
-            bindings.append(dict(module=name, sha256=digest, size=os.path.getsize(path), path=path, kind="host"))
+    # The shared inventory includes actual loaded host aliases and raises on
+    # unresolved native bytes; a completed worker cannot return empty evidence.
     return dict(value=value, bindings=bindings)
 
 
