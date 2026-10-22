@@ -224,6 +224,29 @@ class InstalledNativeAudit(unittest.TestCase):
             self.assertIn("remain separate", scopes[names[1]]["coverage_limit"])
             self.assertIn("test oracles", scopes[names[3]]["coverage_limit"])
 
+    def test_public_reader_and_density_scopes_preserve_unqualified_boundaries(self):
+        reader = "test_classical_archive_reader_native.py"
+        density = "test_host_density_save_native.py"
+        for vendor in ("cpu", "metal", "cuda", "hip"):
+            scopes = q.test_applicability([reader, density], vendor)
+            for name in (reader, density):
+                self.assertIn(name, q.PUBLIC_TESTS)
+                self.assertEqual(scopes[name]["cpu_not_applicable_cases"], {})
+                self.assertIn("native host", scopes[name]["execution_route"])
+                self.assertIn("remain separate", scopes[name]["coverage_limit"])
+                self.assertEqual(q.test_dependencies([name]), ["numpy", "pytest"])
+            self.assertIn("codec-hook", scopes[reader]["coverage_limit"])
+            self.assertIn("fit/inference", scopes[density]["coverage_limit"])
+        self.assertNotIn("test_classical_archive_native_owner.py", q.PUBLIC_TESTS)
+
+    def test_public_reader_and_density_exact_selection_remains_bounded(self):
+        nodes = ["test_classical_archive_reader_native.py::test_public_load_without_numpy_preserves_native_owned_arrays[None]",
+                 "test_host_density_save_native.py::test_density_save_without_numpy_preserves_frozen_archive[kde]"]
+        self.assertEqual(q.selected_files(test_nodes=nodes),
+                         [node.partition("::")[0] for node in nodes])
+        with self.assertRaises(ValueError):
+            q.selected_files(test_nodes=nodes + nodes[:1])
+
     def test_public_owner_and_host_scopes_exclude_private_array_candidate(self):
         names = ("test_native_owner_qualification.py", "test_sequence_shutdown_native.py", "test_training_rms_public_native.py", "test_optimizer_native_step_errors.py",
                  "test_optimizer_native_array_ownership.py", "test_device_rows_metadata_native.py", "test_host_kde_fit_native.py", "test_host_iforest_fit_native.py",

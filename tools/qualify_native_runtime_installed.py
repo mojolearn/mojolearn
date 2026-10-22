@@ -24,6 +24,8 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_TESTS = {
+    "test_classical_archive_reader_native.py": "Public linear archive loading, compressed state, native helper identities, file errors and input/output ownership",
+    "test_host_density_save_native.py": "Public host KDE and IsolationForest save bytes, native configuration, partial state, loaded state and callback refusals",
     "test_classical_archive_writer_native.py": "Public linear/scaler archive bytes, file errors, output ownership and native callback refusals",
     "test_standard_scaler_native_lifecycle.py": "Public StandardScaler lifecycle, checkpoints, consumed state and native refusals",
     "test_minmax_scaler_native_lifecycle.py": "Public MinMaxScaler lifecycle, checkpoints, consumed state and native refusals",
@@ -192,6 +194,14 @@ def test_applicability(selected, vendor):
             scope.update(execution_route="native public linear/scaler archive writer on every package backend",
                          operation_mode="identical (explicit fixture configuration)",
                          coverage_limit="Selected public save bytes, native file errors and callback refusals only; private PCA archive entry and other model formats remain separate")
+        if name == "test_classical_archive_reader_native.py":
+            scope.update(execution_route="native host archive owner, including in GPU packages",
+                         operation_mode="saved identical state; parsing does not select a GPU kernel",
+                         coverage_limit="Selected public linear load paths, compressed state, native file errors and helper identities only; arbitrary name metadata, codec-hook edge cases and other archive formats remain separate")
+        if name == "test_host_density_save_native.py":
+            scope.update(execution_route="native host density archive owner, including in GPU packages",
+                         operation_mode="saved mode and configuration are test-specific; save does not train or select a GPU kernel",
+                         coverage_limit="Selected public host KDE and IsolationForest save/load compatibility and native refusals only; fit/inference, other archive formats and cross-vendor reference/fault evidence remain separate")
         if name == "test_sequential_native_buffers.py":
             scope.update(execution_route="selected package Sequential fit/predict backend",
                          operation_mode="identical (explicit fixture configuration)",
