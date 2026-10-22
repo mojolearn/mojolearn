@@ -1789,8 +1789,70 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
     # core/package_profile.mojo (c0f1e1e97, 2026-10-14), a REAL import of
     # checks/numerics.mojo, which every lane already compiles (the numeric
     # mode default reads `identical_mode_enabled`).
-    assert len(every) <= 43, \
-        f"{len(every)} files now select every lane, against 43 measured on 2026-10-15"
+    # REMEASURED 2026-10-22: the own-walk fixes reduced the old shared
+    # closure to 40. Correctly parsing the commented multiline import in
+    # bindings/_mojolearn.mojo then restores 13 real imports through
+    # bindings.hotpath_device: input/label helpers, fold/scan/radix,
+    # soft_f64 and their context/scratch/phase helpers. The independent
+    # definition graph confirms these edges. Pin the reviewed FILE SET,
+    # not merely a larger ceiling that could hide a different widened file.
+    shared = {
+        'bindings/_mojolearn.mojo',
+        'bindings/_mojolearn_byte_lm_host.mojo',
+        'bindings/_mojolearn_core_host.mojo',
+        'bindings/_mojolearn_forest_host.mojo',
+        'bindings/array_helpers.mojo',
+        'bindings/host_helpers.mojo',
+        'bindings/hotpath_device.mojo',
+        'bindings/hotpath_helpers.mojo',
+        'bindings/py_balanced.mojo',
+        'checks/__init__.mojo',
+        'checks/numerics.mojo',
+        'checks/soft_f64.mojo',
+        'core/__init__.mojo',
+        'core/array_helpers_impl.mojo',
+        'core/core_host_impl.mojo',
+        'core/ctx_key.mojo',
+        'core/device_fold.mojo',
+        'core/device_scan.mojo',
+        'core/device_zero.mojo',
+        'core/fast_radix_sort.mojo',
+        'core/host_helpers_impl.mojo',
+        'core/host_parallel.mojo',
+        'core/host_predict_threads.mojo',
+        'core/hostptr.mojo',
+        'core/hotpath_device.mojo',
+        'core/hotpath_device_impl.mojo',
+        'core/hotpath_impl.mojo',
+        'core/hotpath_impl_rows.mojo',
+        'core/input_device.mojo',
+        'core/label_encode.mojo',
+        'core/label_encode_device.mojo',
+        'core/label_rows_device.mojo',
+        'core/mojolearn_shell_impl.mojo',
+        'core/neural_context.mojo',
+        'core/package_profile.mojo',
+        'core/scratch_pool.mojo',
+        'core/six_lane_experiment_guards.mojo',
+        'core/step_phase.mojo',
+        'glm/__init__.mojo',
+        'glm/impl/__init__.mojo',
+        'glm/impl/lm_finish.mojo',
+        'metrics/__init__.mojo',
+        'metrics/checks/__init__.mojo',
+        'metrics/checks/device_io.mojo',
+        'metrics/checks/pinned_sum.mojo',
+        'python/mojolearn/_array.py',
+        'python/mojolearn/_backend.py',
+        'python/mojolearn/_bufcheck.py',
+        'python/mojolearn/_buffer.py',
+        'sequence/__init__.mojo',
+        'sequence/schedule.mojo',
+        'training/__init__.mojo',
+        'training/byte_lm_host_io.mojo',
+    }
+    assert not (set(every) - shared), \
+        f"unreviewed files now select every lane: {sorted(set(every) - shared)}"
 
 
 # --------------------------------------------------------------------------
