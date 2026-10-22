@@ -14,18 +14,19 @@ def trial(tmp_path):
     arm = dict(arm='coverage-test', patch='unit.patch', bindings=['build_core_host'], lanes=['one'])
     (tmp_path / 'unit.patch').write_text('a retained injected value fault\n')
     clean = dict(commit='a' * 40, vendor='cpu-test', platform='test', mode='identical',
-                 repeats=1, complete=True, fixtures={'base': {'X': 'same'}, 'odd': {'X': 'odd'}},
+                 repeats=1, complete=True, heldout={'base': {'X': 'held'}, 'odd': {'X': 'held-odd'}},
+                 fixtures={'base': {'X': 'same'}, 'odd': {'X': 'odd'}},
                  package={'version': 'alpha', 'python': '3', 'numpy': '2', 'bindings': [
                      {'module': '_mojolearn_core_host', 'sha256': 'a' * 64, 'size': 10}]},
                  resume_signature={'source_sha256': 'c' * 64, 'environment_sha256': 'd' * 64,
                                    'options': {'lanes': 'one', 'fixtures': 'base,odd', 'repeats': 1}},
-                 cells={f'one/{fx}': {'verdict': 'STABLE', 'hashes': ['abc'],
-                                     'infer_verdict': 'STABLE', 'infer': ['answer']}
+                 cells={f'one/{fx}': {'verdict': 'STABLE', 'hashes': ['a' * 16],
+                                     'infer_verdict': 'STABLE', 'infer': ['c' * 16]}
                         for fx in ('base', 'odd')})
     sab = copy.deepcopy(clean)
     sab['package']['bindings'][0]['sha256'] = 'b' * 64
     sab['resume_signature']['source_sha256'] = 'e' * 64
-    sab['cells']['one/base']['hashes'] = ['def']
+    sab['cells']['one/base']['hashes'] = ['d' * 16]
     restored = copy.deepcopy(clean)
 
     def run(evidence=None):
@@ -68,7 +69,7 @@ def test_invalid_evidence_never_counts_as_a_catch(trial, failure):
     elif failure == 'missing-restored-cell': del restored['cells']['one/odd']
     elif failure == 'missing-part': del sab['cells']['one/base']['infer']
     elif failure == 'incomplete': sab['complete'] = False
-    elif failure == 'restore-moved': restored['cells']['one/base']['hashes'] = ['def']
+    elif failure == 'restore-moved': restored['cells']['one/base']['hashes'] = ['d' * 16]
     elif failure == 'restore-binary': restored['package']['bindings'][0]['sha256'] = 'b' * 64
     elif failure == 'unchanged-binary': sab['package'] = copy.deepcopy(clean['package'])
     elif failure == 'unrelated-binary':
@@ -144,7 +145,8 @@ def test_recorded_batch_movement_is_value_evidence_not_infrastructure_failure(tr
     _, clean, sab, restored, run = trial
     for record in (clean, sab, restored):
         for cell in record['cells'].values():
-            cell.update(batch=['abc'], batch_verdict='STABLE')
+            record['batch_protocol'] = {'alone': 16}
+            cell.update(batch=['a' * 16], batch_verdict='STABLE')
     sab['cells']['one/base'].update(batch=['BATCH_MOVED:row:0'], batch_verdict='BATCH_MOVED')
     assert run() == 0
 

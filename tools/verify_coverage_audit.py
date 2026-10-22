@@ -1127,9 +1127,11 @@ def render_markdown(audit, path):
     w("")
     w("One source patch per changed kernel file that no arm reached, each a value fault in the changed "
       "definitions (a float one ulp off, an index permuted, a byte flipped), applied only to a scratch copy. "
-      "`python3 tools/coverage_sabotage.py plan --arm <arm>` prints the build and the two identity_break runs, "
-      "and `check` requires every named lane to read MOVED or REFUSED on the sabotaged build. "
-      + ("Every arm was built and run: see Arms proven below." if proven else
+      "`python3 tools/coverage_sabotage.py plan --arm <arm>` describes clean, sabotaged and restored runs. "
+      "`check` requires matching source/device/input metadata, complete fixtures, valid clean results, "
+      "fault detection in every named lane, and restoration to clean output. Refusals require an exact "
+      "fault-specific review; missing bindings and other infrastructure failures do not count. "
+      + ("Retained execution scope is listed under Arms proven below; a declared arm is not proof it ran." if proven else
          "RUN OWED: no arm has been built or run yet (lanes never compile); `apply-check` passes on this commit."))
     w("")
     try:

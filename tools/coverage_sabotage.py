@@ -52,9 +52,12 @@ import argparse
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
+from verification_evidence import PARTS, same_cell_context
+from verification_matrix import stable_digest, negative_control_moves
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MANIFEST = os.path.join(ROOT, "tools", "identity_lanes", "coverage_sabotage.tsv")
@@ -99,7 +102,8 @@ def _record(path):
 
 
 def _signature(cell):
-    return {key: cell[key] for key in HASH_PARTS if key in cell}
+    return {key: (cell.get("verdict" if key == "hashes" else key + "_verdict"), cell[key])
+            for key in HASH_PARTS if key in cell}
 
 
 def _stable(cell, repeats):
@@ -107,22 +111,19 @@ def _stable(cell, repeats):
         return False
     if cell.get("error") or cell.get("probe_error") or any(cell.get("oracle_errors") or []):
         return False
-    hashes = cell.get("hashes")
-    if (not isinstance(hashes, list) or len(hashes) != repeats or
-            not all(isinstance(h, str) and h and not h.startswith("n/a:") for h in hashes) or
-            len(set(hashes)) != 1):
+    if not stable_digest(cell, "train") or len(cell["hashes"]) != repeats:
         return False
-    for key, verdict in cell.items():
-        if not key.endswith("_verdict"):
+    for part in PARTS[1:]:
+        if part not in cell and part + "_verdict" not in cell:
             continue
-        if verdict not in ("STABLE", "N/A"):
+        values = cell.get(part)
+        if not isinstance(values, list) or len(values) != repeats:
             return False
-        if verdict == "STABLE":
-            values = cell.get(key[:-8])
-            if (not isinstance(values, list) or len(values) != repeats or
-                    not all(isinstance(v, str) and v and not v.startswith("n/a:") for v in values) or
-                    len(set(values)) != 1):
-                return False
+        if stable_digest(cell, part):
+            continue
+        if (cell.get(part + "_verdict") != "N/A" or
+                not all(isinstance(v, str) and v.startswith("n/a:") for v in values)):
+            return False
     return True
 
 
@@ -177,7 +178,8 @@ def _refusal_caught(key, cell, evidence):
     error = str(cell.get("error") or "")
     forbidden = ("ImportError", "ModuleNotFoundError", "FileNotFoundError", "OSError",
                  "MemoryError", "TimeoutError", "no CPU implementation", "not built",
-                 "missing binary", "cannot load", "out of memory")
+                 "missing binary", "missing native binding", "cannot load", "out of memory",
+                 "no module named", "library not loaded", "undefined symbol", "timed out", "timeout")
     if not error or any(word.lower() in error.lower() for word in forbidden):
         return False
     proof = (evidence.get("refusals") or {}).get(key) or {}
@@ -222,6 +224,10 @@ def check(arm, clean_path, sab_path, restored_path=None, evidence_path=None, roo
                     raise ValueError(f"{label}: missing {field} provenance")
             if not isinstance(record.get("repeats"), int) or record["repeats"] < 1:
                 raise ValueError(f"{label}: invalid repeat count")
+            if (record.get("mode") != "identical" or
+                    not re.fullmatch(r"[0-9a-f]{40}", str(record["commit"])) or
+                    not isinstance(record["fixtures"], dict)):
+                raise ValueError(f"{label}: invalid source, mode or fixture metadata")
             signature = record.get("resume_signature") or {}
             if not signature.get("source_sha256") or not signature.get("options"):
                 raise ValueError(f"{label}: missing source/build/settings fingerprint")
@@ -232,7 +238,7 @@ def check(arm, clean_path, sab_path, restored_path=None, evidence_path=None, roo
                     raise ValueError(f"different {key}: records are not comparable")
             if clean["resume_signature"]["options"] != other["resume_signature"]["options"]:
                 raise ValueError("different execution options")
-            for key in ("python", "numpy", "version"):
+            for key in ("python", "numpy", "version", "fixture_n", "wide"):
                 if (clean.get("package") or {}).get(key) != (other.get("package") or {}).get(key):
                     raise ValueError(f"different package {key}")
         for key in ("source_sha256", "environment_sha256"):
@@ -276,6 +282,13 @@ def check(arm, clean_path, sab_path, restored_path=None, evidence_path=None, roo
                 if _signature(cc) != _signature(rc):
                     failures.append(f"{key}: restoration changed the clean result")
                     continue
+                parts = [p for p in PARTS if ("hashes" if p == "train" else p) in cc]
+                # Commit equivalence is independently checked above. Keep all
+                # of main's per-cell input/revision/protocol checks as well.
+                if not all(same_cell_context(clean, dict(r, commit=clean["commit"]), key, p)
+                           for r in (sab, restored) for p in parts):
+                    failures.append(f"{key}: source, inputs, lane revision or protocol differ")
+                    continue
                 if sc.get("verdict") == "REFUSED":
                     if _refusal_caught(key, sc, evidence):
                         print(f"{key}: REFUSED by the reviewed product check")
@@ -299,7 +312,20 @@ def check(arm, clean_path, sab_path, restored_path=None, evidence_path=None, roo
                             if k.endswith("_verdict")) or sc.get("error") or sc.get("probe_error")):
                     failures.append(f"{key}: sabotaged output contains an unreviewed failure")
                     continue
-                if _signature(sc) != _signature(cc):
+                moved = [p for p in parts if negative_control_moves(sc, cc, p)]
+                invalid = []
+                for part in parts:
+                    field = "hashes" if part == "train" else part
+                    verdict = "verdict" if part == "train" else part + "_verdict"
+                    if (len(sc[field]) != repeats or
+                            (stable_digest(cc, part) and not stable_digest(sc, part) and part not in moved) or
+                            (not stable_digest(cc, part) and
+                             (sc[field] != cc[field] or sc.get(verdict) != cc.get(verdict)))):
+                        invalid.append(part)
+                if invalid:
+                    failures.append(f"{key}: invalid sabotaged parts: {', '.join(invalid)}")
+                    continue
+                if moved:
                     print(f"{key}: MOVED; restored result matches")
                     caught += 1
                 else:
