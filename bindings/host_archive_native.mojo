@@ -763,45 +763,64 @@ def host_archive_ivf(cls: PythonObject, arrays: PythonObject, context: PythonObj
     return model
 
 
-def host_archive_hdbscan(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
-    var meta = host_archive_count(arrays, "ints", "<i8", 11, context, True)
-    var reals = host_archive_count(arrays, "reals", "<f8", 2, context, True)
+def host_archive_hdbscan(cls: PythonObject, arrays: PythonObject, path: PythonObject,
+                         context: PythonObject) raises -> PythonObject:
+    """HDBSCAN.load: the refusals keep the Python loader's wording and order."""
+    var where = host_archive_where(path, context)
+    var meta = _archive_exact(arrays, "ints", "<i8", context)
+    var reals = _archive_exact(arrays, "reals", "<f8", context)
+    if Int(py=meta.size) != 11 or Int(py=reals.size) != 2:
+        raise Error(where + " holds " + String(Int(py=meta.size)) + " ints and " + String(Int(py=reals.size))
+                    + " reals, 11 and 2 are needed")
     var d = classical_i64(meta, 0)
     var selected = classical_i64(meta, 1)
     var condensed = classical_i64(meta, 4)
     var edges = classical_i64(meta, 5)
     var exemplars = classical_i64(meta, 10)
-    var raw = _archive_exact(arrays, "raw_data", "<f4", context)
-    if Int(py=raw.ndim) != 2 or Int(py=raw.shape[1]) != d or Int(py=raw.shape[0]) < 2:
-        raise Error("HDBSCAN raw_data shape does not match saved features")
-    var n = Int(py=raw.shape[0])
+    var metric = _archive_string(arrays, "metric", context)
+    var method = _archive_string(arrays, "cluster_selection_method", context)
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
-    host_archive_mode(arrays, fields, context)
     py_setitem(fields, "min_cluster_size", classical_i64(meta, 6))
     var samples = classical_i64(meta, 7)
     py_setitem(fields, "min_samples", PythonObject(None) if samples == -1 else PythonObject(samples))
     py_setitem(fields, "cluster_selection_epsilon", classical_f64(reals, 1))
     py_setitem(fields, "max_cluster_size", classical_i64(meta, 8))
-    py_setitem(fields, "metric", _archive_string(arrays, "metric", context))
+    py_setitem(fields, "metric", metric)
     py_setitem(fields, "alpha", classical_f64(reals, 0))
-    py_setitem(fields, "cluster_selection_method", _archive_string(arrays, "cluster_selection_method", context))
+    py_setitem(fields, "cluster_selection_method", method)
     py_setitem(fields, "allow_single_cluster", classical_i64(meta, 9) != 0)
     py_setitem(fields, "prediction_data", True)
+    host_archive_mode(arrays, fields, context)
+    var raw = _archive_exact(arrays, "raw_data", "<f4", context)
+    if Int(py=raw.ndim) != 2 or Int(py=raw.shape[1]) != d or Int(py=raw.shape[0]) < 2:
+        raise Error(where + " raw_data has shape " + _archive_builtin_repr(raw.shape) + ", ints say "
+                    + String(d) + " features")
+    var n = Int(py=raw.shape[0])
+    var names = Python.tuple("core_distances", "labels", "parents", "lambdas", "deaths", "selected_clusters",
+                             "index_into_children", "exemplar_idx", "exemplar_label_offsets")
+    var dtypes = Python.tuple("<f4", "<i4", "<i4", "<f4", "<f4", "<i4", "<i4", "<i4", "<i4")
+    var sizes = Python.tuple(n, n, edges, edges, condensed, max(selected, 1), edges + 1, max(exemplars, 1), selected + 1)
+    var got = Python.dict()
+    for i in range(len(names)):  # driver-loop: nine saved fitted and prediction-data arrays
+        var name = String(names[i])
+        var size = Int(py=sizes[i])
+        var value = _archive_exact(arrays, name, String(dtypes[i]), context)
+        if Int(py=value.ndim) != 1 or Int(py=value.size) != size:
+            raise Error(where + " " + name + " holds " + String(Int(py=value.size)) + " values, "
+                        + String(size) + " are needed")
+        py_setitem(got, names[i], value)
     py_setitem(fields, "n_features_in_", d)
-    py_setitem(fields, "labels_", host_archive_shape(arrays, "labels", "<i4", Python.tuple(n), context))
-    py_setitem(fields, "core_distances_", host_archive_shape(arrays, "core_distances", "<f4", Python.tuple(n), context))
+    py_setitem(fields, "labels_", got["labels"])
+    py_setitem(fields, "core_distances_", got["core_distances"])
     py_setitem(fields, "n_clusters_", selected)
     py_setitem(fields, "n_outliers_", classical_i64(meta, 2))
     py_setitem(fields, "n_boruvka_rounds_", classical_i64(meta, 3))
     py_setitem(fields, "n_condensed_clusters_", condensed)
     py_setitem(fields, "_raw_data", raw)
     var prediction = Python.dict(n_edges=edges, n_condensed=condensed, n_exemplars=exemplars)
-    var names = Python.tuple("parents", "lambdas", "deaths", "selected_clusters", "index_into_children", "exemplar_idx", "exemplar_label_offsets")
-    var dtypes = Python.tuple("<i4", "<f4", "<f4", "<i4", "<i4", "<i4", "<i4")
-    var sizes = Python.tuple(edges, edges, condensed, max(selected, 1), edges + 1, max(exemplars, 1), selected + 1)
-    for i in range(len(names)):  # driver-loop: seven saved prediction-data arrays
-        py_setitem(prediction, names[i], host_archive_shape(arrays, String(names[i]), String(dtypes[i]), Python.tuple(sizes[i]), context))
+    for i in range(2, len(names)):  # driver-loop: seven saved prediction-data arrays
+        py_setitem(prediction, names[i], got[names[i]])
     py_setitem(fields, "_prediction_data", prediction)
     return model
 
@@ -1751,7 +1770,7 @@ def host_archive_build(path: PythonObject, context: PythonObject,
     elif fmt == "mojolearn-ivf-flat-1":
         model = host_archive_ivf(cls, arrays, context)
     elif fmt == "mojolearn-hdbscan-2":
-        model = host_archive_hdbscan(cls, arrays, context)
+        model = host_archive_hdbscan(cls, arrays, path, context)
     elif fmt == "mojolearn-radius-1":
         model = host_archive_neighbors(cls, arrays, 3, context)
     elif fmt == "mojolearn-knn-1":
