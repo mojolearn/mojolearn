@@ -601,3 +601,93 @@ def test_public_load_error_formats_deep_supported_path_names(tmp_path, kind, dep
     finally:
         raw.name = "restored"
         value.close()
+
+
+@pytest.mark.parametrize("compression", [zipfile.ZIP_STORED, zipfile.ZIP_LZMA])
+@pytest.mark.parametrize("case", ["linear", "kde", "late_schema_error"])
+def test_public_load_repeated_archive_reads_preserve_none_ownership(tmp_path, case, compression):
+    # Mojo 1.0's PythonObject slice conversion decremented borrowed None bounds.
+    # The full public load regression runs in a fresh interpreter: CPython 3.11
+    # exposes the refcount loss; immortal-None versions still verify consumed
+    # state, native calls and a clean process exit. No product refcount tuning.
+    if case == "kde":
+        payload = _payload(compression, format="mojolearn-kde-1", estimator="KernelDensity",
+                           meta=np.array([2, 3, 1], "<i8"), bandwidth=np.array([.75], "<f8"),
+                           kernel="gaussian", metric="euclidean",
+                           x=np.array([[1, 2], [3, 4], [5, 6]], "<f4"),
+                           weights=np.array([1, 2, 1], "<f4"))
+    else:
+        payload = _payload(compression, **({"format": "unknown-format"} if case == "late_schema_error" else {}))
+    path = tmp_path / "repeated-load.npz"
+    path.write_bytes(payload)
+    code = r'''
+import gc, io, json, sys
+import numpy as np
+from mojolearn._classical_host import HostLinearRegression, HostKernelDensity
+from mojolearn._verify_native_runtime import audit_native_call
+path, case = sys.argv[1:]
+payload = open(path, "rb").read()
+loader = HostKernelDensity.load if case == "kde" else HostLinearRegression.load
+
+def consume(model):
+    if case == "kde":
+        assert model.bandwidth == .75 and model.n_features_in_ == 2
+        assert np.asarray(model._x, "<f4").tobytes() == np.array([[1,2],[3,4],[5,6]], "<f4").tobytes()
+        assert np.asarray(model._w, "<f4").tobytes() == np.array([1,2,1], "<f4").tobytes()
+    else:
+        assert model.n_features_in_ == 3 and model.intercept_ == .25
+        assert np.asarray(model.coef_, "<f4").tobytes() == np.array([.75,-.5,.125], "<f4").tobytes()
+
+stream = io.BytesIO(payload)
+audit = audit_native_call(loader, stream)
+report = audit.report()
+assert not report["python_frames"], report
+assert not report["forbidden_native_calls"], report
+assert not report["wrapper_work"], report
+assert not report["unobserved_existing_threads"], report
+if case == "late_schema_error":
+    assert type(audit.exception) is ValueError, repr(audit.exception)
+    expected_error = str(audit.exception)
+else:
+    assert audit.exception is None, repr(audit.exception)
+    consume(audit.result)
+assert not stream.closed
+stream.close()
+del stream, audit, report
+
+def operation():
+    stream = io.BytesIO(payload)
+    try:
+        if case == "late_schema_error":
+            try:
+                loader(stream)
+            except ValueError as error:
+                assert str(error) == expected_error
+            else:
+                raise AssertionError("malformed model unexpectedly loaded")
+        else:
+            model = loader(stream)
+            consume(model)
+        assert not stream.closed and stream.tell() > 0
+    finally:
+        stream.close()
+
+for _ in range(8):
+    operation()
+gc.collect()
+before = sys.getrefcount(None)
+for _ in range(64):
+    operation()
+gc.collect()
+after = sys.getrefcount(None)
+receipt = dict(case=case, calls=64, before=before, after=after, delta=after-before,
+               native=True, consumed_state=True)
+print(json.dumps(receipt), flush=True)
+assert after >= before, receipt
+'''
+    result = subprocess.run([sys.executable, "-c", code, str(path), case],
+                            text=True, capture_output=True, timeout=60)
+    assert result.returncode == 0, (result.returncode, result.stdout, result.stderr)
+    receipt = json.loads(result.stdout)
+    assert receipt["calls"] == 64 and receipt["native"] and receipt["consumed_state"]
+    assert receipt["delta"] >= 0

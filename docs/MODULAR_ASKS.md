@@ -128,3 +128,39 @@ use): the decode loop read `logits` by address after that point, which showed as
 arrays were freed. Every array read by raw address now stays alive until the reading call returns. ParallelCausalLM's
 remote layer states, now freed, release their worker state through a native lifetime owner instead of a Python
 `__del__`, which would have run inside the native calls that drop them.
+
+## PythonObject slices release borrowed None defaults (2026-10-22)
+
+**What we see.** Mojo 1.0.0 (`ed45d567`) converts an omitted slice bound or step
+using borrowed `Py_None()`, passes it to `PySlice_New` (which borrows its inputs),
+then decrements it as if it owned the reference. Each omitted component loses one
+`None` reference. The pinned source is
+[`python_object.mojo` at `mojo/v1.0.0`, `_slice_to_py_object_ptr`](https://github.com/modular/modular/blob/mojo/v1.0.0/mojo/stdlib/std/python/python_object.mojo#L1736-L1765).
+The public [CPython slice API](https://docs.python.org/3/c-api/slice.html#c.PySlice_New)
+accepts null defaults, returns a new slice reference and does not steal the bounds.
+
+**Reproducer and impact.** On CPython 3.11, 200 `PythonObject("abcdef")[0:2]`
+operations lose exactly 200 `None` references. Two controls balance: 200 calls to
+`PySlice_New(start, stop, null)` plus `PyObject_GetItem`, and 200 owned
+`PythonObject(None)` constructions. The pinned-toolchain standalone probe exits
+0 and retains its source, log and interpreter provenance under
+`~/mojolearn-evidence/takeover-0856-20261021/none-refcount-3b5991a57/`
+(`slice_probe.mojo`, `slice-probe-pixi.log`). A first invocation without the pixi
+stdlib environment failed and is retained separately. Successful public model
+loads lost about 139 references each on three frozen binaries, including the
+previously accepted `b9f12538c`. The combined `3b5991a57` NumPy 1.26 suite passed
+323 assertions but aborted at interpreter shutdown while deallocating `None`;
+that run is a failure, not a passing qualification. CPython's immortal-None
+versions can hide this defect from a refcount-only test.
+
+**The ask.** Balance all explicit and omitted start/stop/step combinations in a
+supported release, including negative/zero steps, failed item access, repeated
+calls and interpreter shutdown on supported non-immortal-None Python versions.
+We do not modify the toolchain or adjust references to offset the defect.
+`bindings/py_slice_native.mojo` instead uses the documented slice/item APIs with
+owned bound, slice and result objects, as confirmed by the control above. It is
+only ownership machinery; product callers must still admit native receivers and
+bounds before calling it. The public repeated archive-load regression covers
+successful consumed state and late schema errors in fresh interpreters. This
+source repair is pending native build and execution at this checkpoint; the
+original shutdown failure and unaffected accepted evidence remain retained.

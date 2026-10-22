@@ -6,6 +6,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call
+from bindings.py_slice_native import py_slice
 from bindings.optimizer_public_words import stash_python_error
 
 
@@ -121,7 +122,7 @@ def archive_literal(raw: PythonObject, context: PythonObject) raises -> PythonOb
                 i += 1
             if i == len(raw) or i == begin:
                 _archive_unicode_failure(raw, "unicodeescape", start, i, "malformed \\N character escape", context)
-            var name = py_call(raw[begin:i].decode, "latin1")
+            var name = py_call(py_slice(raw, begin, i).decode, "latin1")
             i += 1
             # unicodedata.lookup is a retained C Unicode database lookup. It
             # is connected at import time, so decoding never imports modules.
