@@ -1081,15 +1081,15 @@ def host_archive_reshape_words(array: PythonObject, shape: PythonObject, dtype: 
         dimensions.append(Int(py=array.shape[i]))
         strides.append(Int(py=array.strides[i]))
     var result = classical_typed(shape, dtype, context)
-    host_archive_reorder_f32(classical_address(array), dimensions, strides, Int(py=array.size), classical_address(result))
+    host_archive_reorder_f32(Int(py=classical_address(array)), dimensions, strides, Int(py=array.size), Int(py=classical_address(result)))
     return result
 
 
 def host_archive_gp_row(array: PythonObject, row: Int, cols: Int, shape: PythonObject,
                         context: PythonObject) raises -> PythonObject:
     var result = classical_typed(shape, "<f4", context)
-    host_archive_copy_f32(classical_address(array) + row * Int(py=array.strides[0]), 0,
-                          Int(py=array.strides[1]), 1, cols, classical_address(result))
+    host_archive_copy_f32(Int(py=classical_address(array)) + row * Int(py=array.strides[0]), 0,
+                          Int(py=array.strides[1]), 1, cols, Int(py=classical_address(result)))
     return result
 
 
@@ -1185,7 +1185,7 @@ def host_archive_gp(cls: PythonObject, arrays: PythonObject, classifier: Bool,
     py_setitem(fields, "estimators_", fits)
     if n_est > 1:
         py_setitem(fields, "n_iter_", counts)
-        py_setitem(fields, "log_marginal_likelihood_value_", host_archive_mean_f64(classical_address(likelihoods), n_est))
+        py_setitem(fields, "log_marginal_likelihood_value_", host_archive_mean_f64(Int(py=classical_address(likelihoods)), n_est))
     return model
 
 
