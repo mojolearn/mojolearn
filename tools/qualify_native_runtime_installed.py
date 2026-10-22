@@ -366,36 +366,46 @@ def worker(request_path):
     namespace.__package__ = "mojolearn.tests"
     sys.modules["mojolearn.tests"] = namespace
     mojolearn.tests = namespace
-    loaded, test_devices, native = {}, {}, {}
+    loaded, test_devices, native, inventory_errors = {}, {}, {}, []
 
-    def observe():
-        artifacts = binding_artifacts()
-        require(artifacts, "no loaded native binding witnesses")
-        loaded.update(installed_module_inventory(sys.modules, sys.prefix, request["payload"], tests, artifacts))
-        native.update({row["module"]: row for row in artifacts})
-        test_devices.update(generation_test_devices(sys.modules, request["generation_device"]))
+    def observe(phase, *, require_loaded=False):
+        try:
+            # A lazy package can have no native modules until a test runs.
+            # Final qualification always requires actual loaded native bytes.
+            artifacts = binding_artifacts(require_loaded=require_loaded)
+            require(not require_loaded or artifacts, "no loaded native binding witnesses")
+            loaded.update(installed_module_inventory(sys.modules, sys.prefix, request["payload"], tests, artifacts))
+            native.update({row["module"]: row for row in artifacts})
+            test_devices.update(generation_test_devices(sys.modules, request["generation_device"]))
+            return True
+        except Exception as error:
+            inventory_errors.append(dict(phase=phase, error=type(error).__name__ + ": " + str(error)))
+            return False
 
     class InstalledGuard:
         def pytest_runtest_teardown(self, item, nextitem):
-            observe()
+            require(observe("test-teardown"), "installed product inventory refused during test teardown")
 
-    code = 1
+    code, worker_error = None, None
     try:
-        observe()
+        require(observe("initial"), "initial installed product inventory refused")
         code = int(pytest.main(["--import-mode=importlib", "-q", "-ra", "--confcutdir=" + str(tests),
                                "--junitxml=" + str(out / "tests.xml"),
                                "--basetemp=" + str(out / "test-tmp")]
                               + [str(tests / name) for name in request["test_files"]],
                               plugins=[InstalledGuard()]))
+    except Exception as error:
+        worker_error = type(error).__name__ + ": " + str(error)
     finally:
-        observe()
+        observe("final", require_loaded=True)
         (out / "installed-modules.json").write_text(json.dumps(dict(
             package=str(Path(mojolearn.__file__).resolve()), prefix=sys.prefix,
             vendor=mojolearn.vendor(), numeric_mode=_backend.default_mode(), modules=loaded,
             binding_provenance_protocol="loaded-native-v2", bindings=list(native.values()),
             generation_test_device=request["generation_device"],
-            observed_generation_test_devices=test_devices, pytest_exit=code), indent=2) + "\n")
-    return code
+            observed_generation_test_devices=test_devices, pytest_exit=code,
+            inventory_errors=inventory_errors, worker_error=worker_error), indent=2) + "\n")
+    return code if code is not None and not inventory_errors and worker_error is None else 1
 
 
 def run_command(name, command, out, *, cwd, env=None, timeout=900):
@@ -506,7 +516,13 @@ def main():
             result = subprocess.run([str(python), str(out / "controller.py"), "--worker", str(out / "request.json")],
                                     cwd=out / "work", env=env, stdout=log, stderr=subprocess.STDOUT,
                                     timeout=args.timeout)
-        report["pytest_exit"] = result.returncode
+        report["worker_exit"] = result.returncode
+        receipt_path = out / "installed-modules.json"
+        receipt = json.loads(receipt_path.read_text()) if receipt_path.is_file() else {}
+        report["pytest_exit"] = receipt.get("pytest_exit")
+        report["installed_guard_summary"] = dict(binding_count=len(receipt.get("bindings", [])),
+                                                  inventory_errors=receipt.get("inventory_errors", []),
+                                                  worker_error=receipt.get("worker_error"))
         if (out / "tests.xml").exists():
             report["tests"] = junit_summary(out / "tests.xml")
         report["installed_guard_receipt"] = str(out / "installed-modules.json")
