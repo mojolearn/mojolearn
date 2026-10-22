@@ -679,3 +679,13 @@ try:
                          _backend.load_host_module("_mojolearn_x_prep_host"))
 except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as _scaler_error:
     _scaler_host_unavailable(HostStandardScaler, _SCALER_CONTEXT, _scaler_error)
+
+# The MinMaxScaler host API likewise retains fixed CPU entries at setup.
+from .preprocessing import _MINMAX_CONTEXT
+from ._native_minmax_bridge import connect_host as _connect_minmax_host
+try:
+    _connect_minmax_host(HostMinMaxScaler, _MINMAX_CONTEXT,
+                         _backend.load_host_module("_mojolearn_estimators_host"),
+                         _backend.load_host_module("_mojolearn_x_prep_host"))
+except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as _minmax_error:
+    _scaler_host_unavailable(HostMinMaxScaler, _MINMAX_CONTEXT, _minmax_error)
