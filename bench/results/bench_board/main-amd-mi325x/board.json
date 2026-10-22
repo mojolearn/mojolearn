@@ -3,15 +3,15 @@
   "MAIN BOARD amd-mi325x, version label main@feee1b453. Unreleased: not reproducible by pip install; the release boards are the reference.",
   "Cells: 230 races; oldest cell main@89485bc96 (2026-10-08T13:27:06Z), newest cell main@feee1b453 (2026-10-15T03:34:40Z). Boxes: AMD Instinct MI325X (amd, DO).",
   "Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 6 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.",
-  "Ours: recorded scored runs from lq jobs or verified paired sessions; the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: MATCH 89, n/a 141).",
-  "Opponents: retained from each paired session when present; otherwise retained historical pairs or stored opponent boards (opponents-20261006, release-board-resume-r2). Ingestion runs no measurements. `ours IDENTICAL / arm` divides the two stored medians, and the clock columns read a torch GPU arm kernel/kernel and every other arm whole/whole (AGENTS.md measurement item 6). Our kernel clock is `-` unless the cell recorded upload_ms_separate. Opponents withheld for changed lane settings: 44 races.",
+  "Ours: recorded scored runs from lq jobs or verified paired sessions; the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: MATCH 82, n/a 148).",
+  "Opponents: retained from each paired session when present; otherwise retained historical pairs or stored opponent boards (opponents-20261006). Ingestion runs no measurements. `ours IDENTICAL / arm` divides the two stored medians, and the clock columns read a torch GPU arm kernel/kernel and every other arm whole/whole (AGENTS.md measurement item 6). Our kernel clock is `-` unless the cell recorded upload_ms_separate. Opponents withheld for changed lane settings: 8 races.",
   "Provenance: main@ identifies the source or harness freeze. Paired wheel runs separately record the installed library version and loaded binary hashes; they are not source builds of that harness commit.",
   "Neural lanes: the headline (its own table, and a line under each neural race) is ours IDENTICAL over torch's fastest bf16 arm, eager or compile, what customers run; the fp32 twin is the second column. Note: torch bf16 uses tensor cores; IDENTICAL does not (vendor matrix units are not bit-identical across vendors): the gap is the identity tax. A cell of ours whose output hash equals a copied opponent's shows quality identical_to=<arm> (the same bits) where the own-host reference gave none."
  ],
  "board_sections": [
   {
    "lines": [
-    "Same lane, dataset and commit on the other GPU vendor (identity = equal output digests on NVIDIA and AMD). Counts: MATCH 89, n/a 141.",
+    "Same lane, dataset and commit on the other GPU vendor (identity = equal output digests on NVIDIA and AMD). Counts: MATCH 82, n/a 148.",
     "",
     "DIFFER: none."
    ],
@@ -68,15 +68,13 @@
   "smoke": false,
   "vendor": "amd"
  },
- "created": "2026-10-18T06:49:13Z",
+ "created": "2026-10-22T19:50:33Z",
  "main_board": {
   "backfill": {
    "filled": {
     "hardware<-box table": 230,
-    "hardware<-cell record": 209,
-    "hardware<-source board box": 23,
-    "hardware<-stored record": 4,
-    "version<-cell record": 236,
+    "hardware<-cell record": 114,
+    "version<-cell record": 114,
     "version<-git _version.py": 230
    },
    "not_comparable_rows": 0,
@@ -271,57 +269,26 @@
   ],
   "failed_runs": 6,
   "identity": {
-   "MATCH": 89,
-   "n/a": 141
+   "MATCH": 82,
+   "n/a": 148
   },
   "inputs": {
    "branch": "main",
-   "generated": "2026-10-18T06:49:13Z",
+   "gate_boards": null,
+   "generated": "2026-10-22T19:50:33Z",
    "grid_logs": [
-    "nv=/dev/null"
+    "nv=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
+    "nv2=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
+    "amd=/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "amd2=/Users/andrewhendel/mojolearn-evidence/grid-lq/amd2-grid-logs.txt"
    ],
    "json_dir": null,
-   "paired_boards": [
-    "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-algos.adafactor.synthetic.rows=full.json",
-    "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-algos.adagrad.synthetic.rows=full.json",
-    "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-algos.adam.synthetic.rows=full.json",
-    "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-algos.adamax.synthetic.rows=full.json",
-    "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-algos.adamw.synthetic.rows=full.json",
-    "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-algos.als.taxi-zones.rows=full.json",
-    "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.mamba2-forward.gaussian.shape=full.json",
-    "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.mamba3-forward.gaussian.shape=full.json",
-    "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.mlp-predict.gaussian.shape=full.json",
-    "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.mlp-train-step.gaussian.shape=full.json",
-    "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.samba-forward.bytes.shape=full.json",
-    "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.samba-train-step.bytes.shape=full.json",
-    "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.transformer-decode.gaussian.shape=full.json",
-    "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.transformer-forward.gaussian.shape=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.adafactor.synthetic.rows=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.adagrad.synthetic.rows=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.adam.synthetic.rows=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.adamax.synthetic.rows=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.adamw.synthetic.rows=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.avgpool1d.synthetic.rows=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.avgpool2d.synthetic.rows=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.batchnorm1d.synthetic.rows=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.batchnorm2d.synthetic.rows=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.cagra.istella.rows=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.cagra.taxi.rows=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.cholesky.synthetic.rows=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.gemm-bf16.gaussian.shape=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.gemm.gaussian.shape=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.lm-forward.bytes.shape=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.mamba2-forward.gaussian.shape=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.mamba3-forward.gaussian.shape=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.mlp-predict.gaussian.shape=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.mlp-train-step.gaussian.shape=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.samba-forward.bytes.shape=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.samba-train-step.bytes.shape=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.transformer-decode.gaussian.shape=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.transformer-forward.gaussian.shape=full.json"
-   ],
+   "paired_boards": null,
    "results": [
-    "nv=/dev/null"
+    "nv=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
+    "nv2=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "amd=/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "amd2=/Users/andrewhendel/mojolearn-evidence/grid-lq/amd2-results.txt"
    ]
   },
   "label": "main@feee1b453",
@@ -330,15 +297,11 @@
   "opponent_boards": [
    {
     "label": "opponents-20261006",
-    "path": "/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/bench_board/overnight-20261006-amd/board.json"
-   },
-   {
-    "label": "release-board-resume-r2",
-    "path": "/Users/andrewhendel/mojolearn-evidence/board-resume-r2/amd-mi325x/board/board.json"
+    "path": "/Users/andrewhendel/mojolearn-wt/measure-coverage/bench/results/bench_board/overnight-20261006-amd/board.json"
    }
   ],
   "replaced": 6,
-  "withheld_opponents": 44
+  "withheld_opponents": 8
  },
  "main_board_schema": "mojolearn-main-board/1",
  "plan": [
@@ -581,7 +544,7 @@
       "torch-compile-fp32",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-fp32",
      "opponents": {
       "torch-compile-fp32": {
@@ -698,7 +661,7 @@
       }
      },
      "ours_over_theirs": 1.13,
-     "pairing": "v2:f5c365b4f4c1b7398a0776d599d797b5ccf554e531baf806905f841fc30f2d0e",
+     "pairing": "v2:7a18711a5546249d0f65c8991994637887227b4c0909bcdc133ddc236107a758",
      "reason": "recorded effective settings match",
      "rerace": "",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
@@ -1259,11 +1222,10 @@
       "box": "amd",
       "commit_date": "2026-10-14T03:32:16Z",
       "identity": {
-       "other_column": "nvidia-l40s",
-       "other_digest": "aa99a3dc8c61a3b4",
-       "other_hardware": "NVIDIA L40S (nv2, RunPod)",
-       "other_job": "nv2/paired-e04405e5f8fcc9e4b47325d2c7bea05296c3d7b5ca9e2e10e290b5c4644f15bd",
-       "status": "MATCH"
+       "other_column": "the nvidia columns",
+       "other_digest": null,
+       "other_job": null,
+       "status": "n/a"
       },
       "job": "paired-f10cf2497d39cc7319d4de70c12bf716db9e88b0028ecc67a6aa49070a81732e",
       "measured": "2026-10-14T03:51:09Z",
@@ -10604,7 +10566,7 @@
       "warmup_rounds": 1
      },
      "shape": null,
-     "source": "main@79fcd24a5 amd/paired-f10cf2497d39cc7319d4de70c12bf716db9e88b0028ecc67a6aa49070a81732e 2026-10-14; identity vs nvidia-l40s: MATCH",
+     "source": "main@79fcd24a5 amd/paired-f10cf2497d39cc7319d4de70c12bf716db9e88b0028ecc67a6aa49070a81732e 2026-10-14; identity vs the nvidia columns: n/a",
      "state_receipts": [
       {
        "model": {
@@ -13218,7 +13180,7 @@
    "log": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd/campaign/measured/algos.adafactor.synthetic.rows=full/board.json (amd/paired-f10cf2497d39cc7319d4de70c12bf716db9e88b0028ecc67a6aa49070a81732e)",
    "main_board": {
     "box": "amd",
-    "identity": "MATCH",
+    "identity": "n/a",
     "job": "paired-f10cf2497d39cc7319d4de70c12bf716db9e88b0028ecc67a6aa49070a81732e",
     "sha": "79fcd24a5695d67af8b5c5c08b652d3183786492"
    },
@@ -15605,7 +15567,7 @@
       "torch-compile-fp32",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-compile-fp32",
      "opponents": {
       "torch-compile-fp32": {
@@ -15722,7 +15684,7 @@
       }
      },
      "ours_over_theirs": 2.037,
-     "pairing": "v2:00b753e2bf87e5f0715d48852cfa569bf1357f6796ac999ae8ce6b0741ff46b8",
+     "pairing": "v2:2fa4fc2ee23903174645e3f351e23e110bcc1a42143e345bcd2dac9bd0581d94",
      "reason": "recorded effective settings match",
      "rerace": "",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
@@ -16283,11 +16245,10 @@
       "box": "amd",
       "commit_date": "2026-10-14T03:32:16Z",
       "identity": {
-       "other_column": "nvidia-l40s",
-       "other_digest": "7eac92c7ee8f1322",
-       "other_hardware": "NVIDIA L40S (nv2, RunPod)",
-       "other_job": "nv2/paired-5fe579b0411a138733083f59a97fce679407262c5f6282e50c7c3deee4b3c737",
-       "status": "MATCH"
+       "other_column": "the nvidia columns",
+       "other_digest": null,
+       "other_job": null,
+       "status": "n/a"
       },
       "job": "paired-af94094fad922b4efc0abda02c1eb1d9d018067c8743a9f2fb66108edcd28323",
       "measured": "2026-10-14T03:47:52Z",
@@ -25602,7 +25563,7 @@
       "warmup_rounds": 1
      },
      "shape": null,
-     "source": "main@79fcd24a5 amd/paired-af94094fad922b4efc0abda02c1eb1d9d018067c8743a9f2fb66108edcd28323 2026-10-14; identity vs nvidia-l40s: MATCH",
+     "source": "main@79fcd24a5 amd/paired-af94094fad922b4efc0abda02c1eb1d9d018067c8743a9f2fb66108edcd28323 2026-10-14; identity vs the nvidia columns: n/a",
      "state_receipts": [
       {
        "model": {
@@ -28242,7 +28203,7 @@
    "log": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd/campaign/measured/algos.adagrad.synthetic.rows=full/board.json (amd/paired-af94094fad922b4efc0abda02c1eb1d9d018067c8743a9f2fb66108edcd28323)",
    "main_board": {
     "box": "amd",
-    "identity": "MATCH",
+    "identity": "n/a",
     "job": "paired-af94094fad922b4efc0abda02c1eb1d9d018067c8743a9f2fb66108edcd28323",
     "sha": "79fcd24a5695d67af8b5c5c08b652d3183786492"
    },
@@ -30650,7 +30611,7 @@
       "torch-eager-fp32",
       "torch-fused-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-fused-fp32",
      "opponents": {
       "torch-compile-fp32": {
@@ -30823,7 +30784,7 @@
       }
      },
      "ours_over_theirs": 2.894,
-     "pairing": "v2:4cee3d2b85e12831f222d603628e66c2d95cd74633750bfb96cf3134c48a1730",
+     "pairing": "v2:b5d36cd8c2592a46af31c8ae10e131eec33ebebb0d812574e9d1c78e120af6e1",
      "reason": "recorded effective settings match",
      "rerace": "",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
@@ -31612,11 +31573,10 @@
       "box": "amd",
       "commit_date": "2026-10-14T03:32:16Z",
       "identity": {
-       "other_column": "nvidia-l40s",
-       "other_digest": "04d59ea621486362",
-       "other_hardware": "NVIDIA L40S (nv2, RunPod)",
-       "other_job": "nv2/paired-e4b3d944a394b8532919b0be38365674898311bfd748fbadfd6ecee83d31ef7a",
-       "status": "MATCH"
+       "other_column": "the nvidia columns",
+       "other_digest": null,
+       "other_job": null,
+       "status": "n/a"
       },
       "job": "paired-b7d8836277782a06993d4691465ee382d5c783cad374eaa186780d08b0bc34e8",
       "measured": "2026-10-14T03:43:00Z",
@@ -43590,7 +43550,7 @@
       "warmup_rounds": 1
      },
      "shape": null,
-     "source": "main@79fcd24a5 amd/paired-b7d8836277782a06993d4691465ee382d5c783cad374eaa186780d08b0bc34e8 2026-10-14; identity vs nvidia-l40s: MATCH",
+     "source": "main@79fcd24a5 amd/paired-b7d8836277782a06993d4691465ee382d5c783cad374eaa186780d08b0bc34e8 2026-10-14; identity vs the nvidia columns: n/a",
      "state_receipts": [
       {
        "model": {
@@ -47638,7 +47598,7 @@
    "log": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd/campaign/measured/algos.adam.synthetic.rows=full/board.json (amd/paired-b7d8836277782a06993d4691465ee382d5c783cad374eaa186780d08b0bc34e8)",
    "main_board": {
     "box": "amd",
-    "identity": "MATCH",
+    "identity": "n/a",
     "job": "paired-b7d8836277782a06993d4691465ee382d5c783cad374eaa186780d08b0bc34e8",
     "sha": "79fcd24a5695d67af8b5c5c08b652d3183786492"
    },
@@ -51201,7 +51161,7 @@
       "torch-compile-fp32",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-fp32",
      "opponents": {
       "torch-compile-fp32": {
@@ -51318,7 +51278,7 @@
       }
      },
      "ours_over_theirs": 1.626,
-     "pairing": "v2:0803408226f232ddcea4848aa6d928e9cbcd6124f82f5057dbe1d9ae5f18ef93",
+     "pairing": "v2:afbbc1a99c0fc3ed8023291bac969aa33c2de8ab2a82d9ca3dbb83f94b15f51f",
      "reason": "recorded effective settings match",
      "rerace": "",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
@@ -51879,11 +51839,10 @@
       "box": "amd",
       "commit_date": "2026-10-14T03:32:16Z",
       "identity": {
-       "other_column": "nvidia-l40s",
-       "other_digest": "2d21cdf4e97f6655",
-       "other_hardware": "NVIDIA L40S (nv2, RunPod)",
-       "other_job": "nv2/paired-725e0ddd7564f0a4f2e5cf2af894bb5a072bfc3d29eef4eb4d5c7f6f4f2ae743",
-       "status": "MATCH"
+       "other_column": "the nvidia columns",
+       "other_digest": null,
+       "other_job": null,
+       "status": "n/a"
       },
       "job": "paired-bb0b9e92ff74e892d405f1ce25ae5c6a696f6a475ef4e3b370133d8c9eb61ca3",
       "measured": "2026-10-14T03:48:57Z",
@@ -61280,7 +61239,7 @@
       "warmup_rounds": 1
      },
      "shape": null,
-     "source": "main@79fcd24a5 amd/paired-bb0b9e92ff74e892d405f1ce25ae5c6a696f6a475ef4e3b370133d8c9eb61ca3 2026-10-14; identity vs nvidia-l40s: MATCH",
+     "source": "main@79fcd24a5 amd/paired-bb0b9e92ff74e892d405f1ce25ae5c6a696f6a475ef4e3b370133d8c9eb61ca3 2026-10-14; identity vs the nvidia columns: n/a",
      "state_receipts": [
       {
        "model": {
@@ -63946,7 +63905,7 @@
    "log": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd/campaign/measured/algos.adamax.synthetic.rows=full/board.json (amd/paired-bb0b9e92ff74e892d405f1ce25ae5c6a696f6a475ef4e3b370133d8c9eb61ca3)",
    "main_board": {
     "box": "amd",
-    "identity": "MATCH",
+    "identity": "n/a",
     "job": "paired-bb0b9e92ff74e892d405f1ce25ae5c6a696f6a475ef4e3b370133d8c9eb61ca3",
     "sha": "79fcd24a5695d67af8b5c5c08b652d3183786492"
    },
@@ -66374,7 +66333,7 @@
       "torch-eager-fp32",
       "torch-fused-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-fused-fp32",
      "opponents": {
       "torch-compile-fp32": {
@@ -66547,7 +66506,7 @@
       }
      },
      "ours_over_theirs": 3.373,
-     "pairing": "v2:0e123b01c3c78b2fae9e7c8a5699e8051083acab1074990cd582b933ec236407",
+     "pairing": "v2:b41928ba48de5e7e233e4f52098d2a0d097eb75a129406791d4eae13c9ef3264",
      "reason": "recorded effective settings match",
      "rerace": "",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
@@ -67336,11 +67295,10 @@
       "box": "amd",
       "commit_date": "2026-10-14T03:32:16Z",
       "identity": {
-       "other_column": "nvidia-l40s",
-       "other_digest": "a56b45e6a36856e6",
-       "other_hardware": "NVIDIA L40S (nv2, RunPod)",
-       "other_job": "nv2/paired-cd0fac0863b7eff0b97cd53e95474fb02e8e987b2362a6008b67ba19706f6d25",
-       "status": "MATCH"
+       "other_column": "the nvidia columns",
+       "other_digest": null,
+       "other_job": null,
+       "status": "n/a"
       },
       "job": "paired-a66aa7eff428a6de1c4a5f3040f82126bf28db7ef40c0925793a4bde8b639da5",
       "measured": "2026-10-14T03:44:16Z",
@@ -79314,7 +79272,7 @@
       "warmup_rounds": 1
      },
      "shape": null,
-     "source": "main@79fcd24a5 amd/paired-a66aa7eff428a6de1c4a5f3040f82126bf28db7ef40c0925793a4bde8b639da5 2026-10-14; identity vs nvidia-l40s: MATCH",
+     "source": "main@79fcd24a5 amd/paired-a66aa7eff428a6de1c4a5f3040f82126bf28db7ef40c0925793a4bde8b639da5 2026-10-14; identity vs the nvidia columns: n/a",
      "state_receipts": [
       {
        "model": {
@@ -83362,7 +83320,7 @@
    "log": "/Users/andrewhendel/mojolearn-evidence/gpu-gap-resume-20261014/amd/campaign/measured/algos.adamw.synthetic.rows=full/board.json (amd/paired-a66aa7eff428a6de1c4a5f3040f82126bf28db7ef40c0925793a4bde8b639da5)",
    "main_board": {
     "box": "amd",
-    "identity": "MATCH",
+    "identity": "n/a",
     "job": "paired-a66aa7eff428a6de1c4a5f3040f82126bf28db7ef40c0925793a4bde8b639da5",
     "sha": "79fcd24a5695d67af8b5c5c08b652d3183786492"
    },
@@ -86922,7 +86880,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -87732,7 +87690,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-fp32",
      "opponents": {
       "torch-compile-bf16": {
@@ -87938,7 +87896,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-fp32",
      "opponents": {
       "torch-compile-bf16": {
@@ -108821,7 +108779,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-bf16",
      "opponents": {
       "torch-compile-bf16": {
@@ -109027,7 +108985,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-fp32",
      "opponents": {
       "torch-compile-bf16": {
@@ -130622,7 +130580,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-bf16",
      "opponents": {
       "torch-compile-bf16": {
@@ -130828,7 +130786,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-fp32",
      "opponents": {
       "torch-compile-bf16": {
@@ -159230,7 +159188,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-fp32",
      "opponents": {
       "torch-compile-bf16": {
@@ -159436,7 +159394,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-compile-fp32",
      "opponents": {
       "torch-compile-bf16": {
@@ -188021,7 +187979,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -188818,7 +188776,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -189430,7 +189388,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -190171,7 +190129,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -190881,7 +190839,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -191593,7 +191551,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -192338,7 +192296,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -193083,7 +193041,7 @@
      "admitted_opponents": [
       "torch-gpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-gpu",
      "opponents": {
       "torch-gpu": {
@@ -199010,7 +198968,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "torch-compile-bf16": {
@@ -201084,7 +201042,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -201888,7 +201846,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -202709,7 +202667,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -203457,7 +203415,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -203753,7 +203711,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -204054,7 +204012,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-bf16",
      "opponents": {
       "torch-compile-bf16": {
@@ -204260,7 +204218,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-bf16",
      "opponents": {
       "torch-compile-bf16": {
@@ -229657,7 +229615,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-fp32",
      "opponents": {
       "torch-compile-bf16": {
@@ -229863,7 +229821,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-bf16",
      "opponents": {
       "torch-compile-bf16": {
@@ -255631,7 +255589,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "statsforecast-cpu": {
@@ -256823,7 +256781,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "statsforecast-cpu": {
@@ -258018,7 +257976,7 @@
       "torch-compile-fp32",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-fp32",
      "opponents": {
       "torch-compile-fp32": {
@@ -258146,7 +258104,7 @@
       "torch-compile-fp32",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-fp32",
      "opponents": {
       "torch-compile-fp32": {
@@ -271079,7 +271037,7 @@
      "admitted_opponents": [
       "statsforecast-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "statsforecast-cpu",
      "opponents": {
       "statsforecast-cpu": {
@@ -271819,7 +271777,7 @@
      "admitted_opponents": [
       "statsforecast-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "statsforecast-cpu",
      "opponents": {
       "statsforecast-cpu": {
@@ -272559,7 +272517,7 @@
      "admitted_opponents": [
       "torch-gpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-gpu",
      "opponents": {
       "torch-gpu": {
@@ -278489,7 +278447,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -278831,7 +278789,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -279519,7 +279477,7 @@
       "torch-compile-fp32",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-fp32",
      "opponents": {
       "torch-compile-fp32": {
@@ -279629,7 +279587,7 @@
       "torch-compile-fp32",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-fp32",
      "opponents": {
       "torch-compile-fp32": {
@@ -294200,7 +294158,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -295041,7 +294999,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -295882,7 +295840,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -296618,7 +296576,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -297352,7 +297310,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "torch-compile-bf16": {
@@ -298858,7 +298816,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "torch-compile-bf16": {
@@ -300369,7 +300327,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-bf16",
      "opponents": {
       "torch-compile-bf16": {
@@ -300575,7 +300533,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-bf16",
      "opponents": {
       "torch-compile-bf16": {
@@ -321068,7 +321026,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-bf16",
      "opponents": {
       "torch-compile-bf16": {
@@ -321274,7 +321232,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-fp32",
      "opponents": {
       "torch-compile-bf16": {
@@ -341762,7 +341720,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "torch-compile-bf16": {
@@ -343273,7 +343231,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "torch-compile-bf16": {
@@ -344784,7 +344742,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "torch-compile-bf16": {
@@ -346554,7 +346512,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "torch-compile-bf16": {
@@ -348324,7 +348282,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "torch-compile-bf16": {
@@ -350144,7 +350102,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "torch-compile-bf16": {
@@ -351964,7 +351922,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "faiss-cpu": {
@@ -352701,7 +352659,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "faiss-cpu": {
@@ -353267,7 +353225,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "faiss-cpu": {
@@ -354008,7 +353966,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -354673,7 +354631,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -355418,7 +355376,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -356163,7 +356121,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -356874,7 +356832,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -357583,7 +357541,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "shap-cpu": {
@@ -358251,7 +358209,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -358464,7 +358422,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -359200,7 +359158,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -359774,7 +359732,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -360506,7 +360464,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -361238,7 +361196,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -361968,7 +361926,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -362696,7 +362654,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -362942,7 +362900,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -363736,7 +363694,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -364538,7 +364496,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -365376,7 +365334,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -366212,7 +366170,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -367017,7 +366975,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -367827,7 +367785,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-bf16",
      "opponents": {
       "torch-compile-bf16": {
@@ -368033,7 +367991,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-fp32",
      "opponents": {
       "torch-compile-bf16": {
@@ -391461,7 +391419,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -392064,7 +392022,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -392796,7 +392754,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -393041,7 +392999,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -393350,7 +393308,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -393659,7 +393617,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "torch-compile-bf16": {
@@ -395429,7 +395387,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "torch-compile-bf16": {
@@ -397199,7 +397157,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "torch-compile-bf16": {
@@ -399019,7 +398977,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "torch-compile-bf16": {
@@ -400839,7 +400797,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -405576,7 +405534,7 @@
      "admitted_opponents": [
       "torch-gpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-gpu",
      "opponents": {
       "torch-gpu": {
@@ -411146,7 +411104,7 @@
      "admitted_opponents": [
       "torch-gpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-gpu",
      "opponents": {
       "torch-gpu": {
@@ -417382,7 +417340,7 @@
      "admitted_opponents": [
       "torch-gpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-gpu",
      "opponents": {
       "torch-gpu": {
@@ -423625,7 +423583,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -424351,7 +424309,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -425080,7 +425038,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-fp32",
      "opponents": {
       "torch-compile-bf16": {
@@ -425286,7 +425244,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-fp32",
      "opponents": {
       "torch-compile-bf16": {
@@ -446169,7 +446127,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-fp32",
      "opponents": {
       "torch-compile-bf16": {
@@ -446375,7 +446333,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-fp32",
      "opponents": {
       "torch-compile-bf16": {
@@ -467441,7 +467399,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -467782,7 +467740,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -468507,7 +468465,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -469252,7 +469210,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -469993,7 +469951,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -470726,7 +470684,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -471457,7 +471415,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -472174,7 +472132,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -472905,7 +472863,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -473634,7 +473592,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -474436,7 +474394,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -475255,7 +475213,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -476004,7 +475962,7 @@
       "torch-compile-fp32",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-fp32",
      "opponents": {
       "torch-compile-fp32": {
@@ -491423,7 +491381,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -492226,7 +492184,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -493027,7 +492985,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -493737,7 +493695,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -494449,7 +494407,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -495183,7 +495141,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -495917,7 +495875,7 @@
      "admitted_opponents": [
       "statsforecast-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "statsforecast-cpu",
      "opponents": {
       "statsforecast-cpu": {
@@ -496657,7 +496615,7 @@
      "admitted_opponents": [
       "statsforecast-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "statsforecast-cpu",
      "opponents": {
       "statsforecast-cpu": {
@@ -497397,7 +497355,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -498129,7 +498087,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -498861,7 +498819,7 @@
      "admitted_opponents": [
       "networkx-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "networkx-cpu",
      "opponents": {
       "networkx-cpu": {
@@ -499491,7 +499449,7 @@
      "admitted_opponents": [
       "networkx-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "networkx-cpu",
      "opponents": {
       "networkx-cpu": {
@@ -500119,7 +500077,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "shap-cpu": {
@@ -500783,7 +500741,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "shap-cpu": {
@@ -501447,7 +501405,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -502167,7 +502125,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -502887,7 +502845,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -503599,7 +503557,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -504313,7 +504271,7 @@
      "admitted_opponents": [
       "torch-gpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-gpu",
      "opponents": {
       "torch-gpu": {
@@ -509602,7 +509560,7 @@
      "admitted_opponents": [
       "torch-gpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-gpu",
      "opponents": {
       "torch-gpu": {
@@ -514896,7 +514854,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -515141,7 +515099,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -515386,68 +515344,11 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
-     "opponents": {
-      "sklearn-cpu": {
-       "quality_comparison": [
-        {
-         "batch": null,
-         "checks": [
-          {
-           "comparison": "absolute",
-           "margin": 0.01,
-           "metric": "r2",
-           "observed": 0.004781424086235164,
-           "opponent": -0.04477950087778848,
-           "ours": -0.039998076791553316,
-           "verdict": "PASS"
-          },
-          {
-           "comparison": "symmetric-relative",
-           "margin": 0.05,
-           "metric": "rmse",
-           "observed": 0.002290869591266063,
-           "opponent": 0.8538326327402931,
-           "ours": 0.8518766135259177,
-           "verdict": "PASS"
-          }
-         ],
-         "failures": [],
-         "interpretation": "engineering margin; not a statistical equivalence claim",
-         "policy": "mojolearn.quality-parity.v7",
-         "verdict": "PASS"
-        }
-       ],
-       "reason": "no supported audit or matched effective settings for this pairing",
-       "rerace": "x",
-       "timing_comparison": {
-        "clock": "whole",
-        "kind": "preferred",
-        "label": "whole/whole",
-        "opponent_ms": 878876.620908999,
-        "ours_ms": 862.1022290026303,
-        "preferred": "whole",
-        "value": 0.0009809138262330617
-       },
-       "timing_comparisons": [
-        {
-         "batch": null,
-         "batch_rows": null,
-         "clock": "whole",
-         "kind": "preferred",
-         "label": "whole/whole",
-         "opponent_ms": 878876.620908999,
-         "ours_ms": 862.1022290026303,
-         "preferred": "whole",
-         "value": 0.0009809138262330617
-        }
-       ],
-       "verdict": "INSUFFICIENT"
-      }
-     },
+     "opponents": {},
      "ours_over_theirs": null,
-     "pairing": "v2:ad2de068c86b02189b638f3e4503120ebdad73d36488adc24bb642891cff786e",
+     "pairing": "v2:8124faa379bf53731d08996dede52d7e84079296aee3707e7138b7c8001d45a1",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
@@ -515729,6 +515630,75 @@
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
+     "verdict": "INSUFFICIENT"
+    },
+    {
+     "admitted_opponents": [],
+     "date": "2026-10-18",
+     "opponent": null,
+     "opponents": {
+      "sklearn-cpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "r2",
+           "observed": 0.004781424086235164,
+           "opponent": -0.04477950087778848,
+           "ours": -0.039998076791553316,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "rmse",
+           "observed": 0.002290869591266063,
+           "opponent": 0.8538326327402931,
+           "ours": 0.8518766135259177,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v7",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 878876.620908999,
+        "ours_ms": 862.1022290026303,
+        "preferred": "whole",
+        "value": 0.0009809138262330617
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 878876.620908999,
+         "ours_ms": 862.1022290026303,
+         "preferred": "whole",
+         "value": 0.0009809138262330617
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      }
+     },
+     "ours_over_theirs": null,
+     "pairing": "v2:ad2de068c86b02189b638f3e4503120ebdad73d36488adc24bb642891cff786e",
+     "reason": "no opponent with sufficient valid comparison evidence",
+     "rerace": "x",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    ],
@@ -515860,8 +515830,8 @@
      "lane": "quantile",
      "library": "scikit-learn",
      "library_version": "1.7.2",
-     "max_ms": 878876.620908999,
-     "median_ms": 878876.620908999,
+     "max_ms": null,
+     "median_ms": null,
      "memory": {
       "children_mb": 4.1,
       "gpu_method": "cpu arm: no device memory",
@@ -515872,7 +515842,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 7990.8
      },
-     "min_ms": 878876.620908999,
+     "min_ms": null,
      "mode": "opponent",
      "neural_shape": null,
      "params": {
@@ -515886,15 +515856,11 @@
       "source": "get_params"
      },
      "peak_gpu_mb": null,
-     "peak_host_mb": 8006.1,
-     "quality": {
-      "finite": true,
-      "r2": -0.04477950087778848,
-      "rmse": 0.8538326327402931
-     },
+     "peak_host_mb": null,
+     "quality": null,
      "ratio_ours_fast_over": null,
-     "ratio_ours_identical_over": 0.0009809138262330617,
-     "rounds": 1,
+     "ratio_ours_identical_over": null,
+     "rounds": 0,
      "rows": null,
      "rows_tag": "full",
      "settings": {
@@ -515936,14 +515902,25 @@
      },
      "shape": "X 100000x220; Xq 100000x220; y 100000; yq 100000",
      "source": "copied from release-board-resume-r2; measured this run",
-     "status": "ok",
-     "times_ms": [
-      878876.620908999
-     ],
+     "status": "REFUSED(refused by name (2026-10-13 audit): different algorithm: ours runs ADMM whatever solver it is given (max_iter=5000, tol=1e-4); scikit-learn's QuantileRegressor has only linear-programming solvers (HiGHS, interior point))",
+     "times_ms": [],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "version": "scikit-learn 1.7.2",
      "version_source": "cell record",
-     "warmup_ms": 896171.8240760001
+     "warmup_ms": null,
+     "withdrawn": {
+      "max_ms": 878876.620908999,
+      "median_ms": 878876.620908999,
+      "min_ms": 878876.620908999,
+      "quality": {
+       "finite": true,
+       "r2": -0.04477950087778848,
+       "rmse": 0.8538326327402931
+      },
+      "times_ms": [
+       878876.620908999
+      ]
+     }
     }
    ],
    "dataset": "istella",
@@ -516005,68 +515982,11 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
-     "opponents": {
-      "sklearn-cpu": {
-       "quality_comparison": [
-        {
-         "batch": null,
-         "checks": [
-          {
-           "comparison": "absolute",
-           "margin": 0.01,
-           "metric": "r2",
-           "observed": 8.128233836346421e-05,
-           "opponent": 0.8996775445525863,
-           "ours": 0.8995962622142228,
-           "verdict": "PASS"
-          },
-          {
-           "comparison": "symmetric-relative",
-           "margin": 0.05,
-           "metric": "rmse",
-           "observed": 0.00040485940786394626,
-           "opponent": 5.044706074663764,
-           "ours": 5.046749298596431,
-           "verdict": "PASS"
-          }
-         ],
-         "failures": [],
-         "interpretation": "engineering margin; not a statistical equivalence claim",
-         "policy": "mojolearn.quality-parity.v7",
-         "verdict": "PASS"
-        }
-       ],
-       "reason": "no supported audit or matched effective settings for this pairing",
-       "rerace": "x",
-       "timing_comparison": {
-        "clock": "whole",
-        "kind": "preferred",
-        "label": "whole/whole",
-        "opponent_ms": 225040.24350500002,
-        "ours_ms": 499.29487399640493,
-        "preferred": "whole",
-        "value": 0.0022186914936630497
-       },
-       "timing_comparisons": [
-        {
-         "batch": null,
-         "batch_rows": null,
-         "clock": "whole",
-         "kind": "preferred",
-         "label": "whole/whole",
-         "opponent_ms": 225040.24350500002,
-         "ours_ms": 499.29487399640493,
-         "preferred": "whole",
-         "value": 0.0022186914936630497
-        }
-       ],
-       "verdict": "INSUFFICIENT"
-      }
-     },
+     "opponents": {},
      "ours_over_theirs": null,
-     "pairing": "v2:009697be3ddc2195d0e2c551c98e1466886719afa27b5a583c387da09f874d7c",
+     "pairing": "v2:5ca3aea7434cec85e19d941eae2173c557cd30989bdcafcdbb2371522591b266",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
@@ -516349,6 +516269,75 @@
      "rerace": "x",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
+    },
+    {
+     "admitted_opponents": [],
+     "date": "2026-10-18",
+     "opponent": null,
+     "opponents": {
+      "sklearn-cpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "r2",
+           "observed": 8.128233836346421e-05,
+           "opponent": 0.8996775445525863,
+           "ours": 0.8995962622142228,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "rmse",
+           "observed": 0.00040485940786394626,
+           "opponent": 5.044706074663764,
+           "ours": 5.046749298596431,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v7",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 225040.24350500002,
+        "ours_ms": 499.29487399640493,
+        "preferred": "whole",
+        "value": 0.0022186914936630497
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 225040.24350500002,
+         "ours_ms": 499.29487399640493,
+         "preferred": "whole",
+         "value": 0.0022186914936630497
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      }
+     },
+     "ours_over_theirs": null,
+     "pairing": "v2:009697be3ddc2195d0e2c551c98e1466886719afa27b5a583c387da09f874d7c",
+     "reason": "no opponent with sufficient valid comparison evidence",
+     "rerace": "x",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
+     "verdict": "INSUFFICIENT"
     }
    ],
    "cells": [
@@ -516479,8 +516468,8 @@
      "lane": "quantile",
      "library": "scikit-learn",
      "library_version": "1.7.2",
-     "max_ms": 225040.24350500002,
-     "median_ms": 225040.24350500002,
+     "max_ms": null,
+     "median_ms": null,
      "memory": {
       "children_mb": 4.1,
       "gpu_method": "cpu arm: no device memory",
@@ -516491,7 +516480,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 898.2
      },
-     "min_ms": 225040.24350500002,
+     "min_ms": null,
      "mode": "opponent",
      "neural_shape": null,
      "params": {
@@ -516505,15 +516494,11 @@
       "source": "get_params"
      },
      "peak_gpu_mb": null,
-     "peak_host_mb": 928.9,
-     "quality": {
-      "finite": true,
-      "r2": 0.8996775445525863,
-      "rmse": 5.044706074663764
-     },
+     "peak_host_mb": null,
+     "quality": null,
      "ratio_ours_fast_over": null,
-     "ratio_ours_identical_over": 0.0022186914936630497,
-     "rounds": 1,
+     "ratio_ours_identical_over": null,
+     "rounds": 0,
      "rows": null,
      "rows_tag": "full",
      "settings": {
@@ -516555,14 +516540,25 @@
      },
      "shape": "X 100000x11; Xq 100000x11; y 100000; yq 100000",
      "source": "copied from release-board-resume-r2; measured this run",
-     "status": "ok",
-     "times_ms": [
-      225040.24350500002
-     ],
+     "status": "REFUSED(refused by name (2026-10-13 audit): different algorithm: ours runs ADMM whatever solver it is given (max_iter=5000, tol=1e-4); scikit-learn's QuantileRegressor has only linear-programming solvers (HiGHS, interior point))",
+     "times_ms": [],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "version": "scikit-learn 1.7.2",
      "version_source": "cell record",
-     "warmup_ms": 227677.16328400094
+     "warmup_ms": null,
+     "withdrawn": {
+      "max_ms": 225040.24350500002,
+      "median_ms": 225040.24350500002,
+      "min_ms": 225040.24350500002,
+      "quality": {
+       "finite": true,
+       "r2": 0.8996775445525863,
+       "rmse": 5.044706074663764
+      },
+      "times_ms": [
+       225040.24350500002
+      ]
+     }
     }
    ],
    "dataset": "taxi",
@@ -516626,7 +516622,7 @@
      "admitted_opponents": [
       "torch-gpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-gpu",
      "opponents": {
       "torch-gpu": {
@@ -522180,7 +522176,7 @@
      "admitted_opponents": [
       "torch-gpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-gpu",
      "opponents": {
       "torch-gpu": {
@@ -527732,7 +527728,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -528423,7 +528419,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -529101,7 +529097,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -529781,7 +529777,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -530608,7 +530604,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -531365,7 +531361,7 @@
       "torch-compile-fp32",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-fp32",
      "opponents": {
       "torch-compile-fp32": {
@@ -546530,7 +546526,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "torch-compile-bf16": {
@@ -548305,7 +548301,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "torch-compile-bf16": {
@@ -550080,7 +550076,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "torch-compile-bf16": {
@@ -551905,7 +551901,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "torch-compile-bf16": {
@@ -553732,7 +553728,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -554474,7 +554470,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -555216,7 +555212,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -555902,7 +555898,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -556586,7 +556582,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "statsmodels-cpu": {
@@ -557249,7 +557245,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "statsmodels-cpu": {
@@ -557914,7 +557910,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -558600,7 +558596,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -559286,7 +559282,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -559972,7 +559968,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -560656,7 +560652,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -561328,7 +561324,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -562000,7 +561996,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -562672,7 +562668,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -563346,7 +563342,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -564032,7 +564028,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -564716,7 +564712,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -564944,7 +564940,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -565176,7 +565172,7 @@
       "torch-eager-fp32",
       "torch-fused-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-fused-fp32",
      "opponents": {
       "torch-compile-fp32": {
@@ -584966,7 +584962,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -585693,7 +585689,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -586422,7 +586418,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -587159,7 +587155,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -587896,7 +587892,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -588623,7 +588619,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -589350,7 +589346,7 @@
      "admitted_opponents": [
       "torch-gpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-gpu",
      "opponents": {
       "torch-gpu": {
@@ -594645,7 +594641,7 @@
      "admitted_opponents": [
       "torch-gpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-gpu",
      "opponents": {
       "torch-gpu": {
@@ -599938,7 +599934,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "gpytorch-cpu": {
@@ -601265,7 +601261,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "gpytorch-cpu": {
@@ -602582,7 +602578,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -603329,7 +603325,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -604074,7 +604070,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "statsforecast-cpu": {
@@ -605265,7 +605261,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "statsforecast-cpu": {
@@ -606456,7 +606452,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -606674,7 +606670,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -606892,66 +606888,15 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
-     "opponents": {
-      "sklearn-cpu": {
-       "audit": "fairness audit 2026-10-13 (no reruns)",
-       "date": "2026-10-13",
-       "evidence": "lane_config mismatches",
-       "quality_comparison": [
-        {
-         "batch": null,
-         "checks": [
-          {
-           "comparison": "absolute",
-           "margin": 0.01,
-           "metric": "trustworthiness_k15",
-           "observed": 4.656271378744581e-05,
-           "opponent": 0.9921703842752498,
-           "ours": 0.9921238215614624,
-           "verdict": "PASS"
-          }
-         ],
-         "failures": [],
-         "interpretation": "engineering margin; not a statistical equivalence claim",
-         "policy": "mojolearn.quality-parity.v7",
-         "verdict": "PASS"
-        }
-       ],
-       "reason": "different algorithm: scikit-learn runs Barnes-Hut (approximate repulsion), ours exact repulsion over the k-NN affinities",
-       "rerace": "x",
-       "timing_comparison": {
-        "clock": "whole",
-        "kind": "preferred",
-        "label": "whole/whole",
-        "opponent_ms": 17896.15827200032,
-        "ours_ms": 1216.2023519995273,
-        "preferred": "whole",
-        "value": 0.0679588509173141
-       },
-       "timing_comparisons": [
-        {
-         "batch": null,
-         "batch_rows": null,
-         "clock": "whole",
-         "kind": "preferred",
-         "label": "whole/whole",
-         "opponent_ms": 17896.15827200032,
-         "ours_ms": 1216.2023519995273,
-         "preferred": "whole",
-         "value": 0.0679588509173141
-        }
-       ],
-       "verdict": "UNFAIR"
-      }
-     },
+     "opponents": {},
      "ours_over_theirs": null,
-     "pairing": "v2:3236b62847bc30616c1da1c4878dd7c57d4b59a79929ad01decd02bfe5800bfd",
+     "pairing": "v2:26471d2743530c04448bf64febc79a311d471bf74efc142717a7b37887cf3fa9",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
-     "verdict": "UNFAIR"
+     "verdict": "INSUFFICIENT"
     }
    },
    "audit_history": [
@@ -607365,6 +607310,69 @@
      "rerace": "x",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
+    },
+    {
+     "admitted_opponents": [],
+     "date": "2026-10-18",
+     "opponent": null,
+     "opponents": {
+      "sklearn-cpu": {
+       "audit": "fairness audit 2026-10-13 (no reruns)",
+       "date": "2026-10-13",
+       "evidence": "lane_config mismatches",
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "trustworthiness_k15",
+           "observed": 4.656271378744581e-05,
+           "opponent": 0.9921703842752498,
+           "ours": 0.9921238215614624,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v7",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "different algorithm: scikit-learn runs Barnes-Hut (approximate repulsion), ours exact repulsion over the k-NN affinities",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 17896.15827200032,
+        "ours_ms": 1216.2023519995273,
+        "preferred": "whole",
+        "value": 0.0679588509173141
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 17896.15827200032,
+         "ours_ms": 1216.2023519995273,
+         "preferred": "whole",
+         "value": 0.0679588509173141
+        }
+       ],
+       "verdict": "UNFAIR"
+      }
+     },
+     "ours_over_theirs": null,
+     "pairing": "v2:3236b62847bc30616c1da1c4878dd7c57d4b59a79929ad01decd02bfe5800bfd",
+     "reason": "no opponent with sufficient valid comparison evidence",
+     "rerace": "x",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
+     "verdict": "UNFAIR"
     }
    ],
    "cells": [
@@ -607488,8 +607496,8 @@
      "lane": "tsne",
      "library": "scikit-learn",
      "library_version": "1.7.2",
-     "max_ms": 17896.15827200032,
-     "median_ms": 17896.15827200032,
+     "max_ms": null,
+     "median_ms": null,
      "memory": {
       "children_mb": 4.1,
       "gpu_method": "cpu arm: no device memory",
@@ -607500,7 +607508,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 359.7
      },
-     "min_ms": 17896.15827200032,
+     "min_ms": null,
      "mode": "opponent",
      "neural_shape": null,
      "params": {
@@ -607518,13 +607526,11 @@
       "source": "get_params"
      },
      "peak_gpu_mb": null,
-     "peak_host_mb": 370.6,
-     "quality": {
-      "trustworthiness_k15": 0.9921703842752498
-     },
+     "peak_host_mb": null,
+     "quality": null,
      "ratio_ours_fast_over": null,
-     "ratio_ours_identical_over": 0.0679588509173141,
-     "rounds": 1,
+     "ratio_ours_identical_over": null,
+     "rounds": 0,
      "rows": null,
      "rows_tag": "full",
      "settings": {
@@ -607574,14 +607580,23 @@
      },
      "shape": "X 20000x220; Xq 2000x220",
      "source": "copied from release-board-resume-r2; measured this run",
-     "status": "ok",
-     "times_ms": [
-      17896.15827200032
-     ],
+     "status": "REFUSED(refused by name (2026-10-13 audit): a different algorithm: scikit-learn's t-SNE is Barnes-Hut (approximate repulsion) or exact over a dense all-pairs P; ours is exact repulsion over the sparse k-NN P (cuML method='exact' is the same algorithm, NVIDIA only) (2026-10-13 fairness audit))",
+     "times_ms": [],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "version": "scikit-learn 1.7.2",
      "version_source": "cell record",
-     "warmup_ms": 17158.160040999064
+     "warmup_ms": null,
+     "withdrawn": {
+      "max_ms": 17896.15827200032,
+      "median_ms": 17896.15827200032,
+      "min_ms": 17896.15827200032,
+      "quality": {
+       "trustworthiness_k15": 0.9921703842752498
+      },
+      "times_ms": [
+       17896.15827200032
+      ]
+     }
     }
    ],
    "dataset": "istella",
@@ -607646,66 +607661,15 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
-     "opponents": {
-      "sklearn-cpu": {
-       "audit": "fairness audit 2026-10-13 (no reruns)",
-       "date": "2026-10-13",
-       "evidence": "lane_config mismatches",
-       "quality_comparison": [
-        {
-         "batch": null,
-         "checks": [
-          {
-           "comparison": "absolute",
-           "margin": 0.01,
-           "metric": "trustworthiness_k15",
-           "observed": 9.829971133468174e-05,
-           "opponent": 0.9988227850361249,
-           "ours": 0.9989210847474596,
-           "verdict": "PASS"
-          }
-         ],
-         "failures": [],
-         "interpretation": "engineering margin; not a statistical equivalence claim",
-         "policy": "mojolearn.quality-parity.v7",
-         "verdict": "PASS"
-        }
-       ],
-       "reason": "different algorithm: scikit-learn runs Barnes-Hut (approximate repulsion), ours exact repulsion over the k-NN affinities",
-       "rerace": "x",
-       "timing_comparison": {
-        "clock": "whole",
-        "kind": "preferred",
-        "label": "whole/whole",
-        "opponent_ms": 15382.828461006284,
-        "ours_ms": 1047.3464919996331,
-        "preferred": "whole",
-        "value": 0.06808543010503804
-       },
-       "timing_comparisons": [
-        {
-         "batch": null,
-         "batch_rows": null,
-         "clock": "whole",
-         "kind": "preferred",
-         "label": "whole/whole",
-         "opponent_ms": 15382.828461006284,
-         "ours_ms": 1047.3464919996331,
-         "preferred": "whole",
-         "value": 0.06808543010503804
-        }
-       ],
-       "verdict": "UNFAIR"
-      }
-     },
+     "opponents": {},
      "ours_over_theirs": null,
-     "pairing": "v2:08403f9a0b8391b15044992a0ac3b2d95c3fa5b93d1dca6afa123dc20678fadc",
+     "pairing": "v2:e5591a6c68ec01179dd1957c879ae05bda06eb621294b5946623822cce223504",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
-     "verdict": "UNFAIR"
+     "verdict": "INSUFFICIENT"
     }
    },
    "audit_history": [
@@ -608119,6 +608083,69 @@
      "rerace": "x",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "UNFAIR"
+    },
+    {
+     "admitted_opponents": [],
+     "date": "2026-10-18",
+     "opponent": null,
+     "opponents": {
+      "sklearn-cpu": {
+       "audit": "fairness audit 2026-10-13 (no reruns)",
+       "date": "2026-10-13",
+       "evidence": "lane_config mismatches",
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "trustworthiness_k15",
+           "observed": 9.829971133468174e-05,
+           "opponent": 0.9988227850361249,
+           "ours": 0.9989210847474596,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v7",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "different algorithm: scikit-learn runs Barnes-Hut (approximate repulsion), ours exact repulsion over the k-NN affinities",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 15382.828461006284,
+        "ours_ms": 1047.3464919996331,
+        "preferred": "whole",
+        "value": 0.06808543010503804
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 15382.828461006284,
+         "ours_ms": 1047.3464919996331,
+         "preferred": "whole",
+         "value": 0.06808543010503804
+        }
+       ],
+       "verdict": "UNFAIR"
+      }
+     },
+     "ours_over_theirs": null,
+     "pairing": "v2:08403f9a0b8391b15044992a0ac3b2d95c3fa5b93d1dca6afa123dc20678fadc",
+     "reason": "no opponent with sufficient valid comparison evidence",
+     "rerace": "x",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
+     "verdict": "UNFAIR"
     }
    ],
    "cells": [
@@ -608242,8 +608269,8 @@
      "lane": "tsne",
      "library": "scikit-learn",
      "library_version": "1.7.2",
-     "max_ms": 15382.828461006284,
-     "median_ms": 15382.828461006284,
+     "max_ms": null,
+     "median_ms": null,
      "memory": {
       "children_mb": 4.1,
       "gpu_method": "cpu arm: no device memory",
@@ -608254,7 +608281,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 308.1
      },
-     "min_ms": 15382.828461006284,
+     "min_ms": null,
      "mode": "opponent",
      "neural_shape": null,
      "params": {
@@ -608272,13 +608299,11 @@
       "source": "get_params"
      },
      "peak_gpu_mb": null,
-     "peak_host_mb": 379.6,
-     "quality": {
-      "trustworthiness_k15": 0.9988227850361249
-     },
+     "peak_host_mb": null,
+     "quality": null,
      "ratio_ours_fast_over": null,
-     "ratio_ours_identical_over": 0.06808543010503804,
-     "rounds": 1,
+     "ratio_ours_identical_over": null,
+     "rounds": 0,
      "rows": null,
      "rows_tag": "full",
      "settings": {
@@ -608328,14 +608353,23 @@
      },
      "shape": "X 20000x11; Xq 2000x11",
      "source": "copied from release-board-resume-r2; measured this run",
-     "status": "ok",
-     "times_ms": [
-      15382.828461006284
-     ],
+     "status": "REFUSED(refused by name (2026-10-13 audit): a different algorithm: scikit-learn's t-SNE is Barnes-Hut (approximate repulsion) or exact over a dense all-pairs P; ours is exact repulsion over the sparse k-NN P (cuML method='exact' is the same algorithm, NVIDIA only) (2026-10-13 fairness audit))",
+     "times_ms": [],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "version": "scikit-learn 1.7.2",
      "version_source": "cell record",
-     "warmup_ms": 16052.242475001549
+     "warmup_ms": null,
+     "withdrawn": {
+      "max_ms": 15382.828461006284,
+      "median_ms": 15382.828461006284,
+      "min_ms": 15382.828461006284,
+      "quality": {
+       "trustworthiness_k15": 0.9988227850361249
+      },
+      "times_ms": [
+       15382.828461006284
+      ]
+     }
     }
    ],
    "dataset": "taxi",
@@ -608402,7 +608436,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -609125,7 +609159,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -609846,7 +609880,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -610383,7 +610417,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -610672,7 +610706,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -611317,7 +611351,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -611962,7 +611996,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -612667,7 +612701,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -613391,7 +613425,7 @@
      "admitted_opponents": [
       "hipvs-gpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "hipvs-gpu",
      "opponents": {
       "hipvs-gpu": {
@@ -613451,7 +613485,7 @@
     },
     "identical/infer": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -620277,7 +620311,7 @@
      "admitted_opponents": [
       "hipvs-gpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "hipvs-gpu",
      "opponents": {
       "hipvs-gpu": {
@@ -620337,7 +620371,7 @@
     },
     "identical/infer": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -627163,7 +627197,7 @@
      "admitted_opponents": [
       "hipvs-gpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "hipvs-gpu",
      "opponents": {
       "hipvs-gpu": {
@@ -631252,7 +631286,7 @@
      "admitted_opponents": [
       "hipvs-gpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "hipvs-gpu",
      "opponents": {
       "hipvs-gpu": {
@@ -635339,7 +635373,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -635454,7 +635488,7 @@
       }
      },
      "ours_over_theirs": null,
-     "pairing": "v2:ef57087f252c42657e342268b0925ec54db574fd110ccca2bbac82d2aa3ccb07",
+     "pairing": "v2:883eaaccb9fa7ea8ed87c29c3e6d8f0e7a8d92f5f23370e93fd69a146b50d3a6",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
@@ -636270,6 +636304,129 @@
      "rerace": "x",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
+    },
+    {
+     "admitted_opponents": [],
+     "date": "2026-10-18",
+     "opponent": null,
+     "opponents": {
+      "sklearn-cpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "r2",
+           "observed": 0.3306246445382409,
+           "opponent": 0.0018812414951135947,
+           "ours": 0.3325058860333545,
+           "verdict": "FAIL"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "rmse",
+           "observed": 0.18222729419958394,
+           "opponent": 0.8336549462422593,
+           "ours": 0.6817402610924328,
+           "verdict": "FAIL"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v7",
+         "verdict": "FAIL"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 3980.589303013403,
+        "ours_ms": 444.6575690017198,
+        "preferred": "whole",
+        "value": 0.11170646734771236
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 3980.589303013403,
+         "ours_ms": 444.6575690017198,
+         "preferred": "whole",
+         "value": 0.11170646734771236
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "torch-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "metric": "r2",
+           "opponent": NaN,
+           "ours": 0.3325058860333545,
+           "reason": "metric missing or nonfinite on one arm",
+           "verdict": "INSUFFICIENT"
+          },
+          {
+           "metric": "rmse",
+           "opponent": NaN,
+           "ours": 0.6817402610924328,
+           "reason": "metric missing or nonfinite on one arm",
+           "verdict": "INSUFFICIENT"
+          }
+         ],
+         "failures": [
+          "recorded quality failure: torch-gpu"
+         ],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v7",
+         "verdict": "FAIL"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: whole/whole (kernel not derivable)",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "fallback",
+        "label": "whole/whole (kernel not derivable)",
+        "opponent_ms": 2523.2515759998932,
+        "ours_ms": 444.6575690017198,
+        "preferred": "kernel",
+        "value": 0.1762240330021451
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "fallback",
+         "label": "whole/whole (kernel not derivable)",
+         "opponent_ms": 2523.2515759998932,
+         "ours_ms": 444.6575690017198,
+         "preferred": "kernel",
+         "value": 0.1762240330021451
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      }
+     },
+     "ours_over_theirs": null,
+     "pairing": "v2:ef57087f252c42657e342268b0925ec54db574fd110ccca2bbac82d2aa3ccb07",
+     "reason": "no opponent with sufficient valid comparison evidence",
+     "rerace": "x",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
+     "verdict": "INSUFFICIENT"
     }
    ],
    "cells": [
@@ -636496,8 +636653,8 @@
      "lane": "ols",
      "library": "torch",
      "library_version": "2.6.0+rocm6.4.1.git1ded221d",
-     "max_ms": 42.80535699945176,
-     "median_ms": 42.80535699945176,
+     "max_ms": null,
+     "median_ms": null,
      "memory": {
       "children_mb": 0.0,
       "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
@@ -636508,7 +636665,7 @@
       "warmup_gpu_mb": 3576.6,
       "warmup_host_mb": 5051.4
      },
-     "min_ms": 42.80535699945176,
+     "min_ms": null,
      "mode": "opponent",
      "neural_shape": null,
      "params": {
@@ -636519,16 +636676,12 @@
       },
       "source": "declared"
      },
-     "peak_gpu_mb": 3649.4,
-     "peak_host_mb": 5051.5,
-     "quality": {
-      "finite": true,
-      "r2": 0.15160442468223645,
-      "rmse": 0.768589451732933
-     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": null,
+     "quality": null,
      "ratio_ours_fast_over": null,
-     "ratio_ours_identical_over": 10.387895351682614,
-     "rounds": 1,
+     "ratio_ours_identical_over": null,
+     "rounds": 0,
      "rows": null,
      "rows_tag": "full",
      "settings": {
@@ -636549,14 +636702,25 @@
      },
      "shape": "2043304x220",
      "source": "copied from opponents-20261006; measured this run",
-     "status": "ok",
-     "times_ms": [
-      42.80535699945176
-     ],
+     "status": "REFUSED(refused by name (2026-10-13 audit): harness-written: OLS assembled by this harness from torch ops (centered normal equations, torch.linalg.eigh, a pseudo-inverse cutoff); not a library's implementation)",
+     "times_ms": [],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "version": "torch 2.6.0+rocm6.4.1.git1ded221d",
      "version_source": "cell record",
-     "warmup_ms": 466.75968899944564
+     "warmup_ms": null,
+     "withdrawn": {
+      "max_ms": 42.80535699945176,
+      "median_ms": 42.80535699945176,
+      "min_ms": 42.80535699945176,
+      "quality": {
+       "finite": true,
+       "r2": 0.15160442468223645,
+       "rmse": 0.768589451732933
+      },
+      "times_ms": [
+       42.80535699945176
+      ]
+     }
     },
     {
      "arm": "sklearn-cpu",
@@ -636701,9 +636865,9 @@
     "arms": [
      "torch-gpu-eigh"
     ],
-    "basis": "4f51ff5548c1d7801705305deb4ea6fa22062fa783aac29afd73dcc771aa03a1",
-    "date": "2026-10-13",
-    "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
+    "basis": "57f8fb2c6b57b0f11b35dbccd7282dbdd62c9f289ed722c5fc4bfb91e95aa2ab",
+    "date": "2026-10-22",
+    "reason": "torch-gpu-eigh: code our harness wrote, not a library's own implementation",
     "why": {
      "torch-gpu-eigh": "code our harness wrote, not a library's own implementation"
     }
@@ -636719,7 +636883,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -636836,7 +637000,7 @@
       }
      },
      "ours_over_theirs": null,
-     "pairing": "v2:4844009351c0834a9c71b16aadd921f78c72ff4bb90615644dcf771a5002e286",
+     "pairing": "v2:9da30d41d01e0f3bb600969fbb3f2714e904462d948dfdba3779fc13a064d6a2",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
@@ -637627,6 +637791,131 @@
      "rerace": "x",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
+    },
+    {
+     "admitted_opponents": [],
+     "date": "2026-10-18",
+     "opponent": null,
+     "opponents": {
+      "sklearn-cpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "r2",
+           "observed": 0.18398691264764366,
+           "opponent": 0.7248496192031624,
+           "ours": 0.908836531850806,
+           "verdict": "FAIL"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "rmse",
+           "observed": 0.42439393637781425,
+           "opponent": 8.159186723208599,
+           "ours": 4.696477352104502,
+           "verdict": "FAIL"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v7",
+         "verdict": "FAIL"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 304.67854300513864,
+        "ours_ms": 14.068485001189401,
+        "preferred": "whole",
+        "value": 0.04617484665125278
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 304.67854300513864,
+         "ours_ms": 14.068485001189401,
+         "preferred": "whole",
+         "value": 0.04617484665125278
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "torch-gpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "r2",
+           "observed": 3.949391984447992e-06,
+           "opponent": 0.9088404812427905,
+           "ours": 0.908836531850806,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "rmse",
+           "observed": 2.166127967442226e-05,
+           "opponent": 4.696375620395093,
+           "ours": 4.696477352104502,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v7",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "required kernel/kernel timing boundary not derivable: whole/whole (kernel not derivable)",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "fallback",
+        "label": "whole/whole (kernel not derivable)",
+        "opponent_ms": 243.6991130016395,
+        "ours_ms": 14.068485001189401,
+        "preferred": "kernel",
+        "value": 0.0577289134453877
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "fallback",
+         "label": "whole/whole (kernel not derivable)",
+         "opponent_ms": 243.6991130016395,
+         "ours_ms": 14.068485001189401,
+         "preferred": "kernel",
+         "value": 0.0577289134453877
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      }
+     },
+     "ours_over_theirs": null,
+     "pairing": "v2:4844009351c0834a9c71b16aadd921f78c72ff4bb90615644dcf771a5002e286",
+     "reason": "no opponent with sufficient valid comparison evidence",
+     "rerace": "x",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
+     "verdict": "INSUFFICIENT"
     }
    ],
    "cells": [
@@ -637853,8 +638142,8 @@
      "lane": "ols",
      "library": "torch",
      "library_version": "2.6.0+rocm6.4.1.git1ded221d",
-     "max_ms": 33.975004000240006,
-     "median_ms": 33.975004000240006,
+     "max_ms": null,
+     "median_ms": null,
      "memory": {
       "children_mb": 0.0,
       "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
@@ -637865,7 +638154,7 @@
       "warmup_gpu_mb": 496.0,
       "warmup_host_mb": 3018.0
      },
-     "min_ms": 33.975004000240006,
+     "min_ms": null,
      "mode": "opponent",
      "neural_shape": null,
      "params": {
@@ -637876,16 +638165,12 @@
       },
       "source": "declared"
      },
-     "peak_gpu_mb": 572.0,
-     "peak_host_mb": 3018.3,
-     "quality": {
-      "finite": true,
-      "r2": 0.9088221193366598,
-      "rmse": 4.696848582886799
-     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": null,
+     "quality": null,
      "ratio_ours_fast_over": null,
-     "ratio_ours_identical_over": 0.414083394989152,
-     "rounds": 1,
+     "ratio_ours_identical_over": null,
+     "rounds": 0,
      "rows": null,
      "rows_tag": "full",
      "settings": {
@@ -637906,14 +638191,25 @@
      },
      "shape": "4000000x11",
      "source": "copied from opponents-20261006; measured this run",
-     "status": "ok",
-     "times_ms": [
-      33.975004000240006
-     ],
+     "status": "REFUSED(refused by name (2026-10-13 audit): harness-written: OLS assembled by this harness from torch ops (centered normal equations, torch.linalg.eigh, a pseudo-inverse cutoff); not a library's implementation)",
+     "times_ms": [],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "version": "torch 2.6.0+rocm6.4.1.git1ded221d",
      "version_source": "cell record",
-     "warmup_ms": 306.0280600002443
+     "warmup_ms": null,
+     "withdrawn": {
+      "max_ms": 33.975004000240006,
+      "median_ms": 33.975004000240006,
+      "min_ms": 33.975004000240006,
+      "quality": {
+       "finite": true,
+       "r2": 0.9088221193366598,
+       "rmse": 4.696848582886799
+      },
+      "times_ms": [
+       33.975004000240006
+      ]
+     }
     },
     {
      "arm": "sklearn-cpu",
@@ -638058,9 +638354,9 @@
     "arms": [
      "torch-gpu-eigh"
     ],
-    "basis": "af94476b1fb2d44de035df68c7e628308dca73debd0037a1dd105c880d18e63b",
-    "date": "2026-10-13",
-    "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
+    "basis": "85ee093119e21c70bd863ad24f0ff78e55b5e82b3b3ee50337568d0958a97ce2",
+    "date": "2026-10-22",
+    "reason": "torch-gpu-eigh: code our harness wrote, not a library's own implementation",
     "why": {
      "torch-gpu-eigh": "code our harness wrote, not a library's own implementation"
     }
@@ -638076,7 +638372,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -638128,7 +638424,7 @@
       }
      },
      "ours_over_theirs": null,
-     "pairing": "v2:5f46b1e30f531e256b0f785c989a4462fc237a80d76ca8abb74a2d9db9250199",
+     "pairing": "v2:f4aab6e8b3a9f4a93e0e78d35e5d6841de8315d8799b9d4b7b6d8bbc64e81929",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
@@ -638524,6 +638820,66 @@
      "rerace": "x",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
+    },
+    {
+     "admitted_opponents": [],
+     "date": "2026-10-18",
+     "opponent": null,
+     "opponents": {
+      "sklearn-cpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "explained_variance_ratio_sum",
+           "observed": 1.0849749931818309e-07,
+           "opponent": 0.9999999501924924,
+           "ours": 1.0000000586899918,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v7",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 621.6950110101607,
+        "ours_ms": 51.824504997057375,
+        "preferred": "whole",
+        "value": 0.0833600142823253
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 621.6950110101607,
+         "ours_ms": 51.824504997057375,
+         "preferred": "whole",
+         "value": 0.0833600142823253
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      }
+     },
+     "ours_over_theirs": null,
+     "pairing": "v2:5f46b1e30f531e256b0f785c989a4462fc237a80d76ca8abb74a2d9db9250199",
+     "reason": "no opponent with sufficient valid comparison evidence",
+     "rerace": "x",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
+     "verdict": "INSUFFICIENT"
     }
    ],
    "cells": [
@@ -638648,8 +639004,8 @@
      "lane": "pca",
      "library": "torch",
      "library_version": "2.6.0+rocm6.4.1.git1ded221d",
-     "max_ms": 19.897697000487824,
-     "median_ms": 19.897697000487824,
+     "max_ms": null,
+     "median_ms": null,
      "memory": {
       "children_mb": 0.0,
       "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
@@ -638660,7 +639016,7 @@
       "warmup_gpu_mb": 3505.8,
       "warmup_host_mb": 5044.1
      },
-     "min_ms": 19.897697000487824,
+     "min_ms": null,
      "mode": "opponent",
      "neural_shape": null,
      "params": {
@@ -638673,14 +639029,12 @@
       },
       "source": "declared"
      },
-     "peak_gpu_mb": 3505.8,
-     "peak_host_mb": 5044.4,
-     "quality": {
-      "explained_variance_ratio_sum": 1.0000000599950392
-     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": null,
+     "quality": null,
      "ratio_ours_fast_over": null,
-     "ratio_ours_identical_over": 2.6045479029953476,
-     "rounds": 1,
+     "ratio_ours_identical_over": null,
+     "rounds": 0,
      "rows": null,
      "rows_tag": "full",
      "settings": {
@@ -638701,14 +639055,23 @@
      },
      "shape": "2043304x220",
      "source": "copied from opponents-20261006; measured this run",
-     "status": "ok",
-     "times_ms": [
-      19.897697000487824
-     ],
+     "status": "REFUSED(refused by name (2026-10-13 audit): harness-written: PCA assembled by this harness from torch ops (mean, xc.T @ xc, torch.linalg.eigh); torch has no PCA estimator of this algorithm (torch.pca_lowrank is randomized, a different algorithm); NVIDIA races cuML PCA (the same algorithm), and AMD and Apple have no library GPU PCA (ROCm-DS 26.03 has no cuML port), so scikit-learn on the CPU is their opponent)",
+     "times_ms": [],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "version": "torch 2.6.0+rocm6.4.1.git1ded221d",
      "version_source": "cell record",
-     "warmup_ms": 422.8637810010696
+     "warmup_ms": null,
+     "withdrawn": {
+      "max_ms": 19.897697000487824,
+      "median_ms": 19.897697000487824,
+      "min_ms": 19.897697000487824,
+      "quality": {
+       "explained_variance_ratio_sum": 1.0000000599950392
+      },
+      "times_ms": [
+       19.897697000487824
+      ]
+     }
     },
     {
      "arm": "sklearn-cpu",
@@ -638852,9 +639215,9 @@
     "arms": [
      "torch-gpu"
     ],
-    "basis": "2ca5359d634080c616e68df731b0936803751bbfd5162831a24c880baabf0293",
-    "date": "2026-10-13",
-    "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
+    "basis": "64eafb092cb375705d49319adbbd447c198bc516878b8d7a4a4b17e1c7d4b15c",
+    "date": "2026-10-22",
+    "reason": "torch-gpu: code our harness wrote, not a library's own implementation",
     "why": {
      "torch-gpu": "code our harness wrote, not a library's own implementation"
     }
@@ -638870,7 +639233,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "sklearn-cpu": {
@@ -638922,7 +639285,7 @@
       }
      },
      "ours_over_theirs": null,
-     "pairing": "v2:21706d030e746a0cf112cc88ce2e1f9c9d81ab2ec2d138f2198bf51c8ccdf2e7",
+     "pairing": "v2:420b75832fa8a0a8c764c668785b0308dffa75a8779b7015b6eb7bb649844731",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
@@ -639318,6 +639681,66 @@
      "rerace": "x",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
+    },
+    {
+     "admitted_opponents": [],
+     "date": "2026-10-18",
+     "opponent": null,
+     "opponents": {
+      "sklearn-cpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "explained_variance_ratio_sum",
+           "observed": 1.5844271323839365e-06,
+           "opponent": 0.9999951377248743,
+           "ours": 0.9999967221520066,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v7",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 82.24478899501264,
+        "ours_ms": 7.578124001156539,
+        "preferred": "whole",
+        "value": 0.0921410838760384
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 82.24478899501264,
+         "ours_ms": 7.578124001156539,
+         "preferred": "whole",
+         "value": 0.0921410838760384
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      }
+     },
+     "ours_over_theirs": null,
+     "pairing": "v2:21706d030e746a0cf112cc88ce2e1f9c9d81ab2ec2d138f2198bf51c8ccdf2e7",
+     "reason": "no opponent with sufficient valid comparison evidence",
+     "rerace": "x",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
+     "verdict": "INSUFFICIENT"
     }
    ],
    "cells": [
@@ -639442,8 +639865,8 @@
      "lane": "pca",
      "library": "torch",
      "library_version": "2.6.0+rocm6.4.1.git1ded221d",
-     "max_ms": 10.87206500051252,
-     "median_ms": 10.87206500051252,
+     "max_ms": null,
+     "median_ms": null,
      "memory": {
       "children_mb": 0.0,
       "gpu_method": "torch.cuda.max_memory_allocated, reset before the round (caching allocator peak; the context is not in it)",
@@ -639454,7 +639877,7 @@
       "warmup_gpu_mb": 412.0,
       "warmup_host_mb": 3009.3
      },
-     "min_ms": 10.87206500051252,
+     "min_ms": null,
      "mode": "opponent",
      "neural_shape": null,
      "params": {
@@ -639467,14 +639890,12 @@
       },
       "source": "declared"
      },
-     "peak_gpu_mb": 412.0,
-     "peak_host_mb": 3009.5,
-     "quality": {
-      "explained_variance_ratio_sum": 0.9999966805916526
-     },
+     "peak_gpu_mb": null,
+     "peak_host_mb": null,
+     "quality": null,
      "ratio_ours_fast_over": null,
-     "ratio_ours_identical_over": 0.6970271057797481,
-     "rounds": 1,
+     "ratio_ours_identical_over": null,
+     "rounds": 0,
      "rows": null,
      "rows_tag": "full",
      "settings": {
@@ -639495,14 +639916,23 @@
      },
      "shape": "4000000x11",
      "source": "copied from opponents-20261006; measured this run",
-     "status": "ok",
-     "times_ms": [
-      10.87206500051252
-     ],
+     "status": "REFUSED(refused by name (2026-10-13 audit): harness-written: PCA assembled by this harness from torch ops (mean, xc.T @ xc, torch.linalg.eigh); torch has no PCA estimator of this algorithm (torch.pca_lowrank is randomized, a different algorithm); NVIDIA races cuML PCA (the same algorithm), and AMD and Apple have no library GPU PCA (ROCm-DS 26.03 has no cuML port), so scikit-learn on the CPU is their opponent)",
+     "times_ms": [],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "version": "torch 2.6.0+rocm6.4.1.git1ded221d",
      "version_source": "cell record",
-     "warmup_ms": 248.78178400103934
+     "warmup_ms": null,
+     "withdrawn": {
+      "max_ms": 10.87206500051252,
+      "median_ms": 10.87206500051252,
+      "min_ms": 10.87206500051252,
+      "quality": {
+       "explained_variance_ratio_sum": 0.9999966805916526
+      },
+      "times_ms": [
+       10.87206500051252
+      ]
+     }
     },
     {
      "arm": "sklearn-cpu",
@@ -639646,9 +640076,9 @@
     "arms": [
      "torch-gpu"
     ],
-    "basis": "5d438f7f03b081b0960a8561c4d66c00ef29d16e717cd08434ca4dbac13cba3d",
-    "date": "2026-10-13",
-    "reason": "opponent arm excluded: code our harness wrote (a pure-PyTorch reference or twin, or a torch-op assembly), not a library's own implementation",
+    "basis": "6015f05c07e9dcd365e925367f0a744134f215ea8d56da0ad91a5548fc7943bd",
+    "date": "2026-10-22",
+    "reason": "torch-gpu: code our harness wrote, not a library's own implementation",
     "why": {
      "torch-gpu": "code our harness wrote, not a library's own implementation"
     }
@@ -639666,7 +640096,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -640392,7 +640822,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -641116,7 +641546,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -641314,7 +641744,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -641512,7 +641942,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -641743,7 +642173,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -641974,7 +642404,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "faiss-cpu": {
@@ -642664,7 +643094,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "faiss-cpu": {
@@ -643354,7 +643784,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -643551,7 +643981,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -643748,7 +644178,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -643946,7 +644376,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -644146,7 +644576,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -644942,7 +645372,7 @@
      "admitted_opponents": [
       "sklearn-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "sklearn-cpu",
      "opponents": {
       "sklearn-cpu": {
@@ -645736,68 +646166,11 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
-     "opponents": {
-      "sklearn-cpu": {
-       "quality_comparison": [
-        {
-         "batch": null,
-         "checks": [
-          {
-           "comparison": "absolute",
-           "margin": 0.01,
-           "metric": "explained_variance_ratio_sum",
-           "observed": 5.937358112939606e-07,
-           "opponent": 1.0000004574591823,
-           "ours": 0.999999863723371,
-           "verdict": "PASS"
-          },
-          {
-           "comparison": "symmetric-relative",
-           "margin": 0.05,
-           "metric": "relative_reconstruction_error",
-           "observed": 0.07153454183481636,
-           "opponent": 0.00012197694657773026,
-           "ours": 0.000131374781371812,
-           "verdict": "FAIL"
-          }
-         ],
-         "failures": [],
-         "interpretation": "engineering margin; not a statistical equivalence claim",
-         "policy": "mojolearn.quality-parity.v7",
-         "verdict": "FAIL"
-        }
-       ],
-       "reason": "no supported audit or matched effective settings for this pairing",
-       "rerace": "x",
-       "timing_comparison": {
-        "clock": "whole",
-        "kind": "preferred",
-        "label": "whole/whole",
-        "opponent_ms": 689.8258959990926,
-        "ours_ms": 29.6061209992331,
-        "preferred": "whole",
-        "value": 0.04291825107022663
-       },
-       "timing_comparisons": [
-        {
-         "batch": null,
-         "batch_rows": null,
-         "clock": "whole",
-         "kind": "preferred",
-         "label": "whole/whole",
-         "opponent_ms": 689.8258959990926,
-         "ours_ms": 29.6061209992331,
-         "preferred": "whole",
-         "value": 0.04291825107022663
-        }
-       ],
-       "verdict": "INSUFFICIENT"
-      }
-     },
+     "opponents": {},
      "ours_over_theirs": null,
-     "pairing": "v2:e5f950d2f801ba7902f78b181aded40a18353023d0332e51445117e7926b4bd3",
+     "pairing": "v2:7c238933866d8799029fbd2632c544ca9d795454037f4e9b03eb41d7af85ca22",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
@@ -646266,6 +646639,75 @@
      "rerace": "x",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
+    },
+    {
+     "admitted_opponents": [],
+     "date": "2026-10-18",
+     "opponent": null,
+     "opponents": {
+      "sklearn-cpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "explained_variance_ratio_sum",
+           "observed": 5.937358112939606e-07,
+           "opponent": 1.0000004574591823,
+           "ours": 0.999999863723371,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "relative_reconstruction_error",
+           "observed": 0.07153454183481636,
+           "opponent": 0.00012197694657773026,
+           "ours": 0.000131374781371812,
+           "verdict": "FAIL"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v7",
+         "verdict": "FAIL"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 689.8258959990926,
+        "ours_ms": 29.6061209992331,
+        "preferred": "whole",
+        "value": 0.04291825107022663
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 689.8258959990926,
+         "ours_ms": 29.6061209992331,
+         "preferred": "whole",
+         "value": 0.04291825107022663
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      }
+     },
+     "ours_over_theirs": null,
+     "pairing": "v2:e5f950d2f801ba7902f78b181aded40a18353023d0332e51445117e7926b4bd3",
+     "reason": "no opponent with sufficient valid comparison evidence",
+     "rerace": "x",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
+     "verdict": "INSUFFICIENT"
     }
    ],
    "cells": [
@@ -646391,8 +646833,8 @@
      "lane": "tsvd",
      "library": "scikit-learn",
      "library_version": "1.7.2",
-     "max_ms": 689.8258959990926,
-     "median_ms": 689.8258959990926,
+     "max_ms": null,
+     "median_ms": null,
      "memory": {
       "children_mb": 4.1,
       "gpu_method": "cpu arm: no device memory",
@@ -646403,7 +646845,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 2415.5
      },
-     "min_ms": 689.8258959990926,
+     "min_ms": null,
      "mode": "opponent",
      "neural_shape": null,
      "params": {
@@ -646418,14 +646860,11 @@
       "source": "get_params"
      },
      "peak_gpu_mb": null,
-     "peak_host_mb": 2422.2,
-     "quality": {
-      "explained_variance_ratio_sum": 1.0000004574591823,
-      "relative_reconstruction_error": 0.00012197694657773026
-     },
+     "peak_host_mb": null,
+     "quality": null,
      "ratio_ours_fast_over": null,
-     "ratio_ours_identical_over": 0.04291825107022663,
-     "rounds": 1,
+     "ratio_ours_identical_over": null,
+     "rounds": 0,
      "rows": null,
      "rows_tag": "full",
      "settings": {
@@ -646454,14 +646893,24 @@
      },
      "shape": "X 1000000x220",
      "source": "copied from release-board-resume-r2; measured this run",
-     "status": "ok",
-     "times_ms": [
-      689.8258959990926
-     ],
+     "status": "REFUSED(refused by name (2026-10-13 audit): different algorithm: ours 'covariance_eigh' (the eigendecomposition of X^T X); scikit-learn TruncatedSVD has only 'arpack' (Lanczos on X) and 'randomized', and no CPU library has ours' algorithm)",
+     "times_ms": [],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "version": "scikit-learn 1.7.2",
      "version_source": "cell record",
-     "warmup_ms": 810.5731009854935
+     "warmup_ms": null,
+     "withdrawn": {
+      "max_ms": 689.8258959990926,
+      "median_ms": 689.8258959990926,
+      "min_ms": 689.8258959990926,
+      "quality": {
+       "explained_variance_ratio_sum": 1.0000004574591823,
+       "relative_reconstruction_error": 0.00012197694657773026
+      },
+      "times_ms": [
+       689.8258959990926
+      ]
+     }
     }
    ],
    "dataset": "istella",
@@ -646504,68 +646953,11 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
-     "opponents": {
-      "sklearn-cpu": {
-       "quality_comparison": [
-        {
-         "batch": null,
-         "checks": [
-          {
-           "comparison": "absolute",
-           "margin": 0.01,
-           "metric": "explained_variance_ratio_sum",
-           "observed": 3.171539404434043e-07,
-           "opponent": 0.9999647287951866,
-           "ours": 0.999965045949127,
-           "verdict": "PASS"
-          },
-          {
-           "comparison": "symmetric-relative",
-           "margin": 0.05,
-           "metric": "relative_reconstruction_error",
-           "observed": 2.8128792137984122e-08,
-           "opponent": 0.003257073483809866,
-           "ours": 0.0032570735754274115,
-           "verdict": "PASS"
-          }
-         ],
-         "failures": [],
-         "interpretation": "engineering margin; not a statistical equivalence claim",
-         "policy": "mojolearn.quality-parity.v7",
-         "verdict": "PASS"
-        }
-       ],
-       "reason": "no supported audit or matched effective settings for this pairing",
-       "rerace": "x",
-       "timing_comparison": {
-        "clock": "whole",
-        "kind": "preferred",
-        "label": "whole/whole",
-        "opponent_ms": 205.58072201674804,
-        "ours_ms": 3.9096290129236877,
-        "preferred": "whole",
-        "value": 0.019017488481265193
-       },
-       "timing_comparisons": [
-        {
-         "batch": null,
-         "batch_rows": null,
-         "clock": "whole",
-         "kind": "preferred",
-         "label": "whole/whole",
-         "opponent_ms": 205.58072201674804,
-         "ours_ms": 3.9096290129236877,
-         "preferred": "whole",
-         "value": 0.019017488481265193
-        }
-       ],
-       "verdict": "INSUFFICIENT"
-      }
-     },
+     "opponents": {},
      "ours_over_theirs": null,
-     "pairing": "v2:ae8262d2c38759f12db0ef62d2b2c5e6b9234ae5732708bdc7e64d9cfd62be6e",
+     "pairing": "v2:36b3d4ae2d19328d0234302194ec841bb8bfe48f8e8645706731e4c8308758dd",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
@@ -646848,6 +647240,75 @@
      "rerace": "x",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
+    },
+    {
+     "admitted_opponents": [],
+     "date": "2026-10-18",
+     "opponent": null,
+     "opponents": {
+      "sklearn-cpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "explained_variance_ratio_sum",
+           "observed": 3.171539404434043e-07,
+           "opponent": 0.9999647287951866,
+           "ours": 0.999965045949127,
+           "verdict": "PASS"
+          },
+          {
+           "comparison": "symmetric-relative",
+           "margin": 0.05,
+           "metric": "relative_reconstruction_error",
+           "observed": 2.8128792137984122e-08,
+           "opponent": 0.003257073483809866,
+           "ours": 0.0032570735754274115,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v7",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 205.58072201674804,
+        "ours_ms": 3.9096290129236877,
+        "preferred": "whole",
+        "value": 0.019017488481265193
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 205.58072201674804,
+         "ours_ms": 3.9096290129236877,
+         "preferred": "whole",
+         "value": 0.019017488481265193
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      }
+     },
+     "ours_over_theirs": null,
+     "pairing": "v2:ae8262d2c38759f12db0ef62d2b2c5e6b9234ae5732708bdc7e64d9cfd62be6e",
+     "reason": "no opponent with sufficient valid comparison evidence",
+     "rerace": "x",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
+     "verdict": "INSUFFICIENT"
     }
    ],
    "cells": [
@@ -646976,8 +647437,8 @@
      "lane": "tsvd",
      "library": "scikit-learn",
      "library_version": "1.7.2",
-     "max_ms": 205.58072201674804,
-     "median_ms": 205.58072201674804,
+     "max_ms": null,
+     "median_ms": null,
      "memory": {
       "children_mb": 4.1,
       "gpu_method": "cpu arm: no device memory",
@@ -646988,7 +647449,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 454.7
      },
-     "min_ms": 205.58072201674804,
+     "min_ms": null,
      "mode": "opponent",
      "neural_shape": null,
      "params": {
@@ -647003,14 +647464,11 @@
       "source": "get_params"
      },
      "peak_gpu_mb": null,
-     "peak_host_mb": 460.6,
-     "quality": {
-      "explained_variance_ratio_sum": 0.9999647287951866,
-      "relative_reconstruction_error": 0.003257073483809866
-     },
+     "peak_host_mb": null,
+     "quality": null,
      "ratio_ours_fast_over": null,
-     "ratio_ours_identical_over": 0.019017488481265193,
-     "rounds": 1,
+     "ratio_ours_identical_over": null,
+     "rounds": 0,
      "rows": null,
      "rows_tag": "full",
      "settings": {
@@ -647039,14 +647497,24 @@
      },
      "shape": "X 1000000x11",
      "source": "copied from release-board-resume-r2; measured this run",
-     "status": "ok",
-     "times_ms": [
-      205.58072201674804
-     ],
+     "status": "REFUSED(refused by name (2026-10-13 audit): different algorithm: ours 'covariance_eigh' (the eigendecomposition of X^T X); scikit-learn TruncatedSVD has only 'arpack' (Lanczos on X) and 'randomized', and no CPU library has ours' algorithm)",
+     "times_ms": [],
      "verdict": "LIKE-FOR-LIKE-SPAN",
      "version": "scikit-learn 1.7.2",
      "version_source": "cell record",
-     "warmup_ms": 193.40438599465415
+     "warmup_ms": null,
+     "withdrawn": {
+      "max_ms": 205.58072201674804,
+      "median_ms": 205.58072201674804,
+      "min_ms": 205.58072201674804,
+      "quality": {
+       "explained_variance_ratio_sum": 0.9999647287951866,
+       "relative_reconstruction_error": 0.003257073483809866
+      },
+      "times_ms": [
+       205.58072201674804
+      ]
+     }
     }
    ],
    "dataset": "taxi",
@@ -647092,7 +647560,7 @@
       "torch-compile-bf16",
       "torch-eager-bf16"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-bf16",
      "opponents": {
       "torch-compile-bf16": {
@@ -655094,7 +655562,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -659717,7 +660185,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -660376,7 +660844,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -661119,7 +661587,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -661561,7 +662029,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -662210,7 +662678,7 @@
      "admitted_opponents": [
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-fp32",
      "opponents": {
       "torch-compile-bf16": {
@@ -664329,11 +664797,11 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
-     "pairing": "v2:d6182f94c9b59e38660255dbe100f05fe2a85680dcfff6dbaa0164be5a5e90ae",
+     "pairing": "v2:928cd043f02d5960f89870e3f347127c222115047ab443fe5b123baaec02a6f7",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
@@ -664408,11 +664876,10 @@
       "box": "amd",
       "commit_date": "2026-10-10T02:40:03Z",
       "identity": {
-       "other_column": "nvidia-l40s",
-       "other_digest": "a1d79e82c24cb1af",
-       "other_hardware": "NVIDIA L40S (nv2, RunPod)",
-       "other_job": "nv2/v1049",
-       "status": "MATCH"
+       "other_column": "the nvidia columns",
+       "other_digest": null,
+       "other_job": null,
+       "status": "n/a"
       },
       "job": "a1189",
       "measured": null,
@@ -664933,7 +665400,7 @@
    "log": "/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt (amd/a1189)",
    "main_board": {
     "box": "amd",
-    "identity": "MATCH",
+    "identity": "n/a",
     "job": "a1189",
     "sha": "9f83ea4798fe487a99e3b0f493dbc3edad16266a"
    },
@@ -664984,11 +665451,11 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
-     "pairing": "v2:e9b29247315a1088e18d8c18bc22f575ee0c8024f6e1cbbd9075071bc4cdb5b8",
+     "pairing": "v2:e80e971cf245a597b3838906878f8221f412ae9dfd5b2c1e1ce82a296cd639c8",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
@@ -665099,11 +665566,10 @@
       "box": "amd",
       "commit_date": "2026-10-11T16:08:30Z",
       "identity": {
-       "other_column": "nvidia-l40s",
-       "other_digest": "16f6e13b87ca41a1",
-       "other_hardware": "NVIDIA L40S (nv2, RunPod)",
-       "other_job": "nv2/v0067",
-       "status": "MATCH"
+       "other_column": "the nvidia columns",
+       "other_digest": null,
+       "other_job": null,
+       "status": "n/a"
       },
       "job": "a1649",
       "measured": null,
@@ -665665,7 +666131,7 @@
    "log": "/Users/andrewhendel/mojolearn-evidence/round-20261011/ingest2/amd-grid-logs.txt (amd/a1649)",
    "main_board": {
     "box": "amd",
-    "identity": "MATCH",
+    "identity": "n/a",
     "job": "a1649",
     "sha": "2afa942e3102e33cfcfc24d90b3e4c6779c0799d"
    },
@@ -665716,7 +666182,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -666371,7 +666837,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "lightgbm-cpu": {
@@ -667470,7 +667936,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -667854,7 +668320,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -668068,7 +668534,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "lightgbm-cpu": {
@@ -669152,7 +669618,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "lightgbm-cpu": {
@@ -670236,7 +670702,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "catboost-cpu": {
@@ -670285,104 +670751,10 @@
         }
        ],
        "verdict": "INSUFFICIENT"
-      },
-      "lightgbm-cpu": {
-       "quality_comparison": [
-        {
-         "batch": null,
-         "checks": [
-          {
-           "comparison": "absolute",
-           "margin": 0.01,
-           "metric": "accuracy",
-           "observed": 0.0025020000000000042,
-           "opponent": 0.910058,
-           "ours": 0.907556,
-           "verdict": "PASS"
-          }
-         ],
-         "failures": [],
-         "interpretation": "engineering margin; not a statistical equivalence claim",
-         "policy": "mojolearn.quality-parity.v7",
-         "verdict": "PASS"
-        }
-       ],
-       "reason": "no supported audit or matched effective settings for this pairing",
-       "rerace": "x",
-       "timing_comparison": {
-        "clock": "whole",
-        "kind": "preferred",
-        "label": "whole/whole",
-        "opponent_ms": 79078.649,
-        "ours_ms": 10051.419,
-        "preferred": "whole",
-        "value": 0.12710661002820114
-       },
-       "timing_comparisons": [
-        {
-         "batch": null,
-         "batch_rows": null,
-         "clock": "whole",
-         "kind": "preferred",
-         "label": "whole/whole",
-         "opponent_ms": 79078.649,
-         "ours_ms": 10051.419,
-         "preferred": "whole",
-         "value": 0.12710661002820114
-        }
-       ],
-       "verdict": "INSUFFICIENT"
-      },
-      "xgboost-cpu": {
-       "quality_comparison": [
-        {
-         "batch": null,
-         "checks": [
-          {
-           "comparison": "absolute",
-           "margin": 0.01,
-           "metric": "accuracy",
-           "observed": 0.0025839999999999197,
-           "opponent": 0.91014,
-           "ours": 0.907556,
-           "verdict": "PASS"
-          }
-         ],
-         "failures": [],
-         "interpretation": "engineering margin; not a statistical equivalence claim",
-         "policy": "mojolearn.quality-parity.v7",
-         "verdict": "PASS"
-        }
-       ],
-       "reason": "no supported audit or matched effective settings for this pairing",
-       "rerace": "x",
-       "timing_comparison": {
-        "clock": "whole",
-        "kind": "preferred",
-        "label": "whole/whole",
-        "opponent_ms": 76053.876,
-        "ours_ms": 10051.419,
-        "preferred": "whole",
-        "value": 0.13216182433621135
-       },
-       "timing_comparisons": [
-        {
-         "batch": null,
-         "batch_rows": null,
-         "clock": "whole",
-         "kind": "preferred",
-         "label": "whole/whole",
-         "opponent_ms": 76053.876,
-         "ours_ms": 10051.419,
-         "preferred": "whole",
-         "value": 0.13216182433621135
-        }
-       ],
-       "verdict": "INSUFFICIENT"
       }
      },
      "ours_over_theirs": null,
-     "pairing": "v2:bdcccf409f48bb9bbbfb53fec60c7148d32d2922a220f9c1017593f473c1cf7d",
+     "pairing": "v2:fc8319feb82841526c4614db37fa57ae482ec155e2eb7409a0cde3fb4c2dfb62",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
@@ -671004,6 +671376,160 @@
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
+     "verdict": "INSUFFICIENT"
+    },
+    {
+     "admitted_opponents": [],
+     "date": "2026-10-18",
+     "opponent": null,
+     "opponents": {
+      "catboost-cpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.00021199999999998997,
+           "opponent": 0.907768,
+           "ours": 0.907556,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v7",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 561543.373,
+        "ours_ms": 10051.419,
+        "preferred": "whole",
+        "value": 0.017899630702257436
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 561543.373,
+         "ours_ms": 10051.419,
+         "preferred": "whole",
+         "value": 0.017899630702257436
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "lightgbm-cpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.0025020000000000042,
+           "opponent": 0.910058,
+           "ours": 0.907556,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v7",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 79078.649,
+        "ours_ms": 10051.419,
+        "preferred": "whole",
+        "value": 0.12710661002820114
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 79078.649,
+         "ours_ms": 10051.419,
+         "preferred": "whole",
+         "value": 0.12710661002820114
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "xgboost-cpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.0025839999999999197,
+           "opponent": 0.91014,
+           "ours": 0.907556,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v7",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 76053.876,
+        "ours_ms": 10051.419,
+        "preferred": "whole",
+        "value": 0.13216182433621135
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 76053.876,
+         "ours_ms": 10051.419,
+         "preferred": "whole",
+         "value": 0.13216182433621135
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      }
+     },
+     "ours_over_theirs": null,
+     "pairing": "v2:bdcccf409f48bb9bbbfb53fec60c7148d32d2922a220f9c1017593f473c1cf7d",
+     "reason": "no opponent with sufficient valid comparison evidence",
+     "rerace": "x",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
     }
    ],
@@ -671351,8 +671877,8 @@
      "lane": "gbdt-multiclass",
      "library": "xgboost",
      "library_version": "3.2.0",
-     "max_ms": 76053.876,
-     "median_ms": 76053.876,
+     "max_ms": null,
+     "median_ms": null,
      "memory": {
       "children_mb": 4.1,
       "gpu_method": "cpu arm: no device memory",
@@ -671363,7 +671889,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 11369.6
      },
-     "min_ms": 76053.876,
+     "min_ms": null,
      "mode": "opponent",
      "neural_shape": null,
      "params": {
@@ -671389,14 +671915,11 @@
       "source": "get_params"
      },
      "peak_gpu_mb": null,
-     "peak_host_mb": 12606.4,
-     "quality": {
-      "accuracy": 0.91014,
-      "mlogloss": 0.246803
-     },
+     "peak_host_mb": null,
+     "quality": null,
      "ratio_ours_fast_over": null,
-     "ratio_ours_identical_over": 0.13216182433621135,
-     "rounds": 1,
+     "ratio_ours_identical_over": null,
+     "rounds": 0,
      "rows": null,
      "rows_tag": "full",
      "settings": {
@@ -671417,14 +671940,24 @@
      },
      "shape": "istellamc-2043304x220",
      "source": "copied from release-board-resume-r2; measured this run",
-     "status": "ok",
-     "times_ms": [
-      76053.876
-     ],
+     "status": "REFUSED(DIFFERENT-GROWER: one depthwise tree per class per round vs one oblivious vector-leaf tree (2026-10-13 audit))",
+     "times_ms": [],
      "verdict": "NOT-COMPARABLE",
      "version": "xgboost 3.2.0",
      "version_source": "cell record",
-     "warmup_ms": 71911.306
+     "warmup_ms": null,
+     "withdrawn": {
+      "max_ms": 76053.876,
+      "median_ms": 76053.876,
+      "min_ms": 76053.876,
+      "quality": {
+       "accuracy": 0.91014,
+       "mlogloss": 0.246803
+      },
+      "times_ms": [
+       76053.876
+      ]
+     }
     },
     {
      "arm": "lightgbm-cpu",
@@ -671455,8 +671988,8 @@
      "lane": "gbdt-multiclass",
      "library": "lightgbm",
      "library_version": "4.7.0",
-     "max_ms": 79078.649,
-     "median_ms": 79078.649,
+     "max_ms": null,
+     "median_ms": null,
      "memory": {
       "children_mb": 4.1,
       "gpu_method": "cpu arm: no device memory",
@@ -671467,7 +672000,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 11436.0
      },
-     "min_ms": 79078.649,
+     "min_ms": null,
      "mode": "opponent",
      "neural_shape": null,
      "params": {
@@ -671492,14 +672025,11 @@
       "source": "get_params"
      },
      "peak_gpu_mb": null,
-     "peak_host_mb": 12549.6,
-     "quality": {
-      "accuracy": 0.910058,
-      "mlogloss": 0.245916
-     },
+     "peak_host_mb": null,
+     "quality": null,
      "ratio_ours_fast_over": null,
-     "ratio_ours_identical_over": 0.12710661002820114,
-     "rounds": 1,
+     "ratio_ours_identical_over": null,
+     "rounds": 0,
      "rows": null,
      "rows_tag": "full",
      "settings": {
@@ -671520,14 +672050,24 @@
      },
      "shape": "istellamc-2043304x220",
      "source": "copied from release-board-resume-r2; measured this run",
-     "status": "ok",
-     "times_ms": [
-      79078.649
-     ],
+     "status": "REFUSED(DIFFERENT-GROWER: one leaf-wise tree per class per round vs one oblivious vector-leaf tree (2026-10-13 audit))",
+     "times_ms": [],
      "verdict": "NOT-COMPARABLE",
      "version": "lightgbm 4.7.0",
      "version_source": "cell record",
-     "warmup_ms": 78743.81
+     "warmup_ms": null,
+     "withdrawn": {
+      "max_ms": 79078.649,
+      "median_ms": 79078.649,
+      "min_ms": 79078.649,
+      "quality": {
+       "accuracy": 0.910058,
+       "mlogloss": 0.245916
+      },
+      "times_ms": [
+       79078.649
+      ]
+     }
     }
    ],
    "dataset": "istella",
@@ -671562,7 +672102,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "catboost-cpu": {
@@ -671611,104 +672151,10 @@
         }
        ],
        "verdict": "INSUFFICIENT"
-      },
-      "lightgbm-cpu": {
-       "quality_comparison": [
-        {
-         "batch": null,
-         "checks": [
-          {
-           "comparison": "absolute",
-           "margin": 0.01,
-           "metric": "accuracy",
-           "observed": 0.0021999999999999797,
-           "opponent": 0.60158,
-           "ours": 0.59938,
-           "verdict": "PASS"
-          }
-         ],
-         "failures": [],
-         "interpretation": "engineering margin; not a statistical equivalence claim",
-         "policy": "mojolearn.quality-parity.v7",
-         "verdict": "PASS"
-        }
-       ],
-       "reason": "no supported audit or matched effective settings for this pairing",
-       "rerace": "x",
-       "timing_comparison": {
-        "clock": "whole",
-        "kind": "preferred",
-        "label": "whole/whole",
-        "opponent_ms": 41539.935,
-        "ours_ms": 6049.794,
-        "preferred": "whole",
-        "value": 0.14563802278458068
-       },
-       "timing_comparisons": [
-        {
-         "batch": null,
-         "batch_rows": null,
-         "clock": "whole",
-         "kind": "preferred",
-         "label": "whole/whole",
-         "opponent_ms": 41539.935,
-         "ours_ms": 6049.794,
-         "preferred": "whole",
-         "value": 0.14563802278458068
-        }
-       ],
-       "verdict": "INSUFFICIENT"
-      },
-      "xgboost-cpu": {
-       "quality_comparison": [
-        {
-         "batch": null,
-         "checks": [
-          {
-           "comparison": "absolute",
-           "margin": 0.01,
-           "metric": "accuracy",
-           "observed": 0.0017479999999999718,
-           "opponent": 0.601128,
-           "ours": 0.59938,
-           "verdict": "PASS"
-          }
-         ],
-         "failures": [],
-         "interpretation": "engineering margin; not a statistical equivalence claim",
-         "policy": "mojolearn.quality-parity.v7",
-         "verdict": "PASS"
-        }
-       ],
-       "reason": "no supported audit or matched effective settings for this pairing",
-       "rerace": "x",
-       "timing_comparison": {
-        "clock": "whole",
-        "kind": "preferred",
-        "label": "whole/whole",
-        "opponent_ms": 35861.411,
-        "ours_ms": 6049.794,
-        "preferred": "whole",
-        "value": 0.16869927399119905
-       },
-       "timing_comparisons": [
-        {
-         "batch": null,
-         "batch_rows": null,
-         "clock": "whole",
-         "kind": "preferred",
-         "label": "whole/whole",
-         "opponent_ms": 35861.411,
-         "ours_ms": 6049.794,
-         "preferred": "whole",
-         "value": 0.16869927399119905
-        }
-       ],
-       "verdict": "INSUFFICIENT"
       }
      },
      "ours_over_theirs": null,
-     "pairing": "v2:ba931926645c3a776783adb0742d621e1d91278033102d0ce1e52cc72135043e",
+     "pairing": "v2:74aa5146c7b6c35b5056868222af728f2427c6c57156f680835964ab5c1c4172",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
@@ -672331,6 +672777,160 @@
      "rerace": "x",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
+    },
+    {
+     "admitted_opponents": [],
+     "date": "2026-10-18",
+     "opponent": null,
+     "opponents": {
+      "catboost-cpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.0002300000000000635,
+           "opponent": 0.59915,
+           "ours": 0.59938,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v7",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 178349.943,
+        "ours_ms": 6049.794,
+        "preferred": "whole",
+        "value": 0.033920919167324884
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 178349.943,
+         "ours_ms": 6049.794,
+         "preferred": "whole",
+         "value": 0.033920919167324884
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "lightgbm-cpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.0021999999999999797,
+           "opponent": 0.60158,
+           "ours": 0.59938,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v7",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 41539.935,
+        "ours_ms": 6049.794,
+        "preferred": "whole",
+        "value": 0.14563802278458068
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 41539.935,
+         "ours_ms": 6049.794,
+         "preferred": "whole",
+         "value": 0.14563802278458068
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "xgboost-cpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [
+          {
+           "comparison": "absolute",
+           "margin": 0.01,
+           "metric": "accuracy",
+           "observed": 0.0017479999999999718,
+           "opponent": 0.601128,
+           "ours": 0.59938,
+           "verdict": "PASS"
+          }
+         ],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v7",
+         "verdict": "PASS"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 35861.411,
+        "ours_ms": 6049.794,
+        "preferred": "whole",
+        "value": 0.16869927399119905
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 35861.411,
+         "ours_ms": 6049.794,
+         "preferred": "whole",
+         "value": 0.16869927399119905
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      }
+     },
+     "ours_over_theirs": null,
+     "pairing": "v2:ba931926645c3a776783adb0742d621e1d91278033102d0ce1e52cc72135043e",
+     "reason": "no opponent with sufficient valid comparison evidence",
+     "rerace": "x",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
+     "verdict": "INSUFFICIENT"
     }
    ],
    "cells": [
@@ -672677,8 +673277,8 @@
      "lane": "gbdt-multiclass",
      "library": "xgboost",
      "library_version": "3.2.0",
-     "max_ms": 35861.411,
-     "median_ms": 35861.411,
+     "max_ms": null,
+     "median_ms": null,
      "memory": {
       "children_mb": 4.1,
       "gpu_method": "cpu arm: no device memory",
@@ -672689,7 +673289,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 7236.2
      },
-     "min_ms": 35861.411,
+     "min_ms": null,
      "mode": "opponent",
      "neural_shape": null,
      "params": {
@@ -672715,14 +673315,11 @@
       "source": "get_params"
      },
      "peak_gpu_mb": null,
-     "peak_host_mb": 8463.4,
-     "quality": {
-      "accuracy": 0.601128,
-      "mlogloss": 1.005128
-     },
+     "peak_host_mb": null,
+     "quality": null,
      "ratio_ours_fast_over": null,
-     "ratio_ours_identical_over": 0.16869927399119905,
-     "rounds": 1,
+     "ratio_ours_identical_over": null,
+     "rounds": 0,
      "rows": null,
      "rows_tag": "full",
      "settings": {
@@ -672743,14 +673340,24 @@
      },
      "shape": "taximc-4110786x16",
      "source": "copied from release-board-resume-r2; measured this run",
-     "status": "ok",
-     "times_ms": [
-      35861.411
-     ],
+     "status": "REFUSED(DIFFERENT-GROWER: one depthwise tree per class per round vs one oblivious vector-leaf tree (2026-10-13 audit))",
+     "times_ms": [],
      "verdict": "NOT-COMPARABLE",
      "version": "xgboost 3.2.0",
      "version_source": "cell record",
-     "warmup_ms": 35849.568
+     "warmup_ms": null,
+     "withdrawn": {
+      "max_ms": 35861.411,
+      "median_ms": 35861.411,
+      "min_ms": 35861.411,
+      "quality": {
+       "accuracy": 0.601128,
+       "mlogloss": 1.005128
+      },
+      "times_ms": [
+       35861.411
+      ]
+     }
     },
     {
      "arm": "lightgbm-cpu",
@@ -672781,8 +673388,8 @@
      "lane": "gbdt-multiclass",
      "library": "lightgbm",
      "library_version": "4.7.0",
-     "max_ms": 41539.935,
-     "median_ms": 41539.935,
+     "max_ms": null,
+     "median_ms": null,
      "memory": {
       "children_mb": 4.1,
       "gpu_method": "cpu arm: no device memory",
@@ -672793,7 +673400,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 7526.6
      },
-     "min_ms": 41539.935,
+     "min_ms": null,
      "mode": "opponent",
      "neural_shape": null,
      "params": {
@@ -672818,14 +673425,11 @@
       "source": "get_params"
      },
      "peak_gpu_mb": null,
-     "peak_host_mb": 8711.3,
-     "quality": {
-      "accuracy": 0.60158,
-      "mlogloss": 1.004282
-     },
+     "peak_host_mb": null,
+     "quality": null,
      "ratio_ours_fast_over": null,
-     "ratio_ours_identical_over": 0.14563802278458068,
-     "rounds": 1,
+     "ratio_ours_identical_over": null,
+     "rounds": 0,
      "rows": null,
      "rows_tag": "full",
      "settings": {
@@ -672846,14 +673450,24 @@
      },
      "shape": "taximc-4110786x16",
      "source": "copied from release-board-resume-r2; measured this run",
-     "status": "ok",
-     "times_ms": [
-      41539.935
-     ],
+     "status": "REFUSED(DIFFERENT-GROWER: one leaf-wise tree per class per round vs one oblivious vector-leaf tree (2026-10-13 audit))",
+     "times_ms": [],
      "verdict": "NOT-COMPARABLE",
      "version": "lightgbm 4.7.0",
      "version_source": "cell record",
-     "warmup_ms": 41316.13
+     "warmup_ms": null,
+     "withdrawn": {
+      "max_ms": 41539.935,
+      "median_ms": 41539.935,
+      "min_ms": 41539.935,
+      "quality": {
+       "accuracy": 0.60158,
+       "mlogloss": 1.004282
+      },
+      "times_ms": [
+       41539.935
+      ]
+     }
     }
    ],
    "dataset": "taxi",
@@ -672890,7 +673504,7 @@
      "admitted_opponents": [
       "catboost-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "catboost-cpu",
      "opponents": {
       "catboost-cpu": {
@@ -673601,7 +674215,7 @@
      "admitted_opponents": [
       "catboost-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "catboost-cpu",
      "opponents": {
       "catboost-cpu": {
@@ -674310,7 +674924,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {
       "catboost-cpu": {
@@ -674349,47 +674963,10 @@
         }
        ],
        "verdict": "INSUFFICIENT"
-      },
-      "xgboost-cpu": {
-       "quality_comparison": [
-        {
-         "batch": null,
-         "checks": [],
-         "failures": [],
-         "interpretation": "engineering margin; not a statistical equivalence claim",
-         "policy": "mojolearn.quality-parity.v7",
-         "verdict": "INSUFFICIENT"
-        }
-       ],
-       "reason": "no supported audit or matched effective settings for this pairing",
-       "rerace": "x",
-       "timing_comparison": {
-        "clock": "whole",
-        "kind": "preferred",
-        "label": "whole/whole",
-        "opponent_ms": 6075.942,
-        "ours_ms": 1540.974,
-        "preferred": "whole",
-        "value": 0.25361894501297083
-       },
-       "timing_comparisons": [
-        {
-         "batch": null,
-         "batch_rows": null,
-         "clock": "whole",
-         "kind": "preferred",
-         "label": "whole/whole",
-         "opponent_ms": 6075.942,
-         "ours_ms": 1540.974,
-         "preferred": "whole",
-         "value": 0.25361894501297083
-        }
-       ],
-       "verdict": "INSUFFICIENT"
       }
      },
      "ours_over_theirs": null,
-     "pairing": "v2:fb1b6c475ede7dab4c73935589f27587d8480bd228cede2e2dcdfbd5639083e8",
+     "pairing": "v2:a59fac7febd472f6a4f396288e576d1b13a1d88ed402ba447237f7138a669d3c",
      "reason": "no opponent with sufficient valid comparison evidence",
      "rerace": "x",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
@@ -674744,6 +675321,93 @@
      "rerace": "x",
      "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v6, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
      "verdict": "INSUFFICIENT"
+    },
+    {
+     "admitted_opponents": [],
+     "date": "2026-10-18",
+     "opponent": null,
+     "opponents": {
+      "catboost-cpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v7",
+         "verdict": "INSUFFICIENT"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 31176.276,
+        "ours_ms": 1540.974,
+        "preferred": "whole",
+        "value": 0.049427776428461176
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 31176.276,
+         "ours_ms": 1540.974,
+         "preferred": "whole",
+         "value": 0.049427776428461176
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      },
+      "xgboost-cpu": {
+       "quality_comparison": [
+        {
+         "batch": null,
+         "checks": [],
+         "failures": [],
+         "interpretation": "engineering margin; not a statistical equivalence claim",
+         "policy": "mojolearn.quality-parity.v7",
+         "verdict": "INSUFFICIENT"
+        }
+       ],
+       "reason": "no supported audit or matched effective settings for this pairing",
+       "rerace": "x",
+       "timing_comparison": {
+        "clock": "whole",
+        "kind": "preferred",
+        "label": "whole/whole",
+        "opponent_ms": 6075.942,
+        "ours_ms": 1540.974,
+        "preferred": "whole",
+        "value": 0.25361894501297083
+       },
+       "timing_comparisons": [
+        {
+         "batch": null,
+         "batch_rows": null,
+         "clock": "whole",
+         "kind": "preferred",
+         "label": "whole/whole",
+         "opponent_ms": 6075.942,
+         "ours_ms": 1540.974,
+         "preferred": "whole",
+         "value": 0.25361894501297083
+        }
+       ],
+       "verdict": "INSUFFICIENT"
+      }
+     },
+     "ours_over_theirs": null,
+     "pairing": "v2:fb1b6c475ede7dab4c73935589f27587d8480bd228cede2e2dcdfbd5639083e8",
+     "reason": "no opponent with sufficient valid comparison evidence",
+     "rerace": "x",
+     "rule": "race_fairness.fairness_rule (mojolearn.quality-parity.v7, shown not gated; mojolearn.comparison-clocks.v2, 2026-10-14)",
+     "verdict": "INSUFFICIENT"
     }
    ],
    "cells": [
@@ -675075,8 +675739,8 @@
      "lane": "gbdt-rank-pairlogit",
      "library": "xgboost",
      "library_version": "3.2.0",
-     "max_ms": 6075.942,
-     "median_ms": 6075.942,
+     "max_ms": null,
+     "median_ms": null,
      "memory": {
       "children_mb": 4.1,
       "gpu_method": "cpu arm: no device memory",
@@ -675087,7 +675751,7 @@
       "warmup_gpu_mb": null,
       "warmup_host_mb": 12060.7
      },
-     "min_ms": 6075.942,
+     "min_ms": null,
      "mode": "opponent",
      "neural_shape": null,
      "params": {
@@ -675113,15 +675777,11 @@
       "source": "get_params"
      },
      "peak_gpu_mb": null,
-     "peak_host_mb": 13581.1,
-     "quality": {
-      "map": 0.872796,
-      "ndcg10": 0.738397,
-      "ndcg5": 0.670093
-     },
+     "peak_host_mb": null,
+     "quality": null,
      "ratio_ours_fast_over": null,
-     "ratio_ours_identical_over": 0.25361894501297083,
-     "rounds": 1,
+     "ratio_ours_identical_over": null,
+     "rounds": 0,
      "rows": null,
      "rows_tag": "full",
      "settings": {
@@ -675137,14 +675797,25 @@
      },
      "shape": "istellarank-2043304x220",
      "source": "copied from release-board-resume-r2; measured this run",
-     "status": "ok",
-     "times_ms": [
-      6075.942
-     ],
+     "status": "REFUSED(DIFFERENT-ALGORITHM: XGBoost rank:pairwise grows depthwise trees over sampled pairs; ours and CatBoost fit PairLogit over every pair on oblivious trees (2026-10-13 audit))",
+     "times_ms": [],
      "verdict": "NOT-COMPARABLE",
      "version": "xgboost 3.2.0",
      "version_source": "cell record",
-     "warmup_ms": 6052.116
+     "warmup_ms": null,
+     "withdrawn": {
+      "max_ms": 6075.942,
+      "median_ms": 6075.942,
+      "min_ms": 6075.942,
+      "quality": {
+       "map": 0.872796,
+       "ndcg10": 0.738397,
+       "ndcg5": 0.670093
+      },
+      "times_ms": [
+       6075.942
+      ]
+     }
     }
    ],
    "dataset": "istella",
@@ -675181,7 +675852,7 @@
      "admitted_opponents": [
       "catboost-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "catboost-cpu",
      "opponents": {
       "catboost-cpu": {
@@ -675892,7 +676563,7 @@
      "admitted_opponents": [
       "catboost-cpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "catboost-cpu",
      "opponents": {
       "catboost-cpu": {
@@ -676599,5 +677270,5 @@
   }
  },
  "schema": "mojolearn-bench-board/1",
- "updated": "2026-10-18T06:49:15Z"
+ "updated": "2026-10-22T19:50:40Z"
 }

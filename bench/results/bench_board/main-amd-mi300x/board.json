@@ -57,7 +57,7 @@
   "smoke": false,
   "vendor": "amd"
  },
- "created": "2026-10-18T06:49:13Z",
+ "created": "2026-10-22T19:50:33Z",
  "main_board": {
   "backfill": {
    "filled": {
@@ -80,52 +80,21 @@
   },
   "inputs": {
    "branch": "main",
-   "generated": "2026-10-18T06:49:13Z",
+   "gate_boards": null,
+   "generated": "2026-10-22T19:50:33Z",
    "grid_logs": [
-    "nv=/dev/null"
+    "nv=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-grid-logs.txt",
+    "nv2=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-grid-logs.txt",
+    "amd=/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-grid-logs.txt",
+    "amd2=/Users/andrewhendel/mojolearn-evidence/grid-lq/amd2-grid-logs.txt"
    ],
    "json_dir": null,
-   "paired_boards": [
-    "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-algos.adafactor.synthetic.rows=full.json",
-    "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-algos.adagrad.synthetic.rows=full.json",
-    "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-algos.adam.synthetic.rows=full.json",
-    "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-algos.adamax.synthetic.rows=full.json",
-    "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-algos.adamw.synthetic.rows=full.json",
-    "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-algos.als.taxi-zones.rows=full.json",
-    "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.mamba2-forward.gaussian.shape=full.json",
-    "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.mamba3-forward.gaussian.shape=full.json",
-    "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.mlp-predict.gaussian.shape=full.json",
-    "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.mlp-train-step.gaussian.shape=full.json",
-    "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.samba-forward.bytes.shape=full.json",
-    "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.samba-train-step.bytes.shape=full.json",
-    "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.transformer-decode.gaussian.shape=full.json",
-    "nv=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/nvidia-neural.transformer-forward.gaussian.shape=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.adafactor.synthetic.rows=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.adagrad.synthetic.rows=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.adam.synthetic.rows=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.adamax.synthetic.rows=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.adamw.synthetic.rows=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.avgpool1d.synthetic.rows=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.avgpool2d.synthetic.rows=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.batchnorm1d.synthetic.rows=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.batchnorm2d.synthetic.rows=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.cagra.istella.rows=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.cagra.taxi.rows=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-algos.cholesky.synthetic.rows=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.gemm-bf16.gaussian.shape=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.gemm.gaussian.shape=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.lm-forward.bytes.shape=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.mamba2-forward.gaussian.shape=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.mamba3-forward.gaussian.shape=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.mlp-predict.gaussian.shape=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.mlp-train-step.gaussian.shape=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.samba-forward.bytes.shape=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.samba-train-step.bytes.shape=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.transformer-decode.gaussian.shape=full.json",
-    "amd2=/Users/andrewhendel/mojolearn-evidence/measure-0852/ingest0849/inputs/amd-neural.transformer-forward.gaussian.shape=full.json"
-   ],
+   "paired_boards": null,
    "results": [
-    "nv=/dev/null"
+    "nv=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv-results.txt",
+    "nv2=/Users/andrewhendel/mojolearn-evidence/grid-lq/nv2-results.txt",
+    "amd=/Users/andrewhendel/mojolearn-evidence/grid-lq/amd-results.txt",
+    "amd2=/Users/andrewhendel/mojolearn-evidence/grid-lq/amd2-results.txt"
    ]
   },
   "label": "main@80ace6b7a",
@@ -170,7 +139,7 @@
       "torch-compile-fp32",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-compile-fp32",
      "opponents": {
       "torch-compile-fp32": {
@@ -15807,7 +15776,7 @@
       "torch-compile-fp32",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-compile-fp32",
      "opponents": {
       "torch-compile-fp32": {
@@ -31446,7 +31415,7 @@
       "torch-eager-fp32",
       "torch-fused-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-fused-fp32",
      "opponents": {
       "torch-compile-fp32": {
@@ -52598,7 +52567,7 @@
       "torch-compile-fp32",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-fp32",
      "opponents": {
       "torch-compile-fp32": {
@@ -68369,7 +68338,7 @@
       "torch-eager-fp32",
       "torch-fused-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-fused-fp32",
      "opponents": {
       "torch-compile-fp32": {
@@ -89523,7 +89492,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-fp32",
      "opponents": {
       "torch-compile-bf16": {
@@ -89729,7 +89698,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-fp32",
      "opponents": {
       "torch-compile-bf16": {
@@ -111716,7 +111685,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-fp32",
      "opponents": {
       "torch-compile-bf16": {
@@ -111922,7 +111891,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-fp32",
      "opponents": {
       "torch-compile-bf16": {
@@ -134621,7 +134590,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-bf16",
      "opponents": {
       "torch-compile-bf16": {
@@ -134827,7 +134796,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-fp32",
      "opponents": {
       "torch-compile-bf16": {
@@ -164334,7 +164303,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-compile-bf16",
      "opponents": {
       "torch-compile-bf16": {
@@ -164540,7 +164509,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-compile-bf16",
      "opponents": {
       "torch-compile-bf16": {
@@ -194230,7 +194199,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -194242,7 +194211,7 @@
     },
     "identical/infer": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -201838,7 +201807,7 @@
      "admitted_opponents": [
       "hipvs-gpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "hipvs-gpu",
      "opponents": {
       "hipvs-gpu": {
@@ -201900,7 +201869,7 @@
      "admitted_opponents": [
       "hipvs-gpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "hipvs-gpu",
      "opponents": {
       "hipvs-gpu": {
@@ -210856,7 +210825,7 @@
      "admitted_opponents": [
       "torch-gpu"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-gpu",
      "opponents": {
       "torch-gpu": {
@@ -216723,7 +216692,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -216854,7 +216823,7 @@
       "torch-compile-bf16",
       "torch-eager-bf16"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-compile-bf16",
      "opponents": {
       "torch-compile-bf16": {
@@ -225525,7 +225494,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-bf16",
      "opponents": {
       "torch-compile-bf16": {
@@ -239020,7 +238989,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-compile-bf16",
      "opponents": {
       "torch-compile-bf16": {
@@ -249853,7 +249822,7 @@
      "admitted_opponents": [
       "mamba-ssm-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "mamba-ssm-fp32",
      "opponents": {
       "mamba-ssm-fp32": {
@@ -259288,7 +259257,7 @@
      "torch-eager-fp32"
     ],
     "basis": "7a03db7711023367b8fb98ec0f347a25a48836ab782302d525ab1fbb587c4918",
-    "date": "2026-10-18",
+    "date": "2026-10-22",
     "reason": "torch-compile-bf16: code our harness wrote, not a library's own implementation; torch-compile-fp32: code our harness wrote, not a library's own implementation; torch-eager-bf16: code our harness wrote, not a library's own implementation; torch-eager-fp32: code our harness wrote, not a library's own implementation",
     "why": {
      "torch-compile-bf16": "code our harness wrote, not a library's own implementation",
@@ -259648,7 +259617,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -268120,7 +268089,7 @@
      "torch-eager-fp32"
     ],
     "basis": "ae89c26e3e31f0ffa50a6a95211ae45138ec1a96d9f8ff5127ebbd279c1f1794",
-    "date": "2026-10-18",
+    "date": "2026-10-22",
     "reason": "torch-compile-bf16: code our harness wrote, not a library's own implementation; torch-compile-fp32: code our harness wrote, not a library's own implementation; torch-eager-bf16: code our harness wrote, not a library's own implementation; torch-eager-fp32: code our harness wrote, not a library's own implementation",
     "why": {
      "torch-compile-bf16": "code our harness wrote, not a library's own implementation",
@@ -268428,7 +268397,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-compile-bf16",
      "opponents": {
       "torch-compile-bf16": {
@@ -279050,7 +279019,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-fp32",
      "opponents": {
       "torch-compile-bf16": {
@@ -292682,7 +292651,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -301229,7 +301198,7 @@
    "audit": {
     "identical/fit": {
      "admitted_opponents": [],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": null,
      "opponents": {},
      "ours_over_theirs": null,
@@ -312555,7 +312524,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-eager-fp32",
      "opponents": {
       "torch-eager-bf16": {
@@ -319747,7 +319716,7 @@
       "torch-eager-bf16",
       "torch-eager-fp32"
      ],
-     "date": "2026-10-18",
+     "date": "2026-10-22",
      "opponent": "torch-compile-fp32",
      "opponents": {
       "torch-compile-bf16": {
@@ -330842,5 +330811,5 @@
   }
  },
  "schema": "mojolearn-bench-board/1",
- "updated": "2026-10-18T06:49:16Z"
+ "updated": "2026-10-22T19:50:42Z"
 }

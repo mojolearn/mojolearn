@@ -1,6 +1,6 @@
 # mojolearn benchmark board
 
-Generated 2026-10-18T06:49:15Z from `board.json` (schema `mojolearn-bench-board/1`).
+Generated 2026-10-22T19:50:40Z from `board.json` (schema `mojolearn-bench-board/1`).
 
 > MAIN BOARD amd-mi325x, version label main@feee1b453. Unreleased: not reproducible by pip install; the release boards are the reference.
 
@@ -8,9 +8,9 @@ Generated 2026-10-18T06:49:15Z from `board.json` (schema `mojolearn-bench-board/
 
 > Rule: each lane x dataset shows the newest default-configuration race on main (highest commit date, then job number) whose status is ok. A newer ok cell replaces an older one whatever the two times are; a run that is not ok is never a numeric cell and never replaces an ok cell (FAILED table; an older ok cell stays, flagged with the newer failed run). 6 replaced or failed observations are in LEDGER.md. A/B and grid arms (MOJOLEARN_BUILD_DEFINES, MOJOLEARN_GRID_TAG grid runs) are never on this board.
 
-> Ours: recorded scored runs from lq jobs or verified paired sessions; the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: MATCH 89, n/a 141).
+> Ours: recorded scored runs from lq jobs or verified paired sessions; the status column names the cell's commit, box/job, commit date and the other vendor's digest at the same commit (identity: MATCH 82, n/a 148).
 
-> Opponents: retained from each paired session when present; otherwise retained historical pairs or stored opponent boards (opponents-20261006, release-board-resume-r2). Ingestion runs no measurements. `ours IDENTICAL / arm` divides the two stored medians, and the clock columns read a torch GPU arm kernel/kernel and every other arm whole/whole (AGENTS.md measurement item 6). Our kernel clock is `-` unless the cell recorded upload_ms_separate. Opponents withheld for changed lane settings: 44 races.
+> Opponents: retained from each paired session when present; otherwise retained historical pairs or stored opponent boards (opponents-20261006). Ingestion runs no measurements. `ours IDENTICAL / arm` divides the two stored medians, and the clock columns read a torch GPU arm kernel/kernel and every other arm whole/whole (AGENTS.md measurement item 6). Our kernel clock is `-` unless the cell recorded upload_ms_separate. Opponents withheld for changed lane settings: 8 races.
 
 > Provenance: main@ identifies the source or harness freeze. Paired wheel runs separately record the installed library version and loaded binary hashes; they are not source builds of that harness commit.
 
@@ -18,7 +18,7 @@ Generated 2026-10-18T06:49:15Z from `board.json` (schema `mojolearn-bench-board/
 
 ## Identity
 
-Same lane, dataset and commit on the other GPU vendor (identity = equal output digests on NVIDIA and AMD). Counts: MATCH 89, n/a 141.
+Same lane, dataset and commit on the other GPU vendor (identity = equal output digests on NVIDIA and AMD). Counts: MATCH 82, n/a 148.
 
 DIFFER: none.
 
@@ -70,7 +70,7 @@ Runs on main whose status is not ok (error, refused, timeout, not_ready, NO-RECO
 
 ## Coverage
 
-Races: 230 planned, 230 done, 0 failed, 0 unsupported, 0 pending. Cells: 591 (HOST-MEMORY 1, REFUSED 12, ok 578).
+Races: 230 planned, 230 done, 0 failed, 0 unsupported, 0 pending. Cells: 591 (HOST-MEMORY 1, REFUSED 27, ok 563).
 
 Inference cells: 65 (REFUSED 2, ok 63).
 
@@ -304,10 +304,10 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | quantile-transformer | istella | rel_diff_vs_sklearn | - | 2.764e-08 | - |
 | algos | quantile-transformer | taxi | max_abs_diff_vs_sklearn | - | 5.96e-08 | - |
 | algos | quantile-transformer | taxi | rel_diff_vs_sklearn | - | 2.294e-08 | - |
-| algos | quantile | istella | r2 (higher is better) | - | -0.039998 | sklearn-cpu -0.044780 |
-| algos | quantile | istella | rmse (lower is better) | - | 0.851877 | sklearn-cpu 0.853833 |
-| algos | quantile | taxi | r2 (higher is better) | - | 0.899596 | sklearn-cpu 0.899678 |
-| algos | quantile | taxi | rmse (lower is better) | - | 5.046749 | sklearn-cpu 5.044706 |
+| algos | quantile | istella | r2 (higher is better) | - | -0.039998 | sklearn-cpu - |
+| algos | quantile | istella | rmse (lower is better) | - | 0.851877 | sklearn-cpu - |
+| algos | quantile | taxi | r2 (higher is better) | - | 0.899596 | sklearn-cpu - |
+| algos | quantile | taxi | rmse (lower is better) | - | 5.046749 | sklearn-cpu - |
 | algos | randomized-svd | istella | relative_reconstruction_error (lower is better) | - | 0.0002359 | torch-gpu 0.0002359 |
 | algos | randomized-svd | taxi | relative_reconstruction_error (lower is better) | - | 0.027197 | torch-gpu 0.027197 |
 | algos | resnet-block | synthetic | relative_error_vs_own_host | - | 0.000000 | torch-eager-fp32 -; torch-compile-fp32 -; torch-eager-bf16 -; torch-compile-bf16 - |
@@ -397,8 +397,8 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | algos | theta | taxi-hourly | forecast_rmse (lower is better) | - | 49.020604 | statsforecast-cpu 49.253901; statsmodels-cpu 49.311757 |
 | algos | tree-shap | istella | max_additivity_error | - | 1.175e-06 | - |
 | algos | tree-shap | taxi | max_additivity_error | - | 3.858e-05 | - |
-| algos | tsne | istella | trustworthiness_k15 (higher is better, 1 at most) | - | 0.992124 | sklearn-cpu 0.992170 |
-| algos | tsne | taxi | trustworthiness_k15 (higher is better, 1 at most) | - | 0.998921 | sklearn-cpu 0.998823 |
+| algos | tsne | istella | trustworthiness_k15 (higher is better, 1 at most) | - | 0.992124 | sklearn-cpu - |
+| algos | tsne | taxi | trustworthiness_k15 (higher is better, 1 at most) | - | 0.998921 | sklearn-cpu - |
 | algos | variance-threshold | istella | max_abs_diff_vs_sklearn | - | 0.000000 | sklearn-cpu - |
 | algos | variance-threshold | istella | rel_diff_vs_sklearn | - | 0.000000 | sklearn-cpu - |
 | algos | variance-threshold | taxi | max_abs_diff_vs_sklearn | - | 0.000000 | sklearn-cpu - |
@@ -433,12 +433,12 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | classical | knn | istella | rows_with_repeated_ids | - | 0 | hipvs-gpu 0 |
 | classical | knn | taxi | recall_at_k (higher is better) | - | 0.999754 | hipvs-gpu 0.999777 |
 | classical | knn | taxi | rows_with_repeated_ids | - | 0 | hipvs-gpu 0 |
-| classical | ols | istella | r2 (higher is better) | - | 0.332506 | torch-gpu nan; torch-gpu-eigh 0.151604; sklearn-cpu 0.001881 |
-| classical | ols | istella | rmse (lower is better) | - | 0.681740 | torch-gpu nan; torch-gpu-eigh 0.768589; sklearn-cpu 0.833655 |
-| classical | ols | taxi | r2 (higher is better) | - | 0.908837 | torch-gpu 0.908840; torch-gpu-eigh 0.908822; sklearn-cpu 0.724850 |
-| classical | ols | taxi | rmse (lower is better) | - | 4.696477 | torch-gpu 4.696376; torch-gpu-eigh 4.696849; sklearn-cpu 8.159187 |
-| classical | pca | istella | explained_variance_ratio_sum (higher is better) | - | 1.000000 | torch-gpu 1.000000; sklearn-cpu 1.000000 |
-| classical | pca | taxi | explained_variance_ratio_sum (higher is better) | - | 0.999997 | torch-gpu 0.999997; sklearn-cpu 0.999995 |
+| classical | ols | istella | r2 (higher is better) | - | 0.332506 | torch-gpu nan; torch-gpu-eigh -; sklearn-cpu 0.001881 |
+| classical | ols | istella | rmse (lower is better) | - | 0.681740 | torch-gpu nan; torch-gpu-eigh -; sklearn-cpu 0.833655 |
+| classical | ols | taxi | r2 (higher is better) | - | 0.908837 | torch-gpu 0.908840; torch-gpu-eigh -; sklearn-cpu 0.724850 |
+| classical | ols | taxi | rmse (lower is better) | - | 4.696477 | torch-gpu 4.696376; torch-gpu-eigh -; sklearn-cpu 8.159187 |
+| classical | pca | istella | explained_variance_ratio_sum (higher is better) | - | 1.000000 | torch-gpu -; sklearn-cpu 1.000000 |
+| classical | pca | taxi | explained_variance_ratio_sum (higher is better) | - | 0.999997 | torch-gpu -; sklearn-cpu 0.999995 |
 | classical | svc | istella | accuracy (higher is better) | - | 0.922200 | sklearn-cpu 0.922200 |
 | classical | svc | istella | n_support | - | 2400 | sklearn-cpu 2400 |
 | classical | svc | taxi | accuracy (higher is better) | - | 0.767500 | sklearn-cpu 0.767500 |
@@ -471,10 +471,10 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | classical2 | ridge | istella | rmse (lower is better) | - | 0.684427 | sklearn-cpu 0.684426 |
 | classical2 | ridge | taxi | r2 (higher is better) | - | 0.908983 | sklearn-cpu 0.908983 |
 | classical2 | ridge | taxi | rmse (lower is better) | - | 4.805050 | sklearn-cpu 4.805056 |
-| classical2 | tsvd | istella | explained_variance_ratio_sum (higher is better) | - | 1.000000 | sklearn-cpu 1.000000 |
-| classical2 | tsvd | istella | relative_reconstruction_error (lower is better) | - | 0.0001314 | sklearn-cpu 0.000122 |
-| classical2 | tsvd | taxi | explained_variance_ratio_sum (higher is better) | - | 0.999965 | sklearn-cpu 0.999965 |
-| classical2 | tsvd | taxi | relative_reconstruction_error (lower is better) | - | 0.003257 | sklearn-cpu 0.003257 |
+| classical2 | tsvd | istella | explained_variance_ratio_sum (higher is better) | - | 1.000000 | sklearn-cpu - |
+| classical2 | tsvd | istella | relative_reconstruction_error (lower is better) | - | 0.0001314 | sklearn-cpu - |
+| classical2 | tsvd | taxi | explained_variance_ratio_sum (higher is better) | - | 0.999965 | sklearn-cpu - |
+| classical2 | tsvd | taxi | relative_reconstruction_error (lower is better) | - | 0.003257 | sklearn-cpu - |
 | neural | gemm-bf16 | gaussian | max_rel_err_vs_fp64 (lower is better) | - | 1.155e-07 | torch-eager-bf16 0.002759; torch-compile-bf16 0.002759 |
 | neural | gemm-bf16 | gaussian | max_abs_diff_vs_ours (0 is our output exactly) | - | - | torch-eager-bf16 0.999023; torch-compile-bf16 0.999023 |
 | neural | gemm-bf16 | gaussian | max_rel_diff_vs_ours (0 is our output exactly) | - | - | torch-eager-bf16 0.002759; torch-compile-bf16 0.002759 |
@@ -500,17 +500,17 @@ Per lane and dataset: our FAST value, our IDENTICAL value, and each opponent's.
 | trees | gbdt-lossguide | istella | logloss (lower is better) | - | 0.150066 | xgboost-gpu -; catboost-cpu 0.157692; xgboost-cpu 0.149263; lightgbm-cpu 0.149653 |
 | trees | gbdt-lossguide | taxi | auc (higher is better) | - | 0.632096 | xgboost-gpu -; catboost-cpu 0.632578; xgboost-cpu 0.630968; lightgbm-cpu 0.632243 |
 | trees | gbdt-lossguide | taxi | logloss (lower is better) | - | 0.528044 | xgboost-gpu -; catboost-cpu 0.527851; xgboost-cpu 0.528677; lightgbm-cpu 0.528067 |
-| trees | gbdt-multiclass | istella | accuracy (higher is better) | - | 0.907556 | xgboost-gpu -; catboost-cpu 0.907768; xgboost-cpu 0.910140; lightgbm-cpu 0.910058 |
-| trees | gbdt-multiclass | istella | mlogloss (lower is better) | - | 0.258413 | xgboost-gpu -; catboost-cpu 0.258286; xgboost-cpu 0.246803; lightgbm-cpu 0.245916 |
-| trees | gbdt-multiclass | taxi | accuracy (higher is better) | - | 0.599380 | xgboost-gpu -; catboost-cpu 0.599150; xgboost-cpu 0.601128; lightgbm-cpu 0.601580 |
-| trees | gbdt-multiclass | taxi | mlogloss (lower is better) | - | 1.012595 | xgboost-gpu -; catboost-cpu 1.012734; xgboost-cpu 1.005128; lightgbm-cpu 1.004282 |
+| trees | gbdt-multiclass | istella | accuracy (higher is better) | - | 0.907556 | xgboost-gpu -; catboost-cpu 0.907768; xgboost-cpu -; lightgbm-cpu - |
+| trees | gbdt-multiclass | istella | mlogloss (lower is better) | - | 0.258413 | xgboost-gpu -; catboost-cpu 0.258286; xgboost-cpu -; lightgbm-cpu - |
+| trees | gbdt-multiclass | taxi | accuracy (higher is better) | - | 0.599380 | xgboost-gpu -; catboost-cpu 0.599150; xgboost-cpu -; lightgbm-cpu - |
+| trees | gbdt-multiclass | taxi | mlogloss (lower is better) | - | 1.012595 | xgboost-gpu -; catboost-cpu 1.012734; xgboost-cpu -; lightgbm-cpu - |
 | trees | gbdt-ordered | istella | auc (higher is better) | - | 0.979444 | catboost-cpu 0.979221 |
 | trees | gbdt-ordered | istella | logloss (lower is better) | - | 0.190928 | catboost-cpu 0.192114 |
 | trees | gbdt-ordered | taxi | auc (higher is better) | - | 0.629203 | catboost-cpu 0.628918 |
 | trees | gbdt-ordered | taxi | logloss (lower is better) | - | 0.529007 | catboost-cpu 0.529083 |
-| trees | gbdt-rank-pairlogit | istella | map (higher is better) | - | 0.854545 | xgboost-gpu -; catboost-cpu 0.846328; xgboost-cpu 0.872796 |
-| trees | gbdt-rank-pairlogit | istella | ndcg10 (higher is better) | - | 0.719953 | xgboost-gpu -; catboost-cpu 0.713361; xgboost-cpu 0.738397 |
-| trees | gbdt-rank-pairlogit | istella | ndcg5 (higher is better) | - | 0.650400 | xgboost-gpu -; catboost-cpu 0.643611; xgboost-cpu 0.670093 |
+| trees | gbdt-rank-pairlogit | istella | map (higher is better) | - | 0.854545 | xgboost-gpu -; catboost-cpu 0.846328; xgboost-cpu - |
+| trees | gbdt-rank-pairlogit | istella | ndcg10 (higher is better) | - | 0.719953 | xgboost-gpu -; catboost-cpu 0.713361; xgboost-cpu - |
+| trees | gbdt-rank-pairlogit | istella | ndcg5 (higher is better) | - | 0.650400 | xgboost-gpu -; catboost-cpu 0.643611; xgboost-cpu - |
 | trees | gbdt-symmetric | istella | auc (higher is better) | - | 0.980129 | catboost-cpu 0.979899 |
 | trees | gbdt-symmetric | istella | logloss (lower is better) | - | 0.186686 | catboost-cpu 0.188093 |
 | trees | gbdt-symmetric | taxi | auc (higher is better) | - | 0.630436 | catboost-cpu 0.630269 |
@@ -697,8 +697,8 @@ race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/
 | mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.37 (source build, main@d886b53dc) | identical | 10051.4 | 10051.4..10051.4 | 1 | - | - | 10051.4 | - | - (stored whole) | - | - | - | - | accuracy=0.907556, mlogloss=0.258413 | - | main board, one scored run | - | ok (main@d886b53dc amd/a1116 2026-10-09; identity vs the nvidia columns: n/a) |
 | xgboost-gpu | xgboost | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | xgboost 3.2.0 | opponent | - | - | 0 | - | - | - | - | - | - | - | - | - | - | - | UNKNOWN | - | REFUSED(asked for by --arms and not built here; built: xgboost-cpu) (copied from opponents-20261006; measured this run) |
 | catboost-cpu | catboost | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | catboost 1.2.10 | opponent | 561543.4 | 561543.4..561543.4 | 1 | 0.018 | - | 561543.4 | 561543.4 | 0.00 (cpu-arm) | 0.018 (whole/whole) | - | 11547.8 | - | accuracy=0.907768, mlogloss=0.258286 | yes | NOT-COMPARABLE | - | ok (copied from release-board-resume-r2; measured this run) |
-| xgboost-cpu | xgboost | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | xgboost 3.2.0 | opponent | 76053.9 | 76053.9..76053.9 | 1 | 0.132 | - | 76053.9 | 76053.9 | 0.00 (cpu-arm) | 0.132 (whole/whole) | - | 12606.4 | - | accuracy=0.910140, mlogloss=0.246803 | yes | NOT-COMPARABLE | - | ok (copied from release-board-resume-r2; measured this run) |
-| lightgbm-cpu | lightgbm | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | lightgbm 4.7.0 | opponent | 79078.6 | 79078.6..79078.6 | 1 | 0.127 | - | 79078.6 | 79078.6 | 0.00 (cpu-arm) | 0.127 (whole/whole) | - | 12549.6 | - | accuracy=0.910058, mlogloss=0.245916 | yes | NOT-COMPARABLE | - | ok (copied from release-board-resume-r2; measured this run) |
+| xgboost-cpu | xgboost | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | xgboost 3.2.0 | opponent | - | - | 0 | - | - | - | - | - | - | - | - | - | - | yes | NOT-COMPARABLE | - | REFUSED(DIFFERENT-GROWER: one depthwise tree per class per round vs one oblivious vector-leaf tree (2026-10-13 audit)) (copied from release-board-resume-r2; measured this run) |
+| lightgbm-cpu | lightgbm | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | lightgbm 4.7.0 | opponent | - | - | 0 | - | - | - | - | - | - | - | - | - | - | yes | NOT-COMPARABLE | - | REFUSED(DIFFERENT-GROWER: one leaf-wise tree per class per round vs one oblivious vector-leaf tree (2026-10-13 audit)) (copied from release-board-resume-r2; measured this run) |
 
 memory, ours, xgboost-gpu: host not sampled; GPU not sampled
 
@@ -717,8 +717,8 @@ race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/
 | mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.37 (source build, main@d886b53dc) | identical | 6049.8 | 6049.8..6049.8 | 1 | - | - | 6049.8 | - | - (stored whole) | - | - | - | - | accuracy=0.599380, mlogloss=1.012595 | - | main board, one scored run | - | ok (main@d886b53dc amd/a1116 2026-10-09; identity vs the nvidia columns: n/a) |
 | xgboost-gpu | xgboost | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | xgboost 3.2.0 | opponent | - | - | 0 | - | - | - | - | - | - | - | - | - | - | - | UNKNOWN | - | REFUSED(asked for by --arms and not built here; built: xgboost-cpu) (copied from opponents-20261006; measured this run) |
 | catboost-cpu | catboost | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | catboost 1.2.10 | opponent | 178349.9 | 178349.9..178349.9 | 1 | 0.034 | - | 178349.9 | 178349.9 | 0.00 (cpu-arm) | 0.034 (whole/whole) | - | 8021.3 | - | accuracy=0.599150, mlogloss=1.012734 | yes | NOT-COMPARABLE | - | ok (copied from release-board-resume-r2; measured this run) |
-| xgboost-cpu | xgboost | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | xgboost 3.2.0 | opponent | 35861.4 | 35861.4..35861.4 | 1 | 0.169 | - | 35861.4 | 35861.4 | 0.00 (cpu-arm) | 0.169 (whole/whole) | - | 8463.4 | - | accuracy=0.601128, mlogloss=1.005128 | yes | NOT-COMPARABLE | - | ok (copied from release-board-resume-r2; measured this run) |
-| lightgbm-cpu | lightgbm | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | lightgbm 4.7.0 | opponent | 41539.9 | 41539.9..41539.9 | 1 | 0.146 | - | 41539.9 | 41539.9 | 0.00 (cpu-arm) | 0.146 (whole/whole) | - | 8711.3 | - | accuracy=0.601580, mlogloss=1.004282 | yes | NOT-COMPARABLE | - | ok (copied from release-board-resume-r2; measured this run) |
+| xgboost-cpu | xgboost | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | xgboost 3.2.0 | opponent | - | - | 0 | - | - | - | - | - | - | - | - | - | - | yes | NOT-COMPARABLE | - | REFUSED(DIFFERENT-GROWER: one depthwise tree per class per round vs one oblivious vector-leaf tree (2026-10-13 audit)) (copied from release-board-resume-r2; measured this run) |
+| lightgbm-cpu | lightgbm | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | lightgbm 4.7.0 | opponent | - | - | 0 | - | - | - | - | - | - | - | - | - | - | yes | NOT-COMPARABLE | - | REFUSED(DIFFERENT-GROWER: one leaf-wise tree per class per round vs one oblivious vector-leaf tree (2026-10-13 audit)) (copied from release-board-resume-r2; measured this run) |
 
 memory, ours, xgboost-gpu: host not sampled; GPU not sampled
 
@@ -771,7 +771,7 @@ race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/
 | mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.37 (source build, main@d886b53dc) | identical | 1541.0 | 1541.0..1541.0 | 1 | - | - | 1541.0 | - | - (stored whole) | - | - | - | - | map=0.854545, ndcg10=0.719953, ndcg5=0.650400 | - | main board, one scored run | - | ok (main@d886b53dc amd/a1116 2026-10-09; identity vs the nvidia columns: n/a) |
 | xgboost-gpu | xgboost | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | xgboost 3.2.0 | opponent | - | - | 0 | - | - | - | - | - | - | - | - | - | - | - | UNKNOWN | - | REFUSED(asked for by --arms and not built here; built: xgboost-cpu) (copied from opponents-20261006; measured this run) |
 | catboost-cpu | catboost | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | catboost 1.2.10 | opponent | 31176.3 | 31176.3..31176.3 | 1 | 0.049 | - | 31176.3 | 31176.3 | 0.00 (cpu-arm) | 0.049 (whole/whole) | - | 12433.4 | - | map=0.846328, ndcg10=0.713361, ndcg5=0.643611 | yes | NOT-COMPARABLE | - | ok (copied from release-board-resume-r2; measured this run) |
-| xgboost-cpu | xgboost | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | xgboost 3.2.0 | opponent | 6075.9 | 6075.9..6075.9 | 1 | 0.254 | - | 6075.9 | 6075.9 | 0.00 (cpu-arm) | 0.254 (whole/whole) | - | 13581.1 | - | map=0.872796, ndcg10=0.738397, ndcg5=0.670093 | yes | NOT-COMPARABLE | - | ok (copied from release-board-resume-r2; measured this run) |
+| xgboost-cpu | xgboost | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | xgboost 3.2.0 | opponent | - | - | 0 | - | - | - | - | - | - | - | - | - | - | yes | NOT-COMPARABLE | - | REFUSED(DIFFERENT-ALGORITHM: XGBoost rank:pairwise grows depthwise trees over sampled pairs; ours and CatBoost fit PairLogit over every pair on oblivious trees (2026-10-13 audit)) (copied from release-board-resume-r2; measured this run) |
 
 memory, ours, xgboost-gpu: host not sampled; GPU not sampled
 
@@ -1187,7 +1187,7 @@ race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.38 (source build, main@c8ef6c66d) | identical | 444.7 | 444.7..444.7 | 1 | - | - | 444.7 | - | - (stored whole) | - | - | - | - | finite=True, r2=0.332506, rmse=0.681740 | - | main board, one scored run | - | ok (main@c8ef6c66d amd/a1716 2026-10-11; identity vs the nvidia columns: n/a) |
 | torch-gpu | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 2340.8 | 2340.8..2340.8 | 1 | 0.190 | - | 2523.3 | 2340.8 | 182.42 (upload_ms_untimed) | 0.176 (whole/whole (kernel not derivable)) | - | 5648.2 | 5303.6 | finite=False, r2=nan, rmse=nan | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-gpu-eigh | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 42.8 | 42.8..42.8 | 1 | 10.388 | - | 222.4 | 42.8 | 179.55 (upload_ms_untimed) | 2.000 (whole/whole (kernel not derivable)) | - | 5051.5 | 3649.4 | finite=True, r2=0.151604, rmse=0.768589 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
+| torch-gpu-eigh | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | - | - | 0 | - | - | - | - | - | - | - | - | - | - | yes | LIKE-FOR-LIKE-SPAN | - | REFUSED(refused by name (2026-10-13 audit): harness-written: OLS assembled by this harness from torch ops (centered normal equations, torch.linalg.eigh, a pseudo-inverse cutoff); not a library's implementation) (copied from opponents-20261006; measured this run) |
 | sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | 3980.6 | 3980.6..3980.6 | 1 | 0.112 | - | 3980.6 | 3980.6 | 0.00 (cpu-arm) | 0.112 (whole/whole) | - | 5793.0 | - | finite=True, r2=0.001881, rmse=0.833655 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; stored (measured 2026-09-29T16:35:47Z on mojolearn-steward-do-amd, cpu (AMD EPYC 9575F 64-Core Processor))) |
 
 memory, ours: host not sampled; GPU not sampled
@@ -1216,7 +1216,7 @@ race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.38 (source build, main@c8ef6c66d) | identical | 14.1 | 14.1..14.1 | 1 | - | - | 14.1 | - | - (stored whole) | - | - | - | - | finite=True, r2=0.908837, rmse=4.696477 | - | main board, one scored run | - | ok (main@c8ef6c66d amd/a1716 2026-10-11; identity vs the nvidia columns: n/a) |
 | torch-gpu | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 100.7 | 100.7..100.7 | 1 | 0.140 | - | 243.7 | 100.7 | 143.01 (upload_ms_untimed) | 0.058 (whole/whole (kernel not derivable)) | - | 3535.9 | 695.3 | finite=True, r2=0.908840, rmse=4.696376 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
-| torch-gpu-eigh | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 34.0 | 34.0..34.0 | 1 | 0.414 | - | 176.6 | 34.0 | 142.61 (upload_ms_untimed) | 0.080 (whole/whole (kernel not derivable)) | - | 3018.3 | 572.0 | finite=True, r2=0.908822, rmse=4.696849 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
+| torch-gpu-eigh | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | - | - | 0 | - | - | - | - | - | - | - | - | - | - | yes | LIKE-FOR-LIKE-SPAN | - | REFUSED(refused by name (2026-10-13 audit): harness-written: OLS assembled by this harness from torch ops (centered normal equations, torch.linalg.eigh, a pseudo-inverse cutoff); not a library's implementation) (copied from opponents-20261006; measured this run) |
 | sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | 304.7 | 304.7..304.7 | 1 | 0.046 | - | 304.7 | 304.7 | 0.00 (cpu-arm) | 0.046 (whole/whole) | - | 782.5 | - | finite=True, r2=0.724850, rmse=8.159187 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; stored (measured 2026-09-29T16:35:14Z on mojolearn-steward-do-amd, cpu (AMD EPYC 9575F 64-Core Processor))) |
 
 memory, ours: host not sampled; GPU not sampled
@@ -1244,7 +1244,7 @@ race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.38 (source build, main@a1c96a5ba) | identical | 51.8 | 51.8..51.8 | 1 | - | - | 51.8 | - | - (stored whole) | - | - | - | - | explained_variance_ratio_sum=1.000000 | - | main board, one scored run | - | ok (main@a1c96a5ba amd/a1676 2026-10-11; identity vs the nvidia columns: n/a) |
-| torch-gpu | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 19.9 | 19.9..19.9 | 1 | 2.605 | - | 206.7 | 19.9 | 186.78 (upload_ms_untimed) | 0.251 (whole/whole (kernel not derivable)) | - | 5044.4 | 3505.8 | explained_variance_ratio_sum=1.000000 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
+| torch-gpu | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | - | - | 0 | - | - | - | - | - | - | - | - | - | - | yes | LIKE-FOR-LIKE-SPAN | - | REFUSED(refused by name (2026-10-13 audit): harness-written: PCA assembled by this harness from torch ops (mean, xc.T @ xc, torch.linalg.eigh); torch has no PCA estimator of this algorithm (torch.pca_lowrank is randomized, a different algorithm); NVIDIA races cuML PCA (the same algorithm), and AMD and Apple have no library GPU PCA (ROCm-DS 26.03 has no cuML port), so scikit-learn on the CPU is their opponent) (copied from opponents-20261006; measured this run) |
 | sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | 621.7 | 621.7..621.7 | 1 | 0.083 | - | 621.7 | 621.7 | 0.00 (cpu-arm) | 0.083 (whole/whole) | - | 2342.9 | - | explained_variance_ratio_sum=1.000000 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; stored (measured 2026-09-29T16:34:57Z on mojolearn-steward-do-amd, cpu (AMD EPYC 9575F 64-Core Processor))) |
 
 memory, ours: host not sampled; GPU not sampled
@@ -1272,7 +1272,7 @@ race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.38 (source build, main@a1c96a5ba) | identical | 7.6 | 7.6..7.6 | 1 | - | - | 7.6 | - | - (stored whole) | - | - | - | - | explained_variance_ratio_sum=0.999997 | - | main board, one scored run | - | ok (main@a1c96a5ba amd/a1676 2026-10-11; identity vs the nvidia columns: n/a) |
-| torch-gpu | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | 10.9 | 10.9..10.9 | 1 | 0.697 | - | 152.7 | 10.9 | 141.81 (upload_ms_untimed) | 0.050 (whole/whole (kernel not derivable)) | - | 3009.5 | 412.0 | explained_variance_ratio_sum=0.999997 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from opponents-20261006; measured this run) |
+| torch-gpu | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.6.0+rocm6.4.1.git1ded221d | opponent | - | - | 0 | - | - | - | - | - | - | - | - | - | - | yes | LIKE-FOR-LIKE-SPAN | - | REFUSED(refused by name (2026-10-13 audit): harness-written: PCA assembled by this harness from torch ops (mean, xc.T @ xc, torch.linalg.eigh); torch has no PCA estimator of this algorithm (torch.pca_lowrank is randomized, a different algorithm); NVIDIA races cuML PCA (the same algorithm), and AMD and Apple have no library GPU PCA (ROCm-DS 26.03 has no cuML port), so scikit-learn on the CPU is their opponent) (copied from opponents-20261006; measured this run) |
 | sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | 82.2 | 82.2..82.2 | 1 | 0.092 | - | 82.2 | 82.2 | 0.00 (cpu-arm) | 0.092 (whole/whole) | - | 401.6 | - | explained_variance_ratio_sum=0.999995 | yes | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; stored (measured 2026-09-29T16:34:39Z on mojolearn-steward-do-amd, cpu (AMD EPYC 9575F 64-Core Processor))) |
 
 memory, ours: host not sampled; GPU not sampled
@@ -1596,7 +1596,7 @@ race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.38 (source build, main@a1c96a5ba) | identical | 29.6 | 29.6..29.6 | 1 | - | - | 29.6 | - | - (stored whole) | - | - | - | - | explained_variance_ratio_sum=1.000000, relative_reconstruction_error=0.0001314 | - | main board, one scored run | - | ok (main@a1c96a5ba amd/a1676 2026-10-11; identity vs the nvidia columns: n/a) |
-| sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | 689.8 | 689.8..689.8 | 1 | 0.043 | - | 689.8 | 689.8 | 0.00 (cpu-arm) | 0.043 (whole/whole) | - | 2422.2 | - | explained_variance_ratio_sum=1.000000, relative_reconstruction_error=0.000122 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
+| sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | - | - | 0 | - | - | - | - | - | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(refused by name (2026-10-13 audit): different algorithm: ours 'covariance_eigh' (the eigendecomposition of X^T X); scikit-learn TruncatedSVD has only 'arpack' (Lanczos on X) and 'randomized', and no CPU library has ours' algorithm) (copied from release-board-resume-r2; measured this run) |
 
 memory, ours: host not sampled; GPU not sampled
 
@@ -1617,7 +1617,7 @@ race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.38 (source build, main@a8e0548a5) | identical | 3.9 | 3.9..3.9 | 1 | - | - | 3.9 | - | - (stored whole) | - | - | - | - | explained_variance_ratio_sum=0.999965, relative_reconstruction_error=0.003257 | - | main board, one scored run | - | ok (main@a8e0548a5 amd/a1553 2026-10-10; identity vs nvidia-l40s: MATCH) |
-| sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | 205.6 | 205.6..205.6 | 1 | 0.019 | - | 205.6 | 205.6 | 0.00 (cpu-arm) | 0.019 (whole/whole) | - | 460.6 | - | explained_variance_ratio_sum=0.999965, relative_reconstruction_error=0.003257 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
+| sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | - | - | 0 | - | - | - | - | - | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(refused by name (2026-10-13 audit): different algorithm: ours 'covariance_eigh' (the eigendecomposition of X^T X); scikit-learn TruncatedSVD has only 'arpack' (Lanczos on X) and 'randomized', and no CPU library has ours' algorithm) (copied from release-board-resume-r2; measured this run) |
 
 memory, ours: host not sampled; GPU not sampled
 
@@ -1879,7 +1879,7 @@ headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twi
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 8.2 | 8.2..8.2 | 1 | - | - | - | 8.2 | - (stored kernel) | - | - | 1722.4 | 235846.9 | optimizer_update_error_vs_torch_fp32=3.386e-06, rel_fro_vs_torch_eager_fp32=1.033e-08 | - | main board, one scored run | wheel | ok (main@79fcd24a5 amd/paired-f10cf2497d39cc7319d4de70c12bf716db9e88b0028ecc67a6aa49070a81732e 2026-10-14; identity vs nvidia-l40s: MATCH) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 8.2 | 8.2..8.2 | 1 | - | - | - | 8.2 | - (stored kernel) | - | - | 1722.4 | 235846.9 | optimizer_update_error_vs_torch_fp32=3.386e-06, rel_fro_vs_torch_eager_fp32=1.033e-08 | - | main board, one scored run | wheel | ok (main@79fcd24a5 amd/paired-f10cf2497d39cc7319d4de70c12bf716db9e88b0028ecc67a6aa49070a81732e 2026-10-14; identity vs the nvidia columns: n/a) |
 | torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 7.2 | 7.2..7.2 | 1 | 1.130 | - | - | 7.2 | - (stored kernel) | 1.130 (kernel/kernel) | - | 2785.7 | 832.0 | optimizer_update_error_vs_torch_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 104.5 | 104.5..104.5 | 1 | 0.078 | - | - | 104.5 | - (stored kernel) | 0.078 (kernel/kernel) | - | 2840.6 | 832.0 | optimizer_update_error_vs_torch_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 
@@ -1923,7 +1923,7 @@ headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twi
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 5.2 | 5.2..5.2 | 1 | - | - | - | 5.2 | - (stored kernel) | - | - | 1528.4 | 235669.5 | optimizer_update_error_vs_torch_fp32=1.874e-06, rel_fro_vs_torch_eager_fp32=3.207e-09 | - | main board, one scored run | wheel | ok (main@79fcd24a5 amd/paired-af94094fad922b4efc0abda02c1eb1d9d018067c8743a9f2fb66108edcd28323 2026-10-14; identity vs nvidia-l40s: MATCH) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 5.2 | 5.2..5.2 | 1 | - | - | - | 5.2 | - (stored kernel) | - | - | 1528.4 | 235669.5 | optimizer_update_error_vs_torch_fp32=1.874e-06, rel_fro_vs_torch_eager_fp32=3.207e-09 | - | main board, one scored run | wheel | ok (main@79fcd24a5 amd/paired-af94094fad922b4efc0abda02c1eb1d9d018067c8743a9f2fb66108edcd28323 2026-10-14; identity vs the nvidia columns: n/a) |
 | torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 4.4 | 4.4..4.4 | 1 | 1.197 | - | - | 4.4 | - (stored kernel) | 1.197 (kernel/kernel) | - | 2742.2 | 960.0 | optimizer_update_error_vs_torch_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 2.6 | 2.6..2.6 | 1 | 2.037 | - | - | 2.6 | - (stored kernel) | 2.037 (kernel/kernel) | - | 3089.0 | 896.0 | optimizer_update_error_vs_torch_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 
@@ -1981,7 +1981,7 @@ headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twi
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 11.6 | 11.6..11.6 | 1 | - | - | - | 11.6 | - (stored kernel) | - | - | 3033.8 | 235846.9 | optimizer_update_error_vs_torch_fp32=8.844e-06, rel_fro_vs_torch_eager_fp32=3.34e-08 | - | main board, one scored run | wheel | ok (main@79fcd24a5 amd/paired-b7d8836277782a06993d4691465ee382d5c783cad374eaa186780d08b0bc34e8 2026-10-14; identity vs nvidia-l40s: MATCH) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 11.6 | 11.6..11.6 | 1 | - | - | - | 11.6 | - (stored kernel) | - | - | 3033.8 | 235846.9 | optimizer_update_error_vs_torch_fp32=8.844e-06, rel_fro_vs_torch_eager_fp32=3.34e-08 | - | main board, one scored run | wheel | ok (main@79fcd24a5 amd/paired-b7d8836277782a06993d4691465ee382d5c783cad374eaa186780d08b0bc34e8 2026-10-14; identity vs the nvidia columns: n/a) |
 | torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 5.9 | 5.9..5.9 | 1 | 1.953 | - | - | 5.9 | - (stored kernel) | 1.953 (kernel/kernel) | - | 2782.5 | 896.0 | optimizer_update_error_vs_torch_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 53.6 | 53.6..53.6 | 1 | 0.216 | - | - | 53.6 | - (stored kernel) | 0.216 (kernel/kernel) | - | 3227.1 | 960.0 | optimizer_update_error_vs_torch_fp32=1.355e-05, rel_fro_vs_torch_eager_fp32=5.116e-08 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-fused-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 4.0 | 4.0..4.0 | 1 | 2.894 | - | - | 4.0 | - (stored kernel) | 2.894 (kernel/kernel) | - | 2703.8 | 896.0 | optimizer_update_error_vs_torch_fp32=6.002e-06, rel_fro_vs_torch_eager_fp32=2.267e-08 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
@@ -2063,7 +2063,7 @@ headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twi
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 9.1 | 9.1..9.1 | 1 | - | - | - | 9.1 | - (stored kernel) | - | - | 1528.3 | 235669.5 | optimizer_update_error_vs_torch_fp32=1.54e-06, rel_fro_vs_torch_eager_fp32=4.144e-09 | - | main board, one scored run | wheel | ok (main@79fcd24a5 amd/paired-bb0b9e92ff74e892d405f1ce25ae5c6a696f6a475ef4e3b370133d8c9eb61ca3 2026-10-14; identity vs nvidia-l40s: MATCH) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 9.1 | 9.1..9.1 | 1 | - | - | - | 9.1 | - (stored kernel) | - | - | 1528.3 | 235669.5 | optimizer_update_error_vs_torch_fp32=1.54e-06, rel_fro_vs_torch_eager_fp32=4.144e-09 | - | main board, one scored run | wheel | ok (main@79fcd24a5 amd/paired-bb0b9e92ff74e892d405f1ce25ae5c6a696f6a475ef4e3b370133d8c9eb61ca3 2026-10-14; identity vs the nvidia columns: n/a) |
 | torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 5.6 | 5.6..5.6 | 1 | 1.626 | - | - | 5.6 | - (stored kernel) | 1.626 (kernel/kernel) | - | 2752.0 | 896.0 | optimizer_update_error_vs_torch_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 47.9 | 47.9..47.9 | 1 | 0.190 | - | - | 47.9 | - (stored kernel) | 0.190 (kernel/kernel) | - | 3221.6 | 960.0 | optimizer_update_error_vs_torch_fp32=2.292e-06, rel_fro_vs_torch_eager_fp32=6.17e-09 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 
@@ -2120,7 +2120,7 @@ headline: ours IDENTICAL / torch bf16: - (no completed torch bf16 arm); fp32 twi
 
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 11.7 | 11.7..11.7 | 1 | - | - | - | 11.7 | - (stored kernel) | - | - | 3032.6 | 235846.9 | optimizer_update_error_vs_torch_fp32=8.841e-06, rel_fro_vs_torch_eager_fp32=3.34e-08 | - | main board, one scored run | wheel | ok (main@79fcd24a5 amd/paired-a66aa7eff428a6de1c4a5f3040f82126bf28db7ef40c0925793a4bde8b639da5 2026-10-14; identity vs nvidia-l40s: MATCH) |
+| mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | 0.8.44 | identical | 11.7 | 11.7..11.7 | 1 | - | - | - | 11.7 | - (stored kernel) | - | - | 3032.6 | 235846.9 | optimizer_update_error_vs_torch_fp32=8.841e-06, rel_fro_vs_torch_eager_fp32=3.34e-08 | - | main board, one scored run | wheel | ok (main@79fcd24a5 amd/paired-a66aa7eff428a6de1c4a5f3040f82126bf28db7ef40c0925793a4bde8b639da5 2026-10-14; identity vs the nvidia columns: n/a) |
 | torch-eager-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 6.5 | 6.5..6.5 | 1 | 1.788 | - | - | 6.5 | - (stored kernel) | 1.788 (kernel/kernel) | - | 2782.5 | 896.0 | optimizer_update_error_vs_torch_fp32=0.000000, rel_fro_vs_torch_eager_fp32=0.000000 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-compile-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 54.6 | 54.6..54.6 | 1 | 0.214 | - | - | 54.6 | - (stored kernel) | 0.214 (kernel/kernel) | - | 3223.3 | 960.0 | optimizer_update_error_vs_torch_fp32=6.012e-05, rel_fro_vs_torch_eager_fp32=2.272e-07 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
 | torch-fused-fp32 | torch | gpu | AMD Instinct Mi325X VF (host mojolearn-steward-do-amd) | torch 2.13.0+rocm7.1 | opponent | 3.5 | 3.5..3.5 | 1 | 3.373 | - | - | 3.5 | - (stored kernel) | 3.373 (kernel/kernel) | - | 2703.8 | 896.0 | optimizer_update_error_vs_torch_fp32=6.574e-05, rel_fro_vs_torch_eager_fp32=2.484e-07 | - | LIKE-FOR-LIKE-SPAN | - | ok (measured this run) |
@@ -5201,7 +5201,7 @@ race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.37 (source build, main@de2b2b739) | identical | 862.1 | 862.1..862.1 | 1 | - | - | 862.1 | - | - (stored whole) | - | - | - | - | finite=True, r2=-0.039998, rmse=0.851877 | - | main board, one scored run | - | ok (main@de2b2b739 amd/a0535 2026-10-08; identity vs nvidia-l40s: MATCH) |
-| sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | 878876.6 | 878876.6..878876.6 | 1 | 0.0009809 | - | 878876.6 | 878876.6 | 0.00 (cpu-arm) | 0.0009809 (whole/whole) | - | 8006.1 | - | finite=True, r2=-0.044780, rmse=0.853833 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
+| sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | - | - | 0 | - | - | - | - | - | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(refused by name (2026-10-13 audit): different algorithm: ours runs ADMM whatever solver it is given (max_iter=5000, tol=1e-4); scikit-learn's QuantileRegressor has only linear-programming solvers (HiGHS, interior point)) (copied from release-board-resume-r2; measured this run) |
 
 memory, ours: host not sampled; GPU not sampled
 
@@ -5222,7 +5222,7 @@ race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/grid-lq/
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.37 (source build, main@de2b2b739) | identical | 499.3 | 499.3..499.3 | 1 | - | - | 499.3 | - | - (stored whole) | - | - | - | - | finite=True, r2=0.899596, rmse=5.046749 | - | main board, one scored run | - | ok (main@de2b2b739 amd/a0535 2026-10-08; identity vs nvidia-l40s: MATCH) |
-| sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | 225040.2 | 225040.2..225040.2 | 1 | 0.002 | - | 225040.2 | 225040.2 | 0.00 (cpu-arm) | 0.002 (whole/whole) | - | 928.9 | - | finite=True, r2=0.899678, rmse=5.044706 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
+| sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | - | - | 0 | - | - | - | - | - | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(refused by name (2026-10-13 audit): different algorithm: ours runs ADMM whatever solver it is given (max_iter=5000, tol=1e-4); scikit-learn's QuantileRegressor has only linear-programming solvers (HiGHS, interior point)) (copied from release-board-resume-r2; measured this run) |
 
 memory, ours: host not sampled; GPU not sampled
 
@@ -6314,7 +6314,7 @@ race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.38 (source build, main@c8ef6c66d) | identical | 1216.2 | 1216.2..1216.2 | 1 | - | - | 1216.2 | - | - (stored whole) | - | - | - | - | trustworthiness_k15=0.992124 | - | main board, one scored run | - | ok (main@c8ef6c66d amd/a1710 2026-10-11; identity vs the nvidia columns: n/a) |
-| sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | 17896.2 | 17896.2..17896.2 | 1 | 0.068 | - | 17896.2 | 17896.2 | 0.00 (cpu-arm) | 0.068 (whole/whole) | - | 370.6 | - | trustworthiness_k15=0.992170 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
+| sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | - | - | 0 | - | - | - | - | - | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(refused by name (2026-10-13 audit): a different algorithm: scikit-learn's t-SNE is Barnes-Hut (approximate repulsion) or exact over a dense all-pairs P; ours is exact repulsion over the sparse k-NN P (cuML method='exact' is the same algorithm, NVIDIA only) (2026-10-13 fairness audit)) (copied from release-board-resume-r2; measured this run) |
 
 memory, ours: host not sampled; GPU not sampled
 
@@ -6339,7 +6339,7 @@ race: done, driver rc None, log `/Users/andrewhendel/mojolearn-evidence/round-20
 | arm | library | device | hardware | version | mode | median ms | min..max ms | rounds | ours IDENTICAL / arm | ours FAST / arm | whole ms | kernel ms | copy ms (source) | ours IDENTICAL / arm (clock) | ours FAST / arm (clock) | peak host MB | peak GPU MB | quality | hash stable | comparability | installed_wheel | status |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
 | mojolearn IDENTICAL | mojolearn | gpu | AMD Instinct MI325X (amd, DO) | mojolearn 0.8.38 (source build, main@c8ef6c66d) | identical | 1047.3 | 1047.3..1047.3 | 1 | - | - | 1047.3 | - | - (stored whole) | - | - | - | - | trustworthiness_k15=0.998921 | - | main board, one scored run | - | ok (main@c8ef6c66d amd/a1711 2026-10-11; identity vs the nvidia columns: n/a) |
-| sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | 15382.8 | 15382.8..15382.8 | 1 | 0.068 | - | 15382.8 | 15382.8 | 0.00 (cpu-arm) | 0.068 (whole/whole) | - | 379.6 | - | trustworthiness_k15=0.998823 | - | LIKE-FOR-LIKE-SPAN | - | ok (copied from release-board-resume-r2; measured this run) |
+| sklearn-cpu | scikit-learn | cpu | CPU AMD EPYC 9575F 64-Core Processor (host mojolearn-steward-do-amd, AMD Instinct MI325X box) | scikit-learn 1.7.2 | opponent | - | - | 0 | - | - | - | - | - | - | - | - | - | - | - | LIKE-FOR-LIKE-SPAN | - | REFUSED(refused by name (2026-10-13 audit): a different algorithm: scikit-learn's t-SNE is Barnes-Hut (approximate repulsion) or exact over a dense all-pairs P; ours is exact repulsion over the sparse k-NN P (cuML method='exact' is the same algorithm, NVIDIA only) (2026-10-13 fairness audit)) (copied from release-board-resume-r2; measured this run) |
 
 memory, ours: host not sampled; GPU not sampled
 
@@ -6413,6 +6413,10 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 - Neural: The byte LM has no incremental decode on any route: LanguageModelTrainer (GPU) and LanguageModelInference (CPU) expose full-sequence logits only (lm-forward on the GPU), no KV-cache state or step, so there is no lm-decode row.
 - Neural: The *-infer and lm-host-train-step rows are the CPU host binding and are never raced; their GPU twins are the *-forward, *-decode and mlp-predict rows.
 - Neural: The GPT-3-small target shape is not on the board (the LM lanes use the smaller control shape so one shape runs on every box, a 16 GB Mac included).
+- Neural: The fit lanes time one whole fit (one epoch at the recipe's batch size); the held-out prediction after it is not timed, and multi-epoch fits, early stopping and the classifier variants of the recurrent models are not raced.
+- Neural: causal-lm-generate* time greedy generate at one prompt shape (batch 1); batched or sampled decoding, a stop token, a tokenizer in the clock and the low-bit weight formats are not raced; the memory figures come from an untimed pass after each round.
+- Neural: sequential-fit times the fit and the held-out predict_proba together; ops-session-step times one recorded step (no multi-step loop, no optimizer state); the session's other operations are timed per operation by tools/ag_opbench.py, not on the board.
+- Neural: program-run times one Program.run of a two-layer forward (inference only); the eager session's time for the same forward is the A/B operation program_eager, not a board arm.
 - Neural, not planned on this vendor: torch-eager-tf32 / torch-compile-tf32: TF32 is an NVIDIA CUDA tensor-core matmul mode; torch on ROCm accepts the flag and changes nothing
 - Neural, not planned on this vendor: torch-compile-* on mamba1-forward and mamba1-infer: the only torch Mamba-1 twin is the pure-PyTorch reference scan, a per-token Python loop that torch.compile would unroll L times; mamba1 races the eager arms only
 - Neural, not planned on this vendor: gemm-bf16 races torch's bf16 settings only (bf16 operands, fp32 accumulate)
@@ -6421,4 +6425,7 @@ parameters: not checked on the main board (our one scored run; opponents copied,
 - Neural, not planned on this vendor: gemm-int8: torch._int_mm is a CUDA kernel; torch on ROCm has no int8 matmul, so ours races alone
 - Neural, not planned on this vendor: mamba-ssm-tf32: TF32 is an NVIDIA CUDA mode; mamba_ssm races in float32 (mamba-ssm-fp32, from its ROCm/HIP source build) on AMD
 - Neural, not planned on this vendor: mamba-ssm bf16: our Mamba blocks are float32, so mamba_ssm races in float32 (and its TF32 setting on NVIDIA)
+- Neural, not planned on this vendor: mlx-fp32 on the fit lanes: MLX runs on Apple silicon only
+- Neural, not planned on this vendor: torch-compile-* on causal-lm-generate*: transformers' generate is a per-token loop over a growing KV cache; the generate lanes race the eager arms only
+- Neural, not planned on this vendor: mlx-fp32 on sequential-predict: no MLX prediction twin is written; it races the torch arms
 

@@ -25,6 +25,15 @@ column-<vendor>.json, diff-ref-<vendor>.txt). In order:
 
 The exit code is the box job's rc (the smoke's own verdict), 1 when no
 results.json came home, 3 when the job never reported within --max-wait-hours.
+
+--gate VENDOR VERSION (2026-10-22, Andrew: every exposed API measured against its peers, and the
+measurements in the smoke): the RELEASE GATE instead of the wheel smoke, `python3 tools/gate_smoke_box.py
+<vendor> <version> <remote-dir>/out all` (setup from the published PyPI wheels, the 5 s smoke over the
+whole plan, the autograd smoke, then one scored run per arm of every plan line). Nothing is uploaded (the
+gate installs from PyPI) and the box's earlier gate tree of this version is KEPT (its venv, data cache and
+gate-smoke.json resume); only the reports come home (gate-smoke.json, the smoke, autograd and campaign
+reports and the merged board, never the venv or the data cache). It succeeds only when gate-smoke.json
+came home with verdict PASS for this vendor and version.
 --state keeps the queued tag: a relaunch while the job is queued or running
 polls it again instead of queueing a second one; it is removed once the result
 is home. The ssh targets are lq's own (NV= and AMD= in the lq script).
@@ -41,7 +50,10 @@ import sys
 import time
 from pathlib import Path
 
-LQ_DEFAULT = Path(os.environ.get("MOJOLEARN_LQ", str(Path.home() / "mojolearn-evidence" / "lq" / "lq")))
+# lq moved to ~/mojolearn-ops/lq (CLAUDE.md, 2026-10-22); the old evidence path is the fallback
+LQ_DEFAULT = Path(os.environ.get("MOJOLEARN_LQ") or next(
+    (str(p) for p in (Path.home() / "mojolearn-ops" / "lq", Path.home() / "mojolearn-evidence" / "lq" / "lq")
+     if p.is_file()), str(Path.home() / "mojolearn-ops" / "lq")))
 SSH_OPTS = ["-o", "ConnectTimeout=20", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no",
             "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=4"]
 #: smoke options whose value is a local file the box needs
@@ -128,6 +140,32 @@ def box_plan(smoke_args, remote_dir):
     return uploads, ["bash", "tools/release_wheel_smoke.sh", *out, "--local", "--out", f"{remote_dir}/out"]
 
 
+#: what --gate brings home from <remote-dir>/out (reports only; the venv and data cache stay on the box)
+GATE_FETCH = ("gate-smoke.json", "autograd-smoke.json", "smoke.log", "measure-*.log", "measure-manifest-*.json",
+              "smoke-*/smoke/smoke.json", "smoke-*/smoke/smoke.txt", "measure-*/campaign.json",
+              "measure-*/campaign-retention.json", "measure-*/board")
+
+
+def gate_plan(vendor, version, remote_dir):
+    """The box argv of the release gate (tools/gate_smoke_box.py ... all)."""
+    if vendor not in ("nvidia", "amd") or not re.fullmatch(r"[0-9A-Za-z.+-]+", version):
+        raise SystemExit(f"lq-smoke: --gate takes nvidia|amd and a version, not {vendor!r} {version!r}")
+    return [], ["python3", "tools/gate_smoke_box.py", vendor, version, f"{remote_dir}/out", "all"]
+
+
+def gate_verdict_home(out, vendor, version):
+    """(ok, why) of the gate-smoke.json that came home."""
+    try:
+        doc = json.loads((Path(out) / "gate-smoke.json").read_text())
+    except (OSError, ValueError):
+        return False, "no gate-smoke.json came home"
+    if doc.get("vendor") != vendor or doc.get("version") != version:
+        return False, f"gate-smoke.json is for {doc.get('vendor')} {doc.get('version')}"
+    if doc.get("verdict") != "PASS":
+        return False, f"verdict {doc.get('verdict')}: " + "; ".join(doc.get("verdict_reasons") or [])
+    return True, "PASS"
+
+
 def lq_line(lq, box, branch, tag, box_argv, timeout_s):
     """The lq command that queues the smoke next on BOX."""
     return [str(lq), "add", "--front", box, "CMD", branch, tag, *box_argv, "BUILDS=none",
@@ -155,6 +193,12 @@ class Runner:
 
     def upload(self, uploads, remote_dir):
         rdir = shlex.quote(remote_dir)
+        if self.a.gate:
+            # the gate keeps its own tree (venv, data cache, gate-smoke.json) and uploads nothing
+            got = self.ssh(f"set -e; mkdir -p {rdir}/out; echo READY")
+            if got.returncode != 0 or "READY" not in (got.stdout or ""):
+                raise SystemExit(f"lq-smoke: could not prepare {remote_dir} on {self.a.box}")
+            return
         got = self.ssh(f"set -e; rm -rf {rdir}/in {rdir}/out {rdir}/out.run; mkdir -p {rdir}/in; echo READY")
         if got.returncode != 0 or "READY" not in (got.stdout or ""):
             raise SystemExit(f"lq-smoke: could not prepare {remote_dir} on {self.a.box}: {(got.stderr or '')[-400:]}")
@@ -205,7 +249,10 @@ class Runner:
 
     def fetch(self, remote_dir, out):
         out.mkdir(parents=True, exist_ok=True)
-        tar = self.ssh(f"cd {shlex.quote(remote_dir)}/out && tar czf - .", timeout=1800, binary=True)
+        what = "."
+        if self.a.gate:
+            what = "$(ls -d " + " ".join(GATE_FETCH) + " 2>/dev/null)"
+        tar = self.ssh(f"cd {shlex.quote(remote_dir)}/out && tar czf - {what}", timeout=1800, binary=True)
         if tar.returncode != 0:
             say(f"fetch: tar on the box exited {tar.returncode}")
             return False
@@ -218,7 +265,8 @@ class Runner:
 
     def main(self):
         a = self.a
-        uploads, box_argv = box_plan(a.smoke, a.remote_dir)
+        uploads, box_argv = (gate_plan(a.gate[0], a.gate[1], a.remote_dir) if a.gate
+                             else box_plan(a.smoke, a.remote_dir))
         key = hashlib.sha256(json.dumps([a.box, a.branch, a.remote_dir, box_argv,
                                          [sha256(l) if l.is_file() else str(l) for l, _ in uploads]]).encode()).hexdigest()
         state = Path(a.state) if a.state else None
@@ -248,6 +296,10 @@ class Runner:
             state.unlink()
         if not fetched:
             return rc or 1
+        if a.gate:
+            ok, why = gate_verdict_home(a.out, a.gate[0], a.gate[1])
+            say(f"gate {a.gate[0]} {a.gate[1]}: {why}")
+            return 0 if ok else (rc or 1)
         if rc == 0 and not (Path(a.out) / "results.json").is_file():
             say("the job said rc=0 but no results.json came home")
             return 1
@@ -267,10 +319,15 @@ def parse(argv):
     ap.add_argument("--poll-seconds", type=int, default=60)
     ap.add_argument("--max-wait-hours", type=float, default=14.0)
     ap.add_argument("--max-job-hours", type=float, default=2.0)
+    ap.add_argument("--gate", nargs=2, metavar=("VENDOR", "VERSION"),
+                    help="run the release gate (tools/gate_smoke_box.py VENDOR VERSION <remote>/out all) "
+                         "instead of the wheel smoke; no smoke arguments")
     ap.add_argument("smoke", nargs=argparse.REMAINDER)
     a = ap.parse_args(argv)
     if a.smoke[:1] == ["--"]:
         a.smoke = a.smoke[1:]
+    if a.gate and a.smoke:
+        ap.error("--gate takes no smoke arguments")
     if not re.fullmatch(r"/[A-Za-z0-9/_.-]+", a.remote_dir):
         ap.error("--remote-dir must be an absolute path of [A-Za-z0-9/_.-]")
     if not re.fullmatch(r"[A-Za-z0-9_.-]+", a.tag):

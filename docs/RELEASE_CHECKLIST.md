@@ -912,6 +912,27 @@ python3 -m venv /tmp/v && /tmp/v/bin/pip install mojolearn==<version> \
 Run it on a Linux GPU box and on a Mac. Both wheels are listed at
 https://pypi.org/project/mojolearn/#files.
 
+## The release gate: smoke and measurement on the boxes (the `gate-nvidia` and `gate-amd` steps)
+
+After each Linux vendor publishes, `pixi run release <version> --publish pypi` runs that vendor's gate on its
+held lq box (`tools/release_lq_smoke.py --gate <vendor> <version>`; a box job, never a Mac job, nothing
+rented). On the box, `python3 tools/gate_smoke_box.py <vendor> <version> <out> all`:
+
+1. setup: the bench venv from the published PyPI wheels (verified) and every pinned opponent;
+2. smoke: the 5 s "does it start" check of EVERY line of the vendor's plan (`--cpu-fallback`: CPU-opponent
+   and ours-only lines included);
+3. autograd: the autograd smoke entries;
+4. measure: one scored run per arm of every plan line, IDENTICAL, one seed, against the peers the plan names
+   with the same explicit parameters; opponents already scored on the box are reused from its opponent store,
+   only missing ones are scored. Each line's evidence is uploaded to R2 as it finishes, and the lines' boards
+   are merged into `measure-*/board/board.json` (put on the rolling main board with
+   `tools/main_board_ingest.py --gate-board <box>=<path>`).
+
+The step is done only on verdict PASS (no FAILED smoke line, autograd exit 0, every plan line measured). The
+`record` step refuses while a published Linux vendor has no passing gate, so a release cannot skip it. To run
+a gate by hand on a held box: `lq add nv CMD main gate-<version>-nvidia 'python3 tools/gate_smoke_box.py nvidia
+<version> /root/release-gate/<version>/nvidia/out all'` (and `amd` likewise).
+
 ## 7. Publish the docs and the site (docs.mojolearn.org, mojolearn.org)
 
 After the macOS wheel is on PyPI, run the one command (on this Mac; nothing runs a model):

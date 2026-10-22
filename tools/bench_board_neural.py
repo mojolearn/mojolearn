@@ -45,6 +45,10 @@ are never raced, so GPU decode work had no row before these):
                        resident sessions are private, so the public
                        per-call step), fresh allocate_state per round.
   samba-decode         SambaStack(config, weights).step(ids_t, state).
+                       Peers (2026-10-22): transformer-decode transformers'
+                       DynamicCache loop; mamba1/2-decode mamba_ssm's own
+                       Mamba/Mamba2 step over InferenceParams (MambaSsmArm);
+                       mamba3-decode and samba-decode none (NOT_PLANNED).
   mlp-predict          SmallMLPTrainer(w1, b1, w2, b2).predict_logits(X).
 CPU lanes (the *Inference classes run on the host binding, on the CPU):
   transformer-infer    TransformerBlockInference(...).forward(x).
@@ -368,7 +372,8 @@ DECODE_LANES = ("transformer-decode", "mamba1-decode", "mamba2-decode", "mamba3-
                 "samba-decode")
 #: Decode lanes with a torch decode twin in this harness. The Mamba
 #: references (mamba/corpus/gen_corpus.py) are full-sequence scans with no
-#: carried-state step, and Samba stacks Mamba-3, so those lanes race ours alone.
+#: carried-state step; mamba1-decode and mamba2-decode race mamba_ssm's own
+#: step kernels instead (MAMBA_SSM_DECODE_LANES, 2026-10-22 lane measure-coverage).
 DECODE_TORCH_TWIN = ("transformer-decode",)
 TRAIN_LANES = ("lm-train-step", "samba-train-step", "mlp-train-step", "lm-host-train-step")
 #: Whole-fit lanes (2026-10-19, lane ag-bench): FIT_LANES above. Every arm's round is one fit
@@ -429,6 +434,18 @@ MAMBA_SSM_ARMS = ("mamba-ssm-fp32", "mamba-ssm-tf32")
 MAMBA_SSM_LANES = ("mamba1-forward", "mamba2-forward", "mamba3-forward")
 MAMBA_SSM_VENDOR_ARMS = {"nvidia": MAMBA_SSM_ARMS, "amd": ("mamba-ssm-fp32",)}
 MAMBA_SSM_VENDORS = tuple(MAMBA_SSM_VENDOR_ARMS)
+# 2026-10-22 (lane measure-coverage): THE DECODE PEER. mamba1-decode and mamba2-decode race mamba_ssm's own
+# carried-state decode: the same Block (ours' weights, read back bit for bit) built with layer_idx 0, an
+# InferenceParams whose cache is the mixer's allocate_inference_cache, and one Block call per token, which
+# routes to Mamba.step / Mamba2.step (causal_conv1d_update + the selective_state_update Triton kernel) from a
+# zero state (the states are zeroed inside the clock each round, ours' load_state). Same precision settings as
+# the forward lanes. mamba3-decode and samba-decode have no peer: mamba_ssm's Mamba3.step at the pin is the
+# CuteDSL kernel mamba3_step_fn (mamba_ssm/modules/mamba3.py, "Only tested on H100"), which needs
+# nvidia-cutlass-dsl and quack-kernels that the board's --no-deps mamba_ssm build does not install, and has no
+# ROCm build; NOT_PLANNED names it. UNVERIFIED AT RUNTIME (no box has run these arms yet).
+MAMBA_SSM_DECODE_LANES = ("mamba1-decode", "mamba2-decode")
+#: every lane a mamba-ssm arm races
+MAMBA_SSM_ARM_LANES = MAMBA_SSM_LANES + MAMBA_SSM_DECODE_LANES
 
 #: Our arms: `ours` IDENTICAL, `ours-fast` the Apple FAST neural tier.
 OUR_ARMS = ("ours", "ours-fast")
@@ -451,9 +468,14 @@ NOT_PLANNED = {
        "the pure-PyTorch reference scan, a per-token Python loop that torch.compile would "
        "unroll L times; mamba1 races the eager arms only",
        "gemm-bf16 races torch's bf16 settings only (bf16 operands, fp32 accumulate)",
-       "mamba1-decode, mamba2-decode, mamba3-decode and samba-decode race ours alone: the "
-       "repo's torch Mamba references are full-sequence scans with no carried-state decode "
-       "step (a torch decode twin is not written yet)",
+       "torch-* on mamba1-decode, mamba2-decode, mamba3-decode and samba-decode: the repo's "
+       "torch Mamba references are full-sequence scans with no carried-state decode step; "
+       "mamba1-decode and mamba2-decode race mamba_ssm's own step kernels (mamba-ssm-*) where "
+       "mamba_ssm is built",
+       "mamba3-decode and samba-decode race ours alone: mamba_ssm's Mamba3.step at the pinned "
+       "commit is the CuteDSL kernel mamba3_step_fn (CUDA only, 'Only tested on H100'), which "
+       "needs nvidia-cutlass-dsl and quack-kernels the board's mamba_ssm build does not install "
+       "and has no ROCm build; Samba stacks Mamba-3, so it has no cached-step peer either",
        "torch-compile-* on transformer-decode: the twin is a per-token loop over a growing "
        "KV cache; transformer-decode races the eager arms only"]
     + (["gemm-int8: torch._int_mm is a CUDA kernel; torch on %s has no int8 matmul, so ours "
@@ -734,6 +756,9 @@ def opponents(vendor, lane):
         return ("torch-eager-int8", "torch-compile-int8") if vendor == "nvidia" else ()
     if lane == "gemm-bf16":
         return tuple("torch-" + s for s in GPU_SETTINGS[vendor] if s.endswith("bf16"))
+    if lane in MAMBA_SSM_DECODE_LANES:
+        # 2026-10-22 (lane measure-coverage): mamba_ssm's own carried-state step (MambaSsmArm)
+        return tuple(MAMBA_SSM_VENDOR_ARMS.get(vendor, ()))
     if lane in DECODE_LANES and lane not in DECODE_TORCH_TWIN:
         return ()
     if lane in PREDICT_LANES:
@@ -919,9 +944,15 @@ LANE_TEXT = {
                            "call at position t (RoPE from LlamaRotaryEmbedding); x uploaded once, "
                            "outputs .cpu() once"),
     "mamba1-decode": ("mojolearn.Mamba1Block(weights).decode_session(state): load_state(); "
-                      "step(x[:, t:t+1]) for t < L (resident GPU decode)", "none (ours alone)"),
+                      "step(x[:, t:t+1]) for t < L (resident GPU decode)",
+                      "mamba-ssm-*: mamba_ssm Block(Mamba, layer_idx 0) over InferenceParams, one token "
+                      "per call (Mamba.step: causal_conv1d_update + selective_state_update), states "
+                      "zeroed per round; x uploaded once, outputs .cpu() once"),
     "mamba2-decode": ("mojolearn.Mamba2Block(weights): state = allocate_state(B); "
-                      "step(x[:, t:t+1], state) for t < L", "none (ours alone)"),
+                      "step(x[:, t:t+1], state) for t < L",
+                      "mamba-ssm-*: mamba_ssm Block(Mamba2, layer_idx 0) over InferenceParams, one "
+                      "token per call (Mamba2.step: causal_conv1d_update + selective_state_update, "
+                      "gated RMSNorm), states zeroed per round; x uploaded once, outputs .cpu() once"),
     "mamba3-decode": ("mojolearn.Mamba3Block(weights): state = allocate_state(B); "
                       "step(x[:, t:t+1], state) for t < L", "none (ours alone)"),
     "samba-decode": ("mojolearn.SambaStack(config, weights): state = allocate_state(B, L); "
@@ -2253,7 +2284,7 @@ class OursBlock(Ours):
                                _mode_of(self.block, ml), "cpu" if cpu else "gpu")
         self.info.update(call=LANE_TEXT[lane][0], cls=cls.__name__)
         self.record = _ours_record(lane)
-        if lane in MAMBA_SSM_LANES:
+        if lane in MAMBA_SSM_ARM_LANES:
             # FAIRNESS FIX (2026-10-13 audit): the block's structural constants, read from the
             # INSTALLED class's module (and the block), compared with what the mamba-ssm arms'
             # constructed modules hold (tools/bench_board_params.py ssm_*), so the real-kernel
@@ -4806,7 +4837,24 @@ def _mamba_ssm_fused_path(model, mixer_mod, arm):
     return "mamba_split_conv1d_scan_combined (causal_conv1d + SSD Triton kernels, gated RMSNorm)"
 
 
-def mamba_ssm_block(torch, dev, model, corpus, dm, weights, arm):
+def _mamba_ssm_step_path(model, mixer_mod, arm):
+    """THE STEP KERNELS OR NOTHING (2026-10-22, lane measure-coverage): a decode arm whose mixer would
+    leave mamba_ssm's kernel step (no causal_conv1d_update or no selective_state_update: the torch roll /
+    einsum fallback inside Mamba.step) refuses by name instead."""
+    if model not in ("mamba1", "mamba2"):
+        raise RuntimeError("REFUSED: %s: mamba_ssm's %s step is not a planned decode peer (NOT_PLANNED)"
+                           % (arm, model))
+    missing = [n for n in ("causal_conv1d_update", "selective_state_update")
+               if getattr(mixer_mod, n, None) is None]
+    if missing:
+        raise RuntimeError("REFUSED: %s: %s does not import in mamba_ssm's %s, so its step would leave the "
+                           "kernel path" % (arm, " and ".join(missing), mixer_mod.__name__))
+    return ("%s.step: causal_conv1d_update + selective_state_update (Triton)%s"
+            % ({"mamba1": "Mamba", "mamba2": "Mamba2"}[model],
+               ", gated RMSNorm (Triton)" if model == "mamba2" else ""))
+
+
+def mamba_ssm_block(torch, dev, model, corpus, dm, weights, arm, layer_idx=None):
     """mamba_ssm's own Block(norm = Triton RMSNorm, mixer, fused_add_norm, residual in fp32)
     holding ours' float32 weights `weights` (our names), read back bit for bit. Returns (block,
     structural read-back, eps read-back, fused path, eps). Raises REFUSED when mamba_ssm does
@@ -4825,8 +4873,12 @@ def mamba_ssm_block(torch, dev, model, corpus, dm, weights, arm):
     mixer_mod = importlib.import_module(mod_name)
     mixer_cls = getattr(mixer_mod, cls_name)
     fused = _mamba_ssm_fused_path(model, mixer_mod, arm)
+    if layer_idx is not None:
+        # a decode arm (2026-10-22): the mixer reads its InferenceParams cache slot by layer_idx
+        fused = _mamba_ssm_step_path(model, mixer_mod, arm)
     f32 = torch.float32
-    block = Block(dm, partial(mixer_cls, device=dev, dtype=f32, **cfg), torch.nn.Identity,
+    extra = {} if layer_idx is None else {"layer_idx": layer_idx}
+    block = Block(dm, partial(mixer_cls, device=dev, dtype=f32, **dict(cfg, **extra)), torch.nn.Identity,
                   norm_cls=partial(RMSNorm, eps=eps, device=dev, dtype=f32),
                   fused_add_norm=True, residual_in_fp32=True).to(dev)
     sd = {}
@@ -4878,9 +4930,10 @@ class MambaSsmArm:
     extra scrutiny."""
 
     def __init__(self, lane, shape, data, arm):
-        if lane not in MAMBA_SSM_LANES:
-            raise RuntimeError("REFUSED: %s races the Mamba forward lanes only (%s), not %s"
-                               % (arm, ", ".join(MAMBA_SSM_LANES), lane))
+        if lane not in MAMBA_SSM_ARM_LANES:
+            raise RuntimeError("REFUSED: %s races the Mamba forward and decode lanes only (%s), not %s"
+                               % (arm, ", ".join(MAMBA_SSM_ARM_LANES), lane))
+        self.decode = lane in MAMBA_SSM_DECODE_LANES
         import numpy as np
         self.np, self.lane = np, lane
         setting = mamba_ssm_setting(arm)
@@ -4903,10 +4956,27 @@ class MambaSsmArm:
         model = MODEL_OF[lane]
         d = _dims_of(lane, shape)
         block, readback, eps_back, fused, cfg, eps = mamba_ssm_block(
-            torch, dev, model, corpus, d["d_model"], _weights(data), arm)
+            torch, dev, model, corpus, d["d_model"], _weights(data), arm,
+            layer_idx=0 if self.decode else None)
         block.eval()
         self.block = block
         self.host = [torch.from_numpy(np.ascontiguousarray(data["x"]))]
+        self.cache = self.params = None
+        if self.decode:
+            # Before the clock: the decode cache, allocated once (weights and cache resident, as ours'
+            # session). seqlen_offset > 0 routes every Block call, the first token's too, to the mixer's
+            # step from the zeroed state: a zero-state token-by-token decode, the work ours' decode does.
+            try:
+                from mamba_ssm.utils.generation import InferenceParams
+            except Exception as exc:  # noqa: BLE001
+                raise RuntimeError("REFUSED: %s: mamba_ssm.utils.generation.InferenceParams does not import "
+                                   "(%r)" % (arm, exc))
+            batch, length = int(data["x"].shape[0]), int(data["x"].shape[1])
+            self.length = length
+            self.params = InferenceParams(max_seqlen=length, max_batch_size=batch)
+            self.cache = block.allocate_inference_cache(batch, length, dtype=torch.float32)
+            self.params.key_value_memory_dict[0] = self.cache
+            self.params.seqlen_offset = 1
         self.info = dict(info)
         self.info.update(_mamba_ssm_info(torch, arm, setting))
         self.info.update({
@@ -4928,6 +4998,15 @@ class MambaSsmArm:
             "input_home": "host",
             "call": "mamba_ssm Block(%s).forward(x) on %s; h + residual; .cpu()"
                     % (MAMBA_SSM_MIXER[model].rsplit(".", 1)[1], dev)})
+        if self.decode:
+            self.info.update({
+                "decode_path": fused, "decode_cache": "InferenceParams(max_seqlen=L, max_batch_size=B), "
+                "key_value_memory_dict[0] = Block.allocate_inference_cache(B, L, float32), seqlen_offset 1",
+                "call": "per round: cache states zeroed; for t < L: h, r = mamba_ssm Block(%s)(x[:, t:t+1], "
+                        "inference_params); h + r; torch.cat over t; .cpu() once (x uploaded once)"
+                        % MAMBA_SSM_MIXER[model].rsplit(".", 1)[1],
+                "operation_scope": "zero-state token-by-token decode of the whole input, one Block call "
+                                   "per token"})
         # preflight-smoke (2026-10-14): the library class constructed (mamba_ssm.modules.block.Block), so the
         # preflight's real-implementation check reads it back
         self.record = {"__library__": "mamba-ssm", "seed": SEED, "__implementation__": type(block)}
@@ -4939,8 +5018,17 @@ class MambaSsmArm:
         torch = self.torch
         x = self.host[0].to(self.dev)
         with torch.no_grad():
-            h, r = self.block(x)
-            out = h + r
+            if self.decode:
+                for state in self.cache:              # the zero-state reset (ours' load_state)
+                    state.zero_()
+                outs = []
+                for t in range(self.length):
+                    h, r = self.block(x[:, t:t + 1, :], inference_params=self.params)
+                    outs.append(h + r)
+                out = torch.cat(outs, dim=1)
+            else:
+                h, r = self.block(x)
+                out = h + r
         self.out = out.float().cpu().numpy()
 
     def sync(self):
