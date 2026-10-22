@@ -7,7 +7,6 @@ The address and params contracts are that file's."""
 from core.hostptr import f32_ptr, f64_ptr
 from gaussian_process.host.gp_theta import (
     gp_log64,
-    gp_restart_uniform,
     gp_theta_param,
 )
 from gaussian_process.host.gpr_grad_oracle import gpr_host_lml_grad
@@ -300,11 +299,3 @@ def gp_theta_params_list(values: List[Float64]) -> List[Float64]:
         out.append(Float64(gp_theta_param(values[i])))
     return out^
 
-
-def gp_restart_uniforms_list(seed: UInt64, nr: Int, nd: Int) -> List[Float64]:
-    """`gp_restart_uniform(seed, r, j)`, restart major."""
-    var out = List[Float64]()
-    for r in range(nr):
-        for j in range(nd):
-            out.append(gp_restart_uniform(seed, r, j))
-    return out^

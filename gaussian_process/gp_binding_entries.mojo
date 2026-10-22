@@ -9,7 +9,6 @@ from gaussian_process.unnorm import GP_PY2MOJO, gpc_binary_out, gpc_ovr_targets
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32, read_i32
 from gaussian_process.host.gp_theta import (
     gp_log64,
-    gp_restart_uniform,
     gp_theta_param,
 )
 
@@ -459,11 +458,3 @@ def gp_theta_params_values(values: List[Float64]) -> List[Float64]:
         out.append(Float64(gp_theta_param(values[i])))
     return out^
 
-
-def gp_restart_uniforms_values(seed: UInt64, nr: Int, nd: Int) -> List[Float64]:
-    """`gp_restart_uniform(seed, r, j)`, restart major."""
-    var out = List[Float64]()
-    for r in range(nr):
-        for j in range(nd):
-            out.append(gp_restart_uniform(seed, r, j))
-    return out^

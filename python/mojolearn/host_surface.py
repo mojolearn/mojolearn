@@ -2338,8 +2338,8 @@ FAMILIES = (
             "gp_host_numeric_mode", "gp_host_vendor", "gp_host_column",
             "gp_host_sabotage", "gp_vendor", "gp_numeric_mode",
             "gpr_fit", "gpr_predict", "gpr_sample_y", "gpr_lml_grad", "gp_log64", "gp_theta_params", "gpr_predict_cov",
-            "gp_restart_uniforms", "gpc_fit", "gpc_predict", "cholesky_profile_jitter",
-            "cholesky_factor", "cholesky_solve", "gpr_optimize", "gp_py2mojo",
+            "gpc_fit", "gpc_predict", "cholesky_profile_jitter",
+            "cholesky_factor", "cholesky_solve", "gpr_optimize",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "gpc_ovr_combine",
         ),
@@ -2548,7 +2548,7 @@ FAMILIES = (
         exports=(
             "gp_infer_host_numeric_mode", "gp_infer_host_vendor",
             "gp_infer_host_column", "gp_infer_host_sabotage",
-            "gp_vendor", "gp_numeric_mode", "gpr_predict", "gpc_predict", "gp_py2mojo",
+            "gp_vendor", "gp_numeric_mode", "gpr_predict", "gpc_predict",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "gpc_ovr_combine",
         ),

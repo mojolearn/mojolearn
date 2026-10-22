@@ -84,13 +84,6 @@ def gp_theta_param(theta: Float64) -> Float32:
     return ftz(identical_exp(ftz(Float32(theta))))
 
 
-def gp_restart_uniform(seed: UInt64, restart: Int, dim: Int) -> Float64:
-    """The optimizer's restart draw (`gp_restart_uniform32`), widened."""
-    return Float64(gp_restart_uniform32(
-        UInt32(seed & 0xFFFFFFFF), UInt32((seed >> 32) & 0xFFFFFFFF), restart, dim
-    ))
-
-
 def gp_lml_gradient_fold(
     dual: List[Float32],
     kinv: List[Float32],
