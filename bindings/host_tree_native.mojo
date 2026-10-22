@@ -102,6 +102,7 @@ def host_tree_groves(fields: PythonObject, addresses: PythonObject, context: Pyt
 
 
 def host_tree_vote(fields: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
+    var model_owner = fields
     var x = host_tree_input(source, context)
     var rows = Int(py=x.shape[0])
     var features = Int(py=x.shape[1])
@@ -133,20 +134,22 @@ def host_tree_vote(fields: PythonObject, source: PythonObject, context: PythonOb
     # can be the sole owner of a native cast/copy, rather than a caller's
     # ndarray. Its lifetime must include the consuming native call.
     _ = x^
-    _ = fields^
+    _ = model_owner^
     if Int(py=wrote) != rows:
         raise Error("RuntimeError: forest prediction did not write every input row")
     return out
 
 
 def host_tree_wide(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    var owner = value
     var out = host_archive_typed(value.shape, "<f8", context["output_context"])
     host_tree_widen(Int(py=classical_address(value)), Int(py=value.size), Int(py=classical_address(out)))
-    _ = value^
+    _ = owner^
     return out
 
 
 def host_tree_labels(classes: PythonObject, vote: PythonObject, context: PythonObject) raises -> PythonObject:
+    var vote_owner = vote
     var b = Python.import_module("builtins")
     if py_type(classes) is not b.list or len(classes) != Int(py=vote.shape[1]):
         raise Error("stored forest classes do not match its output count")
@@ -169,7 +172,7 @@ def host_tree_labels(classes: PythonObject, vote: PythonObject, context: PythonO
             fits = fits and Bool(py=value >= PythonObject(-9223372036854775807 - 1)) and Bool(py=value <= PythonObject(9223372036854775807))
     var rows = Int(py=vote.shape[0])
     var indices = host_tree_argmax(Int(py=classical_address(vote)), rows, Int(py=vote.shape[1]))
-    _ = vote^
+    _ = vote_owner^
     if (integers and fits) or (numbers and not integers):
         var out = host_archive_typed(Python.tuple(rows), "<i8" if integers else "<f8", context["output_context"])
         for i in range(rows):  # driver-loop: publish completed native label selections
@@ -185,6 +188,7 @@ def host_tree_labels(classes: PythonObject, vote: PythonObject, context: PythonO
 
 
 def host_gbdt_predict(fields: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
+    var model_owner = fields
     var x = host_tree_input(source, context)
     var rows = Int(py=x.shape[0])
     var features = Int(py=x.shape[1])
@@ -233,7 +237,7 @@ def host_gbdt_predict(fields: PythonObject, source: PythonObject, context: Pytho
     # models that have no reference held by the Python caller.
     _ = x^
     _ = a^
-    _ = fields^
+    _ = model_owner^
     if Int(py=wrote) != rows:
         raise Error("RuntimeError: GBDT prediction did not write every input row")
     return out
