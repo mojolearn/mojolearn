@@ -57,3 +57,10 @@ coverage-x_decomp-graph_host	build_x_decomp_host rc 0, 28s	CAUGHT	x-decomp-manif
 coverage-x_decomp-graph_device	build_x_decomp rc 0, 133s	CAUGHT	x-decomp-manifold (Metal MOVED)	1 DIVERGENT	STABLE, equal to clean	153
 coverage-ivf-ivf_common	build_ivf_host rc 0, 12s, build_ivf_search_host rc 0, 8s	CAUGHT	ivf-short-fill (host MOVED)	1 OWED (no reference)	STABLE, equal to clean	33
 coverage-sequence-seq_tensor	build_x_sequence rc 0, 241s	CAUGHT	sequence-device-tensor (Metal REFUSED)	1 REFUSED	STABLE, equal to clean	257
+
+# 2026-10-22: four additional arms on 76283a6a3; base fixture, one repeat, CPU/Metal only.
+# Exact records, hashes, refusal reviews and original failures: docs/plans/runtime_fault_completion_20261022.json.
+coverage-core-py2mojo_rows	build_x_linear rc 0, 58.4s; build_x_linear_host rc 0, 17.3s	CAUGHT	cpu: 3 lanes caught (changed values); metal: 3 lanes caught (changed values)	final installed-package references pending	STABLE, exact clean source/bindings/results restored	105
+coverage-sequence-opt_public	build_x_sequence rc 0, 158.9s; build_x_sequence_host rc 0, 109.0s	CAUGHT	cpu: 3 lanes caught (hash-bound product/oracle refusal review); metal: 3 lanes caught (hash-bound product/oracle refusal review)	final installed-package references pending	STABLE, exact clean source/bindings/results restored	304
+coverage-training-optimizer_public	build_training rc 0, 149.3s	CAUGHT	metal: 2 lanes caught (changed values)	final installed-package references pending	STABLE, exact clean source/bindings/results restored	179
+coverage-core-count-fold-hits	build rc 0, 92.7s; build_core_host rc 0, 28.1s	CAUGHT	cpu: 1 lanes caught (hash-bound product/oracle refusal review); metal: 1 lanes caught (hash-bound product/oracle refusal review)	final installed-package references pending	STABLE, exact clean source/bindings/results restored	150

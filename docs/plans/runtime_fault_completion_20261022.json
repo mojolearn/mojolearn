@@ -1,0 +1,180 @@
+{
+  "frozen_commit": "76283a6a39b1a8193d5437fc9bc72ddfc76cff14",
+  "arms_completed": 4,
+  "columns_completed": 7,
+  "scope": "Base fixture, one repeat; CPU and Metal where applicable. No NVIDIA/AMD, installed-wheel or all-option claim. Original unrevised runner/check failures retained beside reviewed decisions.",
+  "arms": [
+    {
+      "arm": "coverage-core-py2mojo_rows",
+      "commit": "76283a6a39b1a8193d5437fc9bc72ddfc76cff14",
+      "scope": "base fixture, one repeat, CPU/Metal where applicable",
+      "columns": [
+        {
+          "column": "cpu",
+          "exit_code": 0,
+          "cells": 3,
+          "records": [
+            {
+              "path": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/missing-fault-arms/coverage-core-py2mojo_rows/clean-cpu.json",
+              "sha256": "664638af15368e5b66c45ad3e0fda7d9c6051eab732890240641264df53b136a"
+            },
+            {
+              "path": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/missing-fault-arms/coverage-core-py2mojo_rows/faulted-cpu.json",
+              "sha256": "cf0d76655dc2d664d530ac36a0bf64088cd6fefaf4a9be34b69623a1c7202088"
+            },
+            {
+              "path": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/missing-fault-arms/coverage-core-py2mojo_rows/restored-cpu.json",
+              "sha256": "7e72d8adff208978717ff7fff1e6992d6b1acba794d59d32802ccac852998ab8"
+            }
+          ],
+          "review": null
+        },
+        {
+          "column": "metal",
+          "exit_code": 0,
+          "cells": 3,
+          "records": [
+            {
+              "path": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/missing-fault-arms/coverage-core-py2mojo_rows/clean-metal.json",
+              "sha256": "b90efda0036477268879f1816bba80f28656ffe383b122d2278a41415cefdb8c"
+            },
+            {
+              "path": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/missing-fault-arms/coverage-core-py2mojo_rows/faulted-metal.json",
+              "sha256": "81781ac31f4fef6a7f9abb69a8cbc4fec305d7454c431de824cfde1a3aaf9a4a"
+            },
+            {
+              "path": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/missing-fault-arms/coverage-core-py2mojo_rows/restored-metal.json",
+              "sha256": "afde71417b6f79e3d5c1a4905b78176a2f61bc1e81b929df23a3c4c5efb498e1"
+            }
+          ],
+          "review": null
+        }
+      ],
+      "logs": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/missing-fault-arms/coverage-core-py2mojo_rows"
+    },
+    {
+      "arm": "coverage-sequence-opt_public",
+      "commit": "76283a6a39b1a8193d5437fc9bc72ddfc76cff14",
+      "scope": "base fixture, one repeat, CPU/Metal where applicable",
+      "columns": [
+        {
+          "column": "cpu",
+          "exit_code": 0,
+          "cells": 3,
+          "records": [
+            {
+              "path": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/missing-fault-arms/coverage-sequence-opt_public/clean-cpu.json",
+              "sha256": "c7792a8e378cfb8979b39e7752377ddfbedab0cbc08f54b13e2b097d62930187"
+            },
+            {
+              "path": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/missing-fault-arms/coverage-sequence-opt_public/faulted-cpu.json",
+              "sha256": "3ef809e771e318f491d3ac896d81eb5daa011cb249f0a2f7fc43d2d8afb2c00d"
+            },
+            {
+              "path": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/missing-fault-arms/coverage-sequence-opt_public/restored-cpu.json",
+              "sha256": "26ce31883e5f8767d8e0d23e9fbc8ff83fff5553099b722ea620904e5c595028"
+            }
+          ],
+          "review": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/missing-fault-arms/coverage-sequence-opt_public/review-cpu.json"
+        },
+        {
+          "column": "metal",
+          "exit_code": 0,
+          "cells": 3,
+          "records": [
+            {
+              "path": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/missing-fault-arms/coverage-sequence-opt_public/clean-metal.json",
+              "sha256": "e63f2890d49b1b3790afaee0d7c6c3ca56b5dd6341d6fa6725ecaf2af5b87f11"
+            },
+            {
+              "path": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/missing-fault-arms/coverage-sequence-opt_public/faulted-metal.json",
+              "sha256": "027db00d247e8aedc1163b061130752e03ee6cfb3f2ae6f24d014218aad3155a"
+            },
+            {
+              "path": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/missing-fault-arms/coverage-sequence-opt_public/restored-metal.json",
+              "sha256": "18b28452c733c567bd131f8033c7c4e2a03bab5666f922609b9152b0947f1bf9"
+            }
+          ],
+          "review": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/missing-fault-arms/coverage-sequence-opt_public/review-metal.json"
+        }
+      ],
+      "logs": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/missing-fault-arms/coverage-sequence-opt_public"
+    },
+    {
+      "arm": "coverage-training-optimizer_public",
+      "commit": "76283a6a39b1a8193d5437fc9bc72ddfc76cff14",
+      "scope": "base fixture, one repeat, CPU/Metal where applicable",
+      "columns": [
+        {
+          "column": "metal",
+          "exit_code": 0,
+          "cells": 2,
+          "records": [
+            {
+              "path": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/missing-fault-arms/coverage-training-optimizer_public/clean-metal.json",
+              "sha256": "ee2e5a7231c4d06459b11e001341d9c0ce65542c2f1126d466e3b81cd4e5a3fd"
+            },
+            {
+              "path": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/missing-fault-arms/coverage-training-optimizer_public/faulted-metal.json",
+              "sha256": "8b5a2fe371c2eb09968a3df9baed4765fe16f425a9af785a09472f77debacef9"
+            },
+            {
+              "path": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/missing-fault-arms/coverage-training-optimizer_public/restored-metal.json",
+              "sha256": "c801c39a05f5cfd956892a6851abc1446b0c46116587ed8e04c3a7048d217466"
+            }
+          ],
+          "review": null
+        }
+      ],
+      "logs": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/missing-fault-arms/coverage-training-optimizer_public"
+    },
+    {
+      "arm": "coverage-core-count-fold-hits",
+      "commit": "76283a6a39b1a8193d5437fc9bc72ddfc76cff14",
+      "scope": "base fixture, one repeat, CPU/Metal where applicable",
+      "columns": [
+        {
+          "column": "cpu",
+          "exit_code": 0,
+          "cells": 1,
+          "records": [
+            {
+              "path": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/missing-fault-arms/coverage-core-count-fold-hits/clean-cpu.json",
+              "sha256": "6ab51d1a6cd59145224f43931267c1d4f0b32e501df96df66bca6d50b0187338"
+            },
+            {
+              "path": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/missing-fault-arms/coverage-core-count-fold-hits/faulted-cpu.json",
+              "sha256": "03f0594de4db634b265c1c66763ff40c21ba2b58db19314bf3df979447ef4cb1"
+            },
+            {
+              "path": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/missing-fault-arms/coverage-core-count-fold-hits/restored-cpu.json",
+              "sha256": "ed6ec34adfb3016bbce046506b9ea331b17b57f63a210100ece3f15ab64dcc17"
+            }
+          ],
+          "review": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/missing-fault-arms/coverage-core-count-fold-hits/review-cpu.json"
+        },
+        {
+          "column": "metal",
+          "exit_code": 0,
+          "cells": 1,
+          "records": [
+            {
+              "path": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/missing-fault-arms/coverage-core-count-fold-hits/clean-metal.json",
+              "sha256": "2aba427a158fed48e33e4601557c9a8e6579ba4be61fd86fa164a77babaec677"
+            },
+            {
+              "path": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/missing-fault-arms/coverage-core-count-fold-hits/faulted-metal.json",
+              "sha256": "1c0af274b1ef4814d0ad3734fc73d67a1be317e3378339c6147297558c489f6d"
+            },
+            {
+              "path": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/missing-fault-arms/coverage-core-count-fold-hits/restored-metal.json",
+              "sha256": "e9330fb68ea52bae66a67a2148c2037ded643b357dee82db8fc3e5cb3723220d"
+            }
+          ],
+          "review": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/missing-fault-arms/coverage-core-count-fold-hits/review-metal.json"
+        }
+      ],
+      "logs": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/missing-fault-arms/coverage-core-count-fold-hits"
+    }
+  ]
+}
