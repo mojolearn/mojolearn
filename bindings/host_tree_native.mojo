@@ -234,7 +234,7 @@ def host_tree_operation(model: PythonObject, operation: String, args: PythonObje
     var fields = host_tree_fields(model, context)
     var gbdt = py_contains(fields, "_arrays")
     if operation == "host_tree_getstate":
-        var state = py_call(fields.copy)
+        var state = py_call(Python.import_module("builtins").dict, fields)
         py_setitem(state, "_groves", PythonObject(None))
         _ = py_call(state.pop, "_binding", PythonObject(None))
         return state
