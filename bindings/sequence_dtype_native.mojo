@@ -119,12 +119,14 @@ def sequence_dtype_text(value: PythonObject, classes: PythonObject, context: Pyt
         if order == "|" or order == "=" or order == "<":
             order = ""
         var base = sequence_dtype_normalize(PythonObject(order + String(groups[3])), classes, context, depth + 1, aligned)
-        var repeats = String(groups[1]).strip()
+        var raw_repeats = String(groups[1])
+        var repeats = String(raw_repeats.strip())
         if repeats != "":
             var tuple_shape = repeats.find(",") >= 0
             if repeats.startswith("(") and repeats.endswith(")"):
-                var body = String(repeats[byte=1:repeats.byte_length() - 1]).strip()
-                repeats = body^
+                var body = String(repeats[byte=1:repeats.byte_length() - 1])
+                var trimmed_body = String(body.strip())
+                repeats = trimmed_body^
                 if repeats != "" and not tuple_shape:
                     raise Error("TypeError: parenthesized dtype dimensions require a tuple comma")
                 tuple_shape = True
