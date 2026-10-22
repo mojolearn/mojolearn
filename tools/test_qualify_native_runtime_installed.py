@@ -197,6 +197,16 @@ class InstalledNativeAudit(unittest.TestCase):
             self.assertEqual(scope["cpu_not_applicable_cases"], {})
             self.assertIn("numpy", q.test_dependencies([name]))
 
+    def test_owner_builtin_identity_scope_is_public_on_every_backend(self):
+        name = "test_native_owner_builtin_identity.py"
+        self.assertIn(name, q.PUBLIC_TESTS)
+        for vendor in ("cpu", "metal", "cuda", "hip"):
+            scope = q.test_applicability([name], vendor)[name]
+            self.assertIn("reinitialization", scope["coverage_limit"])
+            self.assertIn("remain separate", scope["coverage_limit"])
+            self.assertEqual(scope["cpu_not_applicable_cases"], {})
+            self.assertIn("numpy", q.test_dependencies([name]))
+
     def test_public_owner_and_host_scopes_exclude_private_array_candidate(self):
         names = ("test_native_owner_qualification.py", "test_sequence_shutdown_native.py", "test_training_rms_public_native.py", "test_optimizer_native_step_errors.py",
                  "test_optimizer_native_array_ownership.py", "test_device_rows_metadata_native.py", "test_host_kde_fit_native.py", "test_host_iforest_fit_native.py",

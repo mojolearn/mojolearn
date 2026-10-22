@@ -51,6 +51,15 @@ def connect(native_entry=len):
 
 
 class NativeWeakrefConnectionTests(unittest.TestCase):
+    def test_owner_release_retains_native_constructor_and_scalar_identities(self):
+        context = connect()
+        expected = dict(type=type, object=object, list=list, tuple=tuple, dict=dict,
+                        str=str, bytes=bytes, bytearray=bytearray, bool=bool,
+                        int=int, float=float, complex=complex, memoryview=memoryview)
+        self.assertEqual(context['owner_native_types'], expected)
+        for name, native_type in expected.items():
+            self.assertIs(context['owner_native_types'][name], native_type)
+
     def test_native_resident_entries_are_connected_without_calling_python_take(self):
         context = connect()
         self.assertIs(context['arena_resident_take'], Resident.take)
