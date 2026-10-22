@@ -267,6 +267,162 @@ def host_archive_embedding(cls: PythonObject, arrays: PythonObject, context: Pyt
     return model
 
 
+def host_archive_kmeans(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
+    var meta = host_archive_count(arrays, "meta", "<i8", 9, context, True)
+    var reals = host_archive_count(arrays, "reals", "<f8", 5, context, True)
+    var k = classical_i64(meta, 0)
+    var d = classical_i64(meta, 1)
+    var n = classical_i64(meta, 2)
+    if k < 1 or d < 1:
+        raise Error("saved KMeans holds an empty model")
+    var metric = _archive_string(arrays, "metric", context)
+    var start = _archive_string(arrays, "init", context)
+    var metrics = context["host_archive_kmeans_metrics"]
+    var starts = context["host_archive_kmeans_starts"]
+    if not py_contains(metrics, metric) or Int(py=metrics[metric]) != classical_i64(meta, 4):
+        raise Error("saved KMeans metric and code do not match")
+    if not py_contains(starts, start) or Int(py=starts[start]) != classical_i64(meta, 5):
+        raise Error("saved KMeans init and code do not match")
+    var model = host_archive_object(cls, arrays, context)
+    var fields = sequential_fields(model)
+    host_archive_mode(arrays, fields, context)
+    py_setitem(fields, "n_clusters", k)
+    py_setitem(fields, "init", start)
+    py_setitem(fields, "n_init", classical_i64(meta, 7))
+    py_setitem(fields, "max_iter", classical_i64(meta, 6))
+    py_setitem(fields, "tol", classical_f64(reals, 3))
+    py_setitem(fields, "random_state", classical_i64(meta, 8))
+    py_setitem(fields, "init_centroids", PythonObject(None))
+    py_setitem(fields, "metric", metric)
+    py_setitem(fields, "oversampling_factor", classical_f64(reals, 4))
+    py_setitem(fields, "cluster_centers_", host_archive_shape(arrays, "centers", "<f4", Python.tuple(k, d), context))
+    py_setitem(fields, "labels_", host_archive_shape(arrays, "labels", "<i4", Python.tuple(n), context))
+    py_setitem(fields, "n_features_in_", d)
+    py_setitem(fields, "n_iter_", classical_i64(meta, 3))
+    py_setitem(fields, "inertia_", classical_f64(reals, 0))
+    py_setitem(fields, "sum_scale_", classical_f64(reals, 1))
+    py_setitem(fields, "weight_scale_", classical_f64(reals, 2))
+    return model
+
+
+def host_archive_mixture(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
+    var meta = host_archive_count(arrays, "ints", "<i8", 6, context, True)
+    var reals = host_archive_count(arrays, "reals", "<f8", 3, context, True)
+    var k = classical_i64(meta, 0)
+    var d = classical_i64(meta, 1)
+    if k < 1 or d < 1:
+        raise Error("saved GaussianMixture holds an empty model")
+    var model = host_archive_object(cls, arrays, context)
+    var fields = sequential_fields(model)
+    host_archive_mode(arrays, fields, context)
+    py_setitem(fields, "n_components", k)
+    py_setitem(fields, "covariance_type", _archive_string(arrays, "covariance_type", context))
+    py_setitem(fields, "tol", classical_f64(reals, 1))
+    py_setitem(fields, "reg_covar", classical_f64(reals, 2))
+    py_setitem(fields, "max_iter", classical_i64(meta, 4))
+    py_setitem(fields, "init_params", _archive_string(arrays, "init_params", context))
+    py_setitem(fields, "random_state", classical_i64(meta, 5))
+    py_setitem(fields, "n_init", 1)
+    py_setitem(fields, "warm_start", False)
+    py_setitem(fields, "means_init", PythonObject(None))
+    py_setitem(fields, "weights_init", PythonObject(None))
+    py_setitem(fields, "precisions_init", PythonObject(None))
+    py_setitem(fields, "n_features_in_", d)
+    py_setitem(fields, "weights_", host_archive_shape(arrays, "weights", "<f4", Python.tuple(k), context))
+    var means = host_archive_shape(arrays, "means", "<f4", Python.tuple(k * d), context)
+    var covariance = host_archive_shape(arrays, "covariances", "<f4", Python.tuple(k * d * d), context)
+    var precision = host_archive_shape(arrays, "precisions_cholesky", "<f4", Python.tuple(k * d * d), context)
+    py_setitem(fields, "means_", classical_wrap_array(means._store, Python.tuple(k, d), "<f4", "C", context))
+    py_setitem(fields, "covariances_", classical_wrap_array(covariance._store, Python.tuple(k, d, d), "<f4", "C", context))
+    py_setitem(fields, "precisions_cholesky_", classical_wrap_array(precision._store, Python.tuple(k, d, d), "<f4", "C", context))
+    py_setitem(fields, "log_det_chol_", host_archive_shape(arrays, "log_det_chol", "<f4", Python.tuple(k), context))
+    py_setitem(fields, "n_iter_", classical_i64(meta, 2))
+    py_setitem(fields, "converged_", classical_i64(meta, 3) != 0)
+    py_setitem(fields, "lower_bound_", classical_f64(reals, 0))
+    return model
+
+
+def host_archive_density(cls: PythonObject, arrays: PythonObject, kde: Bool,
+                         context: PythonObject) raises -> PythonObject:
+    var meta = host_archive_count(arrays, "meta", "<i8", 3, context, True)
+    var parameter = host_archive_count(arrays, "bandwidth" if kde else "eps", "<f8", 1, context, True)
+    var nf = classical_i64(meta, 0)
+    var n = classical_i64(meta, 1)
+    var metric = _archive_string(arrays, "metric", context)
+    var model = host_archive_object(cls, arrays, context)
+    var fields = sequential_fields(model)
+    host_archive_mode(arrays, fields, context)
+    py_setitem(fields, "metric", metric)
+    py_setitem(fields, "n_features_in_", nf)
+    py_setitem(fields, "n_samples_fit_", n)
+    if kde:
+        var bandwidth = classical_f64(parameter, 0)
+        if not bandwidth > 0.0:
+            raise Error("KernelDensity bandwidth must be positive")
+        py_setitem(fields, "bandwidth", bandwidth)
+        py_setitem(fields, "kernel", _archive_string(arrays, "kernel", context))
+        py_setitem(fields, "algorithm", "auto")
+        py_setitem(fields, "atol", 0)
+        py_setitem(fields, "rtol", 0)
+        py_setitem(fields, "breadth_first", True)
+        py_setitem(fields, "leaf_size", 40)
+        py_setitem(fields, "metric_params", PythonObject(None))
+        py_setitem(fields, "_x", host_archive_shape(arrays, "x", "<f4", Python.tuple(n, nf), context))
+        if classical_i64(meta, 2) != 0:
+            py_setitem(fields, "_w", host_archive_shape(arrays, "weights", "<f4", Python.tuple(n), context))
+        else:
+            if py_contains(arrays, "weights"):
+                raise Error("KernelDensity archive carries weights its meta says it lacks")
+            py_setitem(fields, "_w", PythonObject(None))
+    else:
+        if not py_contains(context["host_archive_dbscan_metrics"], metric):
+            raise Error("saved DBSCAN metric is unsupported")
+        py_setitem(fields, "eps", classical_f64(parameter, 0))
+        py_setitem(fields, "min_samples", classical_i64(meta, 2))
+        py_setitem(fields, "algorithm", _archive_string(arrays, "algorithm", context))
+        py_setitem(fields, "max_mbytes_per_batch", PythonObject(None))
+        py_setitem(fields, "max_iterations", PythonObject(None))
+        py_setitem(fields, "prediction_data", True)
+        var indices = _archive_exact(arrays, "core_sample_indices", "<i4", context)
+        var nc = Int(py=indices.size)
+        py_setitem(fields, "components_", host_archive_shape(arrays, "components", "<f4", Python.tuple(nc, nf), context))
+        py_setitem(fields, "core_sample_indices_", indices)
+        py_setitem(fields, "_core_labels", host_archive_count(arrays, "core_labels", "<i4", nc, context))
+        py_setitem(fields, "labels_", host_archive_count(arrays, "labels", "<i4", n, context))
+    return model
+
+
+def host_archive_agglomerative(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
+    var meta = host_archive_count(arrays, "meta", "<i8", 3, context, True)
+    var k = classical_i64(meta, 0)
+    var nf = classical_i64(meta, 1)
+    var n = classical_i64(meta, 2)
+    var metric = _archive_string(arrays, "metric", context)
+    if not py_contains(context["host_archive_agglo_metrics"], metric):
+        raise Error("NotImplementedError: saved AgglomerativeClustering metric is unsupported")
+    var model = host_archive_object(cls, arrays, context)
+    var fields = sequential_fields(model)
+    host_archive_mode(arrays, fields, context)
+    py_setitem(fields, "n_clusters", k)
+    py_setitem(fields, "metric", metric)
+    py_setitem(fields, "connectivity", PythonObject(None))
+    py_setitem(fields, "linkage", "single")
+    py_setitem(fields, "c", 15)
+    py_setitem(fields, "memory", PythonObject(None))
+    py_setitem(fields, "compute_full_tree", "auto")
+    py_setitem(fields, "distance_threshold", PythonObject(None))
+    py_setitem(fields, "compute_distances", False)
+    py_setitem(fields, "prediction_data", True)
+    py_setitem(fields, "_connectivity", "pairwise")
+    py_setitem(fields, "_compute_distances", False)
+    py_setitem(fields, "_fit_X", host_archive_shape(arrays, "x", "<f4", Python.tuple(n, nf), context))
+    py_setitem(fields, "labels_", host_archive_count(arrays, "labels", "<i4", n, context))
+    py_setitem(fields, "n_clusters_", k)
+    py_setitem(fields, "n_leaves_", n)
+    py_setitem(fields, "n_features_in_", nf)
+    return model
+
+
 def host_archive_build(path: PythonObject, context: PythonObject,
                        requested_class: PythonObject = PythonObject(None)) raises -> PythonObject:
     # This deliberately separate private entry allows each schema to be
@@ -309,6 +465,14 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         model = host_archive_cholesky(cls, arrays, context)
     elif fmt == "mojolearn-embedding-1":
         model = host_archive_embedding(cls, arrays, context)
+    elif fmt == "mojolearn-kmeans-1":
+        model = host_archive_kmeans(cls, arrays, context)
+    elif fmt == "mojolearn-gmm-1":
+        model = host_archive_mixture(cls, arrays, context)
+    elif fmt == "mojolearn-kde-1" or fmt == "mojolearn-dbscan-1":
+        model = host_archive_density(cls, arrays, fmt == "mojolearn-kde-1", context)
+    elif fmt == "mojolearn-agglomerative-1":
+        model = host_archive_agglomerative(cls, arrays, context)
     else:
         raise Error("native host archive schema has not been implemented: " + fmt + "/" + String(estimator))
     if requested_class is None:

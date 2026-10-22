@@ -253,7 +253,7 @@ class HostPCA(_NativeArchiveLoad, _HostBound, PCA):
         )
 
 
-class HostKernelDensity(_HostBound, KernelDensity):
+class HostKernelDensity(_NativeArchiveLoad, _HostBound, KernelDensity):
     _HOST_ARRAYS = ("_x", "_w")
 
 
@@ -275,20 +275,20 @@ class HostSVR(_HostBound, SVR):
     _HOST_ARRAYS = ("dual_coef_", "support_vectors_", "intercept_")
 
 
-class HostDBSCAN(_HostBound, DBSCAN):
+class HostDBSCAN(_NativeArchiveLoad, _HostBound, DBSCAN):
     """`DBSCAN.predict` from a saved `prediction_data=True` model through
     `_mojolearn_estimators_host.labeled_reference_predict`
     (lane/inference-transductive-predict, 2026-09-15, DEVIATION 2740)."""
     _HOST_ARRAYS = ("components_", "core_sample_indices_", "_core_labels")
 
 
-class HostAgglomerativeClustering(_HostBound, AgglomerativeClustering):
+class HostAgglomerativeClustering(_NativeArchiveLoad, _HostBound, AgglomerativeClustering):
     """`AgglomerativeClustering.predict` from a saved model through the
     estimators host binding; the fit's solver family does not ship."""
     _HOST_ARRAYS = ("_fit_X", "labels_")
 
 
-class HostKMeans(_HostBound, KMeans):
+class HostKMeans(_NativeArchiveLoad, _HostBound, KMeans):
     """`KMeans.predict` and `KMeans.transform` from a saved model through
     `_mojolearn_core_host`'s `kmeans_predict` and `kmeans_transform`
     (lane/kmeans-save, 2026-09-16). The arithmetic is
@@ -303,7 +303,7 @@ class HostKMeans(_HostBound, KMeans):
     _HOST_ARRAYS = ("cluster_centers_", "labels_")
 
 
-class HostGaussianMixture(_HostBound, GaussianMixture):
+class HostGaussianMixture(_NativeArchiveLoad, _HostBound, GaussianMixture):
     """score_samples, predict_proba, predict, score, bic and aic of a saved
     GaussianMixture through the inference-only mixture binding."""
     _HOST_ARRAYS = ("weights_", "means_", "covariances_", "precisions_cholesky_", "log_det_chol_")
