@@ -13,8 +13,7 @@ never updates `weight` itself.
 """
 import itertools
 
-from . import _backend, _serialize
-from ._array import Array
+from . import _backend, _native_archive_bridge, _serialize
 from ._buffer import _materialize, addr, addr_ro, as_f32_c, as_i32_c, empty, frombytes
 from ._mode import NumericModeMixin
 
@@ -29,6 +28,11 @@ _TABLE_TOKENS = itertools.count(1)
 #: The saved-table format tag (`save`, `load`, `mojolearn.host_model`;
 #: lane/inference-embedding-ivf-cholesky, 2026-09-15).
 _EMBEDDING_FORMAT = "mojolearn-embedding-1"
+
+# The compiled saved-model owner, connected once at import: `save` is one
+# native call (bindings/archive_schema_native.mojo writes the schema
+# registered after the class).
+_ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
 
 # Profile mojolearn.identical.embedding.fp32.v1: bindings/_mojolearn_embedding.mojo reaches
@@ -393,20 +397,7 @@ class Embedding(NumericModeMixin):
         A loaded table can look ids up with `forward`, including on a CPU-only install, where
         `backward` is not available.
         """
-        from .decomposition import _saved_mode
-        arrays = {
-            "format": _EMBEDDING_FORMAT,
-            "estimator": type(self).__name__,
-            "numeric_mode": _saved_mode(self),
-            "plan": str(self.plan),
-            "weight": self.weight,
-            "meta": Array.from_list(
-                [int(self.num_embeddings), int(self.embedding_dim),
-                 _NO_PADDING if self.padding_idx is None else int(self.padding_idx)],
-                "<i8",
-            ),
-        }
-        return _serialize.write_npz(path, arrays)
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -425,6 +416,19 @@ class Embedding(NumericModeMixin):
                   plan=_serialize.scalar_str(arrays, "plan"))
         _restore_mode(obj, arrays)
         return obj
+
+
+# The 0.8.55 writer's members, in its order (members are written sorted).
+# Only `save` is connected: `Embedding` defines `__del__` and `__setattr__`
+# (it owns a resident device table), which the native loader does not build,
+# so `load` constructs the layer through its constructor.
+_native_archive_bridge.register(Embedding, _EMBEDDING_FORMAT, (
+    *_native_archive_bridge.head(_EMBEDDING_FORMAT),
+    ("str", "plan", "plan"),
+    ("array", "weight", "weight"),
+    ("i8", "meta", (("int", "num_embeddings"), ("int", "embedding_dim"),
+                    ("none", "padding_idx", _NO_PADDING))),
+))
 
 
 __all__ = ["Embedding"]
