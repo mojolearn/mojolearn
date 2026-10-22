@@ -62,7 +62,7 @@ def host_archive_shape(arrays: PythonObject, name: String, dtype: String, shape:
     return value
 
 
-def host_archive_allocate(cls: PythonObject, context: PythonObject) raises -> PythonObject:
+def host_archive_check_layout(cls: PythonObject, context: PythonObject) raises:
     var b = Python.import_module("builtins")
     if py_type(cls) is not b.type:
         raise Error("TypeError: native archive classes require an ordinary native class layout")
@@ -81,6 +81,11 @@ def host_archive_allocate(cls: PythonObject, context: PythonObject) raises -> Py
             found_dictionary = True
     if not found_dictionary:
         raise Error("TypeError: native archive loading requires a native instance dictionary")
+
+
+def host_archive_allocate(cls: PythonObject, context: PythonObject) raises -> PythonObject:
+    host_archive_check_layout(cls, context)
+    var b = Python.import_module("builtins")
     var model = py_call(b.object.__new__, cls)
     return model
 

@@ -198,79 +198,37 @@ class HostForest:
     @property
     def n_trees(self):
         """Number of trees in the model."""
-        return self._n_trees
+        return _native_host_archive(self, "host_tree_count", (), _ARCHIVE_CONTEXT)
 
     @property
     def inference_engine(self):
         """The inference engine the file named: 'sequential' or
         'parallel_groves'. Read-only."""
-        return self._inference_engine
+        return _native_host_archive(self, "host_tree_engine", (), _ARCHIVE_CONTEXT)
 
     def _groves_handle(self):
         """The host grove snapshot of this model (validated once, released
         with the model), prepared on the first groves prediction."""
-        if self._groves is None:
-            family = _GROVES_FAMILY[self.family]
-            binding = self._binding
-            handle = int(binding.forest_host_groves_prepare(
-                [addr_ro(self._offsets, name='offsets'), addr_ro(self._colid, name='colid'),
-                 addr_ro(self._quesval, name='quesval'), addr_ro(self._left_child, name='left_child'),
-                 addr_ro(self._leaves, name='leaves')],
-                [self._n_trees, self.n_features_in_, self._num_outputs, int(self._colid.size)],
-                family))
-            finalizer = weakref.finalize(self, binding.forest_host_groves_release, handle, family)
-            self._groves = (handle, finalizer)
-        return self._groves[0]
+        return _native_host_archive(self, "host_tree_groves", (), _ARCHIVE_CONTEXT)
 
     def __getstate__(self):
-        state = self.__dict__.copy()
-        state['_groves'] = None
-        state.pop('_binding', None)
-        return state
+        return _native_host_archive(self, "host_tree_getstate", (), _ARCHIVE_CONTEXT)
 
     def __setstate__(self, state):
-        self.__dict__.update(state)
-        self._binding = _load()
+        return _native_host_archive(self, "host_tree_setstate", (state,), _ARCHIVE_CONTEXT)
 
     def model_sha256(self):
         """SHA-256 hex digest of the model arrays' bytes, in save order.
 
         Identifies the exact model used for a prediction.
         """
-        h = hashlib.sha256()
-        for a in (self._offsets, self._colid, self._quesval, self._left_child, self._leaves):
-            h.update(a.tobytes())
-        return h.hexdigest()
+        return _native_host_archive(self, "host_tree_hash", (), _ARCHIVE_CONTEXT)
 
     def _vote(self, X):
         """The divided vote, `(n_rows, num_outputs)` float32, what the GPU
         bindings' sequential entries return before the Python layer's argmax
         or widening."""
-        Xa, _ = as_f32_c(X, ndim=2, name='X')
-        n_rows, n_features = Xa.shape
-        if n_features != self.n_features_in_:
-            raise ValueError(f"X has {n_features} features, fit saw {self.n_features_in_}")
-        out = empty((n_rows * self._num_outputs,), '<f4')
-        if self._inference_engine == 'parallel_groves':
-            entry = 'forest_host_groves_predict'
-            wrote = self._binding.forest_host_groves_predict(
-                self._groves_handle(), addr_ro(Xa, name='X'), addr(out, name='out'),
-                [int(n_rows), int(n_features), self._num_outputs], _GROVES_FAMILY[self.family])
-            if int(wrote) != n_rows:
-                raise RuntimeError(f"{entry} wrote {wrote} of {n_rows} rows")
-            return out.reshape((n_rows, self._num_outputs))
-        if self.family == 'rf':
-            entry = 'forest_host_rf_predict_proba' if self.is_classifier else 'forest_host_rf_predict_reg'
-        else:
-            entry = 'forest_host_et_predict'
-        wrote = getattr(self._binding, entry)(
-            [addr_ro(self._offsets, name='offsets'), addr_ro(self._colid, name='colid'),
-             addr_ro(self._quesval, name='quesval'), addr_ro(self._left_child, name='left_child'),
-             addr_ro(self._leaves, name='leaves'), addr_ro(Xa, name='X'), addr(out, name='out')],
-            [int(n_rows), int(n_features), self._n_trees, self._num_outputs, int(self._colid.size)])
-        if int(wrote) != n_rows:
-            raise RuntimeError(f"{entry} wrote {wrote} of {n_rows} rows")
-        return out.reshape((n_rows, self._num_outputs))
+        return _native_host_archive(self, "host_tree_vote", (X,), _ARCHIVE_CONTEXT)
 
     def predict_proba(self, X):
         """Class probabilities, for classifier models only.
@@ -279,10 +237,7 @@ class HostForest:
         float32 for a random forest, float64 for extra trees, shape
         (n_samples, n_classes). A regressor model raises `AttributeError`.
         """
-        if not self.is_classifier:
-            raise AttributeError(f"{self.estimator} has no predict_proba")
-        vote = self._vote(X)
-        return vote if self.family == 'rf' else vote.astype('<f8')
+        return _native_host_archive(self, "host_tree_proba", (X,), _ARCHIVE_CONTEXT)
 
     def _predict_with_proba(self, X):
         """The two classifier views from one host traversal.
@@ -290,11 +245,7 @@ class HostForest:
         Kept in lockstep with the RF/ET estimator helper used by the identity
         harness, including Extra Trees' exact float32-to-float64 widening.
         """
-        if not self.is_classifier:
-            raise AttributeError(f"{self.estimator} has no predict_proba")
-        vote = self._vote(X)
-        proba = vote if self.family == 'rf' else vote.astype('<f8')
-        return decode_labels(self.classes_, argmax_rows(vote)), proba
+        return _native_host_archive(self, "host_tree_predict_pair", (X,), _ARCHIVE_CONTEXT)
 
     def predict(self, X):
         """Predict with the saved model.
@@ -304,11 +255,7 @@ class HostForest:
         of the trees' predictions: float32 for a random forest, float64 for
         extra trees.
         """
-        vote = self._vote(X)
-        if self.is_classifier:
-            return decode_labels(self.classes_, argmax_rows(vote))
-        flat = vote.reshape((vote.shape[0],))
-        return flat if self.family == 'rf' else flat.astype('<f8')
+        return _native_host_archive(self, "host_tree_predict", (X,), _ARCHIVE_CONTEXT)
 
 
 # Maintainer note (moved from the docstring): HostGBDT lives in
