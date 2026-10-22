@@ -1,5 +1,47 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Cooperative classical estimators with explicit per-algorithm partitions."""
+"""Fit classical estimators with their heaviest work spread across several GPUs.
+
+Each function takes an unfitted (or, for prediction, a fitted) mojolearn
+estimator, runs its fit or prediction on the GPUs listed in ``devices`` and
+returns the same result, bit for bit, as the estimator's own one-GPU method.
+The estimator must use the ``'identical'`` numeric mode (or the default).
+
+Example
+-------
+>>> import numpy as np
+>>> from mojolearn import KMeans
+>>> from mojolearn.parallel_classical import fit_kmeans
+>>> X = np.random.default_rng(0).standard_normal((100000, 16)).astype(np.float32)
+>>> km = fit_kmeans(KMeans(n_clusters=8, random_state=3), X, devices=(0, 1))
+>>> km.cluster_centers_.shape
+(8, 16)
+"""
+# Cooperative classical estimators with explicit per-algorithm partitions.
+__all__ = [
+    'fit_logistic',
+    'fit_exponential_smoothing',
+    'fit_gram_estimator',
+    'fit_arima',
+    'fit_kmeans',
+    'fit_coordinate_descent',
+    'fit_svm',
+    'predict_svm',
+    'fit_gaussian_process',
+    'predict_gaussian_process',
+    'fit_dbscan',
+    'fit_gaussian_mixture',
+    'predict_gaussian_mixture',
+    'bootstrap',
+    'permutation_test',
+    'monte_carlo_integrate',
+    'fit_hdbscan',
+    'fit_cholesky',
+    'solve_cholesky',
+    'fit_kernel_method',
+    'apply_kernel_method',
+    'transform_rbf_sampler',
+]
+
 import sys
 
 from ._parallel_pool import DevicePool, driver_read_shift, public_method_result
@@ -7,11 +49,28 @@ from ._buffer import as_f32_c
 
 
 def fit_logistic(estimator, X, y, *, devices=(0,)):
-    """Partition gradient feature columns; retain the original objective and QN trajectory.
+    """Fit a ``LogisticRegression`` with its gradient columns spread across GPUs.
 
-    Supports the existing binary and multinomial objectives and their admitted
-    penalties. Data and optimizer state still have to fit on the root GPU.
+    Parameters
+    ----------
+    estimator : LogisticRegression
+        An unfitted estimator.
+    X : array-like of shape (n_samples, n_features)
+        Training data.
+    y : array-like of shape (n_samples,)
+        Class labels.
+    devices : tuple of int, default=(0,)
+        Distinct GPU indices.
+
+    Returns
+    -------
+    estimator
+        The same estimator, fitted, equal to a one-GPU ``estimator.fit(...)``.
     """
+    # Partition gradient feature columns; retain the original objective and QN trajectory.
+    #
+    # Supports the existing binary and multinomial objectives and their admitted
+    # penalties. Data and optimizer state still have to fit on the root GPU.
     from .linear_model import LogisticRegression
     if type(estimator) is not LogisticRegression:
         raise TypeError('fit_logistic requires mojolearn.LogisticRegression')
@@ -27,7 +86,23 @@ def fit_logistic(estimator, X, y, *, devices=(0,)):
 
 
 def fit_exponential_smoothing(estimator, *, devices=(0,), series_per_shard=1):
-    """Fit Holt-Winters series independently and assemble original component layouts."""
+    """Fit an ``ExponentialSmoothing`` model over many series, groups of series on separate GPUs.
+
+    Parameters
+    ----------
+    estimator : ExponentialSmoothing
+        An unfitted model built on its series (``ts_num`` of them).
+    devices : tuple of int, default=(0,)
+        Distinct GPU indices.
+    series_per_shard : int, default=1
+        Number of series fitted by each GPU task.
+
+    Returns
+    -------
+    estimator
+        The same estimator, fitted, equal to a one-GPU ``estimator.fit(...)``.
+    """
+    # Fit Holt-Winters series independently and assemble original component layouts.
     from ._tsa_impl import ExponentialSmoothing
     from . import _backend
     from ._array import _strided_copy
@@ -88,12 +163,31 @@ def fit_exponential_smoothing(estimator, *, devices=(0,), series_per_shard=1):
 
 
 def fit_gram_estimator(estimator, X, y=None, *, devices=(0,), sample_weight=None):
-    """Distribute the existing pinned Gram chunks for OLS, Ridge, PCA and SVD.
+    """Fit a linear model or decomposition with its Gram-matrix blocks spread across GPUs.
 
-    This entry admits the original Gram/eigendecomposition and wide OLS paths.
-    The root still owns preprocessing and solver state; this is computation
-    partitioning, not a fit beyond one GPU's memory capacity.
+    Parameters
+    ----------
+    estimator : LinearRegression, Ridge, PCA or TruncatedSVD
+        An unfitted estimator.
+    X : array-like of shape (n_samples, n_features)
+        Training data.
+    y : array-like of shape (n_samples,) or (n_samples, n_targets)
+        Targets (``LinearRegression`` and ``Ridge``); omit for ``PCA`` and ``TruncatedSVD``.
+    devices : tuple of int, default=(0,)
+        Distinct GPU indices.
+    sample_weight : array-like of shape (n_samples,), optional
+        Per-row weights, as in ``estimator.fit``.
+
+    Returns
+    -------
+    estimator
+        The same estimator, fitted, equal to a one-GPU ``estimator.fit(...)``.
     """
+    # Distribute the existing pinned Gram chunks for OLS, Ridge, PCA and SVD.
+    #
+    # This entry admits the original Gram/eigendecomposition and wide OLS paths.
+    # The root still owns preprocessing and solver state; this is computation
+    # partitioning, not a fit beyond one GPU's memory capacity.
     from .linear_model import LinearRegression, Ridge
     from .decomposition import PCA, TruncatedSVD
     if type(estimator) not in (LinearRegression, Ridge, PCA, TruncatedSVD):
@@ -117,12 +211,34 @@ def fit_gram_estimator(estimator, X, y=None, *, devices=(0,), sample_weight=None
 
 
 def fit_arima(estimator, y, *, devices=(0,), series_per_shard=1, exog=None):
-    """Fit independent series on GPU workers, retaining each solver's order.
+    """Fit an ``ARIMA`` model over many series, groups of series on separate GPUs.
 
-    A worker receives only its series, so fitting does not require the entire
-    batch on one GPU. A single series must still fit on one GPU. The returned
-    estimator's existing prediction methods are unchanged and use one GPU.
+    Each GPU receives only its own series, so the whole batch need not fit on
+    one GPU.
+
+    Parameters
+    ----------
+    estimator : ARIMA
+        An unfitted model.
+    y : array-like of shape (n_series, n_obs)
+        The series, one per row.
+    devices : tuple of int, default=(0,)
+        Distinct GPU indices.
+    series_per_shard : int, default=1
+        Number of series fitted by each GPU task.
+    exog : None
+        Exogenous regressors are not supported here; use ``ARIMA.fit(y, exog)``.
+
+    Returns
+    -------
+    estimator
+        The same estimator, fitted, equal to a one-GPU ``estimator.fit(...)``.
     """
+    # Fit independent series on GPU workers, retaining each solver's order.
+    #
+    # A worker receives only its series, so fitting does not require the entire
+    # batch on one GPU. A single series must still fit on one GPU. The returned
+    # estimator's existing prediction methods are unchanged and use one GPU.
     from ._arima_impl import ARIMA, _series_major
     from ._buffer import empty, addr, addr_ro
     from ._bufcheck import memcopy
@@ -168,12 +284,29 @@ def fit_arima(estimator, y, *, devices=(0,), series_per_shard=1, exog=None):
 
 
 def fit_kmeans(estimator, X, *, devices=(0,), sample_weight=None):
-    """Distribute KMeans row assignments; retain full-data update/reduction order.
+    """Fit ``KMeans`` with the cluster assignment of row blocks spread across GPUs.
 
-    Initialization, fixed-point centroid sums, restart choice and convergence
-    use the existing implementation. Whole aligned row tiles compute distances
-    concurrently. This first path stages buffers per assignment call.
+    Parameters
+    ----------
+    estimator : KMeans
+        An unfitted estimator.
+    X : array-like of shape (n_samples, n_features)
+        Training data.
+    devices : tuple of int, default=(0,)
+        Distinct GPU indices.
+    sample_weight : array-like of shape (n_samples,), optional
+        Per-row weights.
+
+    Returns
+    -------
+    estimator
+        The same estimator, fitted, equal to a one-GPU ``estimator.fit(...)``.
     """
+    # Distribute KMeans row assignments; retain full-data update/reduction order.
+    #
+    # Initialization, fixed-point centroid sums, restart choice and convergence
+    # use the existing implementation. Whole aligned row tiles compute distances
+    # concurrently. This first path stages buffers per assignment call.
     from .cluster import KMeans
     if type(estimator) is not KMeans:
         raise TypeError('fit_kmeans requires mojolearn.KMeans')
@@ -196,11 +329,28 @@ def fit_kmeans(estimator, X, *, devices=(0,), sample_weight=None):
 
 
 def fit_coordinate_descent(estimator, X, y, *, devices=(0,)):
-    """Distribute original dot leaves; preserve serial coordinate and convergence order.
+    """Fit ``Lasso`` or ``ElasticNet`` with the coordinate updates' dot products spread across GPUs.
 
-    Single-leaf dots remain on the root. Full data and residual state must fit
-    on the root; transport per coordinate can outweigh computation savings.
+    Parameters
+    ----------
+    estimator : Lasso or ElasticNet
+        An unfitted estimator.
+    X : array-like of shape (n_samples, n_features)
+        Training data.
+    y : array-like of shape (n_samples,) or (n_samples, n_targets)
+        Targets.
+    devices : tuple of int, default=(0,)
+        Distinct GPU indices.
+
+    Returns
+    -------
+    estimator
+        The same estimator, fitted, equal to a one-GPU ``estimator.fit(...)``.
     """
+    # Distribute original dot leaves; preserve serial coordinate and convergence order.
+    #
+    # Single-leaf dots remain on the root. Full data and residual state must fit
+    # on the root; transport per coordinate can outweigh computation savings.
     from ._solver_impl import Lasso, ElasticNet
     from . import _backend
     if type(estimator) not in (Lasso, ElasticNet):
@@ -217,13 +367,32 @@ def fit_coordinate_descent(estimator, X, y, *, devices=(0,)):
 
 
 def fit_svm(estimator, X, y, *, devices=(0,), sample_weight=None):
-    """Distribute linear/RBF kernel rows, retaining the original SVC/SVR solver.
+    """Fit ``SVC`` or ``SVR`` with kernel rows computed across GPUs.
 
-    ``sample_weight`` (optional, one non-negative weight per row) scales each
-    row's ``C`` exactly as ``SVC.fit`` / ``SVR.fit`` do.
-    Full data, working-set state and output kernel tile remain on the root.
-    A one-row kernel operation has only one active device.
+    Parameters
+    ----------
+    estimator : SVC or SVR
+        An unfitted estimator.
+    X : array-like of shape (n_samples, n_features)
+        Training data.
+    y : array-like of shape (n_samples,)
+        Class labels (``SVC``) or targets (``SVR``).
+    devices : tuple of int, default=(0,)
+        Distinct GPU indices.
+    sample_weight : array-like of shape (n_samples,), optional
+        Per-row weights scaling each row's ``C``, as in ``estimator.fit``.
+
+    Returns
+    -------
+    estimator
+        The same estimator, fitted, equal to a one-GPU ``estimator.fit(...)``.
     """
+    # Distribute linear/RBF kernel rows, retaining the original SVC/SVR solver.
+    #
+    # ``sample_weight`` (optional, one non-negative weight per row) scales each
+    # row's ``C`` exactly as ``SVC.fit`` / ``SVR.fit`` do.
+    # Full data, working-set state and output kernel tile remain on the root.
+    # A one-row kernel operation has only one active device.
     from ._svm_impl import SVC, SVR
     if type(estimator) not in (SVC, SVR):
         raise TypeError('requires mojolearn.SVC or SVR')
@@ -242,7 +411,24 @@ def fit_svm(estimator, X, y, *, devices=(0,), sample_weight=None):
 
 
 def predict_svm(estimator, X, *, devices=(0,), method='predict'):
-    """Distribute prediction kernel rows; retain the original support-vector fold."""
+    """Predict with a fitted ``SVC`` or ``SVR``, kernel rows computed across GPUs.
+
+    Parameters
+    ----------
+    estimator : SVC or SVR
+        A fitted estimator.
+    X : array-like of shape (n_samples, n_features)
+        Rows to predict.
+    devices : tuple of int, default=(0,)
+        Distinct GPU indices.
+    method : {'predict', 'decision_function'}, default='predict'
+        ``'decision_function'`` is available for ``SVC`` only.
+
+    Returns
+    -------
+    The same value ``estimator.<method>(X)`` returns.
+    """
+    # Distribute prediction kernel rows; retain the original support-vector fold.
     from ._svm_impl import SVC, SVR
     if type(estimator) not in (SVC, SVR):
         raise TypeError('requires mojolearn.SVC or SVR')
@@ -260,7 +446,25 @@ def predict_svm(estimator, X, *, devices=(0,), method='predict'):
 
 
 def fit_gaussian_process(estimator, X, y, *, devices=(0,)):
-    """Distribute covariance rows; retain the original Cholesky and solve order."""
+    """Fit a ``GaussianProcessRegressor`` with covariance rows computed across GPUs.
+
+    Parameters
+    ----------
+    estimator : GaussianProcessRegressor
+        An unfitted estimator.
+    X : array-like of shape (n_samples, n_features)
+        Training data.
+    y : array-like of shape (n_samples,) or (n_samples, n_targets)
+        Targets.
+    devices : tuple of int, default=(0,)
+        Distinct GPU indices.
+
+    Returns
+    -------
+    estimator
+        The same estimator, fitted, equal to a one-GPU ``estimator.fit(...)``.
+    """
+    # Distribute covariance rows; retain the original Cholesky and solve order.
     from ._gp_impl import GaussianProcessRegressor
     if type(estimator) is not GaussianProcessRegressor:
         raise TypeError('requires mojolearn.GaussianProcessRegressor')
@@ -276,7 +480,25 @@ def fit_gaussian_process(estimator, X, y, *, devices=(0,)):
 
 
 def predict_gaussian_process(estimator, X, *, devices=(0,), return_std=False):
-    """Distribute cross-covariance rows; retain root prediction/variance folds."""
+    """Predict with a fitted ``GaussianProcessRegressor``, cross-covariance rows computed across GPUs.
+
+    Parameters
+    ----------
+    estimator : GaussianProcessRegressor
+        A fitted estimator.
+    X : array-like of shape (n_samples, n_features)
+        Rows to predict.
+    devices : tuple of int, default=(0,)
+        Distinct GPU indices.
+    return_std : bool, default=False
+        Also return the predictive standard deviation.
+
+    Returns
+    -------
+    mean, or (mean, std)
+        As ``estimator.predict(X, return_std=return_std)``.
+    """
+    # Distribute cross-covariance rows; retain root prediction/variance folds.
     from ._gp_impl import GaussianProcessRegressor
     if type(estimator) is not GaussianProcessRegressor:
         raise TypeError('requires mojolearn.GaussianProcessRegressor')
@@ -295,12 +517,29 @@ def predict_gaussian_process(estimator, X, *, devices=(0,), return_std=False):
 
 
 def fit_dbscan(estimator, X, *, devices=(0,), sample_weight=None):
-    """Distribute neighborhood rows; retain root core-point and label merges.
+    """Fit ``DBSCAN`` with neighborhood rows computed across GPUs.
 
-    Brute L2/L1 and RBC L2 use their original distance/order contracts.
-    Full reference data, the current batch graph and label state still need
-    to fit on the root GPU. This does not pool the reference index.
+    Parameters
+    ----------
+    estimator : DBSCAN
+        An unfitted estimator.
+    X : array-like of shape (n_samples, n_features)
+        Training data.
+    devices : tuple of int, default=(0,)
+        Distinct GPU indices.
+    sample_weight : array-like of shape (n_samples,), optional
+        Per-row weights.
+
+    Returns
+    -------
+    estimator
+        The same estimator, fitted, equal to a one-GPU ``estimator.fit(...)``.
     """
+    # Distribute neighborhood rows; retain root core-point and label merges.
+    #
+    # Brute L2/L1 and RBC L2 use their original distance/order contracts.
+    # Full reference data, the current batch graph and label state still need
+    # to fit on the root GPU. This does not pool the reference index.
     from .density import DBSCAN
     if type(estimator) is not DBSCAN:
         raise TypeError('fit_dbscan requires mojolearn.DBSCAN')
@@ -324,15 +563,30 @@ def _admit_gaussian_mixture(estimator):
 
 
 def fit_gaussian_mixture(estimator, X, *, devices=(0,)):
-    """Row-shard every E-step; retain the root M-step, Cholesky and convergence test.
+    """Fit a ``GaussianMixture`` with every E-step's row blocks spread across GPUs.
 
-    Whole sample rows run the original E-step on their owners and are copied
-    back into their original positions; the mean log likelihood is folded on
-    the root over the complete gathered rows. The KMeans initialization uses
-    its row-tile assignment driver. Full data, responsibilities and the M-step
-    still have to fit on the root GPU. covariance_type other than 'full' and
-    the refused knobs are refused by the estimator itself, by name.
+    Parameters
+    ----------
+    estimator : GaussianMixture
+        An unfitted estimator.
+    X : array-like of shape (n_samples, n_features)
+        Training data.
+    devices : tuple of int, default=(0,)
+        Distinct GPU indices.
+
+    Returns
+    -------
+    estimator
+        The same estimator, fitted, equal to a one-GPU ``estimator.fit(...)``.
     """
+    # Row-shard every E-step; retain the root M-step, Cholesky and convergence test.
+    #
+    # Whole sample rows run the original E-step on their owners and are copied
+    # back into their original positions; the mean log likelihood is folded on
+    # the root over the complete gathered rows. The KMeans initialization uses
+    # its row-tile assignment driver. Full data, responsibilities and the M-step
+    # still have to fit on the root GPU. covariance_type other than 'full' and
+    # the refused knobs are refused by the estimator itself, by name.
     _admit_gaussian_mixture(estimator)
     X, _ = as_f32_c(X, ndim=2, name='X')
     pool = DevicePool(devices, cooperative=True)
@@ -345,11 +599,27 @@ def fit_gaussian_mixture(estimator, X, *, devices=(0,)):
 
 
 def predict_gaussian_mixture(estimator, X, *, devices=(0,), method='predict'):
-    """Row-shard the scoring E-step of a fitted GaussianMixture.
+    """Score rows with a fitted ``GaussianMixture``, row blocks spread across GPUs.
 
-    method is 'predict', 'predict_proba' or 'score_samples'; the original
-    per-row argmax and host exponential are unchanged.
+    Parameters
+    ----------
+    estimator : GaussianMixture
+        A fitted estimator.
+    X : array-like of shape (n_samples, n_features)
+        Rows to score.
+    devices : tuple of int, default=(0,)
+        Distinct GPU indices.
+    method : {'predict', 'predict_proba', 'score_samples'}, default='predict'
+        The estimator method to run.
+
+    Returns
+    -------
+    The same value ``estimator.<method>(X)`` returns.
     """
+    # Row-shard the scoring E-step of a fitted GaussianMixture.
+    #
+    # method is 'predict', 'predict_proba' or 'score_samples'; the original
+    # per-row argmax and host exponential are unchanged.
     _admit_gaussian_mixture(estimator)
     if method not in ('score_samples', 'predict_proba', 'predict'):
         raise ValueError('method must be predict, predict_proba or score_samples')
@@ -375,40 +645,101 @@ def _resample_parallel(name, devices, kwargs):
 
 
 def bootstrap(data, *, devices=(0,), **kwargs):
-    """`mojolearn.resample.bootstrap` with global replicate ranges on the GPUs.
+    """:func:`mojolearn.resample.bootstrap` with the replicates spread across GPUs.
 
-    Replicate r is a pure function of (seed, r, data) (the r_first handle), so
-    owners compute contiguous ranges of global replicate IDs and the root
-    assembles the distribution in order, then sorts it and computes the point
-    estimate, interval and standard error exactly as one device does.
+    Parameters
+    ----------
+    data : array-like
+        The sample, as in :func:`mojolearn.resample.bootstrap`.
+    devices : tuple of int, default=(0,)
+        Distinct GPU indices.
+    **kwargs
+        Every other argument of :func:`mojolearn.resample.bootstrap`.
+
+    Returns
+    -------
+    BootstrapResult
+        Equal to ``mojolearn.resample.bootstrap(data, **kwargs)``.
     """
+    # `mojolearn.resample.bootstrap` with global replicate ranges on the GPUs.
+    #
+    # Replicate r is a pure function of (seed, r, data) (the r_first handle), so
+    # owners compute contiguous ranges of global replicate IDs and the root
+    # assembles the distribution in order, then sorts it and computes the point
+    # estimate, interval and standard error exactly as one device does.
     return _resample_parallel('bootstrap', devices, dict(kwargs, data=data))
 
 
 def permutation_test(x, y, *, devices=(0,), **kwargs):
-    """`mojolearn.resample.permutation_test` with global permutation ranges."""
+    """:func:`mojolearn.resample.permutation_test` with the permutations spread across GPUs.
+
+    Parameters
+    ----------
+    x, y : array-like
+        The two samples.
+    devices : tuple of int, default=(0,)
+        Distinct GPU indices.
+    **kwargs
+        Every other argument of :func:`mojolearn.resample.permutation_test`.
+
+    Returns
+    -------
+    PermutationTestResult
+        Equal to ``mojolearn.resample.permutation_test(x, y, **kwargs)``.
+    """
+    # `mojolearn.resample.permutation_test` with global permutation ranges.
     return _resample_parallel('permutation_test', devices, dict(kwargs, x=x, y=y))
 
 
 def monte_carlo_integrate(integrand, lower, upper, n_samples, *, devices=(0,), **kwargs):
-    """`mojolearn.resample.monte_carlo_integrate` with whole sample chunks.
+    """:func:`mojolearn.resample.monte_carlo_integrate` with the samples spread across GPUs.
 
-    Owners draw global sample IDs from aligned PINNED_SUM_W chunks; the root
-    folds the chunk partials in order and forms the integral as one device does.
+    Parameters
+    ----------
+    integrand, lower, upper, n_samples
+        As in :func:`mojolearn.resample.monte_carlo_integrate`.
+    devices : tuple of int, default=(0,)
+        Distinct GPU indices.
+    **kwargs
+        Every other argument of :func:`mojolearn.resample.monte_carlo_integrate`.
+
+    Returns
+    -------
+    MonteCarloResult
+        Equal to the one-GPU result.
     """
+    # `mojolearn.resample.monte_carlo_integrate` with whole sample chunks.
+    #
+    # Owners draw global sample IDs from aligned PINNED_SUM_W chunks; the root
+    # folds the chunk partials in order and forms the integral as one device does.
     return _resample_parallel('monte_carlo_integrate', devices,
                               dict(kwargs, integrand=integrand, lower=lower, upper=upper, n_samples=n_samples))
 
 
 def fit_hdbscan(estimator, X, *, devices=(0,)):
-    """HDBSCAN with distributed core-distance k-NN rows and dense distance rows.
+    """Fit ``HDBSCAN`` with the core-distance and pairwise-distance rows computed across GPUs.
 
-    The k-NN query rows use the neighbors row driver and the m x m pairwise
-    distance matrix uses the hierarchy row driver, each with its original
-    per-row arithmetic and byte gather. The mutual reachability cells, the
-    Boruvka MST, the dendrogram, the condensed hierarchy and cluster selection
-    stay on the root in their original order.
+    Parameters
+    ----------
+    estimator : HDBSCAN
+        An unfitted estimator.
+    X : array-like of shape (n_samples, n_features)
+        Training data.
+    devices : tuple of int, default=(0,)
+        Distinct GPU indices.
+
+    Returns
+    -------
+    estimator
+        The same estimator, fitted, equal to a one-GPU ``estimator.fit(...)``.
     """
+    # HDBSCAN with distributed core-distance k-NN rows and dense distance rows.
+    #
+    # The k-NN query rows use the neighbors row driver and the m x m pairwise
+    # distance matrix uses the hierarchy row driver, each with its original
+    # per-row arithmetic and byte gather. The mutual reachability cells, the
+    # Boruvka MST, the dendrogram, the condensed hierarchy and cluster selection
+    # stay on the root in their original order.
     from .hdbscan import HDBSCAN
     if type(estimator) is not HDBSCAN:
         raise TypeError('fit_hdbscan requires mojolearn.HDBSCAN')
@@ -433,12 +764,27 @@ def _admit_cholesky(estimator):
 
 
 def fit_cholesky(estimator, A, *, devices=(0,)):
-    """Factor with whole trailing-update output rows on the selected GPUs.
+    """Factor a symmetric positive-definite matrix with ``Cholesky``, the trailing updates spread across GPUs.
 
-    Each panel's factorization, info read-back, panel solve and subtraction
-    stay on the root in the original panel order; only the rows of each
-    panel's L21 L21^T product move. The full matrix stays on the root.
+    Parameters
+    ----------
+    estimator : Cholesky
+        An unfitted estimator.
+    A : array-like of shape (n, n)
+        The matrix, converted to float32.
+    devices : tuple of int, default=(0,)
+        Distinct GPU indices.
+
+    Returns
+    -------
+    estimator
+        The same estimator, fitted, equal to a one-GPU ``estimator.fit(...)``.
     """
+    # Factor with whole trailing-update output rows on the selected GPUs.
+    #
+    # Each panel's factorization, info read-back, panel solve and subtraction
+    # stay on the root in the original panel order; only the rows of each
+    # panel's L21 L21^T product move. The full matrix stays on the root.
     _admit_cholesky(estimator)
     A, _ = as_f32_c(A, ndim=2, name='A')
     pool = DevicePool(devices, cooperative=True)
@@ -451,10 +797,25 @@ def fit_cholesky(estimator, A, *, devices=(0,)):
 
 
 def solve_cholesky(estimator, B, *, devices=(0,)):
-    """Solve with whole right-hand-side columns on the selected GPUs.
+    """Solve ``A x = B`` with a fitted ``Cholesky``, right-hand-side columns spread across GPUs.
 
-    A single right-hand side is sequential in its rows and runs on one GPU.
+    Parameters
+    ----------
+    estimator : Cholesky
+        A fitted estimator.
+    B : array-like of shape (n,) or (n, n_rhs)
+        Right-hand sides. A single right-hand side runs on one GPU.
+    devices : tuple of int, default=(0,)
+        Distinct GPU indices.
+
+    Returns
+    -------
+    Array
+        Equal to ``estimator.solve(B)``.
     """
+    # Solve with whole right-hand-side columns on the selected GPUs.
+    #
+    # A single right-hand side is sequential in its rows and runs on one GPU.
     _admit_cholesky(estimator)
     if not hasattr(estimator, 'L_'):
         raise ValueError('Cholesky is not fitted')
@@ -478,13 +839,32 @@ def _admit_kernel_method(estimator):
 
 
 def fit_kernel_method(estimator, X, y=None, *, devices=(0,)):
-    """KernelRidge or Nystroem fit with distributed kernel-matrix output rows.
+    """Fit ``KernelRidge`` or ``Nystroem`` with kernel-matrix rows computed across GPUs.
 
-    Rows use the SVM kernel-row seam (original FP32-v1 dot per cell and the
-    original epilogue). KernelRidge's factorization moves whole trailing-update
-    rows and its multi-target solve whole target columns; Nystroem's Jacobi
-    eigensolver stays on the root. 'laplacian' is refused by name.
+    The ``'laplacian'`` kernel is not supported.
+
+    Parameters
+    ----------
+    estimator : KernelRidge or Nystroem
+        An unfitted estimator.
+    X : array-like of shape (n_samples, n_features)
+        Training data.
+    y : array-like of shape (n_samples,) or (n_samples, n_targets), optional
+        Targets; required for ``KernelRidge``.
+    devices : tuple of int, default=(0,)
+        Distinct GPU indices.
+
+    Returns
+    -------
+    estimator
+        The same estimator, fitted, equal to a one-GPU ``estimator.fit(...)``.
     """
+    # KernelRidge or Nystroem fit with distributed kernel-matrix output rows.
+    #
+    # Rows use the SVM kernel-row seam (original FP32-v1 dot per cell and the
+    # original epilogue). KernelRidge's factorization moves whole trailing-update
+    # rows and its multi-target solve whole target columns; Nystroem's Jacobi
+    # eigensolver stays on the root. 'laplacian' is refused by name.
     _admit_kernel_method(estimator)
     X, _ = as_f32_c(X, ndim=2, name='X')
     from .kernel_methods import KernelRidge
@@ -504,7 +884,23 @@ def fit_kernel_method(estimator, X, y=None, *, devices=(0,)):
 
 
 def apply_kernel_method(estimator, X, *, devices=(0,)):
-    """KernelRidge.predict or Nystroem.transform with distributed kernel rows."""
+    """``KernelRidge.predict`` or ``Nystroem.transform`` with kernel rows computed across GPUs.
+
+    Parameters
+    ----------
+    estimator : KernelRidge or Nystroem
+        A fitted estimator.
+    X : array-like of shape (n_samples, n_features)
+        Rows to predict or transform.
+    devices : tuple of int, default=(0,)
+        Distinct GPU indices.
+
+    Returns
+    -------
+    Array
+        Equal to ``estimator.predict(X)`` or ``estimator.transform(X)``.
+    """
+    # KernelRidge.predict or Nystroem.transform with distributed kernel rows.
     _admit_kernel_method(estimator)
     from .kernel_methods import KernelRidge
     method = 'predict' if type(estimator) is KernelRidge else 'transform'
@@ -517,14 +913,31 @@ def apply_kernel_method(estimator, X, *, devices=(0,)):
 
 
 def transform_rbf_sampler(estimator, X, *, devices=(0,), rows_per_shard=4096):
-    """RBFSampler.transform over whole query rows on separate GPUs.
+    """``RBFSampler.transform`` with blocks of rows on separate GPUs.
 
-    The fitted random weights and offsets are position-mapped draws with
-    global feature and component IDs, so every worker receives the same
-    fitted state. Each output row is a pure function of its input row
-    (identical GEMM cell contract and a per-cell epilogue); rows are joined
-    by copying bytes in input order.
+    Parameters
+    ----------
+    estimator : RBFSampler
+        A fitted estimator.
+    X : array-like of shape (n_samples, n_features)
+        Rows to transform.
+    devices : tuple of int, default=(0,)
+        Distinct GPU indices.
+    rows_per_shard : int, default=4096
+        Number of rows in each block.
+
+    Returns
+    -------
+    Array of shape (n_samples, n_components)
+        Equal to ``estimator.transform(X)``.
     """
+    # RBFSampler.transform over whole query rows on separate GPUs.
+    #
+    # The fitted random weights and offsets are position-mapped draws with
+    # global feature and component IDs, so every worker receives the same
+    # fitted state. Each output row is a pure function of its input row
+    # (identical GEMM cell contract and a per-cell epilogue); rows are joined
+    # by copying bytes in input order.
     from ._array import Array
     from .kernel_methods import RBFSampler
     if type(estimator) is not RBFSampler:
