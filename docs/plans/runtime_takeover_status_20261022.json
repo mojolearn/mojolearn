@@ -1,8 +1,8 @@
 {
   "schema": "mojolearn.runtime-takeover-status.v1",
-  "updated": "2026-10-22T04:46:24.350929+00:00",
+  "updated": "2026-10-22T05:06:03.651050+00:00",
   "release": "HELD",
-  "integration_before_report": "e1215659cc16d85d3f3453e9bd2c643950a70738",
+  "integration_before_report": "f0009a086e40c7cac8f49882e28f2a9ae839621e",
   "evidence_root": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021",
   "test_policy": "Rerun failures, new tests and directly affected regression checks; reuse accepted unchanged results. Counts from different scopes are not interchangeable.",
   "completed": {
@@ -151,6 +151,27 @@
       "passed": 26,
       "scope": "25 unique runner controller checks plus1 projection registration check;no installed-wheel runtime qualification",
       "evidence": "installed-owner-scope-lane/HANDOFF.json"
+    },
+    "failure_disposition_35_to_d26": {
+      "cpu": {
+        "prior_failures": 155,
+        "same_node_passed": 154,
+        "same_node_failed": 1,
+        "replaced_cases": 0
+      },
+      "metal": {
+        "prior_failures": 168,
+        "same_node_passed": 163,
+        "same_node_failed": 1,
+        "replaced_cases": 4
+      },
+      "numpy126-metal": {
+        "prior_failures": 87,
+        "same_node_passed": 84,
+        "same_node_failed": 3,
+        "replaced_cases": 0
+      },
+      "evidence": "failure-disposition-35-to-d26.json"
     }
   },
   "remaining": [
@@ -170,9 +191,9 @@
     {
       "id": "sequence-array-conversion",
       "owner": "optimizer_native",
-      "state": "string-and-numpy126-repairs-await-successor",
-      "details": "35 build passed;13 String cases and87 NumPy1.26 cases failed. String status/class and1.26 alias repairs integrated. Shared malformed exception and cross-version followups pending.15 cleanup and18 NumPy2 malformed checks passed. Public __array__ unchanged.",
-      "source_commit": "e1215659cc16d85d3f3453e9bd2c643950a70738"
+      "state": "d26-narrow-cast-failures-under-repair",
+      "details": "All 13 prior String failures have passing same-node or corrected-fixture checks. Eight new NumPy 2 object-warning checks fail. Of 87 original NumPy 1.26 failures, 84 now pass and three remain; two new temporal-warning tests also fail. All 21 alias/negative-storage guards pass. FutureWarning category repair is integrated; public __array__ remains unchanged.",
+      "source_commit": "f0009a086e40c7cac8f49882e28f2a9ae839621e"
     },
     {
       "id": "selector-import-metadata",
@@ -202,9 +223,15 @@
     {
       "id": "other-host-native-inference",
       "owner": "host_model_native",
-      "state": "sparse-repair-and-projection-await-successor",
-      "source_commit": "e1215659cc16d85d3f3453e9bd2c643950a70738",
-      "details": "35 dense kernel/scalar checks pass;155 sparse cases per vendor fail exact-class admission. Repair integrated;175 failing/new/affected sparse cases selected. PCA/TruncatedSVD245 new checks pending;LogisticRegression successor in progress. Previous ElasticNet/Lasso/KMeans checks retained."
+      "state": "d26-sparse-projection-most-selected-pass-logistic-pending",
+      "source_commit": "f0009a086e40c7cac8f49882e28f2a9ae839621e",
+      "details": "Selected sparse checks pass 174/175 and projection checks pass 244/245 on each CPU and Metal run. The two failures per vendor share a LIL overflow exception mismatch; the repair awaits the next freeze. Logistic native inference and complex-label compatibility are integrated; 234 new checks await compilation and execution."
+    },
+    {
+      "id": "training-linear-and-robust-lifecycle",
+      "owner": "optimizer_native/scaler_lifecycle_native",
+      "state": "confirmed-python-orchestration-under-repair",
+      "details": "Eight public training linear_forward/backward CPU baseline operations return valid results while executing package Python frames. RobustScaler retains 32 numerical and five failure baseline cases; fit/transform Python orchestration is confirmed. Both native migrations are isolated and underway."
     }
   ],
   "limitations": [
@@ -212,9 +239,47 @@
     "No performance improvement claim from correctness tests.",
     "Static census categories are not independently demonstrated runtime defects."
   ],
-  "latest_compiled_runtime": "35baa19d5d2474a8677a403f45de5c99edbdefd2",
-  "latest_runtime_summary": "runtime-targeted-35baa19d5-summary.json",
+  "latest_compiled_runtime": "d26addec1f592a1c90395a32381847b542c79a38",
+  "latest_runtime_summary": "runtime-selection-verdict-d26addec1.json",
   "latest_targeted_tests": {
+    "cpu": {
+      "expected": 420,
+      "total": 420,
+      "passed": 418,
+      "failed": 2,
+      "errors": 0,
+      "skipped": 0,
+      "coverage_complete": true,
+      "source_matches": true,
+      "junit": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-tests-cpu-d26addec1.junit.xml",
+      "failures": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/selected-failures-cpu-d26addec1.json"
+    },
+    "metal": {
+      "expected": 527,
+      "total": 527,
+      "passed": 517,
+      "failed": 10,
+      "errors": 0,
+      "skipped": 0,
+      "coverage_complete": true,
+      "source_matches": true,
+      "junit": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-tests-metal-d26addec1.junit.xml",
+      "failures": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/selected-failures-metal-d26addec1.json"
+    },
+    "numpy126-metal": {
+      "expected": 136,
+      "total": 136,
+      "passed": 131,
+      "failed": 5,
+      "errors": 0,
+      "skipped": 0,
+      "coverage_complete": true,
+      "source_matches": true,
+      "junit": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-tests-numpy126-metal-d26addec1.junit.xml",
+      "failures": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/selected-failures-numpy126-metal-d26addec1.json"
+    }
+  },
+  "previous_35_targeted_tests": {
     "cpu": {
       "total": 314,
       "passed": 159,
