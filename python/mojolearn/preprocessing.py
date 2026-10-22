@@ -773,6 +773,9 @@ class StandardScaler(_ScalerProtocol):
     def set_params(self, **params):
         return _STANDARD_CALL(self, "set_params", (params,), _STANDARD_CONTEXT)
 
+    def __sklearn_tags__(self):
+        return _STANDARD_CALL(self, "tags", (), _STANDARD_CONTEXT)
+
     def __sklearn_is_fitted__(self):
         return _STANDARD_CALL(self, "is_fitted", (), _STANDARD_CONTEXT)
 

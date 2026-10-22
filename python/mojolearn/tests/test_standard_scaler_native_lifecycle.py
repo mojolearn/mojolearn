@@ -171,3 +171,42 @@ print(json.dumps({"passed": True}))
     result = subprocess.run([sys.executable, "-c", script], capture_output=True, text=True, env=os.environ)
     assert result.returncode == 0, result.stderr[-4000:]
     assert json.loads(result.stdout.splitlines()[-1])["passed"]
+
+
+def test_sklearn_transformer_tags_use_native_record_slots():
+    sklearn = pytest.importorskip("sklearn.utils")
+    model = ml.StandardScaler()
+    tags = audit_native_call(model.__sklearn_tags__).assert_native()
+    assert isinstance(tags, sklearn.Tags)
+    assert tags.estimator_type is None
+    assert not tags.target_tags.required
+    assert tags.requires_fit
+    assert tags.transformer_tags.preserves_dtype == ["float32"]
+
+
+def test_sklearn_tag_overrides_are_metadata_without_callbacks():
+    pytest.importorskip("sklearn.utils")
+
+    class Tagged(ml.StandardScaler):
+        _sklearn_input_tags = {"allow_nan": True}
+        _sklearn_target_tags = {"multi_output": True}
+
+    model = Tagged()
+    tags = audit_native_call(model.__sklearn_tags__).assert_native()
+    assert tags.input_tags.allow_nan
+    assert tags.target_tags.multi_output
+
+
+def test_sklearn_tag_callback_is_refused_without_invocation():
+    pytest.importorskip("sklearn.utils")
+    called = []
+
+    class Tagged(ml.StandardScaler):
+        def _sklearn_instance_target_tags(self):
+            called.append(True)
+            return {}
+
+    audit = audit_native_call(Tagged().__sklearn_tags__)
+    assert isinstance(audit.exception, TypeError)
+    assert not audit.frames
+    assert called == []
