@@ -85,16 +85,20 @@ implementation and qualification tasks, not a claimed toolchain blocker.
 No Python fallback has been added to native code and the existing public
 interface remains intact.
 
-Qualification checkpoint: frozen `43b5b5e13` compiled successfully. The parent
-reported 146/146 selected CPU cases passing and 296/304 selected Metal cases
-passing; all eight Metal failures were in the private array candidate/guards.
-The follow-up repairs normalize scalar subarray shapes before the native dtype
-factory, preserve unsized void adaptation, refuse non-type warning categories
-before descriptor access, and explicitly select the C numeric locale category.
-Scalar shape-one compatibility retains NumPy 1.26's deprecation warning and
-scalar result through native warning delivery. Fourteen added schema cases and
-two added guard cases still require execution on the repaired frozen build.
-These counts cover the selected combined suites, not an all-green release.
+Qualification checkpoint: frozen `a5ab22094` compiled successfully. The parent
+reported 154/154 selected CPU cases and 237/237 selected Metal cases passing,
+with no skips. Its 83 array repair checks cover all eight prior failures and
+16 added cases. Another 92 unchanged private array cases retain the accepted
+`43b5b5e13` results: 175 fixed-dtype candidate/guard cases have composed passing
+evidence. This is not qualification of the unchanged public method or every
+version/target. The subsequent 137 managed-string cases (including 21 nested
+layout/ownership cases) and 18 malformed-dtype regressions await native
+execution. The planned combined affected selection is 251 cases, retaining
+79 unchanged fixed-dtype results. A separate 118-case NumPy 1.26 selection has
+passed collection against compatible CPython 3.11 imports; its native tests
+remain pending. Full selections and source hashes are retained in
+`array-native/array-combined-test-selection.json` and
+`array-native/numpy126-native-collect.json` under the evidence directory.
 
 Managed-string allocation investigation (NumPy 2.5.3): the retained controller
 traces are `array-native/stringdtype-void-array-metadata.json` under the evidence
@@ -104,9 +108,8 @@ which clones an already-owned descriptor using `new_stringdtype_instance`.
 That constructor invokes comparison and text protocols at lines 73 and 87.
 Calling the public StringDType constructor directly uses that same helper.
 [`PyArray_DescrNew`](https://github.com/numpy/numpy/blob/v2.5.3/numpy/_core/src/multiarray/descriptor.c#L1963)
-explicitly rejects new-style dtypes. A remaining supported alternative to
-investigate is public `PyArray_NewFromDescr` with an externally owned data
-buffer: [`ctors.c`](https://github.com/numpy/numpy/blob/v2.5.3/numpy/_core/src/multiarray/ctors.c#L619)
+explicitly rejects new-style dtypes. Another supported creation path inspected is public `PyArray_NewFromDescr`
+with an externally owned data buffer: [`ctors.c`](https://github.com/numpy/numpy/blob/v2.5.3/numpy/_core/src/multiarray/ctors.c#L619)
 skips descriptor finalization when data is supplied. Safe managed-string
 storage was exercised with the public acquire/pack/pack-null/release API in a
 two-case controller probe, retained as `stringdtype-external-buffer-probe.json`.
@@ -120,6 +123,20 @@ ordinary ownership and missing-value behavior remain unverified. The precise
 upstream capability needed if no supported ownership-preserving route is
 available is native descriptor clone/allocation retaining supplied
 missing-value metadata without invoking comparison or text protocols.
+The public `PyArray_NewLikeArray` API also reaches
+[`PyArray_NewFromDescr` with null data](https://github.com/numpy/numpy/blob/v2.5.3/numpy/_core/src/multiarray/ctors.c#L1059),
+so it does not avoid descriptor finalization. A four-case controller probe
+(`stringdtype-allocation-alternatives.json/.log`) confirms this: two owned
+outputs retained `owndata=True` but entered 23/43 Python frames for the same
+structured-void/ndarray sentinels. Public dtype reassignment of a structured
+String storage owner was also rejected by NumPy with `TypeError: Cannot
+change data-type for array of references.`, entering `_view_is_safe` in Python.
+The only StringDType reconstruction method in the inspected source is
+[`__reduce__`](https://github.com/numpy/numpy/blob/v2.5.3/numpy/_core/src/multiarray/stringdtype/dtype.c#L900),
+which returns NumPy's Python `_convert_to_stringdtype_kwargs` helper; it is not
+a callback-free clone facility. No memory flags, cached dtype fields or
+private allocators were modified in these investigations.
+
 This investigation does not establish a Mojo/Modular compiler limitation or
 authorize a public refusal.
 
