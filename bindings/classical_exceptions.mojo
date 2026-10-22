@@ -3,6 +3,7 @@
 # relationship. No imports of sklearn or calls to Python exception factories.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
+from bindings.py_slice_native import py_slice
 from bindings.classical_metadata import classical_is_fitted
 
 
@@ -69,4 +70,4 @@ def classical_error_reduce(error: PythonObject, context: PythonObject) raises ->
     if not valid:
         raise Error("TypeError: error serialization requires a connected NotFittedError")
     var args = py_call(bi.object.__getattribute__, error, "args")
-    return Python.tuple(context["not_fitted_restore"], args[0:1])
+    return Python.tuple(context["not_fitted_restore"], py_slice(args, 0, 1))
