@@ -3,6 +3,7 @@
 # query preparation, stored-buffer ownership and result publication are native.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
+from bindings.classical_attributes import classical_getattribute
 from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_is_f32, classical_c_order, classical_kind
 from bindings.host_archive_native import host_archive_typed
 from bindings.host_inference_scalars import host_inference_scalar
@@ -58,7 +59,14 @@ def host_kde_inference(model: PythonObject, fields: PythonObject, source: Python
         weights = _kernel_buffer(weight, count, "<f4", context)
     # Derive the fixed native constructor from a C-created scalar. A patched
     # builtins.float must never install a callback on this numerical boundary.
-    var bandwidth = py_call(py_type(PythonObject(Float64(0.0))), fields["bandwidth"])
+    var bandwidth_value = classical_getattribute(model, PythonObject("bandwidth"), context)
+    if py_type(bandwidth_value) is not py_type(PythonObject("")):
+        host_inference_scalar(bandwidth_value, context)
+    var bandwidth = py_call(py_type(PythonObject(Float64(0.0))), bandwidth_value)
+    var kernel = classical_getattribute(model, PythonObject("kernel"), context)
+    var metric = classical_getattribute(model, PythonObject("metric"), context)
+    if py_type(kernel) is not py_type(PythonObject("")) or py_type(metric) is not py_type(PythonObject("")):
+        raise Error("TypeError: KDE kernel and metric require exact native strings")
     var out = host_archive_typed(Python.tuple(rows), "<f4", context["output_context"])
     # The explicit host entry has no resident-fit registry. Each call uses
     # the supplied saved buffers, as the original CPU path did.
@@ -67,7 +75,7 @@ def host_kde_inference(model: PythonObject, fields: PythonObject, source: Python
     try:
         result = py_call(entry, classical_address(train), classical_address(query),
             classical_address(weights) if weights is not None else PythonObject(0), classical_address(out),
-            Python.list(count, rows, features, bandwidth, Int(weights is not None), Int(total)), fields["kernel"], fields["metric"])
+            Python.list(count, rows, features, bandwidth, Int(weights is not None), Int(total)), kernel, metric)
     except error:
         # The public validation wrapper normalizes only plain native
         # nonfinite errors; other CPU kernel failures remain builtin Exception.

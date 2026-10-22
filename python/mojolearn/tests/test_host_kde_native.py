@@ -236,6 +236,57 @@ def test_kde_ordinary_subclass_keeps_native_attributes_and_scores(tmp_path):
     audit_native_call(cls.__del__, model).assert_native()
 
 
+@pytest.mark.parametrize("field", ["bandwidth", "kernel", "metric"])
+@pytest.mark.parametrize("storage", ["slot", "inherited", "instance_override"])
+@pytest.mark.parametrize("method", METHODS)
+def test_kde_native_option_attributes_preserve_bits_and_state(tmp_path, field, storage, method):
+    value = {"bandwidth": .75, "kernel": "exponential", "metric": "manhattan"}[field]
+    members = {"__slots__": (field,)} if storage == "slot" else {field: value}
+    parent = type("NativeKDEOptions", (host.HostKernelDensity,), members)
+    cls = type("InheritedKDEOptions", (parent,), {})
+    model = object.__new__(cls)
+    vars(model).update(vars(_model(tmp_path)))
+    if storage == "slot":
+        vars(model).pop(field)
+        setattr(model, field, value)
+    elif storage == "inherited":
+        vars(model).pop(field)
+    before = _state(vars(model))
+    original = getattr(model, field)
+    _check(model, _input(2, "float32"), method)
+    assert _state(vars(model)) == before and getattr(model, field) is original
+
+
+@pytest.mark.parametrize("field", ["bandwidth", "kernel", "metric"])
+@pytest.mark.parametrize("storage", ["property", "descriptor", "slot_scalar"])
+def test_kde_resolved_options_refuse_python_hooks(tmp_path, field, storage):
+    touched = []
+    def hook(*args):
+        touched.append("get")
+        return .75 if field == "bandwidth" else "gaussian"
+    class Descriptor:
+        __get__ = hook
+    class Scalar:
+        def __float__(self):
+            touched.append("float")
+            return .75
+        def __str__(self):
+            touched.append("str")
+            return "gaussian"
+    members = {field: property(hook) if storage == "property" else Descriptor()}
+    if storage == "slot_scalar":
+        members = {"__slots__": (field,)}
+    cls = type("RefusedKDEOption", (host.HostKernelDensity,), members)
+    model = object.__new__(cls)
+    vars(model).update(vars(_model(tmp_path)))
+    vars(model).pop(field)
+    if storage == "slot_scalar":
+        setattr(model, field, Scalar())
+    before = _state(vars(model))
+    _refused(audit_native_call(model.score_samples, _input(2, "float32")), TypeError)
+    assert touched == [] and _state(vars(model)) == before
+
+
 def test_kde_native_finalizer_masks_device_base_python_finalizer(tmp_path, monkeypatch):
     model = _model(tmp_path)
     touched = []
