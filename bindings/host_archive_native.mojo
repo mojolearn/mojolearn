@@ -657,27 +657,41 @@ def host_archive_arima(cls: PythonObject, arrays: PythonObject, exog: Bool,
     return model
 
 
-def host_archive_holtwinters(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
-    var meta = host_archive_count(arrays, "meta", "<i8", 4, context, True)
-    var eps = host_archive_count(arrays, "eps", "<f8", 1, context, True)
+def host_archive_series_shape(arrays: PythonObject, name: String, dtype: String, shape: PythonObject,
+                              path: PythonObject, context: PythonObject) raises -> PythonObject:
+    """An exact-dtype member of `shape`, refused as the series loaders
+    refused it: `{path!r} {name} has shape {shape}, not {expected}`."""
+    var value = _archive_exact(arrays, name, dtype, context)
+    var got = py_call(Python.import_module("builtins").tuple, value.shape)
+    if not Bool(py=got == shape):
+        raise Error(host_archive_where(path, context) + " " + name + " has shape " + _archive_builtin_repr(got)
+                    + ", not " + _archive_builtin_repr(shape))
+    return value
+
+
+def host_archive_holtwinters(cls: PythonObject, arrays: PythonObject, path: PythonObject,
+                             context: PythonObject) raises -> PythonObject:
+    # The refusals keep ExponentialSmoothing.load's wording and order.
+    var where = host_archive_where(path, context)
+    var meta = host_archive_meta(arrays, "meta", 4, path, context)
     var n = classical_i64(meta, 0)
     var batch = classical_i64(meta, 1)
     var period = classical_i64(meta, 2)
     var start = classical_i64(meta, 3)
-    var seasonal = _archive_string(arrays, "seasonal", context)
-    if String(seasonal) != "additive" and String(seasonal) != "add" and String(seasonal) != "multiplicative" and String(seasonal) != "mul":
-        raise Error("unsupported saved ExponentialSmoothing seasonal type")
+    var eps = _archive_exact(arrays, "eps", "<f8", context)
+    if Int(py=eps.size) != 1:
+        raise Error(where + " eps holds " + String(Int(py=eps.size)) + " values, 1 is needed")
     var initialization = _archive_string(arrays, "initialization_method", context) if py_contains(arrays, "initialization_method") else PythonObject("heuristic")
+    var seasonal = _archive_string(arrays, "seasonal", context)
+    # The constructor's refusals.
+    if String(seasonal) != "additive" and String(seasonal) != "add" and String(seasonal) != "multiplicative" and String(seasonal) != "mul":
+        raise Error("ValueError: mojolearn ExponentialSmoothing: seasonal=" + _archive_builtin_repr(seasonal)
+                    + " is refused; it must be 'additive'/'add' or 'multiplicative'/'mul' (holtwinters.pyx:197)")
     if String(initialization) != "estimated" and String(initialization) != "heuristic" and String(initialization) != "cuml":
-        raise Error("unsupported saved ExponentialSmoothing initialization method")
-    if batch < 1 or n <= period:
-        raise Error("saved ExponentialSmoothing rows and season period are inconsistent")
-    var rows = n - period
-    var cl = rows * batch
-    var comps = host_archive_shape(arrays, "components", "<f4", Python.tuple(3 * cl), context)
+        raise Error("ValueError: mojolearn ExponentialSmoothing: initialization_method=" + _archive_builtin_repr(initialization)
+                    + " is refused; it must be 'estimated' (the default), 'heuristic' or 'cuml'")
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
-    host_archive_mode(arrays, fields, context)
     py_setitem(fields, "endog", PythonObject(None))
     py_setitem(fields, "initialization_method", initialization)
     py_setitem(fields, "seasonal", seasonal)
@@ -685,6 +699,21 @@ def host_archive_holtwinters(cls: PythonObject, arrays: PythonObject, context: P
     py_setitem(fields, "start_periods", start)
     py_setitem(fields, "ts_num", batch)
     py_setitem(fields, "eps", classical_f64(eps, 0))
+    py_setitem(fields, "fit_executed_flag", False)
+    host_archive_mode(arrays, fields, context)
+    if batch < 1 or n <= period:
+        raise Error(where + " records n=" + String(n) + ", ts_num=" + String(batch) + ", seasonal_periods=" + String(period))
+    var rows = n - period
+    var cl = rows * batch
+    var comps = host_archive_series_shape(arrays, "components", "<f4", Python.tuple(3 * cl), path, context)
+    var stats = Python.tuple("sse", "alpha", "beta", "gamma")
+    var loaded = Python.dict()
+    for i in range(len(stats)):  # driver-loop: four saved per-series fit statistics
+        var name = String(stats[i])
+        py_setitem(loaded, name + "_", host_archive_series_shape(arrays, name, "<f4", Python.tuple(batch), path, context))
+    py_setitem(loaded, "n_iter_", host_archive_series_shape(arrays, "n_iter", "<i4", Python.tuple(batch), path, context))
+    py_setitem(loaded, "criterion_", host_archive_series_shape(arrays, "criterion", "<i4", Python.tuple(batch), path, context))
+    # `_set_fitted`: the packed components and their time-major blocks.
     py_setitem(fields, "n", n)
     py_setitem(fields, "_components_len", cl)
     py_setitem(fields, "_comps", comps)
@@ -697,12 +726,9 @@ def host_archive_holtwinters(cls: PythonObject, arrays: PythonObject, context: P
                               rows, batch, Int(py=classical_address(copy)))
         py_setitem(time_major, names[i], copy)
     py_setitem(fields, "_time_major", time_major)
-    var stats = Python.tuple("sse", "alpha", "beta", "gamma")
-    for i in range(len(stats)):  # driver-loop: four saved per-series fit statistics
-        var name = String(stats[i])
-        py_setitem(fields, name + "_", host_archive_shape(arrays, name, "<f4", Python.tuple(batch), context))
-    py_setitem(fields, "n_iter_", host_archive_shape(arrays, "n_iter", "<i4", Python.tuple(batch), context))
-    py_setitem(fields, "criterion_", host_archive_shape(arrays, "criterion", "<i4", Python.tuple(batch), context))
+    var keys = Python.tuple("sse_", "alpha_", "beta_", "gamma_", "n_iter_", "criterion_")
+    for i in range(len(keys)):  # driver-loop: six saved per-series fit statistics
+        py_setitem(fields, keys[i], loaded[keys[i]])
     py_setitem(fields, "fit_executed_flag", True)
     return model
 
@@ -1780,7 +1806,7 @@ def host_archive_build(path: PythonObject, context: PythonObject,
     elif fmt == "mojolearn-arima-1" or fmt == "mojolearn-arima-2":
         model = host_archive_arima(cls, arrays, fmt == "mojolearn-arima-2", context)
     elif fmt == "mojolearn-holtwinters-1":
-        model = host_archive_holtwinters(cls, arrays, context)
+        model = host_archive_holtwinters(cls, arrays, path, context)
     elif fmt == "mojolearn-ivf-flat-1":
         model = host_archive_ivf(cls, arrays, context)
     elif fmt == "mojolearn-hdbscan-2":
