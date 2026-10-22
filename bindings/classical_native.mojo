@@ -17,6 +17,7 @@ from bindings.classical_archive_read import classical_archive_load, classical_ho
 from bindings.host_archive_native import host_archive_build
 from bindings.host_tree_native import host_tree_operation
 from bindings.host_inference_native import host_inference_operation
+from bindings.host_kde_fit_native import host_kde_fit
 from bindings.classical_exceptions import classical_require_fitted, classical_error_restore, classical_error_reduce
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.classical_pandas import classical_admit_value
@@ -102,6 +103,9 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         if operation == "reduce_not_fitted":
             var reduced = classical_error_reduce(model, context)
             return reduced.steal_data()
+        if operation == "host_kde_fit":
+            var result = host_kde_fit(model, args, context["host_inference_context"])
+            return result.steal_data()
         if operation.startswith("host_infer_"):
             var result = host_inference_operation(model, operation, args, context["host_inference_context"], context, classical_caller_outside(context))
             return result.steal_data()

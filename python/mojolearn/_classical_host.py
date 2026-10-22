@@ -215,6 +215,16 @@ def _register_host_inference_class(cls):
             cls, context["classical_attribute_descriptor"])
 
 
+_NATIVE_HOST_FITS = {}
+
+
+def _native_host_fit_method(method):
+    # glue: the complete native fit owns validation and fitted-state publication.
+    method._mojolearn_tracks_fit = True
+    _NATIVE_HOST_FITS[method.__qualname__] = method
+    return method
+
+
 def _native_host_inference_method(method):
     # glue: only these complete native methods own fitted/input validation
     # and result publication. Keep ordinary mixin setup for every other
@@ -410,6 +420,30 @@ class HostKernelDensity(_NativeArchiveLoad, _HostBound, KernelDensity):
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         _register_host_inference_class(cls)
+
+    @_native_host_fit_method
+    def fit(self, X, y=None, sample_weight=None):
+        """Store finite training rows and optional nonnegative weights on the CPU.
+
+        Parameters
+        ----------
+        X : array-like or sparse matrix of shape (n_samples, n_features)
+            Training rows, converted to float32 when necessary.
+        y : array-like, default=None
+            Optional target validated for compatibility and otherwise ignored.
+        sample_weight : scalar or array-like of shape (n_samples,), default=None
+            Finite nonnegative row weights containing at least one positive value.
+
+        Returns
+        -------
+        self
+            The fitted density estimator.
+
+        Examples
+        --------
+        >>> model = model.fit(X, sample_weight=weights)
+        """
+        return _native_classical(self, "host_kde_fit", (X, y, sample_weight), _CLASSICAL)
 
     @_native_host_inference_method
     def score_samples(self, X):
@@ -1202,6 +1236,9 @@ def _connect_host_inference():
             if entry is not None and not isinstance(entry, BuiltinFunctionType):
                 raise TypeError("explicit CPU prediction requires a native binding entry")
             entries[name] = entry
+    # CPU training is public. Replace only this complete native fit after
+    # mixin class setup; inherited/overridden operations keep their guards.
+    HostKernelDensity.fit = _NATIVE_HOST_FITS["HostKernelDensity.fit"]
     context = dict(_CLASSICAL["host_tree_context"])
     context.update(host_inference_entries=entries,
                    host_inference_class_labels=ClassLabels,

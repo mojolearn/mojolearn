@@ -8,6 +8,52 @@ from mojolearn._buffer import as_f32_colmajor, as_f32_c, empty, addr, addr_ro, a
 from mojolearn.cluster import _METRIC_NAMES
 
 
+def kde_fit(model, X, y=None, sample_weight=None):
+    """Frozen 32011bb32 public CPU fit, including outer validation/state."""
+    from mojolearn import _sk_validate
+    from mojolearn._buffer import as_f32_dense_c
+    from mojolearn._sample_weight import check_sample_weight
+    state = vars(model)
+    check = None
+    args, kwargs = (X, y), {"sample_weight": sample_weight}
+    if not state.get("_mojolearn_fitting"):
+        args, kwargs, check = _sk_validate.before_fit(model, "fit", (0, 1, "y"), args, kwargs)
+    state["_mojolearn_fitting"] = state.get("_mojolearn_fitting", 0) + 1
+    try:
+        model._release_resident_fit()
+        x, model.input_copied_ = as_f32_dense_c(args[0], ndim=2, name="X")
+        if not all_finite(x):
+            raise ValueError("mojolearn KernelDensity: X contains a NaN or an infinity; refused by name at fit (DEVIATION 604)")
+        binding = model._bind("_mojolearn_estimators")
+        immutable = bool(getattr(binding, "kde_fast_immutable_fit", lambda: 0)())
+        if immutable:
+            x = x.copy()
+            model.input_copied_ = True
+        model._x = x
+        model.n_features_in_ = x.shape[1]
+        model.n_samples_fit_ = x.shape[0]
+        weight = kwargs["sample_weight"]
+        if weight is not None:
+            w = check_sample_weight(weight, x.shape[0])
+            model._w = w.copy() if immutable else w
+        else:
+            model._w = None
+    except Exception as error:
+        if check is not None:
+            _sk_validate.reraise(model, check, error)
+        raise
+    finally:
+        depth = state.get("_mojolearn_fitting", 1) - 1
+        if depth > 0:
+            state["_mojolearn_fitting"] = depth
+        else:
+            state.pop("_mojolearn_fitting", None)
+    state["_mojolearn_fitted"] = True
+    if check is not None:
+        _sk_validate.after_fit(model, check)
+    return model
+
+
 def kde(model, X, total=False):
     """Frozen 32011bb32 CPU KDE preparation and fixed-order total."""
     from mojolearn._buffer import as_f32_dense_c
