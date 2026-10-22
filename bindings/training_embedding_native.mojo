@@ -149,7 +149,7 @@ def embedding_leaf_store(leaves: PythonObject, object_array: Bool, context: Pyth
         # The previous list door inferred f64 only from Python float or its
         # native float64 subtype. Object buffers with any NumPy real scalar
         # used f64; retain that distinct promotion before the int32 cast.
-        floating = floating or cls is b.float or (numpy and (object_array or cls is native_numpy_type("float64", context)))
+        floating = floating or cls is b.float or (numpy and (object_array or cls is sequence_dtype_create(PythonObject("f8"), context).type))
     if not floating:
         for i in range(len(leaves)):  # driver-loop: preserve the list door's integer-leaf admission
             var cls = py_type(leaves[i])
