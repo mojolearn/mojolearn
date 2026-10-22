@@ -10,7 +10,6 @@
 from __future__ import annotations
 
 import copy
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -25,7 +24,7 @@ _CACHE = os.path.join("~", ".cache", "mojolearn", "models")
 
 def _load():
     try:
-        doc = json.loads(_CATALOG.read_text())  # cpu-route: the shipped catalog file is read on the host
+        doc = json.loads(_CATALOG.read_text())  # cpu-route: catalog() returns the shipped JSON as Python dicts
     except FileNotFoundError:
         return []
     if doc.get("schema") != _SCHEMA:
@@ -76,18 +75,24 @@ def _entry(name):
 
 
 def _sha256_file(path):
-    h = hashlib.sha256()
-    with open(path, "rb") as fh:  # cpu-route: hashing a downloaded model file on the host
-        for chunk in iter(lambda: fh.read(1 << 20), b""):  # cpu-route: file bytes in 1 MB reads
-            h.update(chunk)
-    return h.hexdigest()
+    """The SHA-256 of the file at ``path``, 64 lowercase hex digits (read and hashed in Mojo)."""
+    from .. import _backend
+    b = _backend.binding("_mojolearn_x_sequence")
+    sha, _size = b.verify_file_sha256(os.fspath(path))  # cpu-route: the native Mojo host file hash call
+    return str(sha)
+
+
+def _sha256_bytes(data):
+    """The SHA-256 of ``data``, 64 lowercase hex digits (core/sha256.mojo)."""
+    from .. import _backend
+    return str(_backend.load_host_module("_mojolearn_tokenizer_host").sha256_hex(data))  # cpu-route: the native Mojo host hash call
 
 
 def _download(url, dest):
     import urllib.request
     tmp = str(dest) + ".part"
-    with urllib.request.urlopen(url, timeout=600) as r, open(tmp, "wb") as fh:  # cpu-route: model file download
-        while True:  # cpu-route: model file download in 1 MB reads
+    with urllib.request.urlopen(url, timeout=600) as r, open(tmp, "wb") as fh:  # cpu-route: urllib HTTP response object, Mojo has no HTTP client
+        while True:  # cpu-route: urllib HTTP response object read in 1 MB chunks
             chunk = r.read(1 << 20)
             if not chunk:
                 break
@@ -112,7 +117,7 @@ def _check_input(entry):
     if check.get("input_kind") == "ids":
         raise ValueError(f"{entry['name']}: a token-id check input needs the model's vocabulary size; "
                          "this entry cannot be checked here")
-    # cpu-route: the fixed check input is generated on the host, as the box runs generated it
+    # cpu-route: verification inputs made before the run (numpy's seeded generator, the recipe the catalog digests record)
     return np.random.default_rng(int(check["seed"])).standard_normal(shape, dtype=np.float32)
 
 
@@ -249,7 +254,7 @@ def verify_catalog_entry(name, *, cache=None):
     report = {"name": name, "version": version, "numeric_mode": mode, "vendor": mojolearn.vendor()}
     x = _check_input(entry)
     want_in = entry["check"]["input_digest"]
-    report["input_digest"] = hashlib.sha256(x.tobytes()).hexdigest()[:16]
+    report["input_digest"] = _sha256_bytes(x.tobytes())[:16]
     if report["input_digest"] != want_in:
         raise ValueError(f"{name}: the check input on this install has digest {report['input_digest']}, the "
                          f"catalog's has {want_in} (a different numpy random generator)")
@@ -267,10 +272,7 @@ def verify_catalog_entry(name, *, cache=None):
     y = prog.run(x)
     report["run_ms"] = (time.perf_counter() - t0) * 1e3
     y = y if isinstance(y, tuple) else (y,)
-    h = hashlib.sha256()
-    for a in y:  # glue: one digest update per model output
-        h.update(a.tobytes())
-    report["digest"] = h.hexdigest()[:16]
+    report["digest"] = _sha256_bytes(b"".join([a.tobytes() for a in y]))[:16]  # glue: one byte string per model output
     cell = (entry.get("versions", {}).get(version) or {}).get(mode) or {}
     digests = cell.get("digests") or {}
     report["expected"] = next(iter(digests.values()), None)  # glue: the vendors' digests are equal

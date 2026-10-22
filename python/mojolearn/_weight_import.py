@@ -51,8 +51,8 @@ class WeightSource:
                 raise TypeError(f"{what}: source='safetensors' takes the path of a .safetensors file "
                                 "or of a checkpoint directory")
             from .models.safetensors import Checkpoint
-            self._ckpt = Checkpoint.open(os.fsdecode(obj))  # cpu-route: reads the safetensors file header (file input)
-            self._names = self._ckpt.names()  # cpu-route: lists the checkpoint tensor names (file input)
+            self._ckpt = Checkpoint.open(os.fsdecode(obj))  # cpu-route: the native Mojo host safetensors reader call
+            self._names = self._ckpt.names()  # cpu-route: the native Mojo host safetensors reader call
             self._map = None
         else:
             if _is_path(obj) or not (hasattr(obj, "keys") and hasattr(obj, "__getitem__")):
@@ -100,7 +100,7 @@ class WeightSource:
                 # tensor at its offset
                 base = np.frombuffer(f._map(), dtype=np.uint8)
                 self._bases[info.file] = base
-            offset = f.data_start + info.begin  # cpu-route: safetensors header offset (file input)
+            offset = f.data_start + info.begin  # glue: one tensor record offset
             return base.ctypes.data, offset, dt, tuple(info.shape), _STRIDE_C, ()
         v = self._value(name)
         if (type(v).__module__ or "").startswith("torch"):
