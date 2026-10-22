@@ -24,6 +24,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_TESTS = {
+    "test_host_density_constructors_native.py": "Public host KDE and IsolationForest constructor options, inherited modes and safe reinitialization",
     "test_training_embedding_public_native.py": "Public embedding forward/backward preparation, index conversion, vocabulary options and owned outputs",
     "test_optimizer_native_array_ownership.py": "Native output Array storage, retained checkpoint ownership and device downloads",
     "test_device_rows_metadata_native.py": "DeviceRows constructor and length metadata ownership and native hook refusals",
@@ -185,6 +186,9 @@ def test_applicability(selected, vendor):
             scope["coverage_limit"] = "Native qualification covers score_samples/score and their state/input admission; inherited construction/fit/save/hash remain outside this migration slice"
         if name == "test_host_kde_fit_native.py":
             scope["coverage_limit"] = "Native qualification covers explicit host fit preparation and state publication; ordinary KernelDensity fit, constructors, save and hash remain separate"
+        if name == "test_host_density_constructors_native.py":
+            scope.update(execution_route="native explicit CPU host constructor owner, including in GPU packages",
+                         coverage_limit="Public KDE and IsolationForest construction/reinitialization only; fit/inference, save/hash and subclass registration remain separate")
         if name == "test_device_rows_metadata_native.py":
             scope.update(execution_route="native DeviceRows metadata owner on every package backend",
                          coverage_limit="Constructor and length only; materialize and resident context lifecycle remain separate")
