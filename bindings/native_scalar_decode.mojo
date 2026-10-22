@@ -72,9 +72,10 @@ def native_scalar_buffer(value: PythonObject) raises -> NativeScalarBuffer:
             raise Error("TypeError: complex scalar storage requires floating components")
     var raw = py_call(view.tobytes)
     ref cpy = Python().cpython()
-    var data = cpy.lib.get_function[MutPointer[UInt8, MutUntrackedOrigin]]("PyBytes_AsString")(raw._obj_ptr)
-    if not data:
+    var pointer = cpy.lib.get_function[Optional[MutPointer[UInt8, MutUntrackedOrigin]]]("PyBytes_AsString")(raw._obj_ptr)
+    if not pointer:
         raise cpy.unsafe_get_error()
+    var data = pointer.value()
     var real = native_scalar_real(data, 0, code, width, little)
     var imag = NativeRealBits()
     if complex:

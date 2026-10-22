@@ -5,7 +5,7 @@
 # Format: https://peps.python.org/pep-3118/
 # Arm ABI: https://github.com/ARM-software/abi-aa/blob/main/aapcs64/aapcs64.rst
 # Apple: https://developer.apple.com/documentation/xcode/writing-arm64-code-for-apple-platforms
-from std.sys.info import CompilationTarget
+from std.sys.info import CompilationTarget, is_triple
 
 
 struct NativeRealBits(ImplicitlyCopyable, Movable):
@@ -198,7 +198,10 @@ def native_scalar_real(data: MutPointer[UInt8, MutUntrackedOrigin], offset: Int,
                 var payload = significand & UInt64(0x7FFFFFFFFFFFFFFF)
                 return NativeRealBits(payload, 0, 0, 64, negative, 1 if payload == 0 else 2)
             return NativeRealBits(significand, 0, (exponent if exponent != 0 else 1) - 16383 - 63, 64, negative)
-        elif CompilationTarget.is_arm() and CompilationTarget.is_linux():
+        elif is_triple["aarch64-unknown-linux-gnu"]():
+            # The public triple query is available in pinned Mojo 1.0;
+            # the newer is_arm predicate is not. This selects the supported
+            # Linux AArch64 ABI, not an instruction-set feature or workload.
             var low = _scalar_word(data, offset if little else offset + 8, 8, little)
             var high = _scalar_word(data, offset + 8 if little else offset, 8, little)
             return _scalar_ieee(low, high, 112, 15)
