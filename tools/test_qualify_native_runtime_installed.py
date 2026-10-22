@@ -190,6 +190,7 @@ class InstalledNativeAudit(unittest.TestCase):
     def test_public_owner_and_host_scopes_exclude_private_array_candidate(self):
         names = ("test_native_owner_qualification.py", "test_sequence_shutdown_native.py", "test_training_rms_public_native.py", "test_optimizer_native_step_errors.py",
                  "test_optimizer_native_array_ownership.py", "test_device_rows_metadata_native.py", "test_host_kde_fit_native.py",
+                 "test_training_embedding_public_native.py",
                  "test_training_device_native_finalizer.py", "test_training_device_native_rollback.py",
                  "test_robust_scaler_native_lifecycle.py", "test_scaler_rows_snapshot_native.py", "test_scaler_complex_warning_native.py",
                  "test_robust_scaler_native_transport.py",
@@ -209,6 +210,7 @@ class InstalledNativeAudit(unittest.TestCase):
         self.assertIn("state publication", scope["test_host_kde_fit_native.py"]["coverage_limit"])
         self.assertIn("materialize", scope["test_device_rows_metadata_native.py"]["coverage_limit"])
         self.assertIn("public __array__", scope["test_optimizer_native_array_ownership.py"]["coverage_limit"])
+        self.assertIn("installed version", scope["test_training_embedding_public_native.py"]["coverage_limit"])
         self.assertEqual(len(q.CPU_NOT_APPLICABLE["test_optimizer_native_array_ownership.py"]), 4)
         self.assertEqual(len(q.CPU_NOT_APPLICABLE["test_training_device_native_finalizer.py"]), 7)
         self.assertEqual(len(q.CPU_NOT_APPLICABLE["test_training_device_native_rollback.py"]), 6)

@@ -24,6 +24,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_TESTS = {
+    "test_training_embedding_public_native.py": "Public embedding forward/backward preparation, index conversion, vocabulary options and owned outputs",
     "test_optimizer_native_array_ownership.py": "Native output Array storage, retained checkpoint ownership and device downloads",
     "test_device_rows_metadata_native.py": "DeviceRows constructor and length metadata ownership and native hook refusals",
     "test_host_kde_fit_native.py": "Explicit CPU HostKernelDensity fit preparation, stored state, aliases and native refusals",
@@ -193,6 +194,9 @@ def test_applicability(selected, vendor):
         if name == "test_training_rms_public_native.py":
             scope.update(execution_route="public training RMS operations through the selected CPU or GPU training binding",
                          coverage_limit="Exact preparation/output checks use retained numerical entries; independent primitive checks are separate. NumPy scalar-option coverage follows the installed NumPy version.")
+        if name == "test_training_embedding_public_native.py":
+            scope.update(execution_route="public embedding operations through the selected CPU or GPU training binding",
+                         coverage_limit="Native preparation and retained kernel outputs only; NumPy scalar-option coverage follows the installed version, and full-model training remains separate")
         result[name] = scope
     return result
 
