@@ -235,3 +235,49 @@ def test_materialize_allocates_array_storage_without_python_class_constructors(o
         patch.setattr(Array, hook, staticmethod(forbidden) if hook == '__new__' else forbidden)
         result = audit_native_call(rows.materialize).assert_native()
     assert not calls and result.tobytes() == np.array([[6., 7., 8.], [0., 1., 2.]], dtype='f4').tobytes()
+
+
+@pytest.mark.parametrize('constructor', ['bytes', 'list', 'tuple', 'object', 'memoryview'])
+def test_materialize_uses_connected_native_output_constructors(owner, monkeypatch, constructor):
+    import builtins
+    calls = []
+    def forbidden(*args, **kwargs):
+        calls.append(constructor)
+        raise AssertionError('mutable builtin output hook ran')
+    # The auditor itself constructs a list of disassembled wrapper operations.
+    # Its inherited native constructor stays usable; product use of the new
+    # subclass's length or indexing remains an observable forbidden callback.
+    if constructor in ('list', 'tuple'):
+        replacement = type('ForeignSequence', (getattr(builtins, constructor),),
+                           {'__len__': forbidden, '__getitem__': forbidden})
+    elif constructor == 'object':
+        replacement = type('ForeignObject', (), {'__new__': staticmethod(forbidden)})
+    else:
+        replacement = forbidden
+    rows = DeviceRows(np.arange(12, dtype='f4').reshape(4, 3), np.array([2, 0]), owner.take)
+    with monkeypatch.context() as patch:
+        patch.setattr(builtins, constructor, replacement)
+        audit = audit_native_call(rows.materialize)
+    output = audit.assert_native()
+    assert not calls and output.tobytes() == np.array([[6., 7., 8.], [0., 1., 2.]], dtype='f4').tobytes()
+
+
+@pytest.mark.parametrize('name', ['int', 'float', 'bool'])
+def test_materialize_scalar_admission_uses_connected_native_identities(owner, monkeypatch, name):
+    import builtins
+    calls = []
+    def forbidden(*args, **kwargs):
+        calls.append(name)
+        raise AssertionError('mutable builtin scalar hook ran')
+    cls = type('ForeignScalar', (() if name == 'bool' else (getattr(builtins, name),)),
+               {'__float__': forbidden, '__int__': forbidden, '__bool__': forbidden})
+    value = cls() if name == 'bool' else cls(1)
+    # A genuine float keeps the old conversion's float64 branch selected, so
+    # incorrectly admitting ForeignScalar would invoke its __float__ slot.
+    base = np.array([[value, 1.0]], dtype='O')
+    rows = DeviceRows(base, np.array([0]), owner.take)
+    with monkeypatch.context() as patch:
+        patch.setattr(builtins, name, cls)
+        audit = audit_native_call(rows.materialize)
+    _refused(audit)
+    assert not calls and not owner._entries
