@@ -22,7 +22,12 @@ def _warning_class_fields(cls: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
     if py_type(cls) is not b.type:
         raise Error("TypeError: warning classes require the native metaclass")
-    return py_call(b.type.__dict__["__dict__"].__get__, cls)
+    var fields = py_call(b.type.__dict__["__dict__"].__get__, cls)
+    var keys = py_call(b.list,fields)
+    for k in range(len(keys)):  # driver-loop: class metadata keys precede lookup that could invoke Python equality
+        if py_type(keys[k]) is not b.str:
+            raise Error("TypeError: warning class metadata keys must be native strings")
+    return fields
 
 
 def _warning_category(context: PythonObject) raises -> PythonObject:
@@ -46,17 +51,26 @@ def _warning_admit_category(cls: PythonObject, context: PythonObject) raises:
     var b = Python.import_module("builtins")
     _ = _warning_class_fields(cls)
     var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var warning = False
     var names = Python.tuple("__new__", "__init__", "__str__", "__getattribute__")
     for j in range(len(mro)):  # driver-loop: over the warning exception ancestry
+        warning = warning or mro[j] is context["warning_base"]
         if py_get(_warning_class_fields(mro[j]), "__del__") is not None:
             raise Error("TypeError: custom warning finalizers are not native")
+    if not warning or py_type(py_call(b.type.__getattribute__,cls,"__name__")) is not b.str:
+        raise Error("TypeError: warning category names and ancestry must be native metadata")
     for k in range(len(names)):  # driver-loop: over standard native exception slots
         var found = PythonObject(None)
         for j in range(len(mro)):  # driver-loop: over native exception slot declarations
             found = py_get(_warning_class_fields(mro[j]), names[k])
             if found is not None:
                 break
-        if found is not context["warning_category_slots"][names[k]]:
+        var admitted = found is context["warning_category_slots"][names[k]]
+        if k == 0:
+            var constructors = context["warning_native_new"]
+            for j in range(len(constructors)):  # driver-loop: exact retained native constructors of builtin warning bases
+                admitted = admitted or found is constructors[j]
+        if not admitted:
             raise Error("TypeError: custom warning exception hooks are not native")
 
 

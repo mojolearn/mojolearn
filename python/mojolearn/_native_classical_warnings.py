@@ -32,6 +32,14 @@ def connect_warnings():
         native_slots[name] = getattr(category, name)
         if type(native_slots[name]) not in (BuiltinFunctionType, WrapperDescriptorType, MethodDescriptorType):
             raise TypeError("warning exception slots must be native")
+    # Builtin warning bases each own a distinct native __new__. NumPy's
+    # ComplexWarning inherits RuntimeWarning, not DataConversionWarning's
+    # UserWarning; retain these exact native entries without invoking them.
+    warning_new = tuple(base.__new__ for base in (Warning, UserWarning, DeprecationWarning, PendingDeprecationWarning,  # glue: fixed builtin warning constructor identities
+                        SyntaxWarning, RuntimeWarning, FutureWarning, ImportWarning, UnicodeWarning,
+                        BytesWarning, ResourceWarning, EncodingWarning))
+    if any(type(entry) is not BuiltinFunctionType for entry in warning_new):  # glue: native constructor identity admission at import
+        raise TypeError("warning constructors must be native")
     guarded = next(code for code in _mode._guard_cpu_training.__code__.co_consts if type(code) is CodeType and code.co_name == "guarded")  # glue: retain the established warning location from the legacy wrapper code
     location_line = max(line for _, _, line in guarded.co_lines() if line is not None)  # glue: native warning location is the wrapper's final call line
     context = module_fields.get("_Context")
@@ -42,6 +50,7 @@ def connect_warnings():
         raise TypeError("warnings require the native frame metadata entry")
     return dict(warning_fields=fields, warning_functions=functions, warning_standard_hooks=standard,
                 warning_category=category, warning_category_slots=native_slots,
+                warning_native_new=warning_new, warning_base=Warning,
                 warning_category_default=_sk_validate.DataConversionWarning,
                 warning_record=record, warning_record_fields=descriptor,
                 warning_context_class=context, warning_context_fields=context_descriptor,

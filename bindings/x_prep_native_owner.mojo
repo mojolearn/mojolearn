@@ -221,7 +221,7 @@ def _release_owned(owned: List[Int], entries: PythonObject) -> String:
 
 
 def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObject, out_words: Int,
-              program: List[Int32], inputs: PythonObject, entries: PythonObject, context: PythonObject,
+              var program: List[Int32], inputs: PythonObject, entries: PythonObject, context: PythonObject,
               logical_output: Int = 0) raises:
     var profile = String(getenv("MOJOLEARN_XPREP_PROFILE","0")) == "1"
     var start = Int(perf_counter_ns()) if profile else 0
@@ -286,6 +286,11 @@ def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObje
             _ = py_call(entries["x_prep_run_scratch"],arena,host,scratch,pa,nst)
         else:
             _ = py_call(entries["x_prep_run"],arena,host+scratch,pa,nst)
+        # The tuples above retain pointer integers, not their source Lists.
+        # Keep both descriptor buffers live until the native call returns;
+        # otherwise their last use is tuple construction, before py_call.
+        _ = ins^
+        _ = outs^
     except error:
         var cleanup = _release_owned(owned,entries)
         if cleanup.byte_length() > 0:
@@ -320,3 +325,6 @@ def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObje
                 name = "maxabs_fold"
             names += ("" if i == 0 else "+")+name
         print("XPPROG ops="+names+" arena="+String(host)+" scratch="+String(scratch)+" out="+String(logical_output)+" dev_out="+String(Int(out_words > 0))+" ranges="+String(Int(ranges))+" alloc_s="+String(Float64(Int(py=storage[2]))/1.0e9)+" inputs_s="+String(Float64(kernel_start-start)/1.0e9)+" call_s="+String(Float64(done-kernel_start)/1.0e9))
+    # Own the caller's command List and retain it through execution even
+    # when profiling is disabled. A raw integer address is not an owner.
+    _ = program^

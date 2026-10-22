@@ -212,7 +212,7 @@ def robust_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
     _stage(program,4,d,q,3,d,center,scale,0,0,2,1)
     if unit:
         _stage(program,73,d,scale,fractions)
-    xprep_run(arena,host,scratch,PythonObject(None),0,program,inputs,entries,context)
+    xprep_run(arena,host,scratch,PythonObject(None),0,program^,inputs,entries,context)
     py_setitem(fields,"center_",xprep_take(arena[0],center,d,0,context["output_context"]) if centering else PythonObject(None))
     py_setitem(fields,"scale_",xprep_take(arena[0],scale,d,0,context["output_context"]) if scaling else PythonObject(None))
     py_setitem(fields,"numeric_mode_",mode)
@@ -265,7 +265,7 @@ def robust_transform(model: PythonObject, source: PythonObject, context: PythonO
         _ = py_call(inputs.append,Python.tuple(scale_at,Python.tuple(0,scale,PythonObject(None),d,1)))
     var program = List[Int32]()
     _stage(program,3,n*d,0,n*d,d,center_at,scale_at,dest)
-    xprep_run(arena,host,0,output_store,n*d if dev_out else 0,program,inputs,entries,context,n*d if n*d >= 134217728 else 0)
+    xprep_run(arena,host,0,output_store,n*d if dev_out else 0,program^,inputs,entries,context,n*d if n*d >= 134217728 else 0)
     var output = xprep_take(output_store[0] if dev_out else arena[0],0 if dev_out else dest,n,d,context["output_context"])
     _ = arena^
     _ = values^
