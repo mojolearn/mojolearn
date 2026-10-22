@@ -890,7 +890,7 @@ def _coverage_text_tokenizers(ml):
                            ignore_merges=False, vocab=dict(vocab), merges=[]))
     direct = tk.Tokenizer(tokens, [], pattern="gpt2")
     from_json = tk.Tokenizer._from_json(data, "coverage-tokenizer.json")
-    from_spelled = tk.Tokenizer._from_spelled(dict(vocab), [], pattern=from_json.pattern, added={},
+    from_spelled = tk.Tokenizer._from_spelled(dict(vocab), [], pattern="gpt2", added={},
                                               normalizer=None, bos_ids=(), eos_ids=(),
                                               ignore_merges=False, source="coverage-spelled")
     return direct, from_json, from_spelled
