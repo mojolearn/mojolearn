@@ -8,6 +8,7 @@ import threading
 from types import SimpleNamespace
 import weakref
 
+import numpy as np
 import pytest
 from mojolearn import _arena_io as arena, _backend
 from mojolearn._array import Array
@@ -72,6 +73,23 @@ def test_cache_id_of_preserves_hit_owners_and_native_metadata(kind, entry_type):
     assert audit_native_call(cache.id_of, source).assert_native() == 19
     assert cache._entries is entries and cache._entries[key][1] is owner
     assert (cache.uploads, cache.hits) == (0, 1)
+
+
+@pytest.mark.parametrize("kind", ["float", "str", "bytes", "numpy_int", "numpy_float",
+                                  "numpy_array", "numpy_object_array"])
+def test_cache_id_of_preserves_native_scalar_key_preparation(kind):
+    constructors = {"float": float, "str": str, "bytes": lambda x: str(x).encode(),
+                    "numpy_int": np.int64, "numpy_float": np.float64,
+                    "numpy_array": lambda x: np.array(x, dtype="<i8"),
+                    "numpy_object_array": lambda x: np.array(x, dtype=object)}
+    convert = constructors[kind]
+    source = _source(address=convert(8), size=convert(3),
+                     itemsize=4 if kind in {"str", "bytes"} else convert(4))
+    cache = _cache()
+    cache._entries[(8, 3)] = (19, source)
+    assert audit_native_call(cache.id_of, source).assert_native() == 19
+    assert (cache.uploads, cache.hits) == (0, 1)
+    assert cache._entries[(8, 3)][1] is source
 
 
 @pytest.mark.parametrize("counter", [0, -1, 2**100, -2**100, True, False, .25,

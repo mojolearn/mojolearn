@@ -69,6 +69,7 @@ class NativeWeakrefConnectionTests(unittest.TestCase):
         context = connect()
         self.assertEqual(context['cache_store_routes'], ())
         self.assertIs(context['cache_object_setattr'], object.__setattr__)
+        self.assertIs(context['cache_runtime_error'], RuntimeError)
         self.assertEqual(context['cache_counter_types'],
                          (type(None), float, complex, str, bytes, bytearray,
                           list, tuple, dict, set, frozenset, range))
