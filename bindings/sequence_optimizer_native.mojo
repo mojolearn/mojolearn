@@ -22,7 +22,7 @@ def seq_class(owner: PythonObject, context: PythonObject) raises -> Int:
     raise Error("TypeError: sequence optimizer requires an exact native optimizer owner")
 
 
-def seq_binding(mode: PythonObject, context: PythonObject, binding: PythonObject = PythonObject(None)) raises -> PythonObject:
+def seq_binding(mode: PythonObject, context: PythonObject, binding: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
     var bindings = context["sequence_bindings"]
     if binding is not None:
@@ -213,7 +213,7 @@ def seq_construct(owner: PythonObject, values: PythonObject, mode: PythonObject,
         raise Error("TypeError: optimizer options require a native dictionary")
     opt_scalar(values[1], context)
     opt_scalar(mode, context)
-    var selected = seq_binding(mode, context)
+    var selected = seq_binding(mode, context, PythonObject(None))
     var device = False
     var sizes = Python.list()
     var shapes = Python.list()
