@@ -165,7 +165,7 @@ echo "== release_linux_build: $COMMIT, archs [$ARCHS], layout $LAYOUT, $VCPU vCP
 echo "   image $IMAGE"
 echo "   out $OUT"
 # One RunPod CPU pod per lane tag: the tag carries the set so the sets of one release run at once (2026-10-21).
-LANE_TAG="rel-$SHORT-$(printf "%s" "$ARCHS" | tr -c "a-z0-9\n" "-" | tr -s "-" | sed "s/-$//")"
+LANE_TAG="rel-$(printf "%s" "$SHORT" | cut -c1-7)-$(printf "%s" "$ARCHS" | tr -c "a-z0-9\n" "-" | tr -s "-" | sed "s/-$//")"
 RARGS="--lane $LANE_TAG --worktree $WT --image $IMAGE --vcpu $VCPU --flavors $FLAVORS --disk 80 --lease $LEASE --jobs $JOBS --cmd-file $TMPF/cmd.sh --out $OUT/LEG"
 [ "$BINCACHE" = 1 ] && RARGS="$RARGS --release-bincache"
 [ "$BINCACHE" = 1 ] || RARGS="$RARGS --no-bincache"
