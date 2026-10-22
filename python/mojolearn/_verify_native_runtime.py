@@ -6,12 +6,15 @@ One entry into the selected public wrapper is permitted. Every further Python
 frame, including descriptors, comprehensions and worker bodies, is reported.
 Native calls into NumPy/SciPy/scikit-learn are separately rejected. A clean
 trace proves only the exercised call, not every possible route through an API.
+Native calls with unresolved origins also prevent qualification, including in
+the existing forbidden-call signal used by refusal tests.
 """
 import dis
 import gc
 import sys
 import threading
 from collections import Counter
+from types import ModuleType
 
 #: The audited call stands in for a user's: the public methods answer this
 #: module as they answer code outside the package (`_mode._caller_outside`).
@@ -21,12 +24,50 @@ __mojolearn_user_boundary__ = True
 _FORBIDDEN_NATIVE_MODULES = ("numpy", "scipy", "sklearn")
 
 
+def _ordinary_field(fields, wanted):
+    # The profiler must not execute metadata equality or descriptor hooks.
+    value = None
+    for name, item in fields.items():
+        if type(name) is not str:
+            return None
+        if name == wanted:
+            value = item
+    return value
+
+
+def _module_name(value):
+    if type(value) is str:
+        return value or None
+    if type(value) is ModuleType:
+        # Some extension functions (including psutil on macOS) retain their
+        # actual module as __module__, rather than its name string.
+        fields = ModuleType.__dict__["__dict__"].__get__(value)
+        name = _ordinary_field(fields, "__name__")
+        return name if type(name) is str and name else None
+    return None
+
+
+def _native_call_origin(function):
+    module = getattr(function, "__module__", None)
+    if module is None or (type(module) is str and not module):
+        owner = type(getattr(function, "__self__", None))
+        fields = type.__dict__["__dict__"].__get__(owner)
+        if any(type(name) is not str for name in fields):
+            return None
+        # Built-in owner types compute __module__ rather than storing it in
+        # their dictionaries. Call the retained native type descriptor, not
+        # a metaclass property or custom __getattribute__ implementation.
+        module = type.__dict__["__module__"].__get__(owner)
+    return _module_name(module)
+
+
 class NativeRuntimeAudit:
     def __init__(self):
         self.result = None
         self.exception = None
         self.frames = Counter()
         self.forbidden_native = Counter()
+        self.unresolved_native = Counter()
         self.wrapper_entries = 0
         self.unobserved_threads = []
         self.wrapper_work = []
@@ -34,7 +75,7 @@ class NativeRuntimeAudit:
     @property
     def passed(self):
         return (self.exception is None and not self.frames and
-                not self.forbidden_native and not self.unobserved_threads and
+                not self.forbidden_native and not self.unresolved_native and not self.unobserved_threads and
                 not self.wrapper_work)
 
     def report(self):
@@ -52,6 +93,10 @@ class NativeRuntimeAudit:
                 dict(function=name, calls=count)
                 for name, count in sorted(self.forbidden_native.items())
             ],
+            "unresolved_native_calls": [
+                dict(function=name, calls=count)
+                for name, count in sorted(self.unresolved_native.items())
+            ],
             "unobserved_existing_threads": self.unobserved_threads,
             "exception": None if self.exception is None else {
                 "type": type(self.exception).__name__, "message": str(self.exception)},
@@ -64,6 +109,7 @@ class NativeRuntimeAudit:
             raise AssertionError(
                 f"native runtime boundary failed: Python frames={details}; "
                 f"forbidden native={report['forbidden_native_calls']}; "
+                f"unresolved native={report['unresolved_native_calls']}; "
                 f"wrapper work={self.wrapper_work}; "
                 f"unobserved threads={self.unobserved_threads}; "
                 f"exception={report['exception']}"
@@ -125,13 +171,19 @@ def audit_native_call(operation, *args, **kwargs):
                 audit.frames[(code.co_filename, code.co_firstlineno,
                               code.co_qualname)] += 1
         elif event == "c_call":
-            module = getattr(arg, "__module__", None)
-            if not module:
-                module = type(getattr(arg, "__self__", None)).__module__
-            if any(module == m or module.startswith(m + ".")
+            module = _native_call_origin(arg)
+            name = getattr(arg, "__qualname__", None)
+            if type(name) is not str:
+                name = "<native callable>"
+            if module is None:
+                audit.unresolved_native[name] += 1
+                # Existing refusal guards inspect forbidden_native directly
+                # or its report list. Keep their admission fail-closed too;
+                # unresolved_native retains the distinct provenance reason.
+                audit.forbidden_native["<unresolved-origin>." + name] += 1
+            elif any(module == m or module.startswith(m + ".")
                    for m in _FORBIDDEN_NATIVE_MODULES):
-                audit.forbidden_native[module + "." +
-                                       getattr(arg, "__qualname__", str(arg))] += 1
+                audit.forbidden_native[module + "." + name] += 1
 
     # Install the future-thread hook before profiling the selected operation;
     # the audit controller's own setup/teardown must not enter the result.

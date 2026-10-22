@@ -1,6 +1,6 @@
 {
   "schema": "mojolearn.runtime-takeover-status.v1",
-  "updated": "2026-10-22T08:25:48.391103+00:00",
+  "updated": "2026-10-22T09:09:57.910910+00:00",
   "release": "HELD",
   "integration_before_report": "ea246bca103c35d8c322153d8578d89035a9323f",
   "evidence_root": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021",
@@ -267,9 +267,10 @@
     }
   },
   "remaining": [
-    "Native density constructors, cross entropy, training device allocation, optimizer container/scalar admission and configuration ordering, KDE option inheritance, and neutral owner helper are staged separately and uncompiled.",
-    "DeviceRows materialization is under source review. Resident/context lifecycle, public __array__ ownership and callback contracts, cold sklearn tags, IsolationForest.fit and remaining public constructors/fit/save/hash paths remain open.",
-    "Matching installed-package/reference/fault accounting and Linux/NVIDIA/AMD qualification remain incomplete. Apple selected passes do not establish complete API coverage or cross-vendor identity."
+    "Repair selected308 failures: shared Array allocation, unset density slot exception preservation and cross-entropy Array truth semantics; correct five test setup faults while retaining the intended callback refusals. Candidate source remains outside main.",
+    "Pending reviewed native patches include source-level formatter log10 removal for wheel packaging, StringDType metadata admission and HostIsolationForest.fit. Their compilation and selected runtime checks remain owed.",
+    "Resident/context lifecycle, public __array__ ownership and callback contracts, cold sklearn tags and remaining public constructors/fit/save/hash paths remain open. Cold sklearn startup behavior awaits owner preference.",
+    "Installed wheel assembly failed portable-math import admission before any installed tests. Preserve that failure; compile the source repair before resuming580 CPU-applicable cases. Matching reference/fault accounting and Linux/NVIDIA/AMD qualification remain incomplete."
   ],
   "limitations": [
     "No claim that every public API, option, checkpoint or failure path is fully migrated/qualified.",
@@ -333,7 +334,13 @@
     "scope": "Current selected batch only; unchanged passing results retained across source freezes.",
     "release": "HELD; remaining runtime and vendor/package qualification is separate."
   },
-  "active_frozen_build": null,
+  "active_frozen_build": {
+    "source": "30841c2213a04faac6019c00e24cb3076115cee7",
+    "build_stages_passed": 7,
+    "runtime_selection_passed": false,
+    "evidence": "runtime-selection-verdict-30841c221.json",
+    "merged_to_main": false
+  },
   "last_failed_build": {
     "source": "a4580cc4b690696ff0b327fbc50a50cd112f1764",
     "state": "Five stages passed; FAST base import smoke failed on weak-reference descriptor admission; no runtime selection executed.",
@@ -346,11 +353,7 @@
     "evidence": "runtime-selection-verdict-3ede5addb.json"
   },
   "next_freeze": {
-    "tree": "/Users/andrewhendel/mojolearn-wt/runtime-density-resident-integration",
-    "status": "Separately staged source; pending final source review and precise affected-test union. Not compiled or runtime-qualified.",
-    "reuse_source": "ea246bca103c35d8c322153d8578d89035a9323f",
-    "reuse_tree": "/Users/andrewhendel/mojolearn-wt/runtime-kde-layout-repair-build",
-    "scope": "Only new or directly affected regression checks. Do not repeat the unchanged previous selected suite."
+    "status": "Repairs in three isolated lanes; use308 passed compilation as explicit reuse baseline and rebuild only affected closures."
   },
   "latest_followups": {
     "b638_stronger_cleanup": "2 identical and 2 FAST passed",
@@ -358,5 +361,63 @@
     "e97_static_checks": "Production no-host-routes, no-Python-kernels, no-compute-shells, lane selfcheck and lane accounting all exit0",
     "6b69_static_checks": "Production no-host-routes, no-Python-kernels, no-compute-shells, lane selfcheck and lane accounting all exit 0."
   },
-  "count_correction": "MaxAbs complete selection91GPU/82CPU+9N/A,58new+33existing; earlier107 was arithmetic error. Correction receipt retained."
+  "count_correction": "MaxAbs complete selection91GPU/82CPU+9N/A,58new+33existing; earlier107 was arithmetic error. Correction receipt retained.",
+  "verification_only_integration": {
+    "source": "84b830f469b011cc7f296c8e51c6119aad3d69da",
+    "changes": "Native auditor resolves exact module and bound-builtin origins; unresolved native origins fail both qualification and existing refusal guards.",
+    "tests": {
+      "passed": 20,
+      "failed": 0,
+      "skipped": 0,
+      "evidence": "native-audit-main.junit.xml"
+    },
+    "native_runtime_changed": false
+  },
+  "latest_candidate_tests": {
+    "cpu": {
+      "expected": 723,
+      "total": 723,
+      "passed": 574,
+      "failed": 149,
+      "errors": 0,
+      "skipped": 0,
+      "coverage_complete": true,
+      "source_matches": true,
+      "exit_code": 1
+    },
+    "metal": {
+      "expected": 744,
+      "total": 744,
+      "passed": 595,
+      "failed": 149,
+      "errors": 0,
+      "skipped": 0,
+      "coverage_complete": true,
+      "source_matches": true,
+      "exit_code": 1
+    },
+    "numpy126-metal": {
+      "expected": 540,
+      "total": 540,
+      "passed": 498,
+      "failed": 42,
+      "errors": 0,
+      "skipped": 0,
+      "coverage_complete": true,
+      "source_matches": true,
+      "exit_code": 1
+    }
+  },
+  "worktree_cleanup": {
+    "removed": 14,
+    "evidence": "worktree-cleanup/RESULT.json",
+    "branches_retained": true,
+    "measurement_dirty_patch": "All three changed files already byte-match main; original dirty worktree retained. See measurement-smoke-reconciliation/reconciled.json."
+  },
+  "ci_observation": {
+    "source": "e73a88068dc36e1f78091e20f1d5dbba94473ec8",
+    "passed_workflows": 3,
+    "no_host_routes": "Production scan passed; checker test step was cancelled. Not an all-green CI claim.",
+    "evidence": "ci-no-host-routes-e73-final.json"
+  }
 }
