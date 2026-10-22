@@ -247,7 +247,7 @@ def host_tree_constructor_fields(model: PythonObject, context: PythonObject) rai
     host_archive_check_layout(py_type(model), context)
     var fields = sequential_fields(model)
     var b = Python.import_module("builtins")
-    var keys = py_call(b.list, fields.keys())
+    var keys = py_call(py_type(Python.list()), fields.keys())
     for i in range(len(keys)):  # driver-loop: native constructor dictionary admission
         if py_type(keys[i]) is not b.str:
             raise Error("TypeError: tree state names must be native strings")

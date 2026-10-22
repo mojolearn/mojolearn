@@ -82,7 +82,7 @@ def classical_check_layout(model: PythonObject, context: PythonObject) raises:
         raise Error("TypeError: native public model dictionary descriptor is missing")
     if py_type(model) is not b.type:
         var fields = py_call(plan["fields_get"], model, cls)
-        var keys = py_call(b.list, fields.keys())
+        var keys = py_call(py_type(Python.list()), fields.keys())
         for k in range(len(keys)):  # driver-loop: native instance attribute names
             if py_type(keys[k]) is not b.str:
                 # Refuse before a dict lookup can compare a malicious key
