@@ -87,6 +87,51 @@ def test_public_linear_preserves_zero_rank_array_refusal(operation):
     assert_refused(audit_native_call(getattr(T, operation), *args, numeric_mode="identical"), IndexError)
 
 
+@pytest.mark.parametrize("operation,slot", [("linear_forward", "input"), ("linear_forward", "weight"),
+                                           ("linear_backward", "input"), ("linear_backward", "weight"),
+                                           ("linear_backward", "gradient")])
+@pytest.mark.parametrize("scalar", ["numpy-0d", "numpy-scalar", "array-0d"])
+def test_public_linear_preserves_each_scalar_slot_contract(operation, slot, scalar):
+    # The retained old-wrapper probe uses K=1, so its permissive backward
+    # weight handling never reads beyond a scalar buffer.
+    a, weight, gradient = np.array([[1.25]], dtype="f4"), np.array([[2.]], dtype="f4"), np.array([[0.5]], dtype="f4")
+    value = np.array({"input": 1.25, "weight": 2., "gradient": 0.5}[slot], dtype="f4")
+    if scalar == "numpy-scalar":
+        value = value[()]
+    elif scalar == "array-0d":
+        value = Array.from_buffer(value)
+    if slot == "input":
+        a = value
+    elif slot == "weight":
+        weight = value
+    else:
+        gradient = value
+    args = (a, weight) if operation == "linear_forward" else (gradient, a, weight)
+    result = audit_native_call(getattr(T, operation), *args, numeric_mode="identical")
+    if operation == "linear_forward" and slot == "weight":
+        assert_refused(result, ValueError)
+    elif scalar == "array-0d":
+        assert_refused(result, IndexError)
+    else:
+        shape = (1,) if slot == "input" else (1, 1)
+        expected = (np.full(shape, 2.5, dtype="f4"),) if operation == "linear_forward" else (
+            np.full(shape, 1., dtype="f4"), np.full((1, 1), 0.625, dtype="f4"))
+        assert_outputs(result.assert_native(), expected)
+
+
+@pytest.mark.parametrize("shape", [(2,), (2, 3), (2, 1, 2)])
+@pytest.mark.parametrize("kind", ["numpy", "array"])
+def test_public_linear_backward_preserves_safe_weight_prefix(shape, kind):
+    a = np.array([[1.25], [-0.5]], dtype="f4")
+    gradient = np.array([[0.5, 0.25], [-0.25, 1.]], dtype="f4")
+    weight = np.arange(1, np.prod(shape) + 1, dtype="f4").reshape(shape)
+    expected = kernel_oracle("linear_backward", a, weight.ravel()[:2].reshape(2, 1), gradient, "identical")
+    if kind == "array":
+        weight = Array.from_buffer(weight)
+    result = audit_native_call(T.linear_backward, gradient, a, weight, numeric_mode="identical").assert_native()
+    assert_outputs(result, expected)
+
+
 @pytest.mark.parametrize("case", ["float64", "big-endian", "empty", "zero-feature", "weight-rank", "weight-features"])
 @pytest.mark.parametrize("operation", ["linear_forward", "linear_backward"])
 def test_public_linear_refuses_invalid_buffers_before_kernel(case, operation):
