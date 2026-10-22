@@ -56,6 +56,7 @@ def classical_check_layout(model: PythonObject, context: PythonObject) raises:
     if len(mro) != len(connected):
         raise Error("TypeError: native public model class layout changed")
     var found_fields = False
+    var found_finalizer = False
     for k in range(len(mro)):  # driver-loop: exact connected class ancestry
         if mro[k] is not connected[k]:
             raise Error("TypeError: native public model class ancestry changed")
@@ -63,8 +64,14 @@ def classical_check_layout(model: PythonObject, context: PythonObject) raises:
             # CPython otherwise invokes this hook after AttributeError from
             # our native getter. Refuse while we still control the boundary.
             raise Error("TypeError: Python model __getattr__ hooks are not accepted")
-        if py_contains(_type_fields(mro[k]), "__del__"):
-            raise Error("TypeError: Python model finalizer hooks are not accepted")
+        if not found_finalizer and py_contains(_type_fields(mro[k]), "__del__"):
+            # Explicit CPU archive classes replace device finalizers with a
+            # connected native descriptor. Only the first resolved slot can
+            # run; a shadowed GPU-base Python finalizer is never invoked.
+            var native_finalizer = py_get(context, "host_archive_finalizer_descriptor")
+            if native_finalizer is None or _type_fields(mro[k])["__del__"] is not native_finalizer:
+                raise Error("TypeError: Python model finalizer hooks are not accepted")
+            found_finalizer = True
         if not found_fields:
             var descriptor = py_get(_type_fields(mro[k]), "__dict__")
             if descriptor is not None:

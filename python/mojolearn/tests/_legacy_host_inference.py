@@ -8,6 +8,23 @@ from mojolearn._buffer import as_f32_colmajor, as_f32_c, empty, addr, addr_ro, a
 from mojolearn.cluster import _METRIC_NAMES
 
 
+def kde(model, X, total=False):
+    """Frozen 32011bb32 CPU KDE preparation and fixed-order total."""
+    from mojolearn._buffer import as_f32_dense_c
+    x, _ = as_f32_dense_c(X, ndim=2, name="X")
+    if x.shape[1] != model.n_features_in_:
+        raise ValueError("KDE query width differs from fit")
+    out = empty((x.shape[0],), "<f4")
+    weights = model._w
+    result = model._bind("_mojolearn_estimators").kde_score_samples(
+        addr_ro(model._x, name="_x"), addr_ro(x, name="X"),
+        addr_ro(weights, name="weights") if weights is not None else 0,
+        addr(out, name="out"),
+        [model._x.shape[0], x.shape[0], model.n_features_in_, float(model.bandwidth),
+         int(weights is not None), int(total)], model.kernel, model.metric)
+    return float(result) if total else out
+
+
 def cd_predict(model, X):
     if not hasattr(model, "coef_"):
         raise ValueError("call fit before predict")
