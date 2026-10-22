@@ -29,6 +29,7 @@ every Python call and attribute or item assignment goes through
 bindings/py_balanced.mojo, so no caller object is retained."""
 from std.ffi import _Global
 from std.memory import memcpy
+from std.math import isfinite
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 
@@ -744,9 +745,20 @@ def schedule_spec(schedule: PythonObject) raises -> LrSpec:
     for i in range(len(classes)):  # driver-loop: over three built-in schedule configurations
         if py_type(schedule) is classes[i]:
             kind = i
-    var total = fields["total_steps"]
-    return LrSpec(kind, Int(py=fields["warmup_steps"]), -1 if total is None else Int(py=total), 0,
-                  Float64(py=fields["peak_lr"]), Float64(py=fields["min_lr"]), 0.0, 0.0)
+    if kind < 3:
+        var total = fields["total_steps"]
+        return LrSpec(kind, Int(py=fields["warmup_steps"]), -1 if total is None else Int(py=total), 0,
+                      Float64(py=fields["peak_lr"]), Float64(py=fields["min_lr"]), 0.0, 0.0)
+    if kind < 5:
+        var base = Float64(py=fields["base_lr"])
+        var gamma = Float64(py=fields["gamma"])
+        if not isfinite(base) or not isfinite(gamma):
+            raise Error("ValueError: base_lr and gamma must be finite")
+        return LrSpec(20, Int(py=fields["_step"]) if kind == 3 else 1, 0, 0, base, gamma, 0.0, 0.0)
+    return LrSpec(10, 1 if String(py=fields["anneal_strategy"]) == "linear" else 0,
+                  1 if Bool(py=fields["three_phase"]) else 0, Int(py=fields["total_steps"]),
+                  Float64(py=fields["max_lr"]), Float64(py=fields["div_factor"]),
+                  Float64(py=fields["final_div_factor"]), Float64(py=fields["pct_start"]))
 
 
 # ---------------------------------------------------------------------------

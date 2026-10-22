@@ -48,8 +48,14 @@ def connect(training):
     _numeric_profile.default_profile("training")  # glue: initialize the package's numeric-profile connection
     input_context = _numpy_free_context()
     input_context["native_module_type"] = ModuleType
+    schedule_entries = {}
+    for name in ("lr_schedule_at", "lr_schedule_series"):  # glue: retain native scalar schedule entries at import
+        entry = training._lr_native(name)  # cpu-route: compiled exact learning-rate scalar ABI, never a training/data kernel
+        if not isinstance(entry, BuiltinFunctionType):
+            raise TypeError(f"schedule requires compiled {name}")
+        schedule_entries[name] = entry
     context = {
-        "owners": owners, "schedules": schedules, "device_class": training.TrainDeviceArray,
+        "schedule_entries": schedule_entries, "owners": owners, "schedules": schedules, "device_class": training.TrainDeviceArray,
         "array_class": Array, "array_type": array.array,
         "buffer_types": (bytes, bytearray, array.array, mmap.mmap),
         "scalar_types": (type(None), bool, int, float, complex, str, bytes),
@@ -65,3 +71,15 @@ def connect(training):
     if not isinstance(native, BuiltinFunctionType):
         raise TypeError("optimizer requires compiled optimizer_native")
     return native, context
+
+
+def connect_sequence(training, sequence):
+    # glue: register built-in sequence schedule identities once when that module loads
+    context = training._OPT_CONTEXT
+    classes = (sequence.StepLR, sequence.ExponentialLR, sequence.OneCycleLR)
+    context["schedules"] = context["schedules"][:3] + classes
+    guarded = (sequence._Sched, sequence._PowSched) + classes
+    names = ("__dict__", "__getattribute__", "__getattr__", "__setattr__")
+    guards = tuple((cls, cls.__mro__, vars(cls), tuple((name, vars(cls).get(name)) for name in names))  # glue: retain fixed native metadata layouts at module import
+                   for cls in guarded)
+    context["guards"] += guards
