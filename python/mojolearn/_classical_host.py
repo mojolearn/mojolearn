@@ -261,7 +261,7 @@ class HostSVC(_HostBound, SVC):
     _HOST_ARRAYS = ("dual_coef_", "support_vectors_", "intercept_")
 
 
-class HostIsolationForest(_HostBound, IsolationForest):
+class HostIsolationForest(_NativeArchiveLoad, _HostBound, IsolationForest):
     """`score_samples`, `decision_function` and `predict` of a saved
     IsolationForest through the svm host binding's iforest_run: the forest
     rebuilt from the saved training matrix and knobs (DEVIATION 874), as
