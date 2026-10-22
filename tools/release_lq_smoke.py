@@ -50,7 +50,10 @@ import sys
 import time
 from pathlib import Path
 
-LQ_DEFAULT = Path(os.environ.get("MOJOLEARN_LQ", str(Path.home() / "mojolearn-evidence" / "lq" / "lq")))
+# lq moved to ~/mojolearn-ops/lq (CLAUDE.md, 2026-10-22); the old evidence path is the fallback
+LQ_DEFAULT = Path(os.environ.get("MOJOLEARN_LQ") or next(
+    (str(p) for p in (Path.home() / "mojolearn-ops" / "lq", Path.home() / "mojolearn-evidence" / "lq" / "lq")
+     if p.is_file()), str(Path.home() / "mojolearn-ops" / "lq")))
 SSH_OPTS = ["-o", "ConnectTimeout=20", "-o", "BatchMode=yes", "-o", "StrictHostKeyChecking=no",
             "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=4"]
 #: smoke options whose value is a local file the box needs
