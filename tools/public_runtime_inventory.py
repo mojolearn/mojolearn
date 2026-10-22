@@ -1039,6 +1039,9 @@ FAMILY_ALIASES = {
     "ivf": "neighbors", "forecasting": "sequence", "parallel_forecasting": "sequence",
     "parallel_gaussian_process": "gaussian_process", "parallel_model_selection": "model_selection",
     "parallel_training": "training", "model_pool_training": "training", "offload_training": "training",
+    "parallel_ensemble": "ensemble", "parallel_graph": "manifold", "parallel_neighbors": "neighbors",
+    "parallel_neighbors_reference": "neighbors", "parallel_preprocessing": "preprocessing",
+    "parallel_classical": "multi_gpu",
     "mamba": "neural_inference", "transformer": "neural_inference", "samba": "neural_inference",
     "byte_lm": "language_model", "embedding": "neural_network", "ops": "ops", "importers": "ops",
     "cholesky": "linalg", "linalg_fast": "linalg", "neighbors_reference": "neighbors"}
