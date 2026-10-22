@@ -1,0 +1,120 @@
+{
+  "schema": "mojolearn.runtime-takeover-status.v1",
+  "updated": "2026-10-22T02:48:28.372129+00:00",
+  "release": "HELD",
+  "qualified_runtime_build": "e7c23510b52cbed9c4447ff466460dde6a2745b2",
+  "integration_before_report": "bd71db7578d26738b97af83bb3984d3ada61a54b",
+  "evidence_root": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021",
+  "test_policy": "Rerun failures, new tests and directly affected regression checks; reuse accepted unchanged results. Counts from different scopes are not interchangeable.",
+  "completed": {
+    "previous_failure_repairs": {
+      "cpu": 16,
+      "metal": 16,
+      "evidence": "runtime-targeted-e7c23510b-summary.json"
+    },
+    "targeted_tests": {
+      "cpu": {
+        "passed": 324,
+        "failed": 14,
+        "total": 338,
+        "skipped": 0,
+        "errors": 0
+      },
+      "metal": {
+        "passed": 324,
+        "failed": 14,
+        "total": 338,
+        "skipped": 0,
+        "errors": 0
+      }
+    },
+    "scaler_exact_comparisons": {
+      "standard_per_vendor": 16,
+      "minmax_per_vendor": 24,
+      "explicit_host_training_per_vendor": 18,
+      "maxabs_per_applicable_vendor_mode": 16,
+      "maxabs_metadata_fields_per_mode": 12,
+      "modes": [
+        "cpu identical",
+        "metal identical",
+        "metal fast (MaxAbs only)"
+      ],
+      "host_reference_note": "HostStandard uses accepted previous Host behavior; formerly broken HostMinMax training is checked against ordinary MinMax reference.",
+      "all_match": true
+    },
+    "maxabs_fast_tests": {
+      "passed": 44,
+      "evidence": "maxabs-fast-tests-e7c23510b.junit.xml"
+    },
+    "bounded_identity_routes": {
+      "new_device_optimizers": [
+        "sequence-adafactor-device",
+        "sequence-lamb-device"
+      ],
+      "explicit_host_scaler_inference": [
+        "standard-scaler",
+        "minmax-scaler"
+      ],
+      "fixtures": 1,
+      "repeats": 1,
+      "scope": "Source package diagnostics; matching installed-package and other-vendor references still owed."
+    },
+    "reused_optimizer_evidence": {
+      "source": "95e6b50d5",
+      "optimizer_exact_cases": 60,
+      "sequence_exact_cases": 28,
+      "note": "Unchanged passing optimizer suites and comparisons were not repeated in the e7 targeted run."
+    }
+  },
+  "remaining": [
+    {
+      "id": "gbdt-archive-corner-cases",
+      "owner": "host_model_native",
+      "state": "repairing",
+      "failing_cases_per_vendor": 14,
+      "details": "12 new GBDT saved-state comparisons and2 categorical split cases; all previous16 failures repaired."
+    },
+    {
+      "id": "host-tree-runtime",
+      "owner": "host_model_native",
+      "state": "source-integrated-not-compiled",
+      "source_commit": "bd71db757",
+      "details": "Forest/GBDT prediction/state migration and82 new tests; constructors, text parser and generic host_predict wrappers still being migrated."
+    },
+    {
+      "id": "sequence-array-conversion",
+      "owner": "optimizer_native",
+      "state": "native-candidate-in-development",
+      "details": "Preserve full dtype/copy/warning behavior. Public __array__ remains Python until native candidate is qualified."
+    },
+    {
+      "id": "selector-import-metadata",
+      "owner": "scaler_lifecycle_native",
+      "state": "repairing",
+      "details": "New archive metadata setup conservatively expands helper selection to519/542 lanes. Preserve sound callback selection while distinguishing metadata storage from execution. Full run interrupted after1failure/5passes;99 tests unexecuted."
+    },
+    {
+      "id": "coverage-accounting",
+      "owner": "root",
+      "state": "open",
+      "details": "Registration parser repaired117 missing C doors. Source annotations are not execution proof. Corrected audit:49GAP/2owed native routes and59fault-arm obligations; retained source-specific review required."
+    },
+    {
+      "id": "sklearn-tags-import-contract",
+      "owner": "root",
+      "state": "pending-user-contract-answer",
+      "details": "Proposed import-order change remains excluded; preserve current interface until resolved."
+    },
+    {
+      "id": "release-qualification",
+      "owner": "root",
+      "state": "pending-repairs",
+      "details": "Final affected Linux/NVIDIA/AMD, installed-wheel and native-only qualification, references and missing fault execution. Reuse valid retained evidence; no publication or automatic rentals."
+    }
+  ],
+  "limitations": [
+    "No claim that every public API, option, checkpoint or failure path is fully migrated/qualified.",
+    "No performance improvement claim from correctness tests.",
+    "Static census categories are not independently demonstrated runtime defects."
+  ]
+}
