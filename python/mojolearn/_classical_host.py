@@ -1268,6 +1268,7 @@ def _connect_host_inference():
     context = dict(_CLASSICAL["host_tree_context"])
     context.update(host_inference_entries=entries,
                    host_inference_class_labels=ClassLabels,
+                   host_kde_sequence_types=(list, tuple, range),
                    host_inference_kinds={HostElasticNet: "cd", HostLasso: "cd", HostKMeans: "kmeans",
                                          HostKernelRidge: "kernel_ridge", HostNystroem: "nystroem", HostRBFSampler: "rbf_sampler",
                                          HostPCA: "pca", HostTruncatedSVD: "tsvd", HostLogisticRegression: "logistic", HostSVR: "svr", HostSVC: "svc", HostKernelDensity: "kde", HostIsolationForest: "iforest"})

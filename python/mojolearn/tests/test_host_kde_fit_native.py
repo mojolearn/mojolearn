@@ -202,6 +202,36 @@ def test_kde_empty_weight_storage_preserves_shape_error_and_partial_state(kind, 
     assert _state(vars(model)) == _state(vars(old))
 
 
+@pytest.mark.parametrize("name", ["list", "tuple", "range"])
+def test_kde_weight_admission_ignores_replaced_container_types(name, monkeypatch):
+    import builtins
+    import dis
+    import threading
+    from mojolearn import _verify_native_runtime as verifier
+    touched = []
+    class Foreign:
+        def __len__(self):
+            touched.append("len")
+            return 0
+        def __iter__(self):
+            touched.append("iter")
+            return iter(())
+        def __float__(self):
+            touched.append("float")
+            return 1.
+    model, x, weight = _model(), _x(), Foreign()
+    fit = model.fit
+    with monkeypatch.context() as patch:
+        # The verifier is a test controller; preserve its bytecode inspection
+        # constructors while poisoning the product's live builtin lookup.
+        for controller in (verifier, dis, threading):
+            patch.setattr(controller, name, getattr(builtins, name), raising=False)
+        patch.setattr(builtins, name, Foreign)
+        audit = audit_native_call(fit, x, sample_weight=weight)
+    _refused(audit, TypeError)
+    assert touched == []
+
+
 @pytest.mark.parametrize("mode", [None, "identical", "fast"])
 @pytest.mark.parametrize("indirect", [False, True])
 @pytest.mark.parametrize("override", [False, True])
