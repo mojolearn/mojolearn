@@ -84,6 +84,9 @@ def _cases():
         "AgglomerativeClustering": ("mojolearn-agglomerative-1", dict(
             meta=_i64([2, 2, 3]), metric="euclidean", x=_f32([[1, 2], [3, 4], [5, 6]]),
             labels=np.asarray([0, 1, 1], dtype="<i4"))),
+        "LogisticRegression": ("mojolearn-logistic-1", dict(
+            meta=_i64([2, 1]), classes=np.asarray(["a", "b", "c"]),
+            w=_f32([1, 2, 3, 4, 5, 6, .1, .2, .3]))),
     }
 
 
@@ -186,6 +189,24 @@ def test_host_load_refuses_dictionary_descriptor_before_instantiation(tmp_path):
     report = audit.report()
     assert not any(report[key] for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads")), report
     assert calls == []
+
+
+@pytest.mark.parametrize("labels", [np.asarray([2, 7], dtype="<i8"),
+                                    np.asarray([.5, 1.5], dtype="<f8"),
+                                    np.asarray(["left", "right"]),
+                                    np.asarray(["a", "b", "c"])])
+@pytest.mark.parametrize("intercept", [False, True])
+def test_logistic_saved_label_types_and_coefficient_layout(tmp_path, labels, intercept):
+    targets = 1 if len(labels) == 2 else len(labels)
+    path = _archive(tmp_path, "LogisticRegression", override={
+        "classes": labels, "meta": _i64([3, int(intercept)]),
+        "w": np.arange((3 + int(intercept)) * targets, dtype="<f4")})
+    original = host.LogisticRegression.load.__func__(host.HostLogisticRegression, path)
+    restored = audit_native_call(host.HostLogisticRegression.load, path).assert_native()
+    assert _state(vars(restored)) == _state(vars(original))
+    before = restored._w.tobytes()
+    restored.coef_._mv[0] = -999
+    assert restored._w.tobytes() == before
 
 
 def test_native_load_wrapper_is_one_binding_call():

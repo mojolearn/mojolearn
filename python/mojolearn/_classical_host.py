@@ -200,7 +200,14 @@ class HostRidge(_HostBound, Ridge):
         return _native_classical(self, "model_sha256", (), _CLASSICAL)
 
 
-class HostLogisticRegression(_HostBound, LogisticRegression):
+class _NativeArchiveLoad:
+    @classmethod
+    def load(cls, path):
+        """Load saved model state from ``path`` into this CPU model class."""
+        return _native_classical(cls, "host_archive_load", (path,), _CLASSICAL)
+
+
+class HostLogisticRegression(_NativeArchiveLoad, _HostBound, LogisticRegression):
     _HOST_ARRAYS = ("_w",)
 
     def _host_refusals(self):
@@ -216,13 +223,6 @@ class HostLogisticRegression(_HostBound, LogisticRegression):
                     f"{len(self.classes_)} classes cannot predict on the host; "
                     "rebuild it with bindings/build_estimators_host.sh"
                 )
-
-
-class _NativeArchiveLoad:
-    @classmethod
-    def load(cls, path):
-        """Load saved model state from ``path`` into this CPU model class."""
-        return _native_classical(cls, "host_archive_load", (path,), _CLASSICAL)
 
 
 class HostTruncatedSVD(_NativeArchiveLoad, _HostBound, TruncatedSVD):
