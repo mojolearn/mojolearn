@@ -265,13 +265,13 @@ def _if_fit_body(model: PythonObject, fields: PythonObject, raw: PythonObject, c
         raise Error("mojolearn: X must be 2-D, got " + String(Int(py=raw.ndim)) + "-D shape " + _kde_shape(raw.shape))
     var kind = classical_kind(raw, context)
     if kind == "U" or kind == "S":
-        raise Error("mojolearn: X has buffer format '" + String(native_buffer_view(raw).format) + "', which is not a numeric array")
+        raise Error("TypeError: mojolearn: X has buffer format '" + String(native_buffer_view(raw).format) + "', which is not a numeric array")
     if kind == "O":
         var flat = raw.flat
         for i in range(Int(py=raw.size)):  # driver-loop: native object scalars before the numeric packing phase
             var item = flat[i]
             if py_type(item) is py_type(PythonObject("")):
-                raise Error("mojolearn: X holds a str, not a number")
+                raise Error("TypeError: mojolearn: X holds a str, not a number")
     var x = _kde_cast(raw, context, "X")
     py_setitem(fields, "input_copied_", copied)
     var mode = _kde_fit_mode(model, fields, context)
