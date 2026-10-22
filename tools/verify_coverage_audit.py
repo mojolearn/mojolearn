@@ -1327,8 +1327,9 @@ ANNOTATIONS_BY_SRC.update({
         "owed", ["native-schedule-series"],
         "New source route: schedule lr_values/lrs -> native schedule_values/schedule_list -> "
         "retained lr_schedule_series. The new lane consumes both outputs over phase boundaries "
-        "and empty series; coverage-native-schedule-series faults returned values. Actual runs, "
-        "clean/fault/restored records, cross-vendor references and installed-package admission pending.")
+        "and empty series; coverage-native-schedule-series faults returned values. Bounded CPU/Metal clean "
+        "runs passed on native43 with harness7f64. Fault/restoration records, all-fixture cross-vendor "
+        "references and installed-package admission remain pending.")
        for src in ("bindings/_mojolearn.mojo", "bindings/_mojolearn_core_host.mojo")},
     **{(entry, src): (
         "covered", [lane],
@@ -1346,7 +1347,8 @@ ANNOTATIONS_BY_SRC.update({
         "New source route: native public optimizer " + route + " -> retained " + entry + ". "
         "The named new lanes consume the actual bare owner operation. CPU IO scope is query "
         "and refusal only; optim-resident-io qualifies GPU transfers. Independent new sabotage "
-        "arms are authored. Execution/restoration, reference and installed-package admission pending.")
+        "arms are authored. Bounded CPU/Metal clean runs passed on native43 with harness7f64; "
+        "fault/restoration, all-fixture reference and installed-package admission remain pending.")
        for src in ("bindings/_mojolearn_training.mojo", "bindings/_mojolearn_training_host.mojo")
        for entry, route, lanes in (
            ("optimizer_door_io", "io/raw_io/param_device",
@@ -1366,7 +1368,8 @@ ANNOTATIONS_BY_SRC.update({
         "New GPU-only source route: native sequence finalization and failed upload/copy cleanup "
         "-> retained seq_tensor_free. The new lane independently checks pool closure after explicit, "
         "repeated, GC and forced native-operation failures; a no-op free fault is authored. CPU has "
-        "no resident pool. Execution/restoration, reference and installed-package admission pending."),
+        "no resident pool. Bounded Metal clean execution passed on native43 with harness7f64. "
+        "Fault/restoration, all-fixture reference and installed-package admission remain pending."),
 })
 
 
