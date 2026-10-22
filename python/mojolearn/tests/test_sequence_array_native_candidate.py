@@ -51,6 +51,25 @@ def assert_outputs(actual, expected):
         assert actual.tobytes() == expected.tobytes()
 
 
+def assert_defined_u16_outputs(actual, expected, source):
+    # FIXTURE CORRECTION (2026-10-22): the retained NumPy1.26 mixed-input
+    # failure asserted exact bytes for negative/out-of-range float->uint16
+    # values. NumPy explicitly leaves those results undefined under C99:
+    # https://numpy.org/doc/1.26/release/1.24.0-notes.html#numpy-now-gives-floating-point-errors-in-casts
+    # Keep the entire operation and its warnings/native audit. Restrict only
+    # this uint16 byte oracle to finite values whose truncated integer fits;
+    # the original full-byte mismatch remains retained qualification evidence.
+    assert actual.dtype == expected.dtype
+    assert actual.shape == expected.shape
+    assert actual.flags.writeable == expected.flags.writeable
+    finite = np.isfinite(source)
+    truncated = np.trunc(source[finite].astype("f8"))
+    defined = np.zeros(source.shape, dtype=bool)
+    defined[finite] = (truncated >= 0) & (truncated <= 65535)
+    assert np.any(defined)
+    assert actual[defined].tobytes() == expected[defined].tobytes()
+
+
 @pytest.mark.parametrize("dtype", DTYPES, ids=lambda dtype: str(dtype))
 @pytest.mark.parametrize("copy", [None, False, True])
 def test_native_candidate_preserves_retained_dtype_copy_contract(resident, dtype, copy):
@@ -61,6 +80,34 @@ def test_native_candidate_preserves_retained_dtype_copy_contract(resident, dtype
     with warnings.catch_warnings(record=True) as new:
         warnings.simplefilter("always")
         actual = native_candidate(tensor, dtype, copy)
+    if expected.dtype.kind == "u" and expected.dtype.itemsize == 2:
+        assert_defined_u16_outputs(actual, expected, values)
+    else:
+        assert_outputs(actual, expected)
+    assert [(type(w.message), str(w.message)) for w in new] == [(type(w.message), str(w.message)) for w in old]
+
+
+@pytest.mark.parametrize("length", [1, 7, 8, 15, 16, 17, 31, 32, 33])
+@pytest.mark.parametrize("reversed_input", [False, True])
+def test_native_u16_defined_boundaries_and_neighbor_lengths(length, reversed_input):
+    # Every truncated value fits uint16, including negative fractions that
+    # truncate to zero. Compare every output byte across neighboring lengths
+    # and source strides; no product dispatch keys on these test dimensions.
+    boundary = np.array([65535., np.nextafter(np.float32(65536), np.float32(0)),
+                         0., -0., .5, -.5, 1., 255., 256., 32768.,
+                         np.nextafter(np.float32(-1), np.float32(0)), 65534.], dtype="f4")
+    values = np.resize(boundary, length)
+    if reversed_input:
+        values = values[::-1]
+    tensor = to_device(values, numeric_mode="identical")
+    if type(tensor) is not SequenceDeviceTensor:
+        pytest.skip("uint16 output qualification requires a device tensor")
+    with warnings.catch_warnings(record=True) as old, np.errstate(all="raise"):
+        warnings.simplefilter("always")
+        expected = values.astype("u2", copy=False)
+    with warnings.catch_warnings(record=True) as new, np.errstate(all="raise"):
+        warnings.simplefilter("always")
+        actual = native_candidate(tensor, "u2")
     assert_outputs(actual, expected)
     assert [(type(w.message), str(w.message)) for w in new] == [(type(w.message), str(w.message)) for w in old]
 
