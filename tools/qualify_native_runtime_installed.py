@@ -69,11 +69,13 @@ def test_applicability(selected, vendor):
             scope["operation_mode"] = "identical (explicit fixture configuration)"
             scope["execution_route"] = ("resident GPU tensor pool" if name == "test_sequence_shutdown_native.py"
                                         else "bare optimizer owner; resident cleanup only on GPU")
+            scope["coverage_limit"] = "Owner lifecycle checks do not qualify the public __array__ conversion protocol"
             if vendor == "cpu":
                 scope["cpu_not_applicable_cases"] = dict(CPU_NOT_APPLICABLE[name])
         if name in ("test_host_inference_native.py", "test_host_kernel_inference_native.py"):
             scope.update(execution_route="explicit CPU host binding, including in GPU packages",
-                         operation_mode="identical host operation; fast-mode refusal tested separately")
+                         operation_mode="identical host operation; fast-mode refusal tested separately",
+                         coverage_limit="Native qualification covers audited prediction/transform, preparation and attributes; inherited fit/score cases check compatibility only")
         result[name] = scope
     return result
 
