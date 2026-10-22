@@ -107,6 +107,7 @@ from bindings.sequential_native import sequential_c
 from bindings.classical_native import classical_c
 from bindings.classical_attributes import classical_attribute_c, classical_attribute_descriptor_c
 from bindings.host_archive_lifetime import host_archive_finalize_c
+from bindings.host_svr_native import host_svr_attribute_c
 from bindings.pca_native import pca_c
 from bindings.scaler_native import scaler_fit_c
 from bindings.generator_draw_native import generator_draw_c
@@ -1442,6 +1443,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(classical_attribute_c, "classical_attribute_call")
         module.def_py_c_function(classical_attribute_descriptor_c, "classical_attribute_descriptor")
         module.def_py_c_function(host_archive_finalize_c, "host_archive_finalize_call")
+        module.def_py_c_function(host_svr_attribute_c, "host_svr_attribute_call")
         module.def_py_c_function(pca_c, "pca_native_call")
         module.def_py_c_function(scaler_fit_c, "standard_scaler_fit_native")
         module.def_py_c_function(generator_draw_c, "generator_draw")

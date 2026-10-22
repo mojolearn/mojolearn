@@ -163,3 +163,40 @@ def logistic(model, X, method):
     out = empty((n, nc), "<f8")
     binding.py2mojo_rows(1, addr_ro(probabilities, name="probabilities"), addr(out, name="log probabilities"), [n * nc, 1])
     return out
+
+
+
+def svr(model, X):
+    """Frozen 32011bb32 SVR's complete input/kernel/gather call layout."""
+    from mojolearn._buffer import as_f32_dense_c
+    from mojolearn._svm_impl import _precomputed_columns, _SVR_KERNELS
+    binding = model._bind("_mojolearn_svm")
+    q, _ = as_f32_dense_c(X, ndim=2, name="X")
+    if q.shape[1] != model.n_features_in_:
+        raise ValueError("SVR feature count differs from fit")
+    rows = q.shape[0]
+    dual, support = model.dual_coef_, model.support_vectors_
+    features, count = model.n_features_in_, model.n_support_
+    if model._hp_kernel == "precomputed" and count > 0:
+        q = _precomputed_columns(binding, q, model.support_)
+        features, support = count, dual
+    tail = [int(model._hp_degree), float(model._hp_coef0)] if model._hp_kernel in ("poly", "sigmoid") else []
+    out = empty((rows,), "<f4")
+    binding.svr_predict(addr_ro(q, name="q"), addr_ro(dual, name="dual") if count else 0,
+        addr_ro(support, name="sv") if count else 0, addr(out, name="out"),
+        [rows, features, count, float(model.intercept_[0]), _SVR_KERNELS[model._hp_kernel],
+         model._gamma, model._hp_cache_size] + tail)
+    return out
+
+
+def svr_coefficients(model):
+    """Frozen 32011bb32 linear SVR property, using its existing GEMV entry."""
+    if model._hp_kernel != "linear":
+        raise AttributeError("coef_ requires the linear kernel")
+    from mojolearn._buffer import zeros
+    features, count = model.n_features_in_, model.n_support_
+    out = zeros((1, features), "<f4")
+    if count:
+        model._bind("_mojolearn_svm").svc_dual_gemv(addr_ro(model.dual_coef_, name="dual"),
+            addr_ro(model.support_vectors_, name="support"), [count, features, 0], addr(out, name="coef_"))
+    return out
