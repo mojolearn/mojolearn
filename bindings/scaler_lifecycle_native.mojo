@@ -111,7 +111,7 @@ def _write_back(source: PythonObject, values: PythonObject, output: PythonObject
     var dest = py_call(view.cast,"B")
     var payload = py_call(output._mv.cast,"B")
     py_setitem(dest,py_call(b.slice,PythonObject(None)),payload)
-    _ = values^
+    # `values` is borrowed from the caller and remains live through this call.
     return source
 
 
@@ -431,7 +431,7 @@ def scaler_archive_build(cls: PythonObject, arrays: PythonObject, path: PythonOb
     var ancestry = py_call(b.type.__dict__["__mro__"].__get__,cls)
     var known = False
     for k in range(len(ancestry)):  # driver-loop: native loading class ancestry names
-        known = known or ancestry[k].__name__ == saved
+        known = known or Bool(py=ancestry[k].__name__ == saved)
     if not known:
         raise Error("model estimator does not match loading class")
     var mode = _archive_string(arrays,"numeric_mode",context)
