@@ -126,6 +126,19 @@ def test_partial_fit_preserves_previously_unseen_column_nan():
     assert np.isnan(np.asarray(m.transform(x))[:, 1]).all()
 
 
+@pytest.mark.parametrize("inverse", [False, True])
+@pytest.mark.parametrize("clip", [False, True])
+def test_unseen_column_mask_survives_finite_transform_input(inverse, clip):
+    x = _data()
+    x[:, 1] = np.nan
+    model = ml.MinMaxScaler(clip=clip).fit(x)
+    source = np.nan_to_num(x)
+    operation = model.inverse_transform if inverse else model.transform
+    result = np.asarray(audit_native_call(operation, source).assert_native())
+    assert np.isnan(result[:, 1]).all()
+    assert np.isfinite(result[:, [0, 2, 3, 4]]).all()
+
+
 @pytest.mark.parametrize("bounds", [
     (0, 1), [-2, 3], (np.float32(-1), np.int64(2)),
     np.array([-1, 2], np.float32), np.array([-1, 2], np.float64),

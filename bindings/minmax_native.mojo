@@ -254,15 +254,18 @@ def minmax_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
             raise Error("MinMaxScaler transform overflowed in Float32")
         _ = filled^
     if not finite or colnan:
-        var keep = List[Float32](length=3*n*d+d, fill=0)
+        var keep = List[Float32](length=3*n*d+2*d, fill=0)
         var kp = F32P(unsafe_from_address=Int(keep.unsafe_ptr()))
         memcpy(dest=kp, src=_ptr(values), count=n*d)
         memcpy(dest=kp+n*d, src=_ptr(output), count=n*d)
         memcpy(dest=kp+2*n*d, src=ap+4*d, count=d)
         var restore = List[Int32]()
-        _stage(restore, 103, n*d, 0, d, n*d, 2*n*d, 2*n*d+d)
+        # Match _Prog.put_codes: nan_keep consumes numeric Float32 flags,
+        # not the int32 mask words published by c2_nan_sub.
+        _stage(restore, 10, d, 2*n*d, 2*n*d+d)
+        _stage(restore, 103, n*d, 0, d, n*d, 2*n*d+d, 2*n*d+2*d)
         _run(keep, restore, entries)
-        memcpy(dest=_ptr(output), src=kp+2*n*d+d, count=n*d)
+        memcpy(dest=_ptr(output), src=kp+2*n*d+2*d, count=n*d)
         _ = keep^
     _ = arena^
     _ = mean^
