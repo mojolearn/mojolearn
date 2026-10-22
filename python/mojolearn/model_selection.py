@@ -3670,7 +3670,7 @@ class _NativePermutation:
 
     def _group_order(self, groups):
         """(sizes, sorted rows, inverse) of the groups in sorted-group order."""
-        from ._expansion_metrics import _Prog, _execute
+        from ._expansion_metrics import _Prog, _run
         gc = _GroupCodes.get(groups, self.n, 'groups') if self.n >= _NATIVE_MIN_ROWS else None
         if gc is None:
             from ._labels import encode_labels
@@ -3694,7 +3694,7 @@ class _NativePermutation:
         w_inv = prog.want(prog.alloc(2 * n), 2 * n)
         prog.stage("rows64", n, ordr, w_ord)
         prog.stage("rows64", n, inv, w_inv)
-        _execute(prog, None)
+        _run(prog, None)
         offs = prog.ints(off, m + 1)
         sizes = [offs[g + 1] - offs[g] for g in range(m)]  # glue: group sizes from the m+1 offsets
         return sizes, prog.words(w_ord, 2 * n, "q"), prog.words(w_inv, 2 * n, "q")
