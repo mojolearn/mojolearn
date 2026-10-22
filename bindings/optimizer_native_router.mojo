@@ -10,6 +10,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_cast_kind
 from core.optimizer_state_impl import optimizer_state_cast
 from core.classical_pandas_impl import pd_raw_at, _pd_double
+from bindings.sequence_optimizer_native import sequence_optimizer_operation
 from bindings.optimizer_schedule_native import schedule_operation
 from bindings.optimizer_device_native import device_operation, device_new, device_entries
 
@@ -131,6 +132,8 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
     var b = Python.import_module("builtins")
     if py_type(values) is not b.tuple:
         raise Error("TypeError: optimizer requires native argument tuples")
+    if operation.startswith("seq_"):
+        return sequence_optimizer_operation(operation, owner, values, mode, context)
     if operation.startswith("device_"):
         var selected = optimizer_entries(mode, context) if operation == "device_upload" and py_type(values[0]) is not context["device_class"] else PythonObject(None)
         return device_operation(operation, owner, values, context, selected)
