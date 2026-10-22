@@ -533,17 +533,23 @@ def host_archive_density(cls: PythonObject, arrays: PythonObject, kde: Bool,
     return model
 
 
-def host_archive_agglomerative(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
-    var meta = host_archive_count(arrays, "meta", "<i8", 3, context, True)
+def host_archive_agglomerative(cls: PythonObject, arrays: PythonObject, path: PythonObject,
+                               context: PythonObject) raises -> PythonObject:
+    # The refusals keep AgglomerativeClustering.load's wording and order
+    # (the metric refusal is its constructor check's).
+    var where = host_archive_where(path, context)
+    var meta = host_archive_meta(arrays, "meta", 3, path, context)
     var k = classical_i64(meta, 0)
     var nf = classical_i64(meta, 1)
     var n = classical_i64(meta, 2)
     var metric = _archive_string(arrays, "metric", context)
-    if not py_contains(context["host_archive_agglo_metrics"], metric):
-        raise Error("NotImplementedError: saved AgglomerativeClustering metric is unsupported")
+    var metrics = context["host_archive_agglo_metrics"]
+    if not py_contains(metrics, metric):
+        raise Error("NotImplementedError: mojolearn AgglomerativeClustering: metric=" + _archive_builtin_repr(metric)
+                    + " is refused by name; one of " + host_archive_sorted(metrics) + ". A callable metric would "
+                    + "compute the dissimilarities outside every identity column. See x_cluster/NOT_IMPLEMENTED.tsv")
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
-    host_archive_mode(arrays, fields, context)
     py_setitem(fields, "n_clusters", k)
     py_setitem(fields, "metric", metric)
     py_setitem(fields, "connectivity", PythonObject(None))
@@ -556,8 +562,15 @@ def host_archive_agglomerative(cls: PythonObject, arrays: PythonObject, context:
     py_setitem(fields, "prediction_data", True)
     py_setitem(fields, "_connectivity", "pairwise")
     py_setitem(fields, "_compute_distances", False)
-    py_setitem(fields, "_fit_X", host_archive_shape(arrays, "x", "<f4", Python.tuple(n, nf), context))
-    py_setitem(fields, "labels_", host_archive_count(arrays, "labels", "<i4", n, context))
+    host_archive_mode(arrays, fields, context)
+    var x = _archive_exact(arrays, "x", "<f4", context)
+    var labels = _archive_exact(arrays, "labels", "<i4", context)
+    if Int(py=x.ndim) != 2 or Int(py=x.shape[0]) != n or Int(py=x.shape[1]) != nf:
+        raise Error(where + " x shape " + _archive_builtin_repr(x.shape) + " is not (" + String(n) + ", " + String(nf) + ")")
+    if Int(py=labels.size) != n:
+        raise Error(where + " labels do not match n_leaves_")
+    py_setitem(fields, "_fit_X", x)
+    py_setitem(fields, "labels_", labels)
     py_setitem(fields, "n_clusters_", k)
     py_setitem(fields, "n_leaves_", n)
     py_setitem(fields, "n_features_in_", nf)
@@ -1764,7 +1777,7 @@ def host_archive_build(path: PythonObject, context: PythonObject,
     elif fmt == "mojolearn-kde-1" or fmt == "mojolearn-dbscan-1":
         model = host_archive_density(cls, arrays, fmt == "mojolearn-kde-1", context)
     elif fmt == "mojolearn-agglomerative-1":
-        model = host_archive_agglomerative(cls, arrays, context)
+        model = host_archive_agglomerative(cls, arrays, path, context)
     elif fmt == "mojolearn-logistic-1":
         model = host_archive_logistic(cls, arrays, context)
     elif fmt == "mojolearn-arima-1" or fmt == "mojolearn-arima-2":
