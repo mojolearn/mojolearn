@@ -1786,6 +1786,8 @@ FAMILIES = (
             "msel_rebase_offsets_i32", "msel_split_table_i32", "msel_group_fold_perm_i32",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "unique_inverse", "arange_i64", "leave_range_i64",
+            # lane migrate-shared-labels: the shared argument-and-label entry
+            "prepare_targets",
             "mask_from_indices_u8", "select_mask_u8_i64", "count_mask_u8",
             "next_combination_i64", "ic_running_min_f64", "ic_running_min_f32",
             "fold_pair_f32", "threshold_labels_i64", "scale_shift_ftz_f32",
