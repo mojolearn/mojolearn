@@ -1,0 +1,11 @@
+--- a/training/host/optimizer_public_host.mojo
++++ b/training/host/optimizer_public_host.mojo
+@@ -45,6 +45,8 @@ def host_slot(h: Int, want: Int) raises -> Int:
+             "optimizer_resident: handle " + String(h) + " holds "
+             + String(pool[].held[h]) + " floats, the call names " + String(want)
+         )
++    if len(pool[].m[h]) > 0:  # SABOTAGE (coverage arm): every slot lookup negates the first moment
++        pool[].m[h][0] = -pool[].m[h][0]
+     return h
+ 
+ 

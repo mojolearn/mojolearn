@@ -1186,6 +1186,11 @@ TRAINING_LANE_NAMES = {
     "hf-tokenizer": "the Hugging Face byte-level BPE tokenizer (three pre-tokenization patterns)",
     "hf-causal-lm": "a Hugging Face causal language model loaded and run",
     "hf-causal-lm-stream": "a causal language model's generation stream",
+    # lane verify-gaps-20261022: generate_text / stream_text with a tokenizer
+    # loaded three ways, and the reader surface no lane called (HFConfig,
+    # ModelPlan, TensorInfo, the shard map and _read_weights)
+    "hf-causal-lm-text": "a causal language model's text generation and text stream",
+    "hf-model-surface": "the Hugging Face config, plan and checkpoint header surface",
     # The CTR table lanes: CPU TRAINING of CTR tables refuses by name
     # (NO_CPU_PATH), so the CPU column LOADS the Metal-saved model of each
     # fixture from GBDT_CTR_MODELS_DIR and predicts through the forest host
@@ -1235,6 +1240,12 @@ TRAINING_LANE_NAMES = {
     # `grad-accumulation` is clause 9.2's balanced tree and its alignment
     # predicate, which only the opt-in --batch-grad part had ever reached.
     "saved-model-host-infer": "saved forest and gradient boosting models predicted on the CPU (inference)",
+    # lane verify-gaps-20261022: the Extra Trees and default-engine random
+    # forest regressor host predictions (forest_host_et_predict,
+    # forest_host_rf_predict_reg) no lane reached; and the classical input
+    # door's half-precision sequence conversion
+    "saved-model-host-infer-trees": "saved Extra Trees and random forest regressors predicted on the CPU (inference)",
+    "classical-float16-sequences": "linear models, scalers and PCA fitted on a list of float16 rows",
     "lowbit-conversions": "the bf16 and int8 weight-storage conversions",
     "grad-accumulation": "gradient accumulation across microbatches",
 }
@@ -1475,7 +1486,9 @@ FAMILIES = (
         # models under GBDT_CTR_MODELS_DIR (no CPU fit; see
         # TRAINING_LANE_NAMES), moved in the gate by the CTR arm
         # (GATE_SABOTAGE_OWN_DEFINES).
-        training_lanes=GBDT_CTR_MODEL_LANES + ("saved-model-host-infer",),
+        training_lanes=GBDT_CTR_MODEL_LANES + ("saved-model-host-infer",
+                                               # lane verify-gaps-20261022
+                                               "saved-model-host-infer-trees"),
         inference_lanes=(),
         forest_kinds=(
             "rf_classifier", "rf_regressor", "et_classifier", "et_regressor",
@@ -1574,7 +1587,11 @@ FAMILIES = (
                         "hf-tokenizer",
                         # lane/verify-coverage-audit (2026-10-21): mojolearn.cross_vendor's
                         # ordered fold runs in this binding (cross_vendor_call)
-                        "cross-vendor-fold"),
+                        "cross-vendor-fold",
+                        # lane verify-gaps-20261022: the models reader surface
+                        # (HFConfig, ModelPlan, TensorInfo, _map, _file,
+                        # _read_weights) runs in this binding
+                        "hf-model-surface"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("BpeTokenizer",),
@@ -1669,7 +1686,9 @@ FAMILIES = (
         # reason it reaches `hf-causal-lm`.
         # lane/verify-coverage-audit (2026-10-21): `hf-causal-lm-stream`,
         # CausalLM.stream's GenerationStream against generate.
-        training_lanes=("hf-causal-lm", "par-causal-lm", "hf-causal-lm-stream"),
+        training_lanes=("hf-causal-lm", "par-causal-lm", "hf-causal-lm-stream",
+                        # lane verify-gaps-20261022: generate_text and stream_text
+                        "hf-causal-lm-text"),
         inference_lanes=(),
         forest_kinds=(),
         # lane/inference-neural-forward, 2026-09-15: the Mamba-1, Mamba-2
@@ -1900,6 +1919,9 @@ FAMILIES = (
             # lane/expose-qn-objectives (2026-09-20)
             "linear-svc", "linear-svc-squared-hinge", "linear-svr",
             "linear-svr-squared", "qn-squared", "qn-absolute",
+            # lane verify-gaps-20261022: the classical input door's float16
+            # sequence conversion (core/sequential_inputs_impl.mojo)
+            "classical-float16-sequences",
         ),
         # lane/inference-linear-svm (2026-09-15): the option variants of
         # ols, ridge and logistic load through the same formats; the
@@ -3790,6 +3812,13 @@ PUBLIC_PENDING_LANES = {
     "training-chunked-lm-head": "no reference",
     "training-mlp-sessions": "no reference",
     "samba-optimizer-state": "no reference",
+    # lane verify-gaps-20261022: lanes for the audit's GAP rows; no release
+    # record yet.
+    "saved-model-host-infer-trees": "no reference",
+    "hf-causal-lm-text": "no reference",
+    "hf-model-surface": "no reference",
+    "training-device-cross-entropy": "no reference",
+    "classical-float16-sequences": "no reference",
     }
 # lane/lowbit-int15 (2026-09-29) held gemm-int15 here until a release record
 # carried it. ADMITTED 2026-10-08 (lane rehearsal-suite-green): the shipped

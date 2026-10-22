@@ -773,7 +773,12 @@ NEW_LANES = frozenset({"gp-lml-theta", "cross-vendor-fold", "sequence-moe-backwa
                        "mamba2-decode-session", "mamba3-decode-session", "training-chunked-lm-head",
                        "training-mlp-sessions", "samba-optimizer-state", "sequence-optimizer-state",
                        "x-huber-outliers", "x-sgd-clf-proba", "x-logistic-cv-proba",
-                       "x-decomp-rsvd-rank-deficient"})
+                       "x-decomp-rsvd-rank-deficient",
+                       # lane verify-gaps-20261022
+                       "saved-model-host-infer-trees", "hf-causal-lm-text", "hf-model-surface",
+                       "training-device-cross-entropy", "sequence-layernorm-backward",
+                       "x-metrics-classification-report", "x-metrics-permutation-test-score",
+                       "classical-float16-sequences"})
 
 #: What each new lane is for: the endpoints only it reaches.
 NEW_LANE_PURPOSE = {
@@ -809,6 +814,22 @@ NEW_LANE_PURPOSE = {
     "x-logistic-cv-proba": "LogisticRegressionCV.predict_proba (`py2mojo_rows` ROWS_LRCV_PROBA)",
     "x-decomp-rsvd-rank-deficient": "randomized_svd, PCA and TruncatedSVD (randomized) of a rank-deficient matrix: "
                                     "the live-column compaction (`x_decomp_order_small`, `x_decomp_dev_order_small`)",
+    "saved-model-host-infer-trees": "HostForest and host_predict on saved Extra Trees and default-engine random "
+                                    "forest regressors: `forest_host_et_predict`, `forest_host_rf_predict_reg`",
+    "hf-causal-lm-text": "CausalLM.generate_text, stream_text and _generate_resident with a tokenizer from "
+                         "`Tokenizer(...)`, `_from_json` and `_from_spelled`: `causal_lm_generate_text`, "
+                         "`causal_lm_text_stream`, `causal_lm_resident`, `vocab_json_public`, `vocab_spelled_public`",
+    "hf-model-surface": "HFConfig, ModelPlan, TensorInfo, SafetensorsFile._map, Checkpoint._file and "
+                        "CausalLM._read_weights: `model_config_*`, `model_plan_init`, `tensor_info_*`, "
+                        "`safetensors_map`, `checkpoint_file`, `causal_model_read_weights`",
+    "training-device-cross-entropy": "training.cross_entropy, linear_forward and linear_backward on device arrays "
+                                     "(GPU columns): `ce_loss_dev`, `linear_forward_dev`, `linear_backward_dev`",
+    "sequence-layernorm-backward": "the functional layer_norm_backward",
+    "x-metrics-classification-report": "metrics.classification_report, dict and text",
+    "x-metrics-permutation-test-score": "model_selection.permutation_test_score, with and without groups",
+    "classical-float16-sequences": "LinearRegression, Ridge, StandardScaler, MinMaxScaler and PCA on a list of "
+                                   "float16 rows: the classical input door's `sequence_widen_halves` / "
+                                   "`sequence_narrow_halves` and the scalers' `scaler_cast`",
 }
 
 
@@ -1375,6 +1396,95 @@ ANNOTATIONS_BY_SRC.update({
 })
 
 
+# lane verify-gaps-20261022: the rows the 2026-10-22 audit read GAP. The
+# native owners below retain these entries at import (a context table, a
+# class slot or a finalizer descriptor), so the Python graph cannot see the
+# call; each annotation names the public operation the lane runs and the
+# native call site that takes the entry.
+_HOST_TREE = ("the saved-model owner (bindings/host_tree_native.mojo) calls the forest binding's entry by "
+              "name from the table _native_host_archive_bridge.connect hands it at import "
+              "(`host_tree_entries`); ")
+_FOREST = "bindings/_mojolearn_forest_host.mojo"
+_TOK = "bindings/_mojolearn_tokenizer_host.mojo"
+ANNOTATIONS_BY_SRC.update({
+    ("forest_host_rf_predict_proba", _FOREST): (
+        "covered", ["saved-model-host-infer"],
+        _HOST_TREE + "HostForest.predict / predict_proba on the lane's saved RandomForestClassifier "
+        "(sequential engine) take it in host_tree_vote"),
+    ("forest_host_groves_predict", _FOREST): (
+        "covered", ["saved-model-host-infer"],
+        _HOST_TREE + "HostForest.predict on the lane's parallel_groves RandomForestRegressor takes it in "
+        "host_tree_vote"),
+    ("forest_host_groves_release", _FOREST): (
+        "covered", ["saved-model-host-infer"],
+        _HOST_TREE + "the groves HostForest's finalizer (host_archive_finalize_call, installed as the "
+        "class's __del__ at import) releases its prepared groves through it when the lane drops the model"),
+    ("forest_host_gbdt_predict", _FOREST): (
+        "covered", ["saved-model-host-infer"],
+        _HOST_TREE + "HostGBDT.predict / predict_proba on the lane's saved GradientBoosting take it in "
+        "host_gbdt_predict"),
+    ("forest_host_gbdt_sigmoid_pair", _FOREST): (
+        "covered", ["saved-model-host-infer"],
+        _HOST_TREE + "HostGBDT.predict_proba on the lane's saved Logloss GradientBoosting takes it"),
+    ("forest_host_et_predict", _FOREST): (
+        "covered (new lane)", ["saved-model-host-infer-trees"],
+        _HOST_TREE + "HostForest.predict / predict_proba on the lane's saved ExtraTreesClassifier and "
+        "ExtraTreesRegressor take it in host_tree_vote"),
+    ("forest_host_rf_predict_reg", _FOREST): (
+        "covered (new lane)", ["saved-model-host-infer-trees"],
+        _HOST_TREE + "HostForest.predict and host_predict on the lane's saved RandomForestRegressor "
+        "(default engine) take it in host_tree_vote"),
+    ("forest_host_gbdt_expand_ctr", _FOREST): (
+        "covered", ["gbdt-categorical-ctr-tables", "gbdt-tensor-ctr-tables"],
+        _HOST_TREE + "on a CPU column the lanes predict through HostGBDT of the GPU-saved CTR model "
+        "(identity_break _ctr_saved_or_fit), whose CTR tables make host_gbdt_predict expand the input "
+        "through it"),
+    ("host_archive_finalize_call", _TOK): (
+        "covered", ["saved-model-host-infer"],
+        "_native_host_archive_bridge.connect installs it, through classical_attribute_descriptor, as the "
+        "__del__ of every saved host model class with a finalizer and of HostForest; the lane's groves "
+        "HostForest releases its groves through it (forest_host_groves_release)"),
+    ("classical_attribute_call", _TOK): (
+        "covered", ["ols", "ridge", "ols-no-intercept", "ridge-no-intercept", "ols-weighted"],
+        "_native_classical_bridge.connect_public installs it, through classical_attribute_descriptor, as "
+        "LinearRegression's and Ridge's __getattribute__ at import; every coef_, intercept_ and predict "
+        "the lanes read goes through it"),
+    ("cross_vendor_call", _TOK): (
+        "covered (new lane)", ["cross-vendor-fold"],
+        "mojolearn.cross_vendor binds it at import (`_native_cross_vendor`); ordered_fold and fold_pair "
+        "call it"),
+    ("native_process_call", _TOK): (
+        "covered", ["par-mlp", "par-samba", "par-samba-clip"],
+        "mojolearn._parallel_neural imports _native_process, whose import-time `initialize` call sets the "
+        "interpreter and environment the native process pool (bindings/native_process_pool.mojo) spawns "
+        "the parallel trainers' workers with; par-* lanes run on two-device boxes"),
+    ("parallel_mlp_call", _TOK): (
+        "covered", ["par-mlp"],
+        "mojolearn._parallel_neural imports _parallel_mlp, whose import-time `initialize` call hands the "
+        "parallel MLP owner (bindings/parallel_mlp_native.mojo) SmallMLPTrainer, AdamW and the training "
+        "binding it builds its replicas from; par-* lanes run on two-device boxes"),
+    ("pca_native_call", _TOK): (
+        "covered", ["pca", "pca-whiten", "pca-inverse", "pca-whiten-inverse", "pca-full-whiten",
+                    "x-decomp-pca-randomized", "classical-float16-sequences"],
+        "_native_pca_bridge.connect hands it to the public PCA class at import; PCA.fit, transform and "
+        "inverse_transform call it"),
+    ("arena_rows_native_call", _TOK): (
+        "covered", ["cross-val", "x-metrics-search", "x-metrics-classification"],
+        "model_selection's import connects it (_native_arena_rows.connect sets _arena_io._ROWS_CALL); "
+        "DeviceCache.supports, id_of, get and DeviceRows call it on the cross-validation and metrics paths"),
+    ("ce_loss_dev", "bindings/_mojolearn_training.mojo"): (
+        "covered (new lane)", ["training-device-cross-entropy"],
+        "_native_optimizer_bridge retains it at import with the training binding's entries; "
+        "training.cross_entropy on a TrainDeviceArray of logits takes it "
+        "(bindings/training_cross_entropy_native.mojo, `ce_loss_dev`); GPU columns only"),
+    ("neural_prefill_call", _TOK): (
+        "n/a", [],
+        "no live caller: its callers are TransformerBlock's and the Mamba blocks' _forward_with_tape, "
+        "_backward_from_tape and _close_forward_tape, whose one caller (SambaStack._forward) takes them "
+        "only under retain_tapes=True, which no call in the package passes"),
+})
+
+
 #: (public, op) -> (status, lanes, why) for the public methods.
 # RobustScaler's native owner is new; these existing lanes consume its public
 # fit/transform outputs but do not supply current-freeze qualification yet.
@@ -1518,7 +1628,9 @@ def render_markdown(audit, path):
             sab[ss] += 1
     lines = []
     w = lines.append
-    w("# Verifier coverage of the endpoints changed since the last release (2026-10-21)")
+    stamp = re.search(r"(\d{4})(\d{2})(\d{2})", os.path.basename(path))
+    day = "-".join(stamp.groups()) if stamp else "2026-10-21"
+    w(f"# Verifier coverage of the endpoints changed since the last release ({day})")
     w("")
     w(f"Release gate (Andrew, 2026-10-21): every endpoint that is new or changed since the last published "
       f"release is reached by a verifier lane and by a fault-injection arm the verifier or a check provably "
@@ -1531,7 +1643,7 @@ def render_markdown(audit, path):
     w("")
     w("```sh")
     w(f"python3 tools/verify_coverage_audit.py --base {audit['base']} --json <audit.json> --markdown "
-      f"docs/plans/VERIFY_COVERAGE_20261021.md")
+      f"docs/plans/{os.path.basename(path)}")
     w("```")
     w("")
     w("## Summary")

@@ -22,6 +22,10 @@ FAMILIES = (
             "x-metrics-cluster",
             "x-metrics-splitters",
             "x-metrics-search",
+            # lane verify-gaps-20261022: classification_report and
+            # permutation_test_score, which no lane called
+            "x-metrics-classification-report",
+            "x-metrics-permutation-test-score",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -142,6 +146,10 @@ TRAINING_LANE_NAMES = {
     "x-metrics-splitters": "the model_selection splitters (KFold ... PredefinedSplit), train_test_split and the "
                            "parameter grid / sampler, seeded by the counter RNG",
     "x-metrics-search": "cross_validate, cross_val_predict, scorer names and GridSearchCV",
+    "x-metrics-classification-report": "classification_report, as a dict and as text",
+    "x-metrics-permutation-test-score": "permutation_test_score, with and without groups",
 }
 PUBLIC_PENDING_LANES = {
+    "x-metrics-classification-report": "no reference",
+    "x-metrics-permutation-test-score": "no reference",
     }

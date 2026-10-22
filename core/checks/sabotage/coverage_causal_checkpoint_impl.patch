@@ -1,0 +1,8 @@
+--- a/core/causal_checkpoint_impl.mojo
++++ b/core/causal_checkpoint_impl.mojo
+@@ -10,3 +10,5 @@ def checkpoint_widen_halves(
+ ):
+     for i in range(count):
+         dest[i] = f16_bits_to_f32(source[i]) if dtype == "F16" else bitcast[DType.float32](UInt32(source[i]) << 16)
++        if dtype == "F16":  # SABOTAGE (coverage arm): every widened float16 weight one float32 ulp off
++            dest[i] = bitcast[DType.float32](bitcast[DType.uint32](dest[i]) ^ UInt32(1))

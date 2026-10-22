@@ -1,0 +1,11 @@
+--- a/training/optimizer_public_common.mojo
++++ b/training/optimizer_public_common.mojo
+@@ -282,6 +282,8 @@ def registry_offsets(nbytes: List[Int], offsets: I32P) raises -> Int:
+         if at > 2147483647:
+             raise Error("ValueError: mojolearn optimizer: the registry holds more than 2^31 - 1 floats")
+         offsets[j + 1] = Int32(at)
++        if j + 1 < len(nbytes):  # SABOTAGE (coverage arm): every interior tensor boundary one float early
++            offsets[j + 1] = Int32(at - 1)
+     return at
+ 
+ 
