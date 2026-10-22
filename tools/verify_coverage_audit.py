@@ -849,7 +849,7 @@ _SAMBA_OWNER = ("the native Samba owner (bindings/samba_*_native.mojo) is handed
 _FAST_LINEAR = "fast tier only (Apple): registered for OLS_FAST_NORMAL_EQ / RIDGE_FAST_RESIDENT, which " \
                "need numeric_mode fast on an Apple GPU; the verifier refuses a fast process"
 _HOST_SLOT = ("no live caller on a CPU install: the optimizer door moves its slots through its own "
-              "kernels (keep_slot records the door's module as the owner), and SambaStack opens no slot on "
+              "kernels; the separate close wrapper is live and annotated below. SambaStack opens no slot on "
               "the host binding, which exports no optimizer_resident_step (_samba_open_optimizer)")
 
 #: entry -> (status, lanes, why), read by hand where the static reach cannot
@@ -945,7 +945,7 @@ ANNOTATIONS = {
 #: differs between a GPU binding and its host twin.
 ANNOTATIONS_BY_SRC = {
     **{(e, "bindings/_mojolearn_training_host.mojo"): ("n/a", [], _HOST_SLOT)
-       for e in ("optimizer_resident_open", "optimizer_resident_close", "optimizer_resident_download",
+       for e in ("optimizer_resident_open", "optimizer_resident_download",
                  "optimizer_resident_upload")},
     **{(e, "bindings/_mojolearn_training.mojo"): (
         "covered", ["samba-optimizer-state", "samba"],
@@ -955,6 +955,344 @@ ANNOTATIONS_BY_SRC = {
        for e in ("optimizer_resident_open", "optimizer_resident_close", "optimizer_resident_download",
                  "optimizer_resident_upload")},
 }
+
+# Runtime-owner migration (2026-10-22): these are reviewed source routes,
+# not execution, reference or fault-injection admission. Fixed import-time
+# symbol tables do not prove that a registered ABI wrapper is ever called.
+ANNOTATIONS_BY_SRC.update(
+    {('seq_optimizer_init', 'bindings/_mojolearn_x_sequence.mojo'): ('covered',
+                                                                     ['sequence-rmsprop'],
+                                                                     'RMSprop.__init__ -> '
+                                                                     '_SEQ_NATIVE(seq_construct) -> '
+                                                                     'seq_construct -> verified '
+                                                                     'selected[seq_optimizer_init]; '
+                                                                     'source reach only, qualification '
+                                                                     'remains recorded separately'),
+     ('seq_optimizer_step', 'bindings/_mojolearn_x_sequence.mojo'): ('covered',
+                                                                     ['sequence-rmsprop'],
+                                                                     'RMSprop.step -> '
+                                                                     '_SEQ_NATIVE(seq_step) -> seq_step '
+                                                                     '-> verified '
+                                                                     'entries[seq_optimizer_step]; '
+                                                                     'source reach only, qualification '
+                                                                     'remains recorded separately'),
+     ('seq_optimizer_state', 'bindings/_mojolearn_x_sequence.mojo'): ('covered',
+                                                                      ['sequence-rmsprop'],
+                                                                      'opt.state in _sequence_opt_run -> '
+                                                                      '_SEQ_NATIVE(seq_state) -> '
+                                                                      'verified '
+                                                                      'entries[seq_optimizer_state]; '
+                                                                      'source reach only, qualification '
+                                                                      'remains recorded separately'),
+     ('seq_optimizer_close', 'bindings/_mojolearn_x_sequence.mojo'): ('covered',
+                                                                      ['sequence-rmsprop'],
+                                                                      '_sequence_opt_run optimizer '
+                                                                      'finalization -> '
+                                                                      '_SEQ_NATIVE(seq_finalize) -> '
+                                                                      'verified '
+                                                                      'entries[seq_optimizer_close]; '
+                                                                      'source reach only, qualification '
+                                                                      'remains recorded separately'),
+     ('seq_optimizer_export', 'bindings/_mojolearn_x_sequence.mojo'): ('covered',
+                                                                       ['sequence-optimizer-state'],
+                                                                       'NAdam/RMSprop.state_dict -> '
+                                                                       '_SEQ_NATIVE(seq_export) -> '
+                                                                       'verified '
+                                                                       'entries[seq_optimizer_export]; '
+                                                                       'source reach only, qualification '
+                                                                       'remains recorded separately'),
+     ('seq_optimizer_import', 'bindings/_mojolearn_x_sequence.mojo'): ('covered',
+                                                                       ['sequence-optimizer-state'],
+                                                                       'NAdam/RMSprop.load_state_dict -> '
+                                                                       '_SEQ_NATIVE(seq_import) -> '
+                                                                       'verified '
+                                                                       'entries[seq_optimizer_import]; '
+                                                                       'source reach only, qualification '
+                                                                       'remains recorded separately'),
+     ('seq_adafactor_step', 'bindings/_mojolearn_x_sequence.mojo'): ('covered',
+                                                                     ['sequence-adafactor'],
+                                                                     'Adafactor.step -> '
+                                                                     '_SEQ_NATIVE(seq_step), kind5 -> '
+                                                                     'verified '
+                                                                     'entries[seq_adafactor_step]; '
+                                                                     'source reach only, qualification '
+                                                                     'remains recorded separately'),
+     ('seq_lamb_step', 'bindings/_mojolearn_x_sequence.mojo'): ('covered',
+                                                                ['sequence-lamb'],
+                                                                'LAMB.step -> _SEQ_NATIVE(seq_step), '
+                                                                'kind6 -> verified '
+                                                                'entries[seq_lamb_step]; source reach '
+                                                                'only, qualification remains recorded '
+                                                                'separately'),
+     ('seq_optimizer_init', 'bindings/_mojolearn_x_sequence_host.mojo'): ('covered',
+                                                                          ['sequence-rmsprop'],
+                                                                          'RMSprop.__init__ -> '
+                                                                          '_SEQ_NATIVE(seq_construct) -> '
+                                                                          'seq_construct -> verified '
+                                                                          'selected[seq_optimizer_init]; '
+                                                                          'source reach only, '
+                                                                          'qualification remains '
+                                                                          'recorded separately'),
+     ('seq_optimizer_step', 'bindings/_mojolearn_x_sequence_host.mojo'): ('covered',
+                                                                          ['sequence-rmsprop'],
+                                                                          'RMSprop.step -> '
+                                                                          '_SEQ_NATIVE(seq_step) -> '
+                                                                          'seq_step -> verified '
+                                                                          'entries[seq_optimizer_step]; '
+                                                                          'source reach only, '
+                                                                          'qualification remains '
+                                                                          'recorded separately'),
+     ('seq_optimizer_state', 'bindings/_mojolearn_x_sequence_host.mojo'): ('covered',
+                                                                           ['sequence-rmsprop'],
+                                                                           'opt.state in '
+                                                                           '_sequence_opt_run -> '
+                                                                           '_SEQ_NATIVE(seq_state) -> '
+                                                                           'verified '
+                                                                           'entries[seq_optimizer_state]; '
+                                                                           'source reach only, '
+                                                                           'qualification remains '
+                                                                           'recorded separately'),
+     ('seq_optimizer_close', 'bindings/_mojolearn_x_sequence_host.mojo'): ('covered',
+                                                                           ['sequence-rmsprop'],
+                                                                           '_sequence_opt_run optimizer '
+                                                                           'finalization -> '
+                                                                           '_SEQ_NATIVE(seq_finalize) -> '
+                                                                           'verified '
+                                                                           'entries[seq_optimizer_close]; '
+                                                                           'source reach only, '
+                                                                           'qualification remains '
+                                                                           'recorded separately'),
+     ('seq_optimizer_export', 'bindings/_mojolearn_x_sequence_host.mojo'): ('covered',
+                                                                            ['sequence-optimizer-state'],
+                                                                            'NAdam/RMSprop.state_dict -> '
+                                                                            '_SEQ_NATIVE(seq_export) -> '
+                                                                            'verified '
+                                                                            'entries[seq_optimizer_export]; '
+                                                                            'source reach only, '
+                                                                            'qualification remains '
+                                                                            'recorded separately'),
+     ('seq_optimizer_import', 'bindings/_mojolearn_x_sequence_host.mojo'): ('covered',
+                                                                            ['sequence-optimizer-state'],
+                                                                            'NAdam/RMSprop.load_state_dict '
+                                                                            '-> _SEQ_NATIVE(seq_import) '
+                                                                            '-> verified '
+                                                                            'entries[seq_optimizer_import]; '
+                                                                            'source reach only, '
+                                                                            'qualification remains '
+                                                                            'recorded separately'),
+     ('seq_adafactor_step', 'bindings/_mojolearn_x_sequence_host.mojo'): ('covered',
+                                                                          ['sequence-adafactor'],
+                                                                          'Adafactor.step -> '
+                                                                          '_SEQ_NATIVE(seq_step), kind5 '
+                                                                          '-> verified '
+                                                                          'entries[seq_adafactor_step]; '
+                                                                          'source reach only, '
+                                                                          'qualification remains '
+                                                                          'recorded separately'),
+     ('seq_lamb_step', 'bindings/_mojolearn_x_sequence_host.mojo'): ('covered',
+                                                                     ['sequence-lamb'],
+                                                                     'LAMB.step -> '
+                                                                     '_SEQ_NATIVE(seq_step), kind6 -> '
+                                                                     'verified entries[seq_lamb_step]; '
+                                                                     'source reach only, qualification '
+                                                                     'remains recorded separately'),
+     ('optimizer_resident_open', 'bindings/_mojolearn_x_sequence.mojo'): ('n/a',
+                                                                          [],
+                                                                          'Import-time native '
+                                                                          'registration/admission probes '
+                                                                          'retain the symbol; public '
+                                                                          'operations call seq_* '
+                                                                          'entries. '
+                                                                          'sequence.opt_public_device '
+                                                                          'directly invokes the typed '
+                                                                          'resident kernel, bypassing '
+                                                                          'this wrapper. The typed '
+                                                                          'kernel opt_resident_open is '
+                                                                          'reached through the seq_* '
+                                                                          'owner. Typed-kernel source '
+                                                                          'lane: sequence-rmsprop.'),
+     ('optimizer_resident_close', 'bindings/_mojolearn_x_sequence.mojo'): ('n/a',
+                                                                           [],
+                                                                           'Import-time native '
+                                                                           'registration/admission '
+                                                                           'probes retain the symbol; '
+                                                                           'public operations call seq_* '
+                                                                           'entries. '
+                                                                           'sequence.opt_public_device '
+                                                                           'directly invokes the typed '
+                                                                           'resident kernel, bypassing '
+                                                                           'this wrapper. The typed '
+                                                                           'kernel opt_resident_close is '
+                                                                           'reached through the seq_* '
+                                                                           'owner. Typed-kernel source '
+                                                                           'lane: sequence-rmsprop.'),
+     ('optimizer_resident_move', 'bindings/_mojolearn_x_sequence.mojo'): ('n/a',
+                                                                          [],
+                                                                          'Import-time native '
+                                                                          'registration/admission probes '
+                                                                          'retain the symbol; public '
+                                                                          'operations call seq_* '
+                                                                          'entries. '
+                                                                          'sequence.opt_public_device '
+                                                                          'directly invokes the typed '
+                                                                          'resident kernel, bypassing '
+                                                                          'this wrapper. The typed '
+                                                                          'kernel opt_resident_move is '
+                                                                          'reached through the seq_* '
+                                                                          'owner. Typed-kernel source '
+                                                                          'lane: sequence-rmsprop.'),
+     ('optimizer_resident_step', 'bindings/_mojolearn_x_sequence.mojo'): ('n/a',
+                                                                          [],
+                                                                          'Import-time native '
+                                                                          'registration/admission probes '
+                                                                          'retain the symbol; public '
+                                                                          'operations call seq_* '
+                                                                          'entries. '
+                                                                          'sequence.opt_public_device '
+                                                                          'directly invokes the typed '
+                                                                          'resident kernel, bypassing '
+                                                                          'this wrapper. The typed '
+                                                                          'kernel opt_resident_step is '
+                                                                          'reached through the seq_* '
+                                                                          'owner. Typed-kernel source '
+                                                                          'lane: sequence-rmsprop.'),
+     ('optimizer_resident_step_dev', 'bindings/_mojolearn_x_sequence.mojo'): ('n/a',
+                                                                              [],
+                                                                              'Import-time native '
+                                                                              'registration/admission '
+                                                                              'probes retain the symbol; '
+                                                                              'public operations call '
+                                                                              'seq_* entries. '
+                                                                              'sequence.opt_public_device '
+                                                                              'directly invokes the '
+                                                                              'typed resident kernel, '
+                                                                              'bypassing this wrapper. '
+                                                                              'The typed kernel '
+                                                                              'opt_resident_step_dev is '
+                                                                              'reached through the seq_* '
+                                                                              'owner. Typed-kernel '
+                                                                              'source lane: '
+                                                                              'sequence-device-tensor.'),
+     ('adafactor_resident_open', 'bindings/_mojolearn_x_sequence.mojo'): ('n/a',
+                                                                          [],
+                                                                          'Import-time native '
+                                                                          'registration/admission probes '
+                                                                          'retain the symbol; public '
+                                                                          'operations call seq_* '
+                                                                          'entries. '
+                                                                          'sequence.opt_public_device '
+                                                                          'directly invokes the typed '
+                                                                          'resident kernel, bypassing '
+                                                                          'this wrapper. The typed '
+                                                                          'kernel '
+                                                                          'adafactor_resident_open is '
+                                                                          'reached through the seq_* '
+                                                                          'owner. Typed-kernel source '
+                                                                          'lane: sequence-adafactor.'),
+     ('adafactor_resident_step', 'bindings/_mojolearn_x_sequence.mojo'): ('n/a',
+                                                                          [],
+                                                                          'Import-time native '
+                                                                          'registration/admission probes '
+                                                                          'retain the symbol; public '
+                                                                          'operations call seq_* '
+                                                                          'entries. '
+                                                                          'sequence.opt_public_device '
+                                                                          'directly invokes the typed '
+                                                                          'resident kernel, bypassing '
+                                                                          'this wrapper. The typed '
+                                                                          'kernel '
+                                                                          'adafactor_resident_step is '
+                                                                          'reached through the seq_* '
+                                                                          'owner. Typed-kernel source '
+                                                                          'lane: sequence-adafactor.'),
+     ('adafactor_resident_step_dev', 'bindings/_mojolearn_x_sequence.mojo'): ('n/a',
+                                                                              [],
+                                                                              'Import-time native '
+                                                                              'registration/admission '
+                                                                              'probes retain the symbol; '
+                                                                              'public operations call '
+                                                                              'seq_* entries. '
+                                                                              'sequence.opt_public_device '
+                                                                              'directly invokes the '
+                                                                              'typed resident kernel, '
+                                                                              'bypassing this wrapper. '
+                                                                              'The typed kernel '
+                                                                              'adafactor_resident_step_dev '
+                                                                              'is reached through the '
+                                                                              'seq_* owner. Its '
+                                                                              'device-specific identity '
+                                                                              'lane is still owed; no '
+                                                                              'reference is claimed.'),
+     ('lamb_resident_open', 'bindings/_mojolearn_x_sequence.mojo'): ('n/a',
+                                                                     [],
+                                                                     'Import-time native '
+                                                                     'registration/admission probes '
+                                                                     'retain the symbol; public '
+                                                                     'operations call seq_* entries. '
+                                                                     'sequence.opt_public_device '
+                                                                     'directly invokes the typed '
+                                                                     'resident kernel, bypassing this '
+                                                                     'wrapper. The typed kernel '
+                                                                     'lamb_resident_open is reached '
+                                                                     'through the seq_* owner. '
+                                                                     'Typed-kernel source lane: '
+                                                                     'sequence-lamb.'),
+     ('lamb_resident_step', 'bindings/_mojolearn_x_sequence.mojo'): ('n/a',
+                                                                     [],
+                                                                     'Import-time native '
+                                                                     'registration/admission probes '
+                                                                     'retain the symbol; public '
+                                                                     'operations call seq_* entries. '
+                                                                     'sequence.opt_public_device '
+                                                                     'directly invokes the typed '
+                                                                     'resident kernel, bypassing this '
+                                                                     'wrapper. The typed kernel '
+                                                                     'lamb_resident_step is reached '
+                                                                     'through the seq_* owner. '
+                                                                     'Typed-kernel source lane: '
+                                                                     'sequence-lamb.'),
+     ('lamb_resident_step_dev', 'bindings/_mojolearn_x_sequence.mojo'): ('n/a',
+                                                                         [],
+                                                                         'Import-time native '
+                                                                         'registration/admission probes '
+                                                                         'retain the symbol; public '
+                                                                         'operations call seq_* entries. '
+                                                                         'sequence.opt_public_device '
+                                                                         'directly invokes the typed '
+                                                                         'resident kernel, bypassing '
+                                                                         'this wrapper. The typed kernel '
+                                                                         'lamb_resident_step_dev is '
+                                                                         'reached through the seq_* '
+                                                                         'owner. Its device-specific '
+                                                                         'identity lane is still owed; '
+                                                                         'no reference is claimed.'),
+     ('optimizer_resident_step', 'bindings/_mojolearn_training.mojo'): ('covered',
+                                                                        ['samba-untied-dropout-accum'],
+                                                                        'SambaStack.train_step -> '
+                                                                        'samba_train_step; A4 skips '
+                                                                        'dedicated Samba resident '
+                                                                        'shortcut, dropout.1 also '
+                                                                        'refuses shortcut; '
+                                                                        'maximize=False and host '
+                                                                        'parameter branch calls verified '
+                                                                        'optimizer_resident_step; source '
+                                                                        'reach only, qualification '
+                                                                        'remains recorded separately'),
+     ('optimizer_resident_close', 'bindings/_mojolearn_training_host.mojo'): ('covered',
+                                                                              ['optim-sgd'],
+                                                                              'public_step_host opens '
+                                                                              'host slot for default '
+                                                                              'resident=None -> '
+                                                                              'keep_slot retains '
+                                                                              'training_host module -> '
+                                                                              'optimizer __del__ calls '
+                                                                              'optimizer_finalize_binding '
+                                                                              '-> compiled resident '
+                                                                              'owner close entry; source '
+                                                                              'reach only, qualification '
+                                                                              'remains recorded '
+                                                                              'separately')}
+)
 
 #: (public, op) -> (status, lanes, why) for the public methods.
 PY_ANNOTATIONS = {

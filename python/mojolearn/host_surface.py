@@ -47,10 +47,10 @@ user cannot re-run on their own machine is a claim, not a result. The
 objection was size, and size was measured rather than guessed: the sixteen add
 7.66 MB uncompressed and 2.19 MB compressed to a wheel whose weight is GPU
 bindings (312 MB uncompressed on Linux, 91 files). `ships_in_wheel=False` now
-means a deliberate, stated exclusion, and nothing carries one. What did NOT
-change is the RUN-TIME boundary: an ordinary `fit` on a CPU-only install still
-refuses (`_cpu_reference.py`), and these bindings answer the verifier, which
-fits inside `reference_training()`. The two wheel builders and the packer read
+means a deliberate, stated exclusion, and nothing carries one. CPU training became public on 2026-09-20 for estimators
+with a supported CPU training binding. `_cpu_reference.py` retains
+`reference_training()` as a compatibility context; it no longer enables or
+forbids training. Each family declares its compiled CPU capabilities below. The two wheel builders and the packer read
 `--wheel-families` and `--wheel-bindings` below instead of naming the byte
 LM's binding by hand, and packaging/check_ext_lists.py fails when any of
 them carries a host list of its own.
@@ -1618,6 +1618,7 @@ FAMILIES = (
             # that binds resumable text state to its tokenizer, and the
             # generation coordinator's setup
             "optimizer_finalize", "optimizer_native", "vocab_fingerprint", "generation_initialize",
+            "host_archive_finalize_call",
         ),
         gate="pixi run check-tokenizer and python/mojolearn/tests/test_tokenizer_surface.py",
         wheel_note=(
