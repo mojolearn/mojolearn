@@ -1707,15 +1707,16 @@ def host_archive_svm(cls: PythonObject, arrays: PythonObject, classifier: Bool, 
                                  "nochange_steps", "verbose", "output_type", "random_state", "class_weight",
                                  "decision_function_shape", "probability", "break_ties")
         var values = Python.tuple(classical_f64(hyper, 0), kernel, degree, gamma, coef, classical_f64(hyper, 1),
-                                  classical_f64(hyper, 2), classical_i64(meta, 3), classical_i64(meta, 4), False,
-                                  PythonObject(None), PythonObject(None), PythonObject(None), "ovr", False, False)
+                                  classical_f64(hyper, 2), classical_i64(meta, 3), classical_i64(meta, 4), PythonObject(False),
+                                  PythonObject(None), PythonObject(None), PythonObject(None), PythonObject("ovr"),
+                                  PythonObject(False), PythonObject(False))
         for i in range(len(names)):  # driver-loop: the fixed SVC constructor parameters
             py_setitem(fields, names[i], values[i])
     else:
         var names = Python.tuple("kernel", "degree", "gamma", "coef0", "tol", "C", "epsilon", "cache_size",
                                  "verbose", "max_iter", "nochange_steps", "output_type")
         var values = Python.tuple(kernel, degree, gamma, coef, classical_f64(hyper, 2), classical_f64(hyper, 0),
-                                  classical_f64(hyper, 1), classical_f64(hyper, 3), False, classical_i64(meta, 3),
+                                  classical_f64(hyper, 1), classical_f64(hyper, 3), PythonObject(False), classical_i64(meta, 3),
                                   classical_i64(meta, 4), PythonObject(None))
         for i in range(len(names)):  # driver-loop: the fixed SVR constructor parameters
             py_setitem(fields, names[i], values[i])
