@@ -176,6 +176,17 @@ def _archive_array(value: PythonObject, context: PythonObject) raises -> PythonO
     return Python.tuple("|u1" if descr == "<u1" else descr, shape if len(shape) else Python.tuple(1), raw)
 
 
+def _archive_str_list(value: PythonObject) raises -> Bool:
+    """A non-empty flat list whose every item is a str (or str subclass)."""
+    var b = Python.import_module("builtins")
+    if py_type(value) is not b.list or len(value) == 0:
+        return False
+    for i in range(len(value)):  # driver-loop: over the distinct str class labels of one model
+        if not Bool(py=py_call(b.isinstance, value[i], b.str)):
+            return False
+    return True
+
+
 def _archive_npy(value: PythonObject, context: PythonObject) raises -> PythonObject:
     var shape = PythonObject(None)
     var raw = PythonObject(None)
@@ -187,6 +198,22 @@ def _archive_npy(value: PythonObject, context: PythonObject) raises -> PythonObj
         raw = archive_utf32_encode(value, context)
         if len(value) == 0:
             raw = py_call(context["archive_bytes_type"], 4)
+    elif _archive_str_list(value):
+        # A flat list of str (the str class labels `_labels.classes_member`
+        # saves): one `<U{widest}` vector, each label UTF-32 and
+        # zero-padded to the widest, as `_serialize._describe_list` wrote it.
+        var count = len(value)
+        var width = 1
+        for i in range(count):  # driver-loop: over the distinct str class labels of one model
+            width = max(width, len(value[i]))
+        descr = "<U" + String(width)
+        shape = Python.tuple(count)
+        var joined = py_call(context["archive_bytearray_type"])
+        for i in range(count):  # driver-loop: over the distinct str class labels of one model
+            var item = value[i]
+            _ = py_call(joined.extend, archive_utf32_encode(item, context))
+            _ = py_call(joined.extend, py_call(context["archive_bytes_type"], 4 * (width - len(item))))
+        raw = py_call(context["archive_bytes_type"], joined)
     else:
         classical_admit_value(value, context)
         var array = value if classical_is_array(value, context) or py_type(value) is py_get(context, "ndarray") else classical_input(value, context)

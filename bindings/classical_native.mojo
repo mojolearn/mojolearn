@@ -293,6 +293,8 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             return raise_python_exception(error_without_class(error, "NotImplementedError"), ExceptionType("PyExc_NotImplementedError"))
         if String(error).startswith("ImportError:"):
             return raise_python_exception(error_without_class(error, "ImportError"), ExceptionType("PyExc_ImportError"))
+        if String(error).startswith("IndexError:"):
+            return raise_python_exception(error_without_class(error, "IndexError"), ExceptionType("PyExc_IndexError"))
         if String(error).startswith("AttributeError:"):
             return raise_python_exception(error_without_class(error, "AttributeError"), ExceptionType("PyExc_AttributeError"))
         if String(error).startswith("RuntimeError:"):
