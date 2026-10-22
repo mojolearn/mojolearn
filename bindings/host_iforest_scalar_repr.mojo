@@ -147,7 +147,20 @@ def host_iforest_scalar_repr(value: PythonObject, context: PythonObject) raises 
     var implied = value.dtype.type is py_call(constructor, "i8").type or value.dtype.type is py_call(constructor, "f8").type or (kind == "b" and legacy > 113)
     var suffix = String("")
     if legacy > 210 and Int(py=options["threshold"]) < 1:
-        suffix = "shape=()"
+        # NumPy 2.2 introduced the shape annotation for summarized arrays.
+        # Older releases also use a large sentinel for the default legacy
+        # option, so legacy alone does not identify this display contract.
+        var numpy = py_get(context["modules"], "numpy")
+        if py_type(numpy) is not context["host_iforest_module_type"]:
+            raise Error("TypeError: IsolationForest parameter text requires native NumPy version metadata")
+        var version = py_get(py_call(context["host_iforest_module_dict"], numpy), "__version__")
+        if py_type(version) is not py_type(PythonObject("")):
+            raise Error("TypeError: IsolationForest parameter text requires native NumPy version text")
+        var parts = String(version).split(".")
+        if len(parts) < 2:
+            raise Error("TypeError: IsolationForest parameter text requires major.minor NumPy version text")
+        if Int(String(parts[0])) * 100 + Int(String(parts[1])) >= 202:
+            suffix = "shape=()"
     if not Bool(py=value.dtype.isnative) or not implied:
         if suffix.byte_length() > 0:
             suffix += ", "
