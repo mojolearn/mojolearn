@@ -100,7 +100,10 @@ def _archive_path(value: PythonObject, context: PythonObject) raises -> PythonOb
         if Bool(py=py_call(part.startswith, "/")) or len(result) == 0:
             result = part
         elif len(part) != 0:
-            result = py_call(result.rstrip, "/") + PythonObject("/") + part
+            # Python 3.11 stores a POSIX root as its own _parts item. Keep
+            # the distinct '//' root while joining; rstrip would collapse it.
+            result = (result + part if result == PythonObject("//")
+                      else py_call(result.rstrip, "/") + PythonObject("/") + part)
     return result if len(result) != 0 else PythonObject(".")
 
 

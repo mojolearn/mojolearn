@@ -8,6 +8,7 @@ import os
 from pathlib import Path, PurePosixPath
 import subprocess
 import sys
+import threading
 import zipfile
 
 import numpy as np
@@ -107,6 +108,10 @@ def test_public_load_ignores_replaced_builtin_helpers(tmp_path, monkeypatch, nam
             # genuinely replaced builtin throughout the public load call.
             patch.setattr(dis, name, original, raising=False)
             patch.setattr(observer, name, original, raising=False)
+            if name == "list":
+                # The observer snapshots threading.enumerate before profiling.
+                # Its two list copies are test preparation, not product work.
+                patch.setattr(threading, "list", original, raising=False)
             patch.setattr(builtins, name, foreign)
             audit = audit_native_call(loader, value)
         model = audit.assert_native()
@@ -187,6 +192,19 @@ def test_public_load_filesystem_errors_use_standard_path_lexical_spelling(tmp_pa
     _refused(audit, FileNotFoundError)
     assert audit.exception.errno == expected.value.errno
     assert audit.exception.filename == expected.value.filename
+    assert str(audit.exception) == str(expected.value)
+
+
+@pytest.mark.parametrize("cls", [Path, PurePosixPath])
+def test_public_load_file_error_preserves_double_slash_root(tmp_path, cls):
+    value = cls("//" + str(tmp_path).lstrip("/") + "/missing.npz")
+    with pytest.raises(FileNotFoundError) as expected:
+        io.open(value, "rb")
+    audit = audit_native_call(HostLinearRegression.load, value)
+    _refused(audit, FileNotFoundError)
+    assert type(audit.exception.filename) is str
+    assert audit.exception.filename == expected.value.filename
+    assert audit.exception.errno == expected.value.errno
     assert str(audit.exception) == str(expected.value)
 
 
