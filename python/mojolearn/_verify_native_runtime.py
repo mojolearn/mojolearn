@@ -6,6 +6,8 @@ One entry into the selected public wrapper is permitted. Every further Python
 frame, including descriptors, comprehensions and worker bodies, is reported.
 Native calls into NumPy/SciPy/scikit-learn are separately rejected. A clean
 trace proves only the exercised call, not every possible route through an API.
+Native calls with unresolved origins also prevent qualification, including in
+the existing forbidden-call signal used by refusal tests.
 """
 import dis
 import gc
@@ -175,6 +177,10 @@ def audit_native_call(operation, *args, **kwargs):
                 name = "<native callable>"
             if module is None:
                 audit.unresolved_native[name] += 1
+                # Existing refusal guards inspect forbidden_native directly
+                # or its report list. Keep their admission fail-closed too;
+                # unresolved_native retains the distinct provenance reason.
+                audit.forbidden_native["<unresolved-origin>." + name] += 1
             elif any(module == m or module.startswith(m + ".")
                    for m in _FORBIDDEN_NATIVE_MODULES):
                 audit.forbidden_native[module + "." + name] += 1
