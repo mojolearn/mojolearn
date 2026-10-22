@@ -5,7 +5,7 @@
 from std.python import Python, PythonObject
 from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setattr
-from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
+from bindings.classical_attributes import classical_connect_numpy, classical_check_layout, classical_getattribute
 from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_is_f32, classical_c_order, classical_kind, classical_cast_kind
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, native_pandas_f32, _pd_fields, _pd_get, _pd_class, _pd_type_fields
 from bindings.classical_validate import RESHAPE_HINT
@@ -317,7 +317,7 @@ def host_kde_fit(model: PythonObject, args: PythonObject, context: PythonObject)
     if depth == 0:
         _kde_y(args[1], Int(py=raw.shape[0]) if described else -1, est, context)
     try:
-        _kde_fit_store(fields, raw, args[2], copied, est, context)
+        _kde_fit_store(model, fields, raw, args[2], copied, est, context)
     finally:
         if depth <= 0:
             _ = py_call(fields.pop, "_mojolearn_fitting", PythonObject(None))
@@ -330,7 +330,20 @@ def host_kde_fit(model: PythonObject, args: PythonObject, context: PythonObject)
     return model
 
 
-def _kde_fit_store(fields: PythonObject, raw: PythonObject, weight: PythonObject, copied: Bool, est: String, context: PythonObject) raises:
+def _kde_fit_mode(model: PythonObject, fields: PythonObject, context: PythonObject) raises -> PythonObject:
+    # ModeMixin preserves an inherited numeric_mode without creating an
+    # instance field. Match native attribute precedence, including a missing
+    # attribute's None default, without invoking Python descriptor hooks.
+    var present = py_contains(fields, "numeric_mode")
+    var mro = context["classical_public_layouts"][py_type(model)]["mro"]
+    for i in range(len(mro)):  # driver-loop: connected native class metadata
+        present = present or py_contains(_pd_type_fields(mro[i]), "numeric_mode")
+    if present:
+        return classical_getattribute(model, PythonObject("numeric_mode"), context)
+    return PythonObject(None)
+
+
+def _kde_fit_store(model: PythonObject, fields: PythonObject, raw: PythonObject, weight: PythonObject, copied: Bool, est: String, context: PythonObject) raises:
     # The CPU owner has no resident registry or immutable-fit experiment.
     # Refit clears an existing cache before preparation, like the old method.
     var b = Python.import_module("builtins")
@@ -342,7 +355,7 @@ def _kde_fit_store(fields: PythonObject, raw: PythonObject, weight: PythonObject
         host_inference_finite(Int(py=classical_address(x)), Int(py=x.size))
     except:
         raise Error("mojolearn KernelDensity: X contains a NaN or an infinity; refused by name at fit (DEVIATION 604)")
-    var mode = py_get(fields, "numeric_mode")
+    var mode = _kde_fit_mode(model, fields, context)
     if mode is not None and py_type(mode) is not b.str:
         raise Error("TypeError: KDE numeric mode requires an exact native string")
     if mode is not None and String(mode) != "identical":
