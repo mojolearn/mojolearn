@@ -13,6 +13,8 @@ from bindings.sequential_inputs import sequential_input
 from bindings.sequential_arrays import sequential_array, sequential_address
 from bindings.sequential_description import sequential_fields
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
+from bindings.classical_arrays import classical_kind
+from bindings.classical_validate import classical_view, classical_check_width, _cast_x, RESHAPE_HINT
 
 
 struct PCADimensions(Copyable, Movable):
@@ -67,15 +69,31 @@ def pca_prefix(value: PythonObject, rows: Int, cols: Int, context: PythonObject)
 
 
 def pca_input(source: PythonObject, context: PythonObject) raises -> PythonObject:
-    """X as C-order float32: an exact SciPy sparse container is densified
-    from its storage (bindings/host_sparse_native.mojo), as the public PCA
-    always densified a sparse input; anything else is the shared host
-    conversion."""
+    """X as C-order float32 with scikit-learn's input refusals (complex,
+    rank, empty, non-finite; bindings/classical_validate.mojo), in the
+    wording the public PCA has always raised. An exact SciPy sparse
+    container is densified from its storage (bindings/host_sparse_native.mojo),
+    as the public PCA always densified a sparse input."""
     var format = host_sparse_format(source)
     if format.byte_length() > 0:
         var dense = host_sparse_dense(source, format, context)
         return classical_host_f32(dense, 2, "X", context)
-    return classical_host_f32(source, 2, "X", context)
+    var view = classical_view(source, context, "X")
+    var kind = classical_kind(view, context)
+    if kind == "c":
+        raise Error("Complex data not supported: PCA got a complex X.")
+    if kind == "b" or kind == "i" or kind == "u" or kind == "f":
+        var nd = Int(py=view.ndim)
+        var shape = String(py_call(Python.import_module("builtins").repr, view.shape))
+        if nd < 2:
+            raise Error("Expected 2D array, got " + ("scalar" if nd == 0 else "1D") + " array instead (shape=" + shape + "). " + RESHAPE_HINT)
+        if nd == 2 and Int(py=view.shape[0]) == 0:
+            raise Error("Found array with 0 sample(s) (shape=" + shape + ") while a minimum of 1 is required by PCA.")
+        if nd == 2 and Int(py=view.shape[1]) == 0:
+            raise Error("Found array with 0 feature(s) (shape=" + shape + ") while a minimum of 1 is required by PCA.")
+    var x = _cast_x(view, "PCA", context)
+    _ = view^
+    return x
 
 
 def pca_refusal(var error: Error) -> Error:
@@ -233,7 +251,7 @@ def pca_transform(model: PythonObject, source: PythonObject, inverse: Bool,
     if Int(py=x.shape[1]) != (dims.components if inverse else dims.features):
         if inverse:
             raise Error("mojolearn PCA component count differs from fit")
-        raise Error("mojolearn PCA feature count differs from fit")
+        classical_check_width(Int(py=x.shape[1]), dims.features, "PCA")
     var whiten = Bool(py=fields["whiten"])
     var components = pca_state_array(fields, "components_", Python.tuple(dims.components, dims.features), context, whiten)
     var mean = pca_state_array(fields, "mean_", Python.tuple(dims.features), context, whiten)
