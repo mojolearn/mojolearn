@@ -1542,6 +1542,57 @@ def host_archive_forest(cls: PythonObject, arrays: PythonObject, fmt: String,
     return model
 
 
+def host_archive_meta_word(meta: PythonObject, index: Int) raises -> Int:
+    """`int(meta[index])` of a 1-D int64 member, refused past its end as
+    `Array.__getitem__` refused it."""
+    var size = Int(py=meta.size)
+    if index >= size:
+        raise Error("IndexError: mojolearn: index " + String(index) + " out of range for axis 0 of size " + String(size))
+    return classical_i64(meta, index)
+
+
+def host_archive_public_forest(cls: PythonObject, arrays: PythonObject, fmt: String, extra: Bool,
+                               path: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`RandomForest*.load` / `ExtraTrees*.load` / `DecisionTree*.load`:
+    the public estimator exactly as the Python loader built it from
+    `cls.__new__(cls)`, with its refusals in its order. `extra` reads the
+    three extra-trees meta fields."""
+    var saved = _archive_string(arrays, "estimator", context)
+    if String(py=saved) != String(py=cls.__name__):
+        raise Error(host_archive_where(path, context) + " was saved by " + String(saved) + ", not " + String(cls.__name__))
+    var model = host_archive_allocate(cls, context)
+    var fields = sequential_fields(model)
+    py_setitem(fields, "device", _archive_string(arrays, "device", context))
+    # The 0.8.55 `ForestProtocol._restore_inference_metadata`.
+    if fmt.endswith("-parallel-groves-1"):
+        py_setitem(fields, "inference_engine", "parallel_groves")
+        var mode = py_call(py_call(_archive_string(arrays, "numeric_mode", context).strip).lower)
+        if String(py=mode) != "fast" and String(py=mode) != "identical":
+            raise Error("numeric_mode must be fast, identical or None")
+        py_setitem(fields, "numeric_mode", mode)
+        py_setitem(fields, "_fit_numeric_mode", mode)
+    else:
+        py_setitem(fields, "inference_engine", "sequential")
+    py_setitem(fields, "_offsets", _archive_exact(arrays, "offsets", "<i4", context))
+    py_setitem(fields, "_colid", _archive_exact(arrays, "colid", "<i4", context))
+    py_setitem(fields, "_quesval", _archive_exact(arrays, "quesval", "<f4", context))
+    py_setitem(fields, "_left_child", _archive_exact(arrays, "left_child", "<i4", context))
+    py_setitem(fields, "_leaves", _archive_exact(arrays, "leaves", "<f4", context))
+    var meta = _archive_exact(arrays, "meta", "<i8", context)
+    py_setitem(fields, "n_features_in_", host_archive_meta_word(meta, 0))
+    py_setitem(fields, "_n_trees", host_archive_meta_word(meta, 1))
+    py_setitem(fields, "_num_outputs", host_archive_meta_word(meta, 2))
+    if extra:
+        py_setitem(fields, "depth_cap_bound_", host_archive_meta_word(meta, 3) != 0)
+        py_setitem(fields, "max_depth_resolved_", host_archive_meta_word(meta, 4))
+        py_setitem(fields, "max_features_", host_archive_meta_word(meta, 5))
+    if py_contains(arrays, "classes"):
+        var classes = host_archive_class_values(arrays["classes"], context)
+        py_setitem(fields, "classes_", classes)
+        py_setitem(fields, "n_classes_", len(classes))
+    return model
+
+
 def host_archive_gbdt_state(text: PythonObject, context: PythonObject) raises -> PythonObject:
     var parsed = host_archive_gbdt_text(String(text))
     var state = Python.dict()
@@ -1742,6 +1793,8 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         model = host_archive_gp(cls, arrays, fmt == "mojolearn.gpc.v1", context)
     elif fmt == "mojolearn-svc-1" or fmt == "mojolearn-svr-1":
         model = host_archive_svm(cls, arrays, fmt == "mojolearn-svc-1", context)
+    elif public_owner is not None and (fmt.startswith("mojolearn-randomforest-1") or fmt.startswith("mojolearn-extratrees-1")):
+        model = host_archive_public_forest(cls, arrays, fmt, fmt.startswith("mojolearn-extratrees-1"), path, context)
     elif fmt == "mojolearn-gbdt-1":
         model = host_archive_gbdt(cls, arrays, context)
     elif py_contains(context["host_archive_forest_formats"], fmt):

@@ -500,21 +500,6 @@ class ForestProtocol:
         self.__dict__.update(state)
         self.__dict__["_resident_holder"] = {}
 
-    def _archive_inference_metadata(self, arrays, sequential_format):
-        if self._prediction_engine() == "parallel_groves":
-            arrays["format"] = sequential_format + "-parallel-groves-1"
-            arrays["numeric_mode"] = self._effective_mode()
-
-    def _restore_inference_metadata(self, arrays, sequential_format):
-        from . import _serialize
-        if _serialize.scalar_str(arrays, "format") == sequential_format:
-            self.inference_engine = "sequential"
-        else:
-            self.inference_engine = "parallel_groves"
-            mode = self._validated_mode(_serialize.scalar_str(arrays, "numeric_mode"))
-            self.numeric_mode = mode
-            self._fit_numeric_mode = mode
-
     def __sklearn_is_fitted__(self):
         return hasattr(self, "_offsets")
 

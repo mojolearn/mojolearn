@@ -30,6 +30,18 @@
 #   ("i8" | "i4" | "f8" | "f4", member, items)
 #                                      one packed vector, an item per element
 #   ("when", field, value, steps)      run steps when field == value
+#   ("classes", member, field)         when the instance holds field: the class
+#                                      labels as `_labels.classes_member` stored
+#                                      them (int64 Array for integer or bool
+#                                      labels, float64 Array for real labels,
+#                                      the list of str for str labels)
+#   ("utf8", member, field)            str(field) for a builtin scalar field,
+#                                      as its UTF-8 bytes in a `<u1` Array
+#   ("forest_engine", format)          the 0.8.55 `ForestProtocol._archive_inference_metadata`:
+#                                      a model predicting with the
+#                                      'parallel_groves' engine writes
+#                                      format + "-parallel-groves-1" and its
+#                                      effective numeric_mode
 #
 # An item is ("int", field), ("bool", field), ("const", number),
 # ("dim", field, axis), ("size", field), ("len", field), ("none", field, sentinel),
@@ -257,6 +269,91 @@ def _schema_mode(fields: PythonObject, prefix: PythonObject, context: PythonObje
     return folded
 
 
+def _schema_shown(value: PythonObject) raises -> String:
+    """repr(value) for a builtin scalar; `<type>` for anything whose repr
+    would run Python code."""
+    var b = Python.import_module("builtins")
+    var cls = py_type(value)
+    if value is None or cls is b.str or cls is b.bool or cls is b.int or cls is b.float:
+        return _archive_builtin_repr(value)
+    return "<" + String(cls.__name__) + ">"
+
+
+def _schema_is_bool(value: PythonObject) raises -> Bool:
+    """`_labels.is_bool`: Python's bool or NumPy's bool_."""
+    var cls = py_type(value)
+    return cls is Python.import_module("builtins").bool or String(cls.__name__) == "bool_"
+
+
+def _schema_classes(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+    """`_labels.classes_member(value)`: the saved form of `classes_`."""
+    var b = Python.import_module("builtins")
+    var numbers = Python.import_module("numbers")
+    var count = len(value)
+    var labels = Python.list()
+    var all_int = True
+    var all_real = True
+    var all_bool = True
+    var all_str = True
+    for i in range(count):  # driver-loop: over the distinct class labels of one fitted model
+        var label = value[i]
+        _ = py_call(labels.append, label)
+        var boolean = _schema_is_bool(label)
+        all_bool = all_bool and boolean
+        all_int = all_int and not boolean and Bool(py=py_call(b.isinstance, label, numbers.Integral))
+        all_real = all_real and not boolean and Bool(py=py_call(b.isinstance, label, numbers.Real))
+        all_str = all_str and Bool(py=py_call(b.isinstance, label, b.str))
+    if all_int or all_bool or all_real:
+        var items = Python.list()
+        for i in range(count):  # driver-loop: over the distinct class labels of one fitted model
+            _ = py_call(items.append, Python.tuple("const", labels[i]))
+        return _schema_vector(Python.dict(), "<i8" if all_int or all_bool else "<f8", items, name, context)
+    if all_str:
+        return labels
+    raise Error("ValueError: mojolearn: classes_ holds labels no model file can carry")
+
+
+def _schema_valid_mode(mode: PythonObject) raises -> PythonObject:
+    """`ForestProtocol._validated_mode`."""
+    var b = Python.import_module("builtins")
+    if mode is None:
+        return mode
+    if not Bool(py=py_call(b.isinstance, mode, b.str)):
+        raise Error("ValueError: numeric_mode must be fast, identical or None")
+    var folded = py_call(b.str.lower, py_call(b.str.strip, mode))
+    if String(py=folded) != "fast" and String(py=folded) != "identical":
+        raise Error("ValueError: numeric_mode must be fast, identical or None")
+    return folded
+
+
+def _schema_forest_mode(fields: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`ForestProtocol._effective_mode`: the mode captured at fit, else the
+    requested one, else the process default."""
+    var requested = _schema_valid_mode(py_get(fields, "numeric_mode"))
+    var captured = py_get(fields, "_fit_numeric_mode")
+    if captured is not None:
+        if requested is not None and not Bool(py=requested == captured):
+            raise Error("ValueError: This forest was fitted with numeric_mode=" + _schema_shown(captured)
+                        + "; refit or use set_params before changing numeric_mode")
+        return captured
+    if requested is not None:
+        return requested
+    return context["backend_fields"]["_DEFAULT_MODE"]
+
+
+def _schema_forest_engine(fields: PythonObject, context: PythonObject) raises -> String:
+    """`ForestProtocol._prediction_engine`."""
+    var b = Python.import_module("builtins")
+    var engine = py_get(fields, "inference_engine", PythonObject("sequential"))
+    var valid = Bool(py=py_call(b.isinstance, engine, b.str))
+    var text = String(py=py_call(b.str.__str__, engine)) if valid else String("")
+    if not valid or (text != "auto" and text != "sequential" and text != "parallel_groves"):
+        raise Error("ValueError: inference_engine must be 'auto', 'sequential' or 'parallel_groves'")
+    if text == "auto":
+        return "parallel_groves" if Bool(py=_schema_forest_mode(fields, context) == PythonObject("fast")) else "sequential"
+    return text
+
+
 def _schema_run(model: PythonObject, fields: PythonObject, steps: PythonObject, values: PythonObject,
                 name: String, context: PythonObject) raises:
     var b = Python.import_module("builtins")
@@ -309,6 +406,17 @@ def _schema_run(model: PythonObject, fields: PythonObject, steps: PythonObject, 
         elif kind == "i8" or kind == "i4" or kind == "f8" or kind == "f4":
             var dtype = String("<") + kind
             py_setitem(values, step[1], _schema_vector(fields, dtype, step[2], name, context))
+        elif kind == "classes":
+            if _schema_has(fields, step[2]):
+                py_setitem(values, step[1], _schema_classes(_schema_value(fields, step[2], name), name, context))
+        elif kind == "utf8":
+            var text = _schema_text_member(_schema_value(fields, step[2], name), False)
+            var raw = py_call(b.str.encode, text, "utf-8")
+            py_setitem(values, step[1], _schema_copy(raw, "<u1", 0, len(raw), context))
+        elif kind == "forest_engine":
+            if _schema_forest_engine(fields, context) == "parallel_groves":
+                py_setitem(values, "format", PythonObject(String(step[1]) + "-parallel-groves-1"))
+                py_setitem(values, "numeric_mode", _schema_forest_mode(fields, context))
         elif kind == "when":
             if _schema_has(fields, step[1]) and Bool(py=_schema_value(fields, step[1], name) == step[2]):
                 _schema_run(model, fields, step[3], values, name, context)
