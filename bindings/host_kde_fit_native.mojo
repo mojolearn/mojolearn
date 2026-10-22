@@ -3,6 +3,7 @@
 # Its CPU numerical binding has no immutable-fit or resident-fit registry;
 # preparing the stored float32 rows is the entire fit operation.
 from std.python import Python, PythonObject
+from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setattr
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
 from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_is_f32, classical_c_order, classical_kind, classical_cast_kind
@@ -39,9 +40,9 @@ def _kde_array_view(value: PythonObject, context: PythonObject) raises -> Python
     # Exact native ndarray admission precedes this function. Hold a native
     # buffer export for the complete fitted lifetime, including readonly data.
     var b = Python.import_module("builtins")
-    var pin = py_call(b.memoryview, value)
+    var pin = native_buffer_view(value)
     var flat = py_call(py_call(pin.cast, "B").cast, "f")
-    var out = py_call(b.object.__new__, context["array_class"])
+    var out = native_storage_allocate(context["array_class"])
     py_setattr(out, "_store", value)
     py_setattr(out, "_base", PythonObject(None))
     py_setattr(out, "_pin", pin)
@@ -73,7 +74,7 @@ def _kde_pandas(source: PythonObject, context: PythonObject) raises -> PythonObj
             if series and Bool(py=data.flags.c_contiguous):
                 return Python.tuple(data, False)
             if not series and Bool(py=data.flags.f_contiguous):
-                var pin = py_call(Python.import_module("builtins").memoryview, data)
+                var pin = native_buffer_view(data)
                 var view = py_call(context["ndarray"], result.shape, dtype=context["float32"], buffer=pin,
                     strides=Python.tuple(data.strides[1], data.strides[0]))
                 return Python.tuple(view, False)
@@ -203,7 +204,7 @@ def _kde_y(source: PythonObject, rows: Int, est: String, context: PythonObject) 
                     classical_admit_value(value._mv, context)
                     value = classical_input(value._mv, context["output_context"], "y")
                 else:
-                    var packed = py_call(py_call(b.memoryview, value).tobytes, "C")
+                    var packed = py_call(native_buffer_view(value).tobytes, "C")
                     value = py_call(context["ndarray"], Python.tuple(Int(py=value.size)), dtype=value.dtype, buffer=packed)
                 nrows = Int(py=value.size)
                 columns = 1
@@ -226,7 +227,7 @@ def _kde_weights(source: PythonObject, rows: Int, context: PythonObject) raises 
     var raw = pair[0]
     var rank = Int(py=raw.ndim)
     if classical_kind(raw, context) == "c":
-        var format = py_call(b.memoryview, source).format
+        var format = native_buffer_view(source).format
         raise Error("Complex data not supported: buffer format '" + String(format) + "' is complex")
     if rank > 1 or py_type(source) is b.bool:
         raise Error("Sample weights must be 1D array or scalar")
@@ -264,7 +265,7 @@ def host_kde_fit(model: PythonObject, args: PythonObject, context: PythonObject)
             raise Error("TypeError: KDE fit does not invoke Python after-fit hooks")
     if not known:
         raise Error("TypeError: native KDE fit requires a connected host KDE class")
-    var keys = py_call(b.list, fields.keys())
+    var keys = py_call(py_type(Python.list()), fields.keys())
     for i in range(len(keys)):  # driver-loop: native stored model admission before replacement/destruction
         classical_admit_value(fields[keys[i]], context)
     # Replaced state must not release object buffers with Python finalizers.
