@@ -408,7 +408,96 @@ class HostKernelDensity(_NativeArchiveLoad, _HostBound, KernelDensity):
 
 
 class HostSVC(_NativeArchiveLoad, _HostBound, SVC):
+    """Evaluate a saved support vector classifier on the CPU."""
     _HOST_ARRAYS = ("dual_coef_", "support_vectors_", "intercept_")
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        # glue: ordinary subclass layout is recorded only at class definition.
+        context = _CLASSICAL.get("host_inference_context")
+        if context is not None:
+            context["classical_public_layouts"][cls] = _native_classical_bridge._layout(
+                cls, context["host_svc_attribute_descriptor"])
+
+    @_native_host_inference_method
+    def decision_function(self, X):
+        """Return binary margins or multiclass one-vs-one/one-vs-rest scores.
+
+        Parameters
+        ----------
+        X : array-like or sparse matrix
+            Query samples; precomputed kernels use training rows as columns.
+
+        Returns
+        -------
+        array-like
+            One margin per binary query, or the configured multiclass scores.
+
+        Examples
+        --------
+        >>> margins = model.decision_function(X)
+        """
+        return _native_classical(self, "host_infer_decision_function", (X,), _CLASSICAL)
+
+    @_native_host_inference_method
+    def predict(self, X):
+        """Return fitted class labels for each query sample.
+
+        Parameters
+        ----------
+        X : array-like or sparse matrix
+            Query samples; precomputed kernels use training rows as columns.
+
+        Returns
+        -------
+        array-like or list
+            Predicted labels, using the configured multiclass tie rule.
+
+        Examples
+        --------
+        >>> labels = model.predict(X)
+        """
+        return _native_classical(self, "host_infer_predict", (X,), _CLASSICAL)
+
+    @_native_host_inference_method
+    def predict_proba(self, X):
+        """Return calibrated class probabilities when probability=True.
+
+        Parameters
+        ----------
+        X : array-like or sparse matrix
+            Query samples; precomputed kernels use training rows as columns.
+
+        Returns
+        -------
+        array-like of shape (n_samples, n_classes)
+            Float64 probabilities in fitted class order.
+
+        Examples
+        --------
+        >>> probabilities = model.predict_proba(X)
+        """
+        return _native_classical(self, "host_infer_predict_proba", (X,), _CLASSICAL)
+
+    @_native_host_inference_method
+    def predict_log_proba(self, X):
+        """Return natural logarithms of calibrated class probabilities.
+
+        Parameters
+        ----------
+        X : array-like or sparse matrix
+            Query samples; precomputed kernels use training rows as columns.
+
+        Returns
+        -------
+        array-like of shape (n_samples, n_classes)
+            Float64 log probabilities; available when probability=True.
+
+        Examples
+        --------
+        >>> log_probabilities = model.predict_log_proba(X)
+        """
+        return _native_classical(self, "host_infer_predict_log_proba", (X,), _CLASSICAL)
 
 
 class HostIsolationForest(_NativeArchiveLoad, _HostBound, IsolationForest):
@@ -994,7 +1083,7 @@ def _connect_host_inference():
     for basename, names in (("_mojolearn_estimators_host", ("cd_predict", "kernel_ridge_predict", "nystroem_transform", "rbf_sampler_transform",
                                                           "tsvd_transform", "pca_transform", "inverse_transform", "pca_whiten_transform", "pca_whiten_inverse_transform",
                                                           "qn_decision_function", "qn_predict_binary", "qn_sigmoid", "qn_softmax", "py2mojo_rows", "py2mojo_linear_flags")),  # glue: fixed CPU prediction ABI
-                            ("_mojolearn_svm_host", ("svr_predict", "svc_pair_epilogue", "svc_dual_gemv")),
+                            ("_mojolearn_svm_host", ("svr_predict", "svc_predict", "svc_pair_epilogue", "svc_dual_gemv")),
                             ("_mojolearn_core_host", ("kmeans_predict", "kmeans_transform"))):
         try:
             module = _backend.load_host_module(basename)
@@ -1010,7 +1099,7 @@ def _connect_host_inference():
                    host_inference_class_labels=ClassLabels,
                    host_inference_kinds={HostElasticNet: "cd", HostLasso: "cd", HostKMeans: "kmeans",
                                          HostKernelRidge: "kernel_ridge", HostNystroem: "nystroem", HostRBFSampler: "rbf_sampler",
-                                         HostPCA: "pca", HostTruncatedSVD: "tsvd", HostLogisticRegression: "logistic", HostSVR: "svr"})
+                                         HostPCA: "pca", HostTruncatedSVD: "tsvd", HostLogisticRegression: "logistic", HostSVR: "svr", HostSVC: "svc"})
     # The established native attribute entry is schema-neutral: it admits
     # the supplied class layout and preserves internal Array/public ndarray
     # publication. It does not select scaler bindings or execute scaler work.
@@ -1034,6 +1123,16 @@ def _connect_host_inference():
                    host_svr_coefficient_property=vars(SVR)["coef_"])
     HostSVR.__getattribute__ = svr_descriptor
     context["classical_public_layouts"][HostSVR] = _native_classical_bridge._layout(HostSVR, svr_descriptor)
+    svc_attribute = module.host_svc_attribute_call
+    if not isinstance(svc_attribute, BuiltinFunctionType):
+        raise TypeError("explicit CPU SVC attributes require a native binding entry")
+    svc_descriptor = module.classical_attribute_descriptor(MethodType(svc_attribute, context))
+    context.update(host_svc_attribute_descriptor=svc_descriptor,
+                   host_svc_coefficient_property=vars(SVC)["coef_"],
+                   host_svc_probability_methods={name: vars(HostSVC)[name]
+                       for name in ("predict_proba", "predict_log_proba")})
+    HostSVC.__getattribute__ = svc_descriptor
+    context["classical_public_layouts"][HostSVC] = _native_classical_bridge._layout(HostSVC, svc_descriptor)
     _CLASSICAL["host_inference_context"] = context
 
 

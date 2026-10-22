@@ -200,3 +200,81 @@ def svr_coefficients(model):
         model._bind("_mojolearn_svm").svc_dual_gemv(addr_ro(model.dual_coef_, name="dual"),
             addr_ro(model.support_vectors_, name="support"), [count, features, 0], addr(out, name="coef_"))
     return out
+
+
+def svc(model, X, method):
+    """Frozen 32011bb32 SVC binary/pair ordering and epilogue contract."""
+    import array
+    from mojolearn._buffer import as_f32_dense_c
+    from mojolearn._labels import decode_labels, argmax_rows
+    from mojolearn._array import Array
+
+    binding = model._bind("_mojolearn_svm")
+    q, _ = as_f32_dense_c(X, ndim=2, name="X")
+    rows, features = q.shape
+    if features != model.n_features_in_:
+        raise ValueError("SVC feature count differs from fit")
+    pairs = vars(model).get("_pairs")
+    count = 1 if pairs is None else len(pairs)
+    decisions = empty((count, rows), "<f4")
+    pair_codes = [(0, 1)] if pairs is None else [(p["i"], p["j"]) for p in pairs]
+    if pairs is None:
+        machines = [(model.dual_coef_, model.support_vectors_, model.support_.tolist(),
+                     model.n_support_, model.intercept_[0], model._label0, model._label1)]
+    else:
+        machines = [(p["dual"], p["sv"], p["support"], p["dual"].shape[1], p["b"], 0., 1.) for p in pairs]
+    for i, (dual, sv, columns, support_count, bias, low, high) in enumerate(machines):
+        query, width = q, features
+        if model._hp_kernel == "precomputed" and support_count:
+            if not isinstance(columns, Array):
+                try:
+                    columns = array.array("i", columns)
+                except TypeError:
+                    columns = array.array("i", map(int, columns))
+            query = empty((rows, support_count), "<f4")
+            binding.svc_pair_epilogue(addr_ro(q, name="X"), 0, addr_ro(columns, name="support"),
+                addr(query, name="query"), [6, rows, features, rows, support_count])
+            width, sv = support_count, dual
+        binding.svc_predict(addr_ro(query, name="query"), addr_ro(dual, name="dual") if support_count else 0,
+            addr_ro(sv, name="sv") if support_count else 0, addr(decisions, name="decisions") + 4 * rows * i,
+            [rows, width, support_count, float(bias), float(low), float(high),
+             {"linear": 0, "poly": 1, "rbf": 2, "sigmoid": 3, "precomputed": 4}[model._hp_kernel],
+             model._gamma, int(pairs is None and method == "predict"), model._hp_cache_size,
+             int(model._hp_degree), float(model._hp_coef0)])
+    if method == "decision_function" and pairs is None:
+        return decisions.reshape((rows,))
+    classes = len(model.classes_)
+    if method == "decision_function":
+        mode = 0 if model.decision_function_shape == "ovo" else 1
+    elif method == "predict":
+        mode = 5 if pairs is None else (1 if model._hp_break_ties else 2)
+    else:
+        mode = 3 if method == "predict_proba" else 4
+    shape = (rows,) if mode in (2, 5) else (rows, count if mode == 0 else classes)
+    out = empty(shape, "<i8" if mode in (2, 5) else ("<f4" if mode == 0 else "<f8"))
+    pi = array.array("i", [v for pair in pair_codes for v in pair])
+    ab = array.array("d", [v for pair in model._prob_ab for v in pair]) if mode in (3, 4) else None
+    binding.svc_pair_epilogue(addr_ro(decisions, name="decisions"), pi.buffer_info()[0],
+        ab.buffer_info()[0] if ab is not None else 0, addr(out, name="out"),
+        [mode, rows, count, classes, float(model._label1) if mode == 5 else 0.])
+    if method == "predict":
+        return decode_labels(model.classes_, argmax_rows(out) if mode == 1 else out)
+    return out
+
+
+def svc_coefficients(model):
+    """Frozen 32011bb32 pair primal coefficients, including sign orientation."""
+    from mojolearn._buffer import zeros
+    if not hasattr(model, "dual_coef_") or model._hp_kernel != "linear":
+        raise AttributeError("coef_ requires fitted linear SVC")
+    pairs = vars(model).get("_pairs")
+    rows = 1 if pairs is None else len(pairs)
+    out = zeros((rows, model.n_features_in_), "<f4")
+    for row in range(rows):
+        dual = model.dual_coef_ if pairs is None else pairs[row]["dual"]
+        sv = model.support_vectors_ if pairs is None else pairs[row]["sv"]
+        count = model.n_support_ if pairs is None else dual.shape[1]
+        if count:
+            model._bind("_mojolearn_svm").svc_dual_gemv(addr_ro(dual, name="dual"), addr_ro(sv, name="sv"),
+                [count, model.n_features_in_, int(pairs is not None)], addr(out, name="coef_") + 4 * row * model.n_features_in_)
+    return out
