@@ -1,9 +1,8 @@
 {
   "schema": "mojolearn.runtime-takeover-status.v1",
-  "updated": "2026-10-22T02:48:28.372129+00:00",
+  "updated": "2026-10-22T03:40:40.377523+00:00",
   "release": "HELD",
-  "qualified_runtime_build": "e7c23510b52cbed9c4447ff466460dde6a2745b2",
-  "integration_before_report": "bd71db7578d26738b97af83bb3984d3ada61a54b",
+  "integration_before_report": "9b39c40eb",
   "evidence_root": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021",
   "test_policy": "Rerun failures, new tests and directly affected regression checks; reuse accepted unchanged results. Counts from different scopes are not interchangeable.",
   "completed": {
@@ -11,22 +10,6 @@
       "cpu": 16,
       "metal": 16,
       "evidence": "runtime-targeted-e7c23510b-summary.json"
-    },
-    "targeted_tests": {
-      "cpu": {
-        "passed": 324,
-        "failed": 14,
-        "total": 338,
-        "skipped": 0,
-        "errors": 0
-      },
-      "metal": {
-        "passed": 324,
-        "failed": 14,
-        "total": 338,
-        "skipped": 0,
-        "errors": 0
-      }
     },
     "scaler_exact_comparisons": {
       "standard_per_vendor": 16,
@@ -64,40 +47,89 @@
       "optimizer_exact_cases": 60,
       "sequence_exact_cases": 28,
       "note": "Unchanged passing optimizer suites and comparisons were not repeated in the e7 targeted run."
+    },
+    "earlier_e7_targeted_tests": {
+      "cpu": {
+        "passed": 324,
+        "failed": 14,
+        "total": 338,
+        "skipped": 0,
+        "errors": 0
+      },
+      "metal": {
+        "passed": 324,
+        "failed": 14,
+        "total": 338,
+        "skipped": 0,
+        "errors": 0
+      }
+    },
+    "latest_targeted_tests": {
+      "cpu": {
+        "total": 146,
+        "passed": 146,
+        "failed": 0,
+        "skipped": 0,
+        "junit": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-tests-cpu-43b5b5e13.junit.xml"
+      },
+      "metal": {
+        "total": 304,
+        "passed": 296,
+        "failed": 8,
+        "skipped": 0,
+        "junit": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-tests-metal-43b5b5e13.junit.xml"
+      }
+    },
+    "tree_owner_repairs": {
+      "cpu_passed": 146,
+      "metal_passed": 145,
+      "evidence": "runtime-targeted-43b5b5e13-summary.json",
+      "scope": "Selected tree inference, saved model, lifetime and prior failing lifecycle cases. Full unchanged scopes retain earlier accepted evidence."
+    },
+    "fixture_corrections": {
+      "late_numpy_and_object_nan": {
+        "cpu_passed": 4,
+        "metal_passed": 7,
+        "evidence": "fixture-repairs-c0d-on-320/RESULT.json"
+      },
+      "cpu_portable_math": {
+        "passed": 1,
+        "evidence": "cpu-gbdt-modes-math-repair-32011bb32.json"
+      }
     }
   },
   "remaining": [
     {
       "id": "gbdt-archive-corner-cases",
       "owner": "host_model_native",
-      "state": "repairing",
-      "failing_cases_per_vendor": 14,
-      "details": "12 new GBDT saved-state comparisons and2 categorical split cases; all previous16 failures repaired."
+      "state": "selected-repairs-passed",
+      "details": "All selected saved-model and tree cases passed on CPU/Metal43 freeze; retained earlier failures remain on disk. Final installed-package/vendor qualification is tracked separately."
     },
     {
       "id": "host-tree-runtime",
       "owner": "host_model_native",
-      "state": "source-integrated-not-compiled",
-      "source_commit": "bd71db757",
-      "details": "Forest/GBDT prediction/state migration and82 new tests; constructors, text parser and generic host_predict wrappers still being migrated."
+      "state": "selected-runtime-checks-passed",
+      "source_commit": "43b5b5e1315a61ad3dab9a725829fae1935cff0f",
+      "details": "Forest/GBDT prediction, constructors, parser and selected lifecycle repairs pass. Generic host_predict and other host families remain open."
     },
     {
       "id": "sequence-array-conversion",
       "owner": "optimizer_native",
-      "state": "native-candidate-in-development",
-      "details": "Preserve full dtype/copy/warning behavior. Public __array__ remains Python until native candidate is qualified."
+      "state": "eight-targeted-failures-under-repair",
+      "details": "Private native candidate plus new guards:151/159 passed on Metal43; four subarray Python callbacks, one zero-size subarray mismatch, two exception-category typing failures and one numeric-locale failure remain. StringDType and version qualification also pending. Public __array__ remains Python."
     },
     {
       "id": "selector-import-metadata",
       "owner": "scaler_lifecycle_native",
-      "state": "repairing",
-      "details": "New archive metadata setup conservatively expands helper selection to519/542 lanes. Preserve sound callback selection while distinguishing metadata storage from execution. Full run interrupted after1failure/5passes;99 tests unexecuted."
+      "state": "integrated-with-lane-evidence",
+      "details": "Lane e63a32945:39/39 targeted tests passed, including original helper/qr regressions and adversarial callbacks/installers. Initialization changes conservatively select broad coverage. Integration-specific helper/qr checks pending.",
+      "source_commit": "9b39c40eb"
     },
     {
       "id": "coverage-accounting",
       "owner": "root",
       "state": "open",
-      "details": "Registration parser repaired117 missing C doors. Source annotations are not execution proof. Corrected audit:49GAP/2owed native routes and59fault-arm obligations; retained source-specific review required."
+      "details": "Registration parser repaired117 missing C doors. Reviewed old1484row inventory:1172covered/12new-lane-covered/262n-a/13owed/25GAP. This is source accounting, not current full execution or fault proof.59fault-arm obligations remain in that retained inventory."
     },
     {
       "id": "sklearn-tags-import-contract",
@@ -110,11 +142,19 @@
       "owner": "root",
       "state": "pending-repairs",
       "details": "Final affected Linux/NVIDIA/AMD, installed-wheel and native-only qualification, references and missing fault execution. Reuse valid retained evidence; no publication or automatic rentals."
+    },
+    {
+      "id": "other-host-native-inference",
+      "owner": "host_model_native",
+      "state": "three-class-source-checkpoint-awaiting-freeze",
+      "source_commit": "1c3d11e48",
+      "details": "18 inherited Python predictor owners identified; ElasticNet/Lasso/KMeans native source checkpoint covers3classes/4operations but is not yet compiled.15other predictor classes plus operation-specific fit/state/transform/score/proba/decision accounting remain. Sparse-preserving next slice in progress."
     }
   ],
   "limitations": [
     "No claim that every public API, option, checkpoint or failure path is fully migrated/qualified.",
     "No performance improvement claim from correctness tests.",
     "Static census categories are not independently demonstrated runtime defects."
-  ]
+  ],
+  "latest_compiled_runtime": "43b5b5e1315a61ad3dab9a725829fae1935cff0f"
 }
