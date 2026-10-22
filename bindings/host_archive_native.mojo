@@ -590,12 +590,21 @@ def host_archive_logistic(cls: PythonObject, arrays: PythonObject, context: Pyth
     return model
 
 
-def host_archive_arima(cls: PythonObject, arrays: PythonObject, exog: Bool,
+def _arima_order(values: PythonObject, label: String) raises:
+    """ARIMA `_as_order`'s refusal of a negative saved order entry."""
+    for i in range(len(values)):  # driver-loop: over the fixed entries of one order tuple
+        if Int(py=values[i]) < 0:
+            raise Error("ValueError: mojolearn ARIMA: " + label + " entries must be non-negative integers, got "
+                        + _archive_builtin_repr(values))
+
+
+def host_archive_arima(cls: PythonObject, arrays: PythonObject, exog: Bool, path: PythonObject,
                        context: PythonObject) raises -> PythonObject:
-    var meta = host_archive_count(arrays, "meta", "<i8", 13 if exog else 12, context, True)
-    for i in range(7):  # driver-loop: fixed ARIMA order fields
-        if classical_i64(meta, i) < 0:
-            raise Error("ARIMA order entries must be non-negative integers")
+    # The refusals keep ARIMA.load's wording and order: the meta size and
+    # format checks, the constructor's validation, the trend's intercept,
+    # the saved mode, then each array's shape.
+    var where = host_archive_where(path, context)
+    var meta = host_archive_meta(arrays, "meta", 13 if exog else 12, path, context)
     var p = classical_i64(meta, 0)
     var d = classical_i64(meta, 1)
     var q = classical_i64(meta, 2)
@@ -608,52 +617,76 @@ def host_archive_arima(cls: PythonObject, arrays: PythonObject, exog: Bool,
     var n = classical_i64(meta, 9)
     var nx = classical_i64(meta, 12) if exog else 0
     if exog and nx < 1:
-        raise Error("ARIMA exogenous format requires at least one exogenous column")
+        raise Error(where + " is 'mojolearn-arima-2' with n_exog=" + String(nx))
     if not exog and py_contains(arrays, "exog"):
-        raise Error("ARIMA archive carries exog under the non-exogenous format")
+        raise Error(where + " is 'mojolearn-arima-1' and holds an exog member")
     var trend = _archive_string(arrays, "trend", context)
     var trend_arg = PythonObject(None) if String(trend) == "none" else trend
+    var method_saved = _archive_string(arrays, "method", context)
+    # The constructor's validation, in its order.
+    var order = Python.tuple(p, d, q)
+    var seasonal_order = Python.tuple(sp, sd, sq, period)
+    _arima_order(order, "order")
+    _arima_order(seasonal_order, "seasonal_order")
     var expected_k = 0 if d + sd else 1
     if trend_arg is not None:
         var lower = String(py=py_call(trend.lower))
-        if lower != "n" and lower != "c":
-            raise Error("NotImplementedError: ARIMA trend must be None, n or c; use native exogenous data for a time trend")
-        expected_k = 1 if lower == "c" else 0
-    if k != expected_k:
-        raise Error("ARIMA saved intercept count does not match its trend")
-    var method = py_call(_archive_string(arrays, "method", context).lower)
+        if lower == "n" or lower == "c":
+            expected_k = 1 if lower == "c" else 0
+        elif lower == "t" or lower == "ct":
+            raise Error("NotImplementedError: mojolearn ARIMA: trend=" + _archive_builtin_repr(trend)
+                        + " is refused. cuML has no time trend (its only switch is fit_intercept), so there is no "
+                        + "reference to hold one to; a time trend is a regressor, so pass the time index as an exog "
+                        + "column to fit, predict and forecast. This class carries trend=None, 'n' and 'c'; 'c' is "
+                        + "cuML's fit_intercept=True")
+        else:
+            raise Error("NotImplementedError: mojolearn ARIMA: trend=" + _archive_builtin_repr(trend)
+                        + " is refused. This class carries None (statsmodels' rule: 'c' when d + D == 0, "
+                        + "otherwise 'n'), 'n' and 'c'. A polynomial trend specification is a list of regressors: "
+                        + "pass them as exog")
+    var method = py_call(method_saved.lower)
     if String(method) != "ml" and String(method) != "css" and String(method) != "css-ml":
-        raise Error("unknown saved ARIMA method")
-    var complexity = p + q + sp + sq + k + 1 + nx
+        raise Error("ValueError: mojolearn ARIMA: unknown method " + _archive_builtin_repr(method_saved)
+                    + "; cuML's three are ['css', 'css-ml', 'ml'] and this implementation offers 'ml'")
+    if k != expected_k:
+        raise Error(where + " records k=" + String(k) + ", its trend " + _archive_builtin_repr(trend)
+                    + " resolves to " + String(expected_k))
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
-    host_archive_mode(arrays, fields, context)
-    py_setitem(fields, "order", Python.tuple(p, d, q))
-    py_setitem(fields, "seasonal_order", Python.tuple(sp, sd, sq, period))
+    py_setitem(fields, "order", order)
+    py_setitem(fields, "seasonal_order", seasonal_order)
     py_setitem(fields, "trend", trend_arg)
-    py_setitem(fields, "k_", k)
+    py_setitem(fields, "k_", expected_k)
     py_setitem(fields, "method", method)
     py_setitem(fields, "maxiter", classical_i64(meta, 10))
     py_setitem(fields, "verbose", False)
     py_setitem(fields, "output_type", PythonObject(None))
+    py_setitem(fields, "n_exog_", 0)
+    py_setitem(fields, "complexity_", p + q + sp + sq + expected_k + 1)
+    host_archive_mode(arrays, fields, context)
+    var complexity = p + q + sp + sq + expected_k + 1 + nx
+    var loaded = Python.dict()
+    py_setitem(loaded, "_y", host_archive_series_shape(arrays, "y", "<f4", Python.tuple(batch, n), path, context))
+    var coefficients = Python.tuple("params", "x", "x0")
+    for i in range(len(coefficients)):  # driver-loop: three saved coefficient states
+        var name = String(coefficients[i])
+        py_setitem(loaded, name + "_", host_archive_series_shape(arrays, name, "<f4", Python.tuple(batch, complexity), path, context))
+    py_setitem(loaded, "fx_", host_archive_series_shape(arrays, "fx", "<f4", Python.tuple(batch), path, context))
+    py_setitem(loaded, "n_iter_", host_archive_series_shape(arrays, "n_iter", "<i4", Python.tuple(batch), path, context))
+    py_setitem(loaded, "retcode_", host_archive_series_shape(arrays, "retcode", "<i4", Python.tuple(batch), path, context))
+    var scores = Python.tuple("llf", "aic", "bic")
+    for i in range(len(scores)):  # driver-loop: three saved fit criterion arrays
+        var name = String(scores[i])
+        py_setitem(loaded, name + "_", host_archive_series_shape(arrays, name, "<f8", Python.tuple(batch), path, context))
+    py_setitem(loaded, "_exog", host_archive_series_shape(arrays, "exog", "<f4", Python.tuple(batch, n, nx), path, context) if exog else PythonObject(None))
     py_setitem(fields, "batch_size_", batch)
     py_setitem(fields, "n_obs_", n)
     py_setitem(fields, "input_copied_", classical_i64(meta, 11) != 0)
     py_setitem(fields, "n_exog_", nx)
     py_setitem(fields, "complexity_", complexity)
-    py_setitem(fields, "_exog", host_archive_shape(arrays, "exog", "<f4", Python.tuple(batch, n, nx), context) if exog else PythonObject(None))
-    py_setitem(fields, "_y", host_archive_shape(arrays, "y", "<f4", Python.tuple(batch, n), context))
-    var coefficients = Python.tuple("params", "x", "x0")
-    for i in range(len(coefficients)):  # driver-loop: three saved coefficient states
-        var name = String(coefficients[i])
-        py_setitem(fields, name + "_", host_archive_shape(arrays, name, "<f4", Python.tuple(batch, complexity), context))
-    py_setitem(fields, "fx_", host_archive_shape(arrays, "fx", "<f4", Python.tuple(batch), context))
-    py_setitem(fields, "n_iter_", host_archive_shape(arrays, "n_iter", "<i4", Python.tuple(batch), context))
-    py_setitem(fields, "retcode_", host_archive_shape(arrays, "retcode", "<i4", Python.tuple(batch), context))
-    var scores = Python.tuple("llf", "aic", "bic")
-    for i in range(len(scores)):  # driver-loop: three saved fit criterion arrays
-        var name = String(scores[i])
-        py_setitem(fields, name + "_", host_archive_shape(arrays, name, "<f8", Python.tuple(batch), context))
+    var keys = Python.tuple("_exog", "_y", "params_", "x_", "x0_", "fx_", "n_iter_", "retcode_", "llf_", "aic_", "bic_")
+    for i in range(len(keys)):  # driver-loop: eleven saved fitted fields
+        py_setitem(fields, keys[i], loaded[keys[i]])
     return model
 
 
@@ -1804,7 +1837,7 @@ def host_archive_build(path: PythonObject, context: PythonObject,
     elif fmt == "mojolearn-logistic-1":
         model = host_archive_logistic(cls, arrays, context)
     elif fmt == "mojolearn-arima-1" or fmt == "mojolearn-arima-2":
-        model = host_archive_arima(cls, arrays, fmt == "mojolearn-arima-2", context)
+        model = host_archive_arima(cls, arrays, fmt == "mojolearn-arima-2", path, context)
     elif fmt == "mojolearn-holtwinters-1":
         model = host_archive_holtwinters(cls, arrays, path, context)
     elif fmt == "mojolearn-ivf-flat-1":
