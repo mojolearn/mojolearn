@@ -1626,7 +1626,9 @@ def render_markdown(audit, path):
             sab[ss] += 1
     lines = []
     w = lines.append
-    w("# Verifier coverage of the endpoints changed since the last release (2026-10-21)")
+    stamp = re.search(r"(\d{4})(\d{2})(\d{2})", os.path.basename(path))
+    day = "-".join(stamp.groups()) if stamp else "2026-10-21"
+    w(f"# Verifier coverage of the endpoints changed since the last release ({day})")
     w("")
     w(f"Release gate (Andrew, 2026-10-21): every endpoint that is new or changed since the last published "
       f"release is reached by a verifier lane and by a fault-injection arm the verifier or a check provably "
@@ -1639,7 +1641,7 @@ def render_markdown(audit, path):
     w("")
     w("```sh")
     w(f"python3 tools/verify_coverage_audit.py --base {audit['base']} --json <audit.json> --markdown "
-      f"docs/plans/VERIFY_COVERAGE_20261021.md")
+      f"docs/plans/{os.path.basename(path)}")
     w("```")
     w("")
     w("## Summary")
