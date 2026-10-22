@@ -3,6 +3,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.memory import bitcast
+from std.sys.info import CompilationTarget
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.classical_attributes import classical_connect_numpy
 from core.sequence_array_cast import sequence_cast_leaf, sequence_wide_word, sequence_signaling, SEQ_CAST_INVALID
@@ -88,7 +89,7 @@ def sequence_array_address(value: PythonObject) raises -> Int:
     return address
 
 
-def sequence_array_object_reports(context: PythonObject) raises -> Bool:
+def sequence_array_release(context: PythonObject) raises -> Int:
     # NumPy 2.3 added NPY_METH_NO_FLOATINGPOINT_ERRORS to any_to_object
     # (numpy/_core/src/multiarray/dtype_transfer.c). Its 2.0 ABI version
     # cannot distinguish this change from 2.0--2.2, which still report flags.
@@ -105,7 +106,11 @@ def sequence_array_object_reports(context: PythonObject) raises -> Bool:
         raise Error("TypeError: array cast compatibility requires NumPy major.minor metadata")
     var major = Int(String(parts[0]))
     var minor = Int(String(parts[1]))
-    return major < 2 or (major == 2 and minor < 3)
+    return major * 100 + minor
+
+
+def sequence_array_object_reports(context: PythonObject) raises -> Bool:
+    return sequence_array_release(context) < 203
 
 
 def sequence_array_cast(source: PythonObject, requested: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -181,7 +186,15 @@ def sequence_array_cast(source: PythonObject, requested: PythonObject, context: 
         elif kind == "T":
             status = sequence_string_leaf(start, destination, count, stride, Int(py=leaf[3]), leaf[4], classes, settings, context, status)
         else:
-            status |= sequence_cast_leaf(start, destination, count, stride, Int(py=leaf[3]), String(leaf[0]), Int(py=leaf[1]), Bool(py=leaf[2]))
+            var software_half = False
+            comptime if CompilationTarget.has_neon():
+                # NumPy1.26--2.3 half.hpp explicitly disables ARM __fp16 and
+                # uses FromFloatBits. NumPy2.4 enables ARM half conversion.
+                # The software path preserves signaling NaNs without invalid
+                # status; this is a dtype/version contract, not a shape rule.
+                if kind == "f" and width == 2:
+                    software_half = sequence_array_release(context) < 204
+            status |= sequence_cast_leaf(start, destination, count, stride, Int(py=leaf[3]), kind, width, Bool(py=leaf[2]), software_half)
     _ = source_owner^
     if reports_status:
         sequence_array_report(status, settings, context)

@@ -30,12 +30,18 @@ def sequence_signaling(bits: UInt32) -> Bool:
     return (bits & UInt32(0x7FFFFFFF)) > UInt32(0x7F800000) and (bits & UInt32(0x00400000)) == 0
 
 
-def sequence_half_word(bits: UInt32, mut status: Int) -> UInt64:
+def sequence_half_word(bits: UInt32, mut status: Int, software: Bool) -> UInt64:
     var magnitude = bits & UInt32(0x7FFFFFFF)
     var sign = UInt64(bits >> 31) << 15
     if magnitude >= UInt32(0x7F800000):
         if magnitude == UInt32(0x7F800000):
             return sign | UInt64(0x7C00)
+        if software:
+            # Legacy NumPy's FromFloatBits retains the signaling bit. A NaN
+            # whose payload vanishes when narrowed still needs one payload
+            # bit, so it remains a NaN rather than becoming infinity.
+            var payload = UInt64((bits & UInt32(0x7FFFFF)) >> 13)
+            return sign | UInt64(0x7C00) | max(payload, UInt64(1))
         if sequence_signaling(bits):
             status |= SEQ_CAST_INVALID
         return sign | UInt64(0x7E00) | UInt64((bits & UInt32(0x7FFFFF)) >> 13)
@@ -132,7 +138,7 @@ def sequence_long_float(bits: UInt32, destination: Int, width: Int, little: Bool
 
 
 def sequence_cast_leaf(source: Int, destination: Int, count: Int, stride: Int, offset: Int,
-                       kind: String, width: Int, little: Bool) raises -> Int:
+                       kind: String, width: Int, little: Bool, software_half: Bool = False) raises -> Int:
     var input = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=source)
     var status = 0
     for index in range(count):
@@ -146,12 +152,16 @@ def sequence_cast_leaf(source: Int, destination: Int, count: Int, stride: Int, o
                 target[i] = UInt8(bits >> UInt32(8 * i)) if i < 4 else UInt8(0)
         elif kind == "b":
             sequence_store_word(address, UInt64((bits & UInt32(0x7FFFFFFF)) != 0), 1, True)
+            # The native float-to-bool comparison returns True for either
+            # NaN kind, but only signaling NaNs set invalid status.
+            if sequence_signaling(bits):
+                status |= SEQ_CAST_INVALID
         elif kind == "i" or kind == "u" or kind == "m" or kind == "M":
             sequence_store_word(address, sequence_integer_word(bits, width, kind == "u", kind == "m" or kind == "M", status), width, little)
         else:
             var size = width // 2 if kind == "c" else width
             if size == 2:
-                sequence_store_word(address, sequence_half_word(bits, status), 2, little)
+                sequence_store_word(address, sequence_half_word(bits, status, software_half), 2, little)
             elif size == 4:
                 sequence_store_word(address, UInt64(bits), 4, little)
             elif size == 8:
