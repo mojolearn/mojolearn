@@ -93,7 +93,7 @@ def sequence_device_operation(operation: String, owner: PythonObject, values: Py
         var input = seq_device_input(source, operation == "seqdev_to", context)
         if operation == "seqdev_to" and Bool(py=context["sequence_device_io_off"]):
             return input
-        var selected = seq_binding(mode, context) if operation == "seqdev_to" else seq_binding(mode, context, values[0])
+        var selected = seq_binding(mode, context, PythonObject(None)) if operation == "seqdev_to" else seq_binding(mode, context, values[0])
         var entries = seq_device_entries(selected["module"], context, operation != "seqdev_to")
         if entries is None:
             return input
