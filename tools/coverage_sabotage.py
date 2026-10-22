@@ -128,7 +128,12 @@ def _stable(cell, repeats):
 
 
 def _binaries(record):
-    entries = list((record.get("package") or {}).get("bindings") or [])
+    package = record.get("package") or {}
+    if package.get("bindings_error"):
+        raise ValueError("loaded native binding provenance is incomplete: " + str(package["bindings_error"]))
+    entries = list(package.get("bindings") or [])
+    if package.get("binding_provenance_protocol") == "loaded-native-v2" and not entries:
+        raise ValueError("no loaded native binding provenance")
     entries += [dict(value, module=name) for name, value in
                 ((record.get("host") or {}).get("families") or {}).items()]
     out = {}

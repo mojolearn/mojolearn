@@ -51,6 +51,20 @@ def test_complete_changed_result_and_exact_restoration_pass(trial):
     assert trial[-1]() == 0
 
 
+@pytest.mark.parametrize("record_index", [1, 2, 3])
+def test_partial_binding_inventory_cannot_qualify_a_fault_record(trial, record_index):
+    trial[record_index]["package"]["bindings_error"] = "native module has no retained path"
+    assert trial[-1]() == 1
+
+
+def test_new_loaded_inventory_cannot_be_replaced_by_installed_host_files(trial):
+    _, clean, sab, restored, run = trial
+    for record in (clean, sab, restored):
+        record["host"] = {"families": {"installed": dict(sha256="b" * 64, size=1)}}
+    clean["package"].update(binding_provenance_protocol="loaded-native-v2", bindings=[])
+    assert run() == 1
+
+
 @pytest.mark.parametrize('failure', [
     'unstable-clean', 'wrong-commit', 'wrong-vendor', 'wrong-fixture', 'missing-fault-cell',
     'missing-clean-cell', 'missing-restored-cell', 'missing-part', 'incomplete',
