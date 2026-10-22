@@ -213,3 +213,18 @@ def test_foreign_registry_attributes_do_not_taint_the_local_registry(monkeypatch
     names, _ = ls._module_closure(rel, modules[rel], {"_FORMATS"}, runs=set())
     assert "local" in names and "unknown" in names
     assert "other" not in names
+
+
+def test_import_alias_used_in_a_subscript_index_is_not_rebound(monkeypatch):
+    from import_metadata_effects import Source
+
+    rel = "python/mojolearn/local.py"
+    tree = ast.parse(
+        "def connect():\n    from . import foreign\n    rows = {}\n"
+        "    rows[foreign.SUFFIX] = 1\n    return foreign._FORMATS\n"
+    )
+    foreign = ast.parse("SUFFIX = 'suffix'\n_FORMATS = {}\n")
+    modules = {rel: tree, "python/mojolearn/foreign.py": foreign}
+    source = Source(modules.get, lambda *args: False)
+    target = source.target(rel, tree.body[0].body[-1].value, tree.body[0].body)
+    assert target == ("python/mojolearn/foreign.py", foreign.body[-1].value)

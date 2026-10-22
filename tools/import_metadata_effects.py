@@ -138,13 +138,14 @@ class Source:
                 elif isinstance(node, (ast.Assign, ast.AnnAssign, ast.AugAssign)):
                     targets = node.targets if isinstance(node, ast.Assign) else [node.target]
                     if any(
-                        isinstance(n, ast.Name) and n.id == name
+                        isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store) and n.id == name
                         for target in targets
                         for n in ast.walk(target)
                     ):
                         result.append(node)
                 elif isinstance(node, (ast.For, ast.AsyncFor)) and any(
-                    isinstance(n, ast.Name) and n.id == name for n in ast.walk(node.target)
+                    isinstance(n, ast.Name) and isinstance(n.ctx, ast.Store) and n.id == name
+                    for n in ast.walk(node.target)
                 ):
                     result.append(node)
             return result
