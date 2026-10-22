@@ -1,8 +1,8 @@
 {
   "schema": "mojolearn.runtime-takeover-status.v1",
-  "updated": "2026-10-22T05:06:03.651050+00:00",
+  "updated": "2026-10-22T05:21:10.622897+00:00",
   "release": "HELD",
-  "integration_before_report": "f0009a086e40c7cac8f49882e28f2a9ae839621e",
+  "integration_before_report": "f51475c48",
   "evidence_root": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021",
   "test_policy": "Rerun failures, new tests and directly affected regression checks; reuse accepted unchanged results. Counts from different scopes are not interchangeable.",
   "completed": {
@@ -172,111 +172,69 @@
         "replaced_cases": 0
       },
       "evidence": "failure-disposition-35-to-d26.json"
+    },
+    "failure_disposition_d26_to_ad8": {
+      "cpu": {
+        "prior_failures": 2,
+        "now_passed": 2,
+        "pending": 0
+      },
+      "metal": {
+        "prior_failures": 10,
+        "now_passed": 10,
+        "pending": 0
+      },
+      "numpy126-metal": {
+        "prior_failures": 5,
+        "now_passed": 2,
+        "pending": 3
+      }
+    },
+    "logistic_native_selected": {
+      "per_vendor": 234,
+      "vendors": [
+        "cpu",
+        "metal"
+      ],
+      "evidence": "runtime-selection-verdict-ad8dd52fe.json",
+      "scope": "Selected native inference, class labels, warnings and guards; other methods and installed/cross-vendor qualification remain separate."
     }
   },
   "remaining": [
-    {
-      "id": "gbdt-archive-corner-cases",
-      "owner": "host_model_native",
-      "state": "selected-repairs-passed",
-      "details": "All selected saved-model and tree cases passed on CPU/Metal43 freeze; retained earlier failures remain on disk. Final installed-package/vendor qualification is tracked separately."
-    },
-    {
-      "id": "host-tree-runtime",
-      "owner": "host_model_native",
-      "state": "selected-runtime-checks-passed",
-      "source_commit": "43b5b5e1315a61ad3dab9a725829fae1935cff0f",
-      "details": "Forest/GBDT prediction, constructors, parser and selected lifecycle repairs pass. Generic host_predict and other host families remain open."
-    },
-    {
-      "id": "sequence-array-conversion",
-      "owner": "optimizer_native",
-      "state": "d26-narrow-cast-failures-under-repair",
-      "details": "All 13 prior String failures have passing same-node or corrected-fixture checks. Eight new NumPy 2 object-warning checks fail. Of 87 original NumPy 1.26 failures, 84 now pass and three remain; two new temporal-warning tests also fail. All 21 alias/negative-storage guards pass. FutureWarning category repair is integrated; public __array__ remains unchanged.",
-      "source_commit": "f0009a086e40c7cac8f49882e28f2a9ae839621e"
-    },
-    {
-      "id": "selector-import-metadata",
-      "owner": "scaler_lifecycle_native",
-      "state": "affected-regressions-pass",
-      "details": "570+d215 repair validated; original helper passes combined8de. Previous qr/new guard results retained. No pins relaxed.",
-      "source_commit": "8deeb2f04"
-    },
-    {
-      "id": "coverage-accounting",
-      "owner": "root",
-      "state": "open",
-      "details": "Registration parser repaired117 missing C doors. Reviewed old1484row inventory:1172covered/12new-lane-covered/262n-a/13owed/25GAP. This is source accounting, not current full execution or fault proof.59fault-arm obligations remain in that retained inventory."
-    },
-    {
-      "id": "sklearn-tags-import-contract",
-      "owner": "root",
-      "state": "pending-user-contract-answer",
-      "details": "Proposed import-order change remains excluded; preserve current interface until resolved."
-    },
-    {
-      "id": "release-qualification",
-      "owner": "root",
-      "state": "pending-repairs",
-      "details": "Final affected Linux/NVIDIA/AMD, installed-wheel and native-only qualification, references and missing fault execution. Reuse valid retained evidence; no publication or automatic rentals."
-    },
-    {
-      "id": "other-host-native-inference",
-      "owner": "host_model_native",
-      "state": "d26-sparse-projection-most-selected-pass-logistic-pending",
-      "source_commit": "f0009a086e40c7cac8f49882e28f2a9ae839621e",
-      "details": "Selected sparse checks pass 174/175 and projection checks pass 244/245 on each CPU and Metal run. The two failures per vendor share a LIL overflow exception mismatch; the repair awaits the next freeze. Logistic native inference and complex-label compatibility are integrated; 234 new checks await compilation and execution."
-    },
-    {
-      "id": "training-linear-and-robust-lifecycle",
-      "owner": "optimizer_native/scaler_lifecycle_native",
-      "state": "confirmed-python-orchestration-under-repair",
-      "details": "Eight public training linear_forward/backward CPU baseline operations return valid results while executing package Python frames. RobustScaler retains 32 numerical and five failure baseline cases; fit/transform Python orchestration is confirmed. Both native migrations are isolated and underway."
-    }
+    "Three NumPy 1.26 cases remain explicitly tracked: UInt16 undefined-result fixture correction is integrated but not executed; temporal signaling-NaN warning contract review is underway.",
+    "Private array bool/half signaling repair integrated as 9e7db10c4; no rebuilt candidate yet. Public __array__ remains Python.",
+    "SVR, training linear functions, and RobustScaler native migration source remains in agent lanes.",
+    "Cold sklearn tags import contract.",
+    "Remaining API/option/fault coverage, references, installed wheel, and applicable Linux/NVIDIA/AMD qualification."
   ],
   "limitations": [
     "No claim that every public API, option, checkpoint or failure path is fully migrated/qualified.",
     "No performance improvement claim from correctness tests.",
     "Static census categories are not independently demonstrated runtime defects."
   ],
-  "latest_compiled_runtime": "d26addec1f592a1c90395a32381847b542c79a38",
-  "latest_runtime_summary": "runtime-selection-verdict-d26addec1.json",
+  "latest_compiled_runtime": "ad8dd52fe32c92c584c2b282bac5f0d6f82016b8",
+  "latest_runtime_summary": "runtime-selection-verdict-ad8dd52fe.json",
   "latest_targeted_tests": {
     "cpu": {
-      "expected": 420,
-      "total": 420,
-      "passed": 418,
-      "failed": 2,
+      "expected": 261,
+      "passed": 261,
+      "failed": 0,
       "errors": 0,
-      "skipped": 0,
-      "coverage_complete": true,
-      "source_matches": true,
-      "junit": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-tests-cpu-d26addec1.junit.xml",
-      "failures": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/selected-failures-cpu-d26addec1.json"
+      "skipped": 0
     },
     "metal": {
-      "expected": 527,
-      "total": 527,
-      "passed": 517,
-      "failed": 10,
+      "expected": 335,
+      "passed": 335,
+      "failed": 0,
       "errors": 0,
-      "skipped": 0,
-      "coverage_complete": true,
-      "source_matches": true,
-      "junit": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-tests-metal-d26addec1.junit.xml",
-      "failures": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/selected-failures-metal-d26addec1.json"
+      "skipped": 0
     },
     "numpy126-metal": {
-      "expected": 136,
-      "total": 136,
-      "passed": 131,
-      "failed": 5,
+      "expected": 35,
+      "passed": 35,
+      "failed": 0,
       "errors": 0,
-      "skipped": 0,
-      "coverage_complete": true,
-      "source_matches": true,
-      "junit": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/runtime-tests-numpy126-metal-d26addec1.junit.xml",
-      "failures": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/selected-failures-numpy126-metal-d26addec1.json"
+      "skipped": 0
     }
   },
   "previous_35_targeted_tests": {
@@ -302,5 +260,6 @@
       "errors": 0
     },
     "scope": "New/affected selected scopes;three failure clusters under repair. Original logs,JUnit and binary provenance retained."
-  }
+  },
+  "latest_failure_disposition": "failure-disposition-d26-to-ad8.json"
 }
