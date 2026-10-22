@@ -691,8 +691,7 @@ TRAINING_LANE_NAMES = {
     # precision-recall curve, the three regression errors, the Rand index, the
     # KL divergence and trustworthiness through
     # metrics/host/classification_oracle.mojo, exported under the GPU binding's
-    # names from the metrics host binding (the log loss's probability check,
-    # probability_rows_f32, from the core host binding). IDENTICAL x4 on all
+    # names from the metrics host binding. IDENTICAL x4 on all
     # nine train cells on the M4's CPU column (one core) before the gate ran,
     # and the sabotage build DIVERGENT on all nine.
     "metrics-classification": "the classification, ranking and regression metrics",
@@ -1765,7 +1764,7 @@ FAMILIES = (
             "radius_neighbors_count", "radius_neighbors_fill", "rbc_knn_search", "transpose_f32",
             "cast_colmajor_f64_to_f32", "nonzero_f64_count", "nonzero_f64_fill", "cast_f64_to_f32", "all_finite_f32",
             "all_finite_f64", "gather_i64", "gather_f64", "gather_rows_bytes", "argmax_rows_f32",
-            "argmax_rows_f64", "argmax_last_rows_f32", "probability_rows_f32",
+            "argmax_rows_f64", "argmax_last_rows_f32",
             # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3104): the helpers
             # of bindings/hotpath_helpers.mojo that stand in for per-row Python,
             # and the ORDER RULE's label encoder (DEVIATION 2500) a CPU-only
@@ -1788,20 +1787,19 @@ FAMILIES = (
             "unique_inverse", "arange_i64", "leave_range_i64",
             "mask_from_indices_u8", "select_mask_u8_i64", "count_mask_u8",
             "next_combination_i64", "ic_running_min_f64", "ic_running_min_f32",
-            "fold_pair_f32", "threshold_labels_i64", "scale_shift_ftz_f32",
-            "bincount_i64", "compact_notnan_f32", "gather_keep_neg_i32",
-            "dot_rows_f32", "assign_fold_i64", "count_fold_hits_i64", "mark_split_roles_f32",
-            "split_table_i32", "scatter_rows_bytes", "uniform_init_f32",
-            "normal_init_f32", "epoch_order_i32", "adam_hyper_f64",
-            "mean_std_f32", "first_seen_i32", "strat_fold_assign_i32",
-            "strat_alloc_i64", "ocsvm_alpha_init_f32", "weighted_pick_i32",
-            "draw_rows_without_replacement_i32", "weighted_draw_rows_i32", "group_fold_assign_i32",
-            "strat_group_assign_i32", "strat_group_plan_i32", "bincount2_i32", "strided_copy_bytes", "check_lengths_i64",
+            "fold_pair_f32", "threshold_labels_i64",
+            "bincount_i64",
+            "assign_fold_i64", "count_fold_hits_i64", "mark_split_roles_f32",
+            "scatter_rows_bytes", "uniform_init_f32",
+            "normal_init_f32", "adam_hyper_f64",
+            "first_seen_i32", "strat_fold_assign_i32",
+            "strat_alloc_i64",
+            "group_fold_assign_i32",
+            "strat_group_plan_i32", "bincount2_i32", "strided_copy_bytes", "check_lengths_i64",
             "ragged_rows_bytes", "nsum_f64", "row_means_f64",
             "truncnorm_draws", "fsum_f64", "row_stds_f64",
-            "lr_schedule_values", "lr_onecycle_fill", "lr_decide",
-            "lr_schedule_exact", "lr_onecycle_exact", "lr_pow_values",
-            "lr_schedule_exact_block", "lr_onecycle_exact_block", "class_ratio_f64",
+            "lr_schedule_exact",
+            "lr_schedule_exact_block", "class_ratio_f64",
             "shard_topk_merge_f32",
         ),
         gate="tools/classical_host_gate.py (cpu-identity-gate.yml)",

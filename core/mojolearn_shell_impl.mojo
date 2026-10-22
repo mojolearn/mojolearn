@@ -122,36 +122,3 @@ def all_finite_host_f64(p: MutPointer[Float64, MutUntrackedOrigin], count: Int) 
             return 0
     return 1
 
-
-@fieldwise_init
-struct ProbRowFlags(Copyable, Movable):
-    """What `probability_rows_f32_host` found: a non-finite value, a value
-    outside [0, 1], a multiclass row whose sum is off by more than the
-    tolerance."""
-    var nonfinite: Bool
-    var outside: Bool
-    var bad_sum: Bool
-
-
-def probability_rows_f32_host(src: MutPointer[Float32, MutUntrackedOrigin], dst: MutPointer[Float32, MutUntrackedOrigin], nr: Int, nc: Int, bin: Int) -> ProbRowFlags:
-    """Check nr x nc probability rows; when bin == 1 also write the two-column
-    (1 - p, p) rows to dst."""
-    var nonfinite = False
-    var outside = False
-    var bad_sum = False
-    for r in range(nr):
-        var total = Float64(0)
-        for c in range(nc):
-            var p = src.unsafe_load(r * nc + c)
-            nonfinite = nonfinite or not isfinite(p)
-            outside = outside or p < 0 or p > 1
-            total += Float64(p)
-            if bin == 1:
-                dst.unsafe_store(2 * r, Float32(1) - p)
-                dst.unsafe_store(2 * r + 1, p)
-        # Existing NumPy validation used sqrt(Float32 epsilon), itself
-        # rounded to Float32, then widened for the Float64 comparison.
-        if bin == 0:
-            var error = total - Float64(1)
-            bad_sum = bad_sum or abs(error) > Float64(0.00034526697709225118)
-    return ProbRowFlags(nonfinite, outside, bad_sum)

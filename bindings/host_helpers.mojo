@@ -37,7 +37,6 @@ from core.host_helpers_impl import (
     gather_f64,
     gather_i64,
     gather_rows_bytes,
-    probability_rows_f32,
 )
 
 
@@ -241,38 +240,3 @@ def argmax_last_rows_f32_binding(
 # binding's definitions on the calling thread.
 # ---------------------------------------------------------------------------
 
-
-def probability_rows_f32_binding(
-    src_addr: PythonObject, dst_addr: PythonObject, rows: PythonObject,
-    cols: PythonObject, binary: PythonObject,
-) raises -> PythonObject:
-    """`bindings/_mojolearn.mojo::probability_rows_f32_binding`, restated for
-    the core host binding (the metrics-classification lane, 2026-09-14): the
-    log loss's probability check. Returns 1 for a non-finite value, 2 for a
-    value outside [0, 1], 3 for a multiclass row whose Float64 sum is more
-    than sqrt(Float32 epsilon) from one, else 0; a binary column is packed
-    into `dst` as `[1 - p, p]` rows."""
-    var nr = Int(py=rows)
-    var nc = Int(py=cols)
-    var bin = Int(py=binary)
-    if nr < 0 or nc <= 0 or (bin != 0 and bin != 1):
-        raise Error("probability_rows_f32: invalid dimensions or binary flag")
-    if bin == 1 and nc != 1:
-        raise Error("probability_rows_f32: binary input must have one column")
-    if nr == 0:
-        return PythonObject(0)
-    var src = f32_ptr(Int(py=src_addr))
-    # Multiclass validation never reads or writes dst.
-    var dst = src
-    if bin == 1:
-        dst = f32_ptr(Int(py=dst_addr))
-    var combined = UInt32(0)
-    with GILReleased(Python()):
-        combined = probability_rows_f32(src, dst, nr, nc, bin)
-    if (combined & UInt32(1)) != 0:
-        return PythonObject(1)
-    if (combined & UInt32(2)) != 0:
-        return PythonObject(2)
-    if (combined & UInt32(4)) != 0:
-        return PythonObject(3)
-    return PythonObject(0)
