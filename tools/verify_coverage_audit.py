@@ -1384,6 +1384,16 @@ ANNOTATIONS_BY_SRC[("robust_scaler_native_call", "bindings/_mojolearn_tokenizer_
     "current runtime execution, fault/restoration, installed-wheel and matching reference admission remain pending.")
 
 
+# Static lane reachability is not an execution/installed/fault receipt for a
+# newly registered public attribute or automatic device finalizer entry.
+for _new_entry in ("host_svr_attribute_call", "host_svc_attribute_call", "optimizer_device_finalize"):
+    ANNOTATIONS_BY_SRC[(_new_entry, "bindings/_mojolearn_tokenizer_host.mojo")] = (
+        "owed", [],
+        "Targeted public operation and ownership tests are registered; retain their exact frozen "
+        "execution scope separately. Matching installed-package, reference and fault/restoration "
+        "admission for this entry remains pending; static lane reachability does not establish it.")
+
+
 PY_ANNOTATIONS = {
     ("mojolearn.models.ParallelCausalLM", "generate"): (
         "covered", ["hf-causal-lm", "par-causal-lm"],

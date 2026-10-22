@@ -24,6 +24,9 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_TESTS = {
+    "test_robust_scaler_native_lifecycle.py": "RobustScaler lifecycle, options, inputs, state and native boundary refusals",
+    "test_scaler_rows_snapshot_native.py": "RobustScaler and MaxAbsScaler retained typed DeviceRows snapshots",
+    "test_robust_scaler_native_transport.py": "RobustScaler scratch, mapped outputs, resident transport and operation-owned slots",
     "test_training_device_native_rollback.py": "Training device allocation and optimizer parameter copy rollback with real native failures",
     "test_training_device_native_finalizer.py": "Automatic training device owner cleanup, views, rollback guards and shutdown",
     "test_samba_step_native.py": "SambaStack.train_step, optimizer owners, rollback and native schedule refusal",
@@ -42,6 +45,7 @@ PUBLIC_TESTS = {
     "test_host_projection_native.py": "Explicit CPU HostPCA/HostTruncatedSVD public projection, inverse projection and whitening",
     "test_host_logistic_native.py": "Explicit CPU HostLogisticRegression public decisions, predictions and probabilities",
     "test_host_svr_native.py": "Explicit CPU HostSVR public predictions and computed coefficients",
+    "test_host_svc_native.py": "Explicit CPU HostSVC public margins, predictions, probabilities and computed coefficients",
 }
 # Candidate array tests call _OPT_NATIVE directly. Keep them outside this public
 # registry until tests actually exercise the public __array__ protocol.
@@ -51,9 +55,21 @@ TEST_DEPENDENCIES = {
     "test_host_projection_native.py": ("pandas", "scipy"),
     "test_host_logistic_native.py": ("pandas",),
     "test_host_svr_native.py": ("pandas", "scipy"),
+    "test_host_svc_native.py": ("pandas", "scipy"),
 }
 CPU_RESIDENT_SKIP = "the CPU binding has no resident tensor pool"
 CPU_NOT_APPLICABLE = {
+    "test_robust_scaler_native_transport.py": {
+        'test_every_owned_release_is_attempted_and_primary_error_is_retained[False]': "GPU ranges/store ABI is not applicable to the CPU facade",
+        'test_every_owned_release_is_attempted_and_primary_error_is_retained[True]': "GPU ranges/store ABI is not applicable to the CPU facade",
+        'test_resident_snapshot_counters_and_slot_lifetime_are_preserved[False]': "GPU ranges/store ABI is not applicable to the CPU facade",
+        'test_resident_snapshot_counters_and_slot_lifetime_are_preserved[True]': "GPU ranges/store ABI is not applicable to the CPU facade",
+        'test_device_row_failure_releases_operation_slots_and_retains_scope_owner[False]': "GPU ranges/store ABI is not applicable to the CPU facade",
+        'test_device_row_failure_releases_operation_slots_and_retains_scope_owner[True]': "GPU ranges/store ABI is not applicable to the CPU facade",
+        'test_resident_class_hooks_are_refused_before_cache_allocation[dict]': "GPU ranges/store ABI is not applicable to the CPU facade",
+        'test_resident_class_hooks_are_refused_before_cache_allocation[finalizer]': "GPU ranges/store ABI is not applicable to the CPU facade",
+        'test_resident_class_hooks_are_refused_before_cache_allocation[base]': "GPU ranges/store ABI is not applicable to the CPU facade",
+    },
     "test_training_device_native_rollback.py": {
         'test_native_device_allocation_refusal_destroys_prepared_owner_without_python': "training device rollback requires the GPU binding",
         'test_native_upload_failure_releases_real_allocation': "training device rollback requires the GPU binding",
@@ -97,13 +113,17 @@ def test_applicability(selected, vendor):
             scope["coverage_limit"] = "Owner lifecycle checks do not qualify the public __array__ conversion protocol"
             if vendor == "cpu":
                 scope["cpu_not_applicable_cases"] = dict(CPU_NOT_APPLICABLE[name])
+        if name in ("test_robust_scaler_native_lifecycle.py", "test_scaler_rows_snapshot_native.py", "test_robust_scaler_native_transport.py"):
+            scope.update(execution_route="selected package scaler backend",
+                         operation_mode="identical (explicit fixture configuration)",
+                         coverage_limit="Public scaler operations only; resident context-manager entry and exit remain separate runtime migration work")
         if name == "test_training_device_native_rollback.py":
             scope.update(execution_route="GPU device allocation, upload and resident optimizer parameter copy",
                          coverage_limit="Retained native failure paths only; native heap exhaustion is not injected")
         if name == "test_training_device_native_finalizer.py":
             scope.update(execution_route="training GPU owner cleanup; partial-owner and guard checks also apply on CPU",
                          coverage_limit="Explicit cleanup checks verify release; process shutdown only checks exit status and stderr")
-        if name in ("test_host_inference_native.py", "test_host_kernel_inference_native.py", "test_host_projection_native.py", "test_host_logistic_native.py", "test_host_svr_native.py"):
+        if name in ("test_host_inference_native.py", "test_host_kernel_inference_native.py", "test_host_projection_native.py", "test_host_logistic_native.py", "test_host_svr_native.py", "test_host_svc_native.py"):
             scope.update(execution_route="explicit CPU host binding, including in GPU packages",
                          operation_mode="identical host operation; fast-mode refusal tested separately",
                          coverage_limit="Native qualification covers audited prediction/transform, preparation and attributes; inherited fit/score cases check compatibility only")
