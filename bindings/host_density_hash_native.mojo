@@ -68,22 +68,29 @@ def _density_hash_update(mut hash: Sha256, value: PythonObject) raises:
     # NumPy conversion or scalar arithmetic. Array supplies its physical _mv.
     ref cpy = Python().cpython()
     var view = List[Int](length=10, fill=0)
+    var bytes = List[UInt8]()
     var pointer = view.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
     var status = cpy.lib.get_function[Int32]("PyObject_GetBuffer")(value._obj_ptr, pointer, Int32(0x118))
     if status != 0:
         var failure = stash_python_error()
         raise failure^
     var size = view[2]
-    var bytes = List[UInt8](length=max(size, 1), fill=UInt8(0))
-    var destination = bytes.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
-    status = cpy.lib.get_function[Int32]("PyBuffer_ToContiguous")(destination, pointer, size, Int8(67))
-    cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
-    if status != 0:
-        var failure = stash_python_error()
+    try:
+        # Every recoverable allocation/copy failure releases the acquired
+        # export. Do not rely on the allocator terminating on failure.
+        bytes = List[UInt8](length=max(size, 1), fill=UInt8(0))
+        var destination = bytes.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
+        status = cpy.lib.get_function[Int32]("PyBuffer_ToContiguous")(destination, pointer, size, Int8(67))
+        if status != 0:
+            var failure = stash_python_error()
+            raise failure^
+    except failure:
+        cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
         raise failure^
+    cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
     # The active export pinned mutable exporters through copying; this private
     # Mojo owner remains live until SHA-256 finishes consuming every byte.
-    hash.update(Int(destination), size)
+    hash.update(Int(bytes.unsafe_ptr()), size)
     _ = bytes^
     _ = view^
 
