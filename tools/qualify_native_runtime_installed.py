@@ -24,6 +24,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_TESTS = {
+    "test_optimizer_native_config_order.py": "Native public optimizer get/set parameter order independent of mutable sorting",
     "test_optimizer_native_container_admission.py": "Native optimizer and training container admission with replaced builtin names",
     "test_training_cross_entropy_public_native.py": "Public cross entropy preparation, options, native scalar configuration and consumed host/device outputs",
     "test_training_device_native_allocator.py": "Native training device owner allocation independent of mutable object constructors",
@@ -218,6 +219,10 @@ def test_applicability(selected, vendor):
             scope.update(execution_route="native optimizer and training host-buffer preparation on the selected backend",
                          operation_mode="identical (explicit fixture configuration)",
                          coverage_limit="Selected container and scalar hook refusals plus consumed checkpoint state; other public operations and option combinations remain separate")
+        if name == "test_optimizer_native_config_order.py":
+            scope.update(execution_route="native optimizer configuration owner on the selected backend",
+                         operation_mode="identical (explicit fixture configuration)",
+                         coverage_limit="Public parameter ordering and selected option/reset behavior; unrelated training operations remain separate")
         result[name] = scope
     return result
 
