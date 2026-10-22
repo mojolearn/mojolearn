@@ -124,6 +124,135 @@ class InstalledNativeAudit(unittest.TestCase):
         self.assertIn("original numerical mismatch", report["failures"][0]["reason"])
         self.assertEqual(report["skipped"][0]["reason"], "no physical GPU")
 
+    def test_origin_only_cached_extension_is_checked_against_installed_wheel(self):
+        prefix, payload, tests, modules = self.modules()
+        extension = modules["mojolearn"].runtime
+        path = extension.__file__
+        del extension.__file__
+        extension.__spec__ = types.SimpleNamespace(origin=path)
+        found = q.installed_module_inventory(modules, prefix, payload, tests)
+        row = found["mojolearn/host/example.so"]
+        self.assertTrue(row["native"])
+        self.assertEqual(row["path_source"], "__spec__.origin")
+        Path(path).write_bytes(b"changed")
+        with self.assertRaisesRegex(ValueError, "bytes differ"):
+            q.installed_module_inventory(modules, prefix, payload, tests)
+
+    def test_missing_conflicting_or_external_native_origin_refuses(self):
+        prefix, payload, tests, modules = self.modules()
+        extension = modules["mojolearn"].runtime
+        original = extension.__file__
+        extension.__spec__ = types.SimpleNamespace(origin=str(self.root / "outside.so"))
+        with self.assertRaisesRegex(ValueError, "conflicting loaded product paths"):
+            q.installed_module_inventory(modules, prefix, payload, tests)
+        del extension.__file__
+        with self.assertRaisesRegex(ValueError, "outside installed"):
+            q.installed_module_inventory(modules, prefix, payload, tests)
+        extension.__spec__ = None
+        with self.assertRaisesRegex(ValueError, "no artifact path"):
+            q.installed_module_inventory(modules, prefix, payload, tests)
+        extension.__spec__ = types.SimpleNamespace(origin=original)
+        q.installed_module_inventory(modules, prefix, payload, tests)
+
+    def test_shared_native_witness_keeps_installed_path_and_hash_constraints(self):
+        prefix, payload, tests, modules = self.modules()
+        path = Path(modules["mojolearn"].runtime.__file__)
+        witness = dict(module="mojolearn._host._mojolearn_example", file=str(path),
+                       sha256=q.digest(path), size=path.stat().st_size, path_source="__spec__.origin")
+        del modules["mojolearn"].runtime
+        found = q.installed_module_inventory(modules, prefix, payload, tests, [witness])
+        self.assertTrue(found["mojolearn/host/example.so"]["native"])
+        with self.assertRaisesRegex(ValueError, "witness bytes changed"):
+            q.installed_module_inventory(modules, prefix, payload, tests,
+                                         [dict(witness, sha256="0" * 64)])
+        external = self.root / "outside.so";external.write_bytes(path.read_bytes())
+        with self.assertRaisesRegex(ValueError, "outside installed"):
+            q.installed_module_inventory(modules, prefix, payload, tests,
+                                         [dict(witness, file=str(external))])
+
+    def test_exact_backend_placeholder_is_not_a_missing_native_artifact(self):
+        prefix, payload, tests, modules = self.modules()
+        class Placeholder(types.ModuleType):
+            pass
+        backend = types.ModuleType("mojolearn._backend")
+        backend._HostBinding = Placeholder
+        modules[backend.__name__] = backend
+        modules["mojolearn._mojolearn_placeholder"] = Placeholder("_mojolearn_placeholder")
+        q.installed_module_inventory(modules, prefix, payload, tests)
+        class Unknown(Placeholder):
+            pass
+        modules["mojolearn._mojolearn_placeholder"] = Unknown("_mojolearn_placeholder")
+        with self.assertRaisesRegex(ValueError, "no artifact path"):
+            q.installed_module_inventory(modules, prefix, payload, tests)
+
+    def test_public_owner_and_host_scopes_exclude_private_array_candidate(self):
+        names = ("test_native_owner_qualification.py", "test_sequence_shutdown_native.py",
+                 "test_host_inference_native.py", "test_host_kernel_inference_native.py")
+        for name in names:
+            self.assertIn(name, q.PUBLIC_TESTS)
+            self.assertTrue((q.ROOT / "python/mojolearn/tests" / name).is_file())
+        for name in ("test_sequence_array_native_candidate.py", "test_sequence_array_native_guards.py"):
+            self.assertNotIn(name, q.PUBLIC_TESTS)
+        scope = q.test_applicability(names, "cuda")
+        self.assertIn("explicit CPU host", scope["test_host_inference_native.py"]["execution_route"])
+        self.assertIn("identical", scope["test_sequence_shutdown_native.py"]["operation_mode"])
+        self.assertEqual(q.test_dependencies(names), ["numpy", "pytest", "pandas", "scipy"])
+        self.assertEqual(q.test_dependencies([names[0]]), ["numpy", "pytest"])
+
+    def scope_fixture(self, file, *, passed=1, reason=q.CPU_RESIDENT_SKIP):
+        cases = [dict(name=name, classname="mojolearn.tests." + Path(file).stem,
+                      outcome="skipped", skip_reason=reason)
+                 for name in q.CPU_NOT_APPLICABLE[file]]
+        cases += [dict(name="applicable_" + str(i), classname="mojolearn.tests." + Path(file).stem,
+                       outcome="passed", skip_reason="") for i in range(passed)]
+        return dict(cases=cases, failures=[])
+
+    def test_cpu_resident_skips_remain_explicit_without_discarding_applicable_passes(self):
+        name = "test_native_owner_qualification.py"
+        summary = self.scope_fixture(name, passed=7)
+        scope = q.test_scope_summary(summary, [name], "cpu")
+        self.assertEqual((scope["applicable_passed"], scope["not_applicable_count"]), (7, 2))
+        self.assertEqual(scope["scopes"][name]["status"], "passed")
+        self.assertEqual(q.selected_test_status(0, summary, scope, True), "selected-tests-passed")
+        self.assertEqual(len(summary["cases"]), 9)  # original skip cases are retained
+
+    def test_all_cpu_shutdown_cases_are_na_and_never_a_passing_qualification(self):
+        name = "test_sequence_shutdown_native.py"
+        summary = self.scope_fixture(name, passed=0)
+        scope = q.test_scope_summary(summary, [name], "cpu")
+        self.assertEqual((scope["applicable_passed"], scope["not_applicable_count"]), (0, 5))
+        self.assertEqual(q.selected_test_status(0, summary, scope, True), "selected-tests-not-applicable")
+
+    def test_gpu_skips_and_unrecognized_cpu_skips_remain_incomplete(self):
+        name = "test_native_owner_qualification.py"
+        for vendor, reason in (("metal", q.CPU_RESIDENT_SKIP), ("cpu", "no physical GPU"),
+                               ("cpu", "could not import scipy")):
+            summary = self.scope_fixture(name, reason=reason)
+            scope = q.test_scope_summary(summary, [name], vendor)
+            self.assertEqual(q.selected_test_status(0, summary, scope, True), "failed-or-incomplete")
+        summary = self.scope_fixture(name)
+        summary["cases"][0]["name"] = "new_unreviewed_resident_test"
+        self.assertFalse(q.test_scope_summary(summary, [name], "cpu")["complete"])
+
+    def test_missing_selected_scope_failure_or_missing_receipt_never_qualifies(self):
+        name = "test_native_owner_qualification.py"
+        summary = self.scope_fixture(name)
+        scope = q.test_scope_summary(summary, [name, "test_host_inference_native.py"], "cpu")
+        self.assertFalse(scope["complete"])
+        scope = q.test_scope_summary(summary, [name], "cpu")
+        for code, receipt in ((1, True), (0, False)):
+            self.assertEqual(q.selected_test_status(code, summary, scope, receipt), "failed-or-incomplete")
+        summary["failures"] = [dict(reason="original failure")]
+        self.assertEqual(q.selected_test_status(0, summary, scope, True), "failed-or-incomplete")
+
+    def test_junit_case_identity_distinguishes_a_declared_cpu_skip(self):
+        path = self.root / "tests.xml"
+        path.write_text('<testsuites><testsuite><testcase classname="mojolearn.tests.test_native_owner_qualification" name="test_failed_native_sequence_transfer_releases_allocated_handle[seq_tensor_copy]"><skipped message="the CPU binding has no resident tensor pool"/></testcase></testsuite></testsuites>')
+        summary = q.junit_summary(path)
+        scope = q.test_scope_summary(summary, ["test_native_owner_qualification.py"], "cpu")
+        self.assertEqual(scope["not_applicable_count"], 1)
+        self.assertEqual(summary["skipped"][0]["classname"], "mojolearn.tests.test_native_owner_qualification")
+
     def archive_fixture(self, *, exclude_product=False):
         repo = self.root / "archive-repo"; repo.mkdir()
         files = {

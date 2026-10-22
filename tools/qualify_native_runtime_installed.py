@@ -33,7 +33,55 @@ PUBLIC_TESTS = {
     "test_sequential_native_admission.py": "Public Sequential argument admission before Python hooks",
     "test_generator_draw_native.py": "Generator public draws and stream/error semantics",
     "test_generation_native.py": "CausalLM generation/stream/stopping/resume and consumed outputs",
+    "test_native_owner_qualification.py": "Bare SGD/Adam/AdamW state replacement, checkpoint/resume, IO refusal and resident transfer cleanup",
+    "test_sequence_shutdown_native.py": "Public SequenceDeviceTensor finalization, interpreter shutdown, release retry and callback refusal",
+    "test_host_inference_native.py": "Explicit CPU HostElasticNet/HostLasso/HostKMeans public prediction, validation and attributes",
+    "test_host_kernel_inference_native.py": "Explicit CPU HostKernelRidge/HostNystroem/HostRBFSampler public dense/sparse prediction and transform",
 }
+# Candidate array tests call _OPT_NATIVE directly. Keep them outside this public
+# registry until tests actually exercise the public __array__ protocol.
+TEST_DEPENDENCIES = {
+    "test_host_inference_native.py": ("pandas",),
+    "test_host_kernel_inference_native.py": ("pandas", "scipy"),
+}
+CPU_RESIDENT_SKIP = "the CPU binding has no resident tensor pool"
+CPU_NOT_APPLICABLE = {
+    "test_native_owner_qualification.py": {
+        "test_failed_native_sequence_transfer_releases_allocated_handle[seq_tensor_upload]": CPU_RESIDENT_SKIP,
+        "test_failed_native_sequence_transfer_releases_allocated_handle[seq_tensor_copy]": CPU_RESIDENT_SKIP,
+    },
+    "test_sequence_shutdown_native.py": {
+        "test_sequence_cleanup_without_imports[shutdown]": CPU_RESIDENT_SKIP,
+        "test_sequence_cleanup_without_imports[explicit]": CPU_RESIDENT_SKIP,
+        "test_sequence_cleanup_without_imports[gc]": CPU_RESIDENT_SKIP,
+        "test_sequence_cleanup_retries_failed_native_release": CPU_RESIDENT_SKIP,
+        "test_sequence_cleanup_refuses_conversion_and_release_callbacks": CPU_RESIDENT_SKIP,
+    },
+}
+
+
+def test_applicability(selected, vendor):
+    result = {}
+    for name in selected:
+        scope = dict(package_vendor=vendor, execution_route="selected package backend",
+                     operation_mode="test-specific configuration", cpu_not_applicable_cases={})
+        if name in CPU_NOT_APPLICABLE:
+            scope["operation_mode"] = "identical (explicit fixture configuration)"
+            scope["execution_route"] = ("resident GPU tensor pool" if name == "test_sequence_shutdown_native.py"
+                                        else "bare optimizer owner; resident cleanup only on GPU")
+            if vendor == "cpu":
+                scope["cpu_not_applicable_cases"] = dict(CPU_NOT_APPLICABLE[name])
+        if name in ("test_host_inference_native.py", "test_host_kernel_inference_native.py"):
+            scope.update(execution_route="explicit CPU host binding, including in GPU packages",
+                         operation_mode="identical host operation; fast-mode refusal tested separately")
+        result[name] = scope
+    return result
+
+
+def test_dependencies(selected, extra=()):
+    # Independent test oracles/data preparation, never product dependencies.
+    return list(dict.fromkeys(["numpy", "pytest"] + [dependency for name in selected
+                          for dependency in TEST_DEPENDENCIES.get(name, ())] + list(extra)))
 
 
 def require(condition, why):
@@ -148,11 +196,39 @@ def native_source_inventory(source, commit, committed, git_root):
     return hashes, omitted
 
 
-def installed_module_inventory(modules, prefix, payload, tests):
+def installed_module_inventory(modules, prefix, payload, tests, native_artifacts=()):
     """Tests may live externally; every product Python/extension byte must ship."""
     prefix, tests = Path(prefix).resolve(), Path(tests).resolve()
     found = {}
     candidates = dict(modules)
+    backend = modules.get("mojolearn._backend")
+    placeholders = tuple(value for key in ("_HostBinding", "_NoGpuBinding", "_MissingUpperTier", "_IdenticalOnlyTier")
+                         if isinstance(value := vars(backend).get(key) if backend else None, type))
+
+    def admit(path, *, native=False, module=None, path_source=None):
+        path = Path(path).resolve()
+        require(path.is_relative_to(prefix) and "site-packages" in path.parts,
+                "product imported outside installed environment: " + str(path))
+        at = path.parts.index("site-packages")
+        member = PurePosixPath(*path.parts[at + 1:]).as_posix()
+        require(member in payload, "loaded product file absent from wheel: " + member)
+        require(digest(path) == payload[member]["sha256"], "installed product bytes differ: " + member)
+        row = dict(path=str(path), sha256=payload[member]["sha256"], native=native)
+        if module:
+            row.update(module=module, path_source=path_source)
+        found[member] = row
+
+    # The worker supplies the installed verifier's shared loaded-native-v2
+    # inventory. Apply the additional installed-prefix and wheel constraints
+    # here; a source checkout or an unshipped extension never qualifies.
+    for row in native_artifacts:
+        require(row.get("module") and row.get("file") and row.get("sha256") and row.get("size", 0) > 0,
+                "incomplete loaded native witness")
+        path = Path(row["file"])
+        require(path.suffix in (".so", ".dylib", ".pyd"), "native witness is not an extension")
+        require(path.stat().st_size == row["size"] and digest(path) == row["sha256"],
+                "loaded native witness bytes changed")
+        admit(path, native=True, module=row["module"], path_source=row.get("path_source"))
     for name, module in list(modules.items()):
         if name.startswith("mojolearn") and isinstance(module, types.ModuleType):
             for key, value in vars(module).items():
@@ -161,24 +237,28 @@ def installed_module_inventory(modules, prefix, payload, tests):
     for name, module in candidates.items():
         if not isinstance(module, types.ModuleType):
             continue
-        path = vars(module).get("__file__")
-        if not path:
+        fields = vars(module)
+        actual_name = fields.get("__name__", name)
+        file_path, origin = fields.get("__file__"), getattr(fields.get("__spec__"), "origin", None)
+        paths = {Path(value).resolve() for value in (file_path, origin)
+                 if value and value not in ("built-in", "frozen")}
+        product = actual_name.startswith(("mojolearn", "_mojolearn"))
+        if not paths:
+            # Native extensions cached only on a package attribute also need
+            # a resolvable origin. Namespace modules and exact backend routing
+            # placeholders carry no executed native artifact.
+            require(type(module) in placeholders or not actual_name.rsplit(".", 1)[-1].startswith("_mojolearn"),
+                    "loaded native module has no artifact path: " + actual_name)
             continue
-        path = Path(path).resolve()
-        actual_name = vars(module).get("__name__", name)
+        if not product and not any(p.name.startswith("_mojolearn") for p in paths):
+            continue
+        require(len(paths) == 1, "conflicting loaded product paths: " + actual_name)
+        path = paths.pop()
         if actual_name.startswith("mojolearn.tests"):
             require(path.is_relative_to(tests), "test namespace escaped frozen test copy")
             continue
-        if not (actual_name.startswith(("mojolearn", "_mojolearn")) or path.name.startswith("_mojolearn")):
-            continue
-        require(path.is_relative_to(prefix) and "site-packages" in path.parts,
-                "product imported outside installed environment: " + str(path))
-        at = path.parts.index("site-packages")
-        member = PurePosixPath(*path.parts[at + 1:]).as_posix()
-        require(member in payload, "loaded product file absent from wheel: " + member)
-        require(digest(path) == payload[member]["sha256"], "installed product bytes differ: " + member)
-        found[member] = dict(path=str(path), sha256=payload[member]["sha256"],
-                             native=path.suffix in (".so", ".dylib", ".pyd"))
+        admit(path, native=path.suffix in (".so", ".dylib", ".pyd"), module=actual_name,
+              path_source="__file__" if file_path else "__spec__.origin")
     require("mojolearn/__init__.py" in found, "installed package was not observed")
     return found
 
@@ -190,10 +270,57 @@ def junit_summary(path):
                    reason="\n".join((x.text or x.get("message", "")) for x in list(c)
                                     if x.tag in ("failure", "error")))
               for c in cases if c.find("failure") is not None or c.find("error") is not None]
-    skipped = [dict(name=c.get("name"), reason=c.find("skipped").get("message", ""))
+    skipped = [dict(name=c.get("name"), classname=c.get("classname"), reason=c.find("skipped").get("message", ""))
                for c in cases if c.find("skipped") is not None]
     return dict(total=len(cases), passed=len(cases)-len(failed)-len(skipped),
-                failures=failed, skipped=skipped)
+                failures=failed, skipped=skipped,
+                cases=[dict(name=c.get("name"), classname=c.get("classname"),
+                            outcome="failed" if c.find("failure") is not None or c.find("error") is not None
+                            else "skipped" if c.find("skipped") is not None else "passed",
+                            skip_reason=c.find("skipped").get("message", "") if c.find("skipped") is not None else "")
+                       for c in cases])
+
+
+def test_scope_summary(summary, selected, vendor):
+    """Only exact CPU resident cases are N/A; all other skips remain incomplete."""
+    scopes = {name: dict(total=0, passed=0, failures=0, not_applicable=[], unexpected_skips=[])
+              for name in selected}
+    unmatched = []
+    for case in summary.get("cases", []):
+        module_words = (case.get("classname") or "").split(".")
+        matches = [name for name in selected if Path(name).stem in module_words]
+        if len(matches) != 1:
+            unmatched.append(case)
+            continue
+        name = matches[0]
+        scope = scopes[name]
+        scope["total"] += 1
+        if case["outcome"] == "passed":
+            scope["passed"] += 1
+        elif case["outcome"] == "failed":
+            scope["failures"] += 1
+        else:
+            declared = CPU_NOT_APPLICABLE.get(name, {}).get(case["name"]) if vendor == "cpu" else None
+            key = "not_applicable" if declared is not None and case["skip_reason"] == declared else "unexpected_skips"
+            scope[key].append(case)
+    for scope in scopes.values():
+        scope["status"] = ("failed-or-incomplete" if not scope["total"] or scope["failures"] or scope["unexpected_skips"]
+                           else "passed" if scope["passed"] else "not-applicable")
+    return dict(scopes=scopes, unmatched_cases=unmatched,
+                applicable_passed=sum(row["passed"] for row in scopes.values()),
+                not_applicable_count=sum(len(row["not_applicable"]) for row in scopes.values()),
+                complete=bool(scopes) and not unmatched and all(row["status"] != "failed-or-incomplete"
+                                                               for row in scopes.values()))
+
+
+def selected_test_status(pytest_exit, summary, scope, receipt_exists):
+    if pytest_exit != 0 or not scope["complete"] or summary.get("failures") or not receipt_exists:
+        return "failed-or-incomplete"
+    if scope["applicable_passed"] > 0:
+        return "selected-tests-passed"
+    if scope["not_applicable_count"] > 0:
+        return "selected-tests-not-applicable"
+    return "failed-or-incomplete"
 
 
 def test_environment(parent, vendor, numeric_mode):
@@ -226,6 +353,7 @@ def worker(request_path):
     require(Path.cwd() == out / "work", "test worker must run outside the source checkout")
     import mojolearn
     import pytest
+    from mojolearn._verify import binding_artifacts
     require(mojolearn.vendor() == request["vendor"], "installed backend silently changed")
     from mojolearn import _backend
     require(_backend.default_mode() == request["numeric_mode"], "installed numeric mode differs")
@@ -236,26 +364,33 @@ def worker(request_path):
     namespace.__package__ = "mojolearn.tests"
     sys.modules["mojolearn.tests"] = namespace
     mojolearn.tests = namespace
-    loaded, test_devices = {}, {}
+    loaded, test_devices, native = {}, {}, {}
+
+    def observe():
+        artifacts = binding_artifacts()
+        require(artifacts, "no loaded native binding witnesses")
+        loaded.update(installed_module_inventory(sys.modules, sys.prefix, request["payload"], tests, artifacts))
+        native.update({row["module"]: row for row in artifacts})
+        test_devices.update(generation_test_devices(sys.modules, request["generation_device"]))
 
     class InstalledGuard:
         def pytest_runtest_teardown(self, item, nextitem):
-            loaded.update(installed_module_inventory(sys.modules, sys.prefix, request["payload"], tests))
-            test_devices.update(generation_test_devices(sys.modules, request["generation_device"]))
+            observe()
 
     code = 1
     try:
-        loaded.update(installed_module_inventory(sys.modules, sys.prefix, request["payload"], tests))
+        observe()
         code = int(pytest.main(["--import-mode=importlib", "-q", "-ra", "--confcutdir=" + str(tests),
                                "--junitxml=" + str(out / "tests.xml"),
                                "--basetemp=" + str(out / "test-tmp")]
                               + [str(tests / name) for name in request["test_files"]],
                               plugins=[InstalledGuard()]))
     finally:
-        loaded.update(installed_module_inventory(sys.modules, sys.prefix, request["payload"], tests))
+        observe()
         (out / "installed-modules.json").write_text(json.dumps(dict(
             package=str(Path(mojolearn.__file__).resolve()), prefix=sys.prefix,
             vendor=mojolearn.vendor(), numeric_mode=_backend.default_mode(), modules=loaded,
+            binding_provenance_protocol="loaded-native-v2", bindings=list(native.values()),
             generation_test_device=request["generation_device"],
             observed_generation_test_devices=test_devices, pytest_exit=code), indent=2) + "\n")
     return code
@@ -347,6 +482,8 @@ def main():
                 report["test_hashes"][rel] = hashlib.sha256(raw).hexdigest()
         selected = args.test_file or list(PUBLIC_TESTS)
         report["selected_public_scope"] = {name:PUBLIC_TESTS[name] for name in selected}
+        report["selected_test_applicability"] = test_applicability(selected, args.vendor)
+        report["test_dependencies"] = test_dependencies(selected, args.dependency)
         venv = out / "venv"
         run_command("venv", [args.python, "-m", "venv", str(venv)], out, cwd=out)
         python = venv / "bin/python"
@@ -354,8 +491,8 @@ def main():
         report["test_device_overrides"] = {"MOJOLEARN_GENERATION_DEVICE": env["MOJOLEARN_GENERATION_DEVICE"]}
         run_command("install-wheels", [str(python), "-m", "pip", "install", "--no-deps", "--no-cache-dir"]
                     + [str(Path(p).resolve()) for p in wheels], out, cwd=out, env=env)
-        run_command("install-test-dependencies", [str(python), "-m", "pip", "install", "numpy", "pytest"]
-                    + args.dependency, out, cwd=out, env=env)
+        run_command("install-test-dependencies", [str(python), "-m", "pip", "install"]
+                    + report["test_dependencies"], out, cwd=out, env=env)
         run_command("pip-freeze", [str(python), "-m", "pip", "freeze", "--all"], out, cwd=out, env=env)
         shutil.copyfile(__file__, out / "controller.py")
         request = dict(out=str(out), tests=str(tests), payload=payload, test_files=selected,
@@ -372,16 +509,18 @@ def main():
             report["tests"] = junit_summary(out / "tests.xml")
         report["installed_guard_receipt"] = str(out / "installed-modules.json")
         tests_summary = report.get("tests", {})
-        passed = (result.returncode == 0 and tests_summary.get("total", 0) > 0
-                  and not tests_summary.get("failures") and not tests_summary.get("skipped")
-                  and (out / "installed-modules.json").is_file())
-        report["status"] = "selected-tests-passed" if passed else "failed-or-incomplete"
+        report["test_scope_summary"] = test_scope_summary(tests_summary, selected, args.vendor)
+        scope = report["test_scope_summary"]
+        report["status"] = selected_test_status(result.returncode, tests_summary, scope,
+                                               (out / "installed-modules.json").is_file())
     except Exception as error:
         report["status"] = "failed-or-incomplete"
         report["error"] = type(error).__name__ + ": " + str(error)
     finally:
         (out / "receipt.json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps({k:report.get(k) for k in ("status", "pytest_exit", "release_qualified")}))
+    # An entirely inapplicable selection records honest N/A, never a green
+    # qualification with zero applicable public operations.
     return 0 if report["status"] == "selected-tests-passed" else 1
 
 
