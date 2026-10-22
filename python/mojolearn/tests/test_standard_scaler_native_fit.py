@@ -97,3 +97,19 @@ assert m.n_samples_seen_ == 10
 '''
     run = subprocess.run([sys.executable, "-c", code], text=True, capture_output=True)
     assert run.returncode == 0, run.stdout + run.stderr
+
+
+def test_fit_without_importing_numpy_is_native():
+    code = '''
+import sys
+import mojolearn as ml
+from mojolearn._verify_native_runtime import audit_native_call
+assert "numpy" not in sys.modules
+m = ml.StandardScaler()
+audit_native_call(m.fit, [[1., 3.], [3., 6.], [5., 9.]],
+                  sample_weight=[1., 1., 1.]).assert_native()
+assert m.mean_.tolist() == [3., 6.]
+assert "numpy" not in sys.modules
+'''
+    run = subprocess.run([sys.executable, "-c", code], text=True, capture_output=True)
+    assert run.returncode == 0, run.stdout + run.stderr
