@@ -96,6 +96,7 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
 import bincache  # noqa: E402  the build's own Mojo import resolver
+from mojo_registrations import registered_functions, sole_registration
 PKG = os.path.join("python", "mojolearn")
 HARNESS = os.path.join("tools", "identity_break.py")
 MANIFEST = os.path.join(PKG, "host_surface.py")
@@ -1825,8 +1826,7 @@ def _binding_exports(rel):
         text = _read(rel)
     except OSError:
         return {}
-    return {m.group(2): m.group(1) for m in re.finditer(
-        r"def_function\[\s*([A-Za-z0-9_]+)\s*(?:\[[^\[\]]*\])?\s*\]\s*\(\s*\"([A-Za-z0-9_]+)\"", text)}
+    return {name: impl for name, (impl, _params) in registered_functions(text).items()}
 
 
 @_by_path
@@ -1846,11 +1846,10 @@ def _delegated_exports(rel):
             if name is None or not f.endswith(".mojo"):
                 continue
             defs = _mojo_defs_for(f)
-            if defs is None or "def_function[" not in defs[0].get(name, ""):
+            if defs is None:
                 continue
-            for m in re.finditer(r"def_function\[\s*([A-Za-z0-9_]+)\s*(?:\[[^\[\]]*\])?\s*\]\s*\(\s*\"([A-Za-z0-9_]+)\"",
-                                 defs[0][name]):
-                out.setdefault(m.group(2), (f, m.group(1)))
+            for export, (impl, _params) in registered_functions(defs[0].get(name, "")).items():
+                out.setdefault(export, (f, impl))
     return out
 
 
@@ -1871,11 +1870,7 @@ def _binding_export_params(rel):
         text = _read(rel)
     except OSError:
         return {}
-    out = {}
-    for m in re.finditer(
-            r"def_function\[\s*[A-Za-z0-9_]+\s*\[([^\[\]]*)\]\s*\]\s*\(\s*\"([A-Za-z0-9_]+)\"", text):
-        out[m.group(2)] = re.findall(r"[A-Za-z_][A-Za-z0-9_]*", m.group(1))
-    return out
+    return {name: params for name, (_impl, params) in registered_functions(text).items() if params}
 
 
 def _is_module_init(name):
@@ -2011,15 +2006,14 @@ def binding_additions(ref, path):
             # parametric `m.def_function[f[DevExec]]("x")`; `f` must be a
             # block this diff added or a name its prelude newly imported, and
             # "x" must not have been an export already.
-            m = re.match(r"^\s*[A-Za-z_]\w*\.def_function\[\s*([A-Za-z0-9_]+)\s*(\[[\w\s,]*\])?\s*\]"
-                         r"\s*\(\s*\"([A-Za-z0-9_]+)\"\s*\)\s*$", line)
+            registration = sole_registration(line)
             if not line.strip():
                 continue
-            if not m or m.group(1) not in added | imported:
+            if registration is None or registration.impl not in added | imported:
                 return None
-            if re.search(r"\"%s\"" % re.escape(m.group(3)), old):
+            if registration.name in registered_functions(old):
                 return None
-            exports.add(m.group(3))
+            exports.add(registration.name)
     return exports
 
 

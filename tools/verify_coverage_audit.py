@@ -51,8 +51,7 @@ from collections import defaultdict
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
 
-REG_RE = re.compile(
-    r"def_(?:py_c_|py_)?function\[\s*([A-Za-z0-9_]+)\s*(?:\[([^\[\]]*)\])?\s*\]\s*\(\s*\"([A-Za-z0-9_]+)\"")
+from mojo_registrations import registered_functions
 SAB_RE = re.compile(r"MOJOLEARN_[A-Z0-9_]*SABOTAGE[A-Z0-9_]*")
 IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
@@ -68,10 +67,7 @@ def show(rev, path):
 
 def registrations(text):
     """name -> (impl, [param identifiers]) for one binding source."""
-    out = {}
-    for m in REG_RE.finditer(text or ""):
-        out[m.group(3)] = (m.group(1), IDENT_RE.findall(m.group(2) or ""))
-    return out
+    return registered_functions(text)
 
 
 def kind_of(path):
@@ -944,6 +940,25 @@ ANNOTATIONS = {
 #: (entry, binding source) -> (status, lanes, why): a row whose answer
 #: differs between a GPU binding and its host twin.
 ANNOTATIONS_BY_SRC = {
+    **{(entry, "bindings/_mojolearn_preprocessing_host.mojo"): (
+        "covered", [lane],
+        "Source reach: MOJOLEARN_VENDOR=cpu maps the ordinary preprocessing binding to "
+        "preprocessing_host; the native scaler owner calls its fixed " + entry +
+        " entry (finite, unweighted input for standard_fit). Existing lane references "
+        "are retained separately; this annotation is not execution of the new native door.")
+       for entry, lane in (("standard_fit", "standard-scaler"),
+                           ("standard_transform", "standard-scaler"),
+                           ("minmax_fit", "minmax-scaler"),
+                           ("minmax_transform", "minmax-scaler"))},
+    **{(entry, "bindings/_mojolearn_estimators_host.mojo"): (
+        "owed", [lane],
+        "Source reach requires MOJOLEARN_IDENTITY_HOST_INFER=" + lane +
+        ": the lane saves its scaler, host_model loads Host" + estimator +
+        ", and the held-out transform uses the estimators_host entry. Ordinary "
+        "CPU records exercise preprocessing_host instead; retained host-infer execution "
+        "and matching installed-package qualification are still owed.")
+       for entry, lane, estimator in (("standard_transform", "standard-scaler", "StandardScaler"),
+                                     ("minmax_transform", "minmax-scaler", "MinMaxScaler"))},
     **{(e, "bindings/_mojolearn_training_host.mojo"): ("n/a", [], _HOST_SLOT)
        for e in ("optimizer_resident_open", "optimizer_resident_download",
                  "optimizer_resident_upload")},
