@@ -211,15 +211,19 @@ def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
             raise Error("StandardScaler transform overflowed in Float32")
         _ = filled^
     if not finite or colnan:
-        var keep = List[Float32](length=3*n*d+d, fill=0)
+        var keep = List[Float32](length=3*n*d+2*d, fill=0)
         var kp = F32P(unsafe_from_address=Int(keep.unsafe_ptr()))
         memcpy(dest=kp, src=_ptr(values), count=n*d)
         memcpy(dest=kp+n*d, src=_ptr(output), count=n*d)
         memcpy(dest=kp+2*n*d, src=ap+4*d, count=d)
         var restore = List[Int32]()
-        _stage(restore, 103, n*d, 0, d, n*d, 2*n*d, 2*n*d+d)
+        # c2_nan_sub publishes int32 words, while nan_keep reads numeric
+        # Float32 flags. Preserve the old _Prog.put_codes i2f stage: raw
+        # integer 1 is a subnormal float that Metal can flush to zero.
+        _stage(restore, 10, d, 2*n*d, 2*n*d+d)
+        _stage(restore, 103, n*d, 0, d, n*d, 2*n*d+d, 2*n*d+2*d)
         _run(keep, restore, entries)
-        memcpy(dest=_ptr(output), src=kp+2*n*d+d, count=n*d)
+        memcpy(dest=_ptr(output), src=kp+2*n*d+2*d, count=n*d)
         _ = keep^
     _ = arena^
     _ = mean^
