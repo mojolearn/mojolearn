@@ -216,6 +216,13 @@ def _register_host_inference_class(cls):
 
 
 _NATIVE_HOST_FITS = {}
+_NATIVE_HOST_INITIALIZERS = {}
+
+
+def _native_host_initializer(method):
+    # glue: restore the complete native constructor after mixin class setup.
+    _NATIVE_HOST_INITIALIZERS[method.__qualname__] = method
+    return method
 
 
 def _native_host_fit_method(method):
@@ -417,6 +424,44 @@ class HostKernelDensity(_NativeArchiveLoad, _HostBound, KernelDensity):
     """Evaluate a saved kernel density model on the CPU."""
     _HOST_ARRAYS = ("_x", "_w")
 
+    @_native_host_initializer
+    def __init__(self, *, bandwidth=1.0, algorithm="auto", kernel="gaussian", metric="euclidean",
+                 atol=0, rtol=0, breadth_first=True, leaf_size=40, metric_params=None, numeric_mode=None):
+        """Create a CPU kernel density estimator with the supplied options.
+
+        Parameters
+        ----------
+        bandwidth : float, default=1.0
+            Kernel bandwidth.
+        algorithm : str, default="auto"
+            Density evaluation algorithm.
+        kernel : str, default="gaussian"
+            Density kernel.
+        metric : str, default="euclidean"
+            Distance metric.
+        atol, rtol : float, default=0
+            Absolute and relative approximation tolerances.
+        breadth_first : bool, default=True
+            Tree traversal option.
+        leaf_size : int, default=40
+            Tree leaf size option.
+        metric_params : dict or None, default=None
+            Additional distance metric options.
+        numeric_mode : str or None, default=None
+            Numeric mode recorded with the estimator.
+
+        Returns
+        -------
+        HostKernelDensity
+            The estimator, ready to receive training rows or saved state.
+
+        Examples
+        --------
+        >>> model = HostKernelDensity(bandwidth=0.5)
+        """
+        return _native_classical(self, "host_density_initialize", ("kde", bandwidth, kernel, metric, algorithm,
+                                  atol, rtol, breadth_first, leaf_size, metric_params, numeric_mode), _CLASSICAL)
+
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         _register_host_inference_class(cls)
@@ -584,6 +629,52 @@ class HostSVC(_NativeArchiveLoad, _HostBound, SVC):
 class HostIsolationForest(_NativeArchiveLoad, _HostBound, IsolationForest):
     """Score samples with a saved isolation forest on the CPU."""
     _HOST_ARRAYS = ("_x",)
+
+    @_native_host_initializer
+    def __init__(self, *, n_estimators=100, max_samples="auto", max_depth=None, max_features=1.0,
+                 bootstrap=False, contamination="auto", random_state=None, warm_start=False,
+                 n_jobs=None, verbose=False, output_type=None, numeric_mode=None):
+        """Create a CPU isolation forest with the supplied options.
+
+        Parameters
+        ----------
+        n_estimators : int, default=100
+            Number of isolation trees.
+        max_samples : int, float or str, default="auto"
+            Training sample count or fraction per tree.
+        max_depth : int or None, default=None
+            Maximum tree depth.
+        max_features : int or float, default=1.0
+            Feature count or fraction per tree.
+        bootstrap : bool, default=False
+            Whether trees sample rows with replacement.
+        contamination : float or str, default="auto"
+            Expected outlier fraction or automatic threshold selection.
+        random_state : int or None, default=None
+            Random seed.
+        warm_start : bool, default=False
+            Whether subsequent training extends an existing forest.
+        n_jobs : int or None, default=None
+            Worker count option.
+        verbose : bool, default=False
+            Verbosity option.
+        output_type : str or None, default=None
+            Preferred output container.
+        numeric_mode : str or None, default=None
+            Numeric mode recorded with the estimator.
+
+        Returns
+        -------
+        HostIsolationForest
+            The estimator, ready to receive saved state.
+
+        Examples
+        --------
+        >>> model = HostIsolationForest(n_estimators=20)
+        """
+        return _native_classical(self, "host_density_initialize", ("iforest", n_estimators, max_samples, max_depth,
+                                  max_features, bootstrap, contamination, random_state, warm_start,
+                                  n_jobs, verbose, output_type, numeric_mode), _CLASSICAL)
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -1244,7 +1335,8 @@ except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as _mi
 
 # Import-time connection of complete explicit CPU prediction owners.
 def _connect_host_inference():
-    from types import BuiltinFunctionType, MethodType
+    from types import BuiltinFunctionType, MethodType, FunctionType, MemberDescriptorType
+    from ._native_owner_lifetime import connect_owner_context
     from ._labels import ClassLabels
     from .tokenizer import _binding
     entries = {}
@@ -1265,12 +1357,18 @@ def _connect_host_inference():
     # CPU training is public. Replace only this complete native fit after
     # mixin class setup; inherited/overridden operations keep their guards.
     HostKernelDensity.fit = _NATIVE_HOST_FITS["HostKernelDensity.fit"]
+    HostKernelDensity.__init__ = _NATIVE_HOST_INITIALIZERS["HostKernelDensity.__init__"]
+    HostIsolationForest.__init__ = _NATIVE_HOST_INITIALIZERS["HostIsolationForest.__init__"]
     context = dict(_CLASSICAL["host_tree_context"])
     context.update(host_inference_entries=entries,
                    host_inference_class_labels=ClassLabels,
+                   host_density_object_setattr=vars(object)["__setattr__"],
+                   host_density_member_type=MemberDescriptorType,
+                   host_density_function_type=FunctionType, host_density_attribute_error=AttributeError,
                    host_inference_kinds={HostElasticNet: "cd", HostLasso: "cd", HostKMeans: "kmeans",
                                          HostKernelRidge: "kernel_ridge", HostNystroem: "nystroem", HostRBFSampler: "rbf_sampler",
                                          HostPCA: "pca", HostTruncatedSVD: "tsvd", HostLogisticRegression: "logistic", HostSVR: "svr", HostSVC: "svc", HostKernelDensity: "kde", HostIsolationForest: "iforest"})
+    connect_owner_context(context)
     # The established native attribute entry is schema-neutral: it admits
     # the supplied class layout and preserves internal Array/public ndarray
     # publication. It does not select scaler bindings or execute scaler work.
