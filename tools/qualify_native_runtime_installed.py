@@ -24,6 +24,8 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_TESTS = {
+    "test_training_linear_public_native.py": "Public linear forward/backward input preparation, output ownership and native failure paths",
+    "test_maxabs_scaler_native_transport.py": "MaxAbsScaler scratch, mapped outputs, resident transport and operation-owned slot cleanup",
     "test_robust_scaler_native_lifecycle.py": "RobustScaler lifecycle, options, inputs, state and native boundary refusals",
     "test_scaler_rows_snapshot_native.py": "RobustScaler and MaxAbsScaler retained typed DeviceRows snapshots",
     "test_robust_scaler_native_transport.py": "RobustScaler scratch, mapped outputs, resident transport and operation-owned slots",
@@ -59,6 +61,34 @@ TEST_DEPENDENCIES = {
 }
 CPU_RESIDENT_SKIP = "the CPU binding has no resident tensor pool"
 CPU_NOT_APPLICABLE = {
+    'test_training_linear_public_native.py': {
+        'test_public_device_linear_consumed_outputs_are_native[linear_forward-matrix]': 'resident linear operations require the GPU training binding',
+        'test_public_device_linear_consumed_outputs_are_native[linear_forward-batch]': 'resident linear operations require the GPU training binding',
+        'test_public_device_linear_consumed_outputs_are_native[linear_forward-vector]': 'resident linear operations require the GPU training binding',
+        'test_public_device_linear_consumed_outputs_are_native[linear_forward-strided]': 'resident linear operations require the GPU training binding',
+        'test_public_device_linear_consumed_outputs_are_native[linear_backward-matrix]': 'resident linear operations require the GPU training binding',
+        'test_public_device_linear_consumed_outputs_are_native[linear_backward-batch]': 'resident linear operations require the GPU training binding',
+        'test_public_device_linear_consumed_outputs_are_native[linear_backward-vector]': 'resident linear operations require the GPU training binding',
+        'test_public_device_linear_consumed_outputs_are_native[linear_backward-strided]': 'resident linear operations require the GPU training binding',
+        'test_public_device_linear_refuses_mixed_owners[linear_forward]': 'resident linear operations require the GPU training binding',
+        'test_public_device_linear_refuses_mixed_owners[linear_backward]': 'resident linear operations require the GPU training binding',
+        'test_public_device_linear_nonfinite_refusal_releases_outputs[linear_forward-input]': 'resident linear operations require the GPU training binding',
+        'test_public_device_linear_nonfinite_refusal_releases_outputs[linear_forward-weight]': 'resident linear operations require the GPU training binding',
+        'test_public_device_linear_nonfinite_refusal_releases_outputs[linear_backward-input]': 'resident linear operations require the GPU training binding',
+        'test_public_device_linear_nonfinite_refusal_releases_outputs[linear_backward-weight]': 'resident linear operations require the GPU training binding',
+        'test_public_device_linear_nonfinite_refusal_releases_outputs[linear_backward-gradient]': 'resident linear operations require the GPU training binding',
+    },
+    'test_maxabs_scaler_native_transport.py': {
+        'test_resident_snapshot_counters_and_slot_lifetime_are_preserved[False]': 'GPU ranges/store ABI is not applicable to the CPU facade',
+        'test_resident_snapshot_counters_and_slot_lifetime_are_preserved[True]': 'GPU ranges/store ABI is not applicable to the CPU facade',
+        'test_device_row_failure_releases_operation_slots_and_retains_scope_owner[False]': 'GPU ranges/store ABI is not applicable to the CPU facade',
+        'test_device_row_failure_releases_operation_slots_and_retains_scope_owner[True]': 'GPU ranges/store ABI is not applicable to the CPU facade',
+        'test_every_owned_release_is_attempted_and_primary_error_is_retained[False]': 'GPU ranges/store ABI is not applicable to the CPU facade',
+        'test_every_owned_release_is_attempted_and_primary_error_is_retained[True]': 'GPU ranges/store ABI is not applicable to the CPU facade',
+        'test_resident_class_hooks_are_refused_before_cache_allocation[dict]': 'GPU ranges/store ABI is not applicable to the CPU facade',
+        'test_resident_class_hooks_are_refused_before_cache_allocation[finalizer]': 'GPU ranges/store ABI is not applicable to the CPU facade',
+        'test_resident_class_hooks_are_refused_before_cache_allocation[base]': 'GPU ranges/store ABI is not applicable to the CPU facade',
+    },
     "test_robust_scaler_native_transport.py": {
         'test_every_owned_release_is_attempted_and_primary_error_is_retained[False]': "GPU ranges/store ABI is not applicable to the CPU facade",
         'test_every_owned_release_is_attempted_and_primary_error_is_retained[True]': "GPU ranges/store ABI is not applicable to the CPU facade",
@@ -113,10 +143,14 @@ def test_applicability(selected, vendor):
             scope["coverage_limit"] = "Owner lifecycle checks do not qualify the public __array__ conversion protocol"
             if vendor == "cpu":
                 scope["cpu_not_applicable_cases"] = dict(CPU_NOT_APPLICABLE[name])
-        if name in ("test_robust_scaler_native_lifecycle.py", "test_scaler_rows_snapshot_native.py", "test_robust_scaler_native_transport.py"):
+        if name in ("test_robust_scaler_native_lifecycle.py", "test_scaler_rows_snapshot_native.py", "test_robust_scaler_native_transport.py", "test_maxabs_scaler_native_transport.py"):
             scope.update(execution_route="selected package scaler backend",
                          operation_mode="identical (explicit fixture configuration)",
                          coverage_limit="Public scaler operations only; resident context-manager entry and exit remain separate runtime migration work")
+        if name == "test_training_linear_public_native.py":
+            scope.update(execution_route="host buffers on the selected training backend; resident device owners on GPU",
+                         operation_mode="identical (explicit fixture configuration)",
+                         coverage_limit="Selected public linear operations and retained legacy contracts only; installed reference/fault and other training primitives remain separate")
         if name == "test_training_device_native_rollback.py":
             scope.update(execution_route="GPU device allocation, upload and resident optimizer parameter copy",
                          coverage_limit="Retained native failure paths only; native heap exhaustion is not injected")
