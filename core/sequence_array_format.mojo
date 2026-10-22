@@ -14,14 +14,18 @@ struct SequenceNumericLocale(Movable):
 
     def __init__(out self) raises:
         var name = String("C")
-        self.locale = external_call["newlocale", Optional[MutPointer[UInt8, MutUntrackedOrigin]]](
+        var created = external_call["newlocale", Optional[MutPointer[UInt8, MutUntrackedOrigin]]](
             c_int(0), name.as_c_string_slice().unsafe_ptr(), Optional[MutPointer[UInt8, MutUntrackedOrigin]](None))
-        self.previous = None
-        if not self.locale:
+        if not created:
             raise Error("RuntimeError: native float formatting could not create a C locale")
-        self.previous = external_call["uselocale", Optional[MutPointer[UInt8, MutUntrackedOrigin]]](self.locale.value())
-        if not self.previous:
+        var previous = external_call["uselocale", Optional[MutPointer[UInt8, MutUntrackedOrigin]]](created.value())
+        if not previous:
+            # Construction has not published either owner field. Release the
+            # successful allocation explicitly if selecting it failed.
+            external_call["freelocale", NoneType](created.value())
             raise Error("RuntimeError: native float formatting could not select its C locale")
+        self.locale = created^
+        self.previous = previous^
 
     def __del__(deinit self):
         if self.previous:
