@@ -233,3 +233,42 @@ def test_native_candidate_refuses_schema_protocols_before_hooks(resident, positi
     assert not calls
     report = audit.report()
     assert not report["python_frames"] and not report["forbidden_native_calls"], report
+
+
+MALFORMED_SCHEMAS = [
+    "dontknow", "f4,garbage", "f4,,i4", "(2)f4", "2f4junk", "f4 ",
+    ("f4", (-1,)), ("f4", (2**31,)), ("f4", True), ("S", -1),
+    ("U", 2**31), [("a", "f4"), ("a", "i4")],
+    {"names": ["a"], "formats": []},
+    {"names": ["a"], "formats": ["f4"], "offsets": [-1]},
+    [("a", "f4", "bad")], (), ("f4",), [],
+]
+
+
+@pytest.mark.parametrize("index,schema", list(enumerate(MALFORMED_SCHEMAS)), ids=lambda value: repr(value))
+def test_native_candidate_preserves_malformed_dtype_exception_class(resident, index, schema):
+    values, tensor = resident
+    with warnings.catch_warnings(record=True) as old:
+        warnings.simplefilter("always")
+        try:
+            expected = values.astype(schema, copy=False)
+            failure = None
+        except Exception as error:
+            failure = error
+    with warnings.catch_warnings(record=True) as new:
+        warnings.simplefilter("always")
+        audit = audit_native_call(_OPT_NATIVE, "seqdev_array", tensor, (schema, None), None, _OPT_CONTEXT)
+    report = audit.report()
+    assert not report["python_frames"] and not report["forbidden_native_calls"], report
+    assert not report["unobserved_existing_threads"], report
+    if failure is None:
+        assert_schema_outputs(audit.assert_native(), expected)
+    else:
+        assert type(audit.exception) is type(failure)
+        # These seven defects are the retained a5 repair scope. Other
+        # existing admission messages remain explicit native diagnostics.
+        if index in {2, 6, 7, 8, 11, 13, 14}:
+            assert str(audit.exception) == str(failure)
+        if type(failure) is SyntaxError:
+            assert audit.exception.args == failure.args
+    assert [(type(w.message), str(w.message)) for w in new] == [(type(w.message), str(w.message)) for w in old]
