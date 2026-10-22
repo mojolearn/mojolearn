@@ -24,6 +24,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_TESTS = {
+    "test_cache_lifecycle_native.py": "Public DeviceCache.live connected native store counts and identity-preserving context entry",
     "test_cache_upload_native.py": "Public DeviceCache.id_of native hit/miss preparation, upload publication, retained owners and failure cleanup",
     "test_cache_key_native.py": "Public DeviceCache.get and resident.stats native tuple-key admission, deep nesting and callback refusals",
     "test_archive_unicode_native.py": "Public archive strict Unicode errors, loaded state, partial save bytes and connected codec identity refusals",
@@ -99,6 +100,17 @@ TEST_DEPENDENCIES = {
 }
 CPU_RESIDENT_SKIP = "the CPU binding has no resident tensor pool"
 CPU_NOT_APPLICABLE = {
+    "test_cache_lifecycle_native.py": {
+        'test_cache_live_matches_real_store_count_after_consumed_allocations[0-x_prep]': "real live-slot counter requires a GPU package; explicitly excluded from CPU selection",
+        'test_cache_live_matches_real_store_count_after_consumed_allocations[0-x_metrics]': "real live-slot counter requires a GPU package; explicitly excluded from CPU selection",
+        'test_cache_live_matches_real_store_count_after_consumed_allocations[1-x_prep]': "real live-slot counter requires a GPU package; explicitly excluded from CPU selection",
+        'test_cache_live_matches_real_store_count_after_consumed_allocations[1-x_metrics]': "real live-slot counter requires a GPU package; explicitly excluded from CPU selection",
+        'test_cache_live_matches_real_store_count_after_consumed_allocations[2-x_prep]': "real live-slot counter requires a GPU package; explicitly excluded from CPU selection",
+        'test_cache_live_matches_real_store_count_after_consumed_allocations[2-x_metrics]': "real live-slot counter requires a GPU package; explicitly excluded from CPU selection",
+        'test_cache_live_uses_captured_native_entry_and_ignores_mutable_int[x_prep]': "real live-slot counter requires a GPU package; explicitly excluded from CPU selection",
+        'test_cache_live_uses_captured_native_entry_and_ignores_mutable_int[x_metrics]': "real live-slot counter requires a GPU package; explicitly excluded from CPU selection",
+    },
+
     "test_cache_upload_native.py": {
         'test_cache_id_of_real_upload_hit_alias_and_owned_publication[x_prep]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
         'test_cache_id_of_real_upload_hit_alias_and_owned_publication[x_metrics]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
@@ -281,6 +293,10 @@ def test_applicability(selected, vendor):
         if name == "test_cache_key_native.py":
             scope.update(execution_route="native cache metadata only; no device slots",
                          coverage_limit="Selected DeviceCache.get and resident.stats tuple-key admission only; constructor, upload, release and context lifecycle remain separate")
+        if name == "test_cache_lifecycle_native.py":
+            scope.update(execution_route="native DeviceCache.live metadata and __enter__ on CPU/GPU; real x_prep/x_metrics store counters on GPU",
+                         operation_mode="identical (explicit fixture configuration)",
+                         coverage_limit="Only public live-slot queries and context entry; constructor, supports, release, close, context exit and resident scope cleanup remain separate migration work")
         if name == "test_cache_upload_native.py":
             scope.update(execution_route="native DeviceCache.id_of metadata on CPU and GPU; real x_prep/x_metrics word-store uploads on GPU",
                          operation_mode="identical (explicit fixture configuration)",

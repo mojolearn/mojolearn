@@ -296,6 +296,27 @@ class InstalledNativeAudit(unittest.TestCase):
         with self.assertRaises(ValueError):
             q.selected_files(test_nodes=[node, node])
 
+    def test_public_cache_live_scope_retains_unfinished_lifecycle(self):
+        name = "test_cache_lifecycle_native.py"
+        self.assertIn(name, q.PUBLIC_TESTS)
+        self.assertEqual(q.test_dependencies([name]), ["numpy", "pytest"])
+        for vendor in ("cpu", "metal", "cuda", "hip"):
+            scope = q.test_applicability([name], vendor)[name]
+            self.assertIn("DeviceCache.live", scope["execution_route"])
+            self.assertIn("constructor, supports, release, close", scope["coverage_limit"])
+            self.assertEqual(len(scope["cpu_not_applicable_cases"]), 8 if vendor == "cpu" else 0)
+
+    def test_public_cache_live_cpu_exclusions_are_exact_real_store_cases(self):
+        name = "test_cache_lifecycle_native.py"
+        cases = set()
+        for prefix in ("x_prep", "x_metrics"):
+            for slots in (0, 1, 2):
+                cases.add(f"test_cache_live_matches_real_store_count_after_consumed_allocations[{slots}-{prefix}]")
+            cases.add(f"test_cache_live_uses_captured_native_entry_and_ignores_mutable_int[{prefix}]")
+        self.assertEqual(set(q.CPU_NOT_APPLICABLE[name]), cases)
+        node = name + "::test_cache_live_without_optional_store_counter_is_none[normal]"
+        self.assertEqual(q.selected_files(test_nodes=[node]), [name])
+
     def test_public_cache_upload_scope_preserves_pending_lifecycle(self):
         name = "test_cache_upload_native.py"
         self.assertIn(name, q.PUBLIC_TESTS)
