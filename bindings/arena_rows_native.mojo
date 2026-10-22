@@ -14,6 +14,8 @@ from bindings.arena_cache_get import arena_cache_get
 from bindings.arena_cache_upload import arena_cache_id_of
 from bindings.arena_cache_lifecycle import arena_cache_lifecycle
 from bindings.arena_cache_binding import arena_cache_supports
+from bindings.arena_cache_release import arena_cache_release_operation
+from bindings.arena_resident_native import arena_resident_operation
 from bindings.optimizer_public_words import optimizer_python_error, PYTHON_ERROR_PENDING
 
 
@@ -94,6 +96,8 @@ def arena_rows_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
         var args = call[2]
         var context = call[3]
         var result = PythonObject(None)
+        var cache_release_op = (operation == "cache_init" or operation == "cache_release" or operation == "cache_close"
+            or operation == "cache_exit" or operation == "scope_enter" or operation == "scope_exit" or operation == "scope_close")
         if operation == "cache_len" or operation == "resident_stats":
             result = arena_cache_stats(model,operation,args,context)
         elif operation == "cache_get":
@@ -104,9 +108,13 @@ def arena_rows_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
             result = arena_cache_supports(args,context)
         elif operation == "cache_enter" or operation == "cache_live":
             result = arena_cache_lifecycle(model,operation,context)
+        elif cache_release_op:
+            result = arena_cache_release_operation(model,operation,args,context)
         else:
             classical_connect_numpy(context)
-        if operation == "init":
+        if operation.startswith("msel_resident_"):
+            result = arena_resident_operation(model,operation,args,context)
+        elif operation == "init":
             _rows_initialize(model,args,context)
         elif operation == "materialize":
             result = arena_materialize(_rows_metadata_fields(model,context),context)
@@ -116,7 +124,7 @@ def arena_rows_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
             if py_type(shape) is not b["tuple"] or len(shape) == 0 or py_type(shape[0]) is not b["int"]:
                 raise Error("TypeError: DeviceRows length requires native shape metadata")
             result = shape[0]
-        elif operation != "cache_len" and operation != "resident_stats" and operation != "cache_get" and operation != "cache_id_of" and operation != "cache_enter" and operation != "cache_live" and operation != "cache_supports":
+        elif not cache_release_op and operation != "cache_len" and operation != "resident_stats" and operation != "cache_get" and operation != "cache_id_of" and operation != "cache_enter" and operation != "cache_live" and operation != "cache_supports":
             raise Error("ValueError: unknown native DeviceRows metadata operation")
         return result.steal_data()
     except error:
