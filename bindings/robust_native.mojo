@@ -6,6 +6,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
+from bindings.scaler_tags_native import scaler_tags
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout, classical_getattribute
 from bindings.classical_arrays import classical_typed, classical_is_array, classical_input
 from bindings.native_numpy_metadata import native_numpy_dtype
@@ -299,6 +300,8 @@ def robust_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
                     raise Error("mojolearn: invalid parameter for RobustScaler")
                 py_setitem(fields,keys[k],options[keys[k]])
             result = model
+        elif operation == "tags":
+            result = scaler_tags(model,context,PythonObject(None))
         elif operation == "is_fitted":
             result = classical_is_fitted(model)
         elif operation == "fit" or operation == "fit_transform":
@@ -336,6 +339,8 @@ def robust_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
                 return raise_python_exception(nested)
         if String(own).startswith("TypeError:"):
             return raise_python_exception(error_without_class(own,"TypeError"),ExceptionType.TypeError)
+        if String(own).startswith("AttributeError:"):
+            return raise_python_exception(error_without_class(own,"AttributeError"),ExceptionType("PyExc_AttributeError"))
         if String(own).startswith("ImportError:"):
             return raise_python_exception(error_without_class(own,"ImportError"),ExceptionType("PyExc_ImportError"))
         if String(own).startswith("RuntimeError:"):

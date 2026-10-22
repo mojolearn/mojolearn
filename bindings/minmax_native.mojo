@@ -18,6 +18,7 @@ from bindings.scaler_lifecycle_native import _run, _direct, _entries, _fitted, _
 from core.scaler_fit_impl import scaler_all_finite, scaler_refuse_infinite_columns, scaler_feature_indices
 from bindings.minmax_metadata import _flag, minmax_range_pair
 from bindings.minmax_archive_native import minmax_archive_load, minmax_archive_save
+from bindings.scaler_tags_native import scaler_tags
 
 alias F32P = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -310,6 +311,8 @@ def minmax_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
                 _ = py_call(fields.clear)
                 _ = minmax_initialize(model,values)
             result = model
+        elif operation == "tags":
+            result = scaler_tags(model,context,Python.tuple("float32"))
         elif operation == "is_fitted":
             result = PythonObject(_fitted(py_fields(model)))
         elif operation == "fit":

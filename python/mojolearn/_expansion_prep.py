@@ -861,6 +861,9 @@ class RobustScaler(_PrepBase):
         """Set constructor parameters and return this scaler."""
         return _ROBUST_CALL(self, "set_params", (params,), _ROBUST_CONTEXT)
 
+    def __sklearn_tags__(self):
+        return _ROBUST_CALL(self, "tags", (), _ROBUST_CONTEXT)
+
     def __sklearn_is_fitted__(self):
         return _ROBUST_CALL(self, "is_fitted", (), _ROBUST_CONTEXT)
 
@@ -933,6 +936,9 @@ class MaxAbsScaler(_PrepBase):
     def set_params(self, **params):
         """Set constructor parameters and return this scaler."""
         return _MAXABS_CALL(self, "set_params", (params,), _MAXABS_CONTEXT)
+
+    def __sklearn_tags__(self):
+        return _MAXABS_CALL(self, "tags", (), _MAXABS_CONTEXT)
 
     def __sklearn_is_fitted__(self):
         return _MAXABS_CALL(self, "is_fitted", (), _MAXABS_CONTEXT)
