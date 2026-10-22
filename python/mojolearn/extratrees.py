@@ -90,11 +90,10 @@ Nothing in this module imports NumPy.
 
 import numbers
 
-from . import _mojolearn_trees, _serialize
-from ._array import Array
+from . import _mojolearn_trees, _native_archive_bridge
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_colmajor, as_f32_forest_layout, empty
 from ._labels import (
-    argmax_rows, classes_from_member, classes_member, decode_labels,
+    argmax_rows, decode_labels,
     encode_labels, flat_view, flatten_labels, is_bool, sorted_classes,
 )
 from ._mode import NumericModeMixin
@@ -104,6 +103,13 @@ from ._forest_protocol import (ForestProtocol, forest_estimator,
 
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-extratrees-1"
+
+# The compiled saved-model owner, connected once at import: `save` and
+# `load` are one native call each (bindings/archive_schema_native.mojo
+# writes the schema registered after `_ExtraTreesBase`;
+# bindings/host_archive_native.mojo `host_archive_public_forest` builds the
+# loaded model).
+_ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
 # estimator.mojo's max_features sentinels, same values in the same words.
 _MF_SQRT = -1
@@ -347,37 +353,7 @@ class _ExtraTreesBase(ForestProtocol, NumericModeMixin):
         numeric mode. The file bytes depend only on the model, so equal models
         give equal file hashes on any machine.
         """
-        if not hasattr(self, "_offsets"):
-            raise RuntimeError("this estimator is not fitted yet")
-        # DEVIATION 2343: members are `Array`s and plain str (which
-        # `_serialize.write_npz` encodes as the `<U` scalar member
-        # `np.asarray(str)` gave); `classes` is `_labels.classes_member`
-        # (int64 / float64 `Array`, or the list of str for str labels).
-        arrays = {
-            "format": _MODEL_FORMAT,
-            "estimator": type(self).__name__,
-            "device": self.device,
-            "offsets": self._offsets,
-            "colid": self._colid,
-            "quesval": self._quesval,
-            "left_child": self._left_child,
-            "leaves": self._leaves,
-            "meta": Array.from_list(
-                [
-                    int(self.n_features_in_),
-                    int(self._n_trees),
-                    int(self._num_outputs),
-                    1 if self.depth_cap_bound_ else 0,
-                    int(self.max_depth_resolved_),
-                    int(self.max_features_),
-                ],
-                "<i8",
-            ),
-        }
-        if hasattr(self, "classes_"):
-            arrays["classes"] = classes_member(self.classes_)
-        self._archive_inference_metadata(arrays, _MODEL_FORMAT)
-        return _serialize.write_npz(path, arrays)
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -386,34 +362,29 @@ class _ExtraTreesBase(ForestProtocol, NumericModeMixin):
         The loaded model predicts; it does not refit. Loading a file saved by
         a different estimator class raises `ValueError`.
         """
-        arrays = _serialize.read_npz(path, (_MODEL_FORMAT, _MODEL_FORMAT + "-parallel-groves-1"))
-        saved_as = _serialize.scalar_str(arrays, "estimator")
-        if saved_as != cls.__name__:
-            raise ValueError(
-                f"mojolearn: {path!r} was saved by {saved_as}, not "
-                f"{cls.__name__}"
-            )
-        obj = cls.__new__(cls)
-        obj.device = _serialize.scalar_str(arrays, "device")
-        obj._restore_inference_metadata(arrays, _MODEL_FORMAT)
-        obj._offsets = _serialize.exact(arrays, "offsets", "<i4")
-        obj._colid = _serialize.exact(arrays, "colid", "<i4")
-        obj._quesval = _serialize.exact(arrays, "quesval", "<f4")
-        obj._left_child = _serialize.exact(arrays, "left_child", "<i4")
-        obj._leaves = _serialize.exact(arrays, "leaves", "<f4")
-        meta = _serialize.exact(arrays, "meta", "<i8")
-        obj.n_features_in_ = int(meta[0])
-        obj._n_trees = int(meta[1])
-        obj._num_outputs = int(meta[2])
-        obj.depth_cap_bound_ = bool(int(meta[3]))
-        obj.max_depth_resolved_ = int(meta[4])
-        obj.max_features_ = int(meta[5])
-        if "classes" in arrays:
-            # a 0.6.x file's `classes` member loads too (int, float, bool
-            # or `<U` from `np.unique`); bool labels come back as ints
-            obj.classes_ = classes_from_member(arrays["classes"])
-            obj.n_classes_ = int(len(obj.classes_))
-        return obj
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+
+
+#: The saved formats `load` reads, and the save schema of both extra-trees
+#: classes (bindings/archive_schema_native.mojo): the members, dtypes and
+#: refusals the 0.8.55 Python `save` wrote.
+_MODEL_FORMATS = (_MODEL_FORMAT, _MODEL_FORMAT + "-parallel-groves-1")
+_native_archive_bridge.register(_ExtraTreesBase, _MODEL_FORMATS, (
+    _native_archive_bridge.fitted("_offsets"),
+    ("format", "format", _MODEL_FORMAT),
+    ("estimator", "estimator"),
+    ("array", "device", "device"),
+    ("array", "offsets", "_offsets"),
+    ("array", "colid", "_colid"),
+    ("array", "quesval", "_quesval"),
+    ("array", "left_child", "_left_child"),
+    ("array", "leaves", "_leaves"),
+    ("i8", "meta", (("int", "n_features_in_"), ("int", "_n_trees"), ("int", "_num_outputs"),
+                    ("bool", "depth_cap_bound_"), ("int", "max_depth_resolved_"),
+                    ("int", "max_features_"))),
+    ("classes", "classes", "classes_"),
+    ("forest_engine", _MODEL_FORMAT),
+))
 
 
 @forest_estimator("classifier")
