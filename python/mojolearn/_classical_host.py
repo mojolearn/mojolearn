@@ -1362,6 +1362,8 @@ def _connect_host_inference():
     context = dict(_CLASSICAL["host_tree_context"])
     context.update(host_inference_entries=entries,
                    host_inference_class_labels=ClassLabels,
+                   host_kde_bytearray_type=bytearray,
+                   host_kde_bytes_type=bytes,
                    host_density_object_setattr=vars(object)["__setattr__"],
                    host_density_member_type=MemberDescriptorType,
                    host_density_function_type=FunctionType, host_density_attribute_error=AttributeError,

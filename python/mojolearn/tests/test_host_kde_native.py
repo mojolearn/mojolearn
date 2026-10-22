@@ -287,6 +287,62 @@ def test_kde_resolved_options_refuse_python_hooks(tmp_path, field, storage):
     assert touched == [] and _state(vars(model)) == before
 
 
+_OPTION_FORMS = [(field, form) for field in ("kernel", "metric", "bandwidth")
+                 for form in ("str", "numpy_str", "bytes", "numpy_bytes", "bytearray", "plain_subclass")]
+_OPTION_FORMS += [("bandwidth", form) for form in ("numpy_float32", "numpy_float64", "zero_dim32", "zero_dim64")]
+
+
+@pytest.mark.parametrize("field,form", _OPTION_FORMS)
+@pytest.mark.parametrize("storage", ["dict", "slot"])
+@pytest.mark.parametrize("method", METHODS)
+def test_kde_native_option_scalar_forms_preserve_original_contract(tmp_path, field, form, storage, method):
+    text = {"bandwidth": ".75", "kernel": "gaussian", "metric": "euclidean"}[field]
+    class Plain(str):
+        pass
+    value = {"str": text, "numpy_str": np.str_(text), "bytes": text.encode(),
+             "numpy_bytes": np.bytes_(text), "bytearray": bytearray(text.encode()),
+             "plain_subclass": Plain(text), "numpy_float32": np.float32(.75),
+             "numpy_float64": np.float64(.75), "zero_dim32": np.asarray(.75, dtype="<f4"),
+             "zero_dim64": np.asarray(.75, dtype="<f8")}[form]
+    cls = host.HostKernelDensity if storage == "dict" else type("NativeOptionSlot", (host.HostKernelDensity,), {"__slots__": (field,)})
+    model = object.__new__(cls)
+    vars(model).update(vars(_model(tmp_path)))
+    if storage == "slot":
+        vars(model).pop(field)
+    setattr(model, field, value)
+    before = _state(vars(model))
+    x = _input(2, "float32")
+    if field != "bandwidth" and form in ("bytes", "numpy_bytes", "bytearray"):
+        with pytest.raises(Exception) as old:
+            legacy.kde(model, x, method == "score")
+        audit = audit_native_call(getattr(model, method), x)
+        _refused(audit, type(old.value))
+        assert type(audit.exception) is type(old.value) is Exception
+        assert str(audit.exception) == str(old.value)
+    else:
+        _check(model, x, method)
+    assert _state(vars(model)) == before and getattr(model, field) is value
+
+
+@pytest.mark.parametrize("field", ["bandwidth", "kernel", "metric"])
+@pytest.mark.parametrize("storage", ["dict", "slot"])
+def test_kde_option_string_subclass_conversion_hooks_are_never_called(tmp_path, field, storage):
+    touched = []
+    def hook(*args):
+        touched.append("conversion")
+        return .75 if field == "bandwidth" else "gaussian"
+    cls_value = type("HookOption", (str,), {"__float__" if field == "bandwidth" else "__str__": hook})
+    value = cls_value(".75" if field == "bandwidth" else "gaussian")
+    cls = host.HostKernelDensity if storage == "dict" else type("HookOptionSlot", (host.HostKernelDensity,), {"__slots__": (field,)})
+    model = object.__new__(cls)
+    vars(model).update(vars(_model(tmp_path)))
+    if storage == "slot":
+        vars(model).pop(field)
+    setattr(model, field, value)
+    _refused(audit_native_call(model.score_samples, _input(2, "float32")), TypeError)
+    assert touched == []
+
+
 def test_kde_native_finalizer_masks_device_base_python_finalizer(tmp_path, monkeypatch):
     model = _model(tmp_path)
     touched = []
