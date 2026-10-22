@@ -3,10 +3,11 @@
 # metadata, never Python loaders, constructors, or callbacks. The public
 # router is switched only after every existing format has a native builder.
 from std.python import Python, PythonObject
+from std.memory import bitcast
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.sequential_description import sequential_fields
 from bindings.classical_archive_read import classical_archive_read, classical_archive_build, _archive_exact, _archive_string
-from bindings.classical_arrays import classical_i64, classical_f64, classical_wrap_array, classical_array, classical_address
+from bindings.classical_arrays import classical_i64, classical_f64, classical_wrap_array, classical_array, classical_typed, classical_address
 from core.host_archive_impl import host_archive_copy_f32
 from bindings.scaler_lifecycle_native import scaler_archive_build
 
@@ -424,6 +425,79 @@ def host_archive_agglomerative(cls: PythonObject, arrays: PythonObject, context:
     return model
 
 
+def host_archive_class_values(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Archive decoding produces exact strings, lists, and Arrays. Read their
+    # native storage directly; Array.tolist/__iter__ and arbitrary label
+    # protocols never participate in loading.
+    var b = Python.import_module("builtins")
+    if py_type(value) is b.str:
+        return Python.list(value)
+    var result = Python.list()
+    if py_type(value) is b.list or py_type(value) is b.tuple:
+        for i in range(len(value)):  # driver-loop: saved class label nesting
+            var nested = host_archive_class_values(value[i], context)
+            _ = py_call(result.extend, nested)
+        return result
+    if py_type(value) is not context["array_class"]:
+        raise Error("TypeError: saved class labels must be native archive values")
+    var rank = Int(py=value.ndim)
+    var count = Int(py=value.size)
+    var width = Int(py=value.itemsize)
+    var shape = value.shape
+    var strides = value.strides
+    var storage = value._mv
+    var half = String(value.dtype) == "<f2"
+    for i in range(count):  # driver-loop: saved distinct class label metadata
+        var remaining = i
+        var offset = 0
+        for dimension in range(rank - 1, -1, -1):  # driver-loop: saved class label shape metadata
+            var length = Int(py=shape[dimension])
+            offset += (remaining % length) * Int(py=strides[dimension])
+            remaining //= length
+        var item = storage[offset // width]
+        if half:
+            item = PythonObject(Float64(bitcast[DType.float16](UInt16(Int(py=item)))))
+        _ = py_call(result.append, item)
+    return result
+
+
+def host_archive_logistic(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
+    var meta = host_archive_count(arrays, "meta", "<i8", 2, context, True)
+    var nf = classical_i64(meta, 0)
+    var intercept = classical_i64(meta, 1) != 0
+    if nf < 0:
+        raise Error("saved LogisticRegression feature count cannot be negative")
+    var classes = host_archive_class_values(arrays["classes"], context)
+    if len(classes) < 2:
+        raise Error("saved LogisticRegression must carry at least two classes")
+    var targets = 1 if len(classes) == 2 else len(classes)
+    var w = host_archive_shape(arrays, "w", "<f4", Python.tuple((nf + (1 if intercept else 0)) * targets), context)
+    var coef = classical_typed(Python.tuple(targets, nf), "<f4", context)
+    var bias = classical_array(targets, 0, context)
+    host_archive_copy_f32(Int(py=classical_address(w)), 4, targets * 4, targets, nf, Int(py=classical_address(coef)))
+    if intercept:
+        host_archive_copy_f32(Int(py=classical_address(w)) + targets * nf * 4, 4, 4,
+                              targets, 1, Int(py=classical_address(bias)))
+    var model = host_archive_object(cls, arrays, context)
+    var fields = sequential_fields(model)
+    host_archive_mode(arrays, fields, context)
+    py_setitem(fields, "penalty", "l2")
+    py_setitem(fields, "tol", 0.0001)
+    py_setitem(fields, "C", 1.0)
+    py_setitem(fields, "fit_intercept", intercept)
+    py_setitem(fields, "class_weight", PythonObject(None))
+    py_setitem(fields, "max_iter", 1000)
+    py_setitem(fields, "linesearch_max_iter", 50)
+    py_setitem(fields, "l1_ratio", PythonObject(None))
+    py_setitem(fields, "solver", "qn")
+    py_setitem(fields, "classes_", classes)
+    py_setitem(fields, "_w", w)
+    py_setitem(fields, "coef_", coef)
+    py_setitem(fields, "intercept_", bias)
+    py_setitem(fields, "n_features_in_", nf)
+    return model
+
+
 def host_archive_build(path: PythonObject, context: PythonObject,
                        requested_class: PythonObject = PythonObject(None)) raises -> PythonObject:
     # This deliberately separate private entry allows each schema to be
@@ -476,6 +550,8 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         model = host_archive_density(cls, arrays, fmt == "mojolearn-kde-1", context)
     elif fmt == "mojolearn-agglomerative-1":
         model = host_archive_agglomerative(cls, arrays, context)
+    elif fmt == "mojolearn-logistic-1":
+        model = host_archive_logistic(cls, arrays, context)
     else:
         raise Error("native host archive schema has not been implemented: " + fmt + "/" + String(estimator))
     if requested_class is None:
