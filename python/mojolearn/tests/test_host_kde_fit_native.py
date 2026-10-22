@@ -415,3 +415,69 @@ def test_kde_fit_large_unsigned_scalar_weights_keep_scalar_contract(kind):
     if kind == "zero_dim_uint64":
         weight = np.asarray(weight)
     _pair(_x(), weight)
+
+
+@pytest.mark.parametrize("branch", ["borrow", "cast", "pandas_borrow", "pandas_numpy_objects", "csr", "lil", "numpy_scalar", "target_rank3", "complex_weight"])
+def test_kde_fit_never_calls_replaced_memoryview_constructor(branch, monkeypatch):
+    import builtins
+    x, weight, y = _x(), _weight("c"), None
+    if branch == "cast":
+        x = x.astype("<f8")
+    elif branch == "pandas_borrow":
+        x = pytest.importorskip("pandas").DataFrame(x, copy=False)
+    elif branch == "pandas_numpy_objects":
+        data = np.empty(x.shape, dtype=object)
+        for index in np.ndindex(x.shape):
+            data[index] = np.float64(x[index])
+        x = pytest.importorskip("pandas").DataFrame(data, copy=False)
+    elif branch in ("csr", "lil"):
+        x = getattr(pytest.importorskip("scipy.sparse"), branch + "_matrix")(x)
+    elif branch == "numpy_scalar":
+        weight = np.float64(2.)
+    elif branch == "target_rank3":
+        y = np.ones((3, 2, 2))
+    elif branch == "complex_weight":
+        weight = np.ones(3, dtype="complex64")
+    old, model = _model(), _model()
+    expected_error = None
+    try:
+        legacy.kde_fit(old, x, y, weight)
+    except Exception as error:
+        expected_error = (type(error), str(error))
+    expected = _state(vars(old))
+    touched = []
+    def poisoned(*args, **kwargs):
+        touched.append("memoryview")
+        raise AssertionError("mutable buffer constructor executed")
+    # Preserve the native descriptor identity read by pandas admission;
+    # the exercised constructor replacement itself remains a Python function.
+    poisoned.obj = builtins.memoryview.obj
+    with monkeypatch.context() as patch:
+        patch.setattr(builtins, "memoryview", poisoned)
+        audit = audit_native_call(model.fit, x, y, sample_weight=weight)
+    if expected_error is None:
+        assert audit.assert_native() is model
+    else:
+        _refused(audit, expected_error[0])
+        assert str(audit.exception) == expected_error[1]
+    assert _state(vars(model)) == expected
+    assert touched == []
+
+
+@pytest.mark.parametrize("branch", ["borrow", "cast"])
+def test_kde_fit_never_calls_replaced_object_allocator(branch, monkeypatch):
+    import builtins
+    old, model = _model(), _model()
+    x = _x() if branch == "borrow" else _x().astype("<f8")
+    legacy.kde_fit(old, x)
+    expected = _state(vars(old))
+    touched = []
+    class PoisonObject:
+        def __new__(cls, *args, **kwargs):
+            touched.append("object.__new__")
+            raise AssertionError("mutable allocator executed")
+    with monkeypatch.context() as patch:
+        patch.setattr(builtins, "object", PoisonObject)
+        audit = audit_native_call(model.fit, x)
+    assert audit.assert_native() is model
+    assert _state(vars(model)) == expected and touched == []
