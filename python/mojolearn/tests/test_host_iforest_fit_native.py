@@ -221,6 +221,44 @@ def test_iforest_fit_scalar_error_preserves_native_print_configuration(dtype, va
     assert _state(vars(model)) == _state(vars(old))
 
 
+@pytest.mark.parametrize("dtype,value", [("f4", 2.), ("i4", -1), ("g", 2.), (">f4", 2.)])
+def test_iforest_fit_scalar_error_never_calls_numpy_dtype_formatters(monkeypatch, dtype, value):
+    import importlib
+    module = importlib.import_module("numpy._core._dtype" if np.__version__.split(".")[0] != "1" else "numpy.core._dtype")
+    old, model = _model(max_samples=np.asarray(value, dtype=dtype)), _model(max_samples=np.asarray(value, dtype=dtype))
+    with pytest.raises(ValueError) as expected:
+        legacy.fit(old, _x())
+    touched = []
+    def formatter(*args, **kwargs):
+        touched.append("dtype formatter")
+        return "foreign"
+    # Native dtype descriptors can transitively call these Python functions.
+    # Preserve the real poisoned module through the whole public operation.
+    with monkeypatch.context() as patch:
+        patch.setattr(module, "_name_get", formatter)
+        patch.setattr(module, "__str__", formatter)
+        audit = audit_native_call(model.fit, _x())
+    _refused(audit, ValueError)
+    assert str(audit.exception) == str(expected.value)
+    assert _state(vars(model)) == _state(vars(old))
+    assert touched == []
+
+
+@pytest.mark.parametrize("scalar,value", [(np.str_, "AUTO"), (np.longlong, 2), (np.ulonglong, 2), (np.longdouble, .75)])
+def test_iforest_fitted_original_options_refuse_numpy_scalar_subclass_hooks(scalar, value):
+    model = _model()
+    legacy.fit(model, _x())
+    touched = []
+    def conversion(*args):
+        touched.append("conversion")
+        return .75
+    foreign = type("ForeignOption", (scalar,), {"__int__": conversion, "__float__": conversion,
+                                               "__str__": conversion, "__bool__": conversion})
+    model.max_samples = foreign(value)
+    _refused(audit_native_call(model.score_samples, _x()), TypeError)
+    assert touched == []
+
+
 @pytest.mark.parametrize("key", ["all", "float", "float_kind"])
 def test_iforest_fit_error_refuses_python_print_formatters(key):
     touched = []

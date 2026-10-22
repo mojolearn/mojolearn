@@ -153,9 +153,18 @@ def host_iforest_scalar_repr(value: PythonObject, context: PythonObject) raises 
             suffix += ", "
         suffix += "dtype="
         if Bool(py=value.dtype.isnative):
-            suffix += String(value.dtype.name)
+            # dtype.name is a native descriptor whose implementation calls
+            # NumPy's Python _dtype._name_get. The admitted primitive dtype
+            # already supplies its complete bit name as native metadata.
+            if kind == "b":
+                suffix += "bool"
+            else:
+                var stem = "float" if kind == "f" else "int" if kind == "i" else "uint"
+                suffix += stem + String(Int(py=value.dtype.itemsize) * 8)
         else:
-            var code = py_call(py_type(PythonObject("")), value.dtype)
+            # str(dtype) likewise enters NumPy's Python dtype formatter.
+            # For these primitive nonnative dtypes its result is dtype.str.
+            var code = value.dtype.str
             ref cpy = Python().cpython()
             var shown = cpy.lib.get_function[PyObjectPtr]("PyObject_Repr")(code._obj_ptr)
             if not shown:

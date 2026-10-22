@@ -12,6 +12,22 @@ from bindings.host_inference_features import host_inference_feature_names
 from bindings.host_svc_native import _svc_input
 from bindings.host_sparse_native import host_sparse_format
 from bindings.host_tree_native import host_tree_wide
+from bindings.native_numpy_metadata import native_numpy_dtype
+from bindings.classical_pandas import classical_admit_value
+
+
+def host_iforest_admit_option(value: PythonObject, context: PythonObject) raises:
+    # Fit retains the original options by identity, including native NumPy
+    # Unicode and numeric aliases that have distinct types from int64/float64.
+    # Scoring uses the separately admitted resolved controls; do not reject a
+    # successful fit merely because its unused original option is an alias.
+    if py_get(context, "ndarray") is not None:
+        var constructor = native_numpy_dtype(context)
+        var aliases = Python.tuple("q", "Q", "g", "U", "S")
+        for i in range(len(aliases)):  # driver-loop: exact original native option aliases
+            if py_type(value) is py_call(constructor, aliases[i]).type:
+                return
+    classical_admit_value(value, context)
 
 
 def _iforest_resolve(fields: PythonObject, context: PythonObject) raises:

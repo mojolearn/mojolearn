@@ -15,7 +15,7 @@ from bindings.host_projection_native import host_projection_inference, host_proj
 from bindings.host_svr_native import host_svr_admit_state, host_svr_predict
 from bindings.host_svc_native import host_svc_admit_state, host_svc_inference
 from bindings.host_kde_native import host_kde_admit_state, host_kde_inference
-from bindings.host_iforest_native import host_iforest_admit_state, host_iforest_inference
+from bindings.host_iforest_native import host_iforest_admit_option, host_iforest_admit_state, host_iforest_inference
 from bindings.host_logistic_native import host_logistic_classes, host_logistic_inference
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.classical_arrays import classical_input, classical_address, classical_is_f32, classical_is_array, classical_c_order, classical_kind
@@ -49,6 +49,8 @@ def host_inference_operation(model: PythonObject, operation: String, args: Pytho
     var logistic = String(kind) == "logistic"
     var svc = String(kind) == "svc"
     var kde = String(kind) == "kde"
+    var iforest = String(kind) == "iforest"
+    var iforest_options = Python.tuple("n_estimators", "max_samples", "max_depth", "max_features", "bootstrap", "contamination", "random_state", "warm_start", "n_jobs", "verbose", "output_type")
     var labels = PythonObject(None)
     if (logistic or svc) and py_contains(fields, "classes_"):
         labels = host_logistic_classes(fields["classes_"], context)
@@ -58,7 +60,9 @@ def host_inference_operation(model: PythonObject, operation: String, args: Pytho
         # KDE's option owner admits native Unicode/byte scalar subclasses
         # before conversion; ordinary container admission cannot classify them.
         var kde_option = kde and (name == "bandwidth" or name == "kernel" or name == "metric")
-        if not kde_option and (not (logistic or svc) or name != "classes_"):
+        if iforest and py_contains(iforest_options, keys[i]):
+            host_iforest_admit_option(fields[keys[i]], context)
+        elif not kde_option and (not (logistic or svc) or name != "classes_"):
             classical_admit_value(fields[keys[i]], context)
     host_inference_scalar(py_get(fields, "_mojolearn_fitted", False), context, True)
     host_inference_scalar(py_get(fields, "_mojolearn_fitting", False), context, True)
@@ -74,7 +78,6 @@ def host_inference_operation(model: PythonObject, operation: String, args: Pytho
         host_inference_scalar(fields["fit_intercept"], context, True)
     if svc:
         host_svc_admit_state(fields, context)
-    var iforest = String(kind) == "iforest"
     if iforest:
         host_iforest_admit_state(fields, context)
     if kde:
