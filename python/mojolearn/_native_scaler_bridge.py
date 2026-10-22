@@ -62,7 +62,7 @@ def register_subclass(cls, context):
     context["classical_public_layouts"][cls] = _layout(cls, context["classical_attribute_descriptor"])
 
 
-def connect_host(cls, context, prep, xprep):
+def connect_host(cls, context, prep, xprep, training):
     # glue: called only by _classical_host at its explicit CPU API setup
     from types import BuiltinFunctionType
     host = dict(context)
@@ -72,6 +72,19 @@ def connect_host(cls, context, prep, xprep):
                "x_prep_numeric_mode": xprep.x_prep_numeric_mode}
     if any(not isinstance(entry, BuiltinFunctionType) for entry in entries.values()):  # glue: host ABI identity
         raise TypeError("HostStandardScaler requires compiled CPU entries")
+    if isinstance(training, str):
+        entries["scaler_training_error"] = training
+    else:
+        try:
+            entry = training.standard_fit
+            if not isinstance(entry, BuiltinFunctionType):
+                raise TypeError("HostStandardScaler requires compiled standard_fit")
+            if training.preprocessing_numeric_mode() != 1 or training.preprocessing_vendor() != "cpu":
+                raise ValueError("HostStandardScaler training requires the CPU identical binding")
+            entries["standard_fit"] = entry
+        except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
+            entries["scaler_training_error"] = type(error).__name__ + ": " + str(error)
+
     host.update(scaler_explicit_host=True, scaler_bindings={"identical": entries})
     context["scaler_host_contexts"][cls] = host
 

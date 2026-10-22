@@ -674,9 +674,13 @@ def host_model(path):
 from .preprocessing import _STANDARD_CONTEXT as _SCALER_CONTEXT
 from ._native_scaler_bridge import connect_host as _connect_scaler_host, connect_host_unavailable as _scaler_host_unavailable
 try:
+    _scaler_training = _backend.load_host_module("_mojolearn_preprocessing_host")
+except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as _scaler_training_error:
+    _scaler_training = type(_scaler_training_error).__name__ + ": " + str(_scaler_training_error)
+try:
     _connect_scaler_host(HostStandardScaler, _SCALER_CONTEXT,
                          _backend.load_host_module("_mojolearn_estimators_host"),
-                         _backend.load_host_module("_mojolearn_x_prep_host"))
+                         _backend.load_host_module("_mojolearn_x_prep_host"), _scaler_training)
 except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as _scaler_error:
     _scaler_host_unavailable(HostStandardScaler, _SCALER_CONTEXT, _scaler_error)
 
@@ -686,6 +690,6 @@ from ._native_minmax_bridge import connect_host as _connect_minmax_host
 try:
     _connect_minmax_host(HostMinMaxScaler, _MINMAX_CONTEXT,
                          _backend.load_host_module("_mojolearn_estimators_host"),
-                         _backend.load_host_module("_mojolearn_x_prep_host"))
+                         _backend.load_host_module("_mojolearn_x_prep_host"), _scaler_training)
 except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as _minmax_error:
     _scaler_host_unavailable(HostMinMaxScaler, _MINMAX_CONTEXT, _minmax_error)

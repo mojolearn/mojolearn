@@ -547,8 +547,6 @@ def scaler_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         var host = py_get(context["scaler_host_contexts"],cls)
         if host is not None:
             context = host
-            if op == "partial_fit" or op == "fit_transform":
-                raise Error("RuntimeError: HostStandardScaler supports inference only; fit a StandardScaler on a supported GPU")
         classical_connect_numpy(context)
         classical_check_layout(model,context)
         var result = PythonObject(None)
