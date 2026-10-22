@@ -24,6 +24,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_TESTS = {
+    "test_optimizer_native_step_errors.py": "Public optimizer step exception categories, unchanged refused state and native entry admission",
     "test_training_rms_public_native.py": "Public RMS forward/backward preparation, scalar options, consumed results and native refusals",
     "test_training_linear_public_native.py": "Public linear forward/backward input preparation, output ownership and native failure paths",
     "test_maxabs_scaler_native_transport.py": "MaxAbsScaler scratch, mapped outputs, resident transport and operation-owned slot cleanup",
