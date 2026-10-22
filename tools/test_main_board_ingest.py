@@ -308,6 +308,27 @@ class PairedSessions(unittest.TestCase):
         self.assertEqual(kept["cells"][0]["measurement"],own["measurement"])
         self.assertNotIn("preserved_race",kept["cells"][0]["main_board"]["observation"])
 
+    def test_gate_board_refused_pair_enters_refused_not_as_a_legacy_copy(self):
+        """Andrew 2026-10-22: a gate race whose parameter check refused its opponent enters with the gate's own
+        opponent refused by reason (no ratio, ours alone), never with an older board's unchecked copy."""
+        board=self.board();race=next(iter(board["races"].values()))
+        race.update(params_check="REFUSED",params={"arms":{"ours":{},"cuml-gpu":{}},"verdict":"REFUSED",
+                    "problems":["cuml-gpu: C is 1.0 (C) on ours and 2.0 (C) on cuml-gpu"]})
+        race["cells"][1]["ratio_ours_identical_over"]=2.0
+        with tempfile.TemporaryDirectory() as d:
+            p=os.path.join(d,"board.json")
+            with open(p,"w") as f:json.dump(board,f)
+            obs=MB.gate_observations(BB,["nv="+p],FakeGit(),MB.Skips())
+        self.assertEqual(len(obs),1)
+        self.assertTrue(obs[0]["gate_refused"])
+        winners,failures,ledger=MB.choose(obs)
+        out=MB.assemble(BB,"nvidia-l40s",winners,ledger,MB.identity_index(obs),[],{},"2026-10-22",failures)
+        rr=next(iter(out["races"].values()))
+        opp=next(c for c in rr["cells"] if c["arm"]=="cuml-gpu")
+        self.assertIsNone(opp["ratio_ours_identical_over"])
+        self.assertEqual(opp["params_pair"],{"state":"refused","reason":"cuml-gpu: C is 1.0 (C) on ours and 2.0 (C) on cuml-gpu"})
+        self.assertEqual(BB.pair_report(out)["refused"][0]["arm"],"cuml-gpu")
+
     def test_mixed_worker_hardware_is_refused(self):
         board=self.board();race=next(iter(board["races"].values()))
         race["cells"][1]["measurement"]=dict(race["cells"][1]["measurement"],hardware={"gpu":"other"})
