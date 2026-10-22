@@ -33,6 +33,10 @@ Implemented candidate work:
 - Native warning recording/filtering and NumPy error-state metadata, including
   ignore/warn/raise/print and native log streams. Python dtype-discovery and
   error callbacks are refused before their hooks run.
+  NumPy 1.26's native `geterrobj` mask is decoded in Mojo; NumPy 2's native
+  `_get_extobj_dict` metadata is read directly. The six legacy action settings
+  were checked in an isolated NumPy 1.26.4 controller environment; native
+  candidate execution with that version remains pending.
 
 `test_sequence_array_native_candidate.py` exercises the candidate directly.
 Passing those tests would qualify that helper, **not** the unchanged public
