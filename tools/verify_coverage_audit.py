@@ -1470,6 +1470,11 @@ ANNOTATIONS_BY_SRC.update({
         "covered", ["cross-val", "x-metrics-search", "x-metrics-classification"],
         "model_selection's import connects it (_native_arena_rows.connect sets _arena_io._ROWS_CALL); "
         "DeviceCache.supports, id_of, get and DeviceRows call it on the cross-validation and metrics paths"),
+    ("ce_loss_dev", "bindings/_mojolearn_training.mojo"): (
+        "covered (new lane)", ["training-device-cross-entropy"],
+        "_native_optimizer_bridge retains it at import with the training binding's entries; "
+        "training.cross_entropy on a TrainDeviceArray of logits takes it "
+        "(bindings/training_cross_entropy_native.mojo, `ce_loss_dev`); GPU columns only"),
     ("neural_prefill_call", _TOK): (
         "n/a", [],
         "no live caller: its callers are TransformerBlock's and the Mamba blocks' _forward_with_tape, "
