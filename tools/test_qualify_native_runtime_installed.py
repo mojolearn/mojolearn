@@ -203,6 +203,7 @@ class InstalledNativeAudit(unittest.TestCase):
                  "test_training_embedding_public_native.py",
                  "test_training_cross_entropy_public_native.py", "test_training_device_native_allocator.py",
                  "test_optimizer_native_container_admission.py", "test_optimizer_native_config_order.py",
+                 "test_optimizer_native_scalar_constructors.py",
                  "test_host_density_constructors_native.py",
                  "test_training_device_native_finalizer.py", "test_training_device_native_rollback.py",
                  "test_robust_scaler_native_lifecycle.py", "test_scaler_rows_snapshot_native.py", "test_scaler_complex_warning_native.py",
@@ -228,6 +229,7 @@ class InstalledNativeAudit(unittest.TestCase):
         self.assertIn("retained numerical kernels", scope["test_training_cross_entropy_public_native.py"]["coverage_limit"])
         self.assertEqual(len(q.CPU_NOT_APPLICABLE["test_training_cross_entropy_public_native.py"]), 9)
         self.assertEqual(len(q.CPU_NOT_APPLICABLE["test_training_device_native_allocator.py"]), 2)
+        self.assertEqual(len(q.CPU_NOT_APPLICABLE["test_optimizer_native_scalar_constructors.py"]), 2)
         self.assertEqual(len(q.CPU_NOT_APPLICABLE["test_optimizer_native_array_ownership.py"]), 6)
         self.assertEqual(len(q.CPU_NOT_APPLICABLE["test_training_device_native_finalizer.py"]), 7)
         self.assertEqual(len(q.CPU_NOT_APPLICABLE["test_training_device_native_rollback.py"]), 6)

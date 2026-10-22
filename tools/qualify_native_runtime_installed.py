@@ -24,6 +24,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_TESTS = {
+    "test_optimizer_native_scalar_constructors.py": "Native scalar preparation across public optimizer constructors, updates, checkpoints and device controls",
     "test_optimizer_native_config_order.py": "Native public optimizer get/set parameter order independent of mutable sorting",
     "test_optimizer_native_container_admission.py": "Native optimizer and training container admission with replaced builtin names",
     "test_training_cross_entropy_public_native.py": "Public cross entropy preparation, options, native scalar configuration and consumed host/device outputs",
@@ -79,6 +80,10 @@ TEST_DEPENDENCIES = {
 }
 CPU_RESIDENT_SKIP = "the CPU binding has no resident tensor pool"
 CPU_NOT_APPLICABLE = {
+    "test_optimizer_native_scalar_constructors.py": {
+        "test_device_scalar_controls_use_retained_native_integer[reshape]": "device scalar controls require a GPU training pool",
+        "test_device_scalar_controls_use_retained_native_integer[param_device]": "device scalar controls require a GPU training pool",
+    },
     'test_training_cross_entropy_public_native.py': {'test_public_cross_entropy_device_failure_rollback_has_no_python_finalizer': 'training device pool requires GPU', 'test_public_cross_entropy_device_outputs_are_native_and_consumed[mean-False-0.0]': 'training device pool requires GPU', 'test_public_cross_entropy_device_outputs_are_native_and_consumed[mean-True-0.0]': 'training device pool requires GPU', 'test_public_cross_entropy_device_outputs_are_native_and_consumed[none-False-0.2]': 'training device pool requires GPU', 'test_public_cross_entropy_device_outputs_are_native_and_consumed[sum-True-0.2]': 'training device pool requires GPU', 'test_public_cross_entropy_device_preserves_refusal_categories[logits-rank]': 'training device pool requires GPU', 'test_public_cross_entropy_device_preserves_refusal_categories[none-backward]': 'training device pool requires GPU', 'test_public_cross_entropy_device_preserves_refusal_categories[targets-float]': 'training device pool requires GPU', 'test_public_cross_entropy_device_preserves_refusal_categories[targets-rank]': 'training device pool requires GPU'},
     'test_training_device_native_allocator.py': {'test_training_device_owner_ignores_mutable_object_constructor[upload]': 'training device allocation requires the GPU pool', 'test_training_device_owner_ignores_mutable_object_constructor[reshape]': 'training device allocation requires the GPU pool'},
     "test_optimizer_native_array_ownership.py": {
@@ -200,6 +205,9 @@ def test_applicability(selected, vendor):
             scope.update(execution_route="selected package backend, established identical base-binding resident store",
                          operation_mode="identical base-binding transport, independent of estimator numeric mode",
                          coverage_limit="Public DeviceRows.materialize only; _Resident construction/close and resident scope/cache orchestration remain separate migration work")
+        if name == "test_optimizer_native_scalar_constructors.py":
+            scope.update(execution_route="native optimizer preparation; device controls require a GPU training pool",
+                         coverage_limit="Selected scalar constructor routes only; other public callbacks, package/reference/fault qualification and cross-vendor identity remain separate")
         if name == "test_device_rows_metadata_native.py":
             scope.update(execution_route="native DeviceRows metadata owner on every package backend",
                          coverage_limit="Constructor and length only; materialize and resident context lifecycle remain separate")
