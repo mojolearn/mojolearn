@@ -28,6 +28,7 @@ from bindings.xseq_native_common import (
     xseq_addr, xseq_f32p, xseq_reshape, xseq_curve_list, xseq_int, xseq_float, xseq_truth, xseq_is_int,
     XseqStream,
 )
+from core.xseq_marshal import xseq_fill_f32, xseq_codes_f32
 
 
 def _attr(owner: PythonObject, name: String) raises -> PythonObject:
@@ -136,7 +137,7 @@ def xseq_argmax(scores: PythonObject, rows: Int, cols: Int, context: PythonObjec
 
 def _rnn_optimizer(name: PythonObject, options: PythonObject, context: PythonObject) raises -> PythonObject:
     """`(kind, flags, [f1, f2, eps, weight_decay, f7, initial_accumulator])`
-    for the binding's optimizer slots, PyTorch's defaults under `options`."""
+    of the binding's optimizer slots, PyTorch's defaults under `options`."""
     var b = Python.import_module("builtins")
     var kinds = context["xseq_rnn_optimizers"]
     var known = False
@@ -198,9 +199,7 @@ def _rnn_rates(fields: PythonObject, steps: Int, context: PythonObject) raises -
         return schedule_operation("schedule_values", schedule, Python.tuple(steps), optimizer_context)
     var rates = xseq_zeros(Python.tuple(steps), context)
     var rate = Float32(xseq_float(fields["learning_rate"]))
-    var p = xseq_f32p(rates)
-    for t in range(steps):  # native input marshaling: the constant rate of every optimizer step
-        p[t] = rate
+    xseq_fill_f32(xseq_f32p(rates), steps, rate)
     return rates
 
 
@@ -345,10 +344,7 @@ def xseq_rnn(model: PythonObject, operation: String, args: PythonObject, context
         var codes = encoded[1]
         var count = Int(py=codes.shape[0])
         var target = xseq_zeros(Python.tuple(count), context)
-        var src = XI32P(unsafe_from_address=Int(py=xseq_addr(codes)))
-        var dst = xseq_f32p(target)
-        for i in range(count):  # native input marshaling: one class code per row
-            dst[i] = Float32(src[i])
+        xseq_codes_f32(XI32P(unsafe_from_address=Int(py=xseq_addr(codes))), xseq_f32p(target), count)
         return _rnn_fit(model, fields, args[0], target, entries, context)
     if operation == "rnn_hidden_sequence":
         return _rnn_run(model, fields, args[0], True, context)[1]

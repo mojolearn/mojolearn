@@ -19,6 +19,7 @@ from bindings.xseq_native_common import (
     xseq_reshape, xseq_copy, xseq_item, xseq_first, xseq_column_f32, xseq_column_i64, xseq_mean_dict, xseq_int,
     xseq_float, xseq_truth,
 )
+from core.xseq_marshal import xseq_var_blocks
 
 
 def _getattr(owner: PythonObject, name: String) raises -> PythonObject:
@@ -107,10 +108,9 @@ def _theta_predict(model: PythonObject, fields: PythonObject, args: PythonObject
         _ = py_call_typed(entries["theta"], Python.list(xseq_addr(y), xseq_addr(forecast), xseq_addr(info)),
                           Python.list(batch, n, h, fields["season_length"], code, additive, mask), fp)
         _store(fields, "info_", info)
-        var names = Python.list()
-        var words = xseq_f32p(info)
-        for i in range(batch):  # native result publication: one selected model name per fitted series
-            _ = py_call(_getattr(names, "append"), models[Int(words[i * 8 + 4])])
+        # the selected model of each series: info column 4 as an index into the names
+        var codes = xseq_column_i64(info, batch, 8, 4, context)
+        var names = py_call(b.list, py_call(b.map, _getattr(models, "__getitem__"), py_call(_getattr(codes, "tolist"))))
         _store(fields, "model_", names)
         _store(fields, "_fitted_h", Python.tuple(key, xseq_copy(forecast), xseq_copy(info), py_call(b.list, names)))
     return xseq_mean_dict(xseq_first(forecast, xseq_truth(fields["_one"])))
@@ -331,32 +331,16 @@ def _var_fit(model: PythonObject, fields: PythonObject, args: PythonObject, cont
     _store(state, "nobs", PythonObject(used))
     _store(state, "df_resid", PythonObject(used - (neqs * p + kt)))
     var intercept = xseq_zeros(Python.tuple(neqs), context)
-    var pw = xseq_f32p(params)
-    var iw = xseq_f32p(intercept)
-    if kt:
-        for j in range(neqs):  # native result publication: the intercept row
-            iw[j] = pw[j]
-    _store(state, "intercept", intercept)
-    # coefs[i, a, c] = params[kt + i * K + c, a]: the lag blocks, transposed
     var coefs = xseq_zeros(Python.tuple(p, neqs, neqs), context)
-    var cw = xseq_f32p(coefs)
-    for i in range(p):  # native result publication: one lag coefficient block per lag
-        for a in range(neqs):  # native result publication: the block's rows
-            for c in range(neqs):  # native result publication: the block's columns
-                cw[(i * neqs + a) * neqs + c] = pw[(kt + i * neqs + c) * neqs + a]
-    _store(state, "coefs", coefs)
     # fittedvalues = (endog[k_ar:] - resid) in float32
     var rows = max(used, 0)
-    var fitted = xseq_zeros(Python.tuple(rows, neqs), context)
-    var fw = xseq_f32p(fitted)
-    var ew = xseq_f32p(endog)
-    var rw = xseq_f32p(resid)
-    if rows == nobs:
-        for r in range(rows):  # native result publication: one fitted row per observation
-            for c in range(neqs):  # native result publication: one fitted value per variable
-                fw[r * neqs + c] = ew[(p + r) * neqs + c] - rw[r * neqs + c]
-    elif rows != 0:
+    if rows != nobs and rows != 0:
         raise Error("operands could not be broadcast together")
+    var fitted = xseq_zeros(Python.tuple(rows, neqs), context)
+    xseq_var_blocks(xseq_f32p(params), xseq_f32p(endog), xseq_f32p(resid), xseq_f32p(intercept), xseq_f32p(coefs),
+                    xseq_f32p(fitted), p, kt, neqs, rows)
+    _store(state, "intercept", intercept)
+    _store(state, "coefs", coefs)
     _store(state, "fittedvalues", fitted)
     _store(state, "_numeric_mode", py_get(fields, "numeric_mode"))
     return result

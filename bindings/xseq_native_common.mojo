@@ -9,14 +9,13 @@ Python connects the compiled `_mojolearn_x_sequence` entries once, at import
 into `xseq_native_call`, which runs the same compiled entries, in the same
 order and with the same arguments, as the Python bodies it replaces.
 """
-from std.memory import bitcast
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.sequential_arrays import sequential_array, sequential_address
 from bindings.sequential_inputs import sequential_input
-from bindings.classical_cast import classical_f32_bits
-from core.cast_in import cast_in_kind, cast_f32_bits
+from core.cast_in import cast_in_kind
+from core.xseq_marshal import xseq_cast_nd, xseq_column_copy_f32, xseq_column_copy_i64
 
 comptime XF32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime XI32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -108,31 +107,11 @@ def xseq_f32(value: PythonObject, name: String, copy: Bool, context: PythonObjec
     var cast = cast_in_kind(Int(py=dtype.num), item, name)
     var dims = List[Int]()
     var steps = List[Int]()
-    var total = 1
     for k in range(rank):  # driver-loop: over array rank metadata
         dims.append(Int(py=shape[k]))
         steps.append(Int(py=value.strides[k]))
-        total *= dims[k]
-    var base = Int(py=sequential_address(value))
-    var dst = XF32P(unsafe_from_address=Int(py=sequential_address(out)))
-    var counter = List[Int](length=rank, fill=0)
-    var offset = 0
-    for i in range(total):  # native input marshaling: numeric buffer items, exact cast bits
-        var bytes = XU8P(unsafe_from_address=base + offset)
-        var raw = UInt64(0)
-        for j in range(item):  # native input marshaling: the bytes of one item
-            raw |= UInt64(bytes[j]) << UInt64(j * 8)
-        var bits = classical_f32_bits(raw, cast, item) if double_ints else cast_f32_bits(raw, cast, item)
-        dst[i] = bitcast[DType.float32](bits)
-        var axis = rank - 1
-        while axis >= 0:  # native input marshaling: the next element's byte offset
-            counter[axis] += 1
-            offset += steps[axis]
-            if counter[axis] < dims[axis]:
-                break
-            offset -= steps[axis] * dims[axis]
-            counter[axis] = 0
-            axis -= 1
+    xseq_cast_nd(Int(py=sequential_address(value)), dims, steps, item, cast, double_ints,
+                 XF32P(unsafe_from_address=Int(py=sequential_address(out))))
     return out
 
 
@@ -190,10 +169,7 @@ def xseq_column_f32(value: PythonObject, rows: Int, cols: Int, col: Int, context
     """`value[:, col]` of a C-ordered (rows, cols) float32 array, as its own
     C-ordered (rows,) float32 array (the same words)."""
     var out = xseq_zeros(Python.tuple(rows), context)
-    var src = xseq_f32p(value)
-    var dst = xseq_f32p(out)
-    for r in range(rows):  # native result publication: one fitted value per series
-        dst[r] = src[r * cols + col]
+    xseq_column_copy_f32(xseq_f32p(value), xseq_f32p(out), rows, cols, col)
     return out
 
 
@@ -201,10 +177,7 @@ def xseq_column_i64(value: PythonObject, rows: Int, cols: Int, col: Int, context
     """`value[:, col].astype(np.int64)` of a C-ordered float32 array
     (truncation toward zero, as astype)."""
     var out = xseq_zeros_i64(Python.tuple(rows), context)
-    var src = xseq_f32p(value)
-    var dst = XI64P(unsafe_from_address=Int(py=sequential_address(out)))
-    for r in range(rows):  # native result publication: one fitted count per series
-        dst[r] = Int64(src[r * cols + col])
+    xseq_column_copy_i64(xseq_f32p(value), XI64P(unsafe_from_address=Int(py=sequential_address(out))), rows, cols, col)
     return out
 
 
