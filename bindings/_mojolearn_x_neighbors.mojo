@@ -33,6 +33,7 @@ from x_neighbors.kfeat_dev import XN_FAST_SCHI2_LAZYW, XN_KFEAT_ANY
 from x_neighbors.dev_pyapi import (
     kfeat_first_negative_binding,
     kfeat_flags_binding,
+    kfeat_schi2_draw_binding,
     kfeat_schi2_fit_binding,
     kfeat_schi2_transform_binding,
     kfeat_schi2_weights_binding,
@@ -1226,6 +1227,7 @@ def build__mojolearn_x_neighbors() -> PythonObject:
             m.def_function[kfeat_schi2_fit_binding]("x_neighbors_kfeat_schi2_fit")
         # lane apple-fast-w3-kfeat: SkewedChi2Sampler's lazy weights (opt-in)
         comptime if XN_FAST_SCHI2_LAZYW:
+            m.def_function[kfeat_schi2_draw_binding]("x_neighbors_kfeat_schi2_draw")
             m.def_function[kfeat_schi2_weights_binding]("x_neighbors_kfeat_schi2_weights")
             m.def_function[kfeat_schi2_transform_binding]("x_neighbors_kfeat_schi2_transform")
         # lane fix-k1-neighbors: the samplers' counter-based draws (IDENTICAL)
