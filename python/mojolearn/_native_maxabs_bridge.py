@@ -18,7 +18,7 @@ def connect(scaler_class):
         try:
             module = _backend.binding("_mojolearn_x_prep", mode)
             entries = {}
-            for name in ("x_prep_run", "x_prep_numeric_mode", "x_prep_maxabs_fit_direct"):  # glue: native exports
+            for name in ("x_prep_run", "x_prep_numeric_mode", "x_prep_maxabs_fit_direct"):  # glue: three fixed native exports connected during import
                 try:
                     entry = getattr(module, name)
                 except (AttributeError, ImportError):
