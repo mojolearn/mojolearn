@@ -44,3 +44,15 @@ jobs:
           cat check.log
           { echo '### public runtime (native / orchestrated / python per family)'; echo '```'; cat check.log; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
           exit $state
+      - name: Public lifecycle and option inventory (static, unqualified)
+        run: python3 tools/public_runtime_inventory.py --endpoints-json public-endpoints.json > endpoints.log 2>&1
+      - name: Retain the inventory and full checker logs
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: public-runtime-${{ github.sha }}
+          path: |
+            public-endpoints.json
+            endpoints.log
+            tool-tests.log
+            check.log
