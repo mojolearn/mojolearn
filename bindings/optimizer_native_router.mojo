@@ -54,13 +54,12 @@ def optimizer_step_entry(entry: PythonObject, arguments: PythonObject, context: 
 
 
 def optimizer_betas(source: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
     opt_value(source, context)
     if py_type(source) is context["container_types"][1] or py_type(source) is context["container_types"][0]:
         opt_scalar(source, context)
         if len(source) != 2:
             raise Error("ValueError: betas must be a pair (beta1, beta2)")
-        return Python.tuple(py_call(b.float, source[0]), py_call(b.float, source[1]))
+        return Python.tuple(py_call(context["scalar_types"][3], source[0]), py_call(context["scalar_types"][3], source[1]))
     var input = context["input_context"]
     classical_connect_numpy(input)
     var value = classical_input(source, input)
@@ -80,7 +79,6 @@ def optimizer_betas(source: PythonObject, context: PythonObject) raises -> Pytho
 def optimizer_construct(owner: PythonObject, values: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
     # values: params, kind, lr, betas, eps, weight_decay, momentum,
     # dampening, nesterov, schedule, accumulation_steps, maximize, resident, kwargs.
-    var b = Python.import_module("builtins")
     var fields = py_fields(owner)
     var kind = Int(py=values[1])
     var where = String("SGD") if kind == 0 else (String("Adam") if kind == 1 else String("AdamW"))
@@ -93,10 +91,10 @@ def optimizer_construct(owner: PythonObject, values: PythonObject, mode: PythonO
     var profile = context["profile_defaults"]["training"]
     if not Bool(py=context["profiles"][profile]["training"]):
         raise Error("NotImplementedError: the selected numeric profile is unavailable for optimizer training")
-    var accumulation = Int(py=py_call(b.int, values[10]))
+    var accumulation = Int(py=py_call(context["scalar_types"][2], values[10]))
     if accumulation < 1 or (accumulation & (accumulation - 1)) != 0:
         raise Error("ValueError: mojolearn." + where + ": accumulation_steps must be a power of two >= 1 (optimizer contract clause 9.2 condition 4)")
-    if py_type(values[11]) is not b.bool:
+    if py_type(values[11]) is not context["scalar_types"][1]:
         raise Error("TypeError: mojolearn." + where + ": maximize must be a bool")
     if kind == 0 and Bool(py=values[8]) and (Float64(py=values[6]) == 0.0 or Float64(py=values[7]) != 0.0):
         raise Error("ValueError: mojolearn.SGD: nesterov=True needs momentum > 0 and dampening == 0")
@@ -115,16 +113,16 @@ def optimizer_construct(owner: PythonObject, values: PythonObject, mode: PythonO
     py_setitem(fields, "t", PythonObject(0))
     for name in ["packed_", "total_norm_", "clip_coef_"]:  # driver-loop: over three optional result words
         py_setitem(fields, PythonObject(name), PythonObject(None))
-    py_setitem(fields, "lr", py_call(b.float, values[2]))
-    py_setitem(fields, "weight_decay", py_call(b.float, values[5]))
+    py_setitem(fields, "lr", py_call(context["scalar_types"][3], values[2]))
+    py_setitem(fields, "weight_decay", py_call(context["scalar_types"][3], values[5]))
     py_setitem(fields, "maximize", values[11])
     if kind == 0:
-        py_setitem(fields, "momentum", py_call(b.float, values[6]))
-        py_setitem(fields, "dampening", py_call(b.float, values[7]))
-        py_setitem(fields, "nesterov", py_call(b.bool, values[8]))
+        py_setitem(fields, "momentum", py_call(context["scalar_types"][3], values[6]))
+        py_setitem(fields, "dampening", py_call(context["scalar_types"][3], values[7]))
+        py_setitem(fields, "nesterov", py_call(context["scalar_types"][1], values[8]))
     else:
-        py_setitem(fields, "betas", Python.tuple(py_call(b.float, betas[0]), py_call(b.float, betas[1])))
-        py_setitem(fields, "eps", py_call(b.float, values[4]))
+        py_setitem(fields, "betas", Python.tuple(py_call(context["scalar_types"][3], betas[0]), py_call(context["scalar_types"][3], betas[1])))
+        py_setitem(fields, "eps", py_call(context["scalar_types"][3], values[4]))
     return PythonObject(None)
 
 
@@ -271,7 +269,7 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
         if not Bool(py=py_get(fields, "_p_dev", False)):
             raise Error("RuntimeError: optimizer.param_device: call params_to_device() first")
         opt_scalar(values[0], context)
-        var j = Int(py=py_call(b.int, values[0]))
+        var j = Int(py=py_call(context["scalar_types"][2], values[0]))
         var params = fields["params"]
         if j < 0:
             j += len(params)
@@ -298,7 +296,7 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
         if not opt_exact(py_type(state), context["mapping_types"]):
             raise Error("TypeError: optimizer checkpoint must be a native dictionary")
         opt_scalar(state["t"], context)
-        var t = py_call(b.int, state["t"])
+        var t = py_call(context["scalar_types"][2], state["t"])
         var m = optimizer_state_array(state["exp_avg"], False, context)
         var v = optimizer_state_array(state["exp_avg_sq"], False, context)
         var initialized = optimizer_state_array(state["buf_initialized"], True, context)
@@ -319,7 +317,7 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
             return fields["params"]
         var result = py_call(entries["optimizer_door_io"], owner, op, tensors, values[2], values[3])
         if op == 0:
-            return py_call(b.bool, result)
+            return py_call(context["scalar_types"][1], result)
         if op == 1 or op == 3:
             py_setitem(fields, "_p_dev" if op == 1 else "_g_dev", PythonObject(True))
             return owner
@@ -332,7 +330,7 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
         return py_call(entries["optimizer_door_accumulate"], values[0], values[1])
     if operation == "aligned":
         opt_scalar(values, context)
-        return py_call(b.bool, py_call(entries["accumulation_is_aligned"], Python.list(py_call(b.int, values[0]), py_call(b.int, values[1]))))
+        return py_call(context["scalar_types"][1], py_call(entries["accumulation_is_aligned"], Python.list(py_call(context["scalar_types"][2], values[0]), py_call(context["scalar_types"][2], values[1]))))
     raise Error("TypeError: unknown optimizer native operation")
 
 

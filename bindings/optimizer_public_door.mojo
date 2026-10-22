@@ -151,12 +151,12 @@ def getattr_or(obj: PythonObject, name: String, default: PythonObject) raises ->
 def as_float(value: PythonObject) raises -> Float64:
     """`float(value)`."""
     opt_scalar(value, OPT_DOOR.get_or_create_ptr()[].context)
-    return Float64(py=py_call(_bi().float, value))
+    return Float64(py=py_call(OPT_DOOR.get_or_create_ptr()[].context["scalar_types"][3], value))
 
 
 def truth(value: PythonObject) raises -> Bool:
     opt_scalar(value, OPT_DOOR.get_or_create_ptr()[].context)
-    return Bool(py=py_call(_bi().bool, value))
+    return Bool(py=py_call(OPT_DOOR.get_or_create_ptr()[].context["scalar_types"][1], value))
 
 
 def py_repr(value: PythonObject) raises -> String:
@@ -693,8 +693,7 @@ def _resident_word(value: PythonObject) raises -> Int:
     """`_RESIDENT_WORD.get(resident, 1)`: None -1, False 0, True 1."""
     if value is None:
         return -1
-    var bi = _bi()
-    if is_instance(value, bi.bool) or is_instance(value, bi.int):
+    if py_type(value) is OPT_DOOR.get_or_create_ptr()[].context["scalar_types"][1] or py_type(value) is OPT_DOOR.get_or_create_ptr()[].context["scalar_types"][2]:
         return 0 if Int(py=value) == 0 else 1
     return 1
 
@@ -835,7 +834,7 @@ def door_step[K: OptKernels](
                 + "part of the run's numerical specification (optimizer contract clause 9.2)" + _SRC
             )
         if not (tokens is None):
-            t_tokens = Int(py=py_call(bi.int, tokens))
+            t_tokens = Int(py=py_call(OPT_DOOR.get_or_create_ptr()[].context["scalar_types"][2], tokens))
         if len(parts) > 1 and not (tokens is None) and t_tokens < 1:
             raise Error("ValueError: mojolearn.accumulate_grads: tokens must be >= 1")
     var mn = 0.0
@@ -914,7 +913,7 @@ def door_step[K: OptKernels](
         req.has_sched = True
         req.sched = schedule_spec(schedule)
     var resident = py_fields(opt)["_resident_wanted"]
-    if is_instance(resident, bi.bool) and not truth(resident):
+    if py_type(resident) is d[].context["scalar_types"][1] and not truth(resident):
         # `resident=False`: the state lives in these host arrays (no slot)
         host_moments(opt)
     var maximize = truth(getattr_or(opt, "maximize", PythonObject(False)))
@@ -1205,7 +1204,7 @@ def door_accumulate[K: OptKernels](microbatch_grads: PythonObject, tokens: Pytho
                             + ", microbatch 0 has " + shape_text(probes[0][k].shape))
     var t_tokens = -1
     if not (tokens is None):
-        t_tokens = Int(py=py_call(bi.int, tokens))
+        t_tokens = Int(py=py_call(OPT_DOOR.get_or_create_ptr()[].context["scalar_types"][2], tokens))
         if t_tokens < 1:
             raise Error("ValueError: mojolearn.accumulate_grads: tokens must be >= 1")
     var keep = List[List[Float32]]()
