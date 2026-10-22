@@ -150,10 +150,11 @@ def optimizer_state_array(source: PythonObject, integer: Bool, context: PythonOb
 def optimizer_params(owner: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(owner)
     var kind = Int(py=fields["_KIND"])
-    var names = Python.list("accumulation_steps", "lr", "lr_schedule", "maximize", "numeric_mode", "params", "resident", "weight_decay")
-    var b = Python.import_module("builtins")
-    _ = py_call(names.extend, Python.tuple("momentum", "dampening", "nesterov") if kind == 0 else Python.tuple("betas", "eps"))
-    names = py_call(b.sorted, names)
+    # Public constructor names are fixed. Preserve their established lexical
+    # insertion order without calling a mutable builtins.sorted field.
+    var names = Python.list("accumulation_steps", "betas", "eps", "lr", "lr_schedule", "maximize", "numeric_mode", "params", "resident", "weight_decay")
+    if kind == 0:
+        names = Python.list("accumulation_steps", "dampening", "lr", "lr_schedule", "maximize", "momentum", "nesterov", "numeric_mode", "params", "resident", "weight_decay")
     var result = Python.dict()
     for i in range(len(names)):  # driver-loop: over fixed public constructor parameter names
         var name = names[i]
