@@ -37,7 +37,7 @@ def _binding(b=None):
     if b is None:
         from .. import _backend
         b = _backend.binding("_mojolearn_x_sequence")
-    if not hasattr(b, "onnx_read"):
+    if not hasattr(b, "onnx_read"):  # cpu-route: the native Mojo host reader call, no Python step
         raise RuntimeError("mojolearn: this install's x_sequence binding has no ONNX reader (onnx_read); "
                            "rebuild the x_sequence bindings")
     return b
@@ -131,7 +131,7 @@ def _views(b, h, c, owner):
     """One memoryview per buffer the tables point into, of the bytes the
     reader holds under handle ``h``: each view keeps ``owner`` (whose
     release closes the handle) alive."""
-    addrs = list(b.onnx_buffers(h))
+    addrs = list(b.onnx_buffers(h))  # cpu-route: the native Mojo host reader call, no Python step
     views = []
     for i in range(c.take()):  # glue: one record per file of the model
         _kind, _path, nbytes = c.take(), c.take(), c.take()
@@ -162,7 +162,7 @@ class _Native:
             names.append(str(name))
             flat.append(len(dims))
             flat.extend(dims)
-        words, strings = self.b.onnx_resolve(self.h, names, flat)
+        words, strings = self.b.onnx_resolve(self.h, names, flat)  # cpu-route: the native Mojo host reader call, no Python step
         _header(words, strings, "the model graph")
         c = _Words(words)
         c.i = 3
@@ -194,11 +194,11 @@ def read(path, binding=None):
     # session's, so the graph handle and the session live in one module)
     path = os.fspath(path)
     b = _binding(binding)
-    h = int(b.onnx_read(os.fsdecode(path)))
+    h = int(b.onnx_read(os.fsdecode(path)))  # cpu-route: the native Mojo host reader call, no Python step
     native = _Native(b, h)
     closer = weakref.finalize(native, b.onnx_close, h)
     try:
-        words, strings, floats = b.onnx_info(h)
+        words, strings, floats = b.onnx_info(h)  # cpu-route: the native Mojo host reader call, no Python step
         status = _header(words, strings, path)
         c = _Words(words)
         c.i = 3
