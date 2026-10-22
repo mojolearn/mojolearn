@@ -157,13 +157,13 @@ class DeviceCache:
 
     def live(self):
         """The binding store's live slot count (every cache on it)."""
-        return None if self._live is None else int(self._live())
+        return _ROWS_CALL(self, "cache_live", (), _ROWS_CONTEXT)
 
     def __len__(self):
         return _ROWS_CALL(self, "cache_len", (), _ROWS_CONTEXT)
 
     def __enter__(self):
-        return self
+        return _ROWS_CALL(self, "cache_enter", (), _ROWS_CONTEXT)
 
     def __exit__(self, *exc):
         self.close()
