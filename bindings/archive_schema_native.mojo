@@ -18,6 +18,11 @@
 #   ("refuse_set", field, exc, msg)    raise exc(msg) when field is held and not None
 #   ("refuse_in", field, values, exc, msg)
 #                                      raise exc(msg) when field equals one of values
+#   ("check_array", field, dtype, items, exc, msg)
+#                                      raise exc(msg) unless the field's array has
+#                                      typestr dtype and the shape the int items
+#                                      give; msg may name {want} (that shape),
+#                                      {dtype} and {shape} (the field's own)
 #   ("format", member, text)           a constant text member
 #   ("estimator", member)              the class name
 #   ("mode", member, prefix)           the numeric mode a predict would use now
@@ -34,6 +39,7 @@
 # An item is ("int", field), ("bool", field), ("const", number),
 # ("dim", field, axis), ("size", field), ("len", field), ("none", field, sentinel),
 # ("noneflag", field), ("float", field), ("float_or", field, default),
+# ("none_real", field, sentinel) (sentinel when field is None, else float(field)),
 # ("int_or", field, default), ("bool_or", field, default), ("code", field, table)
 # or ("if_eq", field, value, item, item). A field is an instance-dictionary
 # name, or a tuple path: a name, then dictionary keys and sequence indices.
@@ -118,6 +124,9 @@ def _schema_real(fields: PythonObject, item: PythonObject, name: String,
         return Float64(py=_schema_value(fields, item[1], name))
     if kind == "const":
         return Float64(py=item[1])
+    if kind == "none_real":
+        var value = _schema_value(fields, item[1], name)
+        return Float64(py=item[2]) if value is None else Float64(py=value)
     if kind == "if_eq":
         var chosen = item[3] if Bool(py=_schema_value(fields, item[1], name) == item[2]) else item[4]
         return _schema_real(fields, chosen, name, context)
@@ -281,6 +290,18 @@ def _schema_run(model: PythonObject, fields: PythonObject, steps: PythonObject, 
         elif kind == "refuse_in":
             if _schema_has(fields, step[1]) and py_contains(step[2], _schema_value(fields, step[1], name)):
                 _schema_fail(step[3], step[4], name)
+        elif kind == "check_array":
+            var value = _schema_value(fields, step[1], name)
+            var parts = _schema_bytes(value, context)
+            var want = Python.list()
+            for j in range(len(step[3])):  # driver-loop: over the fixed dimensions of one saved array check
+                _ = py_call(want.append, _schema_whole(fields, step[3][j], name, context))
+            var wanted = py_call(b.tuple, want)
+            var got = py_call(b.tuple, value.shape)
+            if parts[0] != String(step[2]) or not Bool(py=got == wanted):
+                var text = String(step[5]).replace("{want}", _archive_builtin_repr(wanted))
+                text = text.replace("{dtype}", parts[0]).replace("{shape}", _archive_builtin_repr(got))
+                _schema_fail(step[4], PythonObject(text), name)
         elif kind == "format":
             py_setitem(values, step[1], step[2])
         elif kind == "estimator":

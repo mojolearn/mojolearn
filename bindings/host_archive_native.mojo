@@ -331,17 +331,27 @@ def host_archive_minmax(cls: PythonObject, arrays: PythonObject, context: Python
     return model
 
 
-def host_archive_cholesky(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
-    var meta = host_archive_count(arrays, "meta", "<i8", 3, context, True)
-    var scalars = host_archive_count(arrays, "scalars", "<f8", 2, context, True)
-    var jp = host_archive_count(arrays, "jitter_param", "<f8", 1, context, True)
-    var n = classical_i64(meta, 0)
-    if n < 1:
-        raise Error("model Cholesky factor dimension must be positive")
-    var factor = host_archive_shape(arrays, "L", "<f4", Python.tuple(n, n), context)
+def host_archive_cholesky(cls: PythonObject, arrays: PythonObject, path: PythonObject,
+                          context: PythonObject) raises -> PythonObject:
+    # The refusals keep Cholesky.load's wording and order: numeric_mode,
+    # the three field vectors' dtypes, their sizes, then the factor.
+    var b = Python.import_module("builtins")
+    var where = host_archive_where(path, context)
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
     host_archive_mode(arrays, fields, context)
+    var meta = _archive_exact(arrays, "meta", "<i8", context)
+    var scalars = _archive_exact(arrays, "scalars", "<f8", context)
+    var jp = _archive_exact(arrays, "jitter_param", "<f8", context)
+    if Int(py=meta.size) != 3 or Int(py=scalars.size) != 2 or Int(py=jp.size) != 1:
+        raise Error(where + " holds meta " + String(Int(py=meta.size)) + ", scalars " + String(Int(py=scalars.size))
+                    + " and jitter_param " + String(Int(py=jp.size)) + " fields; 3, 2 and 1 are needed")
+    var n = classical_i64(meta, 0)
+    var factor = _archive_exact(arrays, "L", "<f4", context)
+    var got = py_call(b.tuple, factor.shape)
+    if n < 1 or not Bool(py=got == Python.tuple(n, n)):
+        raise Error(where + " L has shape " + _archive_builtin_repr(got) + ", the factor is "
+                    + String(n) + " x " + String(n))
     var jitter = classical_f64(jp, 0)
     py_setitem(fields, "jitter", PythonObject(None) if jitter == -1.0 else PythonObject(jitter))
     py_setitem(fields, "n_", n)
@@ -1731,7 +1741,7 @@ def host_archive_build(path: PythonObject, context: PythonObject,
     elif fmt == "mojolearn-scaler-1" and String(estimator) == "StandardScaler":
         model = scaler_archive_build(cls, arrays, path, context)
     elif fmt == "mojolearn-cholesky-1":
-        model = host_archive_cholesky(cls, arrays, context)
+        model = host_archive_cholesky(cls, arrays, path, context)
     elif fmt == "mojolearn-embedding-1":
         model = host_archive_embedding(cls, arrays, context)
     elif fmt == "mojolearn-kmeans-1":
