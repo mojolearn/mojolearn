@@ -164,3 +164,19 @@ def test_sequence_device_partial_owner_finalizer_is_native():
     from mojolearn._x_sequence_device import SequenceDeviceTensor
     empty = object.__new__(SequenceDeviceTensor)
     audit_native_call(empty.__del__).assert_native()
+
+
+@pytest.mark.parametrize("sign", [1, -1])
+def test_sequence_int64_state_conversion_preserves_direct_float32_rounding(sign):
+    # Just above a float32 midpoint at an int64 magnitude where float64 loses
+    # the last bit: double-rounding would change this established NumPy cast.
+    value = np.int64(sign * ((1 << 62) + (1 << 38) + 1))
+    expected = np.array([value], dtype="i8").astype("f4").tobytes()
+    opt = audit_native_call(O.Adagrad, np.ones(1, dtype="f4"),
+                            initial_accumulator_value=value, numeric_mode="identical").assert_native()
+    assert audit_native_call(O.Adagrad.sum.fget, opt).assert_native().tobytes() == expected
+    saved = opt.state_dict()
+    saved["state"] = [np.array([value], dtype="i8") for _ in saved["state"]]
+    audit_native_call(opt.load_state_dict, saved).assert_native()
+    for actual in audit_native_call(opt.state_dict).assert_native()["state"]:
+        assert actual.tobytes() == expected

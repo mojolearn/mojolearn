@@ -335,7 +335,7 @@ def seq_construct(owner: PythonObject, values: PythonObject, mode: PythonObject,
         py_setitem(fields, "_af_state", states)
     else:
         for i in range(2 if kind == 6 else 3):  # driver-loop: over optimizer moment buffer owners
-            _ = py_call(states.append, seq_array(n, context, Float32(Float64(py=fp[5])) if kind < 5 and i == 1 else 0.0))
+            _ = py_call(states.append, seq_cast(options["initial_accumulator_value"], context, n) if kind == 1 and i == 1 else seq_array(n, context))
         py_setitem(fields, "_state", states)
         py_setitem(fields, "_sc", seq_array(2 if kind == 6 else 3, context, 1.0))
     return PythonObject(None)
