@@ -9,10 +9,11 @@ from core.sequence_array_cast import sequence_cast_leaf, sequence_wide_word
 from bindings.sequence_array_warnings import sequence_array_errstate, sequence_array_report
 from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.sequence_dtype_native import sequence_dtype_classes, sequence_dtype_instance, sequence_dtype_normalize
+from bindings.sequence_string_storage import sequence_string_admit, sequence_string_leaf
 
 
 def sequence_dtype_leaves(dtype: PythonObject, offset: Int, classes: PythonObject,
-                          leaves: PythonObject, depth: Int = 0) raises:
+                          leaves: PythonObject, context: PythonObject, depth: Int = 0) raises:
     var b = Python.import_module("builtins")
     if depth > 64 or not sequence_dtype_instance(dtype, classes):
         raise Error("TypeError: output dtype requires a built-in native layout")
@@ -29,7 +30,7 @@ def sequence_dtype_leaves(dtype: PythonObject, offset: Int, classes: PythonObjec
             var item = fields[names[i]]
             if py_type(item) is not b.tuple or py_type(item[1]) is not b.int:
                 raise Error("TypeError: dtype fields require native layout metadata")
-            sequence_dtype_leaves(item[0], offset + Int(py=item[1]), classes, leaves, depth + 1)
+            sequence_dtype_leaves(item[0], offset + Int(py=item[1]), classes, leaves, context, depth + 1)
         return
     var subarray = dtype.subdtype
     if subarray is not None:
@@ -39,12 +40,14 @@ def sequence_dtype_leaves(dtype: PythonObject, offset: Int, classes: PythonObjec
             count *= Int(py=shape[axis])
         var size = Int(py=subarray[0].itemsize)
         for i in range(count):  # driver-loop: over fixed dtype subarray elements
-            sequence_dtype_leaves(subarray[0], offset + i * size, classes, leaves, depth + 1)
+            sequence_dtype_leaves(subarray[0], offset + i * size, classes, leaves, context, depth + 1)
         return
     var kind = String(dtype.kind)
     var size = Int(py=dtype.itemsize)
-    if kind != "b" and kind != "i" and kind != "u" and kind != "f" and kind != "c" and kind != "O" and kind != "S" and kind != "U" and kind != "V" and kind != "m" and kind != "M":
+    if kind != "b" and kind != "i" and kind != "u" and kind != "f" and kind != "c" and kind != "O" and kind != "S" and kind != "U" and kind != "V" and kind != "m" and kind != "M" and kind != "T":
         raise Error("TypeError: dtype requires an explicit native output layout")
+    if kind == "T":
+        sequence_string_admit(dtype, classes, context)
     py_call(leaves.append, Python.tuple(kind, size, String(dtype.byteorder) != ">", offset))
 
 
@@ -98,7 +101,7 @@ def sequence_array_cast(source: PythonObject, requested: PythonObject, context: 
         # their fields and zero width instead of becoming raw void storage.
         dtype = py_call(dtype_constructor, "V" + String(Int(py=source.itemsize)))
     var leaves = Python.list()
-    sequence_dtype_leaves(dtype, 0, classes, leaves)
+    sequence_dtype_leaves(dtype, 0, classes, leaves, context)
     if dtype == source.dtype:
         # astype(copy=False) returns the downloaded view for an equal dtype,
         # preserving its raw NaN words, backing owner and writeability flags.
@@ -119,6 +122,8 @@ def sequence_array_cast(source: PythonObject, requested: PythonObject, context: 
         var leaf = leaves[i]
         if String(leaf[0]) == "O":
             sequence_object_leaf(start, destination, count, stride, Int(py=leaf[3]))
+        elif String(leaf[0]) == "T":
+            status |= sequence_string_leaf(start, destination, count, stride, Int(py=leaf[3]), result.dtype, classes, settings, context)
         else:
             status |= sequence_cast_leaf(start, destination, count, stride, Int(py=leaf[3]), String(leaf[0]), Int(py=leaf[1]), Bool(py=leaf[2]))
     _ = source_owner^

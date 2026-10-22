@@ -112,7 +112,7 @@ def connect_sequence_device(training, device):
                    warning_lineno=max(line for _, _, line in code.co_lines() if line is not None),  # glue: retain the public array-protocol warning location
                    warning_module=device.__name__, warning_source_line="")
     context["sequence_array_warnings"] = warning
-    context["sequence_dtype_pattern"] = re.compile(r"[<>=|]?(?:[?bBhHiIuUlLqQpPnNefdgFDGOSVcmM][0-9]*(?:\[[0-9a-zA-Z]+\])?|(?:datetime64|timedelta64)(?:\[[0-9a-zA-Z]+\])?)")
+    context["sequence_dtype_pattern"] = re.compile(r"[<>=|]?(?:[?bBhHiIuUlLqQpPnNefdgFDGOSTVcmM][0-9]*(?:\[[0-9a-zA-Z]+\])?|(?:datetime64|timedelta64)(?:\[[0-9a-zA-Z]+\])?)")
     context["sequence_dtype_fullmatch"] = re.Pattern.fullmatch
     context["sequence_dtype_match"] = re.Pattern.match
     context["sequence_dtype_compact"] = re.compile(r"([<>|=]?)( *[(]?[ ,0-9]*[)]? *)([<>|=]?)([A-Za-z0-9.?]*(?:\[[a-zA-Z0-9,.]+\])?)")
