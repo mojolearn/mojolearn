@@ -32,7 +32,7 @@ def classical_admit_value(value: PythonObject, context: PythonObject, depth: Int
     if depth > 64:
         raise Error("TypeError: classical input nesting exceeds the supported depth")
     var b = Python.import_module("builtins")
-    if py_type(value) is b.tuple or py_type(value) is b.list:
+    if py_type(value) is py_type(Python.tuple()) or py_type(value) is py_type(Python.list()):
         for k in range(len(value)):  # driver-loop: over native operation argument containers
             classical_admit_value(value[k], context, depth + 1)
     elif not native_pandas_exact(value):

@@ -27,7 +27,7 @@ def sequential_admit_value(value: PythonObject, context: PythonObject, depth: In
         raise Error("TypeError: Sequential input containers exceed the supported nesting depth")
     var b = Python.import_module("builtins")
     var cls = py_type(value)
-    if cls is b.list or cls is b.tuple:
+    if cls is py_type(Python.list()) or cls is py_type(Python.tuple()):
         for k in range(len(value)):  # driver-loop: over native input container owners and metadata
             sequential_admit_value(value[k], context, depth + 1)
         return
@@ -38,7 +38,7 @@ def sequential_admit_value(value: PythonObject, context: PythonObject, depth: In
             var factory = value.default_factory
             if factory is not None and not _one_of(factory, context["native_default_factories"]) and not _one_of(factory, context["scalar_types"]):
                 raise Error("TypeError: Sequential defaultdict requires a native builtin default factory or None")
-        var pairs = py_call(b.list, value.items())
+        var pairs = py_call(py_type(Python.list()), value.items())
         for k in range(len(pairs)):  # driver-loop: over native mapping keys and buffer owners
             sequential_admit_value(pairs[k][0], context, depth + 1)
             sequential_admit_value(pairs[k][1], context, depth + 1)
