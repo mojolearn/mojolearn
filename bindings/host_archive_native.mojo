@@ -1013,90 +1013,150 @@ def host_archive_spectral(cls: PythonObject, arrays: PythonObject, context: Pyth
     return model
 
 
-def host_archive_umap(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
-    var meta = host_archive_count(arrays, "meta", "<i8", 7, context, True)
-    var controls = host_archive_count(arrays, "controls", "<f4", 6, context, True)
+def _umap_whole(value: Int, name: String, minimum: Int, maximum: Int) raises -> Int:
+    """UMAP `_integer`'s range refusal for a saved integer control."""
+    if value < minimum or value > maximum:
+        raise Error("ValueError: UMAP " + name + " must be in [" + String(minimum) + ", " + String(maximum) + "]")
+    return value
+
+
+def _umap_real(value: Float64, name: String) raises -> Float64:
+    """UMAP `_scalar`: a finite float32 value, rounded once to binary32."""
+    if not isfinite(value) or abs(value) > 3.4028234663852886e38:
+        raise Error("ValueError: UMAP " + name + " must be a finite float32 value")
+    return Float64(Float32(value))
+
+
+def host_archive_umap(cls: PythonObject, arrays: PythonObject, path: PythonObject,
+                      context: PythonObject) raises -> PythonObject:
+    # The refusals keep UMAP.load's wording and order: the vector sizes,
+    # then the constructor's validation of the saved controls, the saved
+    # mode, the config round trip, then the training and embedding shapes.
+    var builtins = Python.import_module("builtins")
+    var where = host_archive_where(path, context)
+    var meta = _archive_exact(arrays, "meta", "<i8", context)
+    var controls = _archive_exact(arrays, "controls", "<f4", context)
+    if Int(py=meta.size) != 7 or Int(py=controls.size) != 6:
+        raise Error(where + " holds " + String(Int(py=meta.size)) + " meta and " + String(Int(py=controls.size))
+                    + " control fields; 7 and 6 are needed")
     var neighbors = classical_i64(meta, 0)
     var components = classical_i64(meta, 1)
     var epochs = classical_i64(meta, 2)
     var seed = classical_i64(meta, 3)
     var negatives = classical_i64(meta, 4)
     var automatic_epochs = classical_i64(meta, 5) != 0
-    if neighbors < 2 or components < 1 or components > 32 or seed < 0 or negatives < 0 or negatives > 2147483647:
-        raise Error("saved UMAP integer parameters are outside the supported ranges")
-    if (automatic_epochs and epochs != 0) or (not automatic_epochs and epochs < 1):
-        raise Error("saved UMAP epochs do not match the automatic-epochs flag")
     var values = controls._mv
-    for i in range(6):  # driver-loop: six saved scalar configuration fields
-        if not isfinite(Float64(py=values[i])):
-            raise Error("saved UMAP controls must be finite float32 values")
     var min_dist = Float64(py=values[0])
     var spread = Float64(py=values[1])
     var mix = Float64(py=values[2])
     var connectivity = Float64(py=values[3])
     var rate = Float64(py=values[4])
     var repulsion = Float64(py=values[5])
-    if rate <= 0 or repulsion < 0 or min_dist < 0 or min_dist > spread or spread <= 0 or mix < 0 or mix > 1 or connectivity < 0:
-        raise Error("saved UMAP scalar configuration is inconsistent")
-    var metric = _archive_string(arrays, "metric", context)
-    var metrics = context["host_archive_umap_metrics"]
-    if not py_contains(metrics, metric):
-        raise Error("unsupported saved UMAP metric")
-    var code = Int(py=metrics[metric])
-    var saved_code = -1
-    var power = Float64(2.0)
-    var a = Float64(0.0)
-    var b = Float64(0.0)
-    if py_contains(arrays, "extras"):
-        var extras = host_archive_count(arrays, "extras", "<f8", 4, context, True)
-        var value = classical_f64(extras, 0)
-        if not isfinite(value) or value < -9223372036854775808.0 or value >= 9223372036854775808.0:
-            raise Error("invalid saved UMAP metric code")
-        saved_code = Int(value)
-        power = classical_f64(extras, 1)
-        a = classical_f64(extras, 2)
-        b = classical_f64(extras, 3)
-    if code != saved_code:
-        raise Error("saved UMAP metric code does not match its metric")
-    if code == 9:
-        if not isfinite(power) or power <= 0 or power > 3.4028234663852886e38 or Float64(Float32(power)) != power:
-            raise Error("saved UMAP Minkowski power must survive float32 validation")
-    elif power != 2.0:
-        raise Error("saved UMAP metric does not read its nondefault power")
-    var have_ab = a > 0 and b > 0
-    if have_ab:
-        if not isfinite(a) or not isfinite(b) or a > 3.4028234663852886e38 or b > 3.4028234663852886e38 or Float64(Float32(a)) != a or Float64(Float32(b)) != b:
-            raise Error("saved UMAP a and b must survive float32 validation")
-    elif a != 0.0 or b != 0.0:
-        raise Error("saved UMAP a and b must be positive together or both absent")
     var initialization = _archive_string(arrays, "init", context)
+    var extras_code = Float64(-1.0)
+    var power_saved = Float64(2.0)
+    var a_saved = Float64(0.0)
+    var b_saved = Float64(0.0)
+    if py_contains(arrays, "extras"):
+        var extras = _archive_exact(arrays, "extras", "<f8", context)
+        if Int(py=extras.size) != 4:
+            raise Error(where + " holds " + String(Int(py=extras.size)) + " extras; 4 are needed")
+        extras_code = classical_f64(extras, 0)
+        power_saved = classical_f64(extras, 1)
+        a_saved = classical_f64(extras, 2)
+        b_saved = classical_f64(extras, 3)
+    var metric = _archive_string(arrays, "metric", context)
+    # int(extras[0]), as the loader's constructor arguments evaluated it.
+    if extras_code != extras_code:
+        raise Error("ValueError: cannot convert float NaN to integer")
+    if not isfinite(extras_code):
+        raise Error("OverflowError: cannot convert float infinity to integer")
+    var saved_code = py_call(builtins.int, PythonObject(extras_code))
+    var minkowski_kwds = Bool(py=saved_code == PythonObject(9))
     if String(initialization) == "array":
         initialization = PythonObject("spectral")
-    if String(initialization) != "spectral" and String(initialization) != "random" and String(initialization) != "pca":
-        raise Error("unsupported saved UMAP initialization")
-    var training = _archive_exact(arrays, "training", "<f4", context)
-    var embedding = _archive_exact(arrays, "embedding", "<f4", context)
-    if Int(py=training.ndim) != 2 or Int(py=embedding.ndim) != 2 or training.shape[0] != embedding.shape[0] or Int(py=embedding.shape[1]) != components:
-        raise Error("saved UMAP training and embedding shapes do not match")
+    var have_a = a_saved > 0
+    var have_b = b_saved > 0
+    # The constructor's validation (`UMAP._parameters`, then `_extras`).
+    _ = _umap_whole(neighbors, "n_neighbors", 2, 9223372036854775807)
+    _ = _umap_whole(components, "n_components", 1, 32)
+    var config_epochs = 0 if automatic_epochs else _umap_whole(epochs, "n_epochs", 1, 9223372036854775807)
+    _ = _umap_whole(seed, "random_state", 0, 9223372036854775807)
+    min_dist = _umap_real(min_dist, "min_dist")
+    spread = _umap_real(spread, "spread")
+    mix = _umap_real(mix, "set_op_mix_ratio")
+    connectivity = _umap_real(connectivity, "local_connectivity")
+    rate = _umap_real(rate, "learning_rate")
+    repulsion = _umap_real(repulsion, "repulsion_strength")
+    _ = _umap_whole(negatives, "negative_sample_rate", 0, 2147483647)
+    if rate <= 0:
+        raise Error("ValueError: UMAP learning_rate must be positive")
+    if repulsion < 0:
+        raise Error("ValueError: UMAP repulsion_strength must be nonnegative")
+    if not (0 <= min_dist and min_dist <= spread) or spread <= 0:
+        raise Error("ValueError: UMAP requires 0 <= min_dist <= spread and spread > 0")
+    if not (0 <= mix and mix <= 1):
+        raise Error("ValueError: UMAP set_op_mix_ratio must be in [0, 1]")
+    if connectivity < 0:
+        raise Error("ValueError: UMAP local_connectivity must be >= 0")
+    var metrics = context["host_archive_umap_metrics"]
+    if not py_contains(metrics, metric):
+        raise Error("ValueError: UMAP metric=" + _archive_builtin_repr(metric) + " is not supported; the kNN computes "
+                    + _archive_builtin_repr(py_call(builtins.sorted, metrics))
+                    + " (a callable, and every other name, is refused by name)")
+    var code = Int(py=metrics[metric])
+    var power = Float64(2.0)
+    if code == 9:
+        power = _umap_real(power_saved if minkowski_kwds else Float64(2.0), "metric_kwds['p']")
+        if not power > 0:
+            raise Error("ValueError: UMAP minkowski p must be positive")
+    elif minkowski_kwds:
+        raise Error("ValueError: UMAP metric_kwds ['p'] are not used by metric=" + _archive_builtin_repr(metric))
+    if have_a != have_b:
+        raise Error("ValueError: UMAP a and b must be given together")
+    var a = Float64(0.0)
+    var b = Float64(0.0)
+    if have_a:
+        a = _umap_real(a_saved, "a")
+        b = _umap_real(b_saved, "b")
+        if not (a > 0 and b > 0):
+            raise Error("ValueError: UMAP a and b must be positive")
+    var init_text = String(initialization)
+    if init_text != "spectral" and init_text != "random" and init_text != "pca":
+        raise Error("ValueError: UMAP init=" + _archive_builtin_repr(initialization) + " must be 'spectral', 'random', 'pca' or an array")
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
     host_archive_mode(arrays, fields, context)
+    var config = Python.tuple(neighbors, components, config_epochs, min_dist, spread, mix, connectivity, seed,
+                              rate, repulsion, negatives, code, power, a, b)
+    var saved = Python.tuple(neighbors, components, epochs, Float64(py=values[0]), Float64(py=values[1]),
+                             Float64(py=values[2]), Float64(py=values[3]), seed, Float64(py=values[4]),
+                             Float64(py=values[5]), negatives, saved_code, power_saved, a_saved, b_saved)
+    if Bool(py=config != saved):
+        raise Error(where + " controls " + _archive_builtin_repr(saved) + " do not survive validation as "
+                    + _archive_builtin_repr(config))
+    var training = _archive_exact(arrays, "training", "<f4", context)
+    var embedding = _archive_exact(arrays, "embedding", "<f4", context)
+    if Int(py=training.ndim) != 2 or Int(py=embedding.ndim) != 2 or Int(py=embedding.shape[0]) != Int(py=training.shape[0]) or Int(py=embedding.shape[1]) != components:
+        raise Error(where + " training " + _archive_builtin_repr(py_call(builtins.tuple, training.shape)) + " and embedding "
+                    + _archive_builtin_repr(py_call(builtins.tuple, embedding.shape)) + " do not agree with n_components="
+                    + String(components))
     py_setitem(fields, "n_neighbors", neighbors)
     py_setitem(fields, "n_components", components)
-    py_setitem(fields, "min_dist", min_dist)
-    py_setitem(fields, "spread", spread)
+    py_setitem(fields, "min_dist", Float64(py=values[0]))
+    py_setitem(fields, "spread", Float64(py=values[1]))
     py_setitem(fields, "n_epochs", PythonObject(None) if automatic_epochs else PythonObject(epochs))
     py_setitem(fields, "random_state", seed)
-    py_setitem(fields, "set_op_mix_ratio", mix)
-    py_setitem(fields, "local_connectivity", connectivity)
+    py_setitem(fields, "set_op_mix_ratio", Float64(py=values[2]))
+    py_setitem(fields, "local_connectivity", Float64(py=values[3]))
     py_setitem(fields, "metric", metric)
     py_setitem(fields, "init", initialization)
-    py_setitem(fields, "learning_rate", rate)
-    py_setitem(fields, "repulsion_strength", repulsion)
+    py_setitem(fields, "learning_rate", Float64(py=values[4]))
+    py_setitem(fields, "repulsion_strength", Float64(py=values[5]))
     py_setitem(fields, "negative_sample_rate", negatives)
-    py_setitem(fields, "a", PythonObject(a) if have_ab else PythonObject(None))
-    py_setitem(fields, "b", PythonObject(b) if have_ab else PythonObject(None))
-    py_setitem(fields, "metric_kwds", Python.dict(p=power) if saved_code == 9 else PythonObject(None))
+    py_setitem(fields, "a", PythonObject(a_saved) if have_a else PythonObject(None))
+    py_setitem(fields, "b", PythonObject(b_saved) if have_b else PythonObject(None))
+    py_setitem(fields, "metric_kwds", Python.dict(p=power_saved) if minkowski_kwds else PythonObject(None))
     py_setitem(fields, "target_n_neighbors", -1)
     py_setitem(fields, "target_metric", "categorical")
     py_setitem(fields, "target_weight", 0.5)
@@ -1104,12 +1164,12 @@ def host_archive_umap(cls: PythonObject, arrays: PythonObject, context: PythonOb
     py_setitem(fields, "output_metric", "euclidean")
     py_setitem(fields, "_transform_training", training)
     py_setitem(fields, "_transform_embedding", embedding)
-    py_setitem(fields, "_transform_config", Python.tuple(neighbors, components, epochs, min_dist, spread, mix, connectivity, seed, rate, repulsion, negatives, code, power, a if have_ab else Float64(0.0), b if have_ab else Float64(0.0)))
+    py_setitem(fields, "_transform_config", config)
     py_setitem(fields, "_transform_mode", fields["numeric_mode"])
     var store = py_call(context["array_type"], "f")
     _ = py_call(store.frombytes, py_call(embedding._mv.cast, "B"))
     py_setitem(fields, "embedding_", classical_wrap_array(store, embedding.shape, "<f4", String(embedding.order), context))
-    py_setitem(fields, "n_features_in_", training.shape[1])
+    py_setitem(fields, "n_features_in_", Int(py=training.shape[1]))
     py_setitem(fields, "input_copied_", classical_i64(meta, 6) != 0)
     return model
 
@@ -1737,7 +1797,7 @@ def host_archive_build(path: PythonObject, context: PythonObject,
     elif fmt == "mojolearn-spectral-1":
         model = host_archive_spectral(cls, arrays, context)
     elif fmt == "mojolearn-umap-1":
-        model = host_archive_umap(cls, arrays, context)
+        model = host_archive_umap(cls, arrays, path, context)
     elif fmt == "mojolearn-gp-1" or fmt == "mojolearn.gpc.v1":
         model = host_archive_gp(cls, arrays, fmt == "mojolearn.gpc.v1", context)
     elif fmt == "mojolearn-svc-1" or fmt == "mojolearn-svr-1":
