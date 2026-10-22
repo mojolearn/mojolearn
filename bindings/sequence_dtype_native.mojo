@@ -3,6 +3,7 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem, py_contains
 from bindings.native_numpy_metadata import native_numpy_dtype
+from bindings.sequence_array_warnings import sequence_array_warn
 
 
 def sequence_dtype_classes(context: PythonObject) raises -> PythonObject:
@@ -38,13 +39,53 @@ def sequence_dtype_integer(value: PythonObject, classes: PythonObject, context: 
     raise Error("TypeError: dtype dimensions and offsets require native integers")
 
 
-def sequence_dtype_shape(value: PythonObject, classes: PythonObject, context: PythonObject) raises:
+def sequence_dtype_shape(value: PythonObject, classes: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
     if py_type(value) is b.tuple or py_type(value) is b.list:
         for i in range(len(value)):  # driver-loop: validate dtype subarray dimensions
             sequence_dtype_integer(value[i], classes, context)
+        return py_call(b.tuple, value)
     else:
         sequence_dtype_integer(value, classes, context)
+        return Python.tuple(value)
+
+
+def sequence_dtype_pair(base: PythonObject, shape: PythonObject, classes: PythonObject,
+                        context: PythonObject, aligned: Bool) raises -> PythonObject:
+    var b = Python.import_module("builtins")
+    var dtype = native_numpy_dtype(context)
+    var scalar = py_type(shape) is not b.list and py_type(shape) is not b.tuple
+    var dimensions = sequence_dtype_shape(shape, classes, context)
+    if scalar:
+        var kind = String(base.kind)
+        if Int(py=base.itemsize) == 0 and base.fields is None and base.subdtype is None and (kind == "S" or kind == "U" or kind == "V"):
+            # Unsized flexible dtypes interpret a scalar as itemsize, not
+            # subarray shape. Construct the same native descriptor directly;
+            # passing a scalar in a dtype tuple invokes npy_ctypes_check.
+            var limit = 2147483647 // 4 if kind == "U" else 2147483647
+            if py_type(shape) is b.bool or shape < PythonObject(0) or shape > PythonObject(limit):
+                raise Error("ValueError: invalid itemsize in generic type tuple")
+            var spelling = String(base.byteorder) + kind + String(Int(py=shape))
+            var metadata = base.metadata
+            if metadata is not None:
+                return py_call(dtype, spelling, align=PythonObject(aligned), metadata=py_call(b.dict, metadata))
+            return py_call(dtype, spelling, align=PythonObject(aligned))
+        if py_type(shape) is not b.bool and shape == PythonObject(1):
+            var module = py_get(context["modules"], "numpy._core._multiarray_umath")
+            if module is None:
+                module = py_get(context["modules"], "numpy.core._multiarray_umath")
+            if module is None or py_type(module) is not context["module_type"]:
+                raise Error("TypeError: dtype compatibility requires NumPy's native version metadata")
+            var entry = py_get(py_fields(module), "_get_ndarray_c_version")
+            var warning = context["sequence_array_warnings"]
+            if entry is None or py_type(entry) is not warning["warning_native_function"] or String(entry.__name__) != "_get_ndarray_c_version" or entry.__self__ is not module:
+                raise Error("TypeError: dtype compatibility requires NumPy's native version entry")
+            if Int(py=py_call(entry)) < 0x02000000:
+                # NumPy 1.26 preserves its deprecated scalar-size-one alias;
+                # explicit tuple (1,) already means a one-element subarray.
+                sequence_array_warn("Passing (type, 1) or '1type' as a synonym of type is deprecated; in a future version of numpy, it will be understood as (type, (1,)) / '(1,)type'.", warning, "DeprecationWarning")
+                return base
+    return py_call(dtype, Python.tuple(base, dimensions), align=PythonObject(aligned))
 
 
 def sequence_dtype_title(value: PythonObject, depth: Int = 0) raises:
@@ -143,7 +184,8 @@ def sequence_dtype_text(value: PythonObject, classes: PythonObject, context: Pyt
                 shape = py_call(b.tuple, dimensions)
             else:
                 shape = py_call(b.int, PythonObject(repeats))
-            base = py_call(dtype, Python.tuple(base, shape), align=PythonObject(aligned))
+            var shaped = sequence_dtype_pair(base, shape, classes, context, aligned)
+            base = shaped^
         py_call(formats.append, base)
         py_call(fields.append, Python.tuple("f" + String(len(fields)), base))
     if len(formats) == 0:
@@ -263,7 +305,7 @@ def sequence_dtype_normalize(value: PythonObject, classes: PythonObject, context
             var normalized_shape = sequence_dtype_normalize(shape, classes, context, depth + 1, aligned)
             shape = normalized_shape^
         else:
-            sequence_dtype_shape(shape, classes, context)
+            return sequence_dtype_pair(base, shape, classes, context, aligned)
         return py_call(dtype, Python.tuple(base, shape), align=PythonObject(aligned))
     if kind is b.list:
         var fields = Python.list()
@@ -280,8 +322,8 @@ def sequence_dtype_normalize(value: PythonObject, classes: PythonObject, context
                 raise Error("TypeError: dtype field names require native strings")
             var format = sequence_dtype_normalize(field[1], classes, context, depth + 1, aligned)
             if len(field) == 3:
-                sequence_dtype_shape(field[2], classes, context)
-                py_call(fields.append, Python.tuple(name, format, field[2]))
+                var shaped = sequence_dtype_pair(format, field[2], classes, context, aligned)
+                py_call(fields.append, Python.tuple(name, shaped))
             else:
                 py_call(fields.append, Python.tuple(name, format))
         return py_call(dtype, fields, align=PythonObject(aligned))

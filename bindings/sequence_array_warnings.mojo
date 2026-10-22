@@ -87,7 +87,9 @@ def sequence_array_category(kind: String) raises -> PythonObject:
     # Validate before PyErr_SetString or constructing a warning message: both
     # can instantiate the exception class. Replaced Python classes/functions
     # therefore must be refused even though the call site itself is native.
-    if category is None or (Int(py=py_call(flags.__get__, category)) & 512) != 0 or (Int(py=py_call(flags.__get__, py_type(category))) & 512) != 0:
+    if category is None or py_type(category) is not b.type:
+        raise Error("TypeError: array warnings require native built-in exception classes")
+    if (Int(py=py_call(flags.__get__, category)) & 512) != 0:
         raise Error("TypeError: array warnings require native built-in exception classes")
     if String(py_call(b.type.__getattribute__, category, "__name__")) != kind or String(py_call(b.type.__getattribute__, category, "__module__")) != "builtins":
         raise Error("TypeError: array warnings require native built-in exception identities")
@@ -102,10 +104,10 @@ def sequence_array_exception(kind: String, var message: String) raises:
     raise failure^
 
 
-def sequence_array_warn(message: String, context: PythonObject) raises:
+def sequence_array_warn(message: String, context: PythonObject, kind: String = "RuntimeWarning") raises:
     var b = Python.import_module("builtins")
     var fields = _warning_fields(context["warning_fields"])
-    var category = sequence_array_category("RuntimeWarning")
+    var category = sequence_array_category(kind)
     # The existing warning originated at the __array__ public method. Its
     # native metadata retains that location for filtering and repetition.
     var filename = context["warning_filename"]
@@ -151,7 +153,7 @@ def sequence_array_warn(message: String, context: PythonObject) raises:
     if mode == "ignore":
         return
     if mode == "error":
-        sequence_array_exception("RuntimeWarning", message)
+        sequence_array_exception(kind, message)
     if mode != "always" and mode != "all" and mode != "default" and mode != "module" and mode != "once":
         raise Error("RuntimeError: unrecognized warning filter action")
     var key = Python.tuple(message, category, PythonObject(None) if mode == "once" else module, PythonObject(lineno if mode == "default" else 0))
@@ -186,12 +188,12 @@ def sequence_array_warn(message: String, context: PythonObject) raises:
         py_setitem(stored, "file", PythonObject(None))
         py_setitem(stored, "line", PythonObject(None))
         py_setitem(stored, "source", PythonObject(None))
-        py_setitem(stored, "_category_name", "RuntimeWarning")
+        py_setitem(stored, "_category_name", PythonObject(kind))
         py_call(log.append, record)
         if mode != "always" and mode != "all":
             py_setitem(context["warning_seen"], key, True)
         return
-    var text = String(filename) + ":" + String(lineno) + ": RuntimeWarning: " + message + "\n"
+    var text = String(filename) + ":" + String(lineno) + ": " + kind + ": " + message + "\n"
     var line = String(context["warning_source_line"])
     if line.byte_length() > 0:
         text += "  " + line + "\n"

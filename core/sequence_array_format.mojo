@@ -4,18 +4,26 @@
 from std.ffi import c_char, c_int, c_size_t, external_call
 from std.memory import bitcast
 from std.math import floor, log10
+from std.sys.info import CompilationTarget
 
 
 struct SequenceNumericLocale(Movable):
-    # POSIX newlocale(0, "C", null) creates an independent C locale. uselocale
+    # Set LC_NUMERIC explicitly: Darwin's null base inherits the current
+    # locale, so a zero mask does not select C numeric formatting. uselocale
     # is thread-local; the caller's locale is restored even on formatting errors.
     var locale: Optional[MutPointer[UInt8, MutUntrackedOrigin]]
     var previous: Optional[MutPointer[UInt8, MutUntrackedOrigin]]
 
     def __init__(out self) raises:
         var name = String("C")
+        # Public libc ABI constants: Darwin LC_NUMERIC_MASK is 1 << 4;
+        # Linux/glibc LC_NUMERIC_MASK is 1 << 1. This chooses an ABI value,
+        # not a numeric algorithm or a workload-dependent route.
+        var numeric_mask = 1 << 1
+        comptime if CompilationTarget.is_macos():
+            numeric_mask = 1 << 4
         var created = external_call["newlocale", Optional[MutPointer[UInt8, MutUntrackedOrigin]]](
-            c_int(0), name.as_c_string_slice().unsafe_ptr(), Optional[MutPointer[UInt8, MutUntrackedOrigin]](None))
+            c_int(numeric_mask), name.as_c_string_slice().unsafe_ptr(), Optional[MutPointer[UInt8, MutUntrackedOrigin]](None))
         if not created:
             raise Error("RuntimeError: native float formatting could not create a C locale")
         var previous = external_call["uselocale", Optional[MutPointer[UInt8, MutUntrackedOrigin]]](created.value())

@@ -92,6 +92,11 @@ def sequence_array_cast(source: PythonObject, requested: PythonObject, context: 
     var dtype = sequence_dtype_normalize(requested, classes, context)
     if (String(dtype.kind) == "S" or String(dtype.kind) == "U") and Int(py=dtype.itemsize) == 0:
         dtype = py_call(dtype_constructor, String(dtype.kind) + "32")
+    if String(dtype.kind) == "V" and Int(py=dtype.itemsize) == 0 and dtype.fields is None:
+        # astype adapts an unsized void target (including zero-element
+        # subarrays) to the source itemsize. Empty structured layouts retain
+        # their fields and zero width instead of becoming raw void storage.
+        dtype = py_call(dtype_constructor, "V" + String(Int(py=source.itemsize)))
     var leaves = Python.list()
     sequence_dtype_leaves(dtype, 0, classes, leaves)
     if dtype == source.dtype:
