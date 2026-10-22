@@ -141,10 +141,12 @@ def _cache_fields(value: PythonObject, cls: PythonObject, descriptor: PythonObje
     return fields
 
 
-def _resident(entries: PythonObject, words: Int, rows: Bool, context: PythonObject) raises -> PythonObject:
+def _resident(entries: PythonObject, words: Int, rows: Bool, context: PythonObject, prefix: String = "x_prep") raises -> PythonObject:
+    # `prefix` names the arena family store (x_prep, x_metrics); the shared
+    # arena program runner (bindings/arena_prog_native.mojo) passes its own.
     var b = Python.import_module("builtins")
     var scope = py_call(b.getattr,context["arena_local"],"scope",PythonObject(None))
-    if scope is None or py_get(entries,"x_prep_dev_put") is None or py_get(entries,"x_prep_dev_free") is None:
+    if scope is None or py_get(entries,PythonObject(prefix+"_dev_put")) is None or py_get(entries,PythonObject(prefix+"_dev_free")) is None:
         return PythonObject(None)
     var fields = _cache_fields(scope,context["arena_scope_class"],context["arena_scope_dict"])
     if py_type(fields["min_words"]) is not b.int or py_type(fields["caches"]) is not b.dict:
@@ -157,15 +159,15 @@ def _resident(entries: PythonObject, words: Int, rows: Bool, context: PythonObje
         var key = keys[i]
         if py_type(key) is not b.tuple or len(key) != 2 or py_type(key[0]) is not b.int or py_type(key[1]) is not b.str:
             raise Error("TypeError: resident cache keys require native binding identities")
-    var key = Python.tuple(entries["arena_binding_id"],"x_prep")
+    var key = Python.tuple(entries["arena_binding_id"],PythonObject(prefix))
     var pair = py_get(caches,key)
     if pair is None:
         _cache_layout(context["arena_cache_class"],context["arena_cache_dict"])
         var cache = py_call(b.object.__new__,context["arena_cache_class"])
         var state = _cache_fields(cache,context["arena_cache_class"],context["arena_cache_dict"])
-        py_setitem(state,"_put",entries["x_prep_dev_put"])
-        py_setitem(state,"_free",entries["x_prep_dev_free"])
-        py_setitem(state,"_live",py_get(entries,"x_prep_dev_live"))
+        py_setitem(state,"_put",entries[PythonObject(prefix+"_dev_put")])
+        py_setitem(state,"_free",entries[PythonObject(prefix+"_dev_free")])
+        py_setitem(state,"_live",py_get(entries,PythonObject(prefix+"_dev_live")))
         py_setitem(state,"_entries",Python.dict())
         py_setitem(state,"uploads",0)
         py_setitem(state,"hits",0)
@@ -176,10 +178,10 @@ def _resident(entries: PythonObject, words: Int, rows: Bool, context: PythonObje
     return pair[0]
 
 
-def _cached_slot(cache: PythonObject, value: PythonObject, entries: PythonObject, context: PythonObject) raises -> Int:
+def _cached_slot(cache: PythonObject, value: PythonObject, entries: PythonObject, context: PythonObject, prefix: String = "x_prep") raises -> Int:
     var b = Python.import_module("builtins")
     var state = _cache_fields(cache,context["arena_cache_class"],context["arena_cache_dict"])
-    if state["_put"] is not entries["x_prep_dev_put"] or state["_free"] is not entries["x_prep_dev_free"] or py_type(state["_entries"]) is not b.dict or py_type(state["uploads"]) is not b.int or py_type(state["hits"]) is not b.int:
+    if state["_put"] is not entries[PythonObject(prefix+"_dev_put")] or state["_free"] is not entries[PythonObject(prefix+"_dev_free")] or py_type(state["_entries"]) is not b.dict or py_type(state["uploads"]) is not b.int or py_type(state["hits"]) is not b.int:
         raise Error("TypeError: resident cache entries must retain native binding metadata")
     var stored = state["_entries"]
     var keys = py_call(b.list,stored)
@@ -196,12 +198,12 @@ def _cached_slot(cache: PythonObject, value: PythonObject, entries: PythonObject
     # Allocate the counter before acquiring a device resource. Until cache
     # publication succeeds, this operation still owns the fresh slot.
     var next_uploads = PythonObject(Int(py=state["uploads"])+1)
-    var slot = Int(py=py_call(entries["x_prep_dev_put"],key[0],key[1]))
+    var slot = Int(py=py_call(entries[PythonObject(prefix+"_dev_put")],key[0],key[1]))
     try:
         py_setitem(stored,key,Python.tuple(slot,value))
     except error:
         try:
-            _ = py_call(entries["x_prep_dev_free"],slot)
+            _ = py_call(entries[PythonObject(prefix+"_dev_free")],slot)
         except cleanup_error:
             raise Error("RuntimeError: arena cache publication failed: "+String(error)+"; slot "+String(slot)+" cleanup also failed: "+String(cleanup_error))
         raise error
