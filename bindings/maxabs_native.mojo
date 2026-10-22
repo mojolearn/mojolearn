@@ -156,6 +156,16 @@ def _dense_values(source: PythonObject, context: PythonObject) raises -> PythonO
 def _values(source: PythonObject, context: PythonObject) raises -> PythonObject:
     if py_type(source) is context["maxabs_rows_class"]:
         var fields = py_fields(source)
+        # DeviceRows.materialize's host-route contract is a single retained
+        # snapshot. A later mutation of base/indices must not silently
+        # replace an already materialized selection. GPU ranges deliberately
+        # retain their separate device-gather/resident-base semantics.
+        var host_rows = String(context["vendor"]) == "cpu" or String(getenv("MOJOLEARN_ARENA_RANGES","1").strip()) == "0"
+        if py_type(fields["dtype"]) is not Python.import_module("builtins").str:
+            raise Error("TypeError: native row selection requires native dtype metadata")
+        host_rows = host_rows or String(fields["dtype"]) != "<f4"
+        if host_rows and py_get(fields,"_host") is not None:
+            return _dense_values(fields["_host"],context)
         var base = _dense_values(fields["base"],context)
         var indices = fields["indices"]
         classical_admit_value(indices,context)
@@ -167,6 +177,8 @@ def _values(source: PythonObject, context: PythonObject) raises -> PythonObject:
             raise Error("MaxAbsScaler requires a nonempty row selection within native indexing bounds")
         var output = classical_typed(Python.tuple(n,d),"<f4",context["output_context"])
         _ = py_call(context["maxabs_gather_rows"],classical_address(base),classical_address(output),classical_address(indices),base.shape[0],n,4*d)
+        if host_rows:
+            py_setitem(fields,"_host",output)
         _ = base^
         return output
     return _dense_values(source,context)
