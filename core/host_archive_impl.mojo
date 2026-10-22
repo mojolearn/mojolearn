@@ -45,6 +45,22 @@ def host_archive_reorder_f32(source: Int, shape: List[Int], strides: List[Int], 
         dst[i] = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=source + offset)[0]
 
 
+def host_archive_reorder_bytes(source: Int, shape: List[Int], strides: List[Int], count: Int,
+                               width: Int, destination: Int):
+    # _serialize.exact returns C-order storage for every supported numeric
+    # dtype. Copy words as bytes so int64 and floating NaN payloads survive.
+    var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=destination)
+    for i in range(count):
+        var index = i
+        var offset = 0
+        for d in range(len(shape) - 1, -1, -1):
+            offset += (index % shape[d]) * strides[d]
+            index //= shape[d]
+        var src = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=source + offset)
+        for byte in range(width):
+            dst[i * width + byte] = src[byte]
+
+
 def host_archive_copy_words(source: Int, count: Int, destination: Int):
     var src = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=source)
     var dst = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=destination)

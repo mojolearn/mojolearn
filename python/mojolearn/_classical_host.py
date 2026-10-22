@@ -637,8 +637,8 @@ def _host_fit_helpers():
 # LinearRegression and Ridge, with their CPU identical binding.
 _native_classical_bridge.connect_host_public(HostRidge, HostLinearRegression, _CLASSICAL, _host_fit_helpers())
 
-# Fixed archive metadata only. The private native builder is qualified per
-# schema before replacing the existing full-format public routing contract.
+# Fixed archive metadata only; the compiled owner reads and routes saved
+# state for every supported classical, forest and GBDT format.
 from . import _native_host_archive_bridge
 
 
@@ -648,39 +648,47 @@ def _host_archive_cleanup_entries():
     # finalizers stay on their original GPU classes.
     entries = {}
     for basename, key, name in (("_mojolearn_ivf_search_host", "IVFIndex", "ivf_flat_index_release"),  # glue: fixed explicit CPU archive entries
-                                 ("_mojolearn_svm_host", "svc_ovo_layout", "svc_ovo_layout")):
+                                 ("_mojolearn_svm_host", "svc_ovo_layout", "svc_ovo_layout"),
+                                 ("_mojolearn_estimators_host", "qn_softmax", "qn_softmax")):
         try:
             module = _backend.load_host_module(basename)
         except ImportError:
             continue
-        entries[key] = getattr(module, name)
+        entries[key] = getattr(module, name, None)
     return entries
 
 
-_native_host_archive_bridge.connect(_CLASSICAL, _FORMATS, _host_archive_cleanup_entries())
+def _host_archive_forest_metadata():
+    # glue: fixed CPU saved-forest classes and binding metadata at import.
+    from types import BuiltinFunctionType
+    from . import _forest_host, _gbdt_host
+    module, error = None, ""
+    try:
+        module = _forest_host._load()
+    except ImportError as unavailable:
+        error = str(unavailable)
+    formats = {}
+    for fmt, family in _forest_host._FORMATS.items():  # glue: two saved forest families
+        classes = {name: _forest_host.HostForest for name, info in _forest_host._ESTIMATORS.items()  # glue: fixed forest class registry
+                   if info[0] == family}
+        formats[fmt] = classes
+        formats[fmt + _forest_host._GROVES_SUFFIX] = dict(classes)
+    forest_formats = tuple(formats)
+    formats[_gbdt_host.GBDT_FORMAT] = {name: _gbdt_host.HostGBDT for name in _gbdt_host.GBDT_ESTIMATORS}  # glue: fixed GBDT archive names
+    return dict(host_archive_extra_formats=formats, host_archive_forest_formats=forest_formats,
+                host_archive_forest_estimators=dict(_forest_host._ESTIMATORS),
+                host_archive_forest_binding=module, host_archive_forest_binding_error=error,
+                host_archive_forest_has_groves=isinstance(getattr(module, "forest_host_groves_prepare", None), BuiltinFunctionType),
+                host_archive_gbdt_estimators=dict(_gbdt_host.GBDT_ESTIMATORS),
+                host_archive_gbdt_classification_losses=tuple(_gbdt_host._CLASSIFICATION_LOSSES),
+                host_archive_gbdt_proba_losses=tuple(_gbdt_host._PROBA_LOSSES))
+
+
+_native_host_archive_bridge.connect(_CLASSICAL, _FORMATS, _host_archive_cleanup_entries(), _host_archive_forest_metadata())
 
 
 def host_model(path):
     """The host model for a saved classical file, by its `format` and
     `estimator` members. Any other format is refused with the tag it
     carries."""
-    arrays = _serialize.peek_npz(path, ("format", "estimator"))
-    fmt = _serialize.scalar_str(arrays, "format") if "format" in arrays else ""
-    if fmt not in CLASSICAL_FORMATS:
-        # Keep the former full-decode error precedence for malformed files;
-        # only accepted archives take the routing fast path.
-        _serialize.read_npz(path, CLASSICAL_FORMATS)
-        raise AssertionError("read_npz accepted a format rejected by the router")
-    if fmt == _LINEAR_FORMAT:
-        # The saved LinearRegression or Ridge loads natively, from one read.
-        return _native_classical(None, "host_model", (path,), _CLASSICAL)
-    estimator = _serialize.scalar_str(arrays, "estimator")
-    cls = _FORMATS[fmt].get(estimator)
-    if cls is None:
-        raise ValueError(
-            f"mojolearn: {path!r} was saved by {estimator}, which {fmt} does not hold"
-        )
-    model = cls.load(path)
-    model._host_refusals()
-    model.estimator = estimator
-    return model
+    return _native_classical(None, "host_archive_classical_model", (path,), _CLASSICAL)

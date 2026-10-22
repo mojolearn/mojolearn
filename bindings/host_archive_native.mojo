@@ -7,10 +7,41 @@ from std.memory import bitcast
 from std.math import isfinite
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.sequential_description import sequential_fields
-from bindings.classical_archive_read import classical_archive_read, classical_archive_build, _archive_exact, _archive_string
-from bindings.classical_arrays import classical_i64, classical_f64, classical_wrap_array, classical_array, classical_typed, classical_address
-from core.host_archive_impl import host_archive_copy_f32, host_archive_unique_i32, host_archive_mean_f64, host_archive_reorder_f32, host_archive_copy_words, host_archive_support_bound, host_archive_svc_gather
+from bindings.classical_archive_read import classical_archive_read, classical_archive_build, _archive_exact as _raw_archive_exact, _archive_string
+from bindings.classical_arrays import classical_i64, classical_f64, classical_wrap_array, classical_array, classical_address, _store_code
+from core.host_archive_impl import host_archive_copy_f32, host_archive_unique_i32, host_archive_mean_f64, host_archive_reorder_f32, host_archive_reorder_bytes, host_archive_copy_words, host_archive_support_bound, host_archive_svc_gather
 from bindings.scaler_lifecycle_native import scaler_archive_build
+from core.host_archive_gbdt import host_archive_gbdt_text
+
+
+def host_archive_typed(shape: PythonObject, dtype: String, context: PythonObject) raises -> PythonObject:
+    # Archive output is always Array storage; obtain the width from its fixed
+    # native typecode, including int32 (the linear allocator only supports f4/f8/i8).
+    var count = 1
+    for i in range(len(shape)):  # driver-loop: native output shape metadata
+        var dimension = Int(py=shape[i])
+        if dimension < 0:
+            raise Error("saved model array dimensions must be nonnegative")
+        count *= dimension
+    var store = py_call(context["array_type"], _store_code(dtype))
+    var raw = py_call(Python.import_module("builtins").bytes, count * Int(py=store.itemsize))
+    _ = py_call(store.frombytes, raw)
+    return classical_wrap_array(store, shape, dtype, "C", context)
+
+
+def _archive_exact(arrays: PythonObject, name: String, dtype: String, context: PythonObject) raises -> PythonObject:
+    var value = _raw_archive_exact(arrays, name, dtype, context)
+    if String(value.order) == "C" or Int(py=value.ndim) < 2:
+        return value
+    var dimensions = List[Int]()
+    var strides = List[Int]()
+    for i in range(Int(py=value.ndim)):  # driver-loop: saved array shape metadata
+        dimensions.append(Int(py=value.shape[i]))
+        strides.append(Int(py=value.strides[i]))
+    var result = host_archive_typed(value.shape, dtype, context)
+    host_archive_reorder_bytes(Int(py=classical_address(value)), dimensions, strides,
+        Int(py=value.size), Int(py=value._mv.itemsize), Int(py=classical_address(result)))
+    return result
 
 
 def host_archive_count(arrays: PythonObject, name: String, dtype: String, count: Int,
@@ -488,7 +519,7 @@ def host_archive_logistic(cls: PythonObject, arrays: PythonObject, context: Pyth
     var words = Int(py=w.size)
     if Int(py=w.ndim) != 1 or words % targets != 0 or words // targets - (1 if intercept else 0) != nf:
         raise Error("saved LogisticRegression weights do not match features and class count")
-    var coef = classical_typed(Python.tuple(targets, nf), "<f4", context)
+    var coef = host_archive_typed(Python.tuple(targets, nf), "<f4", context)
     var bias = classical_array(targets, 0, context)
     host_archive_copy_f32(Int(py=classical_address(w)), 4, targets * 4, targets, nf, Int(py=classical_address(coef)))
     if intercept:
@@ -616,7 +647,7 @@ def host_archive_holtwinters(cls: PythonObject, arrays: PythonObject, context: P
     var time_major = Python.dict()
     var names = Python.tuple("level", "trend", "season")
     for i in range(len(names)):  # driver-loop: three named saved component blocks
-        var copy = classical_typed(Python.tuple(rows, batch), "<f4", context)
+        var copy = host_archive_typed(Python.tuple(rows, batch), "<f4", context)
         host_archive_copy_f32(Int(py=classical_address(comps)) + i * cl * 4, batch * 4, 4,
                               rows, batch, Int(py=classical_address(copy)))
         py_setitem(time_major, names[i], copy)
@@ -770,7 +801,6 @@ def host_archive_neighbors(cls: PythonObject, arrays: PythonObject, kind: Int,
         return model
     py_setitem(fields, "n_neighbors", classical_i64(meta, 2))
     py_setitem(fields, "query_tile", classical_i64(meta, 3))
-    py_setitem(fields, "used_query_tile_", PythonObject(None))
     if kind == 0:
         return model
     py_setitem(fields, "weights", weights)
@@ -1080,14 +1110,14 @@ def host_archive_reshape_words(array: PythonObject, shape: PythonObject, dtype: 
     for i in range(Int(py=array.ndim)):  # driver-loop: saved array shape metadata
         dimensions.append(Int(py=array.shape[i]))
         strides.append(Int(py=array.strides[i]))
-    var result = classical_typed(shape, dtype, context)
+    var result = host_archive_typed(shape, dtype, context)
     host_archive_reorder_f32(Int(py=classical_address(array)), dimensions, strides, Int(py=array.size), Int(py=classical_address(result)))
     return result
 
 
 def host_archive_gp_row(array: PythonObject, row: Int, cols: Int, shape: PythonObject,
                         context: PythonObject) raises -> PythonObject:
-    var result = classical_typed(shape, "<f4", context)
+    var result = host_archive_typed(shape, "<f4", context)
     host_archive_copy_f32(Int(py=classical_address(array)) + row * Int(py=array.strides[0]), 0,
                           Int(py=array.strides[1]), 1, cols, Int(py=classical_address(result)))
     return result
@@ -1193,7 +1223,7 @@ def host_archive_slice_words(array: PythonObject, offset: Int, count: Int, shape
                              dtype: String, context: PythonObject) raises -> PythonObject:
     if offset < 0 or count < 0 or offset > Int(py=array.size) or count > Int(py=array.size) - offset:
         raise Error("saved model block lies outside its archive array")
-    var result = classical_typed(shape, dtype, context)
+    var result = host_archive_typed(shape, dtype, context)
     host_archive_copy_words(Int(py=classical_address(array)) + offset * 4, count, Int(py=classical_address(result)))
     return result
 
@@ -1221,8 +1251,8 @@ def host_archive_svm_ovo(fields: PythonObject, arrays: PythonObject, features: I
     var support_addresses = Python.list()
     var dual_addresses = Python.list()
     var layout_meta = Python.list(k, rows, pair_count)
-    var out_bias = classical_typed(Python.tuple(pair_count), "<f4", context)
-    var out_iterations = classical_typed(Python.tuple(pair_count), "<i4", context)
+    var out_bias = host_archive_typed(Python.tuple(pair_count), "<f4", context)
+    var out_iterations = host_archive_typed(Python.tuple(pair_count), "<i4", context)
     var bias_words = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out_bias)))
     var iteration_words = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out_iterations)))
     var offset = 0
@@ -1257,9 +1287,9 @@ def host_archive_svm_ovo(fields: PythonObject, arrays: PythonObject, features: I
     if offset != total:
         raise Error("saved SVC pair metadata does not cover every support row")
     var cap = min(rows, total)
-    var public_support = classical_typed(Python.tuple(max(1, cap)), "<i4", context)
-    var public_counts = classical_typed(Python.tuple(k), "<i4", context)
-    var public_dual = classical_typed(Python.tuple(max(1, (k - 1) * cap)), "<f4", context)
+    var public_support = host_archive_typed(Python.tuple(max(1, cap)), "<i4", context)
+    var public_counts = host_archive_typed(Python.tuple(k), "<i4", context)
+    var public_dual = host_archive_typed(Python.tuple(max(1, (k - 1) * cap)), "<f4", context)
     var layout = context["host_archive_svc_layout"]
     if layout is None or py_type(layout) is not Python.import_module("types").BuiltinFunctionType:
         raise Error("ImportError: saved multiclass SVC needs the compiled CPU layout entry")
@@ -1269,7 +1299,7 @@ def host_archive_svm_ovo(fields: PythonObject, arrays: PythonObject, features: I
         raise Error("saved SVC native layout returned an invalid row count")
     var result_support = host_archive_slice_words(public_support, 0, n_sv, Python.tuple(n_sv), "<i4", context)
     var result_dual = host_archive_slice_words(public_dual, 0, (k - 1) * n_sv, Python.tuple(k - 1, n_sv), "<f4", context)
-    var result_vectors = classical_typed(Python.tuple(n_sv, features), "<f4", context)
+    var result_vectors = host_archive_typed(Python.tuple(n_sv, features), "<f4", context)
     host_archive_svc_gather(Int(py=classical_address(support)), total, Int(py=classical_address(vectors)), features,
                             Int(py=classical_address(result_support)), n_sv, Int(py=classical_address(result_vectors)))
     var shape = String(_archive_string(arrays, "shape", context))
@@ -1362,8 +1392,8 @@ def host_archive_svm(cls: PythonObject, arrays: PythonObject, classifier: Bool,
                 raise Error("saved SVC probability calibration must be a vector")
             var count = Int(py=probability.size)
             var pairs = Python.list()
-            var a = classical_typed(Python.tuple((count + 1) // 2), "<f8", context)
-            var b = classical_typed(Python.tuple(count // 2), "<f8", context)
+            var a = host_archive_typed(Python.tuple((count + 1) // 2), "<f8", context)
+            var b = host_archive_typed(Python.tuple(count // 2), "<f8", context)
             var ap = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(a)))
             var bp = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(b)))
             for i in range(count // 2):  # driver-loop: saved per-pair calibration coefficients
@@ -1402,22 +1432,150 @@ def host_archive_svm(cls: PythonObject, arrays: PythonObject, classifier: Bool,
     return model
 
 
+def host_archive_forest(cls: PythonObject, arrays: PythonObject, fmt: String,
+                        context: PythonObject) raises -> PythonObject:
+    var estimator = _archive_string(arrays, "estimator", context)
+    var metadata = context["host_archive_forest_estimators"][estimator]
+    var groves = fmt.endswith("-parallel-groves-1")
+    if groves:
+        var mode = _archive_string(arrays, "numeric_mode", context)
+        if String(py=py_call(py_call(mode.strip).lower)) != "identical":
+            raise Error("parallel_groves archives must be saved under numeric_mode='identical'")
+    var meta = _archive_exact(arrays, "meta", "<i8", context)
+    if Int(py=meta.ndim) != 1 or Int(py=meta.size) < 3:
+        raise Error("saved forest metadata must hold at least three fields")
+    var features = classical_i64(meta, 0)
+    var trees = classical_i64(meta, 1)
+    var outputs = classical_i64(meta, 2)
+    if features < 1 or trees < 1 or outputs < 1:
+        raise Error("saved forest features, trees and outputs must be positive")
+    var colid = _archive_exact(arrays, "colid", "<i4", context)
+    var nodes = Int(py=colid.size)
+    if Int(py=colid.ndim) != 1 or String(colid.order) != "C" or nodes < trees:
+        raise Error("saved forest column array does not match its tree count")
+    var offsets = host_archive_count(arrays, "offsets", "<i4", trees + 1, context, True)
+    var thresholds = host_archive_count(arrays, "quesval", "<f4", nodes, context, True)
+    var left = host_archive_count(arrays, "left_child", "<i4", nodes, context, True)
+    var leaves = _archive_exact(arrays, "leaves", "<f4", context)
+    if Int(py=leaves.ndim) != 1 or Int(py=leaves.size) // outputs != nodes or Int(py=leaves.size) % outputs != 0:
+        raise Error("saved forest leaves do not match its nodes and outputs")
+    if Int(py=offsets._mv[0]) != 0 or Int(py=offsets._mv[trees]) != nodes:
+        raise Error("saved forest offsets do not cover its node array")
+    var classifier = Bool(py=metadata[1])
+    var classes = PythonObject(None)
+    if py_contains(arrays, "classes"):
+        classes = host_archive_class_values(arrays["classes"], context)
+    if classifier and (classes is None or len(classes) != outputs):
+        raise Error("saved forest classifier must carry num_outputs classes")
+    if not classifier and outputs != 1:
+        raise Error("saved forest regressor must carry one output")
+    var module = context["host_archive_forest_binding"]
+    if module is None:
+        raise Error("ImportError: " + String(context["host_archive_forest_binding_error"]))
+    if groves and not Bool(py=context["host_archive_forest_has_groves"]):
+        raise Error("RuntimeError: forest host binding predates the parallel_groves engine")
+    var model = host_archive_allocate(cls, context)
+    var fields = sequential_fields(model)
+    py_setitem(fields, "estimator", estimator)
+    py_setitem(fields, "family", metadata[0])
+    py_setitem(fields, "is_classifier", classifier)
+    py_setitem(fields, "device", _archive_string(arrays, "device", context) if py_contains(arrays, "device") else PythonObject(None))
+    py_setitem(fields, "_inference_engine", "parallel_groves" if groves else "sequential")
+    py_setitem(fields, "_groves", PythonObject(None))
+    py_setitem(fields, "_offsets", offsets)
+    py_setitem(fields, "_colid", colid)
+    py_setitem(fields, "_quesval", thresholds)
+    py_setitem(fields, "_left_child", left)
+    py_setitem(fields, "_leaves", leaves)
+    py_setitem(fields, "n_features_in_", features)
+    py_setitem(fields, "_n_trees", trees)
+    py_setitem(fields, "_num_outputs", outputs)
+    py_setitem(fields, "_binding", module)
+    if classifier:
+        py_setitem(fields, "classes_", classes)
+        py_setitem(fields, "n_classes_", len(classes))
+    return model
+
+
+def host_archive_gbdt(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
+    var estimator = _archive_string(arrays, "estimator", context)
+    var loss = _archive_string(arrays, "loss", context)
+    var losses = context["host_archive_gbdt_estimators"][estimator]
+    if losses is not None and not py_contains(losses, loss):
+        raise Error("mojolearn: a " + String(estimator) + " archive with loss " + String(loss) + "; that class saves " + String(py=py_call(PythonObject(", ").join, losses)) + " only, the file is corrupt")
+    var meta = _archive_exact(arrays, "meta", "<i8", context)
+    if Int(py=meta.ndim) != 1 or Int(py=meta.size) < 3:
+        raise Error("saved gradient boosting metadata needs at least three fields")
+    var bias = _archive_exact(arrays, "bias", "<f8", context)
+    if Int(py=bias.size) < 1:
+        raise Error("saved gradient boosting bias is empty")
+    var stored = _archive_exact(arrays, "model", "<u1", context)
+    var raw = py_call(Python.import_module("builtins").bytes, stored._mv)
+    var text = py_call(raw.decode, "utf-8")
+    var parsed = host_archive_gbdt_text(String(text))
+    if classical_i64(meta, 0) != parsed.metadata["n_input_features"] or classical_i64(meta, 1) != parsed.metadata["dim"]:
+        raise Error("saved gradient boosting metadata disagrees with its model text")
+    if classical_f64(bias, 0) != parsed.bias:
+        raise Error("saved gradient boosting bias disagrees with its model text")
+    var module = context["host_archive_forest_binding"]
+    if module is None:
+        raise Error("ImportError: " + String(context["host_archive_forest_binding_error"]))
+    var mode = PythonObject(None)
+    if py_contains(arrays, "numeric_mode"):
+        mode = _archive_string(arrays, "numeric_mode", context)
+        if String(mode) != "fast" and String(mode) != "identical":
+            raise Error("invalid saved numeric_mode")
+    var state = Python.dict()
+    for entry in parsed.metadata.items():  # driver-loop: native parsed model dimensions
+        py_setitem(state, entry.key, entry.value)
+    for entry in parsed.integers.items():  # driver-loop: native parsed integer layout arrays
+        var array = host_archive_typed(Python.tuple(len(entry.value)), "<i4", context)
+        var out = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(array)))
+        for i in range(len(entry.value)):  # driver-loop: publish native parsed buffer words
+            out[i] = entry.value[i]
+        py_setitem(state, entry.key, array)
+    for entry in parsed.floats.items():  # driver-loop: native parsed floating layout arrays
+        var array = host_archive_typed(Python.tuple(len(entry.value)), "<f4", context)
+        var out = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(array)))
+        for i in range(len(entry.value)):  # driver-loop: publish native parsed buffer words
+            out[i] = entry.value[i]
+        py_setitem(state, entry.key, array)
+    py_setitem(state, "bias", parsed.bias)
+    py_setitem(state, "non_symmetric", parsed.non_symmetric)
+    var model = host_archive_allocate(cls, context)
+    var fields = sequential_fields(model)
+    py_setitem(fields, "estimator", estimator)
+    py_setitem(fields, "loss", loss)
+    py_setitem(fields, "numeric_mode", mode)
+    py_setitem(fields, "model_", text)
+    py_setitem(fields, "_arrays", state)
+    py_setitem(fields, "n_features_in_", parsed.metadata["n_input_features"])
+    py_setitem(fields, "n_model_columns_", parsed.metadata["n_features"])
+    py_setitem(fields, "approx_dim_", parsed.metadata["dim"])
+    py_setitem(fields, "bias_", parsed.bias)
+    py_setitem(fields, "n_classes_", PythonObject(None) if classical_i64(meta, 2) < 0 else PythonObject(classical_i64(meta, 2)))
+    py_setitem(fields, "is_classifier", py_contains(context["host_archive_gbdt_classification_losses"], loss))
+    py_setitem(fields, "has_proba", py_contains(context["host_archive_gbdt_proba_losses"], loss))
+    py_setitem(fields, "_binding", module)
+    return model
+
+
 def host_archive_build(path: PythonObject, context: PythonObject,
-                       requested_class: PythonObject = PythonObject(None)) raises -> PythonObject:
-    # This deliberately separate private entry allows each schema to be
-    # qualified without introducing a native-to-Python fallback. Public
-    # host_model keeps its existing full-format contract until all builders
-    # have been implemented and qualified together.
+                       requested_class: PythonObject = PythonObject(None), classical_only: Bool = False) raises -> PythonObject:
+    # Read the archive once and select its native schema from the fixed
+    # import-time registry. No class constructor or load method is invoked.
     var arrays = classical_archive_read(path, context)
     var fmt = String(_archive_string(arrays, "format", context))
+    if classical_only and not py_contains(context["host_archive_classical_formats"], fmt):
+        raise Error("model archive format does not name a classical host model")
     var estimator = _archive_string(arrays, "estimator", context)
     var formats = context["host_archive_formats"]
     var classes = py_get(formats, fmt)
     if classes is None:
-        raise Error("native host archive builder has no qualified schema for " + fmt)
+        raise Error("native host archive builder has no supported schema for " + fmt)
     var cls = py_get(classes, estimator)
     if cls is None:
-        raise Error("model estimator does not match its saved archive format")
+        raise Error("mojolearn: " + String(py_call(Python.import_module("builtins").repr, path)) + " was saved by " + String(estimator) + ", which " + fmt + " does not hold")
     if requested_class is not None:
         var b = Python.import_module("builtins")
         if py_type(requested_class) is not b.type:
@@ -1431,6 +1589,8 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         cls = requested_class
     var model = PythonObject(None)
     if fmt == "mojolearn-linear-1":
+        # Admit the class layout before the existing linear builder allocates.
+        var probe = host_archive_object(cls, arrays, context)
         model = classical_archive_build(cls, arrays, path, String(estimator) == "Ridge", context)
     elif fmt == "mojolearn-pca-1" or fmt == "mojolearn-tsvd-1":
         model = host_archive_decomposition(cls, arrays, fmt == "mojolearn-pca-1", context)
@@ -1481,6 +1641,10 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         model = host_archive_gp(cls, arrays, fmt == "mojolearn.gpc.v1", context)
     elif fmt == "mojolearn-svc-1" or fmt == "mojolearn-svr-1":
         model = host_archive_svm(cls, arrays, fmt == "mojolearn-svc-1", context)
+    elif fmt == "mojolearn-gbdt-1":
+        model = host_archive_gbdt(cls, arrays, context)
+    elif py_contains(context["host_archive_forest_formats"], fmt):
+        model = host_archive_forest(cls, arrays, fmt, context)
     else:
         raise Error("native host archive schema has not been implemented: " + fmt + "/" + String(estimator))
     if py_contains(context["host_archive_fitted_estimators"], estimator):
@@ -1491,5 +1655,10 @@ def host_archive_build(path: PythonObject, context: PythonObject,
             var kernel = Int(py=fields["_kernel_params"][0])
             if kernel != 0 and kernel != 1 and kernel != 2 and kernel != 3 and kernel != 5:
                 raise Error("ImportError: unsupported saved kernel code " + String(kernel))
+        if fmt == "mojolearn-logistic-1" and len(fields["classes_"]) > 2:
+            if String(fields["numeric_mode"]) != "identical":
+                raise Error("saved multiclass LogisticRegression runs identical only on the host")
+            if not Bool(py=context["host_archive_has_softmax"]):
+                raise Error("ImportError: host LogisticRegression binding does not export qn_softmax")
         py_setitem(fields, "estimator", estimator)
     return model

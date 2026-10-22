@@ -2,7 +2,7 @@
 """Import-time archive schemas for the compiled saved-model owner."""
 
 
-def connect(context, formats, cleanup_entries):
+def connect(context, formats, cleanup_entries, forest_metadata):
     # glue: fixed native type and format metadata, connected once at import.
     # No class.load/from_file/constructor callback is installed here.
     from ._native_classical_bridge import _numpy_free_context, _archive_npy_dtypes
@@ -35,6 +35,7 @@ def connect(context, formats, cleanup_entries):
     archive["host_archive_svm_kernels"] = dict(_SVC_KERNELS)
     archive["host_archive_svm_refused"] = dict(_SVC_REFUSED_KERNELS)
     archive["host_archive_svc_layout"] = cleanup_entries.get("svc_ovo_layout")
+    archive["host_archive_has_softmax"] = isinstance(cleanup_entries.get("qn_softmax"), BuiltinFunctionType)
     archive["host_archive_gp_saved_kernel"] = gp_saved_kernel
     archive["host_archive_gpc_saved_kernel"] = gpc_saved_kernel
     archive["host_archive_binary_laplace"] = _BinaryLaplace
@@ -43,8 +44,11 @@ def connect(context, formats, cleanup_entries):
     }
     archive["host_archive_fitted_estimators"] = tuple(
         name for classes in formats.values() for name, cls in classes.items()  # glue: fixed fitted-state ownership metadata at import
-        if issubclass(cls, SklearnTagsMixin)
+        if issubclass(cls, SklearnTagsMixin) and name not in ("LinearRegression", "Ridge")
     )
+    archive["host_archive_classical_formats"] = tuple(formats)
+    archive.update(forest_metadata)
+    archive["host_archive_formats"].update(forest_metadata["host_archive_extra_formats"])
     archive["host_archive_lifetime_layouts"] = {}
     module = _binding()._module
     finalize = getattr(module, "host_archive_finalize_call", None)
