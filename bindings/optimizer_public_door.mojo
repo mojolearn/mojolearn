@@ -130,14 +130,16 @@ def door_ready() raises:
         opt_guards(d[].context)
         return
     d[].bi = Python.import_module("builtins")
-    d[].array_cls = Python.import_module("mojolearn._array").Array
     var training = Python.import_module("mojolearn._training_impl")
     d[].context = py_fields(training)["_OPT_CONTEXT"]
     opt_guards(d[].context)
+    # Keep the import connection's guarded Array layout and native storage
+    # type even when a module field is replaced before the first operation.
+    d[].array_cls = d[].context["array_class"]
     d[].dev_cls = training.TrainDeviceArray
     d[].not_covered = training._NOT_COVERED
     d[].refused = training._REFUSED_KWARGS
-    d[].arrays = Python.import_module("array").array
+    d[].arrays = d[].context["buffer_types"][2]
     d[].ready = True
 
 
