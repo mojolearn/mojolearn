@@ -4,7 +4,6 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.memory import bitcast
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
-from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from core.sequence_array_cast import sequence_cast_leaf, sequence_wide_word
 from bindings.sequence_array_warnings import sequence_array_errstate, sequence_array_report
@@ -63,6 +62,22 @@ def sequence_object_leaf(source: Int, destination: Int, count: Int, stride: Int,
             cpy.Py_DecRef(previous)
 
 
+def sequence_array_address(value: PythonObject) raises -> Int:
+    # Both inputs here are exact native ndarrays retained by the caller.
+    # __array_interface__ requests a structured dtype's `descr`, which enters
+    # NumPy's Python _array_descr helper. A simple buffer export needs only
+    # the contiguous data address and invokes no dtype-format conversion.
+    ref cpy = Python().cpython()
+    var view = List[Int](length=10, fill=0)
+    var pointer = view.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
+    var status = cpy.lib.get_function[Int32]("PyObject_GetBuffer")(value._obj_ptr, pointer, Int32(0))
+    if status != 0:
+        raise cpy.unsafe_get_error()
+    var address = view[0]
+    cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
+    return address
+
+
 def sequence_array_cast(source: PythonObject, requested: PythonObject, context: PythonObject) raises -> PythonObject:
     # No public route is installed until the complete prior dtype contract is
     # qualified; this helper is not an unsupported-dtype Python fallback.
@@ -89,8 +104,8 @@ def sequence_array_cast(source: PythonObject, requested: PythonObject, context: 
     var result = py_call(input["ndarray"], source.shape, dtype=dtype)
     var count = Int(py=source.size)
     var stride = Int(py=dtype.itemsize)
-    var start = Int(py=classical_address(source))
-    var destination = Int(py=classical_address(result))
+    var start = sequence_array_address(source)
+    var destination = sequence_array_address(result)
     var status = 0
     for i in range(len(leaves)):  # driver-loop: over admitted native output field layouts
         var leaf = leaves[i]
