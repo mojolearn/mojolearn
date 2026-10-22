@@ -42,6 +42,7 @@ PUBLIC_TESTS = {
     "test_device_rows_metadata_native.py": "DeviceRows constructor and length metadata ownership and native hook refusals",
     "test_host_kde_fit_native.py": "Explicit CPU HostKernelDensity fit preparation, stored state, aliases and native refusals",
     "test_host_iforest_fit_native.py": "Explicit CPU HostIsolationForest fit preparation, seeded training, state publication and native refusals",
+    "test_native_scalar_decode_public.py": "Native numeric scalar and 0-D preparation through HostIsolationForest.fit; cache.get and other NumPy numeric call sites remain separate work",
     "test_optimizer_native_step_errors.py": "Public optimizer step exception categories, unchanged refused state and native entry admission",
     "test_training_rms_public_native.py": "Public RMS forward/backward preparation, scalar options, consumed results and native refusals",
     "test_training_linear_public_native.py": "Public linear forward/backward input preparation, output ownership and native failure paths",
