@@ -226,7 +226,7 @@ def _kde_weights(source: PythonObject, rows: Int, context: PythonObject) raises 
     # Empty native sequences have a valid one-dimensional weight shape.
     # Check that shape before the general nonempty sequence materializer.
     var source_type = py_type(source)
-    if (source_type is b.list or source_type is b.tuple or source_type is b.range) and len(source) == 0:
+    if _one_of(source_type, context["host_kde_sequence_types"]) and len(source) == 0:
         raise Error("sample_weight.shape == (0,), expected (" + String(rows) + ",)!")
     var pair = _kde_prepare(source, context, "sample_weight")
     var raw = pair[0]
