@@ -29,6 +29,7 @@ PUBLIC_TESTS = {
     "test_training_cross_entropy_public_native.py": "Public cross entropy preparation, options, native scalar configuration and consumed host/device outputs",
     "test_training_device_native_allocator.py": "Native training device owner allocation independent of mutable object constructors",
     "test_host_density_constructors_native.py": "Public host KDE and IsolationForest constructor options, inherited modes and safe reinitialization",
+    "test_device_rows_materialize_native.py": "Public DeviceRows materialization, typed resident snapshots, cache aliases, conversion failures and native hook refusals",
     "test_training_embedding_public_native.py": "Public embedding forward/backward preparation, index conversion, vocabulary options and owned outputs",
     "test_optimizer_native_array_ownership.py": "Native output Array storage, retained checkpoint ownership and device downloads",
     "test_device_rows_metadata_native.py": "DeviceRows constructor and length metadata ownership and native hook refusals",
@@ -195,6 +196,10 @@ def test_applicability(selected, vendor):
         if name == "test_host_density_constructors_native.py":
             scope.update(execution_route="native explicit CPU host constructor owner, including in GPU packages",
                          coverage_limit="Public KDE and IsolationForest construction/reinitialization only; fit/inference, save/hash and subclass registration remain separate")
+        if name == "test_device_rows_materialize_native.py":
+            scope.update(execution_route="selected package backend, established identical base-binding resident store",
+                         operation_mode="identical base-binding transport, independent of estimator numeric mode",
+                         coverage_limit="Public DeviceRows.materialize only; _Resident construction/close and resident scope/cache orchestration remain separate migration work")
         if name == "test_device_rows_metadata_native.py":
             scope.update(execution_route="native DeviceRows metadata owner on every package backend",
                          coverage_limit="Constructor and length only; materialize and resident context lifecycle remain separate")

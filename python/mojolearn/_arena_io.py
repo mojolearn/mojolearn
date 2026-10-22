@@ -259,9 +259,7 @@ class DeviceRows:
         return _ROWS_CALL(self, "len", (), _ROWS_CONTEXT)
 
     def materialize(self):
-        if self._host is None:
-            self._host = self._take(self.base, self.indices)
-        return self._host
+        return _ROWS_CALL(self, "materialize", (), _ROWS_CONTEXT)
 
 
 def rows_slot(binding, prefix, rows, direct):
