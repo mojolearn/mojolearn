@@ -6,6 +6,7 @@ from std.collections import Dict
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
+from bindings.py_slice_native import py_slice, py_slice_from
 from bindings.classical_archive import _archive_methods, _archive_path, _archive_file_call
 from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
 from bindings.optimizer_public_words import stash_python_error
@@ -337,7 +338,7 @@ struct NpyHeader(Movable):
         var start = self.at
         var close = npy_string_close(self.bytes, start, quote)
         if close >= 0:
-            var encoded = self.raw[start:close]
+            var encoded = py_slice(self.raw, start, close)
             self.at = close + 1
             return archive_literal(encoded, self.context)
         raise Error("unterminated npy header string")
@@ -345,7 +346,7 @@ struct NpyHeader(Movable):
     def literal(mut self, text: String) raises:
         self.ws()
         var bytes = py_call(PythonObject(text).encode, "ascii")
-        if self.raw[self.at:self.at + len(bytes)] != bytes:
+        if py_slice(self.raw, self.at, self.at + len(bytes)) != bytes:
             raise Error("malformed npy header literal")
         self.at += len(bytes)
 
@@ -364,7 +365,7 @@ struct NpyHeader(Movable):
             self.at = npy_digits_end(self.bytes, self.at)
             if start == self.at:
                 raise Error("npy shape requires nonnegative dimensions")
-            py_call(dims.append, py_call(py_type(PythonObject(0)), self.raw[start:self.at]))
+            py_call(dims.append, py_call(py_type(PythonObject(0)), py_slice(self.raw, start, self.at)))
             self.ws()
             if self.peek() != 44:
                 # A single dimension must have its tuple comma, as in NPY.
@@ -416,7 +417,7 @@ struct NpyHeader(Movable):
 
 def _text_nest(items: PythonObject, shape: PythonObject, axis: Int, offset: Int) raises -> PythonObject:
     if axis == len(shape) - 1:
-        return items[offset:offset + Int(py=shape[axis])]
+        return py_slice(items, offset, offset + Int(py=shape[axis]))
     var stride = 1
     for k in range(axis + 1, len(shape)):  # driver-loop: over text metadata shape dimensions
         stride *= Int(py=shape[k])
@@ -427,7 +428,7 @@ def _text_nest(items: PythonObject, shape: PythonObject, axis: Int, offset: Int)
 
 
 def _decode_npy(raw: PythonObject, context: PythonObject) raises -> PythonObject:
-    if len(raw) < 10 or raw[0:6] != context["archive_npy_magic"]:
+    if len(raw) < 10 or py_slice(raw, 0, 6) != context["archive_npy_magic"]:
         raise Error("not an npy member (bad magic)")
     var major = _read_uint(raw, 6, 1)
     if _read_uint(raw, 7, 1) != 0 or major < 1 or major > 3:
@@ -436,7 +437,7 @@ def _decode_npy(raw: PythonObject, context: PythonObject) raises -> PythonObject
     var header_size = _read_uint(raw, 8, 2 if major == 1 else 4)
     if header_size > len(raw) - start:
         raise Error("truncated npy header")
-    var parser = NpyHeader(raw[start:start + header_size], context)
+    var parser = NpyHeader(py_slice(raw, start, start + header_size), context)
     var header = parser.parse()
     var descr = header["descr"]
     var shape = header["shape"]
@@ -454,22 +455,22 @@ def _decode_npy(raw: PythonObject, context: PythonObject) raises -> PythonObject
     var unicode = False
     if dtype is not None:
         # With NumPy a dtype; without it the Array typestr, such as "<f4".
-        itemsize = Int(py=dtype.itemsize) if classical_numpy(context) else Int(py=py_call(py_type(PythonObject(0)), dtype[2:]))
+        itemsize = Int(py=dtype.itemsize) if classical_numpy(context) else Int(py=py_call(py_type(PythonObject(0)), py_slice_from(dtype, 2)))
     elif Bool(py=py_call(descr.startswith, "<U")) or Bool(py=py_call(descr.startswith, "=U")):
-        if not Bool(py=descr[2:].isdigit()):
+        if not Bool(py=py_slice_from(descr, 2).isdigit()):
             raise Error("unsupported npy dtype")
-        itemsize = 4 * Int(py=py_call(py_type(PythonObject(0)), descr[2:]))
+        itemsize = 4 * Int(py=py_call(py_type(PythonObject(0)), py_slice_from(descr, 2)))
         unicode = True
     elif Bool(py=py_call(descr.startswith, "|S")):
-        if not Bool(py=descr[2:].isdigit()):
+        if not Bool(py=py_slice_from(descr, 2).isdigit()):
             raise Error("unsupported npy dtype")
-        itemsize = Int(py=py_call(py_type(PythonObject(0)), descr[2:]))
+        itemsize = Int(py=py_call(py_type(PythonObject(0)), py_slice_from(descr, 2)))
     else:
         raise Error("unsupported npy dtype")
     var offset = start + header_size
     if itemsize < 0 or (itemsize > 0 and count > (len(raw) - offset) // itemsize):
         raise Error("npy member does not hold the bytes required by its shape and dtype")
-    var payload = native_buffer_view(raw)[offset:offset + count * itemsize]
+    var payload = py_slice(native_buffer_view(raw), offset, offset + count * itemsize)
     if dtype is not None:
         # The C ndarray constructor only describes the single owned byte copy;
         # it does not compute, cast, or invoke NumPy preparation helpers.
@@ -492,7 +493,7 @@ def _decode_npy(raw: PythonObject, context: PythonObject) raises -> PythonObject
                 source += (remaining // factor) * fstride
                 remaining %= factor
                 fstride *= dim
-        var cell = raw[offset + source * itemsize:offset + (source + 1) * itemsize]
+        var cell = py_slice(raw, offset + source * itemsize, offset + (source + 1) * itemsize)
         if unicode:
             py_call(items.append, py_call(archive_utf32_decode(cell, context).rstrip, py_call(py_call(context["archive_bytes_type"], 1).decode, "latin1")))
         else:
@@ -527,9 +528,9 @@ def _inflate(raw: PythonObject, method: Int, context: PythonObject) raises -> Py
         var size = _read_uint(raw, 2, 2)
         if size > len(raw) - 4:
             raise Error("truncated ZIP LZMA properties")
-        var filters = Python.list(py_call(context["archive_lzma_properties"], context["archive_lzma1"], raw[4:4 + size]))
+        var filters = Python.list(py_call(context["archive_lzma_properties"], context["archive_lzma1"], py_slice(raw, 4, 4 + size)))
         var decoder = py_call(context["archive_lzma"], context["archive_lzma_raw"], filters=filters)
-        return py_call(decoder.decompress, raw[4 + size:])
+        return py_call(decoder.decompress, py_slice_from(raw, 4 + size))
     if method == 93 and py_get(context, "archive_zstd") is not None:
         var decoder = context["archive_zstd"]()
         return py_call(decoder.decompress, raw)
@@ -594,7 +595,7 @@ def _zip_records(file: PythonObject, methods: PythonObject, context: PythonObjec
         var end = at + 46 + name_size + extra_size + comment_size
         if end > len(central):
             raise Error("truncated ZIP central directory")
-        var raw_name = central[at + 46:at + 46 + name_size]
+        var raw_name = py_slice(central, at + 46, at + 46 + name_size)
         var name = _filename(raw_name, flags, context)
         var extra_at = at + 46 + name_size
         var extra_end = extra_at + extra_size
@@ -619,7 +620,7 @@ def _zip_records(file: PythonObject, methods: PythonObject, context: PythonObjec
                     raise Error("truncated ZIP64 member sizes")
             elif tag == 0x7075 and length >= 5 and _read_uint(central, extra_at, 1) == 1:
                 if _read_uint(central, extra_at + 1, 4) == Int(py=py_call(context["archive_crc32"], raw_name)):
-                    name = archive_utf8(central[extra_at + 5:extra_at + length], context)
+                    name = archive_utf8(py_slice(central, extra_at + 5, extra_at + length), context)
             extra_at += length
         # ZipFile's lookup uses the final entry for a duplicate member name.
         py_setitem(records, name, Python.tuple(flags, method, crc, compressed, unpacked, offset + concat, raw_name))
@@ -634,7 +635,7 @@ def _zip_records(file: PythonObject, methods: PythonObject, context: PythonObjec
         var name = positions[k][1]
         var offset = Int(py=positions[k][0])
         if offset == Int(py=records[name][5]):
-            py_setitem(records, name, records[name][0:7] + Python.tuple(limit))
+            py_setitem(records, name, py_slice(records[name], 0, 7) + Python.tuple(limit))
         limit = offset
     return Python.tuple(records, directory_start)
 
@@ -685,7 +686,7 @@ def classical_archive_read(path: PythonObject, context: PythonObject) raises -> 
                 raise Error("ZIP member length differs from its directory")
             if Int(py=py_call(context["archive_crc32"], decoded)) != Int(py=record[2]):
                 raise Error("ZIP member CRC mismatch")
-            py_setitem(result, name[0:len(name) - 4], _decode_npy(decoded, context))
+            py_setitem(result, py_slice(name, 0, len(name) - 4), _decode_npy(decoded, context))
         return result
     finally:
         if close:
