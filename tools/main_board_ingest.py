@@ -715,6 +715,14 @@ def gate_observations(BB, specs, resolve, skips):
             ob.update(measured_cell=copy.deepcopy(ours), version=ours.get("library_version") or ob.get("version"))
             if problem is None:
                 ob.update(paired_race=copy.deepcopy(rr), paired_box=copy.deepcopy(bbox))
+            elif rr.get("params_check") == "REFUSED" or any(
+                    BB.PAIR.is_opponent(c) and BB.PAIR.params_state(rr, c)[0] == BB.PAIR.PAIR_REFUSED
+                    for c in rr.get("cells") or []):
+                # 2026-10-22: the gate re-raced this line and its parameter check refused an opponent: the
+                # race enters with the gate's own opponents, each refused with its reason (no ratio, ours
+                # alone), never with the older boards' unchecked copies in their place
+                ob.update(paired_race=copy.deepcopy(rr), paired_box=copy.deepcopy(bbox), gate_refused=True)
+                skips.add("gate: opponents refused by the parameter check (%s)" % problem, rid)
             else:
                 skips.add("gate: own cell only, opponents from the stored boards (%s)" % problem, rid)
             out.append(ob)
@@ -1151,6 +1159,8 @@ def assemble(BB, column, winners, ledger, idx, sources, inputs, generated, failu
               "log": "%s (%s/%s)" % (ob.get("evidence"), ob["box"], ob["job"]),
               "host": {"hostname": BOX_TEXT.get(ob["box"], ob["box"]) + " job " + str(ob["job"])},
               "cells": cells, "infer_cells": [],
+              # Andrew 2026-10-22: a copied opponent shows `unchecked` (board_pairing.params_state), never a
+              # ratio, until the release gate re-races the line and --gate-board replaces it with a checked cell
               "params_check": "not checked on the main board (our one scored run; opponents copied, never re-run)",
               "opponent_source": {"withheld": why} if why else
               {"boards": sorted({c["copied_from"]["board"] for c in opps})},
@@ -1182,6 +1192,8 @@ def assemble(BB, column, winners, ledger, idx, sources, inputs, generated, failu
         # withdrawn there too, and the ratios are recomputed, so a refused arm never stands as best opponent
         if BB.refuse_lane_arm_cells(ob["lane"], rr.get("cells") or [], ob["family"]):
             rr["cells"] = BB.add_ratios(rr["cells"])
+        # 2026-10-22: an opponent pair that is not MATCHED (an unchecked copy or a refusal) keeps no ratio
+        BB.PAIR.enforce_params(rr)
         hl = BB.neural_headline(rr)
         if hl is not None:
             rr["neural_headline"] = hl

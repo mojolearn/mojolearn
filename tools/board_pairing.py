@@ -127,3 +127,91 @@ def prebinned_arm(lane, arm):
         if arm == own or any(fnmatch.fnmatch(str(arm), g) for g in p["opponents"]):
             return True
     return False
+
+
+# ---------------------------------------------------------------------------
+# The parameter pairing of one opponent cell with ours (Andrew, 2026-10-22: measurement ENFORCES
+# apples-to-apples comparisons, our identical mode being the only difference)
+# ---------------------------------------------------------------------------
+# An opponent cell carries a ratio or stands as a best opponent only when its race's parameter check
+# (tools/bench_board_params.py, the race's `params_check` and `params` report) read MATCHED and this arm's
+# explicit parameters were read back. Every other opponent is either:
+#   unchecked  a legacy copy (`copied_from`: an older board's opponent, never re-raced with a check);
+#              it stays visible until the release gate re-races the line and --gate-board replaces it
+#   refused    its parameters differ, could not be read back, or the race recorded no check at all
+# The board (bench_board.save_result / render_board), the clock ratios (board_clock_audit), the neural
+# headline and the release gate (gate_smoke_box.gate_verdict) all judge pairs through params_state.
+
+PAIR_MATCHED, PAIR_UNCHECKED, PAIR_REFUSED = "MATCHED", "unchecked", "refused"
+PAIR_FIELD = "params_pair"
+#: every ratio a board prints for an opponent cell
+RATIO_FIELDS = ("ratio_ours_identical_over", "ratio_ours_fast_over",
+                "ratio_ours_identical_clock", "ratio_ours_fast_clock")
+
+
+def is_opponent(cell):
+    """An opponent cell (not ours, not a context cell)."""
+    return (cell.get("library") != "mojolearn" and not str(cell.get("arm", "")).startswith("ours")
+            and cell.get("mode") != "context")
+
+
+def _arm_problems(problems, arm):
+    """The parameter-check problems that name `arm` (bench_board_params.check writes '<arm>: ...' or
+    '<arm> (<library>): ...')."""
+    return [str(p) for p in problems or [] if str(p).startswith(arm + ":") or str(p).startswith(arm + " (")]
+
+
+def params_state(race, cell):
+    """(PAIR_MATCHED | PAIR_UNCHECKED | PAIR_REFUSED, reason or None) of one opponent cell of `race`."""
+    arm = str(cell.get("arm") or "")
+    ex = race.get("opponents_excluded") or {}
+    if arm in (ex.get("why") or {}) or arm in (ex.get("arms") or []):
+        return PAIR_REFUSED, str((ex.get("why") or {}).get(arm) or ex.get("reason") or "opponent excluded")
+    retained = ((race.get("retained_opponent_checks") or {}).get(arm) or {}).get("problems")
+    if retained:
+        return PAIR_REFUSED, "retained opponent evidence: " + "; ".join(str(p) for p in retained)
+    pc = race.get("params_check")
+    rep = race.get("params") if isinstance(race.get("params"), dict) else {}
+    if isinstance(pc, dict):        # a driver result stores the whole report under params_check
+        rep, pc = pc, pc.get("verdict")
+    if pc == "MATCHED":
+        if arm in (rep.get("arms") or {}) or cell.get("params"):
+            return PAIR_MATCHED, None
+        return PAIR_REFUSED, "explicit parameters of %s were not read back" % arm
+    if pc == "REFUSED":
+        mine = _arm_problems(rep.get("problems"), arm)
+        if mine:
+            return PAIR_REFUSED, "; ".join(mine)
+        return PAIR_REFUSED, "parameter check REFUSED: " + ("; ".join(str(p) for p in rep.get("problems") or [])
+                                                             or "no reason recorded")
+    if cell.get("copied_from"):
+        src = cell["copied_from"]
+        return PAIR_UNCHECKED, "legacy copy from %s, never re-raced with a parameter check" % (
+            src.get("board") if isinstance(src, dict) else src)
+    return PAIR_REFUSED, "explicit parameters not read back (%s)" % (pc or "no parameter check recorded")
+
+
+def enforce_params(race):
+    """Mark every opponent cell of `race` (cells and infer_cells) with PAIR_FIELD {state, reason} and set
+    every ratio of a pair that is not MATCHED to None, in place. Returns the race."""
+    for kind in ("cells", "infer_cells"):
+        for c in race.get(kind) or []:
+            if not is_opponent(c):
+                continue
+            state, why = params_state(race, c)
+            c[PAIR_FIELD] = {"state": state, "reason": why}
+            if state != PAIR_MATCHED:
+                for f in RATIO_FIELDS:
+                    if c.get(f) is not None:
+                        c[f] = None
+    return race
+
+
+def pair_text(cell):
+    """'unchecked' or 'refused: <reason>' for an opponent cell whose pair is not MATCHED, else None."""
+    p = cell.get(PAIR_FIELD) or {}
+    if p.get("state") == PAIR_UNCHECKED:
+        return "unchecked"
+    if p.get("state") == PAIR_REFUSED:
+        return "refused: %s" % str(p.get("reason") or "-")[:200]
+    return None
