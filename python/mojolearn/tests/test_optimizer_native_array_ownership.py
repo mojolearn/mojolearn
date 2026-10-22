@@ -19,6 +19,11 @@ def test_native_output_storage_does_not_call_mutable_object(monkeypatch, operati
     _native_output_storage_audit(monkeypatch, operation, "object")
 
 
+@pytest.mark.parametrize("operation", ["rms", "linear", "construct", "accumulate"])
+def test_native_output_storage_does_not_call_mutable_bytes(monkeypatch, operation):
+    _native_output_storage_audit(monkeypatch, operation, "bytes")
+
+
 def _native_output_storage_audit(monkeypatch, operation, constructor):
     source = np.arange(12, dtype="f4").reshape(4, 3) / 8
     weight = np.ones(3, dtype="f4")
@@ -84,6 +89,11 @@ def test_native_device_download_does_not_call_mutable_memoryview(monkeypatch, st
 @pytest.mark.parametrize("strided", [False, True])
 def test_native_device_download_does_not_call_mutable_object(monkeypatch, strided):
     _native_device_download_audit(monkeypatch, strided, "object")
+
+
+@pytest.mark.parametrize("strided", [False, True])
+def test_native_device_download_does_not_call_mutable_bytes(monkeypatch, strided):
+    _native_device_download_audit(monkeypatch, strided, "bytes")
 
 
 def _native_device_download_audit(monkeypatch, strided, constructor):
