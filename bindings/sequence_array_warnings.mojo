@@ -44,7 +44,8 @@ def sequence_array_errstate(context: PythonObject) raises -> PythonObject:
     return result
 
 
-def sequence_array_report(status: Int, settings: PythonObject, context: PythonObject) raises:
+def sequence_array_report(status: Int, settings: PythonObject, context: PythonObject,
+                          operation: String = "cast", suppress_error: Bool = False) raises:
     var warning = context["sequence_array_warnings"]
     var b = Python.import_module("builtins")
     # NumPy reports flags in this order and only once per completed cast,
@@ -59,13 +60,14 @@ def sequence_array_report(status: Int, settings: PythonObject, context: PythonOb
         if py_type(action) is not b.str:
             raise Error("TypeError: NumPy error-state actions require native strings")
         var mode = String(action)
-        var message = descriptions[i] + " encountered in cast"
+        var message = descriptions[i] + " encountered in " + operation
         if mode == "ignore":
             continue
         if mode == "warn":
-            sequence_array_warn(message, warning)
+            sequence_array_warn(message, warning, "RuntimeWarning", suppress_error)
         elif mode == "raise":
-            sequence_array_exception("FloatingPointError", message)
+            if not suppress_error:
+                sequence_array_exception("FloatingPointError", message)
         elif mode == "print":
             _warning_write("Warning: " + message + "\n", warning)
         elif mode == "log":
@@ -104,7 +106,8 @@ def sequence_array_exception(kind: String, var message: String) raises:
     raise failure^
 
 
-def sequence_array_warn(message: String, context: PythonObject, kind: String = "RuntimeWarning") raises:
+def sequence_array_warn(message: String, context: PythonObject, kind: String = "RuntimeWarning",
+                        suppress_error: Bool = False) raises:
     var b = Python.import_module("builtins")
     var fields = _warning_fields(context["warning_fields"])
     var category = sequence_array_category(kind)
@@ -153,6 +156,8 @@ def sequence_array_warn(message: String, context: PythonObject, kind: String = "
     if mode == "ignore":
         return
     if mode == "error":
+        if suppress_error:
+            return
         sequence_array_exception(kind, message)
     if mode != "always" and mode != "all" and mode != "default" and mode != "module" and mode != "once":
         raise Error("RuntimeError: unrecognized warning filter action")

@@ -4,6 +4,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem, py_contains
 from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.sequence_array_warnings import sequence_array_warn
+from bindings.sequence_string_storage import sequence_string_class, sequence_string_admit
 
 
 def sequence_dtype_classes(context: PythonObject) raises -> PythonObject:
@@ -15,6 +16,10 @@ def sequence_dtype_classes(context: PythonObject) raises -> PythonObject:
     for code in ["?", "i1", "u1", "i2", "u2", "i4", "u4", "i8", "u8", "f2", "f4", "f8", "g", "c8", "c16", "G", "O", "S", "U", "V", "M8", "m8"]:  # driver-loop: connect fixed native dtype metadata
         var item = py_call(dtype, code)
         py_call(result.append, Python.tuple(py_type(item), item.type))
+    var strings = sequence_string_class(context)
+    if strings is not None:
+        var item = py_call(dtype, "T")
+        py_call(result.append, Python.tuple(strings, item.type))
     py_setitem(context, "sequence_dtype_classes", result)
     return result
 
@@ -290,6 +295,8 @@ def sequence_dtype_normalize(value: PythonObject, classes: PythonObject, context
     var dtype = native_numpy_dtype(context)
     var kind = py_type(value)
     if sequence_dtype_instance(value, classes):
+        if String(value.kind) == "T":
+            sequence_string_admit(value, classes, context)
         return value
     if kind is b.str or kind is b.bytes:
         return sequence_dtype_text(value, classes, context, depth, aligned)
@@ -298,6 +305,10 @@ def sequence_dtype_normalize(value: PythonObject, classes: PythonObject, context
     for i in range(len(classes)):  # driver-loop: admit exact native scalar classes
         if value is classes[i][1]:
             return py_call(dtype, value, align=PythonObject(aligned))
+        if value is classes[i][0]:
+            # Native dtype descriptor classes are interpreted as object,
+            # unlike their scalar classes or descriptor instances.
+            return py_call(dtype, b.object, align=PythonObject(aligned))
     if kind is b.tuple and len(value) == 2:
         var base = sequence_dtype_normalize(value[0], classes, context, depth + 1, aligned)
         var shape = value[1]

@@ -54,8 +54,23 @@ Remaining work before public connection:
    The additional 26-case schema controller baseline uses NumPy 2.4.4; its
    retained array bytes and dtype objects are in `array-native/` under the
    evidence directory. It is not native candidate execution evidence.
-3. Investigate NumPy's variable-width `StringDType` separately from fixed
-   `S`/`U` storage. Its managed native string storage is not implemented here.
+3. Qualify NumPy's variable-width `StringDType` separately from fixed `S`/`U`
+   storage. The separate native candidate uses NumPy's public NpyString
+   acquire/pack/release API for storage and Mojo for formatting. It validates
+   the native capsule/table/function owners before calls, retains descriptor
+   ownership through allocator release, and admits native missing-value
+   metadata before output allocation. Python missing-value hooks are refused.
+   Ordinary metadata, copy/coerce settings, subarrays and signaling-NaN
+   warning behavior have candidate tests; native execution remains pending.
+   A concrete remaining support constraint is structured-void/ndarray
+   missing-value metadata: NumPy's native descriptor finalizer reconstructs
+   the descriptor using scalar comparison/text hooks, entering Python
+   `_promote_fields`/`arrayprint`. Five retained allocation probes observed
+   3–43 Python frames; raw void metadata has none and is admitted. The private
+   candidate refuses those callback-dependent forms before allocation, while
+   the public method remains unchanged. No supported callback-free ownership
+   path has been verified yet; this is not proof that none exists. No private
+   StringDType memory layout is accessed or patched.
 4. Qualify non-default locales, nested/object schemas, empty/scalar shapes,
    NaN payloads, error filters and NumPy versions. Extended dtype layout and
    unsafe out-of-range integer casts require Linux host qualification. NumPy
@@ -81,5 +96,25 @@ scalar result through native warning delivery. Fourteen added schema cases and
 two added guard cases still require execution on the repaired frozen build.
 These counts cover the selected combined suites, not an all-green release.
 
+Managed-string allocation investigation (NumPy 2.5.3): the retained controller
+traces are `array-native/stringdtype-void-array-metadata.json` under the evidence
+directory above. The native `ndarray(..., dtype=existing_descriptor)` path
+reaches [`stringdtype_finalize_descr`](https://github.com/numpy/numpy/blob/v2.5.3/numpy/_core/src/multiarray/stringdtype/dtype.c#L700),
+which clones an already-owned descriptor using `new_stringdtype_instance`.
+That constructor invokes comparison and text protocols at lines 73 and 87.
+Calling the public StringDType constructor directly uses that same helper.
+[`PyArray_DescrNew`](https://github.com/numpy/numpy/blob/v2.5.3/numpy/_core/src/multiarray/descriptor.c#L1963)
+explicitly rejects new-style dtypes. A remaining supported alternative to
+investigate is public `PyArray_NewFromDescr` with an externally owned data
+buffer: [`ctors.c`](https://github.com/numpy/numpy/blob/v2.5.3/numpy/_core/src/multiarray/ctors.c#L619)
+skips descriptor finalization when data is supplied. Safe managed-string
+destruction, buffer/base lifetime, and ordinary missing-value semantics would
+have to be established before using that alternative. If it cannot preserve
+those contracts, the precise upstream need is a supported native descriptor
+clone/allocation operation that retains supplied missing-value metadata
+without invoking comparison or text protocols. This investigation does not
+establish a Mojo/Modular compiler limitation or authorize a public refusal.
+
 References: [Mojo's supported libc/variadic FFI](https://mojolang.static.modular.com/docs/manual/c-ffi/)
 and [NumPy's cast-warning and undefined-result notes](https://numpy.org/doc/1.24/release/1.24.0-notes.html#numpy-now-gives-floating-point-errors-in-casts).
+The managed-string candidate uses [NumPy's public string storage API](https://numpy.org/doc/2.1/reference/c-api/strings.html).
