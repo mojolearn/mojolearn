@@ -6,6 +6,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
+from bindings.py_typed_call import py_call_typed
 from std.memory import memcpy
 from std.os import getenv
 from bindings.generation_buffers import generation_initialize_binding, generation_array, py_ints
@@ -341,7 +342,7 @@ def neural_block_backward_binding(block: PythonObject, input: PythonObject, grad
         else:
             mode = mode.strip().lower()
         var selected = context["training_bindings"][fields["_native_route"] + PythonObject(":") + mode]
-        if Int(py=py_call(selected["all_finite_f32"], dy._addr, dy.size)) != 1:
+        if Int(py=py_call_typed(selected["all_finite_f32"], dy._addr, dy.size)) != 1:
             raise Error("neural backward: grad_output must be finite")
         # Preserve the existing current-weight shape validation without
         # calling a Python block constructor from the operation.

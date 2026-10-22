@@ -296,3 +296,25 @@ def test_pattern_name_is_total():
     assert pattern_name(PATTERNS["gpt2"][0]) == "gpt2"
     for other in ("abc", b"abc", 5, None):
         assert pattern_name(other) is None
+
+
+# ---------------------------------------------------------------- refusal classes (lane fix-p1-defects)
+@pytest.mark.parametrize("build,err,match", [
+    pytest.param(lambda: ml.StepLR(0.1, step_size=2).lr_at(0), ValueError, "ONE-BASED", id="StepLR-lr_at0"),
+    pytest.param(lambda: ml.ExponentialLR(0.1, gamma=0.5).lr_at(0), ValueError, "ONE-BASED", id="ExponentialLR-lr_at0"),
+    pytest.param(lambda: ml.StepLR(0.1, step_size="2"), TypeError, "step_size", id="StepLR-str-step"),
+    pytest.param(lambda: ml.StepLR(0.1, step_size=2.5), TypeError, "step_size", id="StepLR-float-step"),
+    pytest.param(lambda: ml.StepLR("0.1", step_size=2), TypeError, "base_lr", id="StepLR-str-lr"),
+    pytest.param(lambda: ml.StepLR(-0.1, step_size=2), ValueError, "base_lr", id="StepLR-negative"),
+    pytest.param(lambda: ml.StepLR(float("nan"), step_size=2), ValueError, "finite", id="StepLR-nan-init"),
+    pytest.param(lambda: ml.ExponentialLR(0.1, gamma=float("nan")), ValueError, "finite", id="ExponentialLR-nan-init"),
+    pytest.param(lambda: ml.ExponentialLR(0.1, gamma=-0.5), ValueError, "gamma", id="ExponentialLR-negative"),
+    pytest.param(lambda: ml.ExponentialLR(0.1, gamma="x"), TypeError, "gamma", id="ExponentialLR-str"),
+    pytest.param(lambda: ml.OneCycleLR("1", total_steps=5), TypeError, "max_lr", id="OneCycleLR-str"),
+    pytest.param(lambda: ml.OneCycleLR(1.0, total_steps=5.5), TypeError, "total_steps", id="OneCycleLR-float-total"),
+    pytest.param(lambda: ml.Adafactor([np.zeros(3, np.float32)], lr="1"), TypeError, "lr", id="Adafactor-str-lr"),
+    pytest.param(lambda: ml.Adafactor([np.zeros(3, np.float32)], d="2"), TypeError, "d must", id="Adafactor-str-d"),
+])
+def test_typed_refusals(build, err, match):
+    with pytest.raises(err, match=match):
+        build()

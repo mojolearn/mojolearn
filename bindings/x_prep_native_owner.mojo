@@ -6,6 +6,7 @@ from std.os import getenv
 from std.time import perf_counter_ns
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_setattr
+from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_address, classical_is_array, classical_c_order, classical_wrap_array
 from bindings.sequential_admission import sequential_admit_value
 from bindings.x_prep_native_inputs import _dense_values, _values, _rows_fields
@@ -196,12 +197,12 @@ def _cached_slot(cache: PythonObject, value: PythonObject, entries: PythonObject
     # Allocate the counter before acquiring a device resource. Until cache
     # publication succeeds, this operation still owns the fresh slot.
     var next_uploads = PythonObject(Int(py=state["uploads"])+1)
-    var slot = Int(py=py_call(entries["x_prep_dev_put"],key[0],key[1]))
+    var slot = Int(py=py_call_typed(entries["x_prep_dev_put"],key[0],key[1]))
     try:
         py_setitem(stored,key,Python.tuple(slot,value))
     except error:
         try:
-            _ = py_call(entries["x_prep_dev_free"],slot)
+            _ = py_call_typed(entries["x_prep_dev_free"],slot)
         except cleanup_error:
             raise Error("RuntimeError: arena cache publication failed: "+String(error)+"; slot "+String(slot)+" cleanup also failed: "+String(cleanup_error))
         raise error
@@ -214,7 +215,7 @@ def _release_owned(owned: List[Int], entries: PythonObject) -> String:
     for i in range(len(owned)):  # driver-loop: attempt every gather/direct release even when an earlier free raises
         var slot = owned[len(owned)-1-i]
         try:
-            _ = py_call(entries["x_prep_dev_free"],slot)
+            _ = py_call_typed(entries["x_prep_dev_free"],slot)
         except error:
             failures += ("" if failures.byte_length() == 0 else "; ")+"slot "+String(slot)+": "+String(error)
     return failures
@@ -250,10 +251,10 @@ def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObje
                 if cache is not None:
                     source = _cached_slot(cache,value,entries,context)
                 elif py_get(entries,"x_prep_dev_put") is not None and py_get(entries,"x_prep_dev_free") is not None and (rows or (words >= 1048576 and String(getenv("MOJOLEARN_XPREP_DIRECT","1").strip()) != "0")):
-                    source = Int(py=py_call(entries["x_prep_dev_put"],classical_address(value),value.size))
+                    source = Int(py=py_call_typed(entries["x_prep_dev_put"],classical_address(value),value.size))
                     owned.append(source)
                 if rows:
-                    source = Int(py=py_call(entries["x_prep_dev_take_rows"],source,record[4],classical_address(record[2]),record[3]))
+                    source = Int(py=py_call_typed(entries["x_prep_dev_take_rows"],source,record[4],classical_address(record[2]),record[3]))
                     owned.append(source)
             if source < 0:
                 memcpy(dest=F32P(unsafe_from_address=arena+4*offset),src=F32P(unsafe_from_address=Int(py=classical_address(value))),count=words)
@@ -279,13 +280,13 @@ def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObje
         var pa = Int(program.unsafe_ptr())
         kernel_start = Int(perf_counter_ns()) if profile else 0
         if ranges:
-            _ = py_call(entries["x_prep_run_ranges"],arena,pa,op,Python.tuple(host,scratch if device_scratch else 0,out_words,nst),Python.tuple(Int(ins.unsafe_ptr()),len(ins)//3,Int(outs.unsafe_ptr()),len(outs)//4))
+            _ = py_call_typed(entries["x_prep_run_ranges"],arena,pa,op,Python.tuple(host,scratch if device_scratch else 0,out_words,nst),Python.tuple(Int(ins.unsafe_ptr()),len(ins)//3,Int(outs.unsafe_ptr()),len(outs)//4))
         elif out_words > 0 or (device_scratch and py_get(entries,"x_prep_run_out") is not None):
-            _ = py_call(entries["x_prep_run_out"],arena,pa,op,Python.tuple(host,scratch if device_scratch else 0,out_words,nst))
+            _ = py_call_typed(entries["x_prep_run_out"],arena,pa,op,Python.tuple(host,scratch if device_scratch else 0,out_words,nst))
         elif device_scratch:
-            _ = py_call(entries["x_prep_run_scratch"],arena,host,scratch,pa,nst)
+            _ = py_call_typed(entries["x_prep_run_scratch"],arena,host,scratch,pa,nst)
         else:
-            _ = py_call(entries["x_prep_run"],arena,host+scratch,pa,nst)
+            _ = py_call_typed(entries["x_prep_run"],arena,host+scratch,pa,nst)
         # The tuples above retain pointer integers, not their source Lists.
         # Keep both descriptor buffers live until the native call returns;
         # otherwise their last use is tuple construction, before py_call.

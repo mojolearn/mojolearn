@@ -16,6 +16,7 @@ from bindings.scaler_native import _input, _ptr, _stage, _copy_row
 from bindings.scaler_lifecycle_native import _entries, _public_result
 from bindings.x_prep_native_inputs import _target, _values
 from bindings.x_prep_native_owner import xprep_r3, xprep_storage, xprep_take, xprep_values, xprep_run
+from core.scaler_fit_impl import scaler_refuse_infinite
 
 
 def maxabs_fit(model: PythonObject, source: PythonObject, target: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -71,6 +72,9 @@ def maxabs_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
         maximum = xprep_take(arena[0],ma,d,0,context["output_context"])
         scale = xprep_take(arena[0],sc,d,0,context["output_context"])
         _ = arena^
+    # scikit-learn refuses an infinite input (NaN alone is allowed); the
+    # native column maxima of |X| are infinite exactly for those columns.
+    scaler_refuse_infinite(_ptr(maximum),d,"ValueError: Input X contains infinity or a value too large for dtype('float64').")
     py_setitem(fields,"max_abs_",maximum)
     py_setitem(fields,"scale_",scale)
     py_setitem(fields,"n_features_in_",d)

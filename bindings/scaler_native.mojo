@@ -8,6 +8,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from std.os import getenv
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
+from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
 from bindings.classical_arrays import classical_input, classical_address, classical_typed, classical_is_array, classical_is_f32, classical_cast_kind, classical_c_order
 from core.scaler_fit_impl import scaler_cast, scaler_all_finite, scaler_check_stats, scaler_fill, scaler_check_missing, scaler_counts
@@ -114,7 +115,7 @@ def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonO
     if py_get(entries,"standard_fit") is None:
         raise Error("ImportError: HostStandardScaler training requires _mojolearn_preprocessing_host: " + String(py_get(entries,"scaler_training_error","standard_fit is unavailable")))
     var expected = 1 if String(mode) == "identical" else 0
-    if Int(py=py_call(entries["preprocessing_numeric_mode"])) != expected or Int(py=py_call(entries["x_prep_numeric_mode"])) != expected:
+    if Int(py=py_call_typed(entries["preprocessing_numeric_mode"])) != expected or Int(py=py_call_typed(entries["x_prep_numeric_mode"])) != expected:
         raise Error("RuntimeError: Scaler native numeric mode disagrees with requested mode")
     var x = _input(source, 2, True, context)
     var n = Int(py=x.shape[0])
@@ -131,7 +132,7 @@ def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonO
     else:
         finite = scaler_all_finite(xp, n*d)
         if finite and not weighted:
-            _ = py_call(entries["standard_fit"], classical_address(x), classical_address(output), Python.list(n, d, Int(with_mean), Int(with_std)))
+            _ = py_call_typed(entries["standard_fit"], classical_address(x), classical_address(output), Python.list(n, d, Int(with_mean), Int(with_std)))
     var seen = PythonObject(n)
     var mean = PythonObject(None)
     var variance = PythonObject(None)
@@ -194,7 +195,7 @@ def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonO
         if weighted:
             _stage(program, 270, nch, wo, n, ch, wc)
             _stage(program, 248, 1, wc, nch, wc+nch)
-        _ = py_call(entries["x_prep_run"], Int(arena.unsafe_ptr()), size, Int(program.unsafe_ptr()), 5 if weighted else 3)
+        _ = py_call_typed(entries["x_prep_run"], Int(arena.unsafe_ptr()), size, Int(program.unsafe_ptr()), 5 if weighted else 3)
         # Integer addresses do not carry ownership across the C ABI. Keep
         # the instruction storage alive until the synchronous executor returns.
         _ = program^

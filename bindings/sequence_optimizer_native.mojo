@@ -4,6 +4,7 @@
 from std.os import getenv
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_fields, py_get, py_setitem
+from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_admission import opt_exact, opt_scalar, opt_value, opt_schedule
 from bindings.optimizer_public_door import TensorView, tensor_view, base_format, same_shape, py_ints
 from bindings.optimizer_device_native import device_shape, shape_count
@@ -188,6 +189,16 @@ def seq_slots(fields: PythonObject, kind: Int, context: PythonObject, padded: Bo
     return result
 
 
+def _seq_real(value: PythonObject, label: String) raises -> PythonObject:
+    # A real number for an optimizer option as a Python float; a str, None or
+    # an object without __float__ is refused as TypeError naming the option
+    # (the ops.Session `_float` pattern), never parsed.
+    try:
+        return PythonObject(Float64(py=value))
+    except:
+        raise Error("TypeError: " + label + " must be a real number")
+
+
 def seq_construct(owner: PythonObject, values: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
     var kind = seq_class(owner, context)
     var b = Python.import_module("builtins")
@@ -249,36 +260,36 @@ def seq_construct(owner: PythonObject, values: PythonObject, mode: PythonObject,
     py_setitem(fields, "numeric_mode", mode)
     py_setitem(fields, "_dev_b", selected["module"] if device else PythonObject(None))
     py_setitem(fields, "_res_b", PythonObject(None))
-    py_setitem(fields, "lr", py_call(b.float, values[1]))
+    py_setitem(fields, "lr", _seq_real(values[1], "lr"))
     var extra = Python.list()
     var fp = Python.list(0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
     var flags = 0
     if kind < 5:
         py_setitem(fields, "options", py_call(b.dict, options))
         opt_scalar(options["weight_decay"], context)
-        py_setitem(fp, PythonObject(3), py_call(b.float, options["weight_decay"]))
+        py_setitem(fp, PythonObject(3), _seq_real(options["weight_decay"], "weight_decay"))
         if kind == 0 or kind == 1:
             for name in ["eps", "alpha" if kind == 0 else "lr_decay", "momentum" if kind == 0 else "initial_accumulator_value"]:  # driver-loop: over RMSprop or Adagrad scalar options
                 opt_scalar(options[PythonObject(name)], context)
-            py_setitem(fp, PythonObject(2), py_call(b.float, options["eps"]))
-            py_setitem(fp, PythonObject(1 if kind == 0 else 0), py_call(b.float, options["alpha" if kind == 0 else "lr_decay"]))
-            py_setitem(fp, PythonObject(4 if kind == 0 else 5), py_call(b.float, options["momentum" if kind == 0 else "initial_accumulator_value"]))
+            py_setitem(fp, PythonObject(2), _seq_real(options["eps"], "eps"))
+            py_setitem(fp, PythonObject(1 if kind == 0 else 0), _seq_real(options["alpha" if kind == 0 else "lr_decay"], String("alpha" if kind == 0 else "lr_decay")))
+            py_setitem(fp, PythonObject(4 if kind == 0 else 5), _seq_real(options["momentum" if kind == 0 else "initial_accumulator_value"], String("momentum" if kind == 0 else "initial_accumulator_value")))
             if kind == 0:
                 opt_scalar(options["centered"], context)
                 flags = Int(Bool(py=options["centered"]))
         else:
             var betas = seq_pair(options["betas"], context)
-            py_setitem(fp, PythonObject(0), py_call(b.float, betas[0]))
-            py_setitem(fp, PythonObject(1), py_call(b.float, betas[1]))
+            py_setitem(fp, PythonObject(0), _seq_real(betas[0], "betas"))
+            py_setitem(fp, PythonObject(1), _seq_real(betas[1], "betas"))
             if kind == 3 and not (0.0 <= Float64(py=fp[0]) < 1.0 and 0.0 <= Float64(py=fp[1]) < 1.0):
                 raise Error("ValueError: Adamax betas must lie in [0, 1)")
             if kind != 2:
                 opt_scalar(options["eps"], context)
-                py_setitem(fp, PythonObject(2), py_call(b.float, options["eps"]))
+                py_setitem(fp, PythonObject(2), _seq_real(options["eps"], "eps"))
             if kind == 4:
                 opt_scalar(options["momentum_decay"], context)
                 opt_scalar(options["decoupled_weight_decay"], context)
-                py_setitem(fp, PythonObject(4), py_call(b.float, options["momentum_decay"]))
+                py_setitem(fp, PythonObject(4), _seq_real(options["momentum_decay"], "momentum_decay"))
                 if Float64(py=fp[4]) < 0:
                     raise Error("ValueError: NAdam momentum_decay must be >= 0")
                 flags = Int(Bool(py=options["decoupled_weight_decay"]))
@@ -290,24 +301,27 @@ def seq_construct(owner: PythonObject, values: PythonObject, mode: PythonObject,
             opt_scalar(options[PythonObject(name)], context)
         if Bool(py=options["maximize"]):
             raise Error("NotImplementedError: Adafactor maximize is not implemented")
-        if Float64(py=options["beta2_decay"]) > 0 or Float64(py=options["d"]) < 1 or Float64(py=values[1]) < 0 or Float64(py=options["weight_decay"]) < 0:
+        var beta2_decay = Float64(py=_seq_real(options["beta2_decay"], "beta2_decay"))
+        var d = Float64(py=_seq_real(options["d"], "d"))
+        var decay = Float64(py=_seq_real(options["weight_decay"], "weight_decay"))
+        if beta2_decay > 0 or d < 1 or Float64(py=fields["lr"]) < 0 or decay < 0:
             raise Error("ValueError: Adafactor requires beta2_decay <= 0, d >= 1 and nonnegative lr/weight_decay")
         for name in ["beta2_decay", "d", "weight_decay"]:  # driver-loop: over stored Adafactor scalar options
-            py_setitem(fields, PythonObject(name), py_call(b.float, options[PythonObject(name)]))
+            py_setitem(fields, PythonObject(name), _seq_real(options[PythonObject(name)], String(name)))
         var eps = seq_pair(options["eps"], context)
-        py_setitem(fields, "eps", Python.tuple(1.1920928955078125e-7 if eps[0] is None else Float64(py=py_call(b.float, eps[0])), py_call(b.float, eps[1])))
+        py_setitem(fields, "eps", Python.tuple(1.1920928955078125e-7 if eps[0] is None else Float64(py=_seq_real(eps[0], "eps")), _seq_real(eps[1], "eps")))
     else:
         for name in ["eps", "weight_decay", "max_grad_norm", "trust_clip", "always_adapt", "grad_averaging", "bias_correction"]:  # driver-loop: over LAMB scalar options
             opt_scalar(options[PythonObject(name)], context)
         var betas = seq_pair(options["betas"], context)
-        var first = Float64(py=py_call(b.float, betas[0]))
-        var second = Float64(py=py_call(b.float, betas[1]))
+        var first = Float64(py=_seq_real(betas[0], "betas"))
+        var second = Float64(py=_seq_real(betas[1], "betas"))
         if not (0.0 <= first < 1.0 and 0.0 <= second < 1.0):
             raise Error("ValueError: LAMB betas must lie in [0, 1)")
         py_setitem(fields, "betas", Python.tuple(first, second))
         for name in ["eps", "weight_decay"]:  # driver-loop: over LAMB floating-point configuration
-            py_setitem(fields, PythonObject(name), py_call(b.float, options[PythonObject(name)]))
-        py_setitem(fields, "max_grad_norm", PythonObject(None) if options["max_grad_norm"] is None else py_call(b.float, options["max_grad_norm"]))
+            py_setitem(fields, PythonObject(name), _seq_real(options[PythonObject(name)], String(name)))
+        py_setitem(fields, "max_grad_norm", PythonObject(None) if options["max_grad_norm"] is None else _seq_real(options["max_grad_norm"], "max_grad_norm"))
         for name in ["trust_clip", "always_adapt", "grad_averaging", "bias_correction"]:  # driver-loop: over LAMB native flag words
             _ = py_call(extra.append, Int(Bool(py=options[PythonObject(name)])))
         _ = py_call(extra.append, Int(options["max_grad_norm"] is not None))
@@ -322,7 +336,7 @@ def seq_construct(owner: PythonObject, values: PythonObject, mode: PythonObject,
     var ip = Python.list(2 if kind == 5 else (1 if kind == 6 else 0), len(params))
     _ = py_call(ip.extend, sizes)
     _ = py_call(ip.extend, extra)
-    var n = Int(py=py_call(selected["seq_optimizer_init"], classical_address(words), ip))
+    var n = Int(py=py_call_typed(selected["seq_optimizer_init"], classical_address(words), ip))
     if kind < 5 and n < 1:
         raise Error("ValueError: sequence optimizer has no parameters")
     py_setitem(fields, "n_total", PythonObject(n))
@@ -431,7 +445,7 @@ def seq_step(owner: PythonObject, fields: PythonObject, gradients: PythonObject,
     else:
         _ = py_call(fp.extend, Python.tuple(fields["betas"][0], fields["betas"][1], fields["eps"], fields["weight_decay"], 1.0 if fields["max_grad_norm"] is None else fields["max_grad_norm"]))
     py_setitem(fields, "_res_b", entries["module"])
-    _ = py_call(entries["seq_adafactor_step" if kind == 5 else ("seq_lamb_step" if kind == 6 else "seq_optimizer_step")], words, handles, addrs, ip, fp)
+    _ = py_call_typed(entries["seq_adafactor_step" if kind == 5 else ("seq_lamb_step" if kind == 6 else "seq_optimizer_step")], words, handles, addrs, ip, fp)
     _ = keep^
     return owner
 
@@ -466,7 +480,7 @@ def sequence_optimizer_operation(operation: String, owner: PythonObject, values:
         return PythonObject(w[index] != 0) if Bool(py=values[1]) else PythonObject(Int(w[index]))
     if operation == "seq_finalize":
         try:
-            _ = py_call(entries["seq_optimizer_close"], words, handles, nh)
+            _ = py_call_typed(entries["seq_optimizer_close"], words, handles, nh)
         except:
             return PythonObject(None)
         py_setitem(fields, "_res_b", PythonObject(None))
@@ -507,7 +521,7 @@ def sequence_optimizer_operation(operation: String, owner: PythonObject, values:
         var slots = seq_slots(fields, kind, context, True)
         if operation == "seq_slots":
             return slots
-        _ = py_call(entries["seq_optimizer_state"], words, handles, slots)
+        _ = py_call_typed(entries["seq_optimizer_state"], words, handles, slots)
         var state = fields["_af_state" if kind == 5 else "_state"]
         if operation == "seq_slot":
             opt_scalar(values[0], context)
@@ -558,7 +572,7 @@ def sequence_optimizer_operation(operation: String, owner: PythonObject, values:
         for i in range(len(out)):  # driver-loop: over state copy buffer addresses
             _ = py_call(addrs.append, classical_address(out[i]))
         _ = py_call(addrs.extend, Python.tuple(sc_addr, classical_address(sc)))
-        _ = py_call(entries["seq_optimizer_export" if operation == "seq_export" else "seq_optimizer_import"], words, handles, addrs,
+        _ = py_call_typed(entries["seq_optimizer_export" if operation == "seq_export" else "seq_optimizer_import"], words, handles, addrs,
                     Python.list(k, n, sc_len, len(out), t, Int(sc_given), sc_t))
         if operation == "seq_import":
             return owner

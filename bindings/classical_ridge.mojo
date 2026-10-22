@@ -3,6 +3,7 @@
 # kernels. This owner replaces only Python preparation and launch decisions.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
+from bindings.py_typed_call import py_call_typed
 from std.memory import memcpy
 from core.classical_ridge_impl import classical_widen_f32_f64
 from bindings.classical_arrays import classical_array, classical_host_f32, classical_word, classical_address
@@ -14,8 +15,8 @@ def classical_means(x: PythonObject, rows: Int, cols: Int, entries: PythonObject
     var sums = classical_array(cols, 0, context, True)
     var m64 = classical_array(cols, 0, context, True)
     var m32 = classical_array(cols, 0, context)
-    _ = py_call(entries["lm_col_sums"], classical_address(x), classical_address(sums), Python.list(rows, cols))
-    _ = py_call(entries["lm_means_finish"], classical_address(sums), classical_address(m64), classical_address(m32), Python.list(cols, rows, 0), PythonObject(0.0))
+    _ = py_call_typed(entries["lm_col_sums"], classical_address(x), classical_address(sums), Python.list(rows, cols))
+    _ = py_call_typed(entries["lm_means_finish"], classical_address(sums), classical_address(m64), classical_address(m32), Python.list(cols, rows, 0), PythonObject(0.0))
     _ = sums^
     return Python.tuple(m64, m32)
 
@@ -23,7 +24,7 @@ def classical_means(x: PythonObject, rows: Int, cols: Int, entries: PythonObject
 def classical_center(x: PythonObject, mean: PythonObject, rows: Int, cols: Int,
                      entries: PythonObject, context: PythonObject) raises -> PythonObject:
     var out = classical_array(rows, cols if Int(py=x.ndim) == 2 else 0, context)
-    _ = py_call(entries["lm_center"], classical_address(x), classical_address(mean), classical_address(out), Python.list(rows, cols))
+    _ = py_call_typed(entries["lm_center"], classical_address(x), classical_address(mean), classical_address(out), Python.list(rows, cols))
     return out
 
 
@@ -80,7 +81,7 @@ def classical_ridge_fit(model: PythonObject, args: PythonObject, entries: Python
             memcpy(dest=dst + rows * 4, src=source_w, count=rows * 4)
         var n_out = cols + 5
         var values = classical_array(n_out, 0, context)
-        _ = py_call(entries["x_linear_fit"], PythonObject(8), classical_address(x), classical_address(targets),
+        _ = py_call_typed(entries["x_linear_fit"], PythonObject(8), classical_address(x), classical_address(targets),
             Python.list(rows, cols, rows * cols, rows * (2 if has_weights else 1), n_out,
                         max(3 * cols * cols + 4 * cols + 1 + 2 * rows, 1), 1, 4, 1),
             Python.list(1, 1 if intercept else 0, 1, 1 if has_weights else 0),
@@ -98,14 +99,14 @@ def classical_ridge_fit(model: PythonObject, args: PythonObject, entries: Python
         var output_mean = classical_array(1, 0, context, True)
         if py_get(entries, "linear_gram_fit") is not None and py_get(entries, "linear_gram_solve_default") is not None:
             if Bool(py=entries["linear_gram_solve_default"]()):
-                var status = Int(py=py_call(entries["linear_gram_fit"], 
+                var status = Int(py=py_call_typed(entries["linear_gram_fit"], 
                     classical_address(x), classical_address(y), classical_address(coef),
                     classical_address(mean), classical_address(output_mean),
                     Python.list(rows, cols, PythonObject(alpha), 1 if intercept else 0)))
                 done = status == 0
         if not done and py_get(entries, "ridge_fit_resident") is not None and py_get(entries, "ridge_resident_default") is not None:
             if Bool(py=entries["ridge_resident_default"]()):
-                _ = py_call(entries["ridge_fit_resident"], 
+                _ = py_call_typed(entries["ridge_fit_resident"], 
                     classical_address(x), classical_address(y), classical_address(coef),
                     classical_address(mean), classical_address(output_mean),
                     Python.list(rows, cols, PythonObject(alpha), 1 if intercept else 0))
@@ -129,11 +130,11 @@ def classical_ridge_fit(model: PythonObject, args: PythonObject, entries: Python
                         var xm32 = classical_array(cols, 0, context)
                         var ym64 = classical_array(1, 0, context, True)
                         var ym32 = classical_array(1, 0, context)
-                        _ = py_call(entries["lm_col_sums_pair"], classical_address(x), classical_address(y),
+                        _ = py_call_typed(entries["lm_col_sums_pair"], classical_address(x), classical_address(y),
                             classical_address(sx), classical_address(sy), Python.list(rows, cols))
-                        _ = py_call(entries["lm_means_finish"], classical_address(sx), classical_address(xm64), classical_address(xm32),
+                        _ = py_call_typed(entries["lm_means_finish"], classical_address(sx), classical_address(xm64), classical_address(xm32),
                                                        Python.list(cols, rows, 0), PythonObject(0.0))
-                        _ = py_call(entries["lm_means_finish"], classical_address(sy), classical_address(ym64), classical_address(ym32),
+                        _ = py_call_typed(entries["lm_means_finish"], classical_address(sy), classical_address(ym64), classical_address(ym32),
                                                        Python.list(1, rows, 0), PythonObject(0.0))
                         xm = Python.tuple(xm64, xm32)
                         ym = Python.tuple(ym64, ym32)
@@ -146,12 +147,12 @@ def classical_ridge_fit(model: PythonObject, args: PythonObject, entries: Python
                 ymean = classical_word(ym[0])
                 work_x = classical_center(x, mean, rows, cols, entries, context)
                 work_y = classical_center(y, ym[1], rows, 1, entries, context)
-            _ = py_call(entries["ridge_fit"], classical_address(work_x), classical_address(work_y),
+            _ = py_call_typed(entries["ridge_fit"], classical_address(work_x), classical_address(work_y),
                                       classical_address(coef), Python.list(rows, cols, PythonObject(alpha)))
             _ = work_x^
             _ = work_y^
         if intercept:
-            bias = Float64(py=py_call(entries["lm_intercept"], classical_address(mean), classical_address(coef),
+            bias = Float64(py=py_call_typed(entries["lm_intercept"], classical_address(mean), classical_address(coef),
                                                        Python.list(cols), PythonObject(ymean)))
     py_setitem(fields, "coef_", coef)
     py_setitem(fields, "intercept_", bias)
@@ -179,7 +180,7 @@ def classical_linear_predict(model: PythonObject, value: PythonObject, entries: 
     if Int(py=coef.size) != cols:
         raise Error("coef_ length differs from fitted feature count")
     var out = classical_array(rows, 0, context)
-    _ = py_call(entries["ols_predict"], classical_address(x), classical_address(coef), classical_address(out),
+    _ = py_call_typed(entries["ols_predict"], classical_address(x), classical_address(coef), classical_address(out),
                                 Python.list(rows, cols, fields["intercept_"]))
     _ = x^
     _ = coef^

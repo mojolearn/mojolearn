@@ -4,6 +4,7 @@ from std.memory import bitcast
 from std.math import isfinite
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_fields, py_setitem
+from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_admission import opt_scalar, opt_value, opt_schedule, opt_exact
 from bindings.optimizer_public_door import schedule_spec
 
@@ -16,16 +17,39 @@ def schedule_kind(owner: PythonObject, context: PythonObject) raises -> Int:
     raise Error("TypeError: schedule requires a built-in native configuration; Python callbacks cannot execute")
 
 
+def _sched_real(value: PythonObject, label: String) raises -> Float64:
+    # A real number for a schedule option; a str, None or an object without
+    # __float__ is refused as TypeError naming the option (the ops.Session
+    # `_float` pattern), never parsed.
+    try:
+        return Float64(py=value)
+    except:
+        raise Error("TypeError: " + label + " must be a real number")
+
+
+def _sched_int(value: PythonObject, label: String) raises -> Int:
+    # An integer (int or a NumPy integer, not bool) for a schedule count;
+    # a str or a float is refused as TypeError, never parsed or truncated.
+    var b = Python.import_module("builtins")
+    if py_type(value) is b.bool:
+        raise Error("TypeError: " + label + " must be an integer")
+    try:
+        return Int(py=py_call_typed(Python.import_module("operator").index, value))
+    except:
+        raise Error("TypeError: " + label + " must be an integer")
+
+
 def schedule_construct(owner: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
     opt_scalar(values, context)
     var kind = schedule_kind(owner, context)
     var fields = py_fields(owner)
     var b = Python.import_module("builtins")
+    var cls = String(py=py_type(owner).__name__) + ": "
     if kind < 3:
-        var peak = Float64(Float32(Float64(py=py_call(b.float, values[0]))))
-        var low = 0.0 if kind == 0 else Float64(Float32(Float64(py=py_call(b.float, values[3]))))
-        var warmup = Int(py=py_call(b.int, values[1]))
-        var total = PythonObject(None) if kind == 0 or values[2] is None else py_call(b.int, values[2])
+        var peak = Float64(Float32(_sched_real(values[0], cls + "peak_lr")))
+        var low = 0.0 if kind == 0 else Float64(Float32(_sched_real(values[3], cls + "min_lr")))
+        var warmup = _sched_int(values[1], cls + "warmup_steps")
+        var total = PythonObject(None) if kind == 0 or values[2] is None else PythonObject(_sched_int(values[2], cls + "total_steps"))
         if not isfinite(peak) or peak < 0:
             raise Error("ValueError: peak_lr must be finite and >= 0")
         if not isfinite(low) or low < 0:
@@ -39,21 +63,30 @@ def schedule_construct(owner: PythonObject, values: PythonObject, context: Pytho
         py_setitem(fields, "warmup_steps", PythonObject(warmup))
         py_setitem(fields, "total_steps", total)
     elif kind < 5:
-        var step = 1 if kind == 4 else Int(py=py_call(b.int, values[1]))
+        # StepLR / ExponentialLR refuse at construction, as OneCycleLR does:
+        # a non-number is a TypeError, a non-finite or negative rate or
+        # factor a ValueError (lr_at would refuse the non-finite ones later).
+        var base = _sched_real(values[0], cls + "base_lr")
+        var step = 1 if kind == 4 else _sched_int(values[1], cls + "step_size")
+        var gamma = _sched_real(values[2], cls + "gamma")
         if step < 1:
             raise Error("ValueError: StepLR: step_size must be >= 1")
-        py_setitem(fields, "base_lr", py_call(b.float, values[0]))
-        py_setitem(fields, "gamma", py_call(b.float, values[2]))
+        if not isfinite(base) or base < 0:
+            raise Error("ValueError: " + cls + "base_lr must be finite and >= 0")
+        if not isfinite(gamma) or gamma < 0:
+            raise Error("ValueError: " + cls + "gamma must be finite and >= 0")
+        py_setitem(fields, "base_lr", PythonObject(base))
+        py_setitem(fields, "gamma", PythonObject(gamma))
         if kind == 3:
             py_setitem(fields, "step_size", PythonObject(step))
             py_setitem(fields, "_step", PythonObject(step))
     else:
-        var maximum = Float64(py=py_call(b.float, values[0]))
-        var total = Int(py=py_call(b.int, values[1]))
-        var pct = Float64(py=py_call(b.float, values[2]))
+        var maximum = _sched_real(values[0], cls + "max_lr")
+        var total = _sched_int(values[1], cls + "total_steps")
+        var pct = _sched_real(values[2], cls + "pct_start")
         var anneal = values[3]
-        var divide = Float64(py=py_call(b.float, values[4]))
-        var final_divide = Float64(py=py_call(b.float, values[5]))
+        var divide = _sched_real(values[4], cls + "div_factor")
+        var final_divide = _sched_real(values[5], cls + "final_div_factor")
         if total < 1:
             raise Error("ValueError: OneCycleLR: total_steps must be >= 1")
         if not (pct >= 0.0 and pct <= 1.0):
@@ -108,9 +141,9 @@ def schedule_operation(operation: String, owner: PythonObject, values: PythonObj
     var style = 0 if kind < 3 else (1 if kind < 5 else 2)
     var entries = context["schedule_entries"]
     if operation == "schedule_values" or operation == "schedule_list":
-        var result = py_call(entries["lr_schedule_series"], ip, fp, values[0], style)
+        var result = py_call_typed(entries["lr_schedule_series"], ip, fp, values[0], style)
         return py_call(result.tolist) if operation == "schedule_list" else result
-    var value = py_call(entries["lr_schedule_at"], ip, fp, values[0], style)
+    var value = py_call_typed(entries["lr_schedule_at"], ip, fp, values[0], style)
     if operation == "schedule_bits":
         return PythonObject(Int(bitcast[DType.uint32](Float32(Float64(py=value)))))
     return value

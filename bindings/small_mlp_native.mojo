@@ -28,6 +28,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, py_ints
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
+from bindings.py_typed_call import py_call_typed
 from bindings.native_json import native_json_parse, native_json_parse_unique, native_path
 from bindings.native_transport import _transport_json
 from core.parallel_mlp_native_impl import mlp_targets_into
@@ -573,7 +574,7 @@ def _resident_sync(index: Int) raises:
         return
     var b = SMALL_MLP_BOUNDARY.get_or_create_ptr()
     var entries = b[].modes[store[].slots[index].resident_mode]
-    _ = py_call(entries["mlp_resident_download"], store[].slots[index].resident, _resident_addresses(index))
+    _ = py_call_typed(entries["mlp_resident_download"], store[].slots[index].resident, _resident_addresses(index))
 
 
 def _resident_close(index: Int) raises:
@@ -604,7 +605,7 @@ def _resident_open(index: Int, entries: PythonObject, cap_k: Int) raises -> Int:
         if store[].slots[index].resident_mode == mode and store[].slots[index].resident_cap >= cap_k:
             return store[].slots[index].resident
         _settle(index, True)
-    var handle = Int(py=py_call(entries["mlp_resident_open"], _resident_addresses(index), Python.list(cap_k)))
+    var handle = Int(py=py_call_typed(entries["mlp_resident_open"], _resident_addresses(index), Python.list(cap_k)))
     store[].slots[index].resident = handle
     store[].slots[index].resident_mode = mode
     store[].slots[index].resident_cap = cap_k
@@ -744,26 +745,26 @@ def _gemm_into(entries: PythonObject, a: Int, b: Int, dst: Int, m: Int, n: Int, 
     if _mode_name(entries) == "identical":
         if not py_contains(entries, "neural_gemm"):
             raise Error("ImportError: SmallMLPTrainer requires updated training binding: missing neural_gemm")
-        var written = Int(py=py_call(entries["neural_gemm"], a, b, dst, py_ints([m, n, k, layout])))
+        var written = Int(py=py_call_typed(entries["neural_gemm"], a, b, dst, py_ints([m, n, k, layout])))
         if written != m * n:
             raise Error("RuntimeError: SmallMLPTrainer neural GEMM returned an incomplete result")
     else:
         if not py_contains(entries, "linalg_gemm"):
             raise Error("ImportError: SmallMLPTrainer requires the linalg binding's gemm")
         # THE OUTPUT ADDRESS COMES FIRST in the linalg entry.
-        _ = py_call(entries["linalg_gemm"], dst, a, b, py_ints([m, n, k, layout]))
+        _ = py_call_typed(entries["linalg_gemm"], dst, a, b, py_ints([m, n, k, layout]))
     mlp_require_result_finite(dst, m * n, "GEMM")
 
 
 def _bias_into(entries: PythonObject, values: Int, bias: Int, dst: Int, rows: Int, cols: Int, relu: Bool) raises:
-    var written = Int(py=py_call(entries["mlp_bias_activation"], values, bias, dst, py_ints([rows, cols, Int(relu)])))
+    var written = Int(py=py_call_typed(entries["mlp_bias_activation"], values, bias, dst, py_ints([rows, cols, Int(relu)])))
     if written != rows * cols:
         raise Error("RuntimeError: SmallMLPTrainer bias/activation returned an invalid result")
     mlp_require_result_finite(dst, rows * cols, "bias/activation")
 
 
 def _sum_into(entries: PythonObject, values: Int, dst: Int, rows: Int, cols: Int) raises:
-    var written = Int(py=py_call(entries["mlp_sum_rows"], values, dst, py_ints([rows, cols])))
+    var written = Int(py=py_call_typed(entries["mlp_sum_rows"], values, dst, py_ints([rows, cols])))
     if written != cols:
         raise Error("RuntimeError: SmallMLPTrainer bias gradient returned an invalid result")
     mlp_require_result_finite(dst, cols, "bias gradient")
@@ -804,7 +805,7 @@ def _gradient(state: MlpState, entries: PythonObject, x: List[Float32], y: List[
     # ce_loss params: rows, vocab, ignore_index, reduction (2 mean),
     # num_items, return_grad, label_smoothing
     # (bindings/_mojolearn_training.mojo::ce_loss_binding).
-    _ = py_call(entries["ce_loss"], Int(loss.unsafe_ptr()), Int(row_loss.unsafe_ptr()), dl, logits._addr,
+    _ = py_call_typed(entries["ce_loss"], Int(loss.unsafe_ptr()), Int(row_loss.unsafe_ptr()), dl, logits._addr,
                 Int(y.unsafe_ptr()), Python.list(rows, 3, -100, 2, 0, 1, 0.0))
     var value = mlp_read_f32(Int(loss.unsafe_ptr()))
     if not isfinite(value):
@@ -820,7 +821,7 @@ def _gradient(state: MlpState, entries: PythonObject, x: List[Float32], y: List[
     _gemm_into(entries, dl, state.params_addr(2), Int(incoming.unsafe_ptr()), rows, 16, 3, _NN)
     var dhidden = List[Float32](length=rows * 16, fill=Float32(0))
     var dh = Int(dhidden.unsafe_ptr())
-    var written = Int(py=py_call(entries["mlp_relu_backward"], ha, Int(incoming.unsafe_ptr()), dh, py_ints([rows, 16])))
+    var written = Int(py=py_call_typed(entries["mlp_relu_backward"], ha, Int(incoming.unsafe_ptr()), dh, py_ints([rows, 16])))
     if written != rows * 16:
         raise Error("RuntimeError: SmallMLPTrainer ReLU gradient returned an invalid result")
     mlp_require_result_finite(dh, rows * 16, "ReLU gradient")
@@ -851,7 +852,7 @@ def _adamw(mut state: MlpState, entries: PythonObject, grads: List[Float32]) rai
     # (bindings/_mojolearn_training.mojo::optimizer_step_binding).
     var plan = Python.list(4, 2, t, 0, state.lr, state.beta1, state.beta2, state.eps,
                            state.weight_decay, 0.0, 0.0, 0.0, 0)
-    _ = py_call(entries["optimizer_step"], state.params_addr(0), Int(grads.unsafe_ptr()), state.m_addr(),
+    _ = py_call_typed(entries["optimizer_step"], state.params_addr(0), Int(grads.unsafe_ptr()), state.m_addr(),
                 state.v_addr(), Int(offsets.unsafe_ptr()), state.flags_addr(),
                 Int(info.unsafe_ptr()), plan)
     _ = offsets^
@@ -1143,13 +1144,13 @@ def _predict_sessions(handle: Int, inputs: PythonObject) raises -> PythonObject:
         sessions.append(owned^)
     var total: Int
     try:
-        total = Int(py=py_call(entries["mlp_sessions_rows"], shapes, 8))
+        total = Int(py=py_call_typed(entries["mlp_sessions_rows"], shapes, 8))
     except error:
         raise Error(String(error))
     var out = generation_array([total, 3])
     var store = MLP_STORE.get_or_create_ptr()
     ref s = store[].slots[index].state
-    var wrote = Int(py=py_call(entries["mlp_sessions"],
+    var wrote = Int(py=py_call_typed(entries["mlp_sessions"],
         Python.list(out._addr, s.params_addr(0), s.params_addr(1), s.params_addr(2), s.params_addr(3)),
         addresses, shapes, py_ints([8, 16, 3])))
     _ = sessions^
@@ -1256,7 +1257,7 @@ def _save_checkpoint(handle: Int, path: PythonObject) raises:
     py_setitem(envelope, "schema", PythonObject(_FILE_SCHEMA))
     py_setitem(envelope, "payload", state)
     # The digest is the Mojo SHA-256 (core/sha256.mojo), the same hex as hashlib's.
-    py_setitem(envelope, "payload_sha256", py_call(bi.str, py_call(entries["sha256_hex"], _canonical_bytes(state))))
+    py_setitem(envelope, "payload_sha256", py_call(bi.str, py_call_typed(entries["sha256_hex"], _canonical_bytes(state))))
     var profile = py_call(bi.str, entries["neural_arithmetic_profile"]())
     if String(py=profile) != _BASE_PROFILE:
         py_setitem(envelope, "arithmetic_profile", profile)
@@ -1342,7 +1343,7 @@ def _from_checkpoint(cls: PythonObject, path: PythonObject) raises -> PythonObje
     var entries = _mode_entries()
     var digest: PythonObject
     try:
-        digest = py_call(bi.str, py_call(entries["sha256_hex"], _canonical_bytes(envelope["payload"])))
+        digest = py_call(bi.str, py_call_typed(entries["sha256_hex"], _canonical_bytes(envelope["payload"])))
     except:
         raise Error("SmallMLPTrainer checkpoint integrity mismatch")
     if Bool(py=digest != envelope["payload_sha256"]):

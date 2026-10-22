@@ -14,6 +14,7 @@ from std.memory import bitcast, memcpy
 from std.math import isfinite
 from bindings.generation_buffers import GENERATION_BOUNDARY, generation_array, py_ints
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
+from bindings.py_typed_call import py_call_typed
 from bindings.native_json import native_json_parse
 from bindings.native_transport import _transport_json, transport_initialize
 from training.parallel_byte_impl import (
@@ -553,11 +554,11 @@ def parallel_byte_open(owner: PythonObject) raises:
         _ = py_call(addresses.append, state[key]._addr)
     var session = entries["create"]()
     try:
-        var completed = py_call(entries[open_name], session, addresses, params, owner._native_shape["dims"], owner.devices, owner.logical_shards)
+        var completed = py_call_typed(entries[open_name], session, addresses, params, owner._native_shape["dims"], owner.devices, owner.logical_shards)
         if Int(py=completed) != Int(py=state["completed_steps"]):
             raise Error("RuntimeError: parallel admission returned wrong step")
     except error:
-        _ = py_call(entries["close"], session)
+        _ = py_call_typed(entries["close"], session)
         raise error
     py_setattr(owner, "_binding", entries["binding"])
     py_setattr(owner, "_session", session)
