@@ -676,6 +676,7 @@ def _connect_sequential_bindings():
     return {
         "sequential_class": Sequential, "module_type": ModuleType, "modules": sys.modules,
         "mapping_types": (dict, OrderedDict, defaultdict), "scalar_types": scalar_types, "integer_types": integer_types,
+        "native_bytes_type": bytes, "native_bytearray_type": bytearray,
         "defaultdict_class": defaultdict, "native_default_factories": (list, tuple, dict, OrderedDict, defaultdict, bool, int, float, str, bytes, bytearray),
         "native_value_types": (type(None), str, bytes, bytearray, bool, int, float, range, np.ndarray, Array, array, PosixPath, PurePosixPath, type(iter([])), type(iter(())), type(iter(range(0))), type(reversed([]))),
         "buffer_owner_types": (type(None), bytes, bytearray, array, np.ndarray, mmap.mmap), "array_fields": array_fields,

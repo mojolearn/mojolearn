@@ -1,12 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 # Incremental private PCA operation owner. No public route is activated here.
 from std.python import Python, PythonObject
+from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_type
 from bindings.sequential_admission import sequential_admit_value
 from bindings.classical_metadata import classical_is_fitted
+from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.pca_metadata import pca_dictionary, pca_fields, pca_initialize, pca_get_params, pca_set_params, pca_entries
@@ -32,6 +34,7 @@ def pca_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         var loading = operation == "load"
         if (model is not context["pca_class"] if loading else py_type(model) is not context["pca_class"]):
             raise Error("TypeError: the private PCA owner requires an exact PCA instance")
+        classical_connect_numpy(context)
         var result = PythonObject(None)
         if loading:
             _ = pca_dictionary(context)
@@ -75,6 +78,8 @@ def pca_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
                 raise Error("unknown private PCA operation")
         return result.steal_data()
     except error:
+        if String(error) == PYTHON_ERROR_PENDING:
+            return optimizer_python_error(error^)
         if String(error).startswith("NotFittedError:"):
             try:
                 ref cpy = Python().cpython()
