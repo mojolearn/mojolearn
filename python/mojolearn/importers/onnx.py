@@ -5,18 +5,20 @@
 package needed), checks that the model is opset 13 or later in the default
 ONNX domain with tensor types the import supports, and returns the graph
 with its nodes in topological order. The weights are not copied: each
-initializer's bytes are a view into the file (or into its external data
-file) until they are uploaded to the device.
+initializer's bytes are a view into the file's bytes (or its external data
+file's) until they are uploaded to the device.
 """
-# Engineering note: the file is read, decoded and checked in Mojo
+# Engineering note: the file is opened, read, decoded and checked in Mojo
 # (autograd/import_reader.mojo, autograd/import_resolve.mojo) through the
-# x_sequence binding; this module only maps the files for the weight views
-# and wraps the reader's tables in the GraphIR classes. The former Python
-# reader is the test oracle in tests/_onnx_reader_oracle.py.
+# x_sequence binding, and the reader keeps the files' bytes under its handle
+# (onnx_buffers gives their addresses); this module opens no file and only
+# wraps the reader's tables in the GraphIR classes, the weights as views of
+# the reader's bytes. import_model reads a path in one native call
+# (onnx_import_file) and never builds a GraphIR. The former Python reader is
+# the test oracle in tests/_onnx_reader_oracle.py.
 from __future__ import annotations
 
 import ctypes
-import mmap
 import os
 import weakref
 
@@ -28,7 +30,6 @@ OPSET_MIN = 13
 _MAGIC, _VERSION = 0x4F4E5852, 1
 _OK, _NOT_A_MODEL, _CANNOT_OPEN, _BAD_TEXT, _BAD_VALUE, _PROBLEMS = 0, 1, 2, 3, 4, 5
 _DTYPES = ("f32", "f16", "bf16", "f64", "i64", "i32", "bool")
-_BUF_MODEL, _BUF_BLOB, _BUF_EXTERNAL = 0, 1, 2
 _A_FLOAT, _A_INT, _A_STRING, _A_TENSOR, _A_FLOATS, _A_INTS, _A_STRINGS, _A_TENSORS = 1, 2, 3, 4, 6, 7, 8, 9
 
 
@@ -36,19 +37,10 @@ def _binding(b=None):
     if b is None:
         from .. import _backend
         b = _backend.binding("_mojolearn_x_sequence")
-    if not hasattr(b, "onnx_read"):  # cpu-route: model file parsing in Mojo (the reader entry)
+    if not hasattr(b, "onnx_read"):
         raise RuntimeError("mojolearn: this install's x_sequence binding has no ONNX reader (onnx_read); "
                            "rebuild the x_sequence bindings")
     return b
-
-
-def _map_file(path):
-    """A read-only memoryview of the whole file (memory-mapped; the view keeps the map alive)."""
-    with open(path, "rb") as f:
-        try:
-            return memoryview(mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ))
-        except ValueError:  # an empty file cannot be mapped
-            return memoryview(f.read())
 
 
 class _Words:
@@ -65,20 +57,28 @@ class _Words:
         return v
 
 
+def reader_error(status, message, missing, path):
+    """Raise the error of a file the reader refused outright (statuses 1-4)."""
+    if status == _NOT_A_MODEL:
+        raise ValueError(f"{path} is not an ONNX model: {message}")
+    if status == _CANNOT_OPEN:
+        if missing:
+            raise FileNotFoundError(2, "No such file or directory", path)
+        raise OSError(f"{path}: {message}")
+    if status in (_BAD_TEXT, _BAD_VALUE):
+        raise ValueError(f"{path}: {message}")
+    raise RuntimeError(f"mojolearn: the x_sequence binding's ONNX reader returned status {status}; "
+                       "rebuild the x_sequence bindings")
+
+
 def _header(words, strings, path):
     """The status word after the magic and version; raises for a file the reader refused outright."""
     if len(words) < 3 or words[0] != _MAGIC or words[1] != _VERSION:
         raise RuntimeError("mojolearn: the x_sequence binding's ONNX reader has another word layout; "
                            "rebuild the x_sequence bindings")
     status = words[2]
-    if status == _NOT_A_MODEL:
-        raise ValueError(f"{path} is not an ONNX model: {strings[words[3]]}")
-    if status == _CANNOT_OPEN:
-        if not os.path.exists(path):
-            raise FileNotFoundError(2, "No such file or directory", path)
-        raise OSError(f"{path}: {strings[words[3]]}")
-    if status in (_BAD_TEXT, _BAD_VALUE):
-        raise ValueError(f"{path}: {strings[words[3]]}")
+    if status in (_NOT_A_MODEL, _CANNOT_OPEN, _BAD_TEXT, _BAD_VALUE):
+        reader_error(status, strings[words[3]], len(words) > 4 and words[4] == 1, path)
     return status
 
 
@@ -127,22 +127,21 @@ def _attr(c, strings, floats, views):
     return tuple([_tensor(c, strings, views) for _ in range(count)])  # glue: one record per tensors attribute entry
 
 
-def _views(b, h, c, strings):
-    """One memoryview per buffer the tables point into: the model file and its
-    external data files mapped here, the reader's own bytes copied once."""
+def _views(b, h, c, owner):
+    """One memoryview per buffer the tables point into, of the bytes the
+    reader holds under handle ``h``: each view keeps ``owner`` (whose
+    release closes the handle) alive."""
+    addrs = list(b.onnx_buffers(h))
     views = []
-    for _ in range(c.take()):  # glue: one record per file of the model
-        kind, path, nbytes = c.take(), c.take(), c.take()
-        if kind == _BUF_BLOB:
-            blob = bytearray(nbytes)
-            if nbytes:
-                b.onnx_copy_blob(h, ctypes.addressof((ctypes.c_char * nbytes).from_buffer(blob)))
-            views.append(memoryview(blob))
+    for i in range(c.take()):  # glue: one record per file of the model
+        _kind, _path, nbytes = c.take(), c.take(), c.take()
+        if not nbytes:
+            views.append(memoryview(b""))
             continue
-        v = _map_file(strings[path])
-        if len(v) != nbytes:
-            raise ValueError(f"{strings[path]} changed while it was read")
-        views.append(v)
+        # an array type with a slot for the owner, so every view of it holds the handle open
+        arr = type("_ReaderBytes", (ctypes.c_ubyte * nbytes,), {"__slots__": ("owner",)}).from_address(addrs[i])
+        arr.owner = owner
+        views.append(memoryview(arr).cast("B"))
     return views
 
 
@@ -163,7 +162,7 @@ class _Native:
             names.append(str(name))
             flat.append(len(dims))
             flat.extend(dims)
-        words, strings = self.b.onnx_resolve(self.h, names, flat)  # cpu-route: model file parsing in Mojo
+        words, strings = self.b.onnx_resolve(self.h, names, flat)
         _header(words, strings, "the model graph")
         c = _Words(words)
         c.i = 3
@@ -195,16 +194,18 @@ def read(path, binding=None):
     # session's, so the graph handle and the session live in one module)
     path = os.fspath(path)
     b = _binding(binding)
-    h = int(b.onnx_read(os.fsdecode(path)))  # cpu-route: model file parsing in Mojo
+    h = int(b.onnx_read(os.fsdecode(path)))
+    native = _Native(b, h)
+    closer = weakref.finalize(native, b.onnx_close, h)
     try:
-        words, strings, floats = b.onnx_info(h)  # cpu-route: model file parsing in Mojo
+        words, strings, floats = b.onnx_info(h)
         status = _header(words, strings, path)
         c = _Words(words)
         c.i = 3
         if status == _PROBLEMS:
             raise UnsupportedModel(path, _problems(c, strings))
         opset = c.take()
-        views = _views(b, h, c, strings)
+        views = _views(b, h, c, native)
         inputs = tuple([_value(c, strings) for _ in range(c.take())])  # glue: one record per graph input
         outputs = tuple([_value(c, strings) for _ in range(c.take())])  # glue: one record per graph output
         nodes = []
@@ -222,9 +223,9 @@ def read(path, binding=None):
             t = _tensor(c, strings, views)
             inits[t.name] = t
     except BaseException:
-        b.onnx_close(h)
+        closer()
         raise
     g = GraphIR(opset=opset, inputs=inputs, outputs=outputs, nodes=tuple(nodes), initializers=inits, source=path)
-    g._native = _Native(b, h, views)
-    weakref.finalize(g, b.onnx_close, h)
+    native.views = tuple(views)
+    g._native = native  # the handle closes when the graph and every view of its bytes are gone
     return g

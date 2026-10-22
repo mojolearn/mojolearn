@@ -9,7 +9,6 @@ oracle). Checks the round trip of every shared fixture
 resolution on a dynamic batch, the folding of a Shape/Gather/Concat target,
 external data views, the topological sort, and the refusals by version,
 domain, dtype and open axis, each listed in one error."""
-import mmap
 import os
 
 import pytest
@@ -17,7 +16,8 @@ import pytest
 from mojolearn import importers
 from mojolearn.importers import UnsupportedModel
 from mojolearn.importers import onnx as onnx_reader
-from mojolearn.importers._graph import (GraphIR, Node, TensorInfo, int_values, resolve, resolve_shapes)
+from mojolearn.importers._graph import (GraphIR, Node, TensorInfo, resolve, resolve_shapes)
+from mojolearn.tests._resolve_oracle import int_values
 from mojolearn.tests import _onnx_fixture as fx
 
 
@@ -92,7 +92,8 @@ def test_external_data_is_a_view_of_the_shard(tmp_path):
     assert (tmp_path / "shard1.bin").stat().st_size == 4 * (5 + 5 + 15 + 3)
     g = onnx_reader.read(f.path)
     w2 = g.initializers["w2"]
-    assert isinstance(w2.data, memoryview) and isinstance(w2.data.obj, mmap.mmap)
+    # a view of the shard's bytes the Mojo reader holds (no copy); it keeps the reader's handle open
+    assert isinstance(w2.data, memoryview) and getattr(w2.data.obj, "owner", None) is g._native
     assert bytes(w2.data) == f.initializers["w2"].data
     # a location outside the model's directory is refused by name
     sub = tmp_path / "sub"

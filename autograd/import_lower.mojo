@@ -32,6 +32,13 @@ keeps byte ranges only. Returns [status, ...]:
   4: [4, message] (a fatal resolve error)
   5: [5, problems [(name, op or None, reason)]]
 
+`onnx_import_file(path, session, names, flat, source)` is the one call for a
+model file: the reader (import_reader.mojo onnx_read) reads it and keeps its
+bytes, `onnx_import` lowers it on those bytes, the graph is released. The
+reader's problems come back as status 5 like the lowering's; a file the
+reader refuses outright as
+  6: [6, reader status (1-4), message, 1 when the file does not exist].
+
 `onnx_from_words(words, strings, floats, addrs)` builds a graph handle from
 the word layout `onnx_info` returns (header, then the status-0 body; every
 buffer an external one at its address): the torch.export reader's GraphIR
@@ -53,7 +60,7 @@ from autograd.import_reader import (
     AK_FLOAT, AK_FLOATS, AK_INT, AK_INTS, AK_STRING, AK_STRINGS, AK_TENSOR, AK_TENSORS, AttrVal,
     DT_BF16, DT_BOOL, DT_F16, DT_F32, DT_F64, DT_I32, DT_I64, GNode, GValue, ONNX_OK, OnnxGraph,
     OnnxPtr, S_EMPTY, TRec, _ONNX_GRAPHS, _last_attr, dtype_name, fatal_text, fmt_tuple, is_fatal,
-    is_int_dtype, itemsize, onnx_graph, py_repr,
+    is_int_dtype, itemsize, onnx_graph, py_repr, ONNX_PROBLEMS, onnx_buffers, onnx_close, onnx_read,
 )
 from autograd.import_resolve import (
     MaybeInts, RCtx, _RProblem, _ail, _as, _fatal, _in, _numel, _resolve, _slice, _slice_range,
@@ -78,6 +85,7 @@ from sequence.ops import FP
 comptime IMPORT_OK = 0
 comptime IMPORT_BAD_VALUE = 4
 comptime IMPORT_PROBLEMS = 5
+comptime IMPORT_READ_FAILED = 6  # onnx_import_file: the reader refused the file (read_status, message, missing)
 
 # the largest tensor rank of a session (autograd/rankn.mojo RN_MAX_RANK)
 comptime MAX_RANK = 8
@@ -1874,6 +1882,8 @@ struct OnnxImport(Movable):
     captured program and its input and output metadata (IMPORT_OK)."""
     var status: Int
     var message: String
+    var read_status: Int  # IMPORT_READ_FAILED: the reader's status
+    var missing: Bool  # IMPORT_READ_FAILED: the file does not exist
     var problems: List[_Found]
     var pid: Int
     var prog: OpsProgram
@@ -1887,6 +1897,8 @@ struct OnnxImport(Movable):
     def __init__(out self):
         self.status = IMPORT_OK
         self.message = String("")
+        self.read_status = 0
+        self.missing = False
         self.problems = List[_Found]()
         self.pid = 0
         self.prog = OpsProgram()
@@ -1974,6 +1986,47 @@ def onnx_import[E: Exec & Movable & Deinitable, KIND: Int](
         res.out_dims.append(out_shapes[i].copy())
         res.out_int32.append(1 if out_names[i] in low.int32_out else 0)
     res.status = IMPORT_OK
+    return res^
+
+
+def _import_read[E: Exec & Movable & Deinitable, KIND: Int](
+    h: Int, sid: Int, names: List[String], flat: List[Int], src: String,
+) raises -> OnnxImport:
+    """onnx_import of a graph onnx_read holds, on its own bytes; the reader's
+    status when it refused the file."""
+    var gp = onnx_graph(h)
+    var res = OnnxImport()
+    if gp[].status == ONNX_PROBLEMS:
+        res.status = IMPORT_PROBLEMS
+        for i in range(len(gp[].problems)):  # cpu-route: model file parsing (the problems found)
+            ref q = gp[].problems[i]
+            res.problems.append(_Found(i, gp[].st.text(q.name), q.op >= 0,
+                                       gp[].st.text(q.op) if q.op >= 0 else String(""), gp[].st.text(q.reason)))
+        return res^
+    if gp[].status != ONNX_OK:
+        res.status = IMPORT_READ_FAILED
+        res.read_status = gp[].status
+        res.message = gp[].message
+        res.missing = gp[].missing
+        return res^
+    return onnx_import[E, KIND](h, sid, names, flat, onnx_buffers(h), src)
+
+
+def onnx_import_file[E: Exec & Movable & Deinitable, KIND: Int](
+    path: String, sid: Int, names: List[String], flat: List[Int], src: String,
+) raises -> OnnxImport:
+    """Read the ONNX model at `path` and import it into inference session
+    `sid` in one call (this module's docstring); the graph and its bytes are
+    released before it returns."""
+    var h = onnx_read(path)
+    var res: OnnxImport
+    try:
+        res = _import_read[E, KIND](h, sid, names, flat, src)
+    except e:
+        var msg = String(e)
+        onnx_close(h)
+        raise Error(msg)
+    onnx_close(h)
     return res^
 
 

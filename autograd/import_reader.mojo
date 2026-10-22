@@ -10,10 +10,14 @@ outputs with dtypes and shapes), the node table in topological order with
 their attributes, the initializer table (each a dtype, a shape and a byte
 range of the model file, of an external data file or of the reader's own
 small buffer for constants written as typed fields), and the problems found.
-`onnx_info` hands the tables to Python as words, strings and floats; Python
-wraps them in its GraphIR classes and does no parsing. `onnx_resolve`
+The handle also keeps the bytes the byte ranges point into (the model file,
+each external data file, the reader's own buffer): `onnx_buffers` gives
+their addresses, so Python opens and maps no file. `onnx_info` hands the
+tables to Python as words, strings and floats; Python wraps them in its
+GraphIR classes and does no parsing. `onnx_resolve`
 (autograd/import_resolve.mojo) resolves every value's static shape on the
-same handle.
+same handle; `onnx_import_file` (autograd/import_lower.mojo) reads, resolves
+and lowers a model file in one call.
 
 The checks and their texts are the Python reader's: an opset older than 13,
 a node outside the default ONNX domain, an unsupported dtype, a subgraph or
@@ -28,7 +32,7 @@ strings list, -1 for none; a float an index into the floats list):
                      n_inputs, values ..., n_outputs, values ...,
                      n_nodes, nodes ..., n_initializers, tensors ...
            status 5: n_problems, problems (name, op, reason) ...
-           status 1-4: message
+           status 1-4: message, missing (1 when the file does not exist)
   value    name, dtype, rank, rank x (is_str, value or string)
   tensor   name, dtype, rank, dims ..., buffer, start, end (a byte range)
   node     op, domain, name, n_in, inputs ..., n_out, outputs ...,
@@ -38,15 +42,15 @@ strings list, -1 for none; a float an index into the floats list):
            end (a range of floats); 7 ints -> count, values ...; 8 strings -> count,
            strings ...; 9 tensors -> count, tensors ...
 dtype: 0 f32, 1 f16, 2 bf16, 3 f64, 4 i64, 5 i32, 6 bool. Buffer kinds:
-0 the model file, 1 the reader's own bytes (`onnx_copy_blob`), 2 an
-external data file (its resolved path)."""
+0 the model file, 1 the reader's own bytes, 2 an external data file (its
+resolved path); `onnx_buffers` gives each one's address."""
 # cpu-route: model file parsing. Reading a model file is the explicit input
 # step before the runtime: names, dims, attributes and byte ranges, on the
 # host; tensor element values are never computed on (integer and bool
 # tensors are decoded to integers, the description the shape folding reads).
 from std.ffi import _Global
 from std.memory import bitcast, memcpy
-from std.os.path import isfile, realpath
+from std.os.path import exists, isfile, realpath
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from autograd.import_proto import (
@@ -392,11 +396,13 @@ struct OnnxGraph(Movable):
     var st: StrTab
     var status: Int
     var message: String
+    var missing: Bool  # status ONNX_CANNOT_OPEN: the file does not exist
     var opset: Int
     var buf_kind: List[Int]
     var buf_path: List[Int]
     var buf_size: List[Int]
     var blob: List[UInt8]
+    var data: List[List[UInt8]]  # the bytes of each buffer the reader read (by buffer; the blob is `blob`)
     var inputs: List[GValue]
     var outputs: List[GValue]
     var nodes: List[GNode]
@@ -408,11 +414,13 @@ struct OnnxGraph(Movable):
         self.st = StrTab()
         self.status = ONNX_OK
         self.message = String("")
+        self.missing = False
         self.opset = 0
         self.buf_kind = List[Int]()
         self.buf_path = List[Int]()
         self.buf_size = List[Int]()
         self.blob = List[UInt8]()
+        self.data = List[List[UInt8]]()
         self.inputs = List[GValue]()
         self.outputs = List[GValue]()
         self.nodes = List[GNode]()
@@ -929,7 +937,20 @@ struct _Reader(Movable):
         self.g = OnnxGraph()
 
     def take_graph(deinit self) -> OnnxGraph:
-        return self.g^
+        """The graph, with the model's and the external data files' bytes
+        moved under it by buffer index (the lowering reads the weights there)."""
+        var g = self.g^
+        var data = List[List[UInt8]]()
+        for _ in range(len(g.buf_kind)):  # small-loop(buf_kind: the model's files): one slot per file
+            data.append(List[UInt8]())
+        data[BUF_MODEL] = self.model^
+        var ext = self.ext_data^
+        var bufs = self.ext_bufs^
+        while len(ext) > 0:  # small-loop(ext: the external data files): one move per file
+            var k = len(ext) - 1
+            data[bufs[k]] = ext.pop()
+        g.data = data^
+        return g^
 
     def ext_slice(mut self, t: RawTensor, nbytes: Int, mut buf: Int, mut off: Int) raises:
         """The external data range of `t` (importers' former _External.slice)."""
@@ -1497,6 +1518,7 @@ def onnx_read_file(path: String) -> OnnxGraph:
         var g = OnnxGraph()
         g.status = ONNX_CANNOT_OPEN
         g.message = String(e)
+        g.missing = not exists(path)
         return g^
     var size = len(body)
     var base = String(".")
@@ -1541,7 +1563,7 @@ def onnx_read_file(path: String) -> OnnxGraph:
         g.message = fatal_text(String(e)) if is_fatal(String(e)) else String(e)
         return g^
     r.g.buf_size[BUF_BLOB] = len(r.g.blob)
-    # the model and external file bytes are freed here; Python maps the files itself
+    # the model and external file bytes stay with the graph until onnx_close
     return r^.take_graph()
 
 
@@ -1640,6 +1662,7 @@ def onnx_info(h: Int) raises -> OnnxInfo:
         var msg = g[].message
         var mk = g[].st.intern(msg)
         w.append(mk)
+        w.append(1 if g[].missing else 0)
     else:
         w.append(g[].opset)
         w.append(len(g[].buf_kind))
@@ -1707,16 +1730,22 @@ def onnx_info(h: Int) raises -> OnnxInfo:
     return OnnxInfo(w^, strs^, floats^)
 
 
-def onnx_copy_blob(h: Int, addr: Int) raises -> Int:
-    """Copy the reader's own bytes (buffer 1) to `addr` (the caller's
-    buffer of that size) and release them. Returns the byte count."""
+def onnx_buffers(h: Int) raises -> List[Int]:
+    """The address of each buffer of handle `h`, in buffer order (the model
+    file, the reader's own bytes, each external data file; 0 for an empty
+    one). The bytes stay valid until `onnx_close(h)`."""
     var g = onnx_graph(h)
-    var n = len(g[].blob)
-    if n > 0:
-        memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr),
-               src=g[].blob.unsafe_ptr(), count=n)
-    g[].blob = List[UInt8]()
-    return n
+    var out = List[Int]()
+    for i in range(len(g[].buf_kind)):  # small-loop(buf_kind: the model's files): one address per file
+        if g[].buf_size[i] == 0:
+            out.append(0)
+        elif g[].buf_kind[i] == BUF_BLOB:
+            out.append(Int(g[].blob.unsafe_ptr()))
+        elif i < len(g[].data) and len(g[].data[i]) == g[].buf_size[i]:
+            out.append(Int(g[].data[i].unsafe_ptr()))
+        else:
+            raise Error("onnx_buffers: model graph " + String(h) + " holds no bytes for buffer " + String(i))
+    return out^
 
 
 def onnx_close(hid: Int) raises:

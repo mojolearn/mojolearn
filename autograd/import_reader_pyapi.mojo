@@ -3,7 +3,7 @@
 # its arguments and the reader's typed results, nothing else.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call
-from autograd.import_reader import onnx_read, onnx_info, onnx_copy_blob, onnx_close
+from autograd.import_reader import onnx_read, onnx_info, onnx_buffers, onnx_close
 
 
 def onnx_read_py(path: PythonObject) raises -> PythonObject:
@@ -30,9 +30,13 @@ def onnx_info_py(h: PythonObject) raises -> PythonObject:
     return out
 
 
-def onnx_copy_blob_py(h: PythonObject, addr: PythonObject) raises -> PythonObject:
-    """Copy the reader's own bytes (buffer 1) to `addr` and release them. Returns the byte count."""
-    return PythonObject(onnx_copy_blob(Int(py=h), Int(py=addr)))
+def onnx_buffers_py(h: PythonObject) raises -> PythonObject:
+    """The address of each buffer of handle h (0 for an empty one), valid until onnx_close."""
+    var addrs = onnx_buffers(Int(py=h))
+    var out = Python.list()
+    for i in range(len(addrs)):  # driver-loop: over the model's files, converted
+        _ = py_call(out.append, PythonObject(addrs[i]))
+    return out
 
 
 def onnx_close_py(h: PythonObject) raises -> PythonObject:
