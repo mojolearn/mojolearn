@@ -245,3 +245,13 @@ def test_optimizer_parameter_device_consumed_output_is_native():
     assert np.asarray(downloaded).tobytes() == params.tobytes()
     audit_native_call(T.TrainDeviceArray.__del__, output).assert_native()
     audit_native_call(optimizer.params_to_host).assert_native()
+
+
+def test_native_beta_buffer_and_ordered_checkpoint_preserve_supported_interfaces():
+    from collections import OrderedDict
+    beta = np.array([0.9, 0.999], dtype="f8")
+    optimizer = audit_native_call(T.AdamW, np.ones(3, dtype="f4"), betas=beta,
+                                 numeric_mode="identical", resident=False).assert_native()
+    assert optimizer.betas == (float(beta[0]), float(beta[1]))
+    state = audit_native_call(optimizer.state_dict).assert_native()
+    audit_native_call(optimizer.load_state_dict, OrderedDict(state)).assert_native()

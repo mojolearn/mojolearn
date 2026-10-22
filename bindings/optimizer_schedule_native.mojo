@@ -4,7 +4,7 @@ from std.memory import bitcast
 from std.math import isfinite
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_fields, py_setitem
-from bindings.optimizer_admission import opt_scalar, opt_value, opt_schedule
+from bindings.optimizer_admission import opt_scalar, opt_value, opt_schedule, opt_exact
 from bindings.optimizer_public_door import schedule_spec
 
 
@@ -81,7 +81,7 @@ def schedule_operation(operation: String, owner: PythonObject, values: PythonObj
     if operation == "schedule_from_config":
         var cfg = values[0]
         opt_value(cfg, context)
-        if py_type(cfg) is not b.dict:
+        if not opt_exact(py_type(cfg), context["mapping_types"]):
             raise Error("TypeError: schedule configuration requires a native dictionary")
         var name = cfg["kind"]
         opt_scalar(name, context)
