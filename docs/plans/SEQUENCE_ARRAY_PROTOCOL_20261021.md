@@ -70,5 +70,16 @@ implementation and qualification tasks, not a claimed toolchain blocker.
 No Python fallback has been added to native code and the existing public
 interface remains intact.
 
+Qualification checkpoint: frozen `43b5b5e13` compiled successfully. The parent
+reported 146/146 selected CPU cases passing and 296/304 selected Metal cases
+passing; all eight Metal failures were in the private array candidate/guards.
+The follow-up repairs normalize scalar subarray shapes before the native dtype
+factory, preserve unsized void adaptation, refuse non-type warning categories
+before descriptor access, and explicitly select the C numeric locale category.
+Scalar shape-one compatibility retains NumPy 1.26's deprecation warning and
+scalar result through native warning delivery. Fourteen added schema cases and
+two added guard cases still require execution on the repaired frozen build.
+These counts cover the selected combined suites, not an all-green release.
+
 References: [Mojo's supported libc/variadic FFI](https://mojolang.static.modular.com/docs/manual/c-ffi/)
 and [NumPy's cast-warning and undefined-result notes](https://numpy.org/doc/1.24/release/1.24.0-notes.html#numpy-now-gives-floating-point-errors-in-casts).
