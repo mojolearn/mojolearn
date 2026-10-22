@@ -28,7 +28,7 @@ def device_shape(shape: PythonObject, context: PythonObject) raises -> List[Int]
         raise Error("TypeError: training device shape requires a native tuple or list")
     var dims = List[Int]()
     for i in range(len(shape)):  # driver-loop: over native device-array shape words
-        var n = Int(py=py_call(b.int, shape[i]))
+        var n = Int(py=py_call(context["scalar_types"][2], shape[i]))
         if n < 0:
             raise Error("ValueError: training device shape dimensions must be nonnegative")
         dims.append(n)
@@ -183,7 +183,7 @@ def device_operation(operation: String, owner: PythonObject, values: PythonObjec
             var base = values[3]
             if base is not None and py_type(base) is not context["device_class"]:
                 raise Error("TypeError: training device array base must retain a native device-array owner")
-            device_set(owner, binding, py_call(b.int, values[1]), dims, base)
+            device_set(owner, binding, py_call(context["scalar_types"][2], values[1]), dims, base)
             return PythonObject(None)
         return device_allocate(entries, dims, context)
     if operation == "device_upload":
