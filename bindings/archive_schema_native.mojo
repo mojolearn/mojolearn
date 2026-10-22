@@ -49,10 +49,12 @@
 #   ("i8" | "i4" | "f8" | "f4", member, items)
 #                                      one packed vector, an item per element
 #   ("when", field, value, steps)      run steps when field == value
+#   ("when_set", field, steps)         run steps when the instance holds field and
+#                                      field is not None (no == on an array)
 #
 # An item is ("int", field), ("bool", field), ("const", number),
 # ("dim", field, axis), ("size", field), ("len", field), ("none", field, sentinel),
-# ("noneflag", field), ("float", field), ("float_or", field, default),
+# ("noneflag", field), ("setflag", field), ("float", field), ("float_or", field, default),
 # ("int_or", field, default), ("bool_or", field, default), ("code", field, table)
 # ("if_eq", field, value, item, item), ("strict", field, exc, msg),
 # ("none_or", field, sentinel, item), ("at_least", item, low, exc, msg) or
@@ -62,7 +64,8 @@
 # item, refused with exc(msg) below low; "mod" is item % modulus (floored,
 # as Python's %). A field is an instance-dictionary
 # name, or a tuple path: a name, then dictionary keys and sequence indices.
-# Messages may name the class as {cls}.
+# ("noneflag", field) is 1 when field is None, ("setflag", field) 1 when it
+# is not. Messages may name the class as {cls}.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains, py_fields
 from bindings.classical_arrays import classical_address, classical_wrap_array, classical_is_array, classical_input, classical_dtype_str, classical_c_bytes, _store_code
@@ -204,6 +207,8 @@ def _schema_whole(fields: PythonObject, item: PythonObject, name: String,
         return _schema_int(item[2], "sentinel") if value is None else _schema_int(value, _schema_label(item[1]))
     if kind == "noneflag":
         return 1 if _schema_value(fields, item[1], name) is None else 0
+    if kind == "setflag":
+        return 0 if _schema_value(fields, item[1], name) is None else 1
     if kind == "int_or":
         if not _schema_has(fields, item[1]):
             return _schema_int(item[2], "default")
@@ -406,6 +411,9 @@ def _schema_run(model: PythonObject, fields: PythonObject, steps: PythonObject, 
         elif kind == "when":
             if _schema_has(fields, step[1]) and Bool(py=_schema_value(fields, step[1], name) == step[2]):
                 _schema_run(model, fields, step[3], values, name, context)
+        elif kind == "when_set":
+            if _schema_has(fields, step[1]) and _schema_value(fields, step[1], name) is not None:
+                _schema_run(model, fields, step[2], values, name, context)
         else:
             raise Error("RuntimeError: unknown save step " + kind)
 

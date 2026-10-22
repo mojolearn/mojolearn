@@ -483,10 +483,12 @@ def host_archive_mixture(cls: PythonObject, arrays: PythonObject, path: PythonOb
     return model
 
 
-def host_archive_density(cls: PythonObject, arrays: PythonObject, kde: Bool,
+def host_archive_density(cls: PythonObject, arrays: PythonObject, kde: Bool, path: PythonObject,
                          context: PythonObject) raises -> PythonObject:
+    if not kde:
+        return host_archive_dbscan(cls, arrays, path, context)
     var meta = host_archive_count(arrays, "meta", "<i8", 3, context, True)
-    var parameter = host_archive_count(arrays, "bandwidth" if kde else "eps", "<f8", 1, context, True)
+    var parameter = host_archive_count(arrays, "bandwidth", "<f8", 1, context, True)
     var nf = classical_i64(meta, 0)
     var n = classical_i64(meta, 1)
     var metric = _archive_string(arrays, "metric", context)
@@ -496,40 +498,65 @@ def host_archive_density(cls: PythonObject, arrays: PythonObject, kde: Bool,
     py_setitem(fields, "metric", metric)
     py_setitem(fields, "n_features_in_", nf)
     py_setitem(fields, "n_samples_fit_", n)
-    if kde:
-        var bandwidth = classical_f64(parameter, 0)
-        if not bandwidth > 0.0:
-            raise Error("KernelDensity bandwidth must be positive")
-        py_setitem(fields, "bandwidth", bandwidth)
-        py_setitem(fields, "kernel", _archive_string(arrays, "kernel", context))
-        py_setitem(fields, "algorithm", "auto")
-        py_setitem(fields, "atol", 0)
-        py_setitem(fields, "rtol", 0)
-        py_setitem(fields, "breadth_first", True)
-        py_setitem(fields, "leaf_size", 40)
-        py_setitem(fields, "metric_params", PythonObject(None))
-        py_setitem(fields, "_x", host_archive_shape(arrays, "x", "<f4", Python.tuple(n, nf), context))
-        if classical_i64(meta, 2) != 0:
-            py_setitem(fields, "_w", host_archive_shape(arrays, "weights", "<f4", Python.tuple(n), context))
-        else:
-            if py_contains(arrays, "weights"):
-                raise Error("KernelDensity archive carries weights its meta says it lacks")
-            py_setitem(fields, "_w", PythonObject(None))
+    var bandwidth = classical_f64(parameter, 0)
+    if not bandwidth > 0.0:
+        raise Error("KernelDensity bandwidth must be positive")
+    py_setitem(fields, "bandwidth", bandwidth)
+    py_setitem(fields, "kernel", _archive_string(arrays, "kernel", context))
+    py_setitem(fields, "algorithm", "auto")
+    py_setitem(fields, "atol", 0)
+    py_setitem(fields, "rtol", 0)
+    py_setitem(fields, "breadth_first", True)
+    py_setitem(fields, "leaf_size", 40)
+    py_setitem(fields, "metric_params", PythonObject(None))
+    py_setitem(fields, "_x", host_archive_shape(arrays, "x", "<f4", Python.tuple(n, nf), context))
+    if classical_i64(meta, 2) != 0:
+        py_setitem(fields, "_w", host_archive_shape(arrays, "weights", "<f4", Python.tuple(n), context))
     else:
-        if not py_contains(context["host_archive_dbscan_metrics"], metric):
-            raise Error("saved DBSCAN metric is unsupported")
-        py_setitem(fields, "eps", classical_f64(parameter, 0))
-        py_setitem(fields, "min_samples", classical_i64(meta, 2))
-        py_setitem(fields, "algorithm", _archive_string(arrays, "algorithm", context))
-        py_setitem(fields, "max_mbytes_per_batch", PythonObject(None))
-        py_setitem(fields, "max_iterations", PythonObject(None))
-        py_setitem(fields, "prediction_data", True)
-        var indices = _archive_exact(arrays, "core_sample_indices", "<i4", context)
-        var nc = Int(py=indices.size)
-        py_setitem(fields, "components_", host_archive_shape(arrays, "components", "<f4", Python.tuple(nc, nf), context))
-        py_setitem(fields, "core_sample_indices_", indices)
-        py_setitem(fields, "_core_labels", host_archive_count(arrays, "core_labels", "<i4", nc, context))
-        py_setitem(fields, "labels_", host_archive_count(arrays, "labels", "<i4", n, context))
+        if py_contains(arrays, "weights"):
+            raise Error("KernelDensity archive carries weights its meta says it lacks")
+        py_setitem(fields, "_w", PythonObject(None))
+    return model
+
+
+def host_archive_dbscan(cls: PythonObject, arrays: PythonObject, path: PythonObject,
+                        context: PythonObject) raises -> PythonObject:
+    """DBSCAN.load: the refusals keep the Python loader's wording and order."""
+    var where = host_archive_where(path, context)
+    var meta = host_archive_meta(arrays, "meta", 3, path, context)
+    var eps = host_archive_sized(arrays, "eps", "<f8", 1, where + " eps must hold one value", context)
+    var nf = classical_i64(meta, 0)
+    var n = classical_i64(meta, 1)
+    var metric = _archive_string(arrays, "metric", context)
+    var algorithm = _archive_string(arrays, "algorithm", context)
+    var model = host_archive_object(cls, arrays, context)
+    var fields = sequential_fields(model)
+    py_setitem(fields, "eps", classical_f64(eps, 0))
+    py_setitem(fields, "min_samples", classical_i64(meta, 2))
+    py_setitem(fields, "metric", metric)
+    py_setitem(fields, "algorithm", algorithm)
+    py_setitem(fields, "max_mbytes_per_batch", PythonObject(None))
+    py_setitem(fields, "max_iterations", PythonObject(None))
+    py_setitem(fields, "prediction_data", True)
+    host_archive_mode(arrays, fields, context)
+    if not py_contains(context["host_archive_dbscan_metrics"], metric):
+        raise Error(where + " metric " + _archive_builtin_repr(metric) + " is not one DBSCAN serves")
+    var components = _archive_exact(arrays, "components", "<f4", context)
+    var indices = _archive_exact(arrays, "core_sample_indices", "<i4", context)
+    var core_labels = _archive_exact(arrays, "core_labels", "<i4", context)
+    var labels = _archive_exact(arrays, "labels", "<i4", context)
+    var nc = Int(py=indices.size)
+    if Int(py=components.ndim) != 2 or Int(py=components.shape[0]) != nc or Int(py=components.shape[1]) != nf:
+        raise Error(where + " components shape " + _archive_builtin_repr(components.shape)
+                    + " is not (" + String(nc) + ", " + String(nf) + ")")
+    if Int(py=core_labels.size) != nc or Int(py=labels.size) != n:
+        raise Error(where + " core labels or labels do not match the saved counts")
+    py_setitem(fields, "components_", components)
+    py_setitem(fields, "core_sample_indices_", indices)
+    py_setitem(fields, "_core_labels", core_labels)
+    py_setitem(fields, "labels_", labels)
+    py_setitem(fields, "n_features_in_", nf)
+    py_setitem(fields, "n_samples_fit_", n)
     return model
 
 
@@ -799,45 +826,64 @@ def host_archive_ivf(cls: PythonObject, arrays: PythonObject, context: PythonObj
     return model
 
 
-def host_archive_hdbscan(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
-    var meta = host_archive_count(arrays, "ints", "<i8", 11, context, True)
-    var reals = host_archive_count(arrays, "reals", "<f8", 2, context, True)
+def host_archive_hdbscan(cls: PythonObject, arrays: PythonObject, path: PythonObject,
+                         context: PythonObject) raises -> PythonObject:
+    """HDBSCAN.load: the refusals keep the Python loader's wording and order."""
+    var where = host_archive_where(path, context)
+    var meta = _archive_exact(arrays, "ints", "<i8", context)
+    var reals = _archive_exact(arrays, "reals", "<f8", context)
+    if Int(py=meta.size) != 11 or Int(py=reals.size) != 2:
+        raise Error(where + " holds " + String(Int(py=meta.size)) + " ints and " + String(Int(py=reals.size))
+                    + " reals, 11 and 2 are needed")
     var d = classical_i64(meta, 0)
     var selected = classical_i64(meta, 1)
     var condensed = classical_i64(meta, 4)
     var edges = classical_i64(meta, 5)
     var exemplars = classical_i64(meta, 10)
-    var raw = _archive_exact(arrays, "raw_data", "<f4", context)
-    if Int(py=raw.ndim) != 2 or Int(py=raw.shape[1]) != d or Int(py=raw.shape[0]) < 2:
-        raise Error("HDBSCAN raw_data shape does not match saved features")
-    var n = Int(py=raw.shape[0])
+    var metric = _archive_string(arrays, "metric", context)
+    var method = _archive_string(arrays, "cluster_selection_method", context)
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
-    host_archive_mode(arrays, fields, context)
     py_setitem(fields, "min_cluster_size", classical_i64(meta, 6))
     var samples = classical_i64(meta, 7)
     py_setitem(fields, "min_samples", PythonObject(None) if samples == -1 else PythonObject(samples))
     py_setitem(fields, "cluster_selection_epsilon", classical_f64(reals, 1))
     py_setitem(fields, "max_cluster_size", classical_i64(meta, 8))
-    py_setitem(fields, "metric", _archive_string(arrays, "metric", context))
+    py_setitem(fields, "metric", metric)
     py_setitem(fields, "alpha", classical_f64(reals, 0))
-    py_setitem(fields, "cluster_selection_method", _archive_string(arrays, "cluster_selection_method", context))
+    py_setitem(fields, "cluster_selection_method", method)
     py_setitem(fields, "allow_single_cluster", classical_i64(meta, 9) != 0)
     py_setitem(fields, "prediction_data", True)
+    host_archive_mode(arrays, fields, context)
+    var raw = _archive_exact(arrays, "raw_data", "<f4", context)
+    if Int(py=raw.ndim) != 2 or Int(py=raw.shape[1]) != d or Int(py=raw.shape[0]) < 2:
+        raise Error(where + " raw_data has shape " + _archive_builtin_repr(raw.shape) + ", ints say "
+                    + String(d) + " features")
+    var n = Int(py=raw.shape[0])
+    var names = Python.tuple("core_distances", "labels", "parents", "lambdas", "deaths", "selected_clusters",
+                             "index_into_children", "exemplar_idx", "exemplar_label_offsets")
+    var dtypes = Python.tuple("<f4", "<i4", "<i4", "<f4", "<f4", "<i4", "<i4", "<i4", "<i4")
+    var sizes = Python.tuple(n, n, edges, edges, condensed, max(selected, 1), edges + 1, max(exemplars, 1), selected + 1)
+    var got = Python.dict()
+    for i in range(len(names)):  # driver-loop: nine saved fitted and prediction-data arrays
+        var name = String(names[i])
+        var size = Int(py=sizes[i])
+        var value = _archive_exact(arrays, name, String(dtypes[i]), context)
+        if Int(py=value.ndim) != 1 or Int(py=value.size) != size:
+            raise Error(where + " " + name + " holds " + String(Int(py=value.size)) + " values, "
+                        + String(size) + " are needed")
+        py_setitem(got, names[i], value)
     py_setitem(fields, "n_features_in_", d)
-    py_setitem(fields, "labels_", host_archive_shape(arrays, "labels", "<i4", Python.tuple(n), context))
-    py_setitem(fields, "core_distances_", host_archive_shape(arrays, "core_distances", "<f4", Python.tuple(n), context))
+    py_setitem(fields, "labels_", got["labels"])
+    py_setitem(fields, "core_distances_", got["core_distances"])
     py_setitem(fields, "n_clusters_", selected)
     py_setitem(fields, "n_outliers_", classical_i64(meta, 2))
     py_setitem(fields, "n_boruvka_rounds_", classical_i64(meta, 3))
     py_setitem(fields, "n_condensed_clusters_", condensed)
     py_setitem(fields, "_raw_data", raw)
     var prediction = Python.dict(n_edges=edges, n_condensed=condensed, n_exemplars=exemplars)
-    var names = Python.tuple("parents", "lambdas", "deaths", "selected_clusters", "index_into_children", "exemplar_idx", "exemplar_label_offsets")
-    var dtypes = Python.tuple("<i4", "<f4", "<f4", "<i4", "<i4", "<i4", "<i4")
-    var sizes = Python.tuple(edges, edges, condensed, max(selected, 1), edges + 1, max(exemplars, 1), selected + 1)
-    for i in range(len(names)):  # driver-loop: seven saved prediction-data arrays
-        py_setitem(prediction, names[i], host_archive_shape(arrays, String(names[i]), String(dtypes[i]), Python.tuple(sizes[i]), context))
+    for i in range(2, len(names)):  # driver-loop: seven saved prediction-data arrays
+        py_setitem(prediction, names[i], got[names[i]])
     py_setitem(fields, "_prediction_data", prediction)
     return model
 
@@ -1016,9 +1062,12 @@ def host_archive_iforest(cls: PythonObject, arrays: PythonObject, context: Pytho
     return model
 
 
-def host_archive_spectral(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
-    var meta = host_archive_count(arrays, "meta", "<i8", 8, context, True)
-    var tolerance = host_archive_count(arrays, "eigen_tol", "<f8", 1, context, True)
+def host_archive_spectral(cls: PythonObject, arrays: PythonObject, path: PythonObject,
+                          context: PythonObject) raises -> PythonObject:
+    """SpectralClustering.load: the refusals keep the Python loader's
+    wording and order, `_validate_params` included."""
+    var where = host_archive_where(path, context)
+    var meta = host_archive_meta(arrays, "meta", 8, path, context)
     var clusters = classical_i64(meta, 0)
     var k = classical_i64(meta, 1)
     var neighbors = classical_i64(meta, 2)
@@ -1027,21 +1076,37 @@ def host_archive_spectral(cls: PythonObject, arrays: PythonObject, context: Pyth
     var seed_none = classical_i64(meta, 5) != 0
     var n = classical_i64(meta, 6)
     var nf = classical_i64(meta, 7)
+    var tolerance = host_archive_sized(arrays, "eigen_tol", "<f8", 1, where + " eigen_tol must hold one value", context)
     var tol = classical_f64(tolerance, 0)
     var affinity = _archive_string(arrays, "affinity", context)
-    if String(affinity) == "rbf" or String(affinity) == "precomputed_nearest_neighbors":
-        raise Error("NotImplementedError: saved spectral prediction data requires nearest_neighbors or precomputed affinity")
-    if String(affinity) != "nearest_neighbors" and String(affinity) != "precomputed":
-        raise Error("unsupported saved SpectralClustering affinity")
+    var name = String(affinity)
+    # SpectralClustering._validate_params, on the values the file holds.
+    var affinities = context["host_archive_spectral_affinities"]
+    if not py_contains(affinities, affinity):
+        raise Error("mojolearn SpectralClustering: affinity=" + _archive_builtin_repr(affinity)
+                    + " is refused; it must be one of "
+                    + _archive_builtin_repr(py_call(Python.import_module("builtins").list, affinities))
+                    + ". A callable or another kernel name builds the affinity outside every identity column.")
+    if name == "rbf" or name == "precomputed_nearest_neighbors":
+        raise Error("NotImplementedError: mojolearn SpectralClustering: prediction_data with affinity="
+                    + _archive_builtin_repr(affinity) + " is refused; the Nystrom predict (DEVIATION 2860) carries the "
+                    + "'nearest_neighbors' and 'precomputed' affinities only")
     if not tol > 0.0:
-        raise Error("SpectralClustering eigen_tol must be positive")
+        raise Error("mojolearn SpectralClustering: eigen_tol must be positive, got "
+                    + _archive_builtin_repr(PythonObject(tol)) + " (DEVIATION 890; see the 'auto' note)")
     if not seed_none and (seed < 0 or seed >= 4294967296):
-        raise Error("SpectralClustering random_state must fit uint32")
-    if clusters < 1 or k < 1 or neighbors < 1 or starts < 1:
-        raise Error("saved spectral cluster, component, neighbor and start counts must be positive")
+        raise Error("mojolearn SpectralClustering: random_state must satisfy 0 <= random_state < 2**32, got "
+                    + String(seed) + " (cuML's check_random_seed refuses the same range)")
+    if clusters < 1:
+        raise Error("mojolearn SpectralClustering: n_clusters must be at least 1")
+    if starts < 1:
+        raise Error("mojolearn SpectralClustering: n_init must be at least 1")
+    if neighbors < 1:
+        raise Error("mojolearn SpectralClustering: n_neighbors must be at least 1")
+    if k < 1:
+        raise Error("mojolearn SpectralClustering: n_components must be at least 1, or None to follow n_clusters")
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
-    host_archive_mode(arrays, fields, context)
     py_setitem(fields, "n_clusters", clusters)
     py_setitem(fields, "n_components", k)
     py_setitem(fields, "random_state", PythonObject(None) if seed_none else PythonObject(seed))
@@ -1064,14 +1129,26 @@ def host_archive_spectral(cls: PythonObject, arrays: PythonObject, context: Pyth
     py_setitem(fields, "_eigen_tol", tol)
     py_setitem(fields, "_gamma", PythonObject(None))
     py_setitem(fields, "_seed", 0 if seed_none else seed)
-    py_setitem(fields, "_pd_eigenvalues", host_archive_count(arrays, "eigenvalues", "<f4", k, context))
-    py_setitem(fields, "_pd_eigenvectors", host_archive_shape(arrays, "eigenvectors", "<f4", Python.tuple(n, k), context))
-    py_setitem(fields, "_pd_diag", host_archive_count(arrays, "diag", "<f4", n, context))
-    py_setitem(fields, "_pd_centroids", host_archive_shape(arrays, "centroids", "<f4", Python.tuple(clusters, k), context))
-    py_setitem(fields, "labels_", host_archive_count(arrays, "labels", "<i4", n, context))
-    py_setitem(fields, "_fit_X", host_archive_shape(arrays, "x", "<f4", Python.tuple(n, nf), context) if String(affinity) == "nearest_neighbors" else PythonObject(None))
-    if String(affinity) == "nearest_neighbors":
+    host_archive_mode(arrays, fields, context)
+    var values = _archive_exact(arrays, "eigenvalues", "<f4", context)
+    var vectors = _archive_exact(arrays, "eigenvectors", "<f4", context)
+    var diag = _archive_exact(arrays, "diag", "<f4", context)
+    var centroids = _archive_exact(arrays, "centroids", "<f4", context)
+    var labels = _archive_exact(arrays, "labels", "<i4", context)
+    if (Int(py=values.size) != k or Int(py=vectors.ndim) != 2 or Int(py=vectors.shape[0]) != n
+            or Int(py=vectors.shape[1]) != k or Int(py=diag.size) != n or Int(py=centroids.ndim) != 2
+            or Int(py=centroids.shape[0]) != clusters or Int(py=centroids.shape[1]) != k or Int(py=labels.size) != n):
+        raise Error(where + " prediction data shapes do not match n_train=" + String(n) + ", n_components="
+                    + String(k) + ", n_clusters=" + String(clusters))
+    py_setitem(fields, "_fit_X", PythonObject(None))
+    if name == "nearest_neighbors":
+        py_setitem(fields, "_fit_X", host_archive_matrix(arrays, "x", "<f4", n, nf, path, context))
         py_setitem(fields, "n_features_in_", nf)
+    py_setitem(fields, "_pd_eigenvalues", values)
+    py_setitem(fields, "_pd_eigenvectors", vectors)
+    py_setitem(fields, "_pd_diag", diag)
+    py_setitem(fields, "_pd_centroids", centroids)
+    py_setitem(fields, "labels_", labels)
     py_setitem(fields, "n_components_", k)
     return model
 
@@ -1775,7 +1852,7 @@ def host_archive_build(path: PythonObject, context: PythonObject,
     elif fmt == "mojolearn-gmm-1":
         model = host_archive_mixture(cls, arrays, path, context)
     elif fmt == "mojolearn-kde-1" or fmt == "mojolearn-dbscan-1":
-        model = host_archive_density(cls, arrays, fmt == "mojolearn-kde-1", context)
+        model = host_archive_density(cls, arrays, fmt == "mojolearn-kde-1", path, context)
     elif fmt == "mojolearn-agglomerative-1":
         model = host_archive_agglomerative(cls, arrays, path, context)
     elif fmt == "mojolearn-logistic-1":
@@ -1787,7 +1864,7 @@ def host_archive_build(path: PythonObject, context: PythonObject,
     elif fmt == "mojolearn-ivf-flat-1":
         model = host_archive_ivf(cls, arrays, context)
     elif fmt == "mojolearn-hdbscan-2":
-        model = host_archive_hdbscan(cls, arrays, context)
+        model = host_archive_hdbscan(cls, arrays, path, context)
     elif fmt == "mojolearn-radius-1":
         model = host_archive_neighbors(cls, arrays, 3, context)
     elif fmt == "mojolearn-knn-1":
@@ -1798,7 +1875,7 @@ def host_archive_build(path: PythonObject, context: PythonObject,
     elif fmt == "mojolearn-iforest-1":
         model = host_archive_iforest(cls, arrays, context)
     elif fmt == "mojolearn-spectral-1":
-        model = host_archive_spectral(cls, arrays, context)
+        model = host_archive_spectral(cls, arrays, path, context)
     elif fmt == "mojolearn-umap-1":
         model = host_archive_umap(cls, arrays, context)
     elif fmt == "mojolearn-gp-1" or fmt == "mojolearn.gpc.v1":

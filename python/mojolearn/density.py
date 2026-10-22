@@ -2,12 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Density-based clustering on the GPU. Reference: cuML's DBSCAN."""
 
-from . import _mojolearn_estimators, _serialize
-from ._array import Array
+from . import _mojolearn_estimators, _native_archive_bridge, _serialize
 from ._sample_weight import check_sample_weight
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, empty, frombytes, full, zeros
 from ._mode import NumericModeMixin, available_if
-from .linear_model import _check_saved_by, _restore_mode, _saved_mode, _shape_of
+from .linear_model import _check_saved_by, _restore_mode, _shape_of
 
 #: `KernelDensity.save`'s format tag (the kde svc host lane, 2026-09-14).
 _KDE_FORMAT = "mojolearn-kde-1"
@@ -15,6 +14,19 @@ _KDE_FORMAT = "mojolearn-kde-1"
 #: `DBSCAN.save`'s format tag (lane/inference-transductive-predict,
 #: 2026-09-15): the prediction data of a `prediction_data=True` fit.
 _DBSCAN_FORMAT = "mojolearn-dbscan-1"
+
+#: `DBSCAN.save`'s refusal of a fit without prediction data.
+_DBSCAN_UNSTORED = (
+    "mojolearn DBSCAN.save: prediction data was not stored; fit with "
+    "DBSCAN(prediction_data=True). A model without it can label no new "
+    "row, so there is nothing a saved file could serve"
+)
+
+# The compiled saved-model owner, connected once at import: `save` and
+# `load` are one native call each (bindings/archive_schema_native.mojo
+# writes the schema registered below each class; host_archive_native.mojo
+# builds the loaded model).
+_ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
 
 def _check_queries(X, n_features, where):
@@ -486,30 +498,7 @@ class DBSCAN(NumericModeMixin):
         ----------
         path : str or path-like
         """
-        if not hasattr(self, "labels_"):
-            raise RuntimeError("this estimator is not fitted yet")
-        if not self.prediction_data or getattr(self, "components_", None) is None:
-            raise ValueError(
-                "mojolearn DBSCAN.save: prediction data was not stored; fit with "
-                "DBSCAN(prediction_data=True). A model without it can label no new "
-                "row, so there is nothing a saved file could serve"
-            )
-        arrays = {
-            "format": _DBSCAN_FORMAT,
-            "estimator": type(self).__name__,
-            "numeric_mode": _saved_mode(self),
-            "metric": str(self.metric).lower(),
-            "algorithm": str(self.algorithm),
-            "components": self.components_,
-            "core_sample_indices": self.core_sample_indices_,
-            "core_labels": self._core_labels,
-            "labels": self.labels_,
-            "eps": Array.from_list([float(self.eps)], "<f8"),
-            "meta": Array.from_list(
-                [int(self.n_features_in_), int(self.n_samples_fit_), int(self.min_samples)], "<i8"
-            ),
-        }
-        return _serialize.write_npz(path, arrays)
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -527,40 +516,23 @@ class DBSCAN(NumericModeMixin):
         -------
         DBSCAN
         """
-        arrays = _serialize.read_npz(path, _DBSCAN_FORMAT)
-        _check_saved_by(arrays, path, cls)
-        meta = _serialize.exact(arrays, "meta", "<i8")
-        if meta.size != 3:
-            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 3 are needed")
-        eps = _serialize.exact(arrays, "eps", "<f8")
-        if eps.size != 1:
-            raise ValueError(f"mojolearn: {path!r} eps must hold one value")
-        nf, n_fit, min_samples = int(meta[0]), int(meta[1]), int(meta[2])
-        obj = cls(
-            eps=float(eps[0]), min_samples=min_samples,
-            metric=_serialize.scalar_str(arrays, "metric"),
-            algorithm=_serialize.scalar_str(arrays, "algorithm"),
-            prediction_data=True,
-        )
-        _restore_mode(obj, arrays)
-        if str(obj.metric) not in _METRICS:
-            raise ValueError(f"mojolearn: {path!r} metric {obj.metric!r} is not one DBSCAN serves")
-        comps = _serialize.exact(arrays, "components", "<f4")
-        idx = _serialize.exact(arrays, "core_sample_indices", "<i4")
-        core_labels = _serialize.exact(arrays, "core_labels", "<i4")
-        labels = _serialize.exact(arrays, "labels", "<i4")
-        n_core = int(idx.size)
-        if comps.ndim != 2 or tuple(comps.shape) != (n_core, nf):
-            raise ValueError(f"mojolearn: {path!r} components shape {tuple(comps.shape)} is not ({n_core}, {nf})")
-        if core_labels.size != n_core or labels.size != n_fit:
-            raise ValueError(f"mojolearn: {path!r} core labels or labels do not match the saved counts")
-        obj.components_ = comps
-        obj.core_sample_indices_ = idx
-        obj._core_labels = core_labels
-        obj.labels_ = labels
-        obj.n_features_in_ = nf
-        obj.n_samples_fit_ = n_fit
-        return obj
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+
+
+_native_archive_bridge.register(DBSCAN, _DBSCAN_FORMAT, (
+    _native_archive_bridge.fitted("labels_"),
+    ("need_true", "prediction_data", "ValueError", _DBSCAN_UNSTORED),
+    ("need_set", "components_", "ValueError", _DBSCAN_UNSTORED),
+    *_native_archive_bridge.head(_DBSCAN_FORMAT),
+    ("lower", "metric", "metric"),
+    ("str", "algorithm", "algorithm"),
+    ("array", "components", "components_"),
+    ("array", "core_sample_indices", "core_sample_indices_"),
+    ("array", "core_labels", "_core_labels"),
+    ("array", "labels", "labels_"),
+    ("f8", "eps", (("float", "eps"),)),
+    ("i8", "meta", (("int", "n_features_in_"), ("int", "n_samples_fit_"), ("int", "min_samples"))),
+), host_archive_dbscan_metrics=tuple(_METRICS))
 
 
 # Maintainer notes (moved from the class docstring): `kde/`, DEVIATIONS 600-604, kde/README.md.
@@ -956,25 +928,7 @@ class KernelDensity(NumericModeMixin):
         ----------
         path : str or path-like
         """
-        if not hasattr(self, "_x"):
-            raise RuntimeError("this estimator is not fitted yet")
-        arrays = {
-            "format": _KDE_FORMAT,
-            "estimator": type(self).__name__,
-            "numeric_mode": _saved_mode(self),
-            "kernel": str(self.kernel),
-            "metric": str(self.metric),
-            "x": self._x,
-            "bandwidth": Array.from_list([float(self.bandwidth)], "<f8"),
-            "meta": Array.from_list(
-                [int(self.n_features_in_), int(self.n_samples_fit_),
-                 1 if self._w is not None else 0],
-                "<i8",
-            ),
-        }
-        if self._w is not None:
-            arrays["weights"] = self._w
-        return _serialize.write_npz(path, arrays)
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -1025,3 +979,18 @@ class KernelDensity(NumericModeMixin):
         obj.n_features_in_ = nf
         obj.n_samples_fit_ = n_fit
         return obj
+
+
+# KernelDensity.load stays in Python: the class defines `__del__` (it
+# releases a resident device fit), which the native archive builder cannot
+# allocate, and its load runs `_validate_params`.
+_native_archive_bridge.register(KernelDensity, _KDE_FORMAT, (
+    _native_archive_bridge.fitted("_x"),
+    *_native_archive_bridge.head(_KDE_FORMAT),
+    ("str", "kernel", "kernel"),
+    ("str", "metric", "metric"),
+    ("array", "x", "_x"),
+    ("f8", "bandwidth", (("float", "bandwidth"),)),
+    ("i8", "meta", (("int", "n_features_in_"), ("int", "n_samples_fit_"), ("setflag", "_w"))),
+    ("when_set", "_w", (("array", "weights", "_w"),)),
+))
