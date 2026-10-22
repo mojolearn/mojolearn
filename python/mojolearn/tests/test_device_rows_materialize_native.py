@@ -2,6 +2,9 @@
 """The public row materializer owns typed native resident snapshots."""
 from array import array
 import struct
+import json
+import subprocess
+import sys
 import numpy as np
 import pytest
 from mojolearn._array import Array
@@ -224,17 +227,46 @@ def test_materialize_refuses_inconsistent_array_metadata_before_pointer_use(owne
     assert not owner._entries
 
 
+_ARRAY_CONSTRUCTOR_POISON = r"""
+import json,sys
+import numpy as np
+from mojolearn import Array
+from mojolearn._arena_io import DeviceRows
+from mojolearn._buffer import _native
+from mojolearn.model_selection import _Resident
+from mojolearn._verify_native_runtime import audit_native_call
+hook=sys.argv[1]
+live=_native('msel_live');before=int(live());owner=_Resident()
+rows=DeviceRows(np.arange(12,dtype='f4').reshape(4,3),np.array([2,0]),owner.take)
+calls=[]
+def forbidden(*args,**kwargs):
+    calls.append(hook)
+    raise AssertionError('Python Array construction hook ran')
+setattr(Array,hook,staticmethod(forbidden) if hook=='__new__' else forbidden)
+try:
+    result=audit_native_call(rows.materialize).assert_native()
+    expected=np.array([[6.,7.,8.],[0.,1.,2.]],dtype='f4').tobytes()
+    assert not calls and result.tobytes()==expected
+finally:
+    owner.close()
+assert int(live())==before
+print(json.dumps(dict(hook=hook,callbacks=calls,bytes=result.tobytes().hex())))
+"""
+
+
 @pytest.mark.parametrize('hook', ['__new__', '__init__', '__setattr__'])
-def test_materialize_allocates_array_storage_without_python_class_constructors(owner, monkeypatch, hook):
-    rows = DeviceRows(np.arange(12, dtype='f4').reshape(4, 3), np.array([2, 0]), owner.take)
-    calls = []
-    def forbidden(*args, **kwargs):
-        calls.append(hook)
-        raise AssertionError('Python Array construction hook ran')
-    with monkeypatch.context() as patch:
-        patch.setattr(Array, hook, staticmethod(forbidden) if hook == '__new__' else forbidden)
-        result = audit_native_call(rows.materialize).assert_native()
-    assert not calls and result.tobytes() == np.array([[6., 7., 8.], [0., 1., 2.]], dtype='f4').tobytes()
+def test_materialize_allocates_array_storage_without_python_class_constructors(hook):
+    # Deleting a temporarily assigned inherited __new__ does not restore
+    # CPython's original tp_new behavior. Keep this irreversible sabotage
+    # inside a child; its complete native/callback/output assertions still run.
+    before = Array((3,), '<f4')
+    completed = subprocess.run([sys.executable, '-c', _ARRAY_CONSTRUCTOR_POISON, hook],
+                               capture_output=True, text=True, check=False)
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    report = json.loads(completed.stdout)
+    assert report == dict(hook=hook, callbacks=[], bytes=np.array([[6.,7.,8.],[0.,1.,2.]],dtype='f4').tobytes().hex())
+    after = Array((3,), '<f4')
+    assert before.shape == after.shape == (3,) and before.tobytes() == after.tobytes()
 
 
 @pytest.mark.parametrize('constructor', ['bytes', 'list', 'tuple', 'object', 'memoryview'])
