@@ -1,5 +1,25 @@
 # Agent working rules
 
+## Focus on identical; stop Apple fast investment (Andrew, 2026-10-22)
+
+- `deterministic` is retired, with no separate mode, build, evidence campaign
+  or public documentation offering. `identical` is the library's focus;
+  existing Apple-only `fast` may remain opt-in. The research paper and its
+  generated evidence cover only our `identical` mode. Preserve historical raw
+  records and rejection tests for retired mode values.
+- Direct development and performance work to `identical` mode. Stop investing
+  time specifically in Apple `fast`: no dedicated features, fixes, optimization,
+  tuning, builds, validation or benchmark campaigns unless Andrew explicitly
+  reopens that work.
+- This supersedes earlier directions to pursue Apple `fast` experiments or
+  improvements. Existing fast code and retained evidence stay in place; this
+  direction does not request their removal.
+- Apple `identical` remains part of the shared Apple/NVIDIA/AMD bitwise contract
+  and its required verification. Work needed for `identical` may touch shared
+  code; that does not authorize a separate `fast` workstream.
+- The current underoptimized `fast` implementation is not a baseline for claiming
+  the isolated performance cost of bitwise identity.
+
 ## Logs and context
 
 - Save complete build, test, and GPU logs to files. Inspect the exit status and

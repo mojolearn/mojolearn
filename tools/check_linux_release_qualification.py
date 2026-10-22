@@ -613,7 +613,7 @@ def check_release061(wheel, qualification_root, source_root, wheel_sha=None, ven
                 observed_job_failures=observed_failures,
                 comparisons=comparisons,
                 scope=f'Exact final wheel; FULL {len(surface.expected_jobs({"assembly_profile": surface.RELEASE_PROFILE}))} installed jobs on one architecture per advertised vendor '
-                      'and SMOKE (install, import, selector read-back, smoke surface in three modes) on every '
+                      'and SMOKE (install, import, selector read-back, smoke surface in shipped modes) on every '
                       'other architecture the wheel carries; any job seen failing on a smoke column is listed '
                       'in observed_job_failures and is NOT claimed to pass; a FULL column may carry KNOWN '
                       'failures declared by name and cited to the document that records them open, and '

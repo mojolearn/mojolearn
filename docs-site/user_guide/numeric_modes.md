@@ -9,9 +9,7 @@ every mode.
 | Mode | Promise |
 |---|---|
 | `identical` | The default. In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs. |
-| `fast` | Apple GPUs only. Tuned for throughput. No identity or repeatability promise. |
-
-The `deterministic` numeric mode has been removed; use `identical`.
+| `fast` | Optional, on Apple GPUs only. No identity or repeatability promise. |
 
 A release ships only when its recorded Apple, NVIDIA and AMD results agree.
 

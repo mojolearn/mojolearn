@@ -180,58 +180,6 @@ def is_second_order_score_function(s: Int) raises -> Bool:
     )
 
 
-# --- determinism -----------------------------------------------------------
-#
-# NO CATBOOST COUNTERPART. They ship one GPU backend and accept whatever
-# their float atomics do, so the question does not arise for them. It arises
-# here because this implementation targets Metal, CUDA and HIP from one source.
-#
-# THREE LEVELS, A LADDER RATHER THAN TWO SWITCHES, because across-device
-# determinism strictly implies within-device determinism and two independent
-# booleans would let a caller ask for the combination that cannot exist.
-
-comptime DETERMINISM_OFF = 0
-"""No guarantee. Every row of the kernel matrix is read from the device's own
-column and histograms flush through whatever the vendor's fastest path is.
-On NVIDIA and AMD that is a float atomic, so the last bits move between two
-runs of the SAME fit on the SAME device."""
-
-comptime DETERMINISM_DEVICE = 1
-"""Same fit, same device, same model, every run. The flush becomes a
-fixed-point integer accumulator, whose addition is associative, so the answer
-does not depend on which block lands first. Scheduling rows stay on the
-device's column, so this costs only the flush.
-
-This level FORCES the integer accumulator on every backend, Apple included.
-It is not free anywhere. Metal does have a working float atomic add -- 1024
-threads each adding 1.0 through `Atomic.fetch_add` returns exactly 1024.0 on
-this machine -- so the float flush that CatBoost uses
-(`hist_half_byte.cu:45-51`) is available here too, and choosing the integer
-path is choosing to give that up. What it costs is UNRECORDED: no interleaved
-measurement of the two flushes exists yet, and a number without one is not
-allowed in this tree."""
-
-comptime DETERMINISM_CROSS_DEVICE = 2
-"""Same fit, ANY supported GPU, same model. Adds the numeric rows that differ
-between vendors to what `DEVICE` already pins: the replication factor and the
-reduction width move to `COLUMN_BIT_IDENTICAL`, so the reduction tree has one
-shape everywhere.
-
-Apple's lane width already equals the pinned 32 and its shared-memory budget
-IS the safe column, so the bit-identical column and the apple column
-coincide, and this level adds nothing to `DEVICE` there. NVIDIA gives up a
-768-thread block for 512, and AMD additionally gives up its 64-wide
-wavefront. On top of whatever `DEVICE` already costs, which is unrecorded."""
-
-
-def determinism_name(d: Int) -> String:
-    if d == DETERMINISM_OFF:
-        return String("off")
-    if d == DETERMINISM_DEVICE:
-        return String("device")
-    return String("cross_device")
-
-
 # --- bootstrap_type --------------------------------------------------------
 #
 # `enum class EBootstrapType` -- `private/libs/options/enums.h:92-98`. THEIR
@@ -536,26 +484,6 @@ struct CatBoostOptions(Copyable, Movable):
     (`bootstrap_options.cpp:15-19`), so at their default it is unreachable
     too."""
 
-    var determinism: Int
-    """NO CATBOOST COUNTERPART. See the three constants above.
-
-    DECLARED AND VALIDATED, WIRED TO NOTHING (recorded 2026-08-21). The
-    two flushes are different compiled code, so the operative switch is
-    `GLOBAL_NUMERIC_MODE` (`checks/numerics.mojo`), whose default is
-    `NUMERIC_FAST` -- CatBoost's shipped behavior, vendor's fastest path
-    per kernel-matrix column. A field that validates but changes nothing
-    is recorded here rather than silently kept: wiring it would mean a
-    check that RAISES when the requested level exceeds what the build
-    provides, not a runtime dispatch that cannot exist.
-
-    On Apple the FAST build is nonetheless observed bit-reproducible
-    run to run (every gate this repository runs reproduces train mse
-    exactly), because Metal's integer-only threadgroup atomics force the
-    i32 shared stage and the bridge sums per-block partials in a fixed
-    order. On NVIDIA and AMD, FAST keeps CatBoost's warp-private float
-    design and their nondeterminism with it. `NUMERIC_IDENTICAL` is the
-    opt-in that pins every backend for the cross-device claim."""
-
     def l2_leaf_reg_effective(self) -> Float32:
         """`l2_leaf_reg`, with CatBoost's zero substitution applied.
 
@@ -572,14 +500,13 @@ struct CatBoostOptions(Copyable, Movable):
 
     @staticmethod
     def default() -> Self:
-        """CatBoost's defaults, with THREE deliberate departures.
+        """CatBoost's defaults, with two deliberate departures.
 
         `random_strength` is 0.0 rather than 1.0 and `bootstrap_type` is `No`
         rather than `Bayesian`. `bootstrap_type` is unimplemented; the score
         noise IS implemented and 1.0 would pass `check()`, but the shipped
         searcher is the one where CatBoost's own noise cancels, so 0.0 is
-        still the value that describes what a default fit does. `determinism` has no
-        CatBoost counterpart at all and defaults to `device`.
+        still the value that describes what a default fit does.
 
         Everything else is theirs, at the line that DECIDES the value rather
         than the line that names it: depth 6, SymmetricTree, max_leaves
@@ -596,7 +523,6 @@ struct CatBoostOptions(Copyable, Movable):
             128, LEAF_ESTIMATION_NEWTON, 1, 0.0, 1.0,
             0.03, 1000, False,
             BOOTSTRAP_NO, 1.0, 0.66,
-            DETERMINISM_DEVICE,
         )
 
     def check(self) raises:
@@ -788,10 +714,6 @@ struct CatBoostOptions(Copyable, Movable):
             raise Error("Bagging temperature should be >= 0")
         if self.subsample <= 0.0 or self.subsample > 1.0:
             raise Error("Subsample should be in (0,1]")
-        if self.determinism < DETERMINISM_OFF or (
-            self.determinism > DETERMINISM_CROSS_DEVICE
-        ):
-            raise Error("determinism must be off, device or cross_device")
 
 
 # ==========================================================================

@@ -15,14 +15,10 @@ from gbdt.options.catboost_options import (
     LEAF_ESTIMATION_SIMPLE,
     CatBoostOptions,
     set_leaves_estimation_default,
-    DETERMINISM_CROSS_DEVICE,
-    DETERMINISM_DEVICE,
-    DETERMINISM_OFF,
     GROW_DEPTHWISE,
     GROW_LOSSGUIDE,
     GROW_SYMMETRIC,
     SCORE_FUNCTION_NEWTON_L2,
-    determinism_name,
     grow_policy_name,
 )
 from gbdt.options.loss_description import make_loss_description
@@ -123,7 +119,6 @@ def check_options() raises:
         " border_count",
         d.border_count,
     )
-    print("    determinism", determinism_name(d.determinism))
 
     # `grow_policy` WAS A REFUSAL until 2026-08-23 (DEVIATION 259) and is a
     # feature: Depthwise and Lossguide are grown from `train()`. This check
@@ -217,16 +212,6 @@ def check_options() raises:
     h.depth = 0
     expect_refusal(h, String("depth=0"))
 
-    # The three determinism levels must all be accepted.
-    var levels = List[Int]()
-    levels.append(DETERMINISM_OFF)
-    levels.append(DETERMINISM_DEVICE)
-    levels.append(DETERMINISM_CROSS_DEVICE)
-    for i in range(len(levels)):
-        var k = CatBoostOptions.default()
-        k.determinism = levels[i]
-        k.check()
-    print("    all three determinism levels accepted")
     print("  every unimplemented option refuses by name")
     check_newton_availability()
     print("  Newton availability matches their Validate (DEVIATION 257)")

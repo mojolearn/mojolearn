@@ -5,13 +5,12 @@ on every vendor.
 
 NO CATBOOST COUNTERPART. This is in `checks/` because CatBoost never has
 to solve it: it flushes histograms with `atomicAdd` on `float` and accepts a
-non-deterministic answer. Every mode above `DETERMINISM_OFF` refuses that
+non-deterministic answer. `identical` mode refuses that
 answer, so the implementation needs an accumulator CatBoost's source does not contain,
 and inventing one is the largest piece of non-implementation work this tree requires.
 
 CORRECTED 2026-09-10. THIS HEADER USED TO SAY "because Metal has no float
-atomic add", AND THAT IS FALSE. `gbdt/options/catboost_options.mojo`
-(`DETERMINISM_DEVICE`) carries the measurement that disproves it: 1024
+atomic add", AND THAT IS FALSE. The recorded probe found that 1024
 threads each adding 1.0 through `Atomic.fetch_add` returns exactly 1024.0 on
 this machine, and `checks/kernel_matrix.mojo::column_has_float_atomics`
 reports true for `COLUMN_APPLE`. `cluster/checks/reduce_by_key.mojo:129`
@@ -25,7 +24,7 @@ shared accumulation has no float spelling on Apple at any width. Row 1's
 global flush does have one, and IDENTICAL declines it anyway, for the reason
 in the title. Declining an available instruction COSTS something, and that
 cost is still UNRECORDED: no interleaved measurement of the two flushes
-exists (`catboost_options.mojo`, `DETERMINISM_DEVICE`).
+exists in that record.
 
 WHY INTEGERS
 ------------

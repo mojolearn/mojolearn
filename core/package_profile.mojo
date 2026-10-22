@@ -10,6 +10,9 @@ comptime NATIVE_PACKAGE = False
 
 
 def identical_mode_enabled() -> Bool:
+    comptime assert not is_defined["MOJOLEARN_NUMERIC_DETERMINISTIC"](), (
+        "deterministic numeric mode was removed; use identical"
+    )
     comptime if NATIVE_PACKAGE:
         comptime assert not (
             is_defined["MOJOLEARN_NUMERIC_FAST"]()

@@ -144,8 +144,8 @@ gh run watch
 ```
 
 Install from TestPyPI in a clean environment and run representative public
-surfaces in all three modes. Dependencies may need the normal PyPI index as an
-extra index.
+surfaces in the modes shipped for that platform. Dependencies may need the
+normal PyPI index as an extra index.
 
 Finally publish the same source state to PyPI:
 

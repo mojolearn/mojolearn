@@ -5,7 +5,7 @@
 
     python3 tools/gbdt_partition_cache_ab.py --out build/partition_cache_ab
 
-Builds/runs hold the repository build lock. Tests all three numeric modes,
+Builds/runs hold the repository build lock. Tests identical and optional Apple fast,
 then checks that omitting right-child invalidation changes an IDENTICAL model.
 This is a correctness/work-count gate, not a wall-time benchmark.
 Use checks/gbdt_partition_cache_bench.mojo for isolated fit timing.
