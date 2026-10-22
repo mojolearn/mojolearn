@@ -235,8 +235,11 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
                 return raise_python_exception(nested)
         if String(error).startswith("HostInferenceWarning:"):
             try:
-                var call = PythonObject(from_borrowed=args_ptr)
-                var category = call[3]["host_inference_context"]["warning_category"]
+                ref cpy = Python().cpython()
+                # The active ABI args tuple owns the context and admitted
+                # category throughout PyErr_SetString; borrow without transfer.
+                var context = causal_borrowed_item(cpy.PyTuple_GetItem(args_ptr, 3), "host_inference_context")
+                var category = causal_borrowed_item(context, "warning_category")
                 return causal_set_exception(error_without_class(error, "HostInferenceWarning"), category)
             except nested:
                 return raise_python_exception(nested)
