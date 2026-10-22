@@ -404,7 +404,54 @@ class HostPCA(_NativeArchiveLoad, _HostProjection, PCA):
 
 
 class HostKernelDensity(_NativeArchiveLoad, _HostBound, KernelDensity):
+    """Evaluate a saved kernel density model on the CPU."""
     _HOST_ARRAYS = ("_x", "_w")
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        _register_host_inference_class(cls)
+
+    @_native_host_inference_method
+    def score_samples(self, X):
+        """Return the log density at each query sample.
+
+        Parameters
+        ----------
+        X : array-like or sparse matrix of shape (n_queries, n_features)
+            Query samples with the fitted feature count.
+
+        Returns
+        -------
+        array-like of float32
+            One log density per query; compact-kernel misses return -3.4028235e38.
+
+        Examples
+        --------
+        >>> densities = model.score_samples(X)
+        """
+        return _native_classical(self, "host_infer_score_samples", (X,), _CLASSICAL)
+
+    @_native_host_inference_method
+    def score(self, X, y=None):
+        """Return the total log density using the fixed native summation order.
+
+        Parameters
+        ----------
+        X : array-like or sparse matrix of shape (n_queries, n_features)
+            Query samples with the fitted feature count.
+        y : ignored
+            Accepted for compatibility with estimator scoring interfaces.
+
+        Returns
+        -------
+        float
+            Total log density of the queries.
+
+        Examples
+        --------
+        >>> total_log_density = model.score(X)
+        """
+        return _native_classical(self, "host_infer_score", (X, y), _CLASSICAL)
 
 
 class HostSVC(_NativeArchiveLoad, _HostBound, SVC):
@@ -1080,7 +1127,7 @@ def _connect_host_inference():
     from ._labels import ClassLabels
     from .tokenizer import _binding
     entries = {}
-    for basename, names in (("_mojolearn_estimators_host", ("cd_predict", "kernel_ridge_predict", "nystroem_transform", "rbf_sampler_transform",
+    for basename, names in (("_mojolearn_estimators_host", ("cd_predict", "kde_score_samples", "kernel_ridge_predict", "nystroem_transform", "rbf_sampler_transform",
                                                           "tsvd_transform", "pca_transform", "inverse_transform", "pca_whiten_transform", "pca_whiten_inverse_transform",
                                                           "qn_decision_function", "qn_predict_binary", "qn_sigmoid", "qn_softmax", "py2mojo_rows", "py2mojo_linear_flags")),  # glue: fixed CPU prediction ABI
                             ("_mojolearn_svm_host", ("svr_predict", "svc_predict", "svc_pair_epilogue", "svc_dual_gemv")),
@@ -1099,7 +1146,7 @@ def _connect_host_inference():
                    host_inference_class_labels=ClassLabels,
                    host_inference_kinds={HostElasticNet: "cd", HostLasso: "cd", HostKMeans: "kmeans",
                                          HostKernelRidge: "kernel_ridge", HostNystroem: "nystroem", HostRBFSampler: "rbf_sampler",
-                                         HostPCA: "pca", HostTruncatedSVD: "tsvd", HostLogisticRegression: "logistic", HostSVR: "svr", HostSVC: "svc"})
+                                         HostPCA: "pca", HostTruncatedSVD: "tsvd", HostLogisticRegression: "logistic", HostSVR: "svr", HostSVC: "svc", HostKernelDensity: "kde"})
     # The established native attribute entry is schema-neutral: it admits
     # the supplied class layout and preserves internal Array/public ndarray
     # publication. It does not select scaler bindings or execute scaler work.
@@ -1110,7 +1157,7 @@ def _connect_host_inference():
     descriptor = module.classical_attribute_descriptor(MethodType(attribute, context))
     context.update(classical_attribute_descriptor=descriptor, classical_public_layouts={},
                    classical_public_installed=True)
-    for cls in (HostElasticNet, HostLasso, HostKMeans, HostKernelRidge, HostNystroem, HostRBFSampler, HostPCA, HostTruncatedSVD, HostLogisticRegression):  # glue: fixed native prediction class layouts
+    for cls in (HostElasticNet, HostLasso, HostKMeans, HostKernelRidge, HostNystroem, HostRBFSampler, HostPCA, HostTruncatedSVD, HostLogisticRegression, HostKernelDensity):  # glue: fixed native prediction class layouts
         cls.__getattribute__ = descriptor
         context["classical_public_layouts"][cls] = _native_classical_bridge._layout(cls, descriptor)
     # SVR's existing coef_ property is computed natively rather than invoking
