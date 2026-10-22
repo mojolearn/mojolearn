@@ -1,11 +1,14 @@
-"""Verification-only tracing of a complete public operation's Python boundary.
+"""Verification-only profiling across a whole public operation.
 
 This is a correctness probe, never a timer or a product execution helper. It
-observes Python callbacks made by native code as well as ordinary Python calls.
-One entry into the selected public wrapper is permitted. Every further Python
-frame, including descriptors, comprehensions and worker bodies, is reported.
-Native calls into NumPy/SciPy/scikit-learn are separately rejected. A clean
-trace proves only the exercised call, not every possible route through an API.
+observes profile-visible Python callbacks made by native code and ordinary
+Python calls. One entry into the selected public wrapper is permitted. Every
+further profiled Python frame, including descriptors, comprehensions and worker
+bodies, is reported. Native calls into NumPy/SciPy/scikit-learn are separately
+rejected. CPython suppresses profiling of audit hooks unless the hook enables
+tracing. A clean trace alone therefore does not prove that even the exercised
+operation was callback-free. Use independent callback counters and controls
+for those paths; do not change user hooks to obtain a passing result.
 Native calls with unresolved origins also prevent qualification, including in
 the existing forbidden-call signal used by refusal tests.
 """
@@ -82,7 +85,12 @@ class NativeRuntimeAudit:
         return {
             "schema": "mojolearn.native-runtime-audit.v1",
             "passed": self.passed,
-            "scope": "One exercised whole operation; tracing is not timing.",
+            "scope": "Profile-visible work in one whole operation; tracing is not timing.",
+            "claim": "The passed field covers only profiler-visible work and wrapper-bytecode checks.",
+            "observer_limitations": [
+                "CPython audit hooks can execute Python without profile events; "
+                "callback-sensitive paths require independent counters and controls."
+            ],
             "wrapper_entries": self.wrapper_entries,
             "wrapper_work": self.wrapper_work,
             "python_frames": [
@@ -118,12 +126,14 @@ class NativeRuntimeAudit:
 
 
 def audit_native_call(operation, *args, **kwargs):
-    """Exercise a call and return its value, failure and complete boundary trace.
+    """Exercise a call and return its value, failure and profile-visible trace.
 
     Call ``audit.assert_native()`` to require success and retrieve the result.
     Existing profiler hooks are restored even when the operation raises. Run
     probes in an isolated process: pre-existing other threads make the result
     incomplete, since their Python profiles cannot be installed portably.
+    Audit hooks can also evade profiling; a passing trace is an observation,
+    not standalone proof that the operation executed no Python callbacks.
     """
     # Drain unreachable testing-controller objects before tracing. Otherwise
     # an allocation inside a native call can close an unrelated pytest parser

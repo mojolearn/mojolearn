@@ -1,8 +1,12 @@
 """Negative controls for whole-operation tracing, independent of native builds."""
 import importlib.util
+import json
 import math
 from pathlib import Path
 import sys
+import subprocess
+import tempfile
+import textwrap
 import threading
 from types import ModuleType
 import unittest
@@ -16,6 +20,45 @@ SPEC.loader.exec_module(AUDIT)
 
 
 class NativeRuntimeAuditTests(unittest.TestCase):
+    def test_audit_hook_suppression_has_an_independent_callback_control(self):
+        # Hooks cannot be removed. Each setting gets its own child so the
+        # control cannot contaminate other tests or alter a user's audit hooks.
+        script = textwrap.dedent('''\
+            import importlib.util, io, json, sys
+            spec = importlib.util.spec_from_file_location('audit_probe', sys.argv[1])
+            audit = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(audit)
+            target = sys.argv[2]
+            calls = []
+            def callback(event, args):
+                if event == 'open' and args[0] == target:
+                    calls.append(event)
+            if sys.argv[3] == 'traced':
+                callback.__cantrace__ = True
+            sys.addaudithook(callback)
+            result = audit.audit_native_call(io.open, target, 'wb')
+            assert result.exception is None
+            result.result.close()
+            print(json.dumps(dict(callbacks=len(calls), report=result.report())))
+        ''')
+        with tempfile.TemporaryDirectory() as directory:
+            for mode in ('default', 'traced'):
+                with self.subTest(mode=mode):
+                    result = subprocess.run(
+                        [sys.executable, '-c', script, str(PATH),
+                         str(Path(directory) / (mode + '.bin')), mode],
+                        capture_output=True, text=True, timeout=30)
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    record = json.loads(result.stdout)
+                    self.assertEqual(record['callbacks'], 1)
+                    report = record['report']
+                    self.assertIn('profile', report['scope'].lower())
+                    self.assertIn('audit hooks', report['observer_limitations'][0])
+                    observed = any(row['function'] == 'callback'
+                                   for row in report['python_frames'])
+                    self.assertEqual(observed, mode == 'traced')
+                    self.assertEqual(report['passed'], mode == 'default')
+
     def test_bound_native_builtins_keep_computed_module_origin(self):
         values = []
         self.assertIsNone(AUDIT.audit_native_call(values.append, 4).assert_native())
