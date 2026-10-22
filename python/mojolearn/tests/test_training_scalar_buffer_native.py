@@ -116,6 +116,15 @@ def test_embedding_consumes_native_integer_options_and_repeated_warnings(code, n
     assert value.tobytes() == before
 
 
+@pytest.mark.parametrize("operation", ["rms_norm_forward", "rms_norm_backward", "embedding"])
+@pytest.mark.parametrize("form", ["array", "swapped", "singleton"])
+def test_extended_complex_array_options_preserve_consumed_values_and_warning_order(operation, form):
+    if operation == "embedding":
+        test_embedding_consumes_native_integer_options_and_repeated_warnings("G", 4.75 + 1j, form)
+    else:
+        test_rms_consumes_native_scalar_and_endian_options(operation, "G", .125 + 1j, form)
+
+
 @pytest.mark.parametrize("option", ["label_smoothing", "ignore_index", "num_items"])
 @pytest.mark.parametrize("code,form", [("f4", "scalar"), ("g", "swapped"),
                                         ("f8", "singleton"), ("G", "scalar")])
@@ -178,6 +187,12 @@ def test_integer_nonfinite_errors_preserve_text_and_warning_order(operation, cod
     assert str(result.exception) == failure[1]
     assert _warnings(new) == _warnings(old)
     assert value.tobytes() == before
+
+
+@pytest.mark.parametrize("operation", ["embedding", "loss"])
+@pytest.mark.parametrize("number", [complex(float("nan"), 1), complex(float("inf"), 1), complex(-float("inf"), 1)])
+def test_extended_complex_array_integer_failure_preserves_warning_order(operation, number):
+    test_integer_nonfinite_errors_preserve_text_and_warning_order(operation, "G", number, "swapped")
 
 
 @pytest.mark.parametrize("code,number,form", [

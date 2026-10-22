@@ -11,6 +11,7 @@ from bindings.classical_arrays import classical_input, classical_address, classi
 from bindings.host_archive_native import host_archive_typed
 from bindings.host_inference_scalars import host_inference_scalar, host_inference_primitive_number
 from bindings.host_inference_features import host_inference_feature_names
+from bindings.host_kde_bandwidth_native import kde_complex_code, kde_complex_bandwidth
 from bindings.host_kernel_inference_native import _kernel_entry, _kernel_buffer
 from bindings.host_svc_native import _svc_input
 
@@ -65,7 +66,7 @@ def host_kde_admit_state(fields: PythonObject, context: PythonObject) raises:
         if py_contains(fields, names[i]):
             _ = _kde_option_value(fields[names[i]], context)
     var bandwidth = py_get(fields, "bandwidth")
-    if bandwidth is not None:
+    if bandwidth is not None and kde_complex_code(bandwidth, context) == "":
         _ = _kde_option_value(host_inference_primitive_number(bandwidth, context), context, True)
     var buffers = Python.tuple("_x", "_w")
     for i in range(len(buffers)):  # driver-loop: fixed saved KDE buffers
@@ -105,8 +106,12 @@ def host_kde_inference(model: PythonObject, fields: PythonObject, source: Python
         weights = _kernel_buffer(weight, count, "<f4", context)
     # Derive the fixed native constructor from a C-created scalar. A patched
     # builtins.float must never install a callback on this numerical boundary.
-    var bandwidth_value = host_inference_primitive_number(
-        classical_getattribute(model, PythonObject("bandwidth"), context), context)
+    var bandwidth_value = classical_getattribute(model, PythonObject("bandwidth"), context)
+    var complex_code = kde_complex_code(bandwidth_value, context)
+    if complex_code != "":
+        bandwidth_value = kde_complex_bandwidth(bandwidth_value, complex_code, context)
+    else:
+        bandwidth_value = host_inference_primitive_number(bandwidth_value, context)
     bandwidth_value = _kde_option_value(bandwidth_value, context, True)
     var bandwidth = py_call(py_type(PythonObject(Float64(0.0))), bandwidth_value)
     var kernel = _kde_option_value(classical_getattribute(model, PythonObject("kernel"), context), context)

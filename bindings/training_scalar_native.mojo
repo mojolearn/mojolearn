@@ -7,7 +7,7 @@ from bindings.optimizer_admission import opt_exact, opt_value
 from bindings.optimizer_public_words import stash_python_error
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_warnings import classical_warning
-from bindings.native_numpy_metadata import native_numpy_type
+from bindings.native_numpy_metadata import native_numpy_type, native_numpy_module_fields
 from bindings.sequence_dtype_native import sequence_dtype_classes, sequence_dtype_instance, sequence_dtype_create
 from bindings.sequence_array_native import sequence_array_release
 from bindings.native_scalar_decode import native_scalar_buffer
@@ -79,9 +79,16 @@ def training_scalar_number(value: PythonObject, operation: String, context: Pyth
                 training_scalar_warning("Conversion of an array with ndim > 0 to a scalar is deprecated, and will error in future. Ensure you extract a single element from your array before performing this operation. (Deprecated NumPy 1.25.)",
                                         b.DeprecationWarning, operation, context)
             if String(dtype.kind) == "c":
-                # ndarray's scalar slot boxes a Python complex; unlike a
-                # NumPy complex scalar, float() rejects it without a warning.
-                raise Error("TypeError: float() argument must be a string or a real number, not 'complex'")
+                # F/D box builtin complex and refuse conversion. G retains
+                # an extended native scalar, including on double-width ABIs.
+                if String(dtype.char) != "G":
+                    raise Error("TypeError: float() argument must be a string or a real number, not 'complex'")
+                var exceptions = py_get(context["modules"], "numpy.exceptions")
+                if exceptions is None or py_type(exceptions) is not context["module_type"]:
+                    raise Error("TypeError: complex scalar warnings require NumPy's native exception metadata")
+                var category = py_get(native_numpy_module_fields(exceptions), "ComplexWarning")
+                training_scalar_warning("Casting complex values to real discards the imaginary part", category, operation, context)
+                return native_scalar_buffer(value).to_python_number(integer)
             var kind = String(dtype.kind)
             if kind == "b" or kind == "i" or kind == "u" or kind == "f":
                 # Decode admitted storage directly. NumPy scalar slots also
@@ -132,7 +139,7 @@ def training_scalar_number(value: PythonObject, operation: String, context: Pyth
             var exceptions = py_get(context["modules"], "numpy.exceptions")
             if exceptions is None or py_type(exceptions) is not context["module_type"]:
                 raise Error("TypeError: complex scalar warnings require NumPy's native exception metadata")
-            var category = py_get(py_fields(exceptions), "ComplexWarning")
+            var category = py_get(native_numpy_module_fields(exceptions), "ComplexWarning")
             training_scalar_warning("Casting complex values to real discards the imaginary part", category, operation, context)
             return native_scalar_buffer(value).to_python_number(integer)
         if kind == "b" or kind == "i" or kind == "u" or kind == "f":
