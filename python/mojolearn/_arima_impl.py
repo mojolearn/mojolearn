@@ -80,7 +80,7 @@ selected explicitly, makes no cross-vendor claim of any kind.
 
 from . import _portable_math as math
 
-from . import _backend
+from . import _backend, _native_archive_bridge
 from ._array import Array
 from ._buffer import _native, addr, addr_ro, as_f32_c, empty
 from ._bufcheck import nelems, probe
@@ -102,6 +102,12 @@ _ARIMA_FORMAT = "mojolearn-arima-1"
 #: reads) and a thirteenth `meta` field, `n_exog`, under this tag, which a
 #: loader that predates it refuses by name instead of reading one block short.
 _ARIMA_FORMAT_EXOG = "mojolearn-arima-2"
+
+# The compiled saved-model owner, connected once at import: `save` and
+# `load` are one native call each (bindings/archive_schema_native.mojo
+# writes the schema registered after the class; host_archive_native.mojo
+# `host_archive_arima` builds the loaded model).
+_ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
 #: What `arima_numeric_mode()` answers per tier, the `NUMERIC_*` constant in
 #: `checks/numerics.mojo`. Duplicated from `_backend._MODE_CODE` on purpose:
@@ -1083,38 +1089,7 @@ class ARIMA(NumericModeMixin):
         path : str or path-like
             Destination file.
         """
-        self._check_fitted("save")
-        from . import _serialize
-        from .decomposition import _saved_mode
-        p, d, q = self.order
-        P, D, Q, s = self.seasonal_order
-        b, n = int(self.batch_size_), int(self.n_obs_)
-        n_exog = int(getattr(self, "n_exog_", 0))
-        meta = [p, d, q, P, D, Q, s, int(self.k_), b, n, int(self.maxiter),
-                1 if getattr(self, "input_copied_", False) else 0]
-        if n_exog:
-            meta.append(n_exog)
-        arrays = {
-            "format": _ARIMA_FORMAT_EXOG if n_exog else _ARIMA_FORMAT,
-            "estimator": type(self).__name__,
-            "numeric_mode": _saved_mode(self),
-            "trend": "none" if self.trend is None else str(self.trend).lower(),
-            "method": str(self.method),
-            "y": self._y.reshape((b, n)),
-            "params": self.params_,
-            "x": self.x_,
-            "x0": self.x0_,
-            "fx": self.fx_,
-            "n_iter": self.n_iter_,
-            "retcode": self.retcode_,
-            "llf": self.llf_,
-            "aic": self.aic_,
-            "bic": self.bic_,
-            "meta": Array.from_list(meta, "<i8"),
-        }
-        if n_exog:
-            arrays["exog"] = self._exog.reshape((b, n, n_exog))
-        return _serialize.write_npz(path, arrays)
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -1135,64 +1110,51 @@ class ARIMA(NumericModeMixin):
         ValueError
             If the file is not a valid saved ARIMA model.
         """
-        from . import _serialize
-        from .decomposition import _check_saved_by, _restore_mode
-        arrays = _serialize.read_npz(path, (_ARIMA_FORMAT, _ARIMA_FORMAT_EXOG))
-        _check_saved_by(arrays, path, cls)
-        with_exog = _serialize.scalar_str(arrays, "format") == _ARIMA_FORMAT_EXOG
-        meta = _serialize.exact(arrays, "meta", "<i8")
-        want = 13 if with_exog else 12
-        if meta.size != want:
-            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, {want} are needed")
-        p, d, q, P, D, Q, s, k, b, n, maxiter, copied = (int(meta[i]) for i in range(12))  # glue: the twelve metadata ints
-        n_exog = int(meta[12]) if with_exog else 0
-        if with_exog and n_exog < 1:
-            raise ValueError(f"mojolearn: {path!r} is {_ARIMA_FORMAT_EXOG!r} with n_exog={n_exog}")
-        if not with_exog and "exog" in arrays:
-            raise ValueError(f"mojolearn: {path!r} is {_ARIMA_FORMAT!r} and holds an exog member")
-        trend = _serialize.scalar_str(arrays, "trend")
-        obj = cls(order=(p, d, q), seasonal_order=(P, D, Q, s),
-                  trend=None if trend == "none" else trend,
-                  method=_serialize.scalar_str(arrays, "method"), maxiter=maxiter)
-        if obj.k_ != k:
-            raise ValueError(f"mojolearn: {path!r} records k={k}, its trend {trend!r} resolves to {obj.k_}")
-        _restore_mode(obj, arrays)
-        N = obj.complexity_ + n_exog
-        shapes = {"y": ("<f4", (b, n)), "params": ("<f4", (b, N)), "x": ("<f4", (b, N)),
-                  "x0": ("<f4", (b, N)), "fx": ("<f4", (b,)), "n_iter": ("<i4", (b,)),
-                  "retcode": ("<i4", (b,)), "llf": ("<f8", (b,)), "aic": ("<f8", (b,)),
-                  "bic": ("<f8", (b,))}
-        if with_exog:
-            shapes["exog"] = ("<f4", (b, n, n_exog))
-        got = {}
-        for name, (dtype, shape) in shapes.items():  # glue: one entry per named array
-            value = _serialize.exact(arrays, name, dtype)
-            if tuple(value.shape) != shape:
-                raise ValueError(f"mojolearn: {path!r} {name} has shape {tuple(value.shape)}, not {shape}")
-            got[name] = value
-        obj.batch_size_ = b
-        obj.n_obs_ = n
-        obj.input_copied_ = bool(copied)
-        obj.n_exog_ = n_exog
-        obj.complexity_ = N
-        obj._exog = got["exog"] if with_exog else None
-        obj._y = got["y"]
-        obj.params_ = got["params"]
-        obj.x_ = got["x"]
-        obj.x0_ = got["x0"]
-        obj.fx_ = got["fx"]
-        obj.n_iter_ = got["n_iter"]
-        obj.retcode_ = got["retcode"]
-        obj.llf_ = got["llf"]
-        obj.aic_ = got["aic"]
-        obj.bic_ = got["bic"]
-        return obj
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
     def __repr__(self):
         return (
             "ARIMA(order={}, seasonal_order={}, trend={!r}, method={!r})"
             .format(self.order, self.seasonal_order, self.trend, self.method)
         )
+
+
+def _archive_members(fmt, extra):
+    """The members of one saved ARIMA format, in the 0.8.55 writer's order."""
+    return (
+        ("format", "format", fmt),
+        ("estimator", "estimator"),
+        ("mode", "numeric_mode", "mojolearn: "),
+        ("lower", "trend", "trend"),
+        ("str", "method", "method"),
+        ("reshape", "y", "_y", (("int", "batch_size_"), ("int", "n_obs_"))),
+        ("array", "params", "params_"),
+        ("array", "x", "x_"),
+        ("array", "x0", "x0_"),
+        ("array", "fx", "fx_"),
+        ("array", "n_iter", "n_iter_"),
+        ("array", "retcode", "retcode_"),
+        ("array", "llf", "llf_"),
+        ("array", "aic", "aic_"),
+        ("array", "bic", "bic_"),
+        ("i8", "meta", (("int", ("order", 0)), ("int", ("order", 1)), ("int", ("order", 2)),
+                        ("int", ("seasonal_order", 0)), ("int", ("seasonal_order", 1)),
+                        ("int", ("seasonal_order", 2)), ("int", ("seasonal_order", 3)),
+                        ("int", "k_"), ("int", "batch_size_"), ("int", "n_obs_"), ("int", "maxiter"),
+                        ("bool_or", "input_copied_", False)) + extra[0]),
+    ) + extra[1]
+
+
+# A model fit without regressors (n_exog_ == 0) writes `mojolearn-arima-1`;
+# with them, `mojolearn-arima-2` adds `n_exog` to `meta` and the `exog` member.
+_native_archive_bridge.register(ARIMA, (_ARIMA_FORMAT, _ARIMA_FORMAT_EXOG), (
+    ("need", "params_", "ValueError", "mojolearn ARIMA: call fit() before save"),
+    ("when", "n_exog_", 0, _archive_members(_ARIMA_FORMAT, ((), ()))),
+    ("unless", "n_exog_", 0, _archive_members(_ARIMA_FORMAT_EXOG, (
+        (("int", "n_exog_"),),
+        (("reshape", "exog", "_exog", (("int", "batch_size_"), ("int", "n_obs_"), ("int", "n_exog_"))),),
+    ))),
+))
 
 
 def _plain_order(value, normalized):

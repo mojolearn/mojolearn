@@ -70,6 +70,7 @@ import importlib.util
 import os
 import sys
 
+from . import _native_archive_bridge
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_f32_colmajor, empty
 from ._bufcheck import flat_view, nelems, probe, strided_rows
@@ -109,6 +110,12 @@ _mojolearn_tsa = _Binding()
 #: The saved-model format tag (`ExponentialSmoothing.save`,
 #: lane/inference-holtwinters, 2026-09-15).
 _HW_FORMAT = "mojolearn-holtwinters-1"
+
+# The compiled saved-model owner, connected once at import: `save` and
+# `load` are one native call each (bindings/archive_schema_native.mojo
+# writes the schema registered after the class; host_archive_native.mojo
+# `host_archive_holtwinters` builds the loaded model).
+_ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
 #: `initialization_method` names and the code that crosses the binding
 #: (`holtwinters/impl/internal/hw_estimate.mojo`: 0 heuristic, 1 estimated).
@@ -1011,32 +1018,7 @@ class ExponentialSmoothing:
         path : str or path-like
             Destination file.
         """
-        if not self.fit_executed_flag:
-            raise ValueError(
-                "mojolearn ExponentialSmoothing: fit() the model before save()"
-            )
-        from . import _serialize
-        from .decomposition import _saved_mode
-        arrays = {
-            "format": _HW_FORMAT,
-            "estimator": type(self).__name__,
-            "numeric_mode": _saved_mode(self),
-            "seasonal": str(self.seasonal),
-            "initialization_method": str(self.initialization_method),
-            "components": self._comps,
-            "sse": self.sse_,
-            "alpha": self.alpha_,
-            "beta": self.beta_,
-            "gamma": self.gamma_,
-            "n_iter": self.n_iter_,
-            "criterion": self.criterion_,
-            "meta": Array.from_list(
-                [int(self.n), int(self.ts_num), int(self.seasonal_periods), int(self.start_periods)],
-                "<i8",
-            ),
-            "eps": Array.from_list([float(self.eps)], "<f8"),
-        }
-        return _serialize.write_npz(path, arrays)
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -1052,37 +1034,7 @@ class ExponentialSmoothing:
         ExponentialSmoothing
             A fitted model that forecasts and predicts; it does not refit.
         """
-        from . import _serialize
-        from .decomposition import _check_saved_by, _restore_mode
-        arrays = _serialize.read_npz(path, _HW_FORMAT)
-        _check_saved_by(arrays, path, cls)
-        meta = _serialize.exact(arrays, "meta", "<i8")
-        if meta.size != 4:
-            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 4 are needed")
-        n, b, f, sp = (int(meta[i]) for i in range(4))  # glue: the four metadata ints
-        eps = _serialize.exact(arrays, "eps", "<f8")
-        if eps.size != 1:
-            raise ValueError(f"mojolearn: {path!r} eps holds {eps.size} values, 1 is needed")
-        init = (_serialize.scalar_str(arrays, "initialization_method")
-                if "initialization_method" in arrays else "heuristic")
-        obj = cls(None, seasonal=_serialize.scalar_str(arrays, "seasonal"),
-                  seasonal_periods=f, start_periods=sp, ts_num=b, eps=float(eps[0]),
-                  initialization_method=init)
-        _restore_mode(obj, arrays)
-        if b < 1 or n <= f:
-            raise ValueError(f"mojolearn: {path!r} records n={n}, ts_num={b}, seasonal_periods={f}")
-        cl = (n - f) * b
-        shapes = {"components": ("<f4", (3 * cl,)), "sse": ("<f4", (b,)), "alpha": ("<f4", (b,)),
-                  "beta": ("<f4", (b,)), "gamma": ("<f4", (b,)), "n_iter": ("<i4", (b,)),
-                  "criterion": ("<i4", (b,))}
-        got = {}
-        for name, (dtype, shape) in shapes.items():  # glue: one entry per named array
-            value = _serialize.exact(arrays, name, dtype)
-            if tuple(value.shape) != shape:
-                raise ValueError(f"mojolearn: {path!r} {name} has shape {tuple(value.shape)}, not {shape}")
-            got[name] = value
-        return obj._set_fitted(n, got["components"], got["sse"], got["alpha"], got["beta"],
-                               got["gamma"], got["n_iter"], got["criterion"])
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
     def score(self, index=None):
         """Sum of squared errors of the fit, as cuML's ``score`` returns.
@@ -1204,3 +1156,22 @@ class ExponentialSmoothing:
             ``ts_num > 1``; 1-D for one series or a given ``index``.
         """
         return self._named("season_", index, "season")
+
+
+_native_archive_bridge.register(ExponentialSmoothing, _HW_FORMAT, (
+    ("need_true", "fit_executed_flag", "ValueError",
+     "mojolearn ExponentialSmoothing: fit() the model before save()"),
+    *_native_archive_bridge.head(_HW_FORMAT),
+    ("str", "seasonal", "seasonal"),
+    ("str", "initialization_method", "initialization_method"),
+    ("array", "components", "_comps"),
+    ("array", "sse", "sse_"),
+    ("array", "alpha", "alpha_"),
+    ("array", "beta", "beta_"),
+    ("array", "gamma", "gamma_"),
+    ("array", "n_iter", "n_iter_"),
+    ("array", "criterion", "criterion_"),
+    ("i8", "meta", (("int", "n"), ("int", "ts_num"), ("int", "seasonal_periods"),
+                    ("int", "start_periods"))),
+    ("f8", "eps", (("float", "eps"),)),
+))

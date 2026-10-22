@@ -51,11 +51,16 @@
 #   ("array", member, field)           the field's array, as stored
 #   ("flat", member, field)            the field's array in C order, shape (size,)
 #   ("head", member, field, count)     the first max(count, 1) elements of a 1-D array
+#   ("reshape", member, field, items)  the field's array in C order with the shape
+#                                      the items give, one per dimension (whole
+#                                      items); a size mismatch raises Array.reshape's
+#                                      ValueError
 #   ("i8" | "i4" | "f8" | "f4", member, items)
 #                                      one packed vector, an item per element
 #   ("when", field, value, steps)      run steps when field == value
 #   ("when_set", field, steps)         run steps when the instance holds field and
 #                                      field is not None (no == on an array)
+#   ("unless", field, value, steps)    run steps when field is held and field != value
 #
 # An item is ("int", field), ("bool", field), ("const", number),
 # ("dim", field, axis), ("size", field), ("len", field), ("none", field, sentinel),
@@ -326,6 +331,13 @@ def _schema_copy(raw: PythonObject, dtype: String, first: Int, count: Int, conte
     return classical_wrap_array(store, Python.tuple(count), dtype, "C", context)
 
 
+def _schema_shaped(raw: PythonObject, dtype: String, shape: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A C-order Array of `shape` holding all of `raw`."""
+    var store = py_call(context["array_type"], _store_code(dtype))
+    _ = py_call(store.frombytes, raw)
+    return classical_wrap_array(store, shape, dtype, "C", context)
+
+
 def _schema_text_member(value: PythonObject, lower: Bool) raises -> PythonObject:
     """str(value) for a builtin scalar; refuses a value whose str would run
     Python code."""
@@ -426,6 +438,20 @@ def _schema_run(model: PythonObject, fields: PythonObject, steps: PythonObject, 
             var total = len(parts[1]) // width
             var count = max(_schema_whole(fields, Python.tuple("int", step[3]), name, context), 1)
             py_setitem(values, step[1], _schema_copy(parts[1], parts[0], 0, min(count, total), context))
+        elif kind == "reshape":
+            var parts = _schema_bytes(_schema_value(fields, step[2], name), context)
+            var width = Int(py=py_call(context["array_type"], _store_code(parts[0])).itemsize)
+            var total = len(parts[1]) // width
+            var dims = Python.list()
+            var count = 1
+            for i in range(len(step[3])):  # driver-loop: over the fixed dimension items of one saved shape
+                var dim = _schema_whole(fields, step[3][i], name, context)
+                _ = py_call(dims.append, dim)
+                count *= dim
+            var shape = py_call(b.tuple, dims)
+            if count != total:
+                raise Error("ValueError: mojolearn: cannot reshape size " + String(total) + " into " + _archive_builtin_repr(shape))
+            py_setitem(values, step[1], _schema_shaped(parts[1], parts[0], shape, context))
         elif kind == "i8" or kind == "i4" or kind == "f8" or kind == "f4":
             var dtype = String("<") + kind
             py_setitem(values, step[1], _schema_vector(fields, dtype, step[2], name, context))
@@ -435,6 +461,9 @@ def _schema_run(model: PythonObject, fields: PythonObject, steps: PythonObject, 
         elif kind == "when_set":
             if _schema_has(fields, step[1]) and _schema_value(fields, step[1], name) is not None:
                 _schema_run(model, fields, step[2], values, name, context)
+        elif kind == "unless":
+            if _schema_has(fields, step[1]) and not Bool(py=_schema_value(fields, step[1], name) == step[2]):
+                _schema_run(model, fields, step[3], values, name, context)
         else:
             raise Error("RuntimeError: unknown save step " + kind)
 

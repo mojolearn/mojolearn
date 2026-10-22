@@ -717,12 +717,21 @@ def host_archive_logistic(cls: PythonObject, arrays: PythonObject, context: Pyth
     return model
 
 
-def host_archive_arima(cls: PythonObject, arrays: PythonObject, exog: Bool,
+def _arima_order(values: PythonObject, label: String) raises:
+    """ARIMA `_as_order`'s refusal of a negative saved order entry."""
+    for i in range(len(values)):  # driver-loop: over the fixed entries of one order tuple
+        if Int(py=values[i]) < 0:
+            raise Error("ValueError: mojolearn ARIMA: " + label + " entries must be non-negative integers, got "
+                        + _archive_builtin_repr(values))
+
+
+def host_archive_arima(cls: PythonObject, arrays: PythonObject, exog: Bool, path: PythonObject,
                        context: PythonObject) raises -> PythonObject:
-    var meta = host_archive_count(arrays, "meta", "<i8", 13 if exog else 12, context, True)
-    for i in range(7):  # driver-loop: fixed ARIMA order fields
-        if classical_i64(meta, i) < 0:
-            raise Error("ARIMA order entries must be non-negative integers")
+    # The refusals keep ARIMA.load's wording and order: the meta size and
+    # format checks, the constructor's validation, the trend's intercept,
+    # the saved mode, then each array's shape.
+    var where = host_archive_where(path, context)
+    var meta = host_archive_meta(arrays, "meta", 13 if exog else 12, path, context)
     var p = classical_i64(meta, 0)
     var d = classical_i64(meta, 1)
     var q = classical_i64(meta, 2)
@@ -735,76 +744,114 @@ def host_archive_arima(cls: PythonObject, arrays: PythonObject, exog: Bool,
     var n = classical_i64(meta, 9)
     var nx = classical_i64(meta, 12) if exog else 0
     if exog and nx < 1:
-        raise Error("ARIMA exogenous format requires at least one exogenous column")
+        raise Error(where + " is 'mojolearn-arima-2' with n_exog=" + String(nx))
     if not exog and py_contains(arrays, "exog"):
-        raise Error("ARIMA archive carries exog under the non-exogenous format")
+        raise Error(where + " is 'mojolearn-arima-1' and holds an exog member")
     var trend = _archive_string(arrays, "trend", context)
     var trend_arg = PythonObject(None) if String(trend) == "none" else trend
+    var method_saved = _archive_string(arrays, "method", context)
+    # The constructor's validation, in its order.
+    var order = Python.tuple(p, d, q)
+    var seasonal_order = Python.tuple(sp, sd, sq, period)
+    _arima_order(order, "order")
+    _arima_order(seasonal_order, "seasonal_order")
     var expected_k = 0 if d + sd else 1
     if trend_arg is not None:
         var lower = String(py=py_call(trend.lower))
-        if lower != "n" and lower != "c":
-            raise Error("NotImplementedError: ARIMA trend must be None, n or c; use native exogenous data for a time trend")
-        expected_k = 1 if lower == "c" else 0
-    if k != expected_k:
-        raise Error("ARIMA saved intercept count does not match its trend")
-    var method = py_call(_archive_string(arrays, "method", context).lower)
+        if lower == "n" or lower == "c":
+            expected_k = 1 if lower == "c" else 0
+        elif lower == "t" or lower == "ct":
+            raise Error("NotImplementedError: mojolearn ARIMA: trend=" + _archive_builtin_repr(trend)
+                        + " is refused. cuML has no time trend (its only switch is fit_intercept), so there is no "
+                        + "reference to hold one to; a time trend is a regressor, so pass the time index as an exog "
+                        + "column to fit, predict and forecast. This class carries trend=None, 'n' and 'c'; 'c' is "
+                        + "cuML's fit_intercept=True")
+        else:
+            raise Error("NotImplementedError: mojolearn ARIMA: trend=" + _archive_builtin_repr(trend)
+                        + " is refused. This class carries None (statsmodels' rule: 'c' when d + D == 0, "
+                        + "otherwise 'n'), 'n' and 'c'. A polynomial trend specification is a list of regressors: "
+                        + "pass them as exog")
+    var method = py_call(method_saved.lower)
     if String(method) != "ml" and String(method) != "css" and String(method) != "css-ml":
-        raise Error("unknown saved ARIMA method")
-    var complexity = p + q + sp + sq + k + 1 + nx
+        raise Error("ValueError: mojolearn ARIMA: unknown method " + _archive_builtin_repr(method_saved)
+                    + "; cuML's three are ['css', 'css-ml', 'ml'] and this implementation offers 'ml'")
+    if k != expected_k:
+        raise Error(where + " records k=" + String(k) + ", its trend " + _archive_builtin_repr(trend)
+                    + " resolves to " + String(expected_k))
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
-    host_archive_mode(arrays, fields, context)
-    py_setitem(fields, "order", Python.tuple(p, d, q))
-    py_setitem(fields, "seasonal_order", Python.tuple(sp, sd, sq, period))
+    py_setitem(fields, "order", order)
+    py_setitem(fields, "seasonal_order", seasonal_order)
     py_setitem(fields, "trend", trend_arg)
-    py_setitem(fields, "k_", k)
+    py_setitem(fields, "k_", expected_k)
     py_setitem(fields, "method", method)
     py_setitem(fields, "maxiter", classical_i64(meta, 10))
     py_setitem(fields, "verbose", False)
     py_setitem(fields, "output_type", PythonObject(None))
+    py_setitem(fields, "n_exog_", 0)
+    py_setitem(fields, "complexity_", p + q + sp + sq + expected_k + 1)
+    host_archive_mode(arrays, fields, context)
+    var complexity = p + q + sp + sq + expected_k + 1 + nx
+    var loaded = Python.dict()
+    py_setitem(loaded, "_y", host_archive_series_shape(arrays, "y", "<f4", Python.tuple(batch, n), path, context))
+    var coefficients = Python.tuple("params", "x", "x0")
+    for i in range(len(coefficients)):  # driver-loop: three saved coefficient states
+        var name = String(coefficients[i])
+        py_setitem(loaded, name + "_", host_archive_series_shape(arrays, name, "<f4", Python.tuple(batch, complexity), path, context))
+    py_setitem(loaded, "fx_", host_archive_series_shape(arrays, "fx", "<f4", Python.tuple(batch), path, context))
+    py_setitem(loaded, "n_iter_", host_archive_series_shape(arrays, "n_iter", "<i4", Python.tuple(batch), path, context))
+    py_setitem(loaded, "retcode_", host_archive_series_shape(arrays, "retcode", "<i4", Python.tuple(batch), path, context))
+    var scores = Python.tuple("llf", "aic", "bic")
+    for i in range(len(scores)):  # driver-loop: three saved fit criterion arrays
+        var name = String(scores[i])
+        py_setitem(loaded, name + "_", host_archive_series_shape(arrays, name, "<f8", Python.tuple(batch), path, context))
+    py_setitem(loaded, "_exog", host_archive_series_shape(arrays, "exog", "<f4", Python.tuple(batch, n, nx), path, context) if exog else PythonObject(None))
     py_setitem(fields, "batch_size_", batch)
     py_setitem(fields, "n_obs_", n)
     py_setitem(fields, "input_copied_", classical_i64(meta, 11) != 0)
     py_setitem(fields, "n_exog_", nx)
     py_setitem(fields, "complexity_", complexity)
-    py_setitem(fields, "_exog", host_archive_shape(arrays, "exog", "<f4", Python.tuple(batch, n, nx), context) if exog else PythonObject(None))
-    py_setitem(fields, "_y", host_archive_shape(arrays, "y", "<f4", Python.tuple(batch, n), context))
-    var coefficients = Python.tuple("params", "x", "x0")
-    for i in range(len(coefficients)):  # driver-loop: three saved coefficient states
-        var name = String(coefficients[i])
-        py_setitem(fields, name + "_", host_archive_shape(arrays, name, "<f4", Python.tuple(batch, complexity), context))
-    py_setitem(fields, "fx_", host_archive_shape(arrays, "fx", "<f4", Python.tuple(batch), context))
-    py_setitem(fields, "n_iter_", host_archive_shape(arrays, "n_iter", "<i4", Python.tuple(batch), context))
-    py_setitem(fields, "retcode_", host_archive_shape(arrays, "retcode", "<i4", Python.tuple(batch), context))
-    var scores = Python.tuple("llf", "aic", "bic")
-    for i in range(len(scores)):  # driver-loop: three saved fit criterion arrays
-        var name = String(scores[i])
-        py_setitem(fields, name + "_", host_archive_shape(arrays, name, "<f8", Python.tuple(batch), context))
+    var keys = Python.tuple("_exog", "_y", "params_", "x_", "x0_", "fx_", "n_iter_", "retcode_", "llf_", "aic_", "bic_")
+    for i in range(len(keys)):  # driver-loop: eleven saved fitted fields
+        py_setitem(fields, keys[i], loaded[keys[i]])
     return model
 
 
-def host_archive_holtwinters(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
-    var meta = host_archive_count(arrays, "meta", "<i8", 4, context, True)
-    var eps = host_archive_count(arrays, "eps", "<f8", 1, context, True)
+def host_archive_series_shape(arrays: PythonObject, name: String, dtype: String, shape: PythonObject,
+                              path: PythonObject, context: PythonObject) raises -> PythonObject:
+    """An exact-dtype member of `shape`, refused as the series loaders
+    refused it: `{path!r} {name} has shape {shape}, not {expected}`."""
+    var value = _archive_exact(arrays, name, dtype, context)
+    var got = py_call(Python.import_module("builtins").tuple, value.shape)
+    if not Bool(py=got == shape):
+        raise Error(host_archive_where(path, context) + " " + name + " has shape " + _archive_builtin_repr(got)
+                    + ", not " + _archive_builtin_repr(shape))
+    return value
+
+
+def host_archive_holtwinters(cls: PythonObject, arrays: PythonObject, path: PythonObject,
+                             context: PythonObject) raises -> PythonObject:
+    # The refusals keep ExponentialSmoothing.load's wording and order.
+    var where = host_archive_where(path, context)
+    var meta = host_archive_meta(arrays, "meta", 4, path, context)
     var n = classical_i64(meta, 0)
     var batch = classical_i64(meta, 1)
     var period = classical_i64(meta, 2)
     var start = classical_i64(meta, 3)
-    var seasonal = _archive_string(arrays, "seasonal", context)
-    if String(seasonal) != "additive" and String(seasonal) != "add" and String(seasonal) != "multiplicative" and String(seasonal) != "mul":
-        raise Error("unsupported saved ExponentialSmoothing seasonal type")
+    var eps = _archive_exact(arrays, "eps", "<f8", context)
+    if Int(py=eps.size) != 1:
+        raise Error(where + " eps holds " + String(Int(py=eps.size)) + " values, 1 is needed")
     var initialization = _archive_string(arrays, "initialization_method", context) if py_contains(arrays, "initialization_method") else PythonObject("heuristic")
+    var seasonal = _archive_string(arrays, "seasonal", context)
+    # The constructor's refusals.
+    if String(seasonal) != "additive" and String(seasonal) != "add" and String(seasonal) != "multiplicative" and String(seasonal) != "mul":
+        raise Error("ValueError: mojolearn ExponentialSmoothing: seasonal=" + _archive_builtin_repr(seasonal)
+                    + " is refused; it must be 'additive'/'add' or 'multiplicative'/'mul' (holtwinters.pyx:197)")
     if String(initialization) != "estimated" and String(initialization) != "heuristic" and String(initialization) != "cuml":
-        raise Error("unsupported saved ExponentialSmoothing initialization method")
-    if batch < 1 or n <= period:
-        raise Error("saved ExponentialSmoothing rows and season period are inconsistent")
-    var rows = n - period
-    var cl = rows * batch
-    var comps = host_archive_shape(arrays, "components", "<f4", Python.tuple(3 * cl), context)
+        raise Error("ValueError: mojolearn ExponentialSmoothing: initialization_method=" + _archive_builtin_repr(initialization)
+                    + " is refused; it must be 'estimated' (the default), 'heuristic' or 'cuml'")
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
-    host_archive_mode(arrays, fields, context)
     py_setitem(fields, "endog", PythonObject(None))
     py_setitem(fields, "initialization_method", initialization)
     py_setitem(fields, "seasonal", seasonal)
@@ -812,6 +859,21 @@ def host_archive_holtwinters(cls: PythonObject, arrays: PythonObject, context: P
     py_setitem(fields, "start_periods", start)
     py_setitem(fields, "ts_num", batch)
     py_setitem(fields, "eps", classical_f64(eps, 0))
+    py_setitem(fields, "fit_executed_flag", False)
+    host_archive_mode(arrays, fields, context)
+    if batch < 1 or n <= period:
+        raise Error(where + " records n=" + String(n) + ", ts_num=" + String(batch) + ", seasonal_periods=" + String(period))
+    var rows = n - period
+    var cl = rows * batch
+    var comps = host_archive_series_shape(arrays, "components", "<f4", Python.tuple(3 * cl), path, context)
+    var stats = Python.tuple("sse", "alpha", "beta", "gamma")
+    var loaded = Python.dict()
+    for i in range(len(stats)):  # driver-loop: four saved per-series fit statistics
+        var name = String(stats[i])
+        py_setitem(loaded, name + "_", host_archive_series_shape(arrays, name, "<f4", Python.tuple(batch), path, context))
+    py_setitem(loaded, "n_iter_", host_archive_series_shape(arrays, "n_iter", "<i4", Python.tuple(batch), path, context))
+    py_setitem(loaded, "criterion_", host_archive_series_shape(arrays, "criterion", "<i4", Python.tuple(batch), path, context))
+    # `_set_fitted`: the packed components and their time-major blocks.
     py_setitem(fields, "n", n)
     py_setitem(fields, "_components_len", cl)
     py_setitem(fields, "_comps", comps)
@@ -824,12 +886,9 @@ def host_archive_holtwinters(cls: PythonObject, arrays: PythonObject, context: P
                               rows, batch, Int(py=classical_address(copy)))
         py_setitem(time_major, names[i], copy)
     py_setitem(fields, "_time_major", time_major)
-    var stats = Python.tuple("sse", "alpha", "beta", "gamma")
-    for i in range(len(stats)):  # driver-loop: four saved per-series fit statistics
-        var name = String(stats[i])
-        py_setitem(fields, name + "_", host_archive_shape(arrays, name, "<f4", Python.tuple(batch), context))
-    py_setitem(fields, "n_iter_", host_archive_shape(arrays, "n_iter", "<i4", Python.tuple(batch), context))
-    py_setitem(fields, "criterion_", host_archive_shape(arrays, "criterion", "<i4", Python.tuple(batch), context))
+    var keys = Python.tuple("sse_", "alpha_", "beta_", "gamma_", "n_iter_", "criterion_")
+    for i in range(len(keys)):  # driver-loop: six saved per-series fit statistics
+        py_setitem(fields, keys[i], loaded[keys[i]])
     py_setitem(fields, "fit_executed_flag", True)
     return model
 
@@ -1190,90 +1249,150 @@ def host_archive_spectral(cls: PythonObject, arrays: PythonObject, path: PythonO
     return model
 
 
-def host_archive_umap(cls: PythonObject, arrays: PythonObject, context: PythonObject) raises -> PythonObject:
-    var meta = host_archive_count(arrays, "meta", "<i8", 7, context, True)
-    var controls = host_archive_count(arrays, "controls", "<f4", 6, context, True)
+def _umap_whole(value: Int, name: String, minimum: Int, maximum: Int) raises -> Int:
+    """UMAP `_integer`'s range refusal for a saved integer control."""
+    if value < minimum or value > maximum:
+        raise Error("ValueError: UMAP " + name + " must be in [" + String(minimum) + ", " + String(maximum) + "]")
+    return value
+
+
+def _umap_real(value: Float64, name: String) raises -> Float64:
+    """UMAP `_scalar`: a finite float32 value, rounded once to binary32."""
+    if not isfinite(value) or abs(value) > 3.4028234663852886e38:
+        raise Error("ValueError: UMAP " + name + " must be a finite float32 value")
+    return Float64(Float32(value))
+
+
+def host_archive_umap(cls: PythonObject, arrays: PythonObject, path: PythonObject,
+                      context: PythonObject) raises -> PythonObject:
+    # The refusals keep UMAP.load's wording and order: the vector sizes,
+    # then the constructor's validation of the saved controls, the saved
+    # mode, the config round trip, then the training and embedding shapes.
+    var builtins = Python.import_module("builtins")
+    var where = host_archive_where(path, context)
+    var meta = _archive_exact(arrays, "meta", "<i8", context)
+    var controls = _archive_exact(arrays, "controls", "<f4", context)
+    if Int(py=meta.size) != 7 or Int(py=controls.size) != 6:
+        raise Error(where + " holds " + String(Int(py=meta.size)) + " meta and " + String(Int(py=controls.size))
+                    + " control fields; 7 and 6 are needed")
     var neighbors = classical_i64(meta, 0)
     var components = classical_i64(meta, 1)
     var epochs = classical_i64(meta, 2)
     var seed = classical_i64(meta, 3)
     var negatives = classical_i64(meta, 4)
     var automatic_epochs = classical_i64(meta, 5) != 0
-    if neighbors < 2 or components < 1 or components > 32 or seed < 0 or negatives < 0 or negatives > 2147483647:
-        raise Error("saved UMAP integer parameters are outside the supported ranges")
-    if (automatic_epochs and epochs != 0) or (not automatic_epochs and epochs < 1):
-        raise Error("saved UMAP epochs do not match the automatic-epochs flag")
     var values = controls._mv
-    for i in range(6):  # driver-loop: six saved scalar configuration fields
-        if not isfinite(Float64(py=values[i])):
-            raise Error("saved UMAP controls must be finite float32 values")
     var min_dist = Float64(py=values[0])
     var spread = Float64(py=values[1])
     var mix = Float64(py=values[2])
     var connectivity = Float64(py=values[3])
     var rate = Float64(py=values[4])
     var repulsion = Float64(py=values[5])
-    if rate <= 0 or repulsion < 0 or min_dist < 0 or min_dist > spread or spread <= 0 or mix < 0 or mix > 1 or connectivity < 0:
-        raise Error("saved UMAP scalar configuration is inconsistent")
-    var metric = _archive_string(arrays, "metric", context)
-    var metrics = context["host_archive_umap_metrics"]
-    if not py_contains(metrics, metric):
-        raise Error("unsupported saved UMAP metric")
-    var code = Int(py=metrics[metric])
-    var saved_code = -1
-    var power = Float64(2.0)
-    var a = Float64(0.0)
-    var b = Float64(0.0)
-    if py_contains(arrays, "extras"):
-        var extras = host_archive_count(arrays, "extras", "<f8", 4, context, True)
-        var value = classical_f64(extras, 0)
-        if not isfinite(value) or value < -9223372036854775808.0 or value >= 9223372036854775808.0:
-            raise Error("invalid saved UMAP metric code")
-        saved_code = Int(value)
-        power = classical_f64(extras, 1)
-        a = classical_f64(extras, 2)
-        b = classical_f64(extras, 3)
-    if code != saved_code:
-        raise Error("saved UMAP metric code does not match its metric")
-    if code == 9:
-        if not isfinite(power) or power <= 0 or power > 3.4028234663852886e38 or Float64(Float32(power)) != power:
-            raise Error("saved UMAP Minkowski power must survive float32 validation")
-    elif power != 2.0:
-        raise Error("saved UMAP metric does not read its nondefault power")
-    var have_ab = a > 0 and b > 0
-    if have_ab:
-        if not isfinite(a) or not isfinite(b) or a > 3.4028234663852886e38 or b > 3.4028234663852886e38 or Float64(Float32(a)) != a or Float64(Float32(b)) != b:
-            raise Error("saved UMAP a and b must survive float32 validation")
-    elif a != 0.0 or b != 0.0:
-        raise Error("saved UMAP a and b must be positive together or both absent")
     var initialization = _archive_string(arrays, "init", context)
+    var extras_code = Float64(-1.0)
+    var power_saved = Float64(2.0)
+    var a_saved = Float64(0.0)
+    var b_saved = Float64(0.0)
+    if py_contains(arrays, "extras"):
+        var extras = _archive_exact(arrays, "extras", "<f8", context)
+        if Int(py=extras.size) != 4:
+            raise Error(where + " holds " + String(Int(py=extras.size)) + " extras; 4 are needed")
+        extras_code = classical_f64(extras, 0)
+        power_saved = classical_f64(extras, 1)
+        a_saved = classical_f64(extras, 2)
+        b_saved = classical_f64(extras, 3)
+    var metric = _archive_string(arrays, "metric", context)
+    # int(extras[0]), as the loader's constructor arguments evaluated it.
+    if extras_code != extras_code:
+        raise Error("ValueError: cannot convert float NaN to integer")
+    if not isfinite(extras_code):
+        raise Error("OverflowError: cannot convert float infinity to integer")
+    var saved_code = py_call(builtins.int, PythonObject(extras_code))
+    var minkowski_kwds = Bool(py=saved_code == PythonObject(9))
     if String(initialization) == "array":
         initialization = PythonObject("spectral")
-    if String(initialization) != "spectral" and String(initialization) != "random" and String(initialization) != "pca":
-        raise Error("unsupported saved UMAP initialization")
-    var training = _archive_exact(arrays, "training", "<f4", context)
-    var embedding = _archive_exact(arrays, "embedding", "<f4", context)
-    if Int(py=training.ndim) != 2 or Int(py=embedding.ndim) != 2 or training.shape[0] != embedding.shape[0] or Int(py=embedding.shape[1]) != components:
-        raise Error("saved UMAP training and embedding shapes do not match")
+    var have_a = a_saved > 0
+    var have_b = b_saved > 0
+    # The constructor's validation (`UMAP._parameters`, then `_extras`).
+    _ = _umap_whole(neighbors, "n_neighbors", 2, 9223372036854775807)
+    _ = _umap_whole(components, "n_components", 1, 32)
+    var config_epochs = 0 if automatic_epochs else _umap_whole(epochs, "n_epochs", 1, 9223372036854775807)
+    _ = _umap_whole(seed, "random_state", 0, 9223372036854775807)
+    min_dist = _umap_real(min_dist, "min_dist")
+    spread = _umap_real(spread, "spread")
+    mix = _umap_real(mix, "set_op_mix_ratio")
+    connectivity = _umap_real(connectivity, "local_connectivity")
+    rate = _umap_real(rate, "learning_rate")
+    repulsion = _umap_real(repulsion, "repulsion_strength")
+    _ = _umap_whole(negatives, "negative_sample_rate", 0, 2147483647)
+    if rate <= 0:
+        raise Error("ValueError: UMAP learning_rate must be positive")
+    if repulsion < 0:
+        raise Error("ValueError: UMAP repulsion_strength must be nonnegative")
+    if not (0 <= min_dist and min_dist <= spread) or spread <= 0:
+        raise Error("ValueError: UMAP requires 0 <= min_dist <= spread and spread > 0")
+    if not (0 <= mix and mix <= 1):
+        raise Error("ValueError: UMAP set_op_mix_ratio must be in [0, 1]")
+    if connectivity < 0:
+        raise Error("ValueError: UMAP local_connectivity must be >= 0")
+    var metrics = context["host_archive_umap_metrics"]
+    if not py_contains(metrics, metric):
+        raise Error("ValueError: UMAP metric=" + _archive_builtin_repr(metric) + " is not supported; the kNN computes "
+                    + _archive_builtin_repr(py_call(builtins.sorted, metrics))
+                    + " (a callable, and every other name, is refused by name)")
+    var code = Int(py=metrics[metric])
+    var power = Float64(2.0)
+    if code == 9:
+        power = _umap_real(power_saved if minkowski_kwds else Float64(2.0), "metric_kwds['p']")
+        if not power > 0:
+            raise Error("ValueError: UMAP minkowski p must be positive")
+    elif minkowski_kwds:
+        raise Error("ValueError: UMAP metric_kwds ['p'] are not used by metric=" + _archive_builtin_repr(metric))
+    if have_a != have_b:
+        raise Error("ValueError: UMAP a and b must be given together")
+    var a = Float64(0.0)
+    var b = Float64(0.0)
+    if have_a:
+        a = _umap_real(a_saved, "a")
+        b = _umap_real(b_saved, "b")
+        if not (a > 0 and b > 0):
+            raise Error("ValueError: UMAP a and b must be positive")
+    var init_text = String(initialization)
+    if init_text != "spectral" and init_text != "random" and init_text != "pca":
+        raise Error("ValueError: UMAP init=" + _archive_builtin_repr(initialization) + " must be 'spectral', 'random', 'pca' or an array")
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
     host_archive_mode(arrays, fields, context)
+    var config = Python.tuple(neighbors, components, config_epochs, min_dist, spread, mix, connectivity, seed,
+                              rate, repulsion, negatives, code, power, a, b)
+    var saved = Python.tuple(neighbors, components, epochs, Float64(py=values[0]), Float64(py=values[1]),
+                             Float64(py=values[2]), Float64(py=values[3]), seed, Float64(py=values[4]),
+                             Float64(py=values[5]), negatives, saved_code, power_saved, a_saved, b_saved)
+    if Bool(py=config != saved):
+        raise Error(where + " controls " + _archive_builtin_repr(saved) + " do not survive validation as "
+                    + _archive_builtin_repr(config))
+    var training = _archive_exact(arrays, "training", "<f4", context)
+    var embedding = _archive_exact(arrays, "embedding", "<f4", context)
+    if Int(py=training.ndim) != 2 or Int(py=embedding.ndim) != 2 or Int(py=embedding.shape[0]) != Int(py=training.shape[0]) or Int(py=embedding.shape[1]) != components:
+        raise Error(where + " training " + _archive_builtin_repr(py_call(builtins.tuple, training.shape)) + " and embedding "
+                    + _archive_builtin_repr(py_call(builtins.tuple, embedding.shape)) + " do not agree with n_components="
+                    + String(components))
     py_setitem(fields, "n_neighbors", neighbors)
     py_setitem(fields, "n_components", components)
-    py_setitem(fields, "min_dist", min_dist)
-    py_setitem(fields, "spread", spread)
+    py_setitem(fields, "min_dist", Float64(py=values[0]))
+    py_setitem(fields, "spread", Float64(py=values[1]))
     py_setitem(fields, "n_epochs", PythonObject(None) if automatic_epochs else PythonObject(epochs))
     py_setitem(fields, "random_state", seed)
-    py_setitem(fields, "set_op_mix_ratio", mix)
-    py_setitem(fields, "local_connectivity", connectivity)
+    py_setitem(fields, "set_op_mix_ratio", Float64(py=values[2]))
+    py_setitem(fields, "local_connectivity", Float64(py=values[3]))
     py_setitem(fields, "metric", metric)
     py_setitem(fields, "init", initialization)
-    py_setitem(fields, "learning_rate", rate)
-    py_setitem(fields, "repulsion_strength", repulsion)
+    py_setitem(fields, "learning_rate", Float64(py=values[4]))
+    py_setitem(fields, "repulsion_strength", Float64(py=values[5]))
     py_setitem(fields, "negative_sample_rate", negatives)
-    py_setitem(fields, "a", PythonObject(a) if have_ab else PythonObject(None))
-    py_setitem(fields, "b", PythonObject(b) if have_ab else PythonObject(None))
-    py_setitem(fields, "metric_kwds", Python.dict(p=power) if saved_code == 9 else PythonObject(None))
+    py_setitem(fields, "a", PythonObject(a_saved) if have_a else PythonObject(None))
+    py_setitem(fields, "b", PythonObject(b_saved) if have_b else PythonObject(None))
+    py_setitem(fields, "metric_kwds", Python.dict(p=power_saved) if minkowski_kwds else PythonObject(None))
     py_setitem(fields, "target_n_neighbors", -1)
     py_setitem(fields, "target_metric", "categorical")
     py_setitem(fields, "target_weight", 0.5)
@@ -1281,12 +1400,12 @@ def host_archive_umap(cls: PythonObject, arrays: PythonObject, context: PythonOb
     py_setitem(fields, "output_metric", "euclidean")
     py_setitem(fields, "_transform_training", training)
     py_setitem(fields, "_transform_embedding", embedding)
-    py_setitem(fields, "_transform_config", Python.tuple(neighbors, components, epochs, min_dist, spread, mix, connectivity, seed, rate, repulsion, negatives, code, power, a if have_ab else Float64(0.0), b if have_ab else Float64(0.0)))
+    py_setitem(fields, "_transform_config", config)
     py_setitem(fields, "_transform_mode", fields["numeric_mode"])
     var store = py_call(context["array_type"], "f")
     _ = py_call(store.frombytes, py_call(embedding._mv.cast, "B"))
     py_setitem(fields, "embedding_", classical_wrap_array(store, embedding.shape, "<f4", String(embedding.order), context))
-    py_setitem(fields, "n_features_in_", training.shape[1])
+    py_setitem(fields, "n_features_in_", Int(py=training.shape[1]))
     py_setitem(fields, "input_copied_", classical_i64(meta, 6) != 0)
     return model
 
@@ -1895,9 +2014,9 @@ def host_archive_build(path: PythonObject, context: PythonObject,
     elif fmt == "mojolearn-logistic-1":
         model = host_archive_logistic(cls, arrays, context)
     elif fmt == "mojolearn-arima-1" or fmt == "mojolearn-arima-2":
-        model = host_archive_arima(cls, arrays, fmt == "mojolearn-arima-2", context)
+        model = host_archive_arima(cls, arrays, fmt == "mojolearn-arima-2", path, context)
     elif fmt == "mojolearn-holtwinters-1":
-        model = host_archive_holtwinters(cls, arrays, context)
+        model = host_archive_holtwinters(cls, arrays, path, context)
     elif fmt == "mojolearn-ivf-flat-1":
         model = host_archive_ivf(cls, arrays, context)
     elif fmt == "mojolearn-hdbscan-2":
@@ -1914,7 +2033,7 @@ def host_archive_build(path: PythonObject, context: PythonObject,
     elif fmt == "mojolearn-spectral-1":
         model = host_archive_spectral(cls, arrays, path, context)
     elif fmt == "mojolearn-umap-1":
-        model = host_archive_umap(cls, arrays, context)
+        model = host_archive_umap(cls, arrays, path, context)
     elif fmt == "mojolearn-gp-1" or fmt == "mojolearn.gpc.v1":
         model = host_archive_gp(cls, arrays, fmt == "mojolearn.gpc.v1", context)
     elif fmt == "mojolearn-svc-1" or fmt == "mojolearn-svr-1":
