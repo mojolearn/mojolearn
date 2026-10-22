@@ -4577,3 +4577,5 @@ def main(argv=None):
 
 if __name__ == "__main__":
     sys.exit(main())
+
+_ARM = 'mojolearn._verify_par'
