@@ -320,6 +320,24 @@ class InstalledNativeAudit(unittest.TestCase):
         with self.assertRaises(ValueError):
             q.selected_files(test_nodes=[node, node])
 
+    def test_public_cache_supports_scope_is_metadata_only_on_every_target(self):
+        name = "test_cache_supports_native.py"
+        self.assertIn(name, q.PUBLIC_TESTS)
+        self.assertEqual(q.test_dependencies([name]), ["numpy", "pytest"])
+        for vendor in ("cpu", "metal", "cuda", "hip"):
+            scope = q.test_applicability([name], vendor)[name]
+            self.assertIn("DeviceCache.supports", scope["execution_route"])
+            self.assertIn("no device allocation", scope["execution_route"])
+            self.assertIn("constructor, release, close", scope["coverage_limit"])
+            self.assertEqual(scope["cpu_not_applicable_cases"], {})
+
+    def test_public_cache_supports_exact_node_remains_bounded(self):
+        name = "test_cache_supports_native.py"
+        node = name + "::test_cache_supports_preserves_unicode_prefix_names[surrogate]"
+        self.assertEqual(q.selected_files(test_nodes=[node]), [name])
+        with self.assertRaises(ValueError):
+            q.selected_files(test_nodes=[node, node])
+
     def test_public_cache_live_scope_retains_unfinished_lifecycle(self):
         name = "test_cache_lifecycle_native.py"
         self.assertIn(name, q.PUBLIC_TESTS)

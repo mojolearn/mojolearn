@@ -26,6 +26,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_TESTS = {
     "test_classical_exceptions_native_owner.py": "Fitted-state exception compatibility through native estimator entries and connected reduction/restoration bridges, with caller-owned pickle",
     "test_not_fitted_native_lifetime.py": "Public NotFittedError reduction payload, caller-owned pickle compatibility and native singleton ownership",
+    "test_cache_supports_native.py": "Public DeviceCache.supports native binding metadata, Unicode prefix names, CPU refusal compatibility and callback admission",
     "test_cache_lifecycle_native.py": "Public DeviceCache.live connected native store counts and identity-preserving context entry",
     "test_cache_upload_native.py": "Public DeviceCache.id_of native hit/miss preparation, upload publication, retained owners and failure cleanup",
     "test_cache_key_native.py": "Public DeviceCache.get and resident.stats native tuple-key admission, deep nesting and callback refusals",
@@ -304,6 +305,10 @@ def test_applicability(selected, vendor):
         if name == "test_cache_key_native.py":
             scope.update(execution_route="native cache metadata only; no device slots",
                          coverage_limit="Selected DeviceCache.get and resident.stats tuple-key admission only; constructor, upload, release and context lifecycle remain separate")
+        if name == "test_cache_supports_native.py":
+            scope.update(execution_route="native DeviceCache.supports metadata on CPU and GPU; no device allocation or computation",
+                         operation_mode="identical (explicit fixture configuration)",
+                         coverage_limit="Only public capability lookup and its CPU refusal/prefix contracts; constructor, release, close and resident scope cleanup remain separate")
         if name == "test_cache_lifecycle_native.py":
             scope.update(execution_route="native DeviceCache.live metadata and __enter__ on CPU/GPU; real x_prep/x_metrics store counters on GPU",
                          operation_mode="identical (explicit fixture configuration)",
