@@ -1,0 +1,102 @@
+{
+  "scope": "model_selection._Resident constructor/reinitialization, release/close and enter/exit native lifecycle draft",
+  "status": "held_not_default_ready",
+  "reason": "Previously supported ordinary Arrow-backed pandas owners cannot yet be admitted through the available reviewed native owner inspection interfaces without allowing hidden Python finalizers.",
+  "baseline": {
+    "source_commit": "30841c2213a04faac6019c00e24cb3076115cee7",
+    "python": "3.11.16",
+    "numpy": "1.26.4",
+    "pandas": "2.3.3",
+    "pyarrow": "21.0.0",
+    "supported": [
+      "float64[pyarrow] columns",
+      "int64[pyarrow] columns",
+      "string[pyarrow] index"
+    ],
+    "already_refused": "numeric strings in string[pyarrow] columns: TypeError, fold data holds a str, not a number",
+    "observations_completed": 4,
+    "hidden_owner_callback_observed": true,
+    "final_live_slot_delta": 0,
+    "original_controller_exit": 1,
+    "controller_failure": "Final assertion incorrectly expected the existing numeric-string refusal to succeed; all requested observations were retained first. Corrected review does not overwrite original exit or claim an all-green run."
+  },
+  "native_owner_boundary": {
+    "observed_buffer_type": "pyarrow.lib.Buffer",
+    "gc_tracked": false,
+    "gc_referents": [],
+    "parent": null,
+    "instance_dictionary": false,
+    "hidden_owner": "PyForeignBuffer::base_ (private OwnedRefNoGIL), or PyBuffer::py_buf_ (private Py_buffer)",
+    "release_effect": "Dropping the last retained Arrow owner can invoke the hidden Python owner finalizer. The whole-operation baseline observes that callback during _Resident.close."
+  },
+  "supported_api_review": {
+    "reviewed": [
+      "CPython PyType_GetSlot/Py_tp_traverse",
+      "PyArrow Buffer public attributes and parent",
+      "Arrow21 public Python C++ PyForeignBuffer and PyBuffer declarations"
+    ],
+    "missing": "A supported native API that identifies and enumerates Python owners retained inside an Arrow Buffer, including foreign/Python buffers and transitive C++ array ownership, without invoking user hooks.",
+    "classification": "Upstream Arrow owner-inspection boundary; this is not a demonstrated Mojo compiler defect.",
+    "forbidden_workarounds": [
+      "private C++ object layout or vtable inspection",
+      "assuming a native wrapper has no Python owner",
+      "deferring reference destruction outside the operation",
+      "Python fallback",
+      "refusing all previously supported ordinary Arrow-backed frames"
+    ]
+  },
+  "source_status": {
+    "native_compiled": false,
+    "candidate_runtime_executed": false,
+    "activation": "Do not merge the lifecycle wrappers as the default until Arrow compatibility is preserved. Independent75f longlong alias correction may proceed.",
+    "other_implementation": [
+      "NumPy/Python buffer owners",
+      "pandas2.3/3.0 ndarray and ordinary metadata graph traversal",
+      "explicit IntervalNode typed-memoryview ownership",
+      "zoneinfo/dateutil/pytz metadata admission",
+      "independent-slot cleanup and first-error retention"
+    ],
+    "remaining_product_python": [
+      "model_selection._Resident._entry",
+      "model_selection._Resident.take",
+      "_arena_io.resident",
+      "DeviceCache",
+      "_Scope"
+    ]
+  },
+  "qualification": {
+    "new_native_tests_file": "python/mojolearn/tests/test_resident_lifecycle_native.py",
+    "arrow_positive_cases": 6,
+    "arrow_hidden_owner_refusals": 2,
+    "requirement": "Ordinary Arrow tests must pass; missing optional test dependencies must not count as qualification or N/A.",
+    "pending": [
+      "native compilation",
+      "all candidate runtime cases",
+      "installed package runs",
+      "fault/restoration/reference/vendor qualification",
+      "performance"
+    ]
+  },
+  "evidence_root": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/arena-lifecycle-lane",
+  "evidence": [
+    "arrow-resident-baseline308.json",
+    "arrow-resident-baseline308.log",
+    "arrow-resident-baseline308.exit",
+    "arrow-resident-baseline308.review.json",
+    "arrow-resident-baseline-v1.py",
+    "resident-baseline-binary-comparison.json",
+    "arrow-public-owner-source-receipts.json",
+    "arrow-python-io-source-receipts.json",
+    "resident-lifetime-baseline308.json"
+  ],
+  "upstream_source_urls": [
+    "https://github.com/apache/arrow/blob/apache-arrow-21.0.0/python/pyarrow/src/arrow/python/io.h",
+    "https://github.com/apache/arrow/blob/apache-arrow-21.0.0/python/pyarrow/src/arrow/python/common.h",
+    "https://arrow.apache.org/docs/python/generated/pyarrow.Buffer.html"
+  ],
+  "next_actions": [
+    "Obtain a supported transitive native Arrow owner-inspection interface or supported proof for a narrower existing native allocation identity; preserve all existing ordinary inputs.",
+    "Complete that ownership admission before activating native lifecycle wrappers.",
+    "Compile once with the orchestrator, then execute exact new/affected cases; keep current successful frozen evidence."
+  ]
+}
