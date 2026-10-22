@@ -95,7 +95,7 @@ def _if_repr_float(item: PythonObject, width: Int, options: PythonObject, contex
     var tail = String(text[byte=exponent:]) if exponent >= 0 else String("")
     if unique:
         if mantissa.find(".") >= 0:
-            while mantissa.endswith("0"):
+            while mantissa.endswith("0"):  # small-loop(text: trailing digits of one scalar parameter error word)
                 var shorter = String(mantissa[byte=0:mantissa.byte_length() - 1])
                 mantissa = shorter^
         else:
