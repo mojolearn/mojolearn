@@ -4,7 +4,6 @@
 from std.memory import bitcast
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type
-from bindings.native_buffer_owner import native_buffer_view
 from core.native_scalar_decode import NativeRealBits, native_scalar_real
 
 
@@ -46,40 +45,51 @@ struct NativeScalarBuffer(ImplicitlyCopyable, Movable):
 
 
 def native_scalar_buffer(value: PythonObject) raises -> NativeScalarBuffer:
-    # PyMemoryView_FromObject is a documented buffer acquisition; for an
-    # admitted exact numeric NumPy scalar/ndarray it never performs a cast.
-    # memoryview.tobytes copies storage, including nonnative endian data.
-    var view = native_buffer_view(value)
-    var width = Int(py=view.itemsize)
-    if Int(py=view.nbytes) != width or width < 1 or width > 32:
+    # Callers have admitted the exact native ndarray/scalar and primitive
+    # dtype. Its native descriptor supplies width/code/byte order without
+    # NumPy computation. Requesting PEP3118 format would reject byte-swapped
+    # long double even though its raw buffer bytes are supported.
+    var dtype = value.dtype
+    var width = Int(py=dtype.itemsize)
+    var code = String(dtype.char)
+    var order = String(dtype.byteorder)
+    var little = order != ">"  # all supported host ABIs are little-endian
+    if width < 1 or width > 32:
         raise Error("TypeError: numeric scalar decoding requires one primitive buffer element")
-    var code = String(view.format)
-    var little = True  # supported host targets are little-endian
-    if code.byte_length() > 0:
-        var first = String(code[byte=0:1])
-        if first == "@" or first == "=" or first == "<" or first == ">" or first == "!":
-            little = first != ">" and first != "!"
-            var rest = String(code[byte=1:])
-            code = rest^
-    var complex = code.startswith("Z")
+    var complex = code == "F" or code == "D" or code == "G"
+    var component_width = width
     if complex:
         if width % 2 != 0:
             raise Error("TypeError: complex scalar storage requires two equal components")
-        var rest = String(code[byte=1:])
-        code = rest^
-        width //= 2
-        if code != "e" and code != "f" and code != "d" and code != "g":
-            raise Error("TypeError: complex scalar storage requires floating components")
-    var raw = py_call(view.tobytes)
+        component_width //= 2
+        code = String("f") if code == "F" else String("d") if code == "D" else String("g")
+    # Py_buffer is a public CPython structure, ten pointer-sized words on
+    # our supported 64-bit CPython targets; word 2 is len, word 3 itemsize.
+    # PyBUF_FULL_RO without PyBUF_FORMAT (0x118) asks for native shape and
+    # strides but never requests the unsupported PEP3118 spelling.
+    # Allocate both owners before acquisition. Every successful export is
+    # released on all error paths; fixed private bytes outlive both decodes.
+    var view = List[Int](length=10, fill=0)
+    var bytes = List[UInt8](length=32, fill=UInt8(0))
+    var pointer = view.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
+    var data = bytes.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutUntrackedOrigin]()
     ref cpy = Python().cpython()
-    var pointer = cpy.lib.get_function[Optional[MutPointer[UInt8, MutUntrackedOrigin]]]("PyBytes_AsString")(raw._obj_ptr)
-    if not pointer:
+    var status = cpy.lib.get_function[Int32]("PyObject_GetBuffer")(value._obj_ptr,pointer,Int32(0x118))
+    if status != 0:
         raise cpy.unsafe_get_error()
-    var data = pointer.value()
+    try:
+        if view[2] != width or view[3] != width:
+            raise Error("TypeError: numeric scalar decoding requires one primitive buffer element")
+        status = cpy.lib.get_function[Int32]("PyBuffer_ToContiguous")(data,pointer,width,Int8(67))
+        if status != 0:
+            raise cpy.unsafe_get_error()
+    finally:
+        cpy.lib.get_function[NoneType]("PyBuffer_Release")(pointer)
+    width = component_width
     var real = native_scalar_real(data, 0, code, width, little)
     var imag = NativeRealBits()
     if complex:
         imag = native_scalar_real(data, width, code, width, little)
-    _ = raw^
+    _ = bytes^
     _ = view^
     return NativeScalarBuffer(real, imag, complex, code == "g")

@@ -83,6 +83,19 @@ def test_cache_get_preserves_native_integer_conversion(kind):
     assert audit_native_call(cache.get, _source(convert(8), convert(3))).assert_native() == 19
 
 
+@pytest.mark.parametrize('field,dtype', [('_addr', 'g'), ('size', 'g'),
+                                        ('itemsize', 'g'), ('itemsize', 'G')])
+def test_cache_get_decodes_non_native_extended_metadata(field, dtype):
+    cache, source = _cache(), _source()
+    cache._entries[(8, 3)] = (19, source)
+    value = np.asarray(getattr(source, field), dtype=np.dtype(dtype).newbyteorder('>'))
+    setattr(source, field, value)
+    before = value.tobytes()
+    assert audit_native_call(cache.get, source).assert_native() == 19
+    assert cache._entries[(8, 3)][1] is source
+    assert getattr(source, field) is value and value.tobytes() == before
+
+
 @pytest.mark.parametrize('kind', ['subclass', 'retained_instance_key'])
 def test_cache_get_preserves_ordinary_cache_variants(kind):
     cache = _cache()
