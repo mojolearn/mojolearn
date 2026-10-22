@@ -24,6 +24,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_TESTS = {
+    "test_archive_unicode_native.py": "Public archive strict Unicode errors, loaded state, partial save bytes and connected codec identity refusals",
     "test_classical_archive_reader_native.py": "Public linear archive loading, compressed state, native helper identities, file errors and input/output ownership",
     "test_host_density_save_native.py": "Public host KDE and IsolationForest save bytes, native configuration, partial state, loaded state and callback refusals",
     "test_classical_archive_writer_native.py": "Public linear/scaler archive bytes, file errors, output ownership and native callback refusals",
@@ -199,6 +200,10 @@ def test_applicability(selected, vendor):
             scope.update(execution_route="native host archive owner, including in GPU packages",
                          operation_mode="saved identical state; parsing does not select a GPU kernel",
                          coverage_limit="Selected public linear load paths, compressed state, native file errors and helper identities only; arbitrary name metadata, codec-hook edge cases and other archive formats remain separate")
+        if name == "test_archive_unicode_native.py":
+            scope.update(execution_route="native host archive reader/writer, including in GPU packages",
+                         operation_mode="saved identical state and test-specific malformed Unicode; no GPU kernel",
+                         coverage_limit="Selected HostLinearRegression.load strict ZIP UTF-8, NPY UTF-32 and literal errors, valid loaded state, StandardScaler.save surrogate errors/partial bytes and connected codec refusals only; Unicode-escape invalid/octal warning delivery may still reach Python warning display, and complete archive callback closure remains unqualified")
         if name == "test_host_density_save_native.py":
             scope.update(execution_route="native host density archive owner, including in GPU packages",
                          operation_mode="saved mode and configuration are test-specific; save does not train or select a GPU kernel",
