@@ -133,20 +133,26 @@ c=a.DeviceCache(SimpleNamespace(x_dev_put=_native('msel_put'),x_dev_free=_native
 c._entries[(8,3)]=(19,None)
 with a.resident():
     a._LOCAL.scope.caches[(1,'x')]=(c,None)
-    name=NAME
-    saved=getattr(builtins,name)
-    calls=[]
-    def forbidden(*args,**kwargs):
-        calls.append(True)
-        raise AssertionError('mutable builtin invoked')
-    setattr(builtins,name,forbidden)
     try:
-        values=(c.__len__(),a.resident.stats())
+        name=NAME
+        saved=getattr(builtins,name)
+        calls=[]
+        def forbidden(*args,**kwargs):
+            calls.append(True)
+            raise AssertionError('mutable builtin invoked')
+        setattr(builtins,name,forbidden)
+        try:
+            values=(c.__len__(),a.resident.stats())
+        finally:
+            setattr(builtins,name,saved)
+        assert values == (1,{'x':(0,0)}) and not calls
+        assert audit_native_call(c.__len__).assert_native()==1
+        assert audit_native_call(a.resident.stats).assert_native()=={'x':(0,0)}
     finally:
-        setattr(builtins,name,saved)
-    assert values == (1,{'x':(0,0)}) and not calls
-    assert audit_native_call(c.__len__).assert_native()==1
-    assert audit_native_call(a.resident.stats).assert_native()=={'x':(0,0)}
+        # Controller-only count fixture: id19 was never allocated. Remove
+        # the synthetic entry before the still-Python resident cleanup;
+        # calling a real device free here would test an invalid fake slot.
+        c._entries.clear()
 print(json.dumps({'calls':calls,'values':values}))
 '''.replace('NAME', repr(name))
     result = subprocess.run([sys.executable, '-c', code], text=True, capture_output=True,
