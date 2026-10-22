@@ -125,7 +125,7 @@ def _pandas_classes(context: PythonObject) raises -> PythonObject:
                 raise Error("TypeError: resident timezone owners require ordinary type metadata")
             var ancestry = py_call(b["type"].__dict__["__mro__"].__get__, cls)
             var known = False
-            for j in range(len(ancestry)):
+            for j in range(len(ancestry)):  # driver-loop: inspect the connected timezone class ancestry without invoking metadata hooks
                 known = known or ancestry[j] is base
             if not known:
                 raise Error("TypeError: resident timezone cache contains an unsupported owner")
