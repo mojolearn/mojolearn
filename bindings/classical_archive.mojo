@@ -187,6 +187,23 @@ def _archive_npy(value: PythonObject, context: PythonObject) raises -> PythonObj
         raw = archive_utf32_encode(value, context)
         if len(value) == 0:
             raw = py_call(context["archive_bytes_type"], 4)
+    elif py_type(value) is py_type(Python.list()) and len(value) > 0 and py_type(value[0]) is py_type(PythonObject("")):
+        # A list of str (`_labels.classes_member` of str labels), as
+        # `_serialize._describe_list` wrote it: '<U{longest}' of shape
+        # (count,), each label UTF-32-LE and NUL-padded to the width.
+        var count = len(value)
+        var width = 1
+        for i in range(count):  # driver-loop: over the saved text labels
+            if py_type(value[i]) is not py_type(PythonObject("")):
+                raise Error("TypeError: mojolearn: a saved list member must hold only str")
+            width = max(width, len(value[i]))
+        descr = "<U" + String(width)
+        shape = Python.tuple(count)
+        var joined = py_call(context["archive_bytearray_type"])
+        for i in range(count):  # driver-loop: over the saved text labels
+            _ = py_call(joined.extend, archive_utf32_encode(value[i], context))
+            _ = py_call(joined.extend, py_call(context["archive_bytes_type"], 4 * (width - len(value[i]))))
+        raw = py_call(context["archive_bytes_type"], joined)
     else:
         classical_admit_value(value, context)
         var array = value if classical_is_array(value, context) or py_type(value) is py_get(context, "ndarray") else classical_input(value, context)
