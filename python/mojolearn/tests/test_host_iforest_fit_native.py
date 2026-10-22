@@ -221,6 +221,22 @@ def test_iforest_fit_scalar_error_preserves_native_print_configuration(dtype, va
     assert _state(vars(model)) == _state(vars(old))
 
 
+@pytest.mark.parametrize("dtype,value,options", [
+    ("f8", 2.1, {"threshold": 0}), ("i4", -1, {"threshold": 0}),
+    ("?", False, {"threshold": 0}), ("f4", 2.1, {"threshold": 1}),
+    ("f4", 2.1, {"threshold": 0, "legacy": "1.21"}),
+])
+def test_iforest_scalar_shape_annotation_matches_numpy_release(dtype, value, options):
+    old, model = _model(max_samples=np.asarray(value, dtype=dtype)), _model(max_samples=np.asarray(value, dtype=dtype))
+    with np.printoptions(**options):
+        with pytest.raises(ValueError) as expected:
+            legacy.fit(old, _x())
+        audit = audit_native_call(model.fit, _x())
+    _refused(audit, ValueError)
+    assert str(audit.exception) == str(expected.value)
+    assert _state(vars(model)) == _state(vars(old))
+
+
 @pytest.mark.parametrize("dtype,value", [("f4", 2.), ("i4", -1), ("g", 2.), (">f4", 2.)])
 def test_iforest_fit_scalar_error_never_calls_numpy_dtype_formatters(monkeypatch, dtype, value):
     import importlib
