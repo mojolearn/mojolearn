@@ -8,7 +8,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_setattr
 from bindings.classical_arrays import classical_address, classical_is_array, classical_c_order, classical_wrap_array
 from bindings.sequential_admission import sequential_admit_value
-from bindings.x_prep_native_inputs import _dense_values, _values
+from bindings.x_prep_native_inputs import _dense_values, _values, _rows_fields
 
 alias F32P = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -89,7 +89,7 @@ def xprep_values(source: PythonObject, entries: PythonObject, context: PythonObj
     # (kind, native buffer/base, indices, rows, columns). Row handles remain
     # on device when the existing ranges/store ABI is available.
     if py_type(source) is context["maxabs_rows_class"]:
-        var fields = py_fields(source)
+        var fields = _rows_fields(source,context)
         var dtype = fields["dtype"]
         if py_type(dtype) is not Python.import_module("builtins").str:
             raise Error("TypeError: native row selection requires native dtype metadata")

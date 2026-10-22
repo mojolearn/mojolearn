@@ -48,7 +48,7 @@ def connect(scaler_class, qselect):
                    robust_qselect=qselect, robust_method_type=MethodType,
                    robust_fit_method=scaler_class.fit, robust_transform_method=scaler_class.transform,
                    scaler_bindings=connected, scaler_class=scaler_class, scaler_host_contexts={},
-                   maxabs_rows_class=DeviceRows, maxabs_gather_rows=gather,
+                   maxabs_rows_class=DeviceRows, maxabs_rows_dict=vars(DeviceRows)['__dict__'], maxabs_gather_rows=gather,
                    maxabs_finite_f32=finite32, maxabs_finite_f64=finite64, classical_getframe=sys._getframe)
     descriptor = door.classical_attribute_descriptor(MethodType(attribute, context))
     scaler_class.__getattribute__ = descriptor

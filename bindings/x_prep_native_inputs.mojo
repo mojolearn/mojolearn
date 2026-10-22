@@ -198,9 +198,40 @@ def _rows_snapshot(base: PythonObject, indices: PythonObject, context: PythonObj
     return output
 
 
+def _rows_fields(source: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Even an exact DeviceRows can contain foreign dictionary keys. Native
+    # dict lookup would invoke their Python equality before buffer admission.
+    # Resolve its native dictionary slot without application descriptors.
+    var b = Python.import_module("builtins")
+    var cls = context["maxabs_rows_class"]
+    if py_type(source) is not cls or py_type(cls) is not b.type:
+        raise Error("TypeError: native row selection requires its ordinary metadata class")
+    var ancestry = py_call(b.type.__dict__["__mro__"].__get__,cls)
+    if len(ancestry) != 2 or ancestry[1] is not b.object:
+        raise Error("TypeError: native row selection cannot inherit Python lifecycle hooks")
+    var mapping = py_call(b.type.__dict__["__dict__"].__get__,cls)
+    var keys = py_call(b.list,mapping)
+    for k in range(len(keys)):  # driver-loop: class keys precede dictionary-descriptor lookup
+        if py_type(keys[k]) is not b.str:
+            raise Error("TypeError: native row selection class keys must be native strings")
+    var descriptor = context["maxabs_rows_dict"]
+    if py_get(mapping,"__dict__") is not descriptor or py_type(descriptor) is not py_type(b.object.__dict__["__class__"]) or descriptor.__objclass__ is not cls:
+        raise Error("TypeError: native row selection requires a native instance dictionary slot")
+    if py_get(mapping,"__del__") is not None or py_get(mapping,"__getattribute__") is not None:
+        raise Error("TypeError: native row selection cannot install Python lifecycle hooks")
+    var fields = py_call(descriptor.__get__,source,cls)
+    if py_type(fields) is not b.dict:
+        raise Error("TypeError: native row selection requires native metadata storage")
+    keys = py_call(b.list,fields)
+    for k in range(len(keys)):  # driver-loop: reject equality/hash protocols before any row metadata lookup
+        if py_type(keys[k]) is not b.str:
+            raise Error("TypeError: native row selection metadata keys must be native strings")
+    return fields
+
+
 def _values(source: PythonObject, context: PythonObject, force_host_rows: Bool = False) raises -> PythonObject:
     if py_type(source) is context["maxabs_rows_class"]:
-        var fields = py_fields(source)
+        var fields = _rows_fields(source,context)
         # DeviceRows.materialize's host-route contract is a single retained
         # snapshot. A later mutation of base/indices must not silently
         # replace an already materialized selection. GPU ranges deliberately
