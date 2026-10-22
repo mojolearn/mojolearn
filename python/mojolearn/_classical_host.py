@@ -218,11 +218,18 @@ class HostLogisticRegression(_HostBound, LogisticRegression):
                 )
 
 
-class HostTruncatedSVD(_HostBound, TruncatedSVD):
+class _NativeArchiveLoad:
+    @classmethod
+    def load(cls, path):
+        """Load saved model state from ``path`` into this CPU model class."""
+        return _native_classical(cls, "host_archive_load", (path,), _CLASSICAL)
+
+
+class HostTruncatedSVD(_NativeArchiveLoad, _HostBound, TruncatedSVD):
     _HOST_ARRAYS = ("components_", "singular_values_")
 
 
-class HostPCA(_HostBound, PCA):
+class HostPCA(_NativeArchiveLoad, _HostBound, PCA):
     _HOST_ARRAYS = ("components_", "mean_", "singular_values_")
 
     def _whiten_binding(self):
@@ -473,7 +480,7 @@ class HostStandardScaler(_HostScaler, StandardScaler):
     _HOST_ARRAYS = ("mean_", "var_", "scale_")
 
 
-class HostMinMaxScaler(_HostScaler, MinMaxScaler):
+class HostMinMaxScaler(_NativeArchiveLoad, _HostScaler, MinMaxScaler):
     _HOST_ARRAYS = ("data_min_", "data_max_", "data_range_", "scale_", "min_")
 
 
@@ -485,11 +492,11 @@ class _HostCD(_HostBound):
         return self._bind(self._BINDING)
 
 
-class HostElasticNet(_HostCD, ElasticNet):
+class HostElasticNet(_NativeArchiveLoad, _HostCD, ElasticNet):
     pass
 
 
-class HostLasso(_HostCD, Lasso):
+class HostLasso(_NativeArchiveLoad, _HostCD, Lasso):
     pass
 
 
@@ -507,16 +514,16 @@ class _HostKernelMethod(_HostBound):
             raise ImportError(f"mojolearn: unsupported saved kernel code {kernel}")
 
 
-class HostKernelRidge(_HostKernelMethod, KernelRidge):
+class HostKernelRidge(_NativeArchiveLoad, _HostKernelMethod, KernelRidge):
     _HOST_ARRAYS = ("X_fit_", "dual_coef_")
 
 
-class HostNystroem(_HostKernelMethod, Nystroem):
+class HostNystroem(_NativeArchiveLoad, _HostKernelMethod, Nystroem):
     _HOST_ARRAYS = ("components_", "component_indices_", "normalization_",
                     "eigenvalues_", "eigenvectors_")
 
 
-class HostRBFSampler(_HostBound, RBFSampler):
+class HostRBFSampler(_NativeArchiveLoad, _HostBound, RBFSampler):
     _BINDING = "_mojolearn_kernel_methods"
     _HOST_ARRAYS = ("random_weights_", "random_offset_")
 
@@ -629,6 +636,11 @@ def _host_fit_helpers():
 # The explicit host classes run through the same compiled owner as
 # LinearRegression and Ridge, with their CPU identical binding.
 _native_classical_bridge.connect_host_public(HostRidge, HostLinearRegression, _CLASSICAL, _host_fit_helpers())
+
+# Fixed archive metadata only. The private native builder is qualified per
+# schema before replacing the existing full-format public routing contract.
+from . import _native_host_archive_bridge
+_native_host_archive_bridge.connect(_CLASSICAL, _FORMATS)
 
 
 def host_model(path):

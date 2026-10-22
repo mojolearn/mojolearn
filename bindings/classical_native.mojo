@@ -14,6 +14,7 @@ from bindings.classical_metadata import classical_initialize, classical_get_para
 from bindings.classical_attributes import classical_check_layout, classical_getattribute, classical_connect_numpy
 from bindings.classical_archive import classical_archive_save
 from bindings.classical_archive_read import classical_archive_load, classical_host_model
+from bindings.host_archive_native import host_archive_build
 from bindings.classical_exceptions import classical_require_fitted, classical_error_restore, classical_error_reduce
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.classical_pandas import classical_admit_value
@@ -99,6 +100,13 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         if operation == "reduce_not_fitted":
             var reduced = classical_error_reduce(model, context)
             return reduced.steal_data()
+        if operation == "host_archive_model" or operation == "host_archive_load":
+            var archive_context = py_get(context, "host_archive_context")
+            if archive_context is None:
+                raise Error("RuntimeError: native host archive schemas are not connected")
+            classical_admit_value(args, archive_context)
+            var restored = host_archive_build(args[0], archive_context, model if operation == "host_archive_load" else PythonObject(None))
+            return restored.steal_data()
         if operation == "host_model":
             var host_context = py_get(context, "classical_host_context")
             if host_context is None:
