@@ -106,7 +106,7 @@ def test_native_quantile_metadata_and_unit_variance_are_preserved(quantiles):
     assert actual.tobytes() == expected.tobytes()
 
 
-@pytest.mark.parametrize('kind', ['object', 'str', 'bytes', 'f2', 'longdouble', 'complex', 'strided', 'bigendian', 'halfview'])
+@pytest.mark.parametrize('kind', ['object', 'str', 'bytes', 'f2', 'longdouble', 'complex', 'strided', 'bigendian', 'halfview', 'halfarray'])
 def test_native_quantile_buffers_preserve_supported_scalar_kinds(kind):
     source = dict(object=lambda: np.array([10., 90.], dtype=object),
                   str=lambda: np.array(['10', '90']), bytes=lambda: np.array([b'10', b'90']),
@@ -115,7 +115,8 @@ def test_native_quantile_buffers_preserve_supported_scalar_kinds(kind):
                   complex=lambda: np.array([10.+1j, 90.+2j]),
                   strided=lambda: np.array([90., 10.])[::-1],
                   bigendian=lambda: np.array([10., 90.], dtype='>f8'),
-                  halfview=lambda: memoryview(np.array([10., 90.], dtype='f2')))[kind]()
+                  halfview=lambda: memoryview(np.array([10., 90.], dtype='f2')),
+                  halfarray=lambda: Array.from_list([10., 90.], '<f2'))[kind]()
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter('always')
         actual = audit_native_call(ml.RobustScaler(quantile_range=source).fit_transform, _data()).assert_native()
@@ -153,6 +154,47 @@ def test_quantile_storage_refuses_before_element_or_exporter_hooks(storage):
         if storage.endswith('_view'):
             source = memoryview(source)
     calls.clear()  # Construction by the application precedes product execution.
+    _refused(audit_native_call(ml.RobustScaler(quantile_range=source).fit, _data()))
+    assert not calls
+
+
+@pytest.mark.parametrize('metadata', ['name', 'key'])
+def test_complex_quantile_warning_metadata_cannot_invoke_python_hooks(metadata, monkeypatch):
+    calls = []
+    class Text(str):
+        __hash__ = str.__hash__
+        def __str__(self):
+            calls.append('str')
+            return str.__str__(self)
+        def __eq__(self, other):
+            calls.append('eq')
+            return str.__eq__(self, other)
+    fields = {Text('__module__') if metadata == 'key' else '__module__': 'numpy.exceptions'}
+    category = type('ComplexWarning', (RuntimeWarning,), fields)
+    if metadata == 'name':
+        category.__name__ = Text('ComplexWarning')
+    monkeypatch.setattr(np.exceptions, 'ComplexWarning', category)
+    source = np.array([10.+1j, 90.+2j])
+    calls.clear()
+    _refused(audit_native_call(ml.RobustScaler(quantile_range=source).fit, _data()))
+    assert not calls
+
+
+@pytest.mark.parametrize('field', ['dtype', 'shape', '_mv'])
+def test_quantile_array_metadata_refuses_python_value_protocols(field):
+    calls = []
+    class Hook:
+        def __str__(self):
+            calls.append('str')
+            return '<f8'
+        def __index__(self):
+            calls.append('index')
+            return 2
+        def __float__(self):
+            calls.append('float')
+            return 10.
+    source = Array.from_list([10.,90.], '<f8')
+    setattr(source, field, (Hook(),) if field == 'shape' else Hook())
     _refused(audit_native_call(ml.RobustScaler(quantile_range=source).fit, _data()))
     assert not calls
 

@@ -7,7 +7,8 @@ def connect(scaler_class, qselect):
     import sys
     from types import BuiltinFunctionType, MethodType
     from . import _backend
-    from ._arena_io import DeviceRows
+    import mmap
+    from ._arena_io import DeviceRows, DeviceCache, _Scope, _LOCAL
     from ._native_classical_bridge import _state_context, _numpy_free_context, _layout
     from .tokenizer import _binding
 
@@ -18,17 +19,20 @@ def connect(scaler_class, qselect):
         try:
             module = _backend.binding("_mojolearn_x_prep", mode)
             entries = {}
-            for name in ("x_prep_run", "x_prep_numeric_mode", "x_prep_vendor", "x_prep_host_column"):  # glue: fixed native exports connected during import
+            for name in ("x_prep_run", "x_prep_numeric_mode", "x_prep_vendor", "x_prep_host_column",
+                         "x_prep_run_out", "x_prep_run_scratch", "x_prep_run_ranges",
+                         "x_prep_dev_put", "x_prep_dev_free", "x_prep_dev_live", "x_prep_dev_take_rows"):  # glue: fixed native exports connected during import
                 try:
                     entry = getattr(module, name)
                 except (AttributeError, ImportError):
-                    if name in ("x_prep_vendor", "x_prep_host_column"):
+                    if name not in ("x_prep_run", "x_prep_numeric_mode"):
                         continue
                     raise
                 if not isinstance(entry, BuiltinFunctionType):
                     raise TypeError(f"RobustScaler requires compiled {name}")
                 entries[name] = entry
             entries["preprocessing_numeric_mode"] = entries["x_prep_numeric_mode"]
+            entries.update(arena_binding=module, arena_binding_id=id(module))
             connected[mode] = entries
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
             connected[mode] = type(error).__name__ + ": " + str(error)
@@ -38,7 +42,10 @@ def connect(scaler_class, qselect):
     call, attribute = door.robust_scaler_native_call, door.standard_scaler_attribute_call
     if any(not isinstance(entry, BuiltinFunctionType) for entry in (call, attribute, gather, finite32, finite64)):  # glue: fixed native ABI identity
         raise TypeError("RobustScaler requires compiled lifecycle, attribute and row-gather entries")
-    context.update(robust_qselect=qselect, robust_method_type=MethodType,
+    context.update(arena_mmap=mmap.mmap, arena_local=_LOCAL,
+                   arena_scope_class=_Scope, arena_cache_class=DeviceCache,
+                   arena_scope_dict=vars(_Scope)['__dict__'], arena_cache_dict=vars(DeviceCache)['__dict__'],
+                   robust_qselect=qselect, robust_method_type=MethodType,
                    robust_fit_method=scaler_class.fit, robust_transform_method=scaler_class.transform,
                    scaler_bindings=connected, scaler_class=scaler_class, scaler_host_contexts={},
                    maxabs_rows_class=DeviceRows, maxabs_gather_rows=gather,
