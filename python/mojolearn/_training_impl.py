@@ -330,10 +330,8 @@ def _check_dtype(arrays, name, where, *, inplace):
 # optimizer state's host mirrors, calls the one kernel entry
 # (training/optimizer_public.mojo on the GPU binding,
 # training/host/optimizer_public_host.mojo on a CPU-only install) and
-# assigns its result on the optimizer. A caller's OWN schedule object (one
-# with `lr_at` and no `_lr_spec`) is the one Python call a step makes: the
-# door calls `lr_schedule.lr_at(t + 1)` and its exception reaches the caller
-# unchanged.
+# assigns its result on the optimizer. Built-in schedules are native data;
+# unsupported Python callback schedules are refused before invoking any hook.
 
 #: `optimizer_door_step`'s operations (bindings/optimizer_public_door.mojo)
 _OP_STEP, _OP_STEP_DEVICE, _OP_STEP_ACCUMULATED = 0, 1, 2
@@ -356,6 +354,8 @@ class _Optimizer(NumericModeMixin):
     clip as one.
     """
 
+    _mojolearn_native_public = True
+    __getattribute__ = object.__getattribute__
     _BINDING = _EXT_NAME
     _KIND = None
 
@@ -419,28 +419,28 @@ class _Optimizer(NumericModeMixin):
         of `n_total` floats. Reading it copies the optimizer state into the
         returned array, so read it once per use, not per element; assign to
         `exp_avg` to change the state."""
-        return self._binding().optimizer_door_state(self, _STATE_EXP_AVG)
+        return _OPT_NATIVE("state", self, (_STATE_EXP_AVG,), None, _OPT_CONTEXT)
 
     @exp_avg.setter
     def exp_avg(self, value):
-        self._binding().optimizer_door_state_set(self, _STATE_EXP_AVG, value)
+        return _OPT_NATIVE("state_set", self, (_STATE_EXP_AVG, value), None, _OPT_CONTEXT)
 
     @property
     def exp_avg_sq(self):
         """Adam's second moment; see `exp_avg`."""
-        return self._binding().optimizer_door_state(self, _STATE_EXP_AVG_SQ)
+        return _OPT_NATIVE("state", self, (_STATE_EXP_AVG_SQ,), None, _OPT_CONTEXT)
 
     @exp_avg_sq.setter
     def exp_avg_sq(self, value):
-        self._binding().optimizer_door_state_set(self, _STATE_EXP_AVG_SQ, value)
+        return _OPT_NATIVE("state_set", self, (_STATE_EXP_AVG_SQ, value), None, _OPT_CONTEXT)
 
     @property
     def resident_(self):
         """True once the optimizer state lives on the device."""
-        return self._res is not None and not getattr(self, "_res_host", False)
+        return _OPT_NATIVE("resident", self, (), None, _OPT_CONTEXT)
 
     def _binding(self):
-        return _load(getattr(self, "numeric_mode", None))
+        return _OPT_NATIVE("binding", self, (), None, _OPT_CONTEXT)
 
     # -- lane fam2-neural (2026-10-04): parameters and gradients resident ----
     # After `params_to_device()` the parameters live in the optimizer's
@@ -451,49 +451,38 @@ class _Optimizer(NumericModeMixin):
     # call on the same buffers: the same bits.
     def _io(self, op, tensors=None, name="params", tensor=0):
         """One `optimizer_door_io` call; returns its result word."""
-        return self._binding().optimizer_door_io(self, op, tensors, name, tensor)
+        return _OPT_NATIVE("raw_io", self, (op, tensors, name, tensor), None, _OPT_CONTEXT)
 
     def params_resident_available(self):
         """Whether `params_to_device` works on this build."""
-        return bool(self._io(_IO_QUERY))
+        return _OPT_NATIVE("io", self, (_IO_QUERY, None, "params", 0), None, _OPT_CONTEXT)
 
     def params_to_device(self):
         """Upload the parameters into the optimizer's device handle and keep
         them there: later steps neither upload nor download them. Call it
         again after editing the host arrays. Returns self."""
-        self._io(_IO_PARAMS_UP, self.params, "params")
-        self._p_dev = True
-        return self
+        return _OPT_NATIVE("io", self, (_IO_PARAMS_UP, None, "params", 0), None, _OPT_CONTEXT)
 
     def params_to_host(self):
         """Download the device parameters into the caller's arrays (in
         place); they stay resident. Returns the parameter list."""
-        if getattr(self, "_p_dev", False):
-            self._io(_IO_PARAMS_DOWN, self.params, "params")
-        return self.params
+        return _OPT_NATIVE("io", self, (_IO_PARAMS_DOWN, None, "params", 0), None, _OPT_CONTEXT)
 
     def grads_to_device(self, grads):
         """Upload a gradient into the handle's device gradient buffer, for
         `step_device()`. Returns self."""
-        self._io(_IO_GRADS_UP, grads, "grads")
-        self._g_dev = True
-        return self
+        return _OPT_NATIVE("io", self, (_IO_GRADS_UP, grads, "grads", 0), None, _OPT_CONTEXT)
 
     def grads_to_host(self, grads):
         """Download the device gradient (clipped, if the last step clipped)
         into `grads`, in place. Returns `grads`."""
-        self._io(_IO_GRADS_DOWN, grads, "grads")
-        return grads
+        return _OPT_NATIVE("io", self, (_IO_GRADS_DOWN, grads, "grads", 0), None, _OPT_CONTEXT)
 
     def param_device(self, j):
         """Parameter tensor `j` as a `TrainDeviceArray` (a device copy of
         the resident parameters; `params_to_device()` first), for the next
         forward. Its shape is the host tensor's."""
-        if not getattr(self, "_p_dev", False):
-            raise RuntimeError("mojolearn.%s.param_device: call params_to_device() first" % self._where)
-        shape = probe(self.params[j]).shape
-        dev = _dev_binding(getattr(self, "numeric_mode", None), "param_device")
-        return TrainDeviceArray(dev, int(self._io(_IO_PARAM_DEVICE, tensor=j)), shape)
+        return _OPT_NATIVE("param_device", self, (j,), None, _OPT_CONTEXT)
 
     def step_device(self, grads=None, max_norm=None):
         """`step` on device-resident parameters (`params_to_device()` first).
@@ -502,7 +491,7 @@ class _Optimizer(NumericModeMixin):
         gradient already in the handle (`grads_to_device`) is used and, with
         `max_norm`, clipped there; nothing crosses the bus but the three
         info words. Returns what `step` returns."""
-        return self._binding().optimizer_door_step(self, grads, max_norm, _OP_STEP_DEVICE, None)
+        return _OPT_NATIVE("step", self, (grads, max_norm, _OP_STEP_DEVICE, None), None, _OPT_CONTEXT)
 
     def __del__(self):
         return _optimizer_finalize_native(self)
@@ -516,7 +505,7 @@ class _Optimizer(NumericModeMixin):
         momentum buffer it should have continued, which is the failure the
         optimizer contract's clause (d) control 2 is built to catch.
         """
-        return self._binding().optimizer_door_state(self, _STATE_DICT)
+        return _OPT_NATIVE("state", self, (_STATE_DICT,), None, _OPT_CONTEXT)
 
     # DEVIATION 2404: arrays go through _buffer.as_f32_c / as_i32_c and are copied (the NumPy spelling
     # aliased a caller's float32 C-order array).
@@ -530,19 +519,14 @@ class _Optimizer(NumericModeMixin):
             nested list and are converted to float32 (int32 for ``buf_initialized``).
             The optimizer keeps its own copy, so later steps never modify ``state``.
         """
-        t = int(state["t"])
-        ea, c1 = as_f32_c(state["exp_avg"], ndim=1, name="exp_avg")
-        es, c2 = as_f32_c(state["exp_avg_sq"], ndim=1, name="exp_avg_sq")
-        bi, c3 = as_i32_c(state["buf_initialized"], ndim=1,
-                          name="buf_initialized")
-        self._binding().optimizer_door_load_state(self, t, ea, c1, es, c2, bi, c3)
+        return _OPT_NATIVE("load", self, (state,), None, _OPT_CONTEXT)
 
     def zero_grad(self, grads):
         """`torch.optim.Optimizer.zero_grad`, over arrays the caller owns.
         Present so that a training loop written against torch reads the same;
         it writes `+0.0` and nothing else -- all-zero bytes into each buffer,
         which must be C-contiguous and writable."""
-        self._binding().optimizer_door_zero(self, grads)
+        return _OPT_NATIVE("zero", self, (grads,), None, _OPT_CONTEXT)
 
     def step(self, grads, max_norm=None):
         """One step. `grads` matches `params` in count, shape and order.
@@ -561,7 +545,7 @@ class _Optimizer(NumericModeMixin):
         Returns the pre-clip total gradient norm as a float when the clip
         ran, and None when it did not.
         """
-        return self._binding().optimizer_door_step(self, grads, max_norm, _OP_STEP, None)
+        return _OPT_NATIVE("step", self, (grads, max_norm, _OP_STEP, None), None, _OPT_CONTEXT)
 
     def step_accumulated(self, microbatch_grads, tokens, max_norm=None):
         """One step from `A = self.accumulation_steps` microbatch gradient
@@ -569,8 +553,7 @@ class _Optimizer(NumericModeMixin):
         ascending microbatch index, then `step`. `tokens` is the FULL step's
         token count T; a split that clause 9.2 does not admit is refused by
         name (no gradient is combined). Returns what `step` returns."""
-        return self._binding().optimizer_door_step(
-            self, microbatch_grads, max_norm, _OP_STEP_ACCUMULATED, tokens)
+        return _OPT_NATIVE("step", self, (microbatch_grads, max_norm, _OP_STEP_ACCUMULATED, tokens), None, _OPT_CONTEXT)
 
 
 # Optimizer contract 7.3 (momentum 7.3, dampening 7.3a, nesterov 7.3c). `params` order is the
@@ -604,8 +587,8 @@ class SGD(_Optimizer):
         Nesterov momentum. Needs ``momentum > 0`` and ``dampening == 0``, otherwise
         `ValueError` (as torch).
     lr_schedule : object or None, default None
-        A schedule with a one-based `lr_at(t)` method; it sets `lr` before every step.
-        Anything without `lr_at` raises `TypeError`.
+        ConstantLR, WarmupLinearLR or WarmupCosineLR; sets `lr` before every step.
+        Python callback schedules raise `TypeError` before invocation.
     accumulation_steps : int, default 1
         Number of microbatches combined by `step_accumulated`; a power of two >= 1,
         otherwise `ValueError`.
@@ -628,8 +611,7 @@ class SGD(_Optimizer):
     the norm.
 
     `lr` is read at every step, so you can assign ``opt.lr`` between steps, or pass an
-    `lr_schedule` (`ConstantLR`, `WarmupLinearLR`, `WarmupCosineLR`, or any object with
-    a one-based `lr_at(t)`). `step_accumulated(microbatch_grads, tokens)` combines
+    `lr_schedule` (`ConstantLR`, `WarmupLinearLR` or `WarmupCosineLR`). `step_accumulated(microbatch_grads, tokens)` combines
     `accumulation_steps` microbatch gradient lists before one step. `zero_grad(grads)`
     writes +0.0 into the given gradient arrays. `state_dict()` / `load_state_dict()`
     save and restore the step count and the optimizer state.
@@ -651,28 +633,8 @@ class SGD(_Optimizer):
 
     def __init__(self, params, lr=1e-3, momentum=0.0, dampening=0.0,
                  weight_decay=0.0, nesterov=False, lr_schedule=None,
-                 accumulation_steps=1, maximize=False, resident=None, **kwargs):
-        _refuse_unknown(kwargs, "SGD")
-        super().__init__(params, "SGD", lr_schedule, accumulation_steps,
-                         resident=resident)
-        if nesterov and (momentum == 0.0 or dampening != 0.0):
-            raise ValueError(
-                "mojolearn.SGD: nesterov=True needs momentum > 0 and "
-                "dampening == 0, got momentum=%r dampening=%r. That is "
-                "torch.optim.SGD's own refusal and it is repeated here "
-                "because the profile would ACCEPT this combination and "
-                "silently degenerate: at momentum = 0 the Nesterov reading "
-                "is bit-identical to the plain one, so nothing would tell "
-                "you the flag did nothing "
-                "(python/mojolearn/_training_impl.py)"
-                % (momentum, dampening)
-            )
-        self.lr = float(lr)
-        self.momentum = float(momentum)
-        self.dampening = float(dampening)
-        self.weight_decay = float(weight_decay)
-        self.nesterov = bool(nesterov)
-        self.maximize = _maximize_flag(maximize, "SGD")
+                 accumulation_steps=1, maximize=False, resident=None, *, numeric_mode=None, **kwargs):
+        return _OPT_NATIVE("construct", self, (params, _KIND_SGD, lr, (0.9, 0.999), 1e-8, weight_decay, momentum, dampening, nesterov, lr_schedule, accumulation_steps, maximize, resident, kwargs), numeric_mode, _OPT_CONTEXT)
 
     def _config(self):
         return {
@@ -720,8 +682,8 @@ class Adam(_Optimizer):
     weight_decay : float, default 0.0
         L2 penalty, added to the gradient.
     lr_schedule : object or None, default None
-        A schedule with a one-based `lr_at(t)` method; it sets `lr` before every step.
-        Anything without `lr_at` raises `TypeError`.
+        ConstantLR, WarmupLinearLR or WarmupCosineLR; sets `lr` before every step.
+        Python callback schedules raise `TypeError` before invocation.
     accumulation_steps : int, default 1
         Number of microbatches combined by `step_accumulated`; a power of two >= 1,
         otherwise `ValueError`.
@@ -753,8 +715,7 @@ class Adam(_Optimizer):
     the norm.
 
     `lr` is read at every step, so you can assign ``opt.lr`` between steps, or pass an
-    `lr_schedule` (`ConstantLR`, `WarmupLinearLR`, `WarmupCosineLR`, or any object with
-    a one-based `lr_at(t)`). `step_accumulated(microbatch_grads, tokens)` combines
+    `lr_schedule` (`ConstantLR`, `WarmupLinearLR` or `WarmupCosineLR`). `step_accumulated(microbatch_grads, tokens)` combines
     `accumulation_steps` microbatch gradient lists before one step. `zero_grad(grads)`
     writes +0.0 into the given gradient arrays. `state_dict()` / `load_state_dict()`
     save and restore the step count and the optimizer state.
@@ -776,23 +737,8 @@ class Adam(_Optimizer):
 
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8,
                  weight_decay=0.0, lr_schedule=None, accumulation_steps=1,
-                 maximize=False, resident=None, **kwargs):
-        _refuse_unknown(kwargs, type(self).__name__)
-        super().__init__(params, type(self).__name__, lr_schedule,
-                         accumulation_steps, resident=resident)
-        try:
-            b1, b2 = betas
-        except (TypeError, ValueError):
-            raise ValueError(
-                "mojolearn.%s: betas must be a pair (beta1, beta2), got %r "
-                "(python/mojolearn/_training_impl.py)"
-                % (type(self).__name__, betas)
-            )
-        self.lr = float(lr)
-        self.betas = (float(b1), float(b2))
-        self.eps = float(eps)
-        self.weight_decay = float(weight_decay)
-        self.maximize = _maximize_flag(maximize, type(self).__name__)
+                 maximize=False, resident=None, *, numeric_mode=None, **kwargs):
+        return _OPT_NATIVE("construct", self, (params, _KIND_ADAM, lr, betas, eps, weight_decay, 0.0, 0.0, False, lr_schedule, accumulation_steps, maximize, resident, kwargs), numeric_mode, _OPT_CONTEXT)
 
     def _config(self):
         return {
@@ -835,11 +781,8 @@ class AdamW(Adam):
 
     def __init__(self, params, lr=1e-3, betas=(0.9, 0.999), eps=1e-8,
                  weight_decay=0.01, lr_schedule=None, accumulation_steps=1,
-                 maximize=False, resident=None, **kwargs):
-        super().__init__(params, lr=lr, betas=betas, eps=eps,
-                         weight_decay=weight_decay, lr_schedule=lr_schedule,
-                         accumulation_steps=accumulation_steps,
-                         maximize=maximize, resident=resident, **kwargs)
+                 maximize=False, resident=None, *, numeric_mode=None, **kwargs):
+        return _OPT_NATIVE("construct", self, (params, _KIND_ADAMW, lr, betas, eps, weight_decay, 0.0, 0.0, False, lr_schedule, accumulation_steps, maximize, resident, kwargs), numeric_mode, _OPT_CONTEXT)
 
 
 #: torch parameter names this surface does not have, and the reason each is
@@ -1006,7 +949,7 @@ def clip_grad_norm_(grads, max_norm, norm_type=2.0, error_if_nonfinite=True,
     # their own memory, or the packed buffer under MOJOLEARN_CLIP_PACKED=1 or
     # several optimizer devices; the same device buffer, offsets and clip, so
     # the same bits -- and the in-place scale).
-    return _load(numeric_mode).optimizer_door_clip(grads, max_norm, norm_type, error_if_nonfinite, kwargs)
+    return _OPT_NATIVE("clip", None, (grads, max_norm, norm_type, error_if_nonfinite, kwargs), numeric_mode, _OPT_CONTEXT)
 
 
 # ===================================================================
@@ -1563,9 +1506,7 @@ def accumulation_is_aligned(tokens, accumulation_steps, numeric_mode=None):
     -------
     bool
     """
-    binding = _load(numeric_mode)
-    return bool(int(binding.accumulation_is_aligned(
-        [int(tokens), int(accumulation_steps)])))
+    return _OPT_NATIVE("aligned", None, (tokens, accumulation_steps), numeric_mode, _OPT_CONTEXT)
 
 
 # v1 balanced tree, ftz(ftz(x) + ftz(y)) at every node, contract clause 9.2 condition 5.
@@ -1597,7 +1538,7 @@ def accumulate_grads(microbatch_grads, tokens, numeric_mode=None):
     # contiguous, the [A, N] stack, the clause 9.2 tree and the result arrays
     # (bindings/optimizer_public_door.mojo, training/optimizer_public.mojo
     # `public_accumulate`).
-    return _load(numeric_mode).optimizer_door_accumulate(microbatch_grads, tokens)
+    return _OPT_NATIVE("accumulate", None, (microbatch_grads, tokens), numeric_mode, _OPT_CONTEXT)
 
 
 # ===================================================================
@@ -2351,3 +2292,8 @@ def mlp_inference_sessions(inputs, weight1, bias1, weight2, bias2, numeric_mode=
 # Import-time ABI connection only; finalization never invokes the selector.
 from .tokenizer import _binding as _connect_optimizer_lifecycle
 _optimizer_finalize_native = _connect_optimizer_lifecycle()._module.optimizer_finalize
+
+# Package-import ABI connection; no product operation calls the Python loader.
+from ._native_optimizer_bridge import connect as _connect_native_optimizer
+import sys as _optimizer_sys
+_OPT_NATIVE, _OPT_CONTEXT = _connect_native_optimizer(_optimizer_sys.modules[__name__])
