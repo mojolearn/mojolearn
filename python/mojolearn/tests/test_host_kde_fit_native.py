@@ -183,6 +183,64 @@ def test_kde_fit_refusals_preserve_exact_error_and_partial_state(case, refit):
     assert _state(vars(model)) == _state(vars(old))
 
 
+@pytest.mark.parametrize("mode", [None, "identical", "fast"])
+@pytest.mark.parametrize("indirect", [False, True])
+@pytest.mark.parametrize("override", [False, True])
+def test_kde_fit_preserves_inherited_mode_and_instance_precedence(mode, indirect, override):
+    class ModeKDE(host.HostKernelDensity):
+        numeric_mode = mode
+    class DescendantKDE(ModeKDE):
+        pass
+    cls = DescendantKDE if indirect else ModeKDE
+    options = {"numeric_mode": "identical"} if override else {}
+    old, model = cls(bandwidth=.75, **options), cls(bandwidth=.75, **options)
+    assert ("numeric_mode" in vars(model)) is override
+    if mode == "fast" and not override:
+        with pytest.raises(ValueError) as expected:
+            legacy.kde_fit(old, _x())
+        audit = audit_native_call(model.fit, _x())
+        _refused(audit, ValueError)
+        assert str(audit.exception) == str(expected.value)
+        assert "_x" not in vars(model) and model.input_copied_ is False
+    else:
+        legacy.kde_fit(old, _x())
+        assert audit_native_call(model.fit, _x()).assert_native() is model
+        assert _state(model.score_samples(_x())) == _state(legacy.kde(old, _x()))
+    assert _state(vars(model)) == _state(vars(old))
+    assert ("numeric_mode" in vars(model)) is override
+
+
+@pytest.mark.parametrize("kind", ["property", "descriptor", "data_descriptor"])
+@pytest.mark.parametrize("instance_mode", [False, True])
+def test_kde_fit_class_mode_descriptors_never_execute_hooks(kind, instance_mode):
+    touched = []
+    class ModeKDE(host.HostKernelDensity):
+        pass
+    model = ModeKDE(bandwidth=.75, numeric_mode="identical")
+    if not instance_mode:
+        del vars(model)["numeric_mode"]
+    class Descriptor:
+        def __get__(self, instance, owner):
+            touched.append("get")
+            return "identical"
+    class DataDescriptor(Descriptor):
+        def __set__(self, instance, value):
+            touched.append("set")
+    def get_mode(self):
+        touched.append("property")
+        return "identical"
+    ModeKDE.numeric_mode = {"property": property(get_mode), "descriptor": Descriptor(),
+                            "data_descriptor": DataDescriptor()}[kind]
+    audit = audit_native_call(model.fit, _x())
+    if instance_mode and kind == "descriptor":
+        assert audit.assert_native() is model
+        assert model.n_samples_fit_ == 3
+    else:
+        _refused(audit, TypeError)
+        assert "_x" not in vars(model)
+    assert touched == []
+
+
 @pytest.mark.parametrize("field,value", [("bandwidth", "scott"), ("algorithm", "kd_tree"), ("kernel", "bogus"), ("metric", "bogus"), ("leaf_size", -1)])
 def test_kde_fit_does_not_add_inference_parameter_validation(field, value):
     old, model = _model(), _model()
