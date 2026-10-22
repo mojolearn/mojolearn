@@ -721,13 +721,6 @@ def byte_lm_run_configured_binding(addresses: PythonObject, params: PythonObject
     return _byte_lm_run(addresses, params, cfg, session)
 
 
-def byte_lm_session_run_binding(session: PythonObject, addresses: PythonObject,
-                                params: PythonObject, shape: PythonObject) raises -> PythonObject:
-    var cfg = _byte_config(shape)
-    var owner = session.downcast_value_ptr[ByteLMSession]()
-    return _byte_lm_run(addresses, params, cfg, owner[], retain=True)
-
-
 # ---------------------------------------------------------------------------
 # DEVIATION 2658: forward-only logits (training/byte_lm_logits.mojo).
 # ---------------------------------------------------------------------------
@@ -1471,7 +1464,6 @@ def byte_lm_offload_rollback_binding(session: PythonObject) raises -> PythonObje
     return PythonObject(owner[].completed)
 
 
-
 def byte_lm_session_launch_probe_binding(session: PythonObject, count: PythonObject) raises -> PythonObject:
     """lane/neural-pass43: the per-launch host cost ON THE OPEN SESSION'S
     context (Metal pays per live allocation on every launch, so this reads
@@ -1542,7 +1534,6 @@ def build__mojolearn_byte_lm() -> PythonObject:
         module.def_function[byte_lm_session_close_binding]("byte_lm_session_close")
         module.def_function[byte_lm_session_launch_probe_binding]("byte_lm_session_launch_probe")
         module.def_function[byte_lm_launch_probe_binding]("byte_lm_launch_probe")
-        module.def_function[byte_lm_session_run_binding]("byte_lm_session_run")
         module.def_function[byte_lm_context_keeper_active_binding]("byte_lm_context_keeper_active")
         # DEVIATION 2514: the device-owned session entries.
         module.def_function[byte_lm_session_open_binding]("byte_lm_session_open")
