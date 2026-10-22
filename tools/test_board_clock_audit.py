@@ -198,7 +198,7 @@ def test_fast_and_identical_ratios_and_infer_batches_are_separate():
 # ------------------------------------------------------------------ audit
 
 def _board():
-    return {"races": {
+    board = {"races": {
         "classical/kmeans/taxi/rows=full": {"wall_s": 30.0, "cells": [
             cell("ours", "mojolearn", 100.0, span=OURS_SPAN),
             cell("torch-gpu", "torch", 30.0, span={"input_home": "device", "upload_ms_untimed": 10.0}),
@@ -207,6 +207,27 @@ def _board():
             cell("ours", "mojolearn", 200.0, family="algos", span=OURS_SPAN, times=[200.0]),
             cell("torch-eager-fp32", "torch", 20.0, family="algos", span={"input_home": "device"}),
             cell("cupy-gpu", "cupy", 5.0, family="algos", span={})]}}}
+    # every pair parameter-checked MATCHED: a clock ratio is derived only for a MATCHED pair (2026-10-22)
+    for rr in board["races"].values():
+        rr.update(params_check="MATCHED", params={"arms": {c["arm"]: {} for c in rr["cells"]}})
+    return board
+
+
+def test_main_fails_on_a_ratio_from_an_unmatched_pair(tmp_path):
+    """Andrew 2026-10-22: a ratio stored for an unchecked (legacy copy) or refused pair fails the audit."""
+    b = _board()
+    rr = b["races"]["classical/kmeans/taxi/rows=full"]
+    rr["params_check"] = "not checked on the main board"
+    torch = next(c for c in rr["cells"] if c["arm"] == "torch-gpu")
+    torch.update(copied_from={"board": "old"}, ratio_ours_identical_over=3.3)
+    p = tmp_path / "board.json"
+    p.write_text(json.dumps(b))
+    assert ca.main(["--board", "x=%s" % p, "--out", str(tmp_path / "out")]) == 1
+    bad = json.loads((tmp_path / "out" / "x.json").read_text())["unmatched_ratios"]
+    assert [(u["arm"], u["state"]) for u in bad] == [("torch-gpu", "unchecked")]
+    # and no clock ratio is derived for it
+    ca.annotate_result(b)
+    assert torch["ratio_ours_identical_clock"] is None
 
 
 def test_audit_summary_counts_and_rerun_estimate():

@@ -538,6 +538,25 @@ def _run(env, *extra):
     return bb.main(["--vendor", "apple", "--lanes", "rf,kmeans"] + env["base"] + list(extra))
 
 
+def _unchecked_stub_ratios(rec):
+    """The stub drivers print no BOARD-PARAMS line: every opponent of `rec` is stored refused with no ratio
+    (Andrew 2026-10-22, board_pairing.params_state). Returns {arm: cell} with the ratios recomputed as if
+    the race's parameter check had read MATCHED, so the ratio arithmetic is still checked."""
+    for c in rec["cells"]:
+        if bb.PAIR.is_opponent(c) and c["status"] == "ok":
+            assert c["ratio_ours_identical_over"] is None and c["ratio_ours_fast_over"] is None, c["arm"]
+            assert c["params_pair"]["state"] == "refused", c["arm"]
+            assert c["params_pair"]["reason"], c["arm"]
+    # the stubs read back no implementation either, so race_fairness excluded their arms as harness code
+    race = dict(rec, params_check="MATCHED", params={"arms": {c["arm"]: {} for c in rec["cells"]}},
+                opponents_excluded={})
+    cells = json.loads(json.dumps(rec["cells"]))
+    for c in cells:     # the stub rows' hardware keys differ (annotated at save); the ratio arithmetic is the point
+        c.pop("hardware_key", None)
+        c.pop("hardware_comparable", None)
+    return {c["arm"]: c for c in bb.add_ratios(cells, race=race)}
+
+
 def test_run_schema_ratios_quality_and_board(env):
     assert _run(env) == 0
     res = json.loads((env["out"] / "board.json").read_text())
@@ -562,7 +581,7 @@ def test_run_schema_ratios_quality_and_board(env):
             assert c["status"] == "ok", (rec["id"], c["arm"], c["status"])
             assert len(c["times_ms"]) == 3
             assert c["quality"]
-    rf = {c["arm"]: c for c in res["races"]["trees/rf/taxi/rows=1000"]["cells"]}
+    rf = _unchecked_stub_ratios(res["races"]["trees/rf/taxi/rows=1000"])
     assert rf["ours"]["mode"] == "identical" and rf["ours-ab"]["mode"] == "fast"
     assert rf["ours"]["installed_wheel"] == "wheel"
     assert rf["ours"]["verdict"] == "COMPARABLE"
@@ -1005,7 +1024,7 @@ def test_neural_run_schema_quality_and_board(env):
         for l in bb.NEURAL_LANES if bb.NEURAL.DEVICE_OF.get(l) != "cpu")
     rec = res["races"]["neural/lm-train-step/bytes/shape=small"]
     assert rec["status"] == "done" and rec["shape"] == "small"
-    cells = {c["arm"]: c for c in rec["cells"]}
+    cells = _unchecked_stub_ratios(rec)
     ours, torch = cells["ours"], cells["torch-eager-fp32"]
     assert ours["mode"] == "identical" and ours["mode_witness"] == "identical"
     assert ours["installed_wheel"] == "wheel"
@@ -1317,7 +1336,7 @@ def test_classical2_run_schema_quality_and_board(env):
     assert sum(1 for c in calls if " prep " in c) == 1
     rec = res["races"]["classical2/umap/taxi/rows=1000"]
     assert rec["status"] == "done" and rec["lane_config"]["timed"]
-    cells = {c["arm"]: c for c in rec["cells"]}
+    cells = _unchecked_stub_ratios(rec)
     assert set(cells) == {"ours", "ours-fast", "umap-learn-cpu", "umap-learn-cpu-unseeded"}
     assert cells["ours-fast"]["mode"] == "fast" and cells["ours-fast"]["mode_witness"] == "fast"
     assert cells["ours"]["installed_wheel"] == "wheel"

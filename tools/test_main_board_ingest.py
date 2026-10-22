@@ -184,10 +184,16 @@ class MainBoardIngest(unittest.TestCase):
         self.assertIn("newer run bbbbbbbbb/n0006 failed: not_ready", c["source"])
         self.assertEqual(nv["main_board"]["identity"], {"DIFFER": 1, "MATCH": 1, "n/a": 1})
         self.assertEqual(nv["main_board"]["failed_runs"], 2)
-        # opponent copied from the stored board, ratio recomputed from the two stored medians
+        # opponent copied from the stored board: a legacy copy never re-raced with a parameter check, so it
+        # shows `unchecked` and no ratio (Andrew 2026-10-22) until the release gate re-races the line
         opp = next(x for x in rr["cells"] if x["arm"] == "cuml-gpu")
         self.assertEqual(opp["copied_from"]["board"], "opp-fixture-nv")
-        self.assertAlmostEqual(opp["ratio_ours_identical_over"], 150.0 / 200.0)
+        self.assertIsNone(opp["ratio_ours_identical_over"])
+        self.assertEqual(opp["params_pair"]["state"], "unchecked")
+        self.assertIn("legacy copy from opp-fixture-nv", opp["params_pair"]["reason"])
+        with open(os.path.join(self.out, "main-nvidia-l40s", "BOARD.md")) as fh:
+            row = next(l for l in fh.read().splitlines() if l.startswith("| cuml-gpu |"))
+        self.assertIn("| unchecked | unchecked |", row)
         self.assertTrue(opp["source"].startswith("copied from opp-fixture-nv"))
         # the default main bb summary is on the board; the grid bb job is not
         trees = nv["races"]["trees/gbdt-depthwise/taxi/rows=full"]
