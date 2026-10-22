@@ -64,11 +64,15 @@ def _density_descriptor(name: PythonObject, member: PythonObject, present: Bool,
 
 def _density_get_slot(model: PythonObject, name: PythonObject, context: PythonObject) raises -> PythonObject:
     ref cpy = Python().cpython()
-    var result = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetAttr")(model._obj_ptr, name._obj_ptr)
+    var attribute_error = context["host_density_attribute_error"]
+    var matches = cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")
+    var clear = cpy.lib.get_function[NoneType]("PyErr_Clear")
+    var get = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetAttr")
+    var result = get(model._obj_ptr, name._obj_ptr)
     if result:
         return Python.tuple(PythonObject(from_owned=result), True)
-    if cpy.lib.get_function[Int32]("PyErr_ExceptionMatches")(context["host_density_attribute_error"]._obj_ptr) != 0:
-        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+    if matches(attribute_error._obj_ptr) != 0:
+        clear()
         return Python.tuple(PythonObject(None), False)
     raise cpy.unsafe_get_error()
 

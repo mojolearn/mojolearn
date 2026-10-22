@@ -309,7 +309,8 @@ def _layout(cls, attribute_descriptor):
         elif type(value) in (classmethod, staticmethod) and type(value.__func__) is FunctionType:
             bindings[name] = (value, value.__get__)
     return {"mro": mro, "fields_descriptor": fields_descriptor,
-            "fields_get": fields_descriptor.__get__, "bindings": bindings}
+            "fields_get": fields_descriptor.__get__, "bindings": bindings,
+            "attribute_error": AttributeError}
 
 
 def _unavailable(error):
