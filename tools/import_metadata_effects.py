@@ -248,6 +248,11 @@ class Source:
         env = {} if env is None else env
         if isinstance(node, ast.Constant):
             return SCALAR
+        if isinstance(node, ast.Attribute):
+            target = self.target(rel, node, body)
+            if target and isinstance(target[1], ast.ClassDef):
+                return Value("class" if self.plain_class(*target) else "hook_class")
+            return UNKNOWN
         if isinstance(node, ast.Name):
             if node.id in env:
                 return env[node.id]
@@ -307,6 +312,10 @@ class Source:
                 and node.func.id not in env
                 and self.lookup(rel, node.func.id, body) is None
             ):
+                if not node.args and all(keyword.arg is not None for keyword in node.keywords):
+                    slots = tuple((keyword.arg, self.shape(rel, keyword.value, env, body, depth + 1))
+                                  for keyword in node.keywords)
+                    return Value("dict", merge(value for _, value in slots), False, slots)
                 return Value("dict", UNKNOWN)
             target = self.target(rel, node.func, body)
             if target and isinstance(target[1], ast.FunctionDef):
@@ -376,7 +385,7 @@ class Effects:
         if isinstance(node, ast.Attribute):
             value = self.expr(node.value)
             if not value.hot:
-                return UNKNOWN
+                return self.source.shape(self.rel, node, self.env, self.fn.body)
             if value.kind == "class" and node.attr == "__mro__":
                 return Value("iter", Value("class", hot=True), True)
             if value.kind == "class" and node.attr == "__dict__":
@@ -401,6 +410,11 @@ class Effects:
                     else value.item
                 )
                 return replace(item, hot=value.hot or item.hot)
+            if value.kind == "tuple" and isinstance(node.slice, ast.Constant) and type(node.slice.value) is int:
+                index = node.slice.value
+                if -len(value.item) <= index < len(value.item):
+                    item = value.item[index]
+                    return replace(item, hot=value.hot or item.hot)
             if value.hot:
                 raise Unsafe("unknown subscript protocol")
             return UNKNOWN
