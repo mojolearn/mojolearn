@@ -154,7 +154,6 @@ def _cache_init(model: PythonObject, args: PythonObject, context: PythonObject) 
         if py_type(old) is not context["arena_native_types"]["dict"]:
             raise Error("TypeError: DeviceCache entries require a native dictionary")
         if len(old):
-            _ = old^
             arena_cache_close(model,context)
     _counter_set(model,"_put",put)
     _counter_set(model,"_free",free)
