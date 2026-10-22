@@ -109,6 +109,20 @@ def _cases():
             parents=np.asarray([3, 3, 3], dtype="<i4"), lambdas=_f32([1, 1, .5]), deaths=_f32([1, .5]),
             selected_clusters=np.asarray([3], dtype="<i4"), index_into_children=np.asarray([0, 1, 2, 3], dtype="<i4"),
             exemplar_idx=np.asarray([0], dtype="<i4"), exemplar_label_offsets=np.asarray([0, 1], dtype="<i4"))),
+        "NearestNeighbors": ("mojolearn-knn-1", dict(
+            meta=_i64([2, 3, 2, 0, 0, 0]), p=_f64([2]), metric="euclidean", algorithm="rbc",
+            index=_f32([[1, 2], [3, 4], [5, 6]]))),
+        "KNeighborsClassifier": ("mojolearn-knn-1", dict(
+            meta=_i64([2, 3, 2, 0, 1, 2]), p=_f64([2]), metric="euclidean", algorithm="brute",
+            weights="distance", index=_f32([[1, 2], [3, 4], [5, 6]]),
+            y_cols=np.asarray([[2, 7, 2], [-3, 5, 5]], dtype="<i4"),
+            classes=_i64([2, 7, -3, 5]), class_counts=_i64([2, 2]))),
+        "KNeighborsRegressor": ("mojolearn-knn-1", dict(
+            meta=_i64([2, 3, 2, 0, 0, 1]), p=_f64([2]), metric="euclidean", algorithm="brute",
+            weights="uniform", index=_f32([[1, 2], [3, 4], [5, 6]]), y_cols=_f32([[1, 2, 3]]))),
+        "RadiusNeighbors": ("mojolearn-radius-1", dict(
+            meta=_i64([2, 3]), radius=_f64([1.5]), p=_f64([2]), metric="euclidean", algorithm="auto",
+            index=_f32([[1, 2], [3, 4], [5, 6]]))),
     }
 
 
@@ -265,6 +279,41 @@ def test_forecast_archive_rejects_inconsistent_configuration_natively(tmp_path, 
         getattr(host, name).load.__func__(cls, path)
     audit = audit_native_call(cls.load, path)
     assert isinstance(audit.exception, error), audit.report()
+    report = audit.report()
+    assert not any(report[key] for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads")), report
+
+
+@pytest.mark.parametrize("name,changes", [
+    ("NearestNeighbors", {"metric": "minkowski", "p": _f64([1.25])}),
+    ("NearestNeighbors", {"metric": "minkowski", "p": _f64([.5]), "algorithm": "brute"}),
+    ("RadiusNeighbors", {"metric": "manhattan"}),
+    ("KNeighborsClassifier", {"y_cols": np.asfortranarray([[2, 7, 2], [-3, 5, 5]], dtype="<i4")}),
+])
+def test_neighbor_metric_and_strided_label_archive_parity(tmp_path, name, changes):
+    path = _archive(tmp_path, name, override=changes)
+    cls = getattr(host, "Host" + name)
+    original = getattr(host, name).load.__func__(cls, path)
+    restored = audit_native_call(cls.load, path).assert_native()
+    assert _state(vars(restored)) == _state(vars(original))
+
+
+@pytest.mark.parametrize("name,changes", [
+    ("NearestNeighbors", {"metric": "cosine", "algorithm": "rbc"}),
+    ("NearestNeighbors", {"metric": "minkowski", "p": _f64([.5]), "algorithm": "rbc"}),
+    ("NearestNeighbors", {"metric": "euclidean", "p": _f64([3])}),
+    ("KNeighborsRegressor", {"algorithm": "rbc"}),
+    ("KNeighborsRegressor", {"metric": "inner_product", "weights": "distance"}),
+    ("KNeighborsClassifier", {"classes": _i64([2, 7, 5, -3])}),
+    ("KNeighborsClassifier", {"class_counts": _i64([1, 3])}),
+    ("RadiusNeighbors", {"radius": _f64([float("inf")])}),
+])
+def test_neighbor_archive_refuses_inconsistent_configuration_natively(tmp_path, name, changes):
+    path = _archive(tmp_path, name, override=changes)
+    cls = getattr(host, "Host" + name)
+    with pytest.raises(ValueError):
+        getattr(host, name).load.__func__(cls, path)
+    audit = audit_native_call(cls.load, path)
+    assert isinstance(audit.exception, ValueError), audit.report()
     report = audit.report()
     assert not any(report[key] for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads")), report
 
