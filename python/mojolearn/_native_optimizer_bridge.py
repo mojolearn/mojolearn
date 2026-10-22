@@ -114,6 +114,10 @@ def connect_sequence_device(training, device):
     context["sequence_array_warnings"] = warning
     context["sequence_dtype_pattern"] = re.compile(r"[<>=|]?(?:[?bBhHiIlLqQpPnNefdgFDGOUSVcmM][0-9]*(?:\[[0-9a-zA-Z]+\])?|(?:datetime64|timedelta64)(?:\[[0-9a-zA-Z]+\])?)")
     context["sequence_dtype_fullmatch"] = re.Pattern.fullmatch
+    context["sequence_dtype_match"] = re.Pattern.match
+    context["sequence_dtype_compact"] = re.compile(r"([<>|=]?)( *[(]?[ ,0-9]*[)]? *)([<>|=]?)([A-Za-z0-9.?]*(?:\[[a-zA-Z0-9,.]+\])?)")
+    context["sequence_dtype_separator"] = re.compile(r"\s*,\s*")
+    context["sequence_dtype_space"] = re.compile(r"\s+$")
     context["sequence_device_class"] = device.SequenceDeviceTensor
     slots = tuple(device.SequenceDeviceTensor.__slots__)
     names = slots + ("__dict__", "__getattribute__", "__getattr__", "__setattr__")
