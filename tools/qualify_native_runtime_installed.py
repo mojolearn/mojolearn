@@ -27,6 +27,7 @@ PUBLIC_TESTS = {
     "test_archive_unicode_native.py": "Public archive strict Unicode errors, loaded state, partial save bytes and connected codec identity refusals",
     "test_classical_archive_reader_native.py": "Public linear archive loading, compressed state, native helper identities, file errors and input/output ownership",
     "test_host_density_save_native.py": "Public host KDE and IsolationForest save bytes, native configuration, partial state, loaded state and callback refusals",
+    "test_host_density_hash_native.py": "Public host KDE and IsolationForest model digests, native field ordering, stored buffer bytes, ownership and hook refusals",
     "test_classical_archive_writer_native.py": "Public linear/scaler archive bytes, file errors, output ownership and native callback refusals",
     "test_standard_scaler_native_lifecycle.py": "Public StandardScaler lifecycle, checkpoints, consumed state and native refusals",
     "test_minmax_scaler_native_lifecycle.py": "Public MinMaxScaler lifecycle, checkpoints, consumed state and native refusals",
@@ -208,6 +209,10 @@ def test_applicability(selected, vendor):
             scope.update(execution_route="native host density archive owner, including in GPU packages",
                          operation_mode="saved mode and configuration are test-specific; save does not train or select a GPU kernel",
                          coverage_limit="Selected public host KDE and IsolationForest save/load compatibility and native refusals only; fit/inference, other archive formats and cross-vendor reference/fault evidence remain separate")
+        if name == "test_host_density_hash_native.py":
+            scope.update(execution_route="native explicit CPU host model digest owner, including in GPU packages",
+                         operation_mode="stored model-field bytes; hashing does not train or select a GPU kernel",
+                         coverage_limit="Selected public HostKernelDensity.model_sha256 and HostIsolationForest.model_sha256 only; stored field ordering, Array physical bytes and native buffer logical C-order bytes are covered. Other estimators' hash methods, archive-file digests, fit/inference and cross-vendor reference/fault evidence remain separate")
         if name == "test_sequential_native_buffers.py":
             scope.update(execution_route="selected package Sequential fit/predict backend",
                          operation_mode="identical (explicit fixture configuration)",

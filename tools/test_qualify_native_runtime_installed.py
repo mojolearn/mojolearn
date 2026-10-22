@@ -257,6 +257,25 @@ class InstalledNativeAudit(unittest.TestCase):
         with self.assertRaises(ValueError):
             q.selected_files(test_nodes=nodes + nodes[:1])
 
+    def test_public_density_hash_scope_preserves_unqualified_boundaries(self):
+        name = "test_host_density_hash_native.py"
+        self.assertIn(name, q.PUBLIC_TESTS)
+        for vendor in ("cpu", "metal", "cuda", "hip"):
+            scope = q.test_applicability([name], vendor)[name]
+            self.assertEqual(scope["cpu_not_applicable_cases"], {})
+            self.assertEqual(q.test_dependencies([name]), ["numpy", "pytest"])
+            self.assertIn("explicit CPU host", scope["execution_route"])
+            self.assertIn("Other estimators' hash methods", scope["coverage_limit"])
+            self.assertIn("archive-file digests", scope["coverage_limit"])
+            self.assertIn("remain separate", scope["coverage_limit"])
+
+    def test_public_density_hash_exact_selection_remains_bounded(self):
+        node = "test_host_density_hash_native.py::test_density_hash_without_numpy_has_exact_digest[kde]"
+        self.assertEqual(q.selected_files(test_nodes=[node]),
+                         ["test_host_density_hash_native.py"])
+        with self.assertRaises(ValueError):
+            q.selected_files(test_nodes=[node, node])
+
     def test_public_archive_unicode_scope_preserves_warning_limitation(self):
         name = "test_archive_unicode_native.py"
         self.assertIn(name, q.PUBLIC_TESTS)
