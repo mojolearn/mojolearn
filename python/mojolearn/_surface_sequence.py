@@ -37,6 +37,9 @@ FAMILIES = (
                         "sequence-moe-backward", "sequence-export-roundtrip",
                         "sequence-onnx-import", "sequence-program-save-load",
                         "sequence-device-tensor",
+                        # Native device-parameter updates and consumed state;
+                        # references remain pending until actual column runs.
+                        "sequence-adafactor-device", "sequence-lamb-device",
                         # lane verify-coverage-owed (2026-10-21): state_dict and
                         # load_state_dict of the sequence optimizers
                         "sequence-optimizer-state"),
@@ -144,6 +147,8 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
                        "sequence-onnx-import": "import_model on an ONNX file",
                        "sequence-program-save-load": "ops.Program save and Session.load_program",
                        "sequence-device-tensor": "resident sequence tensors through an optimizer",
+                       "sequence-adafactor-device": "Adafactor resident parameters, gradients and state",
+                       "sequence-lamb-device": "LAMB resident parameters, gradients and state",
                        "sequence-optimizer-state": "NAdam and RMSprop state_dict and load_state_dict"}
 PUBLIC_PENDING_LANES = {
     "sequence-tape-sequential": "no reference",
@@ -153,5 +158,7 @@ PUBLIC_PENDING_LANES = {
     "sequence-onnx-import": "no reference",
     "sequence-program-save-load": "no reference",
     "sequence-device-tensor": "no reference",
+    "sequence-adafactor-device": "no reference",
+    "sequence-lamb-device": "no reference",
     "sequence-optimizer-state": "no reference",
 }

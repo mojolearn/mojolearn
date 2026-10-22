@@ -414,6 +414,86 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(p1=d(resident[0]), p2=d(resident[1]), back=d(back), copy=d(twin)))
 
 
+def _coverage_device_optimizer(ml, cls, X, configurations, factored=False):
+    """Compare public host-array and resident-tensor steps and consumed state.
+
+    The CPU column exercises to_device's host fallback; only a GPU column
+    qualifies the typed device-parameter step. All configurations use identical
+    mode explicitly, and no device-specific metadata enters the digest.
+    """
+    from mojolearn._x_sequence_device import SequenceDeviceTensor, to_device
+    d = _coverage_digester(ml)
+    parts = {}
+
+    def consume(value):
+        # Test-controller dispatch: invoke the tensor's native download method.
+        # Its separate dtype-changing __array__ conversion remains unqualified.
+        return value.numpy() if isinstance(value, SequenceDeviceTensor) else value
+
+    def run(resident, settings):
+        def wrap(value):
+            return to_device(value, numeric_mode="identical") if resident else value
+        params = [wrap(np.ascontiguousarray(X[:32, :8], dtype=np.float32).copy()),
+                  wrap(np.ascontiguousarray(X[32:40, 0], dtype=np.float32).copy())]
+        opt = cls(params, numeric_mode="identical", **settings)
+        for k in range(6):  # glue: six public optimizer calls over fixture gradients
+            base = 40 + 48 * k
+            g1 = np.ascontiguousarray(X[base:base + 32, 8:16], dtype=np.float32) * np.float32(0.5)
+            g2 = np.ascontiguousarray(X[base + 32:base + 40, 1], dtype=np.float32)
+            opt.step([wrap(g1), wrap(g2)])
+        # State synchronizes through the public native property while the owner
+        # is alive; this checks reductions/state as well as updated parameters.
+        state = opt.state
+        values = {"p1": consume(params[0]), "p2": consume(params[1]),
+                  "step": np.asarray([opt.t], dtype=np.int64)}
+        if factored:
+            values.update(row_var=state[0]["row_var"], col_var=state[0]["col_var"],
+                          variance=state[1]["variance"])
+        else:
+            values.update(first_moment=state[0], second_moment=state[1])
+        assert opt.t == 6, "optimizer did not consume all six gradient pairs"
+        return values
+
+    for name, settings in configurations:  # glue: the lane's two numerical configurations
+        host = run(False, settings)
+        resident = run(True, settings)
+        for part, value in resident.items():  # glue: compare and digest consumed parameter/state outputs
+            _same_bytes(f"resident {cls.__name__} {name} {part}", value,
+                        f"host-array {cls.__name__} {name} {part}", host[part])
+            parts[name + "_" + part] = d(value)
+    return _fit(parts)
+
+
+@lane("sequence-adafactor-device")
+def _(ml, X, yc, yr, Xh=None):
+    """Adafactor's resident parameter and gradient path, six steps over a
+    32 x 8 factored matrix and an eight-element vector, compared byte for
+    byte with host-array steps. Defaults and changed beta2_decay, clipping d
+    and weight decay; consume both parameters, step count and every state
+    buffer through the public native tensor/state methods."""
+    return _coverage_device_optimizer(ml, ml.Adafactor, X,
+                                      (("plain", dict(lr=1e-2, beta2_decay=-0.8, eps=(None, 1e-3),
+                                                      d=1.0, weight_decay=0.0, maximize=False)),
+                                       ("moved", dict(lr=3e-2, beta2_decay=-0.6, eps=(None, 1e-3),
+                                                      d=2.0, weight_decay=0.1, maximize=False))),
+                                      factored=True)
+
+
+@lane("sequence-lamb-device")
+def _(ml, X, yc, yr, Xh=None):
+    """LAMB's resident parameter and gradient path on the same matrix and
+    vector as sequence-lamb, six steps compared byte for byte with host-array
+    steps. Global clipping/decay defaults and always_adapt/trust_clip without
+    decay or global clipping; consume parameters, moments and step count."""
+    return _coverage_device_optimizer(ml, ml.LAMB, X,
+                                      (("plain", dict(lr=1e-2, bias_correction=True, betas=(0.9, 0.999),
+                                                      eps=1e-6, weight_decay=0.01, grad_averaging=True, max_grad_norm=1.0,
+                                                      always_adapt=False, trust_clip=False)),
+                                       ("adapt", dict(lr=1e-2, bias_correction=True, betas=(0.9, 0.999),
+                                                      eps=1e-6, weight_decay=0.0, grad_averaging=True, max_grad_norm=None,
+                                                      always_adapt=True, trust_clip=True))))
+
+
 # ================================================================ lane verify-coverage-owed (2026-10-21)
 # The rows the audit left owed to the migration lanes, closed after they
 # landed (docs/plans/VERIFY_COVERAGE_20261021.md, "Owed").
@@ -736,5 +816,6 @@ _batch_decl("n/a:coverage-probe (the lane checks one public call path the releas
             "sequence-program-save-load", "hf-causal-lm-stream", "ivf-short-fill", "sequence-device-tensor",
             "mamba2-decode-session", "mamba3-decode-session", "training-chunked-lm-head",
             "training-mlp-sessions", "samba-optimizer-state", "sequence-optimizer-state",
+            "sequence-adafactor-device", "sequence-lamb-device",
             "x-huber-outliers", "x-sgd-clf-proba", "x-logistic-cv-proba",
             "x-decomp-rsvd-rank-deficient")
