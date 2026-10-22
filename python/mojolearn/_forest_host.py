@@ -193,31 +193,7 @@ class HostForest:
         -------
         HostForest
         """
-        accepted = tuple(_FORMATS) + tuple(f + _GROVES_SUFFIX for f in _FORMATS)
-        arrays = _serialize.read_npz(path, accepted)
-        fmt = _serialize.scalar_str(arrays, 'format')
-        engine = 'sequential'
-        if fmt.endswith(_GROVES_SUFFIX):
-            engine = 'parallel_groves'
-            fmt = fmt[:-len(_GROVES_SUFFIX)]
-            mode = _serialize.scalar_str(arrays, 'numeric_mode').strip().lower() if 'numeric_mode' in arrays else ''
-            if mode != 'identical':
-                raise ValueError(
-                    f"mojolearn: {path!r} is a parallel_groves archive saved under "
-                    f"numeric_mode={mode or 'unrecorded'!r}; the host engine computes IDENTICAL "
-                    "bits only. Save the model under numeric_mode='identical'")
-        estimator = _serialize.scalar_str(arrays, 'estimator')
-        if estimator not in _ESTIMATORS or _ESTIMATORS[estimator][0] != _FORMATS[fmt]:
-            raise ValueError(f"mojolearn: {path!r} was saved by {estimator}, which {fmt} does not hold")
-        fields = {name: _serialize.exact(arrays, name, dtype) for name, dtype in _MODEL_ARRAYS}
-        meta = _serialize.exact(arrays, 'meta', '<i8')
-        if meta.size < 3:
-            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, at least 3 are needed")
-        classes = classes_from_member(arrays['classes']) if 'classes' in arrays else None
-        return cls(estimator=estimator, n_features=int(meta[0]), n_trees=int(meta[1]),
-                   num_outputs=int(meta[2]), classes=classes,
-                   device=_serialize.scalar_str(arrays, 'device') if 'device' in arrays else None,
-                   inference_engine=engine, **fields)
+        return _native_host_archive(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
     @property
     def n_trees(self):
@@ -365,25 +341,7 @@ def host_model(path):
     >>> mojolearn.RandomForestRegressor(n_estimators=20).fit(X, X[:, 0]).save("rf.npz")
     >>> pred = mojolearn.host_model("rf.npz").predict(X)
     """
-    from ._classical_host import CLASSICAL_FORMATS
-    from ._classical_host import host_model as classical_host_model
-    from ._gbdt_host import GBDT_FORMAT, HostGBDT
-    accepted = (tuple(_FORMATS) + tuple(f + _GROVES_SUFFIX for f in _FORMATS)
-                + (GBDT_FORMAT,) + CLASSICAL_FORMATS)
-    routing = _serialize.peek_npz(path, ('format',))
-    fmt = _serialize.scalar_str(routing, 'format') if 'format' in routing else ''
-    if fmt not in accepted:
-        # Preserve the old malformed-archive error precedence: before the
-        # routing peek, every member was decoded before the format refusal.
-        # The full reader raises either that earlier member error or the
-        # same format mismatch; this branch cannot return successfully.
-        _serialize.read_npz(path, accepted)
-        raise AssertionError("read_npz accepted a format rejected by the router")
-    if fmt == GBDT_FORMAT:
-        return HostGBDT.from_file(path)
-    if fmt in CLASSICAL_FORMATS:
-        return classical_host_model(path)
-    return HostForest.from_file(path)
+    return _native_host_archive(None, "host_archive_model", (path,), _ARCHIVE_CONTEXT)
 
 
 def host_predict(path, X):
@@ -421,3 +379,8 @@ def host_predict_proba(path, X):
         Class probabilities.
     """
     return host_model(path).predict_proba(X)
+
+
+# Fixed public archive owner connected at import, after host classes exist.
+from .linear_model import _native_classical as _native_host_archive, _CLASSICAL as _ARCHIVE_CONTEXT
+from . import _classical_host as _archive_registry

@@ -301,8 +301,10 @@ def test_ivf_host_finalizer_releases_the_native_resident_index(tmp_path):
     state["_resident"] = ((), token, PoisonedCachedModule())
     audit_native_call(type(model).__del__, model).assert_native()
     assert state["_resident"] is None
-    with pytest.raises(ValueError, match="released resident"):
+    with pytest.raises(Exception, match="released resident") as released:
         native.ivf_flat_index_release(token)
+    # The resident-index C ABI reports stale handles as a base Exception.
+    assert type(released.value) is Exception
 
 
 @pytest.mark.parametrize("labels", [np.asarray([2, 7], dtype="<i8"),

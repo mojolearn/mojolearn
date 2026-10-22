@@ -49,7 +49,10 @@ CTR_TEXT = HEADER + (
 #: its cardinality takes key -1, count 0, bin 0.
 TENSOR_TEXT = HEADER + (
     "features 3 3\ntrees 1\nlosses 0\ntensor_ctr_registry 2 1\n"
-    "feature_freq_tensor 2 hash_hi 1 hash_lo 2 sources 2 0 1 cardinalities 2 2 2 splits 0 "
+    # Canonical TFeatureTensor([0, 1], no splits) hash, as the product
+    # model-text reader requires; the former placeholder hash was ignored
+    # by the Python-only loader and did not qualify a saved native model.
+    "feature_freq_tensor 2 hash_hi 1728849600 hash_lo 1827803631 sources 2 0 1 cardinalities 2 2 2 splits 0 "
     "classes 0 target_border -1 prior_bits 0 1065353216 denominator 10 counts 4 5 3 1 1\n"
     "feature 0 folds 1 one_hot 1 type cat nan as_is borders 1 0.5/3f000000\n"
     "feature 1 folds 1 one_hot 1 type cat nan as_is borders 1 0.5/3f000000\n"

@@ -100,12 +100,12 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         if operation == "reduce_not_fitted":
             var reduced = classical_error_reduce(model, context)
             return reduced.steal_data()
-        if operation == "host_archive_model" or operation == "host_archive_load":
+        if operation == "host_archive_model" or operation == "host_archive_load" or operation == "host_archive_classical_model":
             var archive_context = py_get(context, "host_archive_context")
             if archive_context is None:
                 raise Error("RuntimeError: native host archive schemas are not connected")
             classical_admit_value(args, archive_context)
-            var restored = host_archive_build(args[0], archive_context, model if operation == "host_archive_load" else PythonObject(None))
+            var restored = host_archive_build(args[0], archive_context, model if operation == "host_archive_load" else PythonObject(None), operation == "host_archive_classical_model")
             return restored.steal_data()
         if operation == "host_model":
             var host_context = py_get(context, "classical_host_context")

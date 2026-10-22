@@ -54,7 +54,6 @@ import struct
 from . import _serialize
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty, frombytes
-from ._forest_host import _load
 
 #: `_MODEL_FORMAT` in ensemble.py.
 GBDT_FORMAT = 'mojolearn-gbdt-1'
@@ -547,10 +546,8 @@ def parse_model_text(text):
 #: losses each class can save. `OrderedRMSE` and
 #: `ExperimentalTwoLevelFeatureFreq` subclass `GradientBoosting` and inherit
 #: its `save`, so their archives are the same format holding the same model
-#: text records (symmetric trees, float and one-hot `cat` features); the name
-#: is kept so a report says which class trained the file. A class whose model
-#: text carries CTR or tensor CTR records is still refused by the parser, by
-#: record name, whatever the class.
+#: text records; the name is kept so a report says which class trained the
+#: file. Simple and tensor CTR records use their respective native layouts.
 GBDT_ESTIMATORS = {
     'GradientBoosting': None,
     'OrderedRMSE': ('RMSE',),
@@ -558,8 +555,9 @@ GBDT_ESTIMATORS = {
 }
 
 
-# The model text is parsed in Python because the Mojo parser (gbdt/models/model_text.mojo, load_model_text)
-# returns a TrainedModel from gbdt/train.mojo, which imports the device side. This parser applies the same
+# The legacy direct constructor below still uses this Python parser; public
+# archive loading now uses gbdt/models/model_text.mojo, load_model_text.
+# This legacy parser applies the same
 # strictness (header order, gap-free indices, counts that add up, unknown keyword is an error). Every float
 # comes from the hex-bits half of its token; the decimal half is not consulted (the Mojo loader checks it
 # agrees within one ULP, this parser does not, so a hand-edited decimal is not caught here).
@@ -672,27 +670,7 @@ class HostGBDT:
         ValueError
             If the file was saved by another class or is corrupt.
         """
-        arrays = _serialize.read_npz(path, GBDT_FORMAT)
-        saved_as = _serialize.scalar_str(arrays, 'estimator')
-        if saved_as not in GBDT_ESTIMATORS:
-            raise ValueError(f"mojolearn: {path!r} was saved by {saved_as}, not "
-                             f"{' or '.join(GBDT_ESTIMATORS)}")
-        mode = None
-        if 'numeric_mode' in arrays:
-            mode = _serialize.scalar_str(arrays, 'numeric_mode')
-            if mode not in ('fast', 'identical'):
-                raise ValueError(f"mojolearn: invalid saved numeric_mode {mode!r}")
-        text = _serialize.exact(arrays, 'model', '<u1').tobytes().decode('utf-8')
-        meta = _serialize.exact(arrays, 'meta', '<i8')
-        if meta.size < 3:
-            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, at least 3 are needed")
-        bias = _serialize.exact(arrays, 'bias', '<f8').tolist()
-        while isinstance(bias, list):
-            bias = bias[0]
-        return cls(loss=_serialize.scalar_str(arrays, 'loss'), text=text,
-                   n_features_in=int(meta[0]), approx_dim=int(meta[1]),
-                   n_classes=None if int(meta[2]) < 0 else int(meta[2]),
-                   numeric_mode=mode, bias=float(bias), estimator=saved_as)
+        return _native_host_archive(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
     @property
     def n_trees(self):
@@ -824,3 +802,8 @@ def gbdt_ctr_predict(X, *, loss, text, n_features_in, approx_dim, n_classes, est
     return HostGBDT(loss=loss, text=text, n_features_in=n_features_in,
                     approx_dim=approx_dim, n_classes=n_classes,
                     estimator=estimator).predict(X)
+
+
+# Defer this import until HostGBDT exists: the shared archive registry also
+# connects this class when HostForest is the first public name imported.
+from ._forest_host import _load, _native_host_archive, _ARCHIVE_CONTEXT
