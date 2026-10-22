@@ -3,12 +3,106 @@
 # bounds, dtype validation and member dispatch stay here. Connected C codecs
 # only decompress bytes; Python zipfile/ast/NumPy load helpers never execute.
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
-from bindings.classical_archive import _archive_methods
-from bindings.native_json import native_path
-from bindings.sequential_description import sequential_fields
+from bindings.classical_archive import _archive_methods, _archive_path, _archive_file_call
+from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
+from bindings.optimizer_public_words import stash_python_error
 from bindings.classical_arrays import classical_numpy, classical_is_array, classical_dtype_str, classical_i64, classical_f64, classical_wrap_array, _store_code
 from core.classical_archive_read_impl import npy_latin1_bytes, npy_peek, npy_skip_ws, npy_string_close, npy_digits_end
+
+
+def _archive_builtin_repr(value: PythonObject) raises -> String:
+    # Call only with the exact native scalar/file types admitted below. A C
+    # repr entry is not an admission check for an arbitrary Python object.
+    ref cpy = Python().cpython()
+    var result = cpy.lib.get_function[PyObjectPtr]("PyObject_Repr")(value._obj_ptr)
+    if not result:
+        var failure = stash_python_error()
+        raise failure^
+    return String(PythonObject(from_owned=result))
+
+
+def _archive_model_fields(value: PythonObject) raises -> PythonObject:
+    # A connected model owns an ordinary instance dictionary. Read that native
+    # storage directly, without looking up the mutable builtins.object name.
+    ref cpy = Python().cpython()
+    var result = cpy.lib.get_function[PyObjectPtr]("PyObject_GenericGetDict")(value._obj_ptr, PyObjectPtr())
+    if not result:
+        raise cpy.unsafe_get_error()
+    return PythonObject(from_owned=result)
+
+
+def _archive_read_path(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    var path = _archive_path(value, context)
+    var cls = py_type(value)
+    var paths = context["archive_path_types"]
+    if cls is not paths[0] and cls is not paths[1]:
+        # Keep accepted native bytes-path UTF-8/surrogateescape normalization.
+        return path
+    # Standard pathlib passes this lexical POSIX spelling to open: remove
+    # empty and dot components, keep dot-dot and exactly two leading slashes.
+    # Read the admitted native component storage without __fspath__/__str__.
+    var parts = py_call(path.split, "/")
+    var kept = Python.list()
+    for i in range(len(parts)):  # driver-loop: stored POSIX path components
+        if len(parts[i]) and parts[i] != PythonObject("."):
+            _ = py_call(kept.append, parts[i])
+    var prefix = PythonObject("")
+    if Bool(py=py_call(path.startswith, "/")):
+        prefix = PythonObject("//" if Bool(py=py_call(path.startswith, "//"))
+                              and not Bool(py=py_call(path.startswith, "///")) else "/")
+    var normalized = prefix + py_call(PythonObject("/").join, kept)
+    return normalized if len(normalized) != 0 else PythonObject(".")
+
+
+def _archive_read_repr_seen(value: PythonObject, context: PythonObject, trail: PythonObject) raises -> String:
+    var cls = py_type(value)
+    if (cls is py_type(PythonObject("")) or cls is context["archive_bytes_type"]
+            or cls is py_type(PythonObject(0)) or cls is py_type(PythonObject(True))
+            or cls is py_type(PythonObject(Float64(0)))
+            or value is None):
+        return _archive_builtin_repr(value)
+    var paths = context["archive_path_types"]
+    if cls is paths[0] or cls is paths[1]:
+        # pathlib.__repr__ is Python; format the admitted native path text.
+        var normalized = _archive_read_path(value, context)
+        return ("PosixPath(" if cls is paths[0] else "PurePosixPath(") + _archive_builtin_repr(normalized) + ")"
+    var types = context["archive_file_types"]
+    if cls is types[0]:
+        return _archive_builtin_repr(value)  # BytesIO has no caller-owned name.
+    for i in range(1, len(types)):  # driver-loop: connected exact native file types
+        if cls is not types[i]:
+            continue
+        _ = _archive_methods(value, context)
+        if i == 1 and Bool(py=value.closed):
+            return "<_io.FileIO [closed]>"
+        # FileIO.name can retain an ordinary Path, or be reassigned by a caller.
+        # Never let the C file repr dispatch an arbitrary name.__repr__ hook.
+        for previous in range(len(trail)):  # driver-loop: native file-name chain
+            if value is trail[previous]:
+                # A cycle consists solely of the exact C file types already
+                # admitted here. Let their native repr recursion guard retain
+                # its existing result/error; no Python name hook is reachable.
+                return _archive_builtin_repr(value)
+        _ = py_call(trail.append, value)
+        var stored_name = PythonObject(None)
+        try:
+            stored_name = value.name
+        except:
+            # An exact FileIO can have its ordinary name field deleted. Its
+            # native repr then displays the descriptor; no name hook exists.
+            return _archive_builtin_repr(value)
+        var name = _archive_read_repr_seen(stored_name, context, trail)
+        if i == 1:
+            return "<_io.FileIO name=" + name + " mode=" + _archive_builtin_repr(value.mode) + " closefd=" + ("True" if Bool(py=value.closefd) else "False") + ">"
+        var label = "BufferedReader" if i == 2 else ("BufferedWriter" if i == 3 else "BufferedRandom")
+        return "<_io." + label + " name=" + name + ">"
+    raise Error("TypeError: archive error paths require native names without Python repr callbacks")
+
+
+def _archive_read_repr(value: PythonObject, context: PythonObject) raises -> String:
+    return _archive_read_repr_seen(value, context, Python.list())
 
 
 def _read_uint(raw: PythonObject, at: Int, width: Int) raises -> Int:
@@ -25,8 +119,8 @@ def _read_uint(raw: PythonObject, at: Int, width: Int) raises -> Int:
 def _read_at(file: PythonObject, methods: PythonObject, at: Int, size: Int) raises -> PythonObject:
     if at < 0 or size < 0:
         raise Error("invalid checkpoint offset or size")
-    _ = py_call(methods["seek"], file, at, 0)
-    var raw = py_call(methods["read"], file, size)
+    _ = _archive_file_call(methods["seek"], file, at, 0)
+    var raw = _archive_file_call(methods["read"], file, size)
     if len(raw) != size:
         raise Error("truncated checkpoint payload")
     return raw
@@ -92,7 +186,7 @@ struct NpyHeader(Movable):
             self.at = npy_digits_end(self.bytes, self.at)
             if start == self.at:
                 raise Error("npy shape requires nonnegative dimensions")
-            py_call(dims.append, py_call(Python.import_module("builtins").int, self.raw[start:self.at]))
+            py_call(dims.append, py_call(py_type(PythonObject(0)), self.raw[start:self.at]))
             self.ws()
             if self.peek() != 44:
                 # A single dimension must have its tuple comma, as in NPY.
@@ -105,7 +199,7 @@ struct NpyHeader(Movable):
             if self.peek() == 41:
                 self.at += 1
                 break
-        return py_call(Python.import_module("builtins").tuple, dims)
+        return py_call(py_type(Python.tuple()), dims)
 
     def parse(mut self) raises -> PythonObject:
         self.take(123)
@@ -155,7 +249,6 @@ def _text_nest(items: PythonObject, shape: PythonObject, axis: Int, offset: Int)
 
 
 def _decode_npy(raw: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
     if len(raw) < 10 or raw[0:6] != context["archive_npy_magic"]:
         raise Error("not an npy member (bad magic)")
     var major = _read_uint(raw, 6, 1)
@@ -183,30 +276,30 @@ def _decode_npy(raw: PythonObject, context: PythonObject) raises -> PythonObject
     var unicode = False
     if dtype is not None:
         # With NumPy a dtype; without it the Array typestr, such as "<f4".
-        itemsize = Int(py=dtype.itemsize) if classical_numpy(context) else Int(py=py_call(bi.int, dtype[2:]))
+        itemsize = Int(py=dtype.itemsize) if classical_numpy(context) else Int(py=py_call(py_type(PythonObject(0)), dtype[2:]))
     elif Bool(py=py_call(descr.startswith, "<U")) or Bool(py=py_call(descr.startswith, "=U")):
         if not Bool(py=descr[2:].isdigit()):
             raise Error("unsupported npy dtype")
-        itemsize = 4 * Int(py=py_call(bi.int, descr[2:]))
+        itemsize = 4 * Int(py=py_call(py_type(PythonObject(0)), descr[2:]))
         unicode = True
     elif Bool(py=py_call(descr.startswith, "|S")):
         if not Bool(py=descr[2:].isdigit()):
             raise Error("unsupported npy dtype")
-        itemsize = Int(py=py_call(bi.int, descr[2:]))
+        itemsize = Int(py=py_call(py_type(PythonObject(0)), descr[2:]))
     else:
         raise Error("unsupported npy dtype")
     var offset = start + header_size
     if itemsize < 0 or (itemsize > 0 and count > (len(raw) - offset) // itemsize):
         raise Error("npy member does not hold the bytes required by its shape and dtype")
-    var payload = py_call(bi.memoryview, raw)[offset:offset + count * itemsize]
+    var payload = native_buffer_view(raw)[offset:offset + count * itemsize]
     if dtype is not None:
         # The C ndarray constructor only describes the single owned byte copy;
         # it does not compute, cast, or invoke NumPy preparation helpers.
         # Without NumPy the copy is an Array's own store, in the same layout.
         if not classical_numpy(context):
-            var store = py_call(context["array_type"], PythonObject(_store_code(String(dtype))), py_call(bi.bytes, payload))
+            var store = py_call(context["array_type"], PythonObject(_store_code(String(dtype))), py_call(context["archive_bytes_type"], payload))
             return classical_wrap_array(store, shape, String(dtype), "F" if fortran else "C", context)
-        return py_call(context["ndarray"], shape, dtype=dtype, buffer=py_call(bi.bytearray, payload), order="F" if fortran else "C")
+        return py_call(context["ndarray"], shape, dtype=dtype, buffer=py_call(context["archive_bytearray_type"], payload), order="F" if fortran else "C")
     var items = Python.list()
     for k in range(count):  # driver-loop: over serialized string/bytes metadata entries
         var source = k
@@ -223,9 +316,9 @@ def _decode_npy(raw: PythonObject, context: PythonObject) raises -> PythonObject
                 fstride *= dim
         var cell = raw[offset + source * itemsize:offset + (source + 1) * itemsize]
         if unicode:
-            py_call(items.append, py_call(py_call(context["archive_utf32_decode"], cell)[0].rstrip, py_call(bi.chr, 0)))
+            py_call(items.append, py_call(py_call(context["archive_utf32_decode"], cell)[0].rstrip, py_call(py_call(context["archive_bytes_type"], 1).decode, "latin1")))
         else:
-            py_call(items.append, py_call(cell.rstrip, py_call(bi.bytes, 1)))
+            py_call(items.append, py_call(cell.rstrip, py_call(context["archive_bytes_type"], 1)))
     if count == 1:
         return items[0]
     return _text_nest(items, shape, 0, 0) if len(shape) else items[0]
@@ -266,8 +359,8 @@ def _inflate(raw: PythonObject, method: Int, context: PythonObject) raises -> Py
 
 
 def _zip_records(file: PythonObject, methods: PythonObject, context: PythonObject) raises -> PythonObject:
-    _ = py_call(methods["seek"], file, 0, 2)
-    var size = Int(py=py_call(methods["tell"], file))
+    _ = _archive_file_call(methods["seek"], file, 0, 2)
+    var size = Int(py=_archive_file_call(methods["tell"], file))
     var tail_start = max(0, size - 65557)
     var tail = _read_at(file, methods, tail_start, size - tail_start)
     var at = Int(py=py_call(tail.rfind, context["archive_zip_end"]))
@@ -357,7 +450,7 @@ def _zip_records(file: PythonObject, methods: PythonObject, context: PythonObjec
         seen += 1
     if seen != count:
         raise Error("ZIP directory entry count differs from its footer")
-    positions = py_call(Python.import_module("builtins").sorted, positions)
+    _ = py_call(positions.sort)
     var limit = directory_start
     for k in range(len(positions) - 1, -1, -1):  # driver-loop: over ordered ZIP member bounds to reject overlapping payloads
         var name = positions[k][1]
@@ -369,7 +462,6 @@ def _zip_records(file: PythonObject, methods: PythonObject, context: PythonObjec
 
 
 def classical_archive_read(path: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
     var file = path
     var close = True
     var types = context["archive_file_types"]
@@ -377,13 +469,13 @@ def classical_archive_read(path: PythonObject, context: PythonObject) raises -> 
         if py_type(path) is types[k]:
             close = False
     if close:
-        file = py_call(bi.open, native_path(path), "rb")
+        file = _archive_file_call(context["archive_open"], _archive_read_path(path, context), "rb")
     var methods = _archive_methods(file, context)
     try:
         var directory = _zip_records(file, methods, context)
         var records = directory[0]
         var limit = Int(py=directory[1])
-        var names = py_call(bi.list, records.keys())
+        var names = py_call(py_type(Python.list()), records.keys())
         var result = Python.dict()
         for k in range(len(names)):  # driver-loop: over every NPZ member, including extra schema-independent members
             var name = names[k]
@@ -419,7 +511,7 @@ def classical_archive_read(path: PythonObject, context: PythonObject) raises -> 
         return result
     finally:
         if close:
-            _ = py_call(methods["close"], file)
+            _ = _archive_file_call(methods["close"], file)
 
 
 def _archive_exact(arrays: PythonObject, name: String, dtype: String, context: PythonObject) raises -> PythonObject:
@@ -438,7 +530,6 @@ def _archive_string(arrays: PythonObject, name: String, context: PythonObject) r
     if not py_contains(arrays, name):
         raise Error("model file is missing field " + name)
     var value = arrays[name]
-    var bi = Python.import_module("builtins")
     if py_type(value) is context["array_class"]:
         # A NumPy-free read: a text field never decodes to numbers.
         raise Error("model string field " + name + " is not text")
@@ -446,11 +537,11 @@ def _archive_string(arrays: PythonObject, name: String, context: PythonObject) r
         if Int(py=value.size) == 0:
             raise Error("model string field is empty")
         value = value.flat[0]
-    while py_type(value) is bi.list:  # driver-loop: over the nesting depth of a stored string field
+    while py_type(value) is py_type(Python.list()):  # driver-loop: over the nesting depth of a stored string field
         if len(value) == 0:
             raise Error("model string field is empty")
         value = value[0]
-    return py_call(bi.str, value)
+    return py_call(py_type(PythonObject("")), value)
 
 
 def classical_archive_load(cls: PythonObject, path: PythonObject, ridge: Bool, context: PythonObject) raises -> PythonObject:
@@ -465,10 +556,10 @@ def classical_host_model(path: PythonObject, context: PythonObject) raises -> Py
     var estimator = _archive_string(arrays, "estimator", context)
     var cls = py_get(context["classical_host_estimators"], estimator)
     if cls is None:
-        raise Error("mojolearn: " + String(py_call(Python.import_module("builtins").repr, path)) + " was saved by "
+        raise Error("mojolearn: " + _archive_read_repr(path, context) + " was saved by "
                     + String(estimator) + ", which mojolearn-linear-1 does not hold")
     var model = classical_archive_build(cls, arrays, path, Bool(py=context["classical_kinds"][cls]), context)
-    py_setitem(sequential_fields(model), "estimator", estimator)
+    py_setitem(_archive_model_fields(model), "estimator", estimator)
     return model
 
 
@@ -479,12 +570,12 @@ def classical_archive_build(cls: PythonObject, arrays: PythonObject, path: Pytho
     var saved_as = _archive_string(arrays, "estimator", context)
     # The file's estimator must be cls or one of its bases, so an explicit
     # host class or subclass loads the plain class's file.
-    var ancestry = py_call(Python.import_module("builtins").type.__dict__["__mro__"].__get__, cls)
+    var ancestry = py_call(py_type(py_type(PythonObject(""))).__dict__["__mro__"].__get__, cls)
     var known = False
     for k in range(len(ancestry)):  # driver-loop: over the loading class's ancestry names
         known = known or Bool(py=ancestry[k].__name__ == saved_as)
     if not known:
-        raise Error("mojolearn: " + String(py_call(Python.import_module("builtins").repr, path)) + " was saved by "
+        raise Error("mojolearn: " + _archive_read_repr(path, context) + " was saved by "
                     + String(saved_as) + ", not " + String(cls.__name__))
     var meta = _archive_exact(arrays, "meta", "<i8", context)
     if Int(py=meta.size) != 2:
@@ -504,9 +595,8 @@ def classical_archive_build(cls: PythonObject, arrays: PythonObject, path: Pytho
         alpha = _archive_exact(arrays, "alpha", "<f8", context)
         if Int(py=alpha.size) != 1:
             raise Error("model alpha must hold one value")
-    var bi = Python.import_module("builtins")
-    var model = py_call(bi.object.__new__, cls)
-    var fields = sequential_fields(model)
+    var model = native_storage_allocate(cls)
+    var fields = _archive_model_fields(model)
     py_setitem(fields, "fit_intercept", classical_i64(meta, 1) != 0)
     py_setitem(fields, "numeric_mode", mode)
     py_setitem(fields, "coef_", coef)

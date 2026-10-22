@@ -1579,6 +1579,12 @@ def host_archive_build(path: PythonObject, context: PythonObject,
     if classical_only and not py_contains(context["host_archive_classical_formats"], fmt):
         raise Error("model archive format does not name a classical host model")
     var estimator = _archive_string(arrays, "estimator", context)
+    # Historical explicit CPU saves used their Host* class name. Admit only
+    # these exact aliases within their matching unchanged archive schemas.
+    if fmt == "mojolearn-kde-1" and String(estimator) == "HostKernelDensity":
+        estimator = PythonObject("KernelDensity")
+    elif fmt == "mojolearn-iforest-1" and String(estimator) == "HostIsolationForest":
+        estimator = PythonObject("IsolationForest")
     var formats = context["host_archive_formats"]
     var classes = py_get(formats, fmt)
     if classes is None:

@@ -171,7 +171,7 @@ class DeviceCache:
         return None if self._live is None else int(self._live())
 
     def __len__(self):
-        return len(self._entries)
+        return _ROWS_CALL(self, "cache_len", (), _ROWS_CONTEXT)
 
     def __enter__(self):
         return self
@@ -229,10 +229,7 @@ class resident:
     @staticmethod
     def stats():
         """{prefix: (uploads, hits)} of the active scope, or None."""
-        scope = getattr(_LOCAL, "scope", None)
-        if scope is None:
-            return None
-        return {p: (c.uploads, c.hits) for (_, p), (c, _) in scope.caches.items()}  # glue: counters per arena cache
+        return _ROWS_CALL(_LOCAL, "resident_stats", (), _ROWS_CONTEXT)
 
 
 def active_cache(binding, prefix, n_words):

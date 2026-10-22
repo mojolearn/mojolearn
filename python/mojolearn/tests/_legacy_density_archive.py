@@ -125,3 +125,79 @@ def write_npz(path, arrays):
             with zf.open(info, "w") as fp:
                 write_npy(fp, arrays[name], c_order=True)
     return path
+
+
+# Frozen 30841c221 public density save schemas. Canonical names are the
+# intentional roundtrip repair; canonical=False preserves the original bytes.
+from mojolearn import _backend
+from mojolearn.tests._legacy_host_iforest_fit import parameters as _iforest_parameters
+
+def _saved_mode(est):
+    """The tier `predict` would run on now, persisted as GradientBoosting
+    persists it, so a loaded model never silently changes tier."""
+    mode = getattr(est, "numeric_mode", None) or _backend.default_mode()
+    if not isinstance(mode, str) or mode.strip().lower() not in (
+        "fast", "identical"
+    ):
+        raise ValueError(f"mojolearn: cannot save invalid numeric_mode {mode!r}")
+    return mode.strip().lower()
+
+def save_kde(self, path, *, canonical=False):
+    """Save the fitted model to ``path`` as an ``.npz`` file.
+
+    Stores the float32 training data (the whole fitted state of a
+    brute-force KDE), the weights if any, ``bandwidth``, ``kernel``,
+    ``metric`` and the fitted sizes. ``mojolearn.host_model(path)``
+    scores from the file on a machine without a GPU. An unfitted model
+    raises ``RuntimeError``.
+
+    Parameters
+    ----------
+    path : str or path-like
+    """
+    if not hasattr(self, "_x"):
+        raise RuntimeError("this estimator is not fitted yet")
+    arrays = {
+        "format": 'mojolearn-kde-1',
+        "estimator": ('KernelDensity' if canonical else type(self).__name__),
+        "numeric_mode": _saved_mode(self),
+        "kernel": str(self.kernel),
+        "metric": str(self.metric),
+        "x": self._x,
+        "bandwidth": Array.from_list([float(self.bandwidth)], "<f8"),
+        "meta": Array.from_list(
+            [int(self.n_features_in_), int(self.n_samples_fit_),
+             1 if self._w is not None else 0],
+            "<i8",
+        ),
+    }
+    if self._w is not None:
+        arrays["weights"] = self._w
+    return write_npz(path, arrays)
+
+def save_iforest(self, path, *, canonical=False):
+    """Write the fitted model to `path` as an npz file.
+
+    The file holds the training matrix and the resolved parameters the
+    forest is built from, so it is as large as the training data.
+    """
+    if not hasattr(self, "_x"):
+        raise RuntimeError("this estimator is not fitted yet")
+    if "_seed" not in self.__dict__:  # an instance assembled without fit or load
+        _iforest_parameters(self)
+    return write_npz(path, {
+        "format": 'mojolearn-iforest-1',
+        "estimator": ('IsolationForest' if canonical else type(self).__name__),
+        "numeric_mode": _saved_mode(self),
+        "x": self._x,
+        "ints": Array.from_list([
+            int(self._n_estimators), self._max_samples_mode, self._max_samples_int,
+            self._max_depth, self._max_features_mode, self._max_features_int,
+            1 if self._bootstrap else 0, self._seed, 1 if self._contamination_auto else 0,
+            int(self.n_features_in_), int(self.max_samples_),
+        ], "<i8"),
+        "reals": Array.from_list([
+            float(self._max_samples_frac), float(self._max_features_frac),
+            float(self._contamination), float(self.offset_),
+        ], "<f8"),
+    })
