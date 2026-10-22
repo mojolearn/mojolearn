@@ -70,6 +70,10 @@ def _warning_admit_category(cls: PythonObject, context: PythonObject) raises:
             var constructors = context["warning_native_new"]
             for j in range(len(constructors)):  # driver-loop: exact retained native constructors of builtin warning bases
                 admitted = admitted or found is constructors[j]
+        elif k == 1:
+            var initializers = context["warning_native_init"]
+            for j in range(len(initializers)):  # driver-loop: exact retained builtin warning initializers, including CPython 3.11's per-category slots
+                admitted = admitted or found is initializers[j]
         if not admitted:
             raise Error("TypeError: custom warning exception hooks are not native")
 
