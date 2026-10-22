@@ -1740,15 +1740,7 @@ def embedding_forward(weight, ids, numeric_mode=None):
     -------
     array, shape (N, D)
     """
-    w = _c32(weight, "weight", "embedding_forward")
-    if w.ndim != 2:
-        raise ValueError("mojolearn.embedding_forward: weight must be (V, D)")
-    ids = as_i32_c(ids, ndim=None, name="ids")[0].reshape((-1,))
-    n, (v, d) = int(ids.size), w.shape
-    y = _buffers.empty((n, d), '<f4')
-    _load(numeric_mode).embedding_forward(
-        [_addr(y), _addr_ro(w), _addr_ro(ids)], [n, int(v), int(d)])
-    return y
+    return _OPT_NATIVE("embedding_forward", None, (weight, ids), numeric_mode, _OPT_CONTEXT)
 
 
 # The run-sorted ascending fold of embedding/checks/embedding_identical.mojo, never atomics.
@@ -1773,19 +1765,7 @@ def embedding_backward(dy, ids, vocab, numeric_mode=None):
     -------
     array, shape (vocab, D)
     """
-    dy = _c32(dy, "dy", "embedding_backward")
-    if dy.ndim != 2:
-        raise ValueError("mojolearn.embedding_backward: dy must be (N, D)")
-    ids = as_i32_c(ids, ndim=None, name="ids")[0].reshape((-1,))
-    n, d = dy.shape
-    if ids.size != n:
-        raise ValueError(
-            "mojolearn.embedding_backward: ids and dy row counts differ")
-    dw = _buffers.empty((int(vocab), d), '<f4')
-    _load(numeric_mode).embedding_backward(
-        [_addr(dw), _addr_ro(dy), _addr_ro(ids)],
-        [int(n), int(vocab), int(d)])
-    return dw
+    return _OPT_NATIVE("embedding_backward", None, (dy, ids, vocab), numeric_mode, _OPT_CONTEXT)
 
 
 def rms_norm_forward(x, weight, eps, numeric_mode=None):

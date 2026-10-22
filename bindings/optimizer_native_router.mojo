@@ -17,6 +17,7 @@ from bindings.optimizer_schedule_native import schedule_operation
 from bindings.optimizer_device_native import device_operation, device_new, device_entries, device_finalize, device_adopt, device_release_entry
 from bindings.training_linear_native import training_linear_operation
 from bindings.training_rms_native import training_rms_operation
+from bindings.training_embedding_native import training_embedding_operation
 
 
 def optimizer_entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -254,6 +255,8 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
         return training_linear_operation(operation, values, entries, context)
     if operation == "rms_norm_forward" or operation == "rms_norm_backward":
         return training_rms_operation(operation, values, entries, context)
+    if operation == "embedding_forward" or operation == "embedding_backward":
+        return training_embedding_operation(operation, values, entries, context)
     if operation == "binding":
         return entries["module"]
     if operation == "raw_io":
