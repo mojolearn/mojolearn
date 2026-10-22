@@ -146,3 +146,17 @@ def test_native_candidate_preserves_native_error_log_stream(resident):
     with np.errstate(over="log", call=stream):
         native_candidate(tensor, "f2")
     assert stream.getvalue() == "Warning: overflow encountered in cast\n"
+
+
+def test_native_candidate_refuses_replaced_numpy_dtype_before_call(resident, monkeypatch):
+    _, tensor = resident
+    calls = []
+    def replaced(*args, **kwargs):
+        calls.append("dtype")
+        raise AssertionError("Python dtype constructor executed")
+    monkeypatch.setattr(np, "dtype", replaced)
+    audit = audit_native_call(_OPT_NATIVE, "seqdev_array", tensor, ("f8", None), None, _OPT_CONTEXT)
+    assert type(audit.exception) is TypeError
+    assert not calls
+    report = audit.report()
+    assert not report["python_frames"] and not report["forbidden_native_calls"], report

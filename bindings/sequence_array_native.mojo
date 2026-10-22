@@ -8,14 +8,14 @@ from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from core.sequence_array_cast import sequence_cast_leaf, sequence_wide_word
 from bindings.sequence_array_warnings import sequence_array_errstate, sequence_array_report
+from bindings.native_numpy_metadata import native_numpy_dtype
 
 
 def sequence_dtype_classes(context: PythonObject) raises -> PythonObject:
+    var dtype = native_numpy_dtype(context)
     var stored = py_get(context, "sequence_dtype_classes")
     if stored is not None:
         return stored
-    var numpy = py_fields(context["modules"]["numpy"])
-    var dtype = numpy["dtype"]
     var result = Python.list()
     # Only NumPy's fixed built-in scalar dtype schemas are admitted. A user
     # DType with discovery/casting hooks requires its own native interface.
@@ -132,18 +132,22 @@ def sequence_array_cast(source: PythonObject, requested: PythonObject, context: 
     # qualified; this helper is not an unsupported-dtype Python fallback.
     if requested is None:
         return source
+    var dtype_constructor = native_numpy_dtype(context)
     var input = context["input_context"]
     classical_connect_numpy(input)
     if py_get(input, "ndarray") is None:
         raise Error("TypeError: the ndarray protocol requires NumPy's native array type to be connected")
-    var numpy = py_fields(context["modules"]["numpy"])
     var classes = sequence_dtype_classes(context)
     sequence_dtype_spec(requested, classes, context)
-    var dtype = py_call(numpy["dtype"], requested)
+    var dtype = py_call(dtype_constructor, requested)
     if (String(dtype.kind) == "S" or String(dtype.kind) == "U") and Int(py=dtype.itemsize) == 0:
-        dtype = py_call(numpy["dtype"], String(dtype.kind) + "32")
+        dtype = py_call(dtype_constructor, String(dtype.kind) + "32")
     var leaves = Python.list()
     sequence_dtype_leaves(dtype, 0, classes, leaves)
+    if Bool(py=py_call(dtype.__eq__, source.dtype)):
+        # astype(copy=False) returns the downloaded view for an equal dtype,
+        # preserving its raw NaN words, backing owner and writeability flags.
+        return source
     var settings = sequence_array_errstate(context)
     # Native ndarray allocation owns and initializes object slots. No buffer
     # protocol, scalar conversion or user allocation subclass is invoked.
