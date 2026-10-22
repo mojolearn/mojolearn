@@ -9,6 +9,7 @@ from bindings.optimizer_public_door import door_ready, refuse_kwargs, new_array,
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_cast_kind
 from core.optimizer_state_impl import optimizer_state_cast
+from bindings.optimizer_schedule_native import schedule_operation
 
 
 def optimizer_entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -106,6 +107,8 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
     var b = Python.import_module("builtins")
     if py_type(values) is not b.tuple:
         raise Error("TypeError: optimizer requires native argument tuples")
+    if operation.startswith("schedule_"):
+        return schedule_operation(operation, owner, values, context)
     if operation == "construct":
         if len(values) != 14:
             raise Error("TypeError: invalid optimizer constructor envelope")

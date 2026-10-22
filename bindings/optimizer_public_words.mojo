@@ -71,6 +71,8 @@ def optimizer_python_error(error: Error) -> PyObjectPtr:
         return raise_python_exception(Error(message[byte=14:]), ExceptionType("PyExc_RuntimeError"))
     if message.startswith("NotImplementedError: "):
         return raise_python_exception(Error(message[byte=21:]), ExceptionType("PyExc_NotImplementedError"))
+    if message.startswith("ZeroDivisionError: "):
+        return raise_python_exception(Error(message[byte=19:]), ExceptionType("PyExc_ZeroDivisionError"))
     if message.startswith("OverflowError: "):
         return raise_python_exception(Error(message[byte=15:]), ExceptionType("PyExc_OverflowError"))
     if message.startswith("ArithmeticError: "):

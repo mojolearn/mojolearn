@@ -25,6 +25,7 @@ Adamax, NAdam, LAMB) and recurrent estimators (LSTM/GRU/RNN), which set
 Not carried (sequence/NOT_IMPLEMENTED.tsv): OneCycleLR's momentum cycling
 (cycle_momentum, base_momentum, max_momentum); per-group learning rates;
 `last_epoch` resumption (evaluate `lr_at` at the step you resume from)."""
+from ._training_impl import _OPT_NATIVE, _OPT_CONTEXT
 from ._training_impl import _LR_BEYOND, _LR_EXACT_ONLY, _LR_ONE_BASED, _LrTable, _lr_fill, _lr_status
 
 import array as _array
@@ -59,7 +60,7 @@ class _Sched(_LrTable):
 
     def lrs(self, n):
         """lr_at(1) .. lr_at(n) as a list, from one native call."""
-        return self.lr_values(n).tolist()
+        return _OPT_NATIVE("schedule_list", self, (n,), None, _OPT_CONTEXT)
 
 
 class _PowSched(_Sched):
@@ -70,8 +71,7 @@ class _PowSched(_Sched):
     _step = 1
 
     def _lr_spec(self):
-        return ([_KIND_POW, int(self._step), 0, 0],
-                [_q(self.base_lr, "base_lr"), _q(self.gamma, "gamma"), 0.0, 0.0])
+        return _OPT_NATIVE("schedule_spec", self, (), None, _OPT_CONTEXT)
 
 
 class StepLR(_PowSched):
@@ -111,10 +111,7 @@ class StepLR(_PowSched):
     """
 
     def __init__(self, base_lr, step_size, gamma=0.1):
-        if int(step_size) < 1:
-            raise ValueError("StepLR: step_size must be >= 1")
-        self.base_lr, self.step_size, self.gamma = float(base_lr), int(step_size), float(gamma)
-        self._step = self.step_size
+        return _OPT_NATIVE("schedule_construct", self, (base_lr, step_size, gamma), None, _OPT_CONTEXT)
 
 
 class ExponentialLR(_PowSched):
@@ -149,7 +146,7 @@ class ExponentialLR(_PowSched):
     """
 
     def __init__(self, base_lr, gamma):
-        self.base_lr, self.gamma = float(base_lr), float(gamma)
+        return _OPT_NATIVE("schedule_construct", self, (base_lr, 1, gamma), None, _OPT_CONTEXT)
 
 
 class OneCycleLR(_Sched):
@@ -201,24 +198,10 @@ class OneCycleLR(_Sched):
 
     def __init__(self, max_lr, total_steps, pct_start=0.3, anneal_strategy="cos", div_factor=25.0,
                  final_div_factor=1e4, three_phase=False):
-        if int(total_steps) < 1:
-            raise ValueError("OneCycleLR: total_steps must be >= 1")
-        if not 0.0 <= float(pct_start) <= 1.0:
-            raise ValueError("OneCycleLR: pct_start must lie in [0, 1]")
-        if anneal_strategy not in ("cos", "linear"):
-            raise ValueError("OneCycleLR: anneal_strategy must be 'cos' or 'linear'")
-        self.max_lr, self.total_steps = float(max_lr), int(total_steps)
-        self.pct_start, self.anneal_strategy = float(pct_start), anneal_strategy
-        self.div_factor, self.final_div_factor, self.three_phase = float(div_factor), float(final_div_factor), bool(three_phase)
-        _q(self.max_lr, "max_lr")
-        for name in ("div_factor", "final_div_factor"):  # glue: checks two scalar arguments
-            if _q(getattr(self, name), name) == 0.0:
-                raise ZeroDivisionError(f"OneCycleLR: {name} must be nonzero")
+        return _OPT_NATIVE("schedule_construct", self, (max_lr, total_steps, pct_start, anneal_strategy, div_factor, final_div_factor, three_phase), None, _OPT_CONTEXT)
 
     def _lr_spec(self):
-        return ([_KIND_ONECYCLE, 1 if self.anneal_strategy == "linear" else 0, 1 if self.three_phase else 0,
-                 int(self.total_steps)],
-                [float(self.max_lr), float(self.div_factor), float(self.final_div_factor), float(self.pct_start)])
+        return _OPT_NATIVE("schedule_spec", self, (), None, _OPT_CONTEXT)
 
     def _lr_refuse(self, st, t):
         if st == _LR_BEYOND:
@@ -235,3 +218,9 @@ class OneCycleLR(_Sched):
         if st:
             self._lr_refuse(st, t)
         return out[0]
+
+# Import-time registration of built-in schedule identities, never a runtime hook.
+from . import _training_impl as _schedule_training
+from ._native_optimizer_bridge import connect_sequence as _connect_native_sequence_schedules
+import sys as _schedule_sys
+_connect_native_sequence_schedules(_schedule_training, _schedule_sys.modules[__name__])

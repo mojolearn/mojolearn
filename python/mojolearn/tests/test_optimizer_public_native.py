@@ -146,3 +146,30 @@ def test_scalar_callback_is_refused_without_float_or_bool():
     refused_without_python(optimizer.step, np.ones(2, dtype="f4"), max_norm=Foreign())
     refused_without_python(T.SGD, np.ones(2, dtype="f4"), lr=Foreign())
     assert not calls
+
+
+@pytest.mark.parametrize("schedule_name,args", [
+    ("ConstantLR", (0.003, 2)), ("WarmupLinearLR", (0.003, 2, 9, 0.0001)),
+    ("WarmupCosineLR", (0.003, 2, 9, 0.0001)), ("StepLR", (0.003, 3, 0.8)),
+    ("ExponentialLR", (0.003, 0.8)), ("OneCycleLR", (0.003, 9)),
+])
+def test_builtin_schedule_public_operations_and_optimizer_use_are_native(schedule_name, args):
+    import mojolearn
+    cls = getattr(mojolearn, schedule_name)
+    schedule = audit_native_call(cls, *args).assert_native()
+    values = audit_native_call(schedule.lr_values, 7).assert_native()
+    for step in (1, 3, 7):
+        value = audit_native_call(schedule.lr_at, step).assert_native()
+        bits = audit_native_call(schedule.bits_at, step).assert_native()
+        assert array.array("f", [value]).tobytes() == values[step - 1:step].tobytes()
+        assert bits == np.asarray([value], dtype="f4").view("u4")[0]
+    optimizer = audit_native_call(T.SGD, np.ones(3, dtype="f4"), lr_schedule=schedule,
+                                 numeric_mode="identical", resident=False).assert_native()
+    audit_native_call(optimizer.step, np.ones(3, dtype="f4")).assert_native()
+    assert array.array("f", [optimizer.lr]).tobytes() == values[:1].tobytes()
+    if schedule_name in ("ConstantLR", "WarmupLinearLR", "WarmupCosineLR"):
+        config = audit_native_call(schedule.config).assert_native()
+        clone = audit_native_call(schedule.from_config, config).assert_native()
+        assert audit_native_call(clone.lr_values, 7).assert_native().tobytes() == values.tobytes()
+    else:
+        assert audit_native_call(schedule.lrs, 7).assert_native() == values.tolist()

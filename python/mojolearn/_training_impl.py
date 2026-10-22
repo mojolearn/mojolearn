@@ -1284,17 +1284,15 @@ class _LrTable(object):
 
     def lr_at(self, t):
         """The float32 learning rate of ONE-BASED step `t`, as a float."""
-        ip, fp = self._lr_spec()
-        return _lr_native("lr_schedule_at")(ip, fp, t, self._LR_STYLE)  # cpu-route: a learning-rate schedule value is one host scalar per optimizer step (exact big-rational route)
+        return _OPT_NATIVE("schedule_at", self, (t,), None, _OPT_CONTEXT)
 
     def lr_values(self, n):
         """lr_at(1) .. lr_at(n) as an array('f'), in one native call."""
-        ip, fp = self._lr_spec()
-        return _lr_native("lr_schedule_series")(ip, fp, n, self._LR_STYLE)  # cpu-route: a learning-rate schedule value is one host scalar per optimizer step (exact big-rational route)
+        return _OPT_NATIVE("schedule_values", self, (n,), None, _OPT_CONTEXT)
 
     def bits_at(self, t):
         """`lr_at(t)` as its float32 bit pattern, for fixtures."""
-        return memoryview(array.array("f", (self.lr_at(t),))).cast("B").cast("I")[0]
+        return _OPT_NATIVE("schedule_bits", self, (t,), None, _OPT_CONTEXT)
 
 
 class _Schedule(_LrTable):
@@ -1306,40 +1304,17 @@ class _Schedule(_LrTable):
     _KIND_CODE = {"constant": 0, "linear": 1, "cosine": 2}
 
     def __init__(self, peak_lr, warmup_steps=0, total_steps=None, min_lr=0.0):
-        self.peak_lr = float(_round_f32(peak_lr))
-        self.min_lr = float(_round_f32(min_lr))
-        self.warmup_steps = int(warmup_steps)
-        self.total_steps = None if total_steps is None else int(total_steps)
-        for name, v in (("peak_lr", self.peak_lr), ("min_lr", self.min_lr)):  # glue: validates two scalar arguments
-            if not math.isfinite(v) or v < 0.0:
-                raise ValueError(
-                    "mojolearn.%s: %s must be finite and >= 0, got %r"
-                    % (type(self).__name__, name, v))
-        if self.warmup_steps < 0:
-            raise ValueError("mojolearn.%s: warmup_steps must be >= 0"
-                             % type(self).__name__)
-        if (self.total_steps is not None
-                and self.total_steps < max(1, self.warmup_steps)):
-            raise ValueError(
-                "mojolearn.%s: total_steps must be >= max(1, warmup_steps), "
-                "got %r" % (type(self).__name__, self.total_steps))
+        return _OPT_NATIVE("schedule_construct", self, (peak_lr, warmup_steps, total_steps, min_lr), None, _OPT_CONTEXT)
 
     def config(self):
-        return {"kind": self.kind, "peak_lr": self.peak_lr,
-                "min_lr": self.min_lr, "warmup_steps": self.warmup_steps,
-                "total_steps": self.total_steps}
+        return _OPT_NATIVE("schedule_config", self, (), None, _OPT_CONTEXT)
 
     @staticmethod
     def from_config(cfg):
-        cls = {"constant": ConstantLR, "linear": WarmupLinearLR,
-               "cosine": WarmupCosineLR}[cfg["kind"]]
-        return cls(cfg["peak_lr"], warmup_steps=cfg["warmup_steps"],
-                   total_steps=cfg["total_steps"], min_lr=cfg["min_lr"])
+        return _OPT_NATIVE("schedule_from_config", None, (cfg,), None, _OPT_CONTEXT)
 
     def _lr_spec(self):
-        return ([self._KIND_CODE[self.kind], int(self.warmup_steps),
-                 -1 if self.total_steps is None else int(self.total_steps), 0],
-                [float(self.peak_lr), float(self.min_lr), 0.0, 0.0])
+        return _OPT_NATIVE("schedule_spec", self, (), None, _OPT_CONTEXT)
 
     def _exact_params(self):
         return ([self._KIND_CODE[self.kind], self.warmup_steps,
@@ -1395,7 +1370,7 @@ class ConstantLR(_Schedule):
 
     def __init__(self, peak_lr, warmup_steps=0, total_steps=None,
                  min_lr=0.0):
-        super(ConstantLR, self).__init__(peak_lr, warmup_steps, None, 0.0)
+        return _OPT_NATIVE("schedule_construct", self, (peak_lr, warmup_steps, None, 0.0), None, _OPT_CONTEXT)
 
 
 class WarmupLinearLR(_Schedule):

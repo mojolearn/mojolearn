@@ -60,10 +60,24 @@ def opt_schedule(value: PythonObject, context: PythonObject) raises:
     if value is None:
         return
     if not opt_exact(py_type(value), context["schedules"]):
-        raise Error("TypeError: optimizer lr_schedule requires ConstantLR, WarmupLinearLR or WarmupCosineLR; Python learning-rate callbacks cannot execute in the native runtime")
+        raise Error("TypeError: optimizer lr_schedule requires a built-in native schedule (ConstantLR, WarmupLinearLR, WarmupCosineLR, StepLR, ExponentialLR or OneCycleLR); Python learning-rate callbacks cannot execute in the native runtime")
     var fields = py_fields(value)
-    for name in ["peak_lr", "min_lr", "warmup_steps", "total_steps"]:  # driver-loop: over four stored schedule configuration words
-        opt_scalar(fields[PythonObject(name)], context)
+    var classes = context["schedules"]
+    var index = 0
+    for i in range(len(classes)):  # driver-loop: over connected built-in schedule types
+        if py_type(value) is classes[i]:
+            index = i
+    if index < 3:
+        for name in ["peak_lr", "min_lr", "warmup_steps", "total_steps"]:  # driver-loop: over stored warmup schedule configuration
+            opt_scalar(fields[PythonObject(name)], context)
+    elif index < 5:
+        opt_scalar(fields["base_lr"], context)
+        opt_scalar(fields["gamma"], context)
+        if index == 3:
+            opt_scalar(fields["_step"], context)
+    else:
+        for name in ["max_lr", "total_steps", "pct_start", "anneal_strategy", "div_factor", "final_div_factor", "three_phase"]:  # driver-loop: over stored OneCycle schedule configuration
+            opt_scalar(fields[PythonObject(name)], context)
 
 
 def opt_value(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
