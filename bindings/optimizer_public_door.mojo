@@ -1036,7 +1036,6 @@ def copy_array(source: PythonObject) raises -> PythonObject:
         raise Error("TypeError: optimizer state copy requires a contiguous float32/int32 buffer")
     var result = new_array(v.shape, "<f4" if base_format(v.fmt) == "f" else "<i4")
     memcpy(dest=BP(unsafe_from_address=Int(py=result._addr)), src=BP(unsafe_from_address=v.addr), count=v.nbytes)
-    _ = source^
     return result
 
 
@@ -1099,6 +1098,9 @@ def door_load_state[K: OptKernels](
     if Int(py=v.size) != n_total:
         raise Error("ValueError: mojolearn." + owhere + ".load_state_dict: exp_avg_sq holds " + String(Int(py=v.size))
                     + " floats, this optimizer's registry is " + String(n_total))
+    var init_view = TensorView()
+    if not tensor_view(bi, init_view) or init_view.count() != len(py_fields(opt)["params"]):
+        raise Error("ValueError: buf_initialized does not match the optimizer parameter registry")
     set_field(opt, "_m", m)
     set_field(opt, "_v", v)
     set_field(opt, "_pristine", PythonObject(False))

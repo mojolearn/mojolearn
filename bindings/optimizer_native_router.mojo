@@ -10,6 +10,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_cast_kind
 from core.optimizer_state_impl import optimizer_state_cast
 from bindings.optimizer_schedule_native import schedule_operation
+from bindings.optimizer_device_native import device_operation, device_new, device_entries
 
 
 def optimizer_entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -107,6 +108,9 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
     var b = Python.import_module("builtins")
     if py_type(values) is not b.tuple:
         raise Error("TypeError: optimizer requires native argument tuples")
+    if operation.startswith("device_"):
+        var selected = optimizer_entries(mode, context) if operation == "device_upload" else PythonObject(None)
+        return device_operation(operation, owner, values, context, selected)
     if operation.startswith("schedule_"):
         return schedule_operation(operation, owner, values, context)
     if operation == "construct":
@@ -137,20 +141,9 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
             raise Error("ValueError: optimizer parameter index is out of range")
         var view = TensorView()
         _ = tensor_view(params[j], view)
-        var shape = Python.list()
-        var size = 1
-        for i in range(len(view.shape)):  # driver-loop: over native parameter shape words
-            _ = py_call(shape.append, view.shape[i])
-            size *= view.shape[i]
+        _ = device_entries(entries["module"], context)
         var handle = py_call(entries["optimizer_door_io"], owner, 5, PythonObject(None), "params", j)
-        var result = py_call(b.object.__new__, context["device_class"])
-        var result_fields = py_fields(result)
-        py_setitem(result_fields, "_b", entries["module"])
-        py_setitem(result_fields, "h", py_call(b.int, handle))
-        py_setitem(result_fields, "shape", py_call(b.tuple, shape))
-        py_setitem(result_fields, "size", PythonObject(size))
-        py_setitem(result_fields, "_base", PythonObject(None))
-        return result
+        return device_new(entries["module"], py_call(b.int, handle), view.shape, PythonObject(None), context)
     if operation == "step":
         return py_call(entries["optimizer_door_step"], owner, values[0], values[1], values[2], values[3])
     if operation == "state":
