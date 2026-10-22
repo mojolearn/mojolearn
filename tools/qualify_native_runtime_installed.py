@@ -24,6 +24,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_TESTS = {
+    "test_late_numpy_native_metadata.py": "Public cold/late NumPy metadata connection, builtin identity preservation and pre-hook factory/key refusals",
     "test_optimizer_native_config_order.py": "Native public optimizer get/set parameter order independent of mutable sorting",
     "test_optimizer_native_container_admission.py": "Native optimizer and training container admission with replaced builtin names",
     "test_training_cross_entropy_public_native.py": "Public cross entropy preparation, options, native scalar configuration and consumed host/device outputs",
@@ -195,6 +196,9 @@ def test_applicability(selected, vendor):
         if name == "test_host_density_constructors_native.py":
             scope.update(execution_route="native explicit CPU host constructor owner, including in GPU packages",
                          coverage_limit="Public KDE and IsolationForest construction/reinitialization only; fit/inference, save/hash and subclass registration remain separate")
+        if name == "test_late_numpy_native_metadata.py":
+            scope.update(execution_route="native public DeviceRows constructor on every package backend",
+                         coverage_limit="Cold/late NumPy connection only; successful constructor output and refusal paths are checked in fresh subprocesses")
         if name == "test_device_rows_metadata_native.py":
             scope.update(execution_route="native DeviceRows metadata owner on every package backend",
                          coverage_limit="Constructor and length only; materialize and resident context lifecycle remain separate")

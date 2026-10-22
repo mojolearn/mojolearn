@@ -8,7 +8,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_field
 from bindings.native_error_class import error_without_class
 from bindings.sequential_admission import sequential_admit_value
 from bindings.sequential_inputs import sequential_input
-from bindings.native_numpy_metadata import native_numpy_type
+from bindings.native_numpy_metadata import native_numpy_type, native_numpy_module_fields
 
 
 def _type_fields(cls: PythonObject) raises -> PythonObject:
@@ -146,8 +146,15 @@ def classical_connect_numpy(context: PythonObject) raises:
         raise Error("TypeError: classical NumPy support requires the native NumPy module")
     # Read the loaded module dictionary directly; module __getattr__ is a
     # Python hook. All dtype construction below uses NumPy's C dtype type.
-    var fields = py_fields(numpy)
-    var b = Python.import_module("builtins")
+    var fields = native_numpy_module_fields(numpy)
+    # C-created builtin values supply stable constructor/type identities.
+    # These names may be replaced in builtins after package import; no
+    # replacement becomes a callback or changes scalar admission metadata.
+    var list_type = py_type(Python.list())
+    var tuple_type = py_type(Python.tuple())
+    var int_type = py_type(PythonObject(0))
+    var float_type = py_type(PythonObject(0.0))
+    var bool_type = py_type(PythonObject(True))
     # Check both factory identities before invoking or publishing either.
     # A late NumPy import must not turn first-call metadata setup into a call
     # to an arbitrary Python replacement of numpy.dtype or numpy.ndarray.
@@ -155,8 +162,8 @@ def classical_connect_numpy(context: PythonObject) raises:
     var ndarray = native_numpy_type("ndarray", context)
     var numeric = Python.dict()
     var classes = Python.dict()
-    var scalars = py_call(b.list)
-    var integers = py_call(b.list, Python.tuple(b.int))
+    var scalars = py_call(list_type)
+    var integers = py_call(list_type, Python.tuple(int_type))
     var kinds = Python.tuple("u", "i", "f", "b")
     var sizes = Python.tuple(1, 2, 4, 8)
     for kind in range(4):  # driver-loop: fixed native scalar ABI metadata
@@ -171,8 +178,8 @@ def classical_connect_numpy(context: PythonObject) raises:
             _ = py_call(scalars.append, dtype.type)
             if kind < 2:
                 _ = py_call(integers.append, dtype.type)
-    var values = py_call(b.list, context["native_value_types"])
-    var owners = py_call(b.list, context["buffer_owner_types"])
+    var values = py_call(list_type, context["native_value_types"])
+    var owners = py_call(list_type, context["buffer_owner_types"])
     _ = py_call(values.append, ndarray)
     _ = py_call(owners.append, ndarray)
     var archive = Python.dict()
@@ -185,11 +192,11 @@ def classical_connect_numpy(context: PythonObject) raises:
         py_setitem(archive, code, dtype)
     var update = Python.dict(
         ndarray=ndarray, scalar_type=fields["generic"], integer=fields["integer"],
-        scalar_types=py_call(b.tuple, scalars), integer_types=py_call(b.tuple, integers),
-        native_value_types=py_call(b.tuple, values), buffer_owner_types=py_call(b.tuple, owners),
+        scalar_types=py_call(tuple_type, scalars), integer_types=py_call(tuple_type, integers),
+        native_value_types=py_call(tuple_type, values), buffer_owner_types=py_call(tuple_type, owners),
         numeric_dtypes=numeric, class_dtypes=classes, archive_npy_dtypes=archive,
-        float_types=Python.tuple(b.float, fields["floating"]),
-        int_types=Python.tuple(b.int, fields["integer"]), bool_types=Python.tuple(b.bool, fields["bool_"]),
+        float_types=Python.tuple(float_type, fields["floating"]),
+        int_types=Python.tuple(int_type, fields["integer"]), bool_types=Python.tuple(bool_type, fields["bool_"]),
         float32=py_call(dtype_class, "f4"), float64=py_call(dtype_class, "f8"),
         int32=py_call(dtype_class, "i4"), int64=py_call(dtype_class, "i8"),
         uint64=py_call(dtype_class, "u8"), bool=py_call(dtype_class, "?"))
