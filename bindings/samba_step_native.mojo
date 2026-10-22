@@ -38,8 +38,15 @@ def _samba_open_optimizer(opt: PythonObject, entries: PythonObject, context: Pyt
     if not enabled:
         py_setitem(opt, "_resident_wanted", False)
         return
-    py_setitem(opt, "_res_binding", entries)
-    py_setitem(opt, "_res", py_call(_native_function(entries, "optimizer_resident_open"), opt["n_total"]))
+    var open_slot = _native_function(entries, "optimizer_resident_open")
+    # `entries` is a connection namespace, not the native registry owner.
+    # The verified built-in entry retains the module required by optimizer
+    # state downloads/uploads and eventual resident-slot cleanup.
+    var owner = open_slot.__self__
+    if py_type(owner) is not context["admission"]["module_type"]:
+        raise Error("TypeError: Samba resident optimizer requires its owning native extension")
+    py_setitem(opt, "_res_binding", owner)
+    py_setitem(opt, "_res", py_call(open_slot, opt["n_total"]))
     if not Bool(py=opt["_pristine"]):
         var moments = _samba_moments(opt, context)
         _ = py_call(_native_function(entries, "optimizer_resident_upload"), opt["_res"], moments[0]._addr, moments[1]._addr, opt["n_total"])

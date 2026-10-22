@@ -183,6 +183,55 @@ def test_kde_fit_refusals_preserve_exact_error_and_partial_state(case, refit):
     assert _state(vars(model)) == _state(vars(old))
 
 
+@pytest.mark.parametrize("kind", ["tuple", "range", "ndarray", "array", "memoryview"])
+@pytest.mark.parametrize("refit", [False, True])
+def test_kde_empty_weight_storage_preserves_shape_error_and_partial_state(kind, refit):
+    empty = np.empty(0, dtype="<f4")
+    weight = {"tuple": (), "range": range(0), "ndarray": empty,
+              "array": Array.from_buffer(empty), "memoryview": memoryview(empty)}[kind]
+    old, model = _model(), _model()
+    if refit:
+        legacy.kde_fit(old, _x() + 10, sample_weight=_weight("c"))
+        legacy.kde_fit(model, _x() + 10, sample_weight=_weight("c"))
+    with pytest.raises(ValueError) as expected:
+        legacy.kde_fit(old, _x(), sample_weight=weight)
+    audit = audit_native_call(model.fit, _x(), sample_weight=weight)
+    _refused(audit, type(expected.value))
+    assert type(audit.exception) is type(expected.value)
+    assert str(audit.exception) == str(expected.value) == "sample_weight.shape == (0,), expected (3,)!"
+    assert _state(vars(model)) == _state(vars(old))
+
+
+@pytest.mark.parametrize("name", ["list", "tuple", "range"])
+def test_kde_weight_admission_ignores_replaced_container_types(name, monkeypatch):
+    import builtins
+    import dis
+    import threading
+    from mojolearn import _verify_native_runtime as verifier
+    touched = []
+    class Foreign:
+        def __len__(self):
+            touched.append("len")
+            return 0
+        def __iter__(self):
+            touched.append("iter")
+            return iter(())
+        def __float__(self):
+            touched.append("float")
+            return 1.
+    model, x, weight = _model(), _x(), Foreign()
+    fit = model.fit
+    with monkeypatch.context() as patch:
+        # The verifier is a test controller; preserve its bytecode inspection
+        # constructors while poisoning the product's live builtin lookup.
+        for controller in (verifier, dis, threading):
+            patch.setattr(controller, name, getattr(builtins, name), raising=False)
+        patch.setattr(builtins, name, Foreign)
+        audit = audit_native_call(fit, x, sample_weight=weight)
+    _refused(audit, TypeError)
+    assert touched == []
+
+
 @pytest.mark.parametrize("mode", [None, "identical", "fast"])
 @pytest.mark.parametrize("indirect", [False, True])
 @pytest.mark.parametrize("override", [False, True])

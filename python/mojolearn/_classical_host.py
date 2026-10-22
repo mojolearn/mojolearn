@@ -1365,6 +1365,7 @@ def _connect_host_inference():
                    host_density_object_setattr=vars(object)["__setattr__"],
                    host_density_member_type=MemberDescriptorType,
                    host_density_function_type=FunctionType, host_density_attribute_error=AttributeError,
+                   host_kde_sequence_types=(list, tuple, range),
                    host_inference_kinds={HostElasticNet: "cd", HostLasso: "cd", HostKMeans: "kmeans",
                                          HostKernelRidge: "kernel_ridge", HostNystroem: "nystroem", HostRBFSampler: "rbf_sampler",
                                          HostPCA: "pca", HostTruncatedSVD: "tsvd", HostLogisticRegression: "logistic", HostSVR: "svr", HostSVC: "svc", HostKernelDensity: "kde", HostIsolationForest: "iforest"})
