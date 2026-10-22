@@ -153,8 +153,7 @@ class DeviceCache:
 
     def get(self, arr):
         """The id when `arr` is already resident, else None (no upload)."""
-        hit = self._entries.get(self._key(arr))
-        return None if hit is None else hit[0]
+        return _ROWS_CALL(self, "cache_get", (arr,), _ROWS_CONTEXT)
 
     def release(self, arr):
         hit = self._entries.pop(self._key(arr), None)
@@ -171,7 +170,7 @@ class DeviceCache:
         return None if self._live is None else int(self._live())
 
     def __len__(self):
-        return len(self._entries)
+        return _ROWS_CALL(self, "cache_len", (), _ROWS_CONTEXT)
 
     def __enter__(self):
         return self
@@ -229,10 +228,7 @@ class resident:
     @staticmethod
     def stats():
         """{prefix: (uploads, hits)} of the active scope, or None."""
-        scope = getattr(_LOCAL, "scope", None)
-        if scope is None:
-            return None
-        return {p: (c.uploads, c.hits) for (_, p), (c, _) in scope.caches.items()}  # glue: counters per arena cache
+        return _ROWS_CALL(_LOCAL, "resident_stats", (), _ROWS_CONTEXT)
 
 
 def active_cache(binding, prefix, n_words):

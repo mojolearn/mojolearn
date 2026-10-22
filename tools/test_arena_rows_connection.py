@@ -1,6 +1,7 @@
 """Import-time native descriptor admission; no compiled product claim."""
 from pathlib import Path
 import sys
+import threading
 from types import MemberDescriptorType, ModuleType, SimpleNamespace
 import unittest
 from unittest.mock import patch
@@ -23,11 +24,22 @@ class Resident:
         raise AssertionError("import-time metadata must never call take")
 
 
+class Cache:
+    @staticmethod
+    def _key(value):
+        raise AssertionError("import-time connection must never compute a cache key")
+
+    def get(self, value):
+        raise AssertionError("import-time connection must never read a cache")
+
+
 def connect(native_entry=len):
     package = ModuleType('mojolearn')
     package.__path__ = [str(ROOT / 'python/mojolearn')]
     arena = ModuleType('mojolearn._arena_io')
     arena.DeviceRows = Rows
+    arena.DeviceCache = Cache
+    arena._LOCAL = threading.local()
     selection = ModuleType('mojolearn.model_selection')
     selection._Resident = Resident
     buffers = ModuleType('mojolearn._buffer')
@@ -38,10 +50,13 @@ def connect(native_entry=len):
     bridge._numpy_free_context = lambda: {'array_class': Array}
     tokenizer = ModuleType('mojolearn.tokenizer')
     tokenizer._binding = lambda: SimpleNamespace(_module=SimpleNamespace(arena_rows_native_call=len))
+    warning_bridge = ModuleType('mojolearn._native_classical_warnings')
+    warning_bridge.connect_warnings = lambda: {'test_warning_connection': True}
     modules = {'mojolearn': package, 'mojolearn._arena_io': arena,
                'mojolearn._array': arrays, 'mojolearn._native_classical_bridge': bridge,
                'mojolearn.tokenizer': tokenizer, 'mojolearn.model_selection': selection,
-               'mojolearn._buffer': buffers}
+               'mojolearn._buffer': buffers,
+               'mojolearn._native_classical_warnings': warning_bridge}
     with patch.dict(sys.modules, modules):
         namespace = {'__name__': 'mojolearn._native_arena_rows', '__package__': 'mojolearn'}
         source = ROOT / 'python/mojolearn/_native_arena_rows.py'
@@ -51,6 +66,18 @@ def connect(native_entry=len):
 
 
 class NativeWeakrefConnectionTests(unittest.TestCase):
+    def test_readonly_cache_retains_native_attribute_and_scalar_entries(self):
+        context = connect()
+        self.assertIs(context['cache_object_getattribute'], object.__getattribute__)
+        self.assertIs(context['cache_member_type'], MemberDescriptorType)
+        self.assertIs(context['cache_key_descriptor'], vars(Cache)['_key'])
+        self.assertIs(context['cache_key_function'], Cache._key)
+        scalar = context['cache_scalar_context']
+        self.assertEqual(scalar['scalar_types'], (type(None), bool, int, float, complex, str, bytes))
+        self.assertEqual(scalar['container_types'], (list, tuple, dict, set, frozenset, memoryview))
+        self.assertIs(scalar['input_context'], context)
+        self.assertTrue(scalar['training_scalar_warnings']['test_warning_connection'])
+
     def test_owner_release_retains_native_constructor_and_scalar_identities(self):
         context = connect()
         expected = dict(type=type, object=object, list=list, tuple=tuple, dict=dict,

@@ -4,13 +4,18 @@
 
 def connect():
     # glue: retain native entry and immutable slot identities during import
-    from types import BuiltinFunctionType, ModuleType
+    from types import BuiltinFunctionType, ModuleType, MemberDescriptorType
+    from array import array
+    from collections import OrderedDict
+    import mmap
+    import sys
     import struct
     from . import _arena_io, model_selection
     from ._buffer import _native
     from ._array import Array
     from ._native_classical_bridge import _numpy_free_context
     from ._native_owner_lifetime import connect_owner_context
+    from ._native_classical_warnings import connect_warnings
     from .tokenizer import _binding
 
     call = _binding()._module.arena_rows_native_call
@@ -39,5 +44,33 @@ def connect():
                    arena_msel_take_rows=entries['msel_take_rows'], arena_cast=entries['cast'],
                    maxabs_rows_class=_arena_io.DeviceRows,
                    maxabs_rows_dict=vars(_arena_io.DeviceRows)["__dict__"])
+    # glue: fixed scalar-conversion metadata, independent of the training
+    # package's device configuration and without importing optional NumPy.
+    scalar_context = dict(
+        modules=sys.modules, module_type=ModuleType, native_module_type=ModuleType,
+        scalar_types=(type(None), bool, int, float, complex, str, bytes),
+        container_types=(list, tuple, dict, set, frozenset, memoryview),
+        buffer_types=(bytes, bytearray, array, mmap.mmap), mapping_types=(dict, OrderedDict),
+        array_class=Array, array_type=array, device_class=None,
+        array_getters={name: vars(Array)[name].__get__ for name in Array.__slots__},  # glue: retained native Array slot identities
+        type_flags=vars(type)['__flags__'].__get__, type_mro=vars(type)['__mro__'].__get__,
+        numpy_names=('ndarray', 'bool_', 'int8', 'uint8', 'int16', 'uint16', 'int32', 'uint32',
+                     'int64', 'uint64', 'longlong', 'ulonglong', 'float16', 'float32', 'float64', 'longdouble'),
+        input_context=context, training_scalar_warnings=connect_warnings(),
+        training_scalar_locations={'cache_get': (_arena_io.DeviceCache.get.__code__.co_filename,
+                                                 _arena_io.DeviceCache.get.__code__.co_firstlineno,
+                                                 _arena_io.__name__)})
+    context.update(cache_scalar_context=scalar_context,
+                   cache_type_mro=vars(type)['__mro__'].__get__, cache_type_dict=vars(type)['__dict__'].__get__,
+                   cache_object_getattribute=object.__getattribute__, cache_member_type=MemberDescriptorType,
+                   cache_local_type=type(_arena_io._LOCAL),
+                   cache_local_getattribute=type(_arena_io._LOCAL).__getattribute__,
+                   cache_key_descriptor=vars(_arena_io.DeviceCache)['_key'],
+                   cache_key_function=_arena_io.DeviceCache._key,
+                   cache_little_endian=sys.byteorder == 'little',
+                   cache_attribute_error=AttributeError, cache_deprecation_warning=DeprecationWarning,
+                   cache_hash_types=(type(None), bool, int, float, complex, str, bytes),
+                   cache_itemsize_types=(type(None), object, bool, int, float, complex, str, bytes,
+                                         bytearray, list, tuple, dict, set, frozenset, memoryview))
     _arena_io._ROWS_CALL = call
     _arena_io._ROWS_CONTEXT = context
