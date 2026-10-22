@@ -5,9 +5,10 @@
 def connect(scaler_class):
     # glue: compiled entries and plain metadata are retained during import
     import sys
+    import mmap
     from types import BuiltinFunctionType, MethodType
     from . import _backend
-    from ._arena_io import DeviceRows
+    from ._arena_io import DeviceRows, DeviceCache, _Scope, _LOCAL
     from ._native_classical_bridge import _state_context, _numpy_free_context, _layout
     from .tokenizer import _binding
 
@@ -18,17 +19,20 @@ def connect(scaler_class):
         try:
             module = _backend.binding("_mojolearn_x_prep", mode)
             entries = {}
-            for name in ("x_prep_run", "x_prep_numeric_mode", "x_prep_maxabs_fit_direct"):  # glue: three fixed native exports connected during import
+            for name in ("x_prep_run", "x_prep_numeric_mode", "x_prep_maxabs_fit_direct",  # glue: fixed native exports connected during import
+                         "x_prep_run_out", "x_prep_run_scratch", "x_prep_run_ranges",
+                         "x_prep_dev_put", "x_prep_dev_free", "x_prep_dev_live", "x_prep_dev_take_rows"):
                 try:
                     entry = getattr(module, name)
                 except (AttributeError, ImportError):
-                    if name == "x_prep_maxabs_fit_direct":
+                    if name not in ("x_prep_run", "x_prep_numeric_mode"):
                         continue
                     raise
                 if not isinstance(entry, BuiltinFunctionType):
                     raise TypeError(f"MaxAbsScaler requires compiled {name}")
                 entries[name] = entry
             entries["preprocessing_numeric_mode"] = entries["x_prep_numeric_mode"]
+            entries.update(arena_binding=module, arena_binding_id=id(module))
             connected[mode] = entries
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as error:
             connected[mode] = type(error).__name__ + ": " + str(error)
@@ -38,7 +42,10 @@ def connect(scaler_class):
     call, attribute = door.maxabs_scaler_native_call, door.standard_scaler_attribute_call
     if any(not isinstance(entry, BuiltinFunctionType) for entry in (call, attribute, gather, finite32, finite64)):  # glue: fixed native ABI identity
         raise TypeError("MaxAbsScaler requires compiled lifecycle, attribute and row-gather entries")
-    context.update(scaler_bindings=connected, scaler_class=scaler_class, scaler_host_contexts={},
+    context.update(arena_mmap=mmap.mmap, arena_local=_LOCAL,
+                   arena_scope_class=_Scope, arena_cache_class=DeviceCache,
+                   arena_scope_dict=vars(_Scope)['__dict__'], arena_cache_dict=vars(DeviceCache)['__dict__'],
+                   scaler_bindings=connected, scaler_class=scaler_class, scaler_host_contexts={},
                    maxabs_rows_class=DeviceRows, maxabs_gather_rows=gather,
                    maxabs_finite_f32=finite32, maxabs_finite_f64=finite64, classical_getframe=sys._getframe)
     descriptor = door.classical_attribute_descriptor(MethodType(attribute, context))

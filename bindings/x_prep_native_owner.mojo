@@ -8,7 +8,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_setattr
 from bindings.classical_arrays import classical_address, classical_is_array, classical_c_order, classical_wrap_array
 from bindings.sequential_admission import sequential_admit_value
-from bindings.maxabs_native import _dense_values, _values
+from bindings.x_prep_native_inputs import _dense_values, _values
 
 alias F32P = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -316,5 +316,7 @@ def xprep_run(storage: PythonObject, host: Int, scratch: Int, output: PythonObje
                 name = "colb_part"
             elif op == 125:
                 name = "colb_fold"
+            elif op == 128:
+                name = "maxabs_fold"
             names += ("" if i == 0 else "+")+name
         print("XPPROG ops="+names+" arena="+String(host)+" scratch="+String(scratch)+" out="+String(logical_output)+" dev_out="+String(Int(out_words > 0))+" ranges="+String(Int(ranges))+" alloc_s="+String(Float64(Int(py=storage[2]))/1.0e9)+" inputs_s="+String(Float64(kernel_start-start)/1.0e9)+" call_s="+String(Float64(done-kernel_start)/1.0e9))
