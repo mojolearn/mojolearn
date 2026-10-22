@@ -248,18 +248,25 @@ def test_new_expansion_providers_and_module_hooks_invalidate_the_registry_proof(
     )
 
 
-def test_changing_an_existing_imported_connector_invalidates_import_review(monkeypatch):
+@pytest.mark.parametrize('bridge, signature', [
+    ('_native_maxabs_bridge', 'def connect(scaler_class):'),
+    ('_native_robust_bridge', 'def connect(scaler_class, qselect):'),
+])
+@pytest.mark.parametrize('extra', [
+    '    unknown_installer()',
+    '    scaler_class.fit(None)',
+    "    globals()['dependent_flag'] = len(scaler_class.__dict__)",
+])
+def test_changing_an_existing_imported_connector_invalidates_import_review(monkeypatch, bridge, signature, extra):
     original = ls._parse
     rel, call = real_connector_call()
-    path = "python/mojolearn/_native_maxabs_bridge.py"
-    changed = ast.parse(
-        ls._read(path).replace(
-            "def connect(scaler_class):", "def connect(scaler_class):\n    unknown_installer()"
-        )
-    )
-    monkeypatch.setattr(ls, "_parse", lambda p: changed if p == path else original(p))
+    path = 'python/mojolearn/' + bridge + '.py'
+    source = ls._read(path)
+    assert signature in source
+    changed = ast.parse(source.replace(signature, signature + '\n' + extra))
+    monkeypatch.setattr(ls, '_parse', lambda p: changed if p == path else original(p))
     assert not metadata_only_call(
-        rel, call, {"_FORMATS"}, ls._parse, ls._native_metadata_factory, ls._metadata_registry_guard
+        rel, call, {'_FORMATS'}, ls._parse, ls._native_metadata_factory, ls._metadata_registry_guard
     )
 
 

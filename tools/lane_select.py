@@ -5094,15 +5094,23 @@ def _metadata_registry_guard(rel, name, mutators):
         return False
     if not isinstance(lanes, tuple) or any(not isinstance(lane, str) for lane in lanes):
         return False
-    # The one package connector called by these modules is imported, so its
-    # executable source must also remain the reviewed native ABI connection.
+    # The scaler connectors called by these modules are imported, so their
+    # executable sources must remain the reviewed native ABI connections.
     # Changes in its called helpers are independently followed by the normal
     # import/caller walk; this check never exempts a changed executing callee.
     import hashlib
-    bridge = _parse('python/mojolearn/_native_maxabs_bridge.py')
-    if bridge is None or hashlib.sha256(ast.dump(_strip_docstrings(bridge)).encode()).hexdigest() != (
-            '156e05fa832e4dfde42ccfa0dba6acc19a0116421a37e329fee393411fa7057c'):
-        return False
+    # MaxAbs/Robust retain fixed native run/store entries, mmap/thread-local
+    # owner metadata and native class dictionary descriptors. Their methods
+    # are never called during this connection; future source changes still
+    # invalidate the proof, including metadata-dependent global side effects.
+    reviewed_bridges = {
+        '_native_maxabs_bridge': '9e31eb82df70c139a9716bbdeffdd36bba6b95a3acb8cd9956a2c5733051a015',
+        '_native_robust_bridge': 'ef2caa2953a5f5ccba503db2aab76b1cc76b4829bdce98e4026a96abd336af8f',
+    }
+    for bridge_name, expected_bridge in reviewed_bridges.items():
+        bridge = _parse('python/mojolearn/' + bridge_name + '.py')
+        if bridge is None or hashlib.sha256(ast.dump(_strip_docstrings(bridge)).encode()).hexdigest() != expected_bridge:
+            return False
     for lane in lanes:
         door_path = 'python/mojolearn/_expansion_' + lane + '.py'
         tree = _parse(door_path)
@@ -5112,14 +5120,14 @@ def _metadata_registry_guard(rel, name, mutators):
         # These anchors are deliberately source-specific, not permission for
         # a call name. They bind the already-reviewed import setup (literal
         # containers/environment reads, decomp lifetime probe, array/thread
-        # primitives and MaxAbs's fixed ABI connection). A new installer or
+        # primitives and the scaler fixed ABI connections). A new installer or
         # changed import execution must retain broad selection until reviewed.
         reviewed_imports = {
             'linear': 'e41b2da314b715db13f45113af881a2ad89c1ab71834dd3d510e1aef5413389f',
             'cluster': '16db7377a502b6cb0ea4c998b35c592c61eb3d422531c69935cecc939eed5635',
             'neighbors': '4cc645a6832be7a1c65ffde3f08b39f32d49e89932d0c5a412f02ddb59c38eda',
             'decomp': '188949b119e4ac5c225a9f8fa0532fb95a287bdcf26bf3162694757517d48f6e',
-            'prep': '1ee7364a160dcc0c8d714e40a102b10cc003034c6ede49cb7a01f14f940f161a',
+            'prep': '51c2f0b1ef57da9c7ad332a4f632e07ce0044c8e2adafd3b34e267d3013a2616',
             'sequence': 'e0bec9187e5784b4d1251bbbfee02214bc2ad92f8dde3d99647ad4b37a3a537f',
             'trees': '9c63b5496f4ca49af62e8d2f088f794cea761ece271555c6abf986946bb7d81d',
             'cnn': '1b7533816e61ef6a6cb39dd0dd63a3fd91110d4da56681554091523ccec79765',
