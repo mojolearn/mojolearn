@@ -13,7 +13,7 @@ from core.classical_pandas_impl import pd_raw_at, _pd_double
 from bindings.sequence_device_native import sequence_device_operation, sequence_device_finalize
 from bindings.sequence_optimizer_native import sequence_optimizer_operation
 from bindings.optimizer_schedule_native import schedule_operation
-from bindings.optimizer_device_native import device_operation, device_new, device_entries, device_finalize
+from bindings.optimizer_device_native import device_operation, device_new, device_entries, device_finalize, device_adopt, device_release_entry
 
 
 def optimizer_entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -251,9 +251,12 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
             raise Error("ValueError: optimizer parameter index is out of range")
         var view = TensorView()
         _ = tensor_view(params[j], view)
-        _ = device_entries(entries["module"], context)
+        var native = device_entries(entries["module"], context)
+        var result = device_new(PythonObject(None), PythonObject(None), view.shape, PythonObject(None), context)
+        var release = device_release_entry(native, context)
+        var binding = entries["module"]
         var handle = py_call(entries["optimizer_door_io"], owner, 5, PythonObject(None), "params", j)
-        return device_new(entries["module"], py_call(b.int, handle), view.shape, PythonObject(None), context)
+        return device_adopt(result, binding, handle, release)
     if operation == "step":
         return py_call(entries["optimizer_door_step"], owner, values[0], values[1], values[2], values[3])
     if operation == "state":

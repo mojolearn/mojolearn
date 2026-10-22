@@ -61,6 +61,59 @@ def device_new(binding: PythonObject, handle: PythonObject, dims: List[Int], bas
     return result
 
 
+struct DeviceHandleLease(Movable):
+    # Holds a newly allocated registry handle until its already constructed
+    # public owner has accepted it. This is a Mojo stack owner, not a Python
+    # callback or a package object whose __del__ is needed for rollback.
+    var release: PythonObject
+    var handle: PythonObject
+    var owned: Bool
+
+    def __init__(out self, release: PythonObject, handle: PythonObject):
+        self.release = release
+        self.handle = handle
+        self.owned = True
+
+    def __deinit__(deinit self):
+        if self.owned:
+            try:
+                _ = py_call(self.release, self.handle)
+            except:
+                # A failing native release retains the previous best-effort
+                # cleanup semantics; never replace the original exception.
+                pass
+
+
+def device_release_entry(entries: PythonObject, context: PythonObject) raises -> PythonObject:
+    var release = entries["train_dev_free"]
+    if py_type(release) is not context["device_finalizer_types"][2]:
+        raise Error("TypeError: training device ownership requires its compiled release entry")
+    return release
+
+
+def device_adopt(result: PythonObject, binding: PythonObject, handle: PythonObject,
+                 release: PythonObject) raises -> PythonObject:
+    var lease = DeviceHandleLease(release, handle)
+    var fields = py_fields(result)
+    # device_new(None, None, ...) already created these cells. Until the last
+    # publication succeeds, only the native stack lease owns the allocation.
+    py_setitem(fields, "h", handle)
+    py_setitem(fields, "_b", binding)
+    lease.owned = False
+    return result
+
+
+def device_allocate(entries: PythonObject, dims: List[Int], context: PythonObject) raises -> PythonObject:
+    var result = device_new(PythonObject(None), PythonObject(None), dims, PythonObject(None), context)
+    var release = device_release_entry(entries, context)
+    var allocate = entries["train_dev_alloc"]
+    if py_type(allocate) is not context["device_finalizer_types"][2]:
+        raise Error("TypeError: training device allocation requires its compiled entry")
+    var binding = entries["module"]
+    var handle = py_call(allocate, shape_count(dims))
+    return device_adopt(result, binding, handle, release)
+
+
 def device_finalize(owner: PythonObject, context: PythonObject) raises -> PythonObject:
     # A native method descriptor calls this directly when a temporary output
     # is decref'd during rollback. Retained native types/field access/entries
@@ -129,8 +182,7 @@ def device_operation(operation: String, owner: PythonObject, values: PythonObjec
                 raise Error("TypeError: training device array base must retain a native device-array owner")
             device_set(owner, binding, py_call(b.int, values[1]), dims, base)
             return PythonObject(None)
-        var handle = py_call(entries["train_dev_alloc"], size)
-        return device_new(binding, handle, dims, PythonObject(None), context)
+        return device_allocate(entries, dims, context)
     if operation == "device_upload":
         var source = values[0]
         if py_type(source) is context["device_class"]:
@@ -144,14 +196,14 @@ def device_operation(operation: String, owner: PythonObject, values: PythonObjec
             raise Error("ValueError: mojolearn.train_to_device: a must be nonempty")
         var keep = List[List[Float32]]()
         var addr = contiguous_addr(source, view, keep)
-        var handle = py_call(entries["train_dev_alloc"], view.count())
-        try:
-            _ = py_call(entries["train_dev_put"], handle, addr, view.count())
-        except error:
-            _ = py_call(entries["train_dev_free"], handle)
-            raise error^
+        var upload = entries["train_dev_put"]
+        if py_type(upload) is not context["device_finalizer_types"][2]:
+            raise Error("TypeError: training device upload requires its compiled entry")
+        var result = device_allocate(entries, view.shape, context)
+        _ = py_call(upload, py_fields(result)["h"], addr, view.count())
         _ = keep^
-        return device_new(entries["module"], handle, view.shape, PythonObject(None), context)
+        _ = source^
+        return result
     if py_type(owner) is not context["device_class"]:
         raise Error("TypeError: training device operation requires its exact native owner")
     var fields = py_fields(owner)

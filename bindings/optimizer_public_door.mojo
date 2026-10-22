@@ -971,8 +971,18 @@ def door_io[K: OptKernels](
     req.offsets = read_addr(py_fields(opt)["offsets"], "offsets")
     _state_into(opt, req)
     var r = K.io(req, op_code, tensor)
-    keep_slot(opt, r[0], module, False)
-    return PythonObject(Float64(r[1]))
+    try:
+        keep_slot(opt, r[0], module, False)
+        # A device allocation's handle stays an integer through publication.
+        # The caller has prepared its owner before asking for this allocation.
+        return PythonObject(r[1]) if op_code == 5 else PythonObject(Float64(r[1]))
+    except error:
+        if op_code == 5:
+            try:
+                _ = py_call(resident_entry(module, "train_dev_free"), r[1])
+            except:
+                pass
+        raise error^
 
 
 def door_zero(opt: PythonObject, grads: PythonObject) raises -> PythonObject:
