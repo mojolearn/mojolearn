@@ -39,10 +39,13 @@ def host_archive_object(cls: PythonObject, arrays: PythonObject, context: Python
     var saved = _archive_string(arrays, "estimator", context)
     var known = False
     var found_dictionary = False
+    var found_finalizer = False
     for i in range(len(mro)):  # driver-loop: connected class ancestry metadata
         var fields = py_call(b.type.__dict__["__dict__"].__get__, mro[i])
-        if py_contains(fields, "__del__"):
-            raise Error("TypeError: Python finalizer hooks are not accepted by native archive loading")
+        if not found_finalizer and py_contains(fields, "__del__"):
+            if fields["__del__"] is not py_get(context, "host_archive_finalizer_descriptor"):
+                raise Error("TypeError: Python finalizer hooks are not accepted by native archive loading")
+            found_finalizer = True
         if not found_dictionary and py_contains(fields, "__dict__"):
             if py_type(fields["__dict__"]) is not context["host_archive_dict_descriptor_type"]:
                 raise Error("TypeError: Python dictionary descriptors are not accepted by native archive loading")
@@ -1093,6 +1096,9 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         model = host_archive_neighbors(cls, arrays, 3, context)
     elif fmt == "mojolearn-knn-1":
         model = host_archive_neighbors(cls, arrays, 0 if String(estimator) == "NearestNeighbors" else (1 if String(estimator) == "KNeighborsClassifier" else 2), context)
+        # Native equivalent of the original loader's _mojolearn_after_fit:
+        # a newly restored CPU neighbor model owns an empty query holder.
+        py_setitem(sequential_fields(model), "_resident_holder", Python.dict())
     elif fmt == "mojolearn-iforest-1":
         model = host_archive_iforest(cls, arrays, context)
     elif fmt == "mojolearn-spectral-1":

@@ -2,11 +2,12 @@
 """Import-time archive schemas for the compiled saved-model owner."""
 
 
-def connect(context, formats):
+def connect(context, formats, cleanup_entries):
     # glue: fixed native type and format metadata, connected once at import.
     # No class.load/from_file/constructor callback is installed here.
     from ._native_classical_bridge import _numpy_free_context, _archive_npy_dtypes
-    from types import GetSetDescriptorType
+    from types import GetSetDescriptorType, BuiltinFunctionType, MethodType
+    from .tokenizer import _binding
     from .cluster import _METRIC_NAMES, _INIT_NAMES
     from .density import _METRICS
     from ._hierarchy_impl import _ALL_METRICS
@@ -35,4 +36,25 @@ def connect(context, formats):
         name for classes in formats.values() for name, cls in classes.items()  # glue: fixed fitted-state ownership metadata at import
         if issubclass(cls, SklearnTagsMixin)
     )
+    archive["host_archive_lifetime_layouts"] = {}
+    module = _binding()._module
+    finalize = getattr(module, "host_archive_finalize_call", None)
+    if finalize is not None:
+        if not isinstance(finalize, BuiltinFunctionType):
+            raise TypeError("saved host model cleanup requires a compiled native entry")
+        descriptor = module.classical_attribute_descriptor(MethodType(finalize, archive))
+        archive["host_archive_finalizer_descriptor"] = descriptor
+        for classes in formats.values():  # glue: connect fixed host class lifetime metadata at import
+            for name, cls in classes.items():  # glue: fixed saved estimator class metadata
+                if not any("__del__" in base.__dict__ for base in cls.__mro__):  # glue: inspect fixed finalizer slots once
+                    continue
+                field_descriptor = next(base.__dict__["__dict__"] for base in cls.__mro__  # glue: fixed native instance layout
+                                        if "__dict__" in base.__dict__)
+                if not isinstance(field_descriptor, GetSetDescriptorType):
+                    raise TypeError("saved host model cleanup requires a native instance dictionary")
+                release = cleanup_entries.get(name)
+                if release is not None and not isinstance(release, BuiltinFunctionType):
+                    raise TypeError("saved host model release requires a compiled native entry")
+                archive["host_archive_lifetime_layouts"][cls] = (release, field_descriptor)
+                cls.__del__ = descriptor
     context["host_archive_context"] = archive

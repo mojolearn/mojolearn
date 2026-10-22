@@ -640,7 +640,20 @@ _native_classical_bridge.connect_host_public(HostRidge, HostLinearRegression, _C
 # Fixed archive metadata only. The private native builder is qualified per
 # schema before replacing the existing full-format public routing contract.
 from . import _native_host_archive_bridge
-_native_host_archive_bridge.connect(_CLASSICAL, _FORMATS)
+
+
+def _host_archive_cleanup_entries():
+    # glue: only IVF's CPU inference binding owns a resident registry entry.
+    # The other CPU host bindings keep ordinary array references. Device
+    # finalizers stay on their original GPU classes.
+    try:
+        module = _backend.load_host_module("_mojolearn_ivf_search_host")
+    except ImportError:
+        return {}
+    return {"IVFIndex": module.ivf_flat_index_release}
+
+
+_native_host_archive_bridge.connect(_CLASSICAL, _FORMATS, _host_archive_cleanup_entries())
 
 
 def host_model(path):

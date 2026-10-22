@@ -244,6 +244,47 @@ def test_host_load_refuses_dictionary_descriptor_before_instantiation(tmp_path):
     assert calls == []
 
 
+def test_host_load_refuses_custom_finalizer_before_instantiation(tmp_path):
+    calls = []
+
+    class CustomHost(host.HostPCA):
+        def __del__(self):
+            calls.append("finalize")
+
+    audit = audit_native_call(CustomHost.load, _archive(tmp_path, "PCA"))
+    assert isinstance(audit.exception, TypeError), audit.report()
+    report = audit.report()
+    assert not any(report[key] for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads")), report
+    assert calls == []
+
+
+@pytest.mark.parametrize("name", ["Embedding", "KernelDensity", "IVFIndex", "NearestNeighbors"])
+def test_loaded_host_model_finalizes_without_python(tmp_path, name):
+    cls = getattr(host, "Host" + name)
+    obj = audit_native_call(cls.load, _archive(tmp_path, name)).assert_native()
+    audit_native_call(cls.__del__, obj).assert_native()
+    assert cls.__del__ is not getattr(host, name).__del__
+
+
+def test_ivf_host_finalizer_releases_the_native_resident_index(tmp_path):
+    model = host.HostIVFIndex.load(_archive(tmp_path, "IVFIndex"))
+    state = vars(model)
+    native = host._backend.load_host_module("_mojolearn_ivf_search_host")
+    arrays = [state[key] for key in ("centers_", "center_norms_", "list_offsets_", "list_indices_", "list_data_")]
+    token = native.ivf_flat_index_prepare([a._addr for a in arrays],
+        [state["n_rows_"], state["n_features_in_"], state["n_lists_"], state["metric_code_"], 0])
+
+    class PoisonedCachedModule:
+        def ivf_flat_index_release(self, token):
+            raise AssertionError("cached Python release callback was invoked")
+
+    state["_resident"] = ((), token, PoisonedCachedModule())
+    audit_native_call(type(model).__del__, model).assert_native()
+    assert state["_resident"] is None
+    with pytest.raises(ValueError, match="released resident"):
+        native.ivf_flat_index_release(token)
+
+
 @pytest.mark.parametrize("labels", [np.asarray([2, 7], dtype="<i8"),
                                     np.asarray([.5, 1.5], dtype="<f8"),
                                     np.asarray(["left", "right"]),
