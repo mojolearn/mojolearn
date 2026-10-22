@@ -206,7 +206,7 @@ def new_array(dims: List[Int], dtype: String) raises -> PythonObject:
     var size = 1
     var strides = List[Int](length=len(dims), fill=0)
     var step = 4
-    for i in range(len(dims) - 1, -1, -1):  # driver-loop: one native shape/stride word per dimension
+    for i in range(len(dims) - 1, -1, -1):  # driver-loop: over one native shape/stride word per dimension
         strides[i] = step
         step *= dims[i]
         size *= dims[i]
@@ -235,7 +235,7 @@ def set_field(opt: PythonObject, name: String, value: PythonObject) raises:
 
 def owner_kind(opt: PythonObject) raises -> Int:
     var classes = OPT_DOOR.get_or_create_ptr()[].context["owners"]
-    for i in range(len(classes)):  # driver-loop: three native optimizer kinds
+    for i in range(len(classes)):  # driver-loop: over three native optimizer kinds
         if py_type(opt) is classes[i]:
             return i
     raise Error("TypeError: optimizer requires an exact native optimizer owner")
@@ -741,7 +741,7 @@ def schedule_spec(schedule: PythonObject) raises -> LrSpec:
     var fields = py_fields(schedule)
     var kind = 0
     var classes = context["schedules"]
-    for i in range(len(classes)):  # driver-loop: three built-in schedule configurations
+    for i in range(len(classes)):  # driver-loop: over three built-in schedule configurations
         if py_type(schedule) is classes[i]:
             kind = i
     var total = fields["total_steps"]

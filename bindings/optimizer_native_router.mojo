@@ -37,7 +37,7 @@ def optimizer_construct(owner: PythonObject, values: PythonObject, mode: PythonO
     var kind = Int(py=values[1])
     var where = String("SGD") if kind == 0 else (String("Adam") if kind == 1 else String("AdamW"))
     opt_schedule(values[9], context)
-    for i in [2, 3, 4, 5, 6, 7, 8, 10, 11, 12]:  # driver-loop: scalar constructor configuration words
+    for i in [2, 3, 4, 5, 6, 7, 8, 10, 11, 12]:  # driver-loop: over scalar constructor configuration words
         opt_scalar(values[i], context)
     opt_value(values[0], context)
     opt_value(values[13], context)
@@ -66,9 +66,8 @@ def optimizer_construct(owner: PythonObject, values: PythonObject, mode: PythonO
     py_setitem(fields, "lr_schedule", values[9])
     py_setitem(fields, "accumulation_steps", PythonObject(accumulation))
     _ = py_call(context["init"], owner, values[0])
-    for name in ["t"]:  # small-loop(params: one initialized step counter)
-        py_setitem(fields, PythonObject(name), PythonObject(0))
-    for name in ["packed_", "total_norm_", "clip_coef_"]:  # driver-loop: three optional result words
+    py_setitem(fields, "t", PythonObject(0))
+    for name in ["packed_", "total_norm_", "clip_coef_"]:  # driver-loop: over three optional result words
         py_setitem(fields, PythonObject(name), PythonObject(None))
     py_setitem(fields, "lr", py_call(b.float, values[2]))
     py_setitem(fields, "weight_decay", py_call(b.float, values[5]))
@@ -137,7 +136,7 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
         _ = tensor_view(params[j], view)
         var shape = Python.list()
         var size = 1
-        for i in range(len(view.shape)):  # driver-loop: native parameter shape words
+        for i in range(len(view.shape)):  # driver-loop: over native parameter shape words
             _ = py_call(shape.append, view.shape[i])
             size *= view.shape[i]
         var handle = py_call(entries["optimizer_door_io"], owner, 5, PythonObject(None), "params", j)

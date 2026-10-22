@@ -17,7 +17,7 @@ def connect(training):
     guarded = (Array, training._Optimizer, training._Schedule, training._LrTable,
                training.TrainDeviceArray) + owners + schedules
     names = tuple(Array.__slots__) + ("__getattribute__", "__getattr__", "__setattr__", "__dict__")
-    guards = tuple((cls, cls.__mro__, vars(cls), tuple((name, vars(cls).get(name)) for name in names))
+    guards = tuple((cls, cls.__mro__, vars(cls), tuple((name, vars(cls).get(name)) for name in names))  # glue: connect fixed native descriptor identities at import
                    for cls in guarded)  # glue: snapshot native record and array layouts
     bindings = {}
     entries = ("optimizer_door_step", "optimizer_door_io", "optimizer_door_state",
@@ -59,7 +59,7 @@ def connect(training):
         "guards": guards, "bindings": bindings, "init": init,
         "backend": vars(_backend), "profile_defaults": _numeric_profile._defaults,
         "profiles": _numeric_profile.PROFILES, "input_context": input_context,
-        "array_getters": {name: vars(Array)[name].__get__ for name in Array.__slots__},
+        "array_getters": {name: vars(Array)[name].__get__ for name in Array.__slots__},  # glue: retain fixed native Array slot descriptors at import
     }
     native = _binding()._module.optimizer_native
     if not isinstance(native, BuiltinFunctionType):
