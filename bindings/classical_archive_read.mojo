@@ -693,21 +693,47 @@ def classical_archive_read(path: PythonObject, context: PythonObject) raises -> 
             _ = _archive_file_call(methods["close"], file)
 
 
+def _archive_dtype_name(value: PythonObject, context: PythonObject) raises -> String:
+    # The dtype a refusal names, as `_serialize._dtype_name` named it.
+    var b = Python.import_module("builtins")
+    if classical_is_array(value, context) or (classical_numpy(context) and py_type(value) is context["ndarray"]):
+        return classical_dtype_str(value, context)
+    if py_type(value) is b.str:
+        return "<U"
+    if py_type(value) is b.bytes:
+        return "|S"
+    if py_type(value) is b.list:
+        var inner = value
+        while py_type(inner) is b.list and len(inner) != 0:  # driver-loop: over the nesting depth of a stored field
+            inner = inner[0]
+        if py_type(inner) is b.str:
+            return "<U"
+        if py_type(inner) is b.bytes:
+            return "|S"
+        return "list"
+    return String(py_type(value).__name__)
+
+
+def _archive_missing(name: String) -> String:
+    return "mojolearn: model file is missing field '" + name + "'"
+
+
 def _archive_exact(arrays: PythonObject, name: String, dtype: String, context: PythonObject) raises -> PythonObject:
+    # The refusals keep `_serialize.exact`'s wording: a cast could change
+    # bits, so a dtype mismatch is refused, never converted.
     if not py_contains(arrays, name):
-        raise Error("model file is missing field " + name)
+        raise Error(_archive_missing(name))
     var value = arrays[name]
     var numeric = py_type(value) is context["ndarray"] if classical_numpy(context) else classical_is_array(value, context)
-    if not numeric:
-        raise Error("model field " + name + " is not the expected numeric dtype")
-    if classical_dtype_str(value, context) != dtype:
-        raise Error("model field " + name + " is not the expected numeric dtype")
+    if not numeric or classical_dtype_str(value, context) != dtype:
+        raise Error("mojolearn: model field '" + name + "' has dtype " + _archive_dtype_name(value, context)
+                    + ", the format stores " + dtype + "; refusing to cast a model file")
     return value
 
 
 def _archive_string(arrays: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     if not py_contains(arrays, name):
-        raise Error("model file is missing field " + name)
+        raise Error(_archive_missing(name))
     var value = arrays[name]
     if py_type(value) is context["array_class"]:
         # A NumPy-free read: a text field never decodes to numbers.

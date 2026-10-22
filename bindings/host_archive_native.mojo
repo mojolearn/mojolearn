@@ -7,7 +7,7 @@ from std.memory import bitcast
 from std.math import isfinite
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.sequential_description import sequential_fields
-from bindings.classical_archive_read import classical_archive_read, classical_archive_build, _archive_exact as _raw_archive_exact, _archive_string
+from bindings.classical_archive_read import classical_archive_read, classical_archive_build, _archive_exact as _raw_archive_exact, _archive_string, _archive_read_repr, _archive_builtin_repr
 from bindings.classical_arrays import classical_i64, classical_f64, classical_wrap_array, classical_array, classical_address, _store_code
 from core.host_archive_impl import host_archive_copy_f32, host_archive_unique_i32, host_archive_mean_f64, host_archive_reorder_f32, host_archive_reorder_bytes, host_archive_copy_words, host_archive_support_bound, host_archive_svc_gather
 from bindings.scaler_lifecycle_native import scaler_archive_build
@@ -1570,15 +1570,58 @@ def host_archive_gbdt(cls: PythonObject, arrays: PythonObject, context: PythonOb
     return model
 
 
+def host_archive_public_owner(path: PythonObject, arrays: PythonObject, cls: PythonObject,
+                              context: PythonObject) raises -> PythonObject:
+    """`Class.load(path)` of a public estimator: the format tag and the
+    saving estimator are checked with the refusals `_serialize.read_npz` and
+    `linear_model._check_saved_by` gave, and the nearest connected ancestor
+    (the class whose schema the file holds) is returned."""
+    var b = Python.import_module("builtins")
+    if py_type(cls) is not b.type:
+        raise Error("TypeError: native archive loading requires an ordinary class")
+    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var connected = context["archive_class_formats"]
+    var owner = PythonObject(None)
+    for i in range(len(mro)):  # driver-loop: loading class ancestry metadata
+        if py_contains(connected, mro[i]):
+            owner = mro[i]
+            break
+    if owner is None:
+        raise Error("TypeError: " + String(cls.__name__) + " has no connected saved format")
+    var accepted = connected[owner]
+    var tag = PythonObject("")
+    if py_contains(arrays, "format"):
+        tag = _archive_string(arrays, "format", context)
+    if not py_contains(accepted[0], tag):
+        raise Error("mojolearn: " + _archive_read_repr(path, context) + " holds model format "
+                    + _archive_builtin_repr(tag) + ", this loader reads " + _archive_builtin_repr(accepted[1]))
+    var saved = _archive_string(arrays, "estimator", context)
+    var known = False
+    for i in range(len(mro)):  # driver-loop: loading class ancestry names
+        known = known or Bool(py=mro[i].__name__ == saved)
+    if not known:
+        raise Error("mojolearn: " + _archive_read_repr(path, context) + " was saved by "
+                    + String(saved) + ", not " + String(cls.__name__))
+    return owner
+
+
 def host_archive_build(path: PythonObject, context: PythonObject,
                        requested_class: PythonObject = PythonObject(None), classical_only: Bool = False) raises -> PythonObject:
     # Read the archive once and select its native schema from the fixed
     # import-time registry. No class constructor or load method is invoked.
     var arrays = classical_archive_read(path, context)
+    # A public class's own `load` (the context _native_archive_bridge
+    # connects) keys the schema on the class, not on the saved name: a
+    # subclass loads its base's file, as the Python loaders did.
+    var public_owner = PythonObject(None)
+    if requested_class is not None and py_get(context, "archive_class_formats") is not None:
+        public_owner = host_archive_public_owner(path, arrays, requested_class, context)
     var fmt = String(_archive_string(arrays, "format", context))
     if classical_only and not py_contains(context["host_archive_classical_formats"], fmt):
         raise Error("model archive format does not name a classical host model")
     var estimator = _archive_string(arrays, "estimator", context)
+    if public_owner is not None:
+        estimator = public_owner.__name__
     # Historical explicit CPU saves used their Host* class name. Admit only
     # these exact aliases within their matching unchanged archive schemas.
     if fmt == "mojolearn-kde-1" and String(estimator) == "HostKernelDensity":
@@ -1592,7 +1635,9 @@ def host_archive_build(path: PythonObject, context: PythonObject,
     var cls = py_get(classes, estimator)
     if cls is None:
         raise Error("mojolearn: " + String(py_call(Python.import_module("builtins").repr, path)) + " was saved by " + String(estimator) + ", which " + fmt + " does not hold")
-    if requested_class is not None:
+    if public_owner is not None:
+        cls = requested_class
+    elif requested_class is not None:
         var b = Python.import_module("builtins")
         if py_type(requested_class) is not b.type:
             raise Error("TypeError: native archive loading requires an ordinary class")
