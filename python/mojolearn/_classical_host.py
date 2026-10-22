@@ -533,7 +533,22 @@ class _HostCD(_HostBound):
 
     @_native_host_inference_method
     def predict(self, X):
-        """Predict float32 values with the fitted coefficients and intercept."""
+        """Predict responses with the fitted coefficients and intercept.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Input rows with the fitted number of features.
+
+        Returns
+        -------
+        predictions : ndarray of shape (n_samples,)
+            Predicted responses, published as float64 values.
+
+        Examples
+        --------
+        >>> predictions = model.predict([[1.0, 2.0]])
+        """
         return _native_classical(self, "host_infer_predict", (X,), _CLASSICAL)
 
 
