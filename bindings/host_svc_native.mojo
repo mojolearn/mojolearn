@@ -22,6 +22,7 @@ from bindings.host_svr_native import _svr_matrix, _svr_support, _svr_bias
 from bindings.scaler_lifecycle_native import _outside
 from core.host_sparse_impl import host_sparse_uint64_bound
 from core.host_helpers_impl import argmax_rows_f64
+from core.host_archive_impl import host_archive_copy_f32
 from core.host_svr_impl import host_svr_indices, host_svr_bias
 
 
@@ -187,8 +188,8 @@ def _svc_calibration_array(value: PythonObject, count: Int, vector: Bool, contex
     var stride = Int(py=array.strides[0])
     var col = stride if vector else Int(py=array.strides[1])
     var native = classical_is_array(array, context) or Bool(py=array.dtype.isnative)
-    for i in range(count):
-        for j in range(2):
+    for i in range(count):  # driver-loop: one calibration pair per fitted machine
+        for j in range(2):  # small-loop(Platt A/B coefficients)
             words[2 * i + j] = host_svr_bias(base + (0 if vector else i * stride) + j * col, width, kind, native)
     _ = array^
     return out
@@ -272,10 +273,7 @@ def host_svc_inference(model: PythonObject, fields: PythonObject, labels: Python
         if pairs is None:
             # Copy completed words without changing binary margin bits.
             out = host_archive_typed(Python.tuple(rows), "<f4", context["output_context"])
-            var src = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=base)
-            var dst = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out)))
-            for i in range(rows):
-                dst[i] = src[i]
+            host_archive_copy_f32(base, 4, 4, rows, 1, Int(py=classical_address(out)))
         else:
             out = _svc_epilogue(0 if String(fields["decision_function_shape"]) == "ovo" else 1,
                 decisions, codes, rows, count, classes, ab, 0.0, context)
