@@ -1806,15 +1806,7 @@ def rms_norm_forward(x, weight, eps, numeric_mode=None):
     -------
     array, shape (M, D)
     """
-    x = _c32(x, "x", "rms_norm_forward")
-    w = _c32(weight, "weight", "rms_norm_forward")
-    m, d = x.reshape((-1, x.shape[-1])).shape
-    if w.shape != (d,):
-        raise ValueError("mojolearn.rms_norm_forward: weight must be (D,)")
-    y = _buffers.empty((m, d), '<f4')
-    _load(numeric_mode).rms_norm_forward(
-        [_addr(y), _addr_ro(x), _addr_ro(w)], [int(m), int(d), float(eps)])
-    return y.reshape(x.shape)
+    return _OPT_NATIVE("rms_norm_forward", None, (x, weight, eps), numeric_mode, _OPT_CONTEXT)
 
 
 # The forward's row sums are recomputed by the same kernel.
@@ -1839,18 +1831,7 @@ def rms_norm_backward(dy, x, weight, eps, numeric_mode=None):
     dx : array, shape (M, D)
     dweight : array, shape (D,)
     """
-    x = _c32(x, "x", "rms_norm_backward")
-    dy = _c32(dy, "dy", "rms_norm_backward")
-    w = _c32(weight, "weight", "rms_norm_backward")
-    if dy.shape != x.shape:
-        raise ValueError("mojolearn.rms_norm_backward: dy and x shapes differ")
-    m, d = x.reshape((-1, x.shape[-1])).shape
-    dx = _buffers.empty((m, d), '<f4')
-    dw = _buffers.empty((d,), '<f4')
-    _load(numeric_mode).rms_norm_backward(
-        [_addr(dx), _addr(dw), _addr_ro(dy), _addr_ro(x), _addr_ro(w)],
-        [int(m), int(d), float(eps)])
-    return dx.reshape(x.shape), dw
+    return _OPT_NATIVE("rms_norm_backward", None, (dy, x, weight, eps), numeric_mode, _OPT_CONTEXT)
 
 
 # ===================================================================
