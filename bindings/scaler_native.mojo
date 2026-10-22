@@ -8,7 +8,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from std.os import getenv
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
-from bindings.classical_attributes import classical_connect_numpy
+from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
 from bindings.classical_arrays import classical_input, classical_address, classical_typed, classical_is_array, classical_is_f32, classical_cast_kind, classical_c_order
 from core.scaler_fit_impl import scaler_cast, scaler_all_finite, scaler_check_stats, scaler_fill, scaler_check_missing, scaler_counts
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact, native_pandas_f32
@@ -228,6 +228,10 @@ def scaler_fit_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObje
         var args = PythonObject(from_borrowed=args_ptr)
         if len(args) != 5:
             raise Error("TypeError: StandardScaler.fit requires model, X, y, sample_weight and context")
+        classical_check_layout(args[0], args[4])
+        var hosts = py_get(args[4], "scaler_host_contexts")
+        if hosts is not None and py_get(hosts, py_type(args[0])) is not None:
+            raise Error("RuntimeError: HostStandardScaler supports inference only; fit a StandardScaler on a supported GPU")
         return scaler_fit(args[0], args[1], args[3], args[4]).steal_data()
     except error:
         if String(error).startswith("TypeError:"):

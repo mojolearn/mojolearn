@@ -761,33 +761,27 @@ class StandardScaler(_ScalerProtocol):
     >>> Z = scaler.transform(X)
     """
     _parameters = ('copy', 'with_mean', 'with_std', 'numeric_mode')
+    _mojolearn_native_public = True
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        _register_standard_scaler(cls, _STANDARD_CONTEXT)
+
+    def get_params(self, deep=True):
+        return _STANDARD_CALL(self, "get_params", (deep,), _STANDARD_CONTEXT)
+
+    def set_params(self, **params):
+        return _STANDARD_CALL(self, "set_params", (params,), _STANDARD_CONTEXT)
+
+    def __sklearn_is_fitted__(self):
+        return _STANDARD_CALL(self, "is_fitted", (), _STANDARD_CONTEXT)
+
 
     def __init__(self, *, copy=True, with_mean=True, with_std=True, numeric_mode=None):
-        self.copy = copy
-        self.with_mean = with_mean
-        self.with_std = with_std
-        self.numeric_mode = numeric_mode
+        return _STANDARD_CALL(self, "init", (copy, with_mean, with_std, numeric_mode), _STANDARD_CONTEXT)
         # Stored as given; fit and partial_fit check them (`_configuration`), scikit-learn's convention.
 
-    def _configuration(self):
-        if not is_bool(self.copy):
-            raise ValueError('copy must be a bool')
-        if not is_bool(self.with_mean) or not is_bool(self.with_std):
-            raise ValueError('with_mean and with_std must be bools')
-        if self.numeric_mode is not None and (
-                not isinstance(self.numeric_mode, str) or
-                self.numeric_mode.strip().lower() not in ('fast', 'identical')):
-            raise ValueError('numeric_mode must be fast, identical or None')
 
-    def _keep(self, mean, var, scale, seen, d, mode):
-        self.mean_ = mean if self.with_mean or self.with_std else None
-        self.var_ = var if self.with_std else None
-        self.scale_ = scale if self.with_std else None
-        self.n_features_in_ = d
-        self.n_samples_seen_ = seen
-        self.numeric_mode_ = mode
-        self.with_mean_ = bool(self.with_mean)
-        self.with_std_ = bool(self.with_std)
 
     def fit(self, X, y=None, sample_weight=None):
         """Compute the per-feature mean and variance.
@@ -834,36 +828,8 @@ class StandardScaler(_ScalerProtocol):
         X_scaled : Array of shape (n_samples, n_features), float32
             The standardized data.
         """
-        if not fit_params:
-            fused = self._fit_transform_fused(X)
-            if fused is not None:
-                return fused
-        return self.fit(X, y, **fit_params).transform(X)
+        return _STANDARD_CALL(self, "fit_transform", (X, y, fit_params), _STANDARD_CONTEXT)
 
-    def _fit_transform_fused(self, X):
-        _require_training(self)
-        self._configuration()
-        mode = (self.numeric_mode if self.numeric_mode is not None else _backend.default_mode()).strip().lower()
-        if mode != 'fast':
-            return None
-        entry = _direct_entry(self._binding(mode), "standard_fit_transform_direct")
-        if entry is None:
-            return None
-        values, _, copied = self._input(X, allow_nan=True, with_copied=True, scan=False)
-        n, d = values.shape
-        for name in list(self.__dict__):  # glue: drops stale fitted attributes
-            if name.endswith('_'):
-                del self.__dict__[name]
-        stats = empty((3, d), '<f4')
-        output = empty(values.shape, '<f4')
-        got = int(entry(_addr_ro(values), _addr(stats), _addr(output),
-                        [n, d, int(self.with_mean), int(self.with_std)]))
-        if got == 0:
-            return None   # X holds NaN or an infinity: fit's NaN route, then transform
-        self._keep(stats[0].copy(), stats[1].copy(), stats[2].copy(), n, d, mode)
-        if got < 0:
-            raise ValueError('StandardScaler transform overflowed in Float32')
-        return _write_back(self.copy, copied, values, X, output)
 
     # partial_fit merge (x_prep `gnb_merge`): n = n_past + n_new; mean =
     # (n_new mu_new + n_past mu) / n; var = (n_past var + n_new var_new +
@@ -895,100 +861,10 @@ class StandardScaler(_ScalerProtocol):
             If ``with_mean`` or ``with_std`` changed since the first batch or
             the feature count differs.
         """
-        _require_training(self)
-        if not self.__sklearn_is_fitted__():
-            return self.fit(X, y, sample_weight=sample_weight)
-        self._configuration()
-        if (bool(self.with_mean), bool(self.with_std)) != (self.with_mean_, self.with_std_):
-            raise ValueError('StandardScaler partial_fit: with_mean / with_std changed since the first batch')
-        batch = StandardScaler(with_mean=self.with_mean_, with_std=self.with_std_,
-                               numeric_mode=self.numeric_mode_).fit(X, y, sample_weight=sample_weight)
-        d = self.n_features_in_
-        if batch.n_features_in_ != d:
-            raise ValueError('StandardScaler input feature count differs from fit')
-        weighted = (sample_weight is not None or isinstance(self.n_samples_seen_, float)
-                    or getattr(self.n_samples_seen_, "dtype", None) == "<f4")
-        old_n, new_n = _per_feature(self.n_samples_seen_, d), _per_feature(batch.n_samples_seen_, d)
-        if self.mean_ is None:
-            total = [a + b for a, b in zip(old_n, new_n)]  # glue: merges per-column integer sample counts
-            self.n_samples_seen_ = _seen(total, weighted)
-            return self
-        P = _prep()
-        pr = P._Prog()
-        zeros_d = [0.0] * d
-        oc, bc = pr.put_list(old_n), pr.put_list(new_n)
-        om, bm = pr.put(self.mean_), pr.put(batch.mean_)
-        ov = pr.put(self.var_) if self.var_ is not None else pr.put_list(zeros_d)
-        bv = pr.put(batch.var_) if batch.var_ is not None else pr.put_list(zeros_d)
-        cnt, mean, var, scale = pr.alloc(d), pr.alloc(d), pr.alloc(d), pr.alloc(d)
-        pr.stage("gnb_merge", d, oc, om, ov, bc, bm, bv, d, 1, cnt, mean, var, 1)
-        pr.stage("std_scale", d, var, scale)
-        pr.run(self.numeric_mode_)
-        if weighted:
-            total = pr.values(cnt, d)
-        else:
-            # the int64 counts added on the device (x_prep c2_add_i64, lane cpu2-l3-prep)
-            total = _add_counts(self.numeric_mode_, self.n_samples_seen_, batch.n_samples_seen_, d).tolist()
-        self.mean_ = pr.get(mean, d)
-        if self.with_std_:
-            self.var_ = pr.get(var, d)
-            self.scale_ = pr.get(scale, d)
-        self.n_samples_seen_ = _seen(total, weighted)
-        return self
+        return _STANDARD_CALL(self, "partial_fit", (X, y, sample_weight), _STANDARD_CONTEXT)
 
     def _transform(self, X, inverse, copy):
-        if copy is not None and not is_bool(copy):
-            raise ValueError('StandardScaler transform copy must be a bool or None')
-        copy = self.copy if copy is None else copy
-        if not self.__sklearn_is_fitted__():
-            raise not_fitted_error('StandardScaler is not fitted')
-        binding = self._binding(self.numeric_mode_)
-        # `standard_transform_direct` (lane cpu2-l3-prep, every GPU binding): X up from
-        # its own buffer, the device scans the output (and X when the output is not
-        # finite). The host binding (the host column) has none: the List route
-        direct = _direct_entry(binding, "standard_transform_direct")
-        values, finite, copied = self._input(X, allow_nan=True, with_copied=True, scan=direct is None)
-        n, d = values.shape
-        if d != self.n_features_in_:
-            raise ValueError('StandardScaler input feature count differs from fit')
-        if self.with_mean_ and self.mean_ is None:
-            raise ValueError('StandardScaler mean_ is missing for a centered transform')
-        if self.with_std_ and self.scale_ is None:
-            raise ValueError('StandardScaler scale_ is missing for a scaled transform')
-        mean = self.mean_ if self.mean_ is not None else zeros((d,), "<f4")
-        scale = self.scale_ if self.scale_ is not None else full((d,), 1, "<f4")
-        for name, statistic in (('mean_', mean), ('scale_', scale)):  # glue: checks two fitted statistic names
-            if (not isinstance(statistic, Array) or statistic.dtype != "<f4"
-                    or statistic.shape != (d,) or not statistic.flags["C_CONTIGUOUS"]):
-                raise ValueError(f'StandardScaler {name} must remain a finite contiguous Float32 feature vector')
-        # a feature never seen (NaN statistics) transforms with mean 0, scale 1, then NaN
-        # (lane cpu2-l3-prep: substituted and checked on the device, `_stat_sub`)
-        mean, scale, colnan, nonfinite, nonpos = _stat_sub(self.numeric_mode_, mean, scale, self.with_mean_,
-                                                           self.with_std_, 0.0, 1.0)
-        if nonfinite:
-            raise ValueError('StandardScaler mean_ and scale_ must remain finite (NaN: a feature never seen)')
-        if nonpos:
-            raise ValueError('StandardScaler scale_ must remain positive')
-        params = [n, d, int(inverse), int(self.with_mean_), int(self.with_std_)]
-        output = empty(values.shape, '<f4')
-        if direct is not None:
-            got = int(direct(_addr_ro(values), _addr_ro(mean), _addr_ro(scale), _addr(output), params))
-            if got == 0:
-                raise ValueError('StandardScaler transform overflowed in Float32')
-            finite = got == 1
-            if not finite:
-                # X holds NaN: the NaN-filled X through the same entry (an infinity is refused)
-                source = _nan_scan_fill(self.numeric_mode_, values, None)[0]
-                if int(direct(_addr_ro(source), _addr_ro(mean), _addr_ro(scale), _addr(output), params)) != 1:
-                    raise ValueError('StandardScaler transform overflowed in Float32')
-        else:
-            source = values if finite else _nan_scan_fill(self.numeric_mode_, values, None)[0]
-            binding.standard_transform(_addr_ro(source), _addr_ro(mean), _addr_ro(scale), _addr(output), params)
-            if not all_finite(output):
-                raise ValueError('StandardScaler transform overflowed in Float32')
-        if not finite or colnan is not None:
-            output = _nan_keep(self.numeric_mode_, values, output, colnan)
-        return _write_back(copy, copied, values, X, output)
+        return _STANDARD_CALL(self, "transform", (X, inverse, copy), _STANDARD_CONTEXT)
 
     def transform(self, X, copy=None):
         """Standardize ``X``.
@@ -1013,7 +889,7 @@ class StandardScaler(_ScalerProtocol):
         ValueError
             If the feature count differs or the result overflows float32.
         """
-        return self._transform(X, False, copy)
+        return _STANDARD_CALL(self, "transform", (X, False, copy), _STANDARD_CONTEXT)
 
     def inverse_transform(self, X, copy=None):
         """Undo the standardization.
@@ -1030,7 +906,7 @@ class StandardScaler(_ScalerProtocol):
         X_original : Array of shape (n_samples, n_features), float32
             The data in its original units.
         """
-        return self._transform(X, True, copy)
+        return _STANDARD_CALL(self, "transform", (X, True, copy), _STANDARD_CONTEXT)
 
     def save(self, path):
         """Save the fitted scaler to ``path`` as an ``.npz`` file.
@@ -1049,28 +925,7 @@ class StandardScaler(_ScalerProtocol):
         RuntimeError
             If the scaler is not fitted.
         """
-        if not self.__sklearn_is_fitted__():
-            raise RuntimeError("this estimator is not fitted yet")
-        arrays = {
-            "format": _SCALER_FORMAT,
-            "estimator": type(self).__name__,
-            "numeric_mode": self.numeric_mode_,
-            "meta": Array.from_list(
-                [int(self.n_features_in_),
-                 int(self.n_samples_seen_) if type(self.n_samples_seen_) is int else -1,
-                 int(self.with_mean_), int(self.with_std_)], "<i8"),
-        }
-        if type(self.n_samples_seen_) is not int:
-            # A per-feature count (NaN) or a weight sum: saved as its own
-            # vector, float32 weights or int64 counts, one entry per feature.
-            seen = self.n_samples_seen_
-            arrays["n_samples_seen"] = (seen if isinstance(seen, Array)
-                                        else Array.from_list([float(seen)], "<f4"))
-        for name in ("mean", "var", "scale"):  # glue: saves three statistic names
-            value = getattr(self, name + "_")
-            if value is not None:
-                arrays[name] = value
-        return _serialize.write_npz(path, arrays)
+        return _STANDARD_CALL(self, "save", (path,), _STANDARD_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -1094,30 +949,7 @@ class StandardScaler(_ScalerProtocol):
         ValueError
             If the file is not a StandardScaler or its arrays are inconsistent.
         """
-        arrays = _serialize.read_npz(path, _SCALER_FORMAT)
-        mode, meta = _scaler_header(arrays, path, cls, 4)
-        with_mean, with_std = bool(int(meta[2])), bool(int(meta[3]))
-        obj = cls(with_mean=with_mean, with_std=with_std)
-        d = int(meta[0])
-        kept = {"mean": with_mean or with_std, "var": with_std, "scale": with_std}
-        for name, present in kept.items():  # glue: checks three saved member names
-            if present != (name in arrays):
-                raise ValueError(f"mojolearn: {path!r} {name} does not match with_mean and with_std")
-            setattr(obj, name + "_", _saved_statistic(arrays, name, d, path) if present else None)
-        obj.n_features_in_ = d
-        if int(meta[1]) >= 0:
-            obj.n_samples_seen_ = int(meta[1])
-        else:
-            seen = arrays.get("n_samples_seen")
-            if seen is None or seen.dtype not in ("<f4", "<i8") or seen.ndim != 1 or seen.size not in (1, d):
-                raise ValueError(f"mojolearn: {path!r} n_samples_seen does not match n_features_in_")
-            # One entry: a weight sum shared by every feature (a vector is
-            # only kept when the features' counts differ, so never at d == 1).
-            obj.n_samples_seen_ = float(seen.tolist()[0]) if seen.size == 1 else seen
-        obj.numeric_mode_ = mode
-        obj.with_mean_ = with_mean
-        obj.with_std_ = with_std
-        return obj
+        return _STANDARD_CALL(cls, "load", (path,), _STANDARD_CONTEXT)
 
 
 # scikit-learn keeps more estimators in this module than it defines; they resolve from
@@ -1128,5 +960,5 @@ __getattr__ = _lazy_exports("preprocessing")
 __all__ += _SKLEARN_LAYOUT["preprocessing"]
 
 
-from ._native_scaler_bridge import connect as _connect_standard_scaler
-_STANDARD_FIT, _STANDARD_CONTEXT = _connect_standard_scaler()
+from ._native_scaler_bridge import connect as _connect_standard_scaler, register_subclass as _register_standard_scaler
+_STANDARD_FIT, _STANDARD_CALL, _STANDARD_CONTEXT = _connect_standard_scaler(StandardScaler)

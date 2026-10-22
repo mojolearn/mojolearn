@@ -60,3 +60,67 @@ def scaler_check_missing(arena: F32P, st: Int, stats_base: Int, sc: Int, d: Int)
 def scaler_counts(source: F32P, dest: MutPointer[Int64, MutUntrackedOrigin], d: Int):
     for j in range(d):
         dest[j] = Int64(source[j])
+
+
+def scaler_refuse_infinite_columns(arena: F32P, stats_base: Int, d: Int) raises:
+    for j in range(d):
+        if scaler_inf(arena[stats_base + 3*d+j]) or scaler_inf(arena[stats_base + 4*d+j]):
+            raise Error("Scaler input contains infinity; only NaN may be missing")
+
+
+def scaler_feature_indices(dest: F32P, d: Int):
+    for j in range(d):
+        dest[j] = Float32(j)
+
+
+def scaler_counts_f32(source_addr: Int, source_kind: Int, scalar: Float64, dest: F32P, d: Int):
+    # kind 0 is a native scalar; 1 an int64 vector; 2 a float32 vector.
+    var integers = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=source_addr)
+    var floats = F32P(unsafe_from_address=source_addr)
+    for j in range(d):
+        dest[j] = Float32(scalar) if source_kind == 0 else (Float32(integers[j]) if source_kind == 1 else floats[j])
+
+
+def scaler_counts_i64(source_addr: Int, vector: Bool, scalar: Int64, dest: MutPointer[Int64, MutUntrackedOrigin], d: Int):
+    var source = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=source_addr)
+    for j in range(d):
+        dest[j] = source[j] if vector else scalar
+
+
+def scaler_equal_f32(values: F32P, d: Int) -> Bool:
+    for j in range(1, d):
+        if values[j] != values[0]:
+            return False
+    return True
+
+
+def scaler_equal_i64(values: MutPointer[Int64, MutUntrackedOrigin], d: Int) -> Bool:
+    for j in range(1, d):
+        if values[j] != values[0]:
+            return False
+    return True
+
+
+def scaler_counts_f64(source_addr: Int, source_kind: Int, scalar: Float64, dest: MutPointer[Float64,MutUntrackedOrigin], d: Int):
+    var integers = MutPointer[Int64,MutUntrackedOrigin](unsafe_from_address=source_addr)
+    var floats = F32P(unsafe_from_address=source_addr)
+    for j in range(d):
+        dest[j] = scalar if source_kind == 0 else (Float64(integers[j]) if source_kind == 1 else Float64(floats[j]))
+
+
+def scaler_merge_count_only(a: MutPointer[Float64,MutUntrackedOrigin], b: MutPointer[Float64,MutUntrackedOrigin], d: Int) -> Bool:
+    var same = True
+    for j in range(d):
+        a[j] += b[j]
+        same = same and a[j] == a[0]
+    return same
+
+
+def scaler_narrow_counts(source: MutPointer[Float64,MutUntrackedOrigin], dest_addr: Int, weighted: Bool, d: Int):
+    var floats = F32P(unsafe_from_address=dest_addr)
+    var integers = MutPointer[Int64,MutUntrackedOrigin](unsafe_from_address=dest_addr)
+    for j in range(d):
+        if weighted:
+            floats[j] = Float32(source[j])
+        else:
+            integers[j] = Int64(source[j])

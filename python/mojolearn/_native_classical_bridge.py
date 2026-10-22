@@ -123,9 +123,8 @@ def _numpy_free_context():
     }
 
 
-def connect(ridge_class, linear_class=None):
+def _state_context():
     # glue: connect compiled entries and exact native buffer classes once
-    global _ERROR_ENTRY, _ERROR_CONTEXT
     from types import BuiltinFunctionType, MethodDescriptorType, WrapperDescriptorType, ModuleType, MemberDescriptorType
     import _codecs
     import io
@@ -203,6 +202,18 @@ def connect(ridge_class, linear_class=None):
                    archive_zstd=zstd_class,
                    archive_cp437=tuple(bytes(range(256)).decode("cp437")),
                    archive_npy_magic=b"\x93NUMPY", archive_zip_end=b"PK\x05\x06")
+    return context
+
+
+def connect(ridge_class, linear_class=None):
+    # glue: connect compiled entries and exact native buffer classes once
+    global _ERROR_ENTRY, _ERROR_CONTEXT
+    from types import BuiltinFunctionType
+    import os
+    import sys
+    from . import _backend
+    from .tokenizer import _binding
+    context = _state_context()
     connected = {}
     metric_bindings = {}
     selected = _backend.default_mode()
