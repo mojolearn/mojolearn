@@ -53,3 +53,19 @@ def test_native_object_output_preserves_signaling_status(resident, dtype, mode):
     else:
         assert (type(audit.exception), str(audit.exception)) == (type(failure), str(failure))
     assert [(type(w.message), str(w.message)) for w in new] == [(type(w.message), str(w.message)) for w in old]
+
+
+@pytest.mark.parametrize("name", ["Float32DType", "UInt8DType", "StrDType", "BytesDType", "VoidDType", "DateTime64DType", "TimeDelta64DType"])
+def test_native_legacy_descriptor_classes_preserve_versioned_cast_contract(resident, name):
+    # These classes exist on NumPy1.26 too. Keep this qualification outside
+    # the StringDType module, whose module-level skip requires NumPy2.
+    values, tensor = resident
+    dtype = getattr(np.dtypes, name)
+    with warnings.catch_warnings(record=True) as old:
+        warnings.simplefilter("always")
+        expected = values.astype(dtype, copy=False)
+    with warnings.catch_warnings(record=True) as new:
+        warnings.simplefilter("always")
+        actual = audit_native_call(_OPT_NATIVE, "seqdev_array", tensor, (dtype, None), None, _OPT_CONTEXT).assert_native()
+    assert_values(actual, expected)
+    assert [(type(w.message), str(w.message)) for w in new] == [(type(w.message), str(w.message)) for w in old]
