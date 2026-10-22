@@ -24,6 +24,7 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 PUBLIC_TESTS = {
+    "test_cache_upload_native.py": "Public DeviceCache.id_of native hit/miss preparation, upload publication, retained owners and failure cleanup",
     "test_cache_key_native.py": "Public DeviceCache.get and resident.stats native tuple-key admission, deep nesting and callback refusals",
     "test_archive_unicode_native.py": "Public archive strict Unicode errors, loaded state, partial save bytes and connected codec identity refusals",
     "test_classical_archive_reader_native.py": "Public linear archive loading, compressed state, native helper identities, file errors and input/output ownership",
@@ -98,6 +99,28 @@ TEST_DEPENDENCIES = {
 }
 CPU_RESIDENT_SKIP = "the CPU binding has no resident tensor pool"
 CPU_NOT_APPLICABLE = {
+    "test_cache_upload_native.py": {
+        'test_cache_id_of_real_upload_hit_alias_and_owned_publication[x_prep]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
+        'test_cache_id_of_real_upload_hit_alias_and_owned_publication[x_metrics]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
+        'test_cache_id_of_real_native_upload_failure_preserves_empty_state[null-x_prep]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
+        'test_cache_id_of_real_native_upload_failure_preserves_empty_state[null-x_metrics]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
+        'test_cache_id_of_real_native_upload_failure_preserves_empty_state[address_overflow-x_prep]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
+        'test_cache_id_of_real_native_upload_failure_preserves_empty_state[address_overflow-x_metrics]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
+        'test_cache_id_of_real_native_upload_failure_preserves_empty_state[size_overflow-x_prep]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
+        'test_cache_id_of_real_native_upload_failure_preserves_empty_state[size_overflow-x_metrics]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
+        'test_cache_id_of_real_upload_uses_connected_store_entries[x_prep]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
+        'test_cache_id_of_real_upload_uses_connected_store_entries[x_metrics]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
+        'test_cache_id_of_real_concurrent_publication_cleanup[replace_dictionary-x_prep]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
+        'test_cache_id_of_real_concurrent_publication_cleanup[replace_dictionary-x_metrics]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
+        'test_cache_id_of_real_concurrent_publication_cleanup[publish_competitor-x_prep]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
+        'test_cache_id_of_real_concurrent_publication_cleanup[publish_competitor-x_metrics]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
+        'test_cache_id_of_real_concurrent_publication_cleanup[change_route-x_prep]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
+        'test_cache_id_of_real_concurrent_publication_cleanup[change_route-x_metrics]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
+        'test_cache_id_of_real_concurrent_publication_cleanup[delete_counter_slot-x_prep]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
+        'test_cache_id_of_real_concurrent_publication_cleanup[delete_counter_slot-x_metrics]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
+        'test_cache_id_of_real_concurrent_publication_cleanup[foreign_dictionary-x_prep]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
+        'test_cache_id_of_real_concurrent_publication_cleanup[foreign_dictionary-x_metrics]': 'real word-store upload requires a GPU package; explicitly excluded from CPU selection',
+    },
     "test_training_scalar_buffer_native.py": {
         "test_device_loss_scalar_conversion_and_failure_remain_native[label_smoothing-g-0.125-swapped]": "resident cross-entropy scalar options require the GPU training pool",
         "test_device_loss_scalar_conversion_and_failure_remain_native[ignore_index-c8-(-100+1j)-scalar]": "resident cross-entropy scalar options require the GPU training pool",
@@ -258,6 +281,10 @@ def test_applicability(selected, vendor):
         if name == "test_cache_key_native.py":
             scope.update(execution_route="native cache metadata only; no device slots",
                          coverage_limit="Selected DeviceCache.get and resident.stats tuple-key admission only; constructor, upload, release and context lifecycle remain separate")
+        if name == "test_cache_upload_native.py":
+            scope.update(execution_route="native DeviceCache.id_of metadata on CPU and GPU; real x_prep/x_metrics word-store uploads on GPU",
+                         operation_mode="identical (explicit fixture configuration)",
+                         coverage_limit="Public id_of hit/miss preparation, publication and cleanup only; constructor, release, close, resident contexts and compound cleanup failure injection remain separate qualification work")
         if name == "test_cache_get_native.py":
             scope.update(execution_route="native host metadata on CPU and GPU packages; no device slots acquired",
                          coverage_limit="Only DeviceCache.get; construction/upload/release and resident context lifecycle remain separate migration work")

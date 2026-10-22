@@ -65,6 +65,37 @@ def connect(native_entry=len):
 
 
 class NativeWeakrefConnectionTests(unittest.TestCase):
+    def test_cache_upload_refuses_preimport_exception_constructor_replacement(self):
+        touched = []
+        def function(*args):
+            touched.append("function")
+        class Foreign(RuntimeError):
+            def __new__(cls, *args):
+                touched.append("new")
+                return super().__new__(cls, *args)
+        Foreign.__name__ = "RuntimeError"
+        Foreign.__module__ = "builtins"
+        class Meta(type):
+            def __getattribute__(cls, name):
+                touched.append(name)
+                return super().__getattribute__(name)
+        class ForeignMeta(RuntimeError, metaclass=Meta):
+            pass
+        # Each replacement is installed before the connector module source
+        # executes; this checks actual import setup, not a mocked validator.
+        for replacement in (function, Foreign, ForeignMeta, ValueError, int):
+            with self.subTest(replacement_type=type(replacement)):
+                failure = None
+                with patch("builtins.RuntimeError", replacement):
+                    try:
+                        connect()
+                    except TypeError as error:
+                        failure = str(error)
+                # unittest's traceback clearer itself catches RuntimeError;
+                # run that observer only after restoring the poisoned name.
+                self.assertEqual(failure, "DeviceCache requires the immutable native RuntimeError builtin")
+        self.assertEqual(touched, [])
+
     def test_cpu_cache_upload_retains_empty_store_registry_and_native_setter(self):
         context = connect()
         self.assertEqual(context['cache_store_routes'], ())

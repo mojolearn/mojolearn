@@ -296,6 +296,35 @@ class InstalledNativeAudit(unittest.TestCase):
         with self.assertRaises(ValueError):
             q.selected_files(test_nodes=[node, node])
 
+    def test_public_cache_upload_scope_preserves_pending_lifecycle(self):
+        name = "test_cache_upload_native.py"
+        self.assertIn(name, q.PUBLIC_TESTS)
+        self.assertEqual(q.test_dependencies([name]), ["numpy", "pytest"])
+        for vendor in ("cpu", "metal", "cuda", "hip"):
+            scope = q.test_applicability([name], vendor)[name]
+            self.assertIn("DeviceCache.id_of", scope["execution_route"])
+            self.assertIn("x_prep/x_metrics", scope["execution_route"])
+            self.assertIn("constructor, release, close", scope["coverage_limit"])
+            self.assertIn("compound cleanup failure injection", scope["coverage_limit"])
+            self.assertEqual(len(scope["cpu_not_applicable_cases"]), 20 if vendor == "cpu" else 0)
+
+    def test_public_cache_upload_cpu_exclusions_are_exact_real_store_cases(self):
+        name = "test_cache_upload_native.py"
+        cases = set()
+        for prefix in ("x_prep", "x_metrics"):
+            cases.add("test_cache_id_of_real_upload_hit_alias_and_owned_publication[" + prefix + "]")
+            cases.add("test_cache_id_of_real_upload_uses_connected_store_entries[" + prefix + "]")
+            for failure in ("null", "address_overflow", "size_overflow"):
+                cases.add("test_cache_id_of_real_native_upload_failure_preserves_empty_state[" + failure + "-" + prefix + "]")
+            for change in ("replace_dictionary", "publish_competitor", "change_route", "delete_counter_slot", "foreign_dictionary"):
+                cases.add("test_cache_id_of_real_concurrent_publication_cleanup[" + change + "-" + prefix + "]")
+        self.assertEqual(set(q.CPU_NOT_APPLICABLE[name]), cases)
+        self.assertEqual(set(q.CPU_NOT_APPLICABLE[name].values()),
+                         {"real word-store upload requires a GPU package; explicitly excluded from CPU selection"})
+        host = "test_cache_id_of_preserves_hit_owners_and_native_metadata[tuple-array]"
+        self.assertNotIn(host, q.CPU_NOT_APPLICABLE[name])
+        self.assertEqual(q.selected_files(test_nodes=[name + "::" + host]), [name])
+
     def test_public_training_scalar_buffer_scope_is_version_and_operation_bounded(self):
         name = "test_training_scalar_buffer_native.py"
         self.assertIn(name, q.PUBLIC_TESTS)
