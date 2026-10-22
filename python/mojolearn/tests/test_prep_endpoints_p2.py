@@ -363,3 +363,18 @@ def test_mutual_info_refuses_neighbour_count():
         ml.mutual_info_classif(X, y, n_neighbors=0)
     with pytest.raises(NotImplementedError):
         ml.mutual_info_regression(X, X[:, 0].copy(), n_neighbors=40)
+
+
+def test_encoder_and_imputer_fit_transform_equal_fit_then_transform():
+    y = np.array([7, 3, 7, 5, 3])
+    np.testing.assert_array_equal(np.asarray(ml.LabelEncoder().fit_transform(y)), [2, 0, 2, 1, 0])
+    C = _cats()
+    for make in (ml.OrdinalEncoder, lambda: ml.OneHotEncoder(sparse_output=False)):
+        a = np.asarray(make().fit_transform(C))
+        b = np.asarray(make().fit(C).transform(C))
+        np.testing.assert_array_equal(a, b)
+    X = _pos()
+    X[::4, 1] = np.nan
+    a = np.asarray(ml.SimpleImputer().fit_transform(X))
+    np.testing.assert_array_equal(a, np.asarray(ml.SimpleImputer().fit(X).transform(X)))
+    assert not np.isnan(a).any()
