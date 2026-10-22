@@ -902,6 +902,8 @@ class MaxAbsScaler(_PrepBase):
     its non-NaN entries, so the result lies in ``[-1, 1]``. NaN values are kept as NaN by transform. A
     column of zeros is scaled by one. Input and output are float32.
 
+    In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
+
     Parameters
     ----------
     copy : bool, default True
@@ -930,52 +932,41 @@ class MaxAbsScaler(_PrepBase):
     _sklearn_input_tags = {"allow_nan": True}
     _parameters = ("copy",)
 
+    _mojolearn_native_public = True
+
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        _register_maxabs_scaler(cls, _MAXABS_CONTEXT)
+
     def __init__(self, *, copy=True):
-        self.copy = copy
+        return _MAXABS_CALL(self, "init", (copy,), _MAXABS_CONTEXT)
+
+    def get_params(self, deep=True):
+        """Return this scaler's constructor parameters as a dictionary."""
+        return _MAXABS_CALL(self, "get_params", (deep,), _MAXABS_CONTEXT)
+
+    def set_params(self, **params):
+        """Set constructor parameters and return this scaler."""
+        return _MAXABS_CALL(self, "set_params", (params,), _MAXABS_CONTEXT)
+
+    def __sklearn_is_fitted__(self):
+        return _MAXABS_CALL(self, "is_fitted", (), _MAXABS_CONTEXT)
 
     def fit(self, X, y=None):
-        arr = _x2d(X)
-        n, d = arr.shape
-        mode = _mode()
-        # lane/apple-fast-prep3: `x_prep_maxabs_fit_direct` exists in the FAST
-        # Apple build only (PREP3_MAXABS, default since M3 A/B
-        # prep3-maxabs-istella-x-m3 121.7 -> 104.2 ms; -D
-        # MOJOLEARN_PREP3_MAXABS_OFF reverts; x_prep/fastmaxabs.mojo):
-        # X up once from its own buffer, the same max_abs_ and scale_ words
-        direct = _optional_prep_entry(_prep_binding(mode), "x_prep_maxabs_fit_direct")
-        if direct is not None:
-            out = Array((2 * d,), "<f4")
-            direct(addr_ro(arr, name="X"), out._addr, [n, d])
-            self.max_abs_ = Array._from_flat(out.tolist()[:d], (d,), "<f4")
-            self.scale_ = Array._from_flat(out.tolist()[d:], (d,), "<f4")
-            self.numeric_mode_, self.n_features_in_, self.n_samples_seen_ = mode, d, n
-            return self
-        pr = _Prog()
-        xo = pr.put(arr)
-        scale = pr.alloc(d)
-        if _blocked():
-            # x_prep/blocked.mojo: one unit per (row block, column), then the
-            # largest partial (a maximum is exact in any order: the same words)
-            nb = (n + _XB - 1) // _XB
-            part, ma = pr.work(5 * nb * d), pr.alloc(d)
-            pr.stage("colb_part", nb * d, xo, n, d, part, nb)
-            pr.stage("maxabs_fold", d, part, nb, d, ma, scale)
-        else:
-            st = pr.alloc(6 * d)
-            ma = st + 5 * d
-            pr.stage("col_stats", d, xo, n, d, st)
-            pr.stage("scale_params", d, ma, 1, d, _NONE, scale, 1)
-        pr.run(mode)
-        self.max_abs_ = pr.get(ma, d)
-        self.scale_ = pr.get(scale, d)
-        self.numeric_mode_, self.n_features_in_, self.n_samples_seen_ = mode, d, n
-        return self
+        """Learn per-feature absolute maxima from two-dimensional X; return self.
+
+        y is accepted for pipeline compatibility. NaNs in X are ignored when
+        learning each feature's maximum.
+        """
+        return _MAXABS_CALL(self, "fit", (X, y), _MAXABS_CONTEXT)
+
+    def fit_transform(self, X, y=None, **fit_params):
+        """Fit on X and return a new float32 array of scaled features."""
+        return _MAXABS_CALL(self, "fit_transform", (X, y, fit_params), _MAXABS_CONTEXT)
 
     def transform(self, X):
-        self._check_fitted()
-        arr = _x2d(X)
-        self._check_width(arr)
-        return _affine(self.numeric_mode_, arr, None, self.scale_)
+        """Return X divided by the learned scales, preserving NaN entries."""
+        return _MAXABS_CALL(self, "transform", (X,), _MAXABS_CONTEXT)
 
 
 # ---------------------------------------------------------------- encoders
@@ -7598,3 +7589,9 @@ def _fit_categories_with_codes(mode, arr):
     sizes = [int(v) for v in pr.values(counts, d)]  # glue: per-feature output extents
     categories = [pr.get(dictionary+c*n, sizes[c]) for c in range(d)]  # small-loop(d: per-feature category dictionaries): wraps fitted metadata per feature
     return categories, pr.get(inverse, (n, d))
+
+
+# Import-time metadata connection; public operations hand off once to Mojo.
+from ._native_maxabs_bridge import connect as _connect_maxabs_scaler
+from ._native_scaler_bridge import register_subclass as _register_maxabs_scaler
+_MAXABS_CALL, _MAXABS_CONTEXT = _connect_maxabs_scaler(MaxAbsScaler)
