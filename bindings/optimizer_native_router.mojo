@@ -5,11 +5,12 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.optimizer_public_words import optimizer_python_error
 from bindings.optimizer_admission import opt_guards, opt_owner, opt_value, opt_scalar, opt_schedule, opt_exact
-from bindings.optimizer_public_door import door_ready, refuse_kwargs, new_array, TensorView, tensor_view
+from bindings.optimizer_public_door import door_ready, refuse_kwargs, new_array, TensorView, tensor_view, resident_entry
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_cast_kind
 from core.optimizer_state_impl import optimizer_state_cast
 from core.classical_pandas_impl import pd_raw_at, _pd_double
+from bindings.sequence_device_native import sequence_device_operation
 from bindings.sequence_optimizer_native import sequence_optimizer_operation
 from bindings.optimizer_schedule_native import schedule_operation
 from bindings.optimizer_device_native import device_operation, device_new, device_entries
@@ -126,12 +127,86 @@ def optimizer_state_array(source: PythonObject, integer: Bool, context: PythonOb
     return result
 
 
+
+def optimizer_params(owner: PythonObject, context: PythonObject) raises -> PythonObject:
+    var fields = py_fields(owner)
+    var kind = Int(py=fields["_KIND"])
+    var names = Python.list("accumulation_steps", "lr", "lr_schedule", "maximize", "numeric_mode", "params", "resident", "weight_decay")
+    var b = Python.import_module("builtins")
+    _ = py_call(names.extend, Python.tuple("momentum", "dampening", "nesterov") if kind == 0 else Python.tuple("betas", "eps"))
+    names = py_call(b.sorted, names)
+    var result = Python.dict()
+    for i in range(len(names)):  # driver-loop: over fixed public constructor parameter names
+        var name = names[i]
+        py_setitem(result, name, fields["_resident_wanted"] if String(name) == "resident" else fields[name])
+    return result
+
+
+def optimizer_set_params(owner: PythonObject, updates: PythonObject, context: PythonObject) raises -> PythonObject:
+    var b = Python.import_module("builtins")
+    if py_type(updates) is not b.dict:
+        raise Error("TypeError: optimizer parameter updates require native keyword arguments")
+    if len(updates) == 0:
+        return owner
+    var config = optimizer_params(owner, context)
+    var keys = py_call(b.list, updates)
+    for i in range(len(keys)):  # driver-loop: over public parameter updates
+        var key = keys[i]
+        if py_type(key) is not b.str:
+            raise Error("TypeError: optimizer parameter names must be native strings")
+        if String(key) == "lr_schedule":
+            opt_schedule(updates[key], context)
+        else:
+            opt_value(updates[key], context)
+        var pieces = py_call(key.partition, "__")
+        if not Bool(py=py_call(config.__contains__, pieces[0])):
+            raise Error("ValueError: invalid optimizer parameter '" + String(pieces[0]) + "'")
+        if len(pieces[1]) != 0:
+            raise Error("TypeError: optimizer nested Python set_params hooks cannot execute; pass a complete native schedule or buffer configuration")
+        py_setitem(config, key, updates[key])
+    var fields = py_fields(owner)
+    var field_names = py_call(b.list, fields)
+    for i in range(len(field_names)):  # driver-loop: over retained owner fields before replacement
+        var name = String(field_names[i])
+        if name == "lr_schedule":
+            opt_schedule(fields[field_names[i]], context)
+        elif name == "_res_binding":
+            if fields[field_names[i]] is not None and py_type(fields[field_names[i]]) is not context["module_type"]:
+                raise Error("TypeError: optimizer resident state requires a native binding owner")
+        else:
+            opt_value(fields[field_names[i]], context)
+    var saved = py_call(b.dict, fields)
+    var kind = Int(py=fields["_KIND"])
+    var args = Python.tuple(config["params"], kind, config["lr"],
+        Python.tuple(0.9, 0.999) if kind == 0 else config["betas"],
+        PythonObject(1e-8) if kind == 0 else config["eps"], config["weight_decay"],
+        config["momentum"] if kind == 0 else PythonObject(0.0),
+        config["dampening"] if kind == 0 else PythonObject(0.0),
+        config["nesterov"] if kind == 0 else PythonObject(False),
+        config["lr_schedule"], config["accumulation_steps"], config["maximize"], config["resident"], Python.dict())
+    # Rebuild on the existing exact owner, retaining the old state dictionary
+    # until all validation succeeds. A temporary Python optimizer object would
+    # invoke its Python __del__ on decref inside this native operation.
+    _ = py_call(fields.clear)
+    try:
+        _ = optimizer_construct(owner, args, config["numeric_mode"], context)
+        if py_get(saved, "_res") is not None and py_get(saved, "_res_binding") is not None:
+            _ = py_call(resident_entry(saved["_res_binding"], "optimizer_resident_close"), saved["_res"])
+    except error:
+        _ = py_call(fields.clear)
+        _ = py_call(fields.update, saved)
+        raise error^
+    return owner
+
+
 def optimizer_native(operation: String, owner: PythonObject, values: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
     opt_guards(context)
     door_ready()
     var b = Python.import_module("builtins")
     if py_type(values) is not b.tuple:
         raise Error("TypeError: optimizer requires native argument tuples")
+    if operation.startswith("seqdev_"):
+        return sequence_device_operation(operation, owner, values, mode, context)
     if operation.startswith("seq_"):
         return sequence_optimizer_operation(operation, owner, values, mode, context)
     if operation.startswith("device_"):
@@ -148,6 +223,11 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
     if owner is not None:
         opt_owner(owner, context)
         selected_mode = py_get(py_fields(owner), "numeric_mode")
+    if operation == "get_params":
+        opt_scalar(values[0], context)
+        return optimizer_params(owner, context)
+    if operation == "set_params":
+        return optimizer_set_params(owner, values[0], context)
     var entries = optimizer_entries(selected_mode, context)
     if operation == "binding":
         return entries["module"]

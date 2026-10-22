@@ -87,17 +87,27 @@ def connect_sequence(training, sequence):
 
 
 def connect_sequence_optimizers(training, optim, device):
-    # glue: connect sequence optimizer ABI symbols and exact owner layouts at import
-    from types import BuiltinFunctionType
-    from . import _backend
+    # glue: connect exact sequence optimizer owner layouts at import
     context = training._OPT_CONTEXT
     classes = (optim.RMSprop, optim.Adagrad, optim.Lion, optim.Adamax,
                optim.NAdam, optim.Adafactor, optim.LAMB)
     context["sequence_owners"] = classes
+    guarded = (optim._ResidentState, optim._SeqOptimizer) + classes
+    names = ("__dict__", "__getattribute__", "__getattr__", "__setattr__")
+    context["guards"] += tuple((cls, cls.__mro__, vars(cls), tuple((name, vars(cls).get(name)) for name in names))  # glue: connect fixed native descriptor identities at import
+                                for cls in guarded)  # glue: snapshot sequence native owner layouts
+    return training._OPT_NATIVE, context
+
+
+def connect_sequence_device(training, device):
+    # glue: connect sequence buffer/optimizer ABI symbols once at module import
+    from types import BuiltinFunctionType
+    from . import _backend
+    context = training._OPT_CONTEXT
     context["sequence_device_class"] = device.SequenceDeviceTensor
     slots = tuple(device.SequenceDeviceTensor.__slots__)
     names = slots + ("__dict__", "__getattribute__", "__getattr__", "__setattr__")
-    guarded = (optim._ResidentState, optim._SeqOptimizer, device.SequenceDeviceTensor) + classes
+    guarded = (device.SequenceDeviceTensor,)
     context["guards"] += tuple((cls, cls.__mro__, vars(cls), tuple((name, vars(cls).get(name)) for name in names))  # glue: connect fixed native descriptor identities at import
                                 for cls in guarded)  # glue: snapshot sequence native owner layouts
     context["sequence_device_getters"] = {name: vars(device.SequenceDeviceTensor)[name].__get__ for name in slots}  # glue: retain native slot getters at import

@@ -255,3 +255,22 @@ def test_native_beta_buffer_and_ordered_checkpoint_preserve_supported_interfaces
     assert optimizer.betas == (float(beta[0]), float(beta[1]))
     state = audit_native_call(optimizer.state_dict).assert_native()
     audit_native_call(optimizer.load_state_dict, OrderedDict(state)).assert_native()
+
+
+@pytest.mark.parametrize("cls", [T.SGD, T.Adam, T.AdamW])
+def test_constructor_parameter_inspection_and_reset_are_native(cls):
+    params = np.array([.5, -.25], dtype="f4")
+    opt = cls(params, numeric_mode="identical", resident=False)
+    config = audit_native_call(opt.get_params).assert_native()
+    assert config["resident"] is False and config["params"][0] is params
+    clone = audit_native_call(cls, **config).assert_native()
+    assert audit_native_call(clone.get_params, deep=False).assert_native() == config
+    audit_native_call(opt.step, np.ones_like(params)).assert_native()
+    assert opt.t == 1
+    assert audit_native_call(opt.set_params, lr=.002).assert_native() is opt
+    assert opt.lr == .002 and opt.t == 0
+    prior = audit_native_call(opt.state_dict).assert_native()
+    refused_without_python(opt.set_params, accumulation_steps=3)
+    refused_without_python(opt.set_params, unknown_option=True)
+    assert opt.t == prior["t"] and opt.lr == .002
+    assert audit_native_call(opt.set_params).assert_native() is opt
