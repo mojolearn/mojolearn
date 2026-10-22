@@ -1734,13 +1734,19 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
                                      `_samba_checkpoint.save` by name (an
                                      attribute of a call's result is a method,
                                      `_call_bound_locals`); `host_model` reads
-                                     forest, GBDT and classical files only"""
+                                     forest, GBDT and classical files only
+      neural_inference.py  44 -> 49  five coverage lanes added in 63022df0c2:
+                                     mamba2-decode-session, mamba3-decode-session,
+                                     training-chunked-lm-head, training-mlp-sessions,
+                                     samba-optimizer-state. Each reaches the public
+                                     neural door; the four previously removed name
+                                     collisions remain excluded."""
     rev = lane_select.reverse_map()
     for rel, want in (("cluster/host/kmeans_oracle.mojo", 84),
                       ("core/gbdt_host_predict.mojo", 55),
                       ("core/forest_host_predict.mojo", 92),
                       ("core/forest_inference.mojo", 52),
-                      ("python/mojolearn/neural_inference.py", 44)):
+                      ("python/mojolearn/neural_inference.py", 49)):
         got = len(rev.get(rel, set()))
         assert got == want, f"{rel} answers {got} lanes, not {want}"
     lanes = len(lane_select.all_lanes())
@@ -1868,11 +1874,12 @@ def test_the_public_door_a_name_is_bound_from_is_in_the_map():
         wide = sorted(lanes - naming)
         assert not wide, (f"{rel} answers {len(lanes)} lanes and {wide[:5]} name nothing it "
                           f"binds ({sorted(bound)}); the door rule has gone wide")
-    assert len(rev.get("python/mojolearn/neural_inference.py", ())) == 44, \
-        ("the re-export rule moved neural_inference.py off its measured 44 lanes (40 + hf-checkpoint,"
+    assert len(rev.get("python/mojolearn/neural_inference.py", ())) == 49, \
+        ("the re-export rule moved neural_inference.py off its measured 49 lanes (40 + hf-checkpoint,"
          " 2026-09-23; minus gbdt-tensor-ctr-tables, which fits on the CPU since 2026-09-28;"
          " plus optim-maximize, 2026-09-28; plus four new lanes and minus gbdt-categorical-ctr-tables,"
-         " 2026-10-21, see test_the_wider_mojo_walk_did_not_widen_the_narrow_answers)")
+         " 2026-10-21; plus five coverage lanes in 63022df0c2, see "
+         "test_the_wider_mojo_walk_did_not_widen_the_narrow_answers)")
 
     # THE FAILING SIDE: with no public rebindings the lane each door is
     # checked for loses it. Held per LANE and not per file since 2026-09-21:
