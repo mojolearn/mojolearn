@@ -49,9 +49,9 @@ def sequence_dtype_spec(value: PythonObject, classes: PythonObject, context: Pyt
         for i in range(len(keys)):  # driver-loop: validate dtype alias keys before keyed lookup
             if py_type(keys[i]) is not b.str:
                 raise Error("TypeError: dtype aliases require native string keys")
-        var alias = py_get(aliases, text)
-        if alias is not None:
-            sequence_dtype_spec(alias, classes, context, depth + 1)
+        var mapped = py_get(aliases, text)
+        if mapped is not None:
+            sequence_dtype_spec(mapped, classes, context, depth + 1)
         elif py_call(context["sequence_dtype_fullmatch"], context["sequence_dtype_pattern"], text) is None:
             raise Error("TypeError: dtype text requires an explicit native dtype schema")
         return
@@ -144,7 +144,7 @@ def sequence_array_cast(source: PythonObject, requested: PythonObject, context: 
         dtype = py_call(dtype_constructor, String(dtype.kind) + "32")
     var leaves = Python.list()
     sequence_dtype_leaves(dtype, 0, classes, leaves)
-    if Bool(py=py_call(dtype.__eq__, source.dtype)):
+    if dtype == source.dtype:
         # astype(copy=False) returns the downloaded view for an equal dtype,
         # preserving its raw NaN words, backing owner and writeability flags.
         return source
