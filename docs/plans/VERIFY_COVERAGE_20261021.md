@@ -188,6 +188,24 @@ Fixed during the run (no lane weakened; every arm whose patch or lanes gained so
 - A real host-column bug: `StratifiedGroupKFold.split` refused on a CPU-only install because the GPU base binding's `bincount2_i32` and `strat_group_plan_i32` had no host twin. The core host binding has both now; x-metrics-splitters on the host column is IDENTICAL to the reference on 9 of 9 fixtures, and `coverage-core-hotpath_impl` and `coverage-core-hotpath_impl_rows` were rerun with the fix in the clean set.
 - `coverage-tokenizer-ranks` also lists `build_tokenizer_fast`: that is the FAST-tier binding, which the verifier refuses, so it was not built; the arm is caught through the host tokenizer.
 
+### Native-owner arms (2026-10-22)
+
+The seven arms declared for the native owners (schedule series, optimizer state set/load/zero, optimizer IO query and download, sequence tensor release) run one at a time on the Mac on 551dee1ce. Clean set: the merged Metal (identical) and host build of 42a554521, whose product sources equal 551dee1ce's, copied byte-for-byte into a scratch worktree. Per arm: the clean records, the patch applied, only the arm's bindings rebuilt (host bindings into a separate directory), the faulted records, the patch reverted and the exact clean bytes put back, the restored records, then `coverage_sabotage.py check` per column. Columns are host (`MOJOLEARN_VENDOR=cpu`) and Metal, except the two GPU-only lanes, which have no CPU column. Every arm is CAUGHT on every column it runs on, every faulted cell MOVED (no refusals), and every restored record equals its clean record. The lanes have no `table.json` reference yet, so each arm is judged against its own clean run.
+
+| arm | builds (rc, seconds) | verdict | lanes (column: result) | sabotaged cells against table.json | patch reverted | seconds |
+|---|---|---|---|---|---|---|
+| `coverage-native-schedule-series` | build rc 0, 47s; build_core_host rc 0, 17s | CAUGHT | native-schedule-series (host MOVED Metal MOVED) | 2 OWED (no reference) | STABLE, exact clean source/bindings/results restored | 137 |
+| `coverage-native-optimizer-state-set` | build_training rc 0, 250s; build_training_host rc 0, 29s | CAUGHT | optim-owner-lifecycle (host MOVED Metal MOVED) | 2 OWED (no reference) | STABLE, exact clean source/bindings/results restored | 335 |
+| `coverage-native-optimizer-load` | build_training rc 0, 336s; build_training_host rc 0, 58s | CAUGHT | optim-owner-lifecycle (host MOVED Metal MOVED) | 2 OWED (no reference) | STABLE, exact clean source/bindings/results restored | 456 |
+| `coverage-native-optimizer-zero` | build_training rc 0, 353s; build_training_host rc 0, 45s | CAUGHT | optim-owner-lifecycle (host MOVED Metal MOVED) | 2 OWED (no reference) | STABLE, exact clean source/bindings/results restored | 464 |
+| `coverage-native-optimizer-io-query` | build_training rc 0, 243s; build_training_host rc 0, 35s | CAUGHT | optim-io-capability (host MOVED Metal MOVED) | 2 OWED (no reference) | STABLE, exact clean source/bindings/results restored | 326 |
+| `coverage-native-optimizer-io-download` | build_training rc 0, 197s | CAUGHT | optim-resident-io (Metal MOVED) | 1 OWED (no reference) | STABLE, exact clean source/bindings/results restored | 222 |
+| `coverage-native-sequence-release` | build_x_sequence rc 0, 272s | CAUGHT | sequence-device-release (Metal MOVED) | 1 OWED (no reference) | STABLE, exact clean source/bindings/results restored | 298 |
+
+7 of 7 arms caught; 2238 arm seconds in all.
+
+Fixed during the run: `coverage_sabotage.py check` compared the arm's binding names (`_mojolearn_training`) with the import-path module names that real loaded-native records carry (`mojolearn._sets.identical._mojolearn_training`), so no device record could pass the binary-closure test. It now compares the last path component, and a regression test covers it. The plan's `--fail-on-refused` on the clean and restored runs only also made those runs' options differ from the faulted run's, which the checker rejects. All three runs now use the same options; the checker already requires stable clean and restored cells.
+
 ## Owed
 
 Native entries: none.
