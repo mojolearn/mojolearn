@@ -68,6 +68,8 @@ def training_scalar_float(value: PythonObject, operation: String, context: Pytho
                 # ndarray's scalar slot boxes a Python complex; unlike a
                 # NumPy complex scalar, float() rejects it without a warning.
                 raise Error("TypeError: float() argument must be a string or a real number, not 'complex'")
+            if String(dtype.kind) == "V":
+                raise Error("TypeError: scalar configuration requires a real number or numeric text, not a void/record value")
             var indexes = Python.list()
             for i in range(ndim):  # driver-loop: native scalar index, one zero per singleton axis
                 py_call(indexes.append, 0)
