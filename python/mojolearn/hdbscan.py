@@ -37,7 +37,7 @@ float32 throughout, where cuML uses float64 in some steps.
 """
 import warnings
 
-from . import _backend, _native_archive_bridge
+from . import _backend, _native_archive_bridge, _native_family_bridge
 from ._buffer import addr, addr_ro, as_f32_c, empty
 from ._mode import NumericModeMixin
 
@@ -75,6 +75,15 @@ _HDBSCAN_NAMES = "mojolearn HDBSCAN.save: metric and cluster_selection_method mu
 # builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 _SELECTION = {"eom": SELECTION_EOM, "leaf": SELECTION_LEAF}
+
+# The compiled family owner, connected once at import: `fit` and
+# `fit_predict` are one native call each (bindings/cluster_fit_a_native.mojo:
+# the parameter refusals, the binary's numeric-mode check, `hdbscan_fit` and,
+# with prediction_data=True, `hdbscan_generate_prediction_data`), handed the
+# binding `_bind` resolves.
+_NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
+_native_family_bridge.tables(family_cfa_hdbscan_metrics=dict(_METRICS), family_cfa_hdbscan_selection=dict(_SELECTION),
+                             family_cfa_hdbscan_mode_codes=dict(_MODE_CODE))
 
 
 # cluster_selection_epsilon: cuML's epsilon search (`select.cuh:301-363`), run
@@ -218,135 +227,7 @@ class HDBSCAN(NumericModeMixin):
             For an unknown `metric` or `cluster_selection_method`, or a
             negative or non-finite `cluster_selection_epsilon`.
         """
-        x, copied = as_f32_c(X, ndim=2, name="X")
-        n, d = x.shape
-        if n < 2:
-            # scikit-learn's check_array wording (ensure_min_samples=2); the
-            # mutual-reachability tree needs two points
-            raise ValueError(f"Found array with {n} sample(s) (shape=({n}, {d})) while a minimum of 2 is required.")
-        for name in ("min_cluster_size", "max_cluster_size"):  # glue: checks two parameter names
-            v = getattr(self, name)
-            if isinstance(v, bool) or not isinstance(v, int):
-                raise TypeError(f"mojolearn HDBSCAN: {name} must be an int, got {type(v).__name__}")
-        if self.min_samples is None:
-            min_samples = int(self.min_cluster_size)
-        elif isinstance(self.min_samples, bool) or not isinstance(self.min_samples, int):
-            raise TypeError("mojolearn HDBSCAN: min_samples must be an int or None")
-        else:
-            min_samples = int(self.min_samples)
-        if isinstance(self.metric, str):
-            if self.metric not in _METRICS:
-                raise ValueError(
-                    f"mojolearn HDBSCAN: metric must be 'euclidean' (cuML's "
-                    f"L2SqrtExpanded, the one fit_hdbscan accepts), got {self.metric!r}"
-                )
-            metric = _METRICS[self.metric]
-        else:
-            metric = int(self.metric)
-        if isinstance(self.cluster_selection_method, str):
-            if self.cluster_selection_method not in _SELECTION:
-                raise ValueError(
-                    "mojolearn HDBSCAN: cluster_selection_method must be 'eom' or "
-                    f"'leaf', got {self.cluster_selection_method!r}"
-                )
-            method = _SELECTION[self.cluster_selection_method]
-        else:
-            method = int(self.cluster_selection_method)
-        for name in ("alpha", "cluster_selection_epsilon"):  # glue: checks two parameter names
-            v = getattr(self, name)
-            if isinstance(v, bool) or not isinstance(v, (int, float)):
-                raise TypeError(f"mojolearn HDBSCAN: {name} must be a real number")
-        cse = float(self.cluster_selection_epsilon)
-        if not (cse >= 0.0) or cse == float("inf"):
-            raise ValueError(
-                "mojolearn HDBSCAN: cluster_selection_epsilon must be a finite "
-                f"number >= 0, got {self.cluster_selection_epsilon!r} (scikit-learn's range)"
-            )
-        if not isinstance(self.prediction_data, bool):
-            raise TypeError("mojolearn HDBSCAN: prediction_data must be a bool")
-        want_pd = self.prediction_data
-        labels = empty((n,), "<i4")
-        core = empty((n,), "<f4")
-        info = empty((5 if want_pd else 4,), "<i4")
-        # ORDER MATCHES bindings/_mojolearn_hdbscan.mojo::hdbscan_fit_binding.
-        # x, labels_out, core_dists_out, info_out
-        addrs = [addr_ro(x, name="X"), addr(labels, name="labels_"), addr(core, name="core_distances_"), addr(info, name="info")]
-        probs = empty((n,), "<f4")
-        if want_pd:
-            # tree_parents_out, tree_children_out, tree_lambdas_out,
-            # tree_sizes_out (2 * n each), inverse_label_map_out (n)
-            t_par = empty((2 * n,), "<i4")
-            t_ch = empty((2 * n,), "<i4")
-            t_lam = empty((2 * n,), "<f4")
-            t_sz = empty((2 * n,), "<i4")
-            t_inv = empty((n,), "<i4")
-            addrs += [addr(t_par, name="tree parents"), addr(t_ch, name="tree children"),
-                      addr(t_lam, name="tree lambdas"), addr(t_sz, name="tree sizes"),
-                      addr(t_inv, name="inverse_label_map")]
-        # probabilities_out, always LAST (DEVIATION 5116)
-        addrs.append(addr(probs, name="probabilities_"))
-        ext = self._extension()
-        n_clusters = ext.hdbscan_fit(
-            addrs,
-            # n, d, min_samples, min_cluster_size, max_cluster_size, alpha,
-            # allow_single_cluster, cluster_selection_method, cluster_selection_epsilon, metric
-            [n, d, min_samples, int(self.min_cluster_size), int(self.max_cluster_size), float(self.alpha),
-             1 if self.allow_single_cluster else 0, method, float(self.cluster_selection_epsilon), metric],
-        )
-        self.n_features_in_ = d
-        self.labels_ = labels
-        self.core_distances_ = core
-        self.probabilities_ = probs
-        self.n_clusters_ = int(n_clusters)
-        self.n_outliers_ = int(info[1])
-        self.n_boruvka_rounds_ = int(info[2])
-        self.n_condensed_clusters_ = int(info[3])
-        self._prediction_data = None
-        self._raw_data = None
-        if want_pd:
-            self._prediction_data = self._generate_prediction_data(
-                ext, n, int(info[4]), t_par, t_ch, t_lam, t_sz, t_inv)
-            # cuML keeps the training matrix as `_raw_data` (hdbscan.pyx:1323);
-            # a borrowed input is copied so a caller's later write cannot move it.
-            self._raw_data = x if copied else x.copy()
-        return self
-
-    def _generate_prediction_data(self, ext, n, n_edges, t_par, t_ch, t_lam, t_sz, t_inv):
-        """cuML `generate_prediction_data` (`hdbscan.pyx:394-427`,
-        `prediction_data.cu:92-239`) through the binding's host function."""
-        n_cond = self.n_condensed_clusters_
-        n_sel = self.n_clusters_
-        pd = dict(
-            n_edges=n_edges,
-            n_condensed=n_cond,
-            parents=t_par[:n_edges],
-            children=t_ch[:n_edges],
-            lambdas=t_lam[:n_edges],
-            sizes=t_sz[:n_edges],
-            inverse_label_map=t_inv[:max(n_sel, 1)],
-            deaths=empty((n_cond,), "<f4"),
-            selected_clusters=empty((max(n_sel, 1),), "<i4"),
-            exemplar_idx=empty((n,), "<i4"),
-            exemplar_label_offsets=empty((n_sel + 1,), "<i4"),
-            index_into_children=empty((n_edges + 1,), "<i4"),
-        )
-        n_ex = ext.hdbscan_generate_prediction_data(
-            # labels, parents, children, lambdas, sizes, inverse_label_map,
-            # deaths_out, selected_clusters_out, exemplar_idx_out,
-            # exemplar_label_offsets_out, index_into_children_out
-            [addr_ro(self.labels_, name="labels_"), addr_ro(pd["parents"], name="tree parents"),
-             addr_ro(pd["children"], name="tree children"), addr_ro(pd["lambdas"], name="tree lambdas"),
-             addr_ro(pd["sizes"], name="tree sizes"), addr_ro(pd["inverse_label_map"], name="inverse_label_map"),
-             addr(pd["deaths"], name="deaths"), addr(pd["selected_clusters"], name="selected_clusters"),
-             addr(pd["exemplar_idx"], name="exemplar_idx"),
-             addr(pd["exemplar_label_offsets"], name="exemplar_label_offsets"),
-             addr(pd["index_into_children"], name="index_into_children")],
-            # n_leaves, n_edges, n_clusters, n_selected
-            [n, n_edges, n_cond, n_sel],
-        )
-        pd["n_exemplars"] = int(n_ex)
-        pd["exemplar_idx"] = pd["exemplar_idx"][:max(int(n_ex), 1)]
-        return pd
+        return _NATIVE(self, "family_cfa_hdbscan_fit", (self._bind(), X), _NATIVE_CONTEXT)
 
     def fit_predict(self, X, y=None):
         """Cluster `X` and return `labels_`.
@@ -355,7 +236,7 @@ class HDBSCAN(NumericModeMixin):
         -------
         labels : Array of shape (n_samples,), int32
         """
-        return self.fit(X).labels_
+        return _NATIVE(self, "family_cfa_hdbscan_fit_predict", (self._bind(), X), _NATIVE_CONTEXT)
 
     def save(self, path):
         """Save the fitted model to `path` as an `.npz` file.
