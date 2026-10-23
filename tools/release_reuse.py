@@ -93,8 +93,9 @@ SCHEMA = "mojolearn.binding-identity.v2"
 #: whole-file sha256. A record in it is upgraded only by reproducing it
 #: exactly from the release's own commit (previous_identities).
 SCHEMA_V1 = "mojolearn.binding-identity.v1"
-#: The tree-facts cache (per commit); v2 added the builder views.
-FACTS_SCHEMA = "mojolearn.release-tree-facts.v2"
+#: v3 includes declared Python build helpers in the filtered source archive.
+#: Recompute old facts rather than reusing a cached missing-helper result.
+FACTS_SCHEMA = "mojolearn.release-tree-facts.v3"
 #: The builder view of the runtime closure: every list kept whole.
 RUNTIME_VIEW = ""
 PLAN_SCHEMA = "mojolearn.release-reuse-plan.v1"
@@ -498,6 +499,7 @@ def wanted(name):
     """The members of a commit's archive that any identity can read."""
     return (name.endswith((".mojo", ".mojopkg")) or name.startswith(("bindings/", "tokenizer/", "packaging/"))
             or (name.startswith("tools/") and name.endswith(".sh"))
+            or name in LINUX_BUILDERS + MACOS_BUILDERS
             or name in ("pixi.toml", "pixi.lock", "python/setup.py"))
 
 
