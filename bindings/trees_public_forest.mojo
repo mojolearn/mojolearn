@@ -1274,58 +1274,58 @@ def _predict_input(model: PythonObject, fields: PythonObject, kind: String, X: P
     return ForestInput(x^, mode, native)
 
 
-def _vote(model: PythonObject, fields: PythonObject, kind: String, input: ForestInput, sequential_name: String,
+def _vote(model: PythonObject, fields: PythonObject, kind: String, staged: ForestInput, sequential_name: String,
           context: PythonObject) raises -> PythonObject:
     """`ForestProtocol._predict_forest`: the rows' votes or values, flat
     float32, through the model's engine."""
-    var rows = input.x.rows
+    var rows = staged.x.rows
     var outputs = Int(py=_int(fields["_num_outputs"]))
     var out = trees_vector(rows * outputs, "<f4", context)
-    var engine = _engine(fields, input.mode)
+    var engine = _engine(fields, staged.mode)
     var wrote = PythonObject(None)
-    if engine == "sequential" and not _ordered_export(input.native):
-        var function = trees_need(input.native, sequential_name,
+    if engine == "sequential" and not _ordered_export(staged.native):
+        var function = trees_need(staged.native, sequential_name,
                                   "rebuild the forest binding for inference_engine=" + _repr(PythonObject(engine)))
         var arrays = _model_arrays(fields)
-        var dims = Python.list(PythonObject(rows), PythonObject(input.x.cols), _int(fields["_n_trees"]), PythonObject(outputs))
+        var dims = Python.list(PythonObject(rows), PythonObject(staged.x.cols), _int(fields["_n_trees"]), PythonObject(outputs))
         var call = Python.list()
         for i in range(_MODEL_FIELDS):  # driver-loop: over the five model arrays
             _ = py_call(call.append, PythonObject(trees_view(arrays[i], "forest model", context).addr))
-        _ = py_call(call.append, PythonObject(input.x.addr))
+        _ = py_call(call.append, PythonObject(staged.x.addr))
         _ = py_call(call.append, PythonObject(trees_address(out)))
         _ = py_call(call.append, dims)
         wrote = trees_call(function, call)
         _ = arrays^
     else:
-        var handle = _resident(model, fields, input.native, input.mode, context)
-        wrote = py_call_typed(trees_entry(input.native, "forest_predict_resident_reuse_gpu"), PythonObject(handle),
-                              PythonObject(input.x.addr), PythonObject(trees_address(out)),
-                              Python.list(PythonObject(rows), PythonObject(input.x.cols), PythonObject(outputs)))
+        var handle = _resident(model, fields, staged.native, staged.mode, context)
+        wrote = py_call_typed(trees_entry(staged.native, "forest_predict_resident_reuse_gpu"), PythonObject(handle),
+                              PythonObject(staged.x.addr), PythonObject(trees_address(out)),
+                              Python.list(PythonObject(rows), PythonObject(staged.x.cols), PythonObject(outputs)))
     if Int(py=wrote) != rows:
         raise Error("RuntimeError: " + sequential_name + " wrote " + _str(wrote) + " of " + String(rows) + " rows")
     return out
 
 
-def _resident_labels(model: PythonObject, fields: PythonObject, input: ForestInput, context: PythonObject) raises -> PythonObject:
+def _resident_labels(model: PythonObject, fields: PythonObject, staged: ForestInput, context: PythonObject) raises -> PythonObject:
     """`ForestProtocol._predict_forest_labels`: the resident classifier's
     int32 codes, or None where the fused label route does not apply."""
-    var engine = _engine(fields, input.mode)
-    var capability = trees_entry(input.native, "forest_identical_fused_labels")
-    if input.mode == "identical":
+    var engine = _engine(fields, staged.mode)
+    var capability = trees_entry(staged.native, "forest_identical_fused_labels")
+    if staged.mode == "identical":
         if capability is None or not _truthy(py_call_typed(capability)):
             return PythonObject(None)
-        if not (engine == "sequential" and _ordered_export(input.native)) and engine != "parallel_groves":
+        if not (engine == "sequential" and _ordered_export(staged.native)) and engine != "parallel_groves":
             return PythonObject(None)
-    elif input.mode != "fast" or engine != "parallel_groves":
+    elif staged.mode != "fast" or engine != "parallel_groves":
         return PythonObject(None)
-    var function = trees_entry(input.native, "forest_predict_resident_labels_gpu")
+    var function = trees_entry(staged.native, "forest_predict_resident_labels_gpu")
     if function is None:
         return PythonObject(None)
-    var rows = input.x.rows
+    var rows = staged.x.rows
     var out = trees_vector(rows, "<i4", context)
-    var handle = _resident(model, fields, input.native, input.mode, context)
-    var wrote = py_call_typed(function, PythonObject(handle), PythonObject(input.x.addr), PythonObject(trees_address(out)),
-                              Python.list(PythonObject(rows), PythonObject(input.x.cols), _int(fields["_num_outputs"])))
+    var handle = _resident(model, fields, staged.native, staged.mode, context)
+    var wrote = py_call_typed(function, PythonObject(handle), PythonObject(staged.x.addr), PythonObject(trees_address(out)),
+                              Python.list(PythonObject(rows), PythonObject(staged.x.cols), _int(fields["_num_outputs"])))
     if Int(py=wrote) != rows:
         raise Error("RuntimeError: forest label prediction wrote " + _str(wrote) + " of " + String(rows) + " rows")
     return out
@@ -1352,12 +1352,12 @@ def forest_predict_proba(model: PythonObject, args: PythonObject, context: Pytho
     var inner = _inner(fields) if kind.startswith("dt_") else PythonObject(None)
     if inner is not None:
         return forest_predict_proba(inner, args, context)
-    var input = _predict_input(model, fields, kind, args[0], context)
+    var staged = _predict_input(model, fields, kind, args[0], context)
     var outputs = Int(py=_int(fields["_num_outputs"]))
-    var shape = Python.tuple(input.x.rows, outputs)
+    var shape = Python.tuple(staged.x.rows, outputs)
     if _family(kind) == "et":
-        return _widen(_vote(model, fields, kind, input, "et_predict", context), shape, context)
-    return trees_reshape(_vote(model, fields, kind, input, "rf_predict_proba", context), shape, context)
+        return _widen(_vote(model, fields, kind, staged, "et_predict", context), shape, context)
+    return trees_reshape(_vote(model, fields, kind, staged, "rf_predict_proba", context), shape, context)
 
 
 def forest_predict(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1369,16 +1369,16 @@ def forest_predict(model: PythonObject, args: PythonObject, context: PythonObjec
     var inner = _inner(fields) if kind.startswith("dt_") else PythonObject(None)
     if inner is not None:
         return forest_predict(inner, args, context)
-    var input = _predict_input(model, fields, kind, args[0], context)
-    var rows = input.x.rows
+    var staged = _predict_input(model, fields, kind, args[0], context)
+    var rows = staged.x.rows
     if _classifier(kind):
         var classes = fields["classes_"]
-        var codes = _resident_labels(model, fields, input, context)
+        var codes = _resident_labels(model, fields, staged, context)
         if codes is not None:
             return trees_decode_labels(classes, codes, context)
         var outputs = Int(py=_int(fields["_num_outputs"]))
-        var vote = _vote(model, fields, kind, input, "et_predict" if _family(kind) == "et" else "rf_predict_proba", context)
+        var vote = _vote(model, fields, kind, staged, "et_predict" if _family(kind) == "et" else "rf_predict_proba", context)
         return trees_decode_labels(classes, trees_argmax_rows(vote, rows, outputs, False, context), context)
     if _family(kind) == "et":
-        return _widen(_vote(model, fields, kind, input, "et_predict", context), Python.tuple(rows), context)
-    return _vote(model, fields, kind, input, "rf_predict_reg", context)
+        return _widen(_vote(model, fields, kind, staged, "et_predict", context), Python.tuple(rows), context)
+    return _vote(model, fields, kind, staged, "rf_predict_reg", context)

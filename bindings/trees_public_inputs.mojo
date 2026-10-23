@@ -696,16 +696,17 @@ def _numeric_label_view(y: PythonObject, context: PythonObject, mut bool_source:
     var cls = py_type(y)
     if cls is b.list or cls is b.tuple or cls is b.str or cls is b.bytes or native_pandas_exact(y):
         return None
-    var view: TreesView
+    var found: Optional[TreesView] = None
     try:
         if cls is context["array_class"]:
-            view = _view_of_array(y)
+            found = _view_of_array(y)
         else:
             var probe = native_buffer_view(y)
             bool_source = String(probe.format) == "?"
-            view = _view_of_buffer(y, "y", context)
+            found = _view_of_buffer(y, "y", context)
     except:
         return None
+    var view = found.value().copy()
     var n = view.size()
     var big = 0
     for k in range(view.ndim()):  # driver-loop: over array rank metadata
