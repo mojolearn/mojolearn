@@ -6,10 +6,15 @@ from ._native_msel_metric_plans import METRIC_PLANS
 
 
 def connect(context, selection):
-    from . import _backend, _metrics_impl
+    from . import _backend, _metrics_impl, _expansion_metrics
     metrics = {}
     for name, recipe in METRIC_PLANS.items():  # glue: fixed native metric operation metadata
-        function = getattr(_metrics_impl, name, None)
+        # Some fixed public metrics are exported by the expansion module only;
+        # the metrics alias does not re-export every connected entry. Read the
+        # two owned namespaces directly without invoking module attribute hooks.
+        function = vars(_metrics_impl).get(name)
+        if function is None:
+            function = vars(_expansion_metrics).get(name)
         if type(function) is not FunctionType:
             raise TypeError(f'native scorer metric {name} is not the connected public function')
         fields = function.__globals__

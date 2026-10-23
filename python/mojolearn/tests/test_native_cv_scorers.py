@@ -41,6 +41,39 @@ def test_every_named_metric_has_a_registered_native_plan():
         assert vars(scorer)['_score_func'] in table
 
 
+def test_every_fixed_metric_plan_connects_its_defining_module():
+    from types import BuiltinFunctionType, FunctionType
+    from mojolearn import _expansion_metrics, _metrics_impl
+    from mojolearn._native_msel_metric_plans import METRIC_PLANS
+
+    table = ms._NATIVE_CONTEXT['family_msel_metric_plans']
+    for name, recipe in METRIC_PLANS.items():
+        function = vars(_metrics_impl).get(name)
+        if function is None:
+            function = vars(_expansion_metrics)[name]
+        assert type(function) is FunctionType
+        plan = table[function]
+        assert plan['operation'] == recipe['operation']
+        assert plan['code'] is function.__code__
+        assert plan['context'] is function.__globals__['_NATIVE_CONTEXT']
+        assert plan['entry'] is function.__globals__['_NATIVE']
+        assert type(plan['entry']) is BuiltinFunctionType
+
+
+def test_expansion_only_metric_scorer_consumes_native_prediction():
+    from mojolearn import _expansion_metrics
+
+    x, y = data()
+    model = ml.Ridge().fit(x, y)
+    metric = _expansion_metrics.r2_score_options
+    options = dict(sample_weight=None, multioutput='uniform_average', force_finite=True,
+                   numeric_mode='identical')
+    scorer = audit_native_call(ms.make_scorer, metric, **options).assert_native()
+    got = audit_native_call(scorer.__call__, model, x, y).assert_native()
+    expected = float(metric(y, model.predict(x), **options))
+    assert np.float64(got).view('u8') == np.float64(expected).view('u8')
+
+
 def test_custom_scorer_and_metric_callbacks_refuse_before_call():
     calls = []
 
