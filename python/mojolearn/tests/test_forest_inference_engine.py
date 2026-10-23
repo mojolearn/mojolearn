@@ -73,17 +73,14 @@ def test_classifier_combined_prediction_is_exact_and_traverses_once(cls, monkeyp
         values = Array.from_list([[0.75, 0.25], [0.5, 0.5], [0.125, 0.875]], '<f4')
         return values[:len(X)]
 
-    if cls is RandomForestClassifier:
-        monkeypatch.setattr(model, 'predict_proba', vote)
-    else:
-        monkeypatch.setattr(model, '_vote', vote)
+    # both classifiers derive the labels from `predict_proba` (one native call)
+    monkeypatch.setattr(model, 'predict_proba', vote)
     X = np.ones((3, 1), dtype=np.float32)
     prediction, proba = model._predict_with_proba(X)
     assert calls == [3]
     np.testing.assert_array_equal(prediction, np.array([10, 10, 20]))
     expected = vote(X)
     assert calls == [3, 3]
-    expected = expected if cls is RandomForestClassifier else expected.astype('<f8')
     actual_np, expected_np = np.asarray(proba), np.asarray(expected)
     view = np.uint32 if actual_np.dtype == np.float32 else np.uint64
     np.testing.assert_array_equal(actual_np.view(view), expected_np.view(view))
