@@ -103,10 +103,10 @@ def test_cpu_sample_retains_finished_children(tmp_path, monkeypatch):
 
 
 def test_sigterm_controller_stops_worker_group(tmp_path):
+    worker = 'import os,pathlib,time;pathlib.Path("worker.pid").write_text(str(os.getpid()));time.sleep(60)'
     code = ('import sys;sys.path.insert(0,'+repr(str(Path(guard.__file__).parent))+');'
             'import build_process,os,pathlib;'
-            'r=build_process.run([sys.executable,"-c",'
-            '"import os,pathlib,time;pathlib.Path(\"worker.pid\").write_text(str(os.getpid()));time.sleep(60)"],'
+            f'r=build_process.run([sys.executable,"-c",{worker!r}],'
             'cwd=".",env=os.environ.copy(),log="guard.log",seconds=30,poll=.05);'
             'raise SystemExit(r["exit_code"])')
     proc = subprocess.Popen([sys.executable, '-c', code], cwd=tmp_path)
