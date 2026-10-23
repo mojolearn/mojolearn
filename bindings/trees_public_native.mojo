@@ -8,6 +8,7 @@ from bindings.trees_public_forest import forest_fit, forest_predict, forest_pred
 from bindings.trees_public_score import forest_score
 from bindings.trees_public_iforest import iforest_operation
 from bindings.trees_public_boost import boost_operation
+from bindings.trees_public_meta import meta_operation
 from bindings.trees_public_mixin_score import boost_score, gbdt_adapter_score
 from bindings.trees_public_gbdt_fit import (
     gbdt_fit, catboost_auto_learning_rate_op, gbdt_inspect, gbdt_initialize, adapter_classifier_fit,
@@ -44,6 +45,9 @@ def trees_public_operation(model: PythonObject, operation: String, args: PythonO
         return gbdt_adapter_score(model, args, context)
     if operation.startswith("trees_gbdt_"):
         return _gbdt_operation(model, operation, args, context)
+    if operation.startswith("trees_meta_"):
+        # Voting*, Stacking*, MultiOutput*, OneVsRest, CalibratedClassifierCV
+        return meta_operation(model, operation, args, context)
     raise Error("unknown tree ensemble operation " + operation)
 
 
