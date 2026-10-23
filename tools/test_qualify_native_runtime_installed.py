@@ -632,6 +632,14 @@ class InstalledNativeAudit(unittest.TestCase):
         with patch.dict(q.sys.modules, modules), patch.object(q.sys, "prefix", str(prefix)), \
              patch.object(q.Path, "cwd", return_value=out / "work"), \
              patch.dict(q.os.environ, {"MOJOLEARN_GENERATION_DEVICE": "cpu"}):
+            # A pytest process that already imported the source package (the
+            # Mac suites run this file beside mojolearn's own tests) holds real
+            # mojolearn.* modules the fixture's installed tree does not own;
+            # hide them so the inventory reads only the fixture's modules.
+            # patch.dict restores them on exit.
+            for name in [k for k in q.sys.modules
+                         if (k == "mojolearn" or k.startswith("mojolearn.")) and k not in modules]:
+                del q.sys.modules[name]
             code = q.worker(request)
         return code, json.loads((out / "installed-modules.json").read_text()), calls
 
