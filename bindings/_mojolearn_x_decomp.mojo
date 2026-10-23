@@ -12,6 +12,8 @@ from x_decomp.api_pyapi import (
     cd_rows_py, chol_py, colsum_py, eigh_py, eigh_batch_py, lle_local_py, lle_apply_py, ew_py, gemm_py, lu_py, lu_solve_py, trisolve_py, knn_select_py, numeric_mode_py, orth_py, orth_diag_py, rand_py, svd_py, lasso_rows_py, lars_rows_py, lu_aux_py, omp_rows_py, rand_gamma_py, lda_rows_py, dijkstra_rows_py, barycenter_rows_py, als_rows_py, absmax_sign_py, qr_r_py, geqrf_py, orgqr_py, tsqr_r_py, tsqr_q_py, r_signs_py, rank_above_py, als_cg_rows_py, gather_py, argsort_f32_py, py2mojo_py, move_py, dsum_sq_py, order_f_py, select_smallest_py, argmin_all_py, accuracy_py, pca_mle_rank_host_py, topn_desc_py, rowsum_py, sqdist_py, vendor_py, fast_defines_py, idn_flags_py, lu_gesv_py, ols_tsqr_r_py,
 )
 from x_decomp.device import DevExec
+from x_decomp.pca_randomized_dev import DevRDev
+from x_decomp.tsvd_owner_pyapi import tsvd_randomized_py, tsvd_tsqr_py
 from x_decomp.fa_fast import FA_FAST_APPLE
 from x_decomp.fa_fast_pyapi import fa_defines_py, fa_em_py, fa_gram_py, fa_transform_py
 from std.sys.info import has_apple_gpu_accelerator
@@ -147,6 +149,10 @@ def build__mojolearn_x_decomp() -> PythonObject:
         m.def_function[orgqr_py[DevExec]]("x_decomp_orgqr")
         m.def_function[tsqr_r_py[DevExec]]("x_decomp_tsqr_r")
         m.def_function[tsqr_q_py[DevExec]]("x_decomp_tsqr_q")
+        # TruncatedSVD.fit's randomized and TSVD_QFIX routes, one driver each
+        # (x_decomp/tsvd_owner.mojo; bindings/tsvd_native.mojo calls them)
+        m.def_function[tsvd_randomized_py[DevExec, DevRDev, True]]("x_decomp_tsvd_randomized")
+        m.def_function[tsvd_tsqr_py[DevExec, DevRDev, True]]("x_decomp_tsvd_tsqr")
         m.def_function[r_signs_py]("x_decomp_r_signs")
         m.def_function[rank_above_py]("x_decomp_rank_above")
         # lane idn-dense-linalg: the one-entry OLS and solve routes
