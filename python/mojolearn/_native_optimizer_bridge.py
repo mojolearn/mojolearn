@@ -188,3 +188,46 @@ def connect_sequence_device(training, device):
     context["sequence_bindings"] = bindings
     context["sequence_device_io_off"] = device._DEVICE_IO_OFF
     return training._OPT_NATIVE, context
+
+
+def connect_embedding(training, embedding_cls, archive_context):
+    # glue: connect the Embedding layer's compiled entries and its native
+    # lifetime descriptors once, at package import
+    from types import BuiltinFunctionType, MethodType
+    from . import _backend
+    from .tokenizer import _binding
+    context = training._OPT_CONTEXT
+    bindings = {}
+    names = ("embedding_forward", "embedding_numeric_mode", "embedding_table_release", "seq_tensor_alloc",
+             "embedding_forward_dev", "embedding_backward_dev")
+    for mode in ("identical", "fast"):  # glue: connect every supported numeric-mode ABI at import
+        try:
+            module = _backend.binding("_mojolearn_embedding", mode)
+            cells = {"module": module}
+            for name in names:  # glue: retain the compiled symbols the layer reaches
+                entry = getattr(module, name, None)
+                if isinstance(entry, BuiltinFunctionType):
+                    cells[name] = entry
+            bindings[mode] = cells
+        except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, NotImplementedError) as error:
+            bindings[mode] = type(error).__name__ + ": " + str(error)
+    context["embedding_bindings"] = bindings
+    try:
+        host = _backend.load_host_module("_mojolearn_embedding_infer_host")
+        cells = {"module": host}
+        for name in names:  # glue: retain the compiled symbols the host layer reaches
+            entry = getattr(host, name, None)
+            if isinstance(entry, BuiltinFunctionType):
+                cells[name] = entry
+        context["embedding_host_binding"] = cells
+    except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, NotImplementedError) as error:
+        context["embedding_host_binding"] = type(error).__name__ + ": " + str(error)
+    context["embedding_archive_context"] = archive_context.get("host_archive_context", archive_context)
+    module = _binding()._module
+    lifetime = module.embedding_layer_lifetime
+    descriptor = module.classical_attribute_descriptor
+    if not isinstance(lifetime, BuiltinFunctionType) or not isinstance(descriptor, BuiltinFunctionType):
+        raise TypeError("Embedding requires its compiled lifetime entry")
+    embedding_cls.__setattr__ = descriptor(MethodType(lifetime, context))
+    embedding_cls.__del__ = descriptor(MethodType(lifetime, context))
+    return training._OPT_NATIVE, context

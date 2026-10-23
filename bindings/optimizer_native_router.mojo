@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native public-operation routing, constructors, state preparation and resident IO.
+from bindings.embedding_layer_native import emblayer_operation
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -235,6 +236,9 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
     if operation == "residual_dropout" or operation == "residual_dropout_backward":
         # the explicit residual layer runs in identical mode only
         return training_residual_dropout(operation, values, optimizer_entries(PythonObject("identical"), context))
+    if operation.startswith("emblayer_"):
+        # mojolearn.Embedding's forward and load (bindings/embedding_layer_native.mojo)
+        return emblayer_operation(operation, owner, values, context)
     if operation.startswith("seqln_") or operation.startswith("seqmoe_"):
         return sequence_layers_operation(operation, owner, values, mode, context)
     if operation.startswith("seq_"):
