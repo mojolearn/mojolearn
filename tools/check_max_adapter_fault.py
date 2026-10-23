@@ -21,7 +21,7 @@ def main():
     target = "execute_operation[target, 6, library]"
     assert original.count(target) == 1
     (source_dir / "__init__.mojo").write_text(original.replace(target, "execute_operation[target, 7, library]"))
-    package = args.out / "wrong-relu.mojoc"
+    package = args.out / "wrong_relu.mojoc"
     original_hash = hashlib.sha256(args.library.read_bytes()).hexdigest()
     build = run(["pixi", "run", "mojo", "precompile", str(source_dir), "-o", str(package)],
                 args.out / "build.log", 120)
