@@ -1782,44 +1782,6 @@ def _seed_of(random_state):
     return random_state
 
 
-def _pinv_rows(k, C):
-    """Pseudo-inverse of a full-row-rank C (k x d, k <= d): C^T (C C^T)^-1,
-    through the LU solve of the k x k Gram (d x k result)."""
-    G = k.mm(C, C, tb=True)
-    lu, piv, info = k.lu(G)
-    if info:
-        raise ValueError("compute_inverse_components: the components are rank deficient")
-    return k.lu_solve(lu, piv, C).T
-
-
-def _rp_rand(k, r, c, seed, stream, kind, dev):
-    """`k.rand`'s matrix; with dev, drawn into a device matrix by the same
-    kernel (enqueued, nothing downloaded)."""
-    if not (dev and r * c):
-        return k.rand(r, c, seed, stream, kind)
-    out = k._dout(r, c)
-    k.b.x_decomp_dev_rand(out._d.id, [r * c, int(seed) & 0xFFFFFFFF, int(stream) & 0xFFFFFFFF, kind])
-    return out
-
-
-def _srp_grid_count(thr):
-    """The number of uniforms k * 2^-24 (k in [0, 2^24)) at or below
-    float32(thr): main's sparse keep rate on the draw grid, as an integer
-    (MOJOLEARN_XD_FAST_SRP_STRAT). Glue: one float32 rounding and a floor."""
-    t32 = array.array("f", [thr])[0]
-    if t32 < 0:
-        return 0
-    return min(int(t32 * 16777216.0) + 1, 16777216)  # exact: t32 * 2^24 is a scaled float32
-
-
-def _grp_cls2(k):
-    """lane/apple-fast-gap-cls2: the random projections' FAST Apple fit
-    switches compiled into the kit's binding (x_decomp/resident.mojo
-    `grp_cls2_py`: bit 1 NOSCAN, 2 DEVSCAN, 4 LAZY); 0 when it has none."""
-    fn = getattr(k.b, "x_decomp_grp_cls2", None)
-    return int(fn()) if fn is not None else 0
-
-
 class _RandomProjection(_Base):
     """sklearn `random_projection.py::BaseRandomProjection`. The matrix is
     drawn from the lane's counter-based Philox stream (x_decomp/cells.mojo
@@ -1880,112 +1842,7 @@ class _RandomProjection(_Base):
         TypeError
             If ``random_state`` is not None or an int.
         """
-        self.numeric_mode_ = _mode(self.numeric_mode)
-        # fit reads only the input's shape and refuses a non-finite input;
-        # the store (a copy of the whole input) is transform's to build
-        # (lane neural-pass27: fit_transform converted the 880 MB input
-        # twice at the board's shape)
-        k = self._kit()
-        # lane/idn-gates: the IDENTICAL GPU binding compiles DEVSCAN (bit 2) too
-        cls2 = _grp_cls2(k)
-        if cls2 & 8 and not _is_sparse(X) and self._fused_fit(k, X):
-            return self
-        if cls2 & 3 and not _is_sparse(X):
-            # lane/apple-fast-gap-cls2 (FAST + Apple, x_decomp/resident.mojo
-            # GRP_CLS2_*): no host walk over X. NOSCAN: the shape only
-            # (transform's device projection refuses a non-finite X);
-            # DEVSCAN: the refusal as one device scan of X
-            a = as_f32_c(X, ndim=2, name="X")[0]
-            if a.ndim != 2 or min(a.shape) == 0:  # glue: shape check of the input argument
-                raise ValueError("X: a nonempty two-dimensional input is required")
-            if cls2 & 2 and int(k.b.x_decomp_dev_first_nonfinite(addr_ro(a, name="X"), a.size)) >= 0:
-                raise ValueError("X: input must be finite; NaN/inf are unsupported")
-            n, d = a.shape
-        else:
-            n, d = _M.shape_of_input(X)
-        if self.n_components == "auto":
-            kc = johnson_lindenstrauss_min_dim(n, eps=self.eps)
-            if kc <= 0:
-                raise ValueError(f"eps={self.eps} and n_samples={n} lead to a target dimension of {kc} which is invalid")
-            if kc > d:
-                raise ValueError(f"eps={self.eps} and n_samples={n} lead to a target dimension of {kc} which is larger than the original space with n_features={d}")
-        else:
-            kc = int(self.n_components)
-            if kc <= 0:
-                raise ValueError(f"n_components must be greater than 0, got {kc}")
-        self.n_components_ = kc
-        self.n_features_in_ = d
-        # lane gap-nb-maxabs-grp: on the GPU binding the matrix is drawn on
-        # the device (`x_decomp_dev_rand`, the same Philox words as
-        # `x_decomp_rand`); cgr-decomp deleted the MOJOLEARN_XD_RP_TILED switch
-        dev = k._res()
-        self.components_m_ = self._make(k, kc, d, _seed_of(self.random_state), dev)
-        if dev and self.components_m_._d is not None:
-            # the matrix was drawn on the device and
-            # stays there for transform; components_ is a copy of its words
-            # (one download, the device matrix kept)
-            C = self.components_m_
-            if cls2 & 4 and not self.compute_inverse_components:
-                # lane/apple-fast-gap-cls2 LAZY: downloaded on first read
-                self.__dict__.pop("_rp_components", None)
-                self.__dict__["_rp_lazy"] = (k, C, kc, d)
-            else:
-                res = array.array("f", [0.0]) * (kc * d)
-                k.b.x_decomp_dev_download(C._d.id, res.buffer_info()[0], kc * d)
-                self.components_ = Array._owned(res, (kc, d), "<f4", "C")
-        else:
-            self.components_ = self.components_m_.out()
-        if self.compute_inverse_components:
-            self.inverse_m_ = _pinv_rows(k, self.components_m_)
-            self.inverse_components_ = self.inverse_m_.out()
-        return self
-
-    def _fused_fit(self, k, X):
-        """lane apple-fast-gap-kapprox2 MOJOLEARN_XD_FAST_GRP_FUSED (bit 8 of
-        `x_decomp_grp_cls2`): the scan, the matrix and its download in one
-        binding call with one wait (x_decomp/resident.mojo
-        `grp_fit_fused_py`); the same words and the same fit-time refusal as
-        the DEVSCAN route, Gaussian and sparse. False (nothing done) where
-        it does not apply: 'auto' n_components or
-        compute_inverse_components."""
-        if self.n_components == "auto" or self.compute_inverse_components or not k._res():
-            return False
-        a = as_f32_c(X, ndim=2, name="X")[0]
-        if a.ndim != 2 or a.shape[0] == 0 or a.shape[1] == 0:
-            raise ValueError("X: a nonempty two-dimensional input is required")
-        n, d = a.shape
-        kc = int(self.n_components)
-        if kc <= 0:
-            raise ValueError(f"n_components must be greater than 0, got {kc}")
-        extra = []
-        if isinstance(self, SparseRandomProjection):
-            dens = 1.0 / math.sqrt(d) if self.density == "auto" else float(self.density)
-            if not 0 < dens <= 1:
-                raise ValueError(f"Expected density in range ]0, 1], got: {dens}")
-            mode, sc, thr = (2 if dens == 1 else 1), math.sqrt(1.0 / dens) / math.sqrt(kc), dens - 2.0 ** -25
-            if mode == 1 and _grp_cls2(k) & 16:
-                # lane apple-fast-w2-kfeat MOJOLEARN_XD_FAST_SRP_STRAT
-                # (x_decomp/resident.mojo `srp_strat_kernel`): the
-                # column-stratified pattern; D = the count of 2^-24 grid
-                # points main's `u <= float32(thr)` keeps, so every entry is
-                # nonzero with main's probability
-                mode, extra = 3, [d, _srp_grid_count(thr)]
-        else:
-            dens, mode, sc, thr = None, 0, 1.0 / math.sqrt(kc), 0.0
-        C = k._dout(kc, d)
-        res = array.array("f", [0.0]) * (kc * d)
-        bad = int(k.b.x_decomp_grp_fit_fused(addr_ro(a, name="X"), a.size, C._d.id, res.buffer_info()[0],
-                                             [kc * d, int(_seed_of(self.random_state)) & 0xFFFFFFFF, mode] + extra,
-                                             [sc, thr]))
-        if bad >= 0:
-            raise ValueError("X: input must be finite; NaN/inf are unsupported")
-        if dens is not None:
-            self.density_ = dens
-        self.n_components_ = kc
-        self.n_features_in_ = d
-        self.components_m_ = C
-        self.components_ = Array._owned(res, (kc, d), "<f4", "C")
-        return True
+        return _DECOMP_CALL(self, "fit", (X,), _DECOMP_CONTEXT)
 
     def transform(self, X):
         """Project X: ``X @ components_.T``.
@@ -2004,46 +1861,22 @@ class _RandomProjection(_Base):
         ValueError
             If X has the wrong number of features or is non-finite.
         """
-        self._check()
-        if not _is_sparse(X):
-            out = self._project(X)
-            if out is not None:
-                return out
-        M = _M.from_input(X)
-        if M.c != self.n_features_in_:
-            raise ValueError(f"X has {M.c} features, but {type(self).__name__} is expecting {self.n_features_in_}")
-        return self._kit().mm(M, self.components_m_, tb=True).out()
+        return _DECOMP_CALL(self, "transform", (X,), _DECOMP_CONTEXT)
 
-    def _project(self, X):
-        """transform on the GPU binding (lane gap-nb-maxabs-grp): X goes up from
-        its own buffer (no host copy into a store, no host finiteness pass),
-        x_decomp_dev_project's tiled kernel computes `mm(X, components, tb)`'s
-        words and flags a non-finite entry of X on the device, and the result
-        comes down once into the returned array. None on the host binding
-        (or a column without the tile): the caller takes the path above."""
-        k = self._kit()
-        if not k._res():
-            return None
-        a = as_f32_c(X, ndim=2, name="X")[0]
-        if a.ndim != 2 or min(a.shape) == 0:  # glue: smaller of two shape dims
-            raise ValueError("X: a nonempty two-dimensional input is required")
-        m, d = a.shape
-        if d != self.n_features_in_:
-            raise ValueError(f"X has {d} features, but {type(self).__name__} is expecting {self.n_features_in_}")
-        B = self.components_m_
-        nc = B.r
-        A = _M._on_device(_DevBuf(k._raw(), a.size), m, d)
-        k.b.x_decomp_dev_upload(A._d.id, addr_ro(a, name="X"), a.size)
-        C, flag = k._dout(m, nc), k._dout(1, 1)
-        if int(k.b.x_decomp_dev_project(A._d.id, k._did(B), C._d.id, flag._d.id, [m, d, nc])) < 0:
-            return None
-        res = array.array("f", [0.0]) * (m * nc)
-        k.b.x_decomp_dev_download(C._d.id, res.buffer_info()[0], m * nc)
-        bad = array.array("f", [0.0])
-        k.b.x_decomp_dev_download(flag._d.id, bad.buffer_info()[0], 1)
-        if bad[0] != 0:
-            raise ValueError("X: input must be finite; NaN/inf are unsupported")
-        return Array._owned(res, (m, nc), "<f4", "C")
+    def fit_transform(self, X, y=None):
+        """Fit to X, then return ``transform(X)``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data.
+        y : ignored
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
+        return _DECOMP_CALL(self, "fit_transform", (X,), _DECOMP_CONTEXT)
 
     def inverse_transform(self, X):
         """Map projected data back with the pseudo-inverse of the components.
@@ -2061,11 +1894,7 @@ class _RandomProjection(_Base):
         ValueError
             If the model was fitted without ``compute_inverse_components=True``.
         """
-        self._check()
-        if not hasattr(self, "inverse_m_"):
-            raise ValueError("inverse_transform needs compute_inverse_components=True")
-        M = _M.from_input(X)
-        return self._kit().mm(M, self.inverse_m_, tb=True).out()
+        return _DECOMP_CALL(self, "inverse_transform", (X,), _DECOMP_CONTEXT)
 
 
 # Box-Muller on the Philox stream.
@@ -2120,9 +1949,6 @@ class GaussianRandomProjection(_RandomProjection):
         self.n_components, self.eps = n_components, eps
         self.compute_inverse_components, self.random_state = compute_inverse_components, random_state
         self.numeric_mode = numeric_mode
-
-    def _make(self, k, kc, d, seed, dev=False):
-        return k.ew("scale", _rp_rand(k, kc, d, seed, 1, 1, dev), s=1.0 / math.sqrt(kc))
 
 
 # Achlioptas / Li et al.
@@ -2186,18 +2012,6 @@ class SparseRandomProjection(_RandomProjection):
         self.n_components, self.density, self.eps, self.dense_output = n_components, density, eps, dense_output
         self.compute_inverse_components, self.random_state = compute_inverse_components, random_state
         self.numeric_mode = numeric_mode
-
-    def _make(self, k, kc, d, seed, dev=False):
-        dens = 1.0 / math.sqrt(d) if self.density == "auto" else float(self.density)
-        if not 0 < dens <= 1:
-            raise ValueError(f"Expected density in range ]0, 1], got: {dens}")
-        self.density_ = dens
-        u = _rp_rand(k, kc, d, seed, 2, 0, dev)
-        sgn = k.ew("scale", _rp_rand(k, kc, d, seed, 3, 2, dev), s=math.sqrt(1.0 / dens) / math.sqrt(kc))
-        if dens == 1:
-            return sgn
-        # u < density keeps the signed value, else 0 (select: x > s -> y else z)
-        return k.ew("select", u, _M.zeros(1, 1), sgn, s=dens - 2.0 ** -25)
 
 
 # ================================================================ thin SVD
@@ -2331,120 +2145,7 @@ class NMF(_Base):
         self.verbose, self.shuffle, self.numeric_mode = verbose, shuffle, numeric_mode
 
     # ---- setup
-    def _beta(self):
-        b = {"frobenius": 2.0, "kullback-leibler": 1.0, "itakura-saito": 0.0}.get(self.beta_loss, self.beta_loss)
-        if b not in (0.0, 1.0, 2.0):
-            raise ValueError("beta_loss: 'frobenius', 'kullback-leibler' and 'itakura-saito' are carried; "
-                             "a general float beta is not")
-        return float(b)
-
-    def _validate(self, M):
-        beta = self._beta()
-        if beta != 2.0 and self.solver != "mu":
-            raise ValueError("Invalid beta_loss parameter: solver 'cd' does not handle beta_loss other than 'frobenius'")
-        if self.solver not in ("cd", "mu"):
-            raise ValueError(f"Invalid solver parameter: got {self.solver!r} instead of one of {{'cd', 'mu'}}")
-        if _any_negative(M):
-            raise ValueError("Negative values in data passed to NMF (input X)")
-
-    def _reg(self, n, d):
-        aH = self.alpha_W if self.alpha_H == "same" else self.alpha_H
-        aW = self.alpha_W
-        return (d * aW * self.l1_ratio, n * aH * self.l1_ratio,
-                d * aW * (1.0 - self.l1_ratio), n * aH * (1.0 - self.l1_ratio))
-
-    def _init(self, k, M, nc, init):
-        n, d = M.r, M.c
-        seed = _seed_of(self.random_state)
-        xmean = k.ew("scale", k.total(M), s=1.0 / (n * d)).s[0]
-        if init == "random":
-            avg = math.sqrt(xmean / nc)
-            H = k.ew("scale", k.ew("abs", k.rand(nc, d, seed, 10, 1)), s=avg)
-            W = k.ew("scale", k.ew("abs", k.rand(n, nc, seed, 11, 1)), s=avg)
-            return W, H
-        U, S, Vt = _thin_svd(k, M, nc, u_based=(n >= d))
-        # the per-component factor pairs in ONE binding call (lane
-        # py-runtime-b: x_decomp/nmf.mojo `nmf_nndsvd`, the same cells per
-        # component and the same float32 products of the norms; on resident
-        # device matrices in the GPU binding)
-        W, H = _M.zeros(n, nc), _M.zeros(nc, d)
-        k.b.x_decomp_nmf_nndsvd(U.addr, S.addr, Vt.addr, W.addr, H.addr, [n, d, S.r * S.c, nc])
-        z = _M.zeros(1, 1)
-        W = k.ew("select", W, W, z, s=1e-6 - 1e-13)
-        H = k.ew("select", H, H, z, s=1e-6 - 1e-13)
-        if init == "nndsvda":
-            W = k.ew("select", W, W, k.const(xmean), s=0.0)
-            H = k.ew("select", H, H, k.const(xmean), s=0.0)
-        elif init == "nndsvdar":
-            rw = k.ew("scale", k.ew("abs", k.rand(n, nc, seed, 12, 1)), s=abs(xmean) / 100)
-            rh = k.ew("scale", k.ew("abs", k.rand(nc, d, seed, 13, 1)), s=abs(xmean) / 100)
-            W = k.ew("select", W, W, rw, s=0.0)
-            H = k.ew("select", H, H, rh, s=0.0)
-        return W, H
-
-    def _err(self, k, M, W, H):
-        """sklearn `_beta_divergence(..., square_root=True)`."""
-        beta = self._beta()
-        if beta == 2.0:
-            return k.ew("sqrt", k.total(k.ew("sqdiff", M, k.mm(W, H)))).s[0]
-        WH = k.ew("maxs", k.mm(W, H), s=_F32_EPS)
-        keep = k.ew("gts", M, s=_F32_EPS)                       # X > EPSILON
-        div = k.ew("div", M, WH)
-        if beta == 1.0:
-            sum_wh = k.mm(k.colsum(W), k.rowsum(H)).s[0]
-            xlog = k.total(k.ew("mul", k.ew("mul", M, k.ew("logs", div, s=1.1754943508222875e-38)), keep)).s[0]
-            xs = k.total(k.ew("mul", M, keep)).s[0]
-            res = xlog + sum_wh - xs
-        else:
-            dsum = k.total(k.ew("mul", div, keep)).s[0]
-            lsum = k.total(k.ew("mul", k.ew("logs", div, s=1.1754943508222875e-38), keep)).s[0]
-            res = dsum - M.r * M.c - lsum
-        return math.sqrt(2 * res) if res > 0 else 0.0
-
     # ---- solvers
-    def _solve(self, k, M, W, H, update_H, regs):
-        """`_cd` (solver 'cd') or `_mu` (frobenius) / `_mu_beta` (KL, IS) in
-        ONE binding call (lane py-runtime-b: x_decomp/nmf.mojo on the host
-        column, x_decomp/nmf_dev.mojo on resident device matrices): the same
-        cells, broadcast modes and float32 scalars as the Python drivers it
-        replaces, their float64 convergence tests in the same order, the
-        shuffle orders from the same Philox streams (200 + draw). W and H
-        are copied; the binding replaces the copies."""
-        l1W, l1H, l2W, l2H = regs
-        W, H = W.copy(), H.copy()
-        p = [M.r, M.c, W.c, 0 if self.solver == "cd" else 1, int(bool(update_H)), int(self.max_iter),
-             int(bool(self.shuffle)), _seed_of(self.random_state) & 0xFFFFFFFF]
-        f = [self._beta(), float(self.tol), float(l1W), float(l1H), float(l2W), float(l2H)]
-        it = int(k.b.x_decomp_nmf_solve(M.addr, W.addr, H.addr, p, f))
-        if it < 0:
-            raise ZeroDivisionError("float division by zero")
-        return W, H, it
-
-    def _fit_transform(self, M, H=None, update_H=True):
-        k = self._kit()
-        n, d = M.r, M.c
-        regs = self._reg(n, d)
-        if update_H:
-            nc = self.n_components
-            if nc in (None, "auto"):
-                nc = d if self.init != "custom" else None
-            nc = int(nc)
-            init = self.init or ("nndsvda" if nc <= min(n, d) else "random")
-            if init not in ("random", "nndsvd", "nndsvda", "nndsvdar"):
-                raise ValueError(f"init={init!r} is not supported here (random, nndsvd, nndsvda, nndsvdar)")
-            if init.startswith("nndsvd") and nc > min(n, d):
-                raise ValueError("init = 'nndsvd' can only be used when n_components <= min(n_samples, n_features)")
-            W, H = self._init(k, M, nc, init)
-        else:
-            nc = H.r
-            if self.solver == "mu":
-                xmean = k.ew("scale", k.total(M), s=1.0 / (n * d)).s[0]
-                W = k.const(math.sqrt(xmean / nc), n, nc)
-            else:
-                W = _M.zeros(n, nc)
-        W, H, it = self._solve(k, M, W, H, update_H, regs)
-        return W, H, it, nc
-
     def fit_transform(self, X, y=None, W=None, H=None):
         """Fit the model and return ``W``.
 
@@ -2462,24 +2163,7 @@ class NMF(_Base):
         -------
         ndarray of shape (n_samples, n_components), float32
         """
-        self.numeric_mode_ = _mode(self.numeric_mode)
-        M = _M.from_input(X)
-        self._validate(M)
-        if self.init == "custom":
-            k = self._kit()
-            Wm, Hm = _M.from_input(W, "W"), _M.from_input(H, "H")
-            regs = self._reg(M.r, M.c)
-            Wm, Hm, it = self._solve(k, M, Wm, Hm, True, regs)
-            nc = Hm.r
-        else:
-            Wm, Hm, it, nc = self._fit_transform(M)
-        self.components_m_ = Hm
-        self.components_ = Hm.out()
-        self.n_components_ = nc
-        self.n_iter_ = it
-        self.n_features_in_ = M.c
-        self.reconstruction_err_ = self._err(self._kit(), M, Wm, Hm)
-        return Wm.out()
+        return _DECOMP_CALL(self, "fit_transform", (X, W, H), _DECOMP_CONTEXT)
 
     def fit(self, X, y=None, **params):
         """Fit the model.
@@ -2496,8 +2180,7 @@ class NMF(_Base):
         -------
         self
         """
-        self.fit_transform(X, **params)
-        return self
+        return _DECOMP_CALL(self, "fit", (X, params), _DECOMP_CONTEXT)
 
     def transform(self, X):
         """Solve for ``W`` with the fitted ``H`` held fixed.
@@ -2511,13 +2194,7 @@ class NMF(_Base):
         -------
         ndarray of shape (n_samples, n_components), float32
         """
-        self._check()
-        M = _M.from_input(X)
-        if M.c != self.n_features_in_:
-            raise ValueError(f"X has {M.c} features, but NMF is expecting {self.n_features_in_}")
-        self._validate(M)
-        W, _, _, _ = self._fit_transform(M, H=self.components_m_, update_H=False)
-        return W.out()
+        return _DECOMP_CALL(self, "transform", (X,), _DECOMP_CONTEXT)
 
     def inverse_transform(self, X):
         """Return ``X @ components_``, the data reconstructed from ``W``.
@@ -2531,8 +2208,7 @@ class NMF(_Base):
         -------
         ndarray of shape (n_samples, n_features), float32
         """
-        self._check()
-        return self._kit().mm(_M.from_input(X, "W"), self.components_m_).out()
+        return _DECOMP_CALL(self, "inverse_transform", (X,), _DECOMP_CONTEXT)
 
 
 # ================================================================ FastICA
@@ -2617,25 +2293,6 @@ class FastICA(_Base):
         self.fun_args, self.max_iter, self.tol, self.w_init = fun_args, max_iter, tol, w_init
         self.whiten_solver, self.random_state, self.numeric_mode = whiten_solver, random_state, numeric_mode
 
-    def _solve(self, k, X1, Winit):
-        """`_par` (with `_sym_decorrelation`) or `_def` in ONE binding call
-        (lane py-runtime-b: x_decomp/ica.mojo on the host column,
-        x_decomp/ica_dev.mojo on resident device matrices): the same cells,
-        broadcast modes and float32 scalars as the Python loops it replaces,
-        their float64 limits and norms in the same order. Returns (W, it)."""
-        alpha = 1.0
-        if self.fun == "logcosh":
-            alpha = (self.fun_args or {}).get("alpha", 1.0)
-            if not 1 <= alpha <= 2:
-                raise ValueError("alpha must be in [1,2]")
-        elif self.fun not in ("exp", "cube"):
-            raise ValueError("fun must be 'logcosh', 'exp' or 'cube' (a callable is not carried)")
-        fun = {"logcosh": 0, "exp": 1, "cube": 2}[self.fun]
-        W = Winit.copy()
-        p = [W.r, X1.r, X1.c, 0 if self.algorithm == "parallel" else 1, fun, int(self.max_iter)]
-        it = int(k.b.x_decomp_ica_solve(X1.addr, W.addr, p, [float(alpha), float(self.tol)]))
-        return W, it
-
     def fit_transform(self, X, y=None):
         """Fit the model and return the estimated sources.
 
@@ -2648,7 +2305,7 @@ class FastICA(_Base):
         -------
         ndarray of shape (n_samples, n_components), float32
         """
-        return self._fit(X, True).out()
+        return _DECOMP_CALL(self, "fit_transform", (X,), _DECOMP_CONTEXT)
 
     def fit(self, X, y=None):
         """Fit the model.
@@ -2662,73 +2319,7 @@ class FastICA(_Base):
         -------
         self
         """
-        self._fit(X, False)
-        return self
-
-    def _fit(self, X, sources):
-        self.numeric_mode_ = _mode(self.numeric_mode)
-        k = self._kit()
-        M = _M.from_input(X)
-        n, d = M.r, M.c
-        _min_samples(n, d, "FastICA")
-        if self.algorithm not in ("parallel", "deflation"):
-            raise ValueError("algorithm must be 'parallel' or 'deflation'")
-        whiten = self.whiten
-        if whiten not in (False, "unit-variance", "arbitrary-variance"):
-            raise ValueError(f"whiten={whiten!r} is not supported")
-        nc = self.n_components
-        if not whiten and nc is not None:
-            nc = None
-        if nc is None:
-            nc = min(n, d)
-        if nc > min(n, d):
-            nc = min(n, d)
-        if whiten:
-            mean = k.colmean(M)
-            Xc = k.ew("sub", M, mean)
-            ev, u = k.eigh(k.mm(Xc, Xc, ta=True))
-            order = list(range(d - 1, -1, -1))
-            ev = k.ew("maxs", ev.take_cols(order), s=_F32_EPS * 10)
-            sv = k.ew("sqrt", ev)
-            u = u.take_cols(order)
-            u = k.ew("mul", u, k.neg_signs(u.rows(0, 1)))   # row 0's signs, on the device
-            K = k.ew("div", u, sv).T.rows(0, nc)
-            X1 = k.ew("scale", k.mm(K, Xc, tb=True), s=math.sqrt(n))
-        else:
-            Xc = M
-            X1 = M.T
-        if self.w_init is None:
-            Winit = k.rand(nc, nc, _seed_of(self.random_state), 20, 1)
-        else:
-            Winit = _M.from_input(self.w_init, "w_init")
-            if (Winit.r, Winit.c) != (nc, nc):
-                raise ValueError(f"w_init has invalid shape -- should be {(nc, nc)}")
-        W, it = self._solve(k, X1, Winit)
-        self.n_iter_ = it
-        S = None
-        if whiten:
-            WK = k.mm(W, K)
-            S = k.mm(Xc, WK, tb=True)
-            if whiten == "unit-variance":
-                smean = k.colmean(S)
-                std = k.ew("sqrt", k.ew("scale", k.colsum(k.ew("sqdiff", S, smean)), s=1.0 / n))
-                S = k.ew("div", S, std)
-                W = k.ew("div", W, std.T)
-            comp = k.mm(W, K)
-            self.whitening_m_ = K
-            self.whitening_ = K.out()
-            self.mean_m_ = mean
-            self.mean_ = mean.out((d,))
-        else:
-            S = k.mm(M, W, tb=True)
-            comp = W
-        self.components_m_ = comp
-        self.components_ = comp.out()
-        self.mixing_m_ = _pinv_rows(k, comp)
-        self.mixing_ = self.mixing_m_.out()
-        self._whiten = whiten
-        self.n_features_in_ = d
-        return S
+        return _DECOMP_CALL(self, "fit", (X,), _DECOMP_CONTEXT)
 
     def transform(self, X, copy=True):
         """Recover the sources from X.
@@ -2743,12 +2334,7 @@ class FastICA(_Base):
         -------
         ndarray of shape (n_samples, n_components), float32
         """
-        self._check()
-        k = self._kit()
-        M = _M.from_input(X)
-        if self._whiten:
-            M = k.ew("sub", M, self.mean_m_)
-        return k.mm(M, self.components_m_, tb=True).out()
+        return _DECOMP_CALL(self, "transform", (X,), _DECOMP_CONTEXT)
 
     def inverse_transform(self, X, copy=True):
         """Map sources back to the feature space with ``mixing_``.
@@ -2763,12 +2349,7 @@ class FastICA(_Base):
         -------
         ndarray of shape (n_samples, n_features), float32
         """
-        self._check()
-        k = self._kit()
-        Y = k.mm(_M.from_input(X), self.mixing_m_, tb=True)
-        if self._whiten:
-            Y = k.ew("add", Y, self.mean_m_)
-        return Y.out()
+        return _DECOMP_CALL(self, "inverse_transform", (X,), _DECOMP_CONTEXT)
 
 
 # ================================================================ FactorAnalysis
@@ -2792,71 +2373,8 @@ def _dsum_sq(k, M):
     return float(k.b.x_decomp_dsum_sq(M.addr, n))  # cpu-route: host binding only (CPU-only installs); a GPU binding sums on the device above
 
 
-def _dsum(k, M):
-    """Sequential float64 sum (IEEE adds, ascending, from 0.0) of M's float32
-    words: the same on every box (lane py-runtime-b: x_decomp/fa_em.mojo
-    `dsum`, it was a Python loop)."""
-    n = M.r * M.c
-    return float(k.b.x_decomp_dsum_f32(M.addr, n)) if n else 0.0
-
-
-def _inv(k, A):
-    """A^-1 through the LU solve against the identity (getrf + getrs)."""
-    lu, piv, info = k.lu(A)
-    if info:
-        raise ValueError("singular matrix")
-    return k.lu_solve(lu, piv, _eye(A.r))
-
-
-def _eye(n):
-    """The n x n identity, built whole (row major, a 1 every n + 1 words):
-    no per-row loop. The resident kit's `diag_mask` makes it on the device."""
-    if n < 1:
-        return _M.zeros(0, 0)
-    return _M(array.array("f", [1.0] + [0.0] * n) * (n - 1) + array.array("f", [1.0]), n, n)
-
-
-def _logdet(k, A):
-    """log|det A| from the LU diagonal (sum ascending); sign ignored."""
-    lu, piv, info = k.lu(A)
-    diag = k.diag(lu)       # lane cpu2-l8-decomp: gathered where the LU lives
-    return k.total(k.ew("logs", k.ew("abs", diag), s=1.1754943508222875e-38)).s[0]
-
-
-def _ortho_rotation(k, C, method, tol=1e-6, max_iter=100):
-    """sklearn `_factor_analysis.py::_ortho_rotation`; C is n_features x
-    n_components. The rotation loop (with `_polar`: the power-of-two
-    prescale, the eigh of A^T A) runs in ONE binding call (lane
-    py-runtime-b: x_decomp/rotation.mojo, x_decomp/rotation_dev.mojo on
-    resident device matrices), the same cells and stopping test."""
-    out = _M.zeros(C.c, C.r)
-    k.b.x_decomp_ortho_rotation(C.addr, out.addr, [C.r, C.c, 1 if method == "varimax" else 0, int(max_iter)],
-                                [float(tol)])
-    return out
-
-
-#: x_decomp/fa_fast.mojo's limits (kernel-derived): FA_MAX_D, FA_TR_MAXK, FA_TR_FLOATS
-_FA_MAX_D = 256
-_FA_TR_MAXK = 16
-_FA_TR_FLOATS = 4096
-
-
-def _fa_fast_defines(k):
-    """The FactorAnalysis FAST defines this binding was built with (a FAST
-    Apple build registers `x_decomp_fa_defines`; every other binding has no
-    such entry: the empty set). Asked once per kit; no env read."""
-    got = k.__dict__.get("_fa_defs")
-    if got is None:
-        got = frozenset()
-        if k._res():
-            try:
-                got = frozenset(filter(None, str(getattr(k._raw(), "x_decomp_fa_defines")()).split(",")))
-            except Exception:
-                got = frozenset()
-        k._fa_defs = got
-    return got
-
-
+# Every public FactorAnalysis operation is one call into the compiled owner
+# (bindings/fa_native.mojo, driver x_decomp/fa_owner.mojo).
 # Reference: scikit-learn `decomposition/_factor_analysis.py`: `fit`,
 # `transform`, `get_covariance`, `get_precision`, `score_samples`,
 # `_ortho_rotation`. Each iteration's SVD of the scaled data is the QR +
@@ -2942,137 +2460,7 @@ class FactorAnalysis(_Base):
         -------
         self
         """
-        self.numeric_mode_ = _mode(self.numeric_mode)
-        if self.svd_method not in ("lapack", "randomized"):
-            raise ValueError("svd_method must be 'lapack' or 'randomized'")
-        if self.rotation not in (None, "varimax", "quartimax"):
-            raise ValueError("rotation must be None, 'varimax' or 'quartimax'")
-        k = self._kit()
-        M = _M.from_input(X)
-        n, d = M.r, M.c
-        nc = self.n_components or d
-        # lane/apple-fast-quality-glmfa (2026-10-03): the two-pass mean. The
-        # float32 blocked column sum of a million rows carries a relative
-        # error near 1e-6, so a constant column c had mean c(1 + e), centred
-        # residuals c e and a variance (c e)^2 where theirs (float64) is 0:
-        # its psi stopped near (c e)^2 instead of the 1e-12 floor, and the
-        # mean_ the score subtracts was off by c e. The second pass adds the
-        # mean of the residuals (exact for a constant column: c is recovered
-        # to the word, the residuals are 0). Device launches only.
-        mean = k.colmean(M)
-        mean = k.ew("add", mean, k.colmean(k.ew("sub", M, mean)))
-        llconst = d * _LOG_2PI + nc
-        # FAST on Apple (lane/apple-fast-fa, recovered 2026-10-04): taken only
-        # when the binding reports MOJOLEARN_FA_GRAM_ONCE or
-        # MOJOLEARN_FA_ITER_DEVICE (x_decomp/fa_fast.mojo; ITER_DEVICE is the
-        # FAST + Apple default since 2026-10-04, rollback
-        # -D MOJOLEARN_FA_ITER_DEVICE_OFF); an IDENTICAL
-        # binding registers no FA entry, so this never runs there
-        fdefs = _fa_fast_defines(k)
-        if (("MOJOLEARN_FA_GRAM_ONCE" in fdefs or "MOJOLEARN_FA_ITER_DEVICE" in fdefs)
-                and d <= _FA_MAX_D and 1 <= nc <= d and self.max_iter >= 1):
-            return self._fit_fast(k, M, mean, n, d, nc, llconst, fdefs)
-        Xc = k.ew("sub", M, mean)
-        M = None     # not read again: the input's device copy goes back to the pool before the QR
-        nsqrt = math.sqrt(n)
-        psi = self._psi_init(k, d)
-        SMALL = 1e-12
-        # Xc = Q R once; the scaled data Xc D / sqrt(n) then has the singular
-        # values and right vectors of the d x d R D / sqrt(n) (Q orthogonal)
-        # (n >= d never reads Xc again, so the QR may consume it: one copy of X on the device)
-        Rx = k.qr_r(Xc, consume=True) if n >= d else None
-        # the EM loop in ONE binding call (lane py-runtime-b:
-        # x_decomp/fa_em.mojo on the host column, x_decomp/fa_em_dev.mojo on
-        # resident device matrices): the same cells per iteration (the SVD
-        # of the scaled R when n >= d, else the eigh of the scaled Gram), the
-        # same cancellation-free psi update (lane/apple-fast-quality-glmfa)
-        # and the float64 log-likelihood (`_dsum`'s sequential adds) and
-        # stopping test in the same order
-        A = Rx if n >= d else Xc
-        W = _M.zeros(nc, d)
-        psi = psi.copy()
-        la = array.array("d", [0.0]) * max(int(self.max_iter), 1)
-        it = int(k.b.x_decomp_fa_em_main(A.addr, psi.addr, W.addr, la.buffer_info()[0],
-                                         [n, d, nc, int(self.max_iter), A.r], [float(self.tol), float(llconst)]))
-        loglike = la.tolist()[:it]
-        if it == 0:
-            W = None
-        return self._fit_store(k, W, psi, mean, loglike, it, d, nc)
-
-    def _psi_init(self, k, d):
-        if self.noise_variance_init is None:
-            return k.const(1.0, 1, d)
-        psi = _M.of([float(v) for v in self.noise_variance_init], 1, len(self.noise_variance_init))  # glue: converts the noise_variance_init argument
-        if psi.c != d:
-            raise ValueError(f"noise_variance_init dimension does not match the number of features : {psi.c} != {d}")
-        return psi
-
-    def _fit_fast(self, k, M, mean, n, d, nc, llconst, fdefs):
-        """FAST on Apple (lane/apple-fast-fa@3efbce2af; x_decomp/fa_fast.mojo):
-        the centred Gram G (d x d) in ONE pass over the resident X
-        (MOJOLEARN_FA_GRAM_ONCE: X D / sqrt(n) has the spectrum and right
-        vectors of D G D / n), then the EM loop on G only, either here (the
-        eigh of D G D / n, main's psi update) or as ONE binding call
-        (MOJOLEARN_FA_ITER_DEVICE, `fa_em_py`)."""
-        psi = self._psi_init(k, d)
-        # MOJOLEARN_FA_GRAM_DF (lane/apple-fast-fa-quality): the binding forms
-        # G in double-float, hi words then lo words, so G's buffer is 2 d x d
-        G = k._dout(2 * d if "MOJOLEARN_FA_GRAM_DF" in fdefs else d, d)
-        var = k._dout(1, d)
-        k.b.x_decomp_fa_gram(k._did(M), k._did(mean), G._d.id, var._d.id, [n, d])
-        if "MOJOLEARN_FA_ITER_DEVICE" in fdefs:
-            p0 = array.array("f", psi.s)
-            wa = array.array("f", [0.0]) * (nc * d)
-            pa = array.array("f", [0.0]) * d
-            la = array.array("d", [0.0]) * self.max_iter
-            it = int(k.b.x_decomp_fa_em(G._d.id, p0.buffer_info()[0], wa.buffer_info()[0], pa.buffer_info()[0],
-                                        la.buffer_info()[0], [d, nc, n, self.max_iter], float(self.tol)))
-            return self._fit_store(k, _M(wa, nc, d), _M(pa, 1, d), mean, list(la[:it]), it, d, nc)
-        SMALL = 1e-12
-        old_ll = -math.inf
-        loglike = []
-        order = list(range(d - 1, -1, -1))
-        keep = _M.of([1.0] * nc + [0.0] * (d - nc), 1, d)
-        drop = _M.of([0.0] * nc + [1.0] * (d - nc), 1, d)
-        it = 0
-        W = None
-        for it in range(1, self.max_iter + 1):  # glue: EM iteration driver; every step is device launches (main's loop form)
-            sqrt_psi = k.ew("adds", k.ew("sqrt", psi), s=SMALL)
-            ev, V = k.eigh(k.ew("scale", k.ew("div", k.ew("div", G, sqrt_psi), sqrt_psi.T), s=1.0 / n))
-            s2 = k.ew("maxs", ev.take_cols(order), s=0.0)
-            # the nc leading right vectors signed as main's SVD route signs them
-            Vfull = V.take_cols(order).T
-            Vt = _svd_flip_v(Vfull.rows(0, nc))
-            sk = s2.cols(0, nc)
-            unexp = _dsum(k, s2.cols(nc, d)) if nc < d else 0.0
-            W = k.ew("mul", Vt, k.ew("sqrt", k.ew("maxs", k.ew("adds", sk, s=-1.0), s=0.0)).T)
-            W = k.ew("mul", W, sqrt_psi)
-            slog = _dsum(k, k.ew("logs", sk, s=1.1754943508222875e-38))
-            plog = _dsum(k, k.ew("logs", psi, s=1.1754943508222875e-38))
-            ll = (llconst + slog + unexp + plog) * (-n / 2.0)
-            loglike.append(ll)
-            if (ll - old_ll) < self.tol:
-                break
-            old_ll = ll
-            # main's cancellation-free psi update (lane/apple-fast-quality-glmfa)
-            wts = k.ew("add", k.ew("mul", k.ew("mins", s2, s=1.0), keep), k.ew("mul", s2, drop))
-            share = k.mm(wts, k.ew("sq", Vfull))
-            psi = k.ew("maxs", k.ew("mul", k.ew("sq", sqrt_psi), share), s=SMALL)
-        return self._fit_store(k, W, psi, mean, loglike, it, d, nc)
-
-    def _fit_store(self, k, W, psi, mean, loglike, it, d, nc):
-        if self.rotation is not None:
-            W = _ortho_rotation(k, W.T, self.rotation).rows(0, nc)
-        self.components_m_ = W
-        self.components_ = W.out()
-        self.noise_variance_m_ = psi
-        self.noise_variance_ = psi.out((d,))
-        self.mean_m_ = mean
-        self.mean_ = mean.out((d,))
-        self.loglike_ = loglike
-        self.n_iter_ = it
-        self.n_features_in_ = d
-        return self
+        return _DECOMP_CALL(self, "fit", (X,), _DECOMP_CONTEXT)
 
     def transform(self, X):
         """Return the expected latent variables for each sample.
@@ -3085,33 +2473,7 @@ class FactorAnalysis(_Base):
         -------
         ndarray of shape (n_samples, n_components), float32
         """
-        self._check()
-        k = self._kit()
-        W = self.components_m_
-        if ("MOJOLEARN_FA_TRANSFORM_FUSED" in _fa_fast_defines(k)
-                and W.r <= _FA_TR_MAXK and W.c * (W.r + 1) <= _FA_TR_FLOATS):
-            # FAST on Apple (lane/apple-fast-fa, recovered): (X - mean) P in
-            # ONE launch over rows, P = (W / psi)^T cov_z (d x nc) in
-            # threadgroup memory (x_decomp/fa_fast.mojo fa_transform_kernel)
-            Xm = _M.from_input(X)
-            if Xm.c != W.c:
-                raise ValueError(f"x_decomp: cannot broadcast 1x{W.c} against {Xm.r}x{Xm.c}")
-            Wpsi = k.ew("div", W, self.noise_variance_m_)
-            cov_z = _inv(k, k.ew("add", _eye(W.r), k.mm(Wpsi, W, tb=True)))
-            P = k.mm(Wpsi, cov_z, ta=True)
-            out = k._dout(Xm.r, W.r)
-            k.b.x_decomp_fa_transform(k._did(Xm), k._did(self.mean_m_), k._did(P), out._d.id, [Xm.r, Xm.c, W.r])
-            return out.out()
-        M = k.ew("sub", _M.from_input(X), self.mean_m_)
-        Wpsi = k.ew("div", W, self.noise_variance_m_)
-        cov_z = _inv(k, k.ew("add", _eye(W.r), k.mm(Wpsi, W, tb=True)))
-        return k.mm(k.mm(M, Wpsi, tb=True), cov_z).out()
-
-    def _cov(self, k):
-        W = self.components_m_
-        # lane cpu2-l8-decomp: the noise variances added to the diagonal
-        # where C lives (one add a diagonal value; no d x d round trip)
-        return k.diag_add(k.mm(W, W, ta=True), self.noise_variance_m_)
+        return _DECOMP_CALL(self, "transform", (X,), _DECOMP_CONTEXT)
 
     def get_covariance(self):
         """Return the model covariance ``components_.T @ components_ + diag(noise_variance_)``.
@@ -3120,8 +2482,7 @@ class FactorAnalysis(_Base):
         -------
         ndarray of shape (n_features, n_features), float32
         """
-        self._check()
-        return self._cov(self._kit()).out()
+        return _DECOMP_CALL(self, "get_covariance", (), _DECOMP_CONTEXT)
 
     def get_precision(self):
         """Return the inverse of the model covariance.
@@ -3135,9 +2496,7 @@ class FactorAnalysis(_Base):
         ValueError
             If the covariance is singular.
         """
-        self._check()
-        k = self._kit()
-        return _inv(k, self._cov(k)).out()
+        return _DECOMP_CALL(self, "get_precision", (), _DECOMP_CONTEXT)
 
     def score_samples(self, X):
         """Return the log-likelihood of each sample under the model.
@@ -3150,18 +2509,7 @@ class FactorAnalysis(_Base):
         -------
         ndarray of shape (n_samples,), float32
         """
-        v = self._ss(X)
-        return v.out((v.r,))
-
-    def _ss(self, X):
-        self._check()
-        k = self._kit()
-        Xr = k.ew("sub", _M.from_input(X), self.mean_m_)
-        C = self._cov(k)
-        P = _inv(k, C)
-        ld = _logdet(k, P)
-        q = k.rowsum(k.ew("mul", Xr, k.mm(Xr, P)))
-        return k.ew("adds", k.ew("scale", q, s=-0.5), s=-0.5 * (Xr.c * _LOG_2PI - ld))
+        return _DECOMP_CALL(self, "score_samples", (X,), _DECOMP_CONTEXT)
 
     def score(self, X, y=None):
         """Return the average log-likelihood of the samples.
@@ -3175,9 +2523,7 @@ class FactorAnalysis(_Base):
         -------
         float
         """
-        k = self._kit()
-        v = self._ss(X)
-        return k.ew("scale", k.total(v), s=1.0 / v.r).s[0]
+        return _DECOMP_CALL(self, "score", (X,), _DECOMP_CONTEXT)
 
 
 # ================================================================ TruncatedSVD explained variance
@@ -4549,12 +3895,6 @@ class MiniBatchSparsePCA(_BaseSparsePCA):
 
 
 # ================================================================ LatentDirichletAllocation
-_F64_EPS = 2.220446049250313e-16
-
-
-def _dirichlet_expectation_2d(k, A):
-    """psi(A) - psi(rowsum(A)) (sklearn `_online_lda_fast.pyx`)."""
-    return k.ew("sub", k.ew("digamma", A), k.ew("digamma", k.rowsum(A)))
 
 
 # Reference: scikit-learn `decomposition/_lda.py` with
@@ -4660,98 +4000,6 @@ class LatentDirichletAllocation(_Base):
         self.max_doc_update_iter, self.n_jobs, self.verbose = max_doc_update_iter, n_jobs, verbose
         self.random_state, self.numeric_mode = random_state, numeric_mode
 
-    def _check_X(self, X, whom):
-        M = _M.from_input(X)
-        if _any_negative(M):
-            raise ValueError(f"Negative values in data passed to {whom}")
-        return M
-
-    def _init(self, k, d):
-        nc = self.n_components
-        self.doc_topic_prior_ = 1.0 / nc if self.doc_topic_prior is None else self.doc_topic_prior
-        self.topic_word_prior_ = 1.0 / nc if self.topic_word_prior is None else self.topic_word_prior
-        self._seed = _seed_of(self.random_state)
-        self._draw = 0
-        self.n_batch_iter_ = 1
-        self.n_iter_ = 0
-        self.components_m_ = k.ew("scale", k.rand_gamma(nc, d, self._seed, 60, 100.0), s=0.01)
-        self._exp_dir = k.ew("exp", _dirichlet_expectation_2d(k, self.components_m_))
-
-    def _e_step(self, k, X, cal_sstats, random_init):
-        n, nc = X.r, self.components_m_.r
-        if random_init:
-            self._draw += 1
-            Dt = k.ew("scale", k.rand_gamma(n, nc, self._seed, 61 + self._draw, 100.0), s=0.01)
-        else:
-            Dt = k.const(1.0, n, nc)
-        Et = k.ew("exp", _dirichlet_expectation_2d(k, Dt))
-        ss = None
-        if cal_sstats:
-            ss = self._fused_estep_ss(k, X, Dt, Et)     # FAST + Apple + define only, else None
-        if ss is None:
-            Dt, Et = k.lda_rows(X, self._exp_dir, Dt, Et, self.doc_topic_prior_, self.max_doc_update_iter,
-                                self.mean_change_tol)
-        if cal_sstats and ss is None:
-            norm_phi = k.ew("adds", k.mm(Et, self._exp_dir), s=_F64_EPS)
-            R = k.ew("div", X, norm_phi)
-            ss = k.ew("mul", k.mm(Et, R, ta=True), self._exp_dir)
-        return Dt, ss
-
-    def _fused_estep_ss(self, k, X, Dt, Et):
-        """FAST only (lane apple-fast-nb): the E-step's document loop and the
-        sufficient statistics in one launch, `x_decomp_dev_lda_estep_ss`
-        (x_decomp/lda_fast.mojo), exported by the GPU binding only when built
-        FAST on Apple (default; off with -D MOJOLEARN_LDA_FUSED_SS_OFF). Dt and Et are updated in
-        place on the device as `lda_rows` does. None (the caller runs main's
-        chain) under IDENTICAL, without the export, off the resident path, or
-        past the kernel's caps."""
-        if k.mode != "fast" or not X.r or not k._use(X, self._exp_dir, Dt, Et):
-            return None
-        try:
-            fn = getattr(k._raw(), "x_decomp_dev_lda_estep_ss")
-        except Exception:       # the host proxy raises ImportError for an absent export
-            return None
-        nc, v = self._exp_dir.r, self._exp_dir.c
-        ss = k._dout(nc, v)
-        ok = fn(k._did(X), k._did(self._exp_dir), k._did(Dt), k._did(Et), ss._d.id,
-                [X.r, nc, v, int(self.max_doc_update_iter)],
-                [float(self.doc_topic_prior_), float(self.mean_change_tol)])
-        return ss if int(ok) else None
-
-    def _em_step(self, k, X, total_samples, batch_update):
-        _, ss = self._e_step(k, X, True, True)
-        if batch_update:
-            self.components_m_ = k.ew("adds", ss, s=self.topic_word_prior_)
-        else:
-            # (offset + n_batch_iter)^(-decay) through the cells' log and exp
-            # (Python's ** is the platform libm's pow)
-            weight = k.ew("exp", k.ew("scale", k.ew("logs", k.const(self.learning_offset + self.n_batch_iter_),
-                                                    s=1e-30), s=-self.learning_decay)).s[0]
-            doc_ratio = float(total_samples) / X.r
-            upd = k.ew("adds", k.ew("scale", ss, s=doc_ratio), s=self.topic_word_prior_)
-            self.components_m_ = k.ew("add", k.ew("scale", self.components_m_, s=1 - weight),
-                                      k.ew("scale", upd, s=weight))
-        self._exp_dir = k.ew("exp", _dirichlet_expectation_2d(k, self.components_m_))
-        self.n_batch_iter_ += 1
-
-    def _online_pass(self, k, M, total_samples):
-        """`for a in range(0, n, batch_size): self._em_step(k, M.rows(a, b),
-        total_samples, False)` in ONE binding call (x_decomp/lda_online.mojo,
-        lane/py-decomp-nbrs): the same cells, draws and float32 scalars per
-        mini-batch (cgr-decomp: the MOJOLEARN_XD_LDA_PYTHON loop arm is
-        deleted)."""
-        bs = self.batch_size
-        if isinstance(bs, bool) or not isinstance(bs, int) or bs < 1:
-            raise ValueError("batch_size must be a positive integer")
-        C, E = self.components_m_, self._exp_dir
-        nc, v = C.r, C.c
-        self._draw, self.n_batch_iter_ = k.b.x_decomp_lda_online(
-            M.addr, C.addr, E.addr,
-            [M.r, v, nc, bs, int(self.max_doc_update_iter), int(self._seed) & 0xFFFFFFFF, self._draw,
-             self.n_batch_iter_],
-            [float(self.doc_topic_prior_), float(self.topic_word_prior_), float(self.learning_offset),
-             float(self.learning_decay), float(self.mean_change_tol), float(total_samples)])
-
     def fit(self, X, y=None):
         """Fit the topic model to a document-term matrix.
 
@@ -4765,39 +4013,7 @@ class LatentDirichletAllocation(_Base):
         -------
         self
         """
-        self.numeric_mode_ = _mode(self.numeric_mode)
-        if self.learning_method not in ("batch", "online"):
-            raise ValueError("learning_method must be 'batch' or 'online'")
-        k = self._kit()
-        M = self._check_X(X, "LatentDirichletAllocation.fit")
-        n, d = M.r, M.c
-        self._init(k, d)
-        if self.learning_method == "online":
-            bs = self.batch_size
-            if isinstance(bs, bool) or not isinstance(bs, int) or bs < 1:
-                raise ValueError("batch_size must be a positive integer")
-        # the fit loop (batch EM steps or online epochs, the perplexity
-        # checks) in ONE binding call (lane py-runtime-b: x_decomp/lda_fit.mojo
-        # on the host column, lda_fit_dev.mojo on resident device matrices):
-        # the same cells, draws and float64 bound arithmetic
-        C, E = self.components_m_.copy(), self._exp_dir.copy()
-        nc, v = C.r, C.c
-        it, self._draw, self.n_batch_iter_ = k.b.x_decomp_lda_fit(
-            M.addr, C.addr, E.addr,
-            [n, v, nc, int(self.max_iter), int(self.learning_method == "online"),
-             int(self.batch_size) if self.learning_method == "online" else 1, int(self.max_doc_update_iter),
-             int(self._seed) & 0xFFFFFFFF, self._draw, self.n_batch_iter_, int(self.evaluate_every)],
-            [float(self.doc_topic_prior_), float(self.topic_word_prior_), float(self.learning_offset),
-             float(self.learning_decay), float(self.mean_change_tol), float(n), float(self.perp_tol)])
-        self.components_m_, self._exp_dir = C, E
-        it = int(it)
-        self.n_iter_ = it
-        Dt, _ = self._e_step(k, M, False, False)
-        self.bound_ = self._perplexity(k, M, Dt)
-        self.components_ = self.components_m_.out()
-        self.exp_dirichlet_component_ = self._exp_dir.out()
-        self.n_features_in_ = d
-        return self
+        return _DECOMP_CALL(self, "fit", (X,), _DECOMP_CONTEXT)
 
     def partial_fit(self, X, y=None):
         """Update the model with one batch of documents (online learning).
@@ -4813,23 +4029,7 @@ class LatentDirichletAllocation(_Base):
         -------
         self
         """
-        if not hasattr(self, "components_m_"):
-            self.numeric_mode_ = _mode(self.numeric_mode)
-        k = self._kit()
-        M = self._check_X(X, "LatentDirichletAllocation.partial_fit")
-        if not hasattr(self, "components_m_"):
-            self._init(k, M.c)
-        self._online_pass(k, M, self.total_samples)
-        self.components_ = self.components_m_.out()
-        self.exp_dirichlet_component_ = self._exp_dir.out()
-        self.n_features_in_ = M.c
-        return self
-
-    def _unnormalized(self, X):
-        self._check()
-        k = self._kit()
-        M = self._check_X(X, "LatentDirichletAllocation.transform")
-        return k, M, self._e_step(k, M, False, False)[0]
+        return _DECOMP_CALL(self, "partial_fit", (X,), _DECOMP_CONTEXT)
 
     def transform(self, X, *, normalize=True):
         """Return the topic distribution of each document.
@@ -4845,10 +4045,7 @@ class LatentDirichletAllocation(_Base):
         -------
         ndarray of shape (n_samples, n_components), float32
         """
-        k, M, Dt = self._unnormalized(X)
-        if normalize:
-            Dt = k.ew("div", Dt, k.rowsum(Dt))
-        return Dt.out()
+        return _DECOMP_CALL(self, "transform", (X, normalize), _DECOMP_CONTEXT)
 
     def fit_transform(self, X, y=None, *, normalize=True):
         """Fit the model, then return ``transform(X, normalize=normalize)``.
@@ -4863,49 +4060,7 @@ class LatentDirichletAllocation(_Base):
         -------
         ndarray of shape (n_samples, n_components), float32
         """
-        return self.fit(X).transform(X, normalize=normalize)
-
-    def _loglik(self, k, prior, distr, dirichlet, size):
-        s1 = k.total(k.ew("mul", k.ew("scale", k.ew("adds", distr, s=-prior), s=-1.0), dirichlet)).s[0]
-        s2 = k.total(k.ew("adds", k.ew("lgamma", distr), s=-k.ew("lgamma", k.const(prior)).s[0])).s[0]
-        lg_ps = k.ew("lgamma", k.const(prior * size)).s[0]
-        s3 = k.total(k.ew("scale", k.ew("adds", k.ew("lgamma", k.rowsum(distr)), s=-lg_ps), s=-1.0)).s[0]
-        return s1 + s2 + s3
-
-    def _approx_bound(self, k, M, Dt, sub_sampling=False):
-        n, v = M.r, M.c
-        nc = self.components_m_.r
-        ddt = _dirichlet_expectation_2d(k, Dt)             # n x k
-        dcomp = _dirichlet_expectation_2d(k, self.components_m_)   # k x v
-        floor = 1.1754943508222875e-38
-        if n * v and k._use(M, ddt, dcomp) and hasattr(k._raw(), "x_decomp_dev_lda_bound"):
-            # lane gap-lda-als: the same ew cells per (i, w) in one kernel,
-            # no n x v term matrix per topic (the L40S text-block OOM)
-            P = k._dout(n, v)
-            k.b.x_decomp_dev_lda_bound(k._did(M), k._did(ddt), k._did(dcomp), P._d.id, [n, nc, v], [floor])
-            score = k.total(P).s[0]
-        else:
-            # the host column (lane py-runtime-b): the same ew cells per
-            # (i, w) in `x_decomp_lda_bound` (x_decomp/chi2.mojo, the CPU
-            # twin of lda_bound_kernel), folded by the kit's total
-            P = _M.zeros(n, v)
-            if n * v:
-                k.b.x_decomp_lda_bound(M.addr, ddt.addr, dcomp.addr, P.addr, [n, nc, v], [floor])
-            score = k.total(P).s[0]
-        score += self._loglik(k, self.doc_topic_prior_, Dt, ddt, nc)
-        if sub_sampling:
-            score *= float(self.total_samples) / n
-        score += self._loglik(k, self.topic_word_prior_, self.components_m_, dcomp, v)
-        return score
-
-    def _perplexity(self, k, M, Dt, sub_sampling=False):
-        bound = self._approx_bound(k, M, Dt, sub_sampling)
-        word_cnt = k.total(M).s[0]
-        if sub_sampling:
-            word_cnt *= float(self.total_samples) / M.r
-        if not word_cnt:
-            return math.inf
-        return self._kit().ew("exp", k.const(-bound / word_cnt)).s[0]
+        return _DECOMP_CALL(self, "fit_transform", (X, normalize), _DECOMP_CONTEXT)
 
     def score(self, X, y=None):
         """Return the approximate log-likelihood (variational bound) of X.
@@ -4919,8 +4074,7 @@ class LatentDirichletAllocation(_Base):
         -------
         float
         """
-        k, M, Dt = self._unnormalized(X)
-        return self._approx_bound(k, M, Dt)
+        return _DECOMP_CALL(self, "score", (X,), _DECOMP_CONTEXT)
 
     def perplexity(self, X, sub_sampling=False):
         """Return the approximate perplexity of X.
@@ -4937,8 +4091,7 @@ class LatentDirichletAllocation(_Base):
         float
             Infinity when X has no words.
         """
-        k, M, Dt = self._unnormalized(X)
-        return self._perplexity(k, M, Dt, sub_sampling)
+        return _DECOMP_CALL(self, "perplexity", (X, sub_sampling), _DECOMP_CONTEXT)
 
 
 # ================================================================ manifold: Isomap, MDS, LLE
@@ -6644,3 +5797,12 @@ _ALS_CALL, _ALS_CONTEXT = _connect_decomp_kit("als_native_call")
 # The native linear-algebra owner (bindings/linalg_decomp_native.mojo):
 # randomized_svd and solve.
 _LINALG_CALL, _LINALG_CONTEXT = _connect_decomp_kit("linalg_decomp_native_call")
+
+
+# The compiled owner of the decomposition estimators whose public operations
+# are one native call each (bindings/decomp_native.mojo): FastICA, ...
+from . import _native_decomp_bridge  # noqa: E402
+_DECOMP_CALL, _DECOMP_CONTEXT = _native_decomp_bridge.connect_public({
+    "FastICA": FastICA, "NMF": NMF, "FactorAnalysis": FactorAnalysis,
+    "LatentDirichletAllocation": LatentDirichletAllocation,
+    "GaussianRandomProjection": GaussianRandomProjection, "SparseRandomProjection": SparseRandomProjection})

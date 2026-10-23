@@ -66,7 +66,8 @@ def tsvd_randomized_fit_run[E: Exec, D: RDev, RES: Bool](
         # Xt = U * S; ev = colsum((Xt - colmean(Xt))^2) / n
         var xt = kit.ew(_OP_MUL, u, s)
         var xt_sums = kit.sum(xt, True)
-        var xt_mean = kit.ew(_OP_SCALE, xt_sums, scalar=1.0 / Float64(kit.r(xt)))
+        var xt_rows = kit.r(xt)
+        var xt_mean = kit.ew(_OP_SCALE, xt_sums, scalar=1.0 / Float64(xt_rows))
         var spread = kit.ew(_OP_SQDIFF, xt, xt_mean)
         var spread_sums = kit.sum(spread, True)
         var variance = kit.ew(_OP_SCALE, spread_sums, scalar=1.0 / Float64(rows))

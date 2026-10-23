@@ -1378,127 +1378,7 @@ class KernelPCA(_XNeighbors):
         self : KernelPCA
             The fitted estimator.
         """
-        if callable(self.kernel) or (self.kernel not in _KERNELS and self.kernel != "precomputed"):
-            raise NotImplementedError(f"KernelPCA: kernel={self.kernel!r} is not implemented")
-        if self.fit_inverse_transform:
-            raise NotImplementedError("KernelPCA: fit_inverse_transform is not implemented")
-        if self.kernel_params:
-            raise NotImplementedError("KernelPCA: kernel_params is not implemented")
-        X = _f32(X)
-        n, d = X.shape
-        if self.kernel == "precomputed" and n != d:
-            raise ValueError("Precomputed matrix must be a square matrix.")
-        self._gamma = _f32_scalar(1.0 / d if self.gamma is None else float(self.gamma))
-        Kc_M = None
-        kit = None
-        # w2-w4d-kpca-q validates RBF with the auto top-k solver only.
-        # Keep unmeasured kernels and dense-solver routes on their old path.
-        if (self.kernel == "rbf" and self.eigen_solver == "auto" and n > 200
-                and self.n_components is not None and 0 < int(self.n_components) < 10
-                and _kpca_resident(self)):
-            # lane/apple-fast-kapprox: the kernel matrix never leaves the
-            # device (main's path moved the n x n matrix through the host
-            # five times: the kernel op's download, colsum's upload, the
-            # center op's upload and download, tobytes + the kit's upload)
-            from ._expansion_decomp import _Kit
-            kit = _Kit(self.numeric_mode_used())
-            got = _kpca_resident_center(kit, X, n, self.kernel, self._gamma, _f32_scalar(self.coef0),
-                                        int(self.degree))
-            if got is not None:
-                Kc_M, cols_m, all_m = got
-                cols = cols_m.out((n,))
-                all_ = all_m.out((1,))
-        if Kc_M is None:
-            K = self._k(X, X)
-            cols = self._scale_div(self._colsum(K), float(n))              # K_fit_rows_
-            all_ = self._scale_div(self._colsum(cols.reshape((1, n))), float(n))  # K_fit_all_
-            Kc = _empty_out((n, n), "<f4")
-            self._op("kpca_center", [(K, 0), (cols, 0), (cols, 0), (all_, 0), (Kc, 1)], (n, n))
-        # Top-k GPU Lanczos instead of the full n-by-n host eigensolve when
-        # auto asks for a few components (on by default since 2026-09-30:
-        # L40S CUDA, Apple Metal and the CPU column bit-identical, residual < 1e-5,
-        # float64 reference match; lane pyglue-numeric deleted the
-        # MOJOLEARN_XN_KPCA_LANCZOS route switch). Anything outside that
-        # scope, or a basis that does not converge, takes the exact dense
-        # path below.
-        c = 0 if self.n_components is None else int(self.n_components)
-        lanczos = self.eigen_solver == "auto" and n > 200 and 0 < c < 10
-        if lanczos and kit is None:
-            from ._expansion_decomp import _Kit
-            # Every column (CUDA, HIP, Metal and the CPU host binding) takes
-            # this route, so a CPU-only install gives the GPUs' bits.
-            kit = _Kit(self.numeric_mode_used())
-        result = None
-        if lanczos:
-            import array
-            from ._expansion_decomp import _M, _lanczos_top
-            if Kc_M is None:
-                # Array's buffer is float32 in row order; no Python float list of
-                # n*n cells. The kit uploads it once and retains the device store.
-                store = array.array("f")
-                store.frombytes(Kc.tobytes())
-                Kc_M = _M(store, n, n)
-            result = _lanczos_top(kit, Kc_M, c)
-        if result is not None:
-            values, vectors = result
-            vectors = kit.ew("mul", vectors, kit.absmax_signs(vectors, True))
-            # lane cpu2-l9-neighbors: the clamp and the positive count on the
-            # kit's cells (values come back descending, so the kept set is a
-            # prefix); one count word read back, no host list of the values
-            nv = values.r * values.c
-            vals_m, npos = _kpca_clamp_count(kit, values if values.r == 1 else values.reshape(1, nv))
-            kept = npos if self.remove_zero_eig else nv
-            if kept < nv:
-                vectors = vectors.cols(0, kept)
-                vals_m = vals_m.cols(0, kept)
-            self.eigenvalues_ = vals_m.out((kept,))
-            self.eigenvectors_ = Array._from_flat(vectors.s, (n, kept), "<f4")
-            self._fit_X, self._fit_cols, self._fit_all = X, cols, all_
-            self.n_features_in_ = d
-            return self
-        # lane hr2-kpca-seq: the dense eigendecomposition is x_decomp's
-        # eigh, never the host Jacobi of x_neighbors/eigh.mojo inside the
-        # GPU binding. On every IDENTICAL device column (NVIDIA, AMD and
-        # Apple alike, no vendor gate) eigh from n = 2 TD_NB (64) is the
-        # tridiagonal route (x_decomp/eigh_tridiag.mojo EIGH_TD_IDN, default
-        # since 2026-10-11), below that and on a clustered-spectrum refusal
-        # the round-robin Jacobi (x_decomp/rr.mojo); the host binding takes
-        # the same route with the same words since 2026-10-13
-        # (x_decomp/eigh_tridiag_host.mojo; lane apple-neighbors-gpu-cpu).
-        c = n if self.n_components is None else min(n, int(self.n_components))
-        import array
-        from ._expansion_decomp import _Kit, _M
-        if kit is None:
-            kit = _Kit(self.numeric_mode_used())
-        if Kc_M is None:
-            store = array.array("f")
-            store.frombytes(Kc.tobytes())
-            Kc_M = _M(store, n, n)
-        wm, Vm = kit.eigh(Kc_M)
-        # descending (eigh is ascending; equal values: higher index first);
-        # lane cpu2-l9-neighbors: only the top c values are taken, and the
-        # clamp and the positive count run on the kit's cells (a prefix of
-        # the descending order is kept); one count word read back
-        order = range(n - 1, n - 1 - c, -1)
-        kept = c
-        vals_m = _M(array.array("f"), 1, 0)
-        if c:
-            vals_m, npos = _kpca_clamp_count(kit, wm.take_cols(order))  # wm is 1 x n
-            if self.n_components is None or self.remove_zero_eig:
-                kept = npos
-            if kept < c:
-                vals_m = vals_m.cols(0, kept)
-        order = list(range(n - 1, n - 1 - kept, -1))  # glue: the kept column indices
-        self.eigenvalues_ = vals_m.out((kept,))
-        # sklearn's svd_flip(u, None) on the kept columns: each column's
-        # largest-|.| entry (ties to the lower row) made positive
-        vecs = Vm.take_cols(order)
-        if order:
-            vecs = kit.ew("mul", vecs, kit.absmax_signs(vecs, True))
-        self.eigenvectors_ = Array._from_flat(vecs.s, (n, len(order)), "<f4")
-        self._fit_X, self._fit_cols, self._fit_all = X, cols, all_
-        self.n_features_in_ = d
-        return self
+        return _KPCA_CALL(self, "fit", (X,), _KPCA_CONTEXT)
 
     def fit_transform(self, X, y=None, **params):
         """Fit the model and return the projection of the training data.
@@ -1516,8 +1396,7 @@ class KernelPCA(_XNeighbors):
         -------
         X_new : Array of shape (n_samples, n_components), float32
         """
-        self.fit(X)
-        return self._alpha_scale(0)
+        return _KPCA_CALL(self, "fit_transform", (X,), _KPCA_CONTEXT)
 
     def _alpha_scale(self, divide):
         V = self.eigenvectors_
@@ -1539,30 +1418,7 @@ class KernelPCA(_XNeighbors):
         -------
         X_new : Array of shape (n_queries, n_components), float32
         """
-        Q = _f32(X)
-        nq = Q.shape[0]
-        nf = self._fit_X.shape[0]
-        alphas = self._alpha_scale(1)
-        c = alphas.shape[1]
-        pre = self.kernel == "precomputed"
-        if pre and Q.shape[1] != nf:
-            raise ValueError(f"KernelPCA: a precomputed kernel needs {nf} columns (the fitted rows), got {Q.shape[1]}")
-        if nq and c and not _OLD_ITEMS:
-            # the fused chain (lane/py-dn-kern): kernel, rowsum, / n_fit,
-            # center and the product with the scaled alphas per row tile on
-            # the device, only the (nq, c) result downloaded (`xn_kpca_transform`)
-            out = _empty_out((nq, c), "<f4")
-            self._op("kpca_transform",
-                     [(Q, 0), (Q if pre else self._fit_X, 0), (self._fit_cols, 0), (self._fit_all, 0),
-                      (alphas, 0), (out, 1)],
-                     (nq, nf, Q.shape[1], c, _XN_PRECOMPUTED_KIND if pre else _KERNELS[self.kernel], int(self.degree)),
-                     (0.0 if pre else _f32_scalar(self._gamma), 0.0 if pre else _f32_scalar(self.coef0), float(nf)))
-            return out
-        K = self._k(Q, self._fit_X)
-        pred = self._scale_div(self._rowsum(K), float(nf))
-        Kc = _empty_out((nq, nf), "<f4")
-        self._op("kpca_center", [(K, 0), (self._fit_cols, 0), (pred, 0), (self._fit_all, 0), (Kc, 1)], (nq, nf))
-        return self._matmul(Kc, alphas)
+        return _KPCA_CALL(self, "transform", (X,), _KPCA_CONTEXT)
 
     def inverse_transform(self, X):
         """Not supported: always raises ``NotImplementedError``."""
@@ -3482,3 +3338,12 @@ class SVGP(RegressorScoreMixin, _XNeighbors):
         mean : Array of shape (n_queries,), float32
         """
         return self.predict_f(X)[0]
+
+
+# The compiled owner of KernelPCA's fit, fit_transform and transform
+# (bindings/kpca_native.mojo through the decomposition owner door).
+from . import _native_decomp_bridge  # noqa: E402
+_KPCA_CALL, _KPCA_CONTEXT = _native_decomp_bridge.connect_public(
+    {"KernelPCA": KernelPCA}, neighbors=True,
+    metadata={"kpca_kernels": dict(_KERNELS), "kpca_precomputed_kind": _XN_PRECOMPUTED_KIND,
+              "kpca_old_items": _OLD_ITEMS})
