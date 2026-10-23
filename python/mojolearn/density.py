@@ -2,11 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Density-based clustering on the GPU. Reference: cuML's DBSCAN."""
 
-from . import _mojolearn_estimators, _native_archive_bridge, _serialize
+from . import _mojolearn_estimators, _native_archive_bridge, _native_family_bridge
 from ._sample_weight import check_sample_weight
-from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, empty, frombytes, full, zeros
+from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, empty
 from ._mode import NumericModeMixin, available_if
-from .linear_model import _check_saved_by, _restore_mode, _shape_of
 
 #: `KernelDensity.save`'s format tag (the kde svc host lane, 2026-09-14).
 _KDE_FORMAT = "mojolearn-kde-1"
@@ -77,6 +76,10 @@ _METRICS = {
     "precomputed": DBSCAN_METRIC_PRECOMPUTED,
 }
 
+# The compiled family owner (bindings/cluster_native.mojo): DBSCAN.predict is
+# one native call, handed the binding `_bind` resolves; it reads this table.
+_NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
+
 #: The metric each algorithm arm can serve. The ball cover computes Euclidean
 #: distances for its landmark radii and its three pruning bounds
 #: (`neighbors/impl/ball_cover/`), so it serves L2 only; the brute
@@ -86,6 +89,9 @@ _ARM_METRICS = {
     "rbc": (DBSCAN_METRIC_L2, DBSCAN_METRIC_PRECOMPUTED),
     "brute": (DBSCAN_METRIC_L2, DBSCAN_METRIC_L1, DBSCAN_METRIC_COSINE, DBSCAN_METRIC_PRECOMPUTED),
 }
+_native_family_bridge.tables(family_dbscan_metrics=dict(_METRICS),
+                             family_cfb_dbscan_algorithms=dict(_ALGORITHMS),
+                             family_cfb_dbscan_arms=dict(_ARM_METRICS))
 
 
 # Maintainer notes (moved from the class docstring). House rule: a parameter that is accepted and
@@ -270,155 +276,29 @@ class DBSCAN(NumericModeMixin):
             ``eps``, ``min_samples < 1`` or a mismatched
             ``sample_weight``.
         """
-        if not isinstance(self.prediction_data, bool):
-            raise TypeError(
-                "mojolearn DBSCAN: prediction_data must be a bool, got "
-                f"{type(self.prediction_data).__name__}"
-            )
-        metric_key = str(self.metric).lower()
-        if metric_key not in _METRICS:
-            raise ValueError(
-                f"mojolearn DBSCAN: metric={self.metric!r} is refused; it "
-                f"must be one of {sorted(_METRICS)}. 'euclidean'/'l2' is the "
-                "implemented cuML arm; 'manhattan'/'l1'/'cityblock' is this "
-                "library's own L1 arm (DEVIATION 27, dbscan/impl/neighbors/"
-                "epsilon_neighborhood.mojo); 'cosine' and 'precomputed' "
-                "are cuML's other two (dbscan.pyx:110-115, DEVIATIONS 5113 "
-                "and 5114)"
-            )
-        metric = _METRICS[metric_key]
-        if self.algorithm not in _ALGORITHMS:
-            raise ValueError(
-                f"mojolearn DBSCAN: algorithm={self.algorithm!r} is refused; "
-                f"it must be one of {sorted(_ALGORITHMS)}. Both name an "
-                "eps-neighborhood SEARCH: 'rbc' is the random ball cover "
-                "(the default, DEVIATION 35) and 'brute' is the fused "
-                "all-pairs scan. scikit-learn's 'kd_tree' and 'ball_tree' "
-                "are not offered because a recursive, data-dependent tree "
-                "descent is the wrong shape for a GPU -- divergent branches "
-                "and pointer chasing instead of coalesced reads -- and its "
-                "pruning decays past about ten features anyway. The ball "
-                "cover prunes arithmetically over two flat arrays and "
-                "measured 2.7x-27x over brute force at 16k-200k rows on "
-                "this hardware; see the class docstring"
-            )
-        if metric not in _ARM_METRICS[self.algorithm]:
-            raise ValueError(
-                f"mojolearn DBSCAN: metric={self.metric!r} with "
-                f"algorithm={self.algorithm!r} is refused. The ball cover "
-                "computes Euclidean distances for its landmark radii and "
-                "its three pruning bounds (neighbors/impl/"
-                "ball_cover/) against the radius itself, so it serves "
-                "'euclidean' only ('cosine' compares unit rows against "
-                "2 * eps, a threshold the index does not take). Pass "
-                "algorithm='brute', which serves this metric. This is a "
-                "scope boundary and not a property of the algorithm: the "
-                "ball cover's pruning rests on the triangle inequality, "
-                "which L1 satisfies, so an L1 index is reachable work in "
-                "that lane"
-            )
-        if metric == DBSCAN_METRIC_PRECOMPUTED and self.prediction_data:
-            raise ValueError(
-                "mojolearn DBSCAN: prediction_data=True with "
-                "metric='precomputed' is refused by name: predict needs each "
-                "query's distances to the core samples, which a distance "
-                "matrix over the training rows does not give"
-            )
-        if float(self.eps) <= 0:
-            raise ValueError("mojolearn DBSCAN eps must be positive")
-        if int(self.min_samples) < 1:
-            raise ValueError("mojolearn DBSCAN min_samples must be at least 1")
-        cap = 0 if self.max_iterations is None else int(self.max_iterations)
-        if cap < 0:
-            raise ValueError(
-                "mojolearn DBSCAN max_iterations must be None (the fixed "
-                "point) or a positive cap"
-            )
-        x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
-        if not all_finite(x):
-            # Before this check a NaN row reached the kernel and came back
-            # labelled noise (-1), silently; scikit-learn refuses it.
-            raise ValueError(
-                "mojolearn DBSCAN: X contains a NaN or an infinity; a "
-                "non-finite row has no distance to any other, so it is "
-                "refused by name"
-            )
-        if metric == DBSCAN_METRIC_PRECOMPUTED:
-            if x.shape[0] != x.shape[1]:
-                raise ValueError(
-                    "mojolearn DBSCAN: metric='precomputed' needs a square "
-                    f"distance matrix, got shape {tuple(x.shape)}"
-                )
-            if float(x.min()) < 0:
-                raise ValueError(
-                    "mojolearn DBSCAN: metric='precomputed' refuses a "
-                    "negative distance, as scikit-learn does"
-                )
-        labels = empty((x.shape[0],), "<i4")
-        budget = 0 if self.max_mbytes_per_batch is None else int(self.max_mbytes_per_batch)
-        if budget < 0:
-            raise ValueError("mojolearn DBSCAN max_mbytes_per_batch cannot be negative")
-
-        # sample_weight. `0` is the address the binding reads as cuML's
-        # `sample_weight == nullptr`, so an unweighted fit crosses the
-        # boundary with no array at all. `w` is held in a local until after
-        # the call: it is the object the address belongs to, and letting it
-        # be collected while the device copy is in flight is the failure this
-        # line exists to prevent.
-        w = None
-        weight_addr = 0
-        if sample_weight is not None:
-            # scikit-learn's _check_sample_weight: shape, finite, not all zero
-            # (its wording); negative weights are allowed, as there (a
-            # negative weight suppresses its neighbors' core status). Read only.
-            w = check_sample_weight(sample_weight, x.shape[0], allow_negative=True)
-            weight_addr = addr_ro(w, name="sample_weight")
-
-        # ORDER MATCHES bindings/_mojolearn_estimators.mojo::dbscan_fit_binding.
-        # n_rows, n_features, eps, min_samples, budget_mb, max_iter,
-        # eps_nn_method, metric
-        # precomputed has no neighborhood search; it takes the brute arm's
-        # adjacency path whatever `algorithm` names (DEVIATION 5114).
-        method = EPS_NN_BRUTE_FORCE if metric == DBSCAN_METRIC_PRECOMPUTED else _ALGORITHMS[self.algorithm]
-        params = [x.shape[0], x.shape[1], float(self.eps), int(self.min_samples),
-                  budget, cap, method, metric]
-        binding = self._bind("_mojolearn_estimators")
-        # dbscan_fit_core_binding: the same call, plus n_rows uint8 core
-        # flags, on EVERY fit: core_sample_indices_ and components_ are
-        # scikit-learn's attributes and cuML's default output
-        # (runner.cuh:419-442, dbscan.pyx:304).
-        core = zeros((x.shape[0],), "<u1")
-        self.n_iter_ = binding.dbscan_fit_core(
-            addr_ro(x, name="x"), addr(labels, name="labels"), weight_addr,
-            addr(core, name="core"), params,
-        )
-        del w
-        self.labels_ = labels
-        self.n_features_in_ = x.shape[1]
-        self.n_samples_fit_ = x.shape[0]
-        self._store_core(x, labels, core)
-        return self
-
-    def _store_core(self, x, labels, core):
-        """Keep the core rows, their training indices and their labels, in
-        ascending training index, from the fit's own core mask: the three
-        arrays in the binding (bindings/py2mojo_cluster_est.mojo, lane
-        apple-fast-py2mojo-cluster: the mask check, the compaction and the
-        row copies in one Mojo loop; lane pyglue-numeric deleted the Python
-        routes beside it)."""
-        d = int(x.shape[1])
-        b = self._bind("_mojolearn_estimators")
-        idx, comp, lab = b.dbscan_core_arrays(
-            addr_ro(x, name="x"), addr_ro(labels, name="labels"), addr_ro(core, name="core"),
-            [int(x.shape[0]), d])
-        m = len(idx)
-        self.core_sample_indices_ = frombytes(idx.tobytes(), "<i4", (m,)) if m else empty((0,), "<i4")
-        self.components_ = frombytes(comp.tobytes(), "<f4", (m, d))
-        self._core_labels = frombytes(lab.tobytes(), "<i4", (m,)) if m else empty((0,), "<i4")
+        return _NATIVE(self, "family_cfb_dbscan_fit", (self._bind("_mojolearn_estimators"), X, sample_weight),
+                       _NATIVE_CONTEXT)
 
     def fit_predict(self, X, y=None, sample_weight=None):
         """Fit and return ``labels_``; see :meth:`fit`."""
-        return self.fit(X, y=y, sample_weight=sample_weight).labels_
+        return _NATIVE(self, "family_cfb_dbscan_fit_predict", (self._bind("_mojolearn_estimators"), X, sample_weight),
+                       _NATIVE_CONTEXT)
+
+    # The core rows of a `prediction_data=True` fit stay on the device under
+    # a handle held in `_resident_holder` (bindings/cfb_resident.mojo); no
+    # Python `__del__`: dropping an instance releases it through the native
+    # finalizer connected below the class (`_native_archive_bridge.lifetime`).
+    def __getstate__(self):
+        """A pickle or a deepcopy carries no device handle (the integer is
+        meaningful only in the process that minted it); the copy uploads its
+        own core rows at its first predict."""
+        state = self.__dict__.copy()
+        state.pop("_resident_holder", None)
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.__dict__["_resident_holder"] = {}
 
     # predict (DEVIATION 2740): the fit's eps predicate is the brute arm's accumulator
     # (`dbscan/impl/neighbors/epsilon_neighborhood.mojo::_eps_acc`, features ascending, the core row
@@ -456,31 +336,7 @@ class DBSCAN(NumericModeMixin):
         -------
         labels : Array of int32, shape (n_queries,)
         """
-        if not hasattr(self, "labels_"):
-            raise ValueError("mojolearn DBSCAN.predict: this DBSCAN instance is not fitted yet; call fit first")
-        if not self.prediction_data or getattr(self, "components_", None) is None:
-            raise ValueError(
-                "mojolearn DBSCAN.predict: prediction data was not stored. Fit with "
-                "DBSCAN(prediction_data=True), which keeps the core samples this "
-                "rule needs (DEVIATION 2740)"
-            )
-        q = _check_queries(X, self.n_features_in_, "DBSCAN.predict")
-        nq = int(q.shape[0])
-        n_core = int(self.components_.shape[0])
-        if n_core == 0:
-            return full((nq,), -1, "<i4")
-        out = empty((nq,), "<i4")
-        chosen = empty((nq,), "<i4")
-        self._bind("_mojolearn_estimators").labeled_reference_predict(
-            # ORDER MATCHES bindings/_mojolearn_estimators.mojo::labeled_reference_predict_binding.
-            [addr_ro(self.components_, name="components_"),
-             addr_ro(self.core_sample_indices_, name="core_sample_indices_"),
-             addr_ro(self._core_labels, name="core labels"),
-             addr_ro(q, name="X"), addr(out, name="labels"), addr(chosen, name="core rows")],
-            # n_refs, n_queries, n_features, metric, eps, has_thresh
-            [n_core, nq, int(self.n_features_in_), _METRICS[str(self.metric).lower()], float(self.eps), 1],
-        )
-        return out
+        return _NATIVE(self, "family_cfb_dbscan_predict", (self._bind("_mojolearn_estimators"), X), _NATIVE_CONTEXT)
 
     # npz layout: `components` <f4 (core rows), `core_sample_indices` and `core_labels` <i4, `labels`
     # <i4, `eps` <f8, `metric` and `algorithm` as names, `meta` <i8 [n_features_in_, n_samples_fit_,
@@ -533,6 +389,7 @@ _native_archive_bridge.register(DBSCAN, _DBSCAN_FORMAT, (
     ("f8", "eps", (("float", "eps"),)),
     ("i8", "meta", (("int", "n_features_in_"), ("int", "n_samples_fit_"), ("int", "min_samples"))),
 ), host_archive_dbscan_metrics=tuple(_METRICS))
+_native_archive_bridge.lifetime(DBSCAN, "labeled_reference_release", "_resident_holder")
 
 
 # Maintainer notes (moved from the class docstring): `kde/`, DEVIATIONS 600-604, kde/README.md.
@@ -735,7 +592,10 @@ class KernelDensity(NumericModeMixin):
              1 if w is not None else 0],
             self.kernel, self.metric,
         ))
-        self._resident = (key, handle)
+        # The minting binding travels with the handle: the release (here, and
+        # the native finalizer when the instance is dropped) is its own
+        # `kde_fit_release`.
+        self._resident = (key, handle, binding)
         return handle
 
     def _release_resident_fit(self):
@@ -747,15 +607,13 @@ class KernelDensity(NumericModeMixin):
             return
         self._resident = None
         try:
-            self._bind("_mojolearn_estimators").kde_fit_release(cached[1])
+            cached[2].kde_fit_release(cached[1])
         except Exception:  # noqa: BLE001
             pass
 
-    def __del__(self):
-        try:
-            self._release_resident_fit()
-        except Exception:  # noqa: BLE001
-            pass
+    # No Python `__del__`: dropping an instance releases its device fit
+    # through the native finalizer connected below the class
+    # (`_native_archive_bridge.lifetime`, bindings/host_archive_lifetime.mojo).
 
     def __getstate__(self):
         """A pickle or a deepcopy carries no device handle (the integer is
@@ -945,45 +803,12 @@ class KernelDensity(NumericModeMixin):
         -------
         KernelDensity
         """
-        arrays = _serialize.read_npz(path, _KDE_FORMAT)
-        _check_saved_by(arrays, path, cls)
-        meta = _serialize.exact(arrays, "meta", "<i8")
-        if meta.size != 3:
-            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 3 are needed")
-        bandwidth = _serialize.exact(arrays, "bandwidth", "<f8")
-        if bandwidth.size != 1:
-            raise ValueError(f"mojolearn: {path!r} bandwidth must hold one value")
-        obj = cls(
-            bandwidth=float(bandwidth[0]),
-            kernel=_serialize.scalar_str(arrays, "kernel"),
-            metric=_serialize.scalar_str(arrays, "metric"),
-        )
-        obj._validate_params()
-        _restore_mode(obj, arrays)
-        nf, n_fit, has_weights = int(meta[0]), int(meta[1]), int(meta[2])
-        x = _serialize.exact(arrays, "x", "<f4")
-        if x.ndim != 2 or tuple(x.shape) != (n_fit, nf):
-            raise ValueError(
-                f"mojolearn: {path!r} x shape {tuple(x.shape)} is not ({n_fit}, {nf})"
-            )
-        obj._x = x
-        if has_weights:
-            w = _serialize.exact(arrays, "weights", "<f4")
-            if w.ndim != 1 or w.size != n_fit:
-                raise ValueError(f"mojolearn: {path!r} weights do not match n_samples_fit_")
-            obj._w = w
-        elif "weights" in arrays:
-            raise ValueError(f"mojolearn: {path!r} carries weights its meta says it lacks")
-        else:
-            obj._w = None
-        obj.n_features_in_ = nf
-        obj.n_samples_fit_ = n_fit
-        return obj
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
 
-# KernelDensity.load stays in Python: the class defines `__del__` (it
-# releases a resident device fit), which the native archive builder cannot
-# allocate, and its load runs `_validate_params`.
+# `save` and `load` are one native call each: the schema below, and
+# bindings/host_archive_native.mojo `host_archive_density` with the load's
+# refusals. The resident device fit is released by the native finalizer.
 _native_archive_bridge.register(KernelDensity, _KDE_FORMAT, (
     _native_archive_bridge.fitted("_x"),
     *_native_archive_bridge.head(_KDE_FORMAT),
@@ -994,3 +819,4 @@ _native_archive_bridge.register(KernelDensity, _KDE_FORMAT, (
     ("i8", "meta", (("int", "n_features_in_"), ("int", "n_samples_fit_"), ("setflag", "_w"))),
     ("when_set", "_w", (("array", "weights", "_w"),)),
 ))
+_native_archive_bridge.lifetime(KernelDensity, "kde_fit_release")

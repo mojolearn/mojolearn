@@ -555,7 +555,7 @@ def host_archive_density(cls: PythonObject, arrays: PythonObject, kde: Bool, pat
     py_setitem(fields, "n_samples_fit_", n)
     var bandwidth = classical_f64(parameter, 0)
     if not bandwidth > 0.0:
-        raise Error("KernelDensity bandwidth must be positive")
+        raise Error("mojolearn KernelDensity: bandwidth must be positive, got " + host_archive_float_repr(bandwidth))
     py_setitem(fields, "bandwidth", bandwidth)
     py_setitem(fields, "kernel", _archive_string(arrays, "kernel", context))
     py_setitem(fields, "algorithm", "auto")
@@ -943,6 +943,50 @@ def host_archive_ivf(cls: PythonObject, arrays: PythonObject, context: PythonObj
     return model
 
 
+def host_archive_ann(cls: PythonObject, arrays: PythonObject, fmt: String, path: PythonObject,
+                     context: PythonObject) raises -> PythonObject:
+    """`_AnnSaved.load` of the x_ann indexes (IVFPQIndex, CagraIndex,
+    IVFSQIndex, IVFRaBitQIndex): the saved int constructor parameters and
+    fitted ints, the numeric mode and the index arrays at their saved
+    dtypes, with the Python loader's refusals. `host_archive_ann_layouts`
+    maps the format to (parameter names, fitted names, (attribute, member,
+    dtype) arrays, the other constructor defaults, the parameters saved as
+    -1 for None)."""
+    var b = Python.import_module("builtins")
+    var layout = context["host_archive_ann_layouts"][fmt]
+    var names = layout[0]
+    var fitted_names = layout[1]
+    var saved = layout[2]
+    var defaults = layout[3]
+    var none_below = layout[4]
+    var params = _archive_exact(arrays, "params", "<i8", context)
+    var fitted = _archive_exact(arrays, "fitted", "<i8", context)
+    if Int(py=params.size) != len(names) or Int(py=fitted.size) != len(fitted_names):
+        raise Error(host_archive_where(path, context) + " does not hold " + String(cls.__name__) + "'s parameters")
+    var model = host_archive_object(cls, arrays, context)
+    var fields = sequential_fields(model)
+    var words = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(params)))
+    for i in range(len(names)):  # driver-loop: over the class's saved constructor parameters
+        var value = Int(words[i])
+        if py_contains(none_below, names[i]) and value < 0:
+            py_setitem(fields, names[i], PythonObject(None))
+        else:
+            py_setitem(fields, names[i], PythonObject(value))
+    var keys = py_call(b.list, defaults)
+    for i in range(len(keys)):  # driver-loop: over the class's other constructor parameters
+        py_setitem(fields, keys[i], defaults[keys[i]])
+    host_archive_mode(arrays, fields, context)
+    var counts = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(fitted)))
+    for i in range(len(fitted_names)):  # driver-loop: over the class's saved fitted sizes
+        py_setitem(fields, fitted_names[i], PythonObject(Int(counts[i])))
+    for i in range(len(saved)):  # driver-loop: over the class's saved index arrays
+        var entry = saved[i]
+        py_setitem(fields, entry[0], _archive_exact(arrays, String(entry[1]), String(entry[2]), context))
+    _ = params^
+    _ = fitted^
+    return model
+
+
 def host_archive_hdbscan(cls: PythonObject, arrays: PythonObject, path: PythonObject,
                          context: PythonObject) raises -> PythonObject:
     """HDBSCAN.load: the refusals keep the Python loader's wording and order."""
@@ -1029,6 +1073,12 @@ def host_archive_float_repr(value: Float64) raises -> String:
 
 def host_archive_rbc_metric(cls_name: String, metric: PythonObject, p: Float64,
                             context: PythonObject) raises -> PythonObject:
+    """`host_archive_rbc_metric_object` of a saved float p."""
+    return host_archive_rbc_metric_object(cls_name, metric, PythonObject(p), context)
+
+
+def host_archive_rbc_metric_object(cls_name: String, metric: PythonObject, p: PythonObject,
+                                   context: PythonObject) raises -> PythonObject:
     """`neighbors._resolve_rbc_metric(cls_name, metric, p)` for a saved
     metric name: `(metric_value, metric_arg)`, or the same refusal, by name
     and in the same order."""
@@ -1078,22 +1128,30 @@ def host_archive_rbc_metric(cls_name: String, metric: PythonObject, p: Float64,
             + "ball cover admits: " + String(admitted))
     var value = Int(py=table[key])
     var arg = Float64(2.0)
+    var shown_p = _archive_builtin_repr(p)
     if value != 9:
-        # `_refuse_inert_p`: only metric='minkowski'/'lp' reads p.
-        if p != 2.0:
+        # `_refuse_inert_p`: only metric='minkowski'/'lp' reads p; a bool,
+        # or a p float() refuses, is not the default.
+        var is_default = False
+        if py_type(p) is not b.bool:
+            try:
+                is_default = Float64(py=py_call(b.float, p)) == 2.0
+            except:
+                is_default = False
+        if not is_default:
             raise Error(head + "p is read only by metric='minkowski' "
-                + "(or 'lp'); metric=" + shown + " never reads it, so p=" + host_archive_float_repr(p) + " would "
+                + "(or 'lp'); metric=" + shown + " never reads it, so p=" + shown_p + " would "
                 + "change nothing. Leave p at its default (2) or ask for "
                 + "metric='minkowski'.")
     else:
-        arg = p
+        arg = Float64(py=py_call(b.float, p))
         # `arg != arg or arg == float("inf")`: NaN or +infinity.
         if arg != arg or (arg > 0.0 and not isfinite(arg)):
             raise Error(head + "metric='minkowski' needs a finite "
-                + "p >= 1, got " + host_archive_float_repr(p) + ". p = infinity is metric='chebyshev', "
+                + "p >= 1, got " + shown_p + ". p = infinity is metric='chebyshev', "
                 + "which IS admitted here.")
         if arg < 1.0:
-            raise Error(head + "metric='minkowski' with p=" + host_archive_float_repr(p) + " is "
+            raise Error(head + "metric='minkowski' with p=" + shown_p + " is "
                 + "REFUSED on the random ball cover. The pruning here IS THE "
                 + "TRIANGLE INEQUALITY on the landmark radii "
                 + "(neighbors/impl/ball_cover/common.mojo, "
@@ -1105,6 +1163,33 @@ def host_archive_rbc_metric(cls_name: String, metric: PythonObject, p: Float64,
                 + "algorithm='brute' for p < 1, which is exact brute force "
                 + "and needs no inequality.")
     return Python.tuple(value, arg)
+
+
+def host_archive_radius_refusals(fields: PythonObject, cls_name: String, context: PythonObject) raises:
+    """`RadiusNeighbors._check_refusals` over the instance fields (at `fit`
+    and at `load`): the metric (which sets `_metric_value`/`_metric_arg`),
+    then the algorithm, then the radius, in the Python method's wording."""
+    var b = Python.import_module("builtins")
+    var metric = fields["metric"]
+    var algorithm = fields["algorithm"]
+    var radius = fields["radius"]
+    var resolved = host_archive_rbc_metric_object(cls_name, metric, fields["p"], context)
+    py_setitem(fields, "_metric_value", resolved[0])
+    py_setitem(fields, "_metric_arg", resolved[1])
+    if not (py_type(algorithm) is b.str and (String(algorithm) == "auto" or String(algorithm) == "rbc")):
+        raise Error("mojolearn RadiusNeighbors: algorithm=" + _archive_builtin_repr(algorithm) + " is "
+            + "refused. The index here is cuVS's RANDOM BALL COVER, which "
+            + "is none of scikit-learn's three: it is not 'brute' (there "
+            + "is an index and it prunes), and it is neither 'ball_tree' "
+            + "nor 'kd_tree' (it is a one-level cover over sqrt(n) "
+            + "landmarks, not a tree). Naming any of them would describe "
+            + "the wrong algorithm, so 'auto' and 'rbc' -- the "
+            + "algorithm's own name -- are the two accepted. The "
+            + "results are exact either way")
+    var value = Float64(py=py_call(b.float, radius))
+    if not isfinite(value) or value <= 0:
+        raise Error("mojolearn RadiusNeighbors: radius=" + _archive_builtin_repr(radius) + " is "
+            + "refused; it must be positive and finite")
 
 
 def host_archive_radius(cls: PythonObject, arrays: PythonObject, path: PythonObject,
@@ -1132,23 +1217,7 @@ def host_archive_radius(cls: PythonObject, arrays: PythonObject, path: PythonObj
     py_setitem(fields, "_metric_value", PythonObject(None))
     py_setitem(fields, "_metric_arg", PythonObject(None))
     host_archive_mode(arrays, fields, context)
-    # `_check_refusals`: the metric, then the algorithm, then the radius.
-    var resolved = host_archive_rbc_metric(String(cls.__name__), metric, p, context)
-    py_setitem(fields, "_metric_value", resolved[0])
-    py_setitem(fields, "_metric_arg", resolved[1])
-    if String(algorithm) != "auto" and String(algorithm) != "rbc":
-        raise Error("mojolearn RadiusNeighbors: algorithm=" + _archive_builtin_repr(algorithm) + " is "
-            + "refused. The index here is cuVS's RANDOM BALL COVER, which "
-            + "is none of scikit-learn's three: it is not 'brute' (there "
-            + "is an index and it prunes), and it is neither 'ball_tree' "
-            + "nor 'kd_tree' (it is a one-level cover over sqrt(n) "
-            + "landmarks, not a tree). Naming any of them would describe "
-            + "the wrong algorithm, so 'auto' and 'rbc' -- the "
-            + "algorithm's own name -- are the two accepted. The "
-            + "results are exact either way")
-    if not isfinite(radius) or radius <= 0:
-        raise Error("mojolearn RadiusNeighbors: radius=" + host_archive_float_repr(radius) + " is "
-            + "refused; it must be positive and finite")
+    host_archive_radius_refusals(fields, String(cls.__name__), context)
     var nf = classical_i64(meta, 0)
     var ns = classical_i64(meta, 1)
     var index = _archive_exact(arrays, "index", "<f4", context)
@@ -2628,6 +2697,8 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         model = host_archive_holtwinters(cls, arrays, path, context)
     elif fmt == "mojolearn-ivf-flat-1":
         model = host_archive_ivf(cls, arrays, context)
+    elif py_contains(py_get(context, "host_archive_ann_layouts", Python.dict()), fmt):
+        model = host_archive_ann(cls, arrays, fmt, path, context)
     elif fmt == "mojolearn-hdbscan-2":
         model = host_archive_hdbscan(cls, arrays, path, context)
     elif fmt == "mojolearn-radius-1":
@@ -2635,8 +2706,12 @@ def host_archive_build(path: PythonObject, context: PythonObject,
     elif fmt == "mojolearn-knn-1":
         model = host_archive_neighbors(cls, arrays, 0 if String(estimator) == "NearestNeighbors" else (1 if String(estimator) == "KNeighborsClassifier" else 2), context)
         # Native equivalent of the original loader's _mojolearn_after_fit:
-        # a newly restored CPU neighbor model owns an empty query holder.
-        py_setitem(sequential_fields(model), "_resident_holder", Python.dict())
+        # a newly restored CPU neighbor model owns an empty query holder. A
+        # public class's own `load` also set `used_query_tile_ = None`.
+        var holder = Python.dict()
+        if public_owner is not None:
+            py_setitem(holder, "used_query_tile_", PythonObject(None))
+        py_setitem(sequential_fields(model), "_resident_holder", holder)
     elif fmt == "mojolearn-iforest-1" and public_owner is not None:
         model = host_archive_public_iforest(cls, arrays, path, context)
     elif fmt == "mojolearn-iforest-1":

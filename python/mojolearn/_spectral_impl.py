@@ -23,16 +23,10 @@ The binding lives in `bindings/_mojolearn_metrics.mojo` alongside the
 metrics functions and is loaded through `_metrics_impl._get_binding`.
 """
 
-from . import _backend, _native_archive_bridge
+from . import _backend, _native_archive_bridge, _native_family_bridge
 from ._mode import ParamsMixin, available_if
-from ._array import Array
-from ._buffer import (
-    _native, addr, addr_ro, all_finite, as_f32_c, as_f64_c, as_i32_c, empty,
-)
-from ._expansion_decomp import _Kit, _M
+from ._buffer import _native, addr, empty
 from ._metrics_impl import _get_binding
-from .density import _check_queries
-from .linear_model import _shape_of
 
 __all__ = ["SpectralClustering", "SpectralEmbedding", "spectral_embedding"]
 
@@ -72,108 +66,30 @@ DEFAULT_EIGEN_TOL = 1e-5
 #: `raft::random::RngState rng_state{0}`).
 DEFAULT_SEED = 0
 
+# The compiled family owner (bindings/cfb_spectral.mojo): every public method
+# is one native call, handed the bindings it runs; it reads these tables.
+_NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
+_native_family_bridge.tables(family_cfb_sc_affinities=_CLUSTER_AFFINITIES,
+                             family_cfb_se_affinities=_EMBED_AFFINITIES,
+                             family_cfb_predict_affinities=_AFFINITIES,
+                             family_cfb_assign_labels=_ASSIGN_LABELS,
+                             family_cfb_assign_codes=dict(_ASSIGN_CODES),
+                             family_cfb_default_eigen_tol=DEFAULT_EIGEN_TOL)
+
 
 def _coo_triples(A, who="SpectralClustering"):
     """A precomputed affinity matrix as `(rows, cols, vals, n)` int32/float32.
 
-    Same behavior as cuML's `spectral_clustering.pyx:306-312`, which accepts scipy or
-    cupy sparse in COO/CSR/CSC and calls `sp.coo_matrix(X)` on a dense
-    input. Converting a dense matrix through COO DROPS EXACT ZEROS, which is
-    theirs and is also what makes a dense input usable at all.
-
-    A sparse input is recognized by DUCK TYPE, not by importing SciPy: any
-    object with a `tocoo()` whose result carries `shape`, `row`, `col` and
-    `data` is taken as sparse, and those three arrays are read through the
-    buffer protocol like every other input (DEVIATION 2489). SciPy, CuPy
-    (after `.get()`), and anything else shaped like them qualify; nothing
-    is imported to ask.
+    Same behavior as cuML's `spectral_clustering.pyx:306-312`, which accepts
+    scipy or cupy sparse in COO/CSR/CSC and calls `sp.coo_matrix(X)` on a
+    dense input; converting a dense matrix through COO drops exact zeros. A
+    sparse input is recognized by duck type (a `tocoo()` whose result
+    carries `shape`, `row`, `col` and `data`); nothing is imported to ask.
+    The scan is native (bindings/cfb_spectral.mojo, the base binding's
+    `nonzero_f64_count` / `nonzero_f64_fill`).
     """
-    tocoo = getattr(A, "tocoo", None)
-    if callable(tocoo):
-        coo = tocoo()
-        shape = tuple(coo.shape)
-        if len(shape) != 2 or shape[0] != shape[1]:
-            raise ValueError(
-                f"mojolearn {who}: a precomputed affinity matrix "
-                f"must be square, got shape {shape}"
-            )
-        rows, _ = as_i32_c(coo.row, ndim=1, name="rows")
-        cols, _ = as_i32_c(coo.col, ndim=1, name="cols")
-        vals, _ = as_f32_c(coo.data, ndim=1, name="vals")
-        return rows, cols, vals, int(shape[0])
-    shape = _shape_of(A)
-    if len(shape) != 2 or shape[0] != shape[1]:
-        raise ValueError(
-            f"mojolearn {who}: with affinity='precomputed', X "
-            "must be a square affinity matrix or a sparse matrix with "
-            f"`tocoo()`, got shape {shape}"
-        )
-    # The nonzero test is made in float64, the widest dtype the boundary
-    # carries, so an entry that is nonzero in a float64 input and rounds to
-    # 0.0f is KEPT as an explicit zero, exactly as `np.nonzero` on the
-    # source dtype kept it; the values are narrowed to float32 afterwards,
-    # one rounding each. -0.0 is a zero, NaN is not (it compares unequal).
-    dense, _ = as_f64_c(A, ndim=2, name="X")
-    n = int(shape[0])
-    # DEVIATION 2489: the scan in Mojo, two calls, count then fill into
-    # buffers this side allocates. The Python loop this replaced
-    # (DEVIATION 2373) lives on only as the oracle in
-    # tests/test_native_nonzero.py, which holds the two to byte equality.
-    nnz = int(_native("nonzero_f64_count")(addr_ro(dense, name="X"), dense.size)) if dense.size else 0  # cpu-route: float64 dense Array read once by nonzero_f64_count on a CPU-only install
-    rows = empty((nnz,), "<i4")
-    cols = empty((nnz,), "<i4")
-    vals = empty((nnz,), "<f4")
-    if nnz == 0:
-        # Nothing to write, and an empty Array has no address to hand the
-        # binding (its pointer helpers refuse a null by design).
-        return rows, cols, vals, n
-    wrote = int(_native("nonzero_f64_fill")(  # cpu-route: float64 dense Array read once by nonzero_f64_fill on a CPU-only install
-        addr_ro(dense, name="X"), n, n,
-        [addr(rows, name="rows"), addr(cols, name="cols"),
-         addr(vals, name="vals")],
-        nnz,
-    ))
-    if wrote != nnz:
-        raise RuntimeError(
-            f"mojolearn {who}: nonzero_f64_fill wrote "
-            f"{wrote} of {nnz} entries"
-        )
-    return rows, cols, vals, n
-
-
-def _dense_entry(name):
-    """The metrics binding's dense-affinity entry `name` (lane
-    cpu2-l9-neighbors, 2026-10-04: `spectral_fit_predict_dense`,
-    `spectral_embedding_dense`), or None on a binding without it, the
-    CPU-only host binding, whose route is the COO scan (`_coo_triples`,
-    `_DenseCOO`). On the GPU route the dense matrix is uploaded once and its
-    COO compacted, checked and turned into the Laplacian on the device
-    (spectral/impl/sparse/linalg/detail/dense_graph.mojo): the same COO, so
-    the same bits, with no n^2 host scan."""
-    try:
-        return getattr(_get_binding(), name)
-    except (AttributeError, ImportError):
-        return None
-
-
-def _dense_square(X, who):
-    """A dense precomputed affinity as a C-order float32 square Array (the
-    dense entries' input), with `_coo_triples`' shape refusal. The nonzero
-    test is made on the float32 values on the device route: a float64
-    magnitude that narrows to 0.0f is a zero there."""
-    shape = _shape_of(X)
-    if len(shape) != 2 or shape[0] != shape[1]:
-        raise ValueError(
-            f"mojolearn {who}: with affinity='precomputed', X "
-            "must be a square affinity matrix or a sparse matrix with "
-            f"`tocoo()`, got shape {shape}"
-        )
-    return as_f32_c(X, ndim=2, name="X")[0]
-
-
-#: The dense entries' refusal codes (bindings/_mojolearn_metrics.mojo
-#: `spectral_fit_predict_dense_binding`), in the COO route's check order.
-_DENSE_EMPTY, _DENSE_NONFINITE, _DENSE_NEGATIVE = -1, -2, -3
+    return _NATIVE(None, "family_cfb_coo_triples", (_backend.binding("_mojolearn", "identical"), A, who),
+                   _NATIVE_CONTEXT)
 
 
 # Maintainer notes (moved from the docstring). Reference: cuML 26.08's
@@ -377,140 +293,12 @@ class SpectralClustering(ParamsMixin):
         self.n_jobs = n_jobs
         self.verbose = verbose
 
-    def _validate_params(self):
-        """The constructor checks, run first in `fit` and `load`; the
-        converted values go to private attributes, which the fit reads."""
-        n_clusters, n_components, random_state = self.n_clusters, self.n_components, self.random_state
-        n_neighbors, n_init, eigen_tol, affinity = self.n_neighbors, self.n_init, self.eigen_tol, self.affinity
-        assign_labels, eigen_solver, gamma, degree = self.assign_labels, self.eigen_solver, self.gamma, self.degree
-        coef0, kernel_params, n_jobs, verbose = self.coef0, self.kernel_params, self.n_jobs, self.verbose
-        prediction_data = self.prediction_data
-        if affinity not in _CLUSTER_AFFINITIES:
-            raise ValueError(
-                f"mojolearn SpectralClustering: affinity={affinity!r} is "
-                f"refused; it must be one of {list(_CLUSTER_AFFINITIES)}. A "
-                "callable or another kernel name builds the affinity outside "
-                "every identity column."
-            )
-        if assign_labels not in _ASSIGN_LABELS:
-            raise ValueError(
-                f"mojolearn SpectralClustering: assign_labels="
-                f"{assign_labels!r} must be one of {list(_ASSIGN_LABELS)}"
-            )
-        if prediction_data and assign_labels != "kmeans":
-            raise NotImplementedError(
-                f"mojolearn SpectralClustering: prediction_data with "
-                f"assign_labels={assign_labels!r} is refused; the Nystrom "
-                "predict (DEVIATION 2860) assigns by the k-means centroids")
-        if eigen_solver is not None:
-            raise NotImplementedError(
-                f"mojolearn SpectralClustering: eigen_solver={eigen_solver!r} "
-                "is refused; there is one solver here, RAFT's thick-restart "
-                "Lanczos, and it is the one the identity profile pins"
-            )
-        if gamma is not None and affinity != "rbf":
-            raise NotImplementedError(
-                "mojolearn SpectralClustering: gamma is refused; it "
-                "parameterizes the RBF affinity, and affinity is not 'rbf'")
-        if prediction_data and affinity in ("rbf", "precomputed_nearest_neighbors"):
-            raise NotImplementedError(
-                f"mojolearn SpectralClustering: prediction_data with affinity={affinity!r} "
-                "is refused; the Nystrom predict (DEVIATION 2860) carries the "
-                "'nearest_neighbors' and 'precomputed' affinities only")
-        for name, value in (  # glue: checks keyword argument values
-            ("degree", degree),
-            ("coef0", coef0),
-            ("kernel_params", kernel_params),
-        ):
-            if value is not None:
-                raise NotImplementedError(
-                    f"mojolearn SpectralClustering: {name} is refused; it "
-                    "parameterizes an RBF or polynomial affinity, and "
-                    "affinity is restricted to 'nearest_neighbors' and "
-                    "'precomputed'"
-                )
-        if n_jobs is not None:
-            raise NotImplementedError(
-                "mojolearn SpectralClustering: n_jobs is refused; the work "
-                "is on the GPU and there is no host thread pool to size"
-            )
-        if verbose:
-            raise NotImplementedError(
-                "mojolearn SpectralClustering: verbose is refused; nothing "
-                "in this path prints. Set MOJOLEARN_IDENTITY_TRACE=<path> "
-                "for the identity card instead"
-            )
-        if isinstance(eigen_tol, str):
-            raise NotImplementedError(
-                f"mojolearn SpectralClustering: eigen_tol={eigen_tol!r} is "
-                "refused (DEVIATION 890). cuML 26.08's Python maps 'auto' to "
-                "0.0, which is passed straight through as the eigensolver "
-                "tolerance and disables the convergence test (the loop "
-                "condition is res > tol), so the solve runs to "
-                "max_iterations = 10 * n_samples and an exactly converged "
-                "problem hits the restart-breakdown refusal. Pass a positive "
-                f"float; {DEFAULT_EIGEN_TOL} is cuVS's own struct default "
-                "and is this class's default."
-            )
-        eigen_tol = float(eigen_tol)
-        if not (eigen_tol > 0.0) or eigen_tol != eigen_tol:
-            raise ValueError(
-                "mojolearn SpectralClustering: eigen_tol must be positive, "
-                f"got {eigen_tol!r} (DEVIATION 890; see the 'auto' note)"
-            )
-        if random_state is None:
-            seed = DEFAULT_SEED
-        else:
-            seed = int(random_state)
-            if seed < 0 or seed >= 2**32:
-                raise ValueError(
-                    "mojolearn SpectralClustering: random_state must satisfy "
-                    f"0 <= random_state < 2**32, got {random_state!r} (cuML's "
-                    "check_random_seed refuses the same range)"
-                )
-        if int(n_clusters) < 1:
-            raise ValueError(
-                "mojolearn SpectralClustering: n_clusters must be at least 1"
-            )
-        if int(n_init) < 1:
-            raise ValueError(
-                "mojolearn SpectralClustering: n_init must be at least 1"
-            )
-        if int(n_neighbors) < 1:
-            raise ValueError(
-                "mojolearn SpectralClustering: n_neighbors must be at least 1"
-            )
-        if n_components is not None and int(n_components) < 1:
-            raise ValueError(
-                "mojolearn SpectralClustering: n_components must be at least "
-                "1, or None to follow n_clusters"
-            )
-        self._n_clusters = int(n_clusters)
-        self._n_neighbors = int(n_neighbors)
-        self._n_init = int(n_init)
-        self._eigen_tol = eigen_tol
-        #: scikit-learn's SpectralClustering default gamma is 1.0 (its
-        #: SpectralEmbedding's is 1 / n_features).
-        self._gamma = (1.0 if gamma is None else float(gamma)) if affinity == "rbf" else None
-        self._seed = seed
-
     #: The binding `predict` asks; a host subclass answers the metrics host
     #: binding, which ships in the inference wheel.
     _BINDING = "_mojolearn_metrics"
 
     def _bind(self, name=None):
         return _get_binding(getattr(self, "numeric_mode", None))
-
-    def _state_arrays(self, n, k):
-        return (empty((k,), "<f4"), empty((n, k), "<f4"), empty((n,), "<f4"),
-                empty((self._n_clusters, k), "<f4"))
-
-    def _n_components(self):
-        """cuML's rule: `n_components` defaults to `n_clusters` when None
-        (`spectral_clustering.pyx`)."""
-        return self._n_clusters if self.n_components is None else int(
-            self.n_components
-        )
 
     def fit(self, X, y=None):
         """Cluster ``X``.
@@ -538,248 +326,10 @@ class SpectralClustering(ParamsMixin):
         TypeError
             If ``prediction_data`` is not a bool.
         """
-        self._validate_params()
-        if not isinstance(self.prediction_data, bool):
-            raise TypeError(
-                "mojolearn SpectralClustering: prediction_data must be a bool, "
-                f"got {type(self.prediction_data).__name__}"
-            )
-        for name in _PREDICTION_ATTRS:  # glue: drops cached attribute names
-            self.__dict__.pop(name, None)
-        k = self._n_components()
-        labels_out = None
-        state = None
-        self.__dict__.pop("affinity_matrix_", None)
-        dense_fn = None
-        if self.affinity in ("precomputed", "rbf", "precomputed_nearest_neighbors"):
-            dense_fn = _dense_entry("spectral_fit_predict_dense")
-        if self.affinity == "precomputed":
-            self.affinity_matrix_ = X
-            if dense_fn is not None and not callable(getattr(X, "tocoo", None)):
-                X = _dense_square(X, "SpectralClustering")
-        elif self.affinity == "rbf":
-            # scikit-learn's affinity='rbf' (cluster/_spectral.py:
-            # pairwise_kernels(X, metric='rbf', gamma=self._gamma)), which
-            # cuML does not carry: the dense exp(-gamma ||x_i - x_j||^2) by
-            # the decomp lane's identical cells, SpectralEmbedding's rbf
-            # route exactly (x_decomp/cells.mojo `sqdist_cell`, `exp_c`),
-            # then the precomputed route below unchanged.
-            xm = _M.from_input(X)
-            mode = _backend.default_mode()
-            kit = _Kit(mode, _backend.binding("_mojolearn_x_decomp", mode))
-            aff = kit.ew("exp", kit.ew("scale", kit.sqdist(xm, xm), s=-self._gamma))
-            self.affinity_matrix_ = aff.out()
-            self.n_features_in_ = xm.c
-            X = aff if dense_fn is not None else _DenseCOO(aff)
-        elif self.affinity == "precomputed_nearest_neighbors":
-            # scikit-learn's kneighbors_graph of a precomputed distance
-            # matrix, symmetrized 0.5 (C + C^T): SpectralEmbedding's helper
-            # (comparisons and the exact values 0, 0.5, 1 only).
-            aff = SpectralEmbedding._precomputed_knn_affinity(self, X)
-            self.affinity_matrix_ = aff.out()
-            X = aff if dense_fn is not None else _DenseCOO(aff)
-        if dense_fn is not None and (isinstance(X, _M) or isinstance(X, Array)):
-            # the dense matrix (rbf / kNN affinity host store, or the
-            # precomputed float32 input) straight to the device entry
-            if isinstance(X, _M):
-                n, dense_addr = X.r, X.addr
-            else:
-                n, dense_addr = int(X.shape[0]), addr_ro(X, name="X")
-            self._check_shape(n, k)
-            labels = empty((n,), "<i4")
-            embedding = empty((n, k), "<f4")
-            # ORDER MATCHES bindings/_mojolearn_metrics.mojo::
-            # spectral_fit_predict_dense_binding.
-            params = [n, self._n_clusters, k, self._n_init, self._n_neighbors,
-                      self._eigen_tol, self._seed]
-            addrs = [dense_addr, addr(labels, name="labels"), addr(embedding, name="embedding")]
-            if self.prediction_data:
-                state = self._state_arrays(n, k)
-                addrs += [addr(a, name="prediction data") for a in state]  # glue: addresses of prediction-state buffers
-            n_out = int(dense_fn(addrs, params))
-            if n_out == _DENSE_EMPTY:
-                raise ValueError(
-                    "mojolearn SpectralClustering: the precomputed affinity "
-                    "matrix has no nonzero entries"
-                )
-            if n_out == _DENSE_NONFINITE:
-                raise ValueError(
-                    "mojolearn SpectralClustering: the precomputed affinity "
-                    "matrix has a non-finite entry (the implemented path refuses "
-                    "it by name, because sqrt of a non-finite degree is a "
-                    "NaN and no NaN may reach a recorded value)"
-                )
-            if n_out == _DENSE_NEGATIVE:
-                raise ValueError(
-                    "mojolearn SpectralClustering: the precomputed affinity "
-                    "matrix has a negative entry (refused by name: sqrt of a "
-                    "negative degree is a NaN in cuVS too)"
-                )
-            labels_out = labels
-        elif self.affinity in ("precomputed", "rbf", "precomputed_nearest_neighbors"):
-            # the COO route: a sparse precomputed input, or a binding without
-            # the dense entry (the CPU-only host binding)
-            rows, cols, vals, n = _coo_triples(X)
-            if vals.size == 0:
-                raise ValueError(
-                    "mojolearn SpectralClustering: the precomputed affinity "
-                    "matrix has no nonzero entries"
-                )
-            if not all_finite(vals):
-                raise ValueError(
-                    "mojolearn SpectralClustering: the precomputed affinity "
-                    "matrix has a non-finite entry (the implemented path refuses "
-                    "it by name, because sqrt of a non-finite degree is a "
-                    "NaN and no NaN may reach a recorded value)"
-                )
-            if vals.min() < 0:
-                raise ValueError(
-                    "mojolearn SpectralClustering: the precomputed affinity "
-                    "matrix has a negative entry (refused by name: sqrt of a "
-                    "negative degree is a NaN in cuVS too)"
-                )
-            self._check_shape(n, k)
-            labels = empty((n,), "<i4")
-            embedding = empty((n, k), "<f4")
-            # ORDER MATCHES bindings/_mojolearn_metrics.mojo::
-            # spectral_fit_predict_graph_binding.
-            # n_samples, nnz, n_clusters, n_components, n_init, n_neighbors,
-            # eigen_tol, seed
-            params = [
-                n,
-                int(vals.shape[0]),
-                self._n_clusters,
-                k,
-                self._n_init,
-                self._n_neighbors,
-                self._eigen_tol,
-                self._seed,
-            ]
-            if self.prediction_data:
-                state = self._state_arrays(n, k)
-                # spectral_fit_predict_graph_state_binding: the same call,
-                # plus copies of the prediction data.
-                n_out = int(_get_binding().spectral_fit_predict_graph_state(
-                    [addr_ro(rows, name="rows"), addr_ro(cols, name="cols"),
-                     addr_ro(vals, name="vals"), addr(labels, name="labels"),
-                     addr(embedding, name="embedding")]
-                    + [addr(a, name="prediction data") for a in state],  # glue: addresses of prediction-state buffers
-                    params,
-                ))
-            else:
-                n_out = int(
-                    _get_binding().spectral_fit_predict_graph(
-                        addr_ro(rows, name="rows"),
-                        addr_ro(cols, name="cols"),
-                        addr_ro(vals, name="vals"),
-                        addr(labels, name="labels"),
-                        addr(embedding, name="embedding"),
-                        params,
-                    )
-                )
-            labels_out = labels
-        else:
-            x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
-            if not all_finite(x):
-                raise ValueError(
-                    "mojolearn SpectralClustering: X contains NaN or "
-                    "infinity (the implemented path refuses it by name before any "
-                    "recorded stage)"
-                )
-            n = int(x.shape[0])
-            self._check_shape(n, k)
-            if self._n_neighbors > n:
-                raise ValueError(
-                    f"mojolearn SpectralClustering: n_neighbors="
-                    f"{self._n_neighbors} exceeds n_samples={n}"
-                )
-            labels = empty((n,), "<i4")
-            embedding = empty((n, k), "<f4")
-            # ORDER MATCHES bindings/_mojolearn_metrics.mojo::
-            # spectral_fit_predict_dataset_binding.
-            # n_samples, n_features, n_clusters, n_components, n_init,
-            # n_neighbors, eigen_tol, seed
-            params = [
-                n,
-                int(x.shape[1]),
-                self._n_clusters,
-                k,
-                self._n_init,
-                self._n_neighbors,
-                self._eigen_tol,
-                self._seed,
-            ]
-            if self.prediction_data:
-                state = self._state_arrays(n, k)
-                n_out = int(_get_binding().spectral_fit_predict_dataset_state(
-                    [addr_ro(x, name="x"), addr(labels, name="labels"),
-                     addr(embedding, name="embedding")]
-                    + [addr(a, name="prediction data") for a in state],  # glue: addresses of prediction-state buffers
-                    params,
-                ))
-                # A borrowed input is copied so a caller's later write cannot
-                # move what predict reads.
-                self._fit_X = x if self.input_copied_ else x.copy()
-            else:
-                n_out = int(
-                    _get_binding().spectral_fit_predict_dataset(
-                        addr_ro(x, name="x"),
-                        addr(labels, name="labels"),
-                        addr(embedding, name="embedding"),
-                        params,
-                    )
-                )
-            labels_out = labels
-            self.n_features_in_ = int(x.shape[1])
-        if n_out != k:
-            # Cannot fire today: the clustering path hard-codes
-            # `drop_first = false`, so `n_out == n_components`. The binding
-            # checks the same thing before it writes anything, and this is
-            # the reader-facing half of that guard.
-            raise RuntimeError(
-                f"mojolearn SpectralClustering: the kernel returned {n_out} "
-                f"embedding columns where {k} were expected"
-            )
-        self.embedding_ = embedding
-        self.n_components_ = k
-        self.__dict__.pop("n_iter_assign_", None)
-        if self.assign_labels != "kmeans":
-            labels_out = self._assign(embedding, n, k)
-        self.labels_ = labels_out
-        if state is not None:
-            (self._pd_eigenvalues, self._pd_eigenvectors, self._pd_diag,
-             self._pd_centroids) = state
-        return self
-
-    def _assign(self, embedding, n, k):
-        """scikit-learn's discretize / cluster_qr on the fit's embedding, the
-        x_cluster binding's host code (ENTRY_SPECTRAL_ASSIGN)."""
-        from . import _expansion_cluster
-        b = _backend.binding(_expansion_cluster._XCluster._BINDING, getattr(self, "numeric_mode", None))
-        ip = [n, k, _ASSIGN_CODES[self.assign_labels], int(self._seed), 30, 20]
-        _f, i, sc = b.x_cluster_call(_E_SPECTRAL_ASSIGN, addr_ro(embedding, name="embedding"),
-                                     embedding.size, 0, 0, ip, [0.0])
-        if self.assign_labels == "discretize":
-            self.n_iter_assign_ = int(sc[0])
-        return Array._from_flat(i[0], (n,), "<i4")
-
-    def _resolved_neighbors(self, n):
-        """`SpectralEmbedding._precomputed_knn_affinity` reads this."""
-        return self._n_neighbors
-
-    def _check_shape(self, n, k):
-        if self._n_clusters > n:
-            raise ValueError(
-                f"mojolearn SpectralClustering: n_clusters={self._n_clusters} "
-                f"exceeds n_samples={n}"
-            )
-        if k >= n:
-            raise ValueError(
-                f"mojolearn SpectralClustering: n_components={k} must be "
-                f"below n_samples={n}; the Lanczos requires "
-                "1 <= n_components < n_samples and n_samples - n_components "
-                "> 0 (cuVS's own RAFT_EXPECTS)"
-            )
+        return _NATIVE(self, "family_cfb_sc_fit", (
+            _get_binding(), _backend.binding("_mojolearn_x_decomp", _backend.default_mode()),
+            _backend.binding("_mojolearn", "identical"),
+            _backend.binding("_mojolearn_x_cluster", getattr(self, "numeric_mode", None)), X), _NATIVE_CONTEXT)
 
     def fit_predict(self, X, y=None):
         """Fit to ``X`` and return the training labels.
@@ -795,7 +345,10 @@ class SpectralClustering(ParamsMixin):
         labels : Array of shape (n_samples,), int32
             Same as ``labels_``.
         """
-        return self.fit(X, y=y).labels_
+        return _NATIVE(self, "family_cfb_sc_fit_predict", (
+            _get_binding(), _backend.binding("_mojolearn_x_decomp", _backend.default_mode()),
+            _backend.binding("_mojolearn", "identical"),
+            _backend.binding("_mojolearn_x_cluster", getattr(self, "numeric_mode", None)), X), _NATIVE_CONTEXT)
 
     # predict, maintainer notes (DEVIATION 2860). Nystrom extension of Bengio,
     # Paiement, Vincent, Delalleau, Le Roux and Ouimet (NIPS 2003), as Fowlkes
@@ -868,75 +421,12 @@ class SpectralClustering(ParamsMixin):
         column more than 1000x), the prediction is refused with an error
         naming the column.
         """
-        return self._predict_embedding(X)[0]
+        return _NATIVE(self, "family_cfb_sc_predict", (self._bind(), X), _NATIVE_CONTEXT)
 
     def _predict_embedding(self, X):
         """`predict`'s labels and the extended embedding (n_new x
         n_components float32)."""
-        if not hasattr(self, "labels_"):
-            raise ValueError(
-                "mojolearn SpectralClustering.predict: this instance is not "
-                "fitted yet; call fit first"
-            )
-        if getattr(self, "_pd_eigenvalues", None) is None:
-            raise ValueError(
-                "mojolearn SpectralClustering.predict: prediction data was not "
-                "stored. Fit with SpectralClustering(prediction_data=True), which "
-                "keeps the eigenpairs, degrees and centroids the Nystrom extension "
-                "needs (DEVIATION 2860)"
-            )
-        if self.affinity not in _AFFINITIES:
-            raise ValueError(
-                f"mojolearn SpectralClustering.predict: affinity={self.affinity!r} "
-                "has no out-of-sample rule; it must be one of "
-                f"{list(_AFFINITIES)}"
-            )
-        k = int(self.n_components_)
-        n_train = int(self._pd_diag.shape[0])
-        if self.affinity == "precomputed":
-            A = X.toarray() if callable(getattr(X, "toarray", None)) else X
-            shape = _shape_of(A)
-            if len(shape) != 2 or shape[1] != n_train:
-                raise ValueError(
-                    "mojolearn SpectralClustering.predict: with affinity="
-                    "'precomputed', X must be the affinity between the new rows "
-                    f"and the {n_train} training rows, shape (n_new, {n_train}); "
-                    f"got shape {shape}"
-                )
-            q, _ = as_f32_c(A, ndim=2, name="X")
-            if q.shape[0] < 1:
-                raise ValueError("mojolearn SpectralClustering.predict: X has no rows; refused by name")
-            if not all_finite(q):
-                raise ValueError(
-                    "mojolearn SpectralClustering.predict: the affinity has a "
-                    "non-finite entry; refused by name"
-                )
-            if q.min() < 0:
-                raise ValueError(
-                    "mojolearn SpectralClustering.predict: the affinity has a "
-                    "negative entry; refused by name, as the fit refuses one"
-                )
-            train_addr, n_features, affinity = 0, 0, 1
-        else:
-            q = _check_queries(X, self.n_features_in_, "SpectralClustering.predict")
-            train_addr = addr_ro(self._fit_X, name="training rows")
-            n_features, affinity = int(self.n_features_in_), 0
-        nq = int(q.shape[0])
-        labels = empty((nq,), "<i4")
-        emb = empty((nq, k), "<f4")
-        self._bind().spectral_predict(
-            # ORDER MATCHES bindings/_mojolearn_metrics.mojo::spectral_predict_binding.
-            [addr_ro(q, name="X"), train_addr,
-             addr_ro(self._pd_eigenvalues, name="eigenvalues"),
-             addr_ro(self._pd_eigenvectors, name="eigenvectors"),
-             addr_ro(self._pd_diag, name="degree scaling"),
-             addr_ro(self._pd_centroids, name="centroids"),
-             addr(labels, name="labels"), addr(emb, name="embedding")],
-            # n_train, n_queries, n_features, n_components, n_clusters,
-            # n_neighbors, affinity
-            [n_train, nq, n_features, k, int(self._n_clusters), int(self._n_neighbors), affinity],
-        )
-        return labels, emb
+        return _NATIVE(self, "family_cfb_sc_predict_embedding", (self._bind(), X), _NATIVE_CONTEXT)
 
     # Saved layout: eigenvalues <f4 (k), eigenvectors <f4 (n_train, k), diag <f4
     # (n_train), centroids <f4 (n_clusters, k), labels <i4, x <f4 (training rows,
@@ -1147,72 +637,9 @@ class SpectralEmbedding(ParamsMixin):
 
     def _validate_params(self):
         """The constructor checks, run first in `fit`; the converted values
-        go to private attributes, which the fit reads."""
-        n_components, affinity, random_state = self.n_components, self.affinity, self.random_state
-        n_neighbors, gamma, eigen_solver, eigen_tol = self.n_neighbors, self.gamma, self.eigen_solver, self.eigen_tol
-        if affinity not in _EMBED_AFFINITIES:
-            raise ValueError(
-                f"mojolearn SpectralEmbedding: affinity={affinity!r} is "
-                f"refused; it must be one of {list(_EMBED_AFFINITIES)}. "
-                "A callable affinity is Python code that no identity column "
-                "can run."
-            )
-        if gamma is not None and affinity != "rbf":
-            raise NotImplementedError(
-                "mojolearn SpectralEmbedding: gamma is refused; it "
-                "parameterizes an RBF affinity, and affinity is not 'rbf'"
-            )
-        if gamma is not None and not float(gamma) > 0:
-            raise ValueError("mojolearn SpectralEmbedding: gamma must be positive")
-        if eigen_solver is not None:
-            raise NotImplementedError(
-                f"mojolearn SpectralEmbedding: eigen_solver={eigen_solver!r} "
-                "is refused; there is one solver here, RAFT's thick-restart "
-                "Lanczos. scikit-learn's 'arpack', 'lobpcg' and 'amg' are "
-                "other algorithms, and running the Lanczos under their names "
-                "would be a silent substitution (spectral/NOT_IMPLEMENTED.tsv)"
-            )
-        if isinstance(eigen_tol, str):
-            if eigen_tol != "auto":
-                raise ValueError(
-                    f"mojolearn SpectralEmbedding: eigen_tol={eigen_tol!r} "
-                    "must be 'auto' or a positive float"
-                )
-        elif eigen_tol is not None:
-            tol = float(eigen_tol)
-            if not tol > 0.0 or tol != tol or tol == float("inf"):
-                raise ValueError(
-                    "mojolearn SpectralEmbedding: eigen_tol must be a positive "
-                    f"finite float or 'auto', got {eigen_tol!r} (0 disables the "
-                    "Lanczos convergence test, DEVIATION 890)"
-                )
-        # n_jobs sizes scikit-learn's neighbor search; the kNN graph here is
-        # exact, so the value changes no result. verbose prints nothing.
-        if int(n_components) < 1:
-            raise ValueError(
-                "mojolearn SpectralEmbedding: n_components must be at least 1"
-            )
-        if n_neighbors is not None and int(n_neighbors) < 1:
-            raise ValueError(
-                "mojolearn SpectralEmbedding: n_neighbors must be at least 1, "
-                "or None for max(n_samples // 10, 1)"
-            )
-        if random_state is None:
-            seed = DEFAULT_SEED
-        else:
-            seed = int(random_state)
-            if seed < 0 or seed >= 2**32:
-                raise ValueError(
-                    "mojolearn SpectralEmbedding: random_state must satisfy "
-                    f"0 <= random_state < 2**32, got {random_state!r}"
-                )
-        self._n_components = int(n_components)
-        self._n_neighbors = None if n_neighbors is None else int(n_neighbors)
-        self._seed = seed
-        self._gamma = None if gamma is None else float(gamma)
-
-    def _resolved_neighbors(self, n):
-        return self._n_neighbors if self._n_neighbors is not None else max(n // 10, 1)
+        go to private attributes, which the fit reads
+        (bindings/cfb_spectral.mojo)."""
+        return _NATIVE(self, "family_cfb_se_validate", (), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None):
         """Compute the embedding of ``X``.
@@ -1237,211 +664,17 @@ class SpectralEmbedding(ParamsMixin):
             a negative or repeated entry, or ``n_components`` needs as many
             eigenpairs as there are samples.
         """
-        self._validate_params()
-        k = self._n_components
-        drop_first = bool(self._drop_first)
-        norm_laplacian = bool(self._norm_laplacian)
-        # The one piece of arithmetic the reference keeps in Python
-        # (spectral_embedding.pyx:294): the transform receives this number.
-        n_lanczos = k + 1 if drop_first else k
-        dense_fn = None
-        if self.affinity in ("precomputed", "rbf", "precomputed_nearest_neighbors"):
-            dense_fn = _dense_entry("spectral_embedding_dense")
-        if self.affinity == "precomputed_nearest_neighbors":
-            X = self._precomputed_knn_affinity(X)
-            if dense_fn is None:
-                X = _DenseCOO(X)
-        if self.affinity == "precomputed" and dense_fn is not None and not callable(getattr(X, "tocoo", None)):
-            X = _dense_square(X, "SpectralEmbedding")
-        if self.affinity == "rbf":
-            # scikit-learn's `affinity='rbf'` (manifold/_spectral_embedding.py
-            # `_get_affinity_matrix`: rbf_kernel(X, gamma), gamma defaulting
-            # to 1/n_features), which cuML does not carry (lane/algos-decomp,
-            # 2026-09-27). The dense affinity exp(-gamma ||x_i - x_j||^2) is
-            # the decomp lane's identical cells (x_decomp/cells.mojo
-            # `sqdist_cell`, features ascending with one fused multiply-add
-            # per term, then `exp_c`, the portable expf), and then takes the
-            # precomputed route below unchanged: the dense matrix through COO,
-            # exact zeros dropped, the diagonal dropped.
-            xm = _M.from_input(X)
-            gamma = self._gamma if self._gamma is not None else 1.0 / xm.c
-            self.gamma_ = gamma
-            mode = _backend.default_mode()
-            kit = _Kit(mode, _backend.binding("_mojolearn_x_decomp", mode))
-            aff = kit.ew("exp", kit.ew("scale", kit.sqdist(xm, xm), s=-gamma))
-            self.affinity_matrix_ = aff.out()
-            self.n_features_in_ = xm.c
-            X = aff if dense_fn is not None else _DenseCOO(aff)
-        if dense_fn is not None and (isinstance(X, _M) or isinstance(X, Array)):
-            # the dense matrix straight to the device entry (see
-            # `_dense_entry`); the value refusals come from the same scan
-            if isinstance(X, _M):
-                n, dense_addr = X.r, X.addr
-            else:
-                n, dense_addr = int(X.shape[0]), addr_ro(X, name="X")
-            self._check_shape(n, n_lanczos)
-            self.n_neighbors_ = self._resolved_neighbors(n)
-            embedding = empty((n, k), "<f4")
-            # ORDER MATCHES bindings/_mojolearn_metrics.mojo::
-            # spectral_embedding_dense_binding.
-            params = [n, n_lanczos, k, int(norm_laplacian), int(drop_first),
-                      self._seed] + self._tol_param()
-            n_out = int(dense_fn(dense_addr, addr(embedding, name="embedding"), params))
-            if n_out == _DENSE_EMPTY:
-                raise ValueError(
-                    "mojolearn SpectralEmbedding: the precomputed affinity "
-                    "matrix has no nonzero entries"
-                )
-            if n_out == _DENSE_NONFINITE:
-                raise ValueError(
-                    "mojolearn SpectralEmbedding: the precomputed affinity "
-                    "matrix has a non-finite entry"
-                )
-            if n_out == _DENSE_NEGATIVE:
-                raise ValueError(
-                    "mojolearn SpectralEmbedding: the precomputed affinity "
-                    "matrix has a negative entry (refused by name: sqrt of a "
-                    "negative degree is a NaN)"
-                )
-        elif self.affinity in ("precomputed", "rbf", "precomputed_nearest_neighbors"):
-            # the COO route: a sparse precomputed input, or a binding without
-            # the dense entry (the CPU-only host binding)
-            rows, cols, vals, n = _coo_triples(X, "SpectralEmbedding")
-            if vals.size == 0:
-                raise ValueError(
-                    "mojolearn SpectralEmbedding: the precomputed affinity "
-                    "matrix has no nonzero entries"
-                )
-            # the rbf affinity is exp of a finite value, finite and >= 0 by
-            # construction (`exp_c` clamps), so its two scans are skipped
-            if self.affinity in ("rbf", "precomputed_nearest_neighbors"):
-                pass
-            elif not all_finite(vals):
-                raise ValueError(
-                    "mojolearn SpectralEmbedding: the precomputed affinity "
-                    "matrix has a non-finite entry"
-                )
-            if self.affinity == "precomputed" and vals.min() < 0:
-                raise ValueError(
-                    "mojolearn SpectralEmbedding: the precomputed affinity "
-                    "matrix has a negative entry (refused by name: sqrt of a "
-                    "negative degree is a NaN)"
-                )
-            self._check_shape(n, n_lanczos)
-            self.n_neighbors_ = self._resolved_neighbors(n)
-            embedding = empty((n, k), "<f4")
-            # ORDER MATCHES bindings/_mojolearn_metrics.mojo::
-            # spectral_embedding_graph_binding.
-            params = [n, int(vals.shape[0]), n_lanczos, k,
-                      int(norm_laplacian), int(drop_first), self._seed] + self._tol_param()
-            n_out = int(_get_binding().spectral_embedding_graph(
-                addr_ro(rows, name="rows"), addr_ro(cols, name="cols"),
-                addr_ro(vals, name="vals"), addr(embedding, name="embedding"),
-                params,
-            ))
-        else:
-            x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
-            if not all_finite(x):
-                raise ValueError(
-                    "mojolearn SpectralEmbedding: X contains NaN or infinity"
-                )
-            n = int(x.shape[0])
-            self._check_shape(n, n_lanczos)
-            n_neighbors = self._resolved_neighbors(n)
-            if n_neighbors > n:
-                raise ValueError(
-                    f"mojolearn SpectralEmbedding: n_neighbors={n_neighbors} "
-                    f"exceeds n_samples={n}"
-                )
-            self.n_neighbors_ = n_neighbors
-            embedding = empty((n, k), "<f4")
-            # ORDER MATCHES bindings/_mojolearn_metrics.mojo::
-            # spectral_embedding_dataset_binding.
-            params = [n, int(x.shape[1]), n_lanczos, k, n_neighbors,
-                      int(norm_laplacian), int(drop_first), self._seed] + self._tol_param()
-            n_out = int(_get_binding().spectral_embedding_dataset(
-                addr_ro(x, name="x"), addr(embedding, name="embedding"), params,
-            ))
-            self.n_features_in_ = int(x.shape[1])
-        if n_out != k:
-            raise RuntimeError(
-                f"mojolearn SpectralEmbedding: the kernel returned {n_out} "
-                f"embedding columns where {k} were expected"
-            )
-        self.embedding_ = embedding
-        return self
-
-    def _tol_param(self):
-        """The optional trailing `eigen_tol` of the two embedding bindings:
-        absent for None / 'auto' (the legacy params list, cuVS's 1e-5), else
-        the float, which the binding rounds to float32 once."""
-        if self.eigen_tol is None or isinstance(self.eigen_tol, str):
-            return []
-        return [float(self.eigen_tol)]
+        return _NATIVE(self, "family_cfb_se_fit", (
+            _get_binding(), _backend.binding("_mojolearn_x_decomp", _backend.default_mode()),
+            _backend.binding("_mojolearn", "identical"), X), _NATIVE_CONTEXT)
 
     def _precomputed_knn_affinity(self, X):
-        """scikit-learn's affinity='precomputed_nearest_neighbors':
-        NearestNeighbors(metric='precomputed').kneighbors_graph(X,
-        mode='connectivity'), symmetrized as 0.5 * (C + C^T). X is a distance
-        matrix: sparse (only the STORED entries are candidates) or dense
-        (every entry is). Each row keeps its n_neighbors smallest distances,
-        ties to the lower column (scikit-learn's stable sort of a sorted
-        CSR row); the query IS the fitted data, so a stored diagonal counts,
-        as in scikit-learn. Comparisons and the exact values 0, 0.5 and 1
-        only: no arithmetic."""
-        tocoo = getattr(X, "tocoo", None)
-        if callable(tocoo):
-            coo = tocoo()
-            n = int(coo.shape[0])
-            if tuple(coo.shape) != (n, n):
-                raise ValueError("mojolearn SpectralEmbedding: the precomputed distance graph must be square")
-            rows, _ = as_i32_c(coo.row, ndim=1, name="rows")
-            cols, _ = as_i32_c(coo.col, ndim=1, name="cols")
-            vals, _ = as_f32_c(coo.data, ndim=1, name="data")
-            if not (rows.shape[0] == cols.shape[0] == vals.shape[0]):
-                raise ValueError("mojolearn SpectralEmbedding: the precomputed graph's row, col and data differ in length")
-            nnz = int(vals.shape[0])
-            dense = None
-        else:
-            dense, _ = as_f32_c(X, ndim=2, name="X")
-            n = int(dense.shape[0])
-            if tuple(dense.shape) != (n, n):
-                raise ValueError("mojolearn SpectralEmbedding: the precomputed distance matrix must be square")
-            nnz = 0
-        k = self._resolved_neighbors(n)
-        # core/dense_coo.mojo `knn_affinity_f32` (lane/py-dn-kern, 2026-09-28):
-        # the per-row (value, column) selection, C and 0.5 (C + C^T) in one
-        # host entry; it was a Python sort per row and an n^2 loop here.
-        A = _M.zeros(n, n)
-        if n == 0:
-            self.affinity_matrix_ = A.out()
-            return A
-        status = empty((3,), "<i4")
-        sp = dense is None
-        _native("knn_affinity_f32")(
-            [0 if sp else addr_ro(dense, name="X"),
-             addr_ro(rows, name="rows") if sp and nnz else 0,
-             addr_ro(cols, name="cols") if sp and nnz else 0,
-             addr_ro(vals, name="data") if sp and nnz else 0,
-             A.addr, addr(status, name="status")],
-            [n, k, nnz, 1 if sp else 0])
-        code, row, count = (int(v) for v in status.tolist())  # glue: unpacks the three-field status
-        if code == 1:
-            raise ValueError("mojolearn SpectralEmbedding: a precomputed distance is negative or NaN")
-        if code == 2:
-            # `count`: the failing row's candidates, from the binding's status
-            raise ValueError(f"mojolearn SpectralEmbedding: row {row} of the precomputed graph has "
-                             f"{count} stored distances, fewer than n_neighbors={k}")
-        self.affinity_matrix_ = A.out()
-        return A
-
-    def _check_shape(self, n, n_lanczos):
-        if n_lanczos >= n:
-            raise ValueError(
-                f"mojolearn SpectralEmbedding: n_components={self._n_components} "
-                f"needs {n_lanczos} eigenpairs, which must be below "
-                f"n_samples={n}"
-            )
+        """scikit-learn's affinity='precomputed_nearest_neighbors' of a
+        precomputed distance matrix, symmetrized 0.5 * (C + C^T), as an
+        n x n float32 Array (and `affinity_matrix_`): the base binding's
+        `knn_affinity_f32` (bindings/cfb_spectral.mojo)."""
+        return _NATIVE(self, "family_cfb_se_knn_affinity", (_backend.binding("_mojolearn", "identical"), X),
+                       _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit to ``X`` and return the embedding.
@@ -1457,7 +690,9 @@ class SpectralEmbedding(ParamsMixin):
         embedding : Array of shape (n_samples, n_components), float32
             Same as ``embedding_``.
         """
-        return self.fit(X, y).embedding_
+        return _NATIVE(self, "family_cfb_se_fit_transform", (
+            _get_binding(), _backend.binding("_mojolearn_x_decomp", _backend.default_mode()),
+            _backend.binding("_mojolearn", "identical"), X), _NATIVE_CONTEXT)
 
 
 def spectral_embedding(
@@ -1504,16 +739,7 @@ def spectral_embedding(
     TypeError
         If ``norm_laplacian`` or ``drop_first`` is not a bool.
     """
-    for name, value in (("norm_laplacian", norm_laplacian), ("drop_first", drop_first)):  # glue: checks two boolean flags
-        if not isinstance(value, bool):
-            raise TypeError(
-                f"mojolearn spectral_embedding: {name} must be a bool, got "
-                f"{type(value).__name__}"
-            )
-    model = SpectralEmbedding(
-        n_components=n_components, affinity=affinity,
-        random_state=random_state, n_neighbors=n_neighbors,
-    )
-    model._drop_first = drop_first
-    model._norm_laplacian = norm_laplacian
-    return model.fit_transform(A)
+    return _NATIVE(None, "family_cfb_spectral_embedding", (
+        SpectralEmbedding, _get_binding(), _backend.binding("_mojolearn_x_decomp", _backend.default_mode()),
+        _backend.binding("_mojolearn", "identical"), A, n_components, affinity, random_state, n_neighbors,
+        norm_laplacian, drop_first), _NATIVE_CONTEXT)

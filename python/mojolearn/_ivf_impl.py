@@ -49,10 +49,12 @@ squared, and the root is taken over the `k` selected distances
 where cuVS takes it. `ivf/checks/ivf_check.mojo::check_l2_sqrt_is_the_root_of_l2`
 searches the metric; the identity_break lane is `ivf-euclidean`.
 """
-from . import _backend, _serialize
-from ._array import Array
+from . import _backend, _native_archive_bridge
 from ._buffer import addr, addr_ro, as_f32_c, empty, frombytes
 from ._mode import NumericModeMixin
+
+# The compiled saved-model owner, connected once at import (`save`/`load`).
+_ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
 _MODE_CODE = {"fast": 0, "identical": 1}
 
@@ -391,12 +393,9 @@ class IVFIndex(NumericModeMixin):
         except Exception:  # noqa: BLE001
             pass
 
-    def __del__(self):
-        try:
-            self.__dict__.pop("_device_list_data", None)
-            self._release_resident()
-        except Exception:  # noqa: BLE001
-            pass
+    # No Python `__del__`: dropping an instance releases its device index
+    # through the native finalizer connected below the class
+    # (`_native_archive_bridge.lifetime`, bindings/host_archive_lifetime.mojo).
 
     def __getstate__(self):
         """A pickle or a deepcopy carries no handle: the integer means
@@ -599,12 +598,11 @@ class IVFIndex(NumericModeMixin):
     # npz layout: the five index arrays as `fit` left them, `meta` `<i8`
     # [n_rows, dim, n_lists, metric, n_probes, n_neighbors, kmeans_n_iters,
     # random_state] and the tier; format tag `mojolearn-ivf-flat-1`.
-    # save and load stay Python: a resident build holds `list_data_` only on
-    # the device and `getattr` exports it through `__getattr__` (a Python
-    # method calling ivf_flat_index_export), which a save schema cannot run;
-    # and `IVFIndex.__del__` (the device handle release) is a Python
-    # finalizer, which native archive loading refuses (host_archive_check_layout).
-    # HostIVFIndex loads natively through host_archive_ivf.
+    # save and load are one native call each: the schema below the class
+    # (a resident build's `list_data_`, held only on the device, is exported
+    # into the file by the binding's ivf_flat_index_export, leaving the
+    # index unchanged) and bindings/host_archive_native.mojo
+    # `host_archive_ivf`, as HostIVFIndex loads.
     def save(self, path):
         """Write the built index to `path` as an ``.npz`` file.
 
@@ -627,24 +625,7 @@ class IVFIndex(NumericModeMixin):
         RuntimeError
             If the index has not been fitted.
         """
-        if not self._is_built():
-            raise RuntimeError("mojolearn IVFIndex: call fit before save")
-        from .decomposition import _saved_mode
-        arrays = {
-            "format": _IVF_FORMAT,
-            "estimator": type(self).__name__,
-            "numeric_mode": _saved_mode(self),
-            "meta": Array.from_list(
-                [int(self.n_rows_), int(self.n_features_in_), int(self.n_lists_), int(self.metric_code_),
-                 _int_param("n_probes", self.n_probes), _int_param("n_neighbors", self.n_neighbors),
-                 _int_param("kmeans_n_iters", self.kmeans_n_iters),
-                 _int_param("random_state", self.random_state)],
-                "<i8",
-            ),
-        }
-        for name, _dtype in _INDEX_ARRAYS:  # glue: the five index array names
-            arrays[name.rstrip("_")] = getattr(self, name)
-        return _serialize.write_npz(path, arrays)
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     # The layout itself is admitted by the binding
     # (`ivf_validate_index_arrays`) at the first search.
@@ -671,31 +652,31 @@ class IVFIndex(NumericModeMixin):
             If the file was saved by another class or its contents do not
             match the IVF-Flat layout.
         """
-        from .decomposition import _check_saved_by, _restore_mode
-        arrays = _serialize.read_npz(path, _IVF_FORMAT)
-        _check_saved_by(arrays, path, cls)
-        meta = _serialize.exact(arrays, "meta", "<i8")
-        if meta.size != 8:
-            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 8 are needed")
-        n, dim, n_lists, metric, n_probes, k, iters, seed = (int(meta[i]) for i in range(8))  # glue: unpacks the fixed meta vector
-        if metric not in _METRIC_CODES:
-            raise ValueError(f"mojolearn: {path!r} records metric code {metric}")
-        shapes = {"centers": (n_lists, dim), "center_norms": (n_lists,), "list_offsets": (n_lists + 1,),
-                  "list_indices": (n,), "list_data": (n, dim)}
-        obj = cls(n_lists=n_lists, n_probes=n_probes, n_neighbors=k, kmeans_n_iters=iters,
-                  metric=_METRIC_NAMES[metric], random_state=seed)
-        _restore_mode(obj, arrays)
-        for name, dtype in _INDEX_ARRAYS:  # glue: the five index array names
-            key = name.rstrip("_")
-            value = _serialize.exact(arrays, key, dtype)
-            if tuple(value.shape) != shapes[key]:
-                raise ValueError(f"mojolearn: {path!r} {key} has shape {tuple(value.shape)}, not {shapes[key]}")
-            setattr(obj, name, value)
-        obj.n_features_in_ = dim
-        obj.n_rows_ = n
-        obj.n_lists_ = n_lists
-        obj.metric_code_ = metric
-        return obj
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+
+
+def _ivf_param(name):
+    return ("strict", name, "TypeError", f"mojolearn IVFIndex: {name} must be an int, got {{type}}")
+
+
+# The saved index (the 0.8.55 members, in order), written natively.
+_native_archive_bridge.register(IVFIndex, _IVF_FORMAT, (
+    ("need_either", "list_data_", "_device_list_data", "RuntimeError", "mojolearn IVFIndex: call fit before save"),
+    *_native_archive_bridge.head(_IVF_FORMAT),
+    ("i8", "meta", (("int", "n_rows_"), ("int", "n_features_in_"), ("int", "n_lists_"), ("int", "metric_code_"),
+                    _ivf_param("n_probes"), _ivf_param("n_neighbors"), _ivf_param("kmeans_n_iters"),
+                    _ivf_param("random_state"))),
+    ("array", "centers", "centers_"),
+    ("array", "center_norms", "center_norms_"),
+    ("array", "list_offsets", "list_offsets_"),
+    ("array", "list_indices", "list_indices_"),
+    ("device_array", "list_data", "list_data_", "_device_list_data", "ivf_flat_index_export",
+     (("int", "n_rows_"), ("int", "n_features_in_")), "<f4", "RuntimeError",
+     "mojolearn IVFIndex: the resident index was released before its list data was read"),
+))
+# The device index is released by the native finalizer, through the minting
+# binding's `ivf_flat_index_release` (the resident tuple's binding).
+_native_archive_bridge.lifetime(IVFIndex, "ivf_flat_index_release")
 
 
 IVFFlat = IVFIndex

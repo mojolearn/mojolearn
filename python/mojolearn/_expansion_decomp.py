@@ -23,7 +23,8 @@ import ctypes
 from . import _portable_math as math
 import sys
 
-from . import _backend
+from . import _backend, _native_family_bridge
+from . import _portable_math as _pm
 from ._array import Array
 from ._buffer import addr_ro, as_f32_c, as_f64_c, as_i32_c, frombytes
 from ._buffer import addr as _addr, empty as _empty
@@ -2527,21 +2528,6 @@ class FactorAnalysis(_Base):
 
 
 # ================================================================ TruncatedSVD explained variance
-def _exact_eigen_solver(name, who):
-    """Isomap's and LLE's eigen_solver: 'auto' and 'dense' name an exact
-    solve, which is what runs (LLE's 'auto' past 200 rows: shift-invert
-    subspace iteration to convergence, `_lle_smallest`). 'arpack' (a
-    Lanczos) is a different algorithm and is refused by name rather than run
-    as another solve (a silent substitution; x_decomp/NOT_IMPLEMENTED.tsv)."""
-    if name == "arpack":
-        raise NotImplementedError(
-            f"{who}: eigen_solver='arpack' is not implemented; the exact solve "
-            "runs for 'auto' and 'dense', and running it under ARPACK's name "
-            "would be a silent substitution (x_decomp/NOT_IMPLEMENTED.tsv)")
-    if name not in ("auto", "dense"):
-        raise ValueError(f"{who}: eigen_solver must be 'auto', 'dense' or 'arpack', got {name!r}")
-
-
 # ================================================================ PCA n_components='mle'
 _LOG2, _LOGPI, _LOG2PI_D = 0.6931471805599453, 1.1447298858494002, 1.8378770664093453
 
@@ -4098,63 +4084,9 @@ class LatentDirichletAllocation(_Base):
 _PD_KIND = {"manhattan": 1, "cityblock": 1, "l1": 1, "chebyshev": 2, "infinity": 2, "cosine": 4}
 
 
-def _metric_spec(metric, p=2, metric_params=None, who="metric"):
-    """sklearn's metric name (and minkowski p) as (kind, p) for `_dist`:
-    kind 0 is Euclidean (sqrt of the squared distance cell), the rest
-    x_decomp/cells.mojo `pdist_cell` (DEVIATION 5319). A callable or any
-    other name is refused by name."""
-    if metric_params:
-        extra = set(metric_params) - {"p"}
-        if extra:
-            raise NotImplementedError(f"{who}: metric_params {sorted(extra)} are not carried")
-        p = metric_params.get("p", p)
-    if metric in ("euclidean", "l2"):
-        return 0, 2.0
-    if metric == "minkowski":
-        p = float(p)
-        if not p > 0:
-            raise ValueError(f"{who}: minkowski p must be > 0")
-        if p == 2.0:
-            return 0, 2.0
-        if p == 1.0:
-            return 1, 1.0
-        if p == math.inf:
-            return 2, 0.0
-        return 3, p
-    if isinstance(metric, str) and metric in _PD_KIND:
-        return _PD_KIND[metric], 0.0
-    raise NotImplementedError(f"{who}: metric={metric!r} is not carried (euclidean, minkowski p, manhattan, "
-                              "chebyshev, cosine)")
-
-
-def _dist(k, A, B, kind, pw, same=False):
-    """The distance matrix of `_metric_spec`'s (kind, p). `same` (A is B):
-    sklearn's pairwise_distances zeroes the cosine diagonal."""
-    if kind == 0:
-        return k.ew("sqrt", k.sqdist(A, B))
-    D = k.pdist(A, B, kind, pw)
-    if same and kind == 4:
-        k.fill0(D, 0, B.r + 1, min(A.r, B.r))
-    return D
-
-
-def _knn_mats(k, Q, X, n_neighbors, exclude_self, kind=0, pw=2.0):
-    """`_knn_lists` as two matrices (indices as exact floats, distances),
-    n x n_neighbors, selected by the `graph_knn` cell (resident on the GPU
-    binding)."""
-    D = k.sqdist(Q, X) if kind == 0 else _dist(k, Q, X, kind, pw, same=exclude_self)
-    return k.graph_knn(D, n_neighbors, exclude_self)
-
-
-def _center_kernel(k, K):
-    """sklearn KernelCenterer.fit_transform: K - row means - column means + total mean.
-    Returns (Kc, column means (1 x n), total mean (1 x 1))."""
-    n = K.r
-    col = k.ew("scale", k.colsum(K), s=1.0 / n)
-    allm = k.ew("scale", k.total(col), s=1.0 / n)
-    row = k.ew("scale", k.rowsum(K), s=1.0 / K.c)
-    Kc = k.ew("add", k.ew("sub", k.ew("sub", K, col), row), allm)
-    return Kc, col, allm
+# The manifold estimators' metric rule (`_metric_spec`), distances, kNN
+# matrices, kernel centering and top eigenpairs run in their compiled owner
+# (bindings/mani_decomp_native.mojo); `_PD_KIND` is its table.
 
 
 #: FAST's Lanczos route for the top eigenpairs (lane/decomp-apple2): taken
@@ -4167,8 +4099,7 @@ def _center_kernel(k, K):
 #: 8/8 PASS, every eigenvalue and eigenvector error UNDER the exact dense
 #: solve's against the float64 reference, fits 0.03 to 0.17 s against 1.8 to
 #: 4.1 s). MOJOLEARN_XD_LANCZOS=0 keeps the exact dense solve.
-_LANCZOS_MIN_N = 200
-_LANCZOS_MAX_NC = 10
+#: (The route's n > 200 and n_components < 10 policy is in bindings/mani_decomp_native.mojo.)
 #: Ritz residual bound, relative to the largest |Ritz value|, and the basis cap
 #: past which the route gives up and runs the exact dense solve instead.
 _LANCZOS_TOL = 1e-7
@@ -4268,31 +4199,6 @@ def _lanczos_top(k, A, nc):
     return th.take_cols(top), V
 
 
-def _top_eig(k, A, nc, topk=False):
-    """The nc LARGEST eigenpairs of symmetric A (descending), vectors in
-    columns, each column signed by sklearn's svd_flip(u_based_decision=True).
-    topk: the Lanczos route under sklearn's ARPACK policy (_lanczos_top), the
-    exact dense solve otherwise.
-
-    lane/neural-pass105 (Andrew, 2026-10-01: Isomap / ClassicalMDS /
-    KernelPCA-style top-k uses take a deterministic top-k solver): the route
-    is on in every mode and on every vendor. Every step is a kit primitive
-    (the IDENTICAL GEMM, element-wise ops, the small eigh) or Python float64
-    scalar arithmetic, in a fixed order with a fixed seeded start, so the
-    words agree across vendors."""
-    n = A.r
-    got = None
-    if topk and n > _LANCZOS_MIN_N and nc < _LANCZOS_MAX_NC:
-        got = _lanczos_top(k, A, nc)
-    if got is not None:
-        w, V = got
-    else:
-        w, V = k.eigh(A)
-        order = list(range(n - 1, n - 1 - nc, -1))
-        w, V = w.take_cols(order), V.take_cols(order)
-    return w, k.ew("mul", V, k.absmax_signs(V, True))
-
-
 # Reference: scikit-learn `manifold/_isomap.py` with
 # `KernelPCA(kernel='precomputed')` and `utils/graph.py`: the kNN distance
 # graph (ties to the lower index), all-pairs shortest paths by Dijkstra
@@ -4387,66 +4293,8 @@ class Isomap(_Base):
         -------
         self
         """
-        self.numeric_mode_ = _mode(self.numeric_mode)
-        if self.n_neighbors is not None and self.radius is not None:
-            raise ValueError(f"Both n_neighbors and radius are provided. Use Isomap(radius={self.radius}, "
-                             "n_neighbors=None) if intended to use radius-based neighbors")
-        if self.n_neighbors is None and self.radius is None:
-            raise ValueError("Isomap: one of n_neighbors and radius must be set")
-        if self.radius is not None and not float(self.radius) >= 0:
-            raise ValueError("Isomap: radius must be >= 0")
-        if self.path_method not in ("auto", "FW", "D"):
-            raise ValueError("path_method must be 'auto', 'FW' or 'D'")
-        _exact_eigen_solver(self.eigen_solver, "Isomap")
-        kind, pw = _metric_spec(self.metric, self.p, self.metric_params, "Isomap")
-        self._kind, self._pw = kind, pw
-        k = self._kit()
-        M = _M.from_input(X)
-        n = M.r
-        Wg, nn = self._graph(k, M, n, kind, pw)
-        D = k.dijkstra(Wg)
-        self.dist_matrix_m_ = D
-        self.dist_matrix_ = D.out()
-        G = k.ew("scale", k.ew("sq", D), s=-0.5)
-        Kc, self._k_col, self._k_all = _center_kernel(k, G)
-        w, V = _top_eig(k, Kc, int(self.n_components), topk=self.eigen_solver in ("auto", "arpack"))
-        self.eigenvalues_m_ = w
-        self.eigenvectors_m_ = V
-        self.embedding_m_ = k.ew("mul", V, k.ew("sqrt", w))
-        self.embedding_ = self.embedding_m_.out()
-        self._fit_X, self._knn = M, nn
-        self.n_features_in_ = M.c
-        self._Kc = Kc
-        return self
-
-    def _graph(self, k, M, n, kind, pw):
-        """The neighbor graph, its components joined (sklearn
-        `_fix_connected_components`), all as graph cells (lane
-        hr2-graph-embed): resident on the GPU binding."""
-        if self.radius is not None:
-            D = _dist(k, M, M, kind, pw, same=True)
-            Wg = k.graph_radius(D, _f32(float(self.radius)))
-            nn = None
-        else:
-            nn = int(self.n_neighbors)
-            if nn >= n:
-                # scikit-learn's kneighbors refusal (the query point itself is
-                # one of the n_neighbors + 1 it asks for)
-                raise ValueError(f"Expected n_neighbors <= n_samples_fit, but n_neighbors = {nn + 1}, "
-                                 f"n_samples_fit = {n}, n_samples = {n}")
-            idx, sq = _knn_mats(k, M, M, nn, True, kind, pw)
-            if kind == 0:
-                sq = k.ew("sqrt", sq)
-            Wg = k.graph_knn_dense(idx, sq, n)
-        comp, C = k.graph_components(Wg)
-        self.n_connected_components_ = C
-        if C > 1:
-            import warnings
-            warnings.warn(f"The number of connected components of the neighbors graph is {C} > 1. "
-                          "Completing the graph to fit Isomap might be slow.", stacklevel=3)
-            D = _dist(k, M, M, kind, pw, same=True)
-            k.graph_join(Wg, D, comp, C)
-        return Wg, nn
+        return _NATIVE(self, "family_mani_iso_fit",
+                       (_manifold_binding(self, "numeric_mode"), _backend.binding(_BINDING), X), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit the model and return ``embedding_``.
@@ -4460,7 +4308,8 @@ class Isomap(_Base):
         -------
         ndarray of shape (n_samples, n_components), float32
         """
-        return self.fit(X).embedding_
+        return _NATIVE(self, "family_mani_iso_fit_transform",
+                       (_manifold_binding(self, "numeric_mode"), _backend.binding(_BINDING), X), _NATIVE_CONTEXT)
 
     def transform(self, X):
         """Embed new points.
@@ -4482,45 +4331,8 @@ class Isomap(_Base):
         ValueError
             With ``radius``, if a query has no training point within it.
         """
-        self._check("embedding_m_")
-        k = self._kit()
-        Q = _M.from_input(X)
-        n = self._fit_X.r
-        D = self.dist_matrix_m_
-        if self._knn is None:
-            G = self._radius_geodesic(k, Q)
-        else:
-            G = None
-            # the neighbour matrices as they come (indices as exact
-            # floats), each neighbour's rows of D gathered on the device
-            im, sq = _knn_mats(k, Q, self._fit_X, self._knn, False, self._kind, self._pw)
-            if self._kind == 0:
-                sq = k.ew("sqrt", sq)
-            for a in range(self._knn):  # glue: one device gather-and-min step per neighbor rank (_knn-sized: neighbor ranks)
-                rows = k.take_rows(D, im, m=Q.r, ist=self._knn, ioff=a)
-                cand = k.ew("add", rows, sq.cols(a, a + 1))
-                G = cand if G is None else k.ew("min", G, cand)
-        G = k.ew("scale", k.ew("sq", G), s=-0.5)
-        row = k.ew("scale", k.rowsum(G), s=1.0 / n)
-        Kc = k.ew("add", k.ew("sub", k.ew("sub", G, self._k_col), row), self._k_all)
-        V = k.ew("div", self.eigenvectors_m_, k.ew("sqrt", self.eigenvalues_m_))
-        return k.mm(Kc, V).out()
-
-    def _radius_geodesic(self, k, Q):
-        """sklearn's radius transform: for each query, the minimum over the
-        training rows within the radius (distance 0 included) of
-        dist_matrix_[j] + d(q, j): one cell per (query, column) on the
-        device, the candidates in ascending j (`graph_radius_geo`)."""
-        r = _f32(float(self.radius))
-        Dq = _dist(k, Q, self._fit_X, self._kind, self._pw)
-        D = self.dist_matrix_m_
-        # every query has a training row within the radius: the per-row
-        # counts and their total on the device, one scalar read
-        hits = k.ew("gts", k.rowsum(k.ew("le", Dq, _M.of([r], 1, 1))), s=0.5)
-        if Q.r and k.total(hits).s[0] != Q.r:
-            i = list(hits.s).index(0.0)
-            raise ValueError(f"Isomap.transform: query row {i} has no training row within radius {self.radius}")
-        return k.graph_radius_geo(Dq, D, r)
+        return _NATIVE(self, "family_mani_iso_transform",
+                       (_manifold_binding(self, "numeric_mode_"), _backend.binding(_BINDING), X), _NATIVE_CONTEXT)
 
     def reconstruction_error(self):
         """Return the reconstruction error of the embedding.
@@ -4533,15 +4345,8 @@ class Isomap(_Base):
         -------
         float
         """
-        self._check("embedding_m_")
-        k = self._kit()
-        # a difference of two nearly equal sums: accumulated in binary64
-        # (exact float32 squares, `_dsum_sq`'s chunked adds) or it cancels
-        Kc, ev = self._Kc, self.eigenvalues_m_
-        t = _dsum_sq(k, Kc) - _dsum_sq(k, ev)
-        return math.sqrt(t) / self._Kc.r if t > 0 else 0.0
-
-
+        return _NATIVE(self, "family_mani_iso_reconstruction_error",
+                       (_manifold_binding(self, "numeric_mode_"), _backend.binding(_BINDING)), _NATIVE_CONTEXT)
 # Reference: scikit-learn `manifold/_classical_mds.py`.
 class ClassicalMDS(_Base):
     """Classical (Torgerson) multidimensional scaling.
@@ -4600,27 +4405,8 @@ class ClassicalMDS(_Base):
         -------
         self
         """
-        self.numeric_mode_ = _mode(self.numeric_mode)
-        k = self._kit()
-        M = _M.from_input(X)
-        if self.metric == "precomputed":
-            D2 = k.ew("sq", M)
-            self.dissimilarity_matrix_ = M.out()
-        elif self.metric == "euclidean":
-            D2 = k.sqdist(M, M)
-            self.dissimilarity_matrix_ = k.ew("sqrt", D2).out()
-        else:
-            kind, pw = _metric_spec(self.metric, 2, self.metric_params, "ClassicalMDS")
-            Dm = _dist(k, M, M, kind, pw, same=True)
-            D2 = k.ew("sq", Dm)
-            self.dissimilarity_matrix_ = Dm.out()
-        B, _, _ = _center_kernel(k, k.ew("scale", D2, s=-0.5))
-        w, V = _top_eig(k, B, int(self.n_components), topk=True)
-        self.eigenvalues_ = w.out((w.c,))
-        self.embedding_m_ = k.ew("mul", V, k.ew("sqrt", w))
-        self.embedding_ = self.embedding_m_.out()
-        self.n_features_in_ = M.c
-        return self
+        return _NATIVE(self, "family_mani_cmds_fit",
+                       (_manifold_binding(self, "numeric_mode"), _backend.binding(_BINDING), X), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Compute the embedding and return ``embedding_``.
@@ -4634,9 +4420,8 @@ class ClassicalMDS(_Base):
         -------
         ndarray of shape (n_samples, n_components), float32
         """
-        return self.fit(X).embedding_
-
-
+        return _NATIVE(self, "family_mani_cmds_fit_transform",
+                       (_manifold_binding(self, "numeric_mode"), _backend.binding(_BINDING), X), _NATIVE_CONTEXT)
 # Reference: scikit-learn `manifold/_mds.py`, `_smacof_single`, `smacof`.
 # Random starts come from the Philox stream. init='random' is the default
 # sklearn's FutureWarning names. Non-metric: the disparities are the
@@ -4718,9 +4503,6 @@ class MDS(_Base):
         self.random_state, self.metric, self.metric_params = random_state, metric, metric_params
         self.normalized_stress, self.numeric_mode = normalized_stress, numeric_mode
 
-    def _dist(self, k, Y):
-        return k.ew("sqrt", k.sqdist(Y, Y))
-
     def fit_transform(self, X, y=None, init=None):
         """Compute the embedding and return it.
 
@@ -4736,42 +4518,8 @@ class MDS(_Base):
         -------
         ndarray of shape (n_samples, n_components), float32
         """
-        self.numeric_mode_ = _mode(self.numeric_mode)
-        k = self._kit()
-        M = _M.from_input(X)
-        if self.metric == "precomputed":
-            Dis = M
-        elif self.metric == "euclidean":
-            Dis = self._dist(k, M)
-        else:
-            kind, pw = _metric_spec(self.metric, 2, self.metric_params, "MDS")
-            Dis = _dist(k, M, M, kind, pw, same=True)
-        self.dissimilarity_matrix_ = Dis.out()
-        self._norm = (self.normalized_stress is True) or (self.normalized_stress == "auto" and not self.metric_mds)
-        n, nc = Dis.r, int(self.n_components)
-        seed = _seed_of(self.random_state)
-        if init is not None:
-            starts = [_M.from_input(init, "init")]
-        elif self.init == "classical_mds":
-            starts = [ClassicalMDS(nc, metric="precomputed", numeric_mode=self.numeric_mode_).fit(Dis.out()).embedding_m_]
-        elif self.init == "random":
-            starts = [k.rand(n, nc, seed, 70 + r, 0) for r in range(int(self.n_init))]  # glue: draws one device start per restart (n_init-sized: random restarts)
-        else:
-            raise ValueError("init must be 'random', 'classical_mds' or an array")
-        if not self.metric_mds and n * n > 2147483647:
-            raise ValueError(f"MDS(metric_mds=False): {n} rows exceed the 32-bit pair index (n * n <= 2**31 - 1)")
-        # every start's SMACOF and the restart pick in ONE binding call (lane
-        # py-runtime-b: x_decomp/mds.mojo on the host column, mds_dev.mojo on
-        # resident device matrices): the same cells and float64 stress tests
-        S = k.vstack(starts) if len(starts) > 1 else starts[0]
-        Y = _M.zeros(n, nc)
-        st, it = k.b.x_decomp_mds_fit(Dis.addr, S.addr, Y.addr,
-                                      [n, nc, len(starts), int(self.max_iter), int(bool(self.metric_mds)),
-                                       int(bool(self._norm))], [float(self.eps)])
-        self.stress_, self.n_iter_ = float(st), int(it)
-        self.embedding_ = Y.out()
-        self.n_features_in_ = M.c
-        return self.embedding_
+        return _NATIVE(self, "family_mani_mds_fit_transform",
+                       (_manifold_binding(self, "numeric_mode"), _backend.binding(_BINDING), X, init), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None, init=None):
         """Compute the embedding.
@@ -4787,209 +4535,10 @@ class MDS(_Base):
         -------
         self
         """
-        self.fit_transform(X, init=init)
-        return self
-
-
-#: LocallyLinearEmbedding's iterative route for eigen_solver='auto', taken
-#: under sklearn's own ARPACK policy (n > 200 and n_components + 1 < 10).
-#: The dense route is the one-sided Jacobi SVD of the whole n x n factor:
-#: O(n^3) per sweep in ONE threadgroup on the GPU (M2 Pro: 3.2 s at 250
-#: rows, 22 s at 500, 199 s at 1,000; past the board's 600 s ceiling at
-#: 2,000 on the M3 Ultra). method='standard' only (its factor I - W is
-#: square); 'ltsa', 'hessian' and 'modified' keep the dense route.
-_LLE_ITER_MIN_N = 200
-#: lane/apple-fast-gap-manprep: `_lle_smallest` builds F0 in cells (FAST +
-#: Apple A/B gmp-lle-devf0-*: taxi 3,827 -> 2,570 ms, istella 3,895 ->
-#: 2,653 ms, trustworthiness the same); every mode and vendor since lane
-#: cpu2-l8-decomp (the env switch and the host route are gone)
-_LLE_ITER_MAX_K = 10
-#: Converged: the sine of the largest principal angle between two successive
-#: wanted Ritz subspaces is at most _LLE_SUBSPACE_TOL, or, under
-#: _LLE_STALL_TOL, it stopped shrinking (float32's floor for this factor).
-_LLE_SUBSPACE_TOL = 1e-5
-_LLE_STALL_TOL = 1e-2
-#: The deflation guard: F's rms row sum |F 1| / sqrt(n) (float32's rounding
-#: of the weights' unit sums) must be at most this fraction of its rms row
-#: norm, or the constant is not F's null vector and the dense route runs.
-_LLE_NULL_GUARD = 1e-3
-#: A wanted Ritz singular value at most this many float32 epsilons times the
-#: rms row norm is numerically zero: the kNN graph has several components
-#: (taxi's near-duplicate rows at 2,000), M's null space is wider than the
-#: constant, and any basis of it is the answer (sklearn's ARPACK returns
-#: its own); the iteration stops there from its third step.
-_LLE_NULL_FLOOR = 8.0
-# TOMBSTONE: MOJOLEARN_LLE_FAST_NULL_CANON (DROPPED-quality) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
-# Tried: the _LLE_CANON_* thresholds of the canonical null-space answer.
-# Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_NULL_CANON.patch; record in docs/TOMBSTONES.md.
-
-
-def _lle_orth(k, Z):
-    """Z's columns orthonormalized by the Householder QR (geqrf, orgqr):
-    unconditionally orthonormal, never a zeroed column (the kit's orth zeroes
-    a column it judges dependent, DEVIATION 5318, and subspace iteration's
-    columns lean together). Each column is first scaled by its 1-norm (the
-    shift-invert operator reaches 1 / sigma^2, 1e18 on a null space at
-    float32 resolution, whose squares overflow)."""
-    # lane cpu2-l8-decomp: the scale vector made where Z lives: 1 / norm
-    # (a zero norm gives 0, an infinite one 0), and 1 where that is not > 0
-    rc = k.ew("recip", k.colsum(k.ew("abs", Z)))
-    sc = k.ew("select", rc, rc, _M.of([1.0], 1, 1), s=0.0)
-    h, tau = k.geqrf(k.ew("mul", Z, sc))
-    return k.orgqr(h, tau, Z.c)
-
-
-def _lle_smallest(k, F, nc, max_iter, seed=0, Xd=None):
-    """The nc smallest right singular pairs of the square LLE factor F
-    (n x n, M = F^T F) past its null vector, the constant: (V n x nc, unit
-    columns, ascending singular value, each signed so its largest-|.| entry
-    is positive; S 1 x nc). None when the route does not apply (the caller
-    runs the dense SVD).
-
-    The constant is deflated exactly: H, the Householder reflector taking
-    u = 1 / sqrt(n) to e_{n-1}, and F^ = F H[:, :n-1], F restricted to the
-    constant's complement (its last column F u is dropped; F u is float32
-    rounding of the weights' unit sums, and the guard below checks it is
-    far under its rms row norm). F0 = [F^ | u] is square and, when
-    u is not orthogonal to z (the unit left null vector of F^), nonsingular:
-    ONE LU (the device's parallel right-looking getrf; a pivot under float32
-    resolution is set to eps times the largest); every solve against it is `trisolve` (right-looking substitution
-    on the device, no inverse formed). z = F0^-T e_{n-1}, normalized. For x in R^{n-1},
-    (F^T F^)^-1 x = the first n - 1 entries of F0^-1 (P_z F0^-T [x; 0]),
-    P_z = I - z z^T: F0^-T [x; 0] solves F^^T y = x, P_z takes its
-    minimum-norm part (in range(F^)), and F0^-1 solves F^ w = that exactly.
-    Subspace iteration on that operator (sklearn's shift-invert at
-    sigma = 0) with p = max(2 nc + 1, 20) columns (ARPACK's ncv), each step
-    in two halves (F^+T, then F^+), each half orthonormalized (`_lle_orth`),
-    then rotated to the Ritz vectors of F^
-    (the one-sided Jacobi SVD of F^ X, n x p), until the wanted Ritz
-    subspace settles (_LLE_SUBSPACE_TOL, or stalled under _LLE_STALL_TOL).
-    Every product is a kit cell and the stopping test reads their outputs:
-    the same iterations on every vendor. Not settled in max_iter steps
-    raises (an unconverged answer is not returned as one). Wanted singular
-    values under _LLE_NULL_FLOOR float32 epsilons (a null space wider than
-    the constant) stop it from the third step on (each step has shrunk
-    the rest by (sigma / sigma_next)^2): any basis of that space is the
-    answer, to float32's resolution of |F^ x|."""
-    n = F.c
-    if F.r != n:
-        return None
-    n1 = n - 1
-    p = min(n1, max(2 * nc + 1, 20))
-    if p <= nc:
-        return None
-    rn = 1.0 / math.sqrt(n)
-    hv = [rn] * n
-    hv[n - 1] = rn - 1.0
-    # |h|^2 in closed form (n - 1 entries rn, one rn - 1): a scalar, no fold over n
-    coef = 2.0 / ((n - 1) * (rn * rn) + (rn - 1.0) * (rn - 1.0))
-    h = _M.of(hv, n, 1)
-    un = _M.of([rn] * n, n, 1)
-    hrow = _M.of([rn] * n1, 1, n1)
-    Fh = k.mm(F, h)
-    # lane fam-decomp / apple-fast-gap-manprep: F0 in cells; lane
-    # cpu2-l8-decomp: in every mode on every column (device and host binding
-    # alike: one arithmetic), no longer behind the IDENTICAL binding bit or
-    # FAST's Metal-only switch (the F.cols + host stack route is gone)
-    dev_f0 = True
-    if dev_f0:
-        # lane/apple-fast-gap-manprep (2026-10-03), FAST + Apple default: F0 = [F^ | u] built on the device in three cells
-        # instead of F.cols (F downloaded, then one strided Python slice per
-        # column, 10,000 at the board's n) and _hstack (F^ downloaded and
-        # moved on the host, then uploaded again for the LU). The same words:
-        # the rank-one product has one term per entry, the mask multiply is
-        # exact (x * 1 + 0, 0 * x + rn in one fused rounding).
-        hfull = _M.of([rn] * n1 + [0.0], 1, n)
-        mask = _M.of([1.0] * n1 + [0.0], 1, n)
-        last = _M.of([0.0] * n1 + [rn], 1, n)
-        D = k.ew("sub", F, k.ew("scale", k.mm(Fh, hfull), s=coef))
-        F0 = k.ew("fma", D, mask, last)
-        Fhat = None
-    else:
-        Fhat = k.ew("sub", F.cols(0, n1), k.ew("scale", k.mm(Fh, hrow), s=coef))
-    Fu = k.mm(F, un)
-    g = math.sqrt(_dsum_sq(k, Fu))
-    rms = math.sqrt(max(float(k.total(k.ew("sq", F)).s[0]), 0.0) / n)
-    if not (g <= _LLE_NULL_GUARD * rms):
-        return None
-    floor = _LLE_NULL_FLOOR * _F32_EPS * rms
-    if not dev_f0:
-        F0 = k.hstack([Fhat, un])
-    if dev_f0 and k.w4_flags() & 1:
-        # lane/apple-fast-w4-decomp LLE_FAST_DEV_LU (-D MOJOLEARN_LLE_FAST_DEV_LU,
-        # FAST + Apple): F0 factored where it lives; the same launches as the
-        # two calls below, without F0 / the factor crossing to the host 5 times
-        lu, pm, im, st = k.lu_dev_aux(F0, clamp=True)
-    else:
-        lu, piv, _ = k.lu(F0)
-        st, _, pm, im = k.lu_aux(lu, piv, clamp=True)
-    # a pivot under float32 resolution (an exactly zero one skipped its
-    # step) is set to eps times the largest: inverse iteration's usual
-    # perturbation (LAPACK's stein/hsein); the factor is only the spectral
-    # transform, the Rayleigh-Ritz step below uses F^ itself. The floor and
-    # the swaps' row order (and its inverse) are cells (`lu_aux`), no host
-    # loop over the rows.
-    big = st[0]
-    if not (big > 0.0 and math.isfinite(big)):
-        return None
-
-    def solve(B):               # F0^-1 B = U^-1 L^-1 P B
-        return k.trisolve(lu, pm, B)
-
-    def solve_t(B):             # F0^-T B = P^T L^-T U^-T B
-        return k.trisolve(lu, im, B, 1)
-
-    en = _M.zeros(n, 1)
-    en.s[n - 1] = 1.0
-    z = solve_t(en)
-    zn = math.sqrt(_dsum_sq(k, z))
-    if not zn > 0.0 or not math.isfinite(zn):
-        return None
-    z = k.ew("scale", z, s=1.0 / zn)
-
-    # TOMBSTONE: MOJOLEARN_LLE_FAST_NULL_CANON (DROPPED-quality) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
-    # Tried: the canonical null-space answer in this loop (bit 4 of w4_flags).
-    # Restore: git apply experiments/removed/MOJOLEARN_LLE_FAST_NULL_CANON.patch; record in docs/TOMBSTONES.md.
-
-    def back(Yc):           # back to R^n: H [Yc; 0] = [Yc; 0] - coef h (h^T [Yc; 0])
-        t = k.mm(hrow, Yc)
-        full = k.pad_zero_row(Yc)
-        return k.ew("sub", full, k.ew("scale", k.mm(h, t), s=coef))
-
-    X, Y, S, null = _lle_iterate(k, F0, lu, pm, im, z, n, n1, nc, p, max_iter, seed, floor)
-    sv = S.take_cols(list(range(p - 1, p - 1 - nc, -1)))
-    V = back(Y)
-    # the columns are unit vectors or the solve is not an answer (an
-    # overflow, a dropped launch): refuse rather than return them
-    # the unit-norm and finiteness guard as three words (lane cpu2-l8-decomp:
-    # min and max of the squared norms, max |sv|, reduced where they live)
-    sq = k.colsum(k.ew("sq", V))
-    lo, hi = k.word(k.reduce(sq, k._SEL_MIN)), k.word(k.reduce(sq, k._SEL_MAX))
-    if not (0.9 <= lo and hi <= 1.1) or not math.isfinite(k.word(k.reduce(sv, k._SEL_MAXABS))):
-        raise RuntimeError(
-            "LocallyLinearEmbedding: the shift-invert subspace iteration returned columns of squared norm "
-            f"{[float(v) for v in sq.s]} (not unit); pass eigen_solver='dense' for the full SVD.")
-    return k.ew("mul", V, k.absmax_signs(V, True)), sv
-
-
-def _lle_iterate(k, F0, lu, pm, im, z, n, n1, nc, p, max_iter, seed, floor):
-    """`_lle_smallest`'s subspace iteration with p columns on the F0 route:
-    (X n1 x p the Ritz vectors by descending Ritz value, Y n1 x nc the wanted
-    ones, S 1 x p their values, whether it stopped on the null floor). The
-    loop runs in ONE binding call (lane py-runtime-b: x_decomp/lle_iter.mojo
-    on the host column, lle_iter_dev.mojo on the GPU binding): the same
-    cells, solves on the LU factor (pm the pivots' row order, im its
-    inverse), Householder QR and descending SVD, and the same float64 tests."""
-    X, Y, S = _M.zeros(n1, p), _M.zeros(n1, nc), _M.zeros(1, p)
-    st, e_prev = k.b.x_decomp_lle_iterate(F0.addr, lu.addr, pm.addr, im.addr, z.addr, [X.addr, Y.addr, S.addr],
-                                          [n, n1, nc, p, max(1, int(max_iter)), int(seed) & 0xFFFFFFFF],
-                                          [float(floor), _LLE_SUBSPACE_TOL, _LLE_STALL_TOL])
-    if int(st) == 2:
-        raise RuntimeError(
-            f"LocallyLinearEmbedding: the shift-invert subspace iteration did not settle in {max_iter} "
-            f"iterations (last subspace change {float(e_prev):.3g}); pass eigen_solver='dense' for the full SVD. "
-            "An unconverged embedding is not returned as if it were one.")
-    return X, Y, S, int(st) == 1
+        return _NATIVE(self, "family_mani_mds_fit",
+                       (_manifold_binding(self, "numeric_mode"), _backend.binding(_BINDING), X, init), _NATIVE_CONTEXT)
+# LocallyLinearEmbedding's shift-invert route (`_lle_smallest`) and its
+# policy run in the compiled owner (bindings/mani_decomp_native.mojo).
 
 
 # Reference: scikit-learn `manifold/_locally_linear.py`:
@@ -5086,60 +4635,8 @@ class LocallyLinearEmbedding(_Base):
         -------
         self
         """
-        self.numeric_mode_ = _mode(self.numeric_mode)
-        if self.method not in ("standard", "hessian", "modified", "ltsa"):
-            raise ValueError(f"LocallyLinearEmbedding: unrecognized method {self.method!r}")
-        _exact_eigen_solver(self.eigen_solver, "LocallyLinearEmbedding")
-        k = self._kit()
-        M = _M.from_input(X)
-        n = M.r
-        nn = int(self.n_neighbors)
-        nc = int(self.n_components)
-        if nn >= n:
-            raise ValueError("Expected n_neighbors < n_samples, but n_samples = %d, n_neighbors = %d" % (n, nn))
-        if self.method == "hessian" and nn <= nc + nc * (nc + 1) // 2:
-            raise ValueError("for method='hessian', n_neighbors must be greater than "
-                             "[n_components * (n_components + 3) / 2]")
-        if self.method == "modified" and nn < nc:
-            raise ValueError("modified LLE requires n_neighbors >= n_components")
-        # lane hr2-graph-embed: the kNN, the barycenter weights and I - W
-        # as cells, I - W resident on the GPU binding; cgr-decomp: the LTSA,
-        # Hessian and modified factors as cells too (x_decomp/lle_local.mojo,
-        # the local eigensolves batched), no Python loop over the samples
-        idm, _ = _knn_mats(k, M, M, nn, True)
-        if self.method == "standard":
-            IW = k.graph_lle_iw(idm, k.barycenter(M, M, idm, self.reg), n)
-        elif self.method == "ltsa":
-            IW = k.lle_local(M, idm, 0, nn, nc, 0.0)
-        elif self.method == "hessian":
-            IW = k.lle_local(M, idm, 1, nn, nc, float(self.hessian_tol))
-        else:
-            IW = k.lle_local(M, idm, 2, nn, nc, float(self.modified_tol))
-        # The eigenvectors of M = (I - W)^T (I - W) for its smallest
-        # eigenvalues are the right singular vectors of I - W for its
-        # smallest singular values. Those eigenvalues sit near 1e-7, under
-        # float32 resolution next to M's largest, so the dense eigh of M
-        # cannot order them; the one-sided Jacobi SVD of I - W resolves its
-        # small singular values to high RELATIVE accuracy.
-        got = None
-        if (self.method == "standard" and self.eigen_solver == "auto" and n > _LLE_ITER_MIN_N
-                and nc + 1 < _LLE_ITER_MAX_K):
-            k.enable_lle_precision()
-            got = _lle_smallest(k, IW, nc, int(self.max_iter), _seed_of(self.random_state), M)
-        if got is not None:
-            self.embedding_m_, sv = got
-        else:
-            # eigen_solver='dense', a small n, or the iterative route's guard
-            # refused: the full SVD of I - W (O(n^3) per Jacobi sweep)
-            S, Vt = k.svd(IW)
-            rows = list(range(n - 2, n - 2 - nc, -1))
-            self.embedding_m_ = Vt.take_rows(rows).T
-            sv = S.take_cols(rows)
-        self.embedding_ = self.embedding_m_.out()
-        self.reconstruction_error_ = _dsum_sq(k, sv)
-        self._fit_X, self._knn = M, nn
-        self.n_features_in_ = M.c
-        return self
+        return _NATIVE(self, "family_mani_lle_fit",
+                       (_manifold_binding(self, "numeric_mode"), _backend.binding(_BINDING), X), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Compute the embedding and return ``embedding_``.
@@ -5153,7 +4650,8 @@ class LocallyLinearEmbedding(_Base):
         -------
         ndarray of shape (n_samples, n_components), float32
         """
-        return self.fit(X).embedding_
+        return _NATIVE(self, "family_mani_lle_fit_transform",
+                       (_manifold_binding(self, "numeric_mode"), _backend.binding(_BINDING), X), _NATIVE_CONTEXT)
 
     def transform(self, X):
         """Embed new points.
@@ -5170,14 +4668,25 @@ class LocallyLinearEmbedding(_Base):
         -------
         ndarray of shape (n_queries, n_components), float32
         """
-        self._check("embedding_m_")
-        k = self._kit()
-        Q = _M.from_input(X)
-        idm, _ = _knn_mats(k, Q, self._fit_X, self._knn, False)
-        Wb = k.barycenter(Q, self._fit_X, idm, self.reg)
-        # X_new[i] = sum_a W[i, a] * embedding[idx[i][a]]: one cell per output
-        # (x_decomp/lle_local.mojo `lle_apply_cell`), no loop over the queries
-        return k.lle_apply(Wb, idm, self.embedding_m_).out()
+        return _NATIVE(self, "family_mani_lle_transform",
+                       (_manifold_binding(self, "numeric_mode_"), _backend.binding(_BINDING), X), _NATIVE_CONTEXT)
+
+
+def _manifold_binding(model, field):
+    """The decomp binding of a manifold estimator's numeric mode (`field`:
+    "numeric_mode" for a fit, the fitted "numeric_mode_" after one; None is
+    the default mode). Binding acquisition only."""
+    return _backend.binding(_BINDING, getattr(model, field, None))
+
+
+# The compiled family owner, connected once at import: every public method
+# of Isomap, ClassicalMDS, MDS and LocallyLinearEmbedding is one native call
+# (bindings/mani_decomp_native.mojo). Its tables: the kit's matrix and device
+# buffer classes and the per-binding broadcast zero (`_dev_one`'s cache), and
+# the metric kinds.
+_NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
+_native_family_bridge.tables(family_mani_M=_M, family_mani_devbuf=_DevBuf, family_mani_dev_one=_DEV_ONE,
+                             family_mani_pd_kind=dict(_PD_KIND))
 
 
 # ================================================================ robust covariance

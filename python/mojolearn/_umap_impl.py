@@ -4,8 +4,8 @@
 from . import _portable_math as math
 import operator
 
-from . import _backend, _native_archive_bridge
-from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty
+from . import _backend, _native_archive_bridge, _native_family_bridge
+
 from ._mode import NumericModeMixin
 from .linear_model import _round_f32
 
@@ -20,6 +20,10 @@ _UMAP_FORMAT = "mojolearn-umap-1"
 # writes the schema registered after the class; host_archive_native.mojo
 # `host_archive_umap` builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
+# The compiled family owner, connected once at import: `fit`,
+# `fit_transform` and `transform` are one native call each
+# (bindings/mani_umap_native.mojo).
+_NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 
 
 def _integer(value, name, minimum, maximum=(1 << 63) - 1):
@@ -273,86 +277,6 @@ class UMAP(NumericModeMixin):
                 raise ValueError(f"UMAP init={init!r} must be 'spectral', 'random', 'pca' or an array")
         return (code, p, a, b)
 
-    def _initial(self, x, n, nc, seed):
-        """The initial layout of a non-spectral init (None for 'spectral'):
-        'random' is uniform(-10, 10) on the Philox stream (umap-learn's and
-        cuML's range), 'pca' is umap-learn's PCA of the data scaled to max
-        |coordinate| 10 plus N(0, 1e-4) noise, an array is used as given. The
-        arithmetic is the decomp lane's cells, IDENTICAL on every column."""
-        init = self.init
-        if isinstance(init, str) and init == "spectral":
-            return None
-        from ._expansion_decomp import _Kit, _M, _svd_flip_v
-        k = _Kit("identical")
-        if isinstance(init, str) and init == "random":
-            u = k.rand(n, nc, seed, 90, 0)
-            return k.ew("adds", k.ew("scale", u, s=20.0), s=-10.0).out()
-        if isinstance(init, str):     # 'pca'
-            M = _M.from_input(x)
-            if nc > min(M.r, M.c):
-                raise ValueError("UMAP init='pca' needs n_components <= min(n_samples, n_features)")
-            Xc = k.center(M, k.colmean(M))
-            if M.r >= M.c:
-                _, Vt = k.svd(Xc)
-            else:
-                # wide data: the SVD of Xc^T gives Xc's left vectors U (its
-                # Vt rows); Xc's right vectors are then U^T Xc / S
-                S, Ut = k.svd(Xc.T)
-                if not all(v > 0 for v in S.s[:nc]):  # glue: zero singular value check over nc components
-                    raise ValueError("UMAP init='pca' found a zero singular value")
-                Vt = k.mm(Ut.rows(0, nc), Xc)
-                Vt = k.ew("div", Vt, S.take_cols(list(range(nc))).T)
-            Vt = _svd_flip_v(Vt.rows(0, nc))
-            coords = k.mm(Xc, Vt, tb=True)
-            # max |coords| in Mojo: the positions of the minimum of -|coords|
-            # (x_decomp/moves.mojo argmin_all), an exact negation
-            mag = k.ew("abs", coords)
-            at = k.argmin_all(k.ew("scale", mag, s=-1.0))
-            peak = mag.s[int(at.s[0])] if at.r else 0.0
-            if not peak > 0:
-                raise ValueError("UMAP init='pca' found a zero spread")
-            coords = k.ew("scale", coords, s=10.0 / peak)
-            noise = k.ew("scale", k.rand(n, nc, seed, 91, 1), s=1e-4)
-            return k.ew("add", coords, noise).out()
-        a, _ = as_f32_c(init, ndim=2, name="init")
-        if tuple(a.shape) != (n, nc):
-            raise ValueError(f"UMAP init array has shape {tuple(a.shape)}; ({n}, {nc}) is needed")
-        if not all_finite(a):
-            raise ValueError("UMAP init array must be finite")
-        return a
-
-    def _target(self, y, n):
-        """(kind, dims, codes) of a supervised target: 'categorical' labels
-        as float32 codes (sorted unique values, -1 kept as the unknown
-        label), or a continuous target ('l2' / 'euclidean') as float32."""
-        tm = self.target_metric
-        w = _scalar(self.target_weight, "target_weight")
-        if not 0 <= w <= 1:
-            raise ValueError("UMAP target_weight must be in [0, 1]")
-        tk = _integer(self.target_n_neighbors, "target_n_neighbors", -1)
-        if tk in (0, 1):
-            raise ValueError("UMAP target_n_neighbors must be -1 or >= 2")
-        if tm == "categorical":
-            from . import _user_objects
-            from ._array import Array
-            vals = list(y) if not hasattr(y, "tolist") else y.tolist()
-            if len(vals) != n or _user_objects.kinds(vals)[_user_objects.KIND_SEQ]:
-                raise ValueError("UMAP categorical y must be one label per row")
-            # the labels other than -1 ordered by (str(type(v)), v), as float32
-            # codes, -1 kept: read once natively (user_objects_native sorted_codes)
-            words = _user_objects.call("sorted_codes", vals, -1)
-            t = Array._owned(words, (len(words),), "<f4", "C")
-            return 1, 1, t, max(tk, 0), w
-        if tm in ("l2", "euclidean"):
-            t, _ = as_f32_c(y, ndim=None, name="y")
-            if t.ndim == 1:
-                t = t.reshape((t.shape[0], 1))
-            if t.ndim != 2 or t.shape[0] != n or not all_finite(t):
-                raise ValueError("UMAP continuous y must be finite with one row per sample")
-            return 2, int(t.shape[1]), t, max(tk, 0), w
-        raise NotImplementedError(
-            f"UMAP target_metric={tm!r} is not implemented; 'categorical' and 'l2' / 'euclidean' are")
-
     def fit(self, X, y=None):
         """Fit the embedding to ``X``.
 
@@ -380,55 +304,7 @@ class UMAP(NumericModeMixin):
             For ``densmap=True``, a non-euclidean ``output_metric`` or an
             unsupported ``target_metric``.
         """
-        config = self._parameters()
-        extras = self._extras()
-        x, copied = as_f32_c(X, ndim=2, name="X")
-        if not all_finite(x):
-            raise ValueError("UMAP input coordinates must be finite")
-        n, d = x.shape
-        if config[0] > n:
-            raise ValueError("UMAP n_neighbors exceeds n_samples")
-        initial = self._initial(x, n, config[1], config[7])
-        if initial is None and n < 2 * config[1] + 4:
-            raise ValueError("UMAP has too few samples for spectral initialization")
-        target = None if y is None else self._target(y, n)
-        embedding = empty((n, config[1]), "<f4")
-        # n_samples, n_features, n_neighbors, n_components, n_epochs,
-        # min_dist, spread, set_op_mix_ratio, local_connectivity, random_state,
-        # learning_rate, repulsion_strength, negative_sample_rate.
-        binding = self._bind()
-        mode = (self.numeric_mode or _backend.default_mode()).strip().lower()
-        if binding.umap_numeric_mode() != {"fast": 0, "identical": 1}[mode]:
-            raise RuntimeError("UMAP binary numeric mode disagrees with requested mode")
-        legacy = (initial is None and target is None and extras == (-1, 2.0, 0.0, 0.0)
-                  and config[1] in (2, 3))
-        if legacy:
-            # Preserve the legacy ABI for default controls and existing wheels.
-            native_config = config[:8] if config[8:] == [1.0, 1.0, 5] else config
-            columns = binding.umap_fit_transform(
-                addr_ro(x, name="X"), addr(embedding, name="embedding_"),
-                [n, d, *native_config])
-        else:
-            tkind, tdims, tarr, tk, tw = target if target is not None else (0, 1, None, 0, 0.5)
-            columns = binding.umap_fit_transform_ex(
-                [addr_ro(x, name="X"), addr(embedding, name="embedding_"),
-                 0 if initial is None else addr_ro(initial, name="init"),
-                 0 if tarr is None else addr_ro(tarr, name="y")],
-                [n, d, *config, *extras, tkind, tdims, tk, tw])
-        if columns != config[1] or not all_finite(embedding):
-            raise RuntimeError("UMAP returned an invalid embedding")
-        # Prepare all retained state before publishing a successful fit. Copies
-        # prevent caller edits of X or embedding_ from changing transform's model.
-        training = x.copy()
-        frozen_embedding = embedding.copy()
-        self.embedding_ = embedding
-        self.n_features_in_ = d
-        self.input_copied_ = copied
-        self._transform_training = training
-        self._transform_embedding = frozen_embedding
-        self._transform_config = tuple(config) + tuple(extras)
-        self._transform_mode = mode
-        return self
+        return _NATIVE(self, "family_mani_umap_fit", (self._bind(), X, y), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit to ``X`` and return the training embedding.
@@ -445,7 +321,7 @@ class UMAP(NumericModeMixin):
         embedding : Array of shape (n_samples, n_components)
             The float32 embedding, sharing memory with ``embedding_``.
         """
-        return self.fit(X, y).embedding_
+        return _NATIVE(self, "family_mani_umap_fit_transform", (self._bind(), X, y), _NATIVE_CONTEXT)
 
     def transform(self, X):
         """Embed new rows in the fitted coordinate system without refitting.
@@ -472,39 +348,7 @@ class UMAP(NumericModeMixin):
             since ``fit`` (refit first), the feature count differs, or ``X``
             is not finite.
         """
-        if not hasattr(self, "_transform_training"):
-            raise ValueError("UMAP transform requires a successful fit")
-        config = self._parameters()
-        extras = self._extras()
-        mode = (self.numeric_mode or _backend.default_mode()).strip().lower()
-        if tuple(config) + tuple(extras) != self._transform_config or mode != self._transform_mode:
-            raise ValueError("UMAP parameters or numeric mode changed after fit; refit before transform")
-        x, _ = as_f32_c(X, ndim=2, name="X")
-        training = self._transform_training
-        fitted_embedding = self._transform_embedding
-        if x.shape[1] != training.shape[1]:
-            raise ValueError("UMAP transform feature count differs from fitted data")
-        if not all_finite(x):
-            raise ValueError("UMAP transform input coordinates must be finite")
-        # `Array.tobytes()` is the C-order bytes, so this byte compare is the
-        # one the NumPy-era code made.
-        if x.shape == training.shape and x.tobytes() == training.tobytes():
-            return fitted_embedding.copy()
-        binding = self._bind()
-        if binding.umap_numeric_mode() != {"fast": 0, "identical": 1}[mode]:
-            raise RuntimeError("UMAP binary numeric mode disagrees with fitted mode")
-        output = empty((x.shape[0], config[1]), "<f4")
-        native_config = config[:8] if config[8:] == [1.0, 1.0, 5] else config
-        if extras != (-1, 2.0, 0.0, 0.0):
-            native_config = [*config, *extras]
-        columns = binding.umap_transform(
-            [addr_ro(training, name="training"),
-             addr_ro(fitted_embedding, name="embedding_"),
-             addr_ro(x, name="X"), addr(output, name="output")],
-            [training.shape[0], x.shape[0], training.shape[1], *native_config])
-        if columns != config[1] or not all_finite(output):
-            raise RuntimeError("UMAP transform returned an invalid embedding")
-        return output
+        return _NATIVE(self, "family_mani_umap_transform", (self._bind(), X), _NATIVE_CONTEXT)
 
     # Saved layout (lane/inference-forecast-umap-pca, 2026-09-15): training and
     # embedding (float32), `meta` <i8 [n_neighbors, n_components, n_epochs,
@@ -589,3 +433,7 @@ _native_archive_bridge.register(UMAP, _UMAP_FORMAT, (
     ("f4", "controls", (("float", _config(3)), ("float", _config(4)), ("float", _config(5)),
                         ("float", _config(6)), ("float", _config(8)), ("float", _config(9)))),
 ), host_archive_umap_metrics=dict(_METRICS))
+
+# The owner's fixed tables: the metric codes, and the binding resolver a
+# 'random' / 'pca' start uses for the decomp kit (binding acquisition only).
+_native_family_bridge.tables(family_mani_umap_metrics=dict(_METRICS), family_mani_binding=_backend.binding)

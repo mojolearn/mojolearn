@@ -2,9 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """k-means on the GPU. Reference: cuVS."""
 
-from . import _mojolearn, _native_archive_bridge
-from ._sample_weight import check_sample_weight
-from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty, zeros
+from . import _mojolearn, _native_archive_bridge, _native_family_bridge
 from ._mode import NumericModeMixin
 
 #: The saved k-means model (lane/kmeans-save, 2026-09-16), read by
@@ -19,6 +17,14 @@ _KMEANS_FORMAT = "mojolearn-kmeans-1"
 # writes the schema registered below the class; host_archive_native.mojo
 # builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
+
+# The compiled family owner, connected once at import: `fit`, `predict`,
+# `transform`, `fit_predict` and `fit_transform` are one native call each
+# (bindings/kmeans_native.mojo), which validates the inputs with the
+# refusals below, allocates the outputs, runs the binding's kmeans_fit /
+# kmeans_predict / kmeans_transform and stores the fitted attributes. The
+# shell hands it the binding `_bind` resolves for the model's numeric mode.
+_NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 
 INIT_KMEANS_PLUS_PLUS = 0
 INIT_RANDOM = 1
@@ -70,19 +76,12 @@ _METRIC_SAVED = {
 }
 
 
-def _refuse_non_finite(a, name, where):
-    """A NaN or an infinity in `a` is refused BY NAME before any launch.
-
-    Before this check a NaN row reached the kernel: `fit` returned a NaN
-    centroid, `inertia_` of FLT_MAX and label -1 for the row, and `predict`
-    returned -1 for a NaN query, all silently (scikit-learn's
-    `validate_data` refuses the same input)."""
-    if not all_finite(a):
-        raise ValueError(
-            f"mojolearn KMeans.{where}: {name} contains a NaN or an infinity; "
-            "a non-finite row has no distance to any center, so it is "
-            "refused by name"
-        )
+# `KMeans.fit`, `predict` and `transform` refuse a NaN or an infinity in X,
+# sample_weight or init_centroids BY NAME before any launch
+# (bindings/kmeans_native.mojo `_kmeans_f32`): before that check a NaN row
+# reached the kernel and `fit` returned a NaN centroid, `inertia_` of
+# FLT_MAX and label -1 for the row, all silently (scikit-learn's
+# `validate_data` refuses the same input).
 
 
 # Maintainer notes (moved from the docstring):
@@ -208,38 +207,10 @@ class KMeans(NumericModeMixin):
         self.metric = metric
         self.oversampling_factor = oversampling_factor
 
-    def _metric_code(self):
-        if isinstance(self.metric, str):
-            if self.metric not in _METRIC_NAMES:
-                raise ValueError(
-                    f"mojolearn: metric must be one of "
-                    f"{sorted(_METRIC_NAMES)}, got {self.metric!r}"
-                )
-            return _METRIC_NAMES[self.metric]
-        return int(self.metric)
-
-    def _inference_inputs(self, X):
-        """`X` and the centers as float32 C order, and the metric code, for
-        `predict` and `transform`; refuses an unfitted model and a feature
-        count other than the fit's."""
-        centers = getattr(self, "cluster_centers_", None)
-        if centers is None:
-            raise RuntimeError("this estimator is not fitted yet")
-        metric_code = self._metric_code()
-        x, _ = as_f32_c(X, ndim=2, name="X")
-        _refuse_non_finite(x, "X", "predict/transform")
-        d = x.shape[1]
-        dc = centers.shape[1]
-        if d != dc:
-            raise ValueError(
-                f"mojolearn: X has {d} features, KMeans was fitted with {dc}"
-            )
-        c, _ = as_f32_c(centers, ndim=2, name="cluster_centers_")
-        return x, c, metric_code
-
-    # A callable `init` is called once on the host
-    # (`_expansion_cluster._callable_init`) and its centers take the 'array'
-    # path; an array `init` takes the 'array' path with `init_centroids` ignored.
+    # A callable `init` is called once with the fit's rows and its centers
+    # take the 'array' path (bindings/kmeans_native.mojo, scikit-learn's
+    # `init(X, n_clusters, random_state=...)`); an array `init` takes the
+    # 'array' path with `init_centroids` ignored.
     def fit(self, X, y=None, sample_weight=None):
         """Compute the k-means clustering of `X`.
 
@@ -267,110 +238,7 @@ class KMeans(NumericModeMixin):
         TypeError
             If `oversampling_factor` is not a number.
         """
-        init_centroids = self.init_centroids
-        if isinstance(self.init, str):
-            if self.init not in _INIT_NAMES:
-                raise ValueError(
-                    f"mojolearn: init must be one of "
-                    f"{sorted(_INIT_NAMES)}, got {self.init!r}"
-                )
-            init_code = _INIT_NAMES[self.init]
-        elif callable(self.init):
-            from ._expansion_cluster import _callable_init
-            init_code = INIT_ARRAY
-            init_centroids = _callable_init(self.init, X, self.n_clusters, self.random_state)
-        elif isinstance(self.init, int) and not isinstance(self.init, bool):
-            init_code = int(self.init)
-        else:
-            init_code = INIT_ARRAY
-            init_centroids = self.init
-        metric_code = self._metric_code()
-        if isinstance(self.oversampling_factor, bool) or not isinstance(
-            self.oversampling_factor, (int, float)
-        ):
-            raise TypeError(
-                "mojolearn: oversampling_factor must be a float, got "
-                f"{type(self.oversampling_factor).__name__}"
-            )
-        oversampling = float(self.oversampling_factor)
-
-        x, _ = as_f32_c(X, ndim=2, name="X")
-        _refuse_non_finite(x, "X", "fit")
-        n, d = x.shape
-        if self.n_clusters > n:
-            raise ValueError(
-                f"mojolearn: n_clusters={self.n_clusters} exceeds "
-                f"n_samples={n}"
-            )
-
-        if init_code == INIT_ARRAY:
-            if init_centroids is None:
-                raise ValueError(
-                    "mojolearn: init='array' needs init_centroids"
-                )
-            c0, _ = as_f32_c(init_centroids, ndim=2,
-                             name="init_centroids")
-            if c0.shape != (self.n_clusters, d):
-                raise ValueError(
-                    f"mojolearn: init_centroids must be "
-                    f"({self.n_clusters}, {d}), got {c0.shape}"
-                )
-            # A COPY, on purpose: the kernel writes the centroids in place
-            # and `c0` may be a zero-copy borrow of the caller's array.
-            _refuse_non_finite(c0, "init_centroids", "fit")
-            centers = c0.copy()
-        else:
-            centers = zeros((self.n_clusters, d), "<f4")
-        # DEVIATION 2672: ALLOCATED AS THE ATTRIBUTE'S OWN DTYPE. The kernel
-        # writes uint32 cluster ids and every id is below 2**31, so int32 is
-        # the same bytes; allocating int32 here lets the kernel write the
-        # array the caller keeps. It used to be `<u4` and `labels_` was then
-        # `frombytes(labels.tobytes(), "<i4", (n,))`, two host copies of the
-        # label vector per fit (16 MB each at 4,000,000 rows).
-        labels = empty((n,), "<i4")
-
-        if sample_weight is None:
-            n_weights = 0
-            # Never read when n_weights is 0. Passing X's address avoids
-            # allocating an array of ones the Mojo side would ignore.
-            w = x
-        else:
-            # DEVIATION 2369: a 1-D vector by contract (`ndim=1`); the
-            # NumPy-era `.ravel()` also accepted an (n, 1) column.
-            # scikit-learn's _check_sample_weight (shape, finite, not all
-            # zero, its wording); a scalar is a constant vector. Read only.
-            w = check_sample_weight(sample_weight, n, allow_negative=True)
-            n_weights = n
-
-        inertia, n_iter, sum_scale, weight_scale = self._bind("_mojolearn").kmeans_fit(
-            addr_ro(x, name="X"),
-            addr(centers, name="cluster_centers_"),
-            addr(labels, name="labels_"),
-            addr_ro(w, name="sample_weight"),
-            # ORDER MATCHES bindings/_mojolearn.mojo::kmeans_fit_binding.
-            # n_samples, n_features, n_clusters, n_weights, max_iter,
-            # tol, seed, n_init, init, metric, oversampling_factor
-            [
-                n, d, self.n_clusters, n_weights, self.max_iter,
-                float(self.tol), int(self.random_state), self.n_init,
-                init_code, metric_code, oversampling,
-            ],
-        )
-
-        self.cluster_centers_ = centers
-        # The kernel writes uint32 cluster ids; scikit-learn's attribute is
-        # signed. Every id is below 2**31, so int32 is the SAME BYTES, and
-        # since DEVIATION 2672 the array the kernel wrote IS that int32
-        # array (it was `<u4` plus `frombytes(labels.tobytes(), "<i4")`,
-        # two host copies per fit; before that a `labels.astype(np.int32)`
-        # Python loop, DEVIATION 2369).
-        self.labels_ = labels
-        self.inertia_ = inertia
-        self.n_iter_ = n_iter
-        self.sum_scale_ = sum_scale
-        self.weight_scale_ = weight_scale
-        self.n_features_in_ = d
-        return self
+        return _NATIVE(self, "family_kmeans_fit", (self._bind(), X, sample_weight), _NATIVE_CONTEXT)
 
     def fit_predict(self, X, y=None, sample_weight=None):
         """Fit the model and return `labels_`, the cluster of each row of `X`.
@@ -379,7 +247,7 @@ class KMeans(NumericModeMixin):
         -------
         labels : Array of shape (n_samples,), int32
         """
-        return self.fit(X, sample_weight=sample_weight).labels_
+        return _NATIVE(self, "family_kmeans_fit_predict", (self._bind(), X, sample_weight), _NATIVE_CONTEXT)
 
     # Mirrors cuML's `KMeans.predict` (`kmeans.pyx:1071-1082`): the fit's own
     # final assignment (`cluster/estimator.mojo::kmeans_predict`, host
@@ -409,18 +277,7 @@ class KMeans(NumericModeMixin):
         ValueError
             For a feature count other than the fit's, or a non-finite value.
         """
-        x, c, metric_code = self._inference_inputs(X)
-        n, d = x.shape
-        k = c.shape[0]
-        labels = empty((n,), "<i4")
-        self._bind("_mojolearn").kmeans_predict(
-            addr_ro(x, name="X"),
-            addr_ro(c, name="cluster_centers_"),
-            addr(labels, name="labels"),
-            # ORDER MATCHES bindings/_mojolearn.mojo::kmeans_predict_binding.
-            [n, d, k, metric_code],
-        )
-        return labels
+        return _NATIVE(self, "family_kmeans_predict", (self._bind(), X), _NATIVE_CONTEXT)
 
     # Reference: cuML `KMeans.transform` (`kmeans.pyx:1084`), cuVS
     # `kmeans_transform` (`detail/kmeans.cuh:1178-1219`). Each cell is the fused
@@ -452,18 +309,7 @@ class KMeans(NumericModeMixin):
         ValueError
             For a feature count other than the fit's, or a non-finite value.
         """
-        x, c, metric_code = self._inference_inputs(X)
-        n, d = x.shape
-        k = c.shape[0]
-        out = empty((n, k), "<f4")
-        self._bind("_mojolearn").kmeans_transform(
-            addr_ro(x, name="X"),
-            addr_ro(c, name="cluster_centers_"),
-            addr(out, name="distances"),
-            # ORDER MATCHES bindings/_mojolearn.mojo::kmeans_transform_binding.
-            [n, d, k, metric_code],
-        )
-        return out
+        return _NATIVE(self, "family_kmeans_transform", (self._bind(), X), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None, sample_weight=None):
         """Fit the model, then return `transform(X)`.
@@ -472,7 +318,18 @@ class KMeans(NumericModeMixin):
         -------
         distances : Array of shape (n_samples, n_clusters), float32
         """
-        return self.fit(X, sample_weight=sample_weight).transform(X)
+        return _NATIVE(self, "family_kmeans_fit_transform", (self._bind(), X, sample_weight), _NATIVE_CONTEXT)
+
+    # The fitted centroids live on the device after the first query, under
+    # `_resident_holder` (bindings/kmeans_native.mojo `_kmeans_resident`).
+    # A pickle or a deepcopy carries no device handle; the copy uploads its
+    # own at its first query. No Python `__del__`: dropping an instance
+    # releases the handle through the native finalizer connected below.
+    def __getstate__(self):
+        return _NATIVE(self, "family_kmeans_getstate", (), _NATIVE_CONTEXT)
+
+    def __setstate__(self, state):
+        _NATIVE(self, "family_kmeans_setstate", (state,), _NATIVE_CONTEXT)
 
     # Format `_KMEANS_FORMAT` (lane/kmeans-save, 2026-09-16), written by
     # `_serialize.write_npz`. `host_model` predicts through
@@ -532,6 +389,12 @@ class KMeans(NumericModeMixin):
         return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
 
+# The fixed tables the native fit reads: the init and metric names and
+# their codes, in the refusal wording's sorted order.
+_native_family_bridge.tables(family_kmeans_inits=dict(_INIT_NAMES),
+                             family_kmeans_metrics=dict(_METRIC_NAMES))
+
+
 # The saved model, written natively from this schema (bindings/
 # archive_schema_native.mojo) with the bytes `_serialize.write_npz` wrote:
 # the metric and init NAME and code come from the fixed tables above, and
@@ -556,6 +419,12 @@ _native_archive_bridge.register(KMeans, _KMEANS_FORMAT, (
     ("f8", "reals", (("float", "inertia_"), ("float", "sum_scale_"), ("float", "weight_scale_"),
                      ("float", "tol"), ("float", "oversampling_factor"))),
 ), host_archive_kmeans_metrics=dict(_METRIC_NAMES), host_archive_kmeans_starts=dict(_INIT_NAMES))
+
+
+# Dropping a fitted instance releases its resident centroids through the
+# minting binding's `kmeans_centers_release` (bindings/host_archive_lifetime.mojo
+# "entry" plans); the handle lives in `_resident_holder["index"]`.
+_native_archive_bridge.lifetime(KMeans, "kmeans_centers_release", "_resident_holder")
 
 
 __all__ = ["KMeans"]

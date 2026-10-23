@@ -94,7 +94,7 @@ def test_dense_knn_affinity_matches_the_python_loops(seed):
     X = frombytes(m.s.tobytes(), "<f4", (n, n))
     se = SpectralEmbedding(affinity="precomputed_nearest_neighbors", n_neighbors=3 + seed)
     se._validate_params()  # the fit-time parameter checks derive the private settings
-    assert se._precomputed_knn_affinity(X).s.tobytes() == _knn_oracle(3 + seed, X)
+    assert se._precomputed_knn_affinity(X).tobytes() == _knn_oracle(3 + seed, X)
 
 
 @pytest.mark.parametrize("seed", range(6))
@@ -112,7 +112,7 @@ def test_sparse_knn_affinity_matches_the_python_loops(seed):
     X = _Coo(n, [r[q] for q in rnd_order], [c[q] for q in rnd_order], [v[q] for q in rnd_order])
     se = SpectralEmbedding(affinity="precomputed_nearest_neighbors", n_neighbors=k)
     se._validate_params()  # the fit-time parameter checks derive the private settings
-    assert se._precomputed_knn_affinity(X).s.tobytes() == _knn_oracle(k, X)
+    assert se._precomputed_knn_affinity(X).tobytes() == _knn_oracle(k, X)
 
 
 def test_refusals_follow_the_row_order():

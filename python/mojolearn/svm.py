@@ -26,20 +26,21 @@ objective-change tolerance is ``0.1 * tol``. This follows cuML's
 ``LinearSVC`` and ``LinearSVR``.
 """
 
-from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, empty, frombytes, zeros
-from ._labels import argmax_rows, decode_labels, encode_labels, sorted_classes, threshold_codes
 from ._mode import NumericModeMixin
-from ._sample_weight import check_sample_weight
+from . import _native_family_bridge
 from ._svm_impl import SVC, SVR
-from .linear_model import (
-    _QN_LOSS_SVC_L1, _QN_LOSS_SVC_L2, _QN_LOSS_SVR_L1, _QN_LOSS_SVR_L2,
-    _accuracy_host, _check_qn_solver_fields, _labels_1d, _qn_fit_one_target,
-    _qn_row_weights, _qn_scores, _r2_host, _target_1d, _py2mojo_flags, _PY2MOJO_ROWS,
-)
+from .linear_model import _QN_LOSS_SVC_L1, _QN_LOSS_SVC_L2, _QN_LOSS_SVR_L1, _QN_LOSS_SVR_L2
 
 __all__ = ["SVC", "SVR", "LinearSVC", "LinearSVR"]
 
+
+
+# The compiled family owner, connected once at import: every public method of
+# the two linear machines is one native call (bindings/svm_mixture_native.mojo
+# for LinearSVC.decision_function and LinearSVR.predict,
+# bindings/svc_linear_native.mojo for fit, predict and score), handed the
+# estimators binding `_bind` resolves.
+_NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 
 class _LinearSVMBase(NumericModeMixin):
     """The fields and refusals the two linear machines share."""
@@ -53,8 +54,8 @@ class _LinearSVMBase(NumericModeMixin):
 
     def _init_common(self, penalty, loss, C, fit_intercept, penalized_intercept,
                      tol, max_iter, linesearch_max_iter, lbfgs_memory):
-        # Stored verbatim (scikit-learn's convention); `_check_common`
-        # checks them when `fit` runs.
+        # Stored verbatim (scikit-learn's convention); the native owner
+        # (bindings/svc_linear_native.mojo) checks them when `fit` runs.
         self.penalty = penalty
         self.loss = loss
         self.C = C
@@ -64,28 +65,6 @@ class _LinearSVMBase(NumericModeMixin):
         self.max_iter = max_iter
         self.linesearch_max_iter = linesearch_max_iter
         self.lbfgs_memory = lbfgs_memory
-
-    def _check_common(self):
-        name = type(self).__name__
-        penalty, loss, C = self.penalty, self.loss, self.C
-        if penalty not in ("l1", "l2"):
-            raise ValueError(f"Expected penalty to be one of ['l1', 'l2'], got {penalty!r}")
-        if loss not in self._LOSSES:
-            raise ValueError(f"Expected loss to be one of {list(self._LOSSES)}, got {loss!r}")
-        if not C > 0:
-            raise ValueError(f"mojolearn {name}: C must be positive, got {C}")
-        if self.penalized_intercept:
-            raise NotImplementedError(
-                f"mojolearn {name}: penalized_intercept=True is not implemented "
-                "(the reference appends a column of ones to X and fits without "
-                "a bias, linear.cu:150-163); the intercept is never penalized here")
-        _check_qn_solver_fields(name, self.tol, self.max_iter, self.linesearch_max_iter,
-                                self.lbfgs_memory)
-
-    def _strengths(self):
-        """`linear.cu:151,174-175`: `iC = 1 / C` on the chosen penalty."""
-        inv_c = 1.0 / self.C
-        return (inv_c, 0.0) if self.penalty == "l1" else (0.0, inv_c)
 
     # sample_weight (and LinearSVC's class_weight) are the solver's per-row
     # weights (glm_base.mojo::qn_row_weight_kernel; lane sk-kernels).
@@ -180,14 +159,6 @@ class LinearSVC(_LinearSVMBase):
         self.class_weight = class_weight
         self.multi_class = multi_class
 
-    def _validate_params(self):
-        """The constructor checks, run at the start of `fit`."""
-        multi_class = self.multi_class
-        if multi_class != "ovr":
-            raise ValueError(
-                f"mojolearn LinearSVC: multi_class must be 'ovr', got {multi_class!r}")
-        self._check_common()
-
     def fit(self, X, y, sample_weight=None):
         """Fit the classifier.
 
@@ -207,77 +178,7 @@ class LinearSVC(_LinearSVMBase):
         self : LinearSVC
             The fitted estimator.
         """
-        self._validate_params()
-        x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
-        rows, cols = x.shape
-        labels, _ = _labels_1d(y)
-        if labels is None:
-            raise ValueError("mojolearn LinearSVC requires a 1-D y")
-        if len(labels) != rows:
-            raise ValueError("mojolearn LinearSVC X and y lengths differ")
-        # lane py-shared: the native encoder (`sorted_classes` is its definition)
-        self.classes_, codes = encode_labels(labels)
-        n_classes = len(self.classes_)
-        if n_classes < 2:
-            raise ValueError("mojolearn LinearSVC: y has one class")
-        l1, l2 = self._strengths()
-        sw = _qn_row_weights(self, sample_weight, self.class_weight,
-                             self.classes_, codes, rows)
-        # `OvrSelector` (linear.cu:50-54): y is 1 on the selected class and 0
-        # elsewhere; two classes select class 1 and fit once.
-        selected = [1] if n_classes == 2 else list(range(n_classes))
-        blocks, n_iter, objectives, retcodes = [], 0, [], []
-        ovr = getattr(self._bind("_mojolearn_estimators"), "qn_fit_ovr", None)
-        if ovr is not None and codes.dtype == "<i4":
-            # lane fam2-linear: X and the class codes cross the bus once;
-            # the binding builds each 0/1 target on the device and runs the
-            # same per-class fits (a binding without the entry keeps the
-            # per-class calls below)
-            n_fits = len(selected)
-            n_coefs = cols + (1 if self.fit_intercept else 0)
-            w_all = zeros((n_fits, n_coefs), "<f4")
-            info = zeros((n_fits, 3), "<f4")
-            codes_c = codes._as_c()
-            params = [rows, cols, selected[0], n_fits, float(l1), float(l2),
-                      float(self.tol), float(0.1 * self.tol), int(self.max_iter),
-                      int(self.linesearch_max_iter), int(self.lbfgs_memory),
-                      1 if self.fit_intercept else 0,
-                      1 if self.penalty_normalized else 0,
-                      int(self._LOSSES[self.loss])]
-            if sw is not None:
-                params.append(addr_ro(sw, name="sample_weight"))  # field 15
-            ovr(
-                addr_ro(x, name="X"), addr_ro(codes_c, name="codes"),
-                addr(w_all, name="coef_"), addr(info, name="info"), params)
-            for k, (fx, rc, it) in enumerate(info.tolist()):  # glue: unpacks one result row per fit
-                blocks.append(w_all[k])
-                n_iter = max(n_iter, int(it))
-                objectives.append(float(fx))
-                retcodes.append(int(rc))
-            selected = []
-        for cls in selected:  # glue: one binary fit per selected class
-            # the 0/1 target through the core helpers (equal_elements, cast_elements)
-            y_enc = (codes == cls).astype("<f4")
-            w, k, fx, rc = _qn_fit_one_target(
-                self, x, y_enc, 2, self._LOSSES[self.loss], l1, l2,
-                self.tol, 0.1 * self.tol, sw=sw)
-            blocks.append(w)
-            n_iter = max(n_iter, k)
-            objectives.append(fx)
-            retcodes.append(rc)
-        n_targets = len(blocks)
-        n_coefs = cols + (1 if self.fit_intercept else 0)
-        # the (C, n_coefs) block, joined as bytes; its column-major copy (one
-        # Mojo strided copy) is the `w[c + C*j]` block `qn_decision_function` reads
-        W = frombytes(b"".join(b.tobytes() for b in blocks), "<f4", (n_targets, n_coefs))  # glue: joins one coefficient block per target
-        self._w = Array._view_of(W._as_order("F"), (n_targets * n_coefs,), "C")
-        self.coef_ = W[:, :cols]
-        self.intercept_ = W[:, cols] if self.fit_intercept else zeros((n_targets,), "<f4")
-        self.n_iter_ = Array.from_list([n_iter], "<i8")
-        self.objective_ = objectives[0] if n_targets == 1 else objectives
-        self.retcode_ = retcodes[0] if n_targets == 1 else retcodes
-        self.n_features_in_ = cols
-        return self
+        return _NATIVE(self, "family_svc_linear_svc_fit", (self._bind("_mojolearn_estimators"), X, y, sample_weight), _NATIVE_CONTEXT)
 
     def decision_function(self, X):
         """Return the linear scores ``X @ coef_.T + intercept_``.
@@ -299,10 +200,7 @@ class LinearSVC(_LinearSVMBase):
             If the model is not fitted, or ``X`` has a different number of
             features than the training data.
         """
-        if not hasattr(self, "_w"):
-            raise ValueError("mojolearn LinearSVC: call fit first")
-        n_classes = len(self.classes_)
-        return _qn_scores(self, X, self._w, 1 if n_classes == 2 else n_classes)
+        return _NATIVE(self, "family_svm_linear_svc_decision", (self._bind("_mojolearn_estimators"), X), _NATIVE_CONTEXT)
 
     def predict(self, X):
         """Predict class labels.
@@ -323,43 +221,7 @@ class LinearSVC(_LinearSVMBase):
             An int64 array for integer labels, a float64 array for float
             labels, and a Python list for any other label type.
         """
-        b = self._bind("_mojolearn_estimators") if hasattr(self, "classes_") else None
-        if (b is not None and len(self.classes_) == 2
-                and _py2mojo_flags(b) & _PY2MOJO_ROWS):
-            # lane/apple-fast-py2mojo-linear: the `z > 0` codes in the binding
-            # (`qn_predict_binary`, the same decision function and threshold)
-            if not hasattr(self, "_w"):
-                raise ValueError("mojolearn LinearSVC: call fit first")
-            x, _ = as_f32_c(X, ndim=2, name="X")
-            if x.shape[1] != self.n_features_in_:
-                raise ValueError(f"mojolearn {type(self).__name__} feature count differs from fit")
-            codes = empty((x.shape[0],), "<i8")
-            if x.shape[0]:
-                b.qn_predict_binary(
-                    addr_ro(x, name="X"), addr_ro(self._w, name="coef_"),
-                    addr(codes, name="codes"),
-                    [x.shape[0], x.shape[1], 1 if self.fit_intercept else 0])
-            return decode_labels(self.classes_, codes)
-        multi = getattr(b, "qn_predict_multiclass", None) if b is not None else None
-        if multi is not None and len(self.classes_) > 2:
-            # lane fam2-linear: the row argmax on the device beside the scores
-            if not hasattr(self, "_w"):
-                raise ValueError("mojolearn LinearSVC: call fit first")
-            x, _ = as_f32_c(X, ndim=2, name="X")
-            if x.shape[1] != self.n_features_in_:
-                raise ValueError(f"mojolearn {type(self).__name__} feature count differs from fit")
-            codes = empty((x.shape[0],), "<i8")
-            if x.shape[0]:
-                multi(
-                    addr_ro(x, name="X"), addr_ro(self._w, name="coef_"),
-                    addr(codes, name="codes"),
-                    [x.shape[0], x.shape[1], 1 if self.fit_intercept else 0,
-                     len(self.classes_)])
-            return decode_labels(self.classes_, codes)
-        scores = self.decision_function(X)
-        if len(self.classes_) == 2:
-            return decode_labels(self.classes_, threshold_codes(scores))
-        return decode_labels(self.classes_, argmax_rows(scores))
+        return _NATIVE(self, "family_svc_linear_svc_predict", (self._bind("_mojolearn_estimators"), X), _NATIVE_CONTEXT)
 
     def score(self, X, y):
         """Return the mean accuracy on the given data.
@@ -376,7 +238,7 @@ class LinearSVC(_LinearSVMBase):
         score : float
             The fraction of rows where ``predict(X) == y``.
         """
-        return _accuracy_host(self.predict(X), y)
+        return _NATIVE(self, "family_svc_linear_svc_score", (self._bind("_mojolearn_estimators"), X, y), _NATIVE_CONTEXT)
 
 
 class LinearSVR(_LinearSVMBase):
@@ -461,14 +323,6 @@ class LinearSVR(_LinearSVMBase):
                           tol, max_iter, linesearch_max_iter, lbfgs_memory)
         self.epsilon = epsilon
 
-    def _validate_params(self):
-        """The constructor checks, run at the start of `fit`."""
-        epsilon = self.epsilon
-        if not (0.0 <= epsilon < float("inf")):
-            raise ValueError(
-                f"mojolearn LinearSVR: epsilon must be finite and non-negative, got {epsilon}")
-        self._check_common()
-
     def fit(self, X, y, sample_weight=None):
         """Fit the regressor.
 
@@ -488,22 +342,7 @@ class LinearSVR(_LinearSVMBase):
         self : LinearSVR
             The fitted estimator.
         """
-        self._validate_params()
-        x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
-        rows, cols = x.shape
-        t = _target_1d(y, rows, "mojolearn LinearSVR requires a 1-D y",
-                       "mojolearn LinearSVR X and y lengths differ")
-        l1, l2 = self._strengths()
-        sw = None if sample_weight is None else check_sample_weight(sample_weight, rows)
-        w, n_iter, self.objective_, self.retcode_ = _qn_fit_one_target(
-            self, x, t, 1, self._LOSSES[self.loss], l1, l2,
-            self.tol, 0.1 * self.tol, svr_eps=self.epsilon, sw=sw)
-        self._w = w
-        self.coef_ = w[:cols]
-        self.intercept_ = float(w[cols]) if self.fit_intercept else 0.0
-        self.n_iter_ = Array.from_list([n_iter], "<i8")
-        self.n_features_in_ = cols
-        return self
+        return _NATIVE(self, "family_svc_linear_svr_fit", (self._bind("_mojolearn_estimators"), X, y, sample_weight), _NATIVE_CONTEXT)
 
     def predict(self, X):
         """Predict with the fitted model.
@@ -524,9 +363,7 @@ class LinearSVR(_LinearSVMBase):
             If the model is not fitted, or ``X`` has a different number of
             features than the training data.
         """
-        if not hasattr(self, "_w"):
-            raise ValueError("mojolearn LinearSVR: call fit before predict")
-        return _qn_scores(self, X, self._w)
+        return _NATIVE(self, "family_svm_linear_svr_predict", (self._bind("_mojolearn_estimators"), X), _NATIVE_CONTEXT)
 
     def score(self, X, y):
         """Return the coefficient of determination R^2 of the prediction.
@@ -544,7 +381,7 @@ class LinearSVR(_LinearSVMBase):
             ``1 - SS_res / SS_tot``, computed in float64. A constant ``y``
             scores 0.0.
         """
-        return _r2_host(self.predict(X), y)
+        return _NATIVE(self, "family_svc_linear_svr_score", (self._bind("_mojolearn_estimators"), X, y), _NATIVE_CONTEXT)
 
 
 # scikit-learn keeps more estimators in this module than it defines; they resolve from
