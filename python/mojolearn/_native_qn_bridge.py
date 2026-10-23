@@ -47,6 +47,8 @@ def connect(losses):
     call = _binding()._module.qn_native_call
     if not isinstance(call, BuiltinFunctionType):
         raise TypeError("QNRegressor requires a compiled qn_native_call")
+    from ._native_classical_bridge import _numpy_free_context
+    # the fitted coefficient stores are mojolearn Arrays whatever is installed
     context.update(qn_bindings=connected, classical_metrics=metric_bindings, qn_losses=dict(losses),
-                   environment=os.environ._data)
+                   environment=os.environ._data, output_context=_numpy_free_context())
     return call, context
