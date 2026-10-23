@@ -1618,17 +1618,25 @@ def _set_drop_idx(model: PythonObject, context: PythonObject) raises:
     py_setitem(fields, "drop_idx_", idx)
 
 
-def _onehot_widths(fields: PythonObject) raises -> Tuple[List[Int], List[Int]]:
-    # `_widths`: per-column block widths and drop indices (-1: none).
-    var sizes = _grouped_sizes(fields)
+def _onehot_drops(fields: PythonObject) raises -> List[Int]:
+    # `_widths`' drop indices per column in grouped codes (-1: none).
+    var d = len(fields["categories_"])
     var after = fields["_drop_after"]
-    var widths = List[Int]()
     var drops = List[Int]()
-    for j in range(len(sizes)):  # driver-loop: per-column one-hot block widths
+    for j in range(d):  # driver-loop: per-column drop indices
         var dr = PythonObject(None) if after is None else after[j]
         drops.append(-1 if dr is None else Int(py=dr))
-        widths.append(sizes[j] - (0 if dr is None else 1))
-    return (widths^, drops^)
+    return drops^
+
+
+def _onehot_widths(fields: PythonObject) raises -> List[Int]:
+    # `_widths`: per-column one-hot block widths.
+    var sizes = _grouped_sizes(fields)
+    var drops = _onehot_drops(fields)
+    var widths = List[Int]()
+    for j in range(len(sizes)):  # driver-loop: per-column one-hot block widths
+        widths.append(sizes[j] - (0 if drops[j] < 0 else 1))
+    return widths^
 
 
 def _onehot_fit(model: PythonObject, values: PythonObject, capture: Bool, context: PythonObject) raises -> PythonObject:
@@ -1673,9 +1681,8 @@ def _onehot_transform(model: PythonObject, values: PythonObject, inverse: Python
     var n = Int(py=values[3])
     var d = Int(py=values[4])
     var entries = _entries(fields["numeric_mode_"], context)
-    var shape = _onehot_widths(fields)
-    var widths = shape[0].copy()
-    var drops = shape[1].copy()
+    var widths = _onehot_widths(fields)
+    var drops = _onehot_drops(fields)
     var W = 0
     for j in range(len(widths)):  # driver-loop: total one-hot output width
         W += widths[j]
@@ -1730,9 +1737,8 @@ def _onehot_inverse(model: PythonObject, values: PythonObject, context: PythonOb
     """OneHotEncoder.inverse_transform: block_argmax, the inverse grouping
     remap, cat_gather and the strict bad-row compaction."""
     var fields = py_fields(model)
-    var shape = _onehot_widths(fields)
-    var widths = shape[0].copy()
-    var drops = shape[1].copy()
+    var widths = _onehot_widths(fields)
+    var drops = _onehot_drops(fields)
     var n = Int(py=values[3])
     var cols = Int(py=values[4])
     var d = len(widths)
