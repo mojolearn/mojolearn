@@ -965,7 +965,7 @@ def _has_buffer(value: PythonObject) raises -> Bool:
         return False
 
 
-def _label_columns(Y: PythonObject, context: PythonObject) raises -> PythonObject:
+def _label_columns(Y: PythonObject, xt: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_trees_label_words(Y)` then its native transpose: a numeric 2-D label
     buffer as `(T, n, m)`, T the (m, n) 8-byte words (float64 for a float
     dtype, int64 for an integer one) whose rows are the label columns; None
@@ -997,7 +997,6 @@ def _label_columns(Y: PythonObject, context: PythonObject) raises -> PythonObjec
         if view.c_order():
             var W = trees_vector(n * m, target, context)
             trees_cast(view.addr, view.typestr, trees_address(W), target, n * m, context)
-            var xt = trees_table(context, "identical", "_mojolearn_x_trees")
             _ = py_call_typed(_x(xt, "x_trees_transpose_f64"), _A(W), _A(T), Python.list(_P(n), _P(m)))
         elif view.f_order():
             # a column-major buffer's storage is already the (m, n) columns
@@ -1031,7 +1030,7 @@ def _multioutput_classifier_fit(model: PythonObject, X: PythonObject, y: PythonO
     var weights = _member_weights(Python.list(PythonObject(None)), Python.list(est), sample_weight, n, context)
     var fitted = Python.list()
     var classes = Python.list()
-    var columns = _label_columns(target, context)
+    var columns = _label_columns(target, _xt(py_fields(model), context), context)
     if columns is not None:
         var T = columns[0]
         var rows_n = Int(py=columns[1])
@@ -1187,3 +1186,287 @@ def _multioutput_classifier_score(model: PythonObject, X: PythonObject, y: Pytho
 def _cast_u1(source: PythonObject, out: PythonObject, size: Int, context: PythonObject) raises:
     """`astype("<i4")` of a uint8 flag store."""
     trees_cast(Int(py=py_call(source.buffer_info)[0]), "<u1", trees_address(out), "<i4", size, context)
+
+
+# --------------------------------------------------------------- OneVsRest
+
+
+def _indicator(xt: PythonObject, codes: PythonObject, j: Int, context: PythonObject) raises -> PythonObject:
+    """`OneVsRestClassifier._indicator`: the 0/1 targets of class j."""
+    var n = len(codes)
+    var yj = trees_vector(n, "<i4", context)
+    _ = py_call_typed(_x(xt, "x_trees_indicator_codes"), _A(codes), _A(yj), _P(0), Python.list(_P(n), _P(j)))
+    return yj
+
+
+def _ovr_fit(model: PythonObject, X: PythonObject, y: PythonObject, context: PythonObject) raises -> PythonObject:
+    _refuse_jobs(model, True, "the classes fit one after another.")
+    var xt = _xt(py_fields(model), context)
+    var Xa = _x_array(X, context)
+    var labels = trees_encode_labels(y, context)
+    _set(model, "classes_", labels.classes)
+    var k = len(labels.classes)
+    if k < 2:
+        raise Error("y has fewer than 2 classes")
+    var est = _attr(model, "estimator", PythonObject(None))
+    _require_member(est, _owner(model))
+    var targets = Python.list()
+    if k == 2:
+        _ = py_call(targets.append, labels.codes)
+    else:
+        for j in range(k):  # driver-loop: over the classes (one native indicator each)
+            _ = py_call(targets.append, _indicator(xt, labels.codes, j, context))
+    var fitted = Python.list()
+    _set(model, "estimators_", fitted)
+    for i in range(len(targets)):  # driver-loop: over members
+        var e = _clone(est)
+        _ = py_call(e.fit, Xa, targets[i])
+        _ = py_call(fitted.append, e)
+    _set(model, "n_features_in_", PythonObject(_cols(Xa)))
+    _set(model, "_fitted", PythonObject(True))
+    return model
+
+
+def _proba_positive(xt: PythonObject, e: PythonObject, Xa: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`OneVsRestClassifier._proba_positive`: predict_proba's column for
+    code 1 (zeros when the member never saw it), float32 (n,)."""
+    var n = _rows(Xa)
+    var p = _out2d(py_call(e.predict_proba, Xa), n, context)
+    var at = _index_of_one(e)
+    if at < 0:
+        _ = p^
+        return trees_vector(n, "<f4", context)
+    var col = _one_col(xt, p, at, context)
+    _ = p^
+    return trees_reshape(col, Python.tuple(n), context)
+
+
+def _positive(xt: PythonObject, e: PythonObject, Xa: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`OneVsRestClassifier._positive`: decision_function when the member
+    has one, else predict_proba's column for code 1."""
+    if _has(e, "decision_function"):
+        return _f32_array(py_call(e.decision_function, Xa), 1, "score", context)
+    return _proba_positive(xt, e, Xa, context)
+
+
+def _ovr_predict(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    var Xa = _check_x(model, X, context)
+    var xt = _xt(py_fields(model), context)
+    var n = _rows(Xa)
+    var classes = _attr(model, "classes_", PythonObject(None))
+    var k = len(classes)
+    var members = _attr(model, "estimators_", Python.list())
+    if k == 2:
+        return trees_decode_labels(classes, _i32_vec(py_call(members[0].predict, Xa), "codes", context), context)
+    var acc = _class_zero(xt, n * k, context)
+    var rows = _arange(xt, n, context)
+    for j in range(len(members)):  # driver-loop: over members
+        var blk = _out2d(_positive(xt, members[j], Xa, context), n, context)
+        _ = _place(xt, acc, n, k, blk, rows, j)
+        _ = blk^
+    return trees_decode_labels(classes, _argmax(xt, acc, n, k, context), context)
+
+
+def _ovr_predict_proba(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    var Xa = _check_x(model, X, context)
+    var xt = _xt(py_fields(model), context)
+    var n = _rows(Xa)
+    var k = len(_attr(model, "classes_", Python.list()))
+    var members = _attr(model, "estimators_", Python.list())
+    var acc = _class_zero(xt, n * k, context)
+    var rows = _arange(xt, n, context)
+    if k == 2:
+        # `_trees_binary_proba`: rows (1 - p, p) of the positive column
+        var p = _f32_array(_proba_positive(xt, members[0], Xa, context), 1, "p", context)
+        var out = trees_vector(2 * n, "<f8", context)
+        _ = py_call_typed(_x(xt, "x_trees_binary_proba"), _A(p), _A(out), Python.list(_P(n)))
+        return trees_reshape(out, Python.tuple(n, 2), context)
+    for j in range(len(members)):  # driver-loop: over members
+        var blk = _out2d(_proba_positive(xt, members[j], Xa, context), n, context)
+        _ = _place(xt, acc, n, k, blk, rows, j)
+        _ = blk^
+    _ = py_call_typed(_x(xt, "x_trees_normalize_rows"), _A(acc), Python.list(_P(n), _P(k)))
+    return trees_reshape(acc, Python.tuple(n, k), context)
+
+
+# ------------------------------------------------------------- Calibration
+
+
+def _calibrated_validate(model: PythonObject, context: PythonObject) raises:
+    var method = _attr(model, "method", PythonObject("sigmoid"))
+    if not py_contains(Python.tuple("sigmoid", "isotonic"), method):
+        raise Error("method must be 'sigmoid' or 'isotonic'")
+    _refuse_jobs(model, False, "the folds fit one after another.")
+    var ensemble = _attr(model, "ensemble", PythonObject(True))
+    if not py_contains(Python.tuple(True, False), ensemble):
+        _refuse("ensemble=" + _repr(ensemble), "True or False.")
+    _ = _cv_value(_attr(model, "cv", PythonObject(None)), context)
+
+
+def _cal_scores(model: PythonObject, xt: PythonObject, e: PythonObject, Xa: PythonObject,
+                context: PythonObject) raises -> PythonObject:
+    """`CalibratedClassifierCV._scores`: (n, c) float64 scores, c = 1 when
+    binary, else one column per class."""
+    var n = _rows(Xa)
+    var k = len(_attr(model, "classes_", Python.list()))
+    var out: PythonObject
+    if _has(e, "decision_function"):
+        out = py_call(e.decision_function, Xa)
+    else:
+        out = py_call(e.predict_proba, Xa)
+    var blk = _out2d(out, n, context)
+    if k == 2:
+        var acc = _zeros(n, context)
+        if blk.cols == 1:
+            _ = py_call_typed(_x(xt, "x_trees_accumulate"), _A(acc), _P(blk.addr), Python.list(_P(n), _F(1.0)))
+        else:
+            var at = _index_of_one(e)
+            if at < 0:
+                raise Error("1 is not in list")
+            var col = _one_col(xt, blk, at, context)
+            _ = py_call_typed(_x(xt, "x_trees_accumulate"), _A(acc), _A(col), Python.list(_P(n), _F(1.0)))
+        _ = blk^
+        return trees_reshape(acc, Python.tuple(n, 1), context)
+    var acc = _class_zero(xt, n * k, context)
+    _ = py_call_typed(_x(xt, "x_trees_accumulate_cols"), _A(acc), _P(blk.addr), _A(_sub_cols(e, context)),
+                      Python.list(_P(n), _P(k), _P(len(_attr(e, "classes_", Python.list()))), _F(1.0)))
+    _ = blk^
+    return trees_reshape(acc, Python.tuple(n, k), context)
+
+
+def _fit_calibrators(model: PythonObject, xt: PythonObject, S: PythonObject, codes: PythonObject,
+                     context: PythonObject) raises -> PythonObject:
+    """`CalibratedClassifierCV._fit_calibrators`: one calibrator per class
+    column, the column and its 0/1 target made natively."""
+    var n = _rows(S)
+    var c = _cols(S)
+    var sigmoid = String(_attr(model, "method", PythonObject("sigmoid"))) == "sigmoid"
+    var St = S
+    if c > 1:
+        St = trees_vector(c * n, "<f8", context)
+        _ = py_call_typed(_x(xt, "x_trees_transpose_f64"), _A(S), _A(St), Python.list(_P(n), _P(c)))
+    var yj = trees_vector(n, "<i4", context)
+    var y64 = PythonObject(None)
+    if not sigmoid:
+        y64 = trees_vector(n, "<f8", context)
+    var cals = Python.list()
+    for j in range(c):  # driver-loop: over the class columns (one calibrator each)
+        var cls = 1 if c == 1 else j
+        var f = trees_address(St) + 8 * j * n
+        _ = py_call_typed(_x(xt, "x_trees_indicator_codes"), _A(codes), _A(yj),
+                          _A(y64) if y64 is not None else _P(0), Python.list(_P(n), _P(cls)))
+        if sigmoid:
+            var ab = trees_vector(2, "<f8", context)
+            _ = py_call_typed(_x(xt, "x_trees_platt_fit"), _P(f), _A(yj), _A(ab), Python.list(_P(n)))
+            _ = py_call(cals.append, Python.tuple(PythonObject("sigmoid"),
+                                                  Python.tuple(PythonObject(_f64_word(ab, 0)), PythonObject(_f64_word(ab, 1)))))
+        else:
+            var kx = trees_vector(n, "<f8", context)
+            var ky = trees_vector(n, "<f8", context)
+            var m = Int(py=py_call_typed(_x(xt, "x_trees_isotonic_fit"), _P(f), _A(y64), _A(kx), _A(ky), Python.list(_P(n))))
+            _ = py_call(cals.append, Python.tuple(PythonObject("isotonic"),
+                                                  Python.tuple(_copy_block(kx, 0, m, "<f8", context),
+                                                               _copy_block(ky, 0, m, "<f8", context), PythonObject(m))))
+    return cals
+
+
+def _calibrated_probs(model: PythonObject, xt: PythonObject, e: PythonObject, cals: PythonObject, Xa: PythonObject,
+                      context: PythonObject) raises -> PythonObject:
+    """`CalibratedClassifierCV._calibrated`: the flat (n, k) probabilities of
+    one (member, calibrators) pair."""
+    var n = _rows(Xa)
+    var k = len(_attr(model, "classes_", Python.list()))
+    var S = _cal_scores(model, xt, e, Xa, context)
+    var c = _cols(S)
+    var w = 2 if k == 2 else k
+    var acc = trees_vector(n * w, "<f8", context)
+    for j in range(len(cals)):  # driver-loop: over the class columns (one calibrator each)
+        var entry = cals[j]
+        var col = 1 if k == 2 else j
+        var par = entry[1]
+        if String(entry[0]) == "sigmoid":
+            _ = py_call_typed(_x(xt, "x_trees_platt_apply_strided"), _A(S), _A(acc),
+                              Python.list(_P(n), par[0], par[1], _P(n * c), _P(c), _P(j), _P(n * w), _P(w), _P(col)))
+        else:
+            _ = py_call_typed(_x(xt, "x_trees_isotonic_predict_strided"), _A(par[0]), _A(par[1]), _A(S), _A(acc),
+                              Python.list(par[2], _P(n), _P(n * c), _P(c), _P(j), _P(n * w), _P(w), _P(col)))
+    if k == 2:
+        _ = py_call_typed(_x(xt, "x_trees_complement_pairs"), _A(acc), Python.list(_P(n)))
+        return acc
+    _ = py_call_typed(_x(xt, "x_trees_normalize_rows"), _A(acc), Python.list(_P(n), _P(k)))
+    return acc
+
+
+def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, context: PythonObject) raises -> PythonObject:
+    _calibrated_validate(model, context)
+    var xt = _xt(py_fields(model), context)
+    var Xa = _x_array(X, context)
+    var n = _rows(Xa)
+    var d = _cols(Xa)
+    var labels = trees_encode_labels(y, context)
+    _set(model, "classes_", labels.classes)
+    var k = len(labels.classes)
+    if k < 2:
+        raise Error("y has fewer than 2 classes")
+    var base = _attr(model, "estimator", PythonObject(None))
+    if base is None:
+        base = py_call(_import("mojolearn.svm", "LinearSVC"))
+    _require_member(base, _owner(model))
+    _set(model, "_cal_fast", PythonObject(None))
+    var ensemble = _truthy(_attr(model, "ensemble", PythonObject(True)))
+    var splits = _splits(xt, _attr(model, "cv", PythonObject(None)), X, y, n, labels.codes, not ensemble, k, context)
+    var cols = _arange(xt, d, context)
+    var pairs = Python.list()
+    _set(model, "calibrated_classifiers_", pairs)
+    if ensemble:
+        for f in range(len(splits)):  # driver-loop: over the cv folds
+            var tr = splits[f][0]
+            var te = splits[f][1]
+            var e = _clone(base)
+            _ = py_call(e.fit, _gather(xt, trees_address(Xa), n, d, tr, cols, context),
+                        _gather_codes(xt, labels.codes, tr, context))
+            var Xte = _gather(xt, trees_address(Xa), n, d, te, cols, context)
+            var cals = _fit_calibrators(model, xt, _cal_scores(model, xt, e, Xte, context),
+                                        _gather_codes(xt, labels.codes, te, context), context)
+            _ = py_call(pairs.append, Python.tuple(e, cals))
+    else:
+        var c = 1 if k == 2 else k
+        var S = _zeros(n * c, context)
+        for f in range(len(splits)):  # driver-loop: over the cv folds
+            var tr = splits[f][0]
+            var te = splits[f][1]
+            var e = _clone(base)
+            _ = py_call(e.fit, _gather(xt, trees_address(Xa), n, d, tr, cols, context),
+                        _gather_codes(xt, labels.codes, tr, context))
+            var Xte = _gather(xt, trees_address(Xa), n, d, te, cols, context)
+            var blk = trees_f32(_cal_scores(model, xt, e, Xte, context), 2, "C", "scores", context)
+            _ = _place(xt, S, n, c, blk, te, 0)
+            _ = blk^
+        var e = _clone(base)
+        _ = py_call(e.fit, Xa, labels.codes)
+        _ = py_call(pairs.append, Python.tuple(e, _fit_calibrators(model, xt, trees_reshape(S, Python.tuple(n, c), context),
+                                                                   labels.codes, context)))
+    _set(model, "n_features_in_", PythonObject(d))
+    _set(model, "_fitted", PythonObject(True))
+    return model
+
+
+def _calibrated_proba(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    var Xa = _check_x(model, X, context)
+    var xt = _xt(py_fields(model), context)
+    var n = _rows(Xa)
+    var k = len(_attr(model, "classes_", Python.list()))
+    var acc = _class_zero(xt, n * k, context)
+    var pairs = _attr(model, "calibrated_classifiers_", Python.list())
+    for i in range(len(pairs)):  # driver-loop: over the (member, calibrators) pairs
+        var p = _calibrated_probs(model, xt, pairs[i][0], pairs[i][1], Xa, context)
+        _acc_w(xt, acc, p, n * k, 1.0, context)
+    _scale(xt, acc, Float64(len(pairs)))
+    return trees_reshape(acc, Python.tuple(n, k), context)
+
+
+def _calibrated_predict(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    var p = _calibrated_proba(model, X, context)
+    var xt = _xt(py_fields(model), context)
+    var classes = _attr(model, "classes_", PythonObject(None))
+    return trees_decode_labels(classes, _argmax(xt, p, _rows(p), len(classes), context), context)
