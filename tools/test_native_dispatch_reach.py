@@ -1,5 +1,5 @@
 """Focused source-analysis checks; no native binding or product imports."""
-from native_dispatch_reach import specialize_function
+from native_dispatch_reach import parameter_names, specialize_function
 
 
 def test_known_operation_keeps_metric_dispatch_and_excludes_unrelated_family():
@@ -109,3 +109,26 @@ def test_overloads_unproven_parameter_and_unknown_syntax_fall_back():
         result = specialize_function(text, parameters=facts)
         assert not result.supported
         assert result.text == text
+
+
+def test_ref_alias_loop_and_import_constructor_bindings_refuse_specialization():
+    prefixes = (
+        '    ref String = custom\n',
+        '    alias String = custom\n',
+        '    for String in constructors:\n        consume(String)\n',
+        '    try:\n        from custom import String\n    except:\n        pass\n',
+        '    with context as String:\n        consume(String)\n',
+    )
+    for prefix in prefixes:
+        source = ('def route(operation: String):\n' + prefix
+                  + '    if String(operation) == "linear":\n        return linear()\n'
+                  + '    return forest()\n')
+        result = specialize_function(source, parameters={'operation': frozenset({'linear'})},
+                                     constructors=frozenset({'String'}))
+        assert not result.supported
+        assert result.text == source
+
+
+def test_parameter_names_preserve_positional_order_and_reject_generic_header():
+    assert parameter_names('def route(model: PythonObject, operation: String, mut args: Args):\n    return run()\n') == ('model', 'operation', 'args')
+    assert parameter_names('def route[T: Type](operation: String):\n    return run()\n') is None

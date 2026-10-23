@@ -203,15 +203,59 @@ def _parameter_names(code):
         elif value in (')', ']', '}'):
             depth -= 1
         current.append(value)
-    names = set()
+    names = []
     for parameter in parameters:
         if ':' not in parameter:
             raise ValueError('untyped function parameter')
         prefix = parameter[:parameter.index(':')]
         if not prefix or not re.fullmatch(r'[A-Za-z_]\w*', prefix[-1]):
             raise ValueError('unsupported parameter declaration')
-        names.add(prefix[-1])
-    return names
+        names.append(prefix[-1])
+    return tuple(names)
+
+
+def parameter_names(text: str) -> tuple[str, ...] | None:
+    """Ordered parameters of one supported plain function, else unknown."""
+    try:
+        roots = _statements(text)
+        functions = [r for r in roots if re.match(r'^(?:def|fn)\s+\w+', r.code)]
+        if len(functions) != 1:
+            return None
+        return _parameter_names(functions[0].code)
+    except (ValueError, SyntaxError, tokenize.TokenError, IndentationError, IndexError):
+        return None
+
+
+def _constructor_binding(rows, constructors):
+    """A locally rebound constructor invalidates the caller's import proof.
+
+    Inspect all blocks before specialization: a loop/ref/alias binding must
+    not reintroduce constructor trust after an uncertain control-flow merge.
+    Ambiguous assignment targets are refused rather than interpreted.
+    """
+    for row in rows:
+        code = row.code
+        candidates = []
+        declaration = re.match(r'^(?:var|let|ref|alias|comptime)\s+(.+)', code)
+        if declaration:
+            candidates.append(declaration.group(1).split('=', 1)[0].split(':', 1)[0])
+        assignment = re.match(r'^(.*?)\s*(?:[+*/%&|^-]=|=(?!=))', code)
+        if assignment and not re.match(r'^(?:if|elif|while|return|raise)\b', code):
+            candidates.append(assignment.group(1).split(':', 1)[0])
+        loop = re.search(r'\bfor\s+(.+?)\s+in\b', code)
+        if loop:
+            candidates.append(loop.group(1))
+        candidates.extend(re.findall(r'\bas\s+([A-Za-z_]\w*)', code))
+        definition = re.match(r'^(?:def|fn|struct|trait)\s+([A-Za-z_]\w*)', code)
+        if definition:
+            candidates.append(definition.group(1))
+        if re.match(r'^(?:from|import)\b', code):
+            candidates.append(code)  # Local import resolution is not proven here.
+        if any(set(re.findall(r'\b[A-Za-z_]\w*\b', value)) & constructors for value in candidates):
+            return True
+        if _constructor_binding(row.children, constructors):
+            return True
+    return False
 
 
 def specialize_function(text: str, *, parameters: Mapping[str, Strings] | None = None,
@@ -241,9 +285,11 @@ def specialize_function(text: str, *, parameters: Mapping[str, Strings] | None =
         if not function.children or any(re.match(r'^(?:def|fn|struct|trait)\b', r.code)
                                        for r in function.children):
             raise ValueError('empty or nested definition')
-        names = _parameter_names(function.code)
+        names = set(_parameter_names(function.code))
         if set(constructors) - {'String', 'PythonObject'} or names & constructors:
             raise ValueError('shadowed string constructors')
+        if _constructor_binding(function.children, constructors):
+            raise ValueError('locally bound string constructors')
         if not set(parameters or {}) <= names or not set(packed_parameters or {}) <= names:
             raise ValueError('facts do not name function header parameters')
         state = _State({k: frozenset(v) for k,v in (parameters or {}).items()},
