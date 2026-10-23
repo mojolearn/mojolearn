@@ -273,9 +273,9 @@ def test_save_load_round_trip_over_every_input_kind_the_verify_lanes_pass():
                     for name in fields:
                         assert (np.asarray(getattr(back, name)).tobytes()
                                 == np.asarray(getattr(m, name)).tobytes()), f"{name} differs after load ({where})"
-                    args = (h, fut) if with_exog else (h,)
-                    want = np.asarray(m.forecast(*args) if not with_exog else m.forecast(h, exog=fut))
-                    got = np.asarray(back.forecast(*args) if not with_exog else back.forecast(h, exog=fut))
+                    future = fut if with_exog else None
+                    want = np.asarray(m.forecast(h, exog=future))
+                    got = np.asarray(back.forecast(h, exog=future))
                     assert got.tobytes() == want.tobytes(), f"a loaded model forecast differently ({where})"
                     # a loaded model saves again, to the same bytes
                     again = path + ".again.npz"
