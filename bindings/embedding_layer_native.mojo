@@ -75,7 +75,13 @@ def _want_mode(fields: PythonObject, context: PythonObject) raises -> PythonObje
     return lowered
 
 
-def _entries(fields: PythonObject, context: PythonObject, model: PythonObject = PythonObject(None)) raises -> PythonObject:
+def _entries(fields: PythonObject, context: PythonObject) raises -> PythonObject:
+    # An overload, not a `model = PythonObject(None)` default (a non-raising
+    # caller compile-time evaluates a default; a PythonObject cannot be built then).
+    return _entries(fields, context, PythonObject(None))
+
+
+def _entries(fields: PythonObject, context: PythonObject, model: PythonObject) raises -> PythonObject:
     """`Embedding._extension()`: the embedding binding of the layer's mode,
     connected at import, with its compiled mode read back; for a host
     inference class (`_HostBound`, IDENTICAL only) the lookup host binding."""

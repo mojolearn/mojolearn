@@ -199,8 +199,16 @@ def sequential_fit(model: PythonObject, args: PythonObject, context: PythonObjec
 
 
 def sequential_forward(model: PythonObject, source: PythonObject, transform: Int,
+                       width: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
+    # An overload, not a `classes = PythonObject(None)` default: a non-raising
+    # caller (the abi("C") door) compile-time evaluates a default, and a
+    # PythonObject cannot be built at compile time.
+    return sequential_forward(model, source, transform, width, entries, context, PythonObject(None))
+
+
+def sequential_forward(model: PythonObject, source: PythonObject, transform: Int,
                        width: PythonObject, entries: PythonObject, context: PythonObject,
-                       classes: PythonObject = PythonObject(None)) raises -> PythonObject:
+                       classes: PythonObject) raises -> PythonObject:
     var fields = sequential_fields(model)
     if not py_contains(fields, "params_"):
         raise Error("call fit before predict")
