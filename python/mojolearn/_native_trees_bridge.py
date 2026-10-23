@@ -39,15 +39,31 @@ def _unavailable(error):
     return unavailable
 
 
+def _refusal(error):
+    # glue: a refusal recorded at import as "<Class>: <message>", the class
+    # the native owner raises again (the nearest builtin base the owner's
+    # error prefixes name)
+    for base in (ImportError, AttributeError, TypeError, RuntimeError, ValueError):  # glue: the fixed refusal classes
+        if isinstance(error, base):
+            return f"{base.__name__}: {error}"
+    return f"RuntimeError: {error}"
+
+
 def _entries(module):
     # glue: retain the binding's compiled entry points once at connection
     from types import BuiltinFunctionType, ModuleType
+    from . import _backend
+    if type(module) is _backend._HostBinding:
+        # A CPU-only install: the family's compiled host binding stands
+        # behind the proxy; its entries are read once here, not through the
+        # proxy's Python lookup at call time.
+        module = _backend.load_host_module(module._HostBinding__basename)
     if type(module) is not ModuleType:
         # A missing tier or a refusing stub: touching it states the reason.
         try:
             getattr(module, "trees_owner_probe")
         except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
-            return f"{type(error).__name__}: {error}"
+            return _refusal(error)
         return "ImportError: this binding is not a compiled extension module"
     table = {}
     for name in dir(module):  # glue: the binding's exported names, once at import
@@ -68,7 +84,7 @@ def _bindings():
             try:
                 per_mode[name] = _entries(_backend.binding(name, mode))
             except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
-                per_mode[name] = f"{type(error).__name__}: {error}"
+                per_mode[name] = _refusal(error)
         connected[mode] = per_mode
     return connected
 
@@ -81,7 +97,7 @@ def _helpers():
         try:
             table[name] = _native(name)
         except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
-            table[name] = f"{type(error).__name__}: {error}"
+            table[name] = _refusal(error)
     return table
 
 
