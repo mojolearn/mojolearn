@@ -851,6 +851,8 @@ class BaggingClassifier(ClassifierScoreMixin, _BaggingBase):
     ----------
     estimator : estimator or None, default=None
         The member to clone. None uses ``DecisionTreeClassifier()``.
+        Must be a mojolearn DecisionTree*, RandomForest* or ExtraTrees*
+        estimator; any other estimator raises ``NotImplementedError``.
     n_estimators : int, default=10
         Number of members; must be at least 1.
     max_samples : int or float, default=1.0
@@ -980,6 +982,8 @@ class BaggingRegressor(RegressorScoreMixin, _BaggingBase):
     ----------
     estimator : estimator or None, default=None
         The member to clone. None uses ``DecisionTreeRegressor()``.
+        Must be a mojolearn DecisionTree*, RandomForest* or ExtraTrees*
+        estimator; any other estimator raises ``NotImplementedError``.
     n_estimators : int, default=10
         Number of members; must be at least 1.
     max_samples : int or float, default=1.0
@@ -1111,6 +1115,8 @@ class AdaBoostClassifier(ClassifierScoreMixin, _AdaBoostBase):
     estimator : estimator or None, default=None
         The member to clone. None uses
         ``DecisionTreeClassifier(max_depth=1)``.
+        Must be a mojolearn DecisionTree*, RandomForest* or ExtraTrees*
+        estimator; any other estimator raises ``NotImplementedError``.
     n_estimators : int, default=50
         Maximum number of boosting rounds; must be at least 1. Boosting can
         stop earlier, as in scikit-learn.
@@ -1235,6 +1241,8 @@ class AdaBoostRegressor(RegressorScoreMixin, _AdaBoostBase):
     estimator : estimator or None, default=None
         The member to clone. None uses
         ``DecisionTreeRegressor(max_depth=3)``.
+        Must be a mojolearn DecisionTree*, RandomForest* or ExtraTrees*
+        estimator; any other estimator raises ``NotImplementedError``.
     n_estimators : int, default=50
         Maximum number of boosting rounds; must be at least 1. Boosting can
         stop earlier, as in scikit-learn.
