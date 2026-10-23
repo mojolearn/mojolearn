@@ -164,6 +164,49 @@ def minmax_fit(model: PythonObject, source: PythonObject, context: PythonObject)
     return model
 
 
+def minmax_fit_transform(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
+    """fit_transform on one upload of X: the combined `minmax_fit_transform`
+    export runs `minmax_fit_direct` then `minmax_transform_direct` on the
+    resident X (the same kernels on the same words) and the fitted rows are
+    published by the same c2_mm_keep program as `minmax_fit`. None when this
+    route cannot run (no combined export: the host column or
+    MOJOLEARN_SCALER_DIRECT=0; or X holds a NaN or an infinity: the two-step
+    NaN route), and the caller runs fit then transform."""
+    var fields = py_fields(model)
+    var configuration = _configuration(fields,context)
+    var mode = configuration[0]
+    var entries = _minmax_entries(mode,context)
+    var entry = _direct(entries,"minmax_fit_transform")
+    if entry is None or py_get(entries,"minmax_fit") is None:
+        return PythonObject(None)
+    # minmax_fit's refit invalidation comes before X is read.
+    var names = py_call(Python.import_module("builtins").list,fields)
+    for k in range(len(names)):  # driver-loop: stale fitted attribute names on refit
+        if String(names[k]).endswith("_"):
+            _ = py_call(fields.pop,names[k])
+    var clip = _flag(fields["clip"],"clip",context)
+    var values = _input(source,2,True,context)
+    var n = Int(py=values.shape[0])
+    var d = Int(py=values.shape[1])
+    var stats = classical_typed(Python.tuple(5,d),"<f4",context["output_context"])
+    var output = classical_typed(Python.tuple(n,d),"<f4",context["output_context"])
+    var got = Int(py=py_call(entry,classical_address(values),classical_address(stats),classical_address(output),
+                             Python.list(n,d,configuration[1],configuration[2],Int(clip))))
+    if got == 0:
+        _ = values^
+        return PythonObject(None)
+    _keep_extrema(fields,stats,PythonObject(None),entries,context)
+    py_setitem(fields,"n_features_in_",d)
+    py_setitem(fields,"n_samples_seen_",n)
+    py_setitem(fields,"numeric_mode_",mode)
+    py_setitem(fields,"feature_range_",Python.tuple(configuration[1],configuration[2]))
+    py_setitem(fields,"clip_",clip)
+    _ = stats^
+    if got < 0:
+        raise Error("MinMaxScaler transform overflowed in Float32")
+    return _write_back(source,values,output,_flag(fields["copy"],"copy",context),context)
+
+
 def minmax_partial_fit(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
     var fields = py_fields(model)
     if not _fitted(fields):
@@ -323,8 +366,11 @@ def minmax_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         elif operation == "fit_transform":
             if len(args[2]):
                 raise Error("TypeError: MinMaxScaler.fit got an unexpected keyword argument")
-            _ = minmax_fit(model,args[0],context)
-            result = _public_result(minmax_transform(model,args[0],False,context),context)
+            result = minmax_fit_transform(model,args[0],context)
+            if result is None:
+                _ = minmax_fit(model,args[0],context)
+                result = minmax_transform(model,args[0],False,context)
+            result = _public_result(result,context)
         elif operation == "transform":
             result = _public_result(minmax_transform(model,args[0],Bool(py=args[1]),context),context)
         elif operation == "save":
