@@ -49,7 +49,15 @@ struct ClassicalMetricProgram(Movable):
 def classical_linear_score(model: PythonObject, args: PythonObject, entries: PythonObject,
                            context: PythonObject) raises -> PythonObject:
     var prediction = classical_linear_predict(model, args[0], entries, context)
-    var target = classical_host_f32(args[1], 1, "y", context)
+    return classical_r2_score(prediction, args[1], context)
+
+
+def classical_r2_score(prediction: PythonObject, target_source: PythonObject,
+                       context: PythonObject) raises -> PythonObject:
+    """R^2 of a float32 prediction against the target cast once to float32,
+    by the x_metrics program `_Reg` / `_r2_sums_of(..., None)` stages: 0.0
+    for a constant target."""
+    var target = classical_host_f32(target_source, 1, "y", context)
     var rows = Int(py=prediction.size)
     if Int(py=target.size) != rows:
         raise Error("mojolearn score: y_true and y_pred have different shapes (" + String(Int(py=target.size))

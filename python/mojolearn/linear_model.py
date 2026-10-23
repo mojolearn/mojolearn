@@ -1783,21 +1783,7 @@ class QNRegressor(NumericModeMixin):
         self : QNRegressor
             The fitted estimator.
         """
-        x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
-        rows, cols = x.shape
-        t = _target_1d(y, rows, "mojolearn QNRegressor requires a 1-D y",
-                       "mojolearn QNRegressor X and y lengths differ")
-        change_tol = self.delta if self.delta is not None else self.tol * 0.01
-        sw = None if sample_weight is None else check_sample_weight(sample_weight, rows)
-        w, n_iter, self.objective_, self.retcode_ = _qn_fit_one_target(
-            self, x, t, 1, self._LOSSES[self.loss], self.l1_strength,
-            self.l2_strength, self.tol, change_tol, sw=sw)
-        self._w = w
-        self.coef_ = w[:cols]
-        self.intercept_ = float(w[cols]) if self.fit_intercept else 0.0
-        self.n_iter_ = Array.from_list([n_iter], "<i8")
-        self.n_features_in_ = cols
-        return self
+        return _QN_CALL(self, "fit", (X, y, sample_weight), _QN_CONTEXT)
 
     def predict(self, X):
         """Predict with the fitted model.
@@ -1818,9 +1804,7 @@ class QNRegressor(NumericModeMixin):
             If the model is not fitted, or ``X`` has a different number of
             features than the training data.
         """
-        if not hasattr(self, "_w"):
-            raise ValueError("mojolearn QNRegressor: call fit before predict")
-        return _qn_scores(self, X, self._w)
+        return _QN_CALL(self, "predict", (X,), _QN_CONTEXT)
 
     def score(self, X, y):
         """Return the coefficient of determination R^2 of the prediction.
@@ -1838,7 +1822,7 @@ class QNRegressor(NumericModeMixin):
             ``1 - SS_res / SS_tot``, computed in float64. A constant ``y``
             scores 0.0.
         """
-        return _r2_host(self.predict(X), y)
+        return _QN_CALL(self, "score", (X, y), _QN_CONTEXT)
 
 
 # scikit-learn keeps more estimators in this module than it defines; they resolve from
@@ -1852,3 +1836,9 @@ __getattr__ = _lazy_exports("linear_model")
 # of LinearRegression and Ridge (and their explicit host classes) is one call
 # into it.
 _native_classical, _CLASSICAL = _native_classical_bridge.connect_public(Ridge, LinearRegression)
+
+
+# The compiled QNRegressor owner, connected once at import: fit, predict and
+# score are one call each into it (bindings/qn_native.mojo).
+from ._native_qn_bridge import connect as _connect_qn  # noqa: E402
+_QN_CALL, _QN_CONTEXT = _connect_qn(QNRegressor._LOSSES)

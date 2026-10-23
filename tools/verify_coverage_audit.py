@@ -1504,6 +1504,14 @@ ANNOTATIONS_BY_SRC[("prep_stateless_native_call", "bindings/_mojolearn_tokenizer
     "poly/p2m_transpose, col_stats/var_ptp/c2_key64/c2_gt and gather_cols x_prep programs natively. New source only: runtime execution and identity admission remain pending.")
 
 
+# QNRegressor's native owner is new; these lanes consume its public outputs.
+ANNOTATIONS_BY_SRC[("qn_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", [],
+    "Public QNRegressor fit/predict/score call qn_c, which runs the existing qn_fit and "
+    "qn_decision_function entries and the x_metrics R^2 program natively. New source only: "
+    "runtime execution and identity admission remain pending.")
+
+
 # Static lane reachability is not an execution/installed/fault receipt for a
 # newly registered public attribute or automatic device finalizer entry.
 for _new_entry in ("host_svr_attribute_call", "host_svc_attribute_call", "optimizer_device_finalize"):
