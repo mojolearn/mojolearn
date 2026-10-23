@@ -70,7 +70,7 @@ def forest_estimator(kind):
         if type(cls) is not type or type(descriptor) is not GetSetDescriptorType:
             raise TypeError("native forest constructors require native instance storage")
         protected = ("__getattribute__", "__getattr__", "__setattr__", "__del__")
-        hooks = tuple((name, next((row[name] for row in namespaces if name in row), None))
+        hooks = tuple((name, next((row[name] for row in namespaces if name in row), None))  # glue: import-time inherited hook lookup
                       for name in protected)  # glue: fixed inherited hook identities
         if "trees_unavailable" not in _TREES_CONTEXT:
             _TREES_CONTEXT["trees_constructors"][cls] = (rows, descriptor.__get__, hooks)
