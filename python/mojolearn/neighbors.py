@@ -682,14 +682,7 @@ class NearestNeighbors(NumericModeMixin):
         """Drop the device copy, if one is held. Quiet on a binding that
         cannot be reached any more (interpreter shutdown) and on a handle
         already released (a copied instance)."""
-        cached = getattr(self, "_resident", None)
-        if cached is None:
-            return
-        self._resident = None
-        try:
-            cached[2].knn_index_release(cached[1])
-        except Exception:  # noqa: BLE001
-            pass
+        _NATIVE(self, "family_xn_knn_release", (), _NATIVE_CONTEXT)
 
     # No Python `__del__`: dropping an instance releases its device index
     # through the native finalizer connected below the class
