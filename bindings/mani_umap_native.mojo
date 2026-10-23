@@ -21,6 +21,7 @@ from bindings.family_common import (
     family_as_f32, family_field, family_shape_repr,
 )
 from core.family_cast_impl import family_all_finite_f32
+from core.mani_impl import mani_same_words
 from bindings.mani_kit import (
     MKit, mk_from_input, mk_r, mk_c, mk_n, mk_rows, mk_t, mk_take_cols, mk_col_range, mk_out2, mk_store,
     mk_store_ptr, mk_at, OP_SUB, OP_SCALE, OP_ADDS, OP_DIV, OP_MUL, OP_ABS, OP_ADD,
@@ -210,10 +211,7 @@ def _umap_same_bytes(a: PythonObject, b: PythonObject, count: Int) raises -> Boo
     """Whether two C-order float32 arrays hold the same bytes."""
     var pa = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(a)))
     var pb = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(b)))
-    for i in range(count):  # native input marshaling: one byte compare of the query against the fitted rows
-        if pa[i] != pb[i]:
-            return False
-    return True
+    return mani_same_words(pa, pb, count)
 
 
 def _umap_finite(value: PythonObject) raises -> Bool:
