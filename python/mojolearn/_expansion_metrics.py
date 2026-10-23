@@ -69,8 +69,6 @@ _PARAMS = 14
 _NONE = -1
 
 
-
-
 def _sq(v):
     """v * v: one correctly rounded product. `v ** 2` calls the platform pow,
     which DEVIATION 6106 does not allow (it is not correctly rounded on every
@@ -605,26 +603,9 @@ def multilabel_confusion_matrix(y_true, y_pred, *, sample_weight=None, labels=No
     `sample_weight` they are float64. Multilabel-indicator input and ``samplewise=True``
     raise an error.
     """
-    if samplewise:
-        raise NotImplementedError("mojolearn multilabel_confusion_matrix: samplewise=True applies to "
-                                  "multilabel targets, which are NOT IMPLEMENTED")
-    from ._metrics_impl import _selected_labels
-    true, pred, kind, present, w = _pair(y_true, y_pred, sample_weight, "multilabel_confusion_matrix")
-    chosen = list(present) if labels is None else _selected_labels(labels, kind, present)
-    k = len(chosen)
-    # the device tail (x_metrics/cm_epi.mojo, MLCM): one unit per label writes
-    # tn, fp, fn, tp, exact Int64 counts or binary64 (weighted)
-    s = _Sums(true, pred, w, _label_order(chosen, present), numeric_mode,
-              tail=lambda prog, groups: _cm_stage(prog, groups, w, len(true), k, _CM_MLCM, 8 * k))
-    if s.weighted:
-        return Array._owned(s.prog.words(s.tail, 8 * k, "d"), (k, 2, 2), "<f8")
-    return Array._owned(s.prog.words(s.tail, 8 * k, "q"), (k, 2, 2), "<i8")
-
-
-import threading as _threading
-
-#: classification_report's per-call memo (thread local; None outside it)
-_REPORT = _threading.local()
+    return _NATIVE(None, "family_mexp_cls_mlcm",
+                   (y_true, y_pred, sample_weight, labels, samplewise, numeric_mode),
+                   _NATIVE_CONTEXT)
 
 
 # Engineering notes (moved from the docstring):
@@ -642,70 +623,18 @@ def precision_recall_fscore_support(y_true, y_pred, *, beta=1.0, labels=None, po
     1-D targets. `zero_division` is ``'warn'``, 0.0, 1.0 or ``np.nan``.
     ``average='samples'`` (multilabel) raises an error.
     """
-    if is_bool(beta) or not isinstance(beta, numbers.Real) or not beta >= 0:
-        raise ValueError("beta should be >=0 in the F-beta score")
-    _zero_division_value(zero_division)
-    # classification_report asks for the same inputs four times: inside it
-    # the encoded pair and the per-label sums are made once (lane
-    # metrics-apple3; `_REPORT.memo` is None everywhere else)
-    memo = getattr(_REPORT, "memo", None)
-    same = (id(y_true), id(y_pred), id(sample_weight))
-    hit = None if memo is None else memo.get(("pair", same))
-    if hit is None:
-        hit = _pair(y_true, y_pred, sample_weight, "precision_recall_fscore_support")
-        if memo is not None:
-            memo[("pair", same)] = hit
-    true, pred, kind, present, w = hit
-    chosen = _set_wise_labels(present, kind, average, labels, pos_label, "precision_recall_fscore_support")
-    order = _label_order(chosen, present)
-    k = len(chosen)
-    fb = float(beta)
-    fmode = 0 if pmath.isinf(fb) else (1 if fb == 0 else 2)
-    if memo is None:
-        # the epilogue runs in the sums' program (x_metrics/cls_epi.mojo)
-        s = _Sums(true, pred, w, order, numeric_mode,
-                  epi=(2, k) + _epi_codes(average, zero_division) + (fmode, fb * fb))
-        res = s.epi
-    else:
-        # classification_report asks for the four averages of one input: one
-        # program makes the sums and stages all four epilogues
-        key = ("sums", same, tuple(order), numeric_mode, zero_division if isinstance(zero_division, str)
-               else float(zero_division), fb)
-        hit = memo.get(key)
-        if hit is None:
-            s = _Sums(true, pred, w, order, numeric_mode,
-                      epi=[(2, k) + _epi_codes(a, zero_division) + (fmode, fb * fb) for a in _REPORT_AVERAGES])  # glue: the report's four averages
-            hit = memo[key] = (s, dict(zip(_REPORT_AVERAGES, s.epi)))
-        s, res = hit[0], hit[1][average]
-    bad, _, scal, vals = res
-    if isinstance(zero_division, str):
-        for bit, what in ((1, "precision"), (2, "recall"), (4, "f-score")):  # glue: the three metric names
-            if bad & bit and what in warn_for:
-                _undefined_warning(f"{what.capitalize()} is ill-defined and being set to 0.0 in labels "
-                                   "with no predicted/true samples. Use `zero_division` parameter to "
-                                   "control this behavior.")
-    if average is None:
-        ts = s.true[:k]
-        support = (Array.from_list([float(v) for v in ts], "<f8") if s.weighted  # glue: the k label supports
-                   else Array.from_list([int(v) for v in ts], "<i8"))  # glue: the k label supports
-        return (Array.from_list(list(vals[:k]), "<f8"), Array.from_list(list(vals[k:2 * k]), "<f8"),
-                Array.from_list(list(vals[2 * k:3 * k]), "<f8"), support)
-    return (scal[0], scal[1], scal[2], None)
-
-
-#: the averages classification_report asks precision_recall_fscore_support for
-_REPORT_AVERAGES = (None, "micro", "macro", "weighted")
+    return _NATIVE(None, "family_mexp_cls_prfs",
+                   (y_true, y_pred, beta, labels, pos_label, average, warn_for, sample_weight, zero_division, numeric_mode),
+                   _NATIVE_CONTEXT)
 
 
 def fbeta_score(y_true, y_pred, *, beta, labels=None, pos_label=1, average="binary",
                 sample_weight=None, zero_division="warn", numeric_mode=None):
     """scikit-learn 1.9 `fbeta_score` (binary / multiclass 1-D targets); see
     precision_recall_fscore_support."""
-    _, _, f, _ = precision_recall_fscore_support(
-        y_true, y_pred, beta=beta, labels=labels, pos_label=pos_label, average=average,
-        warn_for=("f-score",), sample_weight=sample_weight, zero_division=zero_division,
-        numeric_mode=numeric_mode)
-    return f
+    return _NATIVE(None, "family_mexp_cls_fbeta",
+                   (y_true, y_pred, beta, labels, pos_label, average, sample_weight, zero_division, numeric_mode),
+                   _NATIVE_CONTEXT)
 
 
 def _prf_weighted(y_true, y_pred, labels, pos_label, average, sample_weight, zero_division,
@@ -725,46 +654,24 @@ def jaccard_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
     """scikit-learn 1.9 `jaccard_score`, `tp / (tp + fp + fn)` per label,
     for binary and multiclass 1-D targets; see precision_recall_fscore_support
     for the sums and the epilogue."""
-    _zero_division_value(zero_division)
-    true, pred, kind, present, w = _pair(y_true, y_pred, sample_weight, "jaccard_score")
-    chosen = _set_wise_labels(present, kind, average, labels, pos_label, "jaccard_score")
-    k = len(chosen)
-    s = _Sums(true, pred, w, _label_order(chosen, present), numeric_mode,
-              epi=(0, k) + _epi_codes(average, zero_division) + (0, 0.0))
-    # the device epilogue (x_metrics/cls_epi.mojo): the binary64 ratios and averages
-    bad, _, scal, vals = s.epi
-    if bad and isinstance(zero_division, str):
-        _undefined_warning("Jaccard is ill-defined and being set to 0.0 in labels with no true or "
-                           "predicted samples. Use `zero_division` parameter to control this behavior.")
-    if average is None:
-        return Array.from_list(list(vals[:k]), "<f8")
-    return scal[0]
+    return _NATIVE(None, "family_mexp_cls_jaccard",
+                   (y_true, y_pred, labels, pos_label, average, sample_weight, zero_division, numeric_mode),
+                   _NATIVE_CONTEXT)
 
 
 def balanced_accuracy_score(y_true, y_pred, *, sample_weight=None, adjusted=False, numeric_mode=None):
     """scikit-learn 1.9 `balanced_accuracy_score`: the mean per-class recall
     over the classes present in y_true (a class with no true weight is
     dropped with sklearn's warning), chance-adjusted when `adjusted`."""
-    true, pred, kind, present, w = _pair(y_true, y_pred, sample_weight, "balanced_accuracy_score")
-    s = _Sums(true, pred, w, present, numeric_mode, epi=(1, len(present), 0, 1 if adjusted else 0, 0, 0.0))
-    # the device epilogue (x_metrics/cls_epi.mojo): the mean recall over the kept
-    # classes and the chance adjustment, binary64
-    if s.epi[1] != len(present):
-        warnings.warn("y_pred contains classes not in y_true", stacklevel=2)
-    return float(s.epi[2][0])
+    return _NATIVE(None, "family_mexp_cls_balanced_accuracy",
+                   (y_true, y_pred, sample_weight, adjusted, numeric_mode),
+                   _NATIVE_CONTEXT)
 
 
 def matthews_corrcoef(y_true, y_pred, *, sample_weight=None, numeric_mode=None):
     """scikit-learn 1.9 `matthews_corrcoef` (binary and multiclass): the
     covariance form over the per-class true / predicted sums and the trace."""
-    true, pred, kind, present, w = _pair(y_true, y_pred, sample_weight, "matthews_corrcoef")
-    # the device tail (x_metrics/cm_epi.mojo, MCC): the sums, dots and
-    # covariances in binary64, one unit; flag 1 = a negative product
-    s = _Sums(true, pred, w, present, numeric_mode,
-              tail=lambda prog, groups: _cm_stage(prog, groups, w, len(true), len(present), _CM_MCC, 4))
-    if s.prog.ints(s.tail, 1)[0]:
-        raise ValueError("math domain error")
-    return float(s.prog.words(s.tail + 2, 2, "d")[0])
+    return _NATIVE(None, "family_mexp_cls_matthews", (y_true, y_pred, sample_weight, numeric_mode), _NATIVE_CONTEXT)
 
 
 def _confusion(true, pred, w, order, numeric_mode, tail):
@@ -821,62 +728,22 @@ def cohen_kappa_score(y1, y2, *, labels=None, weights=None, sample_weight=None,
     """scikit-learn 1.9 `cohen_kappa_score`: the (weighted) confusion matrix
     over `labels` on the device, the kappa in the binary64 epilogue;
     weights None, 'linear' or 'quadratic'."""
-    from ._metrics_impl import _selected_labels, _label_set
-    if weights not in (None, "linear", "quadratic"):
-        raise ValueError("weights must be None, 'linear' or 'quadratic'")
-    true, pred, kind, present, w = _pair(y1, y2, sample_weight, "cohen_kappa_score")
-    chosen = _selected_labels(labels, kind, present)
-    if not set(chosen).intersection(_label_set(true)):
-        raise ValueError("At least one label in `labels` must be present in `y1` (even though "
-                         "`cohen_kappa_score` is otherwise agnostic to the order of `y1` and `y2`).")
-    k = len(chosen)
-
-    def tail(prog, cells, col):
-        # x_metrics/cm_epi.mojo, KAPPA: row / column sums (one unit per
-        # class), den (one unit), the weighted row partials (one unit per
-        # row), then num_k / den_k summed by row and the kappa (one unit)
-        out = prog.want(prog.alloc(4), 4)
-        sc = prog.scratch(8 * k + 2)
-        wm = _KAPPA_W[weights]
-        for phase, units in ((0, k), (1, 1), (2, k), (3, 1)):  # glue: the four kappa stages
-            if units:
-                prog.stage("cm_epi", units, _CM_KAPPA, cells, k, col, phase, wm, out, sc)
-        return out
-
-    prog, out = _confusion(true, pred, w, chosen, numeric_mode, tail)
-    flags = prog.ints(out, 1)[0]
-    if flags & 1:
-        _undefined_warning("`y2` contains no labels that are present in both `y1` and `labels`.")
-        return replace_undefined_by
-    if flags & 2:
-        _undefined_warning("`y1`, `y2` and `labels` have only one label in common.")
-        return replace_undefined_by
-    return float(prog.words(out + 2, 2, "d")[0])
+    return _NATIVE(None, "family_mexp_cls_kappa",
+                   (y1, y2, labels, weights, sample_weight, replace_undefined_by, numeric_mode),
+                   _NATIVE_CONTEXT)
 
 
 def hamming_loss(y_true, y_pred, *, sample_weight=None, numeric_mode=None):
     """scikit-learn 1.9 `hamming_loss` for binary / multiclass 1-D targets:
     the (weighted) fraction of mismatched labels."""
-    true, pred, kind, present, w = _pair(y_true, y_pred, sample_weight, "hamming_loss")
-    # the device tail (x_metrics/cm_epi.mojo, COUNT): (total - hit) / total
-    prog, out, _ = _cm_count(true, pred, w, present, numeric_mode)
-    if prog.ints(out, 1)[0]:
-        raise ZeroDivisionError("float division by zero")
-    return float(prog.words(out + 6, 2, "d")[0])
+    return _NATIVE(None, "family_mexp_cls_hamming", (y_true, y_pred, sample_weight, numeric_mode), _NATIVE_CONTEXT)
 
 
 def zero_one_loss(y_true, y_pred, *, normalize=True, sample_weight=None, numeric_mode=None):
     """scikit-learn 1.9 `zero_one_loss` for binary / multiclass 1-D targets."""
-    if not is_bool(normalize):
-        raise ValueError("normalize must be a bool")
-    true, pred, kind, present, w = _pair(y_true, y_pred, sample_weight, "zero_one_loss")
-    # the device tail (x_metrics/cm_epi.mojo, COUNT): total - hit and its ratio
-    prog, out, weighted = _cm_count(true, pred, w, present, numeric_mode)
-    if normalize:
-        if prog.ints(out, 1)[0]:
-            raise ZeroDivisionError("float division by zero" if weighted else "division by zero")
-        return float(prog.words(out + 6, 2, "d")[0])
-    return float(prog.words(out + 4, 2, "d")[0]) if weighted else prog.ints(out + 10, 1)[0]
+    return _NATIVE(None, "family_mexp_cls_zero_one",
+                   (y_true, y_pred, sample_weight, normalize, numeric_mode),
+                   _NATIVE_CONTEXT)
 
 
 def _accuracy_sums(y_true, y_pred, sample_weight, numeric_mode):
@@ -919,138 +786,18 @@ def class_likelihood_ratios(y_true, y_pred, *, labels=None, sample_weight=None,
     """scikit-learn 1.9 `class_likelihood_ratios` (binary targets): LR+ and
     LR- from the 2 x 2 (weighted) confusion matrix; `replace_undefined_by`
     np.nan, 1.0 or {'LR+': v, 'LR-': v}."""
-    from ._metrics_impl import _selected_labels
-    true, pred, kind, present, w = _pair(y_true, y_pred, sample_weight, "class_likelihood_ratios")
-    if len(present) > 2:
-        raise ValueError("class_likelihood_ratios only supports binary classification problems, "
-                         "got targets of type: multiclass")
-    nan = float("nan")
-    rub = replace_undefined_by
-    if isinstance(rub, numbers.Real) and not is_bool(rub) and rub == 1.0:
-        rub = {"LR+": 1.0, "LR-": 1.0}
-    if isinstance(rub, dict):
-        pos, neg = rub.get("LR+"), rub.get("LR-")
-        if (set(rub) != {"LR+", "LR-"} or not isinstance(pos, numbers.Real)
-                or not isinstance(neg, numbers.Real)
-                or not (pos >= 1.0 or pmath.isnan(pos)) or not (0.0 <= neg <= 1.0 or pmath.isnan(neg))):
-            raise ValueError("The dictionary passed as `replace_undefined_by` needs to be in the form "
-                             "`{'LR+': `value_1`, 'LR-': `value_2`}`")
-    elif not (isinstance(rub, float) and pmath.isnan(rub)):
-        raise ValueError("replace_undefined_by must be np.nan, 1.0 or a dict")
-    chosen = _selected_labels(labels, kind, present) if labels is not None else list(present)
-    if len(chosen) == 1:
-        chosen = chosen + [v for v in present if v not in chosen]  # glue: appends the present class labels
-    k = len(chosen)
-    if k > 4096:
-        raise ValueError("mojolearn metrics: at most 4096 labels in a confusion matrix")
-    if k != 2:
-        raise ValueError("class_likelihood_ratios needs a 2 x 2 confusion matrix")
-
-    def tail(prog, cells, col):
-        # x_metrics/cm_epi.mojo, CLR: the supports and both ratios, binary64
-        out = prog.want(prog.alloc(6), 6)
-        prog.stage("cm_epi", 1, _CM_CLR, cells, col, out)
-        return out
-
-    prog, out = _confusion(true, pred, w, chosen, numeric_mode, tail)
-    flags = prog.ints(out, 1)[0]
-    if flags & 1:
-        _undefined_warning("No samples of the positive class are present in `y_true`.")
-        return nan, nan
-    lr = prog.words(out + 2, 4, "d")
-    lr_pos, lr_neg = lr[0], lr[1]
-    if flags & 2:
-        _undefined_warning("`positive_likelihood_ratio` is ill-defined and set to `np.nan`.")
-        lr_pos = rub if not isinstance(rub, dict) else rub["LR+"]
-    if flags & 4:
-        _undefined_warning("`negative_likelihood_ratio` is ill-defined and set to `np.nan`.")
-        lr_neg = rub if not isinstance(rub, dict) else rub["LR-"]
-    return float(lr_pos), float(lr_neg)
+    return _NATIVE(None, "family_mexp_cls_likelihood_ratios",
+                   (y_true, y_pred, labels, sample_weight, replace_undefined_by, numeric_mode),
+                   _NATIVE_CONTEXT)
 
 
 def classification_report(y_true, y_pred, *, labels=None, target_names=None, sample_weight=None,
                           digits=2, output_dict=False, zero_division="warn", numeric_mode=None):
     """scikit-learn 1.9 `classification_report` for binary / multiclass 1-D
     targets, from precision_recall_fscore_support."""
-    from ._metrics_impl import _classification_encoded, _label_set
-    true, _ = _classification_encoded(y_true, "y_true")
-    pred, _ = _classification_encoded(y_pred, "y_pred")
-    present = sorted(_label_set(true) | _label_set(pred))  # glue: sorts the distinct class labels
-    labels_given = labels is not None
-    chosen = list(labels) if labels_given else present
-    micro_is_accuracy = not labels_given or set(chosen) >= set(present)
-    if target_names is not None and len(target_names) != len(chosen):
-        raise ValueError(f"Number of classes, {len(chosen)}, does not match size of target_names, "
-                         f"{len(target_names)}. Try specifying the labels parameter")
-    names = [str(t) for t in target_names] if target_names is not None else [str(c) for c in chosen]  # glue: formats the report's row names
-    headers = ["precision", "recall", "f1-score", "support"]
-    if getattr(_REPORT, "memo", None) is None:
-        _REPORT.memo = {}
-        try:
-            return _classification_report(y_true, y_pred, labels_given, chosen, present, names, headers,
-                                          micro_is_accuracy, sample_weight, digits, output_dict,
-                                          zero_division, numeric_mode)
-        finally:
-            _REPORT.memo = None
-    return _classification_report(y_true, y_pred, labels_given, chosen, present, names, headers,
-                                  micro_is_accuracy, sample_weight, digits, output_dict, zero_division,
-                                  numeric_mode)
-
-
-def _support_total(support, numeric_mode):
-    """The report's support total on the device (x_metrics/cm_epi.mojo,
-    TOTAL: one unit, from 0 in label order): an exact Int64 of the Int64
-    supports (each below 2^31), or the binary64 sum of the weighted ones
-    (Float32 PairSum images, so the Float32 copy is exact)."""
-    k = support.size
-    weighted = support.dtype == "<f8"
-    prog = _Prog()
-    src = prog.put(support) if weighted else prog.put_i32(support)
-    out = prog.want(prog.alloc(2), 2)
-    prog.stage("cm_epi", 1, _CM_TOTAL, src, k, 1 if weighted else 0, out)
-    _run(prog, numeric_mode)
-    return prog.words(out, 2, "d" if weighted else "q")[0]
-
-
-def _classification_report(y_true, y_pred, labels_given, chosen, present, names, headers, micro_is_accuracy,
-                           sample_weight, digits, output_dict, zero_division, numeric_mode):
-    p, r, f, s = precision_recall_fscore_support(y_true, y_pred, labels=chosen, average=None,
-                                                 sample_weight=sample_weight,
-                                                 zero_division=zero_division, numeric_mode=numeric_mode)
-    rows = list(zip(names, p.tolist(), r.tolist(), f.tolist(), s.tolist()))
-    averages = (["micro avg"] if not micro_is_accuracy else []) + ["macro avg", "weighted avg"]
-    report = {}
-    for name, a, b, c, d in rows:  # glue: formats the text report rows
-        report[name] = dict(zip(headers, (a, b, c, d)))
-    total = _support_total(s, numeric_mode)
-    avg_rows = []
-    if micro_is_accuracy:
-        acc = precision_recall_fscore_support(y_true, y_pred, labels=chosen, average="micro",
-                                              sample_weight=sample_weight, zero_division=zero_division,
-                                              numeric_mode=numeric_mode)[0]
-        report["accuracy"] = acc
-    for avg in averages:  # glue: formats the report's average rows
-        a, b, c, _ = precision_recall_fscore_support(y_true, y_pred, labels=chosen,
-                                                     average=avg.split()[0],
-                                                     sample_weight=sample_weight,
-                                                     zero_division=zero_division, numeric_mode=numeric_mode)
-        report[avg] = dict(zip(headers, (a, b, c, total)))
-        avg_rows.append((avg, a, b, c, total))
-    if output_dict:
-        return report
-    width = max([len(n) for n in names] + [len("weighted avg"), digits])  # glue: the report's text column width
-    head_fmt = "{:>{width}s} " + " {:>9}" * len(headers)
-    out = head_fmt.format("", *headers, width=width) + "\n\n"
-    row_fmt = "{:>{width}s} " + " {:>9.{digits}f}" * 3 + " {:>9}\n"
-    for name, a, b, c, d in rows:  # glue: formats the text report rows
-        out += row_fmt.format(name, a, b, c, d, width=width, digits=digits)
-    out += "\n"
-    if micro_is_accuracy:
-        acc_fmt = "{:>{width}s} " + " {:>9.{digits}}" * 2 + " {:>9.{digits}f}" + " {:>9}\n"
-        out += acc_fmt.format("accuracy", "", "", report["accuracy"], total, width=width, digits=digits)
-    for avg, a, b, c, d in avg_rows:  # glue: formats the report's average rows
-        out += row_fmt.format(avg, a, b, c, d, width=width, digits=digits)
-    return out
+    return _NATIVE(None, "family_mexp_cls_report",
+                   (y_true, y_pred, labels, target_names, sample_weight, digits, output_dict, zero_division, numeric_mode),
+                   _NATIVE_CONTEXT)
 
 
 # ---------------------------------------------------------------------------
@@ -2990,7 +2737,6 @@ def stratified_fold_rows(enc, counts, alloc, k, rng, numeric_mode=None):
     return _fold_rows_run(prog, n, k, code, _NONE, numeric_mode)
 
 
-
 def regression_report(y_true, y_pred, *, sample_weight=None,
                       multioutput="uniform_average", force_finite=True,
                       numeric_mode="identical"):
@@ -3023,7 +2769,6 @@ def regression_report(y_true, y_pred, *, sample_weight=None,
     else:
         r2_value = result(r2)
     return {"mean_squared_error": result(mse), "mean_absolute_error": result(mae), "r2_score": r2_value}
-
 
 
 def ranking_report(y_true, y_score, *, pos_label=None, sample_weight=None,
@@ -3108,4 +2853,5 @@ from . import _native_family_bridge  # noqa: E402
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 _native_family_bridge.tables(family_metrics_ops=dict(_OPS), family_metrics_terms=dict(_TERM),
                              family_metrics_prog_context=_PROG_CONTEXT,
-                             family_metrics_undefined=UndefinedMetricWarning, family_metrics_real=numbers.Real)
+                             family_metrics_undefined=UndefinedMetricWarning, family_metrics_real=numbers.Real,
+                             family_mexp_integral=numbers.Integral)
