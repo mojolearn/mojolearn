@@ -8,6 +8,8 @@ def connect(context, package):
     from . import linear_model, decomposition, preprocessing, _expansion_prep
     from . import _native_trees_bridge
     from . import _backend
+    from . import _arena_io
+    from _json import encode_basestring_ascii
     from .randomforest import RandomForestClassifier, RandomForestRegressor
     from .extratrees import ExtraTreesClassifier, ExtraTreesRegressor
     from .tree import DecisionTreeClassifier, DecisionTreeRegressor
@@ -15,6 +17,9 @@ def connect(context, package):
     from . import resample
     _backend.default_mode()  # glue: settle the shared default before native metadata reads
     context["family_msel_fast_masks"] = {mode: resample.fast_defines(mode) for mode in ("identical", "fast")}  # glue: existing compiled option masks, no product resolver callback
+    context.update(family_msel_rows_entry=_arena_io._ROWS_CALL,
+                   family_msel_rows_context=_arena_io._ROWS_CONTEXT,
+                   family_msel_json_string=encode_basestring_ascii)
     registry = {}
     protected = ('__new__', '__init__', '__getattribute__', '__getattr__', '__setattr__', '__del__',
                  '__sklearn_clone__', 'get_params', 'set_params', 'fit', 'predict', 'predict_proba',

@@ -16,13 +16,17 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
 from bindings.py_attr import py_attr
 from bindings.native_buffer_owner import native_storage_allocate
+from bindings.metrics_native_support import metric_float
+from bindings.msel_json import msel_canonical
+from bindings.sha256_door import sha256_update, sha256_hexdigest
+from core.sha256 import Sha256
 from bindings.msel_estimator_native import msel_native_clone, msel_clone_parameter, msel_estimator_call, msel_estimator_plan
 from bindings.family_common import (
     family_array, family_call, family_call_kw, family_isinstance, family_is_str, family_repr, family_str, family_type_name,
 )
 from bindings.msel_common import (
     msel_b, msel_n_samples, msel_admit, msel_entry, msel_try, msel_missed, msel_catch, msel_is_bool, msel_is_integral, msel_is_real, msel_int,
-    msel_op, msel_cmp, msel_materialize, msel_try_materialize, msel_flatten, msel_is_array, msel_addr, msel_p64,
+    msel_op, msel_cmp, msel_materialize, msel_try_materialize, msel_flatten, msel_is_array, msel_addr, msel_p64, msel_pf64,
     msel_new, msel_f64_list, msel_index_i64, msel_resident_new, msel_resident_op, msel_resident_take,
     msel_resident_release, msel_resident_close, msel_get_scorer, msel_score, msel_lazy,
 )
@@ -230,9 +234,10 @@ def msel_device_rows_ok(estimator: PythonObject, scoring_in: PythonObject, conte
 def _arena_rows_call(obj: PythonObject, op: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """One `_arena_io` DeviceRows / resident-scope operation through its
     compiled door, as the Python methods call it."""
-    var io = context["family_msel_arena_io"]
-    return family_call(family_call(msel_b().getattr, io, PythonObject("_ROWS_CALL")), obj, PythonObject(op), args,
-                       family_call(msel_b().getattr, io, PythonObject("_ROWS_CONTEXT")))
+    var entry = context["family_msel_rows_entry"]
+    if py_type(entry) is not py_type(msel_b().len):
+        raise Error("ImportError: native cross-validation resident-row binding is unavailable")
+    return family_call(entry, obj, PythonObject(op), args, context["family_msel_rows_context"])
 
 
 struct MselFoldRows(Movable):
@@ -648,6 +653,46 @@ def _numeric_pred(pred: PythonObject, context: PythonObject) raises -> PythonObj
     return a if _numeric_dtype(String(py=a.dtype)) else pred
 
 
+def _prediction_list(pred: PythonObject, context: PythonObject) raises -> PythonObject:
+    var b = msel_b()
+    msel_admit(pred, context)
+    var kind = py_type(pred)
+    var width = Python.tuple()
+    var values = PythonObject(None)
+    if kind is context["array_class"]:
+        var packed = msel_materialize(pred, "predictions", context)
+        var rank = Int(py=packed.ndim)
+        if rank == 0:
+            raise Error("TypeError: iteration over a 0-d Array")
+        width = py_call(packed.shape.__getitem__, py_call(b.slice, 1, PythonObject(None)))
+        values = py_call(packed._mv.tolist)
+        for k in range(rank - 1):  # driver-loop: native rank metadata groups flat values into rows
+            var axis = rank - 1 - k
+            var step = Int(py=packed.shape[axis])
+            var count = 1
+            for a in range(axis):  # driver-loop: outer extents also preserve empty dimensions
+                count *= Int(py=packed.shape[a])
+            var groups = Python.list()
+            for r in range(count):  # driver-loop: native list slices preserve the Array.tolist nesting
+                var part = py_call(values.__getitem__, py_call(b.slice, r * step, (r + 1) * step))
+                _ = py_call(groups.append, part)
+            values = groups
+        _ = packed  # retain the native buffer while reading its scalar values
+    elif kind is py_get(context, "ndarray"):
+        # Exact ndarray.tolist is its C extension implementation. Admit
+        # object-storage leaves before any label hash/comparison/conversion.
+        values = py_call(pred.tolist)
+        width = py_call(pred.shape.__getitem__, py_call(b.slice, 1, PythonObject(None)))
+        msel_admit(values, context)
+        if py_type(values) is not b.list:
+            raise Error("TypeError: iteration over a 0-d array")
+    elif kind is b.list or kind is b.tuple or kind is b.range or kind is context["array_type"] or kind is b.memoryview:
+        values = py_call(b.list, pred)
+    else:
+        raise Error("TypeError: native predictions require ordinary label containers or buffers")
+    return Python.tuple(values, width)
+
+
 def _place(preds: PythonObject, tests: PythonObject, n: Int, res: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_cross_val_predict_place`: each fold's predictions put back in row
     order on the device (`msel_scatter_rows` into one resident block), or
@@ -701,32 +746,54 @@ def _place(preds: PythonObject, tests: PythonObject, n: Int, res: PythonObject, 
             finally:
                 _ = family_call(msel_entry("msel_free", context), PythonObject(block))
         return out
-    # label objects (str / mixed): placed by list, the builtins' C loops
+    # Label objects (str / mixed) use admitted native lists; numeric fallback
+    # retains the public int64/float64 promotion without Array Python methods.
     var rows = family_call(msel_op("mul"), py_call(b.list, Python.tuple(PythonObject(None))), PythonObject(n))
     var last_width = Python.tuple()
-    for f in range(count):  # driver-loop: over folds
-        var pred = preds[f]
-        var vals = PythonObject(None)
-        if msel_truth(py_call(b.hasattr, pred, PythonObject("tolist"))):
-            vals = family_call(family_call(b.getattr, pred, PythonObject("tolist")))
-        else:
-            vals = family_call(b.list, pred)
-        _ = family_call(b.list, py_call(b.map, py_call(b.getattr, rows, PythonObject("__setitem__")),
-                                        py_call(b.list, tests[f]._mv), vals))
-        if msel_truth(py_call(b.hasattr, pred, PythonObject("shape"))):
-            last_width = py_call(b.tuple, py_call(py_attr(pred.shape, "__getitem__"), py_call(b.slice, PythonObject(1), PythonObject(None))))
-        else:
-            last_width = Python.tuple()
-    var from_list = family_call(b.getattr, msel_cls("Array", context), PythonObject("from_list"))
-    var itertools = Python.import_module("itertools")
+    for f in range(count):  # driver-loop: fold outputs placed in original row order
+        var converted = _prediction_list(preds[f], context)
+        var vals = converted[0]
+        var indices = tests[f]._mv
+        for j in range(min(len(indices), len(vals))):  # driver-loop: native equivalent of the existing zip placement
+            py_setitem(rows, indices[j], vals[j])
+        last_width = converted[1]
     if len(last_width) > 0:
-        var flat = family_call(b.list, py_call(b.map, b.float, py_call(itertools.chain.from_iterable, rows)))
-        var block = family_call(from_list, flat, PythonObject("<f8"))
-        return family_call(block.reshape, family_call(msel_op("add"), Python.tuple(n), last_width))
-    if msel_truth(family_call(b.all, py_call(b.map, b.isinstance, rows, py_call(itertools.repeat, context["family_msel_integral"])))):
-        return family_call(from_list, rows, PythonObject("<i8"))
-    if msel_truth(family_call(b.all, py_call(b.map, b.isinstance, rows, py_call(itertools.repeat, context["family_msel_real"])))):
-        return family_call(from_list, rows, PythonObject("<f8"))
+        var flat = Python.list()
+        for k in range(n):  # driver-loop: one native container level, preserving the previous reshape contract
+            if py_type(rows[k]) is not b.list and py_type(rows[k]) is not b.tuple:
+                raise Error("TypeError: multioutput predictions require native rows")
+            _ = py_call(flat.extend, rows[k])
+        var shape = family_call(msel_op("add"), Python.tuple(n), last_width)
+        var size = n
+        for k in range(len(last_width)):  # driver-loop: prediction output extents
+            size *= Int(py=last_width[k])
+        if len(flat) != size:
+            raise Error("ValueError: prediction values do not match their output shape")
+        var out = family_array(shape, "<f8", context)
+        var pointer = msel_pf64(out)
+        for k in range(size):  # driver-loop: native numeric scalar output placement
+            pointer[k] = metric_float(flat[k], context)
+            _ = out  # retain the destination buffer through each store
+        return out
+    var integers = True
+    var reals = True
+    for k in range(n):  # driver-loop: exact scalar identity checks before numeric conversion
+        integers = integers and msel_is_integral(rows[k], context)
+        reals = reals and msel_is_real(rows[k], context)
+    if integers:
+        var out = family_array(Python.tuple(n), "<i8", context)
+        var pointer = msel_p64(out)
+        for k in range(n):  # driver-loop: native integer label output placement
+            pointer[k] = Int64(msel_int(rows[k]))
+            _ = out  # retain the destination buffer through each store
+        return out
+    if reals:
+        var out = family_array(Python.tuple(n), "<f8", context)
+        var pointer = msel_pf64(out)
+        for k in range(n):  # driver-loop: native real label output placement
+            pointer[k] = metric_float(rows[k], context)
+            _ = out  # retain the destination buffer through each store
+        return out
     return rows
 
 
@@ -782,24 +849,16 @@ def msel_cross_val_predict(args: PythonObject, context: PythonObject) raises -> 
 # ---------------------------------------------------------------- split_descriptor
 
 
-def _canonical(value: PythonObject) raises -> PythonObject:
-    """`_canonical(value)`: sorted-key, compact, ASCII JSON bytes."""
-    var keywords = Python.dict()
-    py_setitem(keywords, "sort_keys", PythonObject(True))
-    py_setitem(keywords, "separators", Python.tuple(",", ":"))
-    py_setitem(keywords, "ensure_ascii", PythonObject(True))
-    py_setitem(keywords, "allow_nan", PythonObject(False))
-    var text = family_call_kw(Python.import_module("json").dumps, keywords, value)
-    return py_call(text.encode, PythonObject("ascii"))
+def _canonical(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    return msel_canonical(value, context)
 
 
 def _digest(chunks: PythonObject) raises -> PythonObject:
-    """`_digest(*chunks)`: sha256 over length-prefixed chunks."""
-    var m = py_call(Python.import_module("hashlib").sha256)
-    for i in range(len(chunks)):  # driver-loop: over a few descriptor chunks
-        _ = py_call(m.update, py_call(PythonObject(len(chunks[i])).to_bytes, PythonObject(8), PythonObject("little")))
-        _ = py_call(m.update, chunks[i])
-    return py_call(m.hexdigest)
+    var hasher = Sha256()
+    for i in range(len(chunks)):  # driver-loop: descriptor chunks retain the historical 8-byte length prefixes
+        sha256_update(hasher, py_call(PythonObject(len(chunks[i])).to_bytes, 8, "little"))
+        sha256_update(hasher, chunks[i])
+    return PythonObject(hasher.hexdigest())
 
 
 def _ascii(text: String) raises -> PythonObject:
@@ -809,14 +868,12 @@ def _ascii(text: String) raises -> PythonObject:
 def _order_digest(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     """`_order_digest`: the values in arrival order with dtype and shape."""
     var b = msel_b()
-    if family_isinstance(value, b.list):
-        return _digest(Python.tuple(_ascii("list"), _canonical(value)))
+    if py_type(value) is b.list:
+        return _digest(Python.tuple(_ascii("list"), _canonical(value, context)))
     var arr = msel_materialize(value, name, context)
-    if not msel_has_c(arr):
-        arr = family_call(arr._as_c)
     var raw = py_call(b.bytes, arr._mv)
     return _digest(Python.tuple(_ascii("array"), py_call(arr.dtype.encode, PythonObject("ascii")),
-                                _canonical(py_call(b.list, arr.shape)), raw))
+                                _canonical(py_call(b.list, arr.shape), context), raw))
 
 
 def msel_split_descriptor(args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -862,8 +919,8 @@ def msel_split_descriptor(args: PythonObject, context: PythonObject) raises -> P
     py_setitem(descriptor, "X_sha256", _order_digest(x, "X", context))
     py_setitem(descriptor, "y_sha256", _order_digest(y, "y", context))
     py_setitem(descriptor, "groups_sha256", PythonObject(None) if groups is None else _order_digest(groups, "groups", context))
-    py_setitem(descriptor, "fold_assignment_sha256", _digest(Python.tuple(_ascii("folds"), _canonical(folds))))
+    py_setitem(descriptor, "fold_assignment_sha256", _digest(Python.tuple(_ascii("folds"), _canonical(folds, context))))
     py_setitem(descriptor, "n_folds", PythonObject(len(folds)))
     py_setitem(descriptor, "fold_sizes", sizes)
-    py_setitem(descriptor, "sha256", py_call(py_call(Python.import_module("hashlib").sha256, _canonical(descriptor)).hexdigest))
+    py_setitem(descriptor, "sha256", sha256_hexdigest(_canonical(descriptor, context)))
     return descriptor
