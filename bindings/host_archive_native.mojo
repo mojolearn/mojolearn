@@ -6,6 +6,7 @@ from std.python import Python, PythonObject
 from std.memory import bitcast
 from std.math import isfinite
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains, py_setattr
+from bindings.trees_public_iforest import iforest_validate
 from bindings.sequential_description import sequential_fields
 from bindings.classical_archive_read import classical_archive_read, classical_archive_build, _archive_exact as _raw_archive_exact, _archive_string, _archive_read_repr, _archive_builtin_repr
 from bindings.classical_arrays import classical_i64, classical_f64, classical_wrap_array, classical_array, classical_address, _store_code
@@ -1305,6 +1306,66 @@ def host_archive_iforest(cls: PythonObject, arrays: PythonObject, context: Pytho
     return model
 
 
+def host_archive_public_iforest(cls: PythonObject, arrays: PythonObject, path: PythonObject,
+                                context: PythonObject) raises -> PythonObject:
+    """`IsolationForest.load(path)`: the public loader's refusals in its
+    order and wording; the saved knobs pass through the constructor's checks
+    again (`iforest_validate`, the native `_validate_params`), then the saved
+    mode, the training matrix and the fitted scalars."""
+    var b = Python.import_module("builtins")
+    var where = host_archive_where(path, context)
+    var ints = _archive_exact(arrays, "ints", "<i8", context)
+    var reals = _archive_exact(arrays, "reals", "<f8", context)
+    if Int(py=ints.size) != 11 or Int(py=reals.size) != 4:
+        raise Error(where + " holds " + String(Int(py=ints.size)) + " ints and " + String(Int(py=reals.size))
+                    + " reals, 11 and 4 are needed")
+    var trees = classical_i64(ints, 0)
+    var samples_mode = classical_i64(ints, 1)
+    var samples_int = classical_i64(ints, 2)
+    var depth = classical_i64(ints, 3)
+    var features_mode = classical_i64(ints, 4)
+    var features_int = classical_i64(ints, 5)
+    var bootstrap = classical_i64(ints, 6)
+    var seed = classical_i64(ints, 7)
+    var auto_contamination = classical_i64(ints, 8)
+    var nf = classical_i64(ints, 9)
+    var resolved = classical_i64(ints, 10)
+    var samples_frac = classical_f64(reals, 0)
+    var features_frac = classical_f64(reals, 1)
+    var contamination = classical_f64(reals, 2)
+    var offset = classical_f64(reals, 3)
+    if samples_mode < 0 or samples_mode > 2 or features_mode < 0 or features_mode > 1 \
+            or auto_contamination < 0 or auto_contamination > 1 or bootstrap < 0 or bootstrap > 1:
+        raise Error(where + " carries an unknown knob mode")
+    var model = host_archive_allocate(cls, context)
+    var fields = sequential_fields(model)
+    # What `cls(n_estimators=..., ...)` stores: the eleven parameters, then
+    # the numeric mode the constructor wrapper adds.
+    py_setitem(fields, "n_estimators", trees)
+    py_setitem(fields, "max_samples", PythonObject("auto") if samples_mode == 0 else (PythonObject(samples_int) if samples_mode == 1 else PythonObject(samples_frac)))
+    py_setitem(fields, "max_depth", PythonObject(None) if depth == -1 else PythonObject(depth))
+    py_setitem(fields, "max_features", PythonObject(features_int) if features_mode == 1 else PythonObject(features_frac))
+    py_setitem(fields, "bootstrap", PythonObject(bootstrap != 0))
+    py_setitem(fields, "contamination", PythonObject("auto") if auto_contamination != 0 else PythonObject(contamination))
+    py_setitem(fields, "random_state", seed)
+    py_setitem(fields, "warm_start", PythonObject(False))
+    py_setitem(fields, "n_jobs", PythonObject(None))
+    py_setitem(fields, "verbose", PythonObject(False))
+    py_setitem(fields, "output_type", PythonObject(None))
+    py_setitem(fields, "numeric_mode", PythonObject(None))
+    iforest_validate(model, fields, context)
+    host_archive_mode(arrays, fields, context)
+    var x = _archive_exact(arrays, "x", "<f4", context)
+    if Int(py=x.ndim) != 2 or Int(py=x.shape[1]) != nf or Int(py=x.shape[0]) < 1:
+        raise Error(where + " x has shape " + _archive_builtin_repr(py_call(b.tuple, x.shape)) + ", meta says "
+                    + String(nf) + " features")
+    py_setitem(fields, "_x", x)
+    py_setitem(fields, "n_features_in_", nf)
+    py_setitem(fields, "offset_", offset)
+    py_setitem(fields, "max_samples_", resolved)
+    return model
+
+
 def host_archive_spectral(cls: PythonObject, arrays: PythonObject, path: PythonObject,
                           context: PythonObject) raises -> PythonObject:
     """SpectralClustering.load: the refusals keep the Python loader's
@@ -2487,6 +2548,8 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         # Native equivalent of the original loader's _mojolearn_after_fit:
         # a newly restored CPU neighbor model owns an empty query holder.
         py_setitem(sequential_fields(model), "_resident_holder", Python.dict())
+    elif fmt == "mojolearn-iforest-1" and public_owner is not None:
+        model = host_archive_public_iforest(cls, arrays, path, context)
     elif fmt == "mojolearn-iforest-1":
         model = host_archive_iforest(cls, arrays, context)
     elif fmt == "mojolearn-spectral-1":

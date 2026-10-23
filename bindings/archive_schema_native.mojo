@@ -137,6 +137,7 @@ from bindings.classical_pandas import classical_admit_value
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_archive import classical_archive_write, _archive_array
 from bindings.classical_archive_read import _archive_builtin_repr
+from bindings.trees_public_iforest import iforest_validate
 
 
 def archive_schema_lookup(cls: PythonObject, table: PythonObject) raises -> PythonObject:
@@ -821,6 +822,11 @@ def _schema_run(model: PythonObject, fields: PythonObject, steps: PythonObject, 
                 var text = String(step[5]).replace("{want}", _archive_builtin_repr(wanted))
                 text = text.replace("{dtype}", parts[0]).replace("{shape}", _archive_builtin_repr(got))
                 _schema_fail(step[4], PythonObject(text), name)
+        elif kind == "iforest_knobs":
+            # IsolationForest.save on an instance assembled without fit or
+            # load: `_validate_params()` resolves the knobs first.
+            if not _schema_has(fields, "_seed"):
+                iforest_validate(model, fields, context)
         elif kind == "format":
             py_setitem(values, step[1], step[2])
         elif kind == "estimator":

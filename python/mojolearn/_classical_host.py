@@ -751,6 +751,27 @@ class HostIsolationForest(_NativeArchiveLoad, _HostBound, IsolationForest):
         """
         return _native_classical(self, "host_iforest_fit", (X, y), _CLASSICAL)
 
+    def fit_predict(self, X, y=None):
+        """Fit on `X` and return `predict(X)`, both on the CPU.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Dense training samples.
+        y : array-like, default=None
+            Ignored.
+
+        Returns
+        -------
+        array-like of shape (n_samples,)
+            -1 for an anomaly, 1 for an inlier.
+
+        Examples
+        --------
+        >>> labels = model.fit_predict(X)
+        """
+        return self.fit(X, y=y).predict(X)
+
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
         _register_host_inference_class(cls)

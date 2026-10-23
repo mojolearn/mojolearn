@@ -20,7 +20,7 @@ _ENTRY = None
 _CONTEXT = None
 
 #: The tree bindings the owner launches, by numeric mode.
-_TREE_BINDINGS = ("_mojolearn_rf", "_mojolearn_trees", "_mojolearn_x_trees")
+_TREE_BINDINGS = ("_mojolearn_rf", "_mojolearn_trees", "_mojolearn_x_trees", "_mojolearn_svm")
 #: The base binding's input and label helpers (`_buffer._native`), always the
 #: identical binary (they are byte moves and comparisons with no tier).
 _BASE_HELPERS = ("cast_f64_to_f32", "cast_colmajor_f64_to_f32", "transpose_f32", "all_finite_f32",
