@@ -298,23 +298,49 @@ def test_native_ipv6_address_matches_independent_socket(native):
         native('close', (server,))
 
 
+def _live_descriptor_identities(fd_directory):
+    identities = {}
+    for name in os.listdir(fd_directory):
+        try:
+            stat = os.fstat(int(name))
+        except OSError:
+            continue  # listdir's temporary descriptor is already closed
+        identities[name] = [stat.st_dev, stat.st_ino, stat.st_mode]
+    return identities
+
+
+def test_descriptor_snapshot_does_not_hide_reused_enumeration_fd(monkeypatch):
+    from types import SimpleNamespace
+    phase = {'listener_open': False}
+
+    def fstat(fd):
+        if fd == 4 and not phase['listener_open']:
+            raise OSError('closed enumeration descriptor')
+        return SimpleNamespace(st_dev=1, st_ino=100 + fd, st_mode=0o140777)
+
+    monkeypatch.setitem(_live_descriptor_identities.__globals__, 'os',
+                        SimpleNamespace(listdir=lambda _: ['3', '4'], fstat=fstat))
+    before = _live_descriptor_identities('/unused-test-directory')
+    phase['listener_open'] = True
+    after = _live_descriptor_identities('/unused-test-directory')
+    assert {name: identity for name, identity in after.items()
+            if before.get(name) != identity} == {'4': [1, 104, 0o140777]}
+
+
 def test_owned_transport_descriptors_do_not_survive_exec(native, tmp_path):
     import sys
     # Compare actual descriptor identity before/after native listen, then
     # inspect that same OS identity in a directly spawned independent child.
     fd_directory = '/proc/self/fd' if os.path.isdir('/proc/self/fd') else '/dev/fd'
-    before = set(os.listdir(fd_directory))
+    # Raw listdir names include its own temporary directory fd. The listener
+    # can reuse that number; compare only live fstat identities in BOTH samples.
+    before = _live_descriptor_identities(fd_directory)
     server = native('listen', ('127.0.0.1', 0, 5.0))
     output = tmp_path / 'descriptor-check.json'
     try:
-        new = set(os.listdir(fd_directory)) - before
-        identities = {}
-        for name in new:
-            try:
-                stat = os.fstat(int(name))
-            except OSError:
-                continue  # the enumeration directory itself is already closed
-            identities[name] = [stat.st_dev, stat.st_ino, stat.st_mode]
+        after = _live_descriptor_identities(fd_directory)
+        identities = {name: identity for name, identity in after.items()
+                      if before.get(name) != identity}
         assert len(identities) == 1, identities
         script = '''import json, os, sys
 expected = json.loads(sys.argv[1])
@@ -377,23 +403,40 @@ def test_interrupted_syscalls_return_without_swallowing_signal_handlers(operatio
             args = (60.0,)
         started = time.monotonic()
         outcome = None
+        handles_closed, child_reaped = 0, False
         signal.setitimer(signal.ITIMER_REAL, 0.1)
         try:
-            native(operation, args)
-        except (InterruptedError, SignalRaised) as error:
-            outcome = type(error).__name__
+            try:
+                native(operation, args)
+            except InterruptedError:
+                outcome = 'InterruptedError'
+            # CPython may deliver its pending application handler during the
+            # first except body after the native binding has returned. The
+            # outer catch covers that delivery as well as immediate delivery.
+            # This checkpoint is testing/application code, outside native work.
+            time.sleep(0)
+        except SignalRaised:
+            outcome = 'SignalRaised'
         finally:
             signal.setitimer(signal.ITIMER_REAL, 0)
-            elapsed = time.monotonic() - started
             if pid is not None:
                 os.kill(pid, signal.SIGKILL)
-                os.waitpid(pid, 0)
+                waited, status = os.waitpid(pid, 0)
+                assert waited == pid, (waited, pid)
+                child_reaped = True
             for handle in reversed(handles):
                 native('close', (handle,))
+                handles_closed += 1
+            elapsed = time.monotonic() - started
         assert elapsed < 3, elapsed
         assert seen == [signal.SIGALRM], seen
+        assert signal.getsignal(signal.SIGALRM) is handler
+        assert handles_closed == len(handles), (handles_closed, len(handles))
+        assert child_reaped == (pid is not None), (child_reaped, pid)
         assert outcome == ('SignalRaised' if handler_raises else 'InterruptedError'), outcome
-        print(json.dumps({'operation': operation, 'outcome': outcome, 'elapsed': elapsed}))
+        print(json.dumps({'operation': operation, 'outcome': outcome, 'elapsed': elapsed,
+                          'signals': seen, 'handles_closed': handles_closed,
+                          'child_reaped': child_reaped}))
     ''')
     result = subprocess.run([sys.executable, '-c', program, operation, str(handler_raises)],
                             capture_output=True, text=True, timeout=15)
