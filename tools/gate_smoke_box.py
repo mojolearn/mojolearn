@@ -4,7 +4,7 @@
 
     python3 tools/gate_smoke_box.py <nvidia|amd> <version> <out-root> [setup|smoke|autograd|measure|all]
 
-setup: the bench venv from the published wheels (mojolearn==<version> and the
+setup: by default, the bench venv from the published wheels (mojolearn==<version> and the
 vendor plugin, verified against PyPI) plus every pinned opponent, exactly as
 tools/bench_board.setup_python builds it for a measurement run.
 smoke (the first stage after setup, 5 s per line): tools/gpu_gap_campaign.py --smoke --cpu-fallback over the
@@ -110,11 +110,13 @@ def gate_verdict(state):
 
 
 class Gate:
-    def __init__(self, vendor, version, root):
+    def __init__(self, vendor, version, root, candidate_wheels=(), source_commit=None, autograd_manifest=None):
         import bench_board as B
         import bench_board_evidence as E
         self.B, self.E = B, E
         self.vendor, self.version, self.root = vendor, version, Path(root)
+        self.candidate_wheels, self.source_commit = list(candidate_wheels), source_commit
+        self.autograd_manifest = autograd_manifest
         self.root.mkdir(parents=True, exist_ok=True)
         self.out, self.cache = self.root / "setup", str(self.root / "cache")
         (self.out / "logs").mkdir(parents=True, exist_ok=True)
@@ -123,6 +125,20 @@ class Gate:
         if self.state.get("version") not in (None, version) or self.state.get("vendor") not in (None, vendor):
             raise SystemExit("gate: %s holds another gate (%s %s); use a new out-root"
                              % (self.state_path, self.state.get("vendor"), self.state.get("version")))
+        mode, candidate = 'published', None
+        if self.candidate_wheels:
+            import candidate_wheel_install as C
+            mode = 'candidate'
+            candidate = C.identity(C.build_manifest(version, vendor, self.candidate_wheels, source_commit))
+            if not autograd_manifest:
+                raise SystemExit('candidate gate requires an eight-binary autograd artifact manifest')
+            from gate_autograd_artifacts import validate
+            self.autograd_artifacts = validate(autograd_manifest, vendor, source_commit, self.root/'autograd-bin')
+        if self.state and (self.state.get('input_mode', 'published') != mode or self.state.get('candidate') != candidate):
+            raise SystemExit('gate output belongs to different published/candidate artifacts; use a new out-root')
+        self.state.update(input_mode=mode, candidate=candidate)
+        if mode == 'candidate':
+            self.state['autograd_artifacts'] = self.autograd_artifacts
         self.state.update(vendor=vendor, version=version, source_commit=B.repo_commit())
 
     def mark(self, **fields):
@@ -145,14 +161,22 @@ class Gate:
     def setup(self):
         B, out = self.B, self.out
         self.mark(phase="setup", status="running", setup_started=time.time())
-        args = B.build_parser().parse_args(["--vendor", self.vendor, "--out", str(out), "--cache", self.cache,
+        argv = ["--vendor", self.vendor, "--out", str(out), "--cache", self.cache,
                                             "--families", "neural,algos,classical,classical2,trees",
-                                            "--mojolearn-version", self.version])
+                                            "--mojolearn-version", self.version]
+        if self.candidate_wheels:
+            argv += ['--candidate-source-commit', self.source_commit]
+            for path in self.candidate_wheels:
+                argv += ['--candidate-wheel', path]
+        args = B.build_parser().parse_args(argv)
         python, wheel = B.setup_python(args, self.vendor, str(out), str(out / "logs/install.log"))
         manifest = getattr(args, "wheel_manifest", None) or str(out / "wheel-manifest.json")
         with (out / "logs/neural-pins.log").open("w") as f:
-            subprocess.run([python, "-m", "pip", "install", "--disable-pip-version-check"] + list(B.NEURAL_PINS),
-                           stdout=f, stderr=f)
+            pins = subprocess.run([python, "-m", "pip", "install", "--disable-pip-version-check"] + list(B.NEURAL_PINS),
+                                  stdout=f, stderr=f)
+        if pins.returncode:
+            self.mark(status='failed', error='neural opponent dependency installation failed')
+            raise SystemExit('gate: neural dependency installation failed; see setup/logs/neural-pins.log')
         self.amd_env()
         refusal = B.gpu_set_refusal(python, self.vendor)
         if refusal:
@@ -299,15 +323,26 @@ class Gate:
 
 
 def main(argv):
-    if len(argv) < 3:
-        raise SystemExit(__doc__.split("\n\n")[1])
-    vendor, version, root = argv[0], argv[1], argv[2]
-    step = argv[3] if len(argv) > 3 else "all"
+    import argparse
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('vendor', choices=('nvidia', 'amd'))
+    parser.add_argument('version')
+    parser.add_argument('root')
+    parser.add_argument('step', nargs='?', default='all', choices=STAGES+('all',))
+    parser.add_argument('--candidate-wheel', action='append', default=[])
+    parser.add_argument('--source-commit')
+    parser.add_argument('--autograd-manifest')
+    args = parser.parse_args(argv)
+    vendor, version, root, step = args.vendor, args.version, args.root, args.step
     if vendor not in ("nvidia", "amd"):
         raise SystemExit("gate: nvidia or amd (Apple runs its own smoke tooling; Apple timing is the M3 Ultra's)")
     if step not in STAGES + ("all",):
         raise SystemExit("gate: stage is one of %s or all" % ", ".join(STAGES))
-    gate = Gate(vendor, version, root)
+    if bool(args.candidate_wheel) != bool(args.source_commit):
+        parser.error('candidate wheels and source-commit must be supplied together')
+    if args.autograd_manifest and not args.candidate_wheel:
+        parser.error('autograd-manifest is a candidate-mode input')
+    gate = Gate(vendor, version, root, args.candidate_wheel, args.source_commit, args.autograd_manifest)
     for stage in STAGES:
         if step in (stage, "all"):
             getattr(gate, stage)()

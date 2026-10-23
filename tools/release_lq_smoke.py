@@ -142,15 +142,37 @@ def box_plan(smoke_args, remote_dir):
 
 #: what --gate brings home from <remote-dir>/out (reports only; the venv and data cache stay on the box)
 GATE_FETCH = ("gate-smoke.json", "autograd-smoke.json", "smoke.log", "measure-*.log", "measure-manifest-*.json",
+              "setup/wheel-manifest.json", "setup/logs", "autograd-bin/build-manifest.json",
               "smoke-*/smoke/smoke.json", "smoke-*/smoke/smoke.txt", "measure-*/campaign.json",
               "measure-*/campaign-retention.json", "measure-*/board")
 
 
-def gate_plan(vendor, version, remote_dir):
+def gate_plan(vendor, version, remote_dir, candidate_wheels=(), source_commit=None, autograd_dir=None):
     """The box argv of the release gate (tools/gate_smoke_box.py ... all)."""
     if vendor not in ("nvidia", "amd") or not re.fullmatch(r"[0-9A-Za-z.+-]+", version):
         raise SystemExit(f"lq-smoke: --gate takes nvidia|amd and a version, not {vendor!r} {version!r}")
-    return [], ["python3", "tools/gate_smoke_box.py", vendor, version, f"{remote_dir}/out", "all"]
+    argv = ["python3", "tools/gate_smoke_box.py", vendor, version, f"{remote_dir}/out", "all"]
+    uploads = []
+    if candidate_wheels:
+        import candidate_wheel_install as C
+        from gate_autograd_artifacts import validate
+        C.build_manifest(version, vendor, candidate_wheels, source_commit)
+        if not autograd_dir:
+            raise SystemExit('candidate gate requires --gate-autograd-dir')
+        directory = Path(autograd_dir)
+        receipt = directory/'build-manifest.json'
+        artifacts = validate(receipt, vendor, source_commit)
+        for path in candidate_wheels:
+            local = Path(path)
+            remote = f'{remote_dir}/in/{local.name}'
+            uploads.append((local, remote))
+            argv += ['--candidate-wheel', remote]
+        for name in ['build-manifest.json', *[row['file'] for row in artifacts['files']]]:
+            uploads.append((directory/name, f'{remote_dir}/out/autograd-bin/{name}'))
+        argv += ['--source-commit', source_commit, '--autograd-manifest', f'{remote_dir}/out/autograd-bin/build-manifest.json']
+    elif source_commit or autograd_dir:
+        raise SystemExit('candidate source/autograd inputs require candidate wheels')
+    return uploads, argv
 
 
 def gate_verdict_home(out, vendor, version):
@@ -194,14 +216,17 @@ class Runner:
     def upload(self, uploads, remote_dir):
         rdir = shlex.quote(remote_dir)
         if self.a.gate:
-            # the gate keeps its own tree (venv, data cache, gate-smoke.json) and uploads nothing
-            got = self.ssh(f"set -e; mkdir -p {rdir}/out; echo READY")
+            # Preserve all old gate evidence; candidate-hash-specific roots
+            # prevent a different artifact batch from replacing a prior run.
+            got = self.ssh(f"set -e; mkdir -p {rdir}/in {rdir}/out/autograd-bin; echo READY")
             if got.returncode != 0 or "READY" not in (got.stdout or ""):
                 raise SystemExit(f"lq-smoke: could not prepare {remote_dir} on {self.a.box}")
-            return
-        got = self.ssh(f"set -e; rm -rf {rdir}/in {rdir}/out {rdir}/out.run; mkdir -p {rdir}/in; echo READY")
-        if got.returncode != 0 or "READY" not in (got.stdout or ""):
-            raise SystemExit(f"lq-smoke: could not prepare {remote_dir} on {self.a.box}: {(got.stderr or '')[-400:]}")
+            if not uploads:
+                return
+        else:
+            got = self.ssh(f"set -e; rm -rf {rdir}/in {rdir}/out {rdir}/out.run; mkdir -p {rdir}/in; echo READY")
+            if got.returncode != 0 or "READY" not in (got.stdout or ""):
+                raise SystemExit(f"lq-smoke: could not prepare {remote_dir} on {self.a.box}: {(got.stderr or '')[-400:]}")
         want = {}
         for local, remote in uploads:
             if not local.is_file():
@@ -222,6 +247,11 @@ class Runner:
         bad = [r for r, s in want.items() if have.get(r) != s]
         if bad:
             raise SystemExit(f"lq-smoke: sha256 differs on the box for {bad}")
+        executables = [remote for _, remote in uploads if '/out/autograd-bin/' in remote and not remote.endswith('.json')]
+        if executables:
+            changed = self.ssh('chmod +x '+ ' '.join(shlex.quote(path) for path in executables))
+            if changed.returncode:
+                raise SystemExit('lq-smoke: cannot activate autograd check executables')
         say(f"{len(want)} file(s) on the box, sha256 verified")
 
     def queue(self, box_argv, tag):
@@ -265,7 +295,9 @@ class Runner:
 
     def main(self):
         a = self.a
-        uploads, box_argv = (gate_plan(a.gate[0], a.gate[1], a.remote_dir) if a.gate
+        uploads, box_argv = (gate_plan(a.gate[0], a.gate[1], a.remote_dir,
+                                      getattr(a, 'candidate_wheel', ()), getattr(a, 'candidate_source_commit', None),
+                                      getattr(a, 'gate_autograd_dir', None)) if a.gate
                              else box_plan(a.smoke, a.remote_dir))
         key = hashlib.sha256(json.dumps([a.box, a.branch, a.remote_dir, box_argv,
                                          [sha256(l) if l.is_file() else str(l) for l, _ in uploads]]).encode()).hexdigest()
@@ -322,12 +354,19 @@ def parse(argv):
     ap.add_argument("--gate", nargs=2, metavar=("VENDOR", "VERSION"),
                     help="run the release gate (tools/gate_smoke_box.py VENDOR VERSION <remote>/out all) "
                          "instead of the wheel smoke; no smoke arguments")
+    ap.add_argument('--candidate-wheel', action='append', default=[], help='local unpublished core/vendor wheel; repeat')
+    ap.add_argument('--candidate-source-commit', help='full candidate source commit')
+    ap.add_argument('--gate-autograd-dir', help='directory holding the eight binaries and build-manifest.json')
     ap.add_argument("smoke", nargs=argparse.REMAINDER)
     a = ap.parse_args(argv)
     if a.smoke[:1] == ["--"]:
         a.smoke = a.smoke[1:]
     if a.gate and a.smoke:
         ap.error("--gate takes no smoke arguments")
+    if not a.gate and (a.candidate_wheel or a.candidate_source_commit or a.gate_autograd_dir):
+        ap.error('candidate gate inputs require --gate')
+    if a.candidate_wheel and (not a.candidate_source_commit or not a.gate_autograd_dir):
+        ap.error('candidate wheels require source commit and the complete autograd artifact directory')
     if not re.fullmatch(r"/[A-Za-z0-9/_.-]+", a.remote_dir):
         ap.error("--remote-dir must be an absolute path of [A-Za-z0-9/_.-]")
     if not re.fullmatch(r"[A-Za-z0-9_.-]+", a.tag):
