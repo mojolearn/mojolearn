@@ -16,6 +16,7 @@
 # (no second conversion); IsotonicRegression.fit_transform transforms the
 # column the fit converted; a classifier's score scores the prediction the
 # same call decoded; Lasso / ElasticNet score the prediction buffer as it is.
+from std.math import isinf
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -27,6 +28,7 @@ from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_wrap_array
 from bindings.classical_score import classical_r2_score
+from bindings.classical_warnings import classical_warning
 from bindings.classical_labels import (
     LabelsMatrix, ClassicalLabels, labels_f32, labels_view, labels_check_rank, labels_f32_view,
     labels_check_sample_weight, labels_vector, labels_empty, labels_full_f32, labels_address, labels_cast, labels_reshape,
@@ -358,6 +360,14 @@ def _xl_with_weights(y: LabelsMatrix, sample_weight: PythonObject, n: Int, mut h
     _ = w^
     has_sw = 1
     return LabelsMatrix(joined, labels_address(joined), y.rows * y.cols + n, 1, True)
+
+
+def _xl_owned(m: LabelsMatrix, context: PythonObject) raises -> PythonObject:
+    """A float32 vector Array of m's words: m's own Array when it is one,
+    else one byte copy of the caller's buffer."""
+    if py_type(m.keep) is context["array_class"] and labels_address(m.keep) == m.addr:
+        return m.keep
+    return _xl_join(m.addr, m.rows * m.cols, 0, 0, context)
 
 
 def _xl_ints(values: List[Int]) raises -> PythonObject:
@@ -1346,6 +1356,703 @@ def xl_cd_score(model: PythonObject, args: PythonObject, context: PythonObject) 
     return classical_r2_score(prediction, args[1], context)
 
 
+# ------------------------------------------------------------ cv helpers
+# RidgeCV, LassoCV, ElasticNetCV and LogisticRegressionCV. An int (or None)
+# cv takes the same integer fold ids the Python assigned (the base binding's
+# `fold_ids` / `select_fold_i64`, or the binding's own StratifiedKFold ids);
+# a user splitter object is the user-API boundary: its `split(X, y)` is
+# called once, as the Python did, and its (train, test) index arrays are
+# read natively.
+
+comptime ALGO_ENETCV = 9
+comptime ALGO_LOGCV = 10
+comptime ALGO_RIDGE_KFOLD = 13
+
+
+def _xl_helper(context: PythonObject, name: String) raises -> PythonObject:
+    """A base binding helper (`_buffer._native(name)`) connected at import,
+    or the refusal recorded then."""
+    var entry = py_get(context["xl_helpers"], PythonObject(name))
+    if entry is None:
+        raise Error("ImportError: mojolearn: the base binding has no `" + name + "`")
+    if py_type(entry) is _b().str:
+        raise Error(String(py=entry))
+    return entry
+
+
+def _xl_is_int_cv(cv: PythonObject, context: PythonObject) raises -> Bool:
+    """`_is_int_cv`: an Integral that is not a bool."""
+    return _isinstance(cv, context["labels_integral_type"]) and not _isinstance(cv, _b().bool)
+
+
+def _xl_index_i64(values: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+    """`as_index_i64(values, name=name)`: row indices as a 1-D int64 Array
+    (a list, tuple or range through `array('q', ...)` in C; a buffer through
+    the native cast)."""
+    var b = _b()
+    var cls = py_type(values)
+    if cls is b.list or cls is b.tuple or cls is b.range:
+        var store = py_call(context["array_type"], PythonObject("q"), values)
+        return classical_wrap_array(store, Python.tuple(len(store)), "<i8", "C", context)
+    var view = labels_view(values, name, context)
+    var count = view.size()
+    if view.typestr == "<i8" and (view.c_order() or view.both_orders()):
+        if py_type(view.keep) is context["array_class"] and labels_address(view.keep) == view.addr:
+            return labels_reshape(view.keep, Python.tuple(count), context)
+        var copy = labels_vector(count, "<i8", context)
+        if count > 0:
+            memcpy(dest=MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=labels_address(copy)),
+                   src=MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=view.addr), count=count)
+        return copy
+    var out = labels_vector(count, "<i8", context)
+    labels_cast(view.addr, view.typestr, labels_address(out), "<i8", count, context)
+    return out
+
+
+def _xl_cv_splits(cv: PythonObject, x_source: PythonObject, y_source: PythonObject,
+                  context: PythonObject) raises -> PythonObject:
+    """`_cv_splits(cv, X, y)`: a list of (train, test) int64 Arrays from a
+    splitter's `split(X, y)` (called once) or an iterable of pairs."""
+    var b = _b()
+    var pairs = PythonObject(None)
+    if Bool(py=py_call(b.hasattr, cv, PythonObject("split"))):
+        pairs = py_call(cv.split, x_source, y_source)
+    elif _isinstance(cv, Python.tuple(b.str, b.bytes)) or not Bool(py=py_call(b.hasattr, cv, PythonObject("__iter__"))):
+        raise Error("Expected cv as an integer, cross-validation object (from sklearn.model_selection) "
+                    + "or an iterable. Got " + _repr(cv) + ".")
+    else:
+        pairs = cv
+    var listed = py_call(b.list, pairs)
+    var splits = Python.list()
+    for k in range(len(listed)):  # driver-loop: over the cv splits
+        var pair = py_call(b.tuple, listed[k])
+        if len(pair) != 2:
+            if len(pair) > 2:
+                raise Error("too many values to unpack (expected 2, got " + String(len(pair)) + ")")
+            raise Error("not enough values to unpack (expected 2, got " + String(len(pair)) + ")")
+        _ = py_call(splits.append, Python.tuple(_xl_index_i64(pair[0], "train", context),
+                                                _xl_index_i64(pair[1], "test", context)))
+    if len(splits) == 0:
+        raise Error("mojolearn: cv produced no (train, test) split")
+    return splits
+
+
+def _xl_default_folds(n: Int, k: Int, context: PythonObject) raises -> PythonObject:
+    """`KFold(n_splits=k).split(...)` unshuffled: contiguous folds by the
+    core helpers (`fold_ids` with no codes, `select_fold_i64`)."""
+    var fold_store = labels_vector(n, "<i4", context)
+    var fold_counts = labels_vector(k, "<i8", context)
+    var class_counts = labels_vector(1, "<i8", context)
+    _ = py_call_typed(_xl_helper(context, "fold_ids"), PythonObject(0), PythonObject(n), PythonObject(0), PythonObject(k),
+                      PythonObject(labels_address(class_counts)), PythonObject(labels_address(fold_store)),
+                      PythonObject(labels_address(fold_counts)))
+    var select = _xl_helper(context, "select_fold_i64")
+    var counts = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=labels_address(fold_counts))
+    var out = Python.list()
+    for fold in range(k):  # driver-loop: over the cv folds
+        var size = Int(counts[fold])
+        var test = labels_vector(size, "<i8", context)
+        var train = labels_vector(n - size, "<i8", context)
+        var scratch = labels_vector(n, "<i8", context)
+        var got = _int(py_call_typed(select, PythonObject(labels_address(fold_store)), PythonObject(n), PythonObject(fold),
+                                     PythonObject(labels_address(test) if size else labels_address(scratch)),
+                                     PythonObject(labels_address(train) if n - size else labels_address(scratch))))
+        if got != size:
+            raise Error("RuntimeError: mojolearn: select_fold_i64 disagrees with fold_ids")
+        _ = py_call(out.append, Python.tuple(train, test))
+    return out
+
+
+def _xl_kfold_ids_f32(n: Int, k: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_kfold_ids_f32(n, k)`: KFold's contiguous fold ids as float32."""
+    if not _is_int(k) or _lt(k, PythonObject(2)):
+        raise Error("mojolearn: cv must be None or an int in [2, n_samples]")
+    var folds = _int(k)
+    if folds > n:
+        raise Error("Cannot have number of splits n_splits=" + String(folds) + " greater than the "
+                    + "number of samples: n_samples=" + String(n) + ".")
+    var ids = labels_vector(n, "<i4", context)
+    var counts = labels_vector(folds, "<i8", context)
+    _ = py_call_typed(_xl_helper(context, "fold_ids"), PythonObject(0), PythonObject(n), PythonObject(0),
+                      PythonObject(folds), PythonObject(0), PythonObject(labels_address(ids)),
+                      PythonObject(labels_address(counts)))
+    var out = labels_vector(n, "<f4", context)
+    labels_cast(labels_address(ids), "<i4", labels_address(out), "<f4", n, context)
+    return out
+
+
+def _xl_cv_fold_ids(splits: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
+    """`_cv_fold_ids(splits, n)`: the int32 fold of every row when the test
+    sides partition the rows and every train side is the complement of its
+    test side; None otherwise."""
+    var fold = _xl_full_i32(n, -1, context)
+    var assign = _xl_helper(context, "assign_fold_i64")
+    var covered = 0
+    for k in range(len(splits)):  # driver-loop: over the cv splits
+        var te = splits[k][1]
+        var size = Int(py=te.size)
+        if _int(py_call_typed(assign, PythonObject(labels_address(te) if size else 0), PythonObject(size), PythonObject(n),
+                              PythonObject(k), PythonObject(labels_address(fold)))) != 0:
+            return PythonObject(None)
+        covered += size
+    if covered != n:
+        return PythonObject(None)
+    var check = _xl_helper(context, "check_indices_i64")
+    var hits = _xl_helper(context, "count_fold_hits_i64")
+    for k in range(len(splits)):  # driver-loop: over the cv splits
+        var tr = splits[k][0]
+        var te = splits[k][1]
+        var tr_size = Int(py=tr.size)
+        if tr_size != n - Int(py=te.size):
+            return PythonObject(None)
+        if tr_size > 0:
+            if _int(py_call_typed(check, PythonObject(labels_address(tr)), PythonObject(tr_size), PythonObject(n))) != 0:
+                return PythonObject(None)
+            if _int(py_call_typed(hits, PythonObject(labels_address(tr)), PythonObject(tr_size),
+                                  PythonObject(labels_address(fold)), PythonObject(n), PythonObject(k))) != 0:
+                return PythonObject(None)
+    return fold
+
+
+def _xl_full_i32(n: Int, value: Int, context: PythonObject) raises -> PythonObject:
+    """`full((n,), value, '<i4')`: the store repeated in C."""
+    var one = py_call(context["array_type"], PythonObject("i"), Python.list(PythonObject(value)))
+    var store = py_call(one.__mul__, PythonObject(n))
+    return classical_wrap_array(store, Python.tuple(n), "<i4", "C", context)
+
+
+def _xl_cv_fold_ids_f32(splits: PythonObject, n: Int, name: String,
+                        context: PythonObject) raises -> Tuple[PythonObject, PythonObject]:
+    """`_cv_fold_ids_f32(splits, n, name)`: (fold ids, None) for a
+    partition, else (the -(n + 1) words, the per-split roles)."""
+    var ids = _xl_cv_fold_ids(splits, n, context)
+    if ids is not None:
+        var out = labels_vector(n, "<f4", context)
+        labels_cast(labels_address(ids), "<i4", labels_address(out), "<f4", n, context)
+        return (out, PythonObject(None))
+    # `_cv_roles_f32`: per-split roles (x_linear/cv_roles.mojo)
+    if n + 1 > 16777216:
+        raise Error("NotImplementedError: mojolearn " + name + ": cv splits that are not a partition are limited "
+                    + "to 16,777,215 rows")
+    var mark = _xl_helper(context, "mark_split_roles_f32")
+    var roles = labels_vector(len(splits) * n, "<f4", context)
+    for k in range(len(splits)):  # driver-loop: over the cv splits
+        for side in range(2):  # driver-loop: over the two sides of one split
+            var rows = splits[k][side]
+            var size = Int(py=rows.size)
+            var status = _int(py_call_typed(mark, PythonObject(labels_address(rows) if size else 0), PythonObject(size),
+                                            PythonObject(n), PythonObject(k), PythonObject(side + 1),
+                                            PythonObject(labels_address(roles))))
+            if status == 1:
+                raise Error("mojolearn " + name + ": a cv split holds an index outside [0, n_samples)")
+            if status == 2:
+                raise Error("mojolearn " + name + ": a cv split repeats a row, or puts a row on both sides")
+        if Int(py=splits[k][0].size) == 0 or Int(py=splits[k][1].size) == 0:
+            raise Error("mojolearn " + name + ": every cv split needs training and test rows")
+    return (labels_full_f32(n, -Float64(n + 1), context), roles)
+
+
+def _xl_parts(addrs: List[Int], counts: List[Int], context: PythonObject) raises -> PythonObject:
+    """`_concat_f32_parts(parts)`: the parts' 32-bit words in order, one
+    float32 vector (one byte copy per part)."""
+    var total = 0
+    for i in range(len(counts)):  # driver-loop: over the target vector's parts
+        total += counts[i]
+    var out = labels_vector(total, "<f4", context)
+    var o = _F32P(unsafe_from_address=labels_address(out))
+    var at = 0
+    for i in range(len(counts)):  # driver-loop: over the target vector's parts
+        if counts[i] > 0:
+            memcpy(dest=o + at, src=_F32P(unsafe_from_address=addrs[i]), count=counts[i])
+        at += counts[i]
+    return out
+
+
+# ------------------------------------------------------------------ RidgeCV
+
+
+def _xl_ridge(model: PythonObject, entries: PythonObject, x_addr: Int, n: Int, d: Int, y: LabelsMatrix,
+              alphas: List[Float64], sample_weight: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_ridge_run(est, a, n, d, Y, 1, alphas, sample_weight)`: one target,
+    the alphas' Gram solves; refused when X'X + alpha I does not factor even
+    in float-float."""
+    var A = len(alphas)
+    var has_sw = 0
+    var yy = _xl_with_weights(y, sample_weight, n, has_sw, context)
+    var ip: List[Int] = [1, 1 if _truth(py_fields(model)["fit_intercept"]) else 0, A, has_sw]
+    var out = _xl_run(entries, ALGO_RIDGE, x_addr, n * d, n, d, yy.addr, yy.rows, _xl_ints(ip), _xl_reals(alphas),
+                      d + 1 + 2 + A + 1, 3 * d * d + 3 * d + 1 + d + 2 * n, 1, context)
+    if _xl_word(out, d + 1 + 2 + A) == 2.0:
+        raise Error("mojolearn " + _name(model) + ": X'X + alpha I is singular even in float-float (alpha="
+                    + String(py=py_call(_b().format, _xl_float(out, d + 1), PythonObject("g")))
+                    + "); rescale X or use a larger alpha")
+    _ = yy^
+    return out
+
+
+def _xl_gather(src: Int, rows: PythonObject, n: Int, width: Int, context: PythonObject) raises -> PythonObject:
+    """`take(src, idx, width)`: rows idx of src (width float32 words a row)."""
+    var count = Int(py=rows.size)
+    var shape = Python.tuple(count, width) if width > 1 else Python.tuple(count)
+    var out = labels_empty(shape, "<f4", context)
+    _ = py_call_typed(_xl_helper(context, "gather_rows_bytes"), PythonObject(src), PythonObject(labels_address(out)),
+                      PythonObject(labels_address(rows)), PythonObject(n), PythonObject(count), PythonObject(4 * width))
+    return out
+
+
+def _xl_undefined_warning(message: String, context: PythonObject) raises:
+    """`_expansion_metrics._undefined_warning(message)`: scikit-learn's
+    UndefinedMetricWarning when sklearn.exceptions is loaded, else
+    mojolearn's, at the public method's frame."""
+    var category = context["xl_undefined_warning"]
+    var sk = py_get(context["modules"], "sklearn.exceptions")
+    if sk is not None:
+        category = py_call(_b().getattr, sk, PythonObject("UndefinedMetricWarning"), category)
+    var frame = py_call(Python.import_module("sys")._getframe, PythonObject(0))
+    var module = py_get(frame.f_globals, "__name__", "")
+    classical_warning(message, category, context, Python.tuple(frame.f_code.co_filename, frame.f_lineno, module),
+                      "UndefinedMetricWarning")
+
+
+def xl_fit_ridge_cv(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """RidgeCV.fit(X, y, sample_weight)."""
+    var fields = py_fields(model)
+    var b = _b()
+    if fields["scoring"] is not None or _truth(fields["alpha_per_target"]):
+        raise Error("mojolearn RidgeCV: only scoring=None, alpha_per_target=False are implemented")
+    var given = fields["alphas"]
+    var listed = given if Bool(py=py_call(b.hasattr, given, PythonObject("__len__"))) else Python.list(given)
+    var floats = py_call(b.list, py_call(b.map, b.float, listed))
+    var alphas = List[Float64]()
+    for i in range(len(floats)):  # driver-loop: over the alpha grid
+        alphas.append(Float64(py=floats[i]))
+    var refuse = len(alphas) == 0
+    for i in range(len(alphas)):  # driver-loop: over the alpha grid
+        refuse = refuse or not (alphas[i] > 0)
+    if refuse:
+        raise Error("mojolearn RidgeCV: alphas must be positive")
+    var entries = _xl_entries(fields, context)
+    var x = _xl_matrix(args[0], context)
+    var n = x.rows
+    var d = x.cols
+    var y = _xl_vector(args[1], n, context)
+    var sample_weight = args[2]
+    var cv = fields["cv"]
+    var A = len(alphas)
+    if cv is None:
+        var out = _xl_ridge(model, entries, x.addr, n, d, y, alphas, sample_weight, context)
+        _xl_set_linear(fields, out, d, context)
+        py_setitem(fields, "alpha_", _xl_float(out, d + 1))
+        py_setitem(fields, "best_score_", _xl_float(out, d + 2))
+        if _truth(fields["store_cv_results"]):
+            py_setitem(fields, "cv_results_", _xl_slice(out, d + 3, A, Python.tuple(A), context))
+        py_setitem(fields, "n_features_in_", PythonObject(d))
+        _ = x^
+        _ = y^
+        return model
+    var int_cv = _xl_is_int_cv(cv, context)
+    if int_cv and sample_weight is None and _int(cv) >= 2 and n // _int(cv) >= 2:
+        # `_fit_kfold`: the k-fold scores on the binding, the first best
+        # finite score chosen in Mojo
+        var folds = _int(cv)
+        if not (2 <= folds and folds <= n):
+            raise Error("mojolearn RidgeCV: cv must be in [2, n_samples]")
+        if _truth(fields["store_cv_results"]):
+            raise Error("cv!=None and store_cv_results=True are incompatible")
+        var n_fw = 2 * d * d + 3 * d + 1 + A * (d + 2) + A * (n // folds + 1)
+        var ip: List[Int] = [folds, 1 if _truth(fields["fit_intercept"]) else 0, A]
+        var scores = _xl_run(entries, ALGO_RIDGE_KFOLD, x.addr, n * d, n, d, y.addr, y.rows, _xl_ints(ip),
+                             _xl_reals(alphas), A, n_fw, 1, context)
+        var best = _int(py_call_typed(entries["x_linear_best_alpha"], PythonObject(labels_address(scores)), PythonObject(A)))
+        if best < 0:
+            raise Error("mojolearn RidgeCV: X'X + alpha I is singular in float32 for every alpha "
+                        + "(rescale X, or use larger alphas)")
+        var one: List[Float64] = [alphas[best]]
+        var out = _xl_ridge(model, entries, x.addr, n, d, y, one, PythonObject(None), context)
+        _xl_set_linear(fields, out, d, context)
+        py_setitem(fields, "alpha_", PythonObject(alphas[best]))
+        py_setitem(fields, "best_score_", _xl_float(scores, best))
+        py_setitem(fields, "n_features_in_", PythonObject(d))
+        _ = x^
+        _ = y^
+        return model
+    # `_fit_splits`: a native fit, predict and r2_score per split and alpha
+    if _truth(fields["store_cv_results"]):
+        raise Error("cv!=None and store_cv_results=True are incompatible")
+    var splits = PythonObject(None)
+    var yv = _xl_owned(y, context)
+    if int_cv:
+        var folds = _int(cv)
+        if not (2 <= folds and folds <= n):
+            raise Error("mojolearn RidgeCV: cv must be in [2, n_samples]")
+        splits = _xl_default_folds(n, folds, context)
+    else:
+        splits = _xl_cv_splits(cv, args[0], args[1], context)
+    var w_keep = PythonObject(None)
+    var w_addr = 0
+    if sample_weight is not None:
+        var w = labels_check_sample_weight(sample_weight, n, context)
+        w_keep = _xl_owned(w, context)
+        w_addr = labels_address(w_keep)
+    py_setitem(fields, "n_features_in_", PythonObject(d))
+    var rows = Python.list()
+    for i in range(A):  # driver-loop: over the alpha grid
+        _ = py_call(rows.append, Python.list())
+    var undefined = False
+    for s in range(len(splits)):  # driver-loop: over the cv splits
+        var tr = splits[s][0]
+        var te = splits[s][1]
+        var n_tr = Int(py=tr.size)
+        var n_te = Int(py=te.size)
+        if n_tr == 0 or n_te == 0:
+            raise Error("mojolearn RidgeCV: every cv split needs training and test rows")
+        if n_te < 2:
+            # scikit-learn's r2_score: NaN, with its warning, for fewer than
+            # two test rows; every alpha's mean is then NaN (the first wins)
+            _xl_undefined_warning("R^2 score is not well-defined with less than two samples.", context)
+            undefined = True
+            continue
+        var xtr = _xl_gather(x.addr, tr, n, d, context)
+        var ytr = _xl_gather(labels_address(yv), tr, n, 1, context)
+        var xte = _xl_gather(x.addr, te, n, d, context)
+        var yte = _xl_gather(labels_address(yv), te, n, 1, context)
+        var wtr = PythonObject(None)
+        var wte = PythonObject(None)
+        if w_addr != 0:
+            wtr = _xl_gather(w_addr, tr, n, 1, context)
+            wte = _xl_gather(w_addr, te, n, 1, context)
+        var ytr_m = LabelsMatrix(ytr, labels_address(ytr), n_tr, 1, True)
+        var xte_m = LabelsMatrix(xte, labels_address(xte), n_te, d, True)
+        for i in range(A):  # driver-loop: over the alpha grid
+            var one: List[Float64] = [alphas[i]]
+            var out = _xl_ridge(model, entries, labels_address(xtr), n_tr, d, ytr_m, one, wtr, context)
+            var coef = _xl_slice(out, 0, d, Python.tuple(d), context)
+            var pred = _xl_decision(model, xte_m, coef, _xl_float(out, d), LINK_IDENTITY, True, entries, context)
+            var score = labels_r2(yte, pred, wte, PythonObject(None), context)
+            _ = py_call(rows[i].append, PythonObject(score))
+        _ = xtr^
+        _ = xte^
+    var best = 0
+    var best_score = PythonObject(py_call(b.float, PythonObject("nan")))
+    if not undefined:
+        # `_row_means(rows)`: fsum / len per alpha (`row_means_f64`), the
+        # first best by `reduce_stat`
+        var k = len(rows[0])
+        var flat = py_call(context["array_type"], PythonObject("d"))
+        for i in range(A):  # driver-loop: over the alpha grid
+            _ = py_call(flat.extend, rows[i])
+        var means = labels_vector(max(A, 1), "<f8", context)
+        if A > 0 and k > 0:
+            if _int(py_call_typed(_xl_helper(context, "row_means_f64"), py_call(flat.buffer_info)[0], PythonObject(A),
+                                  PythonObject(k), PythonObject(labels_address(means)))) != 0:
+                raise Error("-inf + inf in fsum")
+        best = _int(py_call_typed(_xl_helper(context, "reduce_stat"), PythonObject(labels_address(means)), PythonObject(1),
+                                  PythonObject(A), PythonObject(3)))
+        best_score = PythonObject(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=labels_address(means))[best])
+        _ = flat^
+        _ = means^
+    var one: List[Float64] = [alphas[best]]
+    var w_final = PythonObject(None) if w_addr == 0 else w_keep
+    var out = _xl_ridge(model, entries, x.addr, n, d, y, one, w_final, context)
+    _xl_set_linear(fields, out, d, context)
+    py_setitem(fields, "alpha_", PythonObject(alphas[best]))
+    py_setitem(fields, "best_score_", best_score)
+    _ = w_keep^
+    _ = yv^
+    _ = x^
+    _ = y^
+    return model
+
+
+# ------------------------------------------------------ LassoCV / ElasticNetCV
+
+
+def _xl_enetcv(model: PythonObject, fields: PythonObject, args: PythonObject, l1_ratios: PythonObject,
+               context: PythonObject) raises -> PythonObject:
+    """`_enetcv_fit(est, X, y, l1_ratios, sample_weight)`: the alpha grid,
+    the folds and the path on the binding; returns the l1_ratios entry
+    nearest the best one."""
+    var name = _name(model)
+    var b = _b()
+    if not _eq(fields["selection"], PythonObject("cyclic")):
+        raise Error("mojolearn " + name + ": selection='random' is not implemented")
+    var L = len(l1_ratios)
+    for i in range(L):  # driver-loop: over the l1_ratio grid
+        var r = Float64(py=l1_ratios[i])
+        if not (0 < r and r <= 1):
+            raise Error("mojolearn " + name + ": l1_ratio must be in (0, 1]")
+    var entries = _xl_entries(fields, context)
+    var x = _xl_matrix(args[0], context)
+    var n = x.rows
+    var d = x.cols
+    var y = _xl_vector(args[1], n, context)
+    var cv = fields["cv"]
+    var ids = PythonObject(None)
+    var roles = PythonObject(None)
+    var folds = 0
+    if cv is None or _xl_is_int_cv(cv, context):
+        var k = PythonObject(5) if cv is None else py_call(b.int, cv)
+        ids = _xl_kfold_ids_f32(n, k, context)
+        folds = _int(k)
+    else:
+        var splits = _xl_cv_splits(cv, args[0], args[1], context)
+        folds = len(splits)
+        var got = _xl_cv_fold_ids_f32(splits, n, name, context)
+        ids = got[0]
+        roles = got[1]
+    var alphas = fields["alphas"]
+    var n_alphas = _attr(model, "n_alphas", PythonObject(None))
+    var explicit = False
+    var grid = 0
+    var values = Python.list()
+    if _is_int(alphas):
+        grid = _int(alphas)
+    elif alphas is None or py_contains(Python.tuple("warn", "deprecated"), alphas):
+        grid = _int(n_alphas) if _is_int_plain(n_alphas) else 100
+    else:
+        explicit = True
+        values = py_call(b.sorted, py_call(b.map, b.float, alphas), reverse=PythonObject(True))
+        grid = len(values)
+    if grid < 1:
+        raise Error("mojolearn " + name + ": at least one alpha is required")
+    var sample_weight = args[2]
+    if _isinstance(sample_weight, context["xl_number_type"]):
+        sample_weight = PythonObject(None)
+    var addrs = List[Int]()
+    var counts = List[Int]()
+    addrs.append(y.addr)
+    counts.append(n)
+    addrs.append(labels_address(ids))
+    counts.append(n)
+    var weighted = 0
+    var w_keep = PythonObject(None)
+    if roles is not None:
+        # per-split roles ride the weighted arm, after the weights
+        if sample_weight is None:
+            w_keep = labels_full_f32(n, 1.0, context)
+        else:
+            w_keep = _xl_owned(labels_check_sample_weight(sample_weight, n, context), context)
+        addrs.append(labels_address(w_keep))
+        counts.append(n)
+        addrs.append(labels_address(roles))
+        counts.append(Int(py=roles.size))
+        weighted = 1
+    elif sample_weight is not None:
+        w_keep = _xl_owned(labels_check_sample_weight(sample_weight, n, context), context)
+        addrs.append(labels_address(w_keep))
+        counts.append(n)
+        weighted = 1
+    var yy = _xl_parts(addrs, counts, context)
+    var fp = List[Float64]()
+    fp.append(_float(fields["eps"]))
+    fp.append(_float(fields["tol"]))
+    for i in range(L):  # driver-loop: over the l1_ratio grid
+        fp.append(Float64(py=l1_ratios[i]))
+    if explicit:
+        for i in range(grid):  # driver-loop: over the user alpha grid
+            fp.append(Float64(py=values[i]))
+    var ip: List[Int] = [_int(fields["max_iter"]), 1 if _truth(fields["fit_intercept"]) else 0, grid, folds, L,
+                         1 if explicit else 0, 1 if _truth(fields["positive"]) else 0, weighted]
+    var out = _xl_run(entries, ALGO_ENETCV, x.addr, n * d, n, d, labels_address(yy), Int(py=yy.size), _xl_ints(ip),
+                      _xl_reals(fp), d + 4 + L * grid + L * grid * folds, d * d + 4 * d + 3 + grid * (d + 2), 1, context)
+    _xl_set_linear(fields, out, d, context)
+    py_setitem(fields, "alpha_", _xl_float(out, d + 1))
+    var l1_best = Float64(_xl_word(out, d + 2))
+    py_setitem(fields, "n_iter_", PythonObject(_xl_count(out, d + 3)))
+    var off = d + 4
+    if L == 1:
+        py_setitem(fields, "alphas_", _xl_slice(out, off, grid, Python.tuple(grid), context))
+        py_setitem(fields, "mse_path_", _xl_slice(out, off + grid, grid * folds, Python.tuple(grid, folds), context))
+    else:
+        py_setitem(fields, "alphas_", _xl_slice(out, off, L * grid, Python.tuple(L, grid), context))
+        py_setitem(fields, "mse_path_", _xl_slice(out, off + L * grid, L * grid * folds, Python.tuple(L, grid, folds), context))
+    py_setitem(fields, "n_features_in_", PythonObject(d))
+    # the user's own value (the kernel carried it as float32): the first
+    # entry nearest the returned one
+    var pick = 0
+    var gap = abs(Float64(py=l1_ratios[0]) - l1_best)
+    for i in range(1, L):  # driver-loop: over the l1_ratio grid
+        var g = abs(Float64(py=l1_ratios[i]) - l1_best)
+        if g < gap:
+            gap = g
+            pick = i
+    _ = yy^
+    _ = w_keep^
+    _ = ids^
+    _ = roles^
+    _ = x^
+    _ = y^
+    return l1_ratios[pick]
+
+
+def _is_int_plain(value: PythonObject) raises -> Bool:
+    """`isinstance(value, int)` (bools included, as the Python test was)."""
+    return _isinstance(value, _b().int)
+
+
+def xl_fit_lasso_cv(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """LassoCV.fit(X, y, sample_weight): the l1_ratio grid [1.0]."""
+    var fields = py_fields(model)
+    _ = _xl_enetcv(model, fields, args, Python.list(PythonObject(1.0)), context)
+    return model
+
+
+def xl_fit_elastic_net_cv(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """ElasticNetCV.fit(X, y, sample_weight): l1_ratio_ is the grid entry
+    nearest the best one."""
+    var fields = py_fields(model)
+    var b = _b()
+    var given = fields["l1_ratio"]
+    var ratios = py_call(b.list, given) if Bool(py=py_call(b.hasattr, given, PythonObject("__len__"))) else Python.list(given)
+    var floats = py_call(b.list, py_call(b.map, b.float, ratios))
+    py_setitem(fields, "l1_ratio_", _xl_enetcv(model, fields, args, floats, context))
+    return model
+
+
+# ---------------------------------------------------- LogisticRegressionCV
+
+
+def _xl_cs_grid(cs: PythonObject, context: PythonObject) raises -> List[Float64]:
+    """The Cs grid: `np.logspace(-4, 4, m)` through `_pm.powr` (10 ** y by
+    the decimal module at 50 digits, one correctly rounded conversion), or
+    the user's values."""
+    var grid = List[Float64]()
+    if _is_int(cs):
+        var m = _int(cs)
+        if m <= 1:
+            grid.append(1e-4)
+            return grid^
+        var ten = py_call(context["xl_decimal"], PythonObject(10.0))
+        var ctx = context["xl_pow_context"]
+        for i in range(m):  # driver-loop: over the Cs grid
+            var exponent = -4.0 + Float64(8 * i) / Float64(m - 1)
+            var value = Float64(py=py_call(_b().float, py_call(ctx.power, ten, py_call(context["xl_decimal"], PythonObject(exponent)))))
+            if isinf(value):
+                raise Error("OverflowError: math range error")
+            grid.append(value)
+        return grid^
+    var floats = py_call(_b().list, py_call(_b().map, _b().float, cs))
+    for i in range(len(floats)):  # driver-loop: over the user Cs grid
+        grid.append(Float64(py=floats[i]))
+    return grid^
+
+
+def xl_fit_logistic_cv(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """LogisticRegressionCV.fit(X, y, sample_weight)."""
+    var fields = py_fields(model)
+    var b = _b()
+    if not _eq(fields["penalty"], PythonObject("l2")) or _truth(fields["dual"]) or fields["l1_ratios"] is not None:
+        raise Error("mojolearn LogisticRegressionCV: only penalty='l2' (primal) is implemented")
+    if fields["scoring"] is not None or not _truth(fields["refit"]):
+        raise Error("mojolearn LogisticRegressionCV: scoring and refit=False are not implemented")
+    if not py_contains(Python.tuple("lbfgs", "newton-cg", "newton-cholesky"), fields["solver"]):
+        raise Error("mojolearn LogisticRegressionCV: solver must be lbfgs (newton-* run L-BFGS too)")
+    var entries = _xl_entries(fields, context)
+    var x = _xl_matrix(args[0], context)
+    var n = x.rows
+    var d = x.cols
+    var labels = _xl_class_codes(model, args[1], n, context)
+    var K = len(labels.classes)
+    var kp = 1 if K == 2 else K
+    var Cs = _xl_cs_grid(fields["Cs"], context)
+    var cv = fields["cv"]
+    var explicit = not (cv is None or _xl_is_int_cv(cv, context))
+    var roles = PythonObject(None)
+    var fold_ids = PythonObject(None)
+    var folds = 0
+    if explicit:
+        var splits = _xl_cv_splits(cv, args[0], args[1], context)
+        folds = len(splits)
+        var got = _xl_cv_fold_ids_f32(splits, n, "LogisticRegressionCV", context)
+        fold_ids = got[0]
+        roles = got[1]
+    else:
+        folds = 5 if cv is None else _int(cv)
+    var sample_weight = args[2]
+    var raw = PythonObject(None)
+    if sample_weight is not None:
+        raw = _xl_owned(labels_check_sample_weight(sample_weight, n, context), context)
+    var class_weight = fields["class_weight"]
+    var weigh = sample_weight is not None or class_weight is not None or roles is not None
+    var prep = _xl_class_prep(model, entries, class_weight, labels.classes, labels.codes,
+                              0 if raw is None else labels_address(raw), True, class_weight is not None, context)
+    var fitw = prep[1]
+    var largest = prep[2]
+    if not explicit:
+        # `_check_stratified_folds(largest, folds)`
+        if folds < 2 or folds > largest:
+            raise Error("mojolearn: cv must be None or an int in [2, the largest class size]")
+    var codes = labels_vector(n, "<f4", context)
+    labels_cast(labels_address(labels.codes), "<i4", labels_address(codes), "<f4", n, context)
+    var zeros = labels_vector(n, "<f4", context)
+    var addrs = List[Int]()
+    var counts = List[Int]()
+    addrs.append(labels_address(codes))
+    counts.append(n)
+    addrs.append(labels_address(fold_ids) if explicit else labels_address(zeros))
+    counts.append(n)
+    var has_sw = 0
+    if weigh:
+        if raw is None:
+            raw = labels_full_f32(n, 1.0, context)
+        addrs.append(labels_address(raw) if fitw is None else labels_address(fitw))
+        counts.append(n)
+        addrs.append(labels_address(raw))
+        counts.append(n)
+        has_sw = 1
+    if roles is not None:
+        addrs.append(labels_address(roles))
+        counts.append(Int(py=roles.size))
+    var yy = _xl_parts(addrs, counts, context)
+    var p = kp * (d + 1)
+    var nc = len(Cs)
+    var ip: List[Int] = [_int(fields["max_iter"]), 1 if _truth(fields["fit_intercept"]) else 0, kp, nc, folds, has_sw]
+    if explicit:
+        ip.append(1)
+    var fp = List[Float64]()
+    fp.append(_float(fields["tol"]))
+    for i in range(nc):  # driver-loop: over the Cs grid
+        fp.append(Cs[i])
+    var out = _xl_run(entries, ALGO_LOGCV, x.addr, n * d, n, d, labels_address(yy), Int(py=yy.size), _xl_ints(ip),
+                      _xl_reals(fp), kp * d + kp + 2 + folds * nc, p + 1 + n * (kp + 1) + _lbfgs_work(p), 5, context)
+    py_setitem(fields, "classes_", labels.classes)
+    py_setitem(fields, "coef_", _xl_slice(out, 0, kp * d, Python.tuple(kp, d), context))
+    py_setitem(fields, "intercept_", _xl_slice(out, kp * d, kp, Python.tuple(kp), context))
+    # the grid entry nearest the returned best C (the first on a tie)
+    var best_word = Float64(_xl_word(out, kp * d + kp))
+    var pick = 0
+    var gap = abs(Cs[0] - best_word)
+    for i in range(1, nc):  # driver-loop: over the Cs grid
+        var g = abs(Cs[i] - best_word)
+        if g < gap:
+            gap = g
+            pick = i
+    var cs_list = _xl_reals(Cs)
+    py_setitem(fields, "Cs_", cs_list)
+    var chosen = Python.list()
+    for c in range(kp):  # driver-loop: over the fitted problems (model structure)
+        _ = py_call(chosen.append, PythonObject(Cs[pick]))
+    py_setitem(fields, "C_", chosen)
+    py_setitem(fields, "n_iter_", PythonObject(_xl_count(out, kp * d + kp + 1)))
+    var off = kp * d + kp + 2
+    var names = py_call(b.list, labels.classes)
+    var scores = Python.dict()
+    var first = 1 if kp == 1 else 0
+    for c in range(first, len(names)):  # driver-loop: over the class labels (one score table each)
+        py_setitem(scores, names[c], _xl_slice(out, off, folds * nc, Python.tuple(folds, nc), context))
+    py_setitem(fields, "scores_", scores)
+    py_setitem(fields, "n_features_in_", PythonObject(d))
+    _ = yy^
+    _ = codes^
+    _ = zeros^
+    _ = raw^
+    _ = fitw^
+    _ = fold_ids^
+    _ = roles^
+    _ = x^
+    return model
+
+
 # ------------------------------------------------------------------ door
 
 
@@ -1422,6 +2129,14 @@ def x_linear_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
             var prediction = xl_isotonic(model, "transform", Python.tuple(args[0]), context)
             result = PythonObject(labels_r2(args[1], prediction, args[2],
                                             py_get(py_fields(model), "numeric_mode"), context))
+        elif operation == "fit_ridge_cv":
+            result = xl_fit_ridge_cv(model, args, context)
+        elif operation == "fit_lasso_cv":
+            result = xl_fit_lasso_cv(model, args, context)
+        elif operation == "fit_elastic_net_cv":
+            result = xl_fit_elastic_net_cv(model, args, context)
+        elif operation == "fit_logistic_cv":
+            result = xl_fit_logistic_cv(model, args, context)
         elif operation == "cd_fit":
             result = xl_cd_fit(model, args, context)
         elif operation == "cd_predict":
