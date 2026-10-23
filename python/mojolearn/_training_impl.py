@@ -1043,8 +1043,7 @@ def numeric_mode_used(numeric_mode=None):
     -------
     str
     """
-    return _backend._CODE_MODE.get(
-        _load(numeric_mode).training_numeric_mode(), "unknown")
+    return _OPT_NATIVE("training_numeric_mode", None, (), numeric_mode, _OPT_CONTEXT)
 
 
 def vendor_used(numeric_mode=None):
@@ -1061,7 +1060,7 @@ def vendor_used(numeric_mode=None):
     -------
     str
     """
-    return _load(numeric_mode).training_vendor()
+    return _OPT_NATIVE("training_vendor", None, (), numeric_mode, _OPT_CONTEXT)
 
 
 # ===================================================================
