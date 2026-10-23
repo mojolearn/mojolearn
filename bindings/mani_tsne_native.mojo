@@ -99,7 +99,7 @@ def _tsne_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     if Bool(py=py_call(b.bool, py_call(op.eq, rate, PythonObject("auto")))):
         # max(n / exag / 4.0, 50.0), Python's order (the first unless the second is larger)
         var auto_rate = Float64(n) / exag / 4.0
-        lr = 50.0 if 50.0 > auto_rate else auto_rate
+        lr = Float64(50.0) if 50.0 > auto_rate else auto_rate
     else:
         lr = Float64(py=family_call(b.float, rate))
     var post_param = family_field(fields, "post_exaggeration_learning_rate_factor")
