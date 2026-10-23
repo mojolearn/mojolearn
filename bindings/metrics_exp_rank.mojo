@@ -265,7 +265,7 @@ def _relevance(y_true: PythonObject, y_score: PythonObject, caller: String,
 
 def _dcg_table(mut prog: MxProg, c: Int, log_base: PythonObject, context: PythonObject) raises -> Int:
     """`_dcg_table`: the device discount table's slot."""
-    var b = mx_float(log_base)
+    var b = mx_float(log_base, context)
     if not b > 0.0:
         raise Error("math domain error")
     if b == 1.0:

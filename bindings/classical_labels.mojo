@@ -29,7 +29,7 @@ from std.python._cpython import PyObjectPtr
 from bindings.py_typed_call import py_call_typed, typed_python_error
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.classical_arrays import classical_wrap_array, _store_code, _buffer_typestr
-from bindings.classical_pandas import native_pandas_exact, native_pandas_f32, _pd_fields, _pd_get
+from bindings.classical_pandas import native_pandas_exact, native_pandas_f32, _pd_fields, _pd_get, classical_admit_value
 from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.sequential_inputs import sequential_sequence
@@ -1001,38 +1001,34 @@ comptime _INT32_MAX = 2147483647
 
 
 def labels_shape_of(value: PythonObject, context: PythonObject) raises -> List[Int]:
-    """`_buffer.shape_of`: the shape of an array-like without converting
-    it (an Array's slot, a buffer's shape, a list's nesting, a length)."""
+    """Shape from admitted native storage, without Array properties or protocols."""
+    classical_admit_value(value, context)
     var b = labels_builtins()
     var cls = py_type(value)
     var shape = List[Int]()
     if cls is context["array_class"]:
-        for k in range(Int(py=value.ndim)):  # driver-loop: over array rank metadata
-            shape.append(Int(py=value.shape[k]))
+        var dimensions = py_call(context["array_fields"]["shape"], value)
+        for k in range(len(dimensions)):  # driver-loop: native Array shape slots
+            shape.append(Int(py=dimensions[k]))
         return shape^
     if native_pandas_exact(value):
         var storage = native_pandas_f32(value, context, False, True)
-        for k in range(Int(py=storage.ndim)):  # driver-loop: over array rank metadata
-            shape.append(Int(py=storage.shape[k]))
+        var dimensions = storage.shape
+        for k in range(len(dimensions)):  # driver-loop: admitted native pandas storage dimensions
+            shape.append(Int(py=dimensions[k]))
         return shape^
     if cls is b.list or cls is b.tuple:
         shape.append(len(value))
         if len(value) > 0:
             var first = value[0]
-            if py_type(first) is b.list or py_type(first) is b.tuple or Bool(py=py_call(b.isinstance, first, Python.tuple(b.list, b.tuple))):
+            if py_type(first) is b.list or py_type(first) is b.tuple:
                 shape.append(len(first))
         return shape^
-    try:
-        var view = py_call(b.memoryview, value)
-        for k in range(Int(py=view.ndim)):  # driver-loop: over array rank metadata
-            shape.append(Int(py=view.shape[k]))
-        return shape^
-    except:
-        pass
-    try:
-        shape.append(Int(py=py_call(b.len, value)))
-    except:
-        pass
+    var storage = native_torch_numpy(value) if _ordinary_torch(cls, context) else value
+    var view = native_buffer_view(storage)
+    for k in range(Int(py=view.ndim)):  # driver-loop: native buffer dimensions
+        shape.append(Int(py=view.shape[k]))
+    _ = storage^
     return shape^
 
 

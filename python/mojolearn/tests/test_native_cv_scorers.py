@@ -1,0 +1,58 @@
+"""Native scorer ABI, option semantics and whole public CV audit coverage."""
+import numpy as np
+import pytest
+
+import mojolearn as ml
+from mojolearn import metrics
+from mojolearn import model_selection as ms
+from mojolearn._verify_native_runtime import audit_native_call
+
+
+def data():
+    x = np.arange(48, dtype='f4').reshape(16, 3) / np.float32(48)
+    x[:, 1] *= x[:, 1]
+    x[:, 2] = np.cos(x[:, 2])
+    return x, (x @ np.array([.5, -.25, .75], 'f4')).astype('f4')
+
+
+@pytest.mark.parametrize('name', ['r2', 'neg_mean_squared_error', 'neg_mean_absolute_error',
+                                  'explained_variance', 'max_error'])
+def test_named_scorer_public_cv_is_native(name):
+    x, y = data()
+    result = audit_native_call(ms.cross_val_score, ml.Ridge(), x, y, cv=3,
+                               scoring=name, n_jobs=1, error_score='raise').assert_native()
+    assert np.asarray(result).shape == (3,)
+    assert np.isfinite(np.asarray(result)).all()
+
+
+def test_public_make_scorer_and_call_use_native_metric_options():
+    x, y = data()
+    model = ml.Ridge().fit(x, y)
+    scorer = audit_native_call(ms.make_scorer, metrics.mean_absolute_error,
+                               greater_is_better=False, multioutput='uniform_average').assert_native()
+    got = audit_native_call(scorer.__call__, model, x, y).assert_native()
+    expected = -float(metrics.mean_absolute_error(y, model.predict(x)))
+    assert np.float64(got).view('u8') == np.float64(expected).view('u8')
+
+
+def test_every_named_metric_has_a_registered_native_plan():
+    table = ms._NATIVE_CONTEXT['family_msel_metric_plans']
+    for scorer in ms._NATIVE_CONTEXT['family_msel_scorers'].values():
+        assert vars(scorer)['_score_func'] in table
+
+
+def test_custom_scorer_and_metric_callbacks_refuse_before_call():
+    calls = []
+
+    class Callback:
+        def __call__(self, *args, **kwargs):
+            calls.append('call')
+        def __getattribute__(self, name):
+            calls.append(name)
+            return super().__getattribute__(name)
+
+    for operation in (ms.get_scorer, ms.make_scorer):
+        audit = audit_native_call(operation, Callback())
+        assert isinstance(audit.exception, TypeError), audit.report()
+        assert calls == []
+        assert not audit.report()['python_frames'], audit.report()

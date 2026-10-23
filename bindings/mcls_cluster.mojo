@@ -140,7 +140,7 @@ def _entropy(args: PythonObject, context: PythonObject) raises -> PythonObject:
     if e <= 0.0:
         raise Error("math domain error")
     var top = portable_log64(e)
-    var base = mc_float(args[2])
+    var base = mc_float(args[2], context)
     if base <= 0.0:
         raise Error("math domain error")
     var bottom = portable_log64(base)
@@ -274,7 +274,7 @@ def _regression_error(args: PythonObject, context: PythonObject) raises -> Pytho
     sample_weight, multioutput, numeric_mode)."""
     var name = String(args[1])
     var multioutput = args[5]
-    var shape = mc_shape_of(args[2])
+    var shape = mc_shape_of(args[2], context)
     if (args[4] is not None or not mc_is_str(multioutput) or String(multioutput) != "uniform_average"
             or (mc_rank(shape) == 2 and mc_dim(shape, 1) != 1)):
         # `regression_error_options`: the x_metrics program
@@ -300,7 +300,7 @@ def _r2(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """r2_score; args = (binding, y_true, y_pred, sample_weight, multioutput,
     force_finite, numeric_mode)."""
     var multioutput = args[4]
-    var shape = mc_shape_of(args[1])
+    var shape = mc_shape_of(args[1], context)
     if (not mc_is_str(multioutput) or String(multioutput) != "uniform_average"
             or not Bool(py=family_call(mc_b().bool, args[5]))
             or (mc_rank(shape) == 2 and mc_dim(shape, 1) != 1)):

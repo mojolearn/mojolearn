@@ -194,8 +194,13 @@ def _cast(array: PythonObject, dtype: String, context: PythonObject) raises -> P
     var count = Int(py=metadata["size"])
     if count:
         var status = Int(py=_native_call(context["arena_cast"],Python.tuple(metadata["address"],_cast_code(String(metadata["dtype"])),_slot(target,"_addr",context),_cast_code(dtype),count)))
+        _ = array  # raw source address is borrowed through the complete native cast
+        _ = target
         if status:
-            _cast_failure(Int(py=metadata["address"]),String(metadata["dtype"]),count)
+            try:
+                _cast_failure(Int(py=metadata["address"]),String(metadata["dtype"]),count)
+            finally:
+                _ = array
     return target
 
 

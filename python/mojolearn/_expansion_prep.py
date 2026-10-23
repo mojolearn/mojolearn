@@ -2120,10 +2120,8 @@ class LinearDiscriminantAnalysis(_Classifier):
         ``'eigen'``).
     tol : float, default 1e-4
         Threshold below which singular values are treated as zero by ``'svd'``.
-    covariance_estimator : object, default None
-        An estimator with ``fit`` and a ``covariance_`` attribute, used instead of the empirical
-        covariance with ``'lsqr'`` or ``'eigen'`` (``ValueError`` with ``'svd'`` or with ``shrinkage``
-        set). It is fitted on the host on each class's float32 rows (and, for ``'eigen'``, on all rows).
+    covariance_estimator : None, default None
+        Choose native covariance estimation with ``solver`` and ``shrinkage``.
 
     Attributes
     ----------
@@ -2163,21 +2161,70 @@ class LinearDiscriminantAnalysis(_Classifier):
     >>> lda = mojolearn.LinearDiscriminantAnalysis(n_components=2).fit(X, y)
     >>> Z = lda.transform(X)
     """
+    _mojolearn_native_public = True
     _parameters = ("solver", "shrinkage", "priors", "n_components", "store_covariance", "tol",
                    "covariance_estimator")
 
     def __init__(self, solver="svd", shrinkage=None, priors=None, n_components=None, store_covariance=False,
                  tol=1e-4, covariance_estimator=None):
-        self.solver = solver
-        self.shrinkage = shrinkage
-        self.priors = priors
-        self.n_components = n_components
-        self.store_covariance = store_covariance
-        self.tol = tol
-        self.covariance_estimator = covariance_estimator
+        return _CLS_CALL(self, "initialize", (solver, shrinkage, priors, n_components, store_covariance,
+                                             tol, covariance_estimator), _CLS_CONTEXT)
+
+    def get_params(self, deep=True):
+        """Return the constructor parameters as a dict.
+
+        Parameters
+        ----------
+        deep : bool, default True
+            Accepted for scikit-learn compatibility.
+
+        Returns
+        -------
+        dict
+            Parameter names mapped to their values.
+        """
+        return _CLS_CALL(self, "get_params", (deep,), _CLS_CONTEXT)
+
+    def set_params(self, **params):
+        """Set constructor parameters and return this estimator.
+
+        Parameters
+        ----------
+        **params
+            Constructor parameter names and their new values.
+
+        Returns
+        -------
+        self
+            This estimator with its updated parameters.
+        """
+        return _CLS_CALL(self, "set_params", (params,), _CLS_CONTEXT)
 
     def fit(self, X, y):
         return _CLS_CALL(self, "fit", (X, y), _CLS_CONTEXT)
+
+    def predict(self, X):
+        """Predict the class of each input row."""
+        return _CLS_CALL(self, "predict", (X,), _CLS_CONTEXT)
+
+    def predict_proba(self, X):
+        """Return class probabilities in the order of ``classes_``."""
+        return _CLS_CALL(self, "predict_proba", (X,), _CLS_CONTEXT)
+
+    def predict_log_proba(self, X):
+        """Return log class probabilities in the order of ``classes_``."""
+        return _CLS_CALL(self, "predict_log_proba", (X,), _CLS_CONTEXT)
+
+    def predict_joint_log_proba(self, X):
+        """Return the unnormalized log score of each row and class."""
+        return _CLS_CALL(self, "predict_joint_log_proba", (X,), _CLS_CONTEXT)
+
+    def score(self, X, y):
+        """Return the fraction of correctly classified input rows."""
+        return _CLS_CALL(self, "score", (X, y), _CLS_CONTEXT)
+
+    def __sklearn_is_fitted__(self):
+        return _CLS_CALL(self, "is_fitted", (), _CLS_CONTEXT)
 
     def decision_function(self, X):
         return _CLS_CALL(self, "decision_function", (X,), _CLS_CONTEXT)

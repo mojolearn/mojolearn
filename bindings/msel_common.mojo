@@ -1,15 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
-# Shared pieces of the native model_selection owner (lane mcb2-msel): the
-# base binding's fold and index helpers resolved by name (the same entries
-# python/mojolearn/model_selection.py called through `_buffer._native`, so a
-# test that plants a callable there still sees the call), the input step
-# (`_buffer._materialize`, `_labels.flatten_labels` / `encode_labels`, the
-# input admission the Python called and that this owner hands the caller's
-# objects to unchanged), int64 row Arrays, the counter random generator of
-# the splitters (`_expansion_metrics.CounterRng`, its x_metrics programs
-# built with the shared native `_Prog`), the group codes (`_GroupCodes`) and
-# the mask and index splits. Every helper is called with the arguments the
-# Python passed, in the same order, so the folds and draws are the same.
+# Shared native model-selection storage, label, fold and random helpers.
+# Binding entries are connected at import. Input admission precedes metadata,
+# indexing and conversion, and unsupported Python protocols never run.
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -23,6 +15,12 @@ from bindings.family_common import (
 )
 from bindings.metrics_reg_native import _Prog, _reg_run, _arena_base, _arena_int
 from bindings.native_buffer_owner import native_storage_allocate
+from bindings.msel_inputs import msel_admit, msel_input, msel_input_count
+from bindings.sequential_admission import _one_of
+from bindings.classical_labels import _flatten_labels, labels_encode_labels
+from bindings.classical_attributes import classical_connect_numpy
+from bindings.metrics_native_support import metric_warn
+from bindings.native_torch_admission import native_torch_exact
 
 comptime MSEL_NONE = -1
 comptime MSEL_U8P = MutPointer[UInt8, MutUntrackedOrigin]
@@ -40,15 +38,19 @@ def msel_b() raises -> PythonObject:
 
 
 def msel_native(name: String, context: PythonObject) raises -> PythonObject:
-    """The base binding's helper `name` (`_buffer._native(name)`, binding
-    acquisition, cached there)."""
-    return family_call(context["family_msel_native"], PythonObject(name))
+    """The identical helper resolved once during package connection."""
+    var entry = py_get(context["family_msel_entries"], PythonObject(name))
+    if entry is None:
+        raise Error("ImportError: model selection has no connected native helper " + name)
+    if py_type(entry) is py_type(PythonObject("")):
+        raise Error(String(entry))
+    if py_type(entry) is not context["family_builtin_type"]:
+        raise Error("TypeError: model selection requires its connected compiled helper " + name)
+    return entry
 
 
 def msel_entry(name: String, context: PythonObject) raises -> PythonObject:
-    """A base binding helper, resolved at each use as `_native(name)` was
-    (its own cache keeps the lookup one dict read; a planted callable is
-    seen)."""
+    """A preconnected compiled helper; never call a Python loader."""
     return msel_native(name, context)
 
 
@@ -112,33 +114,38 @@ def msel_catch(error: Error, classes: PythonObject) raises -> Bool:
     return Bool(py=py_call(msel_b().issubclass, _error_class(message), classes))
 
 
-def msel_warn(message: String, category: PythonObject) raises:
+def msel_warn(message: String, category: PythonObject, context: PythonObject) raises:
     """`warnings.warn(message, category)`, attributed to the public call's
     caller."""
-    var keywords = Python.dict()
-    py_setitem(keywords, "stacklevel", PythonObject(2))
-    _ = family_call_kw(Python.import_module("warnings").warn, keywords, PythonObject(message), category)
+    metric_warn(message, category, context, 2)
 
 
 # ---------------------------------------------------------------- values
 
 
-def msel_is_bool(value: PythonObject) raises -> Bool:
+def msel_is_bool(value: PythonObject, context: PythonObject) raises -> Bool:
     """`_labels.is_bool`: Python's bool or NumPy's bool_."""
-    return family_isinstance(value, msel_b().bool) or family_type_name(value) == "bool_"
+    classical_connect_numpy(context)
+    return _one_of(py_type(value), py_get(context, "bool_types", Python.tuple(py_type(PythonObject(True)))))
 
 
 def msel_is_integral(value: PythonObject, context: PythonObject) raises -> Bool:
-    return family_isinstance(value, context["family_msel_integral"])
+    # Exact native scalar identities avoid numbers.Integral's Python ABC hooks.
+    classical_connect_numpy(context)
+    return py_type(value) is py_type(PythonObject(True)) or _one_of(py_type(value), context["integer_types"])
 
 
 def msel_is_int_arg(value: PythonObject, context: PythonObject) raises -> Bool:
     """`isinstance(v, numbers.Integral) and not is_bool(v)`."""
-    return msel_is_integral(value, context) and not msel_is_bool(value)
+    return msel_is_integral(value, context) and not msel_is_bool(value, context)
 
 
 def msel_is_real(value: PythonObject, context: PythonObject) raises -> Bool:
-    return family_isinstance(value, context["family_msel_real"])
+    classical_connect_numpy(context)
+    var cls = py_type(value)
+    return (cls is py_type(PythonObject(True)) or cls is py_type(PythonObject(0))
+            or cls is py_type(PythonObject(0.0))
+            or (_one_of(cls, context["scalar_types"]) and not msel_is_bool(value, context)))
 
 
 def msel_int(value: PythonObject) raises -> Int:
@@ -155,27 +162,49 @@ def msel_cmp(name: String, a: PythonObject, b: PythonObject) raises -> Bool:
 
 
 def msel_materialize(value: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
-    """`_buffer._materialize(value, name)[0]` (the input step)."""
-    return family_call(context["family_msel_materialize"], value, PythonObject(name))[0]
+    """Admitted native storage, in C order, with the original dtype promotion."""
+    return msel_input(value, name, context)
 
 
 def msel_try_materialize(value: PythonObject, name: String, classes: PythonObject,
                          context: PythonObject) raises -> PythonObject:
     """`_materialize(value, name)[0]`, or the miss sentinel on `classes`."""
-    var got = msel_try(context["family_msel_materialize"], Python.tuple(value, PythonObject(name)), classes, context)
-    if msel_missed(got, context):
-        return got
-    return got[0]
+    try:
+        return msel_materialize(value, name, context)
+    except error:
+        if msel_catch(error, classes):
+            return context["family_msel_miss"]
+        raise error^
 
 
 def msel_flatten(value: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_labels.flatten_labels(value)` (the label input step)."""
-    return family_call(context["family_msel_flatten"], value)
+    msel_admit(value, context)
+    var source = value
+    if py_type(value) is msel_b().range:
+        source = py_call(msel_b().list, value)
+    elif py_type(value) is context["array_class"] or native_torch_exact(py_type(value)):
+        # Validate retained slots and owners before the native label reader
+        # reads Array._mv; its Python convenience methods are never called.
+        source = msel_materialize(value, "labels", context)
+    var flat = _flatten_labels(source, context)
+    # Object ndarray storage can contain arbitrary objects. Admit its leaves
+    # before comparison, hashing, scalar conversion or label sorting.
+    msel_admit(flat, context)
+    return flat
 
 
 def msel_encode(value: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_labels.encode_labels(value)`: (classes, int32 codes)."""
-    return family_call(context["family_msel_encode"], value)
+    var flat = msel_flatten(value, context)
+    var labels_context = py_call(msel_b().dict, context)
+    var real = Python.list()
+    _ = py_call(real.extend, Python.tuple(msel_b().int, msel_b().float, msel_b().bool))
+    _ = py_call(real.extend, context["scalar_types"])
+    py_setitem(labels_context, "labels_real_type", py_call(msel_b().tuple, real))
+    py_setitem(labels_context, "labels_integral_type", context["integer_types"])
+    var encoded = labels_encode_labels(flat, labels_context)
+    return Python.tuple(encoded.classes, encoded.codes)
 
 
 def msel_labels_list(y: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
@@ -184,14 +213,9 @@ def msel_labels_list(y: PythonObject, name: String, context: PythonObject) raise
     return msel_flatten(y, context)
 
 
-def msel_n_samples(x: PythonObject) raises -> Int:
-    """`_n_samples(X)`: shape[0] when X has a nonempty shape, else len(X)."""
-    var b = msel_b()
-    if Bool(py=family_call(b.hasattr, x, PythonObject("shape"))):
-        var shape = family_call(b.getattr, x, PythonObject("shape"))
-        if Int(py=family_call(b.len, shape)) > 0:
-            return msel_int(shape[0])
-    return Int(py=family_call(b.len, x))
+def msel_n_samples(x: PythonObject, context: PythonObject) raises -> Int:
+    """Read sample count only from admitted native container metadata."""
+    return msel_input_count(x, context)
 
 
 def msel_is_array(value: PythonObject, context: PythonObject) raises -> Bool:
@@ -364,6 +388,7 @@ def msel_as_index(values: PythonObject, context: PythonObject) raises -> PythonO
     (ints and bools as they are, anything else through int()) as an owned
     int64 Array."""
     var b = msel_b()
+    msel_admit(values, context)
     var array_mod = Python.import_module("array")
     var store = msel_try(array_mod.array, Python.tuple(PythonObject("q"), values), b.TypeError, context)
     if msel_missed(store, context):
@@ -519,7 +544,7 @@ struct MselRng(Movable):
         if state is None:
             state = family_call(msel_b().int.from_bytes, py_call(Python.import_module("os").urandom, PythonObject(8)),
                                 PythonObject("little"))
-        if (msel_is_bool(state) or not msel_is_integral(state, context)
+        if (msel_is_bool(state, context) or not msel_is_integral(state, context)
                 or msel_cmp("lt", state, PythonObject(0))):
             raise Error("mojolearn model_selection: random_state must be None or a non-negative int; "
                         + "numpy RandomState / Generator objects are NOT IMPLEMENTED (their stream "
@@ -617,7 +642,7 @@ def msel_mix_seed(seed: UInt64, r: Int) -> Int:
 def _size_kind(v: PythonObject, context: PythonObject) raises -> String:
     if v is None:
         return "n"
-    if msel_is_bool(v):
+    if msel_is_bool(v, context):
         return "x"
     if msel_is_integral(v, context):
         return "i"
@@ -716,12 +741,14 @@ def msel_take_any(values: PythonObject, indices: PythonObject, context: PythonOb
     """`_take_any` / `_take_rows`: a list or tuple taken by index (a list),
     else one device gather out of a `_Resident` used once."""
     var b = msel_b()
-    if family_isinstance(values, Python.tuple(b.list, b.tuple)):
+    msel_admit(values, context)
+    if py_type(values) is b.list or py_type(values) is b.tuple:
         return py_call(b.list, py_call(b.map, py_call(b.getattr, values, PythonObject("__getitem__")), indices._mv))
+    var prepared = msel_materialize(values, "split data", context)
     var res = msel_resident_new(context)
     var out = PythonObject(None)
     try:
-        out = msel_resident_take(res, values, indices, context)
+        out = msel_resident_take(res, prepared, indices, context)
     finally:
         msel_resident_close(res, context)
     return out
@@ -738,6 +765,9 @@ def msel_lazy(model: PythonObject, op: String, items: PythonObject, context: Pyt
 
 
 # ---------------------------------------------------------------- scorers
+from bindings.msel_estimator_native import msel_estimator_call
+from bindings.msel_scorer_native import msel_scorer_fields, msel_scorer_call
+from bindings.metrics_native_support import metric_float
 
 
 def _msel_attr(model: PythonObject, name: String) raises -> PythonObject:
@@ -745,17 +775,17 @@ def _msel_attr(model: PythonObject, name: String) raises -> PythonObject:
     return family_call(Python.import_module("builtins").getattr, model, PythonObject(name))
 
 def msel_get_scorer(scoring: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`get_scorer(scoring)`."""
     var b = Python.import_module("builtins")
-    if scoring is None or Bool(py=py_call(b.callable, scoring)):
+    if scoring is None:
         return scoring
-    if family_is_str(scoring):
+    if py_type(scoring) is b.str:
         var table = context["family_msel_scorers"]
         if not py_contains(table, scoring):
             raise Error(family_repr(scoring) + " is not a valid scoring value. Use "
                         + "sklearn.metrics.get_scorer_names() to get valid options.")
-        return table[scoring]
-    raise Error("scoring must be a str, a callable or None, got " + family_repr(scoring))
+        scoring = table[scoring]
+    _ = msel_scorer_fields(scoring, context)
+    return scoring
 
 
 def msel_score(estimator: PythonObject, x: PythonObject, y: PythonObject, scorer: PythonObject,
@@ -765,9 +795,9 @@ def msel_score(estimator: PythonObject, x: PythonObject, y: PythonObject, scorer
     var b = Python.import_module("builtins")
     var value: PythonObject
     if scorer is None:
-        value = family_call(_msel_attr(estimator, "score"), x, y)
+        value = msel_estimator_call(estimator, "score", Python.tuple(x, y), context)
     else:
-        value = family_call(scorer, estimator, x, y)
-    if not family_isinstance(value, context["family_msel_real"]):
+        value = msel_scorer_call(scorer, estimator, x, y, PythonObject(None), PythonObject(None), context)
+    if not msel_is_real(value, context):
         raise Error("TypeError: scoring must return a real scalar")
-    return family_call(b.float, value)
+    return PythonObject(metric_float(value, context))

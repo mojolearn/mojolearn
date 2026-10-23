@@ -26,7 +26,7 @@ from bindings.metrics_reg_native import _Prog, _reg_run, _arena_base, _arena_int
 from bindings.msel_common import (
     MSEL_NONE, MSEL_FOLD_ROWS_BOUND, msel_b, msel_entry, msel_try, msel_missed, msel_catch, msel_warn, msel_is_bool,
     msel_is_integral, msel_is_int_arg, msel_is_real, msel_int, msel_op, msel_cmp, msel_materialize,
-    msel_try_materialize, msel_flatten, msel_encode, msel_labels_list, msel_n_samples, msel_is_array, msel_addr,
+    msel_try_materialize, msel_flatten, msel_encode, msel_labels_list, msel_n_samples, msel_is_array, msel_addr, msel_admit,
     msel_p64, msel_p32, msel_new, msel_new2, msel_i64_list, msel_i32_list, msel_read_i64, msel_slice_i64,
     msel_arange, msel_range_index, msel_split_mask, msel_split_indices, msel_index_copy, msel_as_index,
     MselGroups, MselRng, msel_mix_seed, msel_shuffle_sizes, msel_take_any, msel_lazy, msel_index_i64,
@@ -42,12 +42,60 @@ def msel_cls(name: String, context: PythonObject) raises -> PythonObject:
 
 
 def msel_is(model: PythonObject, name: String, context: PythonObject) raises -> Bool:
-    return family_isinstance(model, msel_cls(name, context))
+    if name == "_Repeated":
+        return py_type(model) is msel_cls("RepeatedKFold", context) or py_type(model) is msel_cls("RepeatedStratifiedKFold", context)
+    return py_type(model) is msel_cls(name, context)
 
 
-def msel_field(model: PythonObject, name: String) raises -> PythonObject:
-    """`model.<name>` (the splitter's own attribute, AttributeError kept)."""
-    return family_call(msel_b().getattr, model, PythonObject(name))
+def _splitter_plan(cls: PythonObject, context: PythonObject) raises -> PythonObject:
+    var b = msel_b()
+    if py_type(cls) is not py_type(py_type(PythonObject(0))):
+        raise Error("TypeError: native splitters cannot invoke Python metaclass hooks")
+    var plan = py_get(context["family_msel_splitter_layouts"], cls)
+    if plan is None:
+        raise Error("TypeError: model selection requires a connected native splitter; Python callbacks cannot execute")
+    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    if len(mro) != len(plan[0]):
+        raise Error("TypeError: native splitter ancestry changed")
+    var names = Python.tuple("__dict__", "__getattribute__", "__getattr__", "__setattr__", "__del__")
+    for i in range(len(mro)):  # driver-loop: connected storage/lifecycle metadata before reading an instance
+        if mro[i] is not plan[0][i]:
+            raise Error("TypeError: native splitter ancestry changed")
+        var mapping = py_call(b.type.__dict__["__dict__"].__get__, mro[i])
+        for j in range(len(names)):  # driver-loop: fixed native hook identity checks
+            if py_get(mapping, names[j]) is not plan[2][i][j]:
+                raise Error("TypeError: native splitter cannot invoke Python lifecycle or attribute hooks")
+        var stored = py_call(b.list, plan[4][i])
+        for j in range(len(stored)):  # driver-loop: reject properties replacing stored configuration fields
+            if py_get(mapping, stored[j]) is not plan[4][i][stored[j]]:
+                raise Error("TypeError: native splitter configuration descriptors changed")
+    return plan
+
+
+def _splitter_fields(model: PythonObject, context: PythonObject) raises -> PythonObject:
+    var b = msel_b()
+    var cls = py_type(model)
+    var plan = _splitter_plan(cls, context)
+    var fields = py_call(plan[1], model, cls)
+    var keys = py_call(b.list, fields)
+    for i in range(len(keys)):  # driver-loop: dictionary keys cannot invoke custom equality
+        if py_type(keys[i]) is not b.str:
+            raise Error("TypeError: native splitter fields require ordinary string keys")
+    return fields
+
+
+def msel_field(model: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+    var fields = _splitter_fields(model, context)
+    var defaults = context["family_msel_splitter_layouts"][py_type(model)][3]
+    if not py_contains(fields, PythonObject(name)) and not py_contains(defaults, PythonObject(name)):
+        raise Error("AttributeError: splitter has no stored field " + name)
+    var value = py_get(fields, PythonObject(name), py_get(defaults, PythonObject(name)))
+    if name == "cv":
+        if value is not msel_cls("KFold", context) and value is not msel_cls("StratifiedKFold", context):
+            raise Error("TypeError: repeated model selection requires a native KFold or StratifiedKFold configuration")
+    else:
+        msel_admit(value, context)
+    return value
 
 
 def msel_sabotage() -> Bool:
@@ -57,7 +105,7 @@ def msel_sabotage() -> Bool:
 
 def msel_check_splits(n_splits: PythonObject, context: PythonObject) raises -> Int:
     """`_check_splits`."""
-    if msel_is_bool(n_splits) or not msel_is_integral(n_splits, context):
+    if msel_is_bool(n_splits, context) or not msel_is_integral(n_splits, context):
         raise Error("The number of folds must be of Integral type. " + family_repr(n_splits) + " was passed.")
     if msel_cmp("le", n_splits, PythonObject(1)):
         raise Error("k-fold cross-validation requires at least one train/test split by setting "
@@ -70,15 +118,18 @@ def msel_new_kfold(name: String, n_splits: PythonObject, shuffle: PythonObject, 
     """`KFold(n_splits, shuffle=..., random_state=...)` (or StratifiedKFold):
     `_KFoldBase.__init__`'s checks, then its three attributes."""
     var k = msel_check_splits(n_splits, context)
-    if not msel_is_bool(shuffle):
+    if not msel_is_bool(shuffle, context):
         raise Error("TypeError: shuffle must be True or False; got " + family_str(shuffle))
     if not Bool(py=family_call(msel_b().bool, shuffle)) and random_state is not None:
         raise Error("Setting a random_state has no effect since shuffle is False. You should "
                     + "leave random_state to its default (None), or set shuffle=True.")
-    var cv = native_storage_allocate(msel_cls(name, context))
-    py_setattr(cv, "n_splits", PythonObject(k))
-    py_setattr(cv, "shuffle", shuffle)
-    py_setattr(cv, "random_state", random_state)
+    var cls = msel_cls(name, context)
+    var plan = _splitter_plan(cls, context)
+    var cv = native_storage_allocate(cls)
+    var fields = py_call(plan[1], cv, cls)
+    py_setitem(fields, "n_splits", PythonObject(k))
+    py_setitem(fields, "shuffle", shuffle)
+    py_setitem(fields, "random_state", random_state)
     return cv
 
 
@@ -172,8 +223,9 @@ def msel_discrete_codes(y: PythonObject, context: PythonObject) raises -> Python
     var arr = msel_try_materialize(y, "y", Python.tuple(b.TypeError, b.ValueError), context)
     var have = not msel_missed(arr, context)
     var flat = arr
-    if have and Int(py=arr.ndim) != 1:
-        flat = family_call(arr.reshape, Python.tuple(arr.size))
+    # The native materializer is C contiguous; reduce_stat uses size/address
+    # and msel_encode flattens native storage, so no Array.reshape callback
+    # or temporary metadata wrapper is needed for a column vector.
     if have:
         var dtype = String(py=arr.dtype)
         if (dtype == "<f4" or dtype == "<f8") and Int(py=flat.size) > 0:
@@ -216,8 +268,8 @@ def _select_folds(fold_store: PythonObject, fold_counts: PythonObject, n: Int, k
 def msel_default_folds(y: PythonObject, n_splits: PythonObject, classifier: Bool,
                        context: PythonObject) raises -> PythonObject:
     """`_native_default_folds(y, n_splits, classifier)`."""
-    var n = Int(py=family_call(msel_b().len, y))
-    if msel_is_bool(n_splits) or not msel_is_integral(n_splits, context) or msel_cmp("lt", n_splits, PythonObject(2)):
+    var n = msel_n_samples(y, context)
+    if msel_is_bool(n_splits, context) or not msel_is_integral(n_splits, context) or msel_cmp("lt", n_splits, PythonObject(2)):
         raise Error("cv must specify at least two folds")
     if msel_cmp("gt", n_splits, PythonObject(n)):
         raise Error("cv cannot exceed the number of samples")
@@ -256,7 +308,7 @@ def msel_default_folds(y: PythonObject, n_splits: PythonObject, classifier: Bool
         if most < k:
             raise Error("cv cannot exceed the number of members in every class")
         if least < k:
-            msel_warn("The least populated class has fewer members than cv folds", msel_b().UserWarning)
+            msel_warn("The least populated class has fewer members than cv folds", msel_b().UserWarning, context)
     var out = _select_folds(fold_store, fold_counts, n, k, context)
     if msel_sabotage():
         # THE DORMANT NEGATIVE CONTROL (a verification switch, never set in
@@ -291,7 +343,7 @@ def msel_first_seen(y: PythonObject, context: PythonObject) raises -> PythonObje
     var classes = Python.tuple(b.TypeError, b.ValueError, b.OverflowError)
     var n = 0
     try:
-        n = msel_n_samples(y)
+        n = msel_n_samples(y, context)
         var gc = MselGroups(y, n, "y", context)
         if gc.m < 1:
             return PythonObject(None)
@@ -341,7 +393,7 @@ def _encode_first_seen(values: PythonObject, context: PythonObject) raises -> Py
 def msel_kfold_split(x: PythonObject, k: Int, shuffle: Bool, random_state: PythonObject,
                      context: PythonObject) raises -> PythonObject:
     """`KFold.split`."""
-    var n = msel_n_samples(x)
+    var n = msel_n_samples(x, context)
     if k > n:
         raise Error("Cannot have number of splits n_splits=" + String(k) + " greater than the "
                     + "number of samples: n_samples=" + String(n) + ".")
@@ -397,7 +449,7 @@ def _fold_plan(y: PythonObject, k: Int, context: PythonObject) raises -> PythonO
         raise Error("n_splits=" + String(k) + " cannot be greater than the number of members in each class.")
     if least < k:
         msel_warn("The least populated class in y has only " + String(least) + " members, which is less "
-                  + "than n_splits=" + String(k) + ".", msel_b().UserWarning)
+                  + "than n_splits=" + String(k) + ".", msel_b().UserWarning, context)
     var alloc = msel_new2(k, n_classes, "<i8", context)
     var cnt_arr = msel_i64_list(counts, context)
     _ = family_call(msel_entry("strat_alloc_i64", context), PythonObject(msel_addr(cnt_arr)), PythonObject(n_classes),
@@ -477,7 +529,7 @@ def msel_stratified_split(y: PythonObject, k: Int, shuffle: Bool, random_state: 
 def msel_group_kfold_split(x: PythonObject, groups: PythonObject, k: Int, shuffle: Bool,
                            random_state: PythonObject, context: PythonObject) raises -> PythonObject:
     """`GroupKFold.split`."""
-    var n = msel_n_samples(x)
+    var n = msel_n_samples(x, context)
     var gc = MselGroups(groups, n, "groups", context)
     var m = gc.m
     if k > m:
@@ -510,7 +562,7 @@ def msel_group_kfold_split(x: PythonObject, groups: PythonObject, k: Int, shuffl
 def msel_strat_group_split(x: PythonObject, y: PythonObject, groups: PythonObject, k: Int, shuffle: Bool,
                            random_state: PythonObject, context: PythonObject) raises -> PythonObject:
     """`StratifiedGroupKFold.split`."""
-    var n = msel_n_samples(x)
+    var n = msel_n_samples(x, context)
     var gc = MselGroups(groups, n, "groups", context)
     var fs = msel_first_seen(y, context)
     var yenc = PythonObject(None)
@@ -561,13 +613,13 @@ def msel_strat_group_split(x: PythonObject, y: PythonObject, groups: PythonObjec
 
 def msel_time_series_split(model: PythonObject, x: PythonObject, context: PythonObject) raises -> PythonObject:
     """`TimeSeriesSplit.split`."""
-    var n = msel_n_samples(x)
-    var k = msel_int(msel_field(model, "n_splits"))
+    var n = msel_n_samples(x, context)
+    var k = msel_int(msel_field(model, "n_splits", context))
     var folds = k + 1
-    var ts_field = msel_field(model, "test_size")
+    var ts_field = msel_field(model, "test_size", context)
     var ts = msel_int(ts_field) if ts_field is not None else n // folds
-    var gap = msel_int(msel_field(model, "gap"))
-    var max_train_field = msel_field(model, "max_train_size")
+    var gap = msel_int(msel_field(model, "gap", context))
+    var max_train_field = msel_field(model, "max_train_size", context)
     if folds > n:
         raise Error("Cannot have number of folds=" + String(folds) + " greater than the number of samples="
                     + String(n) + ".")
@@ -593,7 +645,7 @@ def msel_time_series_split(model: PythonObject, x: PythonObject, context: Python
 
 def msel_loo_split(x: PythonObject, model: PythonObject, context: PythonObject) raises -> PythonObject:
     """`LeaveOneOut.split`: one split per row, made on demand."""
-    var n = msel_n_samples(x)
+    var n = msel_n_samples(x, context)
     if n <= 1:
         raise Error("Cannot perform LeaveOneOut with n_samples=" + String(n) + ".")
     var b = msel_b()
@@ -619,8 +671,8 @@ def msel_lpo_split(x: PythonObject, model: PythonObject, context: PythonObject) 
     """`LeavePOut.split`: the combinations in lexicographic order (the
     order `next_combination_i64` stepped through), one split each, made on
     demand."""
-    var n = msel_n_samples(x)
-    var p_field = msel_field(model, "p")
+    var n = msel_n_samples(x, context)
+    var p_field = msel_field(model, "p", context)
     if msel_cmp("le", PythonObject(n), p_field):
         raise Error("p=" + family_str(p_field) + " must be strictly less than the number of samples=" + String(n))
     var p = msel_int(p_field)
@@ -676,7 +728,7 @@ def _state_rows(state: PythonObject, words: PythonObject, want: Int, size: Int,
 def msel_logo_split(x: PythonObject, groups: PythonObject, model: PythonObject,
                     context: PythonObject) raises -> PythonObject:
     """`LeaveOneGroupOut.split`: one split per group, made on demand."""
-    var n = msel_n_samples(x)
+    var n = msel_n_samples(x, context)
     var gc = MselGroups(groups, n, "groups", context)
     if gc.m <= 1:
         raise Error("The groups parameter contains fewer than 2 unique groups (" + family_str(gc.classes) + "). "
@@ -697,9 +749,9 @@ def msel_lpgo_split(x: PythonObject, groups: PythonObject, model: PythonObject,
                     context: PythonObject) raises -> PythonObject:
     """`LeavePGroupsOut.split`: one split per combination of groups, made
     on demand."""
-    var n = msel_n_samples(x)
+    var n = msel_n_samples(x, context)
     var gc = MselGroups(groups, n, "groups", context)
-    var n_groups = msel_field(model, "n_groups")
+    var n_groups = msel_field(model, "n_groups", context)
     if msel_cmp("ge", n_groups, PythonObject(gc.m)):
         raise Error("The groups parameter contains fewer than (or equal to) n_groups (" + family_str(n_groups)
                     + ") numbers of unique groups (" + family_str(gc.classes) + ").")
@@ -736,7 +788,7 @@ def msel_lpgo_at(args: PythonObject, context: PythonObject) raises -> PythonObje
 def msel_shuffle_split(x: PythonObject, n_splits: Int, test_size: PythonObject, train_size: PythonObject,
                        random_state: PythonObject, default_test: PythonObject, context: PythonObject) raises -> PythonObject:
     """`ShuffleSplit.split`."""
-    var n = msel_n_samples(x)
+    var n = msel_n_samples(x, context)
     var sizes = msel_shuffle_sizes(n, test_size, train_size, default_test, context)
     var n_train = sizes[0]
     var n_test = sizes[1]
@@ -755,7 +807,7 @@ def msel_group_shuffle_split(x: PythonObject, groups: PythonObject, n_splits: In
                              train_size: PythonObject, random_state: PythonObject, default_test: PythonObject,
                              context: PythonObject) raises -> PythonObject:
     """`GroupShuffleSplit.split`."""
-    var gc = MselGroups(groups, msel_n_samples(x), "groups", context)
+    var gc = MselGroups(groups, msel_n_samples(x, context), "groups", context)
     var m = gc.m
     var sizes = msel_shuffle_sizes(m, test_size, train_size, default_test, context)
     var n_train = sizes[0]
@@ -794,13 +846,7 @@ def msel_strat_shuffle_split(y: PythonObject, n_splits: Int, test_size: PythonOb
     """`StratifiedShuffleSplit._native_split`: every split, in split order
     (the same draws in the same order the generator made)."""
     var b = msel_b()
-    var n0 = 0
-    if y is not None:
-        if not Bool(py=family_call(b.hasattr, y, PythonObject("shape"))):
-            n0 = Int(py=family_call(b.len, y))
-        else:
-            var shape = family_call(b.getattr, y, PythonObject("shape"))
-            n0 = msel_int(shape[0]) if Int(py=family_call(b.len, shape)) else 0
+    var n0 = 0 if y is None else msel_n_samples(y, context)
     var gc = MselGroups(y, n0, "y", context)
     var n = gc.n
     var k = gc.m
@@ -872,7 +918,7 @@ def msel_strat_shuffle_split(y: PythonObject, n_splits: Int, test_size: PythonOb
 def msel_predefined_split(model: PythonObject, context: PythonObject) raises -> PythonObject:
     """`PredefinedSplit.split`: each fold value other than -1, in sorted
     order."""
-    var folds = msel_field(model, "_folds")
+    var folds = msel_field(model, "_folds", context)
     var gc = MselGroups(folds, Int(py=folds.size), "test_fold", context)
     var out = Python.list()
     for c in range(len(gc.classes)):  # driver-loop: over fold values
@@ -885,10 +931,10 @@ def msel_repeated_split(model: PythonObject, x: PythonObject, y: PythonObject, g
                         context: PythonObject) raises -> PythonObject:
     """`_Repeated.split`: repeat r is a shuffled run of the splitter with
     seed `_mix_seed(base, r)`."""
-    var base = MselRng(msel_field(model, "random_state"), context)
-    var cv = msel_field(model, "cv")
-    var cvargs = msel_field(model, "cvargs")
-    var repeats = msel_int(msel_field(model, "n_repeats"))
+    var base = MselRng(msel_field(model, "random_state", context), context)
+    var cv = msel_field(model, "cv", context)
+    var cvargs = msel_field(model, "cvargs", context)
+    var repeats = msel_int(msel_field(model, "n_repeats", context))
     var out = Python.list()
     for r in range(repeats):  # driver-loop: over repeats
         var seed = PythonObject(msel_mix_seed(base.seed, r))
@@ -903,8 +949,7 @@ def msel_repeated_split(model: PythonObject, x: PythonObject, y: PythonObject, g
             splitter = msel_new_kfold(name, n_splits, PythonObject(True), seed, context)
             folds = msel_split(splitter, x, y, groups, context)
         else:
-            splitter = family_call_kw(cv, keywords)
-            folds = family_call(msel_field(splitter, "split"), x, y, groups)
+            raise Error("TypeError: repeated model selection requires a native splitter configuration")
         _ = py_call(out.extend, folds)
     return out
 
@@ -917,18 +962,20 @@ def msel_split(model: PythonObject, x: PythonObject, y: PythonObject, groups: Py
     """`<splitter>.split(X, y, groups)` of a mojolearn splitter: its splits
     (a list, or a lazy iterator for the per-row and per-combination
     splitters)."""
+    _ = _splitter_fields(model, context)
+    msel_admit(Python.tuple(x, y, groups), context)
     if msel_is(model, "StratifiedGroupKFold", context):
-        return msel_strat_group_split(x, y, groups, msel_int(msel_field(model, "n_splits")),
-                                      msel_truth(msel_field(model, "shuffle")), msel_field(model, "random_state"), context)
+        return msel_strat_group_split(x, y, groups, msel_int(msel_field(model, "n_splits", context)),
+                                      msel_truth(msel_field(model, "shuffle", context)), msel_field(model, "random_state", context), context)
     if msel_is(model, "GroupKFold", context):
-        return msel_group_kfold_split(x, groups, msel_int(msel_field(model, "n_splits")),
-                                      msel_truth(msel_field(model, "shuffle")), msel_field(model, "random_state"), context)
+        return msel_group_kfold_split(x, groups, msel_int(msel_field(model, "n_splits", context)),
+                                      msel_truth(msel_field(model, "shuffle", context)), msel_field(model, "random_state", context), context)
     if msel_is(model, "StratifiedKFold", context):
-        return msel_stratified_split(y, msel_int(msel_field(model, "n_splits")), msel_truth(msel_field(model, "shuffle")),
-                                     msel_field(model, "random_state"), context)
+        return msel_stratified_split(y, msel_int(msel_field(model, "n_splits", context)), msel_truth(msel_field(model, "shuffle", context)),
+                                     msel_field(model, "random_state", context), context)
     if msel_is(model, "KFold", context):
-        return msel_kfold_split(x, msel_int(msel_field(model, "n_splits")), msel_truth(msel_field(model, "shuffle")),
-                                msel_field(model, "random_state"), context)
+        return msel_kfold_split(x, msel_int(msel_field(model, "n_splits", context)), msel_truth(msel_field(model, "shuffle", context)),
+                                msel_field(model, "random_state", context), context)
     if msel_is(model, "TimeSeriesSplit", context):
         return msel_time_series_split(model, x, context)
     if msel_is(model, "LeaveOneOut", context):
@@ -942,21 +989,21 @@ def msel_split(model: PythonObject, x: PythonObject, y: PythonObject, groups: Py
     if msel_is(model, "PredefinedSplit", context):
         return msel_predefined_split(model, context)
     if msel_is(model, "ShuffleSplit", context):
-        var n_splits = msel_int(msel_field(model, "n_splits"))
-        var default_test = msel_field(model, "_default_test_size")
+        var n_splits = msel_int(msel_field(model, "n_splits", context))
+        var default_test = msel_field(model, "_default_test_size", context)
         if msel_is(model, "GroupShuffleSplit", context):
-            return msel_group_shuffle_split(x, groups, n_splits, msel_field(model, "test_size"),
-                                            msel_field(model, "train_size"), msel_field(model, "random_state"),
+            return msel_group_shuffle_split(x, groups, n_splits, msel_field(model, "test_size", context),
+                                            msel_field(model, "train_size", context), msel_field(model, "random_state", context),
                                             default_test, context)
         if msel_is(model, "StratifiedShuffleSplit", context):
-            return msel_strat_shuffle_split(y, n_splits, msel_field(model, "test_size"), msel_field(model, "train_size"),
-                                            msel_field(model, "random_state"), default_test, context)
-        return msel_shuffle_split(x, n_splits, msel_field(model, "test_size"), msel_field(model, "train_size"),
-                                  msel_field(model, "random_state"), default_test, context)
+            return msel_strat_shuffle_split(y, n_splits, msel_field(model, "test_size", context), msel_field(model, "train_size", context),
+                                            msel_field(model, "random_state", context), default_test, context)
+        return msel_shuffle_split(x, n_splits, msel_field(model, "test_size", context), msel_field(model, "train_size", context),
+                                  msel_field(model, "random_state", context), default_test, context)
     if msel_is(model, "_Repeated", context):
         return msel_repeated_split(model, x, y, groups, context)
     if msel_is(model, "_IterableCV", context):
-        return msel_field(model, "_pairs")
+        return msel_field(model, "_pairs", context)
     raise Error("NotImplementedError: ")
 
 
@@ -964,34 +1011,35 @@ def msel_n_splits(model: PythonObject, x: PythonObject, y: PythonObject, groups:
                   context: PythonObject) raises -> PythonObject:
     """`<splitter>.get_n_splits(X, y, groups)`."""
     var b = msel_b()
+    _ = _splitter_fields(model, context)
     var math = Python.import_module("math")
     if msel_is(model, "LeaveOneOut", context):
         if x is None:
             raise Error("The 'X' parameter should not be None.")
-        return PythonObject(msel_n_samples(x))
+        return PythonObject(msel_n_samples(x, context))
     if msel_is(model, "LeavePOut", context):
-        return _comb(PythonObject(msel_n_samples(x)), msel_field(model, "p"))
+        return _comb(PythonObject(msel_n_samples(x, context)), msel_field(model, "p", context))
     if msel_is(model, "LeaveOneGroupOut", context):
         return family_call(b.len, py_call(b.set, msel_labels_list(groups, "groups", context)))
     if msel_is(model, "LeavePGroupsOut", context):
         var m = family_call(b.len, py_call(b.set, msel_labels_list(groups, "groups", context)))
-        return _comb(m, msel_field(model, "n_groups"))
+        return _comb(m, msel_field(model, "n_groups", context))
     if msel_is(model, "PredefinedSplit", context):
-        var classes = msel_encode(msel_field(model, "_folds"), context)[0]
+        var classes = msel_encode(msel_field(model, "_folds", context), context)[0]
         return PythonObject(len(classes) - (1 if py_contains(classes, PythonObject(-1)) else 0))
     if msel_is(model, "_Repeated", context):
-        var cv = msel_field(model, "cv")
-        var cvargs = msel_field(model, "cvargs")
-        var repeats = msel_field(model, "n_repeats")
+        var cv = msel_field(model, "cv", context)
+        var cvargs = msel_field(model, "cvargs", context)
+        var repeats = msel_field(model, "n_repeats", context)
         var per = PythonObject(None)
         if cv is msel_cls("KFold", context) or cv is msel_cls("StratifiedKFold", context):
             per = PythonObject(msel_check_splits(py_get(cvargs, PythonObject("n_splits"), PythonObject(5)), context))
         else:
-            per = family_call(msel_field(family_call_kw(cv, py_call(b.dict, cvargs)), "get_n_splits"), x, y, groups)
+            raise Error("TypeError: repeated model selection requires a native splitter configuration")
         return family_call(msel_op("mul"), per, repeats)
     if msel_is(model, "_IterableCV", context):
-        return family_call(b.len, msel_field(model, "_pairs"))
-    return msel_field(model, "n_splits")
+        return family_call(b.len, msel_field(model, "_pairs", context))
+    return msel_field(model, "n_splits", context)
 
 
 def _comb(n: PythonObject, k: PythonObject) raises -> PythonObject:
@@ -1025,7 +1073,7 @@ def msel_native_discrete(y: PythonObject, context: PythonObject) raises -> Pytho
     var integral = msel_entry("reduce_stat", context)
     if d != "<f4" and d != "<f8":
         return PythonObject(True)
-    var c = arr if String(py=arr.order) == "C" or Int(py=arr.ndim) == 1 else family_call(arr._as_c)
+    var c = msel_materialize(arr, "y", context)
     var _keep_ret_c_r972 = PythonObject(msel_truth(family_call(integral, PythonObject(msel_addr(c)), context["family_msel_native_code"][dtype],
                                                arr.size, context["family_msel_reduce_integral"])))
     _ = c  # keep the Python object alive through the native call above
@@ -1039,7 +1087,7 @@ def msel_check_cv(cv_in: PythonObject, y: PythonObject, classifier: Bool, shuffl
     """`check_cv(cv, y, classifier=..., shuffle=..., random_state=...)`."""
     var b = msel_b()
     var cv = PythonObject(5) if cv_in is None else cv_in
-    if msel_is_integral(cv, context) and not msel_is_bool(cv):
+    if msel_is_integral(cv, context) and not msel_is_bool(cv, context):
         var stratify = False
         var native = msel_native_discrete(y, context) if classifier and y is not None else PythonObject(None)
         if native is not None:
@@ -1053,28 +1101,33 @@ def msel_check_cv(cv_in: PythonObject, y: PythonObject, classifier: Bool, shuffl
             else:
                 # every label Integral, or a Real whose float is integer
                 # valued (float.is_integer is False for NaN and infinity)
-                var kinds = py_call(b.set, py_call(b.map, b.type, labels))
-                var integral = context["family_msel_integral"]
-                var real = context["family_msel_real"]
-                var all_int = msel_truth(family_call(b.all, py_call(b.map, b.issubclass, kinds, py_call(itertools.repeat, integral))))
+                var all_int = True
+                var all_real = True
+                for i in range(len(labels)):  # driver-loop: admitted scalar identities, without Python ABC callbacks
+                    all_int = all_int and msel_is_integral(labels[i], context)
+                    all_real = all_real and msel_is_real(labels[i], context)
                 if all_int:
                     stratify = True
-                elif msel_truth(family_call(b.all, py_call(b.map, b.issubclass, kinds, py_call(itertools.repeat, real)))):
+                elif all_real:
                     stratify = msel_truth(family_call(b.all, py_call(b.map, b.float.is_integer, py_call(b.map, b.float, labels))))
         var rs = random_state if msel_truth(shuffle) else PythonObject(None)
         var kind = String("StratifiedKFold") if stratify else String("KFold")
         return msel_new_kfold(kind, cv, shuffle, rs, context)
-    var split = py_call(b.getattr, cv, PythonObject("split"), PythonObject(None))
-    if msel_truth(py_call(b.callable, split)):
+    if py_type(py_type(cv)) is not py_type(py_type(PythonObject(0))):
+        raise Error("TypeError: cv cannot invoke Python metaclass hooks")
+    if py_contains(context["family_msel_splitter_layouts"], py_type(cv)):
+        _ = _splitter_fields(cv, context)
         return cv
-    if family_is_str(cv) or not msel_truth(py_call(b.hasattr, cv, PythonObject("__iter__"))):
-        raise Error("Expected cv as an integer, cross-validation object (from "
-                    + "sklearn.model_selection) or an iterable. Got " + family_repr(cv) + ".")
+    if py_type(cv) is not b.list and py_type(cv) is not b.tuple:
+        raise Error("TypeError: cv must be an integer, native splitter, or list/tuple of index pairs; Python protocols cannot execute")
     return msel_iterable_cv(cv, context)
 
 
 def msel_iterable_cv(cv: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_IterableCV(cv)`: the caller's index pairs copied once."""
+    if py_type(cv) is not msel_b().list and py_type(cv) is not msel_b().tuple:
+        raise Error("TypeError: explicit folds require a list/tuple of index pairs, without Python iterator hooks")
+    msel_admit(cv, context)
     var pairs = Python.list()
     var it = family_call(msel_b().iter, cv)
     var b = msel_b()
@@ -1090,8 +1143,10 @@ def msel_iterable_cv(cv: PythonObject, context: PythonObject) raises -> PythonOb
         var tr = pair[0]
         var te = pair[1]
         _ = py_call(pairs.append, Python.tuple(msel_index_copy(tr, context), msel_index_copy(te, context)))
-    var out = native_storage_allocate(msel_cls("_IterableCV", context))
-    py_setattr(out, "_pairs", pairs)
+    var cls = msel_cls("_IterableCV", context)
+    var plan = _splitter_plan(cls, context)
+    var out = native_storage_allocate(cls)
+    py_setitem(py_call(plan[1], out, cls), "_pairs", pairs)
     return out
 
 
@@ -1105,11 +1160,12 @@ def msel_train_test_split(arrays: PythonObject, test_size: PythonObject, train_s
     var b = msel_b()
     if len(arrays) == 0:
         raise Error("At least one array required as input")
-    var n = msel_n_samples(arrays[0])
+    msel_admit(Python.tuple(arrays, test_size, train_size, random_state, shuffle, stratify), context)
+    var n = msel_n_samples(arrays[0], context)
     var lengths = Python.list()
     var mismatch = False
     for i in range(len(arrays)):  # driver-loop: over the input arrays
-        var m = msel_n_samples(arrays[i])
+        var m = msel_n_samples(arrays[i], context)
         _ = py_call(lengths.append, PythonObject(m))
         mismatch = mismatch or m != n
     if mismatch:

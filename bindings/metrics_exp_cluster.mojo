@@ -42,8 +42,8 @@ struct _Clusterings(Movable):
 
 def _clusterings(labels_true: PythonObject, labels_pred: PythonObject, caller: String,
                  context: PythonObject) raises -> _Clusterings:
-    mx_refuse_multilabel(labels_true, "labels_true", caller)
-    mx_refuse_multilabel(labels_pred, "labels_pred", caller)
+    mx_refuse_multilabel(labels_true, "labels_true", caller, context)
+    mx_refuse_multilabel(labels_pred, "labels_pred", caller, context)
     var a = mx_encode(labels_true, "labels_true", context)
     var b = mx_encode(labels_pred, "labels_pred", context)
     if a.n != b.n:
@@ -132,7 +132,7 @@ def _contingency_matrix(args: PythonObject, context: PythonObject) raises -> Pyt
                     + "package has no sparse matrix type (metrics/NOT_IMPLEMENTED.tsv)")
     var c = _clusterings(args[0], args[1], "contingency_matrix", context)
     var has_eps = eps is not None
-    var r = _contingency(c, args[5], has_eps, mx_float(eps) if has_eps else 0.0, False, False, context)
+    var r = _contingency(c, args[5], has_eps, mx_float(eps, context) if has_eps else 0.0, False, False, context)
     var shape = Python.tuple(PythonObject(r.ka), PythonObject(r.kb))
     var cells = r.ka * r.kb
     if has_eps:
