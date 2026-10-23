@@ -657,7 +657,7 @@ struct DecompKit(Movable):
     def place_strided(mut self, d: Int, v: Int, stride: Int, off: Int = 0) raises -> Int:
         # `_Kit.place_strided`: D[off + t * stride] = V[t], in place.
         var count = self.size(v)
-        if not count:
+        if count == 0:
             return d
         var params = Python.list(XD_PLACE_COLS, count, 1, stride, off, 0, 0, count, self.size(d), 1)
         if self.use(d, v):
@@ -825,21 +825,32 @@ struct DecompKit(Movable):
         var vt2 = self.ew(XD_MUL, vt, sg)
         return (u2, s, vt2)
 
-    def lu(mut self, a: Int) raises -> Tuple[Int, PythonObject]:
-        # `_Kit.lu`: (the factor, its int32 pivots); info is read by no caller here.
+    def lu(mut self, a: Int) raises -> Tuple[Int, PythonObject, Int]:
+        # `_Kit.lu`: (the factor, its int32 pivots, info).
         var n = self.matrices[a].rows
         var piv = py_call(self.context["array_type"], PythonObject("i"), py_call(self.context["native_bytes_type"], 4 * max(n, 1)))
         var info = self.zeros(1, 1)
         var pa = py_call(piv.buffer_info)[0]
+        var lu: Int
         if n >= 1 and self.matrices[a].cols == n and self.opt_dev("x_decomp_dev_lu") and self.use(a):
-            var lu = self.device_output(n, n)
+            lu = self.device_output(n, n)
             var da = self.device(a)
             _ = py_call(self.entries["x_decomp_dev_lu"], da, self.matrices[lu].device, pa, self.address(info), Python.list(n))
-            return (lu, piv)
-        var lu = self.copy_host(a)
-        _ = py_call(self.entries["x_decomp_lu"], self.address(lu), pa, self.address(info), Python.list(n))
-        self.wrote_host(lu)
-        return (lu, piv)
+        else:
+            lu = self.copy_host(a)
+            _ = py_call(self.entries["x_decomp_lu"], self.address(lu), pa, self.address(info), Python.list(n))
+            self.wrote_host(lu)
+        return (lu, piv, Int(self.word(info)))
+
+    def lu_resid(mut self, a: Int, x: Int, b: Int) raises -> Int:
+        # `_Kit.lu_resid`: B - A X, folded in float-float on the device.
+        var out = self.zeros(self.matrices[b].rows, self.matrices[b].cols)
+        var aa = self.address(a)
+        var ax = self.address(x)
+        var ab = self.address(b)
+        _ = py_call(self.entries["x_decomp_lu_resid"], aa, ax, ab, self.address(out),
+                    Python.list(self.matrices[a].rows, self.matrices[b].cols))
+        return out
 
     def lu_solve(mut self, lu: Int, piv: PythonObject, b: Int) raises -> Int:
         # `_Kit.lu_solve(lu, piv, B)` (trans 0): on a host copy of B.
@@ -915,7 +926,7 @@ struct DecompKit(Movable):
     def reduce(mut self, a: Int, op: Int) raises -> Int:
         # `_Kit.reduce`: max |A| (0), max A (1) or min A (2) as 1 x 1.
         var n = self.size(a)
-        if not n:
+        if n == 0:
             raise Error("x_decomp: reduce of an empty matrix")
         if self.use(a):
             var out = self.device_output(1, 1)

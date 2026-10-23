@@ -16,6 +16,8 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_host_f32, classical_wrap_array, classical_typed
 from bindings.host_sparse_native import host_sparse_format
+from bindings.classical_validate import classical_view
+from core.decomp_native_impl import decomp_piv_valid
 from bindings.decomp_kit_native import (
     DecompKit, DecompF32, decomp_int, decomp_float, decomp_seed, decomp_seed_word, decomp_mode, decomp_entries,
     decomp_input, XD_ABS, XD_ADDS, XD_SCALE, XD_GTS, XD_MUL, XD_ADD,
@@ -122,7 +124,7 @@ def randomized_svd_call(args: PythonObject, context: PythonObject) raises -> Pyt
         var cs = kit.colsum(absq)
         var abscs = kit.ew(XD_ABS, cs)
         var nlive = kit.count_gt(abscs, 0.0)
-        if not nlive:
+        if nlive == 0:
             raise Error("randomized_svd: M is numerically zero")
         var full = kit.ncols(q)
         if nlive < full:
@@ -171,6 +173,202 @@ def randomized_svd_call(args: PythonObject, context: PythonObject) raises -> Pyt
         kit.close()
 
 
+def _is_vector(b: PythonObject) raises -> Bool:
+    # `len(getattr(b, "shape", ())) == 1 or (not hasattr(b, "shape") and not isinstance(b[0], (list, tuple)))`
+    var bi = Python.import_module("builtins")
+    var shape = py_call(bi.getattr, b, PythonObject("shape"), Python.tuple())
+    if len(shape) == 1:
+        return True
+    if Bool(py=py_call(bi.hasattr, b, PythonObject("shape"))):
+        return False
+    return not Bool(py=py_call(bi.isinstance, b[0], Python.tuple(bi.list, bi.tuple)))
+
+
+def _rhs(mut kit: DecompKit, b: PythonObject, vec: Bool, context: PythonObject) raises -> Int:
+    # `_M.from_input(_row_of(b), "b").T if vec else _M.from_input(b, "b")`.
+    if not vec:
+        var array = decomp_input(b, "b", context)
+        return kit.input(array, Int(py=array.shape[0]), Int(py=array.shape[1]))
+    var bi = Python.import_module("builtins")
+    var row: PythonObject
+    if py_call(bi.getattr, b, PythonObject("shape"), PythonObject(None)) is not None and Bool(py=py_call(bi.hasattr, b, PythonObject("reshape"))):
+        row = py_call(b.reshape, 1, -1)
+    else:
+        row = Python.list(py_call(bi.list, b))
+    var array = decomp_input(row, "b", context)
+    var m = kit.input(array, 1, Int(py=array.shape[1]))
+    return kit.transpose(m)
+
+
+def _singular_warning(info: Int, stacklevel: Int) raises:
+    var bi = Python.import_module("builtins")
+    _ = py_call(Python.import_module("_warnings").warn,
+                PythonObject("Diagonal number " + String(info) + " is exactly zero. Singular matrix."),
+                bi.RuntimeWarning, stacklevel)
+
+
+def _typed(shape: PythonObject, typestr: String, code: String, item: Int, context: PythonObject) raises -> PythonObject:
+    var output = context["output_context"]
+    var count = 1
+    for k in range(len(shape)):  # driver-loop: over array rank metadata
+        count *= Int(py=shape[k])
+    var store = py_call(output["array_type"], PythonObject(code), py_call(output["native_bytes_type"], count * item))
+    return classical_wrap_array(store, shape, typestr, "C", output)
+
+
+def _resident_solve(mut kit: DecompKit, handles: List[Int], n: Int, b: PythonObject, refine: Bool,
+                    context: PythonObject) raises -> PythonObject:
+    # `_lu_solve_resident`: B up, the solve on the device factor, X down
+    # (None for an empty system: the host route answers it).
+    var vec = _is_vector(b)
+    var array: PythonObject
+    var rows: Int
+    var nrhs: Int
+    if vec:
+        var view = classical_view(b, context, "b")
+        var nd = Int(py=view.ndim)
+        if nd != 1:
+            raise Error("mojolearn: b must be 1-D, got " + String(nd) + "-D shape "
+                        + String(py=py_call(Python.import_module("builtins").repr, view.shape)))
+        rows = Int(py=view.shape[0])
+        if rows != n:
+            raise Error("b has " + String(rows) + " rows, the factorization has " + String(n))
+        nrhs = 1
+        if n == 0:
+            return PythonObject(None)
+        try:
+            array = classical_host_f32(view, 1, "b", context)
+        except error:
+            if String(error) == "Input b contains NaN or infinity":
+                raise Error("b: input must be finite; NaN/inf are unsupported")
+            raise Error(String(error))
+    else:
+        array = decomp_input(b, "b", context)
+        rows = Int(py=array.shape[0])
+        if rows != n:
+            raise Error("b has " + String(rows) + " rows, the factorization has " + String(n))
+        nrhs = Int(py=array.shape[1])
+    var out = _typed(Python.tuple(n) if vec else Python.tuple(n, nrhs), "<f4", "f", 4, context)
+    _ = py_call(kit.entries["x_decomp_dev_lu_solve"], handles[1], handles[2], handles[0], classical_address(array),
+                out._addr, Python.list(n, nrhs, 1 if refine else 0))
+    return out
+
+
+def solve_call(args: PythonObject, context: PythonObject) raises -> PythonObject:
+    # args: (a, b, numeric_mode)
+    var kit = DecompKit(decomp_entries(args[2], context), context["output_context"])
+    try:
+        var a_source = args[0]
+        var b = args[1]
+        if (kit.flags("x_decomp_idn_flags") & 2) != 0:
+            # gesv: one binding entry, the factor and pivots resident.
+            var a = _matrix(kit, a_source, "a", context)
+            var n = kit.nrows(a)
+            if n != kit.ncols(a):
+                raise Error("expected a square matrix, got " + String(n) + " x " + String(kit.ncols(a)))
+            var vec = _is_vector(b)
+            var bm = _rhs(kit, b, vec, context)
+            if kit.nrows(bm) != n:
+                raise Error("b has " + String(kit.nrows(bm)) + " rows, the factorization has " + String(n))
+            var x = kit.copy_host(bm)
+            var info = kit.zeros(1, 1)
+            var aa = kit.address(a)
+            _ = py_call(kit.entries["x_decomp_lu_gesv"], aa, kit.address(x), kit.address(info),
+                        Python.list(n, kit.ncols(bm)))
+            kit.wrote_host(x)
+            var singular = Int(kit.word(info))
+            if singular != 0:
+                _singular_warning(singular, 2)
+            return kit.out_shape(x, Python.tuple(n)) if vec else kit.publish(x)
+        # lu_factor(a), then lu_solve(pair, b)
+        var sf = kit.flags("x_decomp_s_flags")
+        var qf = kit.flags("x_decomp_qfix_flags")
+        var lu_array: PythonObject
+        var piv_array: PythonObject
+        var qfix_a = -1
+        var handles = List[Int]()
+        if (((sf & 4) != 0 and (qf & 4) != 0) or (sf & 8) != 0) and host_sparse_format(a_source).byte_length() == 0:
+            # `_lu_factor_resident`: A up once, the factor on the device, LU and piv down.
+            var array = decomp_input(a_source, "a", context)
+            var n = Int(py=array.shape[0])
+            if n != Int(py=array.shape[1]):
+                raise Error("expected a square matrix, got " + String(n) + " x " + String(Int(py=array.shape[1])))
+            var da = kit.device_output(n, n)
+            var dlu = kit.device_output(n, n)
+            var dp = kit.device_output(n, 1)
+            lu_array = _typed(Python.tuple(n, n), "<f4", "f", 4, context)
+            piv_array = _typed(Python.tuple(n), "<i4", "i", 4, context)
+            var info = _typed(Python.tuple(1), "<f4", "f", 4, context)
+            var rc = decomp_int(py_call(kit.entries["x_decomp_dev_lu_factor"], classical_address(array), lu_array._addr,
+                                        piv_array._addr, info._addr, kit.matrices[da].device,
+                                        kit.matrices[dlu].device, kit.matrices[dp].device, Python.list(n)))
+            if rc < 0:
+                raise Error("a: input must be finite; NaN/inf are unsupported")
+            var singular = Int(DecompF32(unsafe_from_address=Int(py=info._addr))[0])
+            if singular != 0:
+                _singular_warning(singular, 3)
+            else:
+                handles.append(kit.matrices[da].device)
+                handles.append(kit.matrices[dlu].device)
+                handles.append(kit.matrices[dp].device)
+        else:
+            var a = _matrix(kit, a_source, "a", context)
+            var n = kit.nrows(a)
+            if n != kit.ncols(a):
+                raise Error("expected a square matrix, got " + String(n) + " x " + String(kit.ncols(a)))
+            var factor = kit.lu(a)
+            if factor[2] != 0:
+                _singular_warning(factor[2], 2)
+            lu_array = kit.publish(factor[0])
+            piv_array = _typed(Python.tuple(n), "<i4", "i", 4, context)
+            if n:
+                memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=piv_array._addr)),
+                       src=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=py_call(factor[1].buffer_info)[0])),
+                       count=n)
+            if factor[2] == 0 and (qf & 4) != 0:
+                qfix_a = a
+        # lu_solve (trans 0)
+        if len(handles) > 0 and (kit.flags("x_decomp_s_flags") & 12) != 0:
+            var n = Int(py=lu_array.shape[0])
+            var solved = _resident_solve(kit, handles, n, b, (kit.flags("x_decomp_s_flags") & 4) != 0, context)
+            if solved is not None:
+                return solved
+        var l = _matrix(kit, lu_array, "lu", context)
+        var n = kit.nrows(l)
+        var piv = classical_host_i32(piv_array, context)
+        if Int(py=piv.size) != n or not decomp_piv_valid(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(piv))), n):
+            raise Error("piv must hold one row index in [0, n) per row")
+        var vec = _is_vector(b)
+        var bm = _rhs(kit, b, vec, context)
+        if kit.nrows(bm) != n:
+            raise Error("b has " + String(kit.nrows(bm)) + " rows, the factorization has " + String(n))
+        var store = py_call(context["output_context"]["array_type"], PythonObject("i"), py_call(context["output_context"]["native_bytes_type"], 4 * max(n, 1)))
+        if n:
+            memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=py_call(store.buffer_info)[0])),
+                   src=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(piv))), count=n)
+        var x = kit.lu_solve(l, store, bm)
+        if qfix_a >= 0 and kit.nrows(qfix_a) == n and kit.ncols(qfix_a) == n and (kit.flags("x_decomp_qfix_flags") & 4) != 0:
+            # LU_QFIX: one refinement step, x += LU^-1 (B - A x)
+            var residual = kit.lu_resid(qfix_a, x, bm)
+            var step = kit.lu_solve(l, store, residual)
+            x = kit.ew(XD_ADD, x, step)
+        return kit.out_shape(x, Python.tuple(n)) if vec else kit.publish(x)
+    finally:
+        kit.close()
+
+
+def _matrix(mut kit: DecompKit, source: PythonObject, name: String, context: PythonObject) raises -> Int:
+    var array = decomp_input(source, name, context)
+    return kit.input(array, Int(py=array.shape[0]), Int(py=array.shape[1]))
+
+
+def classical_host_i32(source: PythonObject, context: PythonObject) raises -> PythonObject:
+    # `as_i32_c(piv, ndim=1)` of the pivots this call made (an int32 Array).
+    if Int(py=source.ndim) != 1 or String(py=source.dtype) != "<i4":
+        raise Error("TypeError: piv must be a 1-D int32 array")
+    return source
+
+
 def linalg_decomp_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var call = PythonObject(from_borrowed=args_ptr)
@@ -185,6 +383,8 @@ def linalg_decomp_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyO
         var result = PythonObject(None)
         if operation == "randomized_svd":
             result = randomized_svd_call(call[2], context)
+        elif operation == "solve":
+            result = solve_call(call[2], context)
         else:
             raise Error("unknown native linear algebra operation")
         return result.steal_data()

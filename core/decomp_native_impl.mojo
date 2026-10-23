@@ -34,3 +34,11 @@ def decomp_count_u8(src: MutPointer[UInt8, MutUntrackedOrigin], n: Int) -> Int:
     for i in range(n):
         total += Int(src[i])
     return total
+
+
+def decomp_piv_valid(src: MutPointer[Int32, MutUntrackedOrigin], n: Int) -> Bool:
+    # native input validation: one row index in [0, n) per pivot
+    for i in range(n):
+        if src[i] < 0 or Int(src[i]) >= n:
+            return False
+    return True

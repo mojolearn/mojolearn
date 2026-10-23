@@ -95,7 +95,7 @@ def _topn(mut kit: DecompKit, s: Int, count: Int, skip: Int, context: PythonObje
     if n and kit.use(s):
         var order = kit.order_dev(s, 1, skip)
         var c = min(n, Int(kit.word(order[1])))
-        if not c:
+        if c == 0:
             return Python.tuple(_typed(0, "<i4", "i", 4, context), _typed(0, "<f4", "f", 4, context))
         var ids = kit.rows_of(order[0], 0, c)
         var row = kit.reshape(s, 1, m)

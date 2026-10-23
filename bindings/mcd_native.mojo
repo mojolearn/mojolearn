@@ -335,7 +335,7 @@ def _labels(mut kit: DecompKit, x: Int, fields: PythonObject, context: PythonObj
     var negated = kit.ew(XD_SCALE, d, scalar=-1.0)
     var decision = kit.ew(XD_ADDS, negated, scalar=-Float64(py=fields["offset_"]))
     var labels = _typed(rows, "<i4", "i", 4, context)
-    if not rows:
+    if rows == 0:
         return labels
     var flipped = kit.ew(XD_SCALE, decision, scalar=-1.0)
     var zero = kit.const(0.0)
