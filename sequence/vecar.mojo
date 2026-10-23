@@ -75,6 +75,14 @@ def op_colscale(t: Int, a: Args):
     st(a.p1, t, s)
 
 
+@always_inline
+def var_pivot_tolerance(diagonal: Float32, m: Int) -> Float32:
+    # A dependent column can leave a small positive residual after rounded
+    # sqrt/divide/multiply steps. Use the original Gram diagonal and the
+    # m-term float32 error budget on both the serial and threadgroup routes.
+    return mul(abs(diagonal), mul(Float32(m), Float32(1.1920928955078125e-7)))
+
+
 def op_cholsolve(t: Int, a: Args):
     """One thread: G [m, m] (in place, lower Cholesky factor) and B [m, K]
     (in place, the solution of G X = B). p0 G, p1 B, p2 status [1]
@@ -87,11 +95,7 @@ def op_cholsolve(t: Int, a: Args):
         for k in range(j):
             var l = ld(a.p0, j * m + k)
             d = sub(d, mul(l, l))
-        # A dependent column can leave a small positive residual after the
-        # rounded sqrt/divide/multiply steps. Judge numerical rank relative
-        # to its original Gram diagonal and the m-term float32 error budget;
-        # a strict zero test admitted duplicate columns in identical mode.
-        var rank_tol = mul(abs(diagonal), mul(Float32(m), Float32(1.1920928955078125e-7)))
+        var rank_tol = var_pivot_tolerance(diagonal, m)
         if not (d > rank_tol):
             st(a.p2, 0, Float32(1 + j))
             return
