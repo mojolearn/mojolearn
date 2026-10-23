@@ -2138,6 +2138,10 @@ def registry():
     return REGISTRY
 def make(dict):
     return dict()
+def escaped_local():
+    cache = {}
+    REGISTRY.update(locals())
+    return cache
 def connect():
     module = binding()
     entries = {}
@@ -2160,6 +2164,7 @@ def connect():
                             ("    REGISTRY.update(entries)\n", False),
                             ("    shared = registry()\n    shared['call'] = entry\n", False),
                             ("    shared = make(registry)\n    shared['call'] = entry\n", False),
+                            ("    shared = escaped_local()\n    shared['call'] = entry\n", False),
                             ("    [value() for value in [entry]]\n", False),
                             ("    isinstance(entry, check)\n", False),
                             ("    alias: object = entry\n    alias()\n", False)):

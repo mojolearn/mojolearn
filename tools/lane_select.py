@@ -1136,6 +1136,9 @@ def _native_references_only_uncached(rel, function, exports):
                 return False
             for stmt in body:
                 for part in ast.walk(stmt):
+                    if isinstance(part, ast.Call) and isinstance(part.func, ast.Name) and part.func.id in (
+                            "globals", "locals", "vars", "eval", "exec"):
+                        return False
                     if isinstance(part, (ast.Global, ast.Nonlocal)) and node.id in part.names:
                         return False
                     if isinstance(part, ast.Call) and any(isinstance(n, ast.Name) and n.id == node.id
