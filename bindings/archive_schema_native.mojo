@@ -825,8 +825,10 @@ def _schema_run(model: PythonObject, fields: PythonObject, steps: PythonObject, 
         elif kind == "iforest_knobs":
             # IsolationForest.save on an instance assembled without fit or
             # load: `_validate_params()` resolves the knobs first.
-            if not _schema_has(fields, "_seed"):
-                iforest_validate(model, fields, context)
+            # The class's tables (numbers.Integral, a missing-field
+            # sentinel) are connected with its schema in the archive context.
+            if not _schema_has(fields, PythonObject("_seed")):
+                iforest_validate(model, fields, context["host_archive_context"])
         elif kind == "format":
             py_setitem(values, step[1], step[2])
         elif kind == "estimator":
