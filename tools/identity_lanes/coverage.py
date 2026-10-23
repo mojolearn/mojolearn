@@ -390,28 +390,30 @@ def _(ml, X, yc, yr, Xh=None):
     same launches on the same values). Then a tensor's round trip: upload,
     copy and download."""
     from mojolearn._x_sequence_device import to_device
-    d = _coverage_digester(ml)
+    # local names are unique: lane_applicability walks bare-name calls across
+    # the harness, and a nested `run`/`d` elsewhere reaches _par_devices
+    _sdt_digest = _coverage_digester(ml)
 
-    def run(wrap):
-        p1 = wrap(np.ascontiguousarray(X[:32, :8], dtype=np.float32).copy())
-        p2 = wrap(np.ascontiguousarray(X[32:40, 0], dtype=np.float32).copy())
+    def _rmsprop_six_steps(_as_lane_tensor):
+        p1 = _as_lane_tensor(np.ascontiguousarray(X[:32, :8], dtype=np.float32).copy())
+        p2 = _as_lane_tensor(np.ascontiguousarray(X[32:40, 0], dtype=np.float32).copy())
         opt = ml.RMSprop([p1, p2], lr=1e-2, momentum=0.5)
         for k in range(6):  # glue: six optimizer steps
             base = 40 + 48 * k
             g1 = np.ascontiguousarray(X[base:base + 32, 8:16], dtype=np.float32) * np.float32(0.5)
             g2 = np.ascontiguousarray(X[base + 32:base + 40, 1], dtype=np.float32)
-            opt.step([wrap(g1), wrap(g2)])
+            opt.step([_as_lane_tensor(g1), _as_lane_tensor(g2)])
         return np.asarray(p1, dtype=np.float32), np.asarray(p2, dtype=np.float32)
 
-    host = run(lambda a: a)
-    resident = run(to_device)
+    host = _rmsprop_six_steps(lambda a: a)
+    resident = _rmsprop_six_steps(to_device)
     _same_bytes("resident-tensor RMSprop params", np.concatenate([a.reshape(-1) for a in resident]),
                 "host-array RMSprop params", np.concatenate([a.reshape(-1) for a in host]))
     t = to_device(np.ascontiguousarray(X[:16, :4], dtype=np.float32))
     back = np.asarray(t, dtype=np.float32)
     twin = np.asarray(t.copy(), dtype=np.float32)
     _same_bytes("downloaded tensor", back, "uploaded array", np.ascontiguousarray(X[:16, :4], dtype=np.float32))
-    return _fit(dict(p1=d(resident[0]), p2=d(resident[1]), back=d(back), copy=d(twin)))
+    return _fit(dict(p1=_sdt_digest(resident[0]), p2=_sdt_digest(resident[1]), back=_sdt_digest(back), copy=_sdt_digest(twin)))
 
 
 def _coverage_device_optimizer(ml, cls, X, configurations, factored=False):
