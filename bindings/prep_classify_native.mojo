@@ -390,18 +390,18 @@ def _decision_function(model: PythonObject, fields: PythonObject, kind: String, 
         check_width(model, fields, arr.d)
         var n = arr.n
         var d = arr.d
-        var pr = ClsProg()
-        var xo = pr.put(arr.value)
-        var coef = _put_attr(pr, fields, "coef_", context)
-        var inter = _put_attr(pr, fields, "intercept_", context)
-        var out = pr.alloc(n)
-        pr.stage(OP_MATMUL, n, xo, d, 1, coef, 1, 0, out, 1, d, inter, NONE)
-        pr.run(mode, context)
-        return pr.get(out, n, 0, context)
+        var pl = ClsProg()
+        var xo = pl.put(arr.value)
+        var coef = _put_attr(pl, fields, "coef_", context)
+        var inter = _put_attr(pl, fields, "intercept_", context)
+        var out = pl.alloc(n)
+        pl.stage(OP_MATMUL, n, xo, d, 1, coef, 1, 0, out, 1, d, inter, NONE)
+        pl.run(mode, context)
+        return pl.get(out, n, 0, context)
     var pr = ClsProg()
     if K != 2:
-        var o = _scores(pr, model, fields, kind, X, 0, context)
-        return pr.get(o.jll, o.n, K, context)
+        var oj = _scores(pr, model, fields, kind, X, 0, context)
+        return pr.get(oj.jll, oj.n, K, context)
     # QDA's two-class answer: the difference of the two scores, staged over
     # the scores where they are in the scoring program (the matmul stage and
     # the words the second program used to run over a downloaded block).
@@ -429,13 +429,13 @@ def _gnb_stats(mut pr: ClsProg, mode: PythonObject, wo: Int, xo: Int, n: Int, d:
 
 
 def _gnb_publish(pr: ClsProg, fields: PythonObject, mode: PythonObject, K: Int, d: Int, theta: Int, var_: Int,
-                 cnt: Int, prior: Int, eps: Int, const: Int, raw: Int, context: PythonObject) raises:
+                 cnt: Int, prior: Int, eps: Int, cst: Int, raw: Int, context: PythonObject) raises:
     _set(fields, "theta_", pr.get(theta, K, d, context))
     _set(fields, "var_", pr.get(var_, K, d, context))
     _set(fields, "class_count_", pr.get(cnt, K, 0, context))
     _set(fields, "class_prior_", pr.get(prior, K, 0, context))
     _set(fields, "epsilon_", PythonObject(pr.value(eps)))
-    _set(fields, "_const", pr.get(const, K, 0, context))
+    _set(fields, "_const", pr.get(cst, K, 0, context))
     _set(fields, "_raw_var", pr.get(raw, K, d, context))
     _set(fields, "numeric_mode_", mode)
     _set(fields, "n_features_in_", PythonObject(d))
@@ -458,7 +458,7 @@ def _gnb_fit(model: PythonObject, fields: PythonObject, args: PythonObject, cont
     var theta = pr.alloc(K * d)
     var var_ = pr.alloc(K * d)
     var prior = pr.alloc(K)
-    var const = pr.alloc(K)
+    var cst = pr.alloc(K)
     var wo = _put_weights(pr, _weights(args[2], n, context))
     _gnb_stats(pr, mode, wo, xo, n, d, yo, K, cnt, theta, var_, eps, vs, context)
     var raw = _copy_block(pr, var_, K, d, context)
@@ -470,9 +470,9 @@ def _gnb_fit(model: PythonObject, fields: PythonObject, args: PythonObject, cont
         given = pr.alloc(K)
         var scratch = pr.alloc(d)
         pr.stage(OP_LDA_PREP, 1, cnt, theta, K, d, n, given, scratch, 2, cnt)
-    pr.stage(OP_GNB_PARAMS, K, cnt, var_, K, d, n, eps, prior, const, 1 if given != NONE else 0, given if given != NONE else 0)
+    pr.stage(OP_GNB_PARAMS, K, cnt, var_, K, d, n, eps, prior, cst, 1 if given != NONE else 0, given if given != NONE else 0)
     pr.run(mode, context)
-    _gnb_publish(pr, fields, mode, K, d, theta, var_, cnt, prior, eps, const, raw, context)
+    _gnb_publish(pr, fields, mode, K, d, theta, var_, cnt, prior, eps, cst, raw, context)
     return model
 
 
@@ -514,11 +514,11 @@ def _gnb_partial_fit(model: PythonObject, fields: PythonObject, args: PythonObje
         var scratch = pr.alloc(d)
         pr.stage(OP_LDA_PREP, 1, cnt, theta, K, d, n, given, scratch, 2, cnt)
     var prior = pr.alloc(K)
-    var const = pr.alloc(K)
-    pr.stage(OP_GNB_PARAMS, K, cnt, var_, K, d, 1, eps, prior, const, 1, given)
+    var cst = pr.alloc(K)
+    pr.stage(OP_GNB_PARAMS, K, cnt, var_, K, d, 1, eps, prior, cst, 1, given)
     pr.run(mode, context)
     partial_refuse(pr, coded[1], fields, pc, context)
-    _gnb_publish(pr, fields, mode, K, d, theta, var_, cnt, prior, eps, const, raw, context)
+    _gnb_publish(pr, fields, mode, K, d, theta, var_, cnt, prior, eps, cst, raw, context)
     return model
 
 
@@ -709,11 +709,11 @@ def _dnb_fit(model: PythonObject, fields: PythonObject, kind: String, args: Pyth
     var binarize = _binarize(kind, fields)
     if sample_weight is None and is_sparse(X) and _csr_ready(kind, context):
         var csr = csr_input(X, context)
-        var pr = ClsProg()
+        var pc_ = ClsProg()
         var done = False
-        var c = _fit_counts_csr(pr, model, fields, csr, y, done, context)
+        var cc = _fit_counts_csr(pc_, model, fields, csr, y, done, context)
         if done:
-            return _params(pr, model, fields, kind, c, NONE, _no_partial(), context)
+            return _params(pc_, model, fields, kind, cc, NONE, _no_partial(), context)
         # IDENTICAL only: the dense program, its block built on the device
         # from the CSR arrays (lane idn-all)
         var q = ClsProg()
@@ -841,8 +841,8 @@ def _cat_fit_programs(model: PythonObject, fields: PythonObject, arr: XIn, pc: P
         var po = pr.put_list(given_priors(fields["class_prior"], K, "CategoricalNB", False, context), context)
         pr.stage(OP_LOG, K, po, clp)
     else:
-        var src = cnt if Bool(py=fields["fit_prior"]) else pr.put_list(_ones(K), context)
-        pr.stage(OP_CLASS_LOG_PRIOR, K, src, K, clp)
+        var prior_src = cnt if Bool(py=fields["fit_prior"]) else pr.put_list(_ones(K), context)
+        pr.stage(OP_CLASS_LOG_PRIOR, K, prior_src, K, clp)
     pr.run(mode, context)
     partial_refuse(pr, coded[1], fields, pc, context)
     for j in range(d):  # driver-loop: over the per-column minimum statistics (feature count)
@@ -897,8 +897,8 @@ def _cat_fit_programs(model: PythonObject, fields: PythonObject, arr: XIn, pc: P
         var src = cc
         cc = q.alloc(d * K * cmax)
         if oc > 0:
-            var old = _put_attr(q, fields, "_cc", context)
-            q.stage(OP_COLBLOCK, d * K * oc, old, oc, pad, cmax, 0)
+            var old_cc = _put_attr(q, fields, "_cc", context)
+            q.stage(OP_COLBLOCK, d * K * oc, old_cc, oc, pad, cmax, 0)
         q.stage(OP_ADD_ARRAYS, d * K * cmax, pad, src, cc)
     var flp = q.alloc(d * K * cmax)
     q.stage(OP_CAT_FLP, d * K * cmax, cc, K, no, cmax, co, a, flp)

@@ -2501,8 +2501,6 @@ class KBinsDiscretizer(_PrepBase):
 #: mode -> whether its binding exports `x_prep_proba64` (lane apple-fast-q-clf)
 
 
-
-
 class _Classifier(_PrepBase):
     """predict / predict_proba / predict_log_proba from a subclass's joint
     log likelihood stages (`_jll_stages`), normalised on the device."""
@@ -2597,8 +2595,6 @@ class _Classifier(_PrepBase):
         return _CLS_CALL(self, "score", (X, y), _CLS_CONTEXT)
 
 
-
-
 #: binding -> its `x_prep_idn_int` bits (0 when it has none), probed once
 _IDN_INT = {}
 _IDN_NB_ONEPASS, _IDN_NB_CSR, _IDN_NB_CSR_DENSE = 2, 4, 8
@@ -2618,71 +2614,6 @@ def _idn_int(mode):
         fn = _optional_prep_entry(binding, "x_prep_idn_int")
         v = int(fn()) if fn is not None else 0
         _IDN_INT[key] = v
-    return v
-
-
-
-
-
-
-#: binding -> its `x_prep_idn_fam2` bits (0 when it has none), probed once
-_IDN_FAM2 = {}
-_F2_WDRAW, _F2_PERM_DRAW, _F2_WPICK, _F2_PARTIAL_CODES = 1, 2, 4, 8
-_F2_GRAM, _F2_GRAM_ROWTILE, _F2_LABEL_INV = 16, 32, 64
-#: the most partial words (blocks x cells) a blocked Gram keeps; past it the
-#: block grows, then the one-thread-per-cell stage (a function of the shape
-#: only, so the device and the host column agree)
-_GRAM_WORDS = 2 ** 26
-
-
-def _gram_rows(v, n, cells):
-    """Rows per block of a blocked Gram over n rows with `cells` partial
-    words a block (x_prep/gram_blocked.mojo): the binding's block length
-    (`x_prep_idn_fam2` >> 16; 2048 unless a candidate arm is built), doubled
-    until the partial table fits `_GRAM_WORDS`; 0 when it never does."""
-    rows = (v >> 16) or _XB
-    while ((n + rows - 1) // rows) * cells > _GRAM_WORDS and rows < 2 ** 22:  # glue: the block length doubles
-        rows *= 2
-    return rows if ((n + rows - 1) // rows) * cells <= _GRAM_WORDS else 0
-
-
-def _gram(pr, mode, z, n, d, g):
-    """Stages G = Z'Z of the (n, d) block at z into the (d, d) block g. Under
-    IDENTICAL (`_idn_fam2` bit 16): block partials of the upper triangle, one
-    thread per (block, a, b >= a) (bit 32, a candidate arm: one per
-    (block, a)), then each cell folded over the blocks. Else `matmul`: one
-    thread per cell over every row."""
-    v = _idn_fam2(mode)
-    rows = _gram_rows(v, n, d * d) if (_blocked() and v & _F2_GRAM) else 0
-    if not rows:
-        pr.stage("matmul", d * d, z, 1, d, z, d, 1, g, d, n, _NONE, _NONE)
-        return
-    nb = (n + rows - 1) // rows
-    part = pr.work(nb * d * d)
-    if v & _F2_GRAM_ROWTILE:
-        pr.stage("gb_part_row", nb * d, z, n, d, part, nb, rows)
-    else:
-        pr.stage("gb_part", nb * d * d, z, n, d, part, nb, rows)
-    pr.stage("gb_fold", d * d, part, nb, d, g)
-
-
-
-
-def _idn_fam2(mode):
-    """Lane fam2-prep-metrics: the IDENTICAL binding's x_prep/fam2.mojo
-    switches (bindings/_mojolearn_x_prep*.mojo `idn_fam2_binding`: 1
-    IDN_WDRAW, 2 IDN_PERM_DRAW, 4 IDN_WPICK, 8 IDN_PARTIAL_CODES), 0 on
-    another tier or a build with none. The device and the host column export
-    the same bits, so both stage the same program."""
-    if mode != "identical":
-        return 0
-    binding = _prep_binding(mode)
-    key = id(binding)
-    v = _IDN_FAM2.get(key)
-    if v is None:
-        fn = _optional_prep_entry(binding, "x_prep_idn_fam2")
-        v = int(fn()) if fn is not None else 0
-        _IDN_FAM2[key] = v
     return v
 
 
@@ -2778,117 +2709,11 @@ def _class_stats(pr, wo, total, xo, n, d, yo, K, cnt, mean, var, sums, mode=None
         pr.stage("class_stats_w", total, xo, n, d, yo, K, cnt, mean, var, sums, wo)
 
 
-
-
-
-
-class _DevCodes:
-    """A partial_fit batch's labels whose class codes the fit program makes
-    on the device (lane fam2-prep-metrics, `_stage_partial_codes`): the
-    numeric label buffer, the classes as sorted float32 categories, and
-    `walk`, the Python route (the codes as an int32 Array; it names the
-    labels of a refused batch)."""
-    __slots__ = ("lb", "cats", "walk")
-
-    def __init__(self, lb, cats, walk):
-        self.lb, self.cats, self.walk = lb, cats, walk
-
-
-def _partial_dev(est, y, n, walk):
-    """`_DevCodes` when y is a numeric label buffer of n labels and every
-    class is an int or float with an exact float32 word, strictly ascending
-    (so `lookup`'s binary search over them is the dict's answer); else None."""
-    cl = list(est.classes_)
-    if not cl or any(type(c) not in (int, float) for c in cl):  # glue: the K class labels' types
-        return None
-    vals = [float(c) for c in cl]  # glue: the K class labels as floats
-    cats = Array._from_flat(vals, (len(vals),), "<f4")
-    ordered = all(vals[i] < vals[i + 1] for i in range(len(vals) - 1))  # glue: the K classes ascend
-    if cats.tolist() != vals or not ordered:
-        return None
-    lb = _label_buffer(y)
-    if lb is None or lb.n != n:
-        return None
-    return _DevCodes(lb, cats, walk)
-
-
 #: TOMBSTONE: lane fg-knn-nb G5 (MOJOLEARN_XPREP_DEVICE_CODES, `_fit_device_codes`:
 #: GaussianNB.fit classes and codes from the device unique_inverse) deleted
 #: 2026-10-09 (lane postmerge-act-2): SLOWER, gaussian-nb istella NV 1.29x / AMD
 #: 1.12x, taxi NV 1.70x / AMD 1.35x (nv n0668->n0631, amd a1066->a1091), accuracy
 #: SAME, same digests; code recoverable at main 5c137b55e.
-
-
-def _stage_partial_codes(pr, codes, mode):
-    """The float class codes offset of a partial_fit batch. An int32 Array:
-    `put_codes`. A `_DevCodes` (every tier, lane cpu2-l3-prep): staged in
-    this program (lab_load, lookup among the classes, count_neg, f2_clamp0:
-    a label outside classes_ counts and is clamped to class 0), and the
-    program refuses the batch right after its run, before the caller reads a
-    result, through the Python walk that names the labels."""
-    if not isinstance(codes, _DevCodes):
-        return pr.put_codes(codes)
-    lb, cats = codes.lb, codes.cats
-    K = cats.size
-    x = _label_load(pr, lb)
-    c, neg, yo = pr.work(lb.n), pr.alloc(1), pr.alloc(lb.n)
-    pr.stage("lookup", lb.n, x, lb.n, 1, pr.put(cats), K, pr.put_scalar(K), c)
-    pr.stage("count_neg", 1, c, lb.n, 1, neg)
-    pr.stage("f2_clamp0", lb.n, c, yo)
-
-    def refuse(prog, neg=neg, walk=codes.walk):
-        if prog.values(neg, 1)[0] > 0:
-            walk()
-            raise ValueError("mojolearn: a target label in y does not exist in the initial classes")
-
-    pr._after.append(refuse)
-    return yo
-
-
-def _partial_codes(est, y, classes, n, defer=False):
-    """sklearn `_check_partial_fit_first_call` and the batch's class codes:
-    the first call (no classes_ yet) needs `classes`, later ones may repeat
-    them only unchanged; a label outside classes_ is refused. defer (lane
-    fam2-prep-metrics): a numeric label buffer comes back as a `_DevCodes`
-    for `_stage_partial_codes` (no Python walk over the labels)."""
-    first = getattr(est, "classes_", None) is None
-    if first and classes is None:
-        raise ValueError("mojolearn: classes must be passed on the first call to partial_fit.")
-    if classes is not None:
-        cl, _ = sorted_classes(flatten_labels(classes))
-        if not first and list(cl) != list(est.classes_):
-            raise ValueError(f"mojolearn: `classes={cl}` is not the same as on last call to partial_fit, was: "
-                             f"{est.classes_}")
-        if first:
-            est.classes_ = cl
-    if defer:
-        dev = _partial_dev(est, y, n, lambda: _partial_walk(est, y, n, first)[1])
-        if dev is not None:
-            return first, dev
-    return _partial_walk(est, y, n, first)
-
-
-def _partial_walk(est, y, n, first):
-    """`_partial_codes`' Python route: labels of any kind (str, lists, a
-    class list float32 cannot hold), and the refusal that names a batch's
-    unknown labels."""
-    labels = flatten_labels(y)
-    if len(labels) != n:
-        raise ValueError("mojolearn: X and y have different numbers of rows")
-    index = {c: i for i, c in enumerate(est.classes_)}  # cpu-route: Python object labels of any kind, the explicit label input step
-    bad = sorted({repr(v) for v in labels if v not in index})  # cpu-route: Python object labels of any kind, the explicit label input step
-    if bad:
-        raise ValueError(f"mojolearn: The target label(s) {bad} in y do not exist in the initial classes "
-                         f"{est.classes_}")
-    return first, Array.from_list([index[v] for v in labels], "<i4")  # cpu-route: Python object labels of any kind, the explicit label input step
-
-
-
-
-def _check_alpha(est):
-    if not isinstance(est.alpha, numbers.Real) or not est.alpha > 0:
-        raise NotImplementedError(f"mojolearn: {type(est).__name__} needs alpha > 0 "
-                                  "(alpha = 0 makes log(0) terms)")
 
 
 # partial_fit merges with sklearn's `_update_mean_variance` (Chan's pairwise
@@ -2956,12 +2781,6 @@ class GaussianNB(_Classifier):
 
     def partial_fit(self, X, y, classes=None, sample_weight=None):
         return _CLS_CALL(self, "partial_fit", (X, y, classes, sample_weight), _CLS_CONTEXT)
-
-
-
-
-
-
 
 
 class _DiscreteNB(_Classifier):
@@ -3165,18 +2984,6 @@ def _class_counts(codes, K):
     _ro, tot = _p2m_class_rows(pr, pr.put_codes(codes), n, K, rows=False)
     pr.run(mode)
     return pr.get_i32(tot, K).tolist()
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 # solver 'svd': sklearn's two SVDs are symmetric eigendecompositions of the
@@ -6248,10 +6055,6 @@ class CategoricalNB(_DiscreteNB):
         return _CLS_CALL(self, "partial_fit", (X, y, classes, sample_weight), _CLS_CONTEXT)
 
 
-
-
-
-
 def _c08_route(mode, bit):
     """Compile-time admission of one C08 route (1 TargetEncoder, 2 OneHot
     fit_transform, 4 Ordinal fit_transform); no data processing."""
@@ -6300,3 +6103,7 @@ _STATELESS_CALL, _STATELESS_CONTEXT = _connect_stateless(
     {Binarizer: "binarizer", Normalizer: "normalizer", PolynomialFeatures: "polynomial",
      VarianceThreshold: "variance_threshold", _SelectorMixin: "selector", QuantileTransformer: "quantile",
      PowerTransformer: "power"})
+from ._native_prep_classify_bridge import connect as _connect_classify
+_CLS_CALL, _CLS_CONTEXT = _connect_classify(
+    {GaussianNB: "gnb", MultinomialNB: "mnb", BernoulliNB: "bnb", ComplementNB: "cnb", CategoricalNB: "cat",
+     LinearDiscriminantAnalysis: "lda", QuadraticDiscriminantAnalysis: "qda"}, _PROG_CONTEXT)
