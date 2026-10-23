@@ -10,6 +10,7 @@ from bindings.native_error_class import error_without_class
 from bindings.native_transport import (
     transport_initialize, transport_send, transport_receive, _transport_exact,
     transport_listen, transport_accept, transport_close, transport_clock, transport_sleep, transport_connect,
+    transport_port, transport_address, transport_timeout, transport_hostname,
     _transport_json,
 )
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
@@ -36,7 +37,6 @@ struct CrossVendorBoundary(Defaultable, Movable):
     var feed_cls: PythonObject
     var rate_cls: PythonObject
     var vendor: PythonObject
-    var hostname: PythonObject
     var worker_cls: PythonObject
     var coordinator_cls: PythonObject
     var ready_cls: PythonObject
@@ -53,7 +53,6 @@ struct CrossVendorBoundary(Defaultable, Movable):
         self.feed_cls = PythonObject(None)
         self.rate_cls = PythonObject(None)
         self.vendor = PythonObject(None)
-        self.hostname = PythonObject(None)
         self.worker_cls = PythonObject(None)
         self.coordinator_cls = PythonObject(None)
         self.ready_cls = PythonObject(None)
@@ -154,7 +153,6 @@ def cross_vendor_call(operation: String, args: PythonObject, mut io_error: ByteC
         c[].worker_cls = args[4]
         c[].coordinator_cls = args[5]
         c[].ready_cls = args[6]
-        c[].hostname = Python.import_module("_socket").gethostname
     elif operation == "worker_init":
         return cross_vendor_worker_init(args)
     elif operation == "worker_connect":
@@ -480,7 +478,7 @@ def cross_vendor_coordinator_run(owner: PythonObject) raises -> PythonObject:
     cross_vendor_coordinator_admit(owner)
     var bi = CROSS_VENDOR_BOUNDARY.get_or_create_ptr()[].bi
     var server = transport_listen(String(owner.host), Int(py=owner.port), Float64(py=owner.accept_timeout))
-    py_setattr(owner, "bound_port", server.getsockname()[1])
+    py_setattr(owner, "bound_port", transport_port(server))
     py_setattr(owner.ready, "_set", PythonObject(True))
     var rows = PythonObject(None)
     try:
@@ -490,7 +488,7 @@ def cross_vendor_coordinator_run(owner: PythonObject) raises -> PythonObject:
                 var response = transport_receive(socket, 0)
                 var peer = py_call(bi.dict, response[0])
                 py_setitem(peer, "sock", socket)
-                py_setitem(peer, "where", socket.getpeername())
+                py_setitem(peer, "where", transport_address(socket, True))
                 _ = py_call(owner.peers.append, peer)
             except error:
                 transport_close(socket)
@@ -848,7 +846,7 @@ def cross_vendor_worker_init(args: PythonObject) raises -> PythonObject:
     py_setattr(owner, "shards", py_call(c[].bi.sorted, ids))
     py_setattr(owner, "batches", args[3])
     py_setattr(owner, "address", py_call(c[].bi.tuple, address))
-    py_setattr(owner, "name", args[5] if Bool(py=args[5]) else c[].hostname())
+    py_setattr(owner, "name", args[5] if Bool(py=args[5]) else PythonObject(transport_hostname()))
     py_setattr(owner, "connect_timeout", args[8])
     py_setattr(owner, "timeout", args[9])
     py_setattr(owner, "chained", py_call(c[].bi.bool, args[10]))
@@ -864,7 +862,7 @@ def cross_vendor_worker_connect(owner: PythonObject) raises -> PythonObject:
     while True:  # driver-loop: over native connection retries within the configured deadline
         try:
             var socket = transport_connect(String(owner.address[0]), Int(py=owner.address[1]), 30.0)
-            _ = py_call(socket.settimeout, owner.timeout)
+            transport_timeout(socket, Float64(py=owner.timeout))
             return socket
         except error:
             if transport_clock() > deadline:

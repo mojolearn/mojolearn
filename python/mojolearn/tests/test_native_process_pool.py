@@ -231,3 +231,23 @@ def test_addressed_calls_reuse_exact_worker_and_refuse_invalid_index():
                     os.waitpid(pid, os.WNOHANG)
     finally:
         checked('close', (pool,))
+
+
+@pytest.mark.parametrize('flag', ['0', '1'])
+def test_worker_setup_environment_override_is_local_metadata(flag):
+    before = dict(os.environ)
+    env = dict(row.split('=', 1) for row in checked(
+        'environment', ((0,), (0,), {'MOJOLEARN_NATIVE_CV_NUMPY': flag})))
+    assert env['MOJOLEARN_NATIVE_CV_NUMPY'] == flag
+    assert env['MOJOLEARN_VENDOR'] == _backend.vendor()
+    assert env['MOJOLEARN_NUMERIC_MODE'] == 'identical'
+    assert dict(os.environ) == before
+
+
+@pytest.mark.parametrize('override', [
+    {'MOJOLEARN_VENDOR': 'cpu'}, {'CUDA_VISIBLE_DEVICES': 'unexpected'},
+    {'MOJOLEARN_NATIVE_CV_NUMPY': 'maybe'}, {'MOJOLEARN_NATIVE_CV_NUMPY': 1},
+])
+def test_worker_setup_metadata_cannot_override_route_or_run_conversion(override):
+    with pytest.raises(ValueError, match='environment'):
+        call('environment', ((0,), (0,), override))
