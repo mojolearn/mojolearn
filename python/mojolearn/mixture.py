@@ -9,23 +9,30 @@
 # The default binding implements covariance_type='full', init_params 'kmeans'
 # (through the identity-certified k-means) and 'random' (position-mapped Philox
 # draws, DEVIATION 1733), n_init=1, warm_start=False; every other option is
-# routed to the cluster lane's mixture driver (`_expansion_cluster._gmm_ext_fit`).
+# routed to the cluster lane's mixture driver (bindings/mixture_native.mojo `_gmm_ext_fit`).
 # A collapsed component raises (DEVIATION 1723). No speed claim.
 """Gaussian mixture models.
 
 `GaussianMixture` fits a mixture of Gaussians by expectation-maximization,
 with scikit-learn's parameter names and meanings.
 """
-from . import _backend, _native_archive_bridge, _native_family_bridge
-from ._buffer import addr, addr_ro, as_f32_c, empty
+from . import _native_archive_bridge, _native_family_bridge
 from ._mode import NumericModeMixin
 
 _MODE_CODE = {"fast": 0, "identical": 1}
 
-# The compiled family owner (bindings/svm_mixture_native.mojo), connected once
-# at import: `sample` is one native call, handed the binding `_bind` resolves.
+# The compiled family owners, connected once at import: fit, fit_predict,
+# predict, predict_proba, score_samples, score, bic and aic of
+# GaussianMixture and BayesianGaussianMixture (bindings/mixture_native.mojo)
+# and `sample` (bindings/svm_mixture_native.mojo) are one native call each,
+# handed the binding `_bind` resolves. The covariance-type and init tables
+# are the option-parity solver's codes (x_cluster/entries.mojo::bgmm_entry).
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
-_native_family_bridge.tables(family_gmm_mode_codes=dict(_MODE_CODE))
+_native_family_bridge.tables(
+    family_gmm_mode_codes=dict(_MODE_CODE),
+    family_mix_ctypes={"full": 0, "tied": 1, "diag": 2, "spherical": 3},
+    family_mix_inits={"kmeans": 0, "random": 1, "k-means++": 2, "random_from_data": 3},
+)
 
 #: The model file (the neighbors and density inference lane, 2026-09-15):
 #: `weights`, `means`, `covariances`, `precisions_cholesky` and
@@ -40,30 +47,6 @@ _GMM_FORMAT = "mojolearn-gmm-1"
 # writes the schema registered below the class; host_archive_native.mojo
 # builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
-
-#: Refused by absence on the Mojo side (`GmmParams` has no such field,
-#: DEVIATION 1734), so refused by NAME here rather than accepted and
-#: ignored, which the contract forbids.
-_REFUSED_KNOBS = {
-    "n_init": "n_init > 1 picks the best restart by a float comparison of "
-              "lower bounds (_base.py:282), a second data-dependent branch "
-              "with no identity argument yet (DEVIATION 1734)",
-    "warm_start": "warm_start makes the fit depend on the object's history "
-                  "rather than on its inputs (DEVIATION 1734)",
-    "means_init": "means_init is not a field of GmmParams (mixture/NOT_IMPLEMENTED.tsv)",
-    "weights_init": "weights_init is not a field of GmmParams (mixture/NOT_IMPLEMENTED.tsv)",
-    "precisions_init": "precisions_init is not a field of GmmParams (mixture/NOT_IMPLEMENTED.tsv)",
-}
-
-
-def _real(v, name):
-    if isinstance(v, bool) or not isinstance(v, (int, float)):
-        raise TypeError(
-            f"mojolearn GaussianMixture: {name} must be a real number, got "
-            f"{type(v).__name__}"
-        )
-    return float(v)
-
 
 # log_det_chol_ is `_compute_log_det_cholesky`'s answer from the device fold
 # (DEVIATION 1726), never re-derived from the diagonal in Python.
@@ -177,33 +160,10 @@ class GaussianMixture(NumericModeMixin):
         self.weights_init = weights_init
         self.precisions_init = precisions_init
 
-    def _extension(self):
-        mod = self._bind()
-        want = getattr(self, "numeric_mode", None) or _backend.default_mode()
-        fn = getattr(mod, "mixture_numeric_mode", None)
-        if fn is not None:
-            got = int(fn())
-            if got != _MODE_CODE.get(want):
-                raise RuntimeError(
-                    f"mojolearn GaussianMixture: numeric_mode={want!r} was requested "
-                    f"but {mod.__name__} reports compile-time mode code {got}; "
-                    "rebuild it with bash bindings/build_mixture.sh"
-                )
-        return mod
-
-    def _refuse_knobs(self):
-        if self.n_init != 1:
-            raise ValueError("mojolearn GaussianMixture: " + _REFUSED_KNOBS["n_init"])
-        if self.warm_start:
-            raise ValueError("mojolearn GaussianMixture: " + _REFUSED_KNOBS["warm_start"])
-        for name in ("means_init", "weights_init", "precisions_init"):  # glue: checks three parameter names
-            if getattr(self, name) is not None:
-                raise ValueError("mojolearn GaussianMixture: " + _REFUSED_KNOBS[name])
-
     # EM runs one shot on the device (`gaussian_mixture_fit`). Option parity
     # (2026-09-27, lane/algos-cluster): any option this binding does not carry
     # runs the same EM on the cluster lane's mixture driver
-    # (`x_cluster/bgmm.mojo`, plain mode; `_expansion_cluster._gmm_ext_fit`).
+    # (`x_cluster/bgmm.mojo`, plain mode; bindings/mixture_native.mojo `_gmm_ext_fit`).
     # The default fit is untouched and keeps its recorded bits.
     def fit(self, X, y=None):
         """Fit the mixture to `X` by expectation-maximization.
@@ -236,75 +196,8 @@ class GaussianMixture(NumericModeMixin):
             If `n_components` is not an int or `tol`/`reg_covar` is not a
             number.
         """
-        from ._expansion_cluster import _gmm_needs_ext, _gmm_ext_fit
-        if _gmm_needs_ext(self):
-            return _gmm_ext_fit(self, X)
-        self._ext = None
-        self._refuse_knobs()
-        x, _ = as_f32_c(X, ndim=2, name="X")
-        n, d = x.shape
-        if isinstance(self.n_components, bool) or not isinstance(self.n_components, int):
-            raise TypeError("mojolearn GaussianMixture: n_components must be an int")
-        if not isinstance(self.covariance_type, str) or not isinstance(self.init_params, str):
-            raise TypeError(
-                "mojolearn GaussianMixture: covariance_type and init_params are "
-                "scikit-learn's strings; they are decoded, and refused, by name on "
-                "the Mojo host"
-            )
-        k = int(self.n_components)
-        if k < 1:
-            raise ValueError(f"mojolearn GaussianMixture: n_components must be positive, got {k}")
-        tol = _real(self.tol, "tol")
-        reg_covar = _real(self.reg_covar, "reg_covar")
-        max_iter = int(self.max_iter)
-        weights = empty((k,), "<f4")
-        means = empty((k * d,), "<f4")
-        covariances = empty((k * d * d,), "<f4")
-        precisions = empty((k * d * d,), "<f4")
-        log_det = empty((k,), "<f4")
-        scalars = empty((3,), "<f8")
-        n_iter = self._extension().gmm_fit(
-            # ORDER MATCHES bindings/_mojolearn_mixture.mojo::gmm_fit_binding.
-            # x, weights_out, means_out, covariances_out, precisions_chol_out, log_det_chol_out, scalars_out
-            [addr_ro(x, name="X"), addr(weights, name="weights_"), addr(means, name="means_"),
-             addr(covariances, name="covariances_"), addr(precisions, name="precisions_cholesky_"),
-             addr(log_det, name="log_det_chol_"), addr(scalars, name="scalars")],
-            # n, d, n_components, covariance_type, tol, reg_covar, max_iter, init_params, random_state
-            [n, d, k, self.covariance_type, tol, reg_covar, max_iter, self.init_params, int(self.random_state)],
-        )
-        self.n_features_in_ = d
-        self.weights_ = weights
-        self.means_ = means.reshape((k, d))
-        self.covariances_ = covariances.reshape((k, d, d))
-        self.precisions_cholesky_ = precisions.reshape((k, d, d))
-        self.log_det_chol_ = log_det
-        self.n_iter_ = int(n_iter)
-        self.converged_ = bool(int(scalars[1]))
-        self.lower_bound_ = float(scalars[2])
-        return self
+        return _NATIVE(self, "family_mix_gmm_fit", (self._bind(), self._bind("_mojolearn_x_cluster"), X), _NATIVE_CONTEXT)
 
-    def _model_lists(self, X, out, name):
-        if not hasattr(self, "weights_"):
-            raise ValueError(f"mojolearn GaussianMixture: call fit before {name}")
-        x, _ = as_f32_c(X, ndim=2, name="X")
-        n, d = x.shape
-        if d != self.n_features_in_:
-            raise ValueError(
-                f"mojolearn GaussianMixture: X has {d} features, the fit had {self.n_features_in_}"
-            )
-        k = self.weights_.shape[0]
-        flat_m = self.means_.reshape((k * d,))
-        flat_c = self.covariances_.reshape((k * d * d,))
-        flat_p = self.precisions_cholesky_.reshape((k * d * d,))
-        # ORDER MATCHES bindings/_mojolearn_mixture.mojo::_rebuild_model.
-        # weights, means, covariances, precisions_chol, log_det_chol, x, out
-        addrs = [addr_ro(self.weights_, name="weights_"), addr_ro(flat_m, name="means_"),
-                 addr_ro(flat_c, name="covariances_"), addr_ro(flat_p, name="precisions_cholesky_"),
-                 addr_ro(self.log_det_chol_, name="log_det_chol_"), addr_ro(x, name="X"), addr(out, name=name)]
-        # k, d, n_iter, converged, lower_bound, n
-        params = [k, d, self.n_iter_, 1 if self.converged_ else 0, self.lower_bound_, n]
-        # The arrays addressed above stay alive through the caller's frame.
-        return (x, flat_m, flat_c, flat_p), addrs, params, n, k
 
     def score_samples(self, X):
         """Return the log likelihood of each row of `X` under the model.
@@ -317,14 +210,7 @@ class GaussianMixture(NumericModeMixin):
         -------
         log_likelihood : Array of shape (n_samples,), float32
         """
-        if getattr(self, "_ext", None) is not None:
-            from ._expansion_cluster import _gmm_ext_score
-            return _gmm_ext_score(self, X)[1]
-        x, _ = as_f32_c(X, ndim=2, name="X")
-        out = empty((x.shape[0],), "<f4")
-        keep, addrs, params, n, k = self._model_lists(x, out, "score_samples")
-        self._extension().gmm_score_samples(addrs, params)
-        return out
+        return _NATIVE(self, "family_mix_gmm_score_samples", (self._bind(), X), _NATIVE_CONTEXT)
 
     def predict_proba(self, X):
         """Return the posterior probability of each component for each row.
@@ -337,15 +223,7 @@ class GaussianMixture(NumericModeMixin):
         -------
         proba : Array of shape (n_samples, n_components), float32
         """
-        if getattr(self, "_ext", None) is not None:
-            from ._expansion_cluster import _gmm_ext_score
-            return _gmm_ext_score(self, X)[2]
-        x, _ = as_f32_c(X, ndim=2, name="X")
-        k = self.weights_.shape[0] if hasattr(self, "weights_") else 0
-        out = empty((x.shape[0] * k,), "<f4")
-        keep, addrs, params, n, k = self._model_lists(x, out, "predict_proba")
-        self._extension().gmm_predict_proba(addrs, params)
-        return out.reshape((n, k))
+        return _NATIVE(self, "family_mix_gmm_predict_proba", (self._bind(), X), _NATIVE_CONTEXT)
 
     def predict(self, X):
         """Return the most likely component for each row of `X`.
@@ -360,14 +238,7 @@ class GaussianMixture(NumericModeMixin):
         -------
         labels : Array of shape (n_samples,), int32
         """
-        if getattr(self, "_ext", None) is not None:
-            from ._expansion_cluster import _gmm_ext_score
-            return _gmm_ext_score(self, X)[3]
-        x, _ = as_f32_c(X, ndim=2, name="X")
-        out = empty((x.shape[0],), "<i4")
-        keep, addrs, params, n, k = self._model_lists(x, out, "predict")
-        self._extension().gmm_predict(addrs, params)
-        return out
+        return _NATIVE(self, "family_mix_gmm_predict", (self._bind(), X), _NATIVE_CONTEXT)
 
     def fit_predict(self, X, y=None):
         """Fit the model, then return `predict(X)`.
@@ -376,7 +247,7 @@ class GaussianMixture(NumericModeMixin):
         -------
         labels : Array of shape (n_samples,), int32
         """
-        return self.fit(X).predict(X)
+        return _NATIVE(self, "family_mix_gmm_fit_predict", (self._bind(), self._bind("_mojolearn_x_cluster"), X), _NATIVE_CONTEXT)
 
     def save(self, path):
         """Save the fitted model to `path` as an `.npz` file.
@@ -424,15 +295,6 @@ class GaussianMixture(NumericModeMixin):
         """
         return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
-    def _score_bic_aic(self, X):
-        if getattr(self, "_ext", None) is not None:
-            from ._expansion_cluster import _gmm_ext_bic_aic
-            return _gmm_ext_bic_aic(self, X)
-        x, _ = as_f32_c(X, ndim=2, name="X")
-        out = empty((3,), "<f8")
-        keep, addrs, params, n, k = self._model_lists(x, out, "score")
-        self._extension().gmm_score_bic_aic(addrs, params)
-        return float(out[0]), float(out[1]), float(out[2])
 
     def score(self, X, y=None):
         """Return the mean log likelihood of the rows of `X`.
@@ -447,7 +309,7 @@ class GaussianMixture(NumericModeMixin):
         -------
         score : float
         """
-        return self._score_bic_aic(X)[0]
+        return _NATIVE(self, "family_mix_gmm_score", (self._bind(), X), _NATIVE_CONTEXT)
 
     def bic(self, X):
         """Return the Bayesian information criterion of the model on `X`.
@@ -462,7 +324,7 @@ class GaussianMixture(NumericModeMixin):
         -------
         bic : float
         """
-        return self._score_bic_aic(X)[1]
+        return _NATIVE(self, "family_mix_gmm_bic", (self._bind(), X), _NATIVE_CONTEXT)
 
     def aic(self, X):
         """Return the Akaike information criterion of the model on `X`.
@@ -477,7 +339,7 @@ class GaussianMixture(NumericModeMixin):
         -------
         aic : float
         """
-        return self._score_bic_aic(X)[2]
+        return _NATIVE(self, "family_mix_gmm_aic", (self._bind(), X), _NATIVE_CONTEXT)
 
     # Reference: scikit-learn `BaseMixture.sample`. Draws are position-mapped
     # Philox keyed by `random_state` (DEVIATION 2791, `mixture/checks/sample.mojo`);
