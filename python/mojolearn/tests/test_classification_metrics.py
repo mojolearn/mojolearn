@@ -198,16 +198,16 @@ def test_options_keyword_only_and_exports(binding, name):
 
 @pytest.mark.parametrize('name', ('confusion_matrix',) + NAMES)
 def test_supported_weights_reach_expansion(binding, name, monkeypatch):
-    from mojolearn import _expansion_metrics
-    calls = []
-    def run(*args):
-        calls.append(args)
-        return 2.5
-    helper = 'confusion_matrix_weighted' if name == 'confusion_matrix' else '_prf_weighted'
-    monkeypatch.setattr(_expansion_metrics, helper, run)
-    y, weights = [0, 1], [1, 2]
-    assert getattr(metrics, name)(y, y, sample_weight=weights) == 2.5
-    args, = calls
-    assert args[0] is y and args[1] is y
-    assert args[3 if name == 'confusion_matrix' else 5] is weights
+    # The weights reach the one native metric call (the patched Python
+    # expansion route is gone): a weighted confusion matrix sums the weights,
+    # and a perfect prediction scores 1 under any weights.
+    y, weights = [0, 1, 1], [1, 2, 3]
+    got = getattr(metrics, name)(y, y, sample_weight=weights)
+    if name == 'confusion_matrix':
+        assert np.asarray(got).tolist() == [[1, 0], [0, 5]]
+    else:
+        assert float(got) == 1.0
+    pred = [0, 0, 1]
+    if name == 'confusion_matrix':
+        assert np.asarray(getattr(metrics, name)(y, pred, sample_weight=weights)).tolist() == [[1, 0], [2, 3]]
     assert not binding['fast'].calls
