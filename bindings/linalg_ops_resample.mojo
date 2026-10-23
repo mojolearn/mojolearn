@@ -559,7 +559,7 @@ def _rs_narrow_gather(binding: PythonObject, arrays: PythonObject, n: Int, count
                 w = Int(py=x.shape[1])
         if not (w > 0 and 4 * w <= bound and _rs_is_f32(x, context) and lin_truth(x.flags.c_contiguous)):
             w = 0
-        if w:
+        if w > 0:
             var out = _rs_output(x, count, context["float32"], context)
             _ = py_call(outs.append, out)
             _ = py_call(addresses.append, classical_address(x))
@@ -574,7 +574,7 @@ def _rs_narrow_gather(binding: PythonObject, arrays: PythonObject, n: Int, count
         return PythonObject(None)
     var result = Python.list()
     for i in range(len(arrays)):  # driver-loop: over the argument arrays
-        if (done >> i) & 1:
+        if ((done >> i) & 1) != 0:
             _ = py_call(result.append, outs[i])
         else:
             _ = py_call(result.append, _rs_take(arrays[i], idx, context))
