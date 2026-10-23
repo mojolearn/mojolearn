@@ -3,7 +3,8 @@
 of every migrated public operation of the sequence-expansion estimators
 (python/mojolearn/_native_xseq_bridge.py connects it at import).
 
-Operations: rnn_fit, rnn_predict, rnn_predict_proba, rnn_hidden_sequence
+Operations: rnn_fit, rnn_predict, rnn_predict_proba, rnn_hidden_sequence,
+rnn_score and mlp_score (the regressors' R^2, bindings/xseq_score_native.mojo)
 (bindings/xseq_neural_native.mojo, the recurrent models); mlp_fit,
 mlp_predict, mlp_predict_proba (the perceptrons); theta_*, croston_*, ets_*,
 garch_fit, var_fit, stl_fit (bindings/xseq_forecast_native.mojo).
@@ -15,6 +16,7 @@ from bindings.native_error_class import error_without_class
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.xseq_neural_native import xseq_rnn, xseq_mlp
 from bindings.xseq_forecast_native import xseq_forecast
+from bindings.xseq_score_native import xseq_regressor_score
 
 
 def _xseq_raise(error: Error, args_ptr: PyObjectPtr) -> PyObjectPtr:
@@ -56,7 +58,13 @@ def xseq_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         var args = call[2]
         var context = call[3]
         var result: PythonObject
-        if operation.startswith("rnn_"):
+        if operation == "rnn_score" or operation == "mlp_score":
+            # predict, then R^2 against y, in this one call
+            var predict_args = Python.tuple(args[0])
+            var prediction = (xseq_rnn(model, "rnn_predict", predict_args, context) if operation == "rnn_score"
+                              else xseq_mlp(model, "mlp_predict", predict_args, context))
+            result = xseq_regressor_score(model, prediction, args, context)
+        elif operation.startswith("rnn_"):
             result = xseq_rnn(model, operation, args, context)
         elif operation.startswith("mlp_"):
             result = xseq_mlp(model, operation, args, context)

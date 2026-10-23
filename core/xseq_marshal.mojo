@@ -118,3 +118,25 @@ def tsa_flags_u8(src: _I32P, dst: _U8P, count: Int):
     """`flags.astype("<u1")` of the stationarity flags (each 0 or 1)."""
     for i in range(count):  # native result publication: one flag per series
         dst[i] = UInt8(src[i])
+
+
+def xseq_all_finite_f32(src: _F32P, count: Int) -> Bool:
+    """`all_finite(a)` of `count` float32 words: no NaN and no infinity."""
+    for i in range(count):
+        var bits = bitcast[DType.uint32](src[i])
+        if (bits & UInt32(0x7F800000)) == UInt32(0x7F800000):
+            return False
+    return True
+
+
+def xseq_min_max_f32(src: _F32P, count: Int) -> Tuple[Float32, Float32]:
+    """`(a.min(), a.max())` of `count` (finite, count >= 1) float32 words."""
+    var lo = src[0]
+    var hi = src[0]
+    for i in range(1, count):
+        var v = src[i]
+        if v < lo:
+            lo = v
+        if v > hi:
+            hi = v
+    return (lo, hi)

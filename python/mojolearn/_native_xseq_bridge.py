@@ -68,9 +68,29 @@ def connect():
         if not isinstance(symbol, BuiltinFunctionType):
             raise TypeError(f"the sequence estimators require a compiled {name}")
         base[name] = symbol
+    metrics = {}
+    for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: the two numeric modes, connected once
+        try:
+            module = _backend.binding("_mojolearn_metrics", mode)
+            symbols = {}
+            for name in ("r2_score", "r2_score_weighted", "metrics_numeric_mode"):  # glue: fixed compiled entry names
+                symbol = getattr(module, name, None)
+                if isinstance(symbol, BuiltinFunctionType):
+                    symbols[name] = symbol
+            metrics[mode] = symbols
+        except (ImportError, AttributeError, ValueError, RuntimeError, TypeError) as error:
+            metrics[mode] = type(error).__name__ + ": " + str(error)
+    r2_options = None
+    try:
+        # the native metrics owner's multi-output R^2, where the install has it
+        from . import _native_family_bridge
+        r2_options = _native_family_bridge.connect()
+    except ImportError:
+        r2_options = None
     context = dict(_SEQUENTIAL_CONTEXT)
     context.update(xseq_bindings=bindings, xseq_base=base, optimizer_context=_OPT_CONTEXT,
-                   os_urandom=os.urandom, np_asarray=np.asarray, xseq_linalg_error=np.linalg.LinAlgError)
+                   os_urandom=os.urandom, np_asarray=np.asarray, xseq_linalg_error=np.linalg.LinAlgError,
+                   xseq_metrics=metrics, xseq_r2_options=r2_options)
     _ENTRY, _CONTEXT = entry, context
     return _ENTRY, _CONTEXT
 

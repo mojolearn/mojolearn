@@ -128,6 +128,25 @@ class _RecurrentRegressor(RegressorScoreMixin, _RecurrentBase):
     def predict(self, X):
         return _XSEQ(self, "rnn_predict", (X,), _XSEQ_CONTEXT)
 
+    def score(self, X, y, sample_weight=None):
+        """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_timesteps, n_features)
+            Test sequences.
+        y : array-like of shape (n_samples,) or (n_samples, n_outputs)
+            True targets.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            R^2, averaged uniformly over outputs; 1.0 is a perfect fit.
+        """
+        return _XSEQ(self, "rnn_score", (X, y, sample_weight), _XSEQ_CONTEXT)
+
 
 class _RecurrentClassifier(ClassifierScoreMixin, _RecurrentBase):
     # scikit-learn tags, read by `_mode.sklearn_tags`
