@@ -73,7 +73,8 @@ def host_archive_check_layout(cls: PythonObject, context: PythonObject) raises:
     for i in range(len(mro)):  # driver-loop: connected class ancestry metadata
         var fields = py_call(b.type.__dict__["__dict__"].__get__, mro[i])
         if not found_finalizer and py_contains(fields, "__del__"):
-            if fields["__del__"] is not py_get(context, "host_archive_finalizer_descriptor"):
+            if (fields["__del__"] is not py_get(context, "host_archive_finalizer_descriptor")
+                    and fields["__del__"] is not py_get(context, "host_archive_peer_finalizer_descriptor")):
                 raise Error("TypeError: Python finalizer hooks are not accepted by native archive loading")
             found_finalizer = True
         if not found_dictionary and py_contains(fields, "__dict__"):
