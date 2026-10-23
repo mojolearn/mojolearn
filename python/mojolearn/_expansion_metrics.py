@@ -1239,25 +1239,12 @@ def flatten_mo(values):
     return flatten_labels(values)
 
 
-def _mean_error(kind, y_true, y_pred, sample_weight, multioutput, numeric_mode, caller, *, root=False,
-                scalar=None, log_domain=None):
-    """The per-output (root) mean of the term, averaged, in one program;
-    `log_domain` names the metric whose log-domain refusal scans y and p
-    in the same program (raised before any result is returned)."""
-    r = _Reg(y_true, y_pred, sample_weight, multioutput, caller)
-    r.program(scalar)
-    flag = r.scan_log_domain() if log_domain else None
-    out = r.average(r.stage_mean(kind, _RE_DIV | (_RE_ROOT if root else 0)))
-    return r.result(out, numeric_mode, None if flag is None else lambda prog: _refuse_log_domain(prog, flag, log_domain))
-
-
 def regression_error_options(name, y_true, y_pred, sample_weight, multioutput, numeric_mode):
     """mean_squared_error / mean_absolute_error / root_mean_squared_error
     with sample_weight, multioutput or 2-D targets (lane/metrics); the 1-D
     unweighted call keeps its original kernel and bits."""
-    kind = {"mean_squared_error": "sq", "mean_absolute_error": "abs", "root_mean_squared_error": "sq"}[name]
-    return _mean_error(kind, y_true, y_pred, sample_weight, multioutput, numeric_mode, name,
-                       root=name == "root_mean_squared_error")
+    return _NATIVE(None, "family_metric_regression_error",
+                   (name, y_true, y_pred, sample_weight, multioutput, numeric_mode), _NATIVE_CONTEXT)
 
 
 def mean_squared_log_error(y_true, y_pred, *, sample_weight=None, multioutput="uniform_average",
@@ -1265,43 +1252,30 @@ def mean_squared_log_error(y_true, y_pred, *, sample_weight=None, multioutput="u
     """scikit-learn 1.9 `mean_squared_log_error`: the mean of
     `(log1p(y) - log1p(p))^2` (portable log1p, IDENTITY_PATHS row 51);
     values <= -1 are refused as scikit-learn refuses them."""
-    return _mean_error("sqlog", y_true, y_pred, sample_weight, multioutput, numeric_mode,
-                       "mean_squared_log_error", log_domain="Mean Squared Logarithmic Error")
+    return _NATIVE(None, "family_metric_msle", (y_true, y_pred, sample_weight, multioutput, numeric_mode),
+                   _NATIVE_CONTEXT)
 
 
 def root_mean_squared_log_error(y_true, y_pred, *, sample_weight=None, multioutput="uniform_average",
                                 numeric_mode=None):
     """scikit-learn 1.9 `root_mean_squared_log_error` (per-output root, then averaged)."""
-    return _mean_error("sqlog", y_true, y_pred, sample_weight, multioutput, numeric_mode,
-                       "root_mean_squared_log_error", root=True, log_domain="Root Mean Squared Logarithmic Error")
-
-
-def _refuse_log_domain(prog, flag, what):
-    """The log-domain refusal from the program's flag_scan word (lane
-    cpu2-l7-metrics: the O(n) host min left the GPU route)."""
-    if _flag_set(prog, flag):
-        raise ValueError(f"{what} cannot be used when targets contain values less than or equal to -1.")
+    return _NATIVE(None, "family_metric_rmsle", (y_true, y_pred, sample_weight, multioutput, numeric_mode),
+                   _NATIVE_CONTEXT)
 
 
 def mean_absolute_percentage_error(y_true, y_pred, *, sample_weight=None, multioutput="uniform_average",
                                    numeric_mode=None):
     """scikit-learn 1.9 `mean_absolute_percentage_error`: `|p - y| / max(|y|,
     eps)` with numpy's float64 epsilon, averaged (not multiplied by 100)."""
-    return _mean_error("ape", y_true, y_pred, sample_weight, multioutput, numeric_mode,
-                       "mean_absolute_percentage_error")
-
-
-def _check_alpha(alpha):
-    if is_bool(alpha) or not isinstance(alpha, numbers.Real) or not 0 <= alpha <= 1:
-        raise ValueError("alpha must be a real number in [0, 1]")
-    return float(alpha)
+    return _NATIVE(None, "family_metric_mape", (y_true, y_pred, sample_weight, multioutput, numeric_mode),
+                   _NATIVE_CONTEXT)
 
 
 def mean_pinball_loss(y_true, y_pred, *, sample_weight=None, alpha=0.5, multioutput="uniform_average",
                       numeric_mode=None):
     """scikit-learn 1.9 `mean_pinball_loss` (alpha is rounded to Float32)."""
-    return _mean_error("pinball", y_true, y_pred, sample_weight, multioutput, numeric_mode,
-                       "mean_pinball_loss", scalar=_check_alpha(alpha))
+    return _NATIVE(None, "family_metric_pinball", (y_true, y_pred, sample_weight, multioutput, numeric_mode, alpha),
+                   _NATIVE_CONTEXT)
 
 
 def median_absolute_error(y_true, y_pred, *, multioutput="uniform_average", sample_weight=None,
@@ -1309,24 +1283,13 @@ def median_absolute_error(y_true, y_pred, *, multioutput="uniform_average", samp
     """scikit-learn 1.9 `median_absolute_error`: the per-output median of
     ``|y - p|`` (the weighted percentile at 50 with averaging when weighted, the
     same answer as numpy's median when not), from a stable device sort."""
-    r = _Reg(y_true, y_pred, sample_weight, multioutput, "median_absolute_error")
-    r.program()
-    return r.result(r.average(r.percentile(r.term("abs"), 50.0)), numeric_mode)
+    return _NATIVE(None, "family_metric_medae", (y_true, y_pred, sample_weight, multioutput, numeric_mode),
+                   _NATIVE_CONTEXT)
 
 
 def max_error(y_true, y_pred, *, numeric_mode=None):
     """scikit-learn 1.9 `max_error` (single output)."""
-    r = _Reg(y_true, y_pred, None, "uniform_average", "max_error")
-    if r.D != 1:
-        raise ValueError("Multioutput not supported in max_error")
-    prog = _Prog()
-    Y, P = prog.put(r.y), prog.put(r.p)
-    t = prog.scratch(r.n)
-    prog.stage("reg_term", r.n, Y, P, t, 1, _TERM["abs"], Y, 0)
-    out = prog.want(prog.alloc(1), 1)
-    prog.stage("col_max", 1, t, r.n, 1, out)
-    _run(prog, numeric_mode)
-    return float(prog.floats(out, 1)[0])
+    return _NATIVE(None, "family_metric_max_error", (y_true, y_pred, numeric_mode), _NATIVE_CONTEXT)
 
 
 def _assemble(r, num, den, force_finite, *, average=True):
@@ -1345,20 +1308,8 @@ def explained_variance_score(y_true, y_pred, *, sample_weight=None, multioutput=
     """scikit-learn 1.9 `explained_variance_score`: `1 - Var(y - p) / Var(y)`
     with (weighted) means, one program (the means, then the centered
     squares); force_finite=False returns scikit-learn's NaN / -inf by value."""
-    r = _Reg(y_true, y_pred, sample_weight, multioutput, "explained_variance_score", variance_ok=True)
-    r.program()
-    diff, diff_mean, y_mean = _diff_and_y_means(r)
-    num = _centered(r, diff, diff_mean)
-    den = _centered(r, r.Y, y_mean)
-    return r.result(_assemble(r, num, den, force_finite), numeric_mode)
-
-
-def _diff_and_y_means(r):
-    """Stage y - p and the per-column (weighted) means of y - p and of y,
-    each as the Float32 broadcast column the centered terms read:
-    (diff, diff_mean32, y_mean32)."""
-    diff = r.term("diff")
-    return diff, r.fin(r.sums(diff), f32=True)[1], r.fin(r.sums(r.Y), f32=True)[1]
+    return _NATIVE(None, "family_metric_explained_variance",
+                   (y_true, y_pred, sample_weight, multioutput, force_finite, numeric_mode), _NATIVE_CONTEXT)
 
 
 def _centered(r, V, M, *, mean=True):
@@ -1372,13 +1323,8 @@ def r2_score_options(y_true, y_pred, sample_weight, multioutput, force_finite, n
     """r2_score with multioutput, 2-D targets or force_finite=False
     (lane/metrics): `sum w (y - p)^2` over `sum w (y - avg)^2` per output;
     the 1-D default call keeps its original kernel and bits."""
-    r = _Reg(y_true, y_pred, sample_weight, multioutput, "r2_score", variance_ok=True)
-    if r.n < 2:
-        _undefined_warning("R^2 score is not well-defined with less than two samples.")
-        return float("nan")
-    r.program()
-    num, den = _r2_parts(r)
-    return r.result(_assemble(r, num, den, force_finite), numeric_mode)
+    return _NATIVE(None, "family_metric_r2_options",
+                   (y_true, y_pred, sample_weight, multioutput, force_finite, numeric_mode), _NATIVE_CONTEXT)
 
 
 def _r2_parts(r):
@@ -1402,96 +1348,44 @@ def _r2_sums_of(r, numeric_mode):
     return float(r.prog.words(words[0], 2, "d")[0]), float(r.prog.words(words[1], 2, "d")[0])
 
 
-def _tweedie_domain(r, power, caller):
-    """The power refusal now; the y and p sign scans staged in r's program
-    (reg_epi SIGN, lane cpu2-l7-metrics: the O(n) host mins left the GPU
-    route). Returns the check that raises after the run, before a result."""
-    msg = f"Mean Tweedie deviance error with power={power} can only be used on "
-    if not (power <= 0 or power >= 1):
-        raise ValueError(f"mojolearn {caller}: power in (0, 1) is not a Tweedie distribution")
-    if power == 0:
-        return None
-    fy, fp = r.scan_sign(r.Y), r.scan_sign(r.P)
-
-    def check(prog):
-        y_neg, y_nonpos = prog.ints(fy, 2)
-        p_nonpos = prog.ints(fp, 2)[1]
-        if power < 0:
-            if p_nonpos:
-                raise ValueError(msg + "strictly positive y_pred.")
-        elif 1 <= power < 2:
-            if y_neg or p_nonpos:
-                raise ValueError(msg + "non-negative y and strictly positive y_pred.")
-        elif power >= 2:
-            if y_nonpos or p_nonpos:
-                raise ValueError(msg + "strictly positive y and y_pred.")
-    return check
-
-
 def mean_tweedie_deviance(y_true, y_pred, *, sample_weight=None, power=0, numeric_mode=None):
     """scikit-learn 1.9 `mean_tweedie_deviance` (single output; the power is
     rounded to Float32; pow/log are the portable row-12 functions)."""
-    if is_bool(power) or not isinstance(power, numbers.Real):
-        raise ValueError("power must be a real number")
-    r = _Reg(y_true, y_pred, sample_weight, "uniform_average", "mean_tweedie_deviance")
-    if r.D != 1:
-        raise ValueError("Multioutput not supported in mean_tweedie_deviance")
-    r.program(float(power))
-    check = _tweedie_domain(r, power, "mean_tweedie_deviance")
-    return r.scalar(r.stage_mean("tweedie"), numeric_mode, check)
+    return _NATIVE(None, "family_metric_tweedie", (y_true, y_pred, sample_weight, numeric_mode, power),
+                   _NATIVE_CONTEXT)
 
 
 def mean_poisson_deviance(y_true, y_pred, *, sample_weight=None, numeric_mode=None):
     """scikit-learn 1.9 `mean_poisson_deviance` (Tweedie power 1)."""
-    return mean_tweedie_deviance(y_true, y_pred, sample_weight=sample_weight, power=1, numeric_mode=numeric_mode)
+    return _NATIVE(None, "family_metric_poisson", (y_true, y_pred, sample_weight, numeric_mode), _NATIVE_CONTEXT)
 
 
 def mean_gamma_deviance(y_true, y_pred, *, sample_weight=None, numeric_mode=None):
     """scikit-learn 1.9 `mean_gamma_deviance` (Tweedie power 2)."""
-    return mean_tweedie_deviance(y_true, y_pred, sample_weight=sample_weight, power=2, numeric_mode=numeric_mode)
+    return _NATIVE(None, "family_metric_gamma", (y_true, y_pred, sample_weight, numeric_mode), _NATIVE_CONTEXT)
 
 
 def d2_tweedie_score(y_true, y_pred, *, sample_weight=None, power=0, numeric_mode=None):
     """scikit-learn 1.9 `d2_tweedie_score`: `1 - dev(y, p) / dev(y, avg y)`
     in one program; a zero null deviance answers NaN (0/0) or -inf as
     numpy's float division does."""
-    if is_bool(power) or not isinstance(power, numbers.Real):
-        raise ValueError("power must be a real number")
-    r = _Reg(y_true, y_pred, sample_weight, "uniform_average", "d2_tweedie_score")
-    if r.D != 1:
-        raise ValueError("Multioutput not supported in d2_tweedie_score")
-    if r.n < 2:
-        _undefined_warning("D^2 score is not well-defined with less than two samples.")
-        return float("nan")
-    r.program(float(power))
-    check = _tweedie_domain(r, power, "d2_tweedie_score")
-    num = r.stage_mean("tweedie")
-    y_avg = r.fin(r.sums(r.Y), f32=True)[1]
-    den = r.stage_mean("tweedie", P=y_avg, broadcast=True)
-    return r.scalar(_assemble(r, num, den, False, average=False), numeric_mode, check)
+    return _NATIVE(None, "family_metric_d2_tweedie", (y_true, y_pred, sample_weight, numeric_mode, power),
+                   _NATIVE_CONTEXT)
 
 
 def d2_pinball_score(y_true, y_pred, *, sample_weight=None, alpha=0.5, multioutput="uniform_average",
                      numeric_mode=None):
     """scikit-learn 1.9 `d2_pinball_score`: the pinball loss against the
     (weighted, averaged) alpha-quantile of y_true per output, one program."""
-    alpha = _check_alpha(alpha)
-    r = _Reg(y_true, y_pred, sample_weight, multioutput, "d2_pinball_score")
-    if r.n < 2:
-        _undefined_warning("D^2 score is not well-defined with less than two samples.")
-        return float("nan")
-    r.program(alpha)
-    num = r.stage_mean("pinball")
-    quant = r.percentile(r.Y, alpha * 100, f32=True)[1]
-    den = r.stage_mean("pinball", P=quant, broadcast=True)
-    return r.result(_assemble(r, num, den, True), numeric_mode)
+    return _NATIVE(None, "family_metric_d2_pinball", (y_true, y_pred, sample_weight, multioutput, numeric_mode, alpha),
+                   _NATIVE_CONTEXT)
 
 
 def d2_absolute_error_score(y_true, y_pred, *, sample_weight=None, multioutput="uniform_average",
                             numeric_mode=None):
     """scikit-learn 1.9 `d2_absolute_error_score` (d2_pinball_score at alpha 0.5)."""
-    return d2_pinball_score(y_true, y_pred, sample_weight=sample_weight, alpha=0.5,
-                            multioutput=multioutput, numeric_mode=numeric_mode)
+    return _NATIVE(None, "family_metric_d2_absolute", (y_true, y_pred, sample_weight, multioutput, numeric_mode),
+                   _NATIVE_CONTEXT)
 
 
 # ---------------------------------------------------------------------------
@@ -3205,3 +3099,13 @@ def ranking_report(y_true, y_score, *, pos_label=None, sample_weight=None,
 # Import-time connection; `_Prog.run` hands each program off once to Mojo.
 from ._native_arena_prog import connect as _connect_arena_prog
 _PROG_CALL, _PROG_CONTEXT = _connect_arena_prog("x_metrics", _Prog)
+
+# The compiled family owner (bindings/metrics_reg_native.mojo, reached from
+# the classical door): the regression metrics above are one native call each.
+# It builds the x_metrics program `_Reg` builds, with the fixed op and term
+# codes below, and runs it through the shared program runner connected above.
+from . import _native_family_bridge  # noqa: E402
+_NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
+_native_family_bridge.tables(family_metrics_ops=dict(_OPS), family_metrics_terms=dict(_TERM),
+                             family_metrics_prog_context=_PROG_CONTEXT,
+                             family_metrics_undefined=UndefinedMetricWarning, family_metrics_real=numbers.Real)

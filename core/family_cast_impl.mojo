@@ -53,3 +53,22 @@ def family_cast_rows_f64(
             else:
                 value = bitcast[DType.float64](word)
             dst[r * cols + c] = value
+
+
+def family_all_finite_f32(src: MutPointer[Float32, MutUntrackedOrigin], count: Int) -> Bool:
+    """True when none of `count` float32 words is a NaN or an infinity
+    (`_buffer.all_finite`)."""
+    for i in range(count):  # native input marshaling: one finiteness scan over the checked input
+        var bits = bitcast[DType.uint32](src[i])
+        if (bits & UInt32(0x7F800000)) == UInt32(0x7F800000):
+            return False
+    return True
+
+
+def family_max_f32(src: MutPointer[Float32, MutUntrackedOrigin], count: Int) -> Float32:
+    """The maximum of `count` float32 words (count >= 1)."""
+    var hi = src[0]
+    for i in range(1, count):  # native input marshaling: one reduction over the checked input
+        if src[i] > hi:
+            hi = src[i]
+    return hi
