@@ -22,6 +22,7 @@ def connect(context, package):
                    family_msel_json_string=encode_basestring_ascii)
     registry = {}
     protected = ('__new__', '__init__', '__getattribute__', '__getattr__', '__setattr__', '__del__',
+                 '__hash__', '__eq__', '__ne__',
                  '__sklearn_clone__', 'get_params', 'set_params', 'fit', 'predict', 'predict_proba',
                  'decision_function', 'transform', 'score', '_parameter_names',
                  '_has_constructor_parameters', '_BINDING', '_mojolearn_device_rows', '_estimator_type')
@@ -104,3 +105,6 @@ def connect(context, package):
 
     from ._native_msel_search import connect as connect_search
     connect_search(context, package.model_selection)
+
+    from ._native_parallel_cv import connect as connect_parallel
+    connect_parallel(context, package)

@@ -1,11 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Importable scorer/receipt comparator for the physical CV validation runner."""
+"""Testing-only retention and comparison of completed native CV witnesses."""
 import hashlib
 import json
 from pathlib import Path
 import struct
 
-__all__ = ["array_digest", "score_with_witness", "read_records", "compare_records"]
+__all__ = ["array_digest", "retain_completed", "score_with_witness", "read_records", "compare_records"]
 
 
 def array_digest(value):
@@ -58,6 +58,50 @@ def score_with_witness(estimator, X, y, *, directory):
     return score
 
 
+def retain_completed(completed, *, directory, vendor):
+    """Retain actual arrays/model bytes after the native operation returns.
+
+    The historical scorer above remains a testing helper for old evidence;
+    the installed verifier calls this completed-result consumer instead.
+    """
+    import numpy as np
+    directory = Path(directory)
+    models, arrays = directory / 'models', directory / 'arrays'
+    models.mkdir(exist_ok=True)
+    arrays.mkdir(exist_ok=True)
+    for value in completed:  # glue: testing-only retention after native work completed
+        if value['binding_vendor'] != vendor or value['binding_mode'] != 1:
+            raise RuntimeError('CV witness requires matching identical GBDT binding')
+        key = hashlib.sha256((array_digest(value['X_test']) + array_digest(value['y_test'])).encode()).hexdigest()
+        model_path = models / (key + '.npz')
+        if model_path.exists() or (directory / (key + '.json')).exists():
+            raise RuntimeError('duplicate fold input would overwrite its model witness')
+        archive = value['archive']
+        if type(archive) is not bytes or not archive:
+            raise ValueError('native CV did not return actual model archive bytes')
+        # Preserve even a failed replay's actual archive/arrays. The record
+        # is admitted only after every numerical invariant below passes.
+        with model_path.open('xb') as target:
+            target.write(archive)
+        for name in ('X_test', 'y_test', 'predict', 'raw_predict', 'reload_predict', 'loss_curve'):  # glue: test-controller retention of six completed native outputs
+            np.save(arrays / (key + '-' + name + '.npy'), np.asarray(value[name]), allow_pickle=False)
+        raw, reload = array_digest(value['raw_predict']), array_digest(value['reload_predict'])
+        if raw != reload:
+            raise RuntimeError('CV fitted model save/reload changed prediction bytes')
+        if type(value['model_text']) is not str:
+            raise TypeError('native CV model text must be an exact string')
+        record = dict(fixture=key, model=hashlib.sha256(value['model_text'].encode()).hexdigest(),
+                      predict=array_digest(value['predict']), raw_predict=raw, reload_predict=reload,
+                      loss_curve=array_digest(value['loss_curve']), score=struct.pack('<d', value['score']).hex(),
+                      inventory=value['inventory'], binding_sha256=value['binding_sha256'],
+                      selected_arch=value['selected_arch'], selected_arch_how=value['selected_arch_how'],
+                      native_artifacts=value['native_artifacts'])
+        with (directory / (key + '.json')).open('x') as target:
+            json.dump(record, target, indent=2)
+            target.write('\n')
+    return read_records(directory, len(completed))
+
+
 def read_records(directory, folds):
     records = [json.loads(p.read_text()) for p in sorted(Path(directory).glob('*.json'))]  # glue: one witness record per file
     if len(records) != folds or len({r['fixture'] for r in records}) != folds:  # glue: one witness record per file
@@ -85,6 +129,8 @@ def compare_records(expected, actual, *, vendor, workers):
         if not binding or binding != expected[key].get('binding_sha256'):
             raise ValueError('worker GBDT binding differs from baseline')
         bindings.add(binding)
+        if record.get('native_artifacts') != expected[key].get('native_artifacts'):
+            raise ValueError('worker native CV/tree/archive artifacts differ from baseline')
     if len(bindings) != 1:
         raise ValueError('workers did not use the same native GBDT artifact')
     require_distinct_workers(list(inventories.values()), vendor, workers)

@@ -7,7 +7,6 @@ trace or native arithmetic sabotage is inferred from these checks.
 """
 import argparse
 import copy
-import functools
 import hashlib
 import importlib.metadata as metadata
 import json
@@ -17,14 +16,16 @@ import re
 import subprocess
 import time
 
-from ._parallel_cv_witness import array_digest, score_with_witness, read_records, compare_records
+from ._parallel_cv_witness import array_digest, retain_completed, read_records, compare_records
 from ._verify_distributed import verify_distribution_records
 
 __all__ = ['main', 'source_identity', 'validate_receipt', 'compare']
-PROTOCOL = 'parallel-cv-v2'
+PROTOCOL = 'parallel-cv-v3'
 PROFILE_FILES = frozenset(('__init__.py', '_verify_parallel_cv.py', '_parallel_cv_witness.py',
                            'model_selection.py', 'parallel_model_selection.py', '_parallel_pool.py',
-                           '_parallel_worker.py', '_gpu_witness.py', '_verify_distributed.py'))
+                           '_parallel_worker.py', '_gpu_witness.py', '_verify_distributed.py',
+                           '_native_parallel_cv.py', '_native_parallel_cv_worker.py',
+                           '_native_msel_dispatch.py', '_native_msel_more.py'))
 PARTS = ('model', 'predict', 'raw_predict', 'reload_predict', 'loss_curve', 'score')
 FAULTS = ('dropped-fold', 'changed-model', 'changed-prediction', 'aliased-device')
 
@@ -121,6 +122,12 @@ def validate_receipt(report):
                 raise ValueError('CV saved-model replay differs')
             if record['binding_sha256'] != bindings['_mojolearn_gbdt']['sha256']:
                 raise ValueError('CV worker binding differs from parent')
+            artifacts = record.get('native_artifacts', {})
+            if set(artifacts) != {'cv', 'trees', 'archive', 'gbdt'}:
+                raise ValueError('CV native owner artifact witnesses are missing')
+            for owner, digest in artifacts.items():
+                if digest != bindings.get('_native_' + owner, {}).get('sha256'):
+                    raise ValueError('CV worker native owner differs from parent: ' + owner)
         reference = baseline.setdefault(run['model'], actual)
         compare_records(reference, actual, vendor=report['vendor'], workers=len(run['devices']))
         value = run['scores_hex']
@@ -181,7 +188,7 @@ def main(argv=None):
         parser.error('CV capture requires NumPy; install the optional mojolearn[test] extra')
     import mojolearn as ml
     from . import _backend
-    from .parallel_model_selection import cross_val_score
+    from .parallel_model_selection import _capture
     if _backend.numeric_mode() != 'identical':
         parser.error('CV capture requires identical numeric mode in a fresh process')
     if ml.vendor() not in ('cuda', 'hip') or (args.require_backend and ml.vendor() != args.require_backend):
@@ -193,6 +200,10 @@ def main(argv=None):
     binding_path = Path(native.__file__).resolve()
     bindings = {'_mojolearn_gbdt': {'path': str(binding_path), 'vendor': _backend.read_vendor(native),
                                   'sha256': hashlib.sha256(binding_path.read_bytes()).hexdigest()}}
+    for name, filename in ml.model_selection._NATIVE_CONTEXT['family_msel_parallel']['artifact_paths'].items():
+        owner_path = Path(filename).resolve()
+        bindings['_native_' + name] = {'path': str(owner_path),
+                                      'sha256': hashlib.sha256(owner_path.read_bytes()).hexdigest()}
     if args.require_installed:
         if not distribution or not distribution['import_matches_distribution'] or distribution['editable']:
             parser.error('import does not match a noneditable installed mojolearn wheel')
@@ -228,10 +239,11 @@ def main(argv=None):
                 for repeat in range(REPEATS):
                     directory = out / (name + '-' + '-'.join(map(str, order)) + f'-r{repeat}')
                     directory.mkdir()
-                    scorer = functools.partial(score_with_witness, directory=str(directory))
                     start = time.monotonic()
-                    scores = cross_val_score(model, X, y, devices=order, cv=5, scoring=scorer)
-                    records = read_records(directory, 5)
+                    scores, completed = _capture(model, X, y, devices=order, cv=5)
+                    records = retain_completed(completed, directory=directory, vendor=ml.vendor())
+                    if len(records) != 5:
+                        raise ValueError('native CV did not return all five fold witnesses')
                     if baseline is None:
                         baseline, scores0 = records, scores.tobytes()
                     compare_records(baseline, records, vendor=ml.vendor(), workers=len(order))
