@@ -21,11 +21,11 @@ def connect(scaler_class):
             prep = _backend.binding("_mojolearn_preprocessing", mode)
             xprep = _backend.binding("_mojolearn_x_prep", mode)
             entries = {}
-            for name in ("minmax_fit", "minmax_fit_direct", "minmax_transform", "minmax_transform_direct", "preprocessing_numeric_mode"):  # glue: compiled preprocessing exports
+            for name in ("minmax_fit", "minmax_fit_direct", "minmax_transform", "minmax_transform_direct", "minmax_fit_transform", "preprocessing_numeric_mode"):  # glue: compiled preprocessing exports
                 try:
                     entry = getattr(prep, name)
                 except (AttributeError, ImportError):
-                    if name in ("minmax_fit_direct", "minmax_transform_direct"):
+                    if name in ("minmax_fit_direct", "minmax_transform_direct", "minmax_fit_transform"):
                         continue
                     raise
                 if not isinstance(entry, BuiltinFunctionType):

@@ -11,7 +11,7 @@ from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from preprocessing.estimator import validate_dimensions, validate_standard, minmax_fit_refusing, minmax_transform_refusing, standard_fit_refusing, standard_transform_refusing, minmax_fit_direct, standard_fit_direct, minmax_transform_direct, standard_transform_direct
 from preprocessing.minmax import PREP_FAST_MINMAX
-from preprocessing.estimator import PREP_FAST_FIT_TRANSFORM_FUSED, standard_fit_transform_direct
+from preprocessing.estimator import PREP_FAST_FIT_TRANSFORM_FUSED, standard_fit_transform_direct, minmax_fit_transform_direct
 
 
 def ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -211,6 +211,56 @@ def standard_fit_transform_direct_binding(
     return PythonObject(ok)
 
 
+def standard_fit_transform_binding(
+    x_addr: PythonObject, stats_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """StandardScaler fit_transform on ONE upload of X, every tier and vendor
+    (the public runtime migration: one native operation uploads X once).
+    `standard_fit_direct` then `standard_transform_direct` on the resident X:
+    the same kernels on the same words. params = [n, d, with_mean, with_std];
+    stats 3 x d, out n x d. 1 written, 0 X nonfinite (nothing written: the
+    caller's two-step NaN route), -1 transform overflow (the rows written)."""
+    if len(params) != 4:
+        raise Error("standard_fit_transform: requires 4 parameters")
+    var n = Int(py=params[0])
+    var d = Int(py=params[1])
+    var with_mean = Int(py=params[2])
+    var with_std = Int(py=params[3])
+    validate_standard(n,d,with_mean,with_std)
+    var x = ptr(Int(py=x_addr))
+    var stats = ptr(Int(py=stats_addr))
+    var output = ptr(Int(py=out_addr))
+    var ok = 0
+    with GILReleased(Python()):
+        ok = standard_fit_transform_direct(x,n,d,with_mean,with_std,stats,output)
+    return PythonObject(ok)
+
+
+def minmax_fit_transform_binding(
+    x_addr: PythonObject, stats_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """MinMaxScaler fit_transform on ONE upload of X, every tier and vendor:
+    `minmax_fit_direct` then `minmax_transform_direct` (inverse 0) on the
+    resident X, the same kernels on the same words. params = [n, d,
+    feature_min, feature_max, clip]; stats 5 x d, out n x d. 1 written, 0 X
+    nonfinite (nothing written), -1 transform overflow (the rows written)."""
+    if len(params) != 5:
+        raise Error("minmax_fit_transform: requires 5 parameters")
+    var n = Int(py=params[0])
+    var d = Int(py=params[1])
+    var lower = Float32(Float64(py=params[2]))
+    var upper = Float32(Float64(py=params[3]))
+    var clip = Int(py=params[4])
+    validate_dimensions(n,d,lower,upper)
+    var x = ptr(Int(py=x_addr))
+    var stats = ptr(Int(py=stats_addr))
+    var output = ptr(Int(py=out_addr))
+    var ok = 0
+    with GILReleased(Python()):
+        ok = minmax_fit_transform_direct(x,n,d,lower,upper,clip,stats,output)
+    return PythonObject(ok)
+
+
 def numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
@@ -236,6 +286,9 @@ def build__mojolearn_preprocessing() -> PythonObject:
         m.def_function[standard_transform_direct_binding]("standard_transform_direct")
         comptime if PREP_FAST_FIT_TRANSFORM_FUSED:
             m.def_function[standard_fit_transform_direct_binding]("standard_fit_transform_direct")
+        # public runtime migration: fit_transform uploads X once, every tier
+        m.def_function[standard_fit_transform_binding]("standard_fit_transform")
+        m.def_function[minmax_fit_transform_binding]("minmax_fit_transform")
         m.def_function[numeric_mode_binding]("preprocessing_numeric_mode")
         m.def_function[vendor_binding]("preprocessing_vendor")
         return m.finalize()
