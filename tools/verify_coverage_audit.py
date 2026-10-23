@@ -1572,6 +1572,12 @@ ANNOTATIONS_BY_SRC[("linalg_decomp_native_call", "bindings/_mojolearn_tokenizer_
     'Public randomized_svd, solve and lstsq call linalg_decomp_c, which runs the existing x_decomp entries through the native decomposition kit.' + " New source only: runtime execution and identity admission remain pending.")
 
 
+# A new native owner door; these lanes consume its public outputs.
+ANNOTATIONS_BY_SRC[("decomp_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", [],
+    "Public FastICA, NMF, FactorAnalysis, LatentDirichletAllocation, KernelPCA and Gaussian/SparseRandomProjection operations call decomp_c, which checks the inputs, runs one compiled x_decomp driver (plus KernelPCA's x_neighbors kernel steps) and stores the fitted attributes natively." + " New source only: runtime execution and identity admission remain pending.")
+
+
 # LogisticRegression's native owner is new; these lanes consume its public outputs.
 ANNOTATIONS_BY_SRC[("logistic_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
     "owed", [],
