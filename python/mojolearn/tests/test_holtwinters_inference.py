@@ -84,8 +84,11 @@ def test_prediction_sources_reach_no_fit():
         "max.algorithm", "core.host_parallel", "core.host_predict_threads",
         "checks.numerics", "core.hostptr", "holtwinters.host.hw_predict",
         "holtwinters.impl.tsa.holtwinters_params",
+        # the shared shell's balanced Python calls and its own kernel module
+        # (core/holtwinters_host_predict_impl.mojo, std imports only)
+        "bindings.py_balanced", "core.holtwinters_host_predict_impl",
     }
-    for src in ("holtwinters/host/hw_predict.mojo", SHARED):
+    for src in ("holtwinters/host/hw_predict.mojo", SHARED, "core/holtwinters_host_predict_impl.mojo"):
         imports = set(re.findall(r"^from ([\w.]+) import", _code(_read(src)), re.M))
         assert imports <= allowed, f"{src} imports {sorted(imports - allowed)}"
     params = _code(_read("holtwinters/impl/tsa/holtwinters_params.mojo"))
