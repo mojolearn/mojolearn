@@ -14,7 +14,7 @@
 # that went stale (`_wrote_device` / `_wrote_host`).
 from std.python import Python, PythonObject
 from std.memory import memcpy
-from bindings.py_balanced import py_call, py_get, py_type
+from bindings.py_balanced import py_call, py_get, py_type, py_contains
 from bindings.classical_arrays import classical_array, classical_typed, classical_address, classical_host_f32, classical_kind
 from bindings.classical_validate import classical_view
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
@@ -32,6 +32,7 @@ comptime XD_SQRT = 7
 comptime XD_SQ = 8
 comptime XD_SCALE = 14
 comptime XD_SOFT = 17
+comptime XD_RECIP = 16
 comptime XD_MINS = 19
 comptime XD_SELECT = 35
 
@@ -76,6 +77,28 @@ def decomp_seed_word(seed: PythonObject) raises -> Int:
     var masked = py_call(Python.import_module("operator").and_, py_call(Python.import_module("builtins").int, seed),
                          PythonObject(4294967295))
     return Int(py=masked)
+
+
+def decomp_is_a(model: PythonObject, cls: PythonObject) raises -> Bool:
+    """The model's class MRO, read through type's own descriptor, holds cls."""
+    var b = Python.import_module("builtins")
+    var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
+    for k in range(len(mro)):  # driver-loop: over the model class's MRO
+        if mro[k] is cls:
+            return True
+    return False
+
+
+def decomp_class_attr(model: PythonObject, name: String) raises -> PythonObject:
+    """A class attribute (a fixed estimator constant such as `_deflation`),
+    read from the class dictionaries along the MRO, None when absent."""
+    var b = Python.import_module("builtins")
+    var mro = py_call(b.type.__dict__["__mro__"].__get__, py_type(model))
+    for k in range(len(mro)):  # driver-loop: over the model class's MRO
+        var fields = py_call(b.type.__dict__["__dict__"].__get__, mro[k])
+        if py_contains(fields, PythonObject(name)):
+            return fields[name]
+    return PythonObject(None)
 
 
 def decomp_mode(value: PythonObject, context: PythonObject) raises -> PythonObject:

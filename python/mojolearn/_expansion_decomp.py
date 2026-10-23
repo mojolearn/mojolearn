@@ -3983,18 +3983,6 @@ def lstsq(a, b, rcond=None, *, numeric_mode=None):
 
 
 # ================================================================ PLS / CCA
-def _pinv(k, A, rcond=None):
-    """Moore-Penrose pseudo-inverse through the thin SVD (Gram eigh):
-    V diag(1/s) U^T, singular values at or below cond * s_max dropped
-    (cond = max(shape) * float32 eps, sklearn `_pinv2_old`'s rule)."""
-    r = min(A.r, A.c)
-    U, S, Vt = _thin_svd(k, A, r, u_based=True)
-    cond = (max(A.r, A.c) * _F32_EPS) if rcond is None else rcond
-    cut = _f32(S.s[0] * cond) if r else 0.0
-    inv = k.ew("recip", k.ew("select", S, S, _M.zeros(1, 1), s=cut))
-    return k.mm(Vt, k.ew("mul", U, inv), ta=True, tb=True)
-
-
 def _dot(k, a, b):
     """a . b for two column vectors (n x 1): one gemm cell, rows ascending."""
     return k.mm(a, b, ta=True)
@@ -4012,23 +4000,12 @@ class _PLS(RegressorScoreMixin, _Base):
     _deflation = "regression"
     _pmode = "A"
 
+    # fit, fit_transform, transform, inverse_transform and predict are one
+    # call each into the native PLS owner (bindings/pls_native.mojo), which
+    # reads `_deflation` / `_pmode` from the class.
     def __init__(self, n_components=2, *, scale=True, max_iter=500, tol=1e-06, copy=True, numeric_mode=None):
         self.n_components, self.scale, self.max_iter, self.tol, self.copy = n_components, scale, max_iter, tol, copy
         self.numeric_mode = numeric_mode
-
-    def _xy(self, X, Y):
-        from ._sk_validate import _array_like
-        Y = _array_like(Y)  # an `__array__`-only Y (scikit-learn's _NotAnArray) as its array
-        M = _M.from_input(X)
-        vec = Y is not None and (len(getattr(Y, "shape", ())) == 1 or
-                                 (not hasattr(Y, "shape") and not isinstance(Y[0], (list, tuple))))
-        Ym = None
-        if Y is not None:
-            Ym = _M.from_input(_row_of(Y), "Y").T if vec else _M.from_input(Y, "Y")
-        return M, Ym, vec
-
-    def _validate_params(self):
-        """Parameter checks, run at the start of `fit` (none here)."""
 
     def __sklearn_tags__(self):
         # scikit-learn's _PLS tags: a projection model, not scored as a
@@ -4036,18 +4013,6 @@ class _PLS(RegressorScoreMixin, _Base):
         tags = super().__sklearn_tags__()
         tags.regressor_tags.poor_score = True
         return tags
-
-    def _center_scale(self, k, A):
-        n = A.r
-        mean = k.colmean(A)
-        Ac = k.ew("sub", A, mean)
-        if self.scale:
-            std = k.ew("sqrt", k.ew("scale", k.colsum(k.ew("sq", Ac)), s=1.0 / (n - 1)))
-            std = k.ew("select", std, std, k.const(1.0), s=0.0)
-            Ac = k.ew("div", Ac, std)
-        else:
-            std = k.const(1.0, 1, A.c)
-        return Ac, mean, std
 
     def fit(self, X, Y):
         """Fit the model to X and Y.
@@ -4066,63 +4031,7 @@ class _PLS(RegressorScoreMixin, _Base):
         ValueError
             If Y is missing or ``n_components`` is out of range.
         """
-        self._validate_params()
-        self.numeric_mode_ = _mode(self.numeric_mode)
-        k = self._kit()
-        M, Ym, vec = self._xy(X, Y)
-        if Ym is None:
-            raise ValueError(f"{type(self).__name__} requires y to be passed, but the target y is None.")
-        n, p, q = M.r, M.c, Ym.c
-        # scikit-learn's check_X_y / check_array(ensure_min_samples=2) wording,
-        # before the 1 / (n - 1) of the scaling
-        if Ym.r != n:
-            raise ValueError(f"Found input variables with inconsistent numbers of samples: [{n}, {Ym.r}]")
-        if n < 2:
-            raise ValueError(f"Found array with {n} sample(s) (shape=({n}, {p})) while a minimum of 2 is required.")
-        nc = int(self.n_components)
-        bound = p if self._deflation == "regression" else min(n, p, q)
-        if not 1 <= nc <= bound:
-            raise ValueError(f"n_components == {nc}, while 1 <= n_components <= {bound} is required")
-        self._predict_1d = vec
-        Xk, self._x_mean, self._x_std = self._center_scale(k, M)
-        Yk, self._y_mean, self._y_std = self._center_scale(k, Ym)
-        norm_y = self._deflation == "canonical"
-        # the component loop (NIPALS `_power` or the SVD pair, the flips and
-        # the deflations) in ONE binding call (lane py-runtime-b:
-        # x_decomp/pls.mojo on the host column, pls_dev.mojo on resident
-        # device matrices), the same cells, counts and tolerance tests
-        svd_algo = getattr(self, "algorithm", "nipals") == "svd"
-        outs = [_M.zeros(r, nc) for r in (p, q, n, n, p, q)]  # glue: six output blocks
-        its = array.array("i", [0]) * nc
-        done, nits = k.b.x_decomp_pls_fit(
-            Xk.addr, Yk.addr, [o.addr for o in outs], its.buffer_info()[0],  # glue: six output addresses
-            [n, p, q, nc, int(self.max_iter), 1 if self._pmode == "B" else 0, int(norm_y),
-             int(self._deflation == "canonical"), int(svd_algo)], [float(self.tol)])
-        done, nits = int(done), int(nits)
-        if done < nc:
-            import warnings
-            warnings.warn(f"y residual is constant at iteration {done}", stacklevel=2)
-            outs = [o.cols(0, done) for o in outs]  # glue: the fitted columns of six blocks
-        self.n_iter_ = its.tolist()[:nits]
-        (self.x_weights_m_, self.y_weights_m_, self._x_scores_m, self._y_scores_m, self.x_loadings_m_,
-         self.y_loadings_m_) = outs
-        self.x_rotations_m_ = k.mm(self.x_weights_m_, _pinv(k, k.mm(self.x_loadings_m_, self.x_weights_m_, ta=True)))
-        self.y_rotations_m_ = k.mm(self.y_weights_m_, _pinv(k, k.mm(self.y_loadings_m_, self.y_weights_m_, ta=True)))
-        coef = k.mm(self.x_rotations_m_, self.y_loadings_m_, tb=True)          # p x q
-        coef = k.ew("div", k.ew("mul", coef, self._y_std), self._x_std.T).T     # q x p
-        self.coef_m_ = coef
-        for name in ("x_weights", "y_weights", "x_loadings", "y_loadings", "x_rotations", "y_rotations"):  # glue: loops over six attribute names
-            setattr(self, name + "_", getattr(self, name + "_m_").out())
-        self.coef_ = coef.out()
-        self.intercept_ = self._y_mean.out((q,))
-        self._x_scores, self._y_scores = self._x_scores_m.out(), self._y_scores_m.out()
-        self.n_features_in_ = p
-        self.components_m_ = self.x_rotations_m_
-        return self
-
-    def _check_fitted(self):
-        if not hasattr(self, "coef_m_"):
-            raise RuntimeError(f"{type(self).__name__} is not fitted; call fit first")
+        return _PLS_CALL(self, "fit", (X, Y, None), _PLS_CONTEXT)
 
     def transform(self, X, y=None, Y=None, copy=True):
         """Project X (and optionally Y) onto the fitted rotations.
@@ -4141,15 +4050,7 @@ class _PLS(RegressorScoreMixin, _Base):
         y_scores : ndarray of shape (n_samples, n_components), float32
             Returned only when Y is given.
         """
-        self._check_fitted()
-        Y = y if y is not None else Y
-        k = self._kit()
-        M, Ym, vec = self._xy(X, Y)
-        xs = k.mm(k.ew("div", k.ew("sub", M, self._x_mean), self._x_std), self.x_rotations_m_)
-        if Ym is None:
-            return xs.out()
-        ys = k.mm(k.ew("div", k.ew("sub", Ym, self._y_mean), self._y_std), self.y_rotations_m_)
-        return xs.out(), ys.out()
+        return _PLS_CALL(self, "transform", (X, y, Y), _PLS_CONTEXT)
 
     def inverse_transform(self, X, y=None, Y=None):
         """Map scores back to the original X (and optionally Y) space.
@@ -4167,16 +4068,7 @@ class _PLS(RegressorScoreMixin, _Base):
         Y_reconstructed : ndarray of shape (n_samples, n_targets), float32
             Returned only when Y scores are given.
         """
-        self._check_fitted()
-        k = self._kit()
-        Z = _M.from_input(X)
-        Xr = k.ew("add", k.ew("mul", k.mm(Z, self.x_loadings_m_, tb=True), self._x_std), self._x_mean)
-        Y = y if y is not None else Y
-        if Y is None:
-            return Xr.out()
-        W = _M.from_input(Y, "Y")
-        Yr = k.ew("add", k.ew("mul", k.mm(W, self.y_loadings_m_, tb=True), self._y_std), self._y_mean)
-        return Xr.out(), Yr.out()
+        return _PLS_CALL(self, "inverse_transform", (X, y, Y), _PLS_CONTEXT)
 
     def predict(self, X, copy=True):
         """Predict targets for X.
@@ -4192,11 +4084,7 @@ class _PLS(RegressorScoreMixin, _Base):
         ndarray of shape (n_samples,) or (n_samples, n_targets), float32
             One-dimensional when the model was fitted with a 1-D Y.
         """
-        self._check_fitted()
-        k = self._kit()
-        M = _M.from_input(X)
-        P = k.ew("add", k.mm(k.ew("sub", M, self._x_mean), self.coef_m_, tb=True), self._y_mean)
-        return P.out((P.r,)) if self._predict_1d else P.out()
+        return _PLS_CALL(self, "predict", (X,), _PLS_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit the model, then return ``transform(X, y)``.
@@ -4210,7 +4098,7 @@ class _PLS(RegressorScoreMixin, _Base):
         -------
         x_scores, y_scores : ndarray of shape (n_samples, n_components), float32
         """
-        return self.fit(X, y).transform(X, y)
+        return _PLS_CALL(self, "fit_transform", (X, y, None), _PLS_CONTEXT)
 
 
 # NIPALS, mode A, regression deflation.
@@ -4275,9 +4163,7 @@ class PLSRegression(_PLS):
         -------
         self
         """
-        super().fit(X, y if y is not None else Y)
-        self.x_scores_, self.y_scores_ = self._x_scores, self._y_scores
-        return self
+        return _PLS_CALL(self, "fit", (X, y, Y), _PLS_CONTEXT)
 
 
 # Mode A, canonical deflation.
@@ -4334,10 +4220,6 @@ class PLSCanonical(_PLS):
                  numeric_mode=None):
         self.algorithm = algorithm
         super().__init__(n_components, scale=scale, max_iter=max_iter, tol=tol, copy=copy, numeric_mode=numeric_mode)
-
-    def _validate_params(self):
-        if self.algorithm not in ("nipals", "svd"):
-            raise ValueError("PLSCanonical: algorithm must be 'nipals' or 'svd'")
 
 
 # NIPALS, mode B (the pseudo-inverses of X and Y), canonical deflation.
@@ -7328,3 +7210,8 @@ def _randomized_decompose(X, nc, *, center, n_oversamples, n_iter, power_iterati
 # MiniBatchSparsePCA and sparse_encode, one call per public operation.
 from ._native_decomp_kit_bridge import connect_public as _connect_decomp_kit  # noqa: E402
 _DL_CALL, _DL_CONTEXT = _connect_decomp_kit("dict_learning_native_call", minibatch_sparse_pca_class=MiniBatchSparsePCA)
+
+
+# The native PLS owner (bindings/pls_native.mojo): PLSRegression, PLSCanonical, CCA.
+_PLS_CALL, _PLS_CONTEXT = _connect_decomp_kit("pls_native_call", pls_regression_class=PLSRegression,
+                                              pls_canonical_class=PLSCanonical)
