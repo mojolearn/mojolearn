@@ -113,3 +113,16 @@ struct HostDecomp(DecompDev):
     @staticmethod
     def lanczos_host(pa: F32Ptr, pq: F32Ptr, pab: F32Ptr, n: Int, j0: Int, j1: Int, cap: Int) raises:
         _ = lanczos_run(pa, pq, pab, n, j0, j1, cap)
+
+    @staticmethod
+    def grp_flags() -> Int:
+        return 0
+
+    @staticmethod
+    def grp_fit_fused(src: F32Ptr, cnt: Int, dst: Int, host_out: F32Ptr, count: Int, seed: Int, mode: Int, sd: Int,
+                      sgrid: Int, sc: Float64, thr: Float64) raises -> Int:
+        raise Error("x_decomp: no resident matrices on the host binding")
+
+    @staticmethod
+    def dev_project(a: Int, b: Int, c: Int, flag: Int, m: Int, k: Int, n: Int) raises -> Int:
+        raise Error("x_decomp: no resident matrices on the host binding")

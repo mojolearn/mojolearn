@@ -1782,44 +1782,6 @@ def _seed_of(random_state):
     return random_state
 
 
-def _pinv_rows(k, C):
-    """Pseudo-inverse of a full-row-rank C (k x d, k <= d): C^T (C C^T)^-1,
-    through the LU solve of the k x k Gram (d x k result)."""
-    G = k.mm(C, C, tb=True)
-    lu, piv, info = k.lu(G)
-    if info:
-        raise ValueError("compute_inverse_components: the components are rank deficient")
-    return k.lu_solve(lu, piv, C).T
-
-
-def _rp_rand(k, r, c, seed, stream, kind, dev):
-    """`k.rand`'s matrix; with dev, drawn into a device matrix by the same
-    kernel (enqueued, nothing downloaded)."""
-    if not (dev and r * c):
-        return k.rand(r, c, seed, stream, kind)
-    out = k._dout(r, c)
-    k.b.x_decomp_dev_rand(out._d.id, [r * c, int(seed) & 0xFFFFFFFF, int(stream) & 0xFFFFFFFF, kind])
-    return out
-
-
-def _srp_grid_count(thr):
-    """The number of uniforms k * 2^-24 (k in [0, 2^24)) at or below
-    float32(thr): main's sparse keep rate on the draw grid, as an integer
-    (MOJOLEARN_XD_FAST_SRP_STRAT). Glue: one float32 rounding and a floor."""
-    t32 = array.array("f", [thr])[0]
-    if t32 < 0:
-        return 0
-    return min(int(t32 * 16777216.0) + 1, 16777216)  # exact: t32 * 2^24 is a scaled float32
-
-
-def _grp_cls2(k):
-    """lane/apple-fast-gap-cls2: the random projections' FAST Apple fit
-    switches compiled into the kit's binding (x_decomp/resident.mojo
-    `grp_cls2_py`: bit 1 NOSCAN, 2 DEVSCAN, 4 LAZY); 0 when it has none."""
-    fn = getattr(k.b, "x_decomp_grp_cls2", None)
-    return int(fn()) if fn is not None else 0
-
-
 class _RandomProjection(_Base):
     """sklearn `random_projection.py::BaseRandomProjection`. The matrix is
     drawn from the lane's counter-based Philox stream (x_decomp/cells.mojo
@@ -1880,112 +1842,7 @@ class _RandomProjection(_Base):
         TypeError
             If ``random_state`` is not None or an int.
         """
-        self.numeric_mode_ = _mode(self.numeric_mode)
-        # fit reads only the input's shape and refuses a non-finite input;
-        # the store (a copy of the whole input) is transform's to build
-        # (lane neural-pass27: fit_transform converted the 880 MB input
-        # twice at the board's shape)
-        k = self._kit()
-        # lane/idn-gates: the IDENTICAL GPU binding compiles DEVSCAN (bit 2) too
-        cls2 = _grp_cls2(k)
-        if cls2 & 8 and not _is_sparse(X) and self._fused_fit(k, X):
-            return self
-        if cls2 & 3 and not _is_sparse(X):
-            # lane/apple-fast-gap-cls2 (FAST + Apple, x_decomp/resident.mojo
-            # GRP_CLS2_*): no host walk over X. NOSCAN: the shape only
-            # (transform's device projection refuses a non-finite X);
-            # DEVSCAN: the refusal as one device scan of X
-            a = as_f32_c(X, ndim=2, name="X")[0]
-            if a.ndim != 2 or min(a.shape) == 0:  # glue: shape check of the input argument
-                raise ValueError("X: a nonempty two-dimensional input is required")
-            if cls2 & 2 and int(k.b.x_decomp_dev_first_nonfinite(addr_ro(a, name="X"), a.size)) >= 0:
-                raise ValueError("X: input must be finite; NaN/inf are unsupported")
-            n, d = a.shape
-        else:
-            n, d = _M.shape_of_input(X)
-        if self.n_components == "auto":
-            kc = johnson_lindenstrauss_min_dim(n, eps=self.eps)
-            if kc <= 0:
-                raise ValueError(f"eps={self.eps} and n_samples={n} lead to a target dimension of {kc} which is invalid")
-            if kc > d:
-                raise ValueError(f"eps={self.eps} and n_samples={n} lead to a target dimension of {kc} which is larger than the original space with n_features={d}")
-        else:
-            kc = int(self.n_components)
-            if kc <= 0:
-                raise ValueError(f"n_components must be greater than 0, got {kc}")
-        self.n_components_ = kc
-        self.n_features_in_ = d
-        # lane gap-nb-maxabs-grp: on the GPU binding the matrix is drawn on
-        # the device (`x_decomp_dev_rand`, the same Philox words as
-        # `x_decomp_rand`); cgr-decomp deleted the MOJOLEARN_XD_RP_TILED switch
-        dev = k._res()
-        self.components_m_ = self._make(k, kc, d, _seed_of(self.random_state), dev)
-        if dev and self.components_m_._d is not None:
-            # the matrix was drawn on the device and
-            # stays there for transform; components_ is a copy of its words
-            # (one download, the device matrix kept)
-            C = self.components_m_
-            if cls2 & 4 and not self.compute_inverse_components:
-                # lane/apple-fast-gap-cls2 LAZY: downloaded on first read
-                self.__dict__.pop("_rp_components", None)
-                self.__dict__["_rp_lazy"] = (k, C, kc, d)
-            else:
-                res = array.array("f", [0.0]) * (kc * d)
-                k.b.x_decomp_dev_download(C._d.id, res.buffer_info()[0], kc * d)
-                self.components_ = Array._owned(res, (kc, d), "<f4", "C")
-        else:
-            self.components_ = self.components_m_.out()
-        if self.compute_inverse_components:
-            self.inverse_m_ = _pinv_rows(k, self.components_m_)
-            self.inverse_components_ = self.inverse_m_.out()
-        return self
-
-    def _fused_fit(self, k, X):
-        """lane apple-fast-gap-kapprox2 MOJOLEARN_XD_FAST_GRP_FUSED (bit 8 of
-        `x_decomp_grp_cls2`): the scan, the matrix and its download in one
-        binding call with one wait (x_decomp/resident.mojo
-        `grp_fit_fused_py`); the same words and the same fit-time refusal as
-        the DEVSCAN route, Gaussian and sparse. False (nothing done) where
-        it does not apply: 'auto' n_components or
-        compute_inverse_components."""
-        if self.n_components == "auto" or self.compute_inverse_components or not k._res():
-            return False
-        a = as_f32_c(X, ndim=2, name="X")[0]
-        if a.ndim != 2 or a.shape[0] == 0 or a.shape[1] == 0:
-            raise ValueError("X: a nonempty two-dimensional input is required")
-        n, d = a.shape
-        kc = int(self.n_components)
-        if kc <= 0:
-            raise ValueError(f"n_components must be greater than 0, got {kc}")
-        extra = []
-        if isinstance(self, SparseRandomProjection):
-            dens = 1.0 / math.sqrt(d) if self.density == "auto" else float(self.density)
-            if not 0 < dens <= 1:
-                raise ValueError(f"Expected density in range ]0, 1], got: {dens}")
-            mode, sc, thr = (2 if dens == 1 else 1), math.sqrt(1.0 / dens) / math.sqrt(kc), dens - 2.0 ** -25
-            if mode == 1 and _grp_cls2(k) & 16:
-                # lane apple-fast-w2-kfeat MOJOLEARN_XD_FAST_SRP_STRAT
-                # (x_decomp/resident.mojo `srp_strat_kernel`): the
-                # column-stratified pattern; D = the count of 2^-24 grid
-                # points main's `u <= float32(thr)` keeps, so every entry is
-                # nonzero with main's probability
-                mode, extra = 3, [d, _srp_grid_count(thr)]
-        else:
-            dens, mode, sc, thr = None, 0, 1.0 / math.sqrt(kc), 0.0
-        C = k._dout(kc, d)
-        res = array.array("f", [0.0]) * (kc * d)
-        bad = int(k.b.x_decomp_grp_fit_fused(addr_ro(a, name="X"), a.size, C._d.id, res.buffer_info()[0],
-                                             [kc * d, int(_seed_of(self.random_state)) & 0xFFFFFFFF, mode] + extra,
-                                             [sc, thr]))
-        if bad >= 0:
-            raise ValueError("X: input must be finite; NaN/inf are unsupported")
-        if dens is not None:
-            self.density_ = dens
-        self.n_components_ = kc
-        self.n_features_in_ = d
-        self.components_m_ = C
-        self.components_ = Array._owned(res, (kc, d), "<f4", "C")
-        return True
+        return _DECOMP_CALL(self, "fit", (X,), _DECOMP_CONTEXT)
 
     def transform(self, X):
         """Project X: ``X @ components_.T``.
@@ -2004,46 +1861,22 @@ class _RandomProjection(_Base):
         ValueError
             If X has the wrong number of features or is non-finite.
         """
-        self._check()
-        if not _is_sparse(X):
-            out = self._project(X)
-            if out is not None:
-                return out
-        M = _M.from_input(X)
-        if M.c != self.n_features_in_:
-            raise ValueError(f"X has {M.c} features, but {type(self).__name__} is expecting {self.n_features_in_}")
-        return self._kit().mm(M, self.components_m_, tb=True).out()
+        return _DECOMP_CALL(self, "transform", (X,), _DECOMP_CONTEXT)
 
-    def _project(self, X):
-        """transform on the GPU binding (lane gap-nb-maxabs-grp): X goes up from
-        its own buffer (no host copy into a store, no host finiteness pass),
-        x_decomp_dev_project's tiled kernel computes `mm(X, components, tb)`'s
-        words and flags a non-finite entry of X on the device, and the result
-        comes down once into the returned array. None on the host binding
-        (or a column without the tile): the caller takes the path above."""
-        k = self._kit()
-        if not k._res():
-            return None
-        a = as_f32_c(X, ndim=2, name="X")[0]
-        if a.ndim != 2 or min(a.shape) == 0:  # glue: smaller of two shape dims
-            raise ValueError("X: a nonempty two-dimensional input is required")
-        m, d = a.shape
-        if d != self.n_features_in_:
-            raise ValueError(f"X has {d} features, but {type(self).__name__} is expecting {self.n_features_in_}")
-        B = self.components_m_
-        nc = B.r
-        A = _M._on_device(_DevBuf(k._raw(), a.size), m, d)
-        k.b.x_decomp_dev_upload(A._d.id, addr_ro(a, name="X"), a.size)
-        C, flag = k._dout(m, nc), k._dout(1, 1)
-        if int(k.b.x_decomp_dev_project(A._d.id, k._did(B), C._d.id, flag._d.id, [m, d, nc])) < 0:
-            return None
-        res = array.array("f", [0.0]) * (m * nc)
-        k.b.x_decomp_dev_download(C._d.id, res.buffer_info()[0], m * nc)
-        bad = array.array("f", [0.0])
-        k.b.x_decomp_dev_download(flag._d.id, bad.buffer_info()[0], 1)
-        if bad[0] != 0:
-            raise ValueError("X: input must be finite; NaN/inf are unsupported")
-        return Array._owned(res, (m, nc), "<f4", "C")
+    def fit_transform(self, X, y=None):
+        """Fit to X, then return ``transform(X)``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data.
+        y : ignored
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
+        return _DECOMP_CALL(self, "fit_transform", (X,), _DECOMP_CONTEXT)
 
     def inverse_transform(self, X):
         """Map projected data back with the pseudo-inverse of the components.
@@ -2061,11 +1894,7 @@ class _RandomProjection(_Base):
         ValueError
             If the model was fitted without ``compute_inverse_components=True``.
         """
-        self._check()
-        if not hasattr(self, "inverse_m_"):
-            raise ValueError("inverse_transform needs compute_inverse_components=True")
-        M = _M.from_input(X)
-        return self._kit().mm(M, self.inverse_m_, tb=True).out()
+        return _DECOMP_CALL(self, "inverse_transform", (X,), _DECOMP_CONTEXT)
 
 
 # Box-Muller on the Philox stream.
@@ -2120,9 +1949,6 @@ class GaussianRandomProjection(_RandomProjection):
         self.n_components, self.eps = n_components, eps
         self.compute_inverse_components, self.random_state = compute_inverse_components, random_state
         self.numeric_mode = numeric_mode
-
-    def _make(self, k, kc, d, seed, dev=False):
-        return k.ew("scale", _rp_rand(k, kc, d, seed, 1, 1, dev), s=1.0 / math.sqrt(kc))
 
 
 # Achlioptas / Li et al.
@@ -2186,18 +2012,6 @@ class SparseRandomProjection(_RandomProjection):
         self.n_components, self.density, self.eps, self.dense_output = n_components, density, eps, dense_output
         self.compute_inverse_components, self.random_state = compute_inverse_components, random_state
         self.numeric_mode = numeric_mode
-
-    def _make(self, k, kc, d, seed, dev=False):
-        dens = 1.0 / math.sqrt(d) if self.density == "auto" else float(self.density)
-        if not 0 < dens <= 1:
-            raise ValueError(f"Expected density in range ]0, 1], got: {dens}")
-        self.density_ = dens
-        u = _rp_rand(k, kc, d, seed, 2, 0, dev)
-        sgn = k.ew("scale", _rp_rand(k, kc, d, seed, 3, 2, dev), s=math.sqrt(1.0 / dens) / math.sqrt(kc))
-        if dens == 1:
-            return sgn
-        # u < density keeps the signed value, else 0 (select: x > s -> y else z)
-        return k.ew("select", u, _M.zeros(1, 1), sgn, s=dens - 2.0 ** -25)
 
 
 # ================================================================ thin SVD
@@ -6724,4 +6538,5 @@ _JL_CALL, _JL_CONTEXT = _native_jl_bridge.connect_public()
 from . import _native_decomp_bridge  # noqa: E402
 _DECOMP_CALL, _DECOMP_CONTEXT = _native_decomp_bridge.connect_public({
     "FastICA": FastICA, "NMF": NMF, "FactorAnalysis": FactorAnalysis,
-    "LatentDirichletAllocation": LatentDirichletAllocation})
+    "LatentDirichletAllocation": LatentDirichletAllocation,
+    "GaussianRandomProjection": GaussianRandomProjection, "SparseRandomProjection": SparseRandomProjection})

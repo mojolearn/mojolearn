@@ -13,6 +13,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.ica_native import ica_fit, ica_project
 from bindings.fa_native import fa_fit, fa_query
 from bindings.kpca_native import kpca_fit, kpca_fit_transform, kpca_transform
+from bindings.rp_native import rp_fit, rp_project, rp_query
 from bindings.lda_native import lda_fit, lda_partial_fit, lda_project, lda_query
 from bindings.nmf_native import nmf_fit, nmf_fit_transform, nmf_inverse_transform, nmf_transform
 
@@ -114,6 +115,19 @@ def decomp_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPt
                 result = kpca_transform(model, args[0], context)
             else:
                 raise Error("unknown private KernelPCA operation")
+        elif family == "GaussianRandomProjection" or family == "SparseRandomProjection":
+            var sparse = family == "SparseRandomProjection"
+            if operation == "fit":
+                _ = rp_fit(model, args[0], sparse, context)
+                result = model
+            elif operation == "fit_transform":
+                # the transform projects the X the fit converted: one conversion
+                var x = rp_fit(model, args[0], sparse, context)
+                result = rp_project(model, py_fields(model), args[0], x, False, context)
+            elif operation == "transform" or operation == "inverse_transform":
+                result = rp_query(model, args[0], operation == "inverse_transform", context)
+            else:
+                raise Error("unknown private random projection operation")
         else:
             raise Error("unknown private decomposition estimator")
         return result.steal_data()

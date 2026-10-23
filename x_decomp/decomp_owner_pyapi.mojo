@@ -18,6 +18,7 @@ from x_decomp.fa_owner import fa_fit_run, fa_query_run
 from x_decomp.lda_fit import LdaArgs
 from x_decomp.lda_owner import lda_run
 from x_decomp.kpca_owner import kpca_eig_run
+from x_decomp.rp_owner import rp_fit_run, rp_project_run
 
 
 def door_ptr(p: PythonObject, i: Int) raises -> F32Ptr:
@@ -235,3 +236,44 @@ def kpca_eig_py[E: Exec, D: RDev, RES: Bool, X: DecompDev](p: PythonObject, f: P
     with GILReleased(Python()):
         kept = kpca_eig_run[E, D, RES, X](kc, x, resident, n, d, gamma, requested, lanczos, remove_zero, pv, pe, pc, pa)
     return PythonObject(kept)
+
+
+def rp_fit_py[E: Exec, D: RDev, RES: Bool, X: DecompDev](p: PythonObject, f: PythonObject) raises -> PythonObject:
+    """A random projection's fit. p = [x, n, d, n_components, sparse, seed
+    mod 2^32, inverse, fused_ok, components (kc x d), inverse (d x kc)];
+    f = [density]. Returns the fused scan's first non-finite index or -1."""
+    if len(p) != 10 or len(f) != 1:
+        raise Error("x_decomp_rp_fit: params must hold the input, the options and two outputs")
+    var x = door_ptr(p, 0)
+    var n = door_dim(p, 1)
+    var d = door_dim(p, 2)
+    var kc = door_dim(p, 3)
+    var sparse = Int(py=p[4]) != 0
+    var seed = Int(py=p[5])
+    var inverse = Int(py=p[6]) != 0
+    var fused_ok = Int(py=p[7]) != 0
+    var pc = door_ptr(p, 8)
+    var pi = door_ptr(p, 9)
+    var density = Float64(py=f[0])
+    var bad = -1
+    with GILReleased(Python()):
+        bad = rp_fit_run[E, D, RES, X](x, n, d, kc, sparse, density, seed, inverse, fused_ok, pc, pi)
+    return PythonObject(bad)
+
+
+def rp_project_py[E: Exec, D: RDev, RES: Bool, X: DecompDev](p: PythonObject) raises -> PythonObject:
+    """X matrix^T. p = [x, m, d, matrix, rows, tiled, out]. Returns 1 when
+    the tiled projection flagged a non-finite X."""
+    if len(p) != 7:
+        raise Error("x_decomp_rp_project: params must hold x, m, d, the matrix, rows, tiled and out")
+    var x = door_ptr(p, 0)
+    var m = door_dim(p, 1)
+    var d = door_dim(p, 2)
+    var matrix = door_ptr(p, 3)
+    var rows = door_dim(p, 4)
+    var tiled = Int(py=p[5]) != 0
+    var out = door_ptr(p, 6)
+    var flagged = 0
+    with GILReleased(Python()):
+        flagged = rp_project_run[E, D, RES, X](x, m, d, matrix, rows, tiled, out)
+    return PythonObject(flagged)

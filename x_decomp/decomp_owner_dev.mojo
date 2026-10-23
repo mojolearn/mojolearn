@@ -15,6 +15,10 @@ from x_decomp.fa_em_dev import fa_em_main_dev_run
 from x_decomp.rotation_dev import ortho_rotation_dev_run
 from x_decomp.resident import IDN_QR_R_RESIDENT, dev_lda_bound_run, dev_lda_rows_run, dev_qr_r_run, dev_sqdist_run
 from x_decomp.lanczos_dev import dev_lanczos_run
+from x_decomp.resident import (
+    GRP_CLS2_ANY, GRP_CLS2_DEVSCAN, GRP_CLS2_LAZY, GRP_CLS2_NOSCAN, GRP_FAST_FUSED, GRP_FAST_SRP_STRAT,
+    dev_project_run, grp_fit_fused_run,
+)
 from x_decomp.lda_fit import LdaArgs
 from x_decomp.lda_fit_dev import lda_fit_dev_run
 from x_decomp.kit_device import lda_online_dev_run
@@ -131,3 +135,31 @@ struct DevDecomp(DecompDev):
     @staticmethod
     def lanczos_host(pa: F32Ptr, pq: F32Ptr, pab: F32Ptr, n: Int, j0: Int, j1: Int, cap: Int) raises:
         raise Error("x_decomp: the GPU binding runs Lanczos on resident matrices")
+
+    @staticmethod
+    def grp_flags() -> Int:
+        # `grp_cls2_py`'s bits; `x_decomp_grp_cls2` is registered only under GRP_CLS2_ANY
+        var f = 0
+        comptime if GRP_CLS2_ANY:
+            comptime if GRP_CLS2_NOSCAN:
+                f |= 1
+            comptime if GRP_CLS2_DEVSCAN:
+                f |= 2
+            comptime if GRP_CLS2_LAZY:
+                f |= 4
+            comptime if GRP_FAST_FUSED:
+                f |= 8
+            comptime if GRP_FAST_SRP_STRAT:
+                f |= 16
+        return f
+
+    @staticmethod
+    def grp_fit_fused(src: F32Ptr, cnt: Int, dst: Int, host_out: F32Ptr, count: Int, seed: Int, mode: Int, sd: Int,
+                      sgrid: Int, sc: Float64, thr: Float64) raises -> Int:
+        comptime if GRP_FAST_FUSED:
+            return grp_fit_fused_run(src, cnt, dst, host_out, count, seed, mode, sd, sgrid, sc, thr)
+        raise Error("x_decomp: this build has no fused random-projection fit")
+
+    @staticmethod
+    def dev_project(a: Int, b: Int, c: Int, flag: Int, m: Int, k: Int, n: Int) raises -> Int:
+        return dev_project_run(a, b, c, flag, m, k, n)

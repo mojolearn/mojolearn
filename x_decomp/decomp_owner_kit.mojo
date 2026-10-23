@@ -152,6 +152,23 @@ trait DecompDev:
         """`x_decomp_lanczos` on host words (the host binding only)."""
         ...
 
+    @staticmethod
+    def grp_flags() -> Int:
+        """The random projections' switches (`x_decomp_grp_cls2`): bit 1
+        NOSCAN, 2 DEVSCAN, 4 LAZY, 8 FUSED, 16 SRP_STRAT; 0 elsewhere."""
+        ...
+
+    @staticmethod
+    def grp_fit_fused(src: F32Ptr, cnt: Int, dst: Int, host_out: F32Ptr, count: Int, seed: Int, mode: Int, sd: Int,
+                      sgrid: Int, sc: Float64, thr: Float64) raises -> Int:
+        """`x_decomp_grp_fit_fused` (FUSED builds only)."""
+        ...
+
+    @staticmethod
+    def dev_project(a: Int, b: Int, c: Int, flag: Int, m: Int, k: Int, n: Int) raises -> Int:
+        """`x_decomp_dev_project` on device ids (the GPU binding only)."""
+        ...
+
 
 def words_of(ref words: List[Float32]) -> F32Ptr:
     return F32Ptr(unsafe_from_address=Int(words.unsafe_ptr()))
