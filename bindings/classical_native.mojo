@@ -137,6 +137,17 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         if operation.startswith("host_tree_"):
             var result = host_tree_operation(model, operation, args, context["host_tree_context"])
             return result.steal_data()
+        if operation == "host_archive_predict" or operation == "host_archive_predict_proba":
+            # `host_predict(path, X)` / `host_predict_proba(path, X)`: the
+            # saved model rebuilt by the archive reader, then its own
+            # one-call predict.
+            var predict_context = py_get(context, "host_archive_context")
+            if predict_context is None:
+                raise Error("RuntimeError: native host archive schemas are not connected")
+            var hosted = host_archive_build(args[0], predict_context, PythonObject(None), False)
+            var method = py_call(b.getattr, hosted, PythonObject("predict" if operation == "host_archive_predict" else "predict_proba"))
+            var predicted = py_call(method, args[1])
+            return predicted.steal_data()
         if operation == "host_archive_model" or operation == "host_archive_load" or operation == "host_archive_classical_model":
             var archive_context = py_get(context, "host_archive_context")
             if archive_context is None:

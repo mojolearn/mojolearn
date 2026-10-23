@@ -265,7 +265,7 @@ def host_predict(path, X):
     Array or list of shape (n_samples,)
         Predictions, as the saved model's `predict` returns them.
     """
-    return host_model(path).predict(X)
+    return _native_host_archive(None, "host_archive_predict", (path, X), _ARCHIVE_CONTEXT)
 
 
 def host_predict_proba(path, X):
@@ -284,7 +284,7 @@ def host_predict_proba(path, X):
     Array of shape (n_samples, n_classes)
         Class probabilities.
     """
-    return host_model(path).predict_proba(X)
+    return _native_host_archive(None, "host_archive_predict_proba", (path, X), _ARCHIVE_CONTEXT)
 
 
 # Fixed public archive owner connected at import, after host classes exist.
