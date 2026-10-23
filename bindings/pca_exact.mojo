@@ -30,9 +30,13 @@ struct PCADimensions(Copyable, Movable):
 
 def pca_copied(source: PythonObject, context: PythonObject) raises -> Bool:
     var b = Python.import_module("builtins")
-    if py_type(source) is context["ndarray"] or py_type(source) is context["array_class"]:
+    # NumPy's keys are in the context only once NumPy is loaded
+    var ndarray = py_get(context, "ndarray")
+    if (ndarray is not None and py_type(source) is ndarray) or py_type(source) is context["array_class"]:
         var view = sequential_input(source, context)
-        return not (view.dtype is context["float32"] and Bool(py=view.flags.c_contiguous))
+        var f32 = py_get(context, "float32")
+        var is_f32 = (view.dtype is f32) if f32 is not None else (String(py=py_call(b.str, view.dtype)) == "<f4")
+        return not (is_f32 and Bool(py=view.flags.c_contiguous))
     if py_type(source) is b.memoryview or py_type(source) is context["array_type"] or py_type(source) is b.bytearray:
         var view = py_call(b.memoryview, source)
         return not (Int(py=view.itemsize) == 4 and String(view.format) == "f" and Bool(py=view.c_contiguous))
