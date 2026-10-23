@@ -3,13 +3,15 @@
 
 Only the release orchestrator executes `build`, once per vendor and freeze.
 This uses autograd_smoke's existing supported Mojo build commands unchanged
-except an explicitly requested compiler worker count. Outputs/logs/receipt must
+except an explicitly requested compiler worker count. Linux x86-64 checks use
+the same x86-64-v3 host baseline as the wheels. Outputs/logs/receipt must
 live under a retained /root/results* directory on a build box.
 """
 import argparse
 import hashlib
 import json
 import os
+import platform
 from pathlib import Path
 import shutil
 import subprocess
@@ -42,8 +44,16 @@ def validate(manifest_path, vendor, source_commit, directory=None):
             or not doc.get('target') or not doc.get('compiler', {}).get('sha256')
             or len(doc.get('files', [])) != len(want) or {r['file'] for r in doc['files']} != set(want)):
         raise ValueError('incomplete/wrong-source autograd artifact receipt')
+    target_cpu = AS.HOST_TARGET_CPU.get(vendor)
+    if not target_cpu or doc.get('target_cpu') != target_cpu:
+        raise ValueError('autograd artifact receipt lacks the portable Linux host CPU baseline')
     for row in doc['files']:
         path = directory/row['file']
+        command = row.get('command') or []
+        if (not isinstance(command, list) or command.count('--target-cpu') != 1
+                or command.index('--target-cpu') + 1 >= len(command)
+                or command[command.index('--target-cpu') + 1] != target_cpu):
+            raise ValueError('autograd compile command lacks the portable host CPU baseline: '+row['file'])
         if (row.get('exit_code') != 0 or row.get('source') != want[row['file']] or not row.get('source_sha256')
                 or not row.get('command') or not path.is_file() or not os.access(path, os.X_OK)
                 or sha(path) != row['sha256']):
@@ -52,6 +62,8 @@ def validate(manifest_path, vendor, source_commit, directory=None):
 
 
 def build(args):
+    if platform.system() != 'Linux' or platform.machine().lower() not in ('x86_64', 'amd64'):
+        raise RuntimeError('NVIDIA/AMD gate artifacts require a Linux x86-64 build host')
     def git(*parts):
         return subprocess.check_output(['git', '-C', str(ROOT), *parts], text=True).strip()
     if git('rev-parse', 'HEAD') != args.source_commit or git('status', '--porcelain', '--untracked-files=no'):
@@ -63,13 +75,14 @@ def build(args):
     compiler = Path(shutil.which(args.mojo) or args.mojo).resolve()
     version = subprocess.check_output([str(compiler), '--version'], text=True).strip()
     doc = dict(schema=SCHEMA, source_commit=args.source_commit, vendor=args.vendor, target=args.target,
+               target_cpu=AS.HOST_TARGET_CPU[args.vendor],
                compiler=dict(path=str(compiler), sha256=sha(compiler), version=version), files=[], state='building')
     receipt = out/'build-manifest.json'
     prior = {}
     if args.resume:
         previous = json.loads(receipt.read_text())
-        if any(previous.get(key) != doc[key] for key in ('schema', 'source_commit', 'vendor', 'target', 'compiler')):
-            raise RuntimeError('resume requires the same source, target and compiler')
+        if any(previous.get(key) != doc[key] for key in ('schema', 'source_commit', 'vendor', 'target', 'target_cpu', 'compiler')):
+            raise RuntimeError('resume requires the same source, GPU/CPU targets and compiler')
         history = [row for attempt in previous.get('prior_attempts', []) for row in attempt]
         prior = {row['file']: row for row in history+previous.get('files', [])}
         doc['prior_attempts'] = previous.get('prior_attempts', []) + [previous.get('files', [])]
