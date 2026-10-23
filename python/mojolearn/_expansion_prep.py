@@ -1659,19 +1659,7 @@ class TargetEncoder(_PrepBase):
         return self._run(arr, y, folds, cv, True, target=target)
 
     def transform(self, X):
-        self._check_fitted()
-        arr = _x2d(X)
-        self._check_width(arr)
-        n, d = arr.shape
-        T, cmax = self._T, self._cmax
-        pr = _Prog()
-        codes, _neg = _codes(pr, arr, self.categories_, device_only=_target_scratch(self.numeric_mode_))
-        enc = pr.put(self._enc)
-        meta = pr.put(self._meta)
-        out = pr.output(n * d * T)
-        pr.stage("te_apply", n * d * T, codes, n, d, T, _NONE, enc, cmax, meta, 0, out)
-        pr.run(self.numeric_mode_)
-        return pr.get(out, (n, d * T))
+        return _ENCODE_CALL(self, "transform", (X,), _ENCODE_CONTEXT)
 
 
 # ---------------------------------------------------------------- imputer
@@ -6669,4 +6657,4 @@ _STATELESS_CALL, _STATELESS_CONTEXT = _connect_stateless(
 from ._native_prep_encode_bridge import connect as _connect_encode
 _ENCODE_CALL, _ENCODE_CONTEXT = _connect_encode(
     {SimpleImputer: "simple_imputer", KBinsDiscretizer: "kbins", OrdinalEncoder: "ordinal",
-     OneHotEncoder: "onehot"}, _X_PREP2_QSELECT)
+     OneHotEncoder: "onehot", TargetEncoder: "target"}, _X_PREP2_QSELECT)

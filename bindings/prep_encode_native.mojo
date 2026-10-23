@@ -39,6 +39,7 @@ comptime OP_LOOKUP = 7
 comptime OP_COUNT_NEG = 8
 comptime OP_ONEHOT = 9
 comptime OP_WHERE_NEG = 19
+comptime OP_TE_APPLY = 22
 comptime OP_MARK_MISSING = 23
 comptime OP_FILL = 24
 comptime OP_KBINS_EDGES = 25
@@ -1747,6 +1748,36 @@ def _onehot_inverse(model: PythonObject, values: PythonObject, context: PythonOb
     return _take2(ran, out, n, d, context)
 
 
+# ---------------------------------------------------------------- TargetEncoder
+def _target_scratch(mode: PythonObject, entries: PythonObject) raises -> Bool:
+    # `_target_scratch`: the FAST binding's x_prep_target_scratch.
+    if String(mode) != "fast":
+        return False
+    var entry = py_get(entries, "x_prep_target_scratch")
+    return entry is not None and _truth(py_call_typed(entry))
+
+
+def _target_transform(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
+    """TargetEncoder.transform: lookup (device-only codes when the binding
+    keeps them in scratch) and te_apply over the fitted encodings."""
+    var fields = py_fields(model)
+    var n = Int(py=values[3])
+    var d = Int(py=values[4])
+    _check_width(model, d)
+    var mode = fields["numeric_mode_"]
+    var entries = _entries(mode, context)
+    var T = Int(py=fields["_T"])
+    var cmax = Int(py=fields["_cmax"])
+    var p = EncProg()
+    var codes = _codes(p, values, fields["categories_"], context, _target_scratch(mode, entries))[0]
+    var enc = p.put_array(fields["_enc"], context)
+    var meta = p.put_array(fields["_meta"], context)
+    var out = p.output(n * d * T, entries)
+    _stage(p.program, OP_TE_APPLY, n * d * T, codes, n, d, T, NONE, enc, cmax, meta, 0, out)
+    var ran = p.run(entries, context)
+    return _take2(ran, out, n, d * T, context)
+
+
 # ---------------------------------------------------------------- the door
 def _kind(model: PythonObject, context: PythonObject) raises -> String:
     # The admitted class this model is (or subclasses), by its MRO.
@@ -1850,6 +1881,8 @@ def _transform(model: PythonObject, kind: String, values: PythonObject, inverse:
     if kind == "onehot":
         _check_width(model, Int(py=values[4]))
         return _onehot_transform(model, values, inverse, context)
+    if kind == "target":
+        return _target_transform(model, values, context)
     raise Error("TypeError: the native encode owner does not transform this class")
 
 
