@@ -19,7 +19,7 @@ from x_decomp.tsvd_owner_pyapi import tsvd_randomized_py
 from x_decomp.ipca_owner import NoIpcaDev
 from x_decomp.ipca_owner_pyapi import ipca_fit_py, ipca_partial_py, ipca_project_py
 from x_decomp.decomp_owner_host import HostDecomp
-from x_decomp.decomp_owner_pyapi import ica_fit_py, ica_project_py, nmf_fit_py, nmf_inverse_py
+from x_decomp.decomp_owner_pyapi import ica_fit_py, ica_project_py, nmf_fit_py, nmf_inverse_py, fa_fit_py, fa_query_py
 from x_decomp.select_ops_pyapi import order_small_py, reduce_py
 from x_decomp.nmf_pyapi import nmf_nndsvd_py, nmf_solve_py
 from x_decomp.ica_pyapi import ica_solve_py
@@ -111,6 +111,8 @@ def build__mojolearn_x_decomp_host() -> PythonObject:
         m.def_function[ica_project_py[HostExec, NoRDev, False]]("x_decomp_ica_project")
         m.def_function[nmf_fit_py[HostExec, NoRDev, False, HostDecomp]]("x_decomp_nmf_fit")
         m.def_function[nmf_inverse_py[HostExec, NoRDev, False]]("x_decomp_nmf_inverse")
+        m.def_function[fa_fit_py[HostExec, NoRDev, False, HostDecomp]]("x_decomp_fa_fit")
+        m.def_function[fa_query_py[HostExec, NoRDev, False, HostDecomp]]("x_decomp_fa_query")
         m.def_function[r_signs_py]("x_decomp_r_signs")
         m.def_function[rank_above_py]("x_decomp_rank_above")
         # lane idn-dense-linalg: the one-entry OLS and solve routes

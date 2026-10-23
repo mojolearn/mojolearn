@@ -2572,71 +2572,8 @@ def _dsum_sq(k, M):
     return float(k.b.x_decomp_dsum_sq(M.addr, n))  # cpu-route: host binding only (CPU-only installs); a GPU binding sums on the device above
 
 
-def _dsum(k, M):
-    """Sequential float64 sum (IEEE adds, ascending, from 0.0) of M's float32
-    words: the same on every box (lane py-runtime-b: x_decomp/fa_em.mojo
-    `dsum`, it was a Python loop)."""
-    n = M.r * M.c
-    return float(k.b.x_decomp_dsum_f32(M.addr, n)) if n else 0.0
-
-
-def _inv(k, A):
-    """A^-1 through the LU solve against the identity (getrf + getrs)."""
-    lu, piv, info = k.lu(A)
-    if info:
-        raise ValueError("singular matrix")
-    return k.lu_solve(lu, piv, _eye(A.r))
-
-
-def _eye(n):
-    """The n x n identity, built whole (row major, a 1 every n + 1 words):
-    no per-row loop. The resident kit's `diag_mask` makes it on the device."""
-    if n < 1:
-        return _M.zeros(0, 0)
-    return _M(array.array("f", [1.0] + [0.0] * n) * (n - 1) + array.array("f", [1.0]), n, n)
-
-
-def _logdet(k, A):
-    """log|det A| from the LU diagonal (sum ascending); sign ignored."""
-    lu, piv, info = k.lu(A)
-    diag = k.diag(lu)       # lane cpu2-l8-decomp: gathered where the LU lives
-    return k.total(k.ew("logs", k.ew("abs", diag), s=1.1754943508222875e-38)).s[0]
-
-
-def _ortho_rotation(k, C, method, tol=1e-6, max_iter=100):
-    """sklearn `_factor_analysis.py::_ortho_rotation`; C is n_features x
-    n_components. The rotation loop (with `_polar`: the power-of-two
-    prescale, the eigh of A^T A) runs in ONE binding call (lane
-    py-runtime-b: x_decomp/rotation.mojo, x_decomp/rotation_dev.mojo on
-    resident device matrices), the same cells and stopping test."""
-    out = _M.zeros(C.c, C.r)
-    k.b.x_decomp_ortho_rotation(C.addr, out.addr, [C.r, C.c, 1 if method == "varimax" else 0, int(max_iter)],
-                                [float(tol)])
-    return out
-
-
-#: x_decomp/fa_fast.mojo's limits (kernel-derived): FA_MAX_D, FA_TR_MAXK, FA_TR_FLOATS
-_FA_MAX_D = 256
-_FA_TR_MAXK = 16
-_FA_TR_FLOATS = 4096
-
-
-def _fa_fast_defines(k):
-    """The FactorAnalysis FAST defines this binding was built with (a FAST
-    Apple build registers `x_decomp_fa_defines`; every other binding has no
-    such entry: the empty set). Asked once per kit; no env read."""
-    got = k.__dict__.get("_fa_defs")
-    if got is None:
-        got = frozenset()
-        if k._res():
-            try:
-                got = frozenset(filter(None, str(getattr(k._raw(), "x_decomp_fa_defines")()).split(",")))
-            except Exception:
-                got = frozenset()
-        k._fa_defs = got
-    return got
-
-
+# Every public FactorAnalysis operation is one call into the compiled owner
+# (bindings/fa_native.mojo, driver x_decomp/fa_owner.mojo).
 # Reference: scikit-learn `decomposition/_factor_analysis.py`: `fit`,
 # `transform`, `get_covariance`, `get_precision`, `score_samples`,
 # `_ortho_rotation`. Each iteration's SVD of the scaled data is the QR +
@@ -2722,137 +2659,7 @@ class FactorAnalysis(_Base):
         -------
         self
         """
-        self.numeric_mode_ = _mode(self.numeric_mode)
-        if self.svd_method not in ("lapack", "randomized"):
-            raise ValueError("svd_method must be 'lapack' or 'randomized'")
-        if self.rotation not in (None, "varimax", "quartimax"):
-            raise ValueError("rotation must be None, 'varimax' or 'quartimax'")
-        k = self._kit()
-        M = _M.from_input(X)
-        n, d = M.r, M.c
-        nc = self.n_components or d
-        # lane/apple-fast-quality-glmfa (2026-10-03): the two-pass mean. The
-        # float32 blocked column sum of a million rows carries a relative
-        # error near 1e-6, so a constant column c had mean c(1 + e), centred
-        # residuals c e and a variance (c e)^2 where theirs (float64) is 0:
-        # its psi stopped near (c e)^2 instead of the 1e-12 floor, and the
-        # mean_ the score subtracts was off by c e. The second pass adds the
-        # mean of the residuals (exact for a constant column: c is recovered
-        # to the word, the residuals are 0). Device launches only.
-        mean = k.colmean(M)
-        mean = k.ew("add", mean, k.colmean(k.ew("sub", M, mean)))
-        llconst = d * _LOG_2PI + nc
-        # FAST on Apple (lane/apple-fast-fa, recovered 2026-10-04): taken only
-        # when the binding reports MOJOLEARN_FA_GRAM_ONCE or
-        # MOJOLEARN_FA_ITER_DEVICE (x_decomp/fa_fast.mojo; ITER_DEVICE is the
-        # FAST + Apple default since 2026-10-04, rollback
-        # -D MOJOLEARN_FA_ITER_DEVICE_OFF); an IDENTICAL
-        # binding registers no FA entry, so this never runs there
-        fdefs = _fa_fast_defines(k)
-        if (("MOJOLEARN_FA_GRAM_ONCE" in fdefs or "MOJOLEARN_FA_ITER_DEVICE" in fdefs)
-                and d <= _FA_MAX_D and 1 <= nc <= d and self.max_iter >= 1):
-            return self._fit_fast(k, M, mean, n, d, nc, llconst, fdefs)
-        Xc = k.ew("sub", M, mean)
-        M = None     # not read again: the input's device copy goes back to the pool before the QR
-        nsqrt = math.sqrt(n)
-        psi = self._psi_init(k, d)
-        SMALL = 1e-12
-        # Xc = Q R once; the scaled data Xc D / sqrt(n) then has the singular
-        # values and right vectors of the d x d R D / sqrt(n) (Q orthogonal)
-        # (n >= d never reads Xc again, so the QR may consume it: one copy of X on the device)
-        Rx = k.qr_r(Xc, consume=True) if n >= d else None
-        # the EM loop in ONE binding call (lane py-runtime-b:
-        # x_decomp/fa_em.mojo on the host column, x_decomp/fa_em_dev.mojo on
-        # resident device matrices): the same cells per iteration (the SVD
-        # of the scaled R when n >= d, else the eigh of the scaled Gram), the
-        # same cancellation-free psi update (lane/apple-fast-quality-glmfa)
-        # and the float64 log-likelihood (`_dsum`'s sequential adds) and
-        # stopping test in the same order
-        A = Rx if n >= d else Xc
-        W = _M.zeros(nc, d)
-        psi = psi.copy()
-        la = array.array("d", [0.0]) * max(int(self.max_iter), 1)
-        it = int(k.b.x_decomp_fa_em_main(A.addr, psi.addr, W.addr, la.buffer_info()[0],
-                                         [n, d, nc, int(self.max_iter), A.r], [float(self.tol), float(llconst)]))
-        loglike = la.tolist()[:it]
-        if it == 0:
-            W = None
-        return self._fit_store(k, W, psi, mean, loglike, it, d, nc)
-
-    def _psi_init(self, k, d):
-        if self.noise_variance_init is None:
-            return k.const(1.0, 1, d)
-        psi = _M.of([float(v) for v in self.noise_variance_init], 1, len(self.noise_variance_init))  # glue: converts the noise_variance_init argument
-        if psi.c != d:
-            raise ValueError(f"noise_variance_init dimension does not match the number of features : {psi.c} != {d}")
-        return psi
-
-    def _fit_fast(self, k, M, mean, n, d, nc, llconst, fdefs):
-        """FAST on Apple (lane/apple-fast-fa@3efbce2af; x_decomp/fa_fast.mojo):
-        the centred Gram G (d x d) in ONE pass over the resident X
-        (MOJOLEARN_FA_GRAM_ONCE: X D / sqrt(n) has the spectrum and right
-        vectors of D G D / n), then the EM loop on G only, either here (the
-        eigh of D G D / n, main's psi update) or as ONE binding call
-        (MOJOLEARN_FA_ITER_DEVICE, `fa_em_py`)."""
-        psi = self._psi_init(k, d)
-        # MOJOLEARN_FA_GRAM_DF (lane/apple-fast-fa-quality): the binding forms
-        # G in double-float, hi words then lo words, so G's buffer is 2 d x d
-        G = k._dout(2 * d if "MOJOLEARN_FA_GRAM_DF" in fdefs else d, d)
-        var = k._dout(1, d)
-        k.b.x_decomp_fa_gram(k._did(M), k._did(mean), G._d.id, var._d.id, [n, d])
-        if "MOJOLEARN_FA_ITER_DEVICE" in fdefs:
-            p0 = array.array("f", psi.s)
-            wa = array.array("f", [0.0]) * (nc * d)
-            pa = array.array("f", [0.0]) * d
-            la = array.array("d", [0.0]) * self.max_iter
-            it = int(k.b.x_decomp_fa_em(G._d.id, p0.buffer_info()[0], wa.buffer_info()[0], pa.buffer_info()[0],
-                                        la.buffer_info()[0], [d, nc, n, self.max_iter], float(self.tol)))
-            return self._fit_store(k, _M(wa, nc, d), _M(pa, 1, d), mean, list(la[:it]), it, d, nc)
-        SMALL = 1e-12
-        old_ll = -math.inf
-        loglike = []
-        order = list(range(d - 1, -1, -1))
-        keep = _M.of([1.0] * nc + [0.0] * (d - nc), 1, d)
-        drop = _M.of([0.0] * nc + [1.0] * (d - nc), 1, d)
-        it = 0
-        W = None
-        for it in range(1, self.max_iter + 1):  # glue: EM iteration driver; every step is device launches (main's loop form)
-            sqrt_psi = k.ew("adds", k.ew("sqrt", psi), s=SMALL)
-            ev, V = k.eigh(k.ew("scale", k.ew("div", k.ew("div", G, sqrt_psi), sqrt_psi.T), s=1.0 / n))
-            s2 = k.ew("maxs", ev.take_cols(order), s=0.0)
-            # the nc leading right vectors signed as main's SVD route signs them
-            Vfull = V.take_cols(order).T
-            Vt = _svd_flip_v(Vfull.rows(0, nc))
-            sk = s2.cols(0, nc)
-            unexp = _dsum(k, s2.cols(nc, d)) if nc < d else 0.0
-            W = k.ew("mul", Vt, k.ew("sqrt", k.ew("maxs", k.ew("adds", sk, s=-1.0), s=0.0)).T)
-            W = k.ew("mul", W, sqrt_psi)
-            slog = _dsum(k, k.ew("logs", sk, s=1.1754943508222875e-38))
-            plog = _dsum(k, k.ew("logs", psi, s=1.1754943508222875e-38))
-            ll = (llconst + slog + unexp + plog) * (-n / 2.0)
-            loglike.append(ll)
-            if (ll - old_ll) < self.tol:
-                break
-            old_ll = ll
-            # main's cancellation-free psi update (lane/apple-fast-quality-glmfa)
-            wts = k.ew("add", k.ew("mul", k.ew("mins", s2, s=1.0), keep), k.ew("mul", s2, drop))
-            share = k.mm(wts, k.ew("sq", Vfull))
-            psi = k.ew("maxs", k.ew("mul", k.ew("sq", sqrt_psi), share), s=SMALL)
-        return self._fit_store(k, W, psi, mean, loglike, it, d, nc)
-
-    def _fit_store(self, k, W, psi, mean, loglike, it, d, nc):
-        if self.rotation is not None:
-            W = _ortho_rotation(k, W.T, self.rotation).rows(0, nc)
-        self.components_m_ = W
-        self.components_ = W.out()
-        self.noise_variance_m_ = psi
-        self.noise_variance_ = psi.out((d,))
-        self.mean_m_ = mean
-        self.mean_ = mean.out((d,))
-        self.loglike_ = loglike
-        self.n_iter_ = it
-        self.n_features_in_ = d
-        return self
+        return _DECOMP_CALL(self, "fit", (X,), _DECOMP_CONTEXT)
 
     def transform(self, X):
         """Return the expected latent variables for each sample.
@@ -2865,33 +2672,7 @@ class FactorAnalysis(_Base):
         -------
         ndarray of shape (n_samples, n_components), float32
         """
-        self._check()
-        k = self._kit()
-        W = self.components_m_
-        if ("MOJOLEARN_FA_TRANSFORM_FUSED" in _fa_fast_defines(k)
-                and W.r <= _FA_TR_MAXK and W.c * (W.r + 1) <= _FA_TR_FLOATS):
-            # FAST on Apple (lane/apple-fast-fa, recovered): (X - mean) P in
-            # ONE launch over rows, P = (W / psi)^T cov_z (d x nc) in
-            # threadgroup memory (x_decomp/fa_fast.mojo fa_transform_kernel)
-            Xm = _M.from_input(X)
-            if Xm.c != W.c:
-                raise ValueError(f"x_decomp: cannot broadcast 1x{W.c} against {Xm.r}x{Xm.c}")
-            Wpsi = k.ew("div", W, self.noise_variance_m_)
-            cov_z = _inv(k, k.ew("add", _eye(W.r), k.mm(Wpsi, W, tb=True)))
-            P = k.mm(Wpsi, cov_z, ta=True)
-            out = k._dout(Xm.r, W.r)
-            k.b.x_decomp_fa_transform(k._did(Xm), k._did(self.mean_m_), k._did(P), out._d.id, [Xm.r, Xm.c, W.r])
-            return out.out()
-        M = k.ew("sub", _M.from_input(X), self.mean_m_)
-        Wpsi = k.ew("div", W, self.noise_variance_m_)
-        cov_z = _inv(k, k.ew("add", _eye(W.r), k.mm(Wpsi, W, tb=True)))
-        return k.mm(k.mm(M, Wpsi, tb=True), cov_z).out()
-
-    def _cov(self, k):
-        W = self.components_m_
-        # lane cpu2-l8-decomp: the noise variances added to the diagonal
-        # where C lives (one add a diagonal value; no d x d round trip)
-        return k.diag_add(k.mm(W, W, ta=True), self.noise_variance_m_)
+        return _DECOMP_CALL(self, "transform", (X,), _DECOMP_CONTEXT)
 
     def get_covariance(self):
         """Return the model covariance ``components_.T @ components_ + diag(noise_variance_)``.
@@ -2900,8 +2681,7 @@ class FactorAnalysis(_Base):
         -------
         ndarray of shape (n_features, n_features), float32
         """
-        self._check()
-        return self._cov(self._kit()).out()
+        return _DECOMP_CALL(self, "get_covariance", (), _DECOMP_CONTEXT)
 
     def get_precision(self):
         """Return the inverse of the model covariance.
@@ -2915,9 +2695,7 @@ class FactorAnalysis(_Base):
         ValueError
             If the covariance is singular.
         """
-        self._check()
-        k = self._kit()
-        return _inv(k, self._cov(k)).out()
+        return _DECOMP_CALL(self, "get_precision", (), _DECOMP_CONTEXT)
 
     def score_samples(self, X):
         """Return the log-likelihood of each sample under the model.
@@ -2930,18 +2708,7 @@ class FactorAnalysis(_Base):
         -------
         ndarray of shape (n_samples,), float32
         """
-        v = self._ss(X)
-        return v.out((v.r,))
-
-    def _ss(self, X):
-        self._check()
-        k = self._kit()
-        Xr = k.ew("sub", _M.from_input(X), self.mean_m_)
-        C = self._cov(k)
-        P = _inv(k, C)
-        ld = _logdet(k, P)
-        q = k.rowsum(k.ew("mul", Xr, k.mm(Xr, P)))
-        return k.ew("adds", k.ew("scale", q, s=-0.5), s=-0.5 * (Xr.c * _LOG_2PI - ld))
+        return _DECOMP_CALL(self, "score_samples", (X,), _DECOMP_CONTEXT)
 
     def score(self, X, y=None):
         """Return the average log-likelihood of the samples.
@@ -2955,9 +2722,7 @@ class FactorAnalysis(_Base):
         -------
         float
         """
-        k = self._kit()
-        v = self._ss(X)
-        return k.ew("scale", k.total(v), s=1.0 / v.r).s[0]
+        return _DECOMP_CALL(self, "score", (X,), _DECOMP_CONTEXT)
 
 
 # ================================================================ TruncatedSVD explained variance
@@ -7150,4 +6915,4 @@ _JL_CALL, _JL_CONTEXT = _native_jl_bridge.connect_public()
 # The compiled owner of the decomposition estimators whose public operations
 # are one native call each (bindings/decomp_native.mojo): FastICA, ...
 from . import _native_decomp_bridge  # noqa: E402
-_DECOMP_CALL, _DECOMP_CONTEXT = _native_decomp_bridge.connect_public({"FastICA": FastICA, "NMF": NMF})
+_DECOMP_CALL, _DECOMP_CONTEXT = _native_decomp_bridge.connect_public({"FastICA": FastICA, "NMF": NMF, "FactorAnalysis": FactorAnalysis})

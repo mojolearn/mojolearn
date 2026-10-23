@@ -11,6 +11,7 @@ from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_get, py_type
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.ica_native import ica_fit, ica_project
+from bindings.fa_native import fa_fit, fa_query
 from bindings.nmf_native import nmf_fit, nmf_fit_transform, nmf_inverse_transform, nmf_transform
 
 
@@ -69,6 +70,21 @@ def decomp_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPt
                 result = nmf_inverse_transform(model, args[0], context)
             else:
                 raise Error("unknown private NMF operation")
+        elif family == "FactorAnalysis":
+            if operation == "fit":
+                result = fa_fit(model, args[0], context)
+            elif operation == "transform":
+                result = fa_query(model, args[0], 0, context)
+            elif operation == "get_covariance":
+                result = fa_query(model, PythonObject(None), 1, context)
+            elif operation == "get_precision":
+                result = fa_query(model, PythonObject(None), 2, context)
+            elif operation == "score_samples":
+                result = fa_query(model, args[0], 3, context)
+            elif operation == "score":
+                result = fa_query(model, args[0], 4, context)
+            else:
+                raise Error("unknown private FactorAnalysis operation")
         else:
             raise Error("unknown private decomposition estimator")
         return result.steal_data()

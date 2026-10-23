@@ -14,6 +14,7 @@ from x_decomp.decomp_owner_kit import DecompDev
 from x_decomp.ica_owner import ica_fit_run, ica_project_run
 from x_decomp.nmf import nmf_args_checked
 from x_decomp.nmf_owner import nmf_inverse_run, nmf_run
+from x_decomp.fa_owner import fa_fit_run, fa_query_run
 
 
 def door_ptr(p: PythonObject, i: Int) raises -> F32Ptr:
@@ -122,3 +123,51 @@ def nmf_inverse_py[E: Exec, D: RDev, RES: Bool](p: PythonObject) raises -> Pytho
     with GILReleased(Python()):
         nmf_inverse_run[E, D, RES](w, n, nc, h, d, out)
     return PythonObject(n)
+
+
+def fa_fit_py[E: Exec, D: RDev, RES: Bool, X: DecompDev](p: PythonObject, f: PythonObject) raises -> PythonObject:
+    """FactorAnalysis fit. p = [x, n, d, nc, max_iter, psi0 (d), rotation
+    (0 None, 1 varimax, 2 quartimax), components, noise variances, mean,
+    log-likelihoods (float64, max(max_iter, 1))]; f = [tol]. Returns n_iter_."""
+    if len(p) != 11 or len(f) != 1:
+        raise Error("x_decomp_fa_fit: params must hold the input, the options and four outputs")
+    var x = door_ptr(p, 0)
+    var n = door_dim(p, 1)
+    var d = door_dim(p, 2)
+    var nc = door_dim(p, 3)
+    var max_iter = Int(py=p[4])
+    var psi0 = door_ptr(p, 5)
+    var rotation = Int(py=p[6])
+    var pc = door_ptr(p, 7)
+    var ps = door_ptr(p, 8)
+    var pm = door_ptr(p, 9)
+    var ll_address = Int(py=p[10])
+    if ll_address == 0:
+        raise Error("x_decomp: null float64 buffer address")
+    var ll = MutPointer[Float64, MutAnyOrigin](unsafe_from_address=ll_address)
+    var tol = Float64(py=f[0])
+    var it = 0
+    with GILReleased(Python()):
+        it = fa_fit_run[E, D, RES, X](x, n, d, nc, max_iter, tol, psi0, rotation, pc, ps, pm, ll)
+    return PythonObject(it)
+
+
+def fa_query_py[E: Exec, D: RDev, RES: Bool, X: DecompDev](p: PythonObject) raises -> PythonObject:
+    """A fitted FactorAnalysis query. p = [op (0 transform, 1 covariance, 2
+    precision, 3 score_samples, 4 score), x, n, d, nc, components, noise
+    variances, mean, out]. Returns the score (op 4), else 0."""
+    if len(p) != 9:
+        raise Error("x_decomp_fa_query: params must hold op, x, n, d, nc, the fitted arrays and out")
+    var op = Int(py=p[0])
+    var x = door_ptr(p, 1)
+    var n = door_dim(p, 2)
+    var d = door_dim(p, 3)
+    var nc = door_dim(p, 4)
+    var pc = door_ptr(p, 5)
+    var ps = door_ptr(p, 6)
+    var pm = door_ptr(p, 7)
+    var out = door_ptr(p, 8)
+    var value = Float64(0.0)
+    with GILReleased(Python()):
+        value = fa_query_run[E, D, RES, X](op, x, n, d, nc, pc, ps, pm, out)
+    return PythonObject(value)

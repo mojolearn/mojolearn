@@ -10,6 +10,14 @@ from x_decomp.resident import IDN_EIGH_RESIDENT, IDN_LU_RESIDENT, dev_eigh_run, 
 from x_decomp.ica_dev import ica_solve_dev_run
 from x_decomp.nmf import NmfArgs
 from x_decomp.nmf_dev import nmf_nndsvd_dev_run, nmf_solve_dev_run
+from x_decomp.fa_em import FaArgs
+from x_decomp.fa_em_dev import fa_em_main_dev_run
+from x_decomp.rotation_dev import ortho_rotation_dev_run
+from x_decomp.resident import IDN_QR_R_RESIDENT, dev_qr_r_run
+from x_decomp.fa_fast import (
+    FA_FAST_APPLE, FA_GRAM_DF, FA_GRAM_ONCE, FA_ITER_DEVICE, FA_TRANSFORM_FUSED, fa_em_run, fa_gram_run,
+    fa_transform_run,
+)
 
 
 struct DevDecomp(DecompDev):
@@ -43,3 +51,48 @@ struct DevDecomp(DecompDev):
     @staticmethod
     def nmf_nndsvd(pu: F32Ptr, ps: F32Ptr, pv: F32Ptr, pw: F32Ptr, ph: F32Ptr, n: Int, d: Int, r: Int, nc: Int) raises -> Int:
         return nmf_nndsvd_dev_run(pu, ps, pv, pw, ph, n, d, r, nc)
+
+    @staticmethod
+    def has_qr_r() -> Bool:
+        return IDN_QR_R_RESIDENT
+
+    @staticmethod
+    def qr_r(a: Int, r: F32Ptr, m: Int, n: Int, consume: Bool) raises -> Int:
+        return dev_qr_r_run(a, r, m, n, consume)
+
+    @staticmethod
+    def fa_em_main(pa: F32Ptr, pp: F32Ptr, pw: F32Ptr, pl: MutPointer[Float64, MutUntrackedOrigin], ar: Int,
+                   args: FaArgs) raises -> Int:
+        return fa_em_main_dev_run(pa, pp, pw, pl, ar, args)
+
+    @staticmethod
+    def ortho_rotation(pc: F32Ptr, po: F32Ptr, nrow: Int, ncol: Int, vm: Bool, max_iter: Int, tol: Float64) raises:
+        ortho_rotation_dev_run(pc, po, nrow, ncol, vm, max_iter, tol)
+
+    @staticmethod
+    def fa_flags() -> Int:
+        # `x_decomp_fa_defines` is registered only under FA_FAST_APPLE
+        var f = 0
+        comptime if FA_FAST_APPLE:
+            comptime if FA_GRAM_ONCE:
+                f |= 1
+            comptime if FA_ITER_DEVICE:
+                f |= 2
+            comptime if FA_TRANSFORM_FUSED:
+                f |= 4
+            comptime if FA_GRAM_DF:
+                f |= 8
+        return f
+
+    @staticmethod
+    def fa_gram(x: Int, mean: Int, g: Int, var_: Int, n: Int, d: Int) raises:
+        _ = fa_gram_run(x, mean, g, var_, n, d)
+
+    @staticmethod
+    def fa_em(g: Int, psi_src: F32Ptr, w_dst: F32Ptr, psi_dst: F32Ptr, ll_dst: MutPointer[Float64, MutAnyOrigin],
+              d: Int, nc: Int, n: Int, max_iter: Int, tol: Float64) raises -> Int:
+        return fa_em_run(g, psi_src, w_dst, psi_dst, ll_dst, d, nc, n, max_iter, tol)
+
+    @staticmethod
+    def fa_transform(x: Int, mean: Int, pm: Int, dst: Int, n: Int, d: Int, nc: Int) raises:
+        _ = fa_transform_run(x, mean, pm, dst, n, d, nc)

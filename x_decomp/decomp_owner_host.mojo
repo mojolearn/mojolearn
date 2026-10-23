@@ -8,6 +8,8 @@ from x_decomp.decomp_owner_kit import DecompDev
 from x_decomp.host import HostExec
 from x_decomp.ica import ica_solve_run
 from x_decomp.nmf import NmfArgs, nmf_nndsvd_run, nmf_solve_run
+from x_decomp.fa_em import FaArgs, fa_em_main_run
+from x_decomp.rotation import ortho_rotation_run
 
 
 struct HostDecomp(DecompDev):
@@ -41,3 +43,37 @@ struct HostDecomp(DecompDev):
     @staticmethod
     def nmf_nndsvd(pu: F32Ptr, ps: F32Ptr, pv: F32Ptr, pw: F32Ptr, ph: F32Ptr, n: Int, d: Int, r: Int, nc: Int) raises -> Int:
         return nmf_nndsvd_run[HostExec](pu, ps, pv, pw, ph, n, d, r, nc)
+
+    @staticmethod
+    def has_qr_r() -> Bool:
+        return False
+
+    @staticmethod
+    def qr_r(a: Int, r: F32Ptr, m: Int, n: Int, consume: Bool) raises -> Int:
+        raise Error("x_decomp: no resident matrices on the host binding")
+
+    @staticmethod
+    def fa_em_main(pa: F32Ptr, pp: F32Ptr, pw: F32Ptr, pl: MutPointer[Float64, MutUntrackedOrigin], ar: Int,
+                   args: FaArgs) raises -> Int:
+        return fa_em_main_run[HostExec](pa, pp, pw, pl, ar, args)
+
+    @staticmethod
+    def ortho_rotation(pc: F32Ptr, po: F32Ptr, nrow: Int, ncol: Int, vm: Bool, max_iter: Int, tol: Float64) raises:
+        ortho_rotation_run[HostExec](pc, po, nrow, ncol, vm, max_iter, tol)
+
+    @staticmethod
+    def fa_flags() -> Int:
+        return 0
+
+    @staticmethod
+    def fa_gram(x: Int, mean: Int, g: Int, var_: Int, n: Int, d: Int) raises:
+        raise Error("x_decomp: no FAST Apple FactorAnalysis on the host binding")
+
+    @staticmethod
+    def fa_em(g: Int, psi_src: F32Ptr, w_dst: F32Ptr, psi_dst: F32Ptr, ll_dst: MutPointer[Float64, MutAnyOrigin],
+              d: Int, nc: Int, n: Int, max_iter: Int, tol: Float64) raises -> Int:
+        raise Error("x_decomp: no FAST Apple FactorAnalysis on the host binding")
+
+    @staticmethod
+    def fa_transform(x: Int, mean: Int, pm: Int, dst: Int, n: Int, d: Int, nc: Int) raises:
+        raise Error("x_decomp: no FAST Apple FactorAnalysis on the host binding")

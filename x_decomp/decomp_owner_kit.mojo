@@ -13,11 +13,12 @@ drivers the binding registers under one name with a host and a GPU body
 and decomp_owner_dev.mojo implement it for the two bindings."""
 from std.memory import memcpy
 
-from x_decomp.api import eigh_run, lu_solve_run, rand_run
+from x_decomp.api import eigh_run, lu_solve_run, move_run, rand_run
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.exec_trait import Exec
 from x_decomp.pca_randomized import RDev, RKit
 from x_decomp.nmf import NmfArgs
+from x_decomp.fa_em import FaArgs
 
 # x_decomp/cells.mojo op codes (`_OP` in _expansion_decomp.py)
 comptime OP_ADD = 0
@@ -76,6 +77,42 @@ trait DecompDev:
 
     @staticmethod
     def nmf_nndsvd(pu: F32Ptr, ps: F32Ptr, pv: F32Ptr, pw: F32Ptr, ph: F32Ptr, n: Int, d: Int, r: Int, nc: Int) raises -> Int:
+        ...
+
+    @staticmethod
+    def has_qr_r() -> Bool:
+        ...
+
+    @staticmethod
+    def qr_r(a: Int, r: F32Ptr, m: Int, n: Int, consume: Bool) raises -> Int:
+        ...
+
+    @staticmethod
+    def fa_em_main(pa: F32Ptr, pp: F32Ptr, pw: F32Ptr, pl: MutPointer[Float64, MutUntrackedOrigin], ar: Int,
+                   args: FaArgs) raises -> Int:
+        ...
+
+    @staticmethod
+    def ortho_rotation(pc: F32Ptr, po: F32Ptr, nrow: Int, ncol: Int, vm: Bool, max_iter: Int, tol: Float64) raises:
+        ...
+
+    @staticmethod
+    def fa_flags() -> Int:
+        """FactorAnalysis's FAST Apple switches (`x_decomp_fa_defines`): bit 1
+        GRAM_ONCE, 2 ITER_DEVICE, 4 TRANSFORM_FUSED, 8 GRAM_DF; 0 elsewhere."""
+        ...
+
+    @staticmethod
+    def fa_gram(x: Int, mean: Int, g: Int, var_: Int, n: Int, d: Int) raises:
+        ...
+
+    @staticmethod
+    def fa_em(g: Int, psi_src: F32Ptr, w_dst: F32Ptr, psi_dst: F32Ptr, ll_dst: MutPointer[Float64, MutAnyOrigin],
+              d: Int, nc: Int, n: Int, max_iter: Int, tol: Float64) raises -> Int:
+        ...
+
+    @staticmethod
+    def fa_transform(x: Int, mean: Int, pm: Int, dst: Int, n: Int, d: Int, nc: Int) raises:
         ...
 
 
@@ -206,3 +243,103 @@ def kit_colmean[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], a: Int) r
     var sums = kit.sum(a, True)
     var rows = kit.r(a)
     return kit.ew(OP_SCALE, sums, scalar=1.0 / Float64(rows))
+
+
+comptime _MV_TAKE_COLS = 4
+
+
+def kit_strided[E: Exec, D: RDev, RES: Bool](
+    mut kit: RKit[E, D, RES], a: Int, count: Int, stride_in: Int, off: Int
+) raises -> Int:
+    """`_Kit.strided(A, count, stride, off)`: A's values at off + t stride
+    as 1 x count (the TAKE_COLS move with one column index)."""
+    var stride = off + 1 if count == 1 else stride_in
+    var idx = kit.constant(Float32(off))
+    var n = kit.r(a) * kit.c(a)
+    return kit.move(a, idx, 1, count, _MV_TAKE_COLS, count, 1, stride, 0, 0, 0, n, count, 1, RES)
+
+
+def kit_diag[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], a: Int) raises -> Int:
+    """`_Kit.diag(A)`: the diagonal of square A as 1 x n."""
+    var n = kit.r(a)
+    return kit_strided(kit, a, n, n + 1, 0)
+
+
+def kit_copy[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], a: Int) raises -> Int:
+    """`_Kit.copy(A)`: on the device (one PLACE_COLS move) when A is there,
+    else a host copy."""
+    var rows = kit.r(a)
+    var cols = kit.c(a)
+    var n = rows * cols
+    comptime if RES:
+        if n and kit.mats[a].dev >= 0:
+            var out = kit.device_output(rows, cols)
+            var one = kit.zeros(1, 1)
+            var source = kit.device(a)
+            var index = kit.device(one)
+            D.move(source, index, kit.mats[out].dev, MV_PLACE_COLS, n, cols, cols, 0, 0, 0, n, n, 1)
+            return out
+    return kit.copy_host(a)
+
+
+def kit_place_strided[E: Exec, D: RDev, RES: Bool](
+    mut kit: RKit[E, D, RES], dst: Int, v: Int, stride: Int, off: Int
+) raises -> Int:
+    """`_Kit.place_strided(D, V, stride, off)`: D[off + t stride] = V[t] in
+    place (the PLACE_COLS move with width 1); returns D."""
+    var count = kit.r(v) * kit.c(v)
+    if count == 0:
+        return dst
+    var total = kit.r(dst) * kit.c(dst)
+    var one = kit.zeros(1, 1)
+    comptime if RES:
+        var source = kit.device(v)
+        var index = kit.device(one)
+        var target = kit.device(dst)
+        D.move(source, index, target, MV_PLACE_COLS, count, 1, stride, off, 0, 0, count, total, 1)
+        return dst
+    move_run(MV_PLACE_COLS, kit.ptr(v), kit.ptr(one), kit.ptr(dst), count, 1, stride, off, 0, 0, count, total, 1)
+    return dst
+
+
+def kit_diag_add[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], a: Int, v: Int) raises -> Int:
+    """`_Kit.diag_add(A, v)`: a copy of square A with v added to its diagonal."""
+    var copied = kit_copy(kit, a)
+    var diagonal = kit_diag(kit, a)
+    var added = kit.ew(OP_ADD, diagonal, v)
+    var stride = kit.r(a) + 1
+    return kit_place_strided(kit, copied, added, stride, 0)
+
+
+def kit_eye[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], n: Int) raises -> Int:
+    """`_eye(n)`: the host n x n identity."""
+    var out = kit.zeros(n, n)
+    var p = kit.ptr(out)
+    for i in range(n):  # driver-loop: over the identity's diagonal (model structure: components)
+        p[i * n + i] = 1.0
+    return out
+
+
+def kit_inv[E: Exec, D: RDev, RES: Bool, X: DecompDev](mut kit: RKit[E, D, RES], a: Int) raises -> Int:
+    """`_inv(k, A)`: A^-1 through the LU solve of the identity."""
+    var piv = List[Int32]()
+    var factored = kit_lu[E, D, RES, X](kit, a, piv)
+    if factored[1] != 0:
+        raise Error("singular matrix")
+    var n = kit.r(a)
+    var eye = kit_eye(kit, n)
+    var solved = kit_lu_solve(kit, factored[0], piv, eye)
+    _ = piv^
+    return solved
+
+
+def kit_logdet[E: Exec, D: RDev, RES: Bool, X: DecompDev](mut kit: RKit[E, D, RES], a: Int) raises -> Float64:
+    """`_logdet(k, A)`: the sum of log|diag(LU)| (the LU's info not read)."""
+    var piv = List[Int32]()
+    var factored = kit_lu[E, D, RES, X](kit, a, piv)
+    var diagonal = kit_diag(kit, factored[0])
+    var absolute = kit.ew(OP_ABS, diagonal)
+    var logs = kit.ew(OP_LOGS, absolute, scalar=1.1754943508222875e-38)
+    var value = kit.total(logs)
+    _ = piv^
+    return value
