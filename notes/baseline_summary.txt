@@ -1,0 +1,25 @@
+family                     names methods  native   orch  python  unres nat_calls  py_stmts
+preprocessing                 35     135       0     62      73      0       740     47324
+ensemble                      32     132       0     49      83      0       739     30690
+linear_model                  27     102       0     53      49      0       335     15721
+decomposition                 28     101       0     86      15      0       932     21560
+sequence                      41      81       0      4      77      0       162      7079
+neighbors                     23      73       0     33      40      0       148      9159
+metrics                       69      69       0      9      60      0       314     22652
+neural_network                19      53       8      3      42      0       396      6868
+cluster                       10      47       0     30      17      0        86      4156
+neural_inference               9      28      22      6       0      0        94      1080
+training                      25      27      10     16       1      0        53      1069
+model_selection               15      25       0      0      25      0        80      4895
+svm                            5      23       0     10      13      0       106      4517
+manifold                       8      20       0     10      10      0       257      5790
+linalg                        15      17       0     13       4      0        29       951
+kernel_methods                 3      15       0      4      11      0        14      1360
+gaussian_process               4      13       0      2      11      0        39      3129
+mixture                        2      13       0     11       2      0        13      1032
+models                         3      11      10      0       1      0        10        11
+resample                       5       5       0      4       1      0        11       239
+ops                            3       4       3      0       1      0         9       398
+language_model                 2       2       0      1       1      0        12       314
+TOTAL                        383     996      53    406     537      0      4579    189994
+baseline: /Users/andrewhendel/mojolearn-wt/public-runtime-inventory/tools/hooks/public_runtime_baseline.tsv (996 rows)
