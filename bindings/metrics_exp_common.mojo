@@ -412,7 +412,7 @@ def mx_list_labels(values: PythonObject, name: String, allow_empty: Bool,
         return (mx_list(py_call(b.map, b.str, labels)), String("string"))
     # every label an Integral or a bool (NumPy's bool_ by its type name):
     # the distinct types, then the ones that are neither, by name
-    var types = mx_list(mx_set(py_call(b.map, py_type, labels)))
+    var types = mx_list(mx_set(py_call(b.map, b.type, labels)))
     var integral = Python.tuple(context["family_mexp_integral"], b.bool)
     var fits = mx_list(py_call(b.map, b.issubclass, types, py_call(it.repeat, integral)))
     var rest = mx_list(py_call(it.compress, types, py_call(b.map, op.not_, fits)))
@@ -452,7 +452,7 @@ def _mx_buffer_labels(values: PythonObject, name: String, context: PythonObject)
         # a flat list of exact Python ints as an int64 buffer (OverflowError
         # for an int outside int64 keeps the list route)
         var n = mx_len(values)
-        if n == 0 or not mx_eq(mx_set(py_call(b.map, py_type, values)), mx_set(Python.list(b.int))):
+        if n == 0 or not mx_eq(mx_set(py_call(b.map, b.type, values)), mx_set(Python.list(b.int))):
             return PythonObject(None)
         var lo = py_call(b.min, values)
         var hi = py_call(b.max, values)
