@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time connection of the native owner of the x_prep imputers,
 discretizer and encoders (SimpleImputer, KBinsDiscretizer, OrdinalEncoder,
-OneHotEncoder, TargetEncoder.transform) and its fixed ABI."""
+OneHotEncoder, TargetEncoder.transform, SplineTransformer) and its fixed ABI."""
 
 
 def connect(kinds, qselect):
@@ -26,7 +26,8 @@ def connect(kinds, qselect):
             for name in ("x_prep_run", "x_prep_numeric_mode", "x_prep_idn_fam", "x_prep_vendor",  # glue: fixed native exports connected during import
                          "x_prep_host_column", "x_prep_run_out", "x_prep_run_scratch", "x_prep_run_ranges",
                          "x_prep_dev_put", "x_prep_dev_free", "x_prep_dev_live", "x_prep_dev_take_rows",
-                         "x_prep_cls2_cat", "x_prep_fast_unique", "x_prep_c08_routes", "x_prep_target_scratch"):
+                         "x_prep_cls2_cat", "x_prep_fast_unique", "x_prep_c08_routes", "x_prep_target_scratch",
+                         "x_prep_spline_fused"):
                 try:
                     entry = getattr(module, name)
                 except (AttributeError, ImportError):

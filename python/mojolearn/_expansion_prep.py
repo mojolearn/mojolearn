@@ -187,18 +187,6 @@ def _p2m_sel(pr, xo, n, d, mode, dst):
     return tot
 
 
-def _p2m_positive_rows(pr, xo, wo, n, d, m):
-    """Stages: the rows of the (n, d) block at xo whose weight (at wo) is
-    positive, as a new (m, d) block (the old `_gather_rows(arr, nz)`; m is
-    the count of positive weights). Returns its offset."""
-    ro = pr.alloc(n)
-    _p2m_sel(pr, wo, n, 1, 1, ro)
-    xz = pr.alloc(m * d)
-    if m:
-        pr.stage("p2m_rgather", m * d, xo, d, ro, xz)
-    return xz
-
-
 #: the smallest output (words) that `_Prog.output` keeps out of the arena
 _OUT_MIN_WORDS = 2 ** 27
 
@@ -3852,87 +3840,6 @@ class PolynomialFeatures(_PrepBase):
         return _STATELESS_CALL(self, "fit_transform", (X, y), _STATELESS_CONTEXT)
 
 
-def _p2m_f_stage(pr, off, n, w):
-    """Lane apple-fast-py2mojo-prep: a p2m_transpose stage writing the (n, w)
-    block at off column-major into the program's output; read it back with
-    `_p2m_f_get`. None for an empty block."""
-    if n * w <= 0:
-        return None
-    fo = pr.output(n * w)
-    pr.stage("p2m_transpose", n * w, off, n, w, fo)
-    return fo
-
-
-def _p2m_f_get(pr, fo, n, w):
-    """The column-major block `_p2m_f_stage` wrote, as an (n, w) Fortran-ordered Array."""
-    return Array._view_of(pr.get(fo, (n * w,)), (n, w), "F")
-
-
-def _check_weights(sample_weight, n, who):
-    """sample_weight as float32 words (nonnegative, length n) and the count
-    of its positive entries: one device program (p2m_sel_count / scan over
-    the weights, col_stats for the minimum; lane pyglue-numeric: Python
-    passes over the weight list)."""
-    w = as_f32_c(sample_weight, ndim=1, name="sample_weight")[0]
-    if w.size != n:
-        raise ValueError(f"mojolearn: sample_weight has {w.size} entries; X has {n} rows")
-    pr = _Prog()
-    wo = pr.put(w)
-    st = pr.alloc(6)
-    _cs(pr, _mode(), wo, n, 1, st, var=False)
-    pos = _p2m_sel(pr, wo, n, 1, 1, pr.alloc(n))
-    pr.run(_mode())
-    cnt, lo = pr.values(st, 1)[0], pr.values(st + 3, 1)[0]
-    m = int(pr.get_i32(pos, 1).tolist()[0])
-    if int(cnt) != n or lo < 0:            # a NaN is not counted by col_stats
-        raise ValueError(f"mojolearn: {who} sample_weight must be nonnegative")
-    if m == 0:
-        raise ValueError(f"mojolearn: {who} sample_weight is all zero")
-    return w, m
-
-
-def _weighted_groups(pr, arr, w, n, d):
-    """Stages writing every column's distinct values (ascending, -0.0 folded
-    into 0.0, NaN last) and their summed weights: UG[c*n :] and UG[n*d + c*n :],
-    their count UCNT[c]. Returns (UG, UCNT)."""
-    xo = pr.put(arr)
-    so, ug, ucnt, codes = pr.work(n * d), pr.alloc(2 * n * d), pr.alloc(d), pr.alloc(n * d)
-    pr.stage("sort_cols", d, xo, n, d, so, 1)
-    pr.stage("unique_cols", d, so, n, d, ug, ucnt)
-    pr.stage("lookup", n * d, xo, n, d, ug, n, ucnt, codes)
-    pr.stage("kbins_gw", d, codes, n, d, pr.put(w), ug + n * d)
-    return ug, ucnt
-
-
-def _grid(pr, nb, w, kind):
-    """Stages c2_grid (lane cpu2-l3-prep): one level row of stride w per entry
-    b of nb (KIND 0: i * (100 / b), then 100; 1: i / b; 2: 100 * (i * (1 /
-    b)), then 100; zeros past b), binary64 rounded to float32 as the Python
-    lists were. Returns the (len(nb), w) block's offset."""
-    out = pr.alloc(len(nb) * w)
-    pr.stage("c2_grid", len(nb) * w, pr.put_list(nb), w, kind, out)
-    return out
-
-
-def _weighted_levels(pr, ug, ucnt, n, d, nb, kind, average, out):
-    """A stage of the reference's `_weighted_percentile` of every column at
-    the percent levels `_grid` writes for nb (one b per column, a common
-    stride max + 1) into `out` (column c at c * stride), over
-    `_weighted_groups`."""
-    nbmax = max(nb)  # glue: the widest level row (a shape)
-    lv = _grid(pr, nb, nbmax + 1, kind)
-    pr.stage("kbins_wq", d, ug, n, d, ucnt, pr.put_list(nb), nbmax, lv, int(average), out)
-
-
-def _spline_fused(mode):
-    """lane apple-fast-gap-kapprox2: whether the binding is the FAST Apple
-    build with -D MOJOLEARN_SPLINE_FAST_FUSED (it alone exports
-    `x_prep_spline_fused`)."""
-    if str(mode).strip().lower() != "fast":
-        return False
-    return _optional_prep_entry(_prep_binding(mode), "x_prep_spline_fused") is not None
-
-
 class SplineTransformer(_PrepBase):
     """Generate B-spline basis features for each feature.
 
@@ -4004,157 +3911,21 @@ class SplineTransformer(_PrepBase):
     def _mojolearn_allows_nan(self):
         """handle_missing='zeros' takes NaN (its rows' spline features are 0)."""
         return self.handle_missing == "zeros"
-    def _no_nan(self, pr, st, d, n):
-        if self.handle_missing == "error" and any(int(v) != n for v in pr.values(st, d)):  # glue: raises on a NaN count from the device (d-sized: feature count)
-            raise ValueError("mojolearn: Input X contains NaN values and `SplineTransformer` is configured to "
-                             "error in this case (handle_missing='error'). To avoid this error, set "
-                             "handle_missing='zeros' to encode missing values as splines with value 0 or ensure "
-                             "no missing values in X.")
-
     def fit(self, X, y=None, sample_weight=None):
-        self._fit(X, sample_weight, False)
-        return self
+        return _ENCODE_CALL(self, "fit", (X, y, sample_weight), _ENCODE_CONTEXT)
 
     def fit_transform(self, X, y=None, sample_weight=None):
-        # lane apple-fast-gap-kapprox2: with `x_prep_spline_fused` (the FAST
-        # Apple build with -D MOJOLEARN_SPLINE_FAST_FUSED only) one program fits
-        # and applies; 'error' extrapolation and order 'F' keep fit + transform.
-        if self.extrapolation != "error" and self.order == "C" and _spline_fused(_mode()):
-            return self._fit(X, sample_weight, True)
-        return self.fit(X, y, sample_weight=sample_weight).transform(X)
+        """Fit to ``X``, then transform ``X``.
 
-    def _fit(self, X, sample_weight, fuse):
-        """fit; with `fuse`, the same program also applies the splines to X
-        and returns the output (fit_transform's words in one run)."""
-        if self.extrapolation not in self._EXTRAP:
-            raise ValueError(f"mojolearn: invalid extrapolation {self.extrapolation!r}")
-        if self.handle_missing not in ("error", "zeros"):
-            raise ValueError(f"mojolearn: invalid handle_missing {self.handle_missing!r}")
-        if self.order not in ("C", "F"):
-            raise ValueError(f"mojolearn: invalid order {self.order!r}")
-        if self.sparse_output:
-            raise NotImplementedError("mojolearn: SplineTransformer sparse_output is not implemented "
-                                      "(there is no sparse Array)")
-        k = int(self.degree)
-        if k < 0 or k > 7:
-            raise ValueError("mojolearn: SplineTransformer needs 0 <= degree <= 7")
-        arr = _x2d(X)
-        n, d = arr.shape
-        if n < 2:
-            raise ValueError(f"Found array with {n} sample(s) (shape=({n}, {d})) while a minimum of 2 "
-                             "is required by SplineTransformer.")
-        w = wl = None
-        if sample_weight is not None:
-            w, wl = _check_weights(sample_weight, n, "SplineTransformer")
-        given = not isinstance(self.knots, str)
-        if not given and self.knots not in ("uniform", "quantile"):
-            raise ValueError(f"mojolearn: invalid knots {self.knots!r}")
-        if given:
-            rows = [[float(v) for v in (r.tolist() if hasattr(r, "tolist") else r)] for r in  # glue: converts the user knots argument (r-sized: user knots argument rows)
-                    (self.knots.tolist() if hasattr(self.knots, "tolist") else self.knots)]
-            nk = len(rows)
-            if nk < 2:
-                raise ValueError("mojolearn: Number of knots, knots.shape[0], must be >= 2.")
-            if any(len(r) != d for r in rows):  # glue: validates the user knots argument (rows-sized: user knots argument rows)
-                raise ValueError("mojolearn: knots.shape[1] == n_features is violated.")
-            cols = [list(array.array("f", [r[c] for r in rows])) for c in range(d)]  # glue: transposes the user knots argument (d-sized: feature count)
-            if not all(b > a for col in cols for a, b in zip(col, col[1:])):  # glue: validates the user knots argument is sorted (cols-sized: user knots argument columns)
-                raise ValueError("mojolearn: knots must be sorted without duplicates.")
-        else:
-            nk = int(self.n_knots)
-            if nk < 2:
-                raise ValueError("mojolearn: SplineTransformer needs n_knots >= 2")
-        periodic = self.extrapolation == "periodic"
-        if periodic and nk <= k:
-            raise ValueError(f"mojolearn: Periodic splines require degree < n_knots. Got n_knots={nk} and "
-                             f"degree={k}.")
-        mode = _mode()
-        pr = _Prog()
-        xo = pr.put(arr)
-        sorts = not given and self.knots == "quantile" and w is None
-        # MOJOLEARN_SPLINE_FAST_FUSED: no n*d arena block when nothing sorts
-        # (main's is never written and comes back from the device unread: 64 MB
-        # at the board's 1M x 16), and the count / min / max rows by the blocked
-        # units (one unit per row block and column) instead of one threadgroup
-        # per column over every row. The same knots (counts, minima, maxima).
-        fused = _spline_fused(mode)
-        so = pr.work(n * d) if sorts else (None if fused else pr.alloc(n * d))
-        st = pr.alloc(6 * d)
-        knots = pr.alloc(d * (nk + 2 * k))
-        if fused:
-            _col_stats(pr, xo, n, d, st, var=False)
-        else:
-            _cs(pr, mode, xo, n, d, st, var=False)
-        uniform, kst = 0, st
-        if given:
-            base = pr.put_list([v for col in cols for v in col])  # glue: packs the user knots argument (cols-sized: user knots argument columns)
-        elif self.knots == "quantile":
-            base = pr.alloc(d * nk)
-            if w is None:
-                qf = _grid(pr, [nk - 1], nk, 1)
-                pr.stage("sort_cols", d, xo, n, d, so, 0)
-                pr.stage("quantile", d * nk, so, n, d, qf, nk, base, st)
-            else:
-                ug, ucnt = _weighted_groups(pr, arr, w, n, d)
-                _weighted_levels(pr, ug, ucnt, n, d, [nk - 1] * d, 2, False, base)
-        else:
-            base, uniform = pr.alloc(d * nk), 1
-            if w is not None and wl < n:
-                # the positive-weight rows on the device
-                kst = pr.alloc(6 * d)
-                _cs(pr, mode, _p2m_positive_rows(pr, xo, pr.put(w), n, d, wl), wl, d, kst, var=False)
-        pr.stage("spline_knots", d, base, nk, d, k, knots, uniform, kst, int(periodic))
-        nspl = nk - 1 if periodic else nk + k - 1
-        W = d * (nspl if self.include_bias else nspl - 1)
-        out = None
-        if fuse:
-            out = pr.output(n * W)
-            pr.stage("spline_apply", n * d, xo, n, d, knots, nk, k, self._EXTRAP[self.extrapolation], W,
-                     1 if self.include_bias else 0, out)
-        pr.run(mode)
-        self._no_nan(pr, st, d, n)
-        self._knots = pr.get(knots, d * (nk + 2 * k))
-        flat = pr.values(knots, d * (nk + 2 * k))
-        wd = nk + 2 * k
-        self.bsplines_ = [Array.from_list(flat[c * wd:(c + 1) * wd], "<f4") for c in range(d)]  # glue: per-column fitted spline knot views (d-sized: feature count)
-        self._lo = [flat[c * wd + k] for c in range(d)]  # glue: per-column fitted lower knot (d-sized: feature count)
-        self._hi = [flat[c * wd + k + nk - 1] for c in range(d)]  # glue: per-column fitted upper knot (d-sized: feature count)
-        self._nk, self._k = nk, k
-        self.n_features_out_ = W
-        self.numeric_mode_, self.n_features_in_ = mode, d
-        return pr.get(out, (n, W)) if fuse else self
+        Returns
+        -------
+        array
+            The transformed data.
+        """
+        return _ENCODE_CALL(self, "fit_transform", (X, y, sample_weight), _ENCODE_CONTEXT)
 
     def transform(self, X):
-        self._check_fitted()
-        arr = _x2d(X)
-        self._check_width(arr)
-        n, d = arr.shape
-        W = self.n_features_out_
-        pr = _Prog()
-        xo, ko = pr.put(arr), pr.put(self._knots)
-        out = pr.alloc(n * W) if self.order == "F" else pr.output(n * W)
-        st = pr.alloc(6 * d)
-        check = self.extrapolation == "error" or self.handle_missing == "error"
-        if check:
-            if _spline_fused(self.numeric_mode_):
-                _col_stats(pr, xo, n, d, st, var=False)
-            else:
-                _cs(pr, self.numeric_mode_, xo, n, d, st, var=False)
-        pr.stage("spline_apply", n * d, xo, n, d, ko, self._nk, self._k, self._EXTRAP[self.extrapolation], W,
-                 1 if self.include_bias else 0, out)
-        fo = _p2m_f_stage(pr, out, n, W) if self.order == "F" else None
-        pr.run(self.numeric_mode_)
-        if check:
-            self._no_nan(pr, st, d, n)
-        if self.extrapolation == "error":
-            lo, hi = pr.values(st + 3 * d, d), pr.values(st + 4 * d, d)
-            if any(a < b for a, b in zip(lo, self._lo)) or any(a > b for a, b in zip(hi, self._hi)):  # glue: raises when data leave the fitted knot range (lo-sized: per-column minimum statistics)
-                raise ValueError("mojolearn: X contains values beyond the limits of the knots")
-        if fo is not None:
-            return _p2m_f_get(pr, fo, n, W)
-        if self.order == "F":       # an empty block
-            return Array._owned(array.array("f"), (n, W), "<f4", "F")
-        return pr.get(out, (n, W))
+        return _ENCODE_CALL(self, "transform", (X,), _ENCODE_CONTEXT)
 
 
 class Binarizer(_PrepBase):
@@ -6657,4 +6428,4 @@ _STATELESS_CALL, _STATELESS_CONTEXT = _connect_stateless(
 from ._native_prep_encode_bridge import connect as _connect_encode
 _ENCODE_CALL, _ENCODE_CONTEXT = _connect_encode(
     {SimpleImputer: "simple_imputer", KBinsDiscretizer: "kbins", OrdinalEncoder: "ordinal",
-     OneHotEncoder: "onehot", TargetEncoder: "target"}, _X_PREP2_QSELECT)
+     OneHotEncoder: "onehot", TargetEncoder: "target", SplineTransformer: "spline"}, _X_PREP2_QSELECT)

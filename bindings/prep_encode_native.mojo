@@ -23,7 +23,7 @@ from bindings.classical_arrays import classical_address, classical_typed, classi
 from bindings.scaler_native import _stage, _ptr, _input
 from bindings.scaler_lifecycle_native import _entries
 from bindings.x_prep_native_owner import xprep_storage, xprep_take, xprep_values, xprep_run, xprep_r3
-from bindings.prep_stateless_native import PrepLayout, _place_scratch, _fam, _int_like, _repr, _name
+from bindings.prep_stateless_native import PrepLayout, _place_scratch, _fam, _int_like, _repr, _name, _take_f
 
 alias F32P = MutPointer[Float32, MutUntrackedOrigin]
 alias I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -62,6 +62,8 @@ comptime OP_COLB_PART = 124
 comptime OP_COLB_FOLD = 125
 comptime OP_COLB_SS = 126
 comptime OP_COLB_VAR = 127
+comptime OP_SPLINE_KNOTS = 49
+comptime OP_SPLINE_APPLY = 50
 comptime OP_HCAT = 140
 comptime OP_CAT_ZERO = 157
 comptime OP_CAT_PRESENT = 158
@@ -74,6 +76,7 @@ comptime OP_SMROWS = 205
 comptime OP_SEL_COUNT = 206
 comptime OP_SEL_SCAN = 207
 comptime OP_SEL_WRITE = 208
+comptime OP_TRANSPOSE = 209
 comptime OP_ROWFLAG = 210
 comptime OP_WBLK = 230
 comptime OP_WSCAN = 231
@@ -1778,6 +1781,309 @@ def _target_transform(model: PythonObject, values: PythonObject, context: Python
     return _take2(ran, out, n, d * T, context)
 
 
+# ---------------------------------------------------------------- SplineTransformer
+def _spline_fused(mode: PythonObject, entries: PythonObject) raises -> Bool:
+    # `_spline_fused`: the FAST Apple build with -D MOJOLEARN_SPLINE_FAST_FUSED
+    # (it alone exports x_prep_spline_fused).
+    var text = py_call(Python.import_module("builtins").str, mode)
+    if String(py_call(py_call(text.strip).lower)) != "fast":
+        return False
+    return py_get(entries, "x_prep_spline_fused") is not None
+
+
+def _col_stats_blocked(mut p: EncProg, xo: Int, n: Int, d: Int, out: Int) raises:
+    # `_col_stats(..., var=False)`: the blocked order whenever
+    # MOJOLEARN_XPREP_BLOCKED is on, else one thread per column.
+    if String(getenv("MOJOLEARN_XPREP_BLOCKED", "1").strip()) == "0":
+        _stage(p.program, OP_COL_STATS, d, xo, n, d, out)
+        return
+    var nb = (n + ROW_BLOCK - 1) // ROW_BLOCK
+    var part = p.work(5 * nb * d)
+    _stage(p.program, OP_COLB_PART, nb * d, xo, n, d, part, nb)
+    _stage(p.program, OP_COLB_FOLD, d, part, nb, d, out)
+
+
+def _extrapolation(value: PythonObject) raises -> Int:
+    # `SplineTransformer._EXTRAP`.
+    if _is_str(value):
+        var text = String(value)
+        if text == "constant":
+            return 0
+        if text == "continue" or text == "error":
+            return 1
+        if text == "linear":
+            return 2
+        if text == "periodic":
+            return 3
+    raise Error("mojolearn: invalid extrapolation " + _repr(value))
+
+
+def _spline_checks(fields: PythonObject) raises:
+    """The parameter refusals `_fit` raised before converting X."""
+    _ = _extrapolation(fields["extrapolation"])
+    var missing = fields["handle_missing"]
+    if not (_is_str(missing) and (String(missing) == "error" or String(missing) == "zeros")):
+        raise Error("mojolearn: invalid handle_missing " + _repr(missing))
+    var order = fields["order"]
+    if not (_is_str(order) and (String(order) == "C" or String(order) == "F")):
+        raise Error("mojolearn: invalid order " + _repr(order))
+    if _truth(fields["sparse_output"]):
+        raise Error("NotImplementedError: mojolearn: SplineTransformer sparse_output is not implemented "
+                    + "(there is no sparse Array)")
+    var k = Int(py=py_call_typed(Python.import_module("builtins").int, fields["degree"]))
+    if k < 0 or k > 7:
+        raise Error("mojolearn: SplineTransformer needs 0 <= degree <= 7")
+
+
+def _no_nan(fields: PythonObject, ran: PythonObject, st: Int, d: Int, n: Int) raises:
+    # `_no_nan`: handle_missing='error' refuses a column with a NaN.
+    var missing = fields["handle_missing"]
+    if not (_is_str(missing) and String(missing) == "error"):
+        return
+    for j in range(d):  # driver-loop: over the per-column non-NaN counts (feature metadata)
+        if Int(_word(ran, st + j)) != n:
+            raise Error("mojolearn: Input X contains NaN values and `SplineTransformer` is configured to "
+                        + "error in this case (handle_missing='error'). To avoid this error, set "
+                        + "handle_missing='zeros' to encode missing values as splines with value 0 or ensure "
+                        + "no missing values in X.")
+
+
+def _knot_rows(knots: PythonObject, context: PythonObject) raises -> PythonObject:
+    # The user knots argument's rows, each a Python list of numbers.
+    var b = Python.import_module("builtins")
+    if py_type(knots) is context["array_class"] and Int(py=knots.ndim) == 2:
+        var rows = Python.list()
+        var r = Int(py=knots.shape[0])
+        var c = Int(py=knots.shape[1])
+        if r * c == 0:
+            for _ in range(r):  # driver-loop: over the user knots rows
+                _ = py_call(rows.append, Python.list())
+            return rows
+        var flat = _input(knots, 2, False, context)
+        var source = _ptr(flat)
+        for i in range(r):  # driver-loop: over the user knots rows
+            var row = Python.list()
+            for j in range(c):  # driver-loop: over one user knots row
+                _ = py_call(row.append, PythonObject(Float64(source[i * c + j])))
+            _ = py_call(rows.append, row)
+        return rows
+    var outer = _user_values(knots, context)
+    var rows = Python.list()
+    for i in range(len(outer)):  # driver-loop: over the user knots rows
+        _ = py_call(rows.append, _user_values(outer[i], context))
+    return rows
+
+
+def _spline_fit(model: PythonObject, values: PythonObject, weight_source: PythonObject, fuse: Bool,
+                context: PythonObject) raises -> PythonObject:
+    """SplineTransformer `_fit`: the knots program (col_stats, the given,
+    quantile or uniform base knots, spline_knots) and, with `fuse`, the
+    spline_apply of X in the same program; returns the output or None."""
+    var b = Python.import_module("builtins")
+    var fields = py_fields(model)
+    _spline_checks(fields)
+    var extrap = _extrapolation(fields["extrapolation"])
+    var k = Int(py=py_call_typed(b.int, fields["degree"]))
+    var n = Int(py=values[3])
+    var d = Int(py=values[4])
+    if n < 2:
+        raise Error("Found array with " + String(n) + " sample(s) (shape=(" + String(n) + ", " + String(d)
+                    + ")) while a minimum of 2 is required by SplineTransformer.")
+    var w = PythonObject(None)
+    var wl = 0
+    var weighted = weight_source is not None
+    if weighted:
+        var checked = _check_weights(weight_source, n, "SplineTransformer", context)
+        w = checked[0]
+        wl = checked[1]
+    var knots_arg = fields["knots"]
+    var given = not _is_str(knots_arg)
+    var knot_kind = String(knots_arg) if not given else String("")
+    if not given and knot_kind != "uniform" and knot_kind != "quantile":
+        raise Error("mojolearn: invalid knots " + _repr(knots_arg))
+    var nk = 0
+    var cols = List[Float64]()
+    if given:
+        var rows = _knot_rows(knots_arg, context)
+        nk = len(rows)
+        if nk < 2:
+            raise Error("mojolearn: Number of knots, knots.shape[0], must be >= 2.")
+        var table = List[List[Float32]]()
+        for i in range(nk):  # driver-loop: over the user knots rows
+            if len(rows[i]) != d:
+                raise Error("mojolearn: knots.shape[1] == n_features is violated.")
+            var row = List[Float32]()
+            for c in range(d):  # driver-loop: over one user knots row
+                row.append(_f32(rows[i][c]))
+            table.append(row^)
+        for c in range(d):  # driver-loop: transposes the user knots argument (feature count)
+            for i in range(nk):  # driver-loop: over one knots column
+                if i > 0 and not (table[i][c] > table[i - 1][c]):
+                    raise Error("mojolearn: knots must be sorted without duplicates.")
+        for c in range(d):  # driver-loop: packs the user knots argument column-major
+            for i in range(nk):  # driver-loop: over one knots column
+                cols.append(Float64(table[i][c]))
+    else:
+        nk = Int(py=py_call_typed(b.int, fields["n_knots"]))
+        if nk < 2:
+            raise Error("mojolearn: SplineTransformer needs n_knots >= 2")
+    var periodic = extrap == 3
+    if periodic and nk <= k:
+        raise Error("mojolearn: Periodic splines require degree < n_knots. Got n_knots=" + String(nk) + " and "
+                    + "degree=" + String(k) + ".")
+    var mode = _default_mode(context)
+    var entries = _entries(mode, context)
+    var p = EncProg()
+    var xo = p.put_x(values)
+    var sorts = not given and knot_kind == "quantile" and not weighted
+    # MOJOLEARN_SPLINE_FAST_FUSED: no n*d block when nothing sorts, and the
+    # count / min / max rows by the blocked units
+    var fused = _spline_fused(mode, entries)
+    var so = 0
+    if sorts:
+        so = p.work(n * d)
+    elif not fused:
+        so = p.alloc(n * d)
+    var st = p.alloc(6 * d)
+    var wd = nk + 2 * k
+    var knots = p.alloc(d * wd)
+    if fused:
+        _col_stats_blocked(p, xo, n, d, st)
+    else:
+        _cs(p, mode, entries, xo, n, d, st, False)
+    var uniform = 0
+    var kst = st
+    var base = 0
+    if given:
+        base = p.put_floats(cols, context)
+    elif knot_kind == "quantile":
+        base = p.alloc(d * nk)
+        if not weighted:
+            # `_grid(pr, [nk - 1], nk, 1)`
+            var qf = p.alloc(nk)
+            var levels = List[Float64]()
+            levels.append(Float64(nk - 1))
+            var lo = p.put_floats(levels, context)
+            _stage(p.program, OP_GRID, nk, lo, nk, 1, qf)
+            _stage(p.program, OP_SORT_COLS, d, xo, n, d, so, 0)
+            _stage(p.program, OP_QUANTILE, d * nk, so, n, d, qf, nk, base, st)
+        else:
+            # `_weighted_groups` over the X input already in the arena, then
+            # `_weighted_levels` at the levels c2_grid KIND 2 writes
+            var gs = p.work(n * d)
+            var ug = p.alloc(2 * n * d)
+            var ucnt = p.alloc(d)
+            var codes = p.alloc(n * d)
+            _stage(p.program, OP_SORT_COLS, d, xo, n, d, gs, 1)
+            _stage(p.program, OP_UNIQUE_COLS, d, gs, n, d, ug, ucnt)
+            _stage(p.program, OP_LOOKUP, n * d, xo, n, d, ug, n, ucnt, codes)
+            var wo = p.put(w, n)
+            _stage(p.program, OP_KBINS_GW, d, codes, n, d, wo, ug + n * d)
+            var nb = List[Int]()
+            for _ in range(d):  # driver-loop: one level row per column
+                nb.append(nk - 1)
+            var lv = p.alloc(d * nk)
+            var grid_nb = p.put_floats(_to_floats(nb), context)
+            _stage(p.program, OP_GRID, d * nk, grid_nb, nk, 2, lv)
+            var wq_nb = p.put_floats(_to_floats(nb), context)
+            _stage(p.program, OP_KBINS_WQ, d, ug, n, d, ucnt, wq_nb, nk - 1, lv, 0, base)
+    else:
+        base = p.alloc(d * nk)
+        uniform = 1
+        if weighted and wl < n:
+            # the positive-weight rows on the device
+            kst = p.alloc(6 * d)
+            var wo = p.put(w, n)
+            var ro = p.alloc(n)
+            _ = _sel(p, wo, n, 1, 1, ro)
+            var xz = p.alloc(wl * d)
+            _stage(p.program, OP_RGATHER, wl * d, xo, d, ro, xz)
+            _cs(p, mode, entries, xz, wl, d, kst, False)
+    _stage(p.program, OP_SPLINE_KNOTS, d, base, nk, d, k, knots, uniform, kst, 1 if periodic else 0)
+    var nspl = nk - 1 if periodic else nk + k - 1
+    var bias = _truth(fields["include_bias"])
+    var W = d * (nspl if bias else nspl - 1)
+    var out = 0
+    if fuse:
+        out = p.output(n * W, entries)
+        _stage(p.program, OP_SPLINE_APPLY, n * d, xo, n, d, knots, nk, k, extrap, W, 1 if bias else 0, out)
+    var ran = p.run(entries, context)
+    _no_nan(fields, ran, st, d, n)
+    var output = context["output_context"]
+    py_setitem(fields, "_knots", _take1(ran, knots, d * wd, context))
+    var bsplines = Python.list()
+    var lows = Python.list()
+    var highs = Python.list()
+    for c in range(d):  # driver-loop: per-column fitted spline knots (feature count)
+        _ = py_call(bsplines.append, _take1(ran, knots + c * wd, wd, context))
+        _ = py_call(lows.append, PythonObject(Float64(_word(ran, knots + c * wd + k))))
+        _ = py_call(highs.append, PythonObject(Float64(_word(ran, knots + c * wd + k + nk - 1))))
+    py_setitem(fields, "bsplines_", bsplines)
+    py_setitem(fields, "_lo", lows)
+    py_setitem(fields, "_hi", highs)
+    py_setitem(fields, "_nk", nk)
+    py_setitem(fields, "_k", k)
+    py_setitem(fields, "n_features_out_", W)
+    py_setitem(fields, "numeric_mode_", mode)
+    py_setitem(fields, "n_features_in_", d)
+    _ = w^
+    if fuse:
+        return _take2(ran, out, n, W, context)
+    return PythonObject(None)
+
+
+def _spline_transform(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
+    """SplineTransformer.transform: spline_apply over the fitted knots (with
+    the column statistics when a refusal reads them) and, for order 'F',
+    p2m_transpose into the output."""
+    var fields = py_fields(model)
+    var n = Int(py=values[3])
+    var d = Int(py=values[4])
+    _check_width(model, d)
+    var mode = fields["numeric_mode_"]
+    var entries = _entries(mode, context)
+    var W = Int(py=fields["n_features_out_"])
+    var extrap = _extrapolation(fields["extrapolation"])
+    var fortran = _is_str(fields["order"]) and String(fields["order"]) == "F"
+    var missing_error = _is_str(fields["handle_missing"]) and String(fields["handle_missing"]) == "error"
+    var extrap_error = _is_str(fields["extrapolation"]) and String(fields["extrapolation"]) == "error"
+    var p = EncProg()
+    var xo = p.put_x(values)
+    var ko = p.put_array(fields["_knots"], context)
+    var out = p.alloc(n * W) if fortran else p.output(n * W, entries)
+    var st = p.alloc(6 * d)
+    var check = extrap_error or missing_error
+    if check:
+        if _spline_fused(mode, entries):
+            _col_stats_blocked(p, xo, n, d, st)
+        else:
+            _cs(p, mode, entries, xo, n, d, st, False)
+    _stage(p.program, OP_SPLINE_APPLY, n * d, xo, n, d, ko, Int(py=fields["_nk"]), Int(py=fields["_k"]), extrap, W,
+           1 if _truth(fields["include_bias"]) else 0, out)
+    var fo = 0
+    var transposed = fortran and n * W > 0
+    if transposed:
+        fo = p.output(n * W, entries)
+        _stage(p.program, OP_TRANSPOSE, n * W, out, n, W, fo)
+    var ran = p.run(entries, context)
+    if check:
+        _no_nan(fields, ran, st, d, n)
+    if extrap_error:
+        var lows = fields["_lo"]
+        var highs = fields["_hi"]
+        for j in range(d):  # driver-loop: over the per-column knot limits (feature metadata)
+            if Float64(_word(ran, st + 3 * d + j)) < Float64(py=lows[j]) or Float64(_word(ran, st + 4 * d + j)) > Float64(py=highs[j]):
+                raise Error("mojolearn: X contains values beyond the limits of the knots")
+    if transposed:
+        if fo == OUT_MARK:
+            return _take_f(ran[1][0], 0, n, W, context)
+        return _take_f(ran[0][0], fo, n, W, context)
+    if fortran:
+        # an empty block
+        return classical_wrap_array(py_call(context["array_type"], "f"), Python.tuple(n, W), "<f4", "F", context["output_context"])
+    return _take2(ran, out, n, W, context)
+
+
 # ---------------------------------------------------------------- the door
 def _kind(model: PythonObject, context: PythonObject) raises -> String:
     # The admitted class this model is (or subclasses), by its MRO.
@@ -1846,6 +2152,8 @@ def _precheck(model: PythonObject, kind: String, context: PythonObject) raises:
         if _is_str(drop) and String(drop) != "first" and String(drop) != "if_binary":
             raise Error("mojolearn: OneHotEncoder drop must be None, 'first', 'if_binary' or one category "
                         + "per feature")
+    elif kind == "spline":
+        _spline_checks(fields)
     elif kind == "kbins":
         var encode = fields["encode"]
         var text = String(encode) if _is_str(encode) else String("")
@@ -1865,6 +2173,8 @@ def _fit(model: PythonObject, kind: String, values: PythonObject, weights: Pytho
         return _ordinal_fit(model, values, capture, context)
     elif kind == "onehot":
         return _onehot_fit(model, values, capture, context)
+    elif kind == "spline":
+        _ = _spline_fit(model, values, weights, False, context)
     else:
         raise Error("TypeError: the native encode owner does not fit this class")
     return PythonObject(None)
@@ -1883,6 +2193,8 @@ def _transform(model: PythonObject, kind: String, values: PythonObject, inverse:
         return _onehot_transform(model, values, inverse, context)
     if kind == "target":
         return _target_transform(model, values, context)
+    if kind == "spline":
+        return _spline_transform(model, values, context)
     raise Error("TypeError: the native encode owner does not transform this class")
 
 
@@ -1900,6 +2212,9 @@ def prep_encode_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObj
             var weights = PythonObject(None)
             if kind == "kbins":
                 weights = _fit_weights(model, args, operation)
+            elif kind == "spline":
+                # fit(X, y, sample_weight) and fit_transform(X, y, sample_weight)
+                weights = args[2]
             elif operation == "fit_transform":
                 _no_fit_params(model, args)
             _precheck(model, kind, context)
@@ -1912,9 +2227,20 @@ def prep_encode_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObj
             var auto = py_contains(fields, "categories") and _is_str(fields["categories"]) and String(fields["categories"]) == "auto"
             var capture = operation == "fit_transform" and auto and (
                 (kind == "onehot" and _c08_route(mode, entries, 2)) or (kind == "ordinal" and _c08_route(mode, entries, 4)))
-            var inverse = _fit(model, kind, values, weights, capture, context)
-            result = model
-            if operation == "fit_transform":
+            var fused = False
+            if kind == "spline" and operation == "fit_transform":
+                # with x_prep_spline_fused one program fits and applies; 'error'
+                # extrapolation and order 'F' keep fit + transform
+                var extrap = fields["extrapolation"]
+                var order = fields["order"]
+                fused = not (_is_str(extrap) and String(extrap) == "error") and _is_str(order) and String(order) == "C" and _spline_fused(mode, entries)
+            var inverse = PythonObject(None)
+            if fused:
+                result = _spline_fit(model, values, weights, True, context)
+            else:
+                inverse = _fit(model, kind, values, weights, capture, context)
+                result = model
+            if operation == "fit_transform" and not fused:
                 # The X converted for the fit is the transform's input.
                 result = _transform(model, kind, values, inverse, context)
             _ = values^
