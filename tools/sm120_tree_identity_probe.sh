@@ -18,9 +18,7 @@
 #
 # Output: one directory under $OUT (default ~/sm120_probe/<mode>-<utc>), one
 # log per lane, and a grep-sized summary on stdout. Logs are never printed
-# whole. The poison arm needs a trees binding built with
-# `-D MOJOLEARN_ET_WS_POISON_BYTE=165`; run `repeat` on that build and compare
-# its digests with a default build's: a digest that moves is a read-before-write.
+# whole.
 set -u
 MODE=${1:-}
 LANES=${2:-et-reg,trees-et-deviance,trees-dt-random,gbdt-ordered,gbdt-ordered-rmse,gbdt-ordered-bayesian-noise,gbdt-binary-columns,gbdt-bfa-quantile}
