@@ -1164,7 +1164,7 @@ _native_archive_bridge.register(GradientBoosting, _MODEL_FORMAT, (
                     ("none", "n_classes_", -1), ("none", "best_iteration_", -1),
                     ("bool", "stopped_early_"))),
     ("f8", "bias", (("float", "bias_"),)),
-), host_archive_gbdt_bindings=_native_trees_bridge.bindings())
+), host_archive_gbdt_bindings=_native_trees_bridge.bindings("_mojolearn_gbdt"))
 
 # The fixed option tables `fit` reads natively (bindings/trees_public_gbdt_fit.mojo).
 _native_trees_bridge.register(GradientBoosting, "gbdt", trees_gbdt_tables=dict(

@@ -136,10 +136,15 @@ def connect():
     return _ENTRY, _CONTEXT
 
 
-def bindings():
+def bindings(name=None):
     """The connected tree binding tables by numeric mode (for the archive
-    owner's loaders), or None without the compiled owner."""
-    return connect()[1].get("trees_bindings")
+    owner's loaders), or None without the compiled owner. With `name`, the
+    entries of that one binding by numeric mode (what a loader reads as
+    `tables[mode][entry]`)."""
+    connected = connect()[1].get("trees_bindings")
+    if connected is None or name is None:
+        return connected
+    return {mode: per_mode.get(name) for mode, per_mode in connected.items()}  # glue: the two numeric modes
 
 
 def register(cls, kind, **tables):
