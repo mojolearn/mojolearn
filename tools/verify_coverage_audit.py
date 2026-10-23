@@ -1491,6 +1491,119 @@ ANNOTATIONS_BY_SRC[("robust_scaler_native_call", "bindings/_mojolearn_tokenizer_
     "current runtime execution, fault/restoration, installed-wheel and matching reference admission remain pending.")
 
 
+# The stateless x_prep owner is new; these lanes consume its public outputs.
+ANNOTATIONS_BY_SRC[("prep_stateless_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", ["x-prep-binarizer", "x-prep-normalizer", "x-prep-polynomial-features",
+             "x-prep-variance-threshold", "x-prep-select-kbest", "x-prep-rfe",
+             "x-prep-quantile-transformer", "x-prep-power-transformer", "x-prep-inverse-transforms"],
+    "Public Binarizer, Normalizer, PolynomialFeatures, VarianceThreshold, QuantileTransformer and PowerTransformer "
+    "fit/transform/fit_transform/inverse_transform "
+    "and the selectors' transform call prep_stateless_c, which builds the existing binarize/normalize/"
+    "poly/p2m_transpose, col_stats/var_ptp/c2_key64/c2_gt and gather_cols x_prep programs natively. New source only: runtime execution and identity admission remain pending.")
+
+
+# QNRegressor's native owner is new; these lanes consume its public outputs.
+ANNOTATIONS_BY_SRC[("qn_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", [],
+    "Public QNRegressor fit/predict/score call qn_c, which runs the existing qn_fit and "
+    "qn_decision_function entries and the x_metrics R^2 program natively. New source only: "
+    "runtime execution and identity admission remain pending.")
+
+
+# A new native owner door; these lanes consume its public outputs.
+ANNOTATIONS_BY_SRC[("prep_encode_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", [],
+    'Public SimpleImputer, KBinsDiscretizer, OrdinalEncoder, OneHotEncoder, SplineTransformer fit/transform/inverse_transform/fit_transform and TargetEncoder.transform call prep_encode_c, which builds and runs their x_prep programs natively through xprep_run.' + " New source only: runtime execution and identity admission remain pending.")
+
+
+# A new native owner door; these lanes consume its public outputs.
+ANNOTATIONS_BY_SRC[("prep_classify_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", [],
+    'Public naive Bayes (Gaussian, Multinomial, Bernoulli, Complement, Categorical) and LDA/QDA fit, partial_fit, predict, predict_proba, predict_log_proba, predict_joint_log_proba, score, decision_function, transform and fit_transform call prep_classify_c, which builds their x_prep programs natively, runs them on the shared arena runner and scores through the native label and accuracy steps.' + " New source only: runtime execution and identity admission remain pending.")
+
+
+# A new native owner door; these lanes consume its public outputs.
+ANNOTATIONS_BY_SRC[("tsvd_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", [],
+    'Public TruncatedSVD fit/fit_transform/transform/inverse_transform call tsvd_c, which converts X and runs the existing tsvd entries through the compiled x_decomp_tsvd_randomized / x_decomp_tsvd_tsqr drivers natively.' + " New source only: runtime execution and identity admission remain pending.")
+
+
+# A new native owner door; these lanes consume its public outputs.
+ANNOTATIONS_BY_SRC[("ipca_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", [],
+    'Public IncrementalPCA fit/partial_fit/fit_transform/transform/inverse_transform call ipca_c, which converts X and runs one compiled x_decomp_ipca_fit / _partial / _project driver natively.' + " New source only: runtime execution and identity admission remain pending.")
+
+
+# A new native owner door; these lanes consume its public outputs.
+ANNOTATIONS_BY_SRC[("jl_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", [],
+    'Public johnson_lindenstrauss_min_dim calls jl_c, which checks eps and n_samples and computes the bound natively.' + " New source only: runtime execution and identity admission remain pending.")
+
+
+# A new native owner door; these lanes consume its public outputs.
+ANNOTATIONS_BY_SRC[("dict_learning_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", [],
+    'Public DictionaryLearning, MiniBatchDictionaryLearning, SparseCoder, SparsePCA, MiniBatchSparsePCA fit/fit_transform/transform/inverse_transform and sparse_encode call dict_learning_c, which runs the existing x_decomp entries through the native decomposition kit.' + " New source only: runtime execution and identity admission remain pending.")
+
+
+# A new native owner door; these lanes consume its public outputs.
+ANNOTATIONS_BY_SRC[("pls_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", [],
+    'Public PLSRegression, PLSCanonical and CCA fit/fit_transform/transform/inverse_transform/predict call pls_c, which runs the existing x_decomp entries through the native decomposition kit.' + " New source only: runtime execution and identity admission remain pending.")
+
+
+# A new native owner door; these lanes consume its public outputs.
+ANNOTATIONS_BY_SRC[("mcd_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", [],
+    'Public MinCovDet and EllipticEnvelope fit/score/mahalanobis/get_precision/score_samples/decision_function/predict/fit_predict call mcd_c, which runs the existing x_decomp entries through the native decomposition kit.' + " New source only: runtime execution and identity admission remain pending.")
+
+
+# A new native owner door; these lanes consume its public outputs.
+ANNOTATIONS_BY_SRC[("als_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", [],
+    'Public AlternatingLeastSquares fit/recommend/similar_items call als_c, which runs the existing x_decomp entries through the native decomposition kit.' + " New source only: runtime execution and identity admission remain pending.")
+
+
+# A new native owner door; these lanes consume its public outputs.
+ANNOTATIONS_BY_SRC[("linalg_decomp_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", [],
+    'Public randomized_svd, solve and lstsq call linalg_decomp_c, which runs the existing x_decomp entries through the native decomposition kit.' + " New source only: runtime execution and identity admission remain pending.")
+
+
+# A new native owner door; these lanes consume its public outputs.
+ANNOTATIONS_BY_SRC[("decomp_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", [],
+    "Public FastICA, NMF, FactorAnalysis, LatentDirichletAllocation, KernelPCA and Gaussian/SparseRandomProjection operations call decomp_c, which checks the inputs, runs one compiled x_decomp driver (plus KernelPCA's x_neighbors kernel steps) and stores the fitted attributes natively." + " New source only: runtime execution and identity admission remain pending.")
+
+
+# LogisticRegression's native owner is new; these lanes consume its public outputs.
+ANNOTATIONS_BY_SRC[("logistic_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", [],
+    "Public LogisticRegression fit/decision_function/predict/predict_proba/predict_log_proba/score "
+    "call logistic_c, which runs the existing qn_fit, qn_decision_function, qn_predict_binary, "
+    "qn_predict_multiclass, qn_sigmoid, qn_softmax and py2mojo_rows entries, the native label, "
+    "weight and class-weight steps and the x_metrics accuracy program natively. New source only: "
+    "runtime execution and identity admission remain pending.")
+
+
+# The x_linear estimators' native owner is new; these lanes consume its public outputs.
+ANNOTATIONS_BY_SRC[("x_linear_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", [],
+    "Public x_linear estimators (SGD, GLMs, Huber, BayesianRidge/ARD, Lars/LassoLars, Quantile, "
+    "Perceptron, PassiveAggressive, RidgeClassifier, SGDOneClassSVM, Isotonic, Lasso/ElasticNet) "
+    "decision_function/predict/score/predict_proba and fits call x_linear_c, which runs the existing "
+    "x_linear_fit / x_linear_decision entries, the native label and weight steps and the x_metrics "
+    "programs natively. New source only: runtime execution and identity admission remain pending.")
+
+
+# The native str-label encoder is new; these lanes consume its classes and codes.
+ANNOTATIONS_BY_SRC[("str_labels_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", ["x-prep-label-encoder", "x-prep-label-binarizer", "x-prep-multilabel-binarizer"],
+    "_labels.encode_labels / unique_inverse and LabelEncoder, LabelBinarizer and "
+    "MultiLabelBinarizer transform hand str labels to str_labels_c (code-point order, "
+    "first-seen classes). New source only: runtime execution remains pending.")
+
+
 # Static lane reachability is not an execution/installed/fault receipt for a
 # newly registered public attribute or automatic device finalizer entry.
 for _new_entry in ("host_svr_attribute_call", "host_svc_attribute_call", "optimizer_device_finalize"):

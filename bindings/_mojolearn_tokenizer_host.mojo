@@ -117,6 +117,22 @@ from bindings.scaler_native import scaler_fit_c
 from bindings.scaler_lifecycle_native import scaler_lifecycle_c, scaler_attribute_c
 from bindings.minmax_native import minmax_lifecycle_c
 from bindings.maxabs_native import maxabs_lifecycle_c
+from bindings.prep_stateless_native import prep_stateless_c
+from bindings.qn_native import qn_c
+from bindings.logistic_native import logistic_c
+from bindings.decomp_native import decomp_c
+from bindings.linalg_decomp_native import linalg_decomp_c
+from bindings.als_native import als_c
+from bindings.mcd_native import mcd_c
+from bindings.pls_native import pls_c
+from bindings.dict_learning_native import dict_learning_c
+from bindings.jl_native import jl_c
+from bindings.ipca_native import ipca_c
+from bindings.tsvd_native import tsvd_c
+from bindings.prep_classify_native import prep_classify_c
+from bindings.prep_encode_native import prep_encode_c
+from bindings.x_linear_native import x_linear_c
+from bindings.str_labels_native import str_labels_c
 from bindings.robust_native import robust_lifecycle_c
 from bindings.arena_rows_native import arena_rows_c
 from bindings.arena_prog_native import arena_prog_c
@@ -1324,6 +1340,22 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(scaler_lifecycle_c, "standard_scaler_native_call")
         module.def_py_c_function(minmax_lifecycle_c, "minmax_scaler_native_call")
         module.def_py_c_function(maxabs_lifecycle_c, "maxabs_scaler_native_call")
+        module.def_py_c_function(prep_stateless_c, "prep_stateless_native_call")
+        module.def_py_c_function(qn_c, "qn_native_call")
+        module.def_py_c_function(logistic_c, "logistic_native_call")
+        module.def_py_c_function(decomp_c, "decomp_native_call")
+        module.def_py_c_function(linalg_decomp_c, "linalg_decomp_native_call")
+        module.def_py_c_function(als_c, "als_native_call")
+        module.def_py_c_function(mcd_c, "mcd_native_call")
+        module.def_py_c_function(pls_c, "pls_native_call")
+        module.def_py_c_function(dict_learning_c, "dict_learning_native_call")
+        module.def_py_c_function(jl_c, "jl_native_call")
+        module.def_py_c_function(ipca_c, "ipca_native_call")
+        module.def_py_c_function(tsvd_c, "tsvd_native_call")
+        module.def_py_c_function(prep_classify_c, "prep_classify_native_call")
+        module.def_py_c_function(prep_encode_c, "prep_encode_native_call")
+        module.def_py_c_function(x_linear_c, "x_linear_native_call")
+        module.def_py_c_function(str_labels_c, "str_labels_native_call")
         module.def_py_c_function(robust_lifecycle_c, "robust_scaler_native_call")
         module.def_py_c_function(arena_rows_c, "arena_rows_native_call")
         module.def_py_c_function(arena_prog_c, "arena_prog_native_call")

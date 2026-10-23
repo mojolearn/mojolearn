@@ -387,6 +387,89 @@ def standard_fit_transform_direct(
     return ok
 
 
+# ---- fit_transform on one upload of X (public runtime migration, 2026-10-22) ----
+# MinMaxScaler.fit_transform(X) was `minmax_fit_direct` (X up, scan, the five
+# rows home) then `minmax_transform_direct` (the SAME X up again, scale and
+# min_ up, kernel, scans, output home). For a finite X the published rows are
+# the fit's rows bit for bit (c2_mm_keep passes them through when no column
+# is all-NaN), so the transform reads the resident X and the fitted rows where
+# the fit left them: the same fit route (the cls2 pool / flagged extrema when
+# those are built), the same rows check, the same transform kernel on the
+# same words. No bit moves; one n*d upload and one host round trip saved.
+
+
+def minmax_fit_transform_direct(
+    x: MutPointer[Float32, MutUntrackedOrigin], n: Int, d: Int, lower: Float32, upper: Float32,
+    clip: Int, stats: MutPointer[Float32, MutUntrackedOrigin],
+    output: MutPointer[Float32, MutUntrackedOrigin],
+) raises -> Int:
+    """`minmax_fit_direct` then `minmax_transform_direct` (inverse 0) on ONE
+    upload of X: the five fitted rows into `stats` (5 d) and the n*d
+    transformed words into `output`. 1 when both were written; 0 (nothing
+    written) when X holds a NaN or an infinity (the caller's two-step NaN
+    route); -1 (the rows written, the output not) on a Float32 overflow in
+    the transform. A nonfinite or nonpositive fitted row raises as the fit
+    does."""
+    validate_dimensions(n,d,lower,upper)
+    if clip < 0 or clip > 1:
+        raise Error("MinMaxScaler: invalid transform parameters")
+    var ctx = process_ctx[_DEVCTX_SLOT]()
+    var dx: DeviceBuffer[DType.float32]
+    comptime if PREP_CLS2_MINMAX_POOL:
+        dx = pool_take["MojoPrepCls2MinmaxX"](ctx,n*d)
+        ctx.enqueue_copy(dst_buf=dx, src_ptr=x)
+    else:
+        dx = _upload_direct(ctx,x,n*d)
+    var res: DeviceBuffer[DType.float32]
+    var ok = True
+    var f: SIMD[DType.int32, 4]
+    comptime if PREP_CLS2_MINMAX_FUSED:
+        res = minmax_fit_flagged_dev(ctx,dx,n,d,lower,upper)
+        f = _prep_rows_check(ctx,res,5*d,3*d,d,0,0,5*d,d)
+        if f[2] != 0:
+            ok = False
+    else:
+        if device_first_nonfinite(ctx,dx,n*d) >= 0:
+            ok = False
+            res = ctx.enqueue_create_buffer[DType.float32](1)
+            f = SIMD[DType.int32, 4](0)
+        else:
+            res = minmax_fit_fast_dev(ctx,dx,n,d,lower,upper)
+            f = _prep_rows_check(ctx,res,5*d,3*d,d,0,0,0,0)
+    if not ok or f[0] != 0 or f[1] != 0:
+        comptime if PREP_CLS2_MINMAX_POOL:
+            pool_give["MojoPrepCls2MinmaxX"](dx^)
+        else:
+            _ = dx^
+        _ = res^
+        _ = ctx^
+        if not ok:
+            return 0
+        if f[0] != 0:
+            raise Error("MinMaxScaler: nonfinite input or Float32 arithmetic overflow")
+        raise Error("MinMaxScaler: Float32 scale underflow")
+    _prep_rows_emit(ctx,res,5*d,stats)
+    # row 3 the scale, row 4 min_ (the rows fit keeps as scale_ / min_, the
+    # operands the transform passes)
+    var ds = res.create_sub_buffer[DType.float32](3*d, d)
+    var dm = res.create_sub_buffer[DType.float32](4*d, d)
+    var dout = ctx.enqueue_create_buffer[DType.float32](n*d)
+    minmax_transform_into(ctx,dx,ds,dm,dout,n,d,0,clip,lower,upper)
+    var written = 1
+    if device_first_nonfinite(ctx,dout,n*d) >= 0:
+        written = -1
+    else:
+        ctx.enqueue_copy(dst_ptr=output,src_buf=dout)
+        ctx.synchronize()
+    _ = dout^; _ = dm^; _ = ds^; _ = res^
+    comptime if PREP_CLS2_MINMAX_POOL:
+        pool_give["MojoPrepCls2MinmaxX"](dx^)
+    else:
+        _ = dx^
+    _ = ctx^
+    return written
+
+
 # ---- the refusing entries of the GPU binding (lane cpu4-python) ----------
 # `minmax_fit` / `standard_fit` / `minmax_transform` / `standard_transform`
 # of the GPU binding used to copy X into a host List, walk every word (and
