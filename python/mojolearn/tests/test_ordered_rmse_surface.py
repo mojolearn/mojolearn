@@ -1,47 +1,30 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Python boundary policy only; native ordered certification is a separate gate."""
-import ctypes
-
+"""OrderedRMSE through the real public fit (small inputs); native ordered
+certification is a separate gate."""
 import numpy as np
 import pytest
 
 from mojolearn.ensemble import OrderedRMSE
 
 
-class _Binding:
-    def gbdt_fit_ordered_rmse(self, x, y, weights, permutation, params):
-        self.params = list(params)
-        n, f, nw = params[:3]
-        def copy(address, ctype, count):
-            return np.ctypeslib.as_array((ctype * count).from_address(address)).copy()
-        self.x = copy(x, ctypes.c_float, n * f)
-        self.y = copy(y, ctypes.c_float, n)
-        self.weights = copy(weights, ctypes.c_float, nw)
-        self.permutation = copy(permutation, ctypes.c_uint32, n)
-        return "ordered-model"
-
-
-@pytest.mark.skip(reason="the fit runs in the native owner (bindings/trees_public_gbdt_fit.mojo) with the connected binding; a replaced `_bind` no longer reaches it")
-def test_ordered_buffers_are_original_order_and_column_major():
-    binding = _Binding()
+def _fit(X, **kw):
     model = OrderedRMSE(n_estimators=3, max_depth=2, border_count=7,
                         learning_rate=0.2, l2_leaf_reg=0, numeric_mode="identical")
-    selected = []
-    def bind(name):
-        selected.append((name, model.numeric_mode))
-        return binding
-    model._bind = bind
-    X = np.arange(8, dtype=np.float64).reshape(4, 2)
     y = np.asarray([8, 2, -1, 3], np.float64)
-    assert model.fit(X, y, permutation=[3, 1, 0, 2], sample_weight=[2, 0, 1, 4]) is model
-    assert selected == [("_mojolearn_gbdt", "identical")]
-    assert binding.params == [4, 2, 4, 4, 3, 2, 7, 0.2, 0.0]
-    np.testing.assert_array_equal(binding.x, X.ravel(order="F"))
-    np.testing.assert_array_equal(binding.y, y)
-    np.testing.assert_array_equal(binding.weights, [2, 0, 1, 4])
-    np.testing.assert_array_equal(binding.permutation, [3, 1, 0, 2])
-    assert model.model_ == "ordered-model"
+    assert model.fit(X, y, permutation=[3, 1, 0, 2], sample_weight=[2, 0, 1, 4], **kw) is model
+    return model
+
+
+def test_ordered_fit_reads_rows_in_original_order_any_layout():
+    """The fit reads X in its original row order whatever its layout and
+    dtype: C-order float64, Fortran-order float64 and float32 are one model."""
+    X = np.arange(8, dtype=np.float64).reshape(4, 2)
+    model = _fit(X)
+    assert model.model_
     assert model.loss_curve_ is None and model.best_iteration_ is None
+    assert model.n_features_in_ == 2
+    for same in (np.asfortranarray(X), X.astype(np.float32)):
+        assert _fit(same).model_ == model.model_
 
 
 @pytest.mark.parametrize("permutation", [
@@ -51,7 +34,6 @@ def test_ordered_buffers_are_original_order_and_column_major():
 ])
 def test_invalid_permutation_refused_before_binding(permutation):
     model = OrderedRMSE()
-    model._bind = lambda name: pytest.fail("invalid input reached native binding")
     with pytest.raises(ValueError, match="integer bijection"):
         model.fit(np.arange(8).reshape(4, 2), np.zeros(4), permutation=permutation)
 
@@ -82,15 +64,6 @@ def test_unsupported_options_are_not_silently_accepted(kwargs):
                                         [1, float("nan"), 1, 1], [1, 2]])
 def test_invalid_weights(weights):
     model = OrderedRMSE()
-    model._bind = lambda name: pytest.fail("invalid input reached native binding")
     with pytest.raises(ValueError, match="sample_weight"):
         model.fit(np.arange(8).reshape(4, 2), np.zeros(4),
                   permutation=[0, 1, 2, 3], sample_weight=weights)
-
-
-@pytest.mark.skip(reason="the fit runs in the native owner (bindings/trees_public_gbdt_fit.mojo) with the connected binding; a replaced `_bind` no longer reaches it")
-def test_old_binary_refuses_with_actionable_error():
-    model = OrderedRMSE()
-    model._bind = lambda name: object()
-    with pytest.raises(RuntimeError, match="predates OrderedRMSE"):
-        model.fit(np.arange(8).reshape(4, 2), np.zeros(4), permutation=[0, 1, 2, 3])
