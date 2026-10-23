@@ -21,10 +21,13 @@ elif url.endswith('/pods'):
     elif case=='transient' and not state.exists():
         state.write_text('retried'); code='503'; body={}
     else:
-        body=[dict(id='pod123',name='fixture',desiredStatus='RUNNING')] if case in ('delete-ok','delete-failed') and not deleted else []
+        body=[dict(id='pod123',name='fixture',desiredStatus='RUNNING')] if case in ('delete-ok','delete-failed','v2-delete-ok') and not deleted else []
         if case=='wrapped': body={'items':body}
+        if case.startswith('v2-'):
+            body={'pods':body,'pagination':{'hasNextPage':case=='v2-partial','nextCursor':'more' if case=='v2-partial' else None}}
 else:
-    if case in ('delete-ok','delete-failed') and not deleted: body={'desiredStatus':'RUNNING'}
+    if case in ('delete-ok','delete-failed','v2-delete-ok') and not deleted: body={'status':'RUNNING'} if case.startswith('v2-') else {'desiredStatus':'RUNNING'}
+    elif case=='v2-terminated': body={'status':'TERMINATED'}
     elif case=='bad-status': code='500'; body={'desiredStatus':'TERMINATED'}
     else: code='404'; body={}
 out.write_text(json.dumps(body));print(code,end='')
@@ -41,10 +44,13 @@ class Cleanup(unittest.TestCase):
         env={**os.environ,'CASE':case,'STATE_FILE':str(root/'deleted'),
              'PATH':str(binaries)+os.pathsep+os.environ['PATH'],
              'TMPD':str(root),'CURLRC':str(config),'POD_NAME':'fixture','LIB':str(ROOT/'tools/runpod_pod_lib.sh')}
+        if case.startswith('v2-'):
+            env.update(RP='https://api.runpod.io/v2', RP_API_VERSION='2')
         return root,env
 
     def test_verify_requires_successful_well_formed_listing(self):
         for case, success in [('ok',True),('wrapped',True),('transient',True),
+                              ('v2-empty',True),('v2-terminated',True),('v2-partial',False),
                               ('listing-denied',False),('listing-invalid',False),('bad-status',False)]:
             with self.subTest(case=case):
                 root,env=self.fixture(case)
@@ -81,6 +87,17 @@ class Cleanup(unittest.TestCase):
                 self.assertNotIn('termination VERIFIED',log)
                 self.assertNotIn('credential-sentinel',log)
                 self.assertIn('--max-time 30', (directory/'deadman.sh').read_text())
+
+    def test_v2_deadman_deletes_owned_id_and_requires_complete_absence_proof(self):
+        directory, result = self.deadman('v2-delete-ok')
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn('termination VERIFIED', (directory/'deadman.log').read_text())
+        self.assertFalse((directory/'curlrc').exists())
+        directory, result = self.deadman('v2-partial')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertTrue((directory.parent/'deleted').exists())
+        self.assertTrue((directory/'curlrc').exists())
+        self.assertNotIn('termination VERIFIED', (directory/'deadman.log').read_text())
 
 
 if __name__=='__main__': unittest.main()
