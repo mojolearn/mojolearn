@@ -29,7 +29,7 @@ def connect(context, package):
         if type(cls) is not type or type(descriptor) is not GetSetDescriptorType:
             raise TypeError('native CV requires an ordinary native instance dictionary')
         hooks = tuple((base, name, row.get(name)) for base, row in zip(mro, fields)  # glue: retain method/layout identities once
-                      for name in protected)
+                      for name in protected)  # glue: fixed import-time method identity inventory
         registry[cls] = dict(entry=entry if type(entry) is BuiltinFunctionType else None,
                              context=owner_context, parameters=tuple(parameters), init=init,
                              methods=methods, forest=forest, mro=mro, hooks=hooks,
