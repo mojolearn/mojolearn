@@ -12,15 +12,24 @@ cp .git/devpod_synced "$out/synced-source.txt" 2>/dev/null || true
 tar -czf "$out/adapter-source.tar.gz" adapters tools/build_native_adapters.sh tools/check_native_adapters.py
 pixi run mojo --version > "$out/compiler.txt" 2>&1
 host_flags=()
+target_flags=()
 case "$(uname -s)" in
-    Linux) host_flags=(--target-cpu x86-64-v3) ;;
-    Darwin) case "$arch" in apple-*) ;; *) echo 'Darwin requires an explicit apple-* accelerator target' >&2; exit 2 ;; esac ;;
+    Linux) host_flags=(--target-cpu x86-64-v3); target_flags=(--target-accelerator "$arch") ;;
+    Darwin)
+        [ "$arch" = apple-native ] || { echo 'Darwin requires apple-native on a real Apple GPU build host' >&2; exit 2; }
+        # Match the accepted Apple build policy in bindings/build.sh. On the
+        # pinned compiler, forcing --target-accelerator can omit embedded AIR.
+        # Use native GPU detection; packaging must inspect Metal payloads and
+        # execute real kernels before admitting the resulting artifact.
+        host_flags=(--target-cpu apple-m1)
+        system_profiler SPDisplaysDataType > "$out/apple-hardware.txt"
+        ;;
     *) echo 'unsupported build host' >&2; exit 2 ;;
 esac
 # Python is an external build controller. This process-group deadline works on
 # Linux and macOS without requiring a GNU timeout executable on the Apple host.
 python3 - "$out" pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" \
-    --emit shared-lib "${host_flags[@]}" --target-accelerator "$arch" \
+    --emit shared-lib "${host_flags[@]}" "${target_flags[@]}" \
     -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . -I bindings \
     adapters/native/c_api.mojo -o "$out/libmojolearn_adapter.so" <<'PY'
 import json, os, signal, subprocess, sys
