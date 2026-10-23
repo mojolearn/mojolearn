@@ -1512,6 +1512,26 @@ ANNOTATIONS_BY_SRC[("qn_native_call", "bindings/_mojolearn_tokenizer_host.mojo")
     "runtime execution and identity admission remain pending.")
 
 
+# LogisticRegression's native owner is new; these lanes consume its public outputs.
+ANNOTATIONS_BY_SRC[("logistic_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", [],
+    "Public LogisticRegression fit/decision_function/predict/predict_proba/predict_log_proba/score "
+    "call logistic_c, which runs the existing qn_fit, qn_decision_function, qn_predict_binary, "
+    "qn_predict_multiclass, qn_sigmoid, qn_softmax and py2mojo_rows entries, the native label, "
+    "weight and class-weight steps and the x_metrics accuracy program natively. New source only: "
+    "runtime execution and identity admission remain pending.")
+
+
+# The x_linear estimators' native owner is new; these lanes consume its public outputs.
+ANNOTATIONS_BY_SRC[("x_linear_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", [],
+    "Public x_linear estimators (SGD, GLMs, Huber, BayesianRidge/ARD, Lars/LassoLars, Quantile, "
+    "Perceptron, PassiveAggressive, RidgeClassifier, SGDOneClassSVM, Isotonic, Lasso/ElasticNet) "
+    "decision_function/predict/score/predict_proba and fits call x_linear_c, which runs the existing "
+    "x_linear_fit / x_linear_decision entries, the native label and weight steps and the x_metrics "
+    "programs natively. New source only: runtime execution and identity admission remain pending.")
+
+
 # The native str-label encoder is new; these lanes consume its classes and codes.
 ANNOTATIONS_BY_SRC[("str_labels_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
     "owed", ["x-prep-label-encoder", "x-prep-label-binarizer", "x-prep-multilabel-binarizer"],

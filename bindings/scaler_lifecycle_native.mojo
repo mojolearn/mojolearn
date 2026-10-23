@@ -365,36 +365,44 @@ def scaler_fit_transform(model: PythonObject, source: PythonObject, options: Pyt
     if len(options) == 0:
         var fields = py_fields(model)
         var mode = _mode(fields, context)
-        if String(mode) == "fast":
-            var entries = _entries(mode, context)
-            var entry = _direct(entries, "standard_fit_transform_direct")
-            if entry is not None:
-                var values = _input(source, 2, True, context)
-                var n = Int(py=values.shape[0])
-                var d = Int(py=values.shape[1])
-                var stale = py_call(b.list, fields)
-                for k in range(len(stale)):  # driver-loop: invalidate fitted attribute names on refit
-                    if String(stale[k]).endswith("_"):
-                        _ = py_call(fields.pop, stale[k])
-                var stats = classical_typed(Python.tuple(3,d), "<f4", context["output_context"])
-                var output = classical_typed(Python.tuple(n,d), "<f4", context["output_context"])
-                var wm = _bool(fields["with_mean"], context)
-                var ws = _bool(fields["with_std"], context)
-                var got = Int(py=py_call(entry, classical_address(values), classical_address(stats), classical_address(output), Python.list(n,d,Int(wm),Int(ws))))
-                if got != 0:
-                    var ptr = _ptr(stats)
-                    py_setitem(fields, "mean_", _copy_row(ptr,d,context) if wm or ws else PythonObject(None))
-                    py_setitem(fields, "var_", _copy_row(ptr+d,d,context) if ws else PythonObject(None))
-                    py_setitem(fields, "scale_", _copy_row(ptr+2*d,d,context) if ws else PythonObject(None))
-                    py_setitem(fields, "n_features_in_", d)
-                    py_setitem(fields, "n_samples_seen_", n)
-                    py_setitem(fields, "numeric_mode_", mode)
-                    py_setitem(fields, "with_mean_", wm)
-                    py_setitem(fields, "with_std_", ws)
-                    _ = stats^
-                    if got < 0:
-                        raise Error("StandardScaler transform overflowed in Float32")
-                    return _write_back(source, values, output, _bool(fields["copy"],context), context)
+        # One upload of X for the whole operation: the combined fit +
+        # transform export (every tier; `standard_fit_direct` then
+        # `standard_transform_direct` on the resident X, the same kernels on
+        # the same words), else the FAST Apple experiment's fused export.
+        # Without either (the host column, MOJOLEARN_SCALER_DIRECT=0) the
+        # two-step route below runs.
+        var entries = _entries(mode, context)
+        var entry = _direct(entries, "standard_fit_transform")
+        if entry is None and String(mode) == "fast":
+            entry = _direct(entries, "standard_fit_transform_direct")
+        if entry is not None:
+            # scaler_fit's refit invalidation comes before X is read.
+            var stale = py_call(b.list, fields)
+            for k in range(len(stale)):  # driver-loop: invalidate fitted attribute names on refit
+                if String(stale[k]).endswith("_"):
+                    _ = py_call(fields.pop, stale[k])
+            var values = _input(source, 2, True, context)
+            var n = Int(py=values.shape[0])
+            var d = Int(py=values.shape[1])
+            var stats = classical_typed(Python.tuple(3,d), "<f4", context["output_context"])
+            var output = classical_typed(Python.tuple(n,d), "<f4", context["output_context"])
+            var wm = _bool(fields["with_mean"], context)
+            var ws = _bool(fields["with_std"], context)
+            var got = Int(py=py_call(entry, classical_address(values), classical_address(stats), classical_address(output), Python.list(n,d,Int(wm),Int(ws))))
+            if got != 0:
+                var ptr = _ptr(stats)
+                py_setitem(fields, "mean_", _copy_row(ptr,d,context) if wm or ws else PythonObject(None))
+                py_setitem(fields, "var_", _copy_row(ptr+d,d,context) if ws else PythonObject(None))
+                py_setitem(fields, "scale_", _copy_row(ptr+2*d,d,context) if ws else PythonObject(None))
+                py_setitem(fields, "n_features_in_", d)
+                py_setitem(fields, "n_samples_seen_", n)
+                py_setitem(fields, "numeric_mode_", mode)
+                py_setitem(fields, "with_mean_", wm)
+                py_setitem(fields, "with_std_", ws)
+                _ = stats^
+                if got < 0:
+                    raise Error("StandardScaler transform overflowed in Float32")
+                return _write_back(source, values, output, _bool(fields["copy"],context), context)
     _ = scaler_fit(model, source, py_get(options,"sample_weight"), context)
     return scaler_transform(model, source, False, PythonObject(None), context)
 

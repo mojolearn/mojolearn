@@ -1155,7 +1155,7 @@ class LogisticRegression(NumericModeMixin):
     def __init__(self, *, penalty="l2", tol=1e-4, C=1.0, fit_intercept=True,
                  class_weight=None, max_iter=1000, linesearch_max_iter=50,
                  l1_ratio=None, solver="qn"):
-        # Stored verbatim (scikit-learn's convention); `_validate_params`
+        # Stored verbatim (scikit-learn's convention); the native fit
         # checks them when `fit` runs.
         self.penalty = penalty
         self.tol = tol
@@ -1171,49 +1171,6 @@ class LogisticRegression(NumericModeMixin):
     # the instance carries only its constructor parameters)
     lbfgs_memory = 5
     penalty_normalized = True
-
-    def _validate_params(self):
-        """The constructor checks, run at the start of `fit`. Sets
-        `_l1_ratio`, the l1 ratio the solver reads."""
-        penalty, solver, class_weight, C = self.penalty, self.solver, self.class_weight, self.C
-        l1_ratio = self.l1_ratio
-        if penalty not in ("l1", "l2", "elasticnet", None):
-            raise ValueError(f"`penalty` {penalty!r} not supported.")
-        if solver != "qn":
-            raise ValueError(
-                "Only quasi-newton `qn` solver is supported, not %s" % solver)
-        if C <= 0:
-            raise ValueError(f"C must be positive, got {C}")
-        # `logistic_regression.py:310-316`, copied including the two
-        # messages: `l1_ratio` is REQUIRED for elasticnet and IGNORED
-        # (set to None) for every other penalty.
-        self._l1_ratio = None
-        if penalty == "elasticnet":
-            if l1_ratio is None:
-                raise ValueError(
-                    "l1_ratio has to be specified for loss='elasticnet'"
-                )
-            if l1_ratio < 0.0 or l1_ratio > 1.0:
-                raise ValueError(
-                    "l1_ratio value has to be between 0.0 and 1.0"
-                )
-            self._l1_ratio = l1_ratio
-
-    def _get_qn_params(self):
-        """`_get_qn_params`, logistic_regression.py:632-649, all four arms.
-
-        Returns `(l1_strength, l2_strength)`. `qn_fit` then divides both by
-        `n` when `penalty_normalized` (qn.cuh:54-59), so what the solver sees
-        is `(1/C)/n`, and `l1 != 0` is what selects OWL-QN there.
-        """
-        if self.penalty is None:
-            return 0.0, 0.0
-        if self.penalty == "l1":
-            return 1.0 / self.C, 0.0
-        if self.penalty == "l2":
-            return 0.0, 1.0 / self.C
-        strength = 1.0 / self.C
-        return self._l1_ratio * strength, (1.0 - self._l1_ratio) * strength
 
     # sample_weight and class_weight are the solver's per-row weights (the
     # weighted arm of getLossAndDZ, glm_base.mojo::qn_row_weight_kernel;
@@ -1237,63 +1194,7 @@ class LogisticRegression(NumericModeMixin):
         self : LogisticRegression
             The fitted estimator.
         """
-        self._validate_params()
-        x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
-        rows, cols = x.shape
-        if len(_shape_of(y)) != 1:
-            raise ValueError("mojolearn LogisticRegression requires a 1-D y")
-        # LabelEncoder: sorted unique classes -> 0..k-1
-        # (logistic_regression.py:383), under the package-wide ORDER RULE
-        # (DEVIATION 2340) through `encode_labels`: the native encoder for a
-        # numeric buffer (DEVIATION 2500, as the forests take it), the
-        # `sorted_classes` routine for everything else. Same classes, same
-        # codes (`tests/test_labels_native.py`).
-        self.classes_, codes = encode_labels(y)
-        if len(codes) != rows:
-            raise ValueError("mojolearn LogisticRegression X and y lengths differ")
-        n_classes = len(self.classes_)
-        if n_classes < 2:
-            raise ValueError("mojolearn LogisticRegression: y has one class")
-        # `qn.cuh:106`: one target for two classes (the logistic loss, code
-        # 1 is `classes_[1]`, the class the solver maps to +1), C targets
-        # for C > 2 (the softmax loss, code c is `classes_[c]`).
-        n_targets = 1 if n_classes == 2 else n_classes
-        loss = _QN_LOSS_LOGISTIC if n_targets == 1 else _QN_LOSS_SOFTMAX
-        # Label encoding, the permitted O(rows) Python loop.
-        y_enc = codes.astype("<f4")  # dense codes < 2**24: exact
-        l1, l2 = self._get_qn_params()
-        if n_targets > 1 and l1 != 0.0:
-            raise NotImplementedError(
-                f"mojolearn LogisticRegression: penalty={self.penalty!r} with "
-                f"{n_classes} classes selects OWL-QN on the softmax objective, "
-                "which runs but has no identity gate (glm/checks/"
-                "multinomial_check.mojo gates l2 and no penalty); refused by "
-                "name until it is gated (CONTRIBUTING.md (Non-default paths))"
-            )
-        sw = _qn_row_weights(self, sample_weight, self.class_weight,
-                             self.classes_, codes, rows)
-        has_sw, sw_addr = _qn_weight_fields(sw)
-        n_param = cols + (1 if self.fit_intercept else 0)
-        w = zeros((n_param * n_targets,), "<f4")
-        info = zeros((2,), "<f4")
-        params = [rows, cols, n_classes,
-                  float(l1), float(l2), float(self.tol), float(self.tol * 0.01),
-                  int(self.max_iter), int(self.linesearch_max_iter),
-                  int(self.lbfgs_memory), 1 if self.fit_intercept else 0,
-                  1 if self.penalty_normalized else 0, has_sw, loss]
-        if has_sw:
-            params += [0.0, sw_addr]  # field 15 svr_eps (0), field 16 the weights
-        n_iter = self._bind("_mojolearn_estimators").qn_fit(
-            addr_ro(x, name="X"), addr_ro(y_enc, name="y"),
-            addr(w, name="coef_"), addr(info, name="info"), params,
-        )
-        self._w = w
-        self.coef_, self.intercept_ = _coef_from_w(w, cols, n_targets, self.fit_intercept)
-        self.n_iter_ = Array.from_list([int(n_iter)], "<i8")
-        self.objective_ = float(info[0])
-        self.retcode_ = int(info[1])
-        self.n_features_in_ = cols
-        return self
+        return _LR_CALL(self, "fit", (X, y, sample_weight), _LR_CONTEXT)
 
     def decision_function(self, X):
         """Return the linear scores ``X @ coef_.T + intercept_``.
@@ -1315,34 +1216,7 @@ class LogisticRegression(NumericModeMixin):
             If the model is not fitted, or ``X`` has a different number of
             features than the training data.
         """
-        if not hasattr(self, "_w"):
-            raise ValueError("mojolearn LogisticRegression: call fit first")
-        x, _ = as_f32_c(X, ndim=2, name="X")
-        if x.shape[1] != self.n_features_in_:
-            raise ValueError("mojolearn LogisticRegression feature count differs from fit")
-        n_targets = self._n_targets()
-        if n_targets == 1:
-            out = empty((x.shape[0],), "<f4")
-            self._bind("_mojolearn_estimators").qn_decision_function(
-                addr_ro(x, name="X"), addr_ro(self._w, name="coef_"),
-                addr(out, name="scores"),
-                [x.shape[0], x.shape[1], 1 if self.fit_intercept else 0],
-            )
-            return out
-        # C > 2: `(n, C)` float32, `scores[i, c]` the class-c logit, the
-        # 4-field call of the same entry (lane/logistic-multiclass).
-        out = empty((x.shape[0], n_targets), "<f4")
-        self._bind("_mojolearn_estimators").qn_decision_function(
-            addr_ro(x, name="X"), addr_ro(self._w, name="coef_"),
-            addr(out, name="scores"),
-            [x.shape[0], x.shape[1], 1 if self.fit_intercept else 0, n_targets],
-        )
-        return out
-
-    def _n_targets(self):
-        """`qn.cuh:106`: 1 for two classes, C for C > 2."""
-        n_classes = len(self.classes_)
-        return 1 if n_classes == 2 else n_classes
+        return _LR_CALL(self, "decision_function", (X,), _LR_CONTEXT)
 
     # `qn_predict`: `z > 0 ? 1 : 0` (qn.cuh:276), mapped to classes_
     # (DEVIATION 2364 for the return type). C > 2: the first maximum wins a
@@ -1367,44 +1241,7 @@ class LogisticRegression(NumericModeMixin):
             An int64 array for integer labels, a float64 array for float
             labels, and a Python list for any other label type.
         """
-        if self._n_targets() == 1:
-            x, _ = as_f32_c(X, ndim=2, name="X")
-            codes = empty((x.shape[0],), "<i8")
-            binding = self._bind("_mojolearn_estimators")
-            native = getattr(binding, "qn_predict_binary", None)
-            if native is None:
-                raise RuntimeError(
-                    "mojolearn LogisticRegression: the estimators binding has no "
-                    "qn_predict_binary; rebuild it")
-            native(
-                addr_ro(x, name="X"), addr_ro(self._w, name="coef_"),
-                addr(codes, name="codes"),
-                [x.shape[0], x.shape[1], 1 if self.fit_intercept else 0],
-            )
-            return decode_labels(self.classes_, codes)
-        # lane fam2-linear: the row argmax runs on the device beside the
-        # scores (`qn_predict_multiclass`); a binding without the entry (a
-        # CPU-only install, or a build with MOJOLEARN_QN_DEV_ARGMAX_OFF)
-        # keeps the host scan, the same first-maximum rule.
-        binding = self._bind("_mojolearn_estimators")
-        native = getattr(binding, "qn_predict_multiclass", None)
-        if native is not None:
-            if not hasattr(self, "_w"):
-                raise ValueError("mojolearn LogisticRegression: call fit first")
-            x, _ = as_f32_c(X, ndim=2, name="X")
-            if x.shape[1] != self.n_features_in_:
-                raise ValueError("mojolearn LogisticRegression feature count differs from fit")
-            codes = empty((x.shape[0],), "<i8")
-            if x.shape[0]:
-                native(
-                    addr_ro(x, name="X"), addr_ro(self._w, name="coef_"),
-                    addr(codes, name="codes"),
-                    [x.shape[0], x.shape[1], 1 if self.fit_intercept else 0,
-                     self._n_targets()],
-                )
-            return decode_labels(self.classes_, codes)
-        scores = self.decision_function(X)
-        return decode_labels(self.classes_, argmax_rows(scores))
+        return _LR_CALL(self, "predict", (X,), _LR_CONTEXT)
 
     def predict_proba(self, X):
         """Return class probabilities.
@@ -1422,21 +1259,7 @@ class LogisticRegression(NumericModeMixin):
         proba : array of shape (n_samples, n_classes), float64
             Column ``k`` is the probability of ``classes_[k]``.
         """
-        scores = self.decision_function(X)
-        n_targets = self._n_targets()
-        if n_targets == 1:
-            out = empty((scores.shape[0], 2), "<f8")
-            self._bind("_mojolearn_estimators").qn_sigmoid(
-                addr_ro(scores, name="scores"), addr(out, name="proba"),
-                [scores.shape[0]])
-            return out
-        # C > 2: the softmax of each row in float64 on the host through
-        # `identical_exp64` (`qn_softmax_host`, the rule of DEVIATION 549).
-        out = empty((scores.shape[0], n_targets), "<f8")
-        self._bind("_mojolearn_estimators").qn_softmax(
-            addr_ro(scores, name="scores"), addr(out, name="proba"),
-            [scores.shape[0], n_targets])
-        return out
+        return _LR_CALL(self, "predict_proba", (X,), _LR_CONTEXT)
 
     # `py2mojo_rows` ROWS_LOG in the estimators binding, on the device on a GPU
     # install; -inf at an exact zero as NumPy gave.
@@ -1453,22 +1276,7 @@ class LogisticRegression(NumericModeMixin):
         log_proba : array of shape (n_samples, n_classes), float64
             ``log(p)`` per entry; ``-inf`` where a probability is exactly 0.
         """
-        proba = self.predict_proba(X)
-        binding = self._bind("_mojolearn_estimators")
-        # lane/apple-fast-py2mojo-linear: `_log_or_inf` of every cell in the
-        # binding (core/py2mojo_rows.mojo ROWS_LOG, the same log). Lane
-        # pyglue-sweep (Oct 3): the Python per-cell arm for a binary without
-        # the door is gone; such a binary refuses by name.
-        if not _py2mojo_flags(binding) & _PY2MOJO_ROWS:
-            raise RuntimeError(
-                "mojolearn: this estimators binding predates py2mojo_rows; "
-                "rebuild it (pixi run build)"
-            )
-        out = empty(proba.shape, "<f8")
-        if proba.size:
-            binding.py2mojo_rows(_ROWS_LOG, addr_ro(proba, name="proba"),
-                                 addr(out, name="log proba"), [proba.size, 1])
-        return out
+        return _LR_CALL(self, "predict_log_proba", (X,), _LR_CONTEXT)
 
     # The match count runs in the x_metrics binding (`_accuracy_host`).
     def score(self, X, y):
@@ -1486,7 +1294,7 @@ class LogisticRegression(NumericModeMixin):
         score : float
             The fraction of rows where ``predict(X) == y``.
         """
-        return _accuracy_host(self.predict(X), y)
+        return _LR_CALL(self, "score", (X, y), _LR_CONTEXT)
 
     # The file: `_w` as fitted (the n_targets * (n_features + fit_intercept)
     # float32 block inference reads; coef_ and intercept_ are its copies and are
@@ -1842,3 +1650,10 @@ _native_classical, _CLASSICAL = _native_classical_bridge.connect_public(Ridge, L
 # score are one call each into it (bindings/qn_native.mojo).
 from ._native_qn_bridge import connect as _connect_qn  # noqa: E402
 _QN_CALL, _QN_CONTEXT = _connect_qn(QNRegressor._LOSSES)
+
+
+# The compiled LogisticRegression owner, connected once at import: fit,
+# decision_function, predict, predict_proba, predict_log_proba and score are
+# one call each into it (bindings/logistic_native.mojo).
+from ._native_logistic_bridge import connect as _connect_logistic  # noqa: E402
+_LR_CALL, _LR_CONTEXT = _connect_logistic()

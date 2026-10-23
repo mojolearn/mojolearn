@@ -21,11 +21,11 @@ def connect(scaler_class):
             prep = _backend.binding("_mojolearn_preprocessing", mode)
             xprep = _backend.binding("_mojolearn_x_prep", mode)
             entries = {}
-            for name in ("standard_fit", "standard_fit_direct", "standard_transform", "standard_transform_direct", "standard_fit_transform_direct", "preprocessing_numeric_mode"):  # glue: cache compiled scaler symbols
+            for name in ("standard_fit", "standard_fit_direct", "standard_transform", "standard_transform_direct", "standard_fit_transform_direct", "standard_fit_transform", "preprocessing_numeric_mode"):  # glue: cache compiled scaler symbols
                 try:
                     entry = getattr(prep, name)
                 except (AttributeError, ImportError):
-                    if name in ("standard_fit_direct", "standard_transform_direct", "standard_fit_transform_direct"):
+                    if name in ("standard_fit_direct", "standard_transform_direct", "standard_fit_transform_direct", "standard_fit_transform"):
                         continue
                     raise
                 if not isinstance(entry, BuiltinFunctionType):
