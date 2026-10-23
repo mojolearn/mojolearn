@@ -8,8 +8,9 @@ This is a tooling precision limitation, not a numerical or runtime failure.
 Path selections expose `precision_limitations` in their JSON output. The CLI
 prints a summary and `--why` prints the Python reference and native dispatcher.
 Each record names the changed paths retained through that conservative export
-closure. Joining exports can over-attribute a possible path; these records are
-analysis evidence, not runtime execution traces. Reporting never excludes a
+closure. Provenance is followed per export, so sharing a library does not
+itself create a diagnostic path. Unknown native branches and aliases remain
+broad; these records are analysis evidence, not runtime execution traces. Reporting never excludes a
 lane, hides an unattributed path, or admits a numerical mismatch.
 
 Two concrete boundaries remain unproved as of 2026-10-23:

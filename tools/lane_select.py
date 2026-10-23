@@ -3331,7 +3331,7 @@ def lane_sources():
     read_by_name = {}        # seed_cache key -> the files of it read definition by definition
     native_names = {}        # seed_cache key -> names used by the reached native bodies
 
-    def binding_seeds(src, used, wide=True):
+    def binding_seeds(src, used, wide=True, mark=True):
         """The Mojo files ONE binding contributes to a lane whose door calls
         `used`.
 
@@ -3362,7 +3362,8 @@ def lane_sources():
         one lane, so such a binding contributes its SOURCE only, and a change
         to the binding file still selects every lane."""
         if wide is False:
-            narrowed_files.add(src)
+            if mark:
+                narrowed_files.add(src)
             return {src}
         exports = _binding_exports(src)
         delegated = _delegated_exports(src)
@@ -3446,7 +3447,7 @@ def lane_sources():
                     if f.endswith(".mojo"):
                         named.update(_MOJO_IDENT_RE.findall(_read(f)))
                 native_names[key] = named
-        if wide is not False:
+        if mark and wide is not False:
             narrowed_files.update(read_by_name[key])
         return seed_cache[key]
 
@@ -3627,17 +3628,19 @@ def lane_sources():
                 key = (src, tuple(sorted(used & exports)), wide)
                 reached_exports = native_names[key] & exports_available
                 found.update(reached_exports)
-                # Reporting follows the same conservative export fixed point.
-                # Joining several exports may over-attribute a limitation, so
-                # this is a possible provenance path, never a runtime trace.
-                tags = 0
+                # Reporting follows each export separately. Sharing a native
+                # library is not evidence that its unrelated entry executes.
+                # `mark=False` leaves the selection's conformance bookkeeping
+                # unchanged; these extra cache entries are diagnostics only.
                 for name in used & exports:
-                    tags |= origins.get(name, 0)
-                if tags:
-                    for name in reached_exports:
-                        previous = origins.get(name, 0)
+                    tags = origins.get(name, 0)
+                    if not tags:
+                        continue
+                    binding_seeds(src, {name}, "narrow", mark=False)
+                    for reached_name in native_names[(src, (name,), "narrow")] & exports_available:
+                        previous = origins.get(reached_name, 0)
                         if tags & ~previous:
-                            origins[name] = previous | tags
+                            origins[reached_name] = previous | tags
                             origins_grew = True
             fresh = found - used
             if not fresh and not origins_grew:
@@ -3648,12 +3651,12 @@ def lane_sources():
             got = binding_seeds(src, used, wide)
             exports_of = _binding_exports(src)
             calls.append((src, wide, tuple(sorted(e for e in used if e in exports_of)), frozenset(got)))
-            tags = 0
             for name in used & (exports_of.keys() | _delegated_exports(src).keys()):
-                tags |= origins.get(name, 0)
-            if tags:
-                for file in got:
-                    limitation_paths[file] = limitation_paths.get(file, 0) | tags
+                tags = origins.get(name, 0)
+                if tags:
+                    evidence_files = binding_seeds(src, {name}, "narrow", mark=False)
+                    for file in evidence_files & got:
+                        limitation_paths[file] = limitation_paths.get(file, 0) | tags
             return got
         source_only_hosts = set()
         for binding in bindings:
