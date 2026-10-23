@@ -125,3 +125,35 @@ def test_lda_object_labels_refuse_scalar_protocols_before_fit():
     model = LinearDiscriminantAnalysis()
     clean(model.fit, x, y, error=TypeError)
     assert calls == []
+
+
+def test_native_lda_public_fitted_error_outputs_and_repeated_prediction():
+    from mojolearn.exceptions import NotFittedError
+    x, y = data()
+    model = clean(LinearDiscriminantAnalysis)
+    clean(model.predict, x, error=NotFittedError)
+    clean(model.transform, x, error=NotFittedError)
+    assert clean(model.__sklearn_is_fitted__) is False
+    clean(model.fit, x, y)
+    assert clean(model.__sklearn_is_fitted__) is True
+    classes = model.classes_
+    before = dict(vars(model))
+    for operation in (model.predict, model.predict_proba, model.predict_log_proba, model.decision_function, model.transform):
+        assert type(clean(operation, x)) is np.ndarray
+    assert model.classes_ is classes
+    assert vars(model).keys() == before.keys()
+    np.testing.assert_array_equal(classes[np.array([0, 2], dtype='i4')], np.array([0, 2]))
+    clean(model.fit, x, y)
+
+
+def test_native_lda_public_target_checks_and_dataframe_names():
+    x, y = data()
+    continuous = y.astype('f8') + .25
+    clean(LinearDiscriminantAnalysis().fit, x, continuous, error=ValueError)
+    pd = pytest.importorskip('pandas')
+    frame = pd.DataFrame(x, columns=['a', 'b', 'c', 'd', 'e'])
+    model = clean(LinearDiscriminantAnalysis)
+    clean(model.fit, frame, y)
+    np.testing.assert_array_equal(model.feature_names_in_, np.array(frame.columns, dtype=object))
+    clean(model.fit, x, y)
+    assert not hasattr(model, 'feature_names_in_')
