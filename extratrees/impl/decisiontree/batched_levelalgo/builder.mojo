@@ -192,6 +192,58 @@ from core.weight_compact_device import (
 from extratrees.checks.fixed_point import choose_scale
 from ensemble.decisiontree.batched_levelalgo.quantiles import compute_quantiles
 from extratrees.checks.pcg_rng import row_sample_seed
+from core.device_zero import enqueue_zero_buffer, fill_kernel
+from std.sys.compile import get_defined_int
+
+
+# THE DEVICE SCRATCH IS DEFINED BEFORE ITS FIRST READ (lane
+# sm120-tree-identity, 2026-10-23). Every device buffer of the search
+# workspace (`LevelWorkspace`), the device level loop (`EtDeviceLoop`, its
+# arena and FIFO growth included) and a group's leaf-pass outputs is zero
+# filled once, on the queue, when it is created. `enqueue_create_buffer`
+# returns pooled memory holding whatever the previous owner left: on an RTX
+# 5090 (sm_120) an ExtraTreesRegressor fit gave a different digest every
+# run after other fits in the process, and hit CUDA_ERROR_ILLEGAL_ADDRESS
+# when a RandomForest fit ran first (~/mojolearn-evidence/audit-20261023/
+# sm120-findings.md), the signature of a buffer read before this fit wrote
+# it. A defined start makes such a read return the same bits on every
+# vendor and every run. Zeros are what a fresh allocation held on the
+# columns that recorded the reference, so no recorded bit moves. Cost: one
+# fill launch per buffer per group (setup), none per level.
+# `-D MOJOLEARN_ET_WS_INIT_OFF` restores the unfilled allocations for an
+# A/B. `-D MOJOLEARN_ET_WS_POISON_BYTE=<1..255>` fills every byte with that
+# value instead of zero: a DIAGNOSTIC arm (never a build default) that turns
+# any read-before-write into a digest change on every vendor, so the reader
+# can be found on any box with the identity trace.
+comptime ET_WS_INIT_OFF = is_defined["MOJOLEARN_ET_WS_INIT_OFF"]()
+comptime ET_WS_POISON_BYTE = get_defined_int["MOJOLEARN_ET_WS_POISON_BYTE", 0]()
+comptime ET_WS_FILL_TPB = 256
+comptime ET_WS_FILL_MAX_BLOCKS = 2048
+
+
+def et_ws_init[dt: DType](ctx: DeviceContext, buf: DeviceBuffer[dt]) raises:
+    """Enqueue the defined start of one freshly created device buffer: zeros
+    (the default), the poison byte under `MOJOLEARN_ET_WS_POISON_BYTE`, or
+    nothing under `MOJOLEARN_ET_WS_INIT_OFF`. See the block above."""
+    comptime if ET_WS_POISON_BYTE != 0:
+        var nbytes = len(buf) * size_of[Scalar[dt]]()
+        if nbytes <= 0:
+            return
+        var p8 = MutPointer[UInt8, MutAnyOrigin](
+            unsafe_from_address=Int(buf.unsafe_ptr())
+        )
+        var blocks = ceildiv(nbytes, ET_WS_FILL_TPB)
+        if blocks > ET_WS_FILL_MAX_BLOCKS:
+            blocks = ET_WS_FILL_MAX_BLOCKS
+        ctx.enqueue_function[fill_kernel[DType.uint8]](
+            p8,
+            Int32(nbytes),
+            UInt8(ET_WS_POISON_BYTE),
+            grid_dim=blocks,
+            block_dim=ET_WS_FILL_TPB,
+        )
+    elif not ET_WS_INIT_OFF:
+        enqueue_zero_buffer(ctx, buf)
 
 
 def max_nodes(max_depth: Int32) -> Int:
@@ -3120,6 +3172,13 @@ def upload_dataset(
     var d_quant = ctx.enqueue_create_buffer[DType.float32](1)
     var d_nbins = ctx.enqueue_create_buffer[DType.int32](1)
     var d_weights = ctx.enqueue_create_buffer[DType.int32](1)
+    # The one-element placeholders a kernel may be handed but not use
+    # start defined (`et_ws_init`).
+    et_ws_init(ctx, d_data_rm)
+    et_ws_init(ctx, d_bins_rm)
+    et_ws_init(ctx, d_quant)
+    et_ws_init(ctx, d_nbins)
+    et_ws_init(ctx, d_weights)
     ctx.synchronize()
     return DeviceDataset(
         d_data^, d_labels^, n_rows, n_cols, n_classes, d_data_rm^, False,
@@ -3653,6 +3712,62 @@ struct LevelWorkspace(Movable):
     """False until `stage_batch`'s first upload: pinned shadows arrive with
     arbitrary bytes, so the first stage always copies and snapshots."""
 
+    def init_device(self, ctx: DeviceContext) raises:
+        """`et_ws_init` over every device buffer of the workspace (the
+        defined-start block at the top of this file): enqueued once per
+        group, before the drain that ends `make_level_workspace`."""
+        et_ws_init(ctx, self.d_min)
+        et_ws_init(ctx, self.d_max)
+        et_ws_init(ctx, self.d_thresh)
+        et_ws_init(ctx, self.c_q)
+        et_ws_init(ctx, self.c_m)
+        et_ws_init(ctx, self.d_missing)
+        et_ws_init(ctx, self.d_merges)
+        et_ws_init(ctx, self.d_minkey)
+        et_ws_init(ctx, self.d_maxkey)
+        et_ws_init(ctx, self.d_nleft)
+        et_ws_init(ctx, self.d_ntotal)
+        et_ws_init(ctx, self.d_nblocks)
+        et_ws_init(ctx, self.d_status)
+        et_ws_init(ctx, self.c_c)
+        et_ws_init(ctx, self.c_l)
+        et_ws_init(ctx, self.c_v)
+        et_ws_init(ctx, self.d_colids)
+        et_ws_init(ctx, self.d_gnum)
+        et_ws_init(ctx, self.d_gden)
+        et_ws_init(ctx, self.c_nu)
+        et_ws_init(ctx, self.c_de)
+        et_ws_init(ctx, self.d_accl)
+        et_ws_init(ctx, self.d_acct)
+        et_ws_init(ctx, self.r_q)
+        et_ws_init(ctx, self.r_m)
+        et_ws_init(ctx, self.r_c)
+        et_ws_init(ctx, self.r_l)
+        et_ws_init(ctx, self.r_v)
+        et_ws_init(ctx, self.r_mg)
+        et_ws_init(ctx, self.r_nw)
+        et_ws_init(ctx, self.r_mx)
+        et_ws_init(ctx, self.d_tree)
+        et_ws_init(ctx, self.d_tsalt)
+        et_ws_init(ctx, self.d_ties)
+        et_ws_init(ctx, self.d_nb)
+        et_ws_init(ctx, self.d_nc)
+        et_ws_init(ctx, self.d_iters)
+        et_ws_init(ctx, self.d_swaps)
+        et_ws_init(ctx, self.r_nu)
+        et_ws_init(ctx, self.r_de)
+        et_ws_init(ctx, self.d_samp_scratch)
+        et_ws_init(ctx, self.d_samp_report)
+        et_ws_init(ctx, self.d_items)
+        et_ws_init(ctx, self.d_wl)
+        et_ws_init(ctx, self.d_nonconst)
+        et_ws_init(ctx, self.d_blk_left)
+        et_ws_init(ctx, self.d_blk_off)
+        et_ws_init(ctx, self.d_blk_base)
+        et_ws_init(ctx, self.d_row_alt)
+        et_ws_init(ctx, self.d_part_flags)
+        et_ws_init(ctx, self.d_splits)
+
 
 def make_level_workspace(
     ctx: DeviceContext,
@@ -3768,6 +3883,7 @@ def make_level_workspace(
         s_blk_base=ctx.enqueue_create_host_buffer[DType.int32](nodes),
         stage_valid=False,
     )
+    ws.init_device(ctx)
     # DEVIATION 450: the workspace's ONE materialization drain. Every host
     # buffer above is created by an ENQUEUED op, and the level loop writes
     # them through raw pointers; this sync -- once per GROUP, in setup --
@@ -5904,6 +6020,41 @@ struct EtDeviceLoop(Movable):
             g * size_of[Split]()
         )
         self.tree_base = ctx.enqueue_create_buffer[DType.int32](g + 1)
+        # The defined start (`et_ws_init`, top of this file): every loop
+        # buffer, before `init_roots` writes the roots and the header.
+        et_ws_init(ctx, self.hdr)
+        et_ws_init(ctx, self.queue)
+        et_ws_init(ctx, self.g_nodes)
+        et_ws_init(ctx, self.g_meta)
+        et_ws_init(ctx, self.slot_stat)
+        et_ws_init(ctx, self.slot_base)
+        et_ws_init(ctx, self.slot_tree)
+        et_ws_init(ctx, self.b_items)
+        et_ws_init(ctx, self.b_slot)
+        et_ws_init(ctx, self.b_gpos)
+        et_ws_init(ctx, self.b_splits)
+        et_ws_init(ctx, self.s_items)
+        et_ws_init(ctx, self.s_slot)
+        et_ws_init(ctx, self.s_idx)
+        et_ws_init(ctx, self.d_pick)
+        et_ws_init(ctx, self.x_off)
+        et_ws_init(ctx, self.x_nb)
+        et_ws_init(ctx, self.x_large)
+        et_ws_init(ctx, self.p_rank)
+        et_ws_init(ctx, self.p_valid)
+        et_ws_init(ctx, self.p_left)
+        et_ws_init(ctx, self.p_kids)
+        et_ws_init(ctx, self.p_aoff)
+        et_ws_init(ctx, self.p_eoff)
+        et_ws_init(ctx, self.x_chunk)
+        et_ws_init(ctx, self.cnt)
+        et_ws_init(ctx, self.f_rec)
+        et_ws_init(ctx, self.f_gpos)
+        et_ws_init(ctx, self.pt_items)
+        et_ws_init(ctx, self.pt_slot)
+        et_ws_init(ctx, self.pt_gpos)
+        et_ws_init(ctx, self.pt_splits)
+        et_ws_init(ctx, self.tree_base)
 
     def word(self, w: Int) -> Int:
         """Header word `w` as of the last drain."""
@@ -5976,6 +6127,9 @@ struct EtDeviceLoop(Movable):
                 cap = used + extra
             var nn = ctx.enqueue_create_buffer[DType.uint8](cap * NB)
             var nm = ctx.enqueue_create_buffer[DType.int32](cap * ETL_META_INTS)
+            # The grown arena's records past `used` start defined too.
+            et_ws_init(ctx, nn)
+            et_ws_init(ctx, nm)
             if used > 0:
                 var dn = nn.create_sub_buffer[DType.uint8](0, used * NB)
                 var sn = self.g_nodes.create_sub_buffer[DType.uint8](
@@ -6005,6 +6159,7 @@ struct EtDeviceLoop(Movable):
             if qcap < live + extra:
                 qcap = live + extra
             var nq = ctx.enqueue_create_buffer[DType.int32](qcap * ETL_Q_INTS)
+            et_ws_init(ctx, nq)
             if live > 0:
                 var dq = nq.create_sub_buffer[DType.int32](0, live * ETL_Q_INTS)
                 var sq = self.queue.create_sub_buffer[DType.int32](
@@ -7090,6 +7245,7 @@ def train_forest_classification_device_timed(
         # tiled) or its bootstrap sample (DEVIATION 460). The partition
         # mutates each slot in place across levels.
         var d_row_ids = ctx.enqueue_create_buffer[DType.int32](total_rows)
+        et_ws_init(ctx, d_row_ids)
         fill_row_slots(
             ctx, d_row_ids, g, slot_rows, n_rows, bootstrap, tree_ids,
             first, seed,
@@ -7170,6 +7326,12 @@ def train_forest_classification_device_timed(
             n_alloc * k_out
         )
         var d_visit = ctx.enqueue_create_buffer[DType.int32](n_alloc)
+        # Defined start (`et_ws_init`): a record the scatter does not write
+        # reads as zeros, never as the previous owner's bytes.
+        et_ws_init(ctx, d_nodes)
+        et_ws_init(ctx, d_ranges)
+        et_ws_init(ctx, d_leaves)
+        et_ws_init(ctx, d_visit)
         lp.enqueue_scatter(ctx, d_nodes, d_ranges, total_nodes)
         # `builder.cuh:582` memsets the leaf array before the launch, and an
         # internal node's ZERO IS ITS VALUE. DEVIATION 471: `zero_fill=True`
@@ -8159,6 +8321,7 @@ def train_forest_regression_device_timed(
         var total_rows = g * Int(slot_rows)
 
         var d_row_ids = ctx.enqueue_create_buffer[DType.int32](total_rows)
+        et_ws_init(ctx, d_row_ids)
         # DEVIATION 460: identity permutation or bootstrap sample per slot,
         # exactly as the classification twin.
         fill_row_slots(
@@ -8239,6 +8402,12 @@ def train_forest_regression_device_timed(
             n_alloc * k_out
         )
         var d_visit = ctx.enqueue_create_buffer[DType.int32](n_alloc)
+        # Defined start (`et_ws_init`): a record the scatter does not write
+        # reads as zeros, never as the previous owner's bytes.
+        et_ws_init(ctx, d_nodes)
+        et_ws_init(ctx, d_ranges)
+        et_ws_init(ctx, d_leaves)
+        et_ws_init(ctx, d_visit)
         lp.enqueue_scatter(ctx, d_nodes, d_ranges, total_nodes)
         # `builder.cuh:582` memsets the leaf array before the launch, and an
         # internal node's ZERO IS ITS VALUE. DEVIATION 471: `zero_fill=True`
