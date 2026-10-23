@@ -2161,6 +2161,7 @@ class LinearDiscriminantAnalysis(_Classifier):
     >>> lda = mojolearn.LinearDiscriminantAnalysis(n_components=2).fit(X, y)
     >>> Z = lda.transform(X)
     """
+    _mojolearn_native_public = True
     _parameters = ("solver", "shrinkage", "priors", "n_components", "store_covariance", "tol",
                    "covariance_estimator")
 
@@ -2201,6 +2202,29 @@ class LinearDiscriminantAnalysis(_Classifier):
 
     def fit(self, X, y):
         return _CLS_CALL(self, "fit", (X, y), _CLS_CONTEXT)
+
+    def predict(self, X):
+        """Predict the class of each input row."""
+        return _CLS_CALL(self, "predict", (X,), _CLS_CONTEXT)
+
+    def predict_proba(self, X):
+        """Return class probabilities in the order of ``classes_``."""
+        return _CLS_CALL(self, "predict_proba", (X,), _CLS_CONTEXT)
+
+    def predict_log_proba(self, X):
+        """Return log class probabilities in the order of ``classes_``."""
+        return _CLS_CALL(self, "predict_log_proba", (X,), _CLS_CONTEXT)
+
+    def predict_joint_log_proba(self, X):
+        """Return the unnormalized log score of each row and class."""
+        return _CLS_CALL(self, "predict_joint_log_proba", (X,), _CLS_CONTEXT)
+
+    def score(self, X, y):
+        """Return the fraction of correctly classified input rows."""
+        return _CLS_CALL(self, "score", (X, y), _CLS_CONTEXT)
+
+    def __sklearn_is_fitted__(self):
+        return _CLS_CALL(self, "is_fitted", (), _CLS_CONTEXT)
 
     def decision_function(self, X):
         return _CLS_CALL(self, "decision_function", (X,), _CLS_CONTEXT)

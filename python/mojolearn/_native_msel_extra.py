@@ -6,6 +6,9 @@ def connect(context, register, registry):
     # glue: called once after package classes and their compiled doors exist
     from . import _expansion_prep as prep
     from ._native_classical_bridge import _layout
+    from types import BuiltinFunctionType, MethodType
+    from .tokenizer import _binding
+    from ._labels import ClassLabels
     cls = prep.LinearDiscriminantAnalysis
     parameters = ('solver', 'shrinkage', 'priors', 'n_components', 'store_covariance', 'tol',
                   'covariance_estimator')
@@ -23,13 +26,23 @@ def connect(context, register, registry):
     # __init__ assigns these seven objects unchanged. Native cloning copies
     # their supported values and writes the fresh instance dictionary; no
     # Python constructor or ParamsMixin.get_params is an execution entry.
+    module = _binding()._module
+    attribute = module.standard_scaler_attribute_call
+    descriptor_entry = module.classical_attribute_descriptor
+    if type(attribute) is not BuiltinFunctionType or type(descriptor_entry) is not BuiltinFunctionType:
+        raise TypeError("LDA requires compiled attribute entries")
+    descriptor = descriptor_entry(MethodType(attribute, prep._CLS_CONTEXT))
+    cls.__getattribute__ = descriptor
+    layout = _layout(cls, descriptor)
+    prep._CLS_CONTEXT.update(classifier_labels_class=ClassLabels, classifier_labels_namespace=dict(vars(ClassLabels)),
+                             classical_public_layouts={cls: layout}, classical_public_installed=True,
+                             classical_attribute_descriptor=descriptor)
     register(cls, prep._CLS_CALL, prep._CLS_CONTEXT, parameters, 'initialize', methods)
-    layout = _layout(cls, None)
     prep._CLS_CONTEXT.update(
         lda_native_class=cls, lda_parameters=parameters,
         lda_admission_context={'classical_public_layouts': {cls: layout}, 'classical_public_installed': True},
         lda_fields_get=layout['fields_get'],
         lda_fitted_fields=('classes_', 'n_features_in_', 'numeric_mode_', 'coef_', 'intercept_', '_coef', '_inter',
                            'means_', 'priors_', 'xbar_', 'scalings_', 'explained_variance_ratio_', 'covariance_',
-                           '_rank', '_max_components', '_scal_full'),
+                           '_rank', '_max_components', '_scal_full', '_mojolearn_fitted', '_mojolearn_fitting'),
     )
