@@ -93,10 +93,13 @@ def _logit(
 ) -> Float32:
     var acc = Float32(0.0)
     for feature in range(width):
-        acc = identical_mul_add(
-            hidden[row * width + feature],
-            weight[vocab_id * width + feature], acc,
-        )
+        # The identical contract flushes source operands and every fused
+        # fold. A final-only flush retains host/device-specific subnormal
+        # contributions, including their sign when the final value is zero.
+        acc = ftz(identical_mul_add(
+            ftz(hidden[row * width + feature]),
+            ftz(weight[vocab_id * width + feature]), acc,
+        ))
     return ftz(acc)
 
 
@@ -182,7 +185,7 @@ def chunked_lm_head_v2_oracle(
                     var probability = ftz(identical_div(ftz(identical_exp(shifted)), ftz(denom[row])))
                     var target = Float32(1.0) if token == Int(targets[row]) else Float32(0.0)
                     var dlogit = ftz(identical_div(ftz(probability - target), divisor))
-                    acc = identical_mul_add(dlogit, weight[token * width + feature], acc)
+                    acc = ftz(identical_mul_add(dlogit, ftz(weight[token * width + feature]), acc))
             d_hidden[row * width + feature] = ftz(acc)
 
     # dWeight chunks are independent storage owners; every cell folds rows
@@ -201,6 +204,6 @@ def chunked_lm_head_v2_oracle(
                     var probability = ftz(identical_div(ftz(identical_exp(shifted)), ftz(denom[row])))
                     var target = Float32(1.0) if token == Int(targets[row]) else Float32(0.0)
                     var dlogit = ftz(identical_div(ftz(probability - target), divisor))
-                    acc = identical_mul_add(dlogit, hidden[row * width + feature], acc)
+                    acc = ftz(identical_mul_add(dlogit, ftz(hidden[row * width + feature]), acc))
                 d_weight[token * width + feature] = ftz(acc)
     return ChunkedLMHeadV2Result(loss, maxima^, denom^, d_hidden^, d_weight^)

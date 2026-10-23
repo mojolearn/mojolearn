@@ -36,10 +36,13 @@ def _device_logit(
 ) -> Float32:
     var acc = Float32(0.0)
     for feature in range(width):
-        acc = identical_mul_add(
-            hidden.unsafe_load(row * width + feature),
-            weight.unsafe_load(token * width + feature), acc,
-        )
+        # Flush inputs and each fused fold, as in the host oracle. Flushing
+        # only the final sum lets device denormal handling change both the
+        # accumulated value and the sign of a zero gradient.
+        acc = ftz(identical_mul_add(
+            ftz(hidden.unsafe_load(row * width + feature)),
+            ftz(weight.unsafe_load(token * width + feature)), acc,
+        ))
     return ftz(acc)
 
 
@@ -216,10 +219,10 @@ def chunked_lm_head_v2_dhidden_kernel(
             var dlogit = ftz(identical_div(ftz(probability - target), Float32(rows)))
             for feature in range(width):
                 var cell = row * width + feature
-                d_hidden.unsafe_store(cell, identical_mul_add(
-                    dlogit, weight.unsafe_load(token * width + feature),
+                d_hidden.unsafe_store(cell, ftz(identical_mul_add(
+                    dlogit, ftz(weight.unsafe_load(token * width + feature)),
                     d_hidden.unsafe_load(cell),
-                ))
+                )))
     for feature in range(width):
         var cell = row * width + feature
         d_hidden.unsafe_store(cell, ftz(d_hidden.unsafe_load(cell)))
@@ -250,10 +253,10 @@ def chunked_lm_head_v2_dweight_kernel(
         var dlogit = ftz(identical_div(ftz(probability - target), Float32(rows)))
         for feature in range(width):
             var cell = token * width + feature
-            d_weight.unsafe_store(cell, identical_mul_add(
-                dlogit, hidden.unsafe_load(row * width + feature),
+            d_weight.unsafe_store(cell, ftz(identical_mul_add(
+                dlogit, ftz(hidden.unsafe_load(row * width + feature)),
                 d_weight.unsafe_load(cell),
-            ))
+            )))
     for feature in range(width):
         var cell = token * width + feature
         d_weight.unsafe_store(cell, ftz(d_weight.unsafe_load(cell)))
