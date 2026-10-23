@@ -72,3 +72,8 @@ def family_max_f32(src: MutPointer[Float32, MutUntrackedOrigin], count: Int) -> 
         if src[i] > hi:
             hi = src[i]
     return hi
+
+
+def family_fill_i32(out: MutPointer[Int32, MutUntrackedOrigin], n: Int, value: Int32):
+    for i in range(n):  # native output marshaling: one constant label per row
+        out[i] = value

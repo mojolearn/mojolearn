@@ -598,6 +598,7 @@ def _r2_options(args: PythonObject, context: PythonObject) raises -> PythonObjec
 def metrics_reg_operation(operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """The regression metrics; each shell passes its arguments in its
     signature's order (see python/mojolearn/_expansion_metrics.py)."""
+    classical_connect_numpy(context)
     if operation == "family_metric_regression_error":
         # args = (name, y_true, y_pred, sample_weight, multioutput, mode):
         # mean_squared_error / mean_absolute_error / root_mean_squared_error

@@ -22,6 +22,13 @@ from . import _backend, _buffer
 from . import _portable_math as _pm
 from ._array import Array
 from ._mode import NumericModeMixin
+from . import _native_family_bridge
+
+# The compiled family owner (bindings/cluster_native.mojo), connected once at
+# import: the centers' predict/transform/score, MeanShift and
+# AffinityPropagation predict and BisectingKMeans' tree predict are one
+# native call each, handed the binding `_bind` resolves.
+_NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 
 __all__ = ["MiniBatchKMeans", "BisectingKMeans", "MeanShift", "OPTICS", "AffinityPropagation", "BayesianGaussianMixture"]
 
@@ -120,17 +127,6 @@ class _XCluster(NumericModeMixin):
                              f"was fitted with {self.n_features_in_}")
         return x
 
-    def _nearest(self, x, centers):
-        n, d = x.shape
-        f, i, _ = self._call(_E_NEAREST, x, centers, [n, centers.shape[0], d])
-        return Array._from_flat(i[0], (n,), "<i4"), f[0]
-
-    def _distances(self, x, centers):
-        n, d = x.shape
-        k = centers.shape[0]
-        f, _, _ = self._call(_E_DISTANCES, x, centers, [n, k, d])
-        return Array._from_flat(f[0], (n, k), "<f4")
-
 
 class _CentersMixin:
     """predict / transform / score against `cluster_centers_` (squared
@@ -161,8 +157,7 @@ class _CentersMixin:
             If `X` is empty, has the wrong number of features, or contains
             NaN or infinity.
         """
-        self._check_fitted("cluster_centers_")
-        return self._nearest(self._input_like_fit(X), self.cluster_centers_)[0]
+        return _NATIVE(self, "family_xc_predict", (self._bind(), X), _NATIVE_CONTEXT)
 
     def transform(self, X):
         """Distance from each row of `X` to every cluster center.
@@ -182,8 +177,7 @@ class _CentersMixin:
         RuntimeError
             If the model is not fitted.
         """
-        self._check_fitted("cluster_centers_")
-        return self._distances(self._input_like_fit(X), self.cluster_centers_)
+        return _NATIVE(self, "family_xc_transform", (self._bind(), X), _NATIVE_CONTEXT)
 
     def fit_predict(self, X, y=None, sample_weight=None):
         """Fit the model on `X` and return the training labels.
@@ -249,12 +243,7 @@ class _CentersMixin:
         RuntimeError
             If the model is not fitted.
         """
-        self._check_fitted("cluster_centers_")
-        x = self._input_like_fit(X)
-        # the float-float fold of the distances, in the binding
-        n, d = x.shape
-        _, _, sc = self._call(_E_NEAREST, x, self.cluster_centers_, [n, self.cluster_centers_.shape[0], d, 1])
-        return -sc[0]
+        return _NATIVE(self, "family_xc_score", (self._bind(), X), _NATIVE_CONTEXT)
 
 
 # Reference: scikit-learn `cluster/_kmeans.py` (MiniBatchKMeans),
@@ -692,12 +681,7 @@ class BisectingKMeans(_CentersMixin, _XCluster):
         RuntimeError
             If the model is not fitted.
         """
-        self._check_fitted("cluster_centers_")
-        x = self._input_like_fit(X)
-        n, d = x.shape
-        nodes = [int(v) for v in _buffer.flat_bytes(self._tree_nodes).cast("i")]  # glue: fitted bisect tree node words
-        _, i, _ = self._call(_E_BISECT_PREDICT, x, self._tree_centers, [n, d] + nodes)
-        return Array._from_flat(i[0], (n,), "<i4")
+        return _NATIVE(self, "family_xc_bisect_predict", (self._bind(), X), _NATIVE_CONTEXT)
 
 
 # Reference: scikit-learn `cluster/_mean_shift.py`. Every seed's shift loop is
@@ -837,8 +821,7 @@ class MeanShift(_XCluster):
         RuntimeError
             If the model is not fitted.
         """
-        self._check_fitted("cluster_centers_")
-        return self._nearest(self._input_like_fit(X), self.cluster_centers_)[0]
+        return _NATIVE(self, "family_xc_predict", (self._bind(), X), _NATIVE_CONTEXT)
 
     def fit_predict(self, X, y=None):
         """Fit the model on `X` and return the training labels.
@@ -1227,13 +1210,7 @@ class AffinityPropagation(_XCluster):
         ValueError
             If ``affinity='precomputed'``.
         """
-        self._check_fitted("labels_")
-        if self.affinity == "precomputed":
-            raise ValueError("Predict method is not supported when affinity='precomputed'.")
-        x = self._input_like_fit(X)
-        if self.cluster_centers_.shape[0] == 0:
-            return _buffer.full((x.shape[0],), -1, "<i4")
-        return self._nearest(x, self.cluster_centers_)[0]
+        return _NATIVE(self, "family_xc_ap_predict", (self._bind(), X), _NATIVE_CONTEXT)
 
     def fit_predict(self, X, y=None):
         """Fit the model on `X` and return the training labels.
