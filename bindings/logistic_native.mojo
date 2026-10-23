@@ -259,7 +259,7 @@ def logistic_fit(model: PythonObject, args: PythonObject, context: PythonObject)
         # field 15 svr_eps (0), field 16 the weights
         _ = py_call(params.append, PythonObject(0.0))
         _ = py_call(params.append, PythonObject(sw.addr))
-    var n_iter = py_call_typed(_need(entries, "qn_fit"), PythonObject(classical_address(x)), PythonObject(labels_address(y_enc)),
+    var n_iter = py_call_typed(_need(entries, "qn_fit"), classical_address(x), PythonObject(labels_address(y_enc)),
                                PythonObject(labels_address(w)), PythonObject(labels_address(info)), params)
     py_setitem(fields, "_w", w)
     # `_coef_from_w`: one target, the first `cols` words and the last; C
@@ -331,8 +331,8 @@ def logistic_decision(model: PythonObject, source: PythonObject, context: Python
     else:
         out = labels_empty(Python.tuple(rows, n_targets), "<f4", context)
         _ = py_call(params.append, PythonObject(n_targets))
-    _ = py_call_typed(_need(entries, "qn_decision_function"), PythonObject(classical_address(x)),
-                      PythonObject(classical_address(fields["_w"])), PythonObject(labels_address(out)), params)
+    _ = py_call_typed(_need(entries, "qn_decision_function"), classical_address(x),
+                      classical_address(fields["_w"]), PythonObject(labels_address(out)), params)
     _ = x^
     return out
 
@@ -353,7 +353,7 @@ def logistic_predict(model: PythonObject, source: PythonObject, context: PythonO
             raise Error("RuntimeError: mojolearn LogisticRegression: the estimators binding has no "
                         + "qn_predict_binary; rebuild it")
         var w = _fitted_w(model, fields)
-        _ = py_call_typed(native, PythonObject(classical_address(x)), PythonObject(classical_address(w)),
+        _ = py_call_typed(native, classical_address(x), classical_address(w),
                           PythonObject(labels_address(codes)),
                           Python.list(rows, cols, 1 if Bool(py=fields["fit_intercept"]) else 0))
         _ = x^
@@ -370,7 +370,7 @@ def logistic_predict(model: PythonObject, source: PythonObject, context: PythonO
             raise Error("mojolearn LogisticRegression feature count differs from fit")
         var codes = labels_vector(rows, "<i8", context)
         if rows:
-            _ = py_call_typed(native, PythonObject(classical_address(x)), PythonObject(classical_address(fields["_w"])),
+            _ = py_call_typed(native, classical_address(x), classical_address(fields["_w"]),
                               PythonObject(labels_address(codes)),
                               Python.list(rows, cols, 1 if Bool(py=fields["fit_intercept"]) else 0, n_targets))
         _ = x^

@@ -78,7 +78,7 @@ def msel_apply(callable: PythonObject, args: PythonObject) raises -> PythonObjec
     return PythonObject(from_owned=result)
 
 
-def msel_missed(value: PythonObject, context: PythonObject) -> Bool:
+def msel_missed(value: PythonObject, context: PythonObject) raises -> Bool:
     return value is context["family_msel_miss"]
 
 

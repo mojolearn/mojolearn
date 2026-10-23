@@ -738,7 +738,9 @@ def msel_strat_shuffle_split(y: PythonObject, n_splits: Int, test_size: PythonOb
         raise Error("The test_size = " + String(n_test) + " should be greater or equal to the number of classes = " + String(k))
     var rows = Python.list()
     for c in range(k):  # driver-loop: over classes (one row selection each)
-        _ = py_call(rows.append, gc.only(gc.codes, c, gc.counts[c], context))
+        var words = gc.codes
+        var size = gc.counts[c]
+        _ = py_call(rows.append, gc.only(words, c, size, context))
     var gather = msel_entry("gather_i64", context)
     var rng = MselRng(random_state, context)
     var out = Python.list()

@@ -152,7 +152,8 @@ def _ids(value: PythonObject, context: PythonObject) raises -> PythonObject:
         var fmt = view.fmt
         if fmt.byte_length() > 1 and (fmt.startswith("<") or fmt.startswith(">") or fmt.startswith("=")
                                       or fmt.startswith("@") or fmt.startswith("!")):
-            fmt = String(fmt[byte=1:])
+            var trimmed = String(fmt[byte=1:])
+            fmt = trimmed^
         if fmt == "f" or fmt == "d" or fmt == "e" or fmt == "?":
             raise Error("TypeError: mojolearn Embedding: ids must be integers, got dtype '" + view.dtype
                         + "'; a float id is refused rather than truncated")
@@ -344,7 +345,12 @@ def embedding_layer_lifetime_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi(
         _ = py_call(py_attr(_b().object, "__setattr__"), model, name, args[3])
         return PythonObject(None).steal_data()
     except error:
-        if len(args) == 2:
+        var n_args = 0
+        try:
+            n_args = len(args)
+        except:
+            pass
+        if n_args == 2:
             # a finalizer never raises (released handles, a shutting-down interpreter)
             return PythonObject(None).steal_data()
         return optimizer_python_error(error)

@@ -205,7 +205,12 @@ def _x_decomp_input(source: PythonObject, context: PythonObject) raises -> Pytho
 def _cells_free(free: PythonObject, ids: PythonObject):
     """Return the affinity cells' device buffers to the binding's pool
     (`_DevBuf.__del__`); quiet, as there."""
-    for i in range(len(ids)):  # driver-loop: over the device buffers of the affinity cells
+    var count = 0
+    try:
+        count = len(ids)
+    except:
+        return
+    for i in range(count):  # driver-loop: over the device buffers of the affinity cells
         try:
             _ = py_call(free, ids[i])
         except:

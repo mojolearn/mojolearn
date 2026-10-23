@@ -190,7 +190,9 @@ struct LinKit(Movable):
 
     def reshape(mut self, a: Int, rows: Int, cols: Int) raises -> Int:
         """`_M.reshape`: the same words (a view of the same store or buffer)."""
-        return self.add(self.matrices[a].host, rows, cols, self.matrices[a].device)
+        var host = self.matrices[a].host
+        var device = self.matrices[a].device
+        return self.add(host, rows, cols, device)
 
     def _mode(self, a: Int, x: Int) -> Int:
         if self.r(x) == self.r(a) and self.c(x) == self.c(a):
@@ -324,7 +326,9 @@ struct LinKit(Movable):
         var cols = self.c(a)
         var count = rows * cols
         if rows == 1 or cols == 1:
-            return self.add(self.matrices[a].host, cols, rows, self.matrices[a].device)
+            var host = self.matrices[a].host
+            var device = self.matrices[a].device
+            return self.add(host, cols, rows, device)
         var one = self.zeros(1, 1)
         var params = Python.list(PythonObject(MV_TRANSPOSE), PythonObject(count), PythonObject(rows), PythonObject(cols),
             PythonObject(0), PythonObject(0), PythonObject(0), PythonObject(count), PythonObject(count), PythonObject(1))

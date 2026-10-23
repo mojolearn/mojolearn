@@ -271,7 +271,7 @@ def _coding_encode(mut kit: DecompKit, x: Int, d: Int, fields: PythonObject) rai
     return code
 
 
-def _coding_inverse(mut kit: DecompKit, c: Int, d: Int, fields: PythonObject) raises -> PythonObject:
+def _coding_inverse(mut kit: DecompKit, var c: Int, d: Int, fields: PythonObject) raises -> PythonObject:
     # `_SparseCoding.inverse_transform`: code @ components_.
     if Bool(py=fields["split_sign"]):
         var h = kit.nrows(d)

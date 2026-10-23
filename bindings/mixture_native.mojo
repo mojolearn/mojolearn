@@ -194,7 +194,7 @@ def _xc_call(binding: PythonObject, which: Int, x: PythonObject, aux: PythonObje
             aux_address = classical_address(aux)
     var result = family_call(entry, PythonObject(which), classical_address(x), PythonObject(Int(py=x.size)),
                              aux_address, PythonObject(aux_size), ints, floats)
-    _ = aux^
+    _ = aux  # keep the caller's aux alive through the call
     return result
 
 

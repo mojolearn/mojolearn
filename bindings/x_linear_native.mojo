@@ -1733,7 +1733,7 @@ def xl_fit_ridge_cv(model: PythonObject, args: PythonObject, context: PythonObje
         _ = xtr^
         _ = xte^
     var best = 0
-    var best_score = PythonObject(py_call(b.float, PythonObject("nan")))
+    var best_score = py_call(b.float, PythonObject("nan"))
     if not undefined:
         # `_row_means(rows)`: fsum / len per alpha (`row_means_f64`), the
         # first best by `reduce_stat`

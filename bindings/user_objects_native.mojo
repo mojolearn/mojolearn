@@ -98,7 +98,7 @@ def _address(store: PythonObject) raises -> Int:
     return Int(py=store.buffer_info()[0])
 
 
-def _refusal(kind: String, message: String) raises -> Error:
+def _refusal(kind: String, message: String) -> Error:
     # the door raises it as `kind` (TypeError, ValueError, IndexError, OverflowError)
     return Error("__refuse__" + kind + ":" + message)
 
@@ -633,9 +633,12 @@ def user_objects_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
             # ("__refuse__", kind, message): the door raises it as that kind
             var rest = String(message[byte=10:])
             var colon = rest.find(":")
-            var refusal = Python.tuple(PythonObject("__refuse__"), PythonObject(String(rest[byte=:colon])),
-                                       PythonObject(String(rest[byte=colon + 1:])))
-            return refusal.steal_data()
+            try:
+                var refusal = Python.tuple(PythonObject("__refuse__"), PythonObject(String(rest[byte=:colon])),
+                                           PythonObject(String(rest[byte=colon + 1:])))
+                return refusal.steal_data()
+            except tuple_error:
+                return raise_python_exception(tuple_error^, ExceptionType.ValueError)
         if message.startswith("TypeError: "):
             return raise_python_exception(Error(String(message[byte=11:])), ExceptionType.TypeError)
         return raise_python_exception(error^, ExceptionType.ValueError)
