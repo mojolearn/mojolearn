@@ -141,7 +141,7 @@ struct _Reg(Movable):
         self.w = w
         self.n = n
         self.d = d
-        self.mo = mo
+        self.mo = String(mo)
         self.custom = custom
         self.prog = _Prog(ops)
         self.y_off = _NONE
@@ -196,7 +196,9 @@ struct _Reg(Movable):
         return d32
 
     def stage_mean(mut self, kind: Int, mode: Int, v: Int, p: Int, broadcast: Bool) raises -> Int:
-        return self.fin(self.sums(self.term(kind, v, p, broadcast)), mode)
+        var terms = self.term(kind, v, p, broadcast)
+        var sums = self.sums(terms)
+        return self.fin(sums, mode)
 
     def percentile(mut self, v: Int, rank: Float64, f32: Bool, context: PythonObject) raises -> Int:
         """`_Reg.percentile` (average=True): dst, or d32 with f32."""
@@ -443,7 +445,10 @@ def _mean_error(args: PythonObject, kind: String, caller: String, root: Bool, sc
     if log_domain.byte_length() > 0:
         flag = r.scan_log_domain()
     var mode = _RE_DIV | (_RE_ROOT if root else 0)
-    var out = r.average(r.stage_mean(Int(py=terms[PythonObject(kind)]), mode, r.y_off, r.p_off, False), False, _NONE, context)
+    var y_off = r.y_off
+    var p_off = r.p_off
+    var mean = r.stage_mean(Int(py=terms[PythonObject(kind)]), mode, y_off, p_off, False)
+    var out = r.average(mean, False, _NONE, context)
     var arena = _reg_run(r.prog, args[4], context)
     if flag != _NONE and _arena_int(arena, flag) != 0:
         raise Error(log_domain + " cannot be used when targets contain values less than or equal to -1.")
@@ -455,8 +460,11 @@ def _median_absolute_error(args: PythonObject, context: PythonObject) raises -> 
     var r = _reg_new(args, args[3], "median_absolute_error", False, context)
     var terms = context["family_metrics_terms"]
     r.program(0.0, context)
-    var t = r.term(Int(py=terms["abs"]), r.y_off, r.p_off, False)
-    var out = r.average(r.percentile(t, 50.0, False, context), False, _NONE, context)
+    var y_off = r.y_off
+    var p_off = r.p_off
+    var t = r.term(Int(py=terms["abs"]), y_off, p_off, False)
+    var median = r.percentile(t, 50.0, False, context)
+    var out = r.average(median, False, _NONE, context)
     var arena = _reg_run(r.prog, args[4], context)
     return _reg_result(r, out, arena, context)
 
@@ -487,12 +495,20 @@ def _explained_variance(args: PythonObject, context: PythonObject) raises -> Pyt
     var terms = context["family_metrics_terms"]
     var sq = Int(py=terms["sq"])
     r.program(0.0, context)
+    var y_off = r.y_off
+    var p_off = r.p_off
     # `_diff_and_y_means`, then `_centered` twice.
-    var diff = r.term(Int(py=terms["diff"]), r.y_off, r.p_off, False)
-    var diff_mean = r.fin32(r.sums(diff), _RE_DIV)
-    var y_mean = r.fin32(r.sums(r.y_off), _RE_DIV)
-    var num = r.fin(r.sums(r.term(sq, diff, diff_mean, True)), _RE_DIV)
-    var den = r.fin(r.sums(r.term(sq, r.y_off, y_mean, True)), _RE_DIV)
+    var diff = r.term(Int(py=terms["diff"]), y_off, p_off, False)
+    var diff_sums = r.sums(diff)
+    var diff_mean = r.fin32(diff_sums, _RE_DIV)
+    var y_sums = r.sums(y_off)
+    var y_mean = r.fin32(y_sums, _RE_DIV)
+    var num_terms = r.term(sq, diff, diff_mean, True)
+    var num_sums = r.sums(num_terms)
+    var num = r.fin(num_sums, _RE_DIV)
+    var den_terms = r.term(sq, y_off, y_mean, True)
+    var den_sums = r.sums(den_terms)
+    var den = r.fin(den_sums, _RE_DIV)
     var out = r.assemble(num, den, Bool(py=py_call(b.bool, args[4])), True, context)
     var arena = _reg_run(r.prog, args[5], context)
     return _reg_result(r, out, arena, context)
@@ -535,22 +551,25 @@ def _tweedie(args: PythonObject, power_obj: PythonObject, caller: String, d2: Bo
     var terms = context["family_metrics_terms"]
     var tweedie = Int(py=terms["tweedie"])
     r.program(power, context)
+    var y_off = r.y_off
+    var p_off = r.p_off
     # `_tweedie_domain`: the power refusal now, the sign scans staged.
     if not (power <= 0 or power >= 1):
         raise Error("mojolearn " + caller + ": power in (0, 1) is not a Tweedie distribution")
     var fy = _NONE
     var fp = _NONE
     if power != 0:
-        fy = r.scan_sign(r.y_off)
-        fp = r.scan_sign(r.p_off)
+        fy = r.scan_sign(y_off)
+        fp = r.scan_sign(p_off)
     var out: Int
     if d2:
-        var num = r.stage_mean(tweedie, _RE_DIV, r.y_off, r.p_off, False)
-        var y_avg = r.fin32(r.sums(r.y_off), _RE_DIV)
-        var den = r.stage_mean(tweedie, _RE_DIV, r.y_off, y_avg, True)
+        var num = r.stage_mean(tweedie, _RE_DIV, y_off, p_off, False)
+        var y_sums = r.sums(y_off)
+        var y_avg = r.fin32(y_sums, _RE_DIV)
+        var den = r.stage_mean(tweedie, _RE_DIV, y_off, y_avg, True)
         out = r.assemble(num, den, False, False, context)
     else:
-        out = r.stage_mean(tweedie, _RE_DIV, r.y_off, r.p_off, False)
+        out = r.stage_mean(tweedie, _RE_DIV, y_off, p_off, False)
     _ = r.prog.want(out, 2)
     var arena = _reg_run(r.prog, args[3], context)
     if fy != _NONE:
@@ -568,9 +587,11 @@ def _d2_pinball(args: PythonObject, alpha_obj: PythonObject, context: PythonObje
     var terms = context["family_metrics_terms"]
     var pinball = Int(py=terms["pinball"])
     r.program(alpha, context)
-    var num = r.stage_mean(pinball, _RE_DIV, r.y_off, r.p_off, False)
-    var quant = r.percentile(r.y_off, alpha * 100, True, context)
-    var den = r.stage_mean(pinball, _RE_DIV, r.y_off, quant, True)
+    var y_off = r.y_off
+    var p_off = r.p_off
+    var num = r.stage_mean(pinball, _RE_DIV, y_off, p_off, False)
+    var quant = r.percentile(y_off, alpha * 100, True, context)
+    var den = r.stage_mean(pinball, _RE_DIV, y_off, quant, True)
     var out = r.assemble(num, den, True, True, context)
     var arena = _reg_run(r.prog, args[4], context)
     return _reg_result(r, out, arena, context)
@@ -587,9 +608,16 @@ def _r2_options(args: PythonObject, context: PythonObject) raises -> PythonObjec
     var sq = Int(py=context["family_metrics_terms"]["sq"])
     r.program(0.0, context)
     # `_r2_parts`: the y mean (Float32 column), SS_res, SS_tot.
-    var y_mean = r.fin32(r.sums(r.y_off), _RE_DIV)
-    var num = r.fin(r.sums(r.term(sq, r.y_off, r.p_off, False)), 0)
-    var den = r.fin(r.sums(r.term(sq, r.y_off, y_mean, True)), 0)
+    var y_off = r.y_off
+    var p_off = r.p_off
+    var y_sums = r.sums(y_off)
+    var y_mean = r.fin32(y_sums, _RE_DIV)
+    var res_terms = r.term(sq, y_off, p_off, False)
+    var res_sums = r.sums(res_terms)
+    var num = r.fin(res_sums, 0)
+    var tot_terms = r.term(sq, y_off, y_mean, True)
+    var tot_sums = r.sums(tot_terms)
+    var den = r.fin(tot_sums, 0)
     var out = r.assemble(num, den, Bool(py=py_call(b.bool, args[4])), True, context)
     var arena = _reg_run(r.prog, args[5], context)
     return _reg_result(r, out, arena, context)
