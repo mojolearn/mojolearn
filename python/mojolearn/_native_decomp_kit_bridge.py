@@ -10,7 +10,10 @@ _REQUIRED = ("ew", "gemm", "colsum", "rowsum", "move", "order_f", "svd", "absmax
              "lasso_rows", "omp_rows", "lars_rows", "lu", "lu_solve", "dict_learning", "dict_minibatch")
 _OPTIONAL = ("dev_ew", "dev_alloc", "dev_free", "dev_upload", "dev_download", "dev_gemm", "dev_colsum",
              "dev_rowsum", "dev_move", "dev_reduce", "dev_order_f", "dev_absmax", "dev_rand", "dev_svd",
-             "dev_code_rows", "dev_lu", "pls_fit")
+             "dev_code_rows", "dev_lu", "pls_fit",
+             "eigh", "dev_eigh", "reduce", "argmin_all", "dev_argmin_all", "select_smallest",
+             "dev_select_smallest", "lu_aux", "dev_lu_aux", "mcd", "chi2_quantile", "consistency_factor",
+             "dev_mcd_cov")
 
 
 def _entries(binding):

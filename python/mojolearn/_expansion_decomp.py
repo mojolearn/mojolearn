@@ -2916,19 +2916,6 @@ class FastICA(_Base):
 _LOG_2PI = 1.8378770664093453
 
 
-def _f32_store(a):
-    """An `array.array('f')` holding a float32 Array's bytes (one memcpy)."""
-    st = array.array("f")
-    st.frombytes(a.tobytes())
-    return st
-
-
-def _support_of(mask, n):
-    """A 0/1 int32 membership store as a public '<u1' Array (the Mojo cast helper)."""
-    from ._buffer import frombytes as _fb
-    return _fb(mask.tobytes(), "<i4", (n,)).astype("<u1")
-
-
 def _dsum_sq(k, M):
     """The binary64 sum of the squares of M's float32 values (each square
     exact), DSUM_CHUNK values per partial then the partials folded the same
@@ -6307,99 +6294,6 @@ class LocallyLinearEmbedding(_Base):
 
 
 # ================================================================ robust covariance
-def _pinvh(k, A):
-    """scipy.linalg.pinvh: V diag(1/w) V^T over |w| > max|w| * n * float32 eps."""
-    w, V = k.eigh(A)
-    # lane cpu2-l8-decomp: max |w| is one word; the cutoff mask is a select
-    # cell where w lives
-    wmax = k.word(k.reduce(w, k._SEL_MAXABS)) if w.c else 0.0
-    cut = _f32(wmax * A.r * _F32_EPS)
-    inv = k.ew("select", k.ew("abs", w), k.ew("recip", w), _M.zeros(1, 1), s=cut)
-    return k.mm(k.ew("mul", V, inv), V, tb=True)
-
-
-def _slogdet(k, A):
-    """(sign, log|det|) from the LU factorization (getrf; sums ascending)."""
-    lu, piv, info = k.lu(A)
-    st, diag, _, _ = k.lu_aux(lu, piv)
-    if st[1] > 0:
-        return 0.0, -math.inf
-    neg = int(st[2]) + int(st[3])
-    ld = k.total(k.ew("logs", k.ew("abs", diag), s=1.1754943508222875e-38)).s[0]
-    return (-1.0 if neg % 2 else 1.0), ld
-
-
-def _fast_logdet(k, A):
-    sign, ld = _slogdet(k, A)
-    return ld if sign > 0 else -math.inf
-
-
-def _emp_cov(k, Xs, assume_centered=False):
-    """sklearn empirical_covariance: (X - mean)^T (X - mean) / n."""
-    if assume_centered:
-        return k.ew("scale", k.mm(Xs, Xs, ta=True), s=1.0 / Xs.r)
-    Xc = k.ew("sub", Xs, k.colmean(Xs))
-    return k.ew("scale", k.mm(Xc, Xc, ta=True), s=1.0 / Xs.r)
-
-
-def _f32_below(x):
-    """The largest float32 strictly below the float x: v < x is v <= this for
-    every float32 v (the kit's `le` cell takes the same decision)."""
-    f = _f32(x)
-    if f < x:
-        return f
-    b = array.array("f", [f])
-    u = array.array("I", b.tobytes())
-    if f > 0.0:
-        u[0] -= 1
-    elif f == 0.0:
-        u[0] = 0x80000001          # the least negative subnormal
-    else:
-        u[0] += 1
-    return array.array("f", u.tobytes())[0]
-
-
-def _masked_cov(k, M, m, assume_centered):
-    """sklearn's location and empirical covariance of the rows of M whose
-    mask entry (m, n x 1, 0 or 1) is 1, on the device: the masked rows are
-    exact zeros in the products, the count is the mask's total."""
-    cnt = k.total(m).s[0]
-    Xm = k.ew("mul", M, m)
-    if assume_centered:
-        loc = _M.zeros(1, M.c)
-        Xc = Xm
-    else:
-        loc = k.ew("scale", k.colsum(Xm), s=1.0 / cnt)
-        Xc = k.ew("mul", k.ew("sub", M, loc), m)
-    # Experiment: only the MCD masked covariance seam; binding presence is
-    # compile-gated FAST+Apple. Python schedules device buffers, no host math.
-    ordered = getattr(k.b, "x_decomp_dev_mcd_cov", None)
-    if ordered is not None and k._use(Xc) and Xc.r > 0 and Xc.c > 0:
-        gram = k._dout(Xc.c, Xc.c)
-        ordered(k._did(Xc), gram._d.id, [Xc.r, Xc.c])
-    else:
-        gram = k.mm(Xc, Xc, ta=True)
-    return loc, k.ew("scale", gram, s=1.0 / cnt)
-
-
-def _mahal(k, X, loc, P):
-    Xc = k.ew("sub", X, loc)
-    return k.rowsum(k.ew("mul", k.mm(Xc, P), Xc))
-
-
-def _chi2_quantile(k, dof, upper):
-    """The point m with P(chi2_dof > m) = upper (scipy chi2.isf), by bisection
-    (lane py-runtime-b: x_decomp/chi2.mojo `chi2_quantile`)."""
-    return float(k.b.x_decomp_chi2_quantile(float(dof), float(upper)))
-
-
-def _consistency_factor(k, p, num, den=1):
-    """sklearn `_robust_covariance.py::_consistency_factor` (Pison 2002):
-    alpha / chi2.cdf(chi2.ppf(alpha, p), p + 2) with alpha = num / den, all in
-    Mojo (x_decomp/chi2.mojo `consistency_factor`)."""
-    return float(k.b.x_decomp_consistency_factor(float(p), float(num), float(den)))
-
-
 # Reference: scikit-learn `covariance/_robust_covariance.py`:
 # `c_step`/`_c_step`, `select_candidates`, `fast_mcd`, `MinCovDet.fit`,
 # `correct_covariance`, `reweight_covariance`. The random subsets are
@@ -6461,66 +6355,13 @@ class MinCovDet(_Base):
         self.store_precision, self.assume_centered = store_precision, assume_centered
         self.support_fraction, self.random_state, self.numeric_mode = support_fraction, random_state, numeric_mode
 
-    def _mcd_1d(self, k, X, h):
-        """sklearn fast_mcd's one-feature shortcut: the shortest window of h
-        sorted values (every tie of the minimum width kept), the location the
-        mean of their midpoints, the support the h values nearest it (ties to
-        the lower index), the variance of the support."""
-        return self._mcd_1d_native(k, X, h)
-
-    def _mcd_1d_native(self, k, X, h):
-        """`_mcd_1d` with its orders, gathers, window minimum and support in
-        x_decomp/moves.mojo (lane apple-fast-py2mojo-decomp): the same
-        (value, index) orders, the same kit cells on the same values."""
-        n = X.r
-        xs = k.take_rows(X, k.order(X))
-        if h < n:
-            diff = k.ew("sub", xs.rows(h, n), xs.rows(0, n - h))
-            starts = k.argmin_all(diff)
-            mids = k.ew("scale", k.ew("add", k.take_rows(xs, starts, radd=h), k.take_rows(xs, starts)), s=0.5)
-            loc = k.colmean(mids)
-            cen = k.ew("abs", k.ew("sub", X, loc))
-            sel, mask = k.select_smallest(cen, h)
-            Xs = k.take_rows(X, sel)
-            # the device form's membership is a 0 / 1 float matrix (lane cpu3-python)
-            support = mask.out((n,)).astype("<u1") if isinstance(mask, _M) else _support_of(mask, n)
-        else:
-            loc = k.colmean(X)
-            Xs = X
-            support = _support_of(array.array("i", [1]) * n, n)
-        cov = _emp_cov(k, Xs)
-        P = _pinvh(k, cov)
-        return loc, cov, support, _mahal(k, X, loc, P)
-
-    def _fast_mcd_native(self, k, X, h):
-        """fast_mcd for two or more features in ONE binding call
-        (x_decomp/mcd.mojo, lane/py-decomp-nbrs): the same C-steps, cells,
-        draws and (value, index) orders as the Python driver below, which
-        made 12 to 40 kit calls per C-step. Only the O(1) plan integers are
-        computed here, with the float expressions they always used."""
-        n, p = X.r, X.c
-        plan = [0] * 7
-        if n > 500:
-            n_sub = n // 300
-            n_ss = n // n_sub
-            n_m = min(1500, n)
-            plan = [n_sub, n_ss, int(math.ceil(n_ss * (h / float(n)))), max(10, 500 // n_sub),
-                    n_m, int(math.ceil(n_m * (h / float(n)))), 10 if n > 1500 else 1]
-        loc, cov, dist = _M.zeros(1, p), _M.zeros(p, p), _M.zeros(n, 1)
-        sup = array.array("i", [0]) * n
-        k.b.x_decomp_mcd(X.addr, loc.addr, cov.addr, sup.buffer_info()[0], dist.addr,
-                         [n, p, h, int(self._seed) & 0xFFFFFFFF] + plan)
-        return loc, cov, _support_of(sup, n), dist
-
-    def _fast_mcd(self, k, X):
-        n, p = X.r, X.c
-        # scikit-learn's fast_mcd: the default support size is capped at n
-        # (n <= p otherwise asks for more support points than rows)
-        h = (min(int(math.ceil(0.5 * (n + p + 1))), n) if self.support_fraction is None
-             else int(self.support_fraction * n))
-        if p == 1:
-            return self._mcd_1d(k, X, h)
-        return self._fast_mcd_native(k, X, h)
+    # Every operation is one call into the native MinCovDet owner
+    # (bindings/mcd_native.mojo). A covariance estimator has no transform,
+    # so it has no fit_transform either (scikit-learn's TransformerMixin).
+    @available_if(lambda self: hasattr(self, "transform"))
+    def fit_transform(self, X, y=None):
+        """Not available: this estimator has no ``transform``."""
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute 'fit_transform'")
 
     def fit(self, X, y=None):
         """Fit the robust location and covariance.
@@ -6534,46 +6375,7 @@ class MinCovDet(_Base):
         -------
         self
         """
-        self.numeric_mode_ = _mode(self.numeric_mode)
-        k = self._kit()
-        M = _M.from_input(X)
-        n, p = M.r, M.c
-        _min_samples(n, p, "MinCovDet")
-        self._seed = _seed_of(self.random_state)
-        self._draws = 0
-        loc, cov, support, dist = self._fast_mcd(k, M)
-        if self.assume_centered:
-            loc = _M.zeros(1, p)
-            sm = _M(_f32_store(support.astype("<f4")), n, 1)
-            _, cov = _masked_cov(k, M, sm, True)
-            dist = k.rowsum(k.ew("mul", k.mm(M, _pinvh(k, cov)), M))
-        self.raw_location_m_, self.raw_covariance_m_ = loc, cov
-        self.raw_location_ = loc.out((p,))
-        self.raw_covariance_ = cov.out()
-        self.raw_support_ = support
-        # correct_covariance: consistency at the normal model (the corrected
-        # matrix is returned by sklearn and not kept; dist_ is rescaled)
-        n_support = int(support.sum())  # glue: Array.sum is the Mojo reduce helper
-        corr = _consistency_factor(k, p, n_support, n)
-        dist = k.ew("scale", dist, s=1.0 / corr)
-        # reweight_covariance
-        thr = _chi2_quantile(k, p, 0.025)
-        # the reweighting mask dist < thr on the device (`le` against the
-        # float32 just below thr: the same decision), then the masked moments
-        mm = k.ew("le", dist, _M.of([_f32_below(thr)], 1, 1))
-        locr, covr = _masked_cov(k, M, mm, self.assume_centered)
-        covr = k.ew("scale", covr, s=_consistency_factor(k, p, 0.975))
-        mask = mm.out((n,)).astype("<u1")
-        self.location_m_, self.covariance_m_ = locr, covr
-        self.precision_m_ = _pinvh(k, covr)
-        self.location_ = locr.out((p,))
-        self.covariance_ = covr.out()
-        self.precision_ = self.precision_m_.out() if self.store_precision else None
-        self.support_ = mask
-        self.dist_m_ = _mahal(k, M, locr, self.precision_m_)
-        self.dist_ = self.dist_m_.out((n,))
-        self.n_features_in_ = p
-        return self
+        return _MCD_CALL(self, "fit", (X,), _MCD_CONTEXT)
 
     def mahalanobis(self, X):
         """Return squared Mahalanobis distances under the fitted model.
@@ -6591,11 +6393,7 @@ class MinCovDet(_Base):
         RuntimeError
             If the model is not fitted.
         """
-        if not hasattr(self, "precision_m_"):
-            raise RuntimeError("MinCovDet is not fitted; call fit first")
-        k = self._kit()
-        d = _mahal(k, _M.from_input(X), self.location_m_, self.precision_m_)
-        return d.out((d.r,))
+        return _MCD_CALL(self, "mahalanobis", (X,), _MCD_CONTEXT)
 
     def get_precision(self):
         """Return the precision matrix (pseudo-inverse of ``covariance_``).
@@ -6606,7 +6404,7 @@ class MinCovDet(_Base):
         -------
         ndarray of shape (n_features, n_features), float32
         """
-        return self.precision_m_.out()
+        return _MCD_CALL(self, "get_precision", (), _MCD_CONTEXT)
 
     def score(self, X, y=None):
         """Return the Gaussian log-likelihood of X under the fitted model.
@@ -6623,13 +6421,7 @@ class MinCovDet(_Base):
         -------
         float
         """
-        k = self._kit()
-        M = _M.from_input(X)
-        cov = _emp_cov(k, k.ew("sub", M, self.location_m_), assume_centered=True)
-        tr = k.total(k.ew("mul", cov, self.precision_m_)).s[0]
-        _, ld = _slogdet(k, self.precision_m_)
-        p = M.c
-        return -(p * _LOG_2PI) / 2.0 - 0.5 * tr + 0.5 * ld
+        return _MCD_CALL(self, "score", (X,), _MCD_CONTEXT)
 
 
 class EllipticEnvelope(MinCovDet):
@@ -6699,26 +6491,7 @@ class EllipticEnvelope(MinCovDet):
         -------
         self
         """
-        if not 0 < self.contamination <= 0.5:
-            raise ValueError("contamination must be in (0, 0.5]")
-        super().fit(X)
-        k = self._kit()
-        # the two order statistics the interpolation reads: sorted(-d)[i]
-        # is -(d in ascending order)[n - 1 - i] (negation is exact)
-        dm = self.dist_m_
-        nv = dm.r * dm.c
-        q = 100.0 * self.contamination / 100.0 * (nv - 1)
-        lo = int(math.floor(q))
-        hi = min(lo + 1, nv - 1)
-        # lane cpu3-python: the kit's order (a device radix sort on a GPU
-        # binding), then the two order statistics one word each
-        o = k.order(dm)
-        vlo = -k.word(dm, int(k.word(o, nv - 1 - lo)))
-        vhi = -k.word(dm, int(k.word(o, nv - 1 - hi)))
-        # held as the float32 the device subtracts, so decision_function is
-        # exactly score_samples - offset_ rounded once
-        self.offset_ = _f32(vlo + (vhi - vlo) * (q - lo))
-        return self
+        return _MCD_CALL(self, "fit", (X,), _MCD_CONTEXT)
 
     def score_samples(self, X):
         """Return the negated squared Mahalanobis distance of each sample.
@@ -6731,9 +6504,7 @@ class EllipticEnvelope(MinCovDet):
         -------
         ndarray of shape (n_samples,), float64
         """
-        k = self._kit()
-        d = _mahal(k, _M.from_input(X), self.location_m_, self.precision_m_)
-        return k.ew("scale", d, s=-1.0).out((d.r,))
+        return _MCD_CALL(self, "score_samples", (X,), _MCD_CONTEXT)
 
     def decision_function(self, X):
         """Return ``score_samples(X) - offset_``; negative means outlier.
@@ -6746,9 +6517,7 @@ class EllipticEnvelope(MinCovDet):
         -------
         ndarray of shape (n_samples,), float64
         """
-        k = self._kit()
-        d = _mahal(k, _M.from_input(X), self.location_m_, self.precision_m_)
-        return k.ew("adds", k.ew("scale", d, s=-1.0), s=-self.offset_).out((d.r,))
+        return _MCD_CALL(self, "decision_function", (X,), _MCD_CONTEXT)
 
     def predict(self, X):
         """Label each sample 1 (inlier) or -1 (outlier).
@@ -6761,17 +6530,7 @@ class EllipticEnvelope(MinCovDet):
         -------
         ndarray of shape (n_samples,), int32
         """
-        from ._buffer import frombytes as _fb
-        k = self._kit()
-        d = _mahal(k, _M.from_input(X), self.location_m_, self.precision_m_)
-        dec = k.ew("adds", k.ew("scale", d, s=-1.0), s=-self.offset_)
-        if not d.r:
-            return _fb(b"", "<i4", (0,))
-        # lane cpu3-python: 1 where dec >= 0 (-dec <= 0), else -1 (NaN: -1),
-        # in the kit's cells on either binding
-        ge = k.ew("le", k.ew("scale", dec, s=-1.0), _M.of([0.0], 1, 1))
-        lab = k.ew("select", ge, _M.of([1.0], 1, 1), _M.of([-1.0], 1, 1), s=0.5)
-        return lab.out((d.r,)).astype("<i4")
+        return _MCD_CALL(self, "predict", (X,), _MCD_CONTEXT)
 
     def fit_predict(self, X, y=None):
         """Fit the model, then return ``predict(X)``.
@@ -6785,7 +6544,7 @@ class EllipticEnvelope(MinCovDet):
         -------
         ndarray of shape (n_samples,), int32
         """
-        return self.fit(X).predict(X)
+        return _MCD_CALL(self, "fit_predict", (X,), _MCD_CONTEXT)
 
     # Lane cpu4-python: the x_metrics device program (`accuracy_fraction`:
     # exact match counts, the weight total its PairSum, the ratio binary64
@@ -7215,3 +6974,7 @@ _DL_CALL, _DL_CONTEXT = _connect_decomp_kit("dict_learning_native_call", minibat
 # The native PLS owner (bindings/pls_native.mojo): PLSRegression, PLSCanonical, CCA.
 _PLS_CALL, _PLS_CONTEXT = _connect_decomp_kit("pls_native_call", pls_regression_class=PLSRegression,
                                               pls_canonical_class=PLSCanonical)
+
+
+# The native MinCovDet owner (bindings/mcd_native.mojo): MinCovDet, EllipticEnvelope.
+_MCD_CALL, _MCD_CONTEXT = _connect_decomp_kit("mcd_native_call", elliptic_envelope_class=EllipticEnvelope)
