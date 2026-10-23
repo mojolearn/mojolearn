@@ -23,7 +23,7 @@ from bindings.classical_arrays import classical_address, classical_typed, classi
 from bindings.scaler_native import _stage, _ptr, _input
 from bindings.scaler_lifecycle_native import _entries
 from bindings.x_prep_native_owner import xprep_storage, xprep_take, xprep_values, xprep_run, xprep_r3
-from bindings.prep_stateless_native import PrepLayout, _place_scratch, _fam, _int_like, _repr, _name, _take_f
+from bindings.prep_stateless_native import _fam, _int_like, _repr, _name, _take_f
 
 alias F32P = MutPointer[Float32, MutUntrackedOrigin]
 alias I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -99,6 +99,13 @@ comptime OUT_MIN_WORDS = 134217728
 # The stage word of a program's one device output region, resolved when the
 # program runs (past the host arena and the scratch, as `_Prog.output`).
 comptime OUT_MARK = -2147483647
+# Device scratch word k is the stage word SCRATCH_BASE + k (`_Scratch`, so an
+# offset added to a scratch word stays one), resolved past the host arena when
+# the program runs. Stage parameters are never below -3, and the span keeps
+# the words clear of them; a program needing more scratch keeps the rest as
+# arena words (where a word lives moves no bit).
+comptime SCRATCH_BASE = -1073741824
+comptime SCRATCH_SPAN = 1073740800
 comptime INT32_MAX = 2147483647
 # `_CAT_CAP`, `_CAT_R`, `_CAT_CH` (x_prep/cat_cls2.mojo): the packed distinct
 # values' host region (words), the presence flags per column, flags per chunk.
@@ -109,28 +116,43 @@ comptime CAT_CH = 64
 
 # ---------------------------------------------------------------- programs
 struct EncProg(Movable):
-    """One x_prep program: its arena layout (`PrepLayout`: host words, then
-    device scratch), the inputs copied into it, its stages and at most one
-    device output region (`_Prog.output`)."""
-    var layout: PrepLayout
+    """One x_prep program: its arena layout (host words, then device
+    scratch), the inputs copied into it, its stages and at most one device
+    output region (`_Prog.output`)."""
+    var host: Int
+    var scratch_size: Int
+    var work_on: Bool
     var program: List[Int32]
     var inputs: PythonObject
     var out_words: Int
 
     def __init__(out self) raises:
-        self.layout = PrepLayout(0)
+        self.host = 0
+        self.scratch_size = 0
+        self.work_on = xprep_r3("work")
         self.program = List[Int32]()
         self.inputs = Python.list()
         self.out_words = 0
 
     def alloc(mut self, words: Int) -> Int:
-        return self.layout.alloc(words)
-
-    def work(mut self, words: Int) -> Int:
-        return self.layout.work_words(words)
+        # `_Prog.alloc`: host arena words.
+        var offset = self.host
+        self.host += max(words, 0)
+        return offset
 
     def scratch(mut self, words: Int) -> Int:
-        return self.layout.scratch_words(words)
+        # `_Prog.scratch`: device-only words a stage writes before any reads.
+        if self.scratch_size + max(words, 0) >= SCRATCH_SPAN:
+            return self.alloc(words)
+        var offset = self.scratch_size
+        self.scratch_size += max(words, 0)
+        return SCRATCH_BASE + offset
+
+    def work(mut self, words: Int) -> Int:
+        # `_Prog.work`: device scratch under the `work` change, else arena words.
+        if not self.work_on:
+            return self.alloc(words)
+        return self.scratch(words)
 
     def output(mut self, words: Int, entries: PythonObject) raises -> Int:
         # Below OUT_MIN_WORDS, or on a binding without an output region
@@ -177,15 +199,18 @@ struct EncProg(Movable):
         """`_Prog.run`: the output region (when there is one) past the host
         arena and the scratch, then the scratch past the host arena; returns
         (arena, output store)."""
-        var host = self.layout.host
-        var scratch = self.layout.scratch
+        var host = self.host
+        var scratch = self.scratch_size
         if host + scratch + self.out_words > INT32_MAX:
             raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
         var program = self.program.copy()
-        for i in range(len(program)):  # driver-loop: over the program's stage words
-            if Int(program[i]) == OUT_MARK:
-                program[i] = Int32(host + scratch)
-        _place_scratch(program, host)
+        for i in range(len(program) // 16):  # driver-loop: over the program's stages
+            for k in range(2, 16):  # small-loop(params: the fixed fourteen-word stage ABI)
+                var word = Int(program[i * 16 + k])
+                if word == OUT_MARK:
+                    program[i * 16 + k] = Int32(host + scratch)
+                elif word >= SCRATCH_BASE and word < SCRATCH_BASE + SCRATCH_SPAN:
+                    program[i * 16 + k] = Int32(host + word - SCRATCH_BASE)
         var device_scratch = scratch > 0 and (py_get(entries, "x_prep_run_out") is not None or py_get(entries, "x_prep_run_scratch") is not None)
         var arena = xprep_storage(host + (0 if device_scratch else scratch), context)
         var store = xprep_storage(self.out_words, context) if self.out_words > 0 else PythonObject(None)
