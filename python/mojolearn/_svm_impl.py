@@ -55,8 +55,9 @@ import numbers
 
 from . import _backend
 from . import _native_archive_bridge
+from . import _native_family_bridge
 from ._array import Array
-from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, as_f64_c, empty, zeros
+from ._buffer import _native, addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, as_f64_c, empty, zeros
 from ._sample_weight import check_sample_weight
 from ._labels import argmax_rows, decode_labels, encode_labels, sorted_classes, threshold_codes
 from ._mode import NumericModeMixin, available_if, is_fitted as _is_fitted
@@ -2387,3 +2388,10 @@ _native_archive_bridge.register(
         )),
     ),
 )
+
+# The compiled SVM family owner (bindings/svc_native.mojo) reads these fixed
+# tables: the base binding's host-helper resolver (`_buffer._native`, the
+# entries `gather_i64`, `threshold_labels_i64`, ... the Python called) and
+# the number ABCs of the label and class-weight checks.
+_native_family_bridge.tables(family_svc_native=_native, family_svc_real=numbers.Real,
+                             family_svc_integral=numbers.Integral)
