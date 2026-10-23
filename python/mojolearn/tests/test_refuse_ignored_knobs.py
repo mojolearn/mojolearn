@@ -1,31 +1,27 @@
 # SPDX-License-Identifier: Apache-2.0
 """A knob no code path reads is refused by name, never accepted and ignored
-(the claim-surface census, 2026-09-14). Host-only: constructors and the
-fold builder, no native extension call. Runs as a module:
+(the claim-surface census, 2026-09-14). Covers constructors, fold building
+and native cross-validation. Runs as a module:
     cd python && python3 -m mojolearn.tests.test_refuse_ignored_knobs
 """
 import unittest
 
 import numpy as np
 
-from mojolearn import GradientBoosting
-from mojolearn.model_selection import cross_val_score
+from mojolearn import GradientBoosting, Ridge
+from mojolearn.model_selection import GroupKFold, cross_val_score
+from mojolearn._verify_native_runtime import audit_native_call
 
 
-class _Dummy:
-    """The least estimator cross_val_score clones: get_params, fit, score."""
-
-    def __init__(self, setting=1):
-        self.setting = setting
-
-    def get_params(self, deep=True):
-        return {"setting": self.setting}
-
-    def fit(self, X, y):
-        return self
-
-    def score(self, X, y):
-        return 0.75
+def _native(call, *args, error=None, **kwargs):
+    observed = audit_native_call(call, *args, **kwargs)
+    report = observed.report()
+    assert not any(report[key] for key in ('python_frames', 'forbidden_native_calls', 'unresolved_native_calls',
+                                           'wrapper_work', 'unobserved_existing_threads')), report
+    if error is not None:
+        assert isinstance(observed.exception, error), report
+        return observed.exception
+    return observed.assert_native()
 
 
 class RefuseIgnoredKnobs(unittest.TestCase):
@@ -71,22 +67,37 @@ class RefuseIgnoredKnobs(unittest.TestCase):
         X = np.zeros((12, 2), dtype=np.float32)
         y = np.arange(12, dtype=np.float32)
         for cv in (None, 3):
-            with self.assertRaisesRegex(ValueError, "groups is read only by a splitter passed as cv"):
-                cross_val_score(_Dummy(), X, y, cv=cv, groups=["a"] * 12)
+            error = _native(cross_val_score, Ridge(numeric_mode='identical'), X, y, cv=cv,
+                            groups=['a'] * 12, error=ValueError)
+            self.assertRegex(str(error), 'groups is read only by a splitter passed as cv')
 
     def test_cross_val_groups_reach_a_splitter(self):
-        seen = {}
+        seen = []
 
         class Splitter:
             def split(self, X, y, groups):
-                seen["groups"] = list(groups)
+                seen.append(groups)
                 yield list(range(6)), list(range(6, 12))
 
-        X = np.zeros((12, 2), dtype=np.float32)
-        y = np.arange(12, dtype=np.float32)
-        scores = cross_val_score(_Dummy(), X, y, cv=Splitter(), groups=["a"] * 12)
-        self.assertEqual(list(scores), [0.75])
-        self.assertEqual(seen["groups"], ["a"] * 12)
+        X = np.random.default_rng(13).normal(size=(12, 2)).astype('f4')
+        y = (2 * X[:, 0] - X[:, 1] + .3 * X[:, 0] ** 2).astype('f4')
+        groups = ['a'] * 4 + ['b'] * 4 + ['c'] * 4
+        model = Ridge(numeric_mode='identical')
+        _native(cross_val_score, model, X, y, cv=Splitter(), groups=groups, error=TypeError)
+        self.assertEqual(seen, [])
+        splitter = GroupKFold(3)
+        folds = list(splitter.split(X, y, groups))
+        held, expected = [], []
+        for train, test in folds:
+            train, test = np.asarray(train), np.asarray(test)
+            self.assertFalse(set(groups[i] for i in train) & set(groups[i] for i in test))
+            held.extend(test.tolist())
+            fitted = Ridge(numeric_mode='identical').fit(X[train], y[train])
+            expected.append(fitted.score(X[test], y[test]))
+        self.assertEqual(sorted(held), list(range(len(X))))
+        scores = _native(cross_val_score, model, X, y, cv=splitter, groups=groups)
+        np.testing.assert_array_equal(scores, expected)
+        self.assertFalse(hasattr(model, 'coef_'))
 
 
     # NearestNeighbors and its subclasses read `p` only under

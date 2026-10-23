@@ -7,8 +7,19 @@ import textwrap
 
 import pytest
 
-from mojolearn.model_selection import _clone
 from mojolearn.tests._fold_reference import default_folds as _default_folds
+
+
+def _native(call, *args, error=None, **kwargs):
+    from mojolearn._verify_native_runtime import audit_native_call
+    observed = audit_native_call(call, *args, **kwargs)
+    report = observed.report()
+    assert not any(report[key] for key in ('python_frames', 'forbidden_native_calls', 'unresolved_native_calls',
+                                           'wrapper_work', 'unobserved_existing_threads')), report
+    if error is not None:
+        assert isinstance(observed.exception, error), report
+        return observed.exception
+    return observed.assert_native()
 
 
 @pytest.mark.parametrize('labels', [
@@ -34,65 +45,94 @@ def test_kfold_metadata_matches_reference():
                 (train.tolist(), test.tolist()) for train, test in expected]
 
 
-def test_pipeline_clone_keeps_external_protocol():
+def test_pipeline_callbacks_refuse_and_native_cv_clones_keep_independent_parameters(monkeypatch):
     pipeline = pytest.importorskip('sklearn.pipeline')
     preprocessing = pytest.importorskip('sklearn.preprocessing')
+    from mojolearn import Array, GaussianNB, model_selection as ms
     original = pipeline.Pipeline([('scale', preprocessing.StandardScaler())])
-    cloned = _clone(original)
-    assert cloned is not original
-    assert cloned.steps[0][1] is not original.steps[0][1]
-    assert cloned.get_params()['scale__with_mean'] is True
+    touched = []
+    def forbidden(*args, **kwargs):
+        touched.append('external clone/get_params')
+        raise AssertionError('Python pipeline protocol executed')
+    monkeypatch.setattr(pipeline.Pipeline, '__sklearn_clone__', forbidden)
+    monkeypatch.setattr(pipeline.Pipeline, 'get_params', forbidden)
+    x = Array.from_list([[float(i % 5) + 2 * (i % 2), float(i // 5)] for i in range(20)], '<f4')
+    y = Array.from_list([0, 1] * 10, '<i4')
+    _native(ms.cross_val_score, original, x, y, cv=2, error=TypeError)
+    assert touched == []
+    priors = [.4, .6]
+    model = GaussianNB(priors=priors)
+    result = _native(ms.cross_validate, model, x, y, cv=2, return_estimator=True, error_score='raise')
+    clones = result['estimator']
+    assert len(clones) == 2 and clones[0] is not clones[1]
+    assert all(type(clone) is GaussianNB and clone is not model for clone in clones)
+    assert all(clone.priors == priors and clone.priors is not priors for clone in clones)
+    assert clones[0].priors is not clones[1].priors
+    clones[0].priors[0] = .1
+    assert clones[1].priors == priors == [.4, .6]
+    assert not hasattr(model, 'classes_')
 
 
 def test_default_and_explicit_cv_without_numpy_or_sklearn():
     # Fresh process guarantees an already-imported dependency cannot mask reach.
     program = textwrap.dedent('''
-        import builtins, ctypes
+        import builtins, sys
         original_import = builtins.__import__
         def blocked(name, *args, **kwargs):
             if name.split('.')[0] in ('numpy', 'sklearn'):
                 raise AssertionError('unexpected dependency: ' + name)
             return original_import(name, *args, **kwargs)
         builtins.__import__ = blocked
-        from mojolearn import Array
-        from mojolearn import _buffer
-        from mojolearn.model_selection import cross_val_score
+        from mojolearn import Array, GaussianNB, model_selection as ms
+        from mojolearn._verify_native_runtime import audit_native_call
         calls = []
-        def gather(src, dst, indices, source_rows, output_rows, row_bytes):
-            for output, source in enumerate((ctypes.c_int64 * output_rows).from_address(indices)):
-                assert 0 <= source < source_rows
-                ctypes.memmove(dst + output * row_bytes, src + source * row_bytes, row_bytes)
-        _buffer._NATIVE['gather_rows_bytes'] = gather
+        def native(call, *args, error=None, **kwargs):
+            observed = audit_native_call(call, *args, **kwargs)
+            report = observed.report()
+            assert not any(report[key] for key in ('python_frames', 'forbidden_native_calls', 'unresolved_native_calls',
+                                                    'wrapper_work', 'unobserved_existing_threads')), report
+            if error is not None:
+                assert isinstance(observed.exception, error), report
+                return
+            return observed.assert_native()
+        rows = [[float(i % 5) + 2 * (i % 2), float(i // 5)] for i in range(20)]
+        labels = [0, 1] * 10
+        X = Array.from_list(rows, '<f4')
+        y = Array.from_list(labels, '<i4')
+        priors = [.4, .6]
+        model = GaussianNB(priors=priors)
+        # Independent unshuffled stratification: two rows of each class
+        # per held-out fold, from the alternating label fixture.
+        folds = [([i for i in range(20) if not f * 4 <= i < (f + 1) * 4],
+                  list(range(f * 4, (f + 1) * 4))) for f in range(5)]
+        expected = []
+        for train, test in folds:
+            fitted = GaussianNB(priors=priors).fit(Array.from_list([rows[i] for i in train], '<f4'),
+                                                  Array.from_list([labels[i] for i in train], '<i4'))
+            expected.append(fitted.score(Array.from_list([rows[i] for i in test], '<f4'),
+                                         Array.from_list([labels[i] for i in test], '<i4')))
+        assert native(ms.cross_val_score, model, X, y).tolist() == expected
+        assert native(ms.cross_val_score, model, X, y, cv=folds).tolist() == expected
+        result = native(ms.cross_validate, model, X, y, cv=folds, return_estimator=True, error_score='raise')
+        assert result['test_score'].tolist() == expected
+        assert len({id(item) for item in result['estimator']}) == 5
+        assert all(item is not model and item.priors is not priors for item in result['estimator'])
+        assert model.priors is priors and priors == [.4, .6] and not hasattr(model, 'classes_')
         class Estimator:
-            _estimator_type = 'classifier'
-            def __init__(self, setting=None): self.setting = setting
-            def get_params(self, deep=True): return {'setting': self.setting}
-            def fit(self, X, y):
-                assert not hasattr(self, 'fitted_')
-                assert self.setting == {'nested': [1, 2]}
-                self.setting['nested'].append(3)
-                self.fitted_ = True
-                calls.append((X.tolist(), y.tolist()))
-                return self
-            def score(self, X, y):
-                assert self.fitted_
-                return 0.75
-        X = Array.from_list([[float(i), float(i+100)] for i in range(12)], '<f4')
-        y = Array.from_list([0, 1] * 6, '<i4')
-        model = Estimator({'nested': [1, 2]})
-        assert cross_val_score(model, X, y).tolist() == [0.75] * 5
-        assert model.setting == {'nested': [1, 2]}
-        assert not hasattr(model, 'fitted_')
-        assert cross_val_score(model, X, y, cv=[([0, 1, 2, 3], [4, 5])]).tolist() == [0.75]
+            def __getattribute__(self, name):
+                calls.append(name)
+                raise AssertionError('external estimator hook executed')
         class Splitter:
             def split(self, X, y, groups):
-                assert groups == ['a'] * 12
-                yield [0, 1], [8, 9]
-        assert cross_val_score(model, X, y, cv=Splitter(), groups=['a'] * 12).tolist() == [0.75]
-        assert calls[-1][0] == [[0., 100.], [1., 101.]]
+                calls.append('split')
+                raise AssertionError('external splitter executed')
+        native(ms.cross_val_score, Estimator(), X, y, cv=2, error=TypeError)
+        native(ms.cross_val_score, model, X, y, cv=Splitter(), groups=['a'] * 20, error=TypeError)
+        assert calls == []
+        assert not any(name.split('.')[0] in ('numpy', 'sklearn') for name in sys.modules)
     ''')
     result = subprocess.run([sys.executable, '-c', program], capture_output=True, text=True,
-                            env=os.environ.copy())
+                            env=os.environ.copy(), timeout=180)
     assert result.returncode == 0, result.stdout + result.stderr
 
 
@@ -104,14 +144,6 @@ def test_default_and_explicit_cv_without_numpy_or_sklearn():
 # descriptor can. Both directions are asserted, so neither can quietly stop
 # being true.
 # ---------------------------------------------------------------------------
-
-class _Clf:
-    """The estimator `split_descriptor` reads. Nothing is fitted."""
-    _estimator_type = 'classifier'
-
-    def get_params(self, deep=False):
-        return {}
-
 
 def _ordered_fixture(n=48):
     """Rows whose VALUES differ everywhere and whose labels alternate.
@@ -154,7 +186,7 @@ def test_fold_indices_cannot_see_a_label_preserving_permutation(splits, classifi
 
 @pytest.mark.parametrize('splits', [3, 4])
 def test_split_descriptor_moves_where_the_fold_hash_cannot(splits):
-    from mojolearn import Array
+    from mojolearn import Array, GaussianNB
     from mojolearn.model_selection import split_descriptor
 
     X, labels = _ordered_fixture()
@@ -162,8 +194,8 @@ def test_split_descriptor_moves_where_the_fold_hash_cannot(splits):
     rows = X.tolist()
     moved = Array.from_list([rows[i] for i in order], '<f4')
 
-    before = split_descriptor(X, labels, estimator=_Clf(), cv=splits)
-    after = split_descriptor(moved, [labels[i] for i in order], estimator=_Clf(), cv=splits)
+    before = _native(split_descriptor, X, labels, estimator=GaussianNB(), cv=splits)
+    after = _native(split_descriptor, moved, [labels[i] for i in order], estimator=GaussianNB(), cv=splits)
 
     # The two halves of the finding, asserted against each other.
     assert before['fold_assignment_sha256'] == after['fold_assignment_sha256']
@@ -174,11 +206,12 @@ def test_split_descriptor_moves_where_the_fold_hash_cannot(splits):
 
 
 def test_split_descriptor_is_reproducible_and_refuses_to_guess_the_splitter():
+    from mojolearn import GaussianNB
     from mojolearn.model_selection import SPLIT_DESCRIPTOR_SCHEMA, split_descriptor
 
     X, labels = _ordered_fixture()
-    first = split_descriptor(X, labels, estimator=_Clf(), cv=4)
-    assert first == split_descriptor(X, labels, estimator=_Clf(), cv=4)
+    first = _native(split_descriptor, X, labels, estimator=GaussianNB(), cv=4)
+    assert first == _native(split_descriptor, X, labels, estimator=GaussianNB(), cv=4)
     assert first['schema'] == SPLIT_DESCRIPTOR_SCHEMA
     # Stratified folds and KFold folds are different splits; describing one as
     # the other would be a descriptor of a run that never happened, which is
@@ -191,6 +224,13 @@ def test_split_descriptor_is_reproducible_and_refuses_to_guess_the_splitter():
         split_descriptor(X, labels, cv=4)
     with pytest.raises(ValueError, match='estimator is required'):
         split_descriptor(X, labels)
+    touched = []
+    class ExternalClassifier:
+        def __getattribute__(self, name):
+            touched.append(name)
+            raise AssertionError('external classifier metadata hook ran')
+    _native(split_descriptor, X, labels, estimator=ExternalClassifier(), cv=4, error=TypeError)
+    assert touched == []
 
 
 def test_fold_order_sabotage_is_dormant_and_fires_only_with_both_switches(monkeypatch):
