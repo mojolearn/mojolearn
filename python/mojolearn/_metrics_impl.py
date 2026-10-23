@@ -474,16 +474,7 @@ def rand_score(labels_true, labels_pred):
     >>> score = metrics.rand_score(np.array([0, 0, 1, 1], dtype=np.int32),
     ...                            np.array([1, 1, 0, 0], dtype=np.int32))
     """
-    yt, yp = _pair_1d(
-        labels_true, labels_pred, "labels_true", "labels_pred", _as_i32_1d
-    )
-    # ORDER MATCHES bindings/_mojolearn_metrics.mojo::rand_score_binding.
-    # n
-    return float(
-        _get_binding().rand_score(
-            addr_ro(yt, name="yt"), addr_ro(yp, name="yp"), [int(yt.shape[0])]
-        )
-    )
+    return _NATIVE(None, "family_mcls_rand", (_get_binding(), labels_true, labels_pred), _NATIVE_CONTEXT)
 
 
 # Maintainer notes: backed by `ML::Metrics::adjusted_rand_index`, the int32
@@ -517,16 +508,7 @@ def adjusted_rand_score(labels_true, labels_pred):
     >>> a = rng.integers(0, 4, 1000).astype(np.int32)
     >>> score = metrics.adjusted_rand_score(a, a)
     """
-    yt, yp = _pair_1d(
-        labels_true, labels_pred, "labels_true", "labels_pred", _as_i32_1d
-    )
-    # ORDER MATCHES bindings/_mojolearn_metrics.mojo::adjusted_rand_score_binding.
-    # n
-    return float(
-        _get_binding().adjusted_rand_score(
-            addr_ro(yt, name="yt"), addr_ro(yp, name="yp"), [int(yt.shape[0])]
-        )
-    )
+    return _NATIVE(None, "family_mcls_adjusted_rand", (_get_binding(), labels_true, labels_pred), _NATIVE_CONTEXT)
 
 
 # Maintainer notes: backed by `ML::Metrics::entropy` (cuML `entropy.cu`, RAFT
@@ -570,19 +552,7 @@ def entropy(clustering, *, base=None):
     >>> from mojolearn import metrics
     >>> h = metrics.entropy(np.array([0, 0, 1, 1], dtype=np.int32), base=2)
     """
-    lab = _as_i32_1d(clustering, "clustering")
-    lower = int(lab.min())
-    upper = int(lab.max())
-    # ORDER MATCHES bindings/_mojolearn_metrics.mojo::entropy_binding.
-    # n, lower_class_range, upper_class_range
-    value = float(
-        _get_binding().entropy(
-            addr_ro(lab, name="lab"), [int(lab.shape[0]), lower, upper]
-        )
-    )
-    if base is not None:
-        value = math.log(math.exp(value), base)
-    return value
+    return _NATIVE(None, "family_mcls_entropy", (_get_binding(), clustering, base), _NATIVE_CONTEXT)
 
 
 # Maintainer notes: backed by `ML::Metrics::mutual_info_score` (DEVIATIONS
@@ -617,21 +587,8 @@ def mutual_info_score(labels_true, labels_pred, *, contingency=None):
     >>> mi = metrics.mutual_info_score(np.array([0, 0, 1, 1], dtype=np.int32),
     ...                                np.array([0, 0, 1, 2], dtype=np.int32))
     """
-    if contingency is not None:
-        raise NotImplementedError(
-            "mojolearn mutual_info_score: contingency= is refused; the "
-            "implemented entry builds the contingency matrix on the device "
-            "(metrics/impl/stats/detail/contingency_matrix.mojo) and has "
-            "no arm that consumes a precomputed one"
-        )
-    yt, yp, n, lower, upper = _prepare_cluster_labels(labels_true, labels_pred)
-    # ORDER MATCHES bindings/_mojolearn_metrics.mojo::mutual_info_score_binding.
-    # n, lower_class_range, upper_class_range
-    return float(
-        _get_binding().mutual_info_score(
-            addr_ro(yt, name="yt"), addr_ro(yp, name="yp"), [n, lower, upper]
-        )
-    )
+    return _NATIVE(None, "family_mcls_mutual_info", (_get_binding(), labels_true, labels_pred, contingency),
+                   _NATIVE_CONTEXT)
 
 
 # Maintainer notes: reference `sklearn/metrics/cluster/_supervised.py`. The
@@ -667,29 +624,8 @@ def fowlkes_mallows_score(labels_true, labels_pred, *, sparse="deprecated"):
     >>> score = metrics.fowlkes_mallows_score(np.array([0, 0, 1, 1], dtype=np.int32),
     ...                                       np.array([0, 0, 1, 2], dtype=np.int32))
     """
-    if sparse != "deprecated":
-        raise NotImplementedError(
-            "mojolearn fowlkes_mallows_score: sparse= is refused; scikit-learn "
-            "deprecated and ignores it, and this surface has no sparse arm"
-        )
-    try:
-        empty = len(labels_true) == 0 and len(labels_pred) == 0
-    except TypeError:
-        empty = False
-    if empty:
-        # scikit-learn's check_clusterings allows no samples
-        # (ensure_min_samples=0); the empty contingency matrix gives
-        # tk == 0 and the score 0.0. The label loaders refuse empty input,
-        # so the case is answered here, before them.
-        return 0.0
-    yt, yp, n, lower, upper = _prepare_cluster_labels(labels_true, labels_pred)
-    # ORDER MATCHES bindings/_mojolearn_metrics.mojo::fowlkes_mallows_score_binding.
-    # n, lower_class_range, upper_class_range
-    return float(
-        _get_binding().fowlkes_mallows_score(
-            addr_ro(yt, name="yt"), addr_ro(yp, name="yp"), [n, lower, upper]
-        )
-    )
+    return _NATIVE(None, "family_mcls_fowlkes_mallows", (_get_binding(), labels_true, labels_pred, sparse),
+                   _NATIVE_CONTEXT)
 
 
 # Maintainer note: backed by `ML::Metrics::homogeneity_score`.
@@ -716,14 +652,7 @@ def homogeneity_score(labels_true, labels_pred):
     >>> h = metrics.homogeneity_score(np.array([0, 0, 1, 1], dtype=np.int32),
     ...                               np.array([0, 0, 1, 2], dtype=np.int32))
     """
-    yt, yp, n, lower, upper = _prepare_cluster_labels(labels_true, labels_pred)
-    # ORDER MATCHES bindings/_mojolearn_metrics.mojo::homogeneity_score_binding.
-    # n, lower_class_range, upper_class_range
-    return float(
-        _get_binding().homogeneity_score(
-            addr_ro(yt, name="yt"), addr_ro(yp, name="yp"), [n, lower, upper]
-        )
-    )
+    return _NATIVE(None, "family_mcls_homogeneity", (_get_binding(), labels_true, labels_pred), _NATIVE_CONTEXT)
 
 
 # Maintainer notes: backed by `ML::Metrics::completeness_score`, which RAFT
@@ -755,14 +684,7 @@ def completeness_score(labels_true, labels_pred):
     >>> c = metrics.completeness_score(np.array([0, 0, 1, 1], dtype=np.int32),
     ...                                np.array([0, 0, 1, 2], dtype=np.int32))
     """
-    yt, yp, n, lower, upper = _prepare_cluster_labels(labels_true, labels_pred)
-    # ORDER MATCHES bindings/_mojolearn_metrics.mojo::completeness_score_binding.
-    # n, lower_class_range, upper_class_range
-    return float(
-        _get_binding().completeness_score(
-            addr_ro(yt, name="yt"), addr_ro(yp, name="yp"), [n, lower, upper]
-        )
-    )
+    return _NATIVE(None, "family_mcls_completeness", (_get_binding(), labels_true, labels_pred), _NATIVE_CONTEXT)
 
 
 # Maintainer note: backed by `ML::Metrics::v_measure` (cuML `v_measure.cu`).
@@ -791,14 +713,7 @@ def v_measure_score(labels_true, labels_pred, *, beta=1.0):
     >>> v = metrics.v_measure_score(np.array([0, 0, 1, 1], dtype=np.int32),
     ...                             np.array([0, 0, 1, 2], dtype=np.int32))
     """
-    yt, yp, n, lower, upper = _prepare_cluster_labels(labels_true, labels_pred)
-    # ORDER MATCHES bindings/_mojolearn_metrics.mojo::v_measure_score_binding.
-    # n, lower_class_range, upper_class_range, beta
-    return float(
-        _get_binding().v_measure_score(
-            addr_ro(yt, name="yt"), addr_ro(yp, name="yp"), [n, lower, upper, float(beta)]
-        )
-    )
+    return _NATIVE(None, "family_mcls_v_measure", (_get_binding(), labels_true, labels_pred, beta), _NATIVE_CONTEXT)
 
 
 def homogeneity_completeness_v_measure(labels_true, labels_pred, *, beta=1.0):
@@ -827,11 +742,7 @@ def homogeneity_completeness_v_measure(labels_true, labels_pred, *, beta=1.0):
     >>> h, c, v = metrics.homogeneity_completeness_v_measure(
     ...     np.array([0, 0, 1, 1], dtype=np.int32), np.array([0, 0, 1, 2], dtype=np.int32))
     """
-    return (
-        homogeneity_score(labels_true, labels_pred),
-        completeness_score(labels_true, labels_pred),
-        v_measure_score(labels_true, labels_pred, beta=beta),
-    )
+    return _NATIVE(None, "family_mcls_hcv", (_get_binding(), labels_true, labels_pred, beta), _NATIVE_CONTEXT)
 
 
 # ===========================================================================
@@ -900,60 +811,12 @@ def r2_score(
     >>> pred = y + rng.normal(0, 0.1, 1000).astype(np.float32)
     >>> r2 = metrics.r2_score(y, pred)
     """
-    if (not isinstance(multioutput, str) or multioutput != "uniform_average" or not force_finite
-            or len(_shape_of(y_true)) == 2 and _shape_of(y_true)[1] != 1):
-        # lane/metrics: multioutput ('raw_values', 'variance_weighted', an
-        # array of weights), 2-D targets and force_finite=False through the
-        # x_metrics binding. force_finite=False's NaN / -inf are chosen BY
-        # VALUE in the binary64 epilogue, never computed on a device, so no
-        # vendor payload reaches the result (DEVIATION 6103). The 1-D default
-        # call keeps its kernel and bits.
-        from ._expansion_metrics import r2_score_options
-        return r2_score_options(y_true, y_pred, sample_weight, multioutput, force_finite, numeric_mode)
-    y, yh = _pair_1d(y_true, y_pred, "y_true", "y_pred", _as_f32_1d)
-    if sample_weight is not None:
-        w = _sample_weight_f32(sample_weight, int(y.shape[0]), "r2_score")
-        # ORDER MATCHES bindings/_mojolearn_metrics.mojo::r2_score_weighted_binding.
-        # n
-        return float(
-            _get_binding(numeric_mode).r2_score_weighted(
-                _addr_ro(y), _addr_ro(yh), _addr_ro(w), [int(y.shape[0])]
-            )
-        )
-    # ORDER MATCHES bindings/_mojolearn_metrics.mojo::r2_score_binding.
-    # n
-    return float(
-        _get_binding(numeric_mode).r2_score(_addr_ro(y), _addr_ro(yh), [int(y.shape[0])])
-    )
+    return _NATIVE(None, "family_mcls_r2", (_get_binding(numeric_mode), y_true, y_pred, sample_weight, multioutput,
+                                           force_finite, numeric_mode), _NATIVE_CONTEXT)
 
 
-def _as_regression_f32_1d(x, name):
-    # A plain Python list or tuple has no float32 spelling; it is cast once,
-    # the same rounding `as_f32_c` applies (`materialize_f32_lists`). A
-    # buffer keeps the float32-only contract (Sep 22 pip smoke: plain lists
-    # were refused as "must have dtype float32").
-    if _buffer_format(x) != "f" and not isinstance(x, (list, tuple)):
-        raise TypeError(f"mojolearn regression metrics: {name} must have dtype float32; cast explicitly before scoring")
-    a = materialize_f32_lists(x, "input")[0]
-    if a.dtype != "<f4":
-        raise TypeError(
-            f"mojolearn regression metrics: {name} must have dtype float32, "
-            f"got {a.dtype}; cast explicitly before scoring"
-        )
-    return _as_f32_1d(a, name)
 
 
-def _regression_error(name, y_true, y_pred, sample_weight, multioutput, numeric_mode):
-    if (sample_weight is not None or not isinstance(multioutput, str)
-            or multioutput != "uniform_average" or len(_shape_of(y_true)) == 2 and _shape_of(y_true)[1] != 1):
-        # lane/metrics: sample_weight, multioutput and 2-D targets through the
-        # x_metrics binding; the 1-D unweighted call keeps its kernel and bits.
-        from ._expansion_metrics import regression_error_options
-        return regression_error_options(name, y_true, y_pred, sample_weight, multioutput, numeric_mode)
-    yt, yp = _pair_1d(y_true, y_pred, "y_true", "y_pred", _as_regression_f32_1d)
-    return float(getattr(_get_binding(numeric_mode), name)(
-        _addr_ro(yt), _addr_ro(yp), [int(yt.size)]
-    ))
 
 
 # Maintainer notes: IDENTICAL pins the reduction schedule and flushes
@@ -998,9 +861,8 @@ def mean_squared_error(
     >>> metrics.mean_squared_error(y, pred)
     0.375
     """
-    return _regression_error(
-        "mean_squared_error", y_true, y_pred, sample_weight, multioutput, numeric_mode
-    )
+    return _NATIVE(None, "family_mcls_regression_error", (_get_binding(numeric_mode), "mean_squared_error", y_true,
+                   y_pred, sample_weight, multioutput, numeric_mode), _NATIVE_CONTEXT)
 
 
 def mean_absolute_error(
@@ -1039,9 +901,8 @@ def mean_absolute_error(
     >>> metrics.mean_absolute_error(y, pred)
     0.5
     """
-    return _regression_error(
-        "mean_absolute_error", y_true, y_pred, sample_weight, multioutput, numeric_mode
-    )
+    return _NATIVE(None, "family_mcls_regression_error", (_get_binding(numeric_mode), "mean_absolute_error", y_true,
+                   y_pred, sample_weight, multioutput, numeric_mode), _NATIVE_CONTEXT)
 
 
 def root_mean_squared_error(
@@ -1080,9 +941,8 @@ def root_mean_squared_error(
     >>> pred = np.array([2.5, 0.0, 2.0, 8.0], dtype=np.float32)
     >>> rmse = metrics.root_mean_squared_error(y, pred)
     """
-    return _regression_error(
-        "root_mean_squared_error", y_true, y_pred, sample_weight, multioutput, numeric_mode
-    )
+    return _NATIVE(None, "family_mcls_regression_error", (_get_binding(numeric_mode), "root_mean_squared_error",
+                   y_true, y_pred, sample_weight, multioutput, numeric_mode), _NATIVE_CONTEXT)
 
 
 # Maintainer notes: backed by `ML::Metrics::kl_divergence`, the float overload
@@ -1117,78 +977,15 @@ def kl_divergence(P, Q):
     >>> Q = np.array([0.4, 0.4, 0.2], dtype=np.float32)
     >>> kl = metrics.kl_divergence(P, Q)
     """
-    p, q = _pair_1d(P, Q, "P", "Q", _as_f32_1d)
-    for name, arr in (("P", p), ("Q", q)):  # glue: validates the two named arguments
-        if arr.min() < 0:
-            raise ValueError(
-                f"mojolearn kl_divergence: {name} has a negative entry; "
-                "refused here (metrics/README.md HAND-OFF ask 3) rather "
-                "than letting log of a negative reach the fold"
-            )
-    # ORDER MATCHES bindings/_mojolearn_metrics.mojo::kl_divergence_binding.
-    # n
-    return float(
-        _get_binding().kl_divergence(
-            addr_ro(p, name="p"), addr_ro(q, name="q"), [int(p.shape[0])]
-        )
-    )
+    return _NATIVE(None, "family_mcls_kl", (_get_binding(), P, Q), _NATIVE_CONTEXT)
 
 
 # ===========================================================================
 # Group C: silhouette
 # ===========================================================================
 
-_SILHOUETTE_METRICS = ("euclidean", "l2")
 
 
-def _silhouette(X, labels, metric, chunksize, caller):
-    if not isinstance(metric, str) or metric.lower() not in _SILHOUETTE_METRICS:
-        raise NotImplementedError(
-            f"mojolearn {caller}: metric={metric!r} is refused; only "
-            "'euclidean' and 'l2' are implemented (they are the same "
-            "DistanceType::L2SqrtUnexpanded, which is the arm cuML's "
-            "silhouette_score.pyx dispatches by default). 'cityblock', "
-            "'cosine', 'l1', 'manhattan' and 'sqeuclidean' are other "
-            "distance kernels and are not in metrics/ (NOT_IMPLEMENTED.tsv)"
-        )
-    x, _copied = as_f32_c(X, ndim=2, name="X")
-    if not all_finite(x):
-        raise ValueError(
-            f"mojolearn {caller}: X contains NaN or infinity; refused here "
-            "(metrics/README.md HAND-OFF ask 3), because a NaN distance "
-            "reaches sil_op as +0.0 (DEVIATION 656) rather than as an error"
-        )
-    lab = _as_i32_1d(labels, "labels")
-    if lab.shape[0] != x.shape[0]:
-        raise ValueError(
-            f"mojolearn {caller}: labels has {lab.shape[0]} entries and X "
-            f"has {x.shape[0]} rows"
-        )
-    # Same behavior as cuML's silhouette_score.pyx:99-101: monotonic labels via
-    # cp.unique(..., return_inverse=True), and n_labels is how many distinct
-    # labels there are. `_labels.encode_labels` gives both under the order
-    # rule (DEVIATION 2340), natively over the int32 buffer (lane py-shared
-    # retired DEVIATION 2377's O(rows) Python pass here; `sorted_classes`
-    # stays the definition, `tests/test_labels_native.py`).
-    unique_labels, mapped = encode_labels(lab)
-    n_labels = len(unique_labels)
-    chunk = 40000 if chunksize is None else int(chunksize)
-    if chunk < 1:
-        raise ValueError(
-            f"mojolearn {caller}: chunksize must be at least 1, got {chunk}"
-        )
-    scores = empty((x.shape[0],), "<f4")
-    # ORDER MATCHES bindings/_mojolearn_metrics.mojo::silhouette_binding.
-    # n_rows, n_cols, n_labels, chunksize
-    mean = float(
-        _get_binding().silhouette(
-            addr_ro(x, name="x"),
-            addr_ro(mapped, name="mapped"),
-            addr(scores, name="scores"),
-            [int(x.shape[0]), int(x.shape[1]), n_labels, chunk],
-        )
-    )
-    return mean, scores
 
 
 # Maintainer notes: backed by `ML::Metrics::Batched::silhouette_score`, the
@@ -1244,14 +1041,8 @@ def silhouette_score(
     >>> labels = rng.integers(0, 4, 1000).astype(np.int32)
     >>> s = metrics.silhouette_score(X, labels)
     """
-    if sample_size is not None or random_state is not None:
-        raise NotImplementedError(
-            "mojolearn silhouette_score: sample_size / random_state are "
-            "refused; subsample X yourself so the rows that were scored are "
-            "the rows you chose (cuML's surface has no subsampling either)"
-        )
-    mean, _scores = _silhouette(X, labels, metric, chunksize, "silhouette_score")
-    return mean
+    return _NATIVE(None, "family_mcls_silhouette_score", (_get_binding(), X, labels, metric, sample_size, random_state,
+                                                           chunksize), _NATIVE_CONTEXT)
 
 
 # Maintainer notes: the same kernel call as silhouette_score, which computes
@@ -1289,10 +1080,8 @@ def silhouette_samples(X, labels, *, metric="euclidean", chunksize=None):
     >>> labels = rng.integers(0, 4, 1000).astype(np.int32)
     >>> s = metrics.silhouette_samples(X, labels)
     """
-    _mean, scores = _silhouette(
-        X, labels, metric, chunksize, "silhouette_samples"
-    )
-    return scores
+    return _NATIVE(None, "family_mcls_silhouette_samples", (_get_binding(), X, labels, metric, chunksize),
+                   _NATIVE_CONTEXT)
 
 
 # ===========================================================================
@@ -1358,45 +1147,8 @@ def trustworthiness(
     >>> X = rng.random((1000, 8), dtype=np.float32)
     >>> t = metrics.trustworthiness(X, X[:, :2], n_neighbors=5)
     """
-    if not isinstance(metric, str) or metric.lower() != "euclidean":
-        raise NotImplementedError(
-            f"mojolearn trustworthiness: metric={metric!r} is refused; only "
-            "'euclidean' is implemented, and cuML's trustworthiness.pyx:86 "
-            "refuses every other name too"
-        )
-    x, _cx = as_f32_c(X, ndim=2, name="X")
-    emb, _ce = as_f32_c(X_embedded, ndim=2, name="X_embedded")
-    if x.shape[0] != emb.shape[0]:
-        raise ValueError(
-            f"mojolearn trustworthiness: X has {x.shape[0]} rows and "
-            f"X_embedded has {emb.shape[0]}"
-        )
-    for name, arr in (("X", x), ("X_embedded", emb)):  # glue: validates the two named arguments
-        if not all_finite(arr):
-            raise ValueError(
-                f"mojolearn trustworthiness: {name} contains NaN or "
-                "infinity; refused here (metrics/README.md HAND-OFF ask 3)"
-            )
-    if int(batch_size) < 1:
-        raise ValueError(
-            "mojolearn trustworthiness: batch_size must be at least 1, got "
-            f"{batch_size!r}"
-        )
-    # ORDER MATCHES bindings/_mojolearn_metrics.mojo::trustworthiness_binding.
-    # n, m, d, n_neighbors, batch_size
-    return float(
-        _get_binding().trustworthiness(
-            addr_ro(x, name="x"),
-            addr_ro(emb, name="emb"),
-            [
-                int(x.shape[0]),
-                int(x.shape[1]),
-                int(emb.shape[1]),
-                int(n_neighbors),
-                int(batch_size),
-            ],
-        )
-    )
+    return _NATIVE(None, "family_mcls_trustworthiness", (_get_binding(), X, X_embedded, n_neighbors, metric,
+                                                          batch_size), _NATIVE_CONTEXT)
 
 
 # ---------------------------------------------------------------------------
@@ -2130,3 +1882,22 @@ from ._expansion_metrics import (  # noqa: E402
     auc, average_precision_score, brier_score_loss, coverage_error, d2_brier_score, d2_log_loss_score, dcg_score, det_curve, hinge_loss, label_ranking_average_precision_score, label_ranking_loss, ndcg_score, roc_curve, top_k_accuracy_score,
     adjusted_mutual_info_score, calinski_harabasz_score, contingency_matrix, davies_bouldin_score, normalized_mutual_info_score, pair_confusion_matrix,
 )
+
+
+def _label_entries():
+    # glue: the base binding's label entries (`_buffer._native`'s
+    # `prepare_targets` and `gather_i32`), connected once at import; a
+    # connection error is raised by the first call that needs them
+    try:
+        with _backend.host_helper_scope():
+            base = _backend.binding("_mojolearn", mode="identical")
+        return {"prepare_targets": base.prepare_targets, "gather_i32": base.gather_i32}
+    except Exception as error:  # glue: kept as text for the native owner to raise
+        return f"ImportError: mojolearn metrics: the base binding's label entries are not connected: {error}"
+
+
+# The public functions above are one call each into the compiled owner of
+# the metrics (bindings/metrics_cls_native.mojo, `family_mcls_*`).
+from . import _native_family_bridge  # noqa: E402
+_NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
+_native_family_bridge.tables(family_mcls_labels=_label_entries())
