@@ -1,71 +1,29 @@
-"""Routing contract for the FAST resident binary-class output boundary."""
-import ctypes
-from types import SimpleNamespace
-
+"""predict_classes through the real public path (small inputs): whichever
+route serves the codes (the FAST resident class output or the probability
+path), they are the first-max class code of `predict_proba`."""
 import numpy as np
 import pytest
 
 from mojolearn import GradientBoosting
-from mojolearn._array import Array
-from mojolearn._buffer import as_f32_c
 
 
-def _model(mode):
-    model = GradientBoosting(loss="Logloss", numeric_mode=mode)
-    model.model_ = "model"
-    model.n_features_in_ = 1
-    model.approx_dim_ = 1
-    return model
+def _fit(mode, loss, k):
+    rng = np.random.default_rng(0)
+    X = rng.random((40, 4), dtype=np.float32)
+    y = np.minimum((X[:, 0] * k).astype(np.int32), k - 1).astype(np.float32)
+    model = GradientBoosting(loss=loss, n_estimators=4, max_depth=2, bootstrap_type="No",
+                             random_strength=0.0, numeric_mode=mode)
+    try:
+        model.fit(X, y)
+    except ImportError as error:
+        pytest.skip(f"this install has no {mode} GBDT binding: {error}")
+    return model, X
 
 
-@pytest.mark.skip(reason="`predict_classes` run in the native owner (bindings/host_archive_native.mojo, bindings/trees_public_gbdt.mojo) with the connected bindings; a patched Python `_bind` no longer reaches them")
-def test_fast_binary_predict_classes_uses_resident_codes(monkeypatch):
-    calls = []
-
-    def direct(handle, source, destination, params):
-        calls.append((handle, tuple(params)))
-        out = (ctypes.c_int64 * params[0]).from_address(destination)
-        for i, value in enumerate((0, 1, 0)):
-            out[i] = value
-        return params[0]
-
-    native = SimpleNamespace(gbdt_resident_binary_classes=direct)
-    model = _model("fast")
-    source = as_f32_c(np.ones((3, 1), np.float32), name="X")[0]
-    monkeypatch.setattr(model, "numeric_mode_used", lambda: "fast")
-    monkeypatch.setattr(model, "_bind", lambda *args: native)
-    monkeypatch.setattr(model, "_resident_handle", lambda binding: 17)
-    monkeypatch.setattr(model, "_check_fitted_layout", lambda X: (source, 3, True))
-    np.testing.assert_array_equal(model.predict_classes(source), [0, 1, 0])
-    assert calls == [(17, (3, 1))]
-
-
-@pytest.mark.skip(reason="`predict_classes` run in the native owner (bindings/host_archive_native.mojo, bindings/trees_public_gbdt.mojo) with the connected bindings; a patched Python `_bind` no longer reaches them")
-def test_reproducibility_tiers_and_multiclass_keep_probability_path(monkeypatch):
-    model = _model("identical")
-    monkeypatch.setattr(model, "numeric_mode_used", lambda: "identical")
-    monkeypatch.setattr(
-        model, "_bind",
-        lambda *args: SimpleNamespace(
-            gbdt_resident_binary_classes=lambda *args: (_ for _ in ()).throw(
-                AssertionError("reproducibility tier reached FAST class boundary")
-            )
-        ),
-    )
-    monkeypatch.setattr(
-        model, "predict_proba",
-        lambda X: Array.from_list([[0.5, 0.5], [0.25, 0.75]], "<f8"),
-    )
-    np.testing.assert_array_equal(model.predict_classes([[0.0], [1.0]]), [0, 1])
-
-    # FAST fuses narrow (at most three classes) symmetric multiclass output
-    # on the resident model; wider multiclass keeps the probability path.
-    model.loss = "MultiClass"
-    model.n_classes_ = 4
-    monkeypatch.setattr(model, "numeric_mode_used", lambda: "fast")
-    monkeypatch.setattr(
-        model, "predict_proba",
-        lambda X: Array.from_list(
-            [[0.4, 0.4, 0.1, 0.1], [0.1, 0.2, 0.6, 0.1]], "<f4"),
-    )
-    np.testing.assert_array_equal(model.predict_classes([[0.0], [1.0]]), [0, 2])
+@pytest.mark.parametrize("mode", ["identical", "fast"])
+@pytest.mark.parametrize("loss,k", [("Logloss", 2), ("MultiClass", 3), ("MultiClass", 4)])
+def test_predict_classes_is_the_argmax_of_predict_proba(mode, loss, k):
+    model, X = _fit(mode, loss, k)
+    proba = np.asarray(model.predict_proba(X))
+    assert proba.shape == (X.shape[0], k)
+    np.testing.assert_array_equal(np.asarray(model.predict_classes(X)), np.argmax(proba, axis=1))
