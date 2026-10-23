@@ -39,6 +39,7 @@ transforms from a saved model on a CPU without a GPU.
 from . import _backend, _native_archive_bridge, _native_family_bridge
 from ._mode import NumericModeMixin
 from ._mode import RegressorScoreMixin
+from ._metrics_impl import _get_binding
 
 #: The saved-model formats (lane/inference-linear-svm, 2026-09-15):
 #: `mojolearn.host_model(path)` predicts or transforms from each on a CPU.
@@ -252,6 +253,27 @@ class KernelRidge(RegressorScoreMixin, _KernelMethodBase):
             Predictions, 1-D when the fitted `y` was 1-D.
         """
         return _NATIVE(self, "family_km_krr_predict", (self._bind(), X), _NATIVE_CONTEXT)
+
+    def score(self, X, y, sample_weight=None):
+        """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,) or (n_samples, n_outputs)
+            True targets.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            R^2, averaged uniformly over outputs; 1.0 is a perfect fit.
+        """
+        return _NATIVE(self, "family_km_krr_score",
+                       (self._bind(), X, y, sample_weight, _get_binding(getattr(self, "numeric_mode", None))),
+                       _NATIVE_CONTEXT)
 
     # The fitted X and dual live on the device after the first predict,
     # under `_resident_holder` (bindings/kernel_methods_native.mojo). A

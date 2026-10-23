@@ -20,13 +20,14 @@
 # takes the entries it has, as before.
 from std.python import Python, PythonObject
 from core.scale_gamma_exact import scale_gamma_from_limbs, SGX_BAD
+from bindings.mcls_cluster import mcls_cluster_operation
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
     family_repr, family_is_str, family_is_int, family_is_real, family_type_name, family_call,
     family_entry, family_array, family_view, family_cast_view, family_as_f32, family_as_f32_dense,
-    family_owned, family_min, family_sample_weight, family_field,
+    family_owned, family_min, family_sample_weight, family_field, family_f32,
 )
 
 comptime _KERNEL_PRECOMPUTED = 4
@@ -546,6 +547,17 @@ def kernel_methods_operation(model: PythonObject, operation: String, args: Pytho
         return model
     if operation == "family_km_krr_predict":
         return _krr_predict(model, args, context)
+    if operation == "family_km_krr_score":
+        # `RegressorScoreMixin.score`: y as float32 (`as_f32_c(y, ndim=None,
+        # name="y")`), the native predict, then `metrics.r2_score(y, pred,
+        # sample_weight=..., numeric_mode=...)` through the metrics owner;
+        # args[4] is the metrics binding `_get_binding` resolved.
+        classical_connect_numpy(context)
+        var truth = family_f32(args[2], -1, "y", context)
+        var prediction = _krr_predict(model, args, context)
+        var mode = py_get(py_fields(model), PythonObject("numeric_mode"), PythonObject(None))
+        return mcls_cluster_operation("family_mcls_r2", Python.tuple(args[4], truth, prediction, args[3],
+                                      PythonObject("uniform_average"), PythonObject(True), mode), context)
     if operation == "family_km_nys_fit":
         _ = _nys_fit(model, args, context)
         return model
