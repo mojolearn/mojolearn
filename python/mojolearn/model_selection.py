@@ -2385,11 +2385,14 @@ def make_scorer(score_func, *, response_method='predict', greater_is_better=True
     >>> from mojolearn.model_selection import make_scorer
     >>> scorer = make_scorer(metrics.mean_absolute_error, greater_is_better=False)
     """
-    return _Scorer(score_func, 1 if greater_is_better else -1, kwargs, response_method, None)
+    return _NATIVE(None, "family_msel_make_scorer", (score_func, response_method, greater_is_better, kwargs),
+                   _NATIVE_CONTEXT)
 
 
 def _scorer_table():
-    from . import metrics as m
+    # glue: the fixed scorer table, built once at import (below) and read
+    # natively by `get_scorer` and `get_scorer_names`.
+    from . import _metrics_impl as m
     def s(fn, sign=1, rm='predict', name=None, **kw):
         return _Scorer(fn, sign, kw, rm, name)
     t = {
@@ -2446,7 +2449,7 @@ def get_scorer_names():
     >>> 'neg_mean_squared_error' in get_scorer_names()
     True
     """
-    return sorted(_scorer_table())  # glue: scorer table over the scorer names
+    return _NATIVE(None, "family_msel_scorer_names", (), _NATIVE_CONTEXT)
 
 
 def get_scorer(scoring):
@@ -2474,15 +2477,7 @@ def get_scorer(scoring):
     >>> from mojolearn.model_selection import get_scorer
     >>> scorer = get_scorer('r2')
     """
-    if scoring is None or callable(scoring):
-        return scoring
-    if isinstance(scoring, str):
-        table = _scorer_table()
-        if scoring not in table:
-            raise ValueError(f'{scoring!r} is not a valid scoring value. Use '
-                             'sklearn.metrics.get_scorer_names() to get valid options.')
-        return table[scoring]
-    raise ValueError(f'scoring must be a str, a callable or None, got {scoring!r}')
+    return _NATIVE(None, "family_msel_get_scorer", (scoring,), _NATIVE_CONTEXT)
 
 
 def _scorers(scoring):
@@ -3078,29 +3073,31 @@ class _BaseSearch:
                                  'is not fitted.')
         return self.best_estimator_
 
+    # The delegations and `score` are one native call each
+    # (bindings/model_selection_native.mojo): the refit check, then the
+    # best estimator's own method (or the search's scorer) on X.
     def predict(self, X):
         """Call ``predict`` on ``best_estimator_``."""
-        return self._best().predict(X)
+        return _NATIVE(self, "family_msel_delegate", ("predict", X), _NATIVE_CONTEXT)
 
     def predict_proba(self, X):
         """Call ``predict_proba`` on ``best_estimator_``."""
-        return self._best().predict_proba(X)
+        return _NATIVE(self, "family_msel_delegate", ("predict_proba", X), _NATIVE_CONTEXT)
 
     def decision_function(self, X):
         """Call ``decision_function`` on ``best_estimator_``."""
-        return self._best().decision_function(X)
+        return _NATIVE(self, "family_msel_delegate", ("decision_function", X), _NATIVE_CONTEXT)
 
     def transform(self, X):
         """Call ``transform`` on ``best_estimator_``."""
-        return self._best().transform(X)
+        return _NATIVE(self, "family_msel_delegate", ("transform", X), _NATIVE_CONTEXT)
 
     def score(self, X, y=None):
         """Score ``best_estimator_`` on X and y with the search's scorer.
 
         With several metrics, the metric named by ``refit`` is used.
         """
-        sc = get_scorer(self.scoring) if not self.multimetric_ else self.scorer_[self.refit]
-        return _score(self._best(), X, y, sc)
+        return _NATIVE(self, "family_msel_search_score", (X, y), _NATIVE_CONTEXT)
 
     @property
     def classes_(self):
@@ -3732,3 +3729,11 @@ def _y_free(splitter):
 # Import-time connection; constructing and sizing DeviceRows each hand off once.
 from ._native_arena_rows import connect as _connect_arena_rows
 _connect_arena_rows()
+
+# The compiled family owner (bindings/model_selection_native.mojo), connected
+# once at import, with the fixed tables it reads: the scorer table, the
+# scorer class `make_scorer` fills, and numbers.Real for the score check.
+from . import _native_family_bridge  # noqa: E402
+_NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
+_native_family_bridge.tables(family_msel_scorers=_scorer_table(), family_msel_scorer_class=_Scorer,
+                             family_msel_real=numbers.Real)
