@@ -9,6 +9,14 @@ from bindings.trees_public_score import forest_score
 from bindings.trees_public_iforest import iforest_operation
 from bindings.trees_public_boost import boost_operation
 from bindings.trees_public_mixin_score import boost_score
+from bindings.trees_public_gbdt_fit import (
+    gbdt_fit, catboost_auto_learning_rate_op, gbdt_inspect, gbdt_initialize, adapter_classifier_fit,
+    adapter_regressor_fit,
+)
+from bindings.trees_public_gbdt import (
+    gbdt_predict, gbdt_predict_proba, gbdt_predict_classes, gbdt_tree_metadata_op, ordered_rmse_fit,
+    feature_freq_fit, adapter_decision_function, adapter_predict, adapter_predict_proba, adapter_codes,
+)
 
 
 def trees_public_operation(model: PythonObject, operation: String, args: PythonObject,
@@ -32,7 +40,50 @@ def trees_public_operation(model: PythonObject, operation: String, args: PythonO
         return boost_score(model, args, context)
     if operation.startswith("trees_boost_"):
         return boost_operation(model, operation, args, context)
+    if operation.startswith("trees_gbdt_"):
+        return _gbdt_operation(model, operation, args, context)
     raise Error("unknown tree ensemble operation " + operation)
+
+
+def _gbdt_operation(model: PythonObject, operation: String, args: PythonObject,
+                    context: PythonObject) raises -> PythonObject:
+    """GradientBoosting, OrderedRMSE, ExperimentalTwoLevelFeatureFreq and
+    the scikit-learn GBDT adapters (bindings/trees_public_gbdt.mojo)."""
+    if operation == "trees_gbdt_init":
+        return gbdt_initialize(model, args, context)
+    if operation == "trees_gbdt_adapter_classifier_fit":
+        return adapter_classifier_fit(model, args, context)
+    if operation == "trees_gbdt_adapter_regressor_fit":
+        return adapter_regressor_fit(model, args, context)
+    if operation == "trees_gbdt_fit":
+        return gbdt_fit(model, args, context)
+    if operation == "trees_gbdt_params" or operation == "trees_gbdt_learning_rate" or operation == "trees_gbdt_boosting_type":
+        return gbdt_inspect(model, operation, args, context)
+    if operation == "trees_gbdt_auto_lr":
+        return catboost_auto_learning_rate_op(args, context)
+    if operation == "trees_gbdt_predict":
+        return gbdt_predict(model, args[0], context)
+    if operation == "trees_gbdt_predict_proba":
+        return gbdt_predict_proba(model, args[0], context)
+    if operation == "trees_gbdt_predict_classes":
+        return gbdt_predict_classes(model, args[0], context)
+    if operation == "trees_gbdt_leaf_counts":
+        return gbdt_tree_metadata_op(model, "counts", context)
+    if operation == "trees_gbdt_leaf_values":
+        return gbdt_tree_metadata_op(model, "values", context)
+    if operation == "trees_gbdt_ordered_fit":
+        return ordered_rmse_fit(model, args, context)
+    if operation == "trees_gbdt_feature_freq_fit":
+        return feature_freq_fit(model, args, context)
+    if operation == "trees_gbdt_adapter_decision":
+        return adapter_decision_function(model, args[0], context)
+    if operation == "trees_gbdt_adapter_predict":
+        return adapter_predict(model, args[0], context)
+    if operation == "trees_gbdt_adapter_proba":
+        return adapter_predict_proba(model, args[0], context)
+    if operation == "trees_gbdt_adapter_codes":
+        return adapter_codes(model, args[0], context)
+    raise Error("unknown gradient boosting operation " + operation)
 
 
 def py_unavailable(context: PythonObject) raises -> Bool:

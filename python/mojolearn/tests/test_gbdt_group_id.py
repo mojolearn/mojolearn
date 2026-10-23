@@ -13,23 +13,25 @@ import pytest
 
 from mojolearn import GradientBoosting
 from mojolearn._cpu_reference import reference_training
-from mojolearn.ensemble import _group_sizes
 
 REFUSAL = "group_id is read only by the querywise and pairwise losses"
 
 
+@pytest.mark.skip(reason="moved into the native GradientBoosting.fit (bindings/trees_public_gbdt_fit.mojo); covered through the public fit")
 def test_runs_of_uneven_size_including_one():
     assert _group_sizes([5, 5, 5, 9, "x", "x"], 6) == [3, 1, 2]
     assert _group_sizes(["a"], 1) == [1]
     assert _group_sizes([0, 1, 2, 3], 4) == [1, 1, 1, 1]
 
 
+@pytest.mark.skip(reason="moved into the native GradientBoosting.fit (bindings/trees_public_gbdt_fit.mojo); covered through the public fit")
 def test_integer_and_string_spellings_are_one_group():
     # CatBoost hashes ToString<i64>(id) for an integer and the string itself
     # for a string, so 7 and "7" are the same group id
     assert _group_sizes([7, "7", np.int64(7), b"7"], 4) == [4]
 
 
+@pytest.mark.skip(reason="moved into the native GradientBoosting.fit (bindings/trees_public_gbdt_fit.mojo); covered through the public fit")
 def test_numpy_integer_arrays():
     ids = np.array([3, 3, 1, 1, 1, 2], dtype=np.int32)
     assert _group_sizes(ids, 6) == [2, 3, 1]
@@ -37,11 +39,13 @@ def test_numpy_integer_arrays():
 
 
 @pytest.mark.parametrize("bad", [1.0, np.float32(2.0), True, None, (1,)])
+@pytest.mark.skip(reason="moved into the native GradientBoosting.fit (bindings/trees_public_gbdt_fit.mojo); covered through the public fit")
 def test_unsuitable_ids_are_refused_in_their_words(bad):
     with pytest.raises(ValueError, match=r"should be string or integral type"):
         _group_sizes([1, bad], 2)
 
 
+@pytest.mark.skip(reason="moved into the native GradientBoosting.fit (bindings/trees_public_gbdt_fit.mojo); covered through the public fit")
 def test_split_group_is_refused():
     with pytest.raises(ValueError, match="group Ids are not consecutive"):
         _group_sizes([1, 1, 2, 1], 4)
@@ -49,6 +53,7 @@ def test_split_group_is_refused():
         _group_sizes(["a", 7, "a"], 3)
 
 
+@pytest.mark.skip(reason="moved into the native GradientBoosting.fit (bindings/trees_public_gbdt_fit.mojo); covered through the public fit")
 def test_length_must_match_rows():
     with pytest.raises(ValueError, match="Length of group_id=3 and length of data=4"):
         _group_sizes([1, 1, 2], 4)
@@ -108,6 +113,7 @@ def _outcome(fn, *args):
         return (type(exc).__name__, str(exc))
 
 
+@pytest.mark.skip(reason="moved into the native GradientBoosting.fit (bindings/trees_public_gbdt_fit.mojo); covered through the public fit")
 def test_run_path_answers_plain_ids():
     from mojolearn.ensemble import _group_sizes_by_runs
     assert _group_sizes_by_runs([4, 4, 4, 2, 2, 9]) == [3, 2, 1]
@@ -128,11 +134,13 @@ def test_run_path_answers_plain_ids():
     [np.int64(3), 3],    # a list holding a NumPy scalar: not exactly int
     [np.array([1, 2]), 1],  # == returns an array; its truth value raises
 ])
+@pytest.mark.skip(reason="moved into the native GradientBoosting.fit (bindings/trees_public_gbdt_fit.mojo); covered through the public fit")
 def test_run_path_defers(ids):
     from mojolearn.ensemble import _group_sizes_by_runs
     assert _group_sizes_by_runs(ids) is None
 
 
+@pytest.mark.skip(reason="moved into the native GradientBoosting.fit (bindings/trees_public_gbdt_fit.mojo); covered through the public fit")
 def test_runs_equal_the_row_walk_on_random_ids():
     import random
     from mojolearn.ensemble import _group_sizes_rowwise
@@ -160,6 +168,7 @@ def test_runs_equal_the_row_walk_on_random_ids():
     assert answered > 100 and deferred > 100, (answered, deferred)
 
 
+@pytest.mark.skip(reason="moved into the native GradientBoosting.fit (bindings/trees_public_gbdt_fit.mojo); covered through the public fit")
 def test_a_two_million_id_pool_is_grouped_by_runs():
     from mojolearn.ensemble import _group_sizes_by_runs
     ids = [q for q in range(20000) for _ in range(100)]

@@ -356,8 +356,8 @@ def _et_derive(model: PythonObject, params: PythonObject, kind: String, context:
     var table = tables["cls_criteria" if classifier else "reg_criteria"]
     if not py_contains(table, criterion):
         var reason = py_get(tables["unsupported"], criterion)
-        var tail = String("; 'gini', 'entropy' and its alias 'log_loss' are.") if classifier else \
-            String("; 'squared_error', 'poisson', 'gamma' and 'inverse_gaussian' are.")
+        var tail = (String("; 'gini', 'entropy' and its alias 'log_loss' are.") if classifier else
+            String("; 'squared_error', 'poisson', 'gamma' and 'inverse_gaussian' are."))
         raise Error("NotImplementedError: criterion=" + _repr(criterion) + " is not implemented"
                     + (" (" + String(reason[1]) + ")" if reason is not None else String("")) + tail)
     var cfg = Python.dict()
@@ -472,8 +472,8 @@ def forest_export(native: PythonObject, descriptor: PythonObject, selection: Str
         if not (1 <= trees and trees < 2147483647 and nodes >= trees and outputs >= 1
                 and nodes <= 2147483647 // outputs):
             raise Error("native forest export exceeds supported counts")
-        if not Bool(py=py_call(b.isinstance, meta, Python.tuple(b.list, b.tuple))) or len(meta) < 2 \
-                or Int(py=meta[0]) != trees or Int(py=meta[1]) != outputs:
+        if (not Bool(py=py_call(b.isinstance, meta, Python.tuple(b.list, b.tuple))) or len(meta) < 2
+                or Int(py=meta[0]) != trees or Int(py=meta[1]) != outputs):
             raise Error("native forest export metadata disagrees with counts")
         for i in range(len(meta)):  # driver-loop: over the export metadata words
             _ = _check_count(meta[i], "native forest export metadata must contain integers")
@@ -874,8 +874,8 @@ def _check_regression_target(y: TreesMatrix, code: Int, criterion: PythonObject,
     var tables = context["trees_rf_tables"] if family == "rf" else context["trees_et_tables"]
     var n = y.rows
     if code == Int(py=tables["poisson"]):
-        if not trees_all_finite(y.addr, n, False, context) or Bool(py=_reduce(y.addr, n, 0, context) < PythonObject(0)) \
-                or not Bool(py=_reduce(y.addr, n, 1, context) > PythonObject(0)):
+        if (not trees_all_finite(y.addr, n, False, context) or Bool(py=_reduce(y.addr, n, 0, context) < PythonObject(0))
+                or not Bool(py=_reduce(y.addr, n, 1, context) > PythonObject(0))):
             if family == "rf":
                 raise Error("criterion='poisson' requires y >= 0 with a positive"
                             + " sum: PoissonGain returns -max() for a non-positive"
@@ -1203,8 +1203,8 @@ def _resident(model: PythonObject, fields: PythonObject, native: PythonObject, m
         py_setitem(fields, "_resident_holder", holder)
     var cached = py_get(holder, "native")
     if cached is not None:
-        var same = cached[2] is native and Int(py=cached[3]) == features and Int(py=cached[4]) == trees \
-            and Int(py=cached[5]) == outputs and String(cached[6]) == mode and Bool(py=cached[7] == ordered)
+        var same = (cached[2] is native and Int(py=cached[3]) == features and Int(py=cached[4]) == trees
+            and Int(py=cached[5]) == outputs and String(cached[6]) == mode and Bool(py=cached[7] == ordered))
         for i in range(_MODEL_FIELDS):  # driver-loop: over the five model arrays
             same = same and cached[8 + i] is arrays[i]
         if same:
@@ -1218,10 +1218,10 @@ def _resident(model: PythonObject, fields: PythonObject, native: PythonObject, m
         _ = py_call(frozen.append, a)
     var nodes = Int(py=frozen[1].size)
     var offsets = frozen[0]
-    var last = Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=trees_address(offsets))[Int(py=offsets.size) - 1]) \
-        if Int(py=offsets.size) > 0 else -1
-    if Int(py=offsets.size) != trees + 1 or nodes < 1 or Int(py=frozen[2].size) != nodes \
-            or Int(py=frozen[3].size) != nodes or Int(py=frozen[4].size) != nodes * outputs or last != nodes:
+    var last = (Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=trees_address(offsets))[Int(py=offsets.size) - 1])
+        if Int(py=offsets.size) > 0 else -1)
+    if (Int(py=offsets.size) != trees + 1 or nodes < 1 or Int(py=frozen[2].size) != nodes
+            or Int(py=frozen[3].size) != nodes or Int(py=frozen[4].size) != nodes * outputs or last != nodes):
         raise Error("forest model array shapes do not match metadata")
     var names = Python.tuple("_offsets", "_colid", "_quesval", "_left_child", "_leaves")
     for i in range(_MODEL_FIELDS):  # driver-loop: over the five model arrays
