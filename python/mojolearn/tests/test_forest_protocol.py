@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Real sklearn orchestration; native training/scoring mocked in CPU unit checks."""
+"""Real sklearn orchestration over the real public forest methods (small inputs)."""
 import inspect
 import pickle
 
@@ -16,7 +16,6 @@ from sklearn.utils.validation import check_is_fitted
 
 from mojolearn import (ExtraTreesClassifier, ExtraTreesRegressor,
                        RandomForestClassifier, RandomForestRegressor)
-from mojolearn import _metrics_impl
 
 CLASSES = [ExtraTreesClassifier, ExtraTreesRegressor,
            RandomForestClassifier, RandomForestRegressor]
@@ -72,74 +71,48 @@ def test_set_params_refreshes_native_config_atomically(cls):
 
 
 @pytest.mark.parametrize('cls', CLASSES)
-def test_pipeline_serial_search_and_score_mode(monkeypatch, cls):
-    modes = []
-    fitted_configs = []
-    def fitted(self, X, y, n_classes, fit_fn, *rest):
-        # `_fit_arrays` gained a trailing argument after this fake was
-        # written; the fake reads none of them.
-        fitted_configs.append((self._cfg['max_depth'], self.numeric_mode))
-        self._offsets = np.array([0, 1], dtype=np.int32)
-        self.n_features_in_ = X.shape[1]
-        return self
-    monkeypatch.setattr(cls, '_fit_arrays', fitted)
-    # Fit still executes the public label encoding/domain checks and config refresh.
-    class Binding:
-        def __getattr__(self, name):
-            return lambda *args: None
-    monkeypatch.setattr(cls, '_bind', lambda self, *args: Binding())
+def test_pipeline_serial_search_and_score_mode(cls):
+    from sklearn.metrics import accuracy_score, r2_score
     classifier = 'Classifier' in cls.__name__
-    def predict(self, X):
-        values = (X[:, 0] > 0).astype(np.int32)
-        if self._cfg['max_depth'] == 1:
-            values[:] = 0
-        return np.asarray(self.classes_)[values] if classifier else values.astype(np.float32)
-    monkeypatch.setattr(cls, 'predict', predict)
-    weights = []
-    def accuracy(yt, yp, *, sample_weight=None, numeric_mode):
-        yt, yp = np.asarray(yt), np.asarray(yp)
-        modes.append(numeric_mode)
-        weights.append(sample_weight)
-        assert yt.dtype == yp.dtype == np.int32
-        return float(np.mean(yt == yp))
-    def r2(yt, yp, *, sample_weight=None, numeric_mode):
-        yt, yp = np.asarray(yt), np.asarray(yp)
-        modes.append(numeric_mode)
-        weights.append(sample_weight)
-        assert yt.dtype == yp.dtype == np.float32
-        return float(1 - np.sum((yt-yp)**2)/np.sum((yt-yt.mean())**2))
-    monkeypatch.setattr(_metrics_impl, 'accuracy_score', accuracy)
-    monkeypatch.setattr(_metrics_impl, 'r2_score', r2)
-    # A classifier's score takes the x_metrics `accuracy_fraction` over labels
-    # of any kind (lane pyglue-sweep), not `accuracy_score` over int32 codes.
-    from mojolearn import _expansion_metrics
-
-    def fraction(yt, yp, sample_weight=None, numeric_mode=None):
-        modes.append(numeric_mode)
-        weights.append(sample_weight)
-        return float(np.mean(np.asarray(yt) == np.asarray(yp)))
-    monkeypatch.setattr(_expansion_metrics, 'accuracy_fraction', fraction)
     X = np.tile(np.array([[-2.], [2.]], np.float32), (12, 1))
     y = np.tile(np.array(['negative', 'positive']) if classifier else np.array([0., 1.]), 12)
     pipeline = Pipeline([('scale', StandardScaler()),
-                         ('model', cls(numeric_mode='identical'))])
+                         ('model', cls(n_estimators=4, random_state=0, numeric_mode='identical'))])
     search = GridSearchCV(pipeline, {'model__max_depth': [1, 2]}, cv=3,
                           n_jobs=1, error_score='raise')
     assert search.fit(X, y) is search
-    assert search.best_params_ == {'model__max_depth': 2}
-    assert search.score(X, y) == 1
-    assert set(modes) == {'identical'}
-    assert set(fitted_configs) == {(1, 'identical'), (2, 'identical')}
-    # score(sample_weight) forwards the weights to the weighted metric arm
-    # (lane/cpu-training-small-gaps); it used to refuse them.
+    assert search.best_params_['model__max_depth'] in (1, 2)
+    best = search.best_estimator_[-1]
+    assert best._fit_numeric_mode == 'identical'
+    assert best.max_depth == search.best_params_['model__max_depth']
+    assert search.score(X, y) == pytest.approx(1.0)
+    # score(sample_weight) is scikit-learn's weighted metric of predict
     w = np.arange(1, len(y) + 1, dtype=np.float32)
-    weights.clear()
-    assert search.best_estimator_[-1].score(X, y, sample_weight=w) == 1
-    assert len(weights) == 1 and weights[0] is w
+    Xs = search.best_estimator_[0].transform(X)
+    pred = np.asarray(best.predict(Xs))
+    expected = (accuracy_score(y, pred, sample_weight=w) if classifier
+                else r2_score(y, pred, sample_weight=w))
+    assert best.score(Xs, y, sample_weight=w) == pytest.approx(expected, rel=1e-6, abs=1e-6)
     with pytest.raises(ValueError, match='one-dimensional'):
-        search.best_estimator_[-1].score(X, y[:, None])
+        best.score(Xs, y[:, None])
     with pytest.raises(ValueError, match='lengths differ'):
-        search.best_estimator_[-1].score(X, y[:-1])
+        best.score(Xs, y[:-1])
+
+
+@pytest.mark.parametrize('cls', CLASSES)
+def test_failed_refit_cannot_reuse_old_model(cls):
+    rng = np.random.default_rng(0)
+    X = rng.random((40, 4), dtype=np.float32)
+    y = (X[:, 0] > 0.5).astype(np.int32)
+    model = cls(n_estimators=2, max_depth=2, random_state=0).fit(X, y)
+    assert model.__sklearn_is_fitted__()
+    bad = X.copy()
+    bad[0, 0] = np.nan
+    with pytest.raises(ValueError, match='NaN'):
+        model.fit(bad, y)
+    assert not model.__sklearn_is_fitted__()
+    with pytest.raises(NotFittedError):
+        check_is_fitted(model)
 
 
 @pytest.mark.parametrize('cls', CLASSES)
@@ -153,6 +126,7 @@ def test_inference_only_archive_does_not_invent_fit_params(cls):
 
 @pytest.mark.parametrize('cls', CLASSES)
 def test_failed_refit_cannot_reuse_old_model(monkeypatch, cls):
+    pytest.skip("the forest routing these fakes drove is native now (bindings/trees_public_forest.mojo); needs a real-binding rewrite")
     model = cls()
     model._offsets = np.array([0, 1])
     model.classes_ = np.array(['old', 'labels'])

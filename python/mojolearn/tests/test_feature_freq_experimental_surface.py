@@ -1,25 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Lightweight Python-policy gate for the experimental FeatureFreq surface."""
-
-import ctypes
+"""The experimental FeatureFreq surface through the real public fit (small inputs)."""
 
 import numpy as np
 import pytest
 
 from mojolearn import ExperimentalTwoLevelFeatureFreq
-
-
-class _FakeBinding:
-    def __init__(self):
-        self.params = None
-
-    def gbdt_fit_two_level_feature_freq(self, x, y, weights, sources, params):
-        assert x and y and weights and sources
-        self.weights = np.ctypeslib.as_array(
-            (ctypes.c_float * params[2]).from_address(weights)
-        ).copy()
-        self.params = list(params)
-        return "tensor-model-text"
 
 
 def test_experimental_feature_freq_validates_and_forwards():
@@ -28,15 +13,18 @@ def test_experimental_feature_freq_validates_and_forwards():
         dtype=np.float32,
     )
     y = np.asarray([-5, -3, 3, 5], dtype=np.float32)
-    binding = _FakeBinding()
-    est = ExperimentalTwoLevelFeatureFreq(
-        sources=[0, 1], learning_rate=0.2, l2_leaf_reg=4.0, random_state=7
-    )
-    est._bind = lambda _name: binding
-    assert est.fit(X, y) is est
-    assert est.model_ == "tensor-model-text"
-    assert binding.params == [4, 3, 0, 2, 0.2, 4.0, 7]
+
+    def fit(**kw):
+        est = ExperimentalTwoLevelFeatureFreq(sources=[0, 1], l2_leaf_reg=4.0, random_state=7, **kw)
+        assert est.fit(X, y) is est
+        return est
+
+    est = fit(learning_rate=0.2)
+    assert est.model_
     assert est.n_features_in_ == 3
+    assert fit(learning_rate=0.2).model_ == est.model_
+    # the options reach the fit
+    assert fit(learning_rate=0.5).model_ != est.model_
 
 
 @pytest.mark.parametrize(
@@ -85,13 +73,11 @@ def test_experimental_feature_freq_forwards_weights():
     X = np.asarray(
         [[0, 0], [0, 1], [1, 0], [1, 1]], dtype=np.float32
     )
-    binding = _FakeBinding()
-    est = ExperimentalTwoLevelFeatureFreq(sources=[0, 1])
-    est._bind = lambda _name: binding
-    est.fit(
-        X,
-        np.asarray([-2, -1, 1, 2], dtype=np.float32),
-        sample_weight=np.asarray([1, 2, 3, 4], dtype=np.float32),
-    )
-    assert binding.params[:4] == [4, 2, 4, 2]
-    np.testing.assert_array_equal(binding.weights, [1, 2, 3, 4])
+    y = np.asarray([-2, -1, 1, 2], dtype=np.float32)
+
+    def model(weights):
+        return ExperimentalTwoLevelFeatureFreq(sources=[0, 1]).fit(X, y, sample_weight=weights).model_
+
+    unit = ExperimentalTwoLevelFeatureFreq(sources=[0, 1]).fit(X, y).model_
+    assert model(np.ones(4, np.float32)) == unit
+    assert model(np.asarray([1, 2, 3, 4], dtype=np.float32)) != unit

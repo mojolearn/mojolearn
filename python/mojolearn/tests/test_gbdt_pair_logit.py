@@ -13,7 +13,6 @@ import pytest
 
 from mojolearn import GradientBoosting
 from mojolearn._cpu_reference import reference_training
-from mojolearn.ensemble import _pairs_arrays
 
 
 def _fixture(n=240, d=4, seed=11):
@@ -106,22 +105,29 @@ def test_refusals_by_name():
         _model().fit(X, rel, group_id=g, pairs=[(0, X.shape[0] - 1)])
 
 
+@reference_training()
 def test_pairs_validation():
-    flat, w = _pairs_arrays([(3, 1), [0, 2]], None, 4)
-    assert (list(flat), list(w)) == ([3, 1, 0, 2], [1.0, 1.0])
-    flat, w = _pairs_arrays(np.array([[1, 0]]), [2.5], 2)
-    assert (list(flat), list(w)) == ([1, 0], [2.5])
-    with pytest.raises(ValueError, match="isn't equal to 2"):
-        _pairs_arrays([(1, 2, 3)], None, 4)
-    with pytest.raises(ValueError, match="must be an integer"):
-        _pairs_arrays([(1.0, 2)], None, 4)
-    with pytest.raises(ValueError, match="outside the 4 rows"):
-        _pairs_arrays([(1, 4)], None, 4)
-    with pytest.raises(ValueError, match="with itself"):
-        _pairs_arrays([(2, 2)], None, 4)
-    with pytest.raises(ValueError, match="is not equal to len\\(pairs\\)"):
-        _pairs_arrays([(0, 1)], [1.0, 2.0], 4)
-    with pytest.raises(ValueError, match="finite nonnegative"):
-        _pairs_arrays([(0, 1)], [-1.0], 4)
-    with pytest.raises(ValueError, match="pairs is empty"):
-        _pairs_arrays([], None, 4)
+    X, rel, g = _fixture()
+    n = X.shape[0]
+    pairs = _generated_pairs(rel, g)
+    # a list of tuples, a list of lists and an int array are the same pairs;
+    # no pairs_weight is unit weights
+    base = np.asarray(_model(n_estimators=2).fit(X, rel, group_id=g, pairs=pairs).predict(X))
+    for same in ([list(p) for p in pairs], np.asarray(pairs, dtype=np.int64)):
+        got = np.asarray(_model(n_estimators=2).fit(X, rel, group_id=g, pairs=same).predict(X))
+        assert got.tobytes() == base.tobytes()
+    unit = np.ones(len(pairs), dtype=np.float32)
+    got = np.asarray(_model(n_estimators=2).fit(X, rel, group_id=g, pairs=pairs, pairs_weight=unit).predict(X))
+    assert got.tobytes() == base.tobytes()
+
+    def refused(match, pairs, pairs_weight=None):
+        with pytest.raises(ValueError, match=match):
+            _model(n_estimators=2).fit(X, rel, group_id=g, pairs=pairs, pairs_weight=pairs_weight)
+
+    refused("isn't equal to 2", [(1, 2, 3)])
+    refused("must be an integer", [(1.0, 2)])
+    refused(f"outside the {n} rows", [(1, n)])
+    refused("with itself", [(2, 2)])
+    refused("is not equal to len\\(pairs\\)", [(0, 1)], [1.0, 2.0])
+    refused("finite nonnegative", [(0, 1)], [-1.0])
+    refused("pairs is empty", [])

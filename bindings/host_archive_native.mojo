@@ -5,7 +5,8 @@
 from std.python import Python, PythonObject
 from std.memory import bitcast
 from std.math import isfinite
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains, py_setattr
+from bindings.trees_public_iforest import iforest_validate
 from bindings.sequential_description import sequential_fields
 from bindings.classical_archive_read import classical_archive_read, classical_archive_build, _archive_exact as _raw_archive_exact, _archive_string, _archive_read_repr, _archive_builtin_repr
 from bindings.classical_arrays import classical_i64, classical_f64, classical_wrap_array, classical_array, classical_address, _store_code
@@ -1305,6 +1306,66 @@ def host_archive_iforest(cls: PythonObject, arrays: PythonObject, context: Pytho
     return model
 
 
+def host_archive_public_iforest(cls: PythonObject, arrays: PythonObject, path: PythonObject,
+                                context: PythonObject) raises -> PythonObject:
+    """`IsolationForest.load(path)`: the public loader's refusals in its
+    order and wording; the saved knobs pass through the constructor's checks
+    again (`iforest_validate`, the native `_validate_params`), then the saved
+    mode, the training matrix and the fitted scalars."""
+    var b = Python.import_module("builtins")
+    var where = host_archive_where(path, context)
+    var ints = _archive_exact(arrays, "ints", "<i8", context)
+    var reals = _archive_exact(arrays, "reals", "<f8", context)
+    if Int(py=ints.size) != 11 or Int(py=reals.size) != 4:
+        raise Error(where + " holds " + String(Int(py=ints.size)) + " ints and " + String(Int(py=reals.size))
+                    + " reals, 11 and 4 are needed")
+    var trees = classical_i64(ints, 0)
+    var samples_mode = classical_i64(ints, 1)
+    var samples_int = classical_i64(ints, 2)
+    var depth = classical_i64(ints, 3)
+    var features_mode = classical_i64(ints, 4)
+    var features_int = classical_i64(ints, 5)
+    var bootstrap = classical_i64(ints, 6)
+    var seed = classical_i64(ints, 7)
+    var auto_contamination = classical_i64(ints, 8)
+    var nf = classical_i64(ints, 9)
+    var resolved = classical_i64(ints, 10)
+    var samples_frac = classical_f64(reals, 0)
+    var features_frac = classical_f64(reals, 1)
+    var contamination = classical_f64(reals, 2)
+    var offset = classical_f64(reals, 3)
+    if (samples_mode < 0 or samples_mode > 2 or features_mode < 0 or features_mode > 1
+            or auto_contamination < 0 or auto_contamination > 1 or bootstrap < 0 or bootstrap > 1):
+        raise Error(where + " carries an unknown knob mode")
+    var model = host_archive_allocate(cls, context)
+    var fields = sequential_fields(model)
+    # What `cls(n_estimators=..., ...)` stores: the eleven parameters, then
+    # the numeric mode the constructor wrapper adds.
+    py_setitem(fields, "n_estimators", trees)
+    py_setitem(fields, "max_samples", PythonObject("auto") if samples_mode == 0 else (PythonObject(samples_int) if samples_mode == 1 else PythonObject(samples_frac)))
+    py_setitem(fields, "max_depth", PythonObject(None) if depth == -1 else PythonObject(depth))
+    py_setitem(fields, "max_features", PythonObject(features_int) if features_mode == 1 else PythonObject(features_frac))
+    py_setitem(fields, "bootstrap", PythonObject(bootstrap != 0))
+    py_setitem(fields, "contamination", PythonObject("auto") if auto_contamination != 0 else PythonObject(contamination))
+    py_setitem(fields, "random_state", seed)
+    py_setitem(fields, "warm_start", PythonObject(False))
+    py_setitem(fields, "n_jobs", PythonObject(None))
+    py_setitem(fields, "verbose", PythonObject(False))
+    py_setitem(fields, "output_type", PythonObject(None))
+    py_setitem(fields, "numeric_mode", PythonObject(None))
+    iforest_validate(model, fields, context)
+    host_archive_mode(arrays, fields, context)
+    var x = _archive_exact(arrays, "x", "<f4", context)
+    if Int(py=x.ndim) != 2 or Int(py=x.shape[1]) != nf or Int(py=x.shape[0]) < 1:
+        raise Error(where + " x has shape " + _archive_builtin_repr(py_call(b.tuple, x.shape)) + ", meta says "
+                    + String(nf) + " features")
+    py_setitem(fields, "_x", x)
+    py_setitem(fields, "n_features_in_", nf)
+    py_setitem(fields, "offset_", offset)
+    py_setitem(fields, "max_samples_", resolved)
+    return model
+
+
 def host_archive_spectral(cls: PythonObject, arrays: PythonObject, path: PythonObject,
                           context: PythonObject) raises -> PythonObject:
     """SpectralClustering.load: the refusals keep the Python loader's
@@ -2263,6 +2324,7 @@ def host_archive_public_forest(cls: PythonObject, arrays: PythonObject, fmt: Str
     # The 0.8.55 `ForestProtocol._restore_inference_metadata`.
     if fmt.endswith("-parallel-groves-1"):
         py_setitem(fields, "inference_engine", "parallel_groves")
+        py_setitem(fields, "inference_engine_", "parallel_groves")
         var mode = py_call(py_call(_archive_string(arrays, "numeric_mode", context).strip).lower)
         if String(py=mode) != "fast" and String(py=mode) != "identical":
             raise Error("numeric_mode must be fast, identical or None")
@@ -2270,6 +2332,7 @@ def host_archive_public_forest(cls: PythonObject, arrays: PythonObject, fmt: Str
         py_setitem(fields, "_fit_numeric_mode", mode)
     else:
         py_setitem(fields, "inference_engine", "sequential")
+        py_setitem(fields, "inference_engine_", "sequential")
     py_setitem(fields, "_offsets", _archive_exact(arrays, "offsets", "<i4", context))
     py_setitem(fields, "_colid", _archive_exact(arrays, "colid", "<i4", context))
     py_setitem(fields, "_quesval", _archive_exact(arrays, "quesval", "<f4", context))
@@ -2287,6 +2350,13 @@ def host_archive_public_forest(cls: PythonObject, arrays: PythonObject, fmt: Str
         var classes = host_archive_class_values(arrays["classes"], context)
         py_setitem(fields, "classes_", classes)
         py_setitem(fields, "n_classes_", len(classes))
+    # The former `_mojolearn_after_fit` after a load: the five model arrays
+    # frozen (the loaded Arrays are the archive's own fresh storage) and an
+    # empty resident snapshot holder.
+    var model_names = Python.tuple("_offsets", "_colid", "_quesval", "_left_child", "_leaves")
+    for i in range(5):  # small-loop(model_names): the five model array names
+        py_setattr(fields[model_names[i]], "_readonly", PythonObject(True))
+    py_setitem(fields, "_resident_holder", Python.dict())
     return model
 
 
@@ -2355,6 +2425,93 @@ def host_archive_gbdt(cls: PythonObject, arrays: PythonObject, context: PythonOb
     py_setitem(fields, "is_classifier", py_contains(context["host_archive_gbdt_classification_losses"], loss))
     py_setitem(fields, "has_proba", py_contains(context["host_archive_gbdt_proba_losses"], loss))
     py_setitem(fields, "_binding", module)
+    return model
+
+
+def _archive_one_string(value: PythonObject) raises -> PythonObject:
+    """`ensemble._one_string`: the single str a loaded member holds, or
+    None."""
+    var b = Python.import_module("builtins")
+    var item = value
+    while py_type(item) is b.list or py_type(item) is b.tuple:  # driver-loop: over the nesting depth of a stored string field
+        if len(item) != 1:
+            return PythonObject(None)
+        item = item[0]
+    if py_type(item) is b.str:
+        return item
+    return PythonObject(None)
+
+
+def host_archive_public_gbdt(cls: PythonObject, arrays: PythonObject, path: PythonObject,
+                             context: PythonObject) raises -> PythonObject:
+    """`GradientBoosting.load` (and OrderedRMSE / FeatureFreq, which
+    inherit it): the model exactly as the Python loader built it from
+    `cls.__new__(cls)`, with its refusals in its order. The output
+    dimension comes from the model text through the GBDT binding's
+    `gbdt_model_dim` (or, for a CTR text on the CPU binding, the native
+    text reader), as the loader read it."""
+    var b = Python.import_module("builtins")
+    var saved = _archive_string(arrays, "estimator", context)
+    if String(py=saved) != String(py=cls.__name__):
+        raise Error(host_archive_where(path, context) + " was saved by " + String(saved) + ", not " + String(cls.__name__))
+    var model = host_archive_allocate(cls, context)
+    var fields = sequential_fields(model)
+    py_setitem(fields, "numeric_mode", PythonObject(None))
+    if py_contains(arrays, "numeric_mode"):
+        var mode = _archive_one_string(arrays["numeric_mode"])
+        if mode is None:
+            raise Error("mojolearn: saved numeric_mode must be one string")
+        if String(mode) != "fast" and String(mode) != "identical":
+            raise Error("mojolearn: invalid saved numeric_mode " + _archive_builtin_repr(mode))
+        py_setitem(fields, "numeric_mode", mode)
+    py_setitem(fields, "loss", _archive_string(arrays, "loss", context))
+    var stored = _archive_exact(arrays, "model", "<u1", context)
+    var text = py_call(py_call(b.bytes, stored._mv).decode, "utf-8")
+    py_setitem(fields, "model_", text)
+    var meta = _archive_exact(arrays, "meta", "<i8", context)
+    py_setitem(fields, "n_features_in_", host_archive_meta_word(meta, 0))
+    # `obj._bind("_mojolearn_gbdt")`: the saved mode, else the process default.
+    var mode = fields["numeric_mode"]
+    if mode is None:
+        mode = context["backend_fields"]["_DEFAULT_MODE"]
+    var tables = py_get(context, "host_archive_gbdt_bindings")
+    if tables is None:
+        raise Error("ImportError: mojolearn: the GBDT binding is not connected to the archive owner")
+    var table = py_get(tables, PythonObject(String(py_call(py_call(mode.strip).lower))))
+    if table is None:
+        raise Error("numeric_mode must be fast, identical or None")
+    if py_type(table) is b.str:
+        raise Error(String(table))
+    var t = String(text)
+    var ctr = ("\nctr_columns " in t or t.startswith("ctr_columns ") or "\nctr_table " in t or t.startswith("ctr_table ")
+               or "\ntensor_ctr_registry " in t or t.startswith("tensor_ctr_registry "))
+    var vendor = py_get(table, "gbdt_vendor")
+    var cpu = vendor is not None and String(py_call(b.str, py_call(vendor))) == "cpu"
+    var dim = 0
+    if ctr and cpu:
+        dim = Int(py=host_archive_gbdt_state(text, context)["dim"])
+    else:
+        var entry = py_get(table, "gbdt_model_dim")
+        if entry is None:
+            raise Error("AttributeError: the GBDT binding has no gbdt_model_dim")
+        dim = Int(py=py_call(entry, text))
+    py_setitem(fields, "approx_dim_", PythonObject(dim))
+    var saved_dim = host_archive_meta_word(meta, 1)
+    if dim != saved_dim:
+        raise Error(host_archive_where(path, context) + " stores approx_dim " + String(saved_dim) + " but "
+                    + "its model text holds " + String(dim) + "; the file is "
+                    + "corrupt")
+    var classes = host_archive_meta_word(meta, 2)
+    py_setitem(fields, "n_classes_", PythonObject(None) if classes < 0 else PythonObject(classes))
+    var best = host_archive_meta_word(meta, 3)
+    py_setitem(fields, "best_iteration_", PythonObject(None) if best < 0 else PythonObject(best))
+    py_setitem(fields, "stopped_early_", PythonObject(host_archive_meta_word(meta, 4) != 0))
+    var bias = _archive_exact(arrays, "bias", "<f8", context)
+    if Int(py=bias.size) < 1:
+        raise Error("IndexError: list index out of range")
+    py_setitem(fields, "bias_", PythonObject(classical_f64(bias, 0)))
+    py_setitem(fields, "loss_curve_", PythonObject(None))
+    py_setitem(fields, "test_loss_curve_", PythonObject(None))
     return model
 
 
@@ -2480,6 +2637,8 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         # Native equivalent of the original loader's _mojolearn_after_fit:
         # a newly restored CPU neighbor model owns an empty query holder.
         py_setitem(sequential_fields(model), "_resident_holder", Python.dict())
+    elif fmt == "mojolearn-iforest-1" and public_owner is not None:
+        model = host_archive_public_iforest(cls, arrays, path, context)
     elif fmt == "mojolearn-iforest-1":
         model = host_archive_iforest(cls, arrays, context)
     elif fmt == "mojolearn-spectral-1":
@@ -2494,6 +2653,8 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         model = host_archive_svm(cls, arrays, fmt == "mojolearn-svc-1", path, context)
     elif public_owner is not None and (fmt.startswith("mojolearn-randomforest-1") or fmt.startswith("mojolearn-extratrees-1")):
         model = host_archive_public_forest(cls, arrays, fmt, fmt.startswith("mojolearn-extratrees-1"), path, context)
+    elif public_owner is not None and fmt == "mojolearn-gbdt-1":
+        model = host_archive_public_gbdt(cls, arrays, path, context)
     elif fmt == "mojolearn-gbdt-1":
         model = host_archive_gbdt(cls, arrays, context)
     elif py_contains(context["host_archive_forest_formats"], fmt):

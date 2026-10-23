@@ -1,0 +1,184 @@
+# SPDX-License-Identifier: Apache-2.0
+"""Import-time connection of the compiled tree-ensemble owner.
+
+The public `fit`, `predict`, `predict_proba` and `score` methods of the
+forests (RandomForest*, ExtraTrees*, DecisionTree*) and the other tree
+ensembles are one call each into the compiled classical owner
+(`bindings/classical_native.mojo`, operations `trees_*`, implemented in
+`bindings/trees_public_*.mojo`). That native operation validates the
+parameters, reads X and y, encodes the labels, checks the weights, chooses
+the fit entry and the inference engine, launches the kernels and assigns the
+fitted state.
+
+Python here only connects fixed metadata once, at import: the shared
+context, the compiled entry points of every tree binding in both numeric
+modes, the base binding's input helpers, and the classes the owner serves.
+Nothing here runs when a public method is called.
+"""
+
+_ENTRY = None
+_CONTEXT = None
+
+#: The tree bindings the owner launches, by numeric mode.
+_TREE_BINDINGS = ("_mojolearn_rf", "_mojolearn_trees", "_mojolearn_x_trees", "_mojolearn_metrics",
+                  "_mojolearn_svm", "_mojolearn_gbdt", "_mojolearn_estimators", "_mojolearn_x_neighbors")
+#: The base binding's input and label helpers (`_buffer._native`), always the
+#: identical binary (they are byte moves and comparisons with no tier).
+_BASE_HELPERS = ("cast_f64_to_f32", "cast_colmajor_f64_to_f32", "transpose_f32", "all_finite_f32",
+                 "all_finite_f64", "prepare_targets", "bincount_i64", "class_ratio_f64",
+                 "gather_rows_bytes", "argmax_rows_f32", "argmax_rows_f64", "gather_i64", "gather_f64",
+                 "unique_inverse", "reduce_stat", "cast_elements", "gather_i32", "fsum_f64",
+                 "check_indices_i64", "equal_elements")
+
+
+def _unavailable(error):
+    # glue: an install without the compiled owner keeps the package
+    # importable; the tree methods then explain what is missing.
+    message = f"mojolearn: the tree ensembles need the compiled host binding: {error}"
+
+    def unavailable(*args):
+        raise ModuleNotFoundError(message, name=getattr(error, "name", None))
+    return unavailable
+
+
+def _refusal(error):
+    # glue: a refusal recorded at import as "<Class>: <message>", the class
+    # the native owner raises again (the nearest builtin base the owner's
+    # error prefixes name)
+    for base in (ImportError, AttributeError, TypeError, RuntimeError, ValueError):  # glue: the fixed refusal classes
+        if isinstance(error, base):
+            return f"{base.__name__}: {error}"
+    return f"RuntimeError: {error}"
+
+
+def _entries(module):
+    # glue: retain the binding's compiled entry points once at connection
+    from types import BuiltinFunctionType, ModuleType
+    from . import _backend
+    if type(module) is _backend._HostBinding:
+        # A CPU-only install: the family's compiled host binding stands
+        # behind the proxy; its entries are read once here, not through the
+        # proxy's Python lookup at call time.
+        module = _backend.load_host_module(module._HostBinding__basename)  # cpu-route: a CPU-only install connects its compiled host binding once
+    if type(module) is not ModuleType:
+        # A missing tier or a refusing stub: touching it states the reason.
+        try:
+            getattr(module, "trees_owner_probe")
+        except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
+            return _refusal(error)
+        return "ImportError: this binding is not a compiled extension module"
+    table = {}
+    for name in dir(module):  # glue: the binding's exported names, once at import
+        entry = getattr(module, name, None)
+        if isinstance(entry, BuiltinFunctionType):
+            table[name] = entry
+    return table
+
+
+def _bindings():
+    # glue: connect each tree binding of both numeric modes once at import
+    from . import _backend
+    selected = _backend.default_mode()
+    connected = {}
+    for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: the two numeric modes
+        per_mode = {}
+        for name in _TREE_BINDINGS:  # glue: the fixed tree binding names
+            try:
+                per_mode[name] = _entries(_backend.binding(name, mode))
+            except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
+                per_mode[name] = _refusal(error)
+        connected[mode] = per_mode
+    return connected
+
+
+def _helpers():
+    # glue: the base binding's helpers, resolved once at import
+    from ._buffer import _native
+    table = {}
+    for name in _BASE_HELPERS:  # glue: the fixed helper names
+        try:
+            table[name] = _native(name)
+        except Exception as error:  # noqa: BLE001 - recorded, raised at the first call
+            table[name] = _refusal(error)
+    return table
+
+
+def connect():
+    """`(entry, context)`: the compiled tree owner and the context every
+    connected class shares. Connected once; later calls return the same
+    pair."""
+    global _ENTRY, _CONTEXT
+    if _CONTEXT is not None:
+        return _ENTRY, _CONTEXT
+    from types import BuiltinFunctionType
+    try:
+        from .tokenizer import _binding
+        from ._native_classical_bridge import _state_context
+        module = _binding()._module
+        entry = module.classical_native_call
+        if not isinstance(entry, BuiltinFunctionType):
+            raise TypeError("the tree ensembles require the compiled classical_native_call entry")
+        context = _state_context()
+    except ImportError as error:
+        _ENTRY, _CONTEXT = _unavailable(error), {"trees_unavailable": str(error)}
+        return _ENTRY, _CONTEXT
+    import numbers
+    import types
+    from . import _backend
+    _backend.default_mode()  # glue: settle the process default the native mode falls back to
+    context.update(
+        trees_bindings=_bindings(), trees_helpers=_helpers(), trees_classes={}, trees_defaults={},
+        trees_boost_classes={}, trees_meta_classes={},
+        trees_missing=object(), trees_namespace=types.SimpleNamespace,
+        trees_real_type=numbers.Real, trees_integral_type=numbers.Integral,
+    )
+    _ENTRY, _CONTEXT = entry, context
+    return _ENTRY, _CONTEXT
+
+
+def bindings():
+    """The connected tree binding tables by numeric mode (for the archive
+    owner's loaders), or None without the compiled owner."""
+    return connect()[1].get("trees_bindings")
+
+
+def register(cls, kind, **tables):
+    """Connect one public tree class at its definition: `kind` names the
+    native owner's schema for it ("rf_classifier", "et_regressor", ...);
+    `tables` are its fixed lookup tables (criteria, refusal texts)."""
+    _, context = connect()
+    if "trees_unavailable" in context:
+        return
+    import inspect
+    context["trees_classes"][cls] = kind
+    # The constructor defaults, for an estimator the owner assembles itself
+    # (a splitter='random' tree's inner forest).
+    signature = inspect.signature(cls.__init__)
+    context["trees_defaults"][cls] = {
+        name: p.default for name, p in signature.parameters.items()  # glue: the constructor's parameters, once at definition
+        if name != "self" and p.default is not inspect.Parameter.empty}
+    for key, value in tables.items():  # glue: the class's fixed lookup tables, once at definition
+        context.setdefault(key, value)
+
+
+def register_boost(cls, kind, **tables):
+    """Connect one bagged or boosted tree ensemble class at its definition:
+    `kind` names its schema in bindings/trees_public_boost.mojo
+    ("bagging_classifier", "ada_regressor", "dart_classifier", "rte", ...);
+    `tables` are its fixed lookup tables and the member classes it builds."""
+    _, context = connect()
+    if "trees_unavailable" in context:
+        return
+    context["trees_boost_classes"][cls] = kind
+    for key, value in tables.items():  # glue: the class's fixed lookup tables, once at definition
+        context.setdefault(key, value)
+
+
+def register_meta(cls, kind):
+    """Connect one meta-estimator class at its definition: `kind` names its
+    schema in bindings/trees_public_meta.mojo ("voting_classifier",
+    "stacking_regressor", "multioutput_classifier", "ovr", "calibrated", ...)."""
+    _, context = connect()
+    if "trees_unavailable" in context:
+        return
+    context["trees_meta_classes"][cls] = kind
