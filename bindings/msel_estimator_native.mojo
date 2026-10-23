@@ -172,7 +172,8 @@ def msel_native_clone(model: PythonObject, context: PythonObject) raises -> Pyth
         var fields = py_call(plan["fields_get"], result, py_type(result))
         _ = py_call(fields.update, parameters)
         py_setitem(fields, "_has_constructor_parameters", PythonObject(True))
-        _ = family_call(plan["entry"], result, "trees_forest_initialize", Python.tuple(plan["forest"]), plan["context"])
+        # Public forest constructors store parameters verbatim; native fit
+        # derives/validates configuration in its original owner later.
     elif plan["init"] is None:
         # Exact fixed constructor schemas containing only field assignments.
         var fields = py_call(plan["fields_get"], result, py_type(result))
@@ -183,3 +184,34 @@ def msel_native_clone(model: PythonObject, context: PythonObject) raises -> Pyth
             raise Error("ImportError: native estimator constructor binding is unavailable")
         _ = family_call(entry, result, plan["init"], py_call(b.tuple, args), plan["context"])
     return result
+
+
+def msel_native_set_params(model: PythonObject, params: PythonObject,
+                           context: PythonObject) raises -> PythonObject:
+    var b = Python.import_module("builtins")
+    var plan = msel_estimator_plan(model, context)
+    if py_type(params) is not b.dict:
+        raise Error("TypeError: native estimator parameters require a native dict")
+    var keys = py_call(b.list, params.keys())
+    for k in range(len(keys)):  # driver-loop: parameter admission before hashing or native setter dispatch
+        if py_type(keys[k]) is not b.str:
+            raise Error("TypeError: native estimator parameter names must be exact strings")
+        sequential_admit_value(params[keys[k]], context)
+    if len(keys) == 0:
+        return model
+    if plan["forest"] is None:
+        return msel_estimator_call(model, "set_params", Python.tuple(params), context)
+    var values = family_call(plan["entry"], model, "trees_forest_get_params", Python.tuple(), plan["context"])
+    var unknown = Python.list()
+    for k in range(len(keys)):  # driver-loop: complete forest parameter name validation before mutation
+        if not py_contains(values, keys[k]):
+            _ = py_call(unknown.append, keys[k])
+    if len(unknown):
+        raise Error("Invalid parameter(s) " + String(py_call(b.repr, py_call(b.sorted, unknown)))
+                    + " for " + String(py_type(model).__name__))
+    _ = py_call(values.update, params)
+    var fields = py_call(plan["fields_get"], model, py_type(model))
+    _ = py_call(fields.clear)
+    _ = py_call(fields.update, values)
+    py_setitem(fields, "_has_constructor_parameters", PythonObject(True))
+    return model

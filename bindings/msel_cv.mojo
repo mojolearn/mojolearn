@@ -452,6 +452,8 @@ def msel_scores_dict(scores: MselScores, return_train: Bool, return_estimator: B
 def msel_require_serial(n_jobs: PythonObject, error_score: PythonObject, caller: String,
                         context: PythonObject) raises:
     """`_require_serial`."""
+    msel_admit(n_jobs, context)
+    msel_admit(error_score, context)
     if not py_contains(Python.tuple(PythonObject(None), PythonObject(1)), n_jobs):
         raise Error("NotImplementedError: " + caller + " supports n_jobs=1 (or None) only")
     if not (family_is_str(error_score) and msel_cmp("eq", error_score, PythonObject("raise"))) and not msel_is_real(error_score, context):
@@ -469,6 +471,9 @@ def msel_cross_validate(args: PythonObject, context: PythonObject) raises -> Pyt
     var y = got[1]
     var folds = got[2]
     var scoring = args[4]
+    msel_admit(args[7], context)
+    msel_admit(args[8], context)
+    msel_admit(args[9], context)
     var rt = msel_truth(args[7])
     var re = msel_truth(args[8])
     var ri = msel_truth(args[9])

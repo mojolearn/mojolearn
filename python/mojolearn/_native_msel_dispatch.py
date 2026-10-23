@@ -34,6 +34,7 @@ def connect(context, package):
                              context=owner_context, parameters=tuple(parameters), init=init,
                              methods=methods, forest=forest, mro=mro, hooks=hooks,
                              fields_get=descriptor.__get__, protected=protected, classifier=getattr(cls, '_estimator_type', None) == 'classifier',
+                             estimator_type=getattr(cls, '_estimator_type', None),
                              device_rows=bool(getattr(cls, '_mojolearn_device_rows', False)))
 
     # Each recipe contains argument positions or fixed values. Native code
@@ -47,12 +48,14 @@ def connect(context, package):
             'predict': ('predict_public', (arg(0),)),
             'score': ('score_public', (arg(0), arg(1))),
             'get_params': ('get_params', (const(False),)),
+            'set_params': ('set_params', (arg(0),)),
         })
     register(decomposition.PCA, decomposition._PCA_ENTRY, decomposition._PCA_CONTEXT,
              ('n_components', 'copy', 'whiten', 'svd_solver', 'tol', 'iterated_power', 'n_oversamples',
               'power_iteration_normalizer', 'random_state', 'numeric_mode'), 'initialize', {
                  'fit': ('fit', (arg(0), arg(1))), 'transform': ('transform', (arg(0),)),
                  'get_params': ('get_params', (const(False),)),
+                 'set_params': ('set_params', (arg(0),)),
              })
     for cls, owner, names, transform in (  # glue: fixed native scaler schemas
         (preprocessing.StandardScaler, 'STANDARD', ('copy', 'with_mean', 'with_std', 'numeric_mode'), (arg(0), const(False), const(None))),
@@ -64,6 +67,7 @@ def connect(context, package):
         register(cls, vars(module)['_' + owner + '_CALL'], vars(module)['_' + owner + '_CONTEXT'], names, 'init', {
             'fit': ('fit', (arg(0), arg(1))), 'transform': ('transform', transform),
             'get_params': ('get_params', (const(False),)),
+            'set_params': ('set_params', (arg(0),)),
         })
     registry[preprocessing.StandardScaler]['fit_entry'] = preprocessing._STANDARD_FIT
     entry, trees = _native_trees_bridge.connect()
@@ -83,6 +87,8 @@ def connect(context, package):
         for name, cls in host.get('classical_host_estimators', {}).items():  # glue: already-connected explicit CPU classes
             base = registry[getattr(linear_model, name)]
             register(cls, linear_model._native_classical, host, base['parameters'], base['init'], base['methods'])
+    from ._native_msel_extra import connect as connect_extra
+    connect_extra(context, register, registry)
     context.update(family_msel_estimators=registry,
                    family_msel_pending_estimators=tuple(value for value in vars(package).values()  # glue: distinguish known migration debt from external callbacks
                                                         if type(value) is type and value not in registry),
@@ -90,3 +96,6 @@ def connect(context, package):
 
     from ._native_msel_scorers import connect as connect_scorers
     connect_scorers(context, package.model_selection)
+
+    from ._native_msel_search import connect as connect_search
+    connect_search(context, package.model_selection)
