@@ -113,9 +113,19 @@ def _m3_state_call(block: PythonObject, x: PythonObject, state: PythonObject, st
     var keep = List[PythonObject]()
     var copies = List[PythonObject]()
     var addresses = py_ints([generation_address(x, keep)])
+    var bi = Python.import_module("builtins")
+    # an installed owned snapshot is read on the device (`mamba3_state_owned`)
+    var owned = py_get(fields, "_owned_generation")
+    var canonical = entries.canonical if Bool(py=py_call(bi.hasattr, entries, "canonical")) else entries
+    var on_session = (owned is not None and py_get(fields, "_prefill_session") is not None
+                      and py_get(fields, "_prefill_binding") is canonical
+                      and Bool(py=py_call(bi.hasattr, entries, "mamba3_state_owned")))
     var weights = fields["_w"]
     for i in range(len(weights)):  # driver-loop: over existing Mamba3 parameter ABI slots
-        _ = py_call(addresses.append, generation_address(weights[i], keep))
+        if on_session:
+            _ = py_call(addresses.append, 0)
+        else:
+            _ = py_call(addresses.append, generation_address(weights[i], keep))
     for i in range(len(names)):  # driver-loop: over mutable continuation buffers
         _ = py_call(addresses.append, _mutable(slots[names[i]], shapes[i], keep, copies, names[i]))
     var output = generation_array([b, l, d])
@@ -127,7 +137,10 @@ def _m3_state_call(block: PythonObject, x: PythonObject, state: PythonObject, st
     var q = Int(py=slots["buffered_tokens"])
     var pending = 1 if Bool(py=slots["pending"]) else 0
     var updated = PythonObject(None)
-    if step:
+    if on_session:
+        updated = py_call(_native_function(entries, "mamba3_state_owned"), fields["_prefill_session"], addresses,
+                          Python.list(b, 1 if step else l, d, q, pending, owned, 1 if step else 0))
+    elif step:
         updated = py_call(_native_function(entries, "mamba3_decode_step"), addresses, py_ints([b, d, q, pending]))
     else:
         updated = py_call(_native_function(entries, "mamba3_forward"), addresses, py_ints([b, l, d, q, pending]))

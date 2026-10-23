@@ -264,6 +264,7 @@ from mamba.impl.mamba_shell_impl import (
     _m2_session_load_run,
     _m3_load_weights,
     _mamba3_run,
+    _mamba3_run_owned,
     _mamba3_run_arena,
     Mamba3DecodeSession,
     _m3_require_session_open,
@@ -970,6 +971,44 @@ def mamba3_decode_step_binding(
     return PythonObject(out_len)
 
 
+def mamba3_state_owned_binding(session: PythonObject, addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`mamba3_forward` (step 0) or `mamba3_decode_step` (step 1) on the
+    installed owned snapshot of prefill `session` (lane migrate-neural-2):
+    the weights are read on the device, never from the caller's arrays.
+    `addrs` is the same twenty-five as `mamba3_forward` (the nine weight
+    slots are not read; 0 is accepted); `params` = [B, L, d_model, buf_len,
+    pending, generation, step] (L = 1 for a step). Returns the post-call
+    buf_len."""
+    var owner = session.downcast_value_ptr[Mamba3PrefillSession]()
+    var a = _mamba3_addrs(addrs, String("mamba3_state_owned"))
+    if len(params) != 7:
+        raise Error("mamba3_state_owned: params must contain 7 values (B, L, d_model, buf_len, pending, generation, step)")
+    if owner[].busy or not owner[].usable or not owner[].owned_weights:
+        raise Error("mamba3 owned forward: session is not ready")
+    if Int(py=params[5]) != owner[].weight_generation:
+        raise Error("mamba3 owned forward: stale weight generation")
+    var b = Int(py=params[0])
+    var l = Int(py=params[1])
+    var dm = Int(py=params[2])
+    var q0 = Int(py=params[3])
+    var pend = Int(py=params[4])
+    var step = Int(py=params[6])
+    if step != 0 and step != 1:
+        raise Error("mamba3_state_owned: step must be 0 or 1")
+    if step == 1 and l != 1:
+        raise Error("mamba3_state_owned: a decode step is one token (L = 1)")
+    owner[].busy = True
+    var out_len = 0
+    try:
+        with GILReleased(Python()):
+            out_len = _mamba3_run_owned(owner[], a, b, l, dm, q0, pend)
+    except error:
+        owner[].busy = False
+        raise error
+    owner[].busy = False
+    return PythonObject(out_len)
+
+
 def mamba3_owned_weights_enabled_binding() raises -> PythonObject:
     return PythonObject(NN40_OWNED_WEIGHTS)
 
@@ -1494,6 +1533,7 @@ def build__mojolearn_mamba() -> PythonObject:
             m.def_function[mamba3_owned_weights_enabled_binding]("mamba3_owned_weights_enabled")
             m.def_function[mamba3_prefill_session_install_weights_binding]("mamba3_prefill_session_install_weights")
             m.def_function[mamba3_prefill_session_forward_owned_binding]("mamba3_prefill_session_forward_owned")
+            m.def_function[mamba3_state_owned_binding]("mamba3_state_owned")
             m.def_function[mamba3_prefill_session_backward_owned_binding]("mamba3_prefill_session_backward_owned")
             m.def_function[mamba3_prefill_session_close_binding]("mamba3_prefill_session_close")
             m.def_function[mamba3_prefill_session_forward_binding]("mamba3_prefill_session_forward")
