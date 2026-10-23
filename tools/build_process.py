@@ -14,6 +14,7 @@ import time
 _ACTIVE = set()
 _LOCK = threading.Lock()
 _CANCELLED = threading.Event()
+_SCOPE_ACTIVE = False
 
 
 def cancelled():
@@ -53,9 +54,11 @@ def cancel_active():
 @contextmanager
 def cancellation_scope():
     """The orchestrating thread also cancels builds executing in worker threads."""
-    if threading.current_thread() is not threading.main_thread():
+    global _SCOPE_ACTIVE
+    if threading.current_thread() is not threading.main_thread() or _SCOPE_ACTIVE:
         yield
         return
+    _SCOPE_ACTIVE = True
     _CANCELLED.clear()
     previous = {}
 
@@ -70,6 +73,7 @@ def cancellation_scope():
     finally:
         for sig, handler in previous.items():
             signal.signal(sig, handler)
+        _SCOPE_ACTIVE = False
 
 
 def available_memory():
