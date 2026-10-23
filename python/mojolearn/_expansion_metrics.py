@@ -1233,14 +1233,6 @@ def _auc_of(cur, max_fpr):
     raise TypeError("mojolearn metrics: an AUC is scored from the device fold (`_curves(..., fold='auc')`)")
 
 
-def _ap_of(cur):
-    """The average precision of a curve: a `_FoldCurve` (the device fold, lane
-    cgr2-metrics-shap) scores itself."""
-    if isinstance(cur, _FoldCurve):
-        return cur.ap()
-    raise TypeError("mojolearn metrics: an average precision is scored from the device fold (`_curves(..., fold='ap')`)")
-
-
 def _curves(scores, flags, w, n, problems, numeric_mode, *, stride=1, thresholds=True, keep_flags=True,
             lazy=False, compact=False, fold=None, max_fpr=None, tail=None):
     """[(fps, tps, thresholds)] per problem, from the device sort and the
@@ -1510,13 +1502,9 @@ def roc_curve(y_true, y_score, *, pos_label=None, sample_weight=None, drop_inter
     Follows scikit-learn's `roc_curve`. Returns ``fpr``, ``tpr`` and ``thresholds`` as
     float64 arrays; the first threshold is ``+inf``. Computed on the GPU.
     """
-    arrays, _, F, T, _ = _curve_out(y_true, y_score, pos_label, sample_weight, numeric_mode, "roc_curve",
-                                    _CO_ROC, drop_intermediate)
-    if F <= 0:
-        _undefined_warning("No negative samples in y_true, false positive value should be meaningless")
-    if T <= 0:
-        _undefined_warning("No positive samples in y_true, true positive value should be meaningless")
-    return arrays
+    return _NATIVE(None, "family_mexp_curve_roc",
+                   (y_true, y_score, pos_label, sample_weight, drop_intermediate, numeric_mode),
+                   _NATIVE_CONTEXT)
 
 
 def precision_recall_curve_options(y_true, y_score, pos_label, sample_weight, drop_intermediate, numeric_mode):
@@ -1543,33 +1531,9 @@ def det_curve(y_true, y_score, *, pos_label=None, sample_weight=None, drop_inter
     Follows scikit-learn's `det_curve`. Returns ``fpr``, ``fnr`` and ``thresholds``,
     computed on the GPU. A zero class weight raises ``ZeroDivisionError``.
     """
-    arrays, _, _, _, classes = _curve_out(y_true, y_score, pos_label, sample_weight, numeric_mode, "det_curve",
-                                          _CO_DET, drop_intermediate)
-    if len(classes) != 2:
-        raise ValueError("Only one class is present in y_true. Detection error tradeoff curve is not "
-                         "defined in that case.")
-    if arrays is None:
-        raise ZeroDivisionError("float division by zero")
-    return arrays
-
-
-#: terms per chunk of the device trapezoid sum (x_metrics/curve_out.mojo
-#: ax_chunk); the fold order is a function of n and this constant only.
-#: Restored 2026-10-09: b9675438d removed it with the array helper and the
-#: step flags while auc(x, y) still used all three (NameError on both GPUs).
-_AX_CHUNK = 1024
-_AX_NEG, _AX_POS = 1, 2
-
-
-def _f64_array_words(a):
-    """A C-order Float64 Array's values as their Int32 word pairs (low
-    first), an Int32 Array over a copy of the bytes (no per-value Python).
-    Its own name: the scalar `_f64_words(prog, v)` below shadowed the
-    original `_f64_words(a)` and broke auc(x, y) (TypeError, found by the
-    2026-10-09 reference re-record, x-metrics-ranking)."""
-    store = array.array("i")
-    store.frombytes(a.tobytes())
-    return Array._owned(store, (len(store),), "<i4", "C")
+    return _NATIVE(None, "family_mexp_curve_det",
+                   (y_true, y_score, pos_label, sample_weight, drop_intermediate, numeric_mode),
+                   _NATIVE_CONTEXT)
 
 
 # Engineering notes (moved from the docstring):
@@ -1585,44 +1549,7 @@ def auc(x, y):
     Follows scikit-learn's `auc`. `x` must be monotonic. Lists and integer arrays are
     converted to float64 first. Computed on the GPU.
     """
-    xa, ya = _auc_f64(x), _auc_f64(y)
-    if xa is None:
-        xa = Array.from_list(flatten_mo(x), "<f8")
-    if ya is None:
-        ya = Array.from_list(flatten_mo(y), "<f8")
-    if xa.size != ya.size:
-        raise ValueError("x and y must have the same length")
-    if xa.size < 2:
-        raise ValueError(f"At least 2 points are needed to compute area under curve, but x.shape = ({xa.size},)")
-    n = xa.size
-    prog = _Prog()
-    X = prog.put_i32(_f64_array_words(xa))
-    Y = prog.put_i32(_f64_array_words(ya))
-    OUT = prog.want(prog.alloc(3), 3)
-    prog.stage("auc_xy", 1, n, X, Y, OUT, _AX_CHUNK)
-    _run(prog, None)
-    flags = prog.ints(OUT + 2, 1)[0]
-    if (flags & _AX_NEG) and (flags & _AX_POS):
-        raise ValueError(f"x is neither increasing nor decreasing : {xa.tolist()}.")
-    return float(prog.words(OUT, 2, "d")[0])
-
-
-def _auc_f64(v):
-    """A 1-D float32 or float64 buffer as a C-order Float64 Array (float32
-    widened exactly, as float() does), or None for anything else (lists,
-    integers, n-D): those keep the Python conversion."""
-    from ._buffer import view, typestr_of, _has_buffer, as_f64_c
-    if isinstance(v, (list, tuple)) or not (isinstance(v, Array) or _has_buffer(v)):
-        return None
-    try:
-        b = view(v, name="x")
-        try:
-            ok = b.ndim == 1 and typestr_of(b) in ("<f4", "<f8")
-        finally:
-            b.release()
-        return as_f64_c(v, ndim=1, name="x")[0] if ok else None
-    except Exception:
-        return None
+    return _NATIVE(None, "family_mexp_curve_auc", (x, y), _NATIVE_CONTEXT)
 
 
 #: rank_epi kinds of the ranking averages (x_metrics/rank_epi.mojo, lane cpu2-l7-metrics S3b)
@@ -1911,33 +1838,9 @@ def average_precision_score(y_true, y_score, *, average="macro", pos_label=1, sa
                             numeric_mode=None):
     """scikit-learn 1.9 `average_precision_score` (binary and multiclass
     one-vs-rest; multilabel-indicator targets are refused by name)."""
-    from ._metrics_impl import _label_map
-    if average not in (None, "micro", "macro", "weighted", "samples"):
-        raise ValueError("average has to be one of (None, 'micro', 'macro', 'weighted', 'samples')")
-    true, kind, present = _targets(y_true, "average_precision_score")
-    if len(present) <= 2:
-        if len(present) == 2 and pos_label not in present:
-            raise ValueError(f"pos_label={pos_label} is not a valid label. It should be one of {present}")
-        n = len(true)
-        s = _scores(y_score, n, "average_precision_score", ndim=1)
-        w = _weights(sample_weight, n, "average_precision_score")
-        flags = _label_map(true, lambda v: int(v == pos_label))
-        return _ap_of(_curves(s, flags, w, n, 1, numeric_mode, fold="ap")[0])
-    if pos_label != 1:
-        raise ValueError("Parameter pos_label is fixed to 1 for multiclass y_true. Do not set pos_label "
-                         "or set pos_label to 1.")
-    if average == "samples":
-        raise NotImplementedError("mojolearn average_precision_score: average='samples' applies to "
-                                  "multilabel targets, which are NOT IMPLEMENTED")
-    curves, tail, s, codes, classes, w = _ovr(y_true, y_score, sample_weight, None,
-                                              "average_precision_score", numeric_mode, keep_flags=False,
-                                              fold="ap", tail=_OvrTail("ap", False, average, numeric_mode))
-    k = len(classes)
-    if average == "micro":
-        n = len(codes)
-        flags, wm = _micro_inputs(codes, w, n, k, numeric_mode)
-        return _ap_of(_curves(s.reshape((n * k,)), flags, wm, n * k, 1, numeric_mode, fold="ap")[0])
-    return tail.result(curves)
+    return _NATIVE(None, "family_mexp_curve_average_precision",
+                   (y_true, y_score, pos_label, sample_weight, numeric_mode, average),
+                   _NATIVE_CONTEXT)
 
 
 def top_k_accuracy_score(y_true, y_score, *, k=2, normalize=True, sample_weight=None, labels=None,
@@ -1945,66 +1848,9 @@ def top_k_accuracy_score(y_true, y_score, *, k=2, normalize=True, sample_weight=
     """scikit-learn 1.9 `top_k_accuracy_score`: a hit when the true class is
     among the k largest scores, ties ordered as numpy's stable argsort
     reversed (the larger class index first)."""
-    from ._metrics_impl import _label_map, _selected_labels
-    if is_bool(k) or not isinstance(k, numbers.Integral) or k < 1:
-        raise ValueError("k must be a positive integer")
-    true, kind, present = _targets(y_true, "top_k_accuracy_score")
-    n = len(true)
-    s = _scores(y_score, n, "top_k_accuracy_score")
-    binary = len(present) <= 2 and not (labels is not None and len(labels) > 2)
-    classes = present if labels is None else _selected_labels(labels, kind, present)
-    if labels is not None:
-        if classes != sorted(classes):  # glue: checks the class labels are sorted
-            raise ValueError("Parameter 'labels' must be ordered.")
-        if set(present) - set(classes):
-            raise ValueError("'y_true' contains labels not in parameter 'labels'.")
-    n_score = s.shape[1] if s.ndim == 2 else 2
-    if binary and s.ndim == 2 and s.shape[1] != 1:
-        raise ValueError(f"`y_true` is binary while y_score is 2d with {s.shape[1]} classes. If `y_true` "
-                         "does not contain all the labels, `labels` must be provided.")
-    if len(classes) != n_score:
-        raise ValueError(f"Number of classes in 'y_true' ({len(classes)}) not equal to the number of "
-                         f"classes in 'y_score' ({n_score}).")
-    if k >= len(classes):
-        _undefined_warning(f"'k' ({k}) greater than or equal to 'n_classes' ({len(classes)}) will result "
-                           "in a perfect score and is therefore meaningless.")
-    w = _weights(sample_weight, n, "top_k_accuracy_score")
-    index = {c: i for i, c in enumerate(classes)}  # glue: class index table
-    codes = _label_map(true, lambda v: index[v])
-    prog = _Prog()
-    if binary:
-        flat = s.reshape((n,)) if s.ndim == 2 else s
-        if k == 1:
-            thr = 0.5 if flat.min() >= 0 and flat.max() <= 1 else 0.0
-            # two score columns [thr, s] make "s > thr" a top-1 hit of class 1
-            # with the tie going to class 0 (scikit-learn: y_pred = s > thr)
-            # the columns laid out by the pair_cols unit (thr's bits, then s
-            # bit for bit)
-            import struct
-            S1 = prog.put(flat)
-            S = prog.scratch(2 * n)
-            prog.stage("pair_cols", n, S1, S, struct.unpack("<i", struct.pack("<f", thr))[0])
-            kk, cols = 1, 2
-        else:
-            # zero words: a scratch slot starts zero on every backend
-            S = prog.scratch(2 * n)
-            kk, cols = 2, 2
-    else:
-        S = prog.put(s)
-        kk, cols = k, s.shape[1]
-    Y = prog.put_i32(codes)
-    hit = prog.scratch(n)
-    prog.stage("row_metric", n, S, cols, Y, hit, _ROW["topk"], kk, 0)
-    zero = prog.scratch(n)
-    prog.stage("pair_key", n, 0, 0, zero, 1, 2)
-    W = _NONE if w is None else prog.put(w)
-    tot = _group(prog, zero, n, 1, values=hit, weights=W)[1]
-    sw = _group(prog, zero, n, 1, weights=W)[1] if w is not None else None
-    _run(prog, numeric_mode)
-    hits = prog.floats(tot, 1)[0]
-    if not normalize:
-        return float(hits)
-    return float(hits / (n if w is None else prog.floats(sw, 1)[0]))
+    return _NATIVE(None, "family_mexp_curve_top_k",
+                   (y_true, y_score, k, normalize, sample_weight, labels, numeric_mode),
+                   _NATIVE_CONTEXT)
 
 
 #: rank_epi kinds (x_metrics/rank_epi.mojo)
