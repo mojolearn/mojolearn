@@ -164,3 +164,39 @@ def test_gpu_parallel_step_independent_decay_loss_and_complete_replay():
         audit_native_call(owner.close).assert_native()
         if replay is not None:
             audit_native_call(replay.close).assert_native()
+
+
+@pytest.mark.parametrize("mode", ["fast", "identical"])
+def test_package_imports_in_every_mode_with_or_without_a_byte_lm(mode):
+    """`import mojolearn` never needs the byte LM: a set built without it
+    (the Linux fast set; any set built with MOJOLEARN_PACKAGE_BYTE_LM=0)
+    imports, and only the byte-LM trainer refuses, at use. A fresh process
+    per mode: the byte LM registers Mojo types once per process."""
+    import subprocess
+    import sys
+    program = (
+        "import mojolearn\n"
+        "from mojolearn import _backend, ParallelByteLanguageModelTrainer\n"
+        f"s = _backend.load_set({mode!r})\n"
+        "print('BYTE_LM', 'missing' if '_mojolearn_byte_lm' in s.missing else 'built')\n"
+    )
+    env = dict(os.environ, MOJOLEARN_NUMERIC_MODE=mode)
+    done = subprocess.run([sys.executable, "-c", program], capture_output=True, text=True, env=env, timeout=600)
+    assert done.returncode == 0, done.stderr[-2000:]
+    assert "BYTE_LM " in done.stdout
+    if "BYTE_LM missing" in done.stdout:
+        refusal = (
+            "import mojolearn\n"
+            "from mojolearn import ParallelByteLanguageModelTrainer\n"
+            "from mojolearn.tests.test_parallel_byte_native import state_fixture\n"
+            "state, _ = state_fixture()\n"
+            "try:\n"
+            "    ParallelByteLanguageModelTrainer(state)\n"
+            "except Exception as error:\n"
+            "    print('REFUSED', error)\n"
+            "else:\n"
+            "    print('ACCEPTED')\n"
+        )
+        done = subprocess.run([sys.executable, "-c", refusal], capture_output=True, text=True, env=env, timeout=600)
+        assert done.returncode == 0, done.stderr[-2000:]
+        assert "REFUSED" in done.stdout and "not installed" in done.stdout, done.stdout[-2000:]
