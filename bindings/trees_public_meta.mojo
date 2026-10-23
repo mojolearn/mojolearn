@@ -1470,3 +1470,130 @@ def _calibrated_predict(model: PythonObject, X: PythonObject, context: PythonObj
     var xt = _xt(py_fields(model), context)
     var classes = _attr(model, "classes_", PythonObject(None))
     return trees_decode_labels(classes, _argmax(xt, p, _rows(p), len(classes), context), context)
+
+
+# ------------------------------------------------------------------- score
+
+
+def _regressor_score(model: PythonObject, prediction: PythonObject, y: PythonObject, sample_weight: PythonObject,
+                     context: PythonObject) raises -> PythonObject:
+    """`RegressorScoreMixin.score`: the float32 R^2 of the prediction."""
+    var mode = py_get(py_fields(model), "numeric_mode")
+    var truth = trees_f32(y, -1, "C", "y", context)
+    var pred = trees_f32(prediction, -1, "C", "prediction", context)
+    if len(_attr(pred.keep, "shape", Python.tuple(0))) == 2 or len(_attr(truth.keep, "shape", Python.tuple(0))) == 2:
+        # 2-D targets: the metrics family's public r2_score (its multioutput
+        # program), on the same float32 blocks.
+        var r2 = _import("mojolearn._metrics_impl", "r2_score")
+        var kwargs = Python.dict()
+        py_setitem(kwargs, PythonObject("sample_weight"), sample_weight)
+        py_setitem(kwargs, PythonObject("numeric_mode"), mode)
+        var result = _call_kw(r2, Python.tuple(truth.keep, pred.keep), kwargs)
+        _ = truth^
+        _ = pred^
+        return result
+    var result = trees_r2(truth.keep, pred.keep, sample_weight, mode, context)
+    _ = truth^
+    _ = pred^
+    return PythonObject(result)
+
+
+def _meta_predict(model: PythonObject, kind: String, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    if kind == "voting_classifier":
+        return _voting_predict(model, X, context)
+    if kind == "voting_regressor":
+        return _voting_regress(model, X, context)
+    if kind == "stacking_classifier":
+        return _stacking_predict(model, X, True, context)
+    if kind == "stacking_regressor":
+        return _stacking_predict(model, X, False, context)
+    if kind == "multioutput_regressor":
+        return _multioutput_regressor_predict(model, X, context)
+    if kind == "multioutput_classifier":
+        return _multioutput_classifier_predict(model, X, context)
+    if kind == "ovr":
+        return _ovr_predict(model, X, context)
+    if kind == "calibrated":
+        return _calibrated_predict(model, X, context)
+    raise Error("unknown meta-estimator schema " + kind)
+
+
+def _meta_fit(model: PythonObject, kind: String, X: PythonObject, y: PythonObject, sample_weight: PythonObject,
+              context: PythonObject) raises -> PythonObject:
+    if kind == "voting_classifier":
+        return _voting_fit(model, X, y, sample_weight, True, context)
+    if kind == "voting_regressor":
+        return _voting_fit(model, X, y, sample_weight, False, context)
+    if kind == "stacking_classifier":
+        return _stacking_classifier_fit(model, X, y, sample_weight, context)
+    if kind == "stacking_regressor":
+        return _stacking_regressor_fit(model, X, y, sample_weight, context)
+    if kind == "multioutput_regressor":
+        return _multioutput_regressor_fit(model, X, y, sample_weight, context)
+    if kind == "multioutput_classifier":
+        return _multioutput_classifier_fit(model, X, y, sample_weight, context)
+    if kind == "ovr":
+        return _ovr_fit(model, X, y, context)
+    if kind == "calibrated":
+        return _calibrated_fit(model, X, y, context)
+    raise Error("unknown meta-estimator schema " + kind)
+
+
+def _meta_transform(model: PythonObject, kind: String, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    if kind == "voting_classifier":
+        return _voting_transform(model, X, True, context)
+    if kind == "voting_regressor":
+        return _voting_transform(model, X, False, context)
+    if kind == "stacking_classifier" or kind == "stacking_regressor":
+        return _stacking_transform(model, X, context)
+    raise Error("AttributeError: '" + _owner(model) + "' object has no attribute 'transform'")
+
+
+def _fit_params_weight(fit_params: PythonObject) raises -> PythonObject:
+    """`fit(X, y, **fit_params)`: only `sample_weight` is a fit parameter."""
+    var b = trees_builtins()
+    var keys = py_call(b.list, fit_params)
+    for i in range(len(keys)):  # small-loop(keyword arguments): the caller's fit parameters
+        if String(keys[i]) != "sample_weight":
+            raise Error("TypeError: fit() got an unexpected keyword argument '" + String(keys[i]) + "'")
+    return py_get(fit_params, PythonObject("sample_weight"))
+
+
+def meta_operation(model: PythonObject, operation: String, args: PythonObject,
+                   context: PythonObject) raises -> PythonObject:
+    """The meta-estimators' public methods (`trees_meta_*`)."""
+    var kind = meta_kind(model, context)
+    if operation == "trees_meta_fit":
+        return _meta_fit(model, kind, args[0], args[1], args[2], context)
+    if operation == "trees_meta_predict":
+        return _meta_predict(model, kind, args[0], context)
+    if operation == "trees_meta_predict_proba":
+        if kind == "voting_classifier":
+            return _voting_predict_proba(model, args[0], context)
+        if kind == "stacking_classifier":
+            return _stacking_predict_proba(model, args[0], context)
+        if kind == "multioutput_classifier":
+            return _multioutput_classifier_proba(model, args[0], context)
+        if kind == "ovr":
+            return _ovr_predict_proba(model, args[0], context)
+        if kind == "calibrated":
+            return _calibrated_proba(model, args[0], context)
+        raise Error("AttributeError: '" + _owner(model) + "' object has no attribute 'predict_proba'")
+    if operation == "trees_meta_transform":
+        return _meta_transform(model, kind, args[0], context)
+    if operation == "trees_meta_fit_transform":
+        var fitted = _meta_fit(model, kind, args[0], args[1], _fit_params_weight(args[2]), context)
+        _ = fitted
+        return _meta_transform(model, kind, args[0], context)
+    if operation == "trees_meta_score":
+        var X = args[0]
+        var y = args[1]
+        var sample_weight = args[2]
+        if kind == "multioutput_classifier":
+            return _multioutput_classifier_score(model, X, y, sample_weight, context)
+        var prediction = _meta_predict(model, kind, X, context)
+        if kind.endswith("_regressor"):
+            return _regressor_score(model, prediction, y, sample_weight, context)
+        var mode = py_get(py_fields(model), "numeric_mode")
+        return PythonObject(trees_accuracy(y, prediction, sample_weight, mode, context))
+    raise Error("unknown meta-estimator operation " + operation)
