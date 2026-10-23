@@ -16,11 +16,12 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
 from bindings.py_attr import py_attr
 from bindings.native_buffer_owner import native_storage_allocate
+from bindings.msel_estimator_native import msel_native_clone, msel_clone_parameter, msel_estimator_call, msel_estimator_plan
 from bindings.family_common import (
     family_array, family_call, family_call_kw, family_isinstance, family_is_str, family_repr, family_str, family_type_name,
 )
 from bindings.msel_common import (
-    msel_b, msel_entry, msel_try, msel_missed, msel_catch, msel_is_bool, msel_is_integral, msel_is_real, msel_int,
+    msel_b, msel_n_samples, msel_admit, msel_entry, msel_try, msel_missed, msel_catch, msel_is_bool, msel_is_integral, msel_is_real, msel_int,
     msel_op, msel_cmp, msel_materialize, msel_try_materialize, msel_flatten, msel_is_array, msel_addr, msel_p64,
     msel_new, msel_f64_list, msel_index_i64, msel_resident_new, msel_resident_op, msel_resident_take,
     msel_resident_release, msel_resident_close, msel_get_scorer, msel_score, msel_lazy,
@@ -36,70 +37,15 @@ comptime MSEL_CV_TRUST_FOLDS_BIT = 64
 
 
 def msel_clone(value: PythonObject, parameter: Bool, context: PythonObject) raises -> PythonObject:
-    """`_clone(value, parameter=...)`: fresh constructor state (scikit-learn
-    1.9.1 base.py::_clone_parametrized)."""
-    var b = msel_b()
-    var kind = py_type(value)
-    if kind is b.dict:
-        var out = Python.dict()
-        var items = py_call(b.list, py_call(value.items))
-        for i in range(len(items)):  # driver-loop: over estimator parameters
-            py_setitem(out, items[i][0], msel_clone(items[i][1], True, context))
-        return out
-    if kind is b.list or kind is b.tuple or kind is b.set or kind is b.frozenset:
-        var parts = Python.list()
-        var items = py_call(b.list, value)
-        for i in range(len(items)):  # driver-loop: over estimator parameters
-            _ = py_call(parts.append, msel_clone(items[i], True, context))
-        return family_call(kind, parts)
-    var is_type = family_isinstance(value, b.type)
-    if not is_type and msel_truth(py_call(b.hasattr, value, PythonObject("__sklearn_clone__"))):
-        return family_call(family_call(b.getattr, value, PythonObject("__sklearn_clone__")))
-    var get_params = py_call(b.getattr, value, PythonObject("get_params"), PythonObject(None))
-    if is_type or not msel_truth(py_call(b.callable, get_params)):
-        if parameter:
-            return family_call(Python.import_module("copy").deepcopy, value)
-        raise Error("TypeError: cross_val_score estimator must implement get_params")
-    var keywords = Python.dict()
-    py_setitem(keywords, "deep", PythonObject(False))
-    var given = family_call_kw(get_params, keywords)
-    var parameters = Python.dict()
-    var items = py_call(b.list, family_call(given.items))
-    for i in range(len(items)):  # driver-loop: over estimator parameters
-        py_setitem(parameters, items[i][0], msel_clone(items[i][1], True, context))
-    var result = family_call_kw(kind, parameters)
-    var actual = family_call_kw(family_call(b.getattr, result, PythonObject("get_params")), keywords)
-    var names = py_call(b.list, parameters)
-    for i in range(len(names)):  # driver-loop: over estimator parameters
-        if family_call(py_attr(actual, "__getitem__"), names[i]) is not parameters[names[i]]:
-            raise Error("RuntimeError: estimator constructor must retain its parameter objects for cloning")
-    return result
+    return msel_clone_parameter(value, context) if parameter else msel_native_clone(value, context)
 
 
-def msel_classifier(estimator: PythonObject, pinned: Bool) raises -> Bool:
-    """`_classifier(estimator)` (`pinned`: of `_Pinned(estimator)`, whose
-    type tag is the estimator's and which has no tag protocol)."""
-    var b = msel_b()
-    var kind = family_call(b.getattr, estimator, PythonObject("_estimator_type"), PythonObject(None))
-    if kind is not None:
-        return msel_cmp("eq", kind, PythonObject("classifier"))
-    if pinned:
-        return False
-    var tags = family_call(b.getattr, estimator, PythonObject("__sklearn_tags__"), PythonObject(None))
-    var module = py_type(estimator).__module__
-    if msel_truth(py_call(b.callable, tags)) and not msel_truth(py_call(module.startswith, PythonObject("mojolearn"))):
-        return msel_cmp("eq", family_call(b.getattr, family_call(tags), PythonObject("estimator_type")),
-                        PythonObject("classifier"))
-    return False
+def msel_classifier(estimator: PythonObject, pinned: Bool, context: PythonObject) raises -> Bool:
+    return False if estimator is None else Bool(py=msel_estimator_plan(estimator, context)["classifier"])
 
 
-def msel_fit(estimator: PythonObject, x: PythonObject, y: PythonObject) raises:
-    """`estimator.fit(X, y)` (or `fit(X)` without y)."""
-    var fit = family_call(msel_b().getattr, estimator, PythonObject("fit"))
-    if y is None:
-        _ = family_call(fit, x)
-    else:
-        _ = family_call(fit, x, y)
+def msel_fit(estimator: PythonObject, x: PythonObject, y: PythonObject, context: PythonObject) raises:
+    _ = msel_estimator_call(estimator, "fit", Python.tuple(x, y), context)
 
 
 def msel_seconds() -> Float64:
@@ -146,9 +92,9 @@ def msel_splits_of(splitter: PythonObject, x: PythonObject, y: PythonObject, gro
     """`splitter.split(X, y, groups)`: a mojolearn splitter's splits natively
     (its `split` is the shell over the same call), anything else the
     caller's own `split`."""
-    if py_contains(context["family_msel_splitters"], py_type(splitter)):
+    if py_type(py_type(splitter)) is msel_b().type and py_contains(context["family_msel_splitter_layouts"], py_type(splitter)):
         return msel_split(splitter, x, y, groups, context)
-    return family_call(family_call(msel_b().getattr, splitter, PythonObject("split")), x, y, groups)
+    raise Error("TypeError: Python splitter callbacks are not accepted; use a native splitter or explicit index pairs")
 
 
 def msel_checked_folds(pairs: PythonObject, n: Int, context: PythonObject) raises -> PythonObject:
@@ -161,6 +107,8 @@ def msel_checked_folds(pairs: PythonObject, n: Int, context: PythonObject) raise
         var item = msel_try(b.next, Python.tuple(it), b.StopIteration, context)
         if msel_missed(item, context):
             break
+        if py_type(item) is not b.list and py_type(item) is not b.tuple:
+            raise Error("TypeError: each native fold must be an explicit list or tuple of index buffers")
         var pair = family_call(b.tuple, item)
         if len(pair) != 2:
             raise Error(String("too many values to unpack (expected 2)") if len(pair) > 2
@@ -189,8 +137,8 @@ def msel_cv_folds(estimator: PythonObject, x_in: PythonObject, y_in: PythonObjec
     """`_cv_folds`: (X, y, folds), every fold validated before any fit."""
     var x = msel_materialize(x_in, "X", context)
     var y = PythonObject(None) if y_in is None else msel_materialize_y(y_in, context)
-    var splitter = msel_check_cv(cv, y, msel_classifier(estimator, pinned), PythonObject(False), PythonObject(None), context)
-    var n = Int(py=family_call(msel_b().len, x))
+    var splitter = msel_check_cv(cv, y, msel_classifier(estimator, pinned, context), PythonObject(False), PythonObject(None), context)
+    var n = msel_n_samples(x, context)
     var folds = msel_checked_folds(msel_splits_of(splitter, x, y, groups, context), n, context)
     return Python.tuple(x, y, folds)
 
@@ -205,29 +153,26 @@ def msel_fold_source(cv: PythonObject, estimator: PythonObject, x: PythonObject,
             raise Error("mojolearn cross_val_score: groups is read only by a splitter "
                         + "passed as cv; the default unshuffled folds would ignore it, "
                         + "so it is refused (pass cv=<splitter with .split(X, y, groups)>)")
-        return msel_default_folds(y, PythonObject(5) if cv is None else cv, msel_classifier(estimator, False), context)
-    var split = py_call(b.getattr, cv, PythonObject("split"), PythonObject(None))
-    if msel_truth(py_call(b.callable, split)):
+        return msel_default_folds(y, PythonObject(5) if cv is None else cv, msel_classifier(estimator, False, context), context)
+    if py_type(py_type(cv)) is b.type and py_contains(context["family_msel_splitter_layouts"], py_type(cv)):
         return msel_splits_of(cv, x, y, groups, context)
-    if family_is_str(cv):
-        raise Error("cv must be an integer, splitter or iterable of index pairs")
-    var it = msel_try(b.iter, Python.tuple(cv), b.TypeError, context)
-    if msel_missed(it, context):
-        raise Error("cv must be an integer, splitter or iterable of index pairs")
-    return it
+    if py_type(cv) is b.list or py_type(cv) is b.tuple:
+        return cv
+    raise Error("TypeError: Python fold iterator callbacks are not accepted; provide native splitters or explicit list/tuple index pairs")
 
 
 def msel_fast_on(bit: Int, context: PythonObject) raises -> Bool:
     """`_cv_fast_on(bit)`: the resample binding's FAST define mask (0 off
     the FAST tier)."""
-    var mask = msel_int(family_call(context["family_msel_fast_defines"]))
+    var mode = context["family_msel_backend_fields"]["_DEFAULT_MODE"]
+    var mask = Int(py=context["family_msel_fast_masks"][mode])
     return (mask & bit) != 0
 
 
 def msel_native_default_cv(cv: PythonObject, groups: PythonObject, context: PythonObject) raises -> Bool:
     """`_native_default_cv`."""
     return (groups is None and (cv is None or msel_is_integral(cv, context))
-            and not msel_is_bool(cv) and not msel_sabotage())
+            and not msel_is_bool(cv, context) and not msel_sabotage())
 
 
 def msel_prepare_folds(estimator: PythonObject, x_in: PythonObject, y_in: PythonObject, cv: PythonObject,
@@ -244,20 +189,20 @@ def msel_prepare_folds(estimator: PythonObject, x_in: PythonObject, y_in: Python
     if scoring is not None and not msel_truth(py_call(b.callable, scoring)):
         raise Error("TypeError: scoring must be None, a scorer name or a callable")
     var x = msel_materialize(x_in, "X", context)
-    if msel_cmp("ne", family_call(b.getattr, y_in, PythonObject("ndim"), PythonObject(1)), PythonObject(1)):
-        raise Error("y must be 1-D and match X rows")
     var y = msel_materialize_y(y_in, context)
+    if Int(py=y.ndim) != 1:
+        raise Error("y must be 1-D and match X rows")
     if Int(py=x.ndim) != 2 or Int(py=x.shape[0]) == 0 or Int(py=x.shape[1]) == 0:
         raise Error("X must be a nonempty dense 2-D buffer array")
-    var n = Int(py=family_call(b.len, x))
-    if Int(py=family_call(b.len, y)) != n:
+    var n = msel_n_samples(x, context)
+    if msel_n_samples(y, context) != n:
         raise Error("y must be a 1-D buffer array matching X rows")
     if groups is not None:
-        if (msel_cmp("ne", family_call(b.getattr, groups, PythonObject("ndim"), PythonObject(1)), PythonObject(1))
-                or Int(py=family_call(b.len, groups)) != n):
+        var group_values = msel_materialize_y(groups, context)
+        if Int(py=group_values.ndim) != 1 or msel_n_samples(group_values, context) != n:
             raise Error("groups must be 1-D and match X rows")
     if msel_fast_on(MSEL_CV_TRUST_FOLDS_BIT, context) and msel_native_default_cv(cv, groups, context):
-        var trusted = msel_default_folds(y, PythonObject(5) if cv is None else cv, msel_classifier(estimator, False), context)
+        var trusted = msel_default_folds(y, PythonObject(5) if cv is None else cv, msel_classifier(estimator, False, context), context)
         return Python.tuple(x, y, trusted, scoring)
     var folds = msel_checked_folds(msel_fold_source(cv, estimator, x, y, groups, context), n, context)
     return Python.tuple(x, y, folds, scoring)
@@ -281,7 +226,7 @@ def msel_device_rows_ok(estimator: PythonObject, scoring_in: PythonObject, conte
     """`_device_rows_ok`: the estimator's class opts in and every scorer
     only calls the estimator's own methods."""
     var b = msel_b()
-    if family_call(b.getattr, py_type(estimator), PythonObject("_mojolearn_device_rows"), PythonObject(False)) is not PythonObject(True):
+    if not Bool(py=msel_estimator_plan(estimator, context)["device_rows"]):
         return False
     var scoring = scoring_in
     if family_isinstance(scoring, b.dict):
@@ -466,11 +411,14 @@ def msel_cross_validate_run(estimator: PythonObject, y: PythonObject, mut rows: 
         var yte = got[3]
         var ok = True
         if raise_errors:
-            msel_fit(est, xtr, ytr)
+            msel_fit(est, xtr, ytr, context)
         else:
-            var fit = family_call(b.getattr, est, PythonObject("fit"))
-            var args = Python.tuple(xtr) if ytr is None else Python.tuple(xtr, ytr)
-            ok = not msel_missed(msel_try(fit, args, b.Exception, context), context)
+            try:
+                msel_fit(est, xtr, ytr, context)
+            except error:
+                if not msel_catch(error, b.Exception):
+                    raise error^
+                ok = False
         var t1 = msel_seconds()
         for k in range(len(keys)):  # driver-loop: over scorer names
             var sc = multi[keys[k]] if multi is not None else single
@@ -612,7 +560,7 @@ def _kfold_ranges(x: PythonObject, y: PythonObject, folds: PythonObject, context
     """`_kfold_ranges`: each fold's test block as (a, b) pairs, or an empty
     list unless every fold is a contiguous block."""
     var none = List[Int]()
-    var n = Int(py=family_call(msel_b().len, x))
+    var n = msel_n_samples(x, context)
     if (not msel_is_array(y, context) or String(py=x.order) != "C" or String(py=y.order) != "C" or n < 2):
         return none^
     var ranges = List[Int]()
@@ -638,15 +586,8 @@ def _kfold_ranges(x: PythonObject, y: PythonObject, folds: PythonObject, context
 def msel_fit_score_fold(fitted: PythonObject, xtr: PythonObject, ytr: PythonObject, xte: PythonObject,
                         yte: PythonObject, scoring: PythonObject, context: PythonObject) raises -> Float64:
     """`_fit_score_fold`."""
-    _ = family_call(family_call(msel_b().getattr, fitted, PythonObject("fit")), xtr, ytr)
-    var score: PythonObject
-    if scoring is None:
-        score = family_call(family_call(msel_b().getattr, fitted, PythonObject("score")), xte, yte)
-    else:
-        score = family_call(scoring, fitted, xte, yte)
-    if not msel_is_real(score, context):
-        raise Error("TypeError: scoring must return a real scalar")
-    return Float64(py=family_call(msel_b().float, score))
+    msel_fit(fitted, xtr, ytr, context)
+    return Float64(py=msel_score(fitted, xte, yte, scoring, context))
 
 
 def msel_cross_val_score(args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -655,7 +596,7 @@ def msel_cross_val_score(args: PythonObject, context: PythonObject) raises -> Py
     var cv = args[3]
     var groups = args[5]
     var n_jobs = args[6]
-    if msel_is_bool(n_jobs) or not msel_is_integral(n_jobs, context) or msel_cmp("ne", n_jobs, PythonObject(1)):
+    if msel_is_bool(n_jobs, context) or not msel_is_integral(n_jobs, context) or msel_cmp("ne", n_jobs, PythonObject(1)):
         raise Error("NotImplementedError: cross_val_score supports n_jobs=1 only")
     var scoring = args[4]
     if family_is_str(scoring):
@@ -798,7 +739,7 @@ def msel_cross_val_predict(args: PythonObject, context: PythonObject) raises -> 
     var x = got[0]
     var y = got[1]
     var folds = got[2]
-    var n = Int(py=family_call(msel_b().len, x))
+    var n = msel_n_samples(x, context)
     var total = 0
     for f in range(len(folds)):  # driver-loop: over folds
         total += Int(py=folds[f][1].size)
@@ -828,8 +769,10 @@ def msel_cross_val_predict(args: PythonObject, context: PythonObject) raises -> 
         for i in range(len(folds)):  # driver-loop: over folds
             var est = msel_clone(estimator, False, context)
             var fr = rows.take(i, PythonObject(None), context)
-            _ = family_call(family_call(msel_b().getattr, est, PythonObject("fit")), fr[0], fr[1])
-            var pred = family_call(family_call(msel_b().getattr, est, method), fr[2])
+            msel_fit(est, fr[0], fr[1], context)
+            if py_type(method) is not msel_b().str:
+                raise Error("TypeError: native prediction method must be an exact string")
+            var pred = msel_estimator_call(est, String(method), Python.tuple(fr[2]), context)
             _ = py_call(preds.append, _numeric_pred(pred, context))
         result = _place(preds, tests, n, rows.res, context)
     finally:
@@ -883,7 +826,7 @@ def msel_split_descriptor(args: PythonObject, context: PythonObject) raises -> P
     var estimator = args[2]
     var cv = args[3]
     var groups = args[4]
-    if (cv is None or (not msel_is_bool(cv) and msel_is_integral(cv, context))) and estimator is None:
+    if (cv is None or (not msel_is_bool(cv, context) and msel_is_integral(cv, context))) and estimator is None:
         raise Error("split_descriptor: the default folds are stratified for a classifier "
                     + "and plain KFold otherwise, so estimator is required when cv is None "
                     + "or an integer (pass the estimator cross_val_score was given)")
@@ -891,8 +834,8 @@ def msel_split_descriptor(args: PythonObject, context: PythonObject) raises -> P
     if Int(py=x.ndim) != 2 or Int(py=x.shape[0]) == 0 or Int(py=x.shape[1]) == 0:
         raise Error("X must be a nonempty dense 2-D buffer array")
     var y = msel_materialize_y(args[1], context)
-    var n = Int(py=family_call(b.len, x))
-    if Int(py=family_call(b.len, y)) != n:
+    var n = msel_n_samples(x, context)
+    if msel_n_samples(y, context) != n:
         raise Error("y must be a 1-D buffer array matching X rows")
     var it = family_call(b.iter, msel_fold_source(cv, estimator, x, y, groups, context))
     var folds = Python.list()
@@ -901,6 +844,8 @@ def msel_split_descriptor(args: PythonObject, context: PythonObject) raises -> P
         var item = msel_try(b.next, Python.tuple(it), b.StopIteration, context)
         if msel_missed(item, context):
             break
+        if py_type(item) is not b.list and py_type(item) is not b.tuple:
+            raise Error("TypeError: each native fold must be an explicit list or tuple of index buffers")
         var pair = family_call(b.tuple, item)
         if len(pair) != 2:
             raise Error(String("too many values to unpack (expected 2)") if len(pair) > 2

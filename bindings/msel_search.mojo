@@ -365,7 +365,7 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
             _ = family_call_kw(family_call(b.getattr, best, PythonObject("set_params")),
                                family_call(b.getattr, model, PythonObject("best_params_")))
         var xa = msel_materialize(x_in, "X", context)
-        msel_fit(best, xa, y_in)
+        msel_fit(best, xa, y_in, context)
         py_setattr(model, "best_estimator_", best)
         py_setattr(model, "scorer_", msel_get_scorer(scoring_in, context) if multi is None else multi)
     return model

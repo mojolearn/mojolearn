@@ -738,6 +738,7 @@ def msel_lazy(model: PythonObject, op: String, items: PythonObject, context: Pyt
 
 
 # ---------------------------------------------------------------- scorers
+from bindings.msel_estimator_native import msel_estimator_call
 
 
 def _msel_attr(model: PythonObject, name: String) raises -> PythonObject:
@@ -765,9 +766,9 @@ def msel_score(estimator: PythonObject, x: PythonObject, y: PythonObject, scorer
     var b = Python.import_module("builtins")
     var value: PythonObject
     if scorer is None:
-        value = family_call(_msel_attr(estimator, "score"), x, y)
+        value = msel_estimator_call(estimator, "score", Python.tuple(x, y), context)
     else:
         value = family_call(scorer, estimator, x, y)
-    if not family_isinstance(value, context["family_msel_real"]):
+    if not msel_is_real(value, context):
         raise Error("TypeError: scoring must return a real scalar")
     return family_call(b.float, value)
