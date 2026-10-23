@@ -223,6 +223,8 @@ def _conv_forward_t(layer: PythonObject, x: PythonObject, context: PythonObject)
             var w = xseq_f32(sequential_input(fields["weight_"], context), "weight_", False, context)
             var bias = xseq_f32(sequential_input(fields["bias_"], context), "bias_", False, context)
             _ = py_call_typed(conv, Python.list(xp.h, xcnn_addr(w), xcnn_addr(bias), out.h), PythonObject(9), prm)
+            _ = bias  # keep the Python object alive through the native call above
+            _ = w  # keep the Python object alive through the native call above
     else:
         # each group's channels sliced, convolved and placed on the device
         var og = Int(py=fields["out_channels"]) // groups
@@ -236,6 +238,8 @@ def _conv_forward_t(layer: PythonObject, x: PythonObject, context: PythonObject)
             var bg = _host_rows(fields["bias_"], g * og, (g + 1) * og, context)
             _ = py_call_typed(copy, Python.list(xp.h, xg), PythonObject(3), _group_prm(ps, inc, groups, g, 0))
             _ = py_call_typed(conv, Python.list(xg, xcnn_addr(wg), xcnn_addr(bg), yg), PythonObject(9), prm)
+            _ = bg  # keep the Python object alive through the native call above
+            _ = wg  # keep the Python object alive through the native call above
             _ = py_call_typed(copy, Python.list(yg, out.h), PythonObject(3), _group_prm(oshape, outc, groups, g, 1))
     _set(fields, "_x", x)
     _set(fields, "_xp", xp)
@@ -283,6 +287,9 @@ def xcnn_conv2d_forward(layer: PythonObject, x: PythonObject, context: PythonObj
         var bg = _host_rows(fields["bias_"], g * og, (g + 1) * og, context)
         var yg = out if groups == 1 else xcnn_host_f32([xs[0], og, oshape[2], oshape[3]], context)
         _ = py_call_typed(conv, xcnn_addr(xg), xcnn_addr(wg), xcnn_addr(bg), xcnn_addr(yg), prm)
+        _ = bg  # keep the Python object alive through the native call above
+        _ = wg  # keep the Python object alive through the native call above
+        _ = xg  # keep the Python object alive through the native call above
         if groups > 1:
             py_setitem(out, Python.tuple(_all(), _slice(g * og, (g + 1) * og)), yg)
     _set(fields, "_x", a)
@@ -342,6 +349,7 @@ def _add(entries: PythonObject, left: PythonObject, right: PythonObject, context
     var out = xcnn_host_f32(s, context)
     _ = py_call_typed(xcnn_entry(entries, "x_cnn_add"), xcnn_addr(a), xcnn_addr(c), xcnn_addr(out),
                       Python.list(xcnn_size(s)))
+    _ = c  # keep the Python object alive through the native call above
     return out
 
 
@@ -381,6 +389,8 @@ def _conv_dev(block: PythonObject, entries: PythonObject, conv: PythonObject, xh
         var w = xseq_f32(sequential_input(cf["weight_"], context), "weight_", False, context)
         var bias = xseq_f32(sequential_input(cf["bias_"], context), "bias_", False, context)
         _ = py_call_typed(entry, Python.list(xh, xcnn_addr(w), xcnn_addr(bias), yh), PythonObject(9), _conv_params(cf, xshape))
+        _ = bias  # keep the Python object alive through the native call above
+        _ = w  # keep the Python object alive through the native call above
     return Python.tuple(yh, xcnn_tuple(oshape))
 
 

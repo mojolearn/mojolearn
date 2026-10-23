@@ -2144,6 +2144,7 @@ def host_archive_svm_ovo(fields: PythonObject, arrays: PythonObject, features: I
             var pair = Python.dict()
             var pd = host_archive_slice_words(dual, offset, n, Python.tuple(1, n), "<f4", context)
             var pv = host_archive_slice_words(vectors, offset * features, n * features, Python.tuple(n, features), "<f4", context)
+            _ = vectors  # keep the Python object alive through the native call above
             var ps = host_archive_slice_words(support, offset, n, Python.tuple(n), "<i4", context)
             var bias_value = Float64(saved_bias[q])
             _ = bias_flat  # keep the Python object alive through the native call above
@@ -2151,6 +2152,7 @@ def host_archive_svm_ovo(fields: PythonObject, arrays: PythonObject, features: I
             py_setitem(pair, "j", j)
             py_setitem(pair, "dual", pd)
             py_setitem(pair, "sv", pv)
+            _ = vectors  # keep the Python object alive through the native call above
             py_setitem(pair, "support", ps)
             py_setitem(pair, "b", bias_value)
             py_setitem(pair, "n_iter", iterations)
@@ -2181,6 +2183,7 @@ def host_archive_svm_ovo(fields: PythonObject, arrays: PythonObject, features: I
     var result_vectors = host_archive_typed(Python.tuple(n_sv, features), "<f4", context)
     host_archive_svc_gather(Int(py=classical_address(support)), total, Int(py=classical_address(vectors)), features,
                             Int(py=classical_address(result_support)), n_sv, Int(py=classical_address(result_vectors)))
+    _ = vectors  # keep the Python object alive through the native call above
     py_setitem(fields, "classes_", classes)
     py_setitem(fields, "n_features_in_", features)
     py_setitem(fields, "_pairs", pairs)

@@ -785,15 +785,19 @@ def _kbins_fit(model: PythonObject, values: PythonObject, weight_source: PythonO
         _stage(p.program, OP_WBLK, nbk, wo, n, bs)
         _stage(p.program, OP_WSCAN, 1, bs, nbk, bp)
         var seed_at = p.put_ints(_seed_words(seed_lo, seed_hi), context)
+        _ = seed_lo  # keep the Python object alive through the native call above
         _stage(p.program, OP_WDRAW, draws, wo, n, bs, bp, nbk, seed_at, ro)
+        _ = seed_lo  # keep the Python object alive through the native call above
         _stage(p.program, OP_RGATHER, draws * d, xo, d, ro, xs)
         xo = xs
         n = draws
     elif plain_draw:
         var so_seed = p.put_ints(_seed_words(seed_lo, seed_hi), context)
+        _ = seed_lo  # keep the Python object alive through the native call above
         var ro = p.alloc(draws)
         var xs = p.alloc(draws * d)
         _stage(p.program, OP_SMROWS, draws, so_seed, n, ro)
+        _ = seed_lo  # keep the Python object alive through the native call above
         _stage(p.program, OP_RGATHER, draws * d, xo, d, ro, xs)
         xo = xs
         n = draws
@@ -1133,8 +1137,10 @@ def _cat_values(cats: PythonObject, context: PythonObject) raises -> List[Float3
         return out^
     var flat = _input(cats, 1, False, context)
     var source = _ptr(flat)
+    _ = flat  # keep the Python object alive through the native call above
     for i in range(count):  # driver-loop: over one column's fitted categories
         out.append(source[i])
+        _ = flat  # keep the Python object alive through the native call above
     return out^
 
 
@@ -1936,10 +1942,12 @@ def _knot_rows(knots: PythonObject, context: PythonObject) raises -> PythonObjec
             return rows
         var flat = _input(knots, 2, False, context)
         var source = _ptr(flat)
+        _ = flat  # keep the Python object alive through the native call above
         for i in range(r):  # driver-loop: over the user knots rows
             var row = Python.list()
             for j in range(c):  # driver-loop: over one user knots row
                 _ = py_call(row.append, PythonObject(Float64(source[i * c + j])))
+                _ = flat  # keep the Python object alive through the native call above
             _ = py_call(rows.append, row)
         return rows
     var outer = _user_values(knots, context)

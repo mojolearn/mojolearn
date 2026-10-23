@@ -668,6 +668,7 @@ def _lle_smallest(mut k: MKit, f: PythonObject, nc: Int, max_iter: Int,
     var pi = mk_addr(im, ctx)
     var pz = mk_addr(z, ctx)
     var outs = Python.list(mk_addr(xm, ctx), mk_addr(ym, ctx), mk_addr(sm, ctx))
+    _ = xm  # keep the Python object alive through the native call above
     var params = mk_ints([n, n1, nc, p, max(1, max_iter)])
     _ = py_call(params.append, py_call(Python.import_module("operator").and_, py_call(b.int, seed),
                                        PythonObject(0xFFFFFFFF)))

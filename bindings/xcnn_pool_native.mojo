@@ -284,12 +284,14 @@ def xcnn_dropout_forward(model: PythonObject, x: PythonObject, context: PythonOb
         var h = xcnn_dev_get(model, entries, "mask", xcnn_size(s4), context)
         _ = py_call_typed(xcnn_entry(entries, "x_cnn_dropout2d_m"), Python.list(xcnn_addr(x4), xcnn_addr(y), h),
                           PythonObject(4), prm, fields["p"])
+        _ = x4  # keep the Python object alive through the native call above
         _set(fields, "_mask_host", PythonObject(None))
         _set(fields, "_mask_dev", h)
         _set(fields, "_mask_shape", xcnn_tuple(xs))
         return xcnn_reshape(y, xs)
     var mask = xcnn_host_f32(s4, context)
     _ = py_call_typed(xcnn_entry(entries, "x_cnn_dropout2d"), xcnn_addr(x4), xcnn_addr(y), xcnn_addr(mask), prm, fields["p"])
+    _ = x4  # keep the Python object alive through the native call above
     # the `mask_` setter: the host mask, no resident copy
     _set(fields, "_mask_host", xcnn_reshape(mask, xs))
     _set(fields, "_mask_dev", PythonObject(None))

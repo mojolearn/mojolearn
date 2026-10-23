@@ -489,10 +489,13 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
                     var rows = py_call(np.ascontiguousarray, order_rows.__getitem__(py_call(b.slice, s, s + m)), dtype=np.int32)
                     if not lists:
                         _ = py_call(_e(entries, "x_cnn_res_gather"), a["x"], xall, xcnn_addr(rows), Python.list(m, row))
+                        _ = rows  # keep the Python object alive through the native call above
                         _ = py_call(_e(entries, "x_cnn_res_gather"), a["y"], yall, xcnn_addr(rows), Python.list(m, 1))
+                        _ = rows  # keep the Python object alive through the native call above
                     else:
                         _ = py_call(_e(entries, "x_cnn_res_gather"), Python.list(a["x"], a["y"]), Python.list(xall, yall),
                                     xcnn_addr(rows), Python.list(m, row, 1))
+                        _ = rows  # keep the Python object alive through the native call above
                     var plans = _forward_r(fields, entries, rw, a, m)
                     var loss = py_call(b.float, py_call(_e(entries, "x_cnn_softmax_xent_r"), a["logits"], a["y"], a["glog"],
                                                        a["proba"], Python.list(m, k_out)))

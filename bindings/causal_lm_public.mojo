@@ -549,17 +549,26 @@ def causal_model_head(model: PythonObject, x: PythonObject, normalize: Bool = Tr
         var np = py_ints([b * l, d])
         _ = py_call(np.append, model.norm_eps)
         _ = py_call(e["rms_norm_forward"], py_ints([_addr(hn, keep), _addr(x, keep), _addr(model._norm, keep)]), np)
+        _ = hn  # keep the Python object alive through the native call above
     var out = generation_array([b, l, v])
     if model._head_int15 is None or not packed:
         _ = py_call(e["linear_forward"], py_ints([_addr(out, keep), _addr(hn, keep), _addr(model._head, keep)]), py_ints([b * l, v, d]))
+        _ = hn  # keep the Python object alive through the native call above
     else:
         var hi = generation_array([b * l, d], "b")
         var lo = generation_array([b * l, d], "b")
         var ex = generation_array([b * l], "i")
         _ = py_call(e["quantize15"], py_ints([_addr(hi, keep), _addr(lo, keep), _addr(ex, keep), _addr(hn, keep)]), py_ints([b * l, d]))
+        _ = ex  # keep the Python object alive through the native call above
+        _ = lo  # keep the Python object alive through the native call above
+        _ = hi  # keep the Python object alive through the native call above
+        _ = hn  # keep the Python object alive through the native call above
         var hp = model._head_int15
         e["gemm15"](py_ints([_addr(out, keep), _addr(hi, keep), _addr(lo, keep), _addr(ex, keep),
             _addr(hp[0], keep), _addr(hp[1], keep), _addr(hp[2], keep)]), py_ints([b * l, v, d]))
+        _ = ex  # keep the Python object alive through the native call above
+        _ = lo  # keep the Python object alive through the native call above
+        _ = hi  # keep the Python object alive through the native call above
     if flat:
         var bi = GENERATION_BOUNDARY.get_or_create_ptr()[].bi
         py_setattr(out, "shape", py_call(bi.tuple, py_ints([l, v])))
@@ -830,6 +839,7 @@ def causal_lm_resident_binding(model: PythonObject, value: PythonObject, maximum
             lm = opened[0]
             sessions = opened[1]
         _ = py_call(e["causal_lm_session_run"], lm, sessions, py_ints([_addr(ids, keep), _addr(out, keep), _addr(last_logits, keep)]), py_ints([l, n, 0]))
+        _ = out  # keep the Python object alive through the native call above
     except error:
         if persist:
             py_setitem(fields, "_resident_sessions", PythonObject(None))
@@ -846,7 +856,9 @@ def causal_lm_resident_binding(model: PythonObject, value: PythonObject, maximum
     var dst = i32_ptr(Int(py=result._addr))
     var prompt = i32_ptr(Int(py=ids._addr))
     var generated = i32_ptr(Int(py=out._addr))
+    _ = out  # keep the Python object alive through the native call above
     causal_lm_join_resident(dst, prompt, generated, b, l, n)
+    _ = out  # keep the Python object alive through the native call above
     _ = keep^
     return result
 

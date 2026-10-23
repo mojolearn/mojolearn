@@ -278,6 +278,8 @@ struct LinKit(Movable):
         var t = self._sum(rows, True)
         var _keep_ret_t = self.ptr(t)[0]
         _ = t  # keep the Python object alive through the native call above
+        var _keep_ret_t = _keep_ret_t^
+        _ = t  # keep the Python object alive through the native call above
         return _keep_ret_t^
 
     def move(mut self, a: Int, idx: Int, rows: Int, cols: Int, params: PythonObject, resident: Bool) raises -> Int:
@@ -361,6 +363,8 @@ struct LinKit(Movable):
         if self.on_device(a) and self.n(a) > 1:
             index = self.strided(a, 1, 1)
         var _keep_ret_index = self.ptr(index)[0]
+        _ = index  # keep the Python object alive through the native call above
+        var _keep_ret_index = _keep_ret_index^
         _ = index  # keep the Python object alive through the native call above
         return _keep_ret_index^
 

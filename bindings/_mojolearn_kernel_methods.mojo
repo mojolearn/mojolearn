@@ -345,6 +345,7 @@ def kernel_ridge_predict_ptr_binding(
     with GILReleased(Python()):
         var trace = IdentityTrace()
         kernel_ridge_predict_ptr_into(xfaddr, daddr, xnaddr, n, d, t, kp, q, op, trace)
+        _ = xfaddr  # keep the Python object alive through the native call above
     return PythonObject(0)
 
 
@@ -451,6 +452,7 @@ def nystroem_fit_transform_ptr_binding(
     var sweeps = 0
     with GILReleased(Python()):
         sweeps = km_nystroem_fit_transform_ptr_run(xaddr, n, d, kp, q, seed, cp, ip, np_, evp, ecp, sp, op)
+        _ = xaddr  # keep the Python object alive through the native call above
     return PythonObject(sweeps)
 
 
@@ -569,6 +571,7 @@ def nystroem_fit_ptr_binding(
     var sweeps = 0
     with GILReleased(Python()):
         sweeps = km_nystroem_fit_ptr_run(xaddr, n, d, kp, q, seed, cp, ip, np_, evp, ecp, sp)
+        _ = xaddr  # keep the Python object alive through the native call above
     return PythonObject(sweeps)
 
 

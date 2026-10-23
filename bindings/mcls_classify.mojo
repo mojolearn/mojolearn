@@ -171,6 +171,7 @@ def mc_sums(mut prog: McProg, pair: McPair, order: PythonObject, epis: List[McEp
         if epis[e].fmode == 2:
             var pairs: List[Float64] = [1 + epis[e].b2, epis[e].b2]
             bo = prog.put(mc_f64_words(pairs, context))
+            _ = pairs  # keep the Python object alive through the native call above
         var eo = prog.alloc(8 + 6 * max(labels, 1))
         prog.stage("cls_epi", 1, [s.groups[col], s.groups[2 + col], s.groups[4 + col], epis[e].k, col, epis[e].kind,
                                   epis[e].avg, epis[e].zd, eo, epis[e].fmode, bo])

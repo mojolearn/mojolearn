@@ -261,13 +261,18 @@ def kit_lu[E: Exec, D: RDev, RES: Bool, X: DecompDev](
         _ = info  # keep the Python object alive through the native call above
         var lu_dev = kit.mats[lu].dev
         X.lu(da, lu_dev, pp, info_ptr, n)
+        _ = info  # keep the Python object alive through the native call above
         var _keep_ret_info = (lu, Int(kit.ptr(info)[0]))
+        _ = info  # keep the Python object alive through the native call above
+        var _keep_ret_info = _keep_ret_info^
         _ = info  # keep the Python object alive through the native call above
         return _keep_ret_info^
     var lu = kit.copy_host(a)
     _exec_lu[E](kit.ptr(lu), pp, kit.ptr(info), n)
     _ = info  # keep the Python object alive through the native call above
     var _keep_ret_info = (lu, Int(kit.ptr(info)[0]))
+    _ = info  # keep the Python object alive through the native call above
+    var _keep_ret_info = _keep_ret_info^
     _ = info  # keep the Python object alive through the native call above
     return _keep_ret_info^
 

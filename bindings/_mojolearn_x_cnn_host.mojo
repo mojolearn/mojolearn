@@ -213,16 +213,25 @@ def conv_block_backward_binding(
     var noidx = List[Int32](length=1, fill=Int32(0))
     var pi = ip(idx_addr) if pool else noidx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     var pdw = fp(dw_addr)
+    _ = dw_addr  # keep the Python object alive through the native call above
     var pdb = fp(db_addr)
+    _ = db_addr  # keep the Python object alive through the native call above
     var pdx = fp(dx_addr) if need_dx else pdb
+    _ = db_addr  # keep the Python object alive through the native call above
     var pk = FP(unsafe_from_address=kcols) if keep else pdb
+    _ = db_addr  # keep the Python object alive through the native call above
     var py_ = FP(unsafe_from_address=ky) if keep else pdb
+    _ = db_addr  # keep the Python object alive through the native call above
     with GILReleased(Python()):
         conv_block_backward_into(px, pw, pb, pg, pi, pdx, pdw, pdb, cprm, pprm, pool, need_dx, keep, pk, py_)
+        _ = db_addr  # keep the Python object alive through the native call above
+        _ = dw_addr  # keep the Python object alive through the native call above
         if need_dx:
             out_f32(pdx, nx)
         out_f32(pdw, OC * ckk)
+        _ = dw_addr  # keep the Python object alive through the native call above
         out_f32(pdb, OC)
+        _ = db_addr  # keep the Python object alive through the native call above
     _ = noidx^
     return PythonObject(0)
 

@@ -1145,6 +1145,7 @@ struct MKit(Movable):
         var pi = mk_addr(nbr, self.ctx)
         _ = family_call(self.fn("x_decomp_barycenter_rows"), px, py, pi, mk_addr(w, self.ctx), mk_addr(flags, self.ctx),
                         mk_ints([n, mk_r(y), mk_c(x), k]), py_call(Python.import_module("builtins").float, reg))
+        _ = flags  # keep the Python object alive through the native call above
         return w
 
     def lle_apply(mut self, wb: PythonObject, idm: PythonObject, e: PythonObject) raises -> PythonObject:

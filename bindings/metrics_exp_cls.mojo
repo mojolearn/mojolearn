@@ -335,7 +335,9 @@ def _mlcm(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var tail = _cm_stage(s, k, _CM_MLCM, 8 * k)
     var arena = mx_run(s.prog, args[5], context)
     var shape = Python.tuple(PythonObject(k), PythonObject(2), PythonObject(2))
-    return arena.words(tail, 8 * k, shape, "<f8" if s.weighted else "<i8", context)
+    var _keep_ret_tail = arena.words(tail, 8 * k, shape, "<f8" if s.weighted else "<i8", context)
+    _ = tail  # keep the Python object alive through the native call above
+    return _keep_ret_tail^
 
 
 def _cm_count(args: PythonObject, caller: String, context: PythonObject) raises -> Tuple[MxArena, Int, Bool]:

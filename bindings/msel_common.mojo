@@ -396,6 +396,8 @@ struct MselGroups(Movable):
             _ = family_call(msel_entry("fold_ids", context), PythonObject(msel_addr(codes)), PythonObject(n), PythonObject(m),
                             PythonObject(2), PythonObject(msel_addr(class_counts)), PythonObject(msel_addr(fold_store)),
                             PythonObject(msel_addr(fold_counts)))
+            _ = fold_store  # keep the Python object alive through the native call above
+            _ = fold_counts  # keep the Python object alive through the native call above
             counts = msel_read_i64(class_counts)
         self.counts = counts^
         self.codes = codes
@@ -407,7 +409,9 @@ struct MselGroups(Movable):
     def mapped(self, table: List[Int], context: PythonObject) raises -> PythonObject:
         """Each row's `table[code]` as int32 words."""
         var tbl = msel_i32_list(table, context)
-        return self.mapped_words(tbl, context)
+        var _keep_ret_tbl = self.mapped_words(tbl, context)
+        _ = tbl  # keep the Python object alive through the native call above
+        return _keep_ret_tbl^
 
     def mapped_words(self, tbl: PythonObject, context: PythonObject) raises -> PythonObject:
         var dst = msel_new(self.n, "<i4", context)

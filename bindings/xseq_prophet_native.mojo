@@ -83,6 +83,7 @@ def _features(fields: PythonObject, days: PythonObject, entries: PythonObject, c
                       Python.list(xseq_addr(days), xseq_addr(periods_a), xseq_addr(tsc), xseq_addr(frac)),
                       Python.list(n, ns),
                       Python.list(py_call(_b().float, fields["start_"]), py_call(_b().float, fields["t_scale_"])))
+    _ = periods_a  # keep the Python object alive through the native call above
     return Python.tuple(tsc, frac)
 
 
@@ -220,6 +221,8 @@ def prophet_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
                                   xseq_addr(cpts), xseq_addr(sig_a), xseq_addr(params), xseq_addr(info_out)),
                       Python.list(B, N, od[1], nh, K, S2, multiplicative, fields["max_iter"]),
                       Python.list(fields["changepoint_prior_scale"]))
+    _ = H  # keep the Python object alive through the native call above
+    _ = sig_a  # keep the Python object alive through the native call above
     py_setitem(fields, "params_", params)
     py_setitem(fields, "info_", info_out)
     # diagnostics from info_ (y_scale, objective, iterations, 0): views only
@@ -256,6 +259,7 @@ def prophet_predict(model: PythonObject, args: PythonObject, context: PythonObje
                       Python.list(xseq_addr(params), xseq_addr(fields["info_"]), xseq_addr(ft[0]), xseq_addr(ft[1]),
                                   xseq_addr(od[0]), xseq_addr(H), xseq_addr(cpts), xseq_addr(yhat), xseq_addr(trend)),
                       Python.list(B, M, od[1], nh, Int(py=fields["_K"]), len(cpts), multiplicative))
+    _ = H  # keep the Python object alive through the native call above
     var one = Bool(py=fields["_one"])
     py_setitem(fields, "trend_", trend[0] if one else trend)
     return yhat[0] if one else yhat

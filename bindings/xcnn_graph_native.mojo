@@ -143,6 +143,7 @@ def _vals_t(entries: PythonObject, g: PythonObject, vals_f: PythonObject) raises
     _ = py_call(xcnn_entry(entries, "x_cnn_vals_t"), Python.list(xcnn_addr(vf), xcnn_addr(py_call(np.ascontiguousarray, g.order_f)),
                                                    xcnn_addr(py_call(np.ascontiguousarray, g.order_t)), xcnn_addr(out)),
               Python.list(nnz))
+    _ = vf  # keep the Python object alive through the native call above
     return out
 
 
@@ -155,6 +156,8 @@ def _gemm(entries: PythonObject, a: PythonObject, b2: PythonObject, m: Int, n: I
     var fa = xcnn_f32(a, "a", context)
     var fb = xcnn_f32(b2, "b", context)
     _ = py_call(xcnn_entry(entries, "x_cnn_gemm"), xcnn_addr(fa), xcnn_addr(fb), xcnn_addr(out), Python.list(m, n, k, op))
+    _ = fb  # keep the Python object alive through the native call above
+    _ = fa  # keep the Python object alive through the native call above
     return out
 
 
@@ -167,6 +170,7 @@ def _spmm(entries: PythonObject, g: PythonObject, vals: PythonObject, h: PythonO
     var v = py_call(np.zeros, 1, np.float32) if vals is None or len(vals) == 0 else py_call(np.ascontiguousarray, vals, np.float32)
     _ = py_call(xcnn_entry(entries, "x_cnn_spmm"), xcnn_addr(v), xcnn_addr(hh), xcnn_addr(out), xcnn_addr(g.csr_f),
               Python.list(Int(py=g.n), Int(py=hh.shape[1]), Int(py=g.nnz), mode))
+    _ = v  # keep the Python object alive through the native call above
     return out
 
 
@@ -176,6 +180,7 @@ def _add(entries: PythonObject, a: PythonObject, b2: PythonObject, context: Pyth
     var fb = xcnn_f32(b2, "b", context)
     var out = py_call(_np().empty_like, fa)
     _ = py_call(xcnn_entry(entries, "x_cnn_add"), xcnn_addr(fa), xcnn_addr(fb), xcnn_addr(out), Python.list(Int(py=fa.size)))
+    _ = fb  # keep the Python object alive through the native call above
     return out
 
 
@@ -184,6 +189,7 @@ def _bias_rows(bias: PythonObject, rows: Int, cols: Int, context: PythonObject) 
     var fb = xcnn_f32(bias, "b", context)
     var out = xcnn_host_f32([rows, cols], context)
     graph_bias_rows(Int(py=xcnn_addr(fb)), Int(py=xcnn_addr(out)), rows, cols)
+    _ = fb  # keep the Python object alive through the native call above
     return out
 
 
@@ -281,6 +287,8 @@ def _gcn_graph(fields: PythonObject, entries: PythonObject, n: Int, edge_index: 
         var wo = py_call(np.empty, t, np.float32)
         var k = Int(py=py_call(xcnn_builtins().int, py_call(xcnn_entry(entries, "x_cnn_gcn_loops"), Python.list(xcnn_addr(s32), xcnn_addr(d32), xcnn_addr(w32), xcnn_addr(so), xcnn_addr(dso), xcnn_addr(wo)),
             Python.list(n, len(s32), 1 if Bool(py=fields["improved"]) else 0))))
+        _ = w32  # keep the Python object alive through the native call above
+        _ = d32  # keep the Python object alive through the native call above
         var cut = py_call(xcnn_builtins().slice, PythonObject(None), k + n)
         src = so.__getitem__(cut)
         dst = dso.__getitem__(cut)
@@ -313,6 +321,7 @@ def _gcn_forward_dev(layer: PythonObject, fields: PythonObject, entries: PythonO
     var xh = x.h if xt else xcnn_dev_upload(layer, entries, "x", x, context)
     var hh = xcnn_dev_get(layer, entries, "h", n * f_out, context)
     _ = py_call(xcnn_entry(entries, "x_cnn_gemm_m"), Python.list(xh, xcnn_addr(w), hh), PythonObject(0b101), Python.list(n, f_out, d_in, 1))
+    _ = w  # keep the Python object alive through the native call above
     var bias = Bool(py=fields["bias"])
     var out = xcnn_new(entries, [n, f_out], False, context) if xt else xcnn_host_f32([n, f_out], context)
     var oh = out.h if (xt and not bias) else xcnn_dev_get(layer, entries, "o", n * f_out, context)
@@ -434,6 +443,7 @@ def _sage_forward_dev(layer: PythonObject, fields: PythonObject, entries: Python
         var wr = xcnn_f32(fields["weight_r_"], "b", context)
         var rh = xcnn_dev_get(layer, entries, "r", n * f_out, context)
         _ = py_call(xcnn_entry(entries, "x_cnn_gemm_m"), Python.list(xh, xcnn_addr(wr), rh), PythonObject(0b101), Python.list(n, f_out, d_in, 1))
+        _ = wr  # keep the Python object alive through the native call above
         if norm:
             _ = py_call(xcnn_entry(entries, "x_cnn_map2_m"), Python.list(olh, rh, preh), PythonObject(0b111), Python.list(2, n * f_out))
         elif xt:

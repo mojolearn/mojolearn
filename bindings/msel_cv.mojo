@@ -801,11 +801,13 @@ def msel_cross_val_predict(args: PythonObject, context: PythonObject) raises -> 
         var size = Int(py=t.size)
         if size > 0:
             memcpy(dest=msel_p64(held) + at, src=msel_p64(t), count=size)
+            _ = held  # keep the Python object alive through the native call above
         at += size
         _ = py_call(tests.append, t)
     if msel_int(family_call(msel_entry("check_indices_i64", context), PythonObject(msel_addr(held)), PythonObject(n),
                             PythonObject(n))) != 0:
         raise Error("cross_val_predict only works for partitions")
+    _ = held  # keep the Python object alive through the native calls above
     var method = args[6]
     var rows = MselFoldRows(x, y, folds, msel_device_rows_ok(estimator, PythonObject(None), context), context)
     var result = PythonObject(None)

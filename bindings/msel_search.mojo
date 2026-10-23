@@ -152,18 +152,24 @@ def msel_row_means(rows: List[List[Float64]], context: PythonObject) raises -> L
     var k = len(rows[0]) if m else 0
     var flat = msel_new(max(m * k, 1), "<f8", context)
     var fp = msel_pf64(flat)
+    _ = flat  # keep the Python object alive through the native call above
     for i in range(m):  # driver-loop: over candidates
         for j in range(k):  # driver-loop: over folds
             fp[i * k + j] = rows[i][j]
+            _ = flat  # keep the Python object alive through the native call above
     var out = msel_new(max(m, 1), "<f8", context)
     if m and k:
         if msel_truth(family_call(msel_entry("row_means_f64", context), PythonObject(msel_addr(flat)), PythonObject(m),
                                   PythonObject(k), PythonObject(msel_addr(out)))):
             raise Error("-inf + inf in fsum")
+        _ = flat  # keep the Python object alive through the native calls above
+        _ = out  # keep the Python object alive through the native calls above
     var res = List[Float64]()
     var op = msel_pf64(out)
+    _ = out  # keep the Python object alive through the native call above
     for i in range(m):  # driver-loop: over candidates
         res.append(op[i])
+        _ = out  # keep the Python object alive through the native call above
     return res^
 
 
@@ -177,16 +183,23 @@ def msel_row_stds(rows: List[List[Float64]], means: List[Float64], context: Pyth
     var k = len(rows[0])
     var flat = msel_new(max(m * k, 1), "<f8", context)
     var fp = msel_pf64(flat)
+    _ = flat  # keep the Python object alive through the native call above
     for i in range(m):  # driver-loop: over candidates
         for j in range(k):  # driver-loop: over folds
             fp[i * k + j] = rows[i][j]
+            _ = flat  # keep the Python object alive through the native call above
     var mu = msel_f64_list(means, context)
     var out = msel_new(m, "<f8", context)
     _ = family_call(msel_entry("row_stds_f64", context), PythonObject(msel_addr(flat)), PythonObject(m), PythonObject(k),
                     PythonObject(msel_addr(mu)), PythonObject(msel_addr(out)))
+    _ = flat  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
+    _ = mu  # keep the Python object alive through the native call above
     var op = msel_pf64(out)
+    _ = out  # keep the Python object alive through the native call above
     for i in range(m):  # driver-loop: over candidates
         res.append(op[i])
+        _ = out  # keep the Python object alive through the native call above
     return res^
 
 
@@ -634,6 +647,7 @@ def _group_index(mut rng: MselRng, order: PythonObject, n: Int, context: PythonO
     var gather = msel_entry("gather_i64", context)
     var src = msel_new(n, "<i8", context)
     var s0 = msel_addr(src)
+    _ = src  # keep the Python object alive through the native call above
     var o0 = msel_addr(order[1])
     var perms = rng.permutation_rows(sizes, context)
     var at = 0

@@ -656,8 +656,10 @@ def _fit_ovo(fields: PythonObject, binding: PythonObject, x: PythonObject, class
             if precomputed:
                 # the pair's kernel matrix: its rows AND its columns
                 sub = _gather(binding, _addr(x), n_rows, n_cols, _addr(idx_a), m, _addr(idx_a), m, context)
+                _ = idx_a  # keep the Python object alive through the native call above
             else:
                 sub = _gather(binding, _addr(x), n_rows, n_cols, _addr(idx_a), m, 0, n_cols, context)
+                _ = idx_a  # keep the Python object alive through the native call above
             var sub_c = sel[2]
             var solved = _solve(fields, binding, _addr(sub), m, Int(py=sub.shape[1]), _addr(sel[1]), gamma,
                                 0 if sub_c is None else _addr(sub_c), context)
@@ -672,6 +674,7 @@ def _fit_ovo(fields: PythonObject, binding: PythonObject, x: PythonObject, class
                                      "<f4", context)
             # the pair's support in X's row numbers, gathered in the binding
             var pair_support = _gather_i32(binding, _addr(idx_a), m, _addr(solved[2]), n_sv, context)
+            _ = idx_a  # keep the Python object alive through the native call above
             if precomputed:
                 # the support rows of the WHOLE kernel matrix
                 sv_rows = _gather(binding, _addr(x), n_rows, n_cols, _addr(pair_support), n_sv, 0, n_cols, context)

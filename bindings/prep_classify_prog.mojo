@@ -125,9 +125,13 @@ struct ClsProg(Movable):
         """`_Prog.put_ints`: int32 words read by `ldi` ([0] when empty)."""
         var words = i32_array(len(values), context)
         var dest = I32P(unsafe_from_address=Int(py=classical_address(words)))
+        _ = words  # keep the Python object alive through the native call above
         for i in range(len(values)):  # driver-loop: over a parameter list of int words
             dest[i] = Int32(values[i])
-        return self.put_words(words)
+            _ = words  # keep the Python object alive through the native call above
+        var _keep_ret_words = self.put_words(words)
+        _ = words  # keep the Python object alive through the native call above
+        return _keep_ret_words^
 
     def put_codes(mut self, codes: PythonObject) raises -> Int:
         """`_Prog.put_codes`: int32 codes -> offset of their float values (i2f)."""
