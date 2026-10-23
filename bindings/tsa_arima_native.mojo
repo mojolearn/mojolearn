@@ -15,6 +15,7 @@ from the module table.
 """
 from std.memory import memcpy
 from std.python import Python, PythonObject
+from x_metrics.epilogue import portable_log_c
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_input, classical_address, classical_cast_kind
@@ -222,7 +223,9 @@ def _penalties(order: List[Int], big_n: Int, n_obs: Int, context: PythonObject) 
     var n_par = Float64(big_n)
     var log_t = Float64(0.0)
     if t > 0:
-        log_t = Float64(py=py_call(context["pm_log"], PythonObject(Float64(t))))
+        # the pinned log: portable_log_c is packaging/portable_math.c `mojolearn_log`
+        # operation for operation (what `_portable_math.log` returns)
+        log_t = portable_log_c(Float64(t))
     return (2.0 * n_par, log_t * n_par)
 
 

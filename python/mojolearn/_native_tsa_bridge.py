@@ -67,10 +67,6 @@ def connect():
     context["arima_bindings"] = arima
     context["arima_entry_names"] = arima_names
     from ._buffer import _native
-    log = _native("log")  # glue: the pinned log entry the criterion penalty reads
-    if not isinstance(log, BuiltinFunctionType):
-        raise TypeError("ARIMA requires the compiled pinned log entry")
-    context["pm_log"] = log
     for name in ("gather_rows_bytes", "scatter_rows_bytes"):  # glue: the base binding's byte row moves
         fn = _native(name)
         if not isinstance(fn, BuiltinFunctionType):
