@@ -79,7 +79,10 @@ def run_operation[E: Exec & Movable & Deinitable](
             raise Error("adapter: declared output shape differs from the native result")
         if Int(s.int_words[slot]) != output[1]:
             raise Error("adapter: declared output dtype differs from the native result")
-        var source = s.tape.value(s.tensor(result))
+        # Layout operations can return a deferred view. Use the same native
+        # materialization entry as ordinary public result consumption.
+        var tensor = s.tensor(result)
+        var source = s.tape.value_of(s.ex, tensor)
         copy_words(s.ex, source, FP(unsafe_from_address=output[0]), expected.count())
         s.ex.sync()
     except error:
