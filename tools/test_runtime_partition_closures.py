@@ -1,5 +1,6 @@
 """Runtime partition dependency boundaries; these checks never compile Mojo."""
 from pathlib import Path
+import json
 import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -33,3 +34,25 @@ def test_storage_only_imports_use_the_leaf_instead_of_the_archive_facade():
             if module == 'bindings.host_archive_native' and set(names) == {'host_archive_typed'}:
                 obsolete.append(str(path.relative_to(ROOT)))
     assert not obsolete, obsolete
+
+
+def test_model_selection_edits_invalidate_only_the_independent_development_owner():
+    groups = json.loads((ROOT/'bindings/development_groups.json').read_text())['groups']
+    graph = SourceGraph(ROOT)
+    owners = set()
+    for mode, partitions in groups.items():
+        for name, members in partitions.items():
+            closure = graph.closure(members)
+            assert closure['scope'] == 'closure', closure['unresolved']
+            if 'bindings/msel_split.mojo' in closure['files']:
+                owners.add((mode, name))
+    assert owners == {('host', 'runtime_model_selection')}
+
+
+def test_release_keeps_one_host_file_and_includes_the_new_logical_entry():
+    release = json.loads((ROOT/'bindings/merged_groups.json').read_text())
+    groups = release['dirs']['host']['groups']
+    assert set(groups) == {'_mojolearn_native_host'}
+    assert groups['_mojolearn_native_host'].count('_mojolearn_runtime_model_selection_host') == 1
+    entry = ROOT/'bindings/entry/entry__mojolearn_runtime_model_selection_host.mojo'
+    assert 'PyInit__mojolearn_runtime_model_selection_host' in entry.read_text()

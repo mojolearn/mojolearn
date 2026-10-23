@@ -1293,6 +1293,7 @@ GBDT_CTR_MODEL_LANES = ("gbdt-categorical-ctr-tables", "gbdt-tensor-ctr-tables")
 #: MOJOLEARN_LOWBIT_CONVERT_SABOTAGE is those four seams' own arm and the
 #: gate's set now carries it too.
 GATE_SABOTAGE_OWN_DEFINES = {
+    "runtime_model_selection": ("MOJOLEARN_RUNTIME_MODEL_SELECTION_SABOTAGE",),
     # lane/catboost-parity (2026-09-19): the non-default border types' own
     # arm (drops `select_borders`' middle border). MOJOLEARN_HOST_SABOTAGE
     # already moves gbdt-border-types through the Newton walker; this one
@@ -3219,6 +3220,25 @@ FAMILIES = (
             "transformer-window lanes hash, so they can be checked on an installed CPU; the "
             "shipped neural family carries the forward only."
         ),
+        ships_in_wheel=True,
+    ),
+    dict(
+        family="runtime_model_selection",
+        binding="_mojolearn_runtime_model_selection_host",
+        routes=None,
+        loaded_by="python/mojolearn/_native_model_selection_bridge.py",
+        sabotage_define="MOJOLEARN_RUNTIME_MODEL_SELECTION_SABOTAGE",
+        training_lanes=("x-metrics-splitters",),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("model_selection.KFold", "model_selection.LeavePOut", "model_selection.GridSearchCV"),
+        display="native splitters, cross-validation and model selection",
+        host_modules=("bindings/runtime_model_selection_entry.mojo", "bindings/model_selection_native.mojo"),
+        exports=("model_selection_native_call", "runtime_model_selection_host_numeric_mode",
+                 "runtime_model_selection_host_vendor", "runtime_model_selection_host_column",
+                 "runtime_model_selection_host_sabotage"),
+        gate="python/mojolearn/tests/test_runtime_model_selection_partition.py",
+        wheel_note="Ships: native orchestration for the existing model-selection public API.",
         ships_in_wheel=True,
     ),
 )

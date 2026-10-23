@@ -1,115 +1,242 @@
 {
   "_doc": [
-    "Opt-in development partition. Release remains bindings/merged_groups.json.",
-    "Keep related kernels together to reduce repeated compilation while limiting rebuild scope.",
-    "Membership must equal the release surface, with optional members assigned once.",
-    "Apple flag classes are still separated by tools/merged_bindings.py.",
-    "These initial family boundaries have not yet been benchmarked."
+    "Development only: one independent cached unit per existing logical binding owner.",
+    "Native type registration, allocation and destruction remain inside their logical owner.",
+    "The model-selection runtime owner is separate from the tokenizer dispatcher.",
+    "Release physical groups remain in merged_groups.json; shared code is compiled once there.",
+    "Cold development duplication and target memory/time require measured qualification."
   ],
   "groups": {
     "identical": {
+      "gbdt": [
+        "_mojolearn_gbdt"
+      ],
+      "rf": [
+        "_mojolearn_rf"
+      ],
       "trees": [
-        "_mojolearn_gbdt",
-        "_mojolearn_rf",
-        "_mojolearn_trees",
+        "_mojolearn_trees"
+      ],
+      "x_trees": [
         "_mojolearn_x_trees"
       ],
-      "dense": [
-        "_mojolearn_estimators",
-        "_mojolearn_svm",
-        "_mojolearn_solver",
-        "_mojolearn_linalg",
-        "_mojolearn_gp",
-        "_mojolearn_kernel_methods",
-        "_mojolearn_mixture",
-        "_mojolearn_x_linear",
+      "estimators": [
+        "_mojolearn_estimators"
+      ],
+      "svm": [
+        "_mojolearn_svm"
+      ],
+      "solver": [
+        "_mojolearn_solver"
+      ],
+      "linalg": [
+        "_mojolearn_linalg"
+      ],
+      "gp": [
+        "_mojolearn_gp"
+      ],
+      "kernel_methods": [
+        "_mojolearn_kernel_methods"
+      ],
+      "mixture": [
+        "_mojolearn_mixture"
+      ],
+      "x_linear": [
+        "_mojolearn_x_linear"
+      ],
+      "x_decomp": [
         "_mojolearn_x_decomp"
       ],
-      "neighbors": [
-        "_mojolearn",
-        "_mojolearn_hdbscan",
-        "_mojolearn_ivf",
-        "_mojolearn_x_cluster",
-        "_mojolearn_x_neighbors",
+      "core": [
+        "_mojolearn"
+      ],
+      "hdbscan": [
+        "_mojolearn_hdbscan"
+      ],
+      "ivf": [
+        "_mojolearn_ivf"
+      ],
+      "x_cluster": [
+        "_mojolearn_x_cluster"
+      ],
+      "x_neighbors": [
+        "_mojolearn_x_neighbors"
+      ],
+      "x_ann": [
         "_mojolearn_x_ann"
       ],
-      "utilities": [
-        "_mojolearn_metrics",
-        "_mojolearn_preprocessing",
-        "_mojolearn_resample",
-        "_mojolearn_x_prep",
+      "metrics": [
+        "_mojolearn_metrics"
+      ],
+      "preprocessing": [
+        "_mojolearn_preprocessing"
+      ],
+      "resample": [
+        "_mojolearn_resample"
+      ],
+      "x_prep": [
+        "_mojolearn_x_prep"
+      ],
+      "x_metrics": [
         "_mojolearn_x_metrics"
       ],
-      "neural": [
-        "_mojolearn_training",
-        "_mojolearn_mamba",
-        "_mojolearn_transformer",
-        "_mojolearn_embedding",
-        "_mojolearn_x_sequence",
-        "_mojolearn_x_cnn",
+      "training": [
+        "_mojolearn_training"
+      ],
+      "mamba": [
+        "_mojolearn_mamba"
+      ],
+      "transformer": [
+        "_mojolearn_transformer"
+      ],
+      "embedding": [
+        "_mojolearn_embedding"
+      ],
+      "x_sequence": [
+        "_mojolearn_x_sequence"
+      ],
+      "x_cnn": [
+        "_mojolearn_x_cnn"
+      ],
+      "byte_lm": [
         "_mojolearn_byte_lm"
       ],
-      "forecast": [
-        "_mojolearn_tsa",
+      "tsa": [
+        "_mojolearn_tsa"
+      ],
+      "arima": [
         "_mojolearn_arima"
       ]
     },
     "host": {
+      "forest": [
+        "_mojolearn_forest_host"
+      ],
       "trees": [
-        "_mojolearn_forest_host",
-        "_mojolearn_trees_host",
-        "_mojolearn_rf_host",
-        "_mojolearn_gbdt_host",
+        "_mojolearn_trees_host"
+      ],
+      "rf": [
+        "_mojolearn_rf_host"
+      ],
+      "gbdt": [
+        "_mojolearn_gbdt_host"
+      ],
+      "x_trees": [
         "_mojolearn_x_trees_host"
       ],
-      "dense": [
-        "_mojolearn_linalg_host",
-        "_mojolearn_estimators_host",
-        "_mojolearn_solver_host",
-        "_mojolearn_svm_host",
-        "_mojolearn_gp_host",
-        "_mojolearn_kernel_methods_host",
-        "_mojolearn_mixture_host",
-        "_mojolearn_mixture_infer_host",
-        "_mojolearn_gp_infer_host",
-        "_mojolearn_x_linear_host",
+      "linalg": [
+        "_mojolearn_linalg_host"
+      ],
+      "estimators": [
+        "_mojolearn_estimators_host"
+      ],
+      "solver": [
+        "_mojolearn_solver_host"
+      ],
+      "svm": [
+        "_mojolearn_svm_host"
+      ],
+      "gp": [
+        "_mojolearn_gp_host"
+      ],
+      "kernel_methods": [
+        "_mojolearn_kernel_methods_host"
+      ],
+      "mixture": [
+        "_mojolearn_mixture_host"
+      ],
+      "mixture_infer": [
+        "_mojolearn_mixture_infer_host"
+      ],
+      "gp_infer": [
+        "_mojolearn_gp_infer_host"
+      ],
+      "x_linear": [
+        "_mojolearn_x_linear_host"
+      ],
+      "x_decomp": [
         "_mojolearn_x_decomp_host"
       ],
-      "neighbors": [
-        "_mojolearn_core_host",
-        "_mojolearn_hdbscan_host",
-        "_mojolearn_hdbscan_infer_host",
-        "_mojolearn_ivf_host",
-        "_mojolearn_ivf_search_host",
-        "_mojolearn_x_cluster_host",
-        "_mojolearn_x_neighbors_host",
+      "core": [
+        "_mojolearn_core_host"
+      ],
+      "hdbscan": [
+        "_mojolearn_hdbscan_host"
+      ],
+      "hdbscan_infer": [
+        "_mojolearn_hdbscan_infer_host"
+      ],
+      "ivf": [
+        "_mojolearn_ivf_host"
+      ],
+      "ivf_search": [
+        "_mojolearn_ivf_search_host"
+      ],
+      "x_cluster": [
+        "_mojolearn_x_cluster_host"
+      ],
+      "x_neighbors": [
+        "_mojolearn_x_neighbors_host"
+      ],
+      "x_ann": [
         "_mojolearn_x_ann_host"
       ],
-      "utilities": [
-        "_mojolearn_metrics_host",
-        "_mojolearn_preprocessing_host",
-        "_mojolearn_resample_host",
-        "_mojolearn_x_prep_host",
+      "metrics": [
+        "_mojolearn_metrics_host"
+      ],
+      "preprocessing": [
+        "_mojolearn_preprocessing_host"
+      ],
+      "resample": [
+        "_mojolearn_resample_host"
+      ],
+      "x_prep": [
+        "_mojolearn_x_prep_host"
+      ],
+      "x_metrics": [
         "_mojolearn_x_metrics_host"
       ],
+      "byte_lm": [
+        "_mojolearn_byte_lm_host"
+      ],
       "neural": [
-        "_mojolearn_byte_lm_host",
-        "_mojolearn_neural_host",
-        "_mojolearn_training_host",
-        "_mojolearn_mamba_host",
-        "_mojolearn_embedding_host",
-        "_mojolearn_embedding_infer_host",
-        "_mojolearn_transformer_host",
-        "_mojolearn_x_sequence_host",
+        "_mojolearn_neural_host"
+      ],
+      "training": [
+        "_mojolearn_training_host"
+      ],
+      "mamba": [
+        "_mojolearn_mamba_host"
+      ],
+      "embedding": [
+        "_mojolearn_embedding_host"
+      ],
+      "embedding_infer": [
+        "_mojolearn_embedding_infer_host"
+      ],
+      "transformer": [
+        "_mojolearn_transformer_host"
+      ],
+      "x_sequence": [
+        "_mojolearn_x_sequence_host"
+      ],
+      "x_cnn": [
         "_mojolearn_x_cnn_host"
       ],
+      "tsa": [
+        "_mojolearn_tsa_host"
+      ],
+      "arima": [
+        "_mojolearn_arima_host"
+      ],
       "forecast": [
-        "_mojolearn_tsa_host",
-        "_mojolearn_arima_host",
         "_mojolearn_forecast_host"
       ],
-      "runtime": [
+      "tokenizer": [
         "_mojolearn_tokenizer_host"
+      ],
+      "runtime_model_selection": [
+        "_mojolearn_runtime_model_selection_host"
       ]
     }
   }

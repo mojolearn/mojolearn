@@ -2340,7 +2340,8 @@ _connect_arena_rows()
 # once at import, with the fixed tables it reads: the scorer table, the
 # scorer class `make_scorer` fills, and numbers.Real for the score check.
 from . import _native_family_bridge  # noqa: E402
-_NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
+from . import _native_model_selection_bridge  # noqa: E402
+_NATIVE, _NATIVE_CONTEXT = _native_model_selection_bridge.connect()
 _native_family_bridge.tables(family_msel_scorers=_scorer_table(), family_msel_scorer_class=_Scorer,
                              family_msel_real=numbers.Real)
 # glue: the fixed tables of the native splitters, cross-validation and

@@ -4,12 +4,23 @@ Live copies: ~/mojolearn-evidence/lq/lq, ~/mojolearn-evidence/compile_slot.sh, a
 
 ## Incremental development builds
 
-Internal engineering path: `tools/development_build.py` builds six `identical`
-families and seven host families from `bindings/development_groups.json`.
+Internal engineering path: `tools/development_build.py` builds independent
+logical binding owners from `bindings/development_groups.json`: 33 configured
+`identical` units (including optional byte-LM) and 43 host units. Each existing
+logical binding keeps its native types and state; model selection has its own
+runtime entry instead of importing the tokenizer dispatcher. Target/platform
+selection can omit an optional unit.
 Release scripts keep `bindings/merged_groups.json` and its compact merged files.
 The development layout's native compilation, public runtime behavior and
 Apple/NVIDIA/AMD identity still require qualification. Controller tests do not
 establish numerical equivalence or a compile-time speedup.
+
+The compact release host group includes the model-selection builder as another
+logical module, so release imports use the same native entry. Model-selection
+source edits invalidate its development unit; shared array/admission/error
+helpers still invalidate every owner that imports them. Cold development builds
+duplicate common code across units, so their time, peak memory and total binary
+size must be measured separately from the compact release build.
 
 Run from an isolated development worktree. Install its pinned default Pixi
 environment first. Planning performs no compilation or activation:
@@ -42,7 +53,7 @@ locked dependencies, flags and target. An unresolved import records
 `--cache` defaults to `~/.cache/mojolearn-development` and must be outside the
 source tree. Full logs, plan and per-group receipts remain under `--evidence`.
 
-`--group trees` or `--group host:runtime` limits which missing groups compile.
+`--group trees` or `--group host:runtime_model_selection` limits which missing groups compile.
 If another required group is stale or absent, the selected artifacts are kept
 in cache but activation returns **3** and preserves the existing loader indexes.
 Omit `--group` to build all missing groups. Successful activation stages

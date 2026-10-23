@@ -145,7 +145,8 @@
      "_mojolearn_x_trees_host",
      "_mojolearn_x_cnn_host",
      "_mojolearn_x_ann_host",
-     "_mojolearn_x_metrics_host"
+     "_mojolearn_x_metrics_host",
+     "_mojolearn_runtime_model_selection_host"
     ]
    },
    "optional": {}

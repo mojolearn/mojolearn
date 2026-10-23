@@ -6,8 +6,9 @@
 # maps their `<Class>: ` error prefixes and restores a stashed Python
 # exception unchanged.
 from std.python import PythonObject
+from bindings.py_balanced import py_type, py_get
+from bindings.family_common import family_call
 from bindings.kmeans_native import kmeans_operation
-from bindings.model_selection_native import msel_operation
 from bindings.kernel_methods_native import kernel_methods_operation
 from bindings.linalg_native import linalg_operation
 from bindings.neighbors_native import neighbors_operation
@@ -42,7 +43,15 @@ def family_operation(model: PythonObject, operation: String, args: PythonObject,
     if operation.startswith("family_chol_"):
         return linalg_operation(model, operation, args, context)
     if operation.startswith("family_msel_"):
-        return msel_operation(model, operation, args, context)
+        # Preserve the existing generic entry ABI without importing the
+        # independently compiled model-selection owner. Import setup retains
+        # its verified native entry; Python never chooses an operation route.
+        var entry = py_get(context, "family_msel_door")
+        if entry is None:
+            raise Error("RuntimeError: the model-selection native owner is not connected")
+        if py_type(entry) is not context["family_builtin_type"]:
+            raise Error("TypeError: model selection requires its compiled native entry")
+        return family_call(entry, model, PythonObject(operation), args, context)
     if operation.startswith("family_svc_"):
         return svc_operation(model, operation, args, context)
     if operation.startswith("family_gp_"):
