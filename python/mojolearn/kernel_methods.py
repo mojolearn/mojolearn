@@ -39,7 +39,7 @@ transforms from a saved model on a CPU without a GPU.
 from . import _backend, _native_archive_bridge, _native_family_bridge
 from ._scale_gamma import scale_gamma, scale_gamma_x
 from ._buffer import addr, addr_ro, as_f32_dense_c, empty
-from ._lazy_out import _empty_out, _mapped_out
+from ._lazy_out import _mapped_out
 from ._mode import NumericModeMixin
 from ._mode import RegressorScoreMixin
 
@@ -596,27 +596,7 @@ class RBFSampler(_KernelMethodBase):
         Array of shape (n_rows, n_components), float32
             `scale_ * cos(X @ random_weights_ + random_offset_)`.
         """
-        if not hasattr(self, "random_weights_"):
-            raise ValueError(f"mojolearn {self._WHERE}: call fit before transform")
-        x, _ = as_f32_dense_c(X, ndim=2, name="X")
-        m, d = x.shape
-        if d != self.n_features_in_:
-            raise ValueError(
-                f"mojolearn {self._WHERE}: X has {d} features, the fit had {self.n_features_in_}"
-            )
-        q = self.random_weights_.shape[1]
-        gamma, seed = self._params
-        out = _empty_out((m * q,), "<f4")
-        flat_w = self.random_weights_.reshape((d * q,))
-        self._extension().rbf_sampler_transform(
-            # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::rbf_sampler_transform_binding.
-            # weights, offset, x, out
-            [addr_ro(flat_w, name="random_weights_"), addr_ro(self.random_offset_, name="random_offset_"),
-             addr_ro(x, name="X"), addr(out, name="transform")],
-            # d, q, gamma, seed, sigma, scale, m
-            [d, q, gamma, seed, self.sigma_, self.scale_, m],
-        )
-        return out.reshape((m, q))
+        return _NATIVE(self, "family_km_rbf_transform", (self._bind(), X), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit to `X`, then transform `X`.

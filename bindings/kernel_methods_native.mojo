@@ -307,6 +307,38 @@ def _nys_transform(model: PythonObject, args: PythonObject, context: PythonObjec
     return out
 
 
+def _rbf_transform(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`RBFSampler.transform(X)`: scale_ * cos(X @ random_weights_ + random_offset_)."""
+    classical_connect_numpy(context)
+    var where = String("RBFSampler")
+    var fields = py_fields(model)
+    if not py_contains(fields, PythonObject("random_weights_")):
+        raise Error("mojolearn " + where + ": call fit before transform")
+    var x = family_as_f32_dense(args[1], 2, "X", context)
+    var m = Int(py=x.shape[0])
+    var d = Int(py=x.shape[1])
+    var fitted = family_field(fields, "n_features_in_")
+    if d != Int(py=fitted):
+        raise Error("mojolearn " + where + ": X has " + String(d) + " features, the fit had " + String(Int(py=fitted)))
+    var weights = family_as_f32(family_field(fields, "random_weights_"), 2, "random_weights_", context)
+    var q = Int(py=weights.shape[1])
+    var params = family_field(fields, "_params")
+    var offset = family_field(fields, "random_offset_")
+    var out = family_array(Python.tuple(m, q), "<f4", context)
+    var binding = _km_extension(model, args[0], where, context)
+    # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::rbf_sampler_transform_binding:
+    # weights, offset, x, out; d, q, gamma, seed, sigma, scale, m.
+    _ = family_call(family_entry(binding, "rbf_sampler_transform", context),
+                    Python.list(classical_address(weights), classical_address(offset), classical_address(x),
+                                classical_address(out)),
+                    Python.list(PythonObject(d), PythonObject(q), params[0], params[1], family_field(fields, "sigma_"),
+                                family_field(fields, "scale_"), PythonObject(m)))
+    _ = weights^
+    _ = offset^
+    _ = x^
+    return out
+
+
 def kernel_methods_operation(model: PythonObject, operation: String, args: PythonObject,
                              context: PythonObject) raises -> PythonObject:
     """The kernel methods' public operations: args[0] is the resolved binding."""
@@ -320,6 +352,8 @@ def kernel_methods_operation(model: PythonObject, operation: String, args: Pytho
         return model
     if operation == "family_km_nys_transform":
         return _nys_transform(model, args, context)
+    if operation == "family_km_rbf_transform":
+        return _rbf_transform(model, args, context)
     if operation == "family_km_nys_fit_transform":
         _nys_fit(model, args, context)
         return _nys_transform(model, args, context)
