@@ -31,7 +31,7 @@ from bindings.msel_common import (
 from bindings.msel_split import msel_truth, msel_cls, msel_sabotage
 from bindings.msel_cv import (
     msel_clone, msel_cv_folds, msel_device_rows_ok, msel_require_serial, msel_scorers, MselFoldRows, MselScores,
-    msel_cross_validate_run, msel_seconds, msel_fit,
+    msel_cross_validate_run, msel_seconds, msel_fit, msel_error_value,
 )
 
 from bindings.msel_estimator_native import msel_native_set_params, msel_estimator_plan
@@ -481,6 +481,8 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
     var st = List[Float64]()
     var res = msel_resident_new(context)
     var scoring = args[6]
+    var error_score = args[10]
+    var raise_errors = py_type(error_score) is b.str and String(error_score) == "raise"
     try:
         for si in range(len(sizes)):  # driver-loop: over train sizes
             var a = sizes[si]
@@ -491,11 +493,21 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
                 var t0 = msel_seconds()
                 var xs = _take(res, x, sub, context)
                 var ys = _take(res, y, sub, context)
-                msel_fit(est, xs, ys, context)
+                var fitted = True
+                if raise_errors:
+                    msel_fit(est, xs, ys, context)
+                else:
+                    try:
+                        msel_fit(est, xs, ys, context)
+                    except error:
+                        if not msel_catch(error, b.Exception):
+                            raise error^
+                        fitted = False
                 var t1 = msel_seconds()
                 var sc = msel_get_scorer(scoring, context)
-                tr_s.append(Float64(py=msel_score(est, xs, ys, sc, context)))
-                te_s.append(Float64(py=msel_score(est, _take(res, x, test, context), _take(res, y, test, context), sc, context)))
+                tr_s.append(Float64(py=msel_score(est, xs, ys, sc, context)) if fitted else msel_error_value(error_score))
+                te_s.append(Float64(py=msel_score(est, _take(res, x, test, context), _take(res, y, test, context), sc, context))
+                            if fitted else msel_error_value(error_score))
                 msel_resident_release(res, sub, context)
                 ft.append(t1 - t0)
                 st.append(msel_seconds() - t1)
