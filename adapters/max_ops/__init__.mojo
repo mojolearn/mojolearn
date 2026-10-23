@@ -4,12 +4,9 @@ import extensibility
 from extensibility import InputTensor, OutputTensor
 from max.gpu.host import DeviceContext
 from std.utils.index import IndexList
-from adapters.native.operation import run_operation, WORDS, IP
-from sequence.exec import HostExec
-from sequence.exec_device import DeviceExec
-from sequence.ops import FP
-from autograd.rankn import ShapeN
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from std.ffi import OwnedDLHandle
+
+comptime WORDS = 11  # adapters/native/abi.h, ABI version 1
 
 
 def descriptor[rank: Int](
@@ -17,12 +14,10 @@ def descriptor[rank: Int](
 ) raises -> List[Int]:
     if rank > 8:
         raise Error("adapter: rank exceeds eight")
-    var dimensions = List[Int]()
-    for k in range(rank):
-        dimensions.append(shape[k])
-    _ = ShapeN.of(dimensions)  # validates positive extents and storage overflow
     var expected = 1
     for k in range(rank - 1, -1, -1):  # small-loop(rank<=8): layout validation
+        if shape[k] < 1 or expected > (1 << 58) // shape[k]:
+            raise Error("adapter: invalid or oversized shape")
         if shape[k] > 1 and strides[k] != expected:
             raise Error("adapter: contiguous tensors required")
         expected *= shape[k]
@@ -35,21 +30,29 @@ def descriptor[rank: Int](
     return result^
 
 
-def execute_operation[target: StaticString, code: Int](
+def execute_operation[target: StaticString, code: Int, library: StaticString](
     inputs: List[Int], count: Int, output: List[Int], ctx: DeviceContext,
 ) raises:
-    if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
-        raise Error("adapter requires identical arithmetic")
-    var no_ints = IP(unsafe_from_address=0)
-    var no_floats = FP(unsafe_from_address=0)
+    # Use the SAME frozen native artifact as Torch. MAX compiles only this
+    # ABI adapter; it neither recompiles numerical kernels nor chooses their
+    # arithmetic flags. OwnedDLHandle is Mojo's supported public C FFI.
+    var lib = OwnedDLHandle(String(library))
+    if lib.get_function[Int]("mojolearn_adapter_abi")() != 1:
+        raise Error("adapter: incompatible native ABI")
+    var device = -1
     comptime if target == "gpu":
-        run_operation(DeviceExec(ctx), code, IP(unsafe_from_address=Int(inputs.unsafe_ptr())), count,
-                      IP(unsafe_from_address=Int(output.unsafe_ptr())), no_ints, 0, no_floats, 0)
-    elif target == "cpu":
-        run_operation(HostExec(), code, IP(unsafe_from_address=Int(inputs.unsafe_ptr())), count,
-                      IP(unsafe_from_address=Int(output.unsafe_ptr())), no_ints, 0, no_floats, 0)
-    else:
+        device = Int(ctx.id())
+        if device != 0:
+            raise Error("adapter: this build supports only visible GPU zero")
+        ctx.synchronize()
+    elif target != "cpu":
         raise Error("adapter: unsupported target")
+    var error = List[UInt8](length=2048, fill=0)
+    var status = lib.get_function[Int]("mojolearn_adapter_operation")(
+        device, Int(code), Int(inputs.unsafe_ptr()), count, Int(output.unsafe_ptr()),
+        Int(0), Int(0), Int(0), Int(0), Int(error.unsafe_ptr()), len(error))
+    if status != 0:
+        raise Error(String(unsafe_from_utf8_ptr=error.unsafe_ptr()))
     # Raw ABI pointers do not encode origins; retain their owners through call.
     _ = inputs
     _ = output
@@ -58,19 +61,19 @@ def execute_operation[target: StaticString, code: Int](
 @extensibility.register("mojolearn_relu")
 struct Relu:
     @staticmethod
-    def execute[target: StaticString](
+    def execute[target: StaticString, library: StaticString = "libmojolearn_adapter.so"](
         output: OutputTensor[dtype=DType.float32, ...],
         x: InputTensor[dtype=DType.float32, ...], ctx: DeviceContext,
     ) raises:
         var inputs = descriptor(Int(x.unsafe_ptr()), x.shape(), x.strides())
         var out = descriptor(Int(output.unsafe_ptr()), output.shape(), output.strides())
-        execute_operation[target, 6](inputs, 1, out, ctx)
+        execute_operation[target, 6, library](inputs, 1, out, ctx)
 
 
 @extensibility.register("mojolearn_matmul")
 struct Matmul:
     @staticmethod
-    def execute[target: StaticString](
+    def execute[target: StaticString, library: StaticString = "libmojolearn_adapter.so"](
         output: OutputTensor[dtype=DType.float32, ...],
         x: InputTensor[dtype=DType.float32, ...],
         weight: InputTensor[dtype=DType.float32, ...], ctx: DeviceContext,
@@ -80,4 +83,4 @@ struct Matmul:
         for k in range(len(other)):  # small-loop(WORDS=11): second descriptor
             inputs.append(other[k])
         var out = descriptor(Int(output.unsafe_ptr()), output.shape(), output.strides())
-        execute_operation[target, 1](inputs, 2, out, ctx)
+        execute_operation[target, 1, library](inputs, 2, out, ctx)

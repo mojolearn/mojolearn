@@ -9,6 +9,7 @@ import traceback
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--library", type=Path, required=True)
+    parser.add_argument("--native-library", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
@@ -31,8 +32,10 @@ def main():
         with Graph("mojolearn_native_matmul_relu", input_types=input_types,
                    custom_extensions=[args.library.resolve()]) as graph:
             product = ops.custom("mojolearn_matmul", dev, [v.tensor for v in graph.inputs],
-                                 out_types=[output_type])[0].tensor
-            result = ops.custom("mojolearn_relu", dev, [product], out_types=[output_type])[0].tensor
+                                 out_types=[output_type],
+                                 parameters={"library": str(args.native_library.resolve())})[0].tensor
+            result = ops.custom("mojolearn_relu", dev, [product], out_types=[output_type],
+                                parameters={"library": str(args.native_library.resolve())})[0].tensor
             graph.output(result)
         model = session.load(graph)
         buffers = [Buffer.from_numpy(a).to(device) for a in (x, w)]
