@@ -2131,6 +2131,11 @@ def test_native_pointer_factory_proof_refuses_calls_and_unknown_escapes():
     safe = '''
 from types import BuiltinFunctionType
 NAMES = ("native_fit",)
+REGISTRY = dict()
+def binding():
+    return None
+def registry():
+    return REGISTRY
 def connect():
     module = binding()
     entries = {}
@@ -2148,12 +2153,17 @@ def connect():
     for extra, expected in (("", True), ("    entry()\n", False),
                             ("    unknown(entries)\n", False),
                             ("    owner.cache = entries\n", False),
-                            ("    module.native_fit()\n", False)):
+                            ("    module.native_fit()\n", False),
+                            ("    REGISTRY['call'] = entry\n", False),
+                            ("    REGISTRY.update(entries)\n", False),
+                            ("    shared = registry()\n    shared['call'] = entry\n", False),
+                            ("    [value() for value in [entry]]\n", False),
+                            ("    alias: object = entry\n    alias()\n", False)):
         text = safe.replace("    return call, context", extra + "    return call, context")
         lane_select._read.cache[path] = text
         lane_select._parse.cache.pop(path, None)
         tree = lane_select._parse(path)
-        fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef))
+        fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "connect")
         try:
             assert lane_select._native_references_only(path, fn, exports) is expected, extra
             got = lane_select._executed_names(path, tree.body, {"connect"}, {(path, "connect")}, exports)

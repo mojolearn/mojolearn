@@ -1039,9 +1039,12 @@ def _deferred_factory_calls_uncached(rel, nodes, wanted):
     source = Source(_parse, lambda *args: False)
     needed = set(wanted)
     assignments = []
+    opaque_namespace = False
     for top in nodes:
         if isinstance(top, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             needed.update(n.id for n in ast.walk(top) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load))
+            needed.update(n.value for n in ast.walk(top) if isinstance(n, ast.Constant)
+                          and isinstance(n.value, str) and n.value.isidentifier())
         elif isinstance(top, ast.Assign):
             assignments.append(top)
             # A native pointer passed to any setup call could run there,
@@ -1051,6 +1054,13 @@ def _deferred_factory_calls_uncached(rel, nodes, wanted):
                     needed.update(n.id for n in ast.walk(arg) if isinstance(n, ast.Name))
         elif not isinstance(top, (ast.Import, ast.ImportFrom)):
             needed.update(n.id for n in ast.walk(top) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load))
+        for call in (n for n in ast.walk(top) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)):
+            if call.func.id in ("globals", "locals", "vars", "eval", "exec") or (
+                    call.func.id == "getattr" and len(call.args) >= 2 and not isinstance(call.args[1], ast.Constant)):
+                opaque_namespace = True
+    if opaque_namespace:
+        needed.update(n.id for top in assignments for target in top.targets
+                      for n in ast.walk(target) if isinstance(n, ast.Name))
     changed = True
     while changed:
         before = len(needed)
@@ -1091,8 +1101,11 @@ def _native_references_only_uncached(rel, function, exports):
     object, or a global store refuses the proof. Helpers still keep their
     own import/call edges. Names and comments never confer an exemption.
     """
-    if function.decorator_list or any(isinstance(n, (ast.Global, ast.Nonlocal, ast.AnnAssign,
-                                                     ast.AugAssign, ast.NamedExpr)) for n in ast.walk(function)):
+    if (function.decorator_list or function.args.defaults or any(function.args.kw_defaults)
+            or function.args.vararg or function.args.kwarg
+            or any(isinstance(n, (ast.Global, ast.Nonlocal, ast.AnnAssign, ast.AugAssign,
+                                  ast.NamedExpr, ast.comprehension, ast.Match, ast.With,
+                                  ast.AsyncWith, ast.Lambda)) for n in ast.walk(function))):
         return False
     from import_metadata_effects import Source
     source = Source(_parse, lambda *args: False)
@@ -1106,6 +1119,43 @@ def _native_references_only_uncached(rel, function, exports):
                    or isinstance(n, ast.Constant) and isinstance(n.value, str) and n.value in exports
                    for n in ast.walk(node))
 
+    def fresh_dict(where, node, body, seen=frozenset()):
+        if isinstance(node, ast.Dict):
+            return True
+        if isinstance(node, ast.Name):
+            key = where, node.id, id(body)
+            if key in seen:
+                return False
+            assigned = [n.value for n in body if isinstance(n, ast.Assign)
+                        and any(isinstance(t, ast.Name) and t.id == node.id for t in n.targets)]
+            # Only an unconditionally assigned local can establish ownership.
+            # A helper returning a module registry merely proves dict shape.
+            if len(assigned) != 1:
+                return False
+            for stmt in body:
+                for part in ast.walk(stmt):
+                    if isinstance(part, (ast.Global, ast.Nonlocal)) and node.id in part.names:
+                        return False
+                    if isinstance(part, ast.Call) and any(isinstance(n, ast.Name) and n.id == node.id
+                            for arg in part.args + [kw.value for kw in part.keywords] for n in ast.walk(arg)):
+                        return False
+                    if isinstance(part, ast.Assign) and any(isinstance(n, ast.Name) and n.id == node.id
+                            for n in ast.walk(part.value)):
+                        return False
+            return fresh_dict(where, assigned[0], body, seen | {key})
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name) and node.func.id == "dict" and source.lookup(where, "dict", body) is None:
+                return True
+            target = source.target(where, node.func, body)
+            if target and isinstance(target[1], ast.FunctionDef):
+                fn = target[1]
+                key = target[0], fn.name, id(fn)
+                if key in seen or fn.decorator_list:
+                    return False
+                returns = [n for n in ast.walk(fn) if isinstance(n, ast.Return)]
+                return bool(returns) and all(fresh_dict(target[0], n.value, fn.body, seen | {key}) for n in returns)
+        return False
+
     def plain_dict(node):
         if isinstance(node, ast.Name):
             assigned = [n.value for n in ast.walk(function) if isinstance(n, ast.Assign)
@@ -1113,8 +1163,8 @@ def _native_references_only_uncached(rel, function, exports):
             loop_bound = any(isinstance(n, ast.For) and any(isinstance(t, ast.Name) and t.id == node.id
                              for t in ast.walk(n.target)) for n in ast.walk(function))
             if assigned and not loop_bound:
-                return all(source.shape(rel, value, body=function.body).kind == "dict" for value in assigned)
-        return source.shape(rel, node, body=function.body).kind == "dict"
+                return all(fresh_dict(rel, value, function.body) for value in assigned)
+        return False
 
     def stored_names(target):
         if isinstance(target, ast.Subscript):
@@ -1139,13 +1189,20 @@ def _native_references_only_uncached(rel, function, exports):
         return False
     for node in statements:
         if isinstance(node, ast.Call):
+            builtin = isinstance(node.func, ast.Name) and source.lookup(rel, node.func.id, function.body) is None
+            dictionary_method = (isinstance(node.func, ast.Attribute)
+                                 and node.func.attr in ("update", "get", "items", "keys", "values")
+                                 and plain_dict(node.func.value))
+            target = source.target(rel, node.func, function.body)
+            if not (dictionary_method or target and isinstance(target[1], ast.FunctionDef)
+                    or builtin and node.func.id in ("getattr", "isinstance", "type", "id", "str", "dict", "tuple", "list",
+                                                    "TypeError", "ValueError", "RuntimeError", "ImportError")):
+                return False
             if carries(node.func):
                 # A dict method reads/copies entries; it never invokes them.
-                if not (isinstance(node.func, ast.Attribute) and node.func.attr in ("update", "get", "items", "keys", "values")
-                        and plain_dict(node.func.value)):
+                if not dictionary_method:
                     return False
             if any(carries(arg) for arg in node.args + [kw.value for kw in node.keywords]):
-                builtin = isinstance(node.func, ast.Name) and source.lookup(rel, node.func.id, function.body) is None
                 if builtin and node.func.id in ("getattr", "isinstance", "type", "id",
                                                 "TypeError", "ValueError", "RuntimeError", "ImportError"):
                     continue
