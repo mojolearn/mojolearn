@@ -53,6 +53,8 @@ def repo(tmp_path, monkeypatch):
     monkeypatch.setattr(merged, "DEVELOPMENT_MANIFEST", root / dev.MANIFEST)
     monkeypatch.setattr(dev, "REPO", root)
     monkeypatch.setattr(dev, "toolchain_facts", lambda _root: FACTS)
+    monkeypatch.setattr(dev.build_process, "cancelled", lambda: False)
+    monkeypatch.setattr(dev, "available_resources", lambda: (16, 100 * 2 ** 30))
     return root
 
 
@@ -286,6 +288,266 @@ def test_parallelism_respects_cpu_and_memory():
         dev.pool_size(2, 1, None)
     with pytest.raises(dev.BuildError, match="cannot fit"):
         dev.pool_size(2, 1, 20, (8, 10 * 2 ** 30))
+
+
+@pytest.mark.parametrize("workers,reservation,resources", [
+    (8, None, (2, 100 * 2 ** 30)),
+    (2, 90, (8, 100 * 2 ** 30)),
+    (1, 1, (8, 0)),
+    (1, 0, (8, 100 * 2 ** 30)),
+    (1, float("nan"), (8, 100 * 2 ** 30)),
+    (1, float("inf"), (8, 100 * 2 ** 30)),
+])
+def test_single_compiler_must_fit_real_allocation(workers, reservation, resources):
+    with pytest.raises(dev.BuildError):
+        dev.pool_size(1, workers, reservation, resources)
+
+
+def test_serial_and_parallel_budgets_preserve_available_memory_headroom():
+    gib = 2 ** 30
+    serial = dev.resource_budget(1, 8, None, (8, 100 * gib))
+    assert serial["jobs"] == 1
+    assert serial["rss_bytes"] == 80 * gib
+    assert serial["min_available_bytes"] == 20 * gib
+    assert serial["reservation_source"] == "available-allocation"
+    parallel = dev.resource_budget(4, 8, 30, (32, 100 * gib))
+    assert parallel["jobs"] == 2
+    assert parallel["rss_bytes"] == 30 * gib
+    assert parallel["min_available_bytes"] == 20 * gib
+    assert parallel["reservation_source"] == "measured"
+
+
+def test_guard_controls_are_not_compiler_inputs_or_cache_keys(repo, tmp_path, monkeypatch):
+    limits = dict(seconds=321, stall_seconds=12, lock_seconds=9,
+                  rss_bytes=6 * 2 ** 30, min_available_bytes=2 * 2 ** 30)
+    env = dict(ENV, **{dev.GUARD_ENV: json.dumps(limits)})
+    assert keys(plan(repo, tmp_path)) == keys(plan(repo, tmp_path, env))
+    calls = []
+
+    def guarded(command, **kwargs):
+        calls.append((command, kwargs))
+        return dict(complete=True, exit_code=0, status="passed")
+
+    monkeypatch.setattr(dev.build_process, "run", guarded)
+    assert dev.run_logged(["fake-compiler"], repo, env, tmp_path / "build.log") == 0
+    command, passed = calls[0]
+    assert command == ["fake-compiler"]
+    assert passed["env"] == ENV
+    assert passed["seconds"] == 321
+    assert passed["stall_seconds"] == 12
+    assert passed["rss_bytes"] == 6 * 2 ** 30
+    assert passed["min_available_bytes"] == 2 * 2 ** 30
+
+
+@pytest.mark.parametrize("status,code", [
+    ("timeout", 124), ("stalled", 124), ("rss-limit", 124),
+    ("memory-pressure", 124), ("interrupted", 130), ("controller-error", 125),
+])
+def test_guard_verdict_is_retained_and_cannot_publish_cache(repo, tmp_path, monkeypatch, status, code):
+    row = plan(repo, tmp_path)["groups"][0]
+
+    def guarded(command, **kwargs):
+        output = Path(command[command.index("--outdir") + 1])
+        (output / (row["stem"] + ".so")).write_bytes(b"partial-native-output")
+        result = dict(complete=True, exit_code=code, status=status)
+        log = kwargs["log"]
+        dev.atomic_json(log.with_suffix(log.suffix + ".execution.json"), result)
+        return result
+
+    monkeypatch.setattr(dev.build_process, "run", guarded)
+    result = dev.compile_group(row, repo, tmp_path / "cache", ENV, tmp_path / "evidence")
+    assert result["exit_code"] == code
+    assert result["execution"]["status"] == status
+    assert dev.cached_artifact(tmp_path / "cache", row) is None
+    retained = json.loads((tmp_path / "evidence" / (row["mode"] + "-" + row["stem"] + ".json")).read_text())
+    assert retained == result
+
+
+@pytest.mark.parametrize("verdict", [
+    dict(complete=False, exit_code=0, status="running"),
+    dict(complete=True, exit_code=0, status="interrupted"),
+])
+def test_zero_exit_without_guard_completion_is_refused(repo, tmp_path, monkeypatch, verdict):
+    monkeypatch.setattr(dev.build_process, "run", lambda *_, **__: verdict)
+    with pytest.raises(dev.BuildError, match="did not certify"):
+        dev.run_logged(["fake-compiler"], repo, ENV, tmp_path / "build.log")
+
+
+@pytest.mark.parametrize("produce_empty", [False, True])
+def test_stale_or_empty_output_cannot_satisfy_success(repo, tmp_path, monkeypatch, produce_empty):
+    row = plan(repo, tmp_path)["groups"][0]
+    output = tmp_path / "cache/work" / row["key"] / "output" / (row["stem"] + ".so")
+    output.parent.mkdir(parents=True)
+    output.write_bytes(b"abandoned-earlier-build")
+
+    def compiler(*_):
+        assert not output.exists()
+        if produce_empty:
+            output.touch()
+        return 0
+
+    monkeypatch.setattr(dev, "run_logged", compiler)
+    result = dev.compile_group(row, repo, tmp_path / "cache", ENV, tmp_path / "evidence")
+    assert result["exit_code"] == 1
+    assert "nonempty" in result["reason"]
+    assert dev.cached_artifact(tmp_path / "cache", row) is None
+
+
+def test_empty_artifact_with_matching_hash_is_not_reused(repo, tmp_path):
+    row = plan(repo, tmp_path)["groups"][0]
+    cache_row(tmp_path / "cache", row, b"")
+    assert dev.cached_artifact(tmp_path / "cache", row) is None
+
+
+def test_cancellation_after_compiler_success_prevents_cache_receipt(repo, tmp_path, monkeypatch):
+    row = plan(repo, tmp_path)["groups"][0]
+    cancelled = [False]
+    monkeypatch.setattr(dev.build_process, "cancelled", lambda: cancelled[0])
+
+    def compiler(command, *_):
+        output = Path(command[command.index("--outdir") + 1])
+        (output / (row["stem"] + ".so")).write_bytes(b"completed")
+        cancelled[0] = True
+        return 0
+
+    monkeypatch.setattr(dev, "run_logged", compiler)
+    result = dev.compile_group(row, repo, tmp_path / "cache", ENV, tmp_path / "evidence")
+    assert result["exit_code"] == 130
+    assert result["state"] == "interrupted"
+    assert dev.cached_artifact(tmp_path / "cache", row) is None
+
+
+def test_lock_wait_has_a_deadline(monkeypatch, tmp_path):
+    from types import SimpleNamespace
+    monkeypatch.setattr(dev.build_process, "cancelled", lambda: False)
+    ticks = iter([0.0, 1.0])
+    monkeypatch.setattr(dev, "time", SimpleNamespace(monotonic=lambda: next(ticks)))
+
+    def busy(*_):
+        raise BlockingIOError("another compiler holds the lock")
+
+    monkeypatch.setattr(dev.fcntl, "flock", busy)
+    with pytest.raises(dev.BuildError, match="lock wait exceeded"):
+        with dev.lock(tmp_path / "busy.lock", 0.5):
+            pytest.fail("busy lock was entered")
+
+
+def configure_main(repo, monkeypatch):
+    monkeypatch.setattr(dev.os, "environ", dict(ENV))
+    monkeypatch.setattr(merged, "default_platform", lambda: "linux")
+    monkeypatch.setattr(bincache, "first_line", lambda *_: "synthetic-source-commit")
+
+
+def test_warm_main_has_zero_compiler_attempts_and_needs_no_compiler_reservation(repo, tmp_path, monkeypatch):
+    configure_main(repo, monkeypatch)
+    for row in plan(repo, tmp_path)["groups"]:
+        cache_row(tmp_path / "cache", row)
+
+    def forbidden(*_):
+        pytest.fail("warm identical cache must not start or reserve a compiler")
+
+    monkeypatch.setattr(dev, "run_logged", forbidden)
+    monkeypatch.setattr(dev, "available_resources", forbidden)
+    evidence = tmp_path / "evidence"
+    assert dev.main(["build", "--sets", "identical", "--cache", str(tmp_path / "cache"),
+                     "--evidence", str(evidence), "--jobs", "8"]) == 0
+    report = json.loads((evidence / "result.json").read_text())
+    assert report["state"] == "activated"
+    assert report["compile_attempts"] == 0
+    assert report["jobs"] == 0
+
+
+def test_main_cancellation_scope_covers_workers_and_preserves_indexes(repo, tmp_path, monkeypatch):
+    configure_main(repo, monkeypatch)
+    active, cancelled = [], []
+
+    @dev.contextlib.contextmanager
+    def scope():
+        active.append(True)
+        try:
+            yield
+        finally:
+            active.pop()
+
+    def interrupted(*_):
+        assert active
+        raise KeyboardInterrupt("synthetic controller interrupt")
+
+    monkeypatch.setattr(dev.build_process, "cancellation_scope", scope)
+    monkeypatch.setattr(dev.build_process, "cancel_active", lambda: cancelled.append(True))
+    monkeypatch.setattr(dev, "compile_group", interrupted)
+    index = write(repo, "python/mojolearn/identical/_mojolearn_merged.json", "previous-index")
+    evidence = tmp_path / "evidence"
+    assert dev.main(["build", "--sets", "identical", "--cache", str(tmp_path / "cache"),
+                     "--evidence", str(evidence)]) == 130
+    assert cancelled
+    assert not active
+    assert index.read_text() == "previous-index"
+    assert json.loads((evidence / "result.json").read_text())["state"] == "interrupted"
+
+
+def test_main_passes_measured_guard_budget_and_retains_compile_attempt_count(repo, tmp_path, monkeypatch):
+    configure_main(repo, monkeypatch)
+    seen = []
+
+    def guarded_failure(command, root, env, log):
+        seen.append(json.loads(env[dev.GUARD_ENV]))
+        return 124
+
+    monkeypatch.setattr(dev, "run_logged", guarded_failure)
+    index = write(repo, "python/mojolearn/identical/_mojolearn_merged.json", "previous-index")
+    evidence = tmp_path / "evidence"
+    assert dev.main(["build", "--sets", "identical", "--cache", str(tmp_path / "cache"),
+                     "--evidence", str(evidence), "--jobs", "2", "--memory-per-job-gib", "30",
+                     "--group-seconds", "321", "--stall-seconds", "12", "--lock-seconds", "9"]) == 1
+    report = json.loads((evidence / "result.json").read_text())
+    assert len(seen) == report["plan"]["counts"]["build_selected"] == report["compile_attempts"]
+    assert report["jobs"] == 2
+    assert all(value["rss_bytes"] == 30 * 2 ** 30 and value["min_available_bytes"] == 20 * 2 ** 30
+               and value["seconds"] == 321 and value["stall_seconds"] == 12
+               and value["lock_seconds"] == 9 for value in seen)
+    assert all(result["exit_code"] == 124 for result in report["results"])
+    assert index.read_text() == "previous-index"
+
+
+@pytest.mark.parametrize("option,value", [
+    ("--group-seconds", "nan"), ("--group-seconds", "0"),
+    ("--stall-seconds", "inf"), ("--stall-seconds", "0"),
+    ("--lock-seconds", "-1"),
+])
+def test_main_refuses_unbounded_controls_before_starting_compiler(repo, tmp_path, monkeypatch, option, value):
+    configure_main(repo, monkeypatch)
+    monkeypatch.setattr(dev, "run_logged", lambda *_: pytest.fail("invalid controls must not execute"))
+    evidence = tmp_path / "evidence"
+    assert dev.main(["build", "--sets", "identical", "--cache", str(tmp_path / "cache"),
+                     "--evidence", str(evidence), option, value]) == 1
+    assert "finite and positive" in json.loads((evidence / "result.json").read_text())["error"]
+
+
+def test_activation_waits_for_all_existing_index_locks_before_writing(repo, tmp_path, monkeypatch):
+    value = dev.make_plan(repo, tmp_path / "cache", ["identical", "host"], ENV, facts=FACTS, plat="linux")
+    for row in value["groups"]:
+        cache_row(tmp_path / "cache", row)
+    indexes = [write(repo, f"python/mojolearn/{mode}/_mojolearn_merged.json", "previous-index")
+               for mode in ("identical", "host")]
+    seen = []
+
+    @dev.contextlib.contextmanager
+    def bounded_lock(path, seconds):
+        seen.append((path, seconds))
+        if len(seen) == 2:
+            raise dev.BuildError("lock wait exceeded")
+        yield
+
+    monkeypatch.setattr(dev, "lock", bounded_lock)
+    with pytest.raises(dev.BuildError, match="lock wait"):
+        dev.activate(value, repo, tmp_path / "cache", 17)
+    assert all(index.read_text() == "previous-index" for index in indexes)
+    expected = {Path(dev.tempfile.gettempdir()) / ("mojolearn-merged-index-" +
+                dev.hashlib.sha256(os.path.realpath(index.parent).encode()).hexdigest()[:16] + ".lock")
+                for index in indexes}
+    assert {path for path, _ in seen} == expected
+    assert all(seconds == 17 for _, seconds in seen)
 
 
 @pytest.mark.parametrize("mode,plat,arch,workers", [

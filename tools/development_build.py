@@ -29,6 +29,11 @@ Multiple compilers require --jobs plus --memory-per-job-gib, a measured peak
 reservation for this source/target, including compiler subprocesses. Available
 memory and CPU allocation bound the pool. The default is one compiler until a
 group memory measurement is supplied; MOJOLEARN_COMPILE_JOBS controls its workers.
+Even one compiler must fit its worker/reservation budget. Without a measured
+serial reservation its RSS budget is 80% of current available allocation. The
+remaining 20% stays available to the system. --group-seconds, --stall-seconds
+and --lock-seconds bound active work and lock waits; defaults live in
+tools/release_limits.sh. These controller settings never reach the compiler.
 """
 import argparse
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -37,17 +42,21 @@ from datetime import datetime, timezone
 import fcntl
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import platform
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
 
 import bincache
+import build_process
 import merged_bindings as merged
+import release_limits
 
 REPO = Path(__file__).resolve().parent.parent
 SCHEMA = "mojolearn.development-build.v1"
@@ -55,6 +64,10 @@ KEY_SCHEMA = "mojolearn.development-group.v1"
 MANIFEST = "bindings/development_groups.json"
 BUILD_INPUTS = ("bindings/merged_build.sh", "bindings/build_defines.sh",
                 "tools/merged_bindings.py", "tools/bincache.py", "tools/development_build.py")
+# Private transport between controller functions, deliberately outside
+# bincache.KEY_ENV_PREFIXES and removed before starting any child process.
+GUARD_ENV = "_MOJOLEARN_DEVELOPMENT_GUARD"
+MEMORY_FRACTION = 0.8
 
 
 class BuildError(RuntimeError):
@@ -80,12 +93,36 @@ def atomic_json(path, value):
         tmp.unlink(missing_ok=True)
 
 
+def positive_seconds(value, label):
+    value = float(value)
+    if not math.isfinite(value) or value <= 0:
+        raise BuildError(f"{label} must be finite and positive")
+    return value
+
+
 @contextlib.contextmanager
-def lock(path):
+def lock(path, seconds=None):
+    seconds = positive_seconds(seconds if seconds is not None else
+                               release_limits.get("DEVELOPMENT_LOCK_SECONDS"), "lock wait")
+    path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a") as stream:
-        fcntl.flock(stream, fcntl.LOCK_EX)
-        yield
+        deadline = time.monotonic() + seconds
+        while True:
+            if build_process.cancelled():
+                raise KeyboardInterrupt("development build cancelled while waiting for lock")
+            try:
+                fcntl.flock(stream, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                break
+            except BlockingIOError:
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    raise BuildError(f"lock wait exceeded {seconds:g}s: {path}")
+                time.sleep(min(0.1, remaining))
+        try:
+            yield
+        finally:
+            fcntl.flock(stream, fcntl.LOCK_UN)
 
 
 class SourceGraph:
@@ -195,7 +232,8 @@ def cached_artifact(cache, row):
     try:
         saved = json.loads(receipt.read_text())
         if (saved["key"] != row["key"] or saved["fields"] != row["fields"]
-                or saved["exit_code"] != 0 or saved["sha256"] != bincache.sha256_file(artifact)):
+                or saved["exit_code"] != 0 or artifact.stat().st_size == 0
+                or saved["sha256"] != bincache.sha256_file(artifact)):
             return None
         return artifact
     except (OSError, KeyError, ValueError, TypeError):
@@ -260,30 +298,31 @@ def available_resources():
     if sys.platform == "linux":
         from build_sizing import box_resources
         return box_resources()
-    cores = os.cpu_count() or 1
-    # vm_stat's free and inactive pages are a conservative reclaimable budget;
-    # do not use the machine's total RAM as if it were currently available.
-    raw = subprocess.check_output(["vm_stat"], text=True)
-    import re
-    page_size = int(re.search(r"page size of (\d+) bytes", raw).group(1))
-    values = dict(re.findall(r"^([^:]+):\s+(\d+)\.", raw, re.M))
-    memory = page_size * (int(values.get("Pages free", 0)) + int(values.get("Pages inactive", 0)))
-    return cores, memory
+    return os.cpu_count() or 1, build_process.available_memory()
+
+
+def resource_budget(requested, workers, per_job_gib, resources=None):
+    if requested < 1 or workers < 1:
+        raise BuildError("--jobs must be positive")
+    if per_job_gib is None and requested > 1:
+        raise BuildError("parallel builds require a measured --memory-per-job-gib reservation")
+    if per_job_gib is not None and (not math.isfinite(per_job_gib) or per_job_gib <= 0):
+        raise BuildError("--memory-per-job-gib must be finite and positive")
+    cores, memory = resources or available_resources()
+    usable = int(MEMORY_FRACTION * memory)
+    reservation = int(per_job_gib * 2 ** 30) if per_job_gib is not None else usable
+    if cores < 1 or usable < 1 or reservation < 1:
+        raise BuildError("available CPU/memory allocation cannot fit one requested compiler reservation")
+    actual = min(requested, cores // workers, usable // reservation)
+    if actual < 1:
+        raise BuildError("available CPU/memory allocation cannot fit one requested compiler reservation")
+    return dict(jobs=actual, cores=cores, available_bytes=memory, compiler_workers=workers,
+                rss_bytes=reservation, min_available_bytes=memory-usable,
+                reservation_source="measured" if per_job_gib is not None else "available-allocation")
 
 
 def pool_size(requested, workers, per_job_gib, resources=None):
-    if requested < 1 or workers < 1:
-        raise BuildError("--jobs must be positive")
-    if requested == 1:
-        return 1
-    import math
-    if per_job_gib is None or not math.isfinite(per_job_gib) or per_job_gib <= 0:
-        raise BuildError("parallel builds require a measured --memory-per-job-gib reservation")
-    cores, memory = resources or available_resources()
-    actual = min(requested, cores // workers, int(0.8 * memory / (per_job_gib * 2 ** 30)))
-    if actual < 1:
-        raise BuildError("available CPU/memory allocation cannot fit one requested compiler reservation")
-    return actual
+    return resource_budget(requested, workers, per_job_gib, resources)["jobs"]
 
 
 def planned_compiler_workers(plan):
@@ -293,53 +332,83 @@ def planned_compiler_workers(plan):
 
 
 def run_logged(argv, repo, env, path):
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w") as stream:
-        result = subprocess.run(argv, cwd=repo, env=env, stdout=stream, stderr=subprocess.STDOUT)
-    return result.returncode
+    child_env = dict(env)
+    encoded = child_env.pop(GUARD_ENV, None)
+    limits = json.loads(encoded) if encoded else dict(
+        resource_budget(1, int(child_env.get("MOJOLEARN_COMPILE_JOBS", "1")), None),
+        seconds=release_limits.get("DEVELOPMENT_BUILD_SECONDS"),
+        stall_seconds=release_limits.get("DEVELOPMENT_STALL_SECONDS"))
+    result = build_process.run(argv, cwd=repo, env=child_env, log=path,
+                               seconds=limits["seconds"], stall_seconds=limits["stall_seconds"],
+                               rss_bytes=limits["rss_bytes"],
+                               min_available_bytes=limits["min_available_bytes"])
+    if not result.get("complete") or (result["exit_code"] == 0 and result["status"] != "passed"):
+        raise BuildError(f"build guard did not certify completion; see {path}.execution.json")
+    return result["exit_code"]
 
 
 def compile_group(row, repo, cache, env, evidence):
-    with lock(cache / "locks" / (row["key"] + ".lock")):
-        hit = cached_artifact(cache, row)
-        if hit:
-            return {"mode": row["mode"], "stem": row["stem"], "key": row["key"],
-                    "state": "reused", "exit_code": 0}
-        target = cache / "artifacts" / row["key"]
-        work = cache / "work" / row["key"]
-        work.mkdir(parents=True, exist_ok=True)
-        output = work / "output"
-        output.mkdir(exist_ok=True)
-        log = evidence / (row["mode"] + "-" + row["stem"] + ".log")
-        effective = build_environment(row["mode"], env, row["fields"]["platform"])
-        command = ["sh", "bindings/merged_build.sh", "host" if row["mode"] == "host" else "gpu",
-                   "--layout", "development", "--group", row["stem"], "--outdir", str(output),
-                   "--rootdir", str(work / "roots")]
-        started = time.monotonic()
-        code = run_logged(command, repo, effective, log)
-        result = {"mode": row["mode"], "stem": row["stem"], "key": row["key"],
-                  "exit_code": code, "seconds": time.monotonic() - started,
-                  "log": str(log), "command": command, "state": "failed"}
-        artifact = output / (row["stem"] + ".so")
-        if code == 0:
-            after = make_plan(repo, cache, [row["mode"]], env,
-                              facts=toolchain_facts(repo), plat=row["fields"]["platform"])
-            current = next((r for r in after["groups"] if r["stem"] == row["stem"]), None)
-            if current is None or current["key"] != row["key"]:
-                result.update(exit_code=1, reason="build inputs changed during compilation")
-            elif not artifact.is_file():
-                result.update(exit_code=1, reason="compiler returned success without the declared output")
+    started = time.monotonic()
+    result = {"mode": row["mode"], "stem": row["stem"], "key": row["key"],
+              "state": "failed", "exit_code": 1}
+    limits = json.loads(env.get(GUARD_ENV, "{}"))
+    try:
+        with lock(cache / "locks" / (row["key"] + ".lock"), limits.get("lock_seconds")):
+            hit = cached_artifact(cache, row)
+            if hit:
+                result.update(state="reused", exit_code=0)
             else:
-                target.mkdir(parents=True, exist_ok=True)
-                sha = bincache.sha256_file(artifact)
-                shutil.copy2(artifact, target / artifact.name)
-                result.update(state="built", sha256=sha)
-                atomic_json(target / "receipt.json", dict(result, fields=row["fields"]))
-        atomic_json(evidence / (row["mode"] + "-" + row["stem"] + ".json"), result)
-        return result
+                target = cache / "artifacts" / row["key"]
+                work = cache / "work" / row["key"]
+                output = work / "output"
+                output.mkdir(parents=True, exist_ok=True)
+                log = evidence / (row["mode"] + "-" + row["stem"] + ".log")
+                execution = log.with_suffix(log.suffix + ".execution.json")
+                artifact = output / (row["stem"] + ".so")
+                # Neither a failed earlier attempt's output nor its verdict may
+                # certify a new compiler that returns zero without writing.
+                artifact.unlink(missing_ok=True)
+                execution.unlink(missing_ok=True)
+                effective = build_environment(row["mode"], env, row["fields"]["platform"])
+                command = ["sh", "bindings/merged_build.sh", "host" if row["mode"] == "host" else "gpu",
+                           "--layout", "development", "--group", row["stem"], "--outdir", str(output),
+                           "--rootdir", str(work / "roots")]
+                result.update(log=str(log), command=command, execution_receipt=str(execution))
+                code = run_logged(command, repo, effective, log)
+                result["exit_code"] = code
+                if execution.is_file():
+                    result["execution"] = json.loads(execution.read_text())
+                if build_process.cancelled():
+                    raise KeyboardInterrupt("development build cancelled before cache publication")
+                if code == 0:
+                    after = make_plan(repo, cache, [row["mode"]], env,
+                                      facts=toolchain_facts(repo), plat=row["fields"]["platform"])
+                    current = next((r for r in after["groups"] if r["stem"] == row["stem"]), None)
+                    if current is None or current["key"] != row["key"]:
+                        result.update(exit_code=1, reason="build inputs changed during compilation")
+                    elif not artifact.is_file() or artifact.stat().st_size == 0:
+                        result.update(exit_code=1, reason="compiler returned success without nonempty declared output")
+                    else:
+                        target.mkdir(parents=True, exist_ok=True)
+                        sha = bincache.sha256_file(artifact)
+                        shutil.copy2(artifact, target / artifact.name)
+                        if build_process.cancelled():
+                            raise KeyboardInterrupt("development build cancelled before cache receipt")
+                        result.update(state="built", sha256=sha)
+                        atomic_json(target / "receipt.json", dict(result, fields=row["fields"]))
+                        if build_process.cancelled():
+                            (target / "receipt.json").unlink(missing_ok=True)
+                            raise KeyboardInterrupt("development build cancelled during cache publication")
+    except KeyboardInterrupt as error:
+        result.update(state="interrupted", exit_code=130, reason=str(error))
+    except (BuildError, ValueError, OSError, subprocess.SubprocessError) as error:
+        result.update(state="failed", exit_code=1, reason=str(error))
+    result["seconds"] = time.monotonic() - started
+    atomic_json(evidence / (row["mode"] + "-" + row["stem"] + ".json"), result)
+    return result
 
 
-def activate(plan, repo, cache):
+def activate(plan, repo, cache, lock_seconds=None):
     """Publish only complete current sets; every indexed binary is immutable."""
     rows = plan["groups"]
     sources = {row["key"]: cached_artifact(cache, row) for row in rows}
@@ -372,8 +441,17 @@ def activate(plan, repo, cache):
         indexes[out] = {"format": merged.INDEX_FORMAT, "layout": "development", "files": files,
                         "provenance": {r["stem"]: r["key"] for r in rows if r["mode"] == mode}}
     # No index changes until every artifact in every requested set is staged.
-    for out, index in indexes.items():
-        with merged.index_lock(out):
+    with contextlib.ExitStack() as stack:
+        for out in sorted(indexes):
+            # Same lock path/protocol as merged.index_lock, with a finite wait.
+            key = hashlib.sha256(os.path.realpath(out).encode()).hexdigest()[:16]
+            path = Path(tempfile.gettempdir()) / f"mojolearn-merged-index-{key}.lock"
+            stack.enter_context(lock(path, lock_seconds))
+        if build_process.cancelled():
+            raise KeyboardInterrupt("development build cancelled before index activation")
+        for out, index in indexes.items():
+            if build_process.cancelled():
+                raise KeyboardInterrupt("development build cancelled during index activation")
             atomic_json(out / "_mojolearn_merged.json", index)
     return {"state": "activated", "missing": [], "activated": modes}
 
@@ -396,13 +474,21 @@ def main(argv=None):
     parser.add_argument("--evidence", type=Path)
     parser.add_argument("--jobs", type=int, default=1)
     parser.add_argument("--memory-per-job-gib", type=float)
+    parser.add_argument("--group-seconds", type=float,
+                        default=release_limits.get("DEVELOPMENT_BUILD_SECONDS"))
+    parser.add_argument("--stall-seconds", type=float,
+                        default=release_limits.get("DEVELOPMENT_STALL_SECONDS"))
+    parser.add_argument("--lock-seconds", type=float,
+                        default=release_limits.get("DEVELOPMENT_LOCK_SECONDS"))
     args = parser.parse_args(argv)
     modes = list(dict.fromkeys(args.sets.split(",")))
     env, cache = dict(os.environ), args.cache.resolve()
+    env.pop(GUARD_ENV, None)  # Private settings are made here, never inherited.
     evidence = args.evidence or (Path.home() / "mojolearn-evidence/development-builds" /
         (datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ") + "-" + str(os.getpid())))
     report = {"schema": SCHEMA, "state": "planning", "results": [], "release_qualified": False,
               "source_commit": bincache.first_line(["git", "-C", str(REPO), "rev-parse", "HEAD"])}
+    futures = []
     try:
         if args.command == "plan":
             plan = make_plan(REPO, cache, modes, env, args.group)
@@ -411,10 +497,22 @@ def main(argv=None):
             summary(plan)
             return 0
         evidence.mkdir(parents=True, exist_ok=True)
-        with lock(cache / "locks" / (digest(str(REPO)) + ".lock")):
+        limits = dict(seconds=positive_seconds(args.group_seconds, "--group-seconds"),
+                      stall_seconds=positive_seconds(args.stall_seconds, "--stall-seconds"),
+                      lock_seconds=positive_seconds(args.lock_seconds, "--lock-seconds"))
+        if args.jobs < 1:
+            raise BuildError("--jobs must be positive")
+        if args.memory_per_job_gib is not None:
+            positive_seconds(args.memory_per_job_gib, "--memory-per-job-gib")
+        report["limits"] = limits
+        with build_process.cancellation_scope(), lock(
+                cache / "locks" / (digest(str(REPO)) + ".lock"), limits["lock_seconds"]):
             # Generate before computing keys, never after deciding a cache hit.
             # This also preserves the generator's pin/refusal semantics.
             if "host" in modes:
+                generator_limits = dict(resource_budget(1, 1, None), **limits)
+                env[GUARD_ENV] = json.dumps(generator_limits)
+                report["generator_limits"] = generator_limits
                 code = run_logged(["sh", "tokenizer/tools/gen_unicode_table.sh"], REPO, env,
                                   evidence / "generate-unicode.log")
                 if code:
@@ -425,35 +523,75 @@ def main(argv=None):
             if not plan["toolchain_available"]:
                 raise BuildError("install the pinned default pixi environment before building")
             workers = planned_compiler_workers(plan)
-            jobs = pool_size(args.jobs, workers, args.memory_per_job_gib)
-            report.update(plan=plan, jobs=jobs, state="building")
             wanted = [r for r in plan["groups"] if r["selected"] and r["action"] == "build"]
-            with ThreadPoolExecutor(max_workers=jobs) as pool:
-                futures = [pool.submit(compile_group, row, REPO, cache, env, evidence) for row in wanted]
-                for future in as_completed(futures):
-                    result = future.result()
-                    report["results"].append(result)
-                    atomic_json(evidence / "result.json", report)
-                    print(f"{result['mode']} {result['stem']} {result['state']} rc={result['exit_code']}")
+            # A warm cache has no compiler to reserve or start. The generator
+            # above still runs under a guard before keys are computed.
+            jobs = 0
+            if wanted:
+                budget = resource_budget(args.jobs, workers, args.memory_per_job_gib)
+                jobs = budget["jobs"]
+                env[GUARD_ENV] = json.dumps(dict(budget, **limits))
+                report["resource_budget"] = budget
+            report.update(plan=plan, jobs=jobs, state="building", compile_attempts=0)
+            atomic_json(evidence / "result.json", report)
+            if wanted:
+                with ThreadPoolExecutor(max_workers=jobs) as pool:
+                    futures = []
+                    try:
+                        futures = [pool.submit(compile_group, row, REPO, cache, env, evidence) for row in wanted]
+                        for future in as_completed(futures):
+                            result = future.result()
+                            report["results"].append(result)
+                            report["compile_attempts"] += int("command" in result)
+                            atomic_json(evidence / "result.json", report)
+                            print(f"{result['mode']} {result['stem']} {result['state']} rc={result['exit_code']}")
+                    except BaseException:
+                        # Cancel before ThreadPoolExecutor.__exit__ waits. Its
+                        # workers' guarded process groups must stop together.
+                        build_process.cancel_active()
+                        for future in futures:
+                            future.cancel()
+                        raise
             if any(r["exit_code"] for r in report["results"]):
                 raise BuildError("one or more group builds failed; existing loader indexes were preserved")
             final_plan = make_plan(REPO, cache, modes, env, args.group)
             if [r["key"] for r in final_plan["groups"]] != [r["key"] for r in plan["groups"]]:
                 raise BuildError("build inputs changed; refusing to activate mixed-source outputs")
-            report.update(activate(final_plan, REPO, cache))
+            if build_process.cancelled():
+                raise KeyboardInterrupt("development build cancelled before activation")
+            report.update(activate(final_plan, REPO, cache, limits["lock_seconds"]))
             atomic_json(evidence / "result.json", report)
             if args.json:
                 atomic_json(args.json, report)
             print(f"{report['state']}: evidence {evidence}")
             return 0 if report["state"] == "activated" else 3
-    except (BuildError, ValueError, OSError, subprocess.SubprocessError) as error:
-        report.update(state="failed", error=str(error))
+    except (BuildError, ValueError, OSError, subprocess.SubprocessError, KeyboardInterrupt) as error:
+        interrupted = isinstance(error, KeyboardInterrupt)
+        if interrupted:
+            build_process.cancel_active()
+        # Executor shutdown has now joined started workers. Retain their final
+        # guard verdicts even when the main thread stopped consuming futures.
+        recorded = {row["key"] for row in report["results"]}
+        for future in futures:
+            if not future.done() or future.cancelled():
+                continue
+            try:
+                result = future.result()
+            except (Exception, KeyboardInterrupt, SystemExit):
+                continue
+            if result["key"] not in recorded:
+                report["results"].append(result)
+                recorded.add(result["key"])
+        if "compile_attempts" in report:
+            report["compile_attempts"] = sum("command" in row for row in report["results"])
+        report.update(state="interrupted" if interrupted else "failed", error=str(error),
+                      exit_code=130 if interrupted else 1)
         if args.command == "build":
             atomic_json(evidence / "result.json", report)
         if args.json:
             atomic_json(args.json, report)
         print(f"development_build: {error}", file=sys.stderr)
-        return 1
+        return report["exit_code"]
 
 
 if __name__ == "__main__":
