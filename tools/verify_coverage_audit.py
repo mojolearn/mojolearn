@@ -1512,6 +1512,14 @@ ANNOTATIONS_BY_SRC[("qn_native_call", "bindings/_mojolearn_tokenizer_host.mojo")
     "runtime execution and identity admission remain pending.")
 
 
+# The native str-label encoder is new; these lanes consume its classes and codes.
+ANNOTATIONS_BY_SRC[("str_labels_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", ["x-prep-label-encoder", "x-prep-label-binarizer", "x-prep-multilabel-binarizer"],
+    "_labels.encode_labels / unique_inverse and LabelEncoder, LabelBinarizer and "
+    "MultiLabelBinarizer transform hand str labels to str_labels_c (code-point order, "
+    "first-seen classes). New source only: runtime execution remains pending.")
+
+
 # Static lane reachability is not an execution/installed/fault receipt for a
 # newly registered public attribute or automatic device finalizer entry.
 for _new_entry in ("host_svr_attribute_call", "host_svc_attribute_call", "optimizer_device_finalize"):

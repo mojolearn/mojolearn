@@ -5213,11 +5213,17 @@ class LabelEncoder(_PrepBase):
         if not values:
             return Array((0,), "<i4")
         if self._cats is None or _numeric_labels(values) is None:
-            index = {c: i for i, c in enumerate(self._classes)}  # cpu-route: str or object labels, the explicit label input step
-            missing = [v for v in values if v not in index]  # cpu-route: str or object labels, the explicit label input step
+            native = _labels.str_labels("lookup", list(self._classes), values, False)
+            if native is not None:
+                codes, missing, count = native
+                if count:
+                    raise ValueError(f"mojolearn: y contains previously unseen labels: {missing}")
+                return codes
+            index = {c: i for i, c in enumerate(self._classes)}  # cpu-route: non-str object labels, the explicit label input step
+            missing = [v for v in values if v not in index]  # cpu-route: non-str object labels, the explicit label input step
             if missing:
                 raise ValueError(f"mojolearn: y contains previously unseen labels: {missing[:5]}")
-            return Array.from_list([index[v] for v in values], "<i4")  # cpu-route: str or object labels, the explicit label input step
+            return Array.from_list([index[v] for v in values], "<i4")  # cpu-route: non-str object labels, the explicit label input step
         n = len(values)
         pr = _Prog()
         codes, neg = _label_codes(pr, values, self._cats)
@@ -5402,8 +5408,12 @@ class LabelBinarizer(_PrepBase):
         n = len(values)
         pr = _Prog()
         if self._cats is None or _numeric_labels(values) is None:
-            index = {c: i for i, c in enumerate(self._classes)}  # cpu-route: str or object labels, the explicit label input step
-            codes = pr.put_list([index.get(v, -1) for v in values])  # cpu-route: str or object labels, the explicit label input step
+            native = _labels.str_labels("lookup", list(self._classes), values, True) if values else None
+            if native is not None:
+                codes = pr.put(native[0])
+            else:
+                index = {c: i for i, c in enumerate(self._classes)}  # cpu-route: non-str object labels, the explicit label input step
+                codes = pr.put_list([index.get(v, -1) for v in values])  # cpu-route: non-str object labels, the explicit label input step
         else:
             codes, _neg = _label_codes(pr, values, self._cats)
         if K == 1:
@@ -5614,8 +5624,12 @@ class MultiLabelBinarizer(_PrepBase):
             pr.run(self.numeric_mode_)
             return pr.get_i32(out, (n, K))
         if self._cats is None or _numeric_labels(flat) is None:
-            index = {c: i for i, c in enumerate(self._classes)}  # cpu-route: str or object labels, the explicit label input step
-            codes = pr.put_list([index.get(v, -1) for v in flat])  # cpu-route: Python iterables of labels, the explicit label input step
+            native = _labels.str_labels("lookup", list(self._classes), flat, True)
+            if native is not None:
+                codes = pr.put(native[0])
+            else:
+                index = {c: i for i, c in enumerate(self._classes)}  # cpu-route: non-str object labels, the explicit label input step
+                codes = pr.put_list([index.get(v, -1) for v in flat])  # cpu-route: Python iterables of labels, the explicit label input step
         else:
             codes, _neg = _label_codes(pr, flat, self._cats)
         ro = pr.put_list(owner)
