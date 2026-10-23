@@ -24,7 +24,7 @@ sha256sum "$out/libmojolearn_adapter.so" > "$out/native.sha256"
 ldd "$out/libmojolearn_adapter.so" > "$out/native-libraries.txt"
 nm -D "$out/libmojolearn_adapter.so" > "$out/native-symbols.txt"
 # An interpreter dependency is not admitted for this standalone native bridge.
-if rg -q 'libpython|\bU Py[A-Za-z_]' "$out/native-libraries.txt" "$out/native-symbols.txt"; then
+if grep -Eq 'libpython|[[:space:]]U Py[A-Za-z_]' "$out/native-libraries.txt" "$out/native-symbols.txt"; then
     echo 'adapter unexpectedly depends on CPython' >&2
     exit 1
 fi

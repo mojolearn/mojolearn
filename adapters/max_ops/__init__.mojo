@@ -8,6 +8,7 @@ from adapters.native.operation import run_operation, WORDS, IP
 from sequence.exec import HostExec
 from sequence.exec_device import DeviceExec
 from sequence.ops import FP
+from autograd.rankn import ShapeN
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 
@@ -16,6 +17,10 @@ def descriptor[rank: Int](
 ) raises -> List[Int]:
     if rank > 8:
         raise Error("adapter: rank exceeds eight")
+    var dimensions = List[Int]()
+    for k in range(rank):
+        dimensions.append(shape[k])
+    _ = ShapeN.of(dimensions)  # validates positive extents and storage overflow
     var expected = 1
     for k in range(rank - 1, -1, -1):  # small-loop(rank<=8): layout validation
         if shape[k] > 1 and strides[k] != expected:
