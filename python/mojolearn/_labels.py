@@ -219,7 +219,7 @@ def str_labels(operation, *args):
     if not _STR_LABELS:
         from .tokenizer import _binding
         _STR_LABELS.append(_binding()._module.str_labels_native_call)
-    got = _STR_LABELS[0]((operation,) + args)
+    got = _STR_LABELS[0](operation, *args)
     if got is None:
         return None
     if operation == "encode":

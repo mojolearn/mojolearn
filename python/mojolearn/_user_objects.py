@@ -27,7 +27,7 @@ def call(operation, *args):
     if not _CALL:
         from .tokenizer import _binding
         _CALL.append(_binding()._module.user_objects_native_call)
-    got = _CALL[0]((operation,) + args)
+    got = _CALL[0](operation, *args)
     if type(got) is tuple and len(got) == 3 and got[0] == "__refuse__":
         raise _REFUSALS[got[1]](got[2])
     return got
