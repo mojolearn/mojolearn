@@ -7,14 +7,21 @@
 # a CPU-only install's by-name refusal, a user callable's own exception) is
 # stashed and restored unchanged at the door (`stash_python_error`), so the
 # caller sees the class and message it saw before the migration.
+from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.py_balanced import py_call, py_type, py_get, py_contains
-from bindings.classical_arrays import classical_address, classical_host_f32, classical_wrap_array, _store_code
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
+from bindings.classical_arrays import (
+    classical_address, classical_host_f32, classical_wrap_array, _store_code, classical_is_array,
+    classical_cast_kind, classical_is_f32, classical_c_order, classical_dtype_str,
+)
+from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
+from core.family_cast_impl import family_cast_rows, family_cast_rows_f64, family_min_f32
 from bindings.classical_validate import classical_view, RESHAPE_HINT
 from bindings.optimizer_public_words import stash_python_error
 from core.family_weights_impl import (
-    family_fill_f32, family_weight_status, FAMILY_WEIGHTS_NONFINITE, FAMILY_WEIGHTS_NEGATIVE,
+    family_fill_f32, family_fill_f64, family_weight_status, family_weight_status_f64,
+    FAMILY_WEIGHTS_NONFINITE, FAMILY_WEIGHTS_NEGATIVE,
     FAMILY_WEIGHTS_ALL_ZERO,
 )
 
@@ -169,27 +176,120 @@ def family_f32(source: PythonObject, ndim: Int, name: String, context: PythonObj
     return result
 
 
+def family_cast_view(view: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+    """`_buffer.as_f32_c`'s cast of a checked view of rank 0, 1 or 2, with
+    no finiteness refusal (as_f32_c made none): the view itself when it is
+    already float32 in C order, otherwise a new mojolearn Array of its shape.
+    """
+    var b = Python.import_module("builtins")
+    var nd = Int(py=view.ndim)
+    if nd > 2:
+        raise Error("mojolearn: " + name + " must be at most 2-D, got " + String(nd) + "-D")
+    if not classical_is_array(view, context) and not Bool(py=view.dtype.isnative):
+        raise Error("TypeError: " + name + " must be in native byte order")
+    if classical_is_f32(view, context) and classical_c_order(view, context):
+        return view
+    var rows = 1 if nd == 0 else Int(py=view.shape[0])
+    var cols = 1 if nd < 2 else Int(py=view.shape[1])
+    var item = Int(py=view.itemsize)
+    var kind = classical_cast_kind(view, item, name, context)
+    var s0 = 0 if nd == 0 else Int(py=view.strides[0])
+    var s1 = 0 if nd < 2 else Int(py=view.strides[1])
+    var result = family_array(py_call(b.tuple, view.shape), "<f4", context)
+    family_cast_rows(Int(py=classical_address(view)), s0, s1, rows, cols, item, kind,
+                     FAMILY_F32P(unsafe_from_address=Int(py=classical_address(result))))
+    return result
+
+
+def family_cast_view_f64(view: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+    """`_buffer.as_f64_c`'s cast of a checked view of rank 0, 1 or 2: the
+    view itself when it is already float64 in C order, otherwise a new
+    mojolearn Array of its shape."""
+    var b = Python.import_module("builtins")
+    var nd = Int(py=view.ndim)
+    if nd > 2:
+        raise Error("mojolearn: " + name + " must be at most 2-D, got " + String(nd) + "-D")
+    if not classical_is_array(view, context) and not Bool(py=view.dtype.isnative):
+        raise Error("TypeError: " + name + " must be in native byte order")
+    if classical_dtype_str(view, context) == "<f8" and classical_c_order(view, context):
+        return view
+    var rows = 1 if nd == 0 else Int(py=view.shape[0])
+    var cols = 1 if nd < 2 else Int(py=view.shape[1])
+    var item = Int(py=view.itemsize)
+    var kind = classical_cast_kind(view, item, name, context)
+    var s0 = 0 if nd == 0 else Int(py=view.strides[0])
+    var s1 = 0 if nd < 2 else Int(py=view.strides[1])
+    var result = family_array(py_call(b.tuple, view.shape), "<f8", context)
+    family_cast_rows_f64(Int(py=classical_address(view)), s0, s1, rows, cols, item, kind,
+                         FAMILY_F64P(unsafe_from_address=Int(py=classical_address(result))))
+    return result
+
+
+def family_as_f32(source: PythonObject, ndim: Int, name: String, context: PythonObject) raises -> PythonObject:
+    """`_buffer.as_f32_c(source, ndim=ndim, name=name)`: its rank and
+    emptiness refusals, then its cast (no finiteness refusal)."""
+    var view = family_view(source, ndim, name, context)
+    var result = family_cast_view(view, name, context)
+    _ = view^
+    return result
+
+
+def family_as_f32_dense(source: PythonObject, ndim: Int, name: String, context: PythonObject) raises -> PythonObject:
+    """`_buffer.as_f32_dense_c`: a scipy.sparse matrix densified exactly
+    (its implicit entries are zeros), read natively from its storage, then
+    `family_as_f32`."""
+    var sparse = host_sparse_format(source)
+    if sparse.byte_length() > 0:
+        if not py_contains(context, PythonObject("output_context")):
+            py_setitem(context, "output_context", context)
+        var dense = host_sparse_dense(source, sparse, context)
+        return family_as_f32(dense, ndim, name, context)
+    return family_as_f32(source, ndim, name, context)
+
+
+def family_owned(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`value` (a C-order float32 array) as an owned mojolearn Array: the
+    array itself when it is one the owner made, else one copy."""
+    if classical_is_array(value, context) and value._base is None and not Bool(py=value._readonly):
+        return value
+    var b = Python.import_module("builtins")
+    var result = family_array(py_call(b.tuple, value.shape), "<f4", context)
+    memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(result))),
+           src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(value))), count=Int(py=value.size))
+    return result
+
+
+def family_min(value: PythonObject) raises -> Float32:
+    """The minimum of a non-empty C-order float32 array."""
+    return family_min_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(value))), Int(py=value.size))
+
+
 def family_nonfinite(error: Error, name: String) -> Bool:
     """True for the cast's NaN-or-infinity refusal of `name`."""
     return String(error) == "Input " + name + " contains NaN or infinity"
 
 
-def family_sample_weight(source: PythonObject, n: Int, allow_negative: Bool, context: PythonObject) raises -> PythonObject:
-    """`_sample_weight.check_sample_weight(source, n, allow_negative=...)`
-    for a float32 vector: a scalar fills a new vector, a sequence or buffer
-    of `n` entries is read (borrowed when it already is float32 C order),
-    and the shape, non-finite, negative and all-zero refusals keep
-    scikit-learn's wording and order."""
+def family_sample_weight(source: PythonObject, n: Int, allow_negative: Bool, context: PythonObject,
+                         wide: Bool = False) raises -> PythonObject:
+    """`_sample_weight.check_sample_weight(source, n, dtype=..., allow_negative=...)`
+    as a float32 (or, `wide`, float64) vector: a scalar fills a new vector,
+    a sequence or buffer of `n` entries is cast (borrowed when it already
+    has the dtype in C order), and the shape, non-finite, negative and
+    all-zero refusals keep scikit-learn's wording and order."""
     var b = Python.import_module("builtins")
     var weights = PythonObject(None)
+    var typestr = String("<f8") if wide else String("<f4")
     var zero_d = False
     if not family_is_real(source):
         zero_d = (Bool(py=py_call(b.hasattr, source, "ndim")) and Bool(py=py_call(b.hasattr, source, "shape"))
                   and Int(py=family_call(b.int, source.ndim)) == 0)
     if family_is_real(source) or zero_d:
-        var value = Float32(Float64(py=family_call(b.float, source)))
-        weights = family_array(Python.tuple(n), "<f4", context)
-        family_fill_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(weights))), n, value)
+        var value = Float64(py=family_call(b.float, source))
+        weights = family_array(Python.tuple(n), typestr, context)
+        if wide:
+            family_fill_f64(FAMILY_F64P(unsafe_from_address=Int(py=classical_address(weights))), n, value)
+        else:
+            family_fill_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(weights))), n, Float32(value))
     else:
         var view = classical_view(source, context, "sample_weight")
         if Int(py=view.size) == 0:
@@ -199,16 +299,15 @@ def family_sample_weight(source: PythonObject, n: Int, allow_negative: Bool, con
             raise Error("Sample weights must be 1D array or scalar")
         if Int(py=view.shape[0]) != n:
             raise Error("sample_weight.shape == " + family_shape_repr(view) + ", expected (" + String(n) + ",)!")
-        try:
-            weights = classical_host_f32(view, 1, "sample_weight", context)
-        except error:
-            if family_nonfinite(error, "sample_weight"):
-                raise Error(FAMILY_NONFINITE_WEIGHTS)
-            raise Error(String(error))
+        weights = family_cast_view_f64(view, "sample_weight", context) if wide else family_cast_view(view, "sample_weight", context)
         _ = view^
     # prepare_targets' weight checks: finiteness, then the minimum, then
-    # the maximum, over the float32 words.
-    var status = family_weight_status(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(weights))), n, allow_negative)
+    # the maximum.
+    var status: Int
+    if wide:
+        status = family_weight_status_f64(FAMILY_F64P(unsafe_from_address=Int(py=classical_address(weights))), n, allow_negative)
+    else:
+        status = family_weight_status(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(weights))), n, allow_negative)
     if status == FAMILY_WEIGHTS_NONFINITE:
         raise Error(FAMILY_NONFINITE_WEIGHTS)
     if status == FAMILY_WEIGHTS_NEGATIVE:
