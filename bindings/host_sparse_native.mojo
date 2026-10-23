@@ -9,7 +9,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.classical_pandas import _pd_type_fields
 from bindings.classical_arrays import classical_address
 from bindings.sequential_admission import _one_of
-from bindings.host_archive_native import host_archive_typed
+from bindings.host_array_native import host_archive_typed
 from bindings.native_numpy_metadata import native_numpy_dtype
 from core.cast_in import cast_in_kind, cast_f32_bits, cast_w64_bits
 from core.classical_pandas_impl import _pd_double

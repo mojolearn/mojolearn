@@ -5,7 +5,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.sequential_admission import _one_of
 from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_is_f32, classical_c_order, classical_kind, classical_f64
-from bindings.host_archive_native import host_archive_typed
+from bindings.host_array_native import host_archive_typed
 from bindings.host_kernel_inference_native import _kernel_entry
 from bindings.host_inference_scalars import host_inference_scalar
 from bindings.host_inference_features import host_inference_feature_names

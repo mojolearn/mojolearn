@@ -8,7 +8,7 @@ from bindings.classical_attributes import classical_getattribute
 from bindings.classical_pandas import _pd_type_fields
 from bindings.native_numpy_metadata import native_numpy_dtype
 from bindings.classical_arrays import classical_input, classical_address, classical_is_array, classical_is_f32, classical_c_order, classical_kind
-from bindings.host_archive_native import host_archive_typed
+from bindings.host_array_native import host_archive_typed
 from bindings.host_inference_scalars import host_inference_scalar, host_inference_primitive_number
 from bindings.host_inference_features import host_inference_feature_names
 from bindings.host_kde_bandwidth_native import kde_bandwidth_code, kde_native_bandwidth

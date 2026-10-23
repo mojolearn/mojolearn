@@ -19,7 +19,7 @@ from bindings.host_iforest_native import host_iforest_admit_option, host_iforest
 from bindings.host_logistic_native import host_logistic_classes, host_logistic_inference
 from bindings.native_torch_admission import native_torch_numpy
 from bindings.classical_arrays import classical_input, classical_address, classical_is_f32, classical_is_array, classical_c_order, classical_kind
-from bindings.host_archive_native import host_archive_typed
+from bindings.host_array_native import host_archive_typed
 from bindings.host_tree_native import host_tree_input, host_tree_constructor_fields, host_tree_scalar, host_tree_wide
 from core.host_tree_impl import host_tree_column_copy
 from core.host_inference_impl import host_inference_finite, host_inference_raw_finite

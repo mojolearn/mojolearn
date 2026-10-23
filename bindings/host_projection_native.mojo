@@ -7,7 +7,7 @@ from bindings.classical_arrays import classical_input, classical_address, classi
 from bindings.classical_pandas import classical_admit_value, native_pandas_exact
 from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
-from bindings.host_archive_native import host_archive_typed
+from bindings.host_array_native import host_archive_typed
 from bindings.host_tree_native import host_tree_input
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
 from bindings.host_inference_features import host_inference_feature_names
