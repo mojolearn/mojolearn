@@ -35,6 +35,13 @@ Linux GPU planning/builds additionally need one explicit target, for example
 that GPU target and selects the CPU column. Apple uses the existing compiler
 flag classes; it needs no target override. There is no development `fast` lane.
 
+Compiler workers default to eight for Linux AMD, two for Linux NVIDIA/host,
+and one on macOS. `MOJOLEARN_COMPILE_JOBS` overrides all of these;
+`MOJOLEARN_AMD_COMPILE_JOBS` overrides the AMD default when the general override
+is absent. The effective count is part of each cache key. `--jobs` instead
+controls concurrent library compilations; its CPU reservation uses the largest
+compiler worker count among the selected pending groups.
+
 The orchestrator builds on the Mac through the existing semaphore:
 
 ```sh

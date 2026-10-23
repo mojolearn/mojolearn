@@ -137,15 +137,21 @@ class SourceGraph:
         return {"scope": scope, "files": hashes, "unresolved": unresolved}
 
 
-def build_environment(mode, env):
+def build_environment(mode, env, plat=None):
     env = dict(env)
+    plat = plat or merged.default_platform()
     if env.get("MOJOLEARN_NUMERIC_MODE", "identical") != "identical":
         raise BuildError("development builds support identical only; unset the other numeric mode")
     env["MOJOLEARN_NUMERIC_MODE"] = "identical"
     env["MOJOLEARN_PACKAGE_BYTE_LM"] = env.get("MOJOLEARN_PACKAGE_BYTE_LM", "1")
     if env["MOJOLEARN_PACKAGE_BYTE_LM"] not in ("0", "1"):
         raise BuildError("MOJOLEARN_PACKAGE_BYTE_LM must be 0 or 1")
-    env["MOJOLEARN_COMPILE_JOBS"] = env.get("MOJOLEARN_COMPILE_JOBS", "1")
+    # Match the supported release compiler policy. AMD's one-worker compiler
+    # crash is reproduced in recovery; group concurrency is a separate budget.
+    default_workers = "1" if plat == "darwin" else "2"
+    if plat != "darwin" and mode == "identical" and env.get("MOJOLEARN_GPU_ARCHS", "").startswith("gfx"):
+        default_workers = env.get("MOJOLEARN_AMD_COMPILE_JOBS") or "8"
+    env["MOJOLEARN_COMPILE_JOBS"] = env.get("MOJOLEARN_COMPILE_JOBS", default_workers)
     if not env["MOJOLEARN_COMPILE_JOBS"].isdigit() or int(env["MOJOLEARN_COMPILE_JOBS"]) < 1:
         raise BuildError("MOJOLEARN_COMPILE_JOBS must be a positive integer")
     env["MOJOLEARN_MERGED_PYTHON"] = sys.executable
@@ -218,7 +224,7 @@ def make_plan(repo, cache, modes, env, selection=(), facts=None, plat=None):
     for mode in modes:
         if mode not in ("identical", "host"):
             raise BuildError("development builds support identical and host only")
-        effective = build_environment(mode, env)
+        effective = build_environment(mode, env, plat)
         arch = effective.get("MOJOLEARN_GPU_ARCHS", "")
         if mode == "identical" and plat == "linux" and not arch:
             raise BuildError("Linux identical development builds need MOJOLEARN_GPU_ARCHS")
@@ -280,6 +286,12 @@ def pool_size(requested, workers, per_job_gib, resources=None):
     return actual
 
 
+def planned_compiler_workers(plan):
+    """Reserve for the largest selected compiler, including mixed GPU/host sets."""
+    return max((int(row["fields"]["environment"]["MOJOLEARN_COMPILE_JOBS"])
+                for row in plan["groups"] if row["selected"] and row["action"] == "build"), default=1)
+
+
 def run_logged(argv, repo, env, path):
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("w") as stream:
@@ -299,7 +311,7 @@ def compile_group(row, repo, cache, env, evidence):
         output = work / "output"
         output.mkdir(exist_ok=True)
         log = evidence / (row["mode"] + "-" + row["stem"] + ".log")
-        effective = build_environment(row["mode"], env)
+        effective = build_environment(row["mode"], env, row["fields"]["platform"])
         command = ["sh", "bindings/merged_build.sh", "host" if row["mode"] == "host" else "gpu",
                    "--layout", "development", "--group", row["stem"], "--outdir", str(output),
                    "--rootdir", str(work / "roots")]
@@ -412,7 +424,7 @@ def main(argv=None):
             summary(plan)
             if not plan["toolchain_available"]:
                 raise BuildError("install the pinned default pixi environment before building")
-            workers = int(build_environment("host", env)["MOJOLEARN_COMPILE_JOBS"])
+            workers = planned_compiler_workers(plan)
             jobs = pool_size(args.jobs, workers, args.memory_per_job_gib)
             report.update(plan=plan, jobs=jobs, state="building")
             wanted = [r for r in plan["groups"] if r["selected"] and r["action"] == "build"]

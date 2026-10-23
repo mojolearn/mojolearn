@@ -288,6 +288,51 @@ def test_parallelism_respects_cpu_and_memory():
         dev.pool_size(2, 1, 20, (8, 10 * 2 ** 30))
 
 
+@pytest.mark.parametrize("mode,plat,arch,workers", [
+    ("identical", "linux", "gfx942", "8"),
+    ("identical", "linux", "gfx950", "8"),
+    ("identical", "linux", "sm_89", "2"),
+    ("identical", "linux", "sm_120a", "2"),
+    ("host", "linux", "gfx942", "2"),
+    ("host", "linux", "", "2"),
+    ("identical", "darwin", "", "1"),
+    ("host", "darwin", "", "1"),
+])
+def test_supported_compiler_worker_defaults(mode, plat, arch, workers):
+    env = {"MOJOLEARN_GPU_ARCHS": arch} if arch else {}
+    assert dev.build_environment(mode, env, plat)["MOJOLEARN_COMPILE_JOBS"] == workers
+    env["MOJOLEARN_COMPILE_JOBS"] = "3"
+    assert dev.build_environment(mode, env, plat)["MOJOLEARN_COMPILE_JOBS"] == "3"
+
+
+def test_worker_overrides_are_effective_and_keyed(repo, tmp_path):
+    env = {"MOJOLEARN_GPU_ARCHS": "gfx942"}
+    base = plan(repo, tmp_path, env)
+    explicit_default = plan(repo, tmp_path, dict(env, MOJOLEARN_COMPILE_JOBS="8"))
+    assert keys(base) == keys(explicit_default)
+    overridden = plan(repo, tmp_path, dict(env, MOJOLEARN_COMPILE_JOBS="4"))
+    assert len(changed(base, overridden)) == 3
+    amd_override = dict(env, MOJOLEARN_AMD_COMPILE_JOBS="6")
+    assert dev.build_environment("identical", amd_override, "linux")["MOJOLEARN_COMPILE_JOBS"] == "6"
+    assert len(changed(base, plan(repo, tmp_path, amd_override))) == 3
+    both = dict(amd_override, MOJOLEARN_COMPILE_JOBS="4")
+    assert dev.build_environment("identical", both, "linux")["MOJOLEARN_COMPILE_JOBS"] == "4"
+    assert dev.build_environment("host", amd_override, "linux")["MOJOLEARN_COMPILE_JOBS"] == "2"
+
+
+def test_mixed_group_pool_reserves_the_largest_selected_compiler(repo, tmp_path):
+    value = dev.make_plan(repo, tmp_path / "cache", ["identical", "host"],
+                          {"MOJOLEARN_GPU_ARCHS": "gfx942"}, facts=FACTS, plat="linux")
+    assert dev.planned_compiler_workers(value) == 8
+    assert dev.pool_size(8, dev.planned_compiler_workers(value), 1, (16, 100 * 2 ** 30)) == 2
+    for row in value["groups"]:
+        row["selected"] = row["mode"] == "host"
+    assert dev.planned_compiler_workers(value) == 2
+    for row in value["groups"]:
+        row["action"] = "reuse"
+    assert dev.planned_compiler_workers(value) == 1
+
+
 def test_host_target_normalization_and_refusals(repo, tmp_path):
     env = dev.build_environment("host", dict(ENV, MOJOLEARN_TARGET_COLUMN="nvidia"))
     assert env["MOJOLEARN_TARGET_COLUMN"] == "cpu"
