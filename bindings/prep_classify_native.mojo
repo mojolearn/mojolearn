@@ -22,6 +22,10 @@ from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_wrap_array, classical_host_f32, classical_typed
 from bindings.classical_validate import classical_view
+from bindings.prep_lda_admission import (
+    lda_native_fields, lda_native_labels, lda_native_context, lda_native_initialize,
+    lda_native_get_params, lda_native_set_params,
+)
 from bindings.classical_labels import classical_encode_labels, classical_decode_labels, classical_accuracy, labels_check_sample_weight
 from bindings.x_prep_native_inputs import _values
 from bindings.arena_cache_release import arena_cache_release_operation
@@ -1471,9 +1475,24 @@ def _class_counts(mut pr: ClsProg, co: Int, n: Int, K: Int) -> Int:
 # ---------------------------------------------------------------- the door
 
 
-def _dispatch(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def _dispatch(model: PythonObject, operation: String, args: PythonObject, var context: PythonObject) raises -> PythonObject:
+    if py_type(py_type(model)) is not py_type(py_type(PythonObject(0))):
+        raise Error("TypeError: native classifiers cannot invoke Python metaclass hooks")
     var kind = cls_kind(model, context)
-    var fields = py_fields(model)
+    var fields: PythonObject
+    if kind == "lda":
+        context = lda_native_context(context)
+        if operation == "initialize":
+            return lda_native_initialize(model, args, context)
+        fields = lda_native_fields(model, context)
+        if operation == "get_params":
+            return lda_native_get_params(fields, context)
+        if operation == "set_params":
+            return lda_native_set_params(model, fields, args[0], context)
+        if operation == "fit" or operation == "fit_transform" or operation == "score":
+            lda_native_labels(args[1], context)
+    else:
+        fields = py_fields(model)
     if operation == "predict":
         return _predict(model, fields, kind, args[0], context)
     if operation == "predict_proba":
