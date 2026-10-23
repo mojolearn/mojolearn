@@ -6308,19 +6308,7 @@ class EllipticEnvelope(MinCovDet):
         ZeroDivisionError
             If the weights sum to zero.
         """
-        from ._expansion_metrics import accuracy_fraction
-        pa = self.predict(X)
-        n = len(pa)
-        # Preserve classification label types for the shared encoder.
-        # Converting integer labels to Float64 made valid score calls fail.
-        if len(y) != n:
-            raise ValueError("y and X have different numbers of rows")
-        if sample_weight is not None and len(as_f64_c(sample_weight, ndim=1, name="sample_weight")[0]) != n:
-            raise ValueError("sample_weight and X have different numbers of rows")
-        try:
-            return accuracy_fraction(y, pa, sample_weight, self.numeric_mode_)
-        except ZeroDivisionError:
-            raise ZeroDivisionError("Weights sum to zero, can't be normalized") from None
+        return _MCD_CALL(self, "elliptic_score", (X, y, sample_weight), _MCD_CONTEXT)
 
 
 # ================================================================ implicit ALS

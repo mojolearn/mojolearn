@@ -21,6 +21,7 @@ from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_pyth
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.classical_attributes import classical_connect_numpy
+from bindings.classical_labels import classical_accuracy, labels_shape_of, labels_view, labels_check_rank
 from bindings.classical_arrays import classical_address, classical_host_f32, classical_wrap_array
 from bindings.decomp_kit_native import (
     DecompKit, DecompF32, decomp_float, decomp_int, decomp_seed, decomp_seed_word, decomp_mode, decomp_entries,
@@ -412,6 +413,32 @@ def mcd_operation(model: PythonObject, operation: String, args: PythonObject, co
         kit.close()
 
 
+def elliptic_score(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """EllipticEnvelope.score: the native predict, then the (weighted) match
+    fraction of the x_metrics accuracy program in the fitted mode, the
+    prediction handed straight to it (`accuracy_fraction`)."""
+    var prediction = mcd_operation(model, "predict", Python.tuple(args[0]), context)
+    var n = labels_shape_of(prediction, context)[0]
+    var y = args[1]
+    var sample_weight = args[2]
+    # `len(y)`: the row count from the shape (an Array's slots, a buffer's
+    # shape, a list's length).
+    var y_shape = labels_shape_of(y, context)
+    if len(y_shape) == 0 or y_shape[0] != n:
+        raise Error("y and X have different numbers of rows")
+    if sample_weight is not None:
+        var view = labels_view(sample_weight, "sample_weight", context)
+        labels_check_rank(view, 1, "sample_weight")
+        if view.shape[0] != n:
+            raise Error("sample_weight and X have different numbers of rows")
+    try:
+        return PythonObject(classical_accuracy(y, prediction, sample_weight, py_fields(model)["numeric_mode_"], context))
+    except error:
+        if String(error).startswith("ZeroDivisionError"):
+            raise Error("ZeroDivisionError: Weights sum to zero, can't be normalized")
+        raise error^
+
+
 def mcd_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var call = PythonObject(from_borrowed=args_ptr)
@@ -422,7 +449,7 @@ def mcd_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
             raise Error("TypeError: native MinCovDet requires an operation, an argument tuple and its context")
         var context = call[3]
         classical_connect_numpy(context)
-        var result = mcd_operation(call[0], String(py=call[1]), call[2], context)
+        var result = elliptic_score(call[0], call[2], context) if String(py=call[1]) == "elliptic_score" else mcd_operation(call[0], String(py=call[1]), call[2], context)
         return result.steal_data()
     except error:
         if String(error) == PYTHON_ERROR_PENDING:
@@ -437,4 +464,6 @@ def mcd_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
             return raise_python_exception(error_without_class(error, "ImportError"), ExceptionType("PyExc_ImportError"))
         if String(error).startswith("RuntimeError:"):
             return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
+        if String(error).startswith("ZeroDivisionError:"):
+            return raise_python_exception(error_without_class(error, "ZeroDivisionError"), ExceptionType("PyExc_ZeroDivisionError"))
         return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)

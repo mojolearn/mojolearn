@@ -56,6 +56,9 @@ def connect(door, **classes):
             connected[mode] = type(error).__name__ + ": " + str(error)
     # Every output and working buffer is a mojolearn Array, as `_M.out()` made.
     context.update(output_context=_numpy_free_context(), decomp_bindings=connected, **classes)
+    # The shared native label and accuracy steps (EllipticEnvelope.score).
+    from ._native_labels_bridge import label_context
+    context.update(label_context())
     entry = getattr(_binding()._module, door)
     if not isinstance(entry, BuiltinFunctionType):
         raise TypeError(f"the native decomposition owner requires a compiled {door}")
