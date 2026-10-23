@@ -59,7 +59,9 @@ def test_manifest_declares_the_family():
     # (`cross_vendor_call`), so the coverage lane names this family.
     assert f["training_lanes"] == ("tokenizer", "bpe-trainer", "bpe-vocabulary",
                                    "tokenized-corpus", "hf-tokenizer",
-                                   "cross-vendor-fold") and f["inference_lanes"] == ()
+                                   "cross-vendor-fold",
+                                   # lane verify-gaps-20261022: the models reader surface
+                                   "hf-model-surface") and f["inference_lanes"] == ()
     assert host_surface.PUBLIC_HOST_ONLY_LANES["cross-vendor-fold"] == "tokenizer"
     # The trainer's own arm is in the gate's set too: the encoder arm above
     # cannot reach `bpe-trainer`, which never encodes (measured: that lane's
@@ -126,6 +128,8 @@ def test_binding_source_reads_the_sabotage_define():
     src = _read("bindings/_mojolearn_tokenizer_host.mojo")
     assert "TOKENIZER_HOST_SABOTAGE," in src
     names = re.findall(r'module\.def_function\[[A-Za-z0-9_]+\]\("([A-Za-z0-9_]+)"\)', src)
+    # the native doors register as C functions (`def_py_c_function(<c>, "<name>")`)
+    names += re.findall(r'module\.def_py_c_function\(\s*[A-Za-z0-9_]+,\s*"([A-Za-z0-9_]+)"\)', src)
     assert sorted(names) == sorted(host_surface.family("tokenizer")["exports"])
 
 
