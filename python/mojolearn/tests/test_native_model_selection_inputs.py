@@ -150,6 +150,22 @@ def test_splitter_subclass_refuses_overridden_property():
     assert calls == []
 
 
+def test_splitter_metaclass_hash_is_never_called():
+    calls = []
+
+    class Meta(type):
+        def __hash__(cls):
+            calls.append('metaclass hash')
+            return type.__hash__(cls)
+
+    class Custom(metaclass=Meta):
+        pass
+
+    clean(ms.check_cv, Custom(), error=TypeError)
+    clean(ms.KFold.get_n_splits, Custom(), error=TypeError)
+    assert calls == []
+
+
 def test_splitter_field_property_mutation_is_refused_before_construction(monkeypatch):
     splitter = ms.KFold(3)
     calls = []
