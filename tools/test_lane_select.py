@@ -1838,13 +1838,31 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
                                      (hf-causal-lm-text,
                                      saved-model-host-infer-trees,
                                      sequence-layernorm-backward,
-                                     training-device-cross-entropy)."""
+                                     training-device-cross-entropy).
+
+    REMEASURED 2026-10-23 (f4870004b -> 7dcef380b; both registries 555):
+      neural_inference.py  74 -> 85  eleven EXISTING sequence lanes gained
+                                     the import-time native sequence bridge;
+                                     no previously reached lane was removed.
+                                     _x_sequence_* -> _native_xseq_bridge
+                                     -> _training_impl -> _native_samba_bridge
+                                     -> neural_inference (all import edges).
+                                     +3 58ab6ec69: sequence-rnn/lstm/gru
+                                     +1 d82367475: sequence-mlp
+                                     +6 061c9f767: sequence-theta/croston/ets/
+                                                  garch/var/stl
+                                     +1 bbd1ecc88: sequence-prophet
+                                     Retained before/after membership and paths:
+                                     codex-recovery-20261023/native-failures/
+                                     neural-membership-{pin74,current,delta}.json.
+    This Python import change is separate from unresolved native dispatch
+    precision; the public-door name/re-export checks still apply."""
     rev = lane_select.reverse_map()
     for rel, want in (("cluster/host/kmeans_oracle.mojo", 84),
                       ("core/gbdt_host_predict.mojo", 55),
                       ("core/forest_host_predict.mojo", 93),
                       ("core/forest_inference.mojo", 53),
-                      ("python/mojolearn/neural_inference.py", 74)):
+                      ("python/mojolearn/neural_inference.py", 85)):
         got = len(rev.get(rel, set()))
         assert got == want, f"{rel} answers {got} lanes, not {want}"
     lanes = len(lane_select.all_lanes())
@@ -2034,8 +2052,8 @@ def test_the_public_door_a_name_is_bound_from_is_in_the_map():
         wide = sorted(lanes - naming)
         assert not wide, (f"{rel} answers {len(lanes)} lanes and {wide[:5]} name nothing it "
                           f"binds ({sorted(bound)}); the door rule has gone wide")
-    assert len(rev.get("python/mojolearn/neural_inference.py", ())) == 74, \
-        ("the re-export rule moved neural_inference.py off its measured 74 lanes (40 + hf-checkpoint,"
+    assert len(rev.get("python/mojolearn/neural_inference.py", ())) == 85, \
+        ("the re-export rule moved neural_inference.py off its measured 85 lanes (40 + hf-checkpoint,"
          " 2026-09-23; minus gbdt-tensor-ctr-tables, which fits on the CPU since 2026-09-28;"
          " plus optim-maximize, 2026-09-28; plus four new lanes and minus gbdt-categorical-ctr-tables,"
          " 2026-10-21; plus five coverage lanes in 63022df0c2;"
@@ -2043,7 +2061,9 @@ def test_the_public_door_a_name_is_bound_from_is_in_the_map():
          " e492586c6 2026-10-21, whose doors now import _training_impl -> _native_samba_bridge ->"
          " neural_inference (2430b2684);"
          " plus five new lanes in 1f1183e21 and two in 50c405ad2, 2026-10-21;"
-         " plus four verify-gaps lanes in d332cd33c, 2026-10-22; see "
+         " plus four verify-gaps lanes in d332cd33c, 2026-10-22;"
+         " plus eleven existing sequence lanes through _native_xseq_bridge -> _training_impl"
+         " (58ab6ec69, d82367475, 061c9f767, bbd1ecc88), measured 2026-10-23; see "
          "test_the_wider_mojo_walk_did_not_widen_the_narrow_answers)")
 
     # THE FAILING SIDE: with no public rebindings the lane each door is
