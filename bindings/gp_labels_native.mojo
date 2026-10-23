@@ -43,7 +43,7 @@ def _gp_prepare(address: Int, code: Int, n: Int, as_bool: Bool, base: PythonObje
     """`_labels.prepare_targets(labels, None, n)` plus `classes.tolist()`:
     (the k sorted classes as a Python list, the n int32 codes)."""
     var wide = code == 0 or code == 1
-    var classes = family_array(Python.tuple(n), "<f8" if wide else "<i8", context)
+    var classes = family_array(Python.tuple(n), String("<f8") if wide else String("<i8"), context)
     var codes = family_array(Python.tuple(n), "<i4", context)
     var entry = family_entry(base, "prepare_targets", context)
     var k: Int
@@ -54,7 +54,7 @@ def _gp_prepare(address: Int, code: Int, n: Int, as_bool: Bool, base: PythonObje
     except error:
         if String(error).find("NaN label") != -1:
             raise Error(String(_NAN_LABEL))
-        raise error^
+        raise Error(String(error))
     var values = Python.list()
     if wide:
         var fp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(classes)))
@@ -64,7 +64,7 @@ def _gp_prepare(address: Int, code: Int, n: Int, as_bool: Bool, base: PythonObje
         var ip = FAMILY_I64P(unsafe_from_address=Int(py=classical_address(classes)))
         for i in range(k):  # driver-loop: over the distinct classes
             if as_bool:
-                _ = py_call(values.append, PythonObject(ip[i] != 0))
+                _ = py_call(values.append, PythonObject(Bool(ip[i] != 0)))
             else:
                 _ = py_call(values.append, PythonObject(Int(ip[i])))
     _ = classes^
@@ -280,12 +280,12 @@ def gp_decode_labels(classes: PythonObject, codes: PythonObject, base: PythonObj
             _ = py_call(wide.append, family_call(b.int if kind == "int" else b.float, classes[i]))
         var table = PythonObject(None)
         try:
-            table = py_call(context["array_type"], PythonObject("q" if kind == "int" else "d"), wide)
+            table = py_call(context["array_type"], PythonObject(String("q") if kind == "int" else String("d")), wide)
         except:
             table = PythonObject(None)  # a class outside int64: the label objects come back
         if table is not None:
-            var out = family_array(Python.tuple(n), "<i8" if kind == "int" else "<f8", context)
-            _ = family_call(family_entry(base, "gather_i64" if kind == "int" else "gather_f64", context),
+            var out = family_array(Python.tuple(n), String("<i8") if kind == "int" else String("<f8"), context)
+            _ = family_call(family_entry(base, String("gather_i64") if kind == "int" else String("gather_f64"), context),
                             py_call(table.buffer_info)[0], PythonObject(k), classical_address(codes),
                             PythonObject(n), classical_address(out))
             _ = table^

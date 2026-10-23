@@ -149,6 +149,7 @@ def _gpr_normalize(model: PythonObject, binding: PythonObject, targets: PythonOb
     var b = Python.import_module("builtins")
     var scaler_cls = context["family_gp_scaler"][0]
     var scaler_context = context["family_gp_scaler"][1]
+    classical_connect_numpy(scaler_context)
     var mode = gp_numeric_mode_used(binding, context)
     var scaler = family_call(b.object.__new__, scaler_cls)
     _ = scaler_initialize(scaler, Python.tuple(PythonObject(True), PythonObject(True), PythonObject(True), mode))
@@ -308,7 +309,7 @@ def _gpr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     # info, nb, logdet, ydotalpha, lml -- in that order.
     var scalars = family_array(Python.tuple(5), "<f8", context)
     var ext = _gpr_ext(model, args[0], context)
-    var fit_fn = gp_entry(ext, "gpr_fit_ptr" if (gp_caps(ext) & 2) == 2 else "gpr_fit")
+    var fit_fn = gp_entry(ext, String("gpr_fit_ptr") if (gp_caps(ext) & 2) == 2 else String("gpr_fit"))
     var info = 0
     while True:  # driver-loop: over the tenfold ridge retries (alpha up to 1.0)
         var alpha = Float64(py=fields["_alpha"])
@@ -409,7 +410,7 @@ def _gpr_predict(model: PythonObject, args: PythonObject, context: PythonObject)
     # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_predict_binding.
     # xtrain, l, dual, xstar, kinds, kparams, ls_len, ls, mean_out, var_out, std_out, clamped_out;
     # n_train, n_features, n_star, n_nodes, n_ls, return_std, info (+ normalize_y, y_std, y_mean)
-    var n_clamped = family_call(gp_entry(ext, "gpr_predict_ptr" if (gp_caps(ext) & 2) == 2 else "gpr_predict"),
+    var n_clamped = family_call(gp_entry(ext, String("gpr_predict_ptr") if (gp_caps(ext) & 2) == 2 else String("gpr_predict")),
         Python.list(classical_address(xt), classical_address(lf), classical_address(dual), classical_address(q),
                     classical_address(arrays[0]), classical_address(arrays[1]), classical_address(arrays[2]),
                     classical_address(arrays[3]), classical_address(mean), classical_address(var_out),
@@ -621,9 +622,14 @@ def _gpr_score(model: PythonObject, args: PythonObject, context: PythonObject) r
     r.program(0.0, context)
     var y_off = r.y_off
     var p_off = r.p_off
-    var y_mean = r.fin32(r.sums(y_off), _RE_DIV)
-    var num = r.fin(r.sums(r.term(sq, y_off, p_off, False)), 0)
-    var den = r.fin(r.sums(r.term(sq, y_off, y_mean, True)), 0)
+    var y_sums = r.sums(y_off)
+    var y_mean = r.fin32(y_sums, _RE_DIV)
+    var res_terms = r.term(sq, y_off, p_off, False)
+    var res_sums = r.sums(res_terms)
+    var num = r.fin(res_sums, 0)
+    var tot_terms = r.term(sq, y_off, y_mean, True)
+    var tot_sums = r.sums(tot_terms)
+    var den = r.fin(tot_sums, 0)
     _ = r.prog.want(num, 2)
     _ = r.prog.want(den, 2)
     var arena = _reg_run(r.prog, PythonObject(None), context)
