@@ -677,9 +677,28 @@ def _log_loss(args: PythonObject, context: PythonObject) raises -> PythonObject:
     return PythonObject(mc_arena_double(arena, res))
 
 
+def mcls_accuracy_fraction(y_true: PythonObject, y_pred: PythonObject, sample_weight: PythonObject,
+                           numeric_mode: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_expansion_metrics.accuracy_fraction` (the estimators' `score`): the
+    COUNT tail of `_accuracy_sums` over the match sums, the (weighted)
+    match count over the row count or the weight total; a zero weight total
+    raises as the division did. The same program as accuracy_count's."""
+    var pair = mc_pair(y_true, y_pred, sample_weight, "accuracy_score", context)
+    var prog = McProg(context)
+    var s = mc_sums(prog, pair, pair.present, List[McEpi](), context)
+    var out = mc_count_tail(prog, s, mc_len(pair.present))
+    var arena = mc_run(prog, numeric_mode, context)
+    if s.weighted and mc_arena_int(arena, out) != 0:
+        raise Error("ZeroDivisionError: float division by zero")
+    return PythonObject(mc_arena_double(arena, out + 8))
+
+
 def mcls_classify_operation(operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
     if operation == "family_mcls_accuracy":
         return _accuracy(args, context)
+    if operation == "family_mcls_accuracy_fraction":
+        # args = (y_true, y_pred, sample_weight, numeric_mode)
+        return mcls_accuracy_fraction(args[0], args[1], args[2], args[3], context)
     if operation == "family_mcls_confusion":
         return _confusion(args, context)
     if operation == "family_mcls_prf":

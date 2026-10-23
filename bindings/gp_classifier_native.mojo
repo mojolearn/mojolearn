@@ -21,6 +21,8 @@ from bindings.family_common import (
 from core.hotpath_impl import reduce_stat, cast_elements, HP_F64, HP_SUM, HP_I32, HP_I64
 from bindings.gp_common_native import gp_extension, gp_caps, gp_entry, gp_kernel_arrays, gp_f32
 from bindings.gp_labels_native import gp_encode_labels, gp_decode_labels
+from bindings.mcls_classify import mcls_accuracy_fraction
+from bindings.mcls_common import mc_shape_of
 
 comptime _NAME = "mojolearn GaussianProcessClassifier"
 comptime _K_PROD = 5
@@ -446,4 +448,17 @@ def gp_classifier_operation(model: PythonObject, operation: String, args: Python
         return _gpc_predict_proba(model, args, context)
     if operation == "family_gp_gpc_latent":
         return _gpc_latent_mean_and_variance(model, args, context)
+    if operation == "family_gp_gpc_score":
+        # `score(X, y)`: predict, the row-count refusal, then
+        # `accuracy_fraction(y, pred)`; args = (binding, base binding, X, y).
+        var pred = _gpc_predict(model, Python.tuple(args[0], args[1], args[2]), context)
+        var shape = mc_shape_of(args[3])
+        var n_truth = 0
+        if Int(py=py_call(Python.import_module("builtins").len, shape)) > 0:
+            n_truth = Int(py=py_call(Python.import_module("builtins").int, shape[0]))
+        var n_pred = Int(py=py_call(Python.import_module("builtins").len, pred))
+        if n_truth != n_pred:
+            raise Error("mojolearn GaussianProcessClassifier: y has " + String(n_truth) + " entries for "
+                        + String(n_pred) + " rows")
+        return mcls_accuracy_fraction(args[3], pred, PythonObject(None), PythonObject(None), context)
     raise Error("RuntimeError: unknown gaussian process classifier operation " + operation)

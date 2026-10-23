@@ -578,14 +578,6 @@ def _cm_stage(prog, groups, w, n, k, kind, size):
     return out
 
 
-def _cm_count(true, pred, w, present, numeric_mode):
-    """The COUNT tail (x_metrics/cm_epi.mojo) over the match sums: the
-    program and its 11-word output (see `_count` there)."""
-    s = _Sums(true, pred, w, present, numeric_mode,
-              tail=lambda prog, groups: _cm_stage(prog, groups, w, len(true), len(present), _CM_COUNT, 11))
-    return s.prog, s.tail, s.weighted
-
-
 # Engineering notes (moved from the docstring):
 # Per-label one-vs-rest 2x2 confusion matrices, `[[tn, fp], [fn, tp]]`.
 #
@@ -746,26 +738,6 @@ def zero_one_loss(y_true, y_pred, *, normalize=True, sample_weight=None, numeric
                    _NATIVE_CONTEXT)
 
 
-def _accuracy_sums(y_true, y_pred, sample_weight, numeric_mode):
-    """(the (weighted) number of matches, their fraction of the row count
-    (at least 1) or the weight total), both from the device tail
-    (x_metrics/cm_epi.mojo, COUNT). A zero weight total raises as the
-    division did."""
-    true, pred, kind, present, w = _pair(y_true, y_pred, sample_weight, "accuracy_score")
-    prog, out, weighted = _cm_count(true, pred, w, present, numeric_mode)
-    if not weighted:
-        return prog.ints(out + 1, 1)[0], float(prog.words(out + 8, 2, "d")[0])
-    hit = float(prog.words(out + 2, 2, "d")[0])
-    if prog.ints(out, 1)[0]:
-        return hit, None
-    return hit, float(prog.words(out + 8, 2, "d")[0])
-
-
-def accuracy_count(y_true, y_pred, sample_weight, numeric_mode):
-    """accuracy_score(normalize=False): the (weighted) number of matches."""
-    return _accuracy_sums(y_true, y_pred, sample_weight, numeric_mode)[0]
-
-
 def accuracy_fraction(y_true, y_pred, sample_weight=None, numeric_mode=None):
     """sklearn's ClassifierMixin.score / accuracy_score over labels of any
     kind: the (weighted) match count over the row count or the weight total,
@@ -775,10 +747,8 @@ def accuracy_fraction(y_true, y_pred, sample_weight=None, numeric_mode=None):
     device, `_wsum_sf64`, no longer Float32 PairSums). Lane
     cgr4-py-compute: the estimators' `score` methods called this instead of
     a per-row Python comparison."""
-    frac = _accuracy_sums(y_true, y_pred, sample_weight, numeric_mode)[1]
-    if frac is None:
-        raise ZeroDivisionError("float division by zero")
-    return frac
+    return _NATIVE(None, "family_mcls_accuracy_fraction", (y_true, y_pred, sample_weight, numeric_mode),
+                   _NATIVE_CONTEXT)
 
 
 def class_likelihood_ratios(y_true, y_pred, *, labels=None, sample_weight=None,

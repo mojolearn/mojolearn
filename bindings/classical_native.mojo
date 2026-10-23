@@ -303,4 +303,6 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             return raise_python_exception(error_without_class(error, "AttributeError"), ExceptionType("PyExc_AttributeError"))
         if String(error).startswith("RuntimeError:"):
             return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
+        if String(error).startswith("ZeroDivisionError:"):
+            return raise_python_exception(error_without_class(error, "ZeroDivisionError"), ExceptionType("PyExc_ZeroDivisionError"))
         return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)

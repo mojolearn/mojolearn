@@ -22,7 +22,7 @@ from bindings.mcls_ranking import mcls_ranking_operation
 def metrics_cls_operation(model: PythonObject, operation: String, args: PythonObject,
          context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
-    if (operation == "family_mcls_accuracy" or operation == "family_mcls_confusion"
+    if (operation == "family_mcls_accuracy" or operation == "family_mcls_accuracy_fraction" or operation == "family_mcls_confusion"
             or operation == "family_mcls_prf" or operation == "family_mcls_log_loss"):
         return mcls_classify_operation(operation, args, context)
     if operation == "family_mcls_roc_auc" or operation == "family_mcls_pr_curve":

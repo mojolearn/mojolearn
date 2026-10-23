@@ -622,14 +622,8 @@ class GaussianProcessClassifier(NumericModeMixin):
         -------
         float
         """
-        from ._expansion_metrics import accuracy_fraction
-        from ._metrics_impl import _shape_of
-        pred = self.predict(X)
-        n_truth = int(_shape_of(y)[0]) if _shape_of(y) else 0
-        if n_truth != len(pred):
-            raise ValueError(f"{_NAME}: y has {n_truth} entries for {len(pred)} rows")
-        # the x_metrics binding's grouped match count over the row count
-        return accuracy_fraction(y, pred)
+        return _NATIVE(self, "family_gp_gpc_score", (self._bind(), _backend.binding("_mojolearn", "identical"), X, y),
+                       _NATIVE_CONTEXT)
 
     # -- save and load ----------------------------------------------------------
 
