@@ -33,7 +33,8 @@ def _loaded_fields(module: PythonObject) raises -> PythonObject:
         raise cpy.unsafe_get_error()
     var keys = PythonObject(from_owned=raw_keys)
     var string_type = _loaded_type(PythonObject(""))
-    for i in range(len(keys)):  # driver-loop: native namespace keys, before metadata lookups
+    # driver-loop: over module namespace field names, before metadata lookups
+    for i in range(len(keys)):  # small-loop(keys: module field names): validates namespace metadata before attribute lookup
         if _loaded_type(keys[i]) is not string_type:
             raise Error("TypeError: native module connection requires ordinary string fields")
     if _loaded_lookup(fields, "__getattr__"):
@@ -61,7 +62,8 @@ def native_loaded_module(name: String) raises -> PythonObject:
     var string_type = _loaded_type(PythonObject(""))
     if _loaded_type(connections) is not tuple_type:
         raise Error("TypeError: native module connection records require an exact tuple")
-    for i in range(len(connections)):  # driver-loop: the fixed import-time module inventory
+    # driver-loop: over the fixed import-time module inventory
+    for i in range(len(connections)):  # small-loop(connections: registered modules): selects the fixed native setup record
         var record = connections[i]
         if _loaded_type(record) is not tuple_type or len(record) != 3 or _loaded_type(record[0]) is not string_type:
             raise Error("TypeError: malformed native module connection record")
@@ -77,7 +79,8 @@ def native_loaded_module(name: String) raises -> PythonObject:
         var exports = record[2]
         if _loaded_type(exports) is not tuple_type:
             raise Error("TypeError: native module export records require an exact tuple")
-        for j in range(len(exports)):  # driver-loop: exact identities of registered native exports
+        # driver-loop: over exact identities of registered native exports
+        for j in range(len(exports)):  # small-loop(exports: registered native names): validates fixed export identities before use
             var item = exports[j]
             if _loaded_type(item) is not tuple_type or len(item) != 2 or _loaded_type(item[0]) is not string_type:
                 raise Error("TypeError: malformed native module export record")
