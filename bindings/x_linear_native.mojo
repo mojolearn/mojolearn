@@ -1455,8 +1455,8 @@ def _xl_default_folds(n: Int, k: Int, context: PythonObject) raises -> PythonObj
         var train = labels_vector(n - size, "<i8", context)
         var scratch = labels_vector(n, "<i8", context)
         var got = _int(py_call_typed(select, PythonObject(labels_address(fold_store)), PythonObject(n), PythonObject(fold),
-                                     PythonObject(labels_address(test) if size else labels_address(scratch)),
-                                     PythonObject(labels_address(train) if n - size else labels_address(scratch))))
+                                     PythonObject(labels_address(test) if size > 0 else labels_address(scratch)),
+                                     PythonObject(labels_address(train) if n - size > 0 else labels_address(scratch))))
         if got != size:
             raise Error("RuntimeError: mojolearn: select_fold_i64 disagrees with fold_ids")
         _ = py_call(out.append, Python.tuple(train, test))
@@ -1491,7 +1491,7 @@ def _xl_cv_fold_ids(splits: PythonObject, n: Int, context: PythonObject) raises 
     for k in range(len(splits)):  # driver-loop: over the cv splits
         var te = splits[k][1]
         var size = Int(py=te.size)
-        if _int(py_call_typed(assign, PythonObject(labels_address(te) if size else 0), PythonObject(size), PythonObject(n),
+        if _int(py_call_typed(assign, PythonObject(labels_address(te) if size > 0 else 0), PythonObject(size), PythonObject(n),
                               PythonObject(k), PythonObject(labels_address(fold)))) != 0:
             return PythonObject(None)
         covered += size
@@ -1540,7 +1540,7 @@ def _xl_cv_fold_ids_f32(splits: PythonObject, n: Int, name: String,
         for side in range(2):  # driver-loop: over the two sides of one split
             var rows = splits[k][side]
             var size = Int(py=rows.size)
-            var status = _int(py_call_typed(mark, PythonObject(labels_address(rows) if size else 0), PythonObject(size),
+            var status = _int(py_call_typed(mark, PythonObject(labels_address(rows) if size > 0 else 0), PythonObject(size),
                                             PythonObject(n), PythonObject(k), PythonObject(side + 1),
                                             PythonObject(labels_address(roles))))
             if status == 1:
