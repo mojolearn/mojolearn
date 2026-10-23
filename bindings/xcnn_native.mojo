@@ -12,6 +12,7 @@ from bindings.xcnn_pool_native import xcnn_pool_layers
 from bindings.xcnn_bn_native import xcnn_bn_layers
 from bindings.xcnn_conv_native import xcnn_conv_layers
 from bindings.xcnn_graph_native import xcnn_gcn_forward, xcnn_sage_forward
+from bindings.xcnn_classifier_native import cnnclf_fit, cnnclf_predict, cnnclf_predict_proba
 
 
 def xcnn_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
@@ -22,6 +23,12 @@ def xcnn_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         var operation = String(py=call[1])
         if operation.startswith("conv_forward") or operation.startswith("conv_transform") or operation.startswith("block_"):
             return xcnn_conv_layers(call[0], operation, call[2], context).steal_data()
+        if operation == "cnnclf_fit":
+            return cnnclf_fit(call[0], call[2], context).steal_data()
+        if operation == "cnnclf_predict":
+            return cnnclf_predict(call[0], call[2], context).steal_data()
+        if operation == "cnnclf_predict_proba":
+            return cnnclf_predict_proba(call[0], call[2], context).steal_data()
         if operation == "gcn_forward":
             return xcnn_gcn_forward(call[0], call[2], context).steal_data()
         if operation == "sage_forward":

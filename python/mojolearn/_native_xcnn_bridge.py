@@ -151,3 +151,30 @@ def register(**tables):
     _, context = connect()
     if "xcnn_unavailable" not in context:
         context.update(tables)
+
+
+def connect_classifier():
+    """Connect what CNNClassifier's native owner reads beside the layers: the
+    x_sequence binding's label sort of both tiers, the seeded draw, the pinned
+    sum and the base gathers (fixed compiled entries, once, at import; NumPy
+    is not imported)."""
+    _, context = connect()
+    if "xcnn_unavailable" in context:
+        return
+    import os
+    from types import BuiltinFunctionType
+    from . import _backend
+    from ._buffer import _native
+    labels = {}
+    for mode in ("identical", "fast"):  # glue: the two numeric modes, connected once
+        try:
+            entry = getattr(_backend.binding("_mojolearn_x_sequence", mode), "model_labels")
+            if not isinstance(entry, BuiltinFunctionType):
+                raise TypeError("CNNClassifier requires the compiled model_labels")
+            labels[mode] = {"model_labels": entry}
+        except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError) as error:
+            labels[mode] = type(error).__name__ + ": " + str(error)
+    context.update(xcnn_label_bindings=labels, os_urandom=os.urandom,
+                   xseq_base={"uniform_init_f32": _native("uniform_init_f32")},
+                   xcnn_nsum_f64=_native("nsum_f64"), xcnn_gather_f64=_native("gather_f64"),
+                   xcnn_gather_i64=_native("gather_i64"))
