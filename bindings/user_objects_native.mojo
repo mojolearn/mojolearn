@@ -25,6 +25,8 @@
 #   ("group_runs", ids)                       -> int64 run lengths of a ranking pool's group ids
 #   ("pairs", rows, weights, n_rows)          -> (int64 winner/loser words, float64 weights)
 #   ("sorted_codes", values, unknown)         -> float32 codes over sorted((str(type(v)), v))
+#   ("f32_exact", values)                     -> [float(v)] when float32 holds every real label, else None
+#   ("indicator", rows)                       -> (status, float32 words, width) of a 0/1 label matrix
 #   ("group_rows", codes, k)                  -> k int64 stores: the rows of each code
 #   ("group_permute", values, rows, perms)    -> values permuted within each group's rows
 #
@@ -46,7 +48,8 @@ comptime KIND_INTVAL = 5      # Integral, or a finite integer-valued Real
 comptime KIND_SEQ = 6         # isinstance(v, (list, tuple))
 comptime KIND_INT_OR_BOOL = 7 # Integral or bool / bool_
 comptime KIND_PLAIN_INT = 8   # Integral and not bool / bool_
-comptime N_KINDS = 9
+comptime KIND_REAL_NONBOOL = 9  # isinstance(v, numbers.Real) and not isinstance(v, bool)
+comptime N_KINDS = 10
 
 
 struct _Env(Movable):
@@ -164,14 +167,18 @@ def _lookup(env: _Env, classes: PythonObject, values: PythonObject) raises -> Py
     return Python.tuple(codes, missing)
 
 
-def _is_intval(env: _Env, v: PythonObject) raises -> Bool:
-    # math.isfinite(v) and float(v).is_integer(), for a Real
-    var x = Float64(py=py_call(env.b.float, v))
+def _float_is_integer(x: Float64) -> Bool:
+    # math.isfinite(x) and x.is_integer()
     if not (x - x == 0.0):
         return False
     if x >= 9007199254740992.0 or x <= -9007199254740992.0:
         return True  # every float this large is an integer
     return Float64(Int(x)) == x
+
+
+def _is_intval(env: _Env, v: PythonObject) raises -> Bool:
+    # math.isfinite(v) and float(v).is_integer(), for a Real
+    return _float_is_integer(Float64(py=py_call(env.b.float, v)))
 
 
 def _kinds(env: _Env, values: PythonObject) raises -> PythonObject:
@@ -201,6 +208,8 @@ def _kinds(env: _Env, values: PythonObject) raises -> PythonObject:
             counts[KIND_INT_OR_BOOL] += 1
         if integral and not is_b:
             counts[KIND_PLAIN_INT] += 1
+        if real and not env.isinstance(v, env.b.bool):
+            counts[KIND_REAL_NONBOOL] += 1
     var out = Python.list()
     for k in range(N_KINDS):  # driver-loop: over the kind counters
         _ = py_call(out.append, PythonObject(counts[k]))
@@ -513,6 +522,57 @@ def _group_permute(env: _Env, values: PythonObject, rows: PythonObject, perms: P
     return out
 
 
+def _f32_exact(env: _Env, values: PythonObject) raises -> PythonObject:
+    # the labels as Python floats when every one is a real number (not a
+    # bool) that float32 holds exactly and none is NaN, else None
+    var n = len(values)
+    var out = Python.list()
+    for i in range(n):  # cpu-route: Python label objects read once by user_objects_c (f32_exact)
+        var v = values[i]
+        if env.isinstance(v, env.b.bool) or not env.isinstance(v, env.real):
+            return PythonObject(None)
+        var x = Float64(py=py_call(env.b.float, v))
+        if x != x or Float64(Float32(x)) != x:
+            return PythonObject(None)
+        _ = py_call(out.append, PythonObject(x))
+    return out
+
+
+def _indicator(env: _Env, rows: PythonObject) raises -> PythonObject:
+    # _expansion_prep._multilabel_indicator of list rows: (0, float32 words,
+    # width), (1, None, 0) when the rows' lengths differ, (2, None, 0) when a
+    # value is not an integral real or more than two distinct values occur
+    var n = len(rows)
+    var w = len(rows[0])
+    for i in range(n):  # cpu-route: Python list-of-lists y read once by user_objects_c (indicator)
+        if len(rows[i]) != w:
+            return Python.tuple(PythonObject(1), PythonObject(None), PythonObject(0))
+    var words = env.store("f", n * w, 4)
+    var out = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=_address(words))
+    var d0 = 0.0
+    var d1 = 0.0
+    var nd = 0
+    for i in range(n):  # cpu-route: Python list-of-lists y read once by user_objects_c (indicator)
+        var r = rows[i]
+        for j in range(w):  # driver-loop: over one row's columns
+            var v = r[j]
+            if env.isinstance(v, env.b.bool) or not env.isinstance(v, env.real):
+                return Python.tuple(PythonObject(2), PythonObject(None), PythonObject(0))
+            var x = Float64(py=py_call(env.b.float, v))
+            if not _float_is_integer(x):
+                return Python.tuple(PythonObject(2), PythonObject(None), PythonObject(0))
+            if nd == 0 or (x != d0 and (nd == 1 or x != d1)):
+                if nd == 0:
+                    d0 = x
+                elif nd == 1:
+                    d1 = x
+                nd += 1
+                if nd > 2:
+                    return Python.tuple(PythonObject(2), PythonObject(None), PythonObject(0))
+            out[i * w + j] = Float32(x)
+    return Python.tuple(PythonObject(0), words, PythonObject(w))
+
+
 def user_objects_call(call: PythonObject) raises -> PythonObject:
     var env = _Env()
     var operation = String(py=call[0])
@@ -552,6 +612,10 @@ def user_objects_call(call: PythonObject) raises -> PythonObject:
         return _pairs(env, call[1], call[2], Int(py=call[3]))
     if operation == "sorted_codes":
         return _sorted_codes(env, call[1], call[2])
+    if operation == "f32_exact":
+        return _f32_exact(env, call[1])
+    if operation == "indicator":
+        return _indicator(env, call[1])
     if operation == "group_rows":
         return _group_rows(env, call[1], Int(py=call[2]))
     if operation == "group_permute":

@@ -18,7 +18,7 @@ _REFUSALS = {"TypeError": TypeError, "ValueError": ValueError, "IndexError": Ind
 
 # ("kinds", values) counters, bindings/user_objects_native.mojo KIND_*
 KIND_STR, KIND_BOOL, KIND_EXACT_INT, KIND_INTEGRAL, KIND_REAL = 0, 1, 2, 3, 4
-KIND_INTVAL, KIND_SEQ, KIND_INT_OR_BOOL, KIND_PLAIN_INT = 5, 6, 7, 8
+KIND_INTVAL, KIND_SEQ, KIND_INT_OR_BOOL, KIND_PLAIN_INT, KIND_REAL_NONBOOL = 5, 6, 7, 8, 9
 
 
 def call(operation, *args):
@@ -41,7 +41,11 @@ def kinds(values):
 def take(values, indices):
     """``[values[i] for i in indices]`` for a Python list or tuple and an
     int32 or int64 index Array."""
+    import array
     from ._array import Array
+    if isinstance(indices, array.array) and indices.typecode in ("q", "i") and indices.itemsize in (4, 8):
+        return call("take", values, indices.buffer_info()[0] if len(indices) else 0, len(indices),
+                    indices.itemsize)
     if not isinstance(indices, Array) or indices.dtype not in ("<i4", "<i8"):
         from ._buffer import as_index_i64
         indices = as_index_i64(indices, name="indices")
