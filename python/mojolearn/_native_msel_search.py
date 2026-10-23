@@ -23,7 +23,7 @@ def connect(context, selection):
         descriptor = next((row['__dict__'] for row in rows if '__dict__' in row), None)  # glue: ordinary instance storage
         if type(cls) is not type or type(descriptor) is not GetSetDescriptorType:
             raise TypeError('native model selection requires ordinary instance storage')
-        protected = tuple(sorted(set(('__getattribute__', '__getattr__', '__setattr__', '__del__',
+        protected = tuple(sorted(set(('__getattribute__', '__getattr__', '__setattr__', '__del__',  # glue: import-time class-layout inventory
                                       '__new__', '__init__', '__dict__')) |
                                  {name for row in rows for name, value in row.items()  # glue: fixed method/property identity inventory
                                   if type(value) in (FunctionType, property)}))
