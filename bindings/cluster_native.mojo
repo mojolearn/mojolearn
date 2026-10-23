@@ -11,10 +11,10 @@
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields
 from bindings.classical_arrays import classical_address, classical_wrap_array, classical_c_bytes
-from core.family_cast_impl import family_fill_i32
+from core.family_cast_impl import family_fill_i32, family_all_finite_f32
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
-    FAMILY_I32P, family_call, family_entry, family_array, family_f32, family_as_f32, family_nonfinite,
+    FAMILY_F32P, FAMILY_I32P, family_repr, family_call, family_entry, family_array, family_f32, family_as_f32, family_nonfinite,
     family_shape_repr,
 )
 
@@ -83,6 +83,104 @@ def _xc_nearest(model: PythonObject, binding: PythonObject, x: PythonObject, cen
     return _xc_array(result[1][0], Python.tuple(n), "<i4", "i", context)
 
 
+def _reference_queries(source: PythonObject, n_features: Int, where: String, context: PythonObject) raises -> PythonObject:
+    """`density._check_queries`: float32 C order, the fitted feature count,
+    at least one row, every value finite."""
+    var q = family_as_f32(source, 2, "X", context)
+    var d = Int(py=q.shape[1])
+    if d != n_features:
+        raise Error("mojolearn " + where + ": X has " + String(d) + " features, the fit saw " + String(n_features))
+    if Int(py=q.shape[0]) < 1:
+        raise Error("mojolearn " + where + ": X has no rows; refused by name")
+    if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(q))), Int(py=q.size)):
+        raise Error("mojolearn " + where + ": X contains a NaN or an infinity; a non-finite "
+                    + "query has no distance order to take a nearest row from, so it is "
+                    + "refused by name")
+    return q
+
+
+def _labeled_reference(binding: PythonObject, refs: PythonObject, keys: PythonObject, labels: PythonObject,
+                       q: PythonObject, n_refs: Int, n_features: Int, metric: Int, eps: PythonObject,
+                       has_thresh: Int, context: PythonObject) raises -> PythonObject:
+    """The binding's `labeled_reference_predict`: the label of the nearest
+    reference row (ORDER MATCHES bindings/_mojolearn_estimators.mojo::
+    labeled_reference_predict_binding)."""
+    var nq = Int(py=q.shape[0])
+    var out = family_array(Python.tuple(nq), "<i4", context)
+    var chosen = family_array(Python.tuple(nq), "<i4", context)
+    var entry = family_entry(binding, "labeled_reference_predict", context)
+    _ = family_call(entry, Python.list(classical_address(refs), classical_address(keys), classical_address(labels),
+                                       classical_address(q), classical_address(out), classical_address(chosen)),
+                    Python.list(PythonObject(n_refs), PythonObject(nq), PythonObject(n_features), PythonObject(metric),
+                                eps, PythonObject(has_thresh)))
+    _ = chosen^
+    return out
+
+
+def _dbscan_predict(model: PythonObject, binding: PythonObject, source: PythonObject,
+                    context: PythonObject) raises -> PythonObject:
+    """`DBSCAN.predict`: the nearest core sample's label within eps."""
+    var b = Python.import_module("builtins")
+    if not Bool(py=family_call(b.hasattr, model, PythonObject("labels_"))):
+        raise Error("mojolearn DBSCAN.predict: this DBSCAN instance is not fitted yet; call fit first")
+    var components = py_call(b.getattr, model, PythonObject("components_"), PythonObject(None))
+    if not Bool(py=py_call(b.bool, py_call(b.getattr, model, PythonObject("prediction_data")))) or components is None:
+        raise Error("mojolearn DBSCAN.predict: prediction data was not stored. Fit with "
+                    + "DBSCAN(prediction_data=True), which keeps the core samples this "
+                    + "rule needs (DEVIATION 2740)")
+    var n_features = Int(py=py_call(b.getattr, model, PythonObject("n_features_in_")))
+    var q = _reference_queries(source, n_features, "DBSCAN.predict", context)
+    var nq = Int(py=q.shape[0])
+    var n_core = Int(py=components.shape[0])
+    if n_core == 0:
+        var labels = family_array(Python.tuple(nq), "<i4", context)
+        family_fill_i32(FAMILY_I32P(unsafe_from_address=Int(py=classical_address(labels))), nq, -1)
+        return labels
+    var metric_name = py_call(py_call(b.str, py_call(b.getattr, model, PythonObject("metric"))).lower)
+    var metric = Int(py=context["family_dbscan_metrics"][metric_name])
+    var eps = family_call(b.float, py_call(b.getattr, model, PythonObject("eps")))
+    var result = _labeled_reference(binding, components, py_call(b.getattr, model, PythonObject("core_sample_indices_")),
+                                    py_call(b.getattr, model, PythonObject("_core_labels")), q, n_core, n_features,
+                                    metric, eps, 1, context)
+    _ = q^
+    return result
+
+
+def _agglo_predict(model: PythonObject, binding: PythonObject, source: PythonObject,
+                   context: PythonObject) raises -> PythonObject:
+    """`AgglomerativeClustering.predict`: the nearest training row's cluster
+    (single linkage, euclidean)."""
+    var b = Python.import_module("builtins")
+    if not Bool(py=family_call(b.hasattr, model, PythonObject("labels_"))):
+        raise Error("mojolearn AgglomerativeClustering.predict: this instance is not "
+                    + "fitted yet; call fit first")
+    var linkage = py_call(b.getattr, model, PythonObject("linkage"))
+    var metric = py_call(b.getattr, model, PythonObject("metric"))
+    # `_predicts`: single linkage under a euclidean metric name.
+    var predicts = py_type(linkage) is b.str and String(linkage) == "single"
+    if predicts:
+        predicts = Bool(py=family_call(Python.import_module("operator").contains, context["family_agglo_predict_metrics"], metric))
+    if not predicts:
+        raise Error("NotImplementedError: mojolearn AgglomerativeClustering.predict: linkage=" + family_repr(linkage)
+                    + ", metric=" + family_repr(metric) + " has no predict rule; DEVIATION 2740 is single "
+                    + "linkage's own criterion (the nearest training row's cluster) under "
+                    + "the euclidean metric only")
+    var refs = py_call(b.getattr, model, PythonObject("_fit_X"), PythonObject(None))
+    if refs is None:
+        raise Error("mojolearn AgglomerativeClustering.predict: prediction data was not "
+                    + "stored. Fit with AgglomerativeClustering(prediction_data=True), "
+                    + "which keeps the training rows this rule needs (DEVIATION 2740)")
+    var n_features = Int(py=py_call(b.getattr, model, PythonObject("n_features_in_")))
+    var q = _reference_queries(source, n_features, "AgglomerativeClustering.predict", context)
+    var labels = py_call(b.getattr, model, PythonObject("labels_"))
+    # The key of every training row is its label: ties go to the lowest
+    # cluster label, then the lowest training index.
+    var result = _labeled_reference(binding, refs, labels, labels, q, Int(py=refs.shape[0]), n_features, 0,
+                                    PythonObject(0.0), 0, context)
+    _ = q^
+    return result
+
+
 def family_as_i32_words(value: PythonObject, context: PythonObject) raises -> PythonObject:
     """The int32 words of a C-ordered int32 array as a list of ints
     (`[int(v) for v in flat_bytes(value).cast("i")]`)."""
@@ -97,6 +195,10 @@ def cluster_operation(model: PythonObject, operation: String, args: PythonObject
     classical_connect_numpy(context)
     var b = Python.import_module("builtins")
     var binding = args[0]
+    if operation == "family_xc_dbscan_predict":
+        return _dbscan_predict(model, binding, args[1], context)
+    if operation == "family_xc_agglo_predict":
+        return _agglo_predict(model, binding, args[1], context)
     if operation == "family_xc_predict":
         var centers = _xc_fitted(model, "cluster_centers_")
         var x = _xc_input(model, args[1], context)

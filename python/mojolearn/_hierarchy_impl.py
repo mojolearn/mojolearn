@@ -17,7 +17,7 @@ whoever owns that file decides the public namespace.
 
 import sys
 
-from . import _backend, _expansion_cluster, _mojolearn_solver, _native_archive_bridge
+from . import _backend, _expansion_cluster, _mojolearn_solver, _native_archive_bridge, _native_family_bridge
 from ._mode import ParamsMixin, available_if
 from ._array import Array
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty, frombytes, zeros
@@ -50,6 +50,11 @@ _METRICS = {
     "euclidean": DISTANCE_L2_SQRT_EXPANDED,
     "l2": DISTANCE_L2_SQRT_EXPANDED,
 }
+
+# The compiled family owner (bindings/cluster_native.mojo): predict is one
+# native call, handed the binding `_bind` resolves; it reads this table.
+_NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
+_native_family_bridge.tables(family_agglo_predict_metrics=dict(_METRICS))
 
 #: scikit-learn's metric names on the x_cluster route (`x_cluster/agglo.mojo`):
 #: -1 euclidean through the squared distance, 1 manhattan, 4 cosine
@@ -615,39 +620,7 @@ class AgglomerativeClustering(ParamsMixin):
         # itself need not be 0. One thread per query row, no fold across rows;
         # the GPU binding and the CPU host binding
         # (`core/labeled_reference_host_predict.mojo`) compute the same bytes.
-        if not hasattr(self, "labels_"):
-            raise ValueError(
-                "mojolearn AgglomerativeClustering.predict: this instance is not "
-                "fitted yet; call fit first"
-            )
-        if not self._predicts():
-            raise NotImplementedError(
-                f"mojolearn AgglomerativeClustering.predict: linkage={self.linkage!r}, "
-                f"metric={self.metric!r} has no predict rule; DEVIATION 2740 is single "
-                "linkage's own criterion (the nearest training row's cluster) under "
-                "the euclidean metric only")
-        if getattr(self, "_fit_X", None) is None:
-            raise ValueError(
-                "mojolearn AgglomerativeClustering.predict: prediction data was not "
-                "stored. Fit with AgglomerativeClustering(prediction_data=True), "
-                "which keeps the training rows this rule needs (DEVIATION 2740)"
-            )
-        q = _check_queries(X, self.n_features_in_, "AgglomerativeClustering.predict")
-        nq = int(q.shape[0])
-        n_refs = int(self._fit_X.shape[0])
-        out = empty((nq,), "<i4")
-        chosen = empty((nq,), "<i4")
-        self._bind(self._BINDING).labeled_reference_predict(
-            # ORDER MATCHES bindings/_mojolearn_estimators.mojo::labeled_reference_predict_binding.
-            # The key of every training row is its label: ties go to the
-            # lowest cluster label, then the lowest training index.
-            [addr_ro(self._fit_X, name="training rows"), addr_ro(self.labels_, name="labels_ (keys)"),
-             addr_ro(self.labels_, name="labels_"), addr_ro(q, name="X"),
-             addr(out, name="labels"), addr(chosen, name="training rows chosen")],
-            # n_refs, n_queries, n_features, metric (0: L2), eps (unused), has_thresh
-            [n_refs, nq, int(self.n_features_in_), 0, 0.0, 0],
-        )
-        return out
+        return _NATIVE(self, "family_xc_agglo_predict", (self._bind(self._BINDING), X), _NATIVE_CONTEXT)
 
     def save(self, path):
         """Save the model's prediction data to `path`.

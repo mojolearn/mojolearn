@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Density-based clustering on the GPU. Reference: cuML's DBSCAN."""
 
-from . import _mojolearn_estimators, _native_archive_bridge
+from . import _mojolearn_estimators, _native_archive_bridge, _native_family_bridge
 from ._sample_weight import check_sample_weight
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, empty, frombytes, full, zeros
 from ._mode import NumericModeMixin, available_if
@@ -76,6 +76,11 @@ _METRICS = {
     "cosine": DBSCAN_METRIC_COSINE,
     "precomputed": DBSCAN_METRIC_PRECOMPUTED,
 }
+
+# The compiled family owner (bindings/cluster_native.mojo): DBSCAN.predict is
+# one native call, handed the binding `_bind` resolves; it reads this table.
+_NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
+_native_family_bridge.tables(family_dbscan_metrics=dict(_METRICS))
 
 #: The metric each algorithm arm can serve. The ball cover computes Euclidean
 #: distances for its landmark radii and its three pruning bounds
@@ -456,31 +461,7 @@ class DBSCAN(NumericModeMixin):
         -------
         labels : Array of int32, shape (n_queries,)
         """
-        if not hasattr(self, "labels_"):
-            raise ValueError("mojolearn DBSCAN.predict: this DBSCAN instance is not fitted yet; call fit first")
-        if not self.prediction_data or getattr(self, "components_", None) is None:
-            raise ValueError(
-                "mojolearn DBSCAN.predict: prediction data was not stored. Fit with "
-                "DBSCAN(prediction_data=True), which keeps the core samples this "
-                "rule needs (DEVIATION 2740)"
-            )
-        q = _check_queries(X, self.n_features_in_, "DBSCAN.predict")
-        nq = int(q.shape[0])
-        n_core = int(self.components_.shape[0])
-        if n_core == 0:
-            return full((nq,), -1, "<i4")
-        out = empty((nq,), "<i4")
-        chosen = empty((nq,), "<i4")
-        self._bind("_mojolearn_estimators").labeled_reference_predict(
-            # ORDER MATCHES bindings/_mojolearn_estimators.mojo::labeled_reference_predict_binding.
-            [addr_ro(self.components_, name="components_"),
-             addr_ro(self.core_sample_indices_, name="core_sample_indices_"),
-             addr_ro(self._core_labels, name="core labels"),
-             addr_ro(q, name="X"), addr(out, name="labels"), addr(chosen, name="core rows")],
-            # n_refs, n_queries, n_features, metric, eps, has_thresh
-            [n_core, nq, int(self.n_features_in_), _METRICS[str(self.metric).lower()], float(self.eps), 1],
-        )
-        return out
+        return _NATIVE(self, "family_xc_dbscan_predict", (self._bind("_mojolearn_estimators"), X), _NATIVE_CONTEXT)
 
     # npz layout: `components` <f4 (core rows), `core_sample_indices` and `core_labels` <i4, `labels`
     # <i4, `eps` <f8, `metric` and `algorithm` as names, `meta` <i8 [n_features_in_, n_samples_fit_,
