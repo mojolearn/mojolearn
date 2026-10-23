@@ -1,0 +1,152 @@
+Native Torch/MAX adapters: packaging and qualification handoff
+Owner request: finish packaging and testing; changes should land in main.
+
+Keep logs out of context: save complete output to files, use targeted rg/grep
+with bounded surrounding lines and short tails, and summarize exit status,
+coverage, failures, and evidence paths. Expand only relevant diagnostic blocks;
+never hide failures or infer full success from filtered output. Propagate this
+reminder to any delegated agents.
+
+Scope and frozen source
+-----------------------
+Start from the latest origin/main containing the native MPS transport commit
+991f6ade5. Freeze and record the full SHA before building. Preserve the older
+adapters/qualification_20261023.json as historical AMD evidence, not a receipt
+for changed artifacts. Read the newer MPS qualification record beside this file.
+
+The optional Torch C++ operator and MAX custom operations both call the same
+compiled Mojo adapter library. Numerical kernels are unchanged by this lane.
+The new C ABI symbol mojolearn_adapter_operation_host_buffers accepts CPU
+storage but REQUIRES GPU 0 and runs its arithmetic through DeviceExec. The
+existing ABI and MAX package remain compatible (ABI 1).
+
+Torch MPS transport is native ATen MPS-to-host copy, native Mojo upload,
+identical GPU execution, native download, then native ATen host-to-MPS copy.
+Copies preserve dtype and words; they are blocking and owners live until all
+queues are drained. No reinterpretation of foreign Metal handles, Python
+callbacks, CPU mathematical fallback, or new numerical implementation.
+Keep all copies and synchronization inside any measured operation boundary.
+There is no zero-copy or speed-improvement claim.
+
+Actual Apple MPS execution remains REQUIRED and unqualified until run on an
+authorized Apple test host. The requesting session prohibited local Apple
+builds/tests: use an authorized remote Apple host, or obtain a changed owner
+instruction in the receiving session. AMD forced-staging tests do not qualify
+MPS, Metal interoperability, macOS linking, Apple Inductor or wheel installation.
+Do not work around missing Mojo/Modular support; record the blocker and wait.
+
+Deliverables
+------------
+1. Package the optional native library, native Torch registration, and MAX
+   .mojoc extension with documented installation/activation. Reuse the existing
+   platform/plugin packaging layout. Keep Torch and MAX optional: ordinary
+   mojolearn installation/import must not load either framework or initialize
+   its GPU. Preserve existing supported imports and model/estimator APIs.
+2. Runtime initialization/registration is a native binding boundary; public
+   numerical methods must remain one native call. No Python conversion,
+   orchestration, callbacks, autograd fallback, or hidden computation.
+3. Build each platform/target with the pinned Mojo/MAX versions and identical
+   flags. Match LibTorch version, backend and C++ ABI to the tested framework.
+   Pin supported Torch versions accurately; a single compiled extension is not
+   automatically compatible with every Torch release/backend. Keep the compiler
+   out of end-user installation and operation. Respect actual macOS deployment
+   minimums, native dependencies, licensing and existing wheel audits.
+4. Use package-relative runtime search paths ($ORIGIN / @loader_path / @rpath)
+   and retain required runtime libraries. Existing qualification build scripts
+   use absolute test-environment search paths; those are not distributable wheel
+   metadata. Exercise relocation from a clean venv after removing build paths.
+   Re-sign every changed Mach-O binary after rewriting load commands, following
+   packaging/macos/stage_dylibs.py; read back the final artifact hashes.
+5. Test installed wheels (not source-tree imports), merge packaging fixes into
+   main, and retain ready-to-publish wheels plus manifests and full evidence.
+   Follow the release owner's publication instructions. Do not publish public
+   docs or claim a platform before its required qualification is complete.
+
+Build and functional checks
+---------------------------
+Run on authorized machines; retain every exit code, complete log and artifact.
+OUT is an absolute directory under /root/results-* on rented Linux hosts.
+Use the equivalent retained directory on remote Apple hosts.
+
+  bash tools/build_native_adapters.sh "$OUT" gfx942       # AMD
+  bash tools/build_native_adapters.sh "$OUT" sm_89        # NVIDIA: use actual supported target
+  bash tools/build_native_adapters.sh "$OUT" apple-native # real Apple GPU host; native GPU detection
+
+Match the NVIDIA target to the actual GPU and accepted compiler evidence.
+The Apple builder follows bindings/build.sh: no forced --target-accelerator
+on the pinned compiler, since retained evidence shows that can omit Metal AIR.
+Read embedded architectures/Metal payloads back and execute kernels before
+admission; a successful compiler exit alone is insufficient.
+The native builder saves command/source/compiler receipts and a 20-minute
+process-group deadline. Never run unrelated GPU jobs alongside qualification.
+
+  python tools/check_native_adapters.py --out "$OUT" --device cuda:0
+  PYTORCH_ENABLE_MPS_FALLBACK=0 python tools/check_native_adapters.py --out "$OUT" --device mps
+  python tools/check_native_adapter_abi.py "$OUT/libmojolearn_adapter.so" --json "$OUT/cpu-abi.json"
+  python tools/check_native_adapter_faults.py --qualified-out "$OUT" --out "$FAULT_OUT" --device mps
+
+On Apple, ensure both generic compile/export checks and the real MPS dispatcher
+execute. A setup failure is not a successful rejection test. The test controller
+records non-applicable CUDA stream coverage separately. No mandatory failure or
+unsupported feature may silently turn into a passing/skipped case.
+
+Required MPS cases: float32 arithmetic, int32 copies/indices/output, special FP32
+word preservation, contiguous views with nonzero storage offsets, producer and
+consumer ordering, no-input operation with mps and mps:0 device forms, output
+shape/type refusals, mixed devices, noncontiguous tensors, repeated execution,
+owner lifetimes, recovery after error, TorchScript/export and torch.compile.
+Reject requires_grad until a separately implemented native backward is qualified.
+
+Linux additionally exercises the same host-buffer GPU route without pretending
+to test Metal. Use a separate directory and NEVER package its forced-test build:
+
+  mkdir -p "$STAGED_OUT"
+  cp "$OUT/libmojolearn_adapter.so" "$STAGED_OUT/"
+  python tools/check_native_adapters.py --out "$STAGED_OUT" --device cuda:0 --host-staging
+  python tools/check_native_adapter_faults.py --qualified-out "$STAGED_OUT" --out "$STAGED_FAULT_OUT" --device cuda:0 --host-staging
+  python tools/check_native_adapter_transport.py --library "$OUT/libmojolearn_adapter.so" --torch-library "$OUT/mojolearn_torch.so" --out "$TRANSPORT_OUT"
+
+MOJOLEARN_ADAPTER_TEST_HOST_STAGING is test-only. Reject that define in release
+build manifests. The 48 transport cases retain full input/output arrays, compare
+exact words against device-buffer execution, reject CPU selection, and exercise
+a one-bit corruption control. They do not establish cross-vendor identity.
+
+MAX: compile/package adapters/max_ops with the pinned public Mojo package tool,
+then run tools/check_max_native_adapters.py and tools/check_max_adapter_fault.py
+against the SAME native library. Verify installed paths, default loading, GPU
+selection, matmul/ReLU composition, all four generic arities, scalar/integer
+options, mixed float/index inputs, view materialization and int32 outputs.
+Reusing a compatible accepted .mojoc is allowed; preserve its provenance/hash.
+
+Admission and evidence
+-----------------------
+* Preserve full raw input/output bytes for an identical fixture/operation matrix
+  through Torch, MAX and direct Tape on each admitted vendor, all tied to the
+  same numerical source/flags/toolchain release. Compare exact words and exact
+  coverage, not merely overlapping cases or tolerances. Check wrong/missing
+  cases, mismatched provenance and one-bit corruption all fail the comparator.
+* Reuse valid unchanged numerical evidence. Fresh adapter/device/packaging
+  validation is still required. Do not turn an AMD pass or a clean build into
+  a three-vendor identity pass, and do not invent a separate Apple reference.
+* Fault controls must reach execution: wrong operation/output must fail, an
+  injected stall must reach its marker and hit a process-group timeout, and
+  restoring the untouched accepted binaries must pass. Preserve all failures.
+* Confirm GPU kernel execution (including Metal on the Apple host), native
+  transitive calls, and no CPython/libtorch_python dependency in our extensions.
+  Framework application code may call the API; package-side execution cannot
+  call Python. Audit wrappers and installed entry points, not only private helpers.
+* Run all required repository gates on the final merge. Package changes and
+  receipts belong in main. Use board tools only if adding real measurements;
+  this adapter qualification does not establish benchmark or performance claims.
+* Archive source bytes, native binaries, .mojoc, installed wheels, full logs,
+  fixtures, model outputs, hardware/software details, source/flag manifests and
+  hashes to the Mac AND R2; verify actual retained bytes before rental teardown.
+  The generic box archive excludes some binaries, so preserve them explicitly.
+  Check ownership before teardown. Do not restart any watcher/periodic archiver.
+* Final handoff: main SHA, artifact hashes/locations, install/use commands,
+  tested platform/framework matrix, exact counts/failures and remaining blockers.
+
+Scope stays explicit: these are inference operations. Automatic arbitrary model
+conversion, training/backward, other dtypes/layouts and multiple visible GPUs
+need separate implementation/qualification. Stock Torch/MAX math outside our
+operations does not inherit mojolearn's identity guarantee.
