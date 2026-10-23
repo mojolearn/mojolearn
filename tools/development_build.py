@@ -169,11 +169,15 @@ def toolchain_facts(repo):
     compiler = repo / ".pixi/envs/default/bin/mojo"
     available = compiler.is_file()
     package_dir = repo / ".pixi/envs/default/lib/mojo"
-    packages = {p.name: bincache.sha256_file(p) for p in sorted(package_dir.glob("*.mojoc"))}
+    packages = {p.name: bincache.sha256_file(p) for p in sorted(package_dir.iterdir())
+                if p.is_file() and p.suffix in (".mojoc", ".mojopkg")} if package_dir.is_dir() else {}
+    config = repo / "pixi.toml"
     return {"available": available, "compiler": str(compiler.resolve()),
             "compiler_sha256": bincache.sha256_file(compiler) if available else None,
             "version": bincache.first_line([str(compiler), "--version"]) if available else None,
             "locked": bincache.toolchain(repo), "installed": bincache.installed_toolchain(repo),
+            "pixi_configuration": hashlib.sha256(bincache.pixi_toml_build_part(config.read_text()).encode()).hexdigest()
+                if config.is_file() else None,
             "precompiled_packages": packages, "os": bincache.os_fields(),
             "apple": bincache.darwin_toolchain(), "pixi": bincache.first_line(["pixi", "--version"])}
 
@@ -308,8 +312,8 @@ def compile_group(row, repo, cache, env, evidence):
         if code == 0:
             after = make_plan(repo, cache, [row["mode"]], env,
                               facts=toolchain_facts(repo), plat=row["fields"]["platform"])
-            current = next(r for r in after["groups"] if r["stem"] == row["stem"])
-            if current["key"] != row["key"]:
+            current = next((r for r in after["groups"] if r["stem"] == row["stem"]), None)
+            if current is None or current["key"] != row["key"]:
                 result.update(exit_code=1, reason="build inputs changed during compilation")
             elif not artifact.is_file():
                 result.update(exit_code=1, reason="compiler returned success without the declared output")
