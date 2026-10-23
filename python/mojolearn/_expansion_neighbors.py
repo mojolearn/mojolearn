@@ -33,6 +33,12 @@ from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty, full, zeros
 from ._lazy_out import _empty_out
 from ._mode import NumericModeMixin, available_if
 from ._mode import RegressorScoreMixin
+from . import _native_family_bridge
+
+# The compiled family owner (bindings/neighbors_native.mojo), connected once
+# at import: PolynomialCountSketch's `fit`, `transform` and `fit_transform`
+# are one native call each, handed the binding `_bind` resolves.
+_NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 
 __all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch",
            "AdditiveChi2Sampler", "SkewedChi2Sampler", "LabelPropagation", "LabelSpreading", "KNNImputer",
@@ -1688,37 +1694,7 @@ class PolynomialCountSketch(_XNeighbors):
             If ``degree`` or ``n_components`` is below 1, or ``random_state`` is
             not an int, a numpy RandomState or None.
         """
-        X = _f32(X)
-        d = X.shape[1]
-        nf = d + (1 if self.coef0 != 0 else 0)
-        deg, nc = int(self.degree), int(self.n_components)
-        if deg < 1 or nc < 1:
-            raise ValueError("degree and n_components must be >= 1")
-        seed = _seed_word(self.random_state)
-        draw_idn = (getattr(self._bind(), "x_neighbors_kfeat_pcs_draw_idn", None)
-                    if isinstance(seed, int) and not isinstance(seed, bool) and nf > 0 else None)
-        if draw_idn is not None:
-            # IDN_XN_SKETCH_CTR (IDENTICAL default with an _OFF A/B; FAST always;
-            # x_neighbors/kfeat_rng.mojo): the tables from the counter-based
-            # generator on the device, not the MT19937 Python loop
-            ih = empty((deg, nf), "<i4")
-            bh = empty((deg, nf), "<i4")
-            draw_idn([seed & 0xFFFFFFFF, nc, deg * nf], addr(ih, name="indexHash_"), addr(bh, name="bitHash_"))
-            self.indexHash_ = ih
-            self.bitHash_ = bh
-            self.n_features_in_ = d
-            return self
-        if nf > 0:
-            # lane py-runtime-b: the MT19937 Python draw behind the _OFF
-            # define is deleted (no Python compute in the runtime); a binary
-            # without the device draw refuses
-            raise NotImplementedError(
-                "mojolearn PolynomialCountSketch: this binary lacks x_neighbors_kfeat_pcs_draw_idn "
-                "(rebuild without -D MOJOLEARN_IDN_XN_SKETCH_CTR_OFF)")
-        self.indexHash_ = zeros((deg, 0), "<i4")
-        self.bitHash_ = zeros((deg, 0), "<i4")
-        self.n_features_in_ = d
-        return self
+        return _NATIVE(self, "family_xn_pcs_fit", (self._bind(), X), _NATIVE_CONTEXT)
 
     def transform(self, X):
         """Map X to the sketched feature space.
@@ -1733,17 +1709,7 @@ class PolynomialCountSketch(_XNeighbors):
         -------
         X_new : Array of shape (n_samples, n_components), float32
         """
-        X = _f32(X)
-        n, d = X.shape
-        if d != self.n_features_in_:
-            raise ValueError("Number of features of test samples does not match that of training samples.")
-        nf = self.indexHash_.shape[1]
-        nc, deg = int(self.n_components), int(self.degree)
-        out = _empty_out((n, nc), "<f4")
-        self._op("pcs" if _OLD_ITEMS else "pcs_resident",
-                 [(X, 0), (self.indexHash_, 0), (self.bitHash_, 0), (out, 1)],
-                 (n, d, nf, nc, deg), (_f32_scalar(self.gamma), _f32_scalar(self.coef0)))
-        return out
+        return _NATIVE(self, "family_xn_pcs_transform", (self._bind(), X), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit to X, then transform X: ``fit(X).transform(X)``.
@@ -1759,7 +1725,7 @@ class PolynomialCountSketch(_XNeighbors):
         -------
         X_new : Array of shape (n_samples, n_components), float32
         """
-        return self.fit(X).transform(X)
+        return _NATIVE(self, "family_xn_pcs_fit_transform", (self._bind(), X), _NATIVE_CONTEXT)
 
     def get_feature_names_out(self, input_features=None):
         """Output feature names: ``polynomialcountsketch0``, ``polynomialcountsketch1``, ...
