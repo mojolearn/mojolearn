@@ -105,7 +105,7 @@ from training.dev_tensors import (
 )
 # lane fam2-neural (2026-10-04): parameters and gradients resident across steps
 from training.estimator import (
-    identical_optimizer_step_resident_io, IDN_OPT_PARAMS_RESIDENT, OPT_IO_ALL, IDN_MAXIMIZE_DEV,
+    identical_optimizer_step_resident_io, IDN_OPT_PARAMS_RESIDENT, OPT_IO_ALL, OPT_IO_UP_G, IDN_MAXIMIZE_DEV,
     maximize_negate_device,
 )
 from std.ffi import _Global
@@ -120,7 +120,8 @@ from training.mlp_ops import (
 from training.mlp_fast import (
     MLP_MULTISTEP, MLP_RESIDENT,
     mlp_resident_close_host, mlp_resident_download_host, mlp_resident_open_host,
-    mlp_resident_step_host, mlp_resident_upload_host,
+    mlp_resident_step_host, mlp_resident_upload_host, mlp_resident_registry,
+    FT_TOTAL, RS_OFF_P, RS_OFF_G, RS_OFF_M, RS_OFF_V,
 )
 from training.checks.optimizer_contract import microbatch_split_is_identical
 from training.chunked_lm_head_v2 import (
@@ -811,6 +812,58 @@ def mlp_resident_steps_binding(
     return PythonObject(count)
 
 
+def mlp_resident_apply_binding(
+    handle: PythonObject, addresses: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`SmallMLPTrainer.apply_gradients` on the open session (lane
+    migrate-neural-2): the packed gradient [dw1, db1, dw2, db2] goes up into
+    the session's gradient slot and `optimizer_step`'s AdamW step (the same
+    `identical_optimizer_step_resident_io` on the same registry offsets
+    [0, 128, 144, 192, 195]) updates the session's weights and moments in
+    place; nothing comes down, so the session stays open.
+
+        addresses: grads (195 f32), flags (4 i32, read and written),
+                   info (3 f32, written)
+        params:    t, lr, beta1, beta2, eps, weight_decay
+
+    Returns 195."""
+    var a = _addrs(addresses, 3, "mlp_resident_apply")
+    _params(params, 6, "mlp_resident_apply")
+    var h = Int(py=handle)
+    var t = Int(py=params[0])
+    var lr = Float32(Float64(py=params[1]))
+    var beta1 = Float32(Float64(py=params[2]))
+    var beta2 = Float32(Float64(py=params[3]))
+    var eps = Float32(Float64(py=params[4]))
+    var weight_decay = Float32(Float64(py=params[5]))
+    var n = 0
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        var arena = mlp_resident_registry(h)
+        var p_v = arena.create_sub_buffer[DType.float32](RS_OFF_P, FT_TOTAL)
+        var g_v = arena.create_sub_buffer[DType.float32](RS_OFF_G, FT_TOTAL)
+        var m_v = arena.create_sub_buffer[DType.float32](RS_OFF_M, FT_TOTAL)
+        var v_v = arena.create_sub_buffer[DType.float32](RS_OFF_V, FT_TOTAL)
+        var p_stage = ctx.enqueue_create_host_buffer[DType.float32](1)
+        var g_stage = ctx.enqueue_create_host_buffer[DType.float32](1)
+        var offsets: List[Int32] = [0, 128, 144, 192, 195]
+        n = identical_optimizer_step_resident_io(
+            ctx, _f32_ptr(a[0]), _f32_ptr(a[0]), m_v, v_v, p_v, g_v, p_stage, g_stage,
+            offsets.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), _i32_ptr(a[1]), _f32_ptr(a[2]),
+            4, 2, t, 0, lr, beta1, beta2, eps, weight_decay, Float32(0.0), Float32(0.0), Float32(0.0),
+            OPT_IO_UP_G,
+        )
+        _ = offsets^
+        _ = p_v^
+        _ = g_v^
+        _ = m_v^
+        _ = v_v^
+        _ = p_stage^
+        _ = g_stage^
+        _ = arena^
+    return PythonObject(n)
+
+
 # ===========================================================================
 # THE SAMBA STACK'S OPS: embedding, RMSNorm, LM head, accumulate, RNG.
 # Every one takes (addresses, params) as two Python lists, the byte-LM
@@ -962,6 +1015,39 @@ def mlp_sessions_binding(addresses: PythonObject, input_addresses: PythonObject,
     with GILReleased(Python()):
         var ctx = neural_ctx[_NEURAL_CTX]()
         count = nn_mlp_sessions_device(ctx, inputs, rows, _f32_ptr(a[1]), _f32_ptr(a[2]), _f32_ptr(a[3]), _f32_ptr(a[4]), _f32_ptr(a[0]), in_width, hidden, out_width)
+    return PythonObject(count)
+
+
+def mlp_sessions_resident_binding(handle: PythonObject, addresses: PythonObject, input_addresses: PythonObject,
+                                  shapes: PythonObject, dims: PythonObject) raises -> PythonObject:
+    """`mlp_sessions` reading the weights of open training session `handle`
+    where they are (lane migrate-neural-2: `mlp_inference_sessions` no
+    longer downloads the session to upload it again). addresses = [output];
+    the rest as `mlp_sessions`."""
+    if len(addresses) != 1 or Int(py=addresses[0]) == 0:
+        raise Error("mlp_sessions_resident: addresses must be [output]")
+    _params(dims, 3, "mlp_sessions")
+    var n_sessions = len(shapes)
+    if len(input_addresses) != n_sessions:
+        raise Error("neural MLP sessions: metadata length mismatch")
+    var inputs = List[Int]()
+    var rows = List[Int]()
+    for i in range(n_sessions):  # small-loop(n_sessions: session handles): reads buffer addresses and shapes, not data
+        inputs.append(Int(py=input_addresses[i]))
+        rows.append(Int(py=shapes[i][0]))
+    var in_width = Int(py=dims[0])
+    var hidden = Int(py=dims[1])
+    var out_width = Int(py=dims[2])
+    var out = _f32_ptr(Int(py=addresses[0]))
+    var h = Int(py=handle)
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = neural_ctx[_NEURAL_CTX]()
+        var arena = mlp_resident_registry(h)
+        var reg = Optional[DeviceBuffer[DType.float32]](arena.create_sub_buffer[DType.float32](RS_OFF_P, FT_TOTAL))
+        count = nn_mlp_sessions_device(ctx, inputs, rows, out, out, out, out, out, in_width, hidden, out_width, reg)
+        _ = reg^
+        _ = arena^
     return PythonObject(count)
 
 
@@ -1367,6 +1453,8 @@ def build__mojolearn_training() -> PythonObject:
             m.def_function[mlp_resident_download_binding]("mlp_resident_download")
             m.def_function[mlp_resident_close_binding]("mlp_resident_close")
             m.def_function[mlp_resident_steps_binding]("mlp_resident_step")
+            m.def_function[mlp_resident_apply_binding]("mlp_resident_apply")
+            m.def_function[mlp_sessions_resident_binding]("mlp_sessions_resident")
         comptime if MLP_MULTISTEP:
             m.def_function[mlp_resident_steps_binding]("mlp_resident_steps")
         m.def_function[embedding_forward_binding]("embedding_forward")
