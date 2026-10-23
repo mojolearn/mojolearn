@@ -663,7 +663,7 @@ def _package_bindings():
     if _PACKAGE_BINDINGS is not None:
         return _PACKAGE_BINDINGS
     binding_re = re.compile(r"_mojolearn[a-z0-9_]*")
-    modules, names = {}, {}
+    modules, names, shim_targets = {}, {}, {}
     for fn in sorted(os.listdir(PKG)):
         if not fn.endswith(".py"):
             continue
@@ -674,9 +674,22 @@ def _package_bindings():
             continue
         stem = fn[:-3]
         modules[stem] = set(binding_re.findall(text))
+        # A one-call native door (`_native_<family>_bridge`, the runtime
+        # migration of 2026-10-21..23) names its compiled owner through the
+        # bridge, not by a `_mojolearn_*` string in this file.
+        modules[stem] |= {"native-owner:" + m for m in re.findall(r"\b(_native_\w+_bridge)\b", text)}
+        # a re-export shim (`training.py` over `_training_impl`) answers for
+        # the module it re-exports: its relative imports' bindings count
+        for node in tree.body:
+            if isinstance(node, ast.ImportFrom) and node.level == 1 and node.module:
+                shim_targets.setdefault(stem, set()).add(node.module.split(".")[0])
         for node in tree.body:
             if isinstance(node, (ast.ClassDef, ast.FunctionDef)):
                 names.setdefault(node.name, set()).add(stem)
+    for stem, targets in shim_targets.items():  # one level: the shim's own imports
+        if not modules.get(stem):
+            for t in targets:
+                modules[stem] = modules[stem] | modules.get(t, set())
     _PACKAGE_BINDINGS = (modules, names)
     return _PACKAGE_BINDINGS
 
