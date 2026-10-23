@@ -6,8 +6,9 @@
 # AffinityPropagation `predict`. The shell hands over the binding `_bind`
 # resolved; this owner makes the Python methods' refusals, calls the
 # binding's `x_cluster_call(which, x, x_size, aux, aux_size, ints, floats)`
-# with the same words, and builds the Arrays from the lists it returns, as
-# `Array._from_flat` did. Same entry, same inputs: the bits do not move.
+# with the same words, and makes the `array.array` results it returns the
+# Arrays' stores (no second copy). Same entry, same inputs: the bits do not
+# move. The fits of these classes are bindings/cluster_fit_a_native.mojo's.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields
 from bindings.classical_arrays import classical_address, classical_wrap_array, classical_c_bytes
@@ -54,6 +55,15 @@ def _xc_input(model: PythonObject, source: PythonObject, context: PythonObject) 
 def _xc_call(binding: PythonObject, which: Int, x: PythonObject, aux: PythonObject, ints: PythonObject,
              context: PythonObject) raises -> PythonObject:
     """`_XCluster._call` (no float parameters): (f, i, s)."""
+    return xc_call_floats(binding, which, x, aux, ints, Python.list(), context)
+
+
+def xc_call_floats(binding: PythonObject, which: Int, x: PythonObject, aux: PythonObject, ints: PythonObject,
+                   floats: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_XCluster._call(which, x, aux, ints, floats)`: the binding's
+    `x_cluster_call(which, x, x_size, aux, aux_size, ints, floats)` with the
+    aux block's address only when it holds values; returns (f, i, s). The
+    caller keeps `x` and `aux` alive across the call."""
     var entry = family_entry(binding, "x_cluster_call", context)
     var aux_address = PythonObject(0)
     var aux_size = 0
@@ -62,13 +72,19 @@ def _xc_call(binding: PythonObject, which: Int, x: PythonObject, aux: PythonObje
         if aux_size:
             aux_address = classical_address(aux)
     return family_call(entry, PythonObject(which), classical_address(x), PythonObject(Int(py=x.size)), aux_address,
-                       PythonObject(aux_size), ints, Python.list())
+                       PythonObject(aux_size), ints, floats)
 
 
 def _xc_array(flat: PythonObject, shape: PythonObject, typestr: String, code: String,
               context: PythonObject) raises -> PythonObject:
-    """`Array._from_flat(flat, shape, typestr)`."""
-    var store = py_call(context["array_type"], PythonObject(code), flat)
+    """`Array._from_flat(flat, shape, typestr)` without its copy: the
+    entry returns each result as one `array.array` of the dtype's store code
+    (x_cluster/out_pyapi.mojo, one memcpy from the result), which becomes the
+    Array's store as it is. Anything else is copied once, as `_from_flat` did.
+    Same values either way."""
+    var store = flat
+    if py_type(flat) is not context["array_type"] or String(py=flat.typecode) != code:
+        store = py_call(context["array_type"], PythonObject(code), flat)
     return classical_wrap_array(store, shape, typestr, "C", context)
 
 
