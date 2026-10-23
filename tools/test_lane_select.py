@@ -2161,6 +2161,7 @@ def connect():
                             ("    shared = registry()\n    shared['call'] = entry\n", False),
                             ("    shared = make(registry)\n    shared['call'] = entry\n", False),
                             ("    [value() for value in [entry]]\n", False),
+                            ("    isinstance(entry, check)\n", False),
                             ("    alias: object = entry\n    alias()\n", False)):
         text = safe.replace("    return call, context", extra + "    return call, context")
         lane_select._read.cache[path] = text

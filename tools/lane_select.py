@@ -1212,7 +1212,13 @@ def _native_references_only_uncached(rel, function, exports):
                 if not dictionary_method:
                     return False
             if any(carries(arg) for arg in node.args + [kw.value for kw in node.keywords]):
-                if builtin and node.func.id in ("getattr", "isinstance", "type", "id",
+                if builtin and node.func.id == "isinstance":
+                    if len(node.args) == 2 and source.target(rel, node.args[1], function.body) == ("types", "BuiltinFunctionType"):
+                        continue
+                    return False
+                if builtin and node.func.id == "type" and len(node.args) != 1:
+                    return False
+                if builtin and node.func.id in ("getattr", "type", "id",
                                                 "TypeError", "ValueError", "RuntimeError", "ImportError"):
                     continue
                 if isinstance(node.func, ast.Attribute) and node.func.attr == "update" and plain_dict(node.func.value):
