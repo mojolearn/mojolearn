@@ -21,23 +21,20 @@ Behavior to know:
   across folds and candidates. All learning happens in the estimator.
 """
 import array
-import collections
 import copy
-import hashlib
 import itertools
-import json
-from . import _portable_math as math
 import numbers
 import os
 import warnings
 from . import _arena_io
 from ._array import Array
-from ._buffer import _materialize, _native, _native_optional, empty
+from ._buffer import _materialize, _native, empty
 from ._arrays import _addr, _addr_ro
 from ._labels import is_bool, flatten_labels
 # The splitters' random draws (lane/metrics): a module-level import, so the
-# lane selector sees model_selection reach the x_metrics binding.
-from ._expansion_metrics import CounterRng, _mix64, fold_rows, stratified_fold_rows
+# lane selector sees model_selection reach the x_metrics binding (the native
+# owner resolves it through this binding getter).
+from ._expansion_metrics import _binding as _x_metrics_binding
 
 #: The binding the splitters' permutations and the scorers' added metrics run
 #: on (python/mojolearn/_expansion_metrics.py `_BINDING`). Named here because
@@ -320,35 +317,6 @@ def _folds(cv, estimator, X, y, groups):
 SPLIT_DESCRIPTOR_SCHEMA = 'mojolearn.split_descriptor.v1'
 
 
-def _canonical(value):
-    return json.dumps(value, sort_keys=True, separators=(',', ':'),
-                      ensure_ascii=True, allow_nan=False).encode('ascii')
-
-
-def _digest(*chunks):
-    """sha256 over length-prefixed chunks, so no two field layouts collide."""
-    m = hashlib.sha256()
-    for chunk in chunks:  # glue: length-prefixed sha256 over a few descriptor chunks
-        m.update(len(chunk).to_bytes(8, 'little'))
-        m.update(chunk)
-    return m.hexdigest()
-
-
-def _order_digest(value, name):
-    """The VALUES IN ARRIVAL ORDER, with their dtype and shape.
-
-    This is the only field of the descriptor that moves when rows are
-    permuted and nothing else changes, so it is the field that carries the
-    claim. A buffer array hashes its C-order bytes; a Python label list
-    hashes its canonical JSON, because label objects have no dtype.
-    """
-    if isinstance(value, list):
-        return _digest(b'list', _canonical(value))
-    array = _materialize(value, name)[0]._as_c()
-    return _digest(b'array', array.dtype.encode('ascii'),
-                   _canonical(list(array.shape)), array.tobytes())
-
-
 # Maintainer notes (moved from the docstring):
 # LINK 3 OF THE REPRODUCIBLE PIPELINE. Everything else mojolearn promises is
 # pinned by something mojolearn holds: the kernels by the numeric mode, the
@@ -556,7 +524,6 @@ def _prepare_folds(estimator, X, y, cv, scoring, groups, error_score):
 # tier and build.
 # ---------------------------------------------------------------------------
 
-_CV_SLICE_BIT = 32        # CV_FAST_SLICE (default; _OFF rolls back)
 _CV_TRUST_FOLDS_BIT = 64  # CV_FAST_TRUST_FOLDS (default; _OFF rolls back)
 
 
@@ -576,59 +543,6 @@ def _native_default_cv(cv, groups):
     default (None) or an integer, no groups, no sabotage control."""
     return (groups is None and (cv is None or isinstance(cv, numbers.Integral))
             and not is_bool(cv) and not _sabotage_requested())
-
-
-def _row_range_view(arr, a, b):
-    """Rows [a, b) of a C-order Array as a READ-ONLY view over the same
-    memory (no copy; `arr` stays alive through the view's `_base`). Read
-    only so an estimator that asks for a writable address is refused rather
-    than writing into the caller's X or y (`_take_rows` handed out copies)."""
-    if a == 0 and b == arr.shape[0]:
-        return arr
-    per = arr.size // arr.shape[0]
-    view = Array._view_of(arr, arr.shape, 'C')
-    view._mv = arr._mv[a * per:b * per]
-    view._addr = arr._addr + a * per * arr.itemsize
-    view._readonly = True
-    view._set_meta((b - a,) + tuple(arr.shape[1:]), arr.dtype, 'C')
-    return view
-
-
-def _rows_outside(arr, a, b):
-    """Rows [0, a) then [b, n) of a C-order Array: a view when one side is
-    empty, else one new Array filled by two memcpys."""
-    n = arr.shape[0]
-    if a == 0:
-        return _row_range_view(arr, b, n)
-    if b == n:
-        return _row_range_view(arr, 0, a)
-    per = arr.size // n
-    out = empty((n - (b - a),) + tuple(arr.shape[1:]), arr.dtype)
-    out._mv[:a * per] = arr._mv[:a * per]
-    out._mv[a * per:] = arr._mv[b * per:]
-    return out
-
-
-def _kfold_ranges(X, y, folds):
-    """Each fold's test block `(a, b)`, or None unless EVERY fold is a
-    contiguous block. Called only on `_native_default_folds`' folds, whose
-    sides are ascending, duplicate free and a partition of the rows
-    (`select_fold_i64` scans the rows in order), so test == [a, b) exactly
-    when its size is b - a with both ends a and b - 1, and train is then
-    the complement in ascending order."""
-    n = len(X)
-    if not isinstance(y, Array) or X.order != 'C' or y.order != 'C' or n < 2:
-        return None
-    ranges = []
-    for train, test in folds:  # glue: one O(1) endpoint check per fold
-        if not test.size or not train.size:
-            return None
-        a = int(test._mv[0])
-        b = int(test._mv[test.size - 1]) + 1
-        if b - a != test.size or train.size != n - test.size:
-            return None
-        ranges.append((a, b))
-    return ranges
 
 
 def _fit_score_fold(fitted, X_train, y_train, X_test, y_test, scoring):
@@ -661,64 +575,6 @@ __all__ += [
 ]
 
 
-def _comb(n, k):
-    """n choose k in exact integers."""
-    if k < 0 or k > n:
-        return 0
-    out = 1
-    for i in range(1, k + 1):  # glue: n choose k of argument counts, combinatorics only
-        out = out * (n - k + i) // i
-    return out
-
-
-def _n_samples(X):
-    if hasattr(X, 'shape') and len(X.shape):
-        return int(X.shape[0])
-    return len(X)
-
-
-def _labels_list(y, name='y'):
-    if y is None:
-        raise ValueError(f"The '{name}' parameter should not be None.")
-    return flatten_labels(y)
-
-
-def _encode_first_seen(values):
-    # the first-seen order by dict.fromkeys, the codes by a C map (the same
-    # dict equality as setdefault; lane metrics-apple)
-    index = {v: i for i, v in enumerate(dict.fromkeys(values))}  # cpu-route: first-seen dict encoding of label objects (str/mixed) the native encoder refuses [py-data-loop]
-    return list(map(index.__getitem__, values)), len(index)
-
-
-def _first_seen_native(y):
-    """`_encode_first_seen` and the class counts with no per-row Python (lane
-    apple-fast-py2mojo-core): (int32 codes `Array` in first-seen order, k,
-    counts), or None (y None, fewer than `_NATIVE_MIN_ROWS` rows, labels the
-    native encoder refuses: str, mixed or NaN labels keep the dict route).
-    The order rule's codes and counts come from `_GroupCodes` (the native
-    encoder and `fold_ids`), each class's first row from the x_metrics
-    binding's `first_rows`, and the codes are renumbered by first row
-    through the core gather: the same classes (both group by numeric
-    equality) in the same first-seen order."""
-    if y is None:
-        return None
-    try:
-        n = _n_samples(y)
-        gc = _GroupCodes.get(y, n, 'y')
-    except (TypeError, ValueError, OverflowError):
-        return None
-    if gc is None or gc.m < 1:
-        return None
-    first = array.array('q', bytes(8 * gc.m))
-    _expansion_metrics_binding().x_metrics_first_rows(_addr_ro(gc.codes), n, gc.m, first.buffer_info()[0])  # cpu-route: first-seen class order for label encoding at splitter entry
-    order = sorted(range(gc.m), key=first.__getitem__)  # glue: class order by first row over the k classes
-    table = [0] * gc.m
-    for rank, c in enumerate(order):  # glue: class order by first row over the k classes
-        table[c] = rank
-    words = gc.mapped(table)
-    return Array._owned(words, (n,), '<i4', 'C'), gc.m, [gc.counts[c] for c in order]  # glue: class order by first row over the k classes
-
-
 def _as_index(values):
     if isinstance(values, range) and values.step == 1:
         # a contiguous row range, written by the base binding (lane cgr4-py-compute)
@@ -744,41 +600,6 @@ def _arange_rows(start, n):
     return out
 
 
-def _zeros_i64(n):
-    from ._buffer import zeros
-    return zeros((n,), '<i8')
-
-
-def _split_mask(mask, n):
-    """(train, test): the ascending rows whose mask byte is 0 / nonzero, by
-    `count_mask_u8` and `select_mask_u8_i64` (lane cgr4-py-compute)."""
-    m = mask if isinstance(mask, (bytearray, array.array)) else bytearray(mask)
-    maddr = m.buffer_info()[0] if isinstance(m, array.array) else _bytes_addr(m)
-    n_test = int(_native('count_mask_u8')(maddr, n))
-    test = empty((n_test,), '<i8')
-    train = empty((n - n_test,), '<i8')
-    _native('select_mask_u8_i64')(maddr, n, _addr(test) if n_test else 0, _addr(train) if n - n_test else 0)
-    return train, test
-
-
-def _bytes_addr(buf):
-    import ctypes
-    return ctypes.addressof((ctypes.c_char * len(buf)).from_buffer(buf))
-
-
-def _split_indices(test, n):
-    """(train, test) from a test row list: the mask by `mask_from_indices_u8`
-    (indices checked in range there), then `_split_mask`."""
-    if isinstance(test, Array) and test.dtype == '<i8':
-        k, iaddr = test.size, _addr_ro(test)
-    else:
-        idx = test if isinstance(test, array.array) and test.typecode == 'q' else array.array('q', test)
-        k, iaddr = len(idx), idx.buffer_info()[0]
-    mask = array.array('B', bytes(n))
-    _native('mask_from_indices_u8')(iaddr if k else 0, k, n, mask.buffer_info()[0])
-    return _split_mask(mask, n)
-
-
 # ---------------------------------------------------------------- native rows
 # lane/py-misc-msel (2026-09-28): the group splitters, PredefinedSplit,
 # unshuffled KFold and StratifiedShuffleSplit build their rows with the core
@@ -801,104 +622,10 @@ def _msel_native():
     return True  # lane cgr4-py-compute: the MOJOLEARN_MSEL_BEFORE route switch is deleted
 
 
-class _GroupCodes:
-    """Groups (or labels) under the order rule as int32 codes with their
-    per-code row counts, and the helpers that turn a per-code table into
-    split rows. `get` returns None whenever the native route cannot answer."""
-
-    def __init__(self, codes, m, counts, select, gather):
-        self.codes, self.m, self.counts = codes, m, counts
-        self.n = codes.size
-        self._select, self._gather = select, gather
-        self._scratch = None
-
-    @classmethod
-    def get(cls, values, n, name):
-        if values is None:
-            _labels_list(values, name)  # raises the definition's error
-        # lane py-runtime-b: the only route (the Python `_test_folds`
-        # definitions it handed back to are deleted); `_native` raises by
-        # name when the binary lacks a helper
-        fold_ids = _native('fold_ids')
-        select = _native('select_fold_i64')
-        gather = _native('gather_i32')
-        from ._labels import encode_labels
-        classes, codes = encode_labels(values)
-        if codes.ndim != 1 or codes.size != n:
-            raise ValueError(f'{name} has {codes.size} labels for {n} samples')
-        if codes.dtype != '<i4':
-            codes = codes.astype('<i4')
-        m = len(classes)
-        counts = [0] * m
-        if m:
-            from ._buffer import _output_store
-            class_counts = _output_store('q', m)
-            fold_store = _output_store('i', n)
-            fold_counts = _output_store('q', 2)
-            fold_ids(_addr_ro(codes), n, m, 2, class_counts.buffer_info()[0], fold_store.buffer_info()[0],
-                     fold_counts.buffer_info()[0])
-            counts = list(class_counts)
-        out = cls(codes, m, counts, select, gather)
-        out.classes = classes
-        return out
-
-    def mapped(self, table):
-        """Each row's `table[code]` as int32 words (kept alive by the caller)."""
-        from ._buffer import _output_store
-        tbl = table if isinstance(table, array.array) and table.typecode == 'i' else array.array('i', table)
-        dst = _output_store('i', self.n)
-        self._gather(tbl.buffer_info()[0], len(tbl), _addr_ro(self.codes), self.n, dst.buffer_info()[0])
-        return dst
-
-    def rows(self, words, want, size):
-        """(train, test): the ascending rows whose word is `want` (test) and
-        every other row (train), from int32 `words` (codes or `mapped`)."""
-        addr = words.buffer_info()[0] if hasattr(words, 'buffer_info') else _addr_ro(words)
-        test = empty((size,), '<i8')
-        train = empty((self.n - size,), '<i8')
-        got = int(self._select(addr, self.n, int(want), _addr(test), _addr(train)))
-        if got != size:
-            raise RuntimeError('mojolearn: select_fold_i64 disagrees with the group counts')
-        return train, test
-
-    def only(self, words, want, size):
-        """The ascending rows whose word is `want` (the rest discarded)."""
-        from ._buffer import _output_store
-        if self._scratch is None:
-            self._scratch = _output_store('q', self.n)
-        addr = words.buffer_info()[0] if hasattr(words, 'buffer_info') else _addr_ro(words)
-        out = empty((size,), '<i8')
-        got = int(self._select(addr, self.n, int(want), _addr(out), self._scratch.buffer_info()[0]))
-        if got != size:
-            raise RuntimeError('mojolearn: select_fold_i64 disagrees with the group counts')
-        return out
-
-    def split_by_fold(self, to_fold, k, sizes):
-        """[(train, test)] per fold f < k from each group's fold `to_fold[g]`
-        (int32 words) and each fold's row count `sizes[f]`."""
-        words = self.mapped(to_fold)
-        return [self.rows(words, f, int(sizes[f])) for f in range(k)]  # glue: one native row split per fold (k folds)
-
-
 _LITTLE_ENDIAN = __import__('sys').byteorder == 'little'
 
 #: bytes.translate table flipping a 0/1 mask
 _FLIP = bytes([1, 0]) + bytes(254)
-
-
-def _row_stds(rows, means):
-    """The population standard deviation of each equal-length row of float
-    scores about its mean, in Mojo (the core helper `row_stds_f64`, lane
-    py-runtime round 3; it was a Python sqrt(fsum((v - m)^2) / k) per row)."""
-    m = len(rows)
-    if not m:
-        return []
-    k = len(rows[0])
-    flat = array.array('d', itertools.chain.from_iterable(rows))  # glue: score rows packed as one float64 table
-    mu = array.array('d', means)
-    out = array.array('d', bytes(8 * m))
-    _native('row_stds_f64')(flat.buffer_info()[0], m, k, mu.buffer_info()[0], out.buffer_info()[0])
-    return out.tolist()
 
 
 def _row_means(rows):
@@ -914,12 +641,6 @@ def _row_means(rows):
         if int(_native('row_means_f64')(flat.buffer_info()[0], m, k, out.buffer_info()[0])):
             raise ValueError('-inf + inf in fsum')
     return out.tolist()[:m]
-
-
-def _rng(random_state):
-    rng = CounterRng(random_state)
-    assert rng.binding == _SPLIT_BINDING
-    return rng
 
 
 class _Splitter:
@@ -1321,10 +1042,6 @@ class _Repeated:
         yield from _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
-def _mix_seed(seed, r):
-    return _mix64(seed * 0x9E3779B97F4A7C15 + 0x632BE59BD9B4E019 * (r + 1)) >> 1
-
-
 class RepeatedKFold(_Repeated):
     """Repeated k-fold cross-validator.
 
@@ -1382,50 +1099,6 @@ class RepeatedStratifiedKFold(_Repeated):
 
     def __init__(self, *, n_splits=5, n_repeats=10, random_state=None):
         super().__init__(StratifiedKFold, n_repeats=n_repeats, random_state=random_state, n_splits=n_splits)
-
-
-def _validate_shuffle_split(n, test_size, train_size, default_test_size=None):
-    if test_size is None and train_size is None:
-        test_size = default_test_size
-
-    def kind(v):
-        if v is None:
-            return None
-        if is_bool(v):
-            return 'x'
-        if isinstance(v, numbers.Integral):
-            return 'i'
-        if isinstance(v, numbers.Real):
-            return 'f'
-        return 'x'
-    tk, rk = kind(test_size), kind(train_size)
-    if (tk == 'i' and (test_size >= n or test_size <= 0)) or (tk == 'f' and not 0 < test_size < 1):
-        raise ValueError(f'test_size={test_size} should be either positive and smaller than the number of '
-                         f'samples {n} or a float in the (0, 1) range')
-    if (rk == 'i' and (train_size >= n or train_size <= 0)) or (rk == 'f' and not 0 < train_size < 1):
-        raise ValueError(f'train_size={train_size} should be either positive and smaller than the number '
-                         f'of samples {n} or a float in the (0, 1) range')
-    if rk == 'x':
-        raise ValueError(f'Invalid value for train_size: {train_size}')
-    if tk == 'x':
-        raise ValueError(f'Invalid value for test_size: {test_size}')
-    if rk == 'f' and tk == 'f' and train_size + test_size > 1:
-        raise ValueError(f'The sum of test_size and train_size = {train_size + test_size}, should be in the '
-                         '(0, 1) range. Reduce test_size and/or train_size.')
-    n_test = math.ceil(test_size * n) if tk == 'f' else test_size
-    n_train = math.floor(train_size * n) if rk == 'f' else train_size
-    if train_size is None:
-        n_train = n - n_test
-    elif test_size is None:
-        n_test = n - n_train
-    if n_train + n_test > n:
-        raise ValueError(f'The sum of train_size and test_size = {n_train + n_test}, should be smaller than '
-                         f'the number of samples {n}. Reduce test_size and/or train_size.')
-    n_train, n_test = int(n_train), int(n_test)
-    if n_train == 0:
-        raise ValueError(f'With n_samples={n}, test_size={test_size} and train_size={train_size}, the '
-                         'resulting train set will be empty. Adjust any of the aforementioned parameters.')
-    return n_train, n_test
 
 
 class ShuffleSplit(_Splitter):
@@ -1641,35 +1314,6 @@ class _IterableCV(_Splitter):
         yield from self._pairs
 
 
-def _native_discrete(y):
-    """`check_cv`'s stratify test on a 1-D numeric buffer without a Python
-    object per label (lane/py-misc-msel): every integer or bool label is
-    integral, and a float buffer is discrete when every value is finite and
-    integer valued (`reduce_stat`'s integral test, the predicate
-    `_native_default_folds` uses). None for anything else. A numeric list
-    or buffer is materialized first (lane py-runtime-b), so only label
-    objects (str, mixed) reach `check_cv`'s per-label test."""
-    if not isinstance(y, Array):
-        try:
-            y = _materialize(y, 'y')[0]
-        except (TypeError, ValueError, OverflowError):
-            return None
-        if y.ndim == 2 and y.shape[1] == 1:
-            y = y.reshape((y.shape[0],))
-    if y.ndim != 1 or y.size < _NATIVE_MIN_ROWS or not _msel_native():
-        return None
-    from ._labels import _NATIVE_ENCODE
-    if y.dtype not in _NATIVE_ENCODE:
-        return None
-    if y.dtype not in ('<f4', '<f8'):
-        return True if _native('reduce_stat') is not None else None
-    integral = _native('reduce_stat')
-    if integral is None:
-        return None
-    from ._array import _NATIVE_CODE, _REDUCE_INTEGRAL
-    return bool(integral(_addr_ro(y._as_c()), _NATIVE_CODE[y.dtype], y.size, _REDUCE_INTEGRAL))
-
-
 def check_cv(cv=5, y=None, *, classifier=False, shuffle=False, random_state=None):
     """Turn a ``cv`` argument into a splitter.
 
@@ -1770,12 +1414,6 @@ def train_test_split(*arrays, test_size=None, train_size=None, random_state=None
                    (arrays, test_size, train_size, random_state, shuffle, stratify), _NATIVE_CONTEXT)
 
 
-def _take_any(values, indices):
-    if isinstance(values, (list, tuple)):
-        return [values[i] for i in indices.tolist()]  # cpu-route: Python list of label objects taken by index [py-data-loop]
-    return _take_rows(values, indices)
-
-
 # ---------------------------------------------------------------- fold rows
 # cpu-gpu-cleanup c-metrics-prep: lane metrics-apple3's opt-in
 # switch routes (fold-row cache, shared scorer predictions,
@@ -1794,7 +1432,7 @@ class _FoldRows:
     and replaces the previous such y on the device. Close it (or use it in a
     `with` block) to free the device copies.
 
-    device_rows (lane cpu4-misc; `_device_rows_ok`): X's fold rows are
+    device_rows (lane cpu4-misc; decided by the caller): X's fold rows are
     handed over as `_arena_io.DeviceRows` instead of host Arrays, when X is
     float32 C-contiguous 2-D. The estimator's arena runner puts X once into
     its own binding's store (the `resident()` scope opened here, which holds
@@ -1856,28 +1494,6 @@ class _FoldRows:
     def __exit__(self, *exc):
         self.close()
         return False
-
-
-def _device_rows_ok(estimator, scoring=None):
-    """Whether fold X may go to `estimator` as `_arena_io.DeviceRows` (lane
-    cpu4-misc): its class opts in (`_mojolearn_device_rows = True`; a
-    search candidate's `_Pinned` is unwrapped, a Pipeline or any other
-    estimator is not) and every scorer only calls the estimator's own
-    methods on X (None, a scorer name, or mojolearn's `_Scorer`s; a user
-    callable may read X on the host, so it gets host rows)."""
-    est = estimator
-    while isinstance(est, _Pinned):
-        est = est._est
-    if getattr(type(est), '_mojolearn_device_rows', False) is not True:
-        return False
-    if isinstance(scoring, dict):
-        scoring = list(scoring.values())
-    if not isinstance(scoring, (list, tuple, set)):
-        scoring = [scoring]
-    ok = True
-    for sc in scoring:  # glue: the kind of each scorer (a handful)
-        ok = ok and (sc is None or isinstance(sc, (str, _Scorer)))
-    return ok
 
 
 # ---------------------------------------------------------------- scorers
@@ -2078,55 +1694,7 @@ def get_scorer(scoring):
     return _NATIVE(None, "family_msel_get_scorer", (scoring,), _NATIVE_CONTEXT)
 
 
-def _scorers(scoring):
-    """{name: scorer} for multimetric scoring, or (None, single) for one."""
-    if isinstance(scoring, (list, tuple, set)):
-        return {s: get_scorer(s) for s in scoring}  # glue: scorer table over the scorer names
-    if isinstance(scoring, dict):
-        return {k: get_scorer(v) for k, v in scoring.items()}  # glue: scorer table over the scorer names
-    return None
-
-
-def _score(estimator, X, y, scorer, memo=None):
-    if scorer is None:
-        value = estimator.score(X, y)
-    elif memo is not None and isinstance(scorer, _Scorer):
-        value = scorer(estimator, X, y, _memo=memo)
-    else:
-        value = scorer(estimator, X, y)
-    if not isinstance(value, numbers.Real):
-        raise TypeError('scoring must return a real scalar')
-    return float(value)
-
-
 # ---------------------------------------------------------------- validation
-
-
-def _cv_folds(estimator, X, y, cv, groups):
-    """(X, y, folds) with every fold validated before any fit."""
-    X = _materialize(X, "X")[0]
-    try:
-        y = None if y is None else _materialize(y, "y")[0]
-    except TypeError:
-        y = flatten_labels(y)
-    splitter = check_cv(cv, y, classifier=_classifier(estimator))
-    folds = []
-    for train, test in splitter.split(X, y, groups):  # glue: one validated index pair per fold (n_splits sized)
-        train = _indices(train, len(X), 'train')
-        test = _indices(test, len(X), 'test')
-        if _overlap(train, test, len(X)):
-            raise ValueError('train and test indices overlap')
-        folds.append((train, test))
-    if not folds:
-        raise ValueError('cv must produce at least one fold')
-    return X, y, folds
-
-
-def _require_serial(n_jobs, error_score, caller):
-    if n_jobs not in (None, 1):
-        raise NotImplementedError(f'{caller} supports n_jobs=1 (or None) only')
-    if not (isinstance(error_score, str) and error_score == 'raise') and not isinstance(error_score, numbers.Real):
-        raise ValueError("error_score must be 'raise' or a number")
 
 
 def cross_validate(estimator, X, y=None, *, groups=None, scoring=None, cv=None, n_jobs=None,
@@ -2191,68 +1759,6 @@ def cross_validate(estimator, X, y=None, *, groups=None, scoring=None, cv=None, 
                     return_indices, error_score), _NATIVE_CONTEXT)
 
 
-def _cross_validate_folds(estimator, X, y, folds, scoring, return_train_score=False, return_estimator=False,
-                          return_indices=False, error_score=float('nan'), rows=None):
-    """`cross_validate` on (X, y, folds) that `_cv_folds` already made: a
-    search or a validation curve draws its folds ONCE and scores every
-    candidate on them, as scikit-learn does (a shuffling splitter with
-    random_state=None would otherwise draw new folds per candidate).
-    permutation_test_score reuses it on its fixed folds."""
-    multi = _scorers(scoring)
-    single = None if multi is not None else get_scorer(scoring)
-    names = list(multi) if multi is not None else ['score']
-    out = {'fit_time': [], 'score_time': []}
-    for nm in names:  # glue: one result list per scorer name
-        out[f'test_{nm}'] = []
-        if return_train_score:
-            out[f'train_{nm}'] = []
-    ests, idx = [], {'train': [], 'test': []}
-    own = rows is None
-    if own:
-        rows = _FoldRows(X, y, folds, device_rows=_device_rows_ok(estimator, scoring))
-    try:
-        return _cross_validate_loop(estimator, y, folds, rows, names, multi, single, out, ests, idx,
-                                    return_train_score, return_estimator, return_indices, error_score)
-    finally:
-        if own:
-            rows.close()
-
-
-def _cross_validate_loop(estimator, y, folds, rows, names, multi, single, out, ests, idx,
-                         return_train_score, return_estimator, return_indices, error_score):
-    import time
-    for i, (train, test) in enumerate(folds):  # glue: one fit and score per fold (n_splits sized)
-        est = _clone(estimator)
-        t0 = time.perf_counter()
-        Xtr, ytr, Xte, yte = rows.take(i, None if y is rows.y else y)
-        try:
-            est.fit(Xtr, ytr) if ytr is not None else est.fit(Xtr)
-            ok = True
-        except Exception:
-            if isinstance(error_score, str):
-                raise
-            ok = False
-        t1 = time.perf_counter()
-        for nm in names:  # glue: one result list per scorer name
-            sc = multi[nm] if multi is not None else single
-            out[f'test_{nm}'].append(_score(est, Xte, yte, sc) if ok else float(error_score))
-            if return_train_score:
-                out[f'train_{nm}'].append(_score(est, Xtr, ytr, sc) if ok else float(error_score))
-        out['fit_time'].append(t1 - t0)
-        out['score_time'].append(time.perf_counter() - t1)
-        if return_estimator:
-            ests.append(est)
-        if return_indices:
-            idx['train'].append(train)
-            idx['test'].append(test)
-    res = {k: Array.from_list(v, '<f8') for k, v in out.items()}  # glue: one result list per scorer name
-    if return_estimator:
-        res['estimator'] = ests
-    if return_indices:
-        res['indices'] = idx
-    return res
-
-
 def cross_val_predict(estimator, X, y=None, *, groups=None, cv=None, n_jobs=None, method='predict'):
     """Return each row's prediction from the fold that held it out.
 
@@ -2299,105 +1805,6 @@ def cross_val_predict(estimator, X, y=None, *, groups=None, cv=None, n_jobs=None
     """
     return _NATIVE(None, "family_msel_cross_val_predict", (estimator, X, y, groups, cv, n_jobs, method),
                    _NATIVE_CONTEXT)
-
-
-def _cross_val_predict_native(estimator, X, y, folds, n, method):
-    """`cross_val_predict` with no per-row Python (lane apple-fast-py2mojo-core):
-    the partition test is `check_indices_i64` over every fold's test rows
-    laid end to end (each row held out exactly once: n rows in all, none
-    twice; the folds' rows are already in range), and each fold's
-    predictions are put back in row order ON THE DEVICE (lane
-    cpu2-l4-modelsel): `msel_scatter_rows` casts each fold's predictions
-    and scatters them by the fold's resident test indices into one
-    resident int64 (integer predictions) or float64 (real predictions, or
-    any prediction with columns) block, read back once. The folds' rows are
-    device gathers out of the resident X and y (`_FoldRows`). A fold whose
-    predictions are not a numeric `Array` (str labels come back as a Python
-    list) sends the placement to the label loop below it (object labels,
-    the G5 input-prep case)."""
-    import ctypes
-    from ._buffer import _output_store
-    total = sum(int(test.size) for _, test in folds)  # glue: fold sizes summed over the folds
-    if total != n:
-        raise ValueError('cross_val_predict only works for partitions')
-    held = _output_store('q', n)
-    at = 0
-    keep = []
-    for _, test in folds:  # glue: fold sizes summed over the folds
-        t = test if test.dtype == '<i8' and test._has_order('C') else test.astype('<i8')._as_c()
-        ctypes.memmove(held.buffer_info()[0] + 8 * at, _addr_ro(t), 8 * t.size)
-        at += t.size
-        keep.append(t)
-    if int(_native('check_indices_i64')(held.buffer_info()[0], n, n)) != 0:
-        raise ValueError('cross_val_predict only works for partitions')
-    with _FoldRows(X, y, folds, device_rows=_device_rows_ok(estimator)) as rows:
-        preds = []
-        for i, t in enumerate(keep):  # glue: one fit per fold
-            est = _clone(estimator)
-            Xtr, ytr, Xte, _ = rows.take(i)
-            est.fit(Xtr, ytr)
-            preds.append((getattr(est, method)(Xte), t))
-        return _cross_val_predict_place(preds, n, rows._res)
-
-
-def _numeric_pred(pred):
-    """`pred` as an Array when it is a numeric buffer or list an external
-    estimator returned (lane py-runtime-b: those are scattered natively
-    too), else `pred` unchanged (label objects keep the list route)."""
-    if isinstance(pred, Array):
-        return pred
-    try:
-        a = _materialize(pred, 'predictions')[0]
-    except (TypeError, ValueError, OverflowError):
-        return pred
-    return a if a.dtype in ('<f4', '<f8', '<i4', '<i8', '<u4', '<u1') else pred
-
-
-def _cross_val_predict_place(preds, n, res):
-    preds = [(_numeric_pred(p), t) for p, t in preds]  # glue: one conversion check per fold
-    numeric = all(isinstance(p, Array) and p.dtype in ('<f4', '<f8', '<i4', '<i8', '<u4', '<u1')
-                  and p.ndim >= 1 and p.shape[0] == t.size for p, t in preds)  # glue: per-fold dtype and shape checks
-    width = tuple(preds[-1][0].shape[1:]) if numeric else ()
-    if numeric and all(tuple(p.shape[1:]) == width for p, _ in preds):  # glue: per-fold dtype and shape checks
-        integral = not width and all(p.dtype[1] in 'iu' for p, _ in preds)  # glue: per-fold dtype and shape checks
-        dtype = '<i8' if integral else '<f8'
-        out = empty((n,) + width, dtype)
-        cols = 1
-        for w in width:  # glue: the prediction shape's column count
-            cols *= int(w)
-        if cols and n:
-            block = int(_native('msel_alloc')(n * cols * 8))
-            try:
-                scatter = _native('msel_scatter_rows')
-                for p, t in preds:  # glue: one device scatter per fold
-                    if t.size:
-                        src = p._as_c()
-                        scatter(block, n, _MSEL_CODE[dtype], _addr_ro(src), _MSEL_CODE[src.dtype],
-                                t.size, cols, res._entry(t, '<i8')[2])
-                _native('msel_read')(block, _addr(out), n * cols * 8)
-            finally:
-                _native('msel_free')(block)
-        return out
-    rows = [None] * n
-    width = None
-    for pred, t in preds:  # cpu-route: label-object predictions (str/mixed) placed by list; numeric non-Array predictions are now materialized and scattered natively [py-data-loop]
-        vals = pred.tolist() if hasattr(pred, 'tolist') else list(pred)
-        for i, v in zip(t.tolist(), vals):  # cpu-route: label-object predictions (str/mixed) placed by list; numeric non-Array predictions are now materialized and scattered natively [py-data-loop]
-            rows[i] = v
-        width = getattr(pred, 'shape', (0,))[1:] if hasattr(pred, 'shape') else ()
-    if width:
-        return Array.from_list([float(v) for row in rows for v in row], '<f8').reshape((n,) + tuple(width))  # cpu-route: label-object predictions (str/mixed) placed by list; numeric non-Array predictions are now materialized and scattered natively [py-data-loop]
-    if all(isinstance(v, numbers.Integral) for v in rows):  # cpu-route: label-object predictions (str/mixed) placed by list; numeric non-Array predictions are now materialized and scattered natively [py-data-loop]
-        return Array.from_list(rows, '<i8')
-    if all(isinstance(v, numbers.Real) for v in rows):  # cpu-route: label-object predictions (str/mixed) placed by list; numeric non-Array predictions are now materialized and scattered natively [py-data-loop]
-        return Array.from_list(rows, '<f8')
-    return rows
-
-
-def _expansion_metrics_binding():
-    """The x_metrics binding of the running tier (its host epilogues)."""
-    from ._expansion_metrics import _binding
-    return _binding(None)
 
 
 class ParameterGrid:
@@ -2497,17 +1904,6 @@ class ParameterSampler:
         return _NATIVE(self, "family_msel_sampler_len", (), _NATIVE_CONTEXT)
 
 
-def _rank(values):
-    """scikit-learn's rank_test_score: 'min' ranking of the scores,
-    descending (1 is best)."""
-    order = sorted(set(values), reverse=True)  # glue: explicit scalar tail, one score per candidate
-    pos, start = {}, 1
-    for v in order:  # glue: explicit scalar tail, one score per candidate
-        pos[v] = start
-        start += values.count(v)
-    return [pos[v] for v in values]  # glue: explicit scalar tail, one rank per candidate
-
-
 class _BaseSearch:
     _estimator_type = None
 
@@ -2603,21 +1999,6 @@ class _BaseSearch:
     def classes_(self):
         """The class labels of ``best_estimator_``."""
         return self._best().classes_
-
-
-class _Pinned:
-    """A configured candidate that cross_validate may clone: `_clone` of it
-    returns a fresh clone of the configured estimator."""
-
-    def __init__(self, est):
-        self._est = est
-
-    def __sklearn_clone__(self):
-        return _clone(self._est)
-
-    @property
-    def _estimator_type(self):
-        return getattr(self._est, '_estimator_type', None)
 
 
 class GridSearchCV(_BaseSearch):
@@ -2946,189 +2327,6 @@ def permutation_test_score(estimator, X, y, *, groups=None, cv=None, n_permutati
                     params), _NATIVE_CONTEXT)
 
 
-class _NativePermutation:
-    """`permutation_test_score` with y kept as a buffer (lane/py-misc-msel).
-
-    The definition above rebuilds y from a Python list per permutation
-    (`Array.from_list(yv, '<f4' if isinstance(yv[0], float) else '<i4')`),
-    permutes it by a list comprehension, and with groups filters every row
-    once per group per permutation. Here y is converted ONCE into that same
-    dtype (the same words: the array('f') / array('i') item setter over the
-    same Python scalars, or a buffer of the same values), and each permuted
-    y is a device gather of it (`_Resident.take`, base y resident for every
-    permutation; lane cpu2-l4-modelsel) by an Int64 row index: without groups the
-    permutation itself (`permutation_rows`, the same draw), with groups the
-    index the definition builds, from the same per-group draws in the same
-    sorted-group order (one program for all of them), each group's rows
-    permuted by `gather_i64` over the group-sorted rows and put back in row
-    order by the inverse sort. Folds are computed once when the splitter
-    cannot read y and is deterministic (`_Y_FREE`), which is exactly when
-    every `cross_validate` call of the definition draws the same folds.
-    Only ints (bools) or only floats take this route; anything else, or a
-    missing helper, takes the definition."""
-
-    @classmethod
-    def get(cls, estimator, X, y, groups, cv):
-        if not _msel_native() or _sabotage_requested():
-            return None
-        gather64 = _native('gather_i64')
-        if gather64 is None:
-            return None
-        base = cls._base(y)
-        if base is None or base.size < 2:
-            return None
-        self = cls()
-        self.X = _materialize(X, 'X')[0]
-        self.base, self.n = base, base.size
-        self.gather64 = gather64
-        return self
-
-    @staticmethod
-    def _base(y):
-        """y as the definition's first `mean_score` array, or None."""
-        if isinstance(y, (list, tuple)):
-            kinds = set(map(type, y))
-            if kinds and kinds <= {int, bool}:
-                code, dtype = 'i', '<i4'
-            elif kinds == {float}:
-                code, dtype = 'f', '<f4'
-            else:
-                return None
-            try:
-                store = array.array(code, y)
-            except OverflowError:
-                return None
-            return Array._owned(store, (len(store),), dtype, 'C')
-        try:
-            a = _materialize(y, 'y')[0]
-        except (TypeError, ValueError):
-            return None
-        if a.ndim != 1 or a.size < 1:
-            return None
-        if a.dtype in ('<f4', '<f8'):
-            from ._buffer import as_f32_c
-            return as_f32_c(a, ndim=1, name='y')[0]
-        if a.dtype == '<i4':
-            return a._as_c()
-        if a.dtype in ('<i8', '<u1', '<u4'):
-            # the int32 narrowing in the base binding's cast_elements (a
-            # device twin on GPU builds); 1 is the OverflowError of the
-            # array('i') route, which hands back to the definition
-            c = a._as_c()
-            narrow = empty((c.size,), '<i4')
-            if int(_native('cast_elements')(_addr_ro(c), _MSEL_CODE[c.dtype], _addr(narrow), 2, c.size)) != 0:
-                return None
-            return narrow
-        if a.dtype in ('<i2', '<u2', '<i1'):
-            try:
-                narrow = array.array('i', a.tolist())  # glue: dtypes the native casts do not name
-            except OverflowError:
-                return None
-            return Array._owned(narrow, (len(narrow),), '<i4', 'C')
-        return None
-
-    def _folds(self, estimator, yarr, groups, cv):
-        return _cv_folds(estimator, self.X, yarr, cv, groups)[2]
-
-    def run(self, estimator, groups, cv, n_permutations, random_state, sc):
-        n, base = self.n, self.base
-        splitter = None if cv is None or isinstance(cv, numbers.Integral) else cv
-        reuse = splitter is not None and _y_free(splitter)
-        folds0 = self._folds(estimator, base, groups, cv)
-        # lane metrics-apple3: X's fold rows are the same for every
-        # permutation that runs on folds0 (only y is permuted)
-        rows0 = _FoldRows(self.X, None, folds0, keep_y=False, device_rows=_device_rows_ok(estimator, sc))
-        try:
-            return self._run(estimator, groups, cv, n_permutations, random_state, sc, reuse, folds0, rows0)
-        finally:
-            rows0.close()
-
-    def _run(self, estimator, groups, cv, n_permutations, random_state, sc, reuse, folds0, rows0):
-        n, base = self.n, self.base
-
-        def mean_score(yarr):
-            folds = folds0 if reuse or yarr is base else self._folds(estimator, yarr, groups, cv)
-            r = _cross_validate_folds(estimator, self.X, yarr, folds, sc,
-                                      rows=rows0 if folds is folds0 else None)
-            return _row_means([r['test_score'].tolist()])[0]
-        score = mean_score(base)
-        rng = _rng(random_state)
-        order = None if groups is None else self._group_order(groups)
-        perm_scores = []
-        for _ in range(n_permutations):  # glue: one permuted cross-validation per permutation
-            if order is None:
-                idx = rng.permutation_rows([n])[0]
-            else:
-                idx = self._group_index(rng, order)
-            # the permuted y: one device gather out of the resident base y
-            idx = Array._owned(idx, (n,), '<i8', 'C')
-            yp = rows0._res.take(base, idx)
-            rows0._res.release(idx)
-            perm_scores.append(mean_score(yp))
-        pvalue = (sum(1 for s in perm_scores if s >= score) + 1.0) / (n_permutations + 1)  # glue: explicit scalar tail, one score per permutation
-        return score, Array.from_list(perm_scores, '<f8'), pvalue
-
-    def _group_order(self, groups):
-        """(sizes, sorted rows, inverse) of the groups in sorted-group order."""
-        from ._expansion_metrics import _Prog, _run
-        gc = _GroupCodes.get(groups, self.n, 'groups') if self.n >= _NATIVE_MIN_ROWS else None
-        if gc is None:
-            from ._labels import encode_labels
-            classes, codes = encode_labels(flatten_labels(groups))
-            if codes.size != self.n:
-                raise ValueError('groups and y have different lengths')
-            m, codes = len(classes), codes
-        else:
-            m, codes = gc.m, gc.codes
-        n = self.n
-        prog = _Prog()
-        key = prog.put_i32(codes)
-        off = prog.want(prog.alloc(m + 1), m + 1)
-        ordr = prog.alloc(n)
-        prog.stage("group_sort", 1, key, n, m, off, ordr)
-        off2 = prog.alloc(n + 1)
-        inv = prog.alloc(n)
-        # the inverse of a permutation is its stable sort by value
-        prog.stage("group_sort", 1, ordr, n, n, off2, inv)
-        w_ord = prog.want(prog.alloc(2 * n), 2 * n)
-        w_inv = prog.want(prog.alloc(2 * n), 2 * n)
-        prog.stage("rows64", n, ordr, w_ord)
-        prog.stage("rows64", n, inv, w_inv)
-        _run(prog, None)
-        offs = prog.ints(off, m + 1)
-        sizes = [offs[g + 1] - offs[g] for g in range(m)]  # glue: group sizes from the m+1 offsets
-        return sizes, prog.words(w_ord, 2 * n, "q"), prog.words(w_inv, 2 * n, "q")
-
-    def _group_index(self, rng, order):
-        """The definition's `yp[rows[i]] = yl[rows[perm[i]]]` as a row index."""
-        sizes, ordr, inv = order
-        n = self.n
-        src = array.array('q', bytes(8 * n))
-        s0, o0 = src.buffer_info()[0], ordr.buffer_info()[0]
-        at = 0
-        for size, perm in zip(sizes, rng.permutation_rows(sizes)):  # glue: one device gather per group (m groups)
-            self.gather64(o0 + 8 * at, size, perm.buffer_info()[0], size, s0 + 8 * at)
-            at += size
-        idx = array.array('q', bytes(8 * n))
-        self.gather64(s0, n, inv.buffer_info()[0], n, idx.buffer_info()[0])
-        return idx
-
-
-def _y_free(splitter):
-    """True when `splitter.split` cannot read y and draws the same folds on
-    every call (an int seed, or no shuffle)."""
-    t = type(splitter)
-    if t in (LeaveOneGroupOut, LeavePGroupsOut, TimeSeriesSplit, LeaveOneOut, LeavePOut, PredefinedSplit,
-             _IterableCV):
-        return True
-    seeded = isinstance(getattr(splitter, 'random_state', None), numbers.Integral)
-    if t in (KFold, GroupKFold):
-        return not splitter.shuffle or seeded
-    if t in (ShuffleSplit, GroupShuffleSplit):
-        return seeded
-    return False
-
-
 # Import-time connection; constructing and sizing DeviceRows each hand off once.
 from ._native_arena_rows import connect as _connect_arena_rows
 _connect_arena_rows()
@@ -3150,7 +2348,6 @@ _native_family_bridge.tables(family_msel_scorers=_scorer_table(), family_msel_sc
 # iterators).
 from ._array import _NATIVE_CODE as _ARRAY_CODE, _REDUCE_INTEGRAL  # noqa: E402
 from ._labels import encode_labels as _encode_labels, _NATIVE_ENCODE  # noqa: E402
-from ._expansion_metrics import _binding as _x_metrics_binding  # noqa: E402
 _native_family_bridge.tables(
     family_msel_classes=dict(
         KFold=KFold, StratifiedKFold=StratifiedKFold, GroupKFold=GroupKFold,

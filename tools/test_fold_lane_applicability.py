@@ -15,9 +15,16 @@ def test_descriptor_default_fold_route_reaches_native_helpers():
     # The sentinel is the native boundary, not a duplicate implementation.
     tree = ast.parse((ROOT / 'python/mojolearn/model_selection.py').read_text())
     functions = {n.name: n for n in tree.body if isinstance(n, ast.FunctionDef)}
-    descriptor_calls = {n.func.id for n in ast.walk(functions['split_descriptor'])
-                        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)}
-    assert '_folds' in descriptor_calls
+    # split_descriptor is one call into the native model_selection owner,
+    # whose default folds (bindings/msel_split.mojo `msel_default_folds`)
+    # call the same base helpers as the Python `_native_default_folds`.
+    descriptor_ops = {n.args[1].value for n in ast.walk(functions['split_descriptor'])
+                      if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == '_NATIVE'
+                      and len(n.args) > 1 and isinstance(n.args[1], ast.Constant)}
+    assert descriptor_ops == {'family_msel_split_descriptor'}
+    owner = (ROOT / 'bindings/msel_split.mojo').read_text()
+    body = owner[owner.index('def msel_default_folds('):owner.index('# ---', owner.index('def msel_default_folds('))]
+    assert 'msel_entry("fold_ids"' in body and '_select_folds(' in owner and 'msel_entry("select_fold_i64"' in owner
 
     class NativeRoute(Exception):
         pass
