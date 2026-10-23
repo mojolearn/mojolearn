@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native handling for established classical validation warnings. The
 # warnings module's Python display and formatting hooks are never invoked.
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
 
@@ -8,7 +9,7 @@ comptime COLUMN_WARNING = "A column-vector y was passed when a 1d array was expe
 
 
 def _warning_fields(value: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(value) is not b.dict:
         raise Error("TypeError: warning metadata requires native dictionaries")
     var keys = py_call(b.list, value.keys())
@@ -19,7 +20,7 @@ def _warning_fields(value: PythonObject) raises -> PythonObject:
 
 
 def _warning_class_fields(cls: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(cls) is not b.type:
         raise Error("TypeError: warning classes require the native metaclass")
     var fields = py_call(b.type.__dict__["__dict__"].__get__, cls)
@@ -31,13 +32,13 @@ def _warning_class_fields(cls: PythonObject) raises -> PythonObject:
 
 
 def _warning_category(context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     # scikit-learn's DataConversionWarning once sklearn is loaded, else
     # mojolearn's own (_sk_validate._conversion_warning); the error path reads
     # the same class back from the context.
     var cls = context["warning_category_default"]
-    var module = py_get(Python.import_module("sys").modules, "sklearn.exceptions")
-    if module is not None and py_type(module) is py_type(Python.import_module("sys")):
+    var module = py_get(native_loaded_module("sys").modules, "sklearn.exceptions")
+    if module is not None and py_type(module) is py_type(native_loaded_module("sys")):
         var loaded = py_get(py_call(b.object.__getattribute__, module, "__dict__"), "DataConversionWarning")
         if loaded is not None:
             cls = loaded
@@ -48,7 +49,7 @@ def _warning_admit_category(cls: PythonObject, context: PythonObject) raises:
     # Every category, including a supplied UserWarning, must be admitted
     # before reading its metadata or constructing a warning instance.
     # A C exception entry can otherwise invoke Python subclass hooks.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     _ = _warning_class_fields(cls)
     var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
     var warning = False
@@ -87,7 +88,7 @@ def _warning_match(pattern: PythonObject, text: PythonObject, context: PythonObj
 
 
 def _warning_write(text: String, context: PythonObject) raises:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var stream = py_get(_warning_fields(context["warning_sys_fields"]), "stderr")
     if stream is None:
         return
@@ -121,7 +122,7 @@ def classical_warn_column(context: PythonObject) raises:
 def classical_warning(message: String, category: PythonObject, context: PythonObject, location: PythonObject, error_prefix: String = "DataConversionWarning") raises:
     _warning_admit_category(category, context)
     py_setitem(context, "warning_category", category)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = _warning_fields(context["warning_fields"])
     # Preserve the old stacklevel=4 location in _guard_cpu_training; warning
     # filters and default/module repetition therefore keep their old scope.

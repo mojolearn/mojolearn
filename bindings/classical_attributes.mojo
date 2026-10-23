@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native public model attribute lookup. Only connected function/native
 # descriptors may bind; arbitrary Python properties/hooks are never called.
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -12,12 +13,12 @@ from bindings.native_numpy_metadata import native_numpy_type, native_numpy_modul
 
 
 def _type_fields(cls: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     return py_call(b.type.__dict__["__dict__"].__get__, cls)
 
 
 def _type_mro(cls: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     return py_call(b.type.__dict__["__mro__"].__get__, cls)
 
 
@@ -30,7 +31,7 @@ def _descriptor_slot(cls: PythonObject, name: String) raises -> Bool:
 
 
 def _public_plan(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = model if py_type(model) is b.type else py_type(model)
     if py_type(cls) is not py_type(py_type(PythonObject(0))):
         raise Error("TypeError: native public attributes cannot invoke Python metaclass hooks")
@@ -50,7 +51,7 @@ def classical_check_layout(model: PythonObject, context: PythonObject) raises:
         if Bool(py=py_get(context, "classical_public_installed", False)):
             raise Error("RuntimeError: native public model metadata was removed")
         return
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = model if py_type(model) is b.type else py_type(model)
     var plan = _public_plan(model, context)
     var mro = _type_mro(cls)
@@ -113,7 +114,7 @@ def _classical_descriptor_get(binding: PythonObject, model: PythonObject, cls: P
 
 
 def classical_getattribute(model: PythonObject, name: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(name) is not b.str:
         raise Error("TypeError: native model attribute name must be an exact string")
     classical_check_layout(model, context)
@@ -228,7 +229,7 @@ def classical_connect_numpy(context: PythonObject) raises:
 
 
 def _attribute_context(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var host = py_get(context, "classical_host_context")
     if host is not None and py_contains(host["classical_kinds"], py_type(model)):
         return host
@@ -258,8 +259,8 @@ def classical_attribute_descriptor_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr
         if not function:
             raise cpy.unsafe_get_error()
         var value = PythonObject(from_borrowed=function)
-        var b = Python.import_module("builtins")
-        var types = Python.import_module("types")
+        var b = native_loaded_module("builtins")
+        var types = native_loaded_module("types")
         if py_type(value) is not types.MethodType or py_type(value.__func__) is not types.BuiltinFunctionType:
             raise Error("native attribute descriptor requires a bound compiled entry")
         # Documented CPython API, present throughout package Python >=3.10.

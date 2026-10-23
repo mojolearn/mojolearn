@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native warning delivery for sequence array-protocol casts.
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.classical_warnings import _warning_fields, _warning_class_fields, _warning_match, _warning_write
@@ -28,7 +29,7 @@ def sequence_array_errstate(context: PythonObject) raises -> PythonObject:
     # Each base-8 digit is a documented error action, in divide/over/under/
     # invalid order. Decode the metadata here instead of calling np.geterr,
     # whose wrapper executes Python. See NumPy 1.26 geterrobj API contract.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(stored) is not b.list or len(stored) != 3 or py_type(stored[1]) is not b.int:
         raise Error("TypeError: NumPy error-state metadata requires a native mask")
     var mask = Int(py=stored[1])
@@ -47,7 +48,7 @@ def sequence_array_errstate(context: PythonObject) raises -> PythonObject:
 def sequence_array_report(status: Int, settings: PythonObject, context: PythonObject,
                           operation: String = "cast", suppress_error: Bool = False) raises:
     var warning = context["sequence_array_warnings"]
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     # NumPy reports flags in this order and only once per completed cast,
     # regardless of how many individual elements or fields set the flag.
     var flags: List[Int] = [SEQ_CAST_OVERFLOW, SEQ_CAST_UNDERFLOW, SEQ_CAST_INVALID]
@@ -83,7 +84,7 @@ def sequence_array_report(status: Int, settings: PythonObject, context: PythonOb
 
 
 def sequence_array_category(kind: String) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var category = py_get(py_fields(b), PythonObject(kind))
     var flags = b.type.__dict__["__flags__"]
     # Validate before PyErr_SetString or constructing a warning message: both
@@ -108,7 +109,7 @@ def sequence_array_exception(kind: String, var message: String) raises:
 
 def sequence_array_warn(message: String, context: PythonObject, kind: String = "RuntimeWarning",
                         suppress_error: Bool = False) raises:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = _warning_fields(context["warning_fields"])
     var category = sequence_array_category(kind)
     # The existing warning originated at the __array__ public method. Its

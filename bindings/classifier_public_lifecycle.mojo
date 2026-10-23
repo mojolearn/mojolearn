@@ -2,6 +2,7 @@
 # Native equivalents of the classifier mixin's completed-fit metadata. Keep
 # class labels in ordinary native storage while the solver/score consumes them;
 # expose the established ClassLabels object only after the operation completes.
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.py_attr import py_attr
@@ -10,7 +11,7 @@ from bindings.classical_labels import _flatten_labels
 
 
 def _labels_class(context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = context["classifier_labels_class"]
     if py_type(cls) is not b.type:
         raise Error("TypeError: native class-label output requires connected class metadata")
@@ -42,7 +43,7 @@ def classifier_label_list(value: PythonObject, context: PythonObject) raises -> 
 
 
 def _public_labels(values: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(values) is not b.list:
         return values
     var cls = _labels_class(context)
@@ -56,7 +57,7 @@ def _feature_names(source: PythonObject, context: PythonObject) raises -> Python
     # manager/index storage avoids DataFrame.columns and Index iteration.
     if py_type(source) is not _pd_class("pandas.core.frame", "DataFrame"):
         return PythonObject(None)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var manager = py_get(_pd_fields(source), "_mgr")
     if py_type(manager) is not _pd_class("pandas.core.internals.managers", "BlockManager"):
         raise Error("TypeError: native classifier requires ordinary pandas manager storage")

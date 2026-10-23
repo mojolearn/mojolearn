@@ -6,6 +6,7 @@ dispatch loop. The coordinator owns device visibility, framing, authentication,
 process cleanup and request ordering. No pickle or Python worker loop is used.
 """
 from std.ffi import _Global
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -49,7 +50,7 @@ comptime PROCESS_BOUNDARY = _Global[
 
 def process_initialize(executable: String, environ: PythonObject, vendor: String) raises:
     var p = PROCESS_BOUNDARY.get_or_create_ptr()
-    p[].bi = Python.import_module("builtins")
+    p[].bi = native_loaded_module("builtins")
     if py_type(environ) is not p[].bi.dict or executable == "":
         raise Error("process: initialization requires an executable and native environment mapping")
     # Cache the underlying bytes dictionary, not os._Environ.get/__iter__.

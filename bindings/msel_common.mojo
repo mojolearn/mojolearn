@@ -3,6 +3,7 @@
 # Binding entries are connected at import. Input admission precedes metadata,
 # indexing and conversion, and unsupported Python protocols never run.
 from std.memory import memcpy
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
@@ -34,7 +35,7 @@ comptime MSEL_GOLDEN: UInt64 = 0x9E3779B97F4A7C15
 
 
 def msel_b() raises -> PythonObject:
-    return Python.import_module("builtins")
+    return native_loaded_module("builtins")
 
 
 def msel_native(name: String, context: PythonObject) raises -> PythonObject:
@@ -153,7 +154,7 @@ def msel_int(value: PythonObject) raises -> Int:
 
 
 def msel_op(name: String) raises -> PythonObject:
-    return py_call(msel_b().getattr, Python.import_module("operator"), PythonObject(name))
+    return py_call(msel_b().getattr, native_loaded_module("operator"), PythonObject(name))
 
 
 def msel_cmp(name: String, a: PythonObject, b: PythonObject) raises -> Bool:
@@ -321,7 +322,7 @@ def msel_index_i64(value: PythonObject, context: PythonObject) raises -> PythonO
     if not py_contains(codes, PythonObject(dtype)):
         # a narrow integer dtype the cast does not name: `array('q', view)`
         # widens it in C
-        var store = family_call(Python.import_module("array").array, PythonObject("q"), value._mv)
+        var store = family_call(native_loaded_module("array").array, PythonObject("q"), value._mv)
         return classical_wrap_array(store, Python.tuple(len(store)), "<i8", "C", context)
     var out = msel_new(Int(py=value.size), "<i8", context)
     if Int(py=value.size) > 0:
@@ -389,7 +390,7 @@ def msel_as_index(values: PythonObject, context: PythonObject) raises -> PythonO
     int64 Array."""
     var b = msel_b()
     msel_admit(values, context)
-    var array_mod = Python.import_module("array")
+    var array_mod = native_loaded_module("array")
     var store = msel_try(array_mod.array, Python.tuple(PythonObject("q"), values), b.TypeError, context)
     if msel_missed(store, context):
         store = family_call(array_mod.array, PythonObject("q"), py_call(b.map, b.int, values))
@@ -542,7 +543,7 @@ struct MselRng(Movable):
     def __init__(out self, random_state: PythonObject, context: PythonObject) raises:
         var state = random_state
         if state is None:
-            state = family_call(msel_b().int.from_bytes, py_call(Python.import_module("os").urandom, PythonObject(8)),
+            state = family_call(msel_b().int.from_bytes, py_call(native_loaded_module("os").urandom, PythonObject(8)),
                                 PythonObject("little"))
         if (msel_is_bool(state, context) or not msel_is_integral(state, context)
                 or msel_cmp("lt", state, PythonObject(0))):
@@ -600,7 +601,7 @@ struct MselRng(Movable):
         var o = prog.want(slot, size)
         var arena = _reg_run(prog, PythonObject(None), context)
         _ = prog^
-        var store = py_call(Python.import_module("array").array, PythonObject("i"))
+        var store = py_call(native_loaded_module("array").array, PythonObject("i"))
         _ = py_call(store.frombytes, py_call(py_call(py_attr(arena, "__getitem__"), py_call(msel_b().slice, PythonObject(o), PythonObject(o + size))).tobytes))
         return py_call(msel_b().list, store)
 
@@ -679,7 +680,7 @@ def msel_shuffle_sizes(n: Int, test_size_in: PythonObject, train_size: PythonObj
     if rk == "f" and tk == "f" and msel_cmp("gt", family_call(add, train_size, test_size), one):
         raise Error("The sum of test_size and train_size = " + family_str(family_call(add, train_size, test_size))
                     + ", should be in the (0, 1) range. Reduce test_size and/or train_size.")
-    var math = Python.import_module("math")
+    var math = native_loaded_module("math")
     var n_test = PythonObject(None)
     var n_train = PythonObject(None)
     if tk == "f":
@@ -759,7 +760,7 @@ def msel_lazy(model: PythonObject, op: String, items: PythonObject, context: Pyt
     an argument tuple): `map` over the compiled door, so a splitter with
     one split per row or per combination makes each split on demand, as the
     Python generator did, with no Python frame."""
-    var itertools = Python.import_module("itertools")
+    var itertools = native_loaded_module("itertools")
     return py_call(msel_b().map, context["family_msel_door"], py_call(itertools.repeat, model),
                    py_call(itertools.repeat, PythonObject(op)), items, py_call(itertools.repeat, context))
 
@@ -772,10 +773,10 @@ from bindings.metrics_native_support import metric_float
 
 def _msel_attr(model: PythonObject, name: String) raises -> PythonObject:
     """`model.<name>` with its own AttributeError."""
-    return family_call(Python.import_module("builtins").getattr, model, PythonObject(name))
+    return family_call(native_loaded_module("builtins").getattr, model, PythonObject(name))
 
 def msel_get_scorer(var scoring: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if scoring is None:
         return scoring
     if py_type(scoring) is b.str:
@@ -792,7 +793,7 @@ def msel_score(estimator: PythonObject, x: PythonObject, y: PythonObject, scorer
                context: PythonObject) raises -> PythonObject:
     """`model_selection._score(estimator, X, y, scorer)`: the estimator's own
     `score` without a scorer; a real scalar, as a float."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var value: PythonObject
     if scorer is None:
         value = msel_estimator_call(estimator, "score", Python.tuple(x, y), context)

@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Shared scalar configuration admission, parsing and numeric buffer decoding.
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_fields, py_get
@@ -46,7 +47,7 @@ def training_scalar_number(value: PythonObject, operation: String, context: Pyth
                            integer: Bool, depth: Int = 0) raises -> PythonObject:
     if depth > 64:
         raise Error("TypeError: scalar configuration exceeds native nesting; supply a native number")
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_type(value)
     var containers = context["container_types"]
     var admitted = opt_exact(cls, context["scalar_types"]) or cls is context["buffer_types"][1] or cls is containers[0] or cls is containers[1] or cls is containers[2]

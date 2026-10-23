@@ -2,6 +2,7 @@
 # No Python-defined protocols are invoked by native Sequential execution.
 # Admission compares exact type identities before reading attributes or
 # walking containers, so subclass properties/iterators cannot run first.
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.native_torch_admission import native_torch_exact, native_torch_admit
 from bindings.py_balanced import py_call, py_type, py_fields, py_contains, py_get
@@ -25,7 +26,7 @@ def _ctypes_array_owner(owner_type: PythonObject, context: PythonObject) raises 
     var base = py_get(context, "ctypes_array_base")
     if base is None:
         return False
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var bases = py_call(b.type.__dict__["__bases__"].__get__, owner_type)
     if len(bases) != 1 or bases[0] is not base:
         return False
@@ -44,7 +45,7 @@ def _ordinary_torch(cls: PythonObject, context: PythonObject) raises -> Bool:
 def sequential_admit_value(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
     if depth > 64:
         raise Error("TypeError: Sequential input containers exceed the supported nesting depth")
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_type(value)
     if cls is py_type(Python.list()) or cls is py_type(Python.tuple()):
         for k in range(len(value)):  # driver-loop: over native input container owners and metadata
@@ -79,7 +80,7 @@ def sequential_admit_value(value: PythonObject, context: PythonObject, depth: In
 
 
 def sequential_admit(model: PythonObject, operation: String, args: PythonObject, context: PythonObject) raises:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if operation == "load_checkpoint":
         if model is not context["sequential_class"]:
             raise Error("TypeError: Sequential checkpoint loading requires the native Sequential class")

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native NotFittedError class selection preserves the existing optional sklearn
 # relationship. No imports of sklearn or calls to Python exception factories.
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.py_slice_native import py_slice
@@ -8,9 +9,9 @@ from bindings.classical_metadata import classical_is_fitted
 
 
 def classical_not_fitted_class(context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var own = context["not_fitted_class"]
-    var module = py_get(Python.import_module("sys").modules, "sklearn.exceptions")
+    var module = py_get(native_loaded_module("sys").modules, "sklearn.exceptions")
     if module is None:
         py_setitem(context, "active_not_fitted_class", own)
         return own
@@ -53,7 +54,7 @@ def classical_require_fitted(model: PythonObject, ridge: Bool, operation: String
 
 
 def classical_error_restore(args: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     if len(args) != 1 or py_type(args[0]) is not bi.str:
         raise Error("TypeError: NotFittedError restoration requires a native message string")
     var cls = classical_not_fitted_class(context)
@@ -61,7 +62,7 @@ def classical_error_restore(args: PythonObject, context: PythonObject) raises ->
 
 
 def classical_error_reduce(error: PythonObject, context: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var cls = py_type(error)
     var valid = cls is context["not_fitted_class"]
     var classes = py_call(bi.list, context["not_fitted_bridges"].values())

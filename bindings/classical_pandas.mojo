@@ -3,6 +3,7 @@
 # manager properties, extension conversion methods or any Python callbacks.
 # A caller imports pandas; runtime admission only reads its loaded modules.
 from std.memory import bitcast
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.native_buffer_owner import native_buffer_view
 from core.cast_in import cast_in_kind, cast_w64_bits, f64_to_f32_bits
@@ -14,13 +15,13 @@ from bindings.py_balanced import py_call, py_type, py_get, py_fields
 
 
 def _pd_native_metaclass(cls: PythonObject) raises -> Bool:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(cls) is b.type:
         return True
     # pandas' ordinary DatetimeIndex/TimedeltaIndex classes use ABCMeta.
     # Accept its exact loaded identity for native metadata reads only;
     # never invoke abstract checks, metaclass hooks or class constructors.
-    var sys = Python.import_module("sys")
+    var sys = native_loaded_module("sys")
     var module = py_get(sys.modules, "abc")
     if module is None or py_type(module) is not py_type(sys):
         return False
@@ -29,8 +30,8 @@ def _pd_native_metaclass(cls: PythonObject) raises -> Bool:
 
 
 def _pd_class(module_name: String, name: String) raises -> PythonObject:
-    var b = Python.import_module("builtins")
-    var sys = Python.import_module("sys")
+    var b = native_loaded_module("builtins")
+    var sys = native_loaded_module("sys")
     var module = py_get(sys.modules, module_name)
     if module is None or py_type(module) is not py_type(sys):
         return PythonObject(None)
@@ -46,7 +47,7 @@ def native_pandas_exact(value: PythonObject) raises -> Bool:
 def classical_admit_value(value: PythonObject, context: PythonObject, depth: Int = 0) raises:
     if depth > 64:
         raise Error("TypeError: classical input nesting exceeds the supported depth")
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(value) is py_type(Python.tuple()) or py_type(value) is py_type(Python.list()):
         for k in range(len(value)):  # driver-loop: over native operation argument containers
             classical_admit_value(value[k], context, depth + 1)
@@ -55,11 +56,11 @@ def classical_admit_value(value: PythonObject, context: PythonObject, depth: Int
 
 
 def _pd_type_fields(cls: PythonObject) raises -> PythonObject:
-    return py_call(Python.import_module("builtins").type.__dict__["__dict__"].__get__, cls)
+    return py_call(native_loaded_module("builtins").type.__dict__["__dict__"].__get__, cls)
 
 
 def _pd_fields(value: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_type(value)
     if not _pd_native_metaclass(cls):
         raise Error("TypeError: pandas storage requires ordinary native class metadata")
@@ -83,7 +84,7 @@ def _pd_get(module: String, cls: String, field: String, value: PythonObject) rai
     if owner is None:
         raise Error("TypeError: pandas native storage metadata is unavailable")
     var descriptor = py_get(_pd_type_fields(owner), field)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if descriptor is None or py_type(descriptor) is not py_type(b.memoryview.obj):
         raise Error("TypeError: pandas storage requires native field " + field)
     return py_call(descriptor.__get__, value)
@@ -97,7 +98,7 @@ def _pd_raw(value: PythonObject, offset: Int) raises -> UInt64:
 
 
 def _pd_object_bits(value: PythonObject, context: PythonObject) raises -> UInt32:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_type(value)
     var number = Float64(0.0)
     if cls is b.int or cls is b.float or cls is b.bool:
@@ -118,7 +119,7 @@ def _pd_object_bits(value: PythonObject, context: PythonObject) raises -> UInt32
 
 
 def _pd_values(values: PythonObject, series: Bool, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(values) is context["ndarray"]:
         return Python.tuple(values, False)
     var cls = py_type(values)
@@ -140,7 +141,7 @@ def _pd_values(values: PythonObject, series: Bool, context: PythonObject) raises
 
 
 def _pd_locations(block: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var location = _pd_get("pandas._libs.internals", "Block", "_mgr_locs", block)
     if py_type(location) is not _pd_class("pandas._libs.internals", "BlockPlacement"):
         raise Error("TypeError: pandas block requires native placement metadata")
@@ -161,7 +162,7 @@ def _pd_locations(block: PythonObject, context: PythonObject) raises -> PythonOb
 
 
 def native_pandas_f32(value: PythonObject, context: PythonObject, strict_f32: Bool = False, allow_nonfinite: Bool = False) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if not native_pandas_exact(value):
         raise Error("TypeError: pandas input requires an exact DataFrame or Series")
     var series = py_type(value) is _pd_class("pandas.core.series", "Series")

@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # The LDA owner reads only connected native class storage and admitted values.
 from std.math import isfinite, floor
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.classical_attributes import classical_check_layout
@@ -75,7 +76,7 @@ def lda_native_set_params(model: PythonObject, fields: PythonObject, values: Pyt
     for i in range(len(keys)):  # driver-loop: preserve the existing ordered parameter update
         var name = keys[i]
         if not py_contains(names, name):
-            raise Error("mojolearn: invalid parameter " + String(py_call(Python.import_module("builtins").repr, name))
+            raise Error("mojolearn: invalid parameter " + String(py_call(native_loaded_module("builtins").repr, name))
                         + " for LinearDiscriminantAnalysis")
         _lda_parameter(name, values[name], context)
         py_setitem(fields, name, values[name])
@@ -92,7 +93,7 @@ def lda_native_labels(value: PythonObject, context: PythonObject, fitting: Bool 
     var flat = _flatten_labels(value, context)
     classical_admit_value(flat, context)
     if fitting:
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         var shape = labels_shape_of(value, context)
         if len(shape) == 2 and shape[1] == 1 and py_type(value) is not b.list and py_type(value) is not b.tuple and py_type(value) is not b.memoryview:
             metric_warn(COLUMN_WARNING, _warning_category(context), context)
@@ -126,7 +127,7 @@ def lda_native_context(context: PythonObject) raises -> PythonObject:
     # The established label algorithms use isinstance against their connected
     # real/integral classes. Concrete native type tuples preserve those tests
     # without executing numbers.Real/Integral's Python ABC machinery.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var result = py_call(b.dict, context)
     var types = Python.list()
     _ = py_call(types.extend, Python.tuple(b.int, b.float, b.bool))

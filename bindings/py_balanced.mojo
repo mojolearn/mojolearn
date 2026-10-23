@@ -11,6 +11,7 @@
 # reference owned by the returned PythonObject. Nothing here adds or removes a
 # reference to compensate for the standard library; when Modular ships the
 # balanced operations, call sites can go back to the ordinary syntax.
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 
@@ -81,4 +82,4 @@ def py_contains(container: PythonObject, key: PythonObject) raises -> Bool:
 def py_fields(value: PythonObject) raises -> PythonObject:
     """`object.__getattribute__(value, "__dict__")`: the instance dictionary
     through object's native lookup, without class or instance hooks."""
-    return py_call(Python.import_module("builtins").object.__getattribute__, value, "__dict__")
+    return py_call(native_loaded_module("builtins").object.__getattribute__, value, "__dict__")

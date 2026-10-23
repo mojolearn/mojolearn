@@ -7,6 +7,7 @@
 # codes. Every stage group stages the words, operands and order the Python
 # helper of the same name staged.
 from std.os import getenv
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
@@ -74,7 +75,7 @@ comptime II_CH = 1024
 
 
 def cls_builtins() raises -> PythonObject:
-    return Python.import_module("builtins")
+    return native_loaded_module("builtins")
 
 
 def cls_name(model: PythonObject) raises -> String:

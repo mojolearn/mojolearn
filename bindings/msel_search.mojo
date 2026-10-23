@@ -11,6 +11,7 @@
 # `row_means_f64` / `row_stds_f64` and the permutations the same counter
 # draws, so every result is unchanged.
 from std.memory import memcpy
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
 from bindings.py_attr import py_attr
@@ -72,7 +73,7 @@ def msel_grid_list(param_grid: PythonObject, context: PythonObject) raises -> Py
     """`list(ParameterGrid)` from its stored dicts: every combination of
     each dict's values, keys sorted, dicts in list order."""
     var b = msel_b()
-    var itertools = Python.import_module("itertools")
+    var itertools = native_loaded_module("itertools")
     var out = Python.list()
     for i in range(len(param_grid)):  # driver-loop: over the candidate dicts
         var g = param_grid[i]
@@ -238,7 +239,7 @@ def msel_rank(values: PythonObject) raises -> PythonObject:
 
 def _i32_from_list(values: PythonObject, context: PythonObject) raises -> PythonObject:
     """`Array.from_list(values, '<i4')` of a list of Python ints."""
-    var store = family_call(Python.import_module("array").array, PythonObject("i"), values)
+    var store = family_call(native_loaded_module("array").array, PythonObject("i"), values)
     return classical_wrap_array(store, Python.tuple(len(store)), "<i4", "C", context)
 
 
@@ -318,10 +319,10 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
         rows.close(context)
     var results = Python.dict()
     py_setitem(results, "params", candidates)
-    var itertools = Python.import_module("itertools")
+    var itertools = native_loaded_module("itertools")
     var keys = family_call(b.sorted, py_call(b.set, py_call(itertools.chain.from_iterable, candidates)))
     for i in range(len(keys)):  # driver-loop: over candidate parameter names
-        var getter = py_call(Python.import_module("operator").methodcaller, PythonObject("get"), keys[i])
+        var getter = py_call(native_loaded_module("operator").methodcaller, PythonObject("get"), keys[i])
         py_setitem(results, family_call(msel_op("add"), PythonObject("param_"), family_call(b.str, keys[i])),
                    py_call(b.list, py_call(b.map, getter, candidates)))
     var best_means = Python.list()
@@ -438,7 +439,7 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
         n_max = min(n_max, Int(py=folds[f][0].size))
     var chosen = Python.list()
     var requested = msel_parameter_values(args[4], context)
-    var math = Python.import_module("math")
+    var math = native_loaded_module("math")
     for i in range(len(requested)):  # driver-loop: over the requested train sizes
         var s = requested[i]
         var a = 0
@@ -560,7 +561,7 @@ def _perm_base(y: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_NativePermutation._base(y)`: y as the definition's first
     `mean_score` array (int32 or float32), or None."""
     var b = msel_b()
-    var array_mod = Python.import_module("array")
+    var array_mod = native_loaded_module("array")
     if family_isinstance(y, Python.tuple(b.list, b.tuple)):
         var kinds = py_call(b.set, py_call(b.map, b.type, y))
         var code = String("")
@@ -755,8 +756,8 @@ def _permutation_definition(args: PythonObject, context: PythonObject) raises ->
     native permutation cannot hold): y rebuilt from a list per permutation,
     the permutations by Python's own list operations."""
     var b = msel_b()
-    var itertools = Python.import_module("itertools")
-    var operator = Python.import_module("operator")
+    var itertools = native_loaded_module("itertools")
+    var operator = native_loaded_module("operator")
     var estimator = args[0]
     var groups = args[3]
     var cv = args[4]

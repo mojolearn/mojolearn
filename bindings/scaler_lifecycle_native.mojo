@@ -3,6 +3,7 @@
 # kernels, operation order, modes, and copy semantics remain unchanged.
 from std.memory import memcpy, bitcast
 from std.os import getenv
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from std.python._cpython import PyObjectPtr
@@ -30,7 +31,7 @@ alias I64P = MutPointer[Int64, MutUntrackedOrigin]
 
 
 def _entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(mode) is not b.str or (String(mode) != "fast" and String(mode) != "identical"):
         raise Error("numeric_mode must be fast, identical or None")
     if Bool(py=py_get(context,"scaler_explicit_host",False)) and String(mode) != "identical":
@@ -51,7 +52,7 @@ def _mode(fields: PythonObject, context: PythonObject) raises -> PythonObject:
     var mode = fields["numeric_mode"]
     if mode is None:
         mode = context["backend_fields"]["_DEFAULT_MODE"]
-    if py_type(mode) is not Python.import_module("builtins").str:
+    if py_type(mode) is not native_loaded_module("builtins").str:
         raise Error("numeric_mode must be fast, identical or None")
     mode = py_call(py_call(mode.strip).lower)
     if String(mode) != "fast" and String(mode) != "identical":
@@ -71,7 +72,7 @@ def _run(mut arena: List[Float32], mut program: List[Int32], entries: PythonObje
 
 def _features(fields: PythonObject) raises -> Int:
     var value = fields["n_features_in_"]
-    if py_type(value) is not Python.import_module("builtins").int:
+    if py_type(value) is not native_loaded_module("builtins").int:
         raise Error("TypeError: StandardScaler n_features_in_ must remain a native integer")
     return Int(py=value)
 
@@ -91,7 +92,7 @@ def scaler_initialize(model: PythonObject, args: PythonObject) raises -> PythonO
 def _write_back(source: PythonObject, values: PythonObject, output: PythonObject, copy: Bool, context: PythonObject) raises -> PythonObject:
     if copy or native_pandas_exact(source):
         return output
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(source) is b.list or py_type(source) is b.tuple or py_type(source) is b.range:
         return output
     var view = PythonObject(None)
@@ -256,7 +257,7 @@ def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
 
 def _counts(value: PythonObject, d: Int, dest: F32P, context: PythonObject) raises:
     classical_admit_value(value,context)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(value) is b.int or py_type(value) is b.float:
         scaler_counts_f32(0, 0, Float64(py=value), dest, d)
         return
@@ -269,7 +270,7 @@ def _counts(value: PythonObject, d: Int, dest: F32P, context: PythonObject) rais
 
 
 def _integer_counts(value: PythonObject, d: Int, dest: I64P, context: PythonObject) raises:
-    var scalar = py_type(value) is Python.import_module("builtins").int
+    var scalar = py_type(value) is native_loaded_module("builtins").int
     if not scalar and (not classical_is_array(value, context) or String(value.dtype) != "<i8" or Int(py=value.size) != d):
         raise Error("StandardScaler n_samples_seen_ must remain int64 counts")
     scaler_counts_i64(0 if scalar else Int(py=classical_address(value)), not scalar, Int64(py=value) if scalar else Int64(0), dest, d)
@@ -288,7 +289,7 @@ def scaler_partial_fit(model: PythonObject, source: PythonObject, weights: Pytho
     _ = _mode(fields, context)
     if _bool(fields["with_mean"], context) != _bool(fields["with_mean_"], context) or _bool(fields["with_std"], context) != _bool(fields["with_std_"], context):
         raise Error("StandardScaler partial_fit: with_mean / with_std changed since the first batch")
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var batch = py_call(b.object.__new__, context["scaler_class"])
     _ = scaler_initialize(batch, Python.tuple(True, fields["with_mean_"], fields["with_std_"], fields["numeric_mode_"]))
     _ = scaler_fit(batch, source, weights, context)
@@ -384,7 +385,7 @@ def scaler_partial_fit(model: PythonObject, source: PythonObject, weights: Pytho
 
 
 def scaler_fit_transform(model: PythonObject, source: PythonObject, options: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var names = py_call(b.list, options)
     for k in range(len(names)):  # driver-loop: fit's keyword names, not data
         if py_type(names[k]) is not b.str or String(names[k]) != "sample_weight":
@@ -450,7 +451,7 @@ def scaler_archive_save(model: PythonObject, path: PythonObject, context: Python
     var fields = py_fields(model)
     if not _fitted(fields):
         raise Error("RuntimeError: this estimator is not fitted yet")
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var seen = fields["n_samples_seen_"]
     var integer = py_type(seen) is b.int
     var meta = classical_typed(Python.tuple(4), "<i8", context["output_context"])
@@ -484,7 +485,7 @@ def scaler_archive_save(model: PythonObject, path: PythonObject, context: Python
 
 
 def scaler_archive_build(cls: PythonObject, arrays: PythonObject, path: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if String(_archive_string(arrays,"format",context)) != "mojolearn-scaler-1":
         raise Error("model archive format does not match mojolearn-scaler-1")
     var saved = _archive_string(arrays,"estimator",context)
@@ -605,7 +606,7 @@ def scaler_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         var op = String(all[1])
         var args = all[2]
         var context = all[3]
-        var cls = model if py_type(model) is Python.import_module("builtins").type else py_type(model)
+        var cls = model if py_type(model) is native_loaded_module("builtins").type else py_type(model)
         var host = py_get(context["scaler_host_contexts"],cls)
         if host is not None:
             context = host
@@ -620,7 +621,7 @@ def scaler_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         elif op == "set_params":
             var fields = py_fields(model)
             var options = args[0]
-            var b = Python.import_module("builtins")
+            var b = native_loaded_module("builtins")
             var names = py_call(b.list,options)
             var known = Python.tuple("copy","with_mean","with_std","numeric_mode")
             for k in range(len(names)):  # driver-loop: proposed estimator parameter names
