@@ -119,6 +119,7 @@ from bindings.maxabs_native import maxabs_lifecycle_c
 from bindings.prep_stateless_native import prep_stateless_c
 from bindings.qn_native import qn_c
 from bindings.logistic_native import logistic_c
+from bindings.prep_encode_native import prep_encode_c
 from bindings.x_linear_native import x_linear_c
 from bindings.str_labels_native import str_labels_c
 from bindings.robust_native import robust_lifecycle_c
@@ -1329,6 +1330,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(prep_stateless_c, "prep_stateless_native_call")
         module.def_py_c_function(qn_c, "qn_native_call")
         module.def_py_c_function(logistic_c, "logistic_native_call")
+        module.def_py_c_function(prep_encode_c, "prep_encode_native_call")
         module.def_py_c_function(x_linear_c, "x_linear_native_call")
         module.def_py_c_function(str_labels_c, "str_labels_native_call")
         module.def_py_c_function(robust_lifecycle_c, "robust_scaler_native_call")

@@ -1512,6 +1512,12 @@ ANNOTATIONS_BY_SRC[("qn_native_call", "bindings/_mojolearn_tokenizer_host.mojo")
     "runtime execution and identity admission remain pending.")
 
 
+# A new native owner door; these lanes consume its public outputs.
+ANNOTATIONS_BY_SRC[("prep_encode_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", [],
+    'Public SimpleImputer, KBinsDiscretizer, OrdinalEncoder, OneHotEncoder, SplineTransformer fit/transform/inverse_transform/fit_transform and TargetEncoder.transform call prep_encode_c, which builds and runs their x_prep programs natively through xprep_run.' + " New source only: runtime execution and identity admission remain pending.")
+
+
 # LogisticRegression's native owner is new; these lanes consume its public outputs.
 ANNOTATIONS_BY_SRC[("logistic_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
     "owed", [],
