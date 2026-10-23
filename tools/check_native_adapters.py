@@ -158,6 +158,33 @@ def main():
             equal(compiled(x, y), model(x, y))
         checked("torch_fullgraph_capture", capture)
 
+        def inductor():
+            def model(a, b):
+                return operation([a, b], 2, [2, 3])
+            compiled = torch.compile(model, backend="inductor", fullgraph=True)
+            equal(compiled(x, y), x + y)
+        checked("torch_inductor_custom_op", inductor)
+
+        def scripted_composition():
+            def model(a, b):
+                product = operation([a, b], 1, [2, 2])
+                return operation([product], 6, [2, 2])
+            compiled = torch.jit.trace(model, (x, w))
+            compiled.save(str(out / "torch-composition.pt"))
+            for _ in range(4):
+                equal(compiled(x, w), torch.relu(x @ w))
+        checked("native_torchscript_composition", scripted_composition)
+
+        def exported_composition():
+            class Model(torch.nn.Module):
+                def forward(self, a, b):
+                    product = operation([a, b], 1, [2, 2])
+                    return operation([product], 6, [2, 2])
+            exported = torch.export.export(Model(), (x, w), strict=True)
+            torch.export.save(exported, out / "torch-composition.pt2")
+            equal(exported.module()(x, w), torch.relu(x @ w))
+        checked("torch_export_custom_ops", exported_composition)
+
         def negative_control():
             actual = operation([x, y], 2, [2, 3])
             changed = actual.clone()
