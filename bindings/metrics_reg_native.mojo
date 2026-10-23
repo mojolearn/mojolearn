@@ -20,6 +20,8 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setat
 from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
 from bindings.classical_arrays import classical_address, classical_is_array, classical_dtype_str
 from bindings.classical_attributes import classical_connect_numpy
+from bindings.classical_pandas import classical_admit_value
+from bindings.metrics_native_support import metric_is_real, metric_is_bool, metric_float, metric_arguments, metric_undefined
 from bindings.classical_validate import classical_view
 from bindings.arena_prog_native import _metrics_run
 from bindings.family_common import (
@@ -415,11 +417,7 @@ def _reg_new(args: PythonObject, multioutput: PythonObject, caller: String, vari
 
 
 def _metric_real(value: PythonObject, context: PythonObject) raises -> Bool:
-    """A real number that is not a bool (`is_bool` or not numbers.Real)."""
-    var b = Python.import_module("builtins")
-    if family_isinstance(value, b.bool) or String(py_type(value).__name__) == "bool_":
-        return False
-    return family_isinstance(value, context["family_metrics_real"])
+    return metric_is_real(value, context) and not metric_is_bool(value, context)
 
 
 def _check_alpha(alpha: PythonObject, context: PythonObject) raises -> Float64:
@@ -427,27 +425,14 @@ def _check_alpha(alpha: PythonObject, context: PythonObject) raises -> Float64:
     var b = Python.import_module("builtins")
     if not _metric_real(alpha, context):
         raise Error("alpha must be a real number in [0, 1]")
-    var value = Float64(py=family_call(b.float, alpha))
+    var value = metric_float(alpha, context)
     if not (value >= 0 and value <= 1):
         raise Error("alpha must be a real number in [0, 1]")
     return value
 
 
 def _undefined(message: String, context: PythonObject) raises:
-    """`_undefined_warning`: scikit-learn's UndefinedMetricWarning when the
-    caller imported sklearn.exceptions, else mojolearn's; attributed to the
-    metric's caller."""
-    var b = Python.import_module("builtins")
-    var category = context["family_metrics_undefined"]
-    var sk = py_get(Python.import_module("sys").modules, PythonObject("sklearn.exceptions"), PythonObject(None))
-    if sk is not None:
-        category = py_call(b.getattr, sk, PythonObject("UndefinedMetricWarning"), category)
-    var keywords = Python.dict()
-    py_setitem(keywords, "stacklevel", PythonObject(2))
-    _ = family_call_kw(Python.import_module("warnings").warn, keywords, PythonObject(message), category)
-
-
-# ---------------------------------------------------------------- the metrics
+    metric_undefined(message, context)
 
 
 def _mean_error(args: PythonObject, kind: String, caller: String, root: Bool, scalar: Float64,
@@ -639,10 +624,12 @@ def _r2_options(args: PythonObject, context: PythonObject) raises -> PythonObjec
     return _reg_result(r, out, arena, context)
 
 
-def metrics_reg_operation(operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+def metrics_reg_operation(operation: String, var args: PythonObject, context: PythonObject) raises -> PythonObject:
     """The regression metrics; each shell passes its arguments in its
     signature's order (see python/mojolearn/_expansion_metrics.py)."""
     classical_connect_numpy(context)
+    classical_admit_value(args, context)
+    args = metric_arguments(args, 0, context)
     if operation == "family_metric_regression_error":
         # args = (name, y_true, y_pred, sample_weight, multioutput, mode):
         # mean_squared_error / mean_absolute_error / root_mean_squared_error

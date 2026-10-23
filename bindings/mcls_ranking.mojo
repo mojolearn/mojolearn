@@ -190,8 +190,8 @@ def _roc_binary(true: McLabels, args: PythonObject, max_fpr: PythonObject, conte
     var s = _scores(args[2], n, "roc_auc_score", 1, context)
     var w = mc_weights(args[4], n, "roc_auc_score", context) if args[4] is not None else PythonObject(None)
     var flags = mc_map_equal(true, present[1], context)
-    var partial = max_fpr is not None and mc_float(max_fpr) != 1
-    var mf = mc_float(max_fpr) if partial else 0.0
+    var partial = max_fpr is not None and mc_float(max_fpr, context) != 1
+    var mf = mc_float(max_fpr, context) if partial else 0.0
     # `_fold_curves(s, flags, w, n, 1, fold="auc", max_fpr=mf)`
     var prog = McProg(context)
     var s_off = prog.put(s)
@@ -215,7 +215,7 @@ def _roc_ovr(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
     var n = true.n
     var classes = present
     if labels is not None:
-        classes = mc_selected(labels, true.kind, present)
+        classes = mc_selected(labels, true.kind, present, context)
         if mc_ne(classes, mc_sorted(classes)):
             raise Error("Parameter 'labels' must be ordered")
         if mc_len(family_call(mc_set(present).difference, classes)) > 0:
@@ -290,7 +290,7 @@ def _roc_ovo(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
     var labels = args[7]
     var present = true.classes
     var n = true.n
-    var classes = present if labels is None else mc_selected(labels, true.kind, present)
+    var classes = present if labels is None else mc_selected(labels, true.kind, present, context)
     if mc_len(classes) != k:
         raise Error("Number of classes in y_true not equal to the number of columns in 'y_score'")
     var weighted_avg = String(args[3]) == "weighted"
@@ -390,15 +390,15 @@ def _roc_options(args: PythonObject, context: PythonObject) raises -> PythonObje
     var multiclass = mc_len(present) > 2 or (mc_len(shape) == 2 and Int(py=shape[1]) > 2)
     var max_fpr = args[5]
     if max_fpr is not None:
-        var ok = not mc_is_bool(max_fpr) and mc_is_real(max_fpr)
+        var ok = not mc_is_bool(max_fpr) and mc_is_real(max_fpr, context)
         if ok:
-            var v = mc_float(max_fpr)
+            var v = mc_float(max_fpr, context)
             ok = v > 0 and v <= 1
         if not ok:
             raise Error("Expected max_fpr in range (0, 1], got: " + family_repr(max_fpr))
     if not multiclass:
         return _roc_binary(true, args, max_fpr, context)
-    if max_fpr is not None and mc_float(max_fpr) != 1:
+    if max_fpr is not None and mc_float(max_fpr, context) != 1:
         raise Error("Partial AUC computation not available in multiclass setting, 'max_fpr' must be "
                     + "set to `None`, received `max_fpr=" + family_str(max_fpr) + "` instead")
     var multi_class = args[6]
@@ -431,10 +431,10 @@ def _roc_auc(args: PythonObject, context: PythonObject) raises -> PythonObject:
     sample_weight, max_fpr, multi_class, labels, numeric_mode)."""
     var max_fpr = args[5]
     var full = max_fpr is None
-    if not full and not mc_is_bool(max_fpr) and mc_is_real(max_fpr):
+    if not full and not mc_is_bool(max_fpr) and mc_is_real(max_fpr, context):
         full = mc_eq(max_fpr, PythonObject(1))
     if (mc_ne(args[3], PythonObject("macro")) or mc_ne(args[6], PythonObject("raise")) or args[7] is not None
-            or args[4] is not None or not full or mc_rank(mc_shape_of(args[2])) == 2):
+            or args[4] is not None or not full or mc_rank(mc_shape_of(args[2], context)) == 2):
         return _roc_options(args, context)
     var true = _binary_labels(args[1], context)
     var scores = _binary_scores(args[2], true.n, context)
@@ -470,7 +470,7 @@ def _pr_options(args: PythonObject, context: PythonObject) raises -> PythonObjec
     var pos_label = args[3]
     if mc_len(classes) > 2 and pos_label is None:
         raise Error("multiclass format is not supported")
-    var pos = mc_pos_label(pos_label, true.kind, classes, caller)
+    var pos = mc_pos_label(pos_label, true.kind, classes, caller, context)
     var n = true.n
     var s = _scores(args[2], n, caller, 1, context)
     var w = mc_weights(args[4], n, caller, context) if args[4] is not None else PythonObject(None)
@@ -502,7 +502,7 @@ def _pr_options(args: PythonObject, context: PythonObject) raises -> PythonObjec
         raise Error("mojolearn metrics: an empty curve has no thresholds")
     var t_tot = mc_arena_double(arena, head + 4)
     if t_tot == 0:
-        mc_warn("No positive class found in y_true, recall is set to one for all thresholds.", mc_b().UserWarning)
+        mc_warn("No positive class found in y_true, recall is set to one for all thresholds.", mc_b().UserWarning, context)
     if status == _CO_ZERO_CLASS:
         return PythonObject(None)
     var precision = mc_arena_f64_array(arena, out, m, Python.tuple(m), context)
@@ -529,7 +529,7 @@ def _pr_curve(args: PythonObject, context: PythonObject) raises -> PythonObject:
             raise Error("pos_label must be specified for labels outside {0,1} or {-1,1}")
         positive = PythonObject(1)
     else:
-        var pos = mc_positive(args[3])
+        var pos = mc_positive(args[3], context)
         if true.kind != String(pos[1]):
             raise Error("pos_label must use the same type as y_true")
         positive = pos[0]
@@ -553,7 +553,7 @@ def _pr_curve(args: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = recall  # keep the Python object alive through the native calls above
     _ = precision  # keep the Python object alive through the native calls above
     if not mc_in(positive, classes):
-        mc_warn("No positive class found in y_true; recall is set to one for all thresholds.", mc_b().UserWarning)
+        mc_warn("No positive class found in y_true; recall is set to one for all thresholds.", mc_b().UserWarning, context)
     # `precision[:size + 1].copy()`, `recall[:size + 1].copy()`, `thresholds[:size].copy()`
     var p_out = family_array(Python.tuple(size + 1), "<f4", context)
     _ = thresholds  # keep the Python object alive through the native call above

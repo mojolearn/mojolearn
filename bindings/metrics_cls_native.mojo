@@ -14,14 +14,23 @@
 #   bindings/mcls_ranking.mojo   roc_auc_score, precision_recall_curve
 from std.python import Python, PythonObject
 from bindings.classical_attributes import classical_connect_numpy
+from bindings.classical_pandas import classical_admit_value
+from bindings.metrics_native_support import metric_arguments
 from bindings.mcls_cluster import mcls_cluster_operation
 from bindings.mcls_classify import mcls_classify_operation
 from bindings.mcls_ranking import mcls_ranking_operation
 
 
-def metrics_cls_operation(model: PythonObject, operation: String, args: PythonObject,
+def metrics_cls_operation(model: PythonObject, operation: String, var args: PythonObject,
          context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
+    # The first argument is a connected binding for these operations; all
+    # remaining arguments are user data/configuration and must be admitted
+    # before any truth, equality, length or scalar conversion can run.
+    var first = 0 if operation == "family_mcls_log_loss" or operation == "family_mcls_accuracy_fraction" else 1
+    for index in range(first, len(args)):  # driver-loop: metric input owners and native option metadata
+        classical_admit_value(args[index], context)
+    args = metric_arguments(args, first, context)
     if (operation == "family_mcls_accuracy" or operation == "family_mcls_accuracy_fraction" or operation == "family_mcls_confusion"
             or operation == "family_mcls_prf" or operation == "family_mcls_log_loss"):
         return mcls_classify_operation(operation, args, context)

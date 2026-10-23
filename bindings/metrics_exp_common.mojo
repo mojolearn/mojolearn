@@ -34,6 +34,8 @@ from bindings.family_common import (
     family_call, family_call_kw, family_array, family_shape_repr, family_cast_view, family_view,
 )
 from bindings.metrics_reg_native import _reg_weights
+from bindings.metrics_native_support import metric_is_real, metric_float, metric_integer, metric_is_integral, metric_warn, metric_undefined
+from bindings.metrics_native_inputs import metric_shape, metric_flatten
 from core.family_cast_impl import family_all_finite_f32
 from core.cast_in import CastIn, CAST_KIND_FLOAT, label_kind_of
 from core.label_cast import host_unique_inverse_cast
@@ -82,18 +84,16 @@ def mx_is_str(value: PythonObject) raises -> Bool:
 
 
 def mx_is_real(value: PythonObject, context: PythonObject) raises -> Bool:
-    """`isinstance(value, numbers.Real)`."""
-    return family_isinstance(value, context["family_metrics_real"])
+    return metric_is_real(value, context)
 
 
 def mx_is_integral(value: PythonObject, context: PythonObject) raises -> Bool:
-    """`isinstance(value, numbers.Integral)`."""
-    return family_isinstance(value, context["family_mexp_integral"])
+    return metric_is_integral(value, context)
 
 
-def mx_float(value: PythonObject) raises -> Float64:
+def mx_float(value: PythonObject, context: PythonObject) raises -> Float64:
     """`float(value)`."""
-    return Float64(py=family_call(mx_b().float, value))
+    return metric_float(value, context)
 
 
 def mx_nan() -> Float64:
@@ -127,20 +127,12 @@ def mx_zero_division(message: String) raises:
     mx_raise_obj(mx_b().ZeroDivisionError, PythonObject(message))
 
 
-def mx_warn(message: String, category: PythonObject, stacklevel: Int) raises:
-    var keywords = Python.dict()
-    py_setitem(keywords, "stacklevel", PythonObject(stacklevel))
-    _ = family_call_kw(Python.import_module("warnings").warn, keywords, PythonObject(message), category)
+def mx_warn(message: String, category: PythonObject, stacklevel: Int, context: PythonObject) raises:
+    metric_warn(message, category, context, stacklevel)
 
 
 def mx_undefined(message: String, context: PythonObject) raises:
-    """`_undefined_warning`: scikit-learn's UndefinedMetricWarning when the
-    caller imported sklearn.exceptions, else mojolearn's."""
-    var category = context["family_metrics_undefined"]
-    var sk = py_get(Python.import_module("sys").modules, PythonObject("sklearn.exceptions"), PythonObject(None))
-    if sk is not None:
-        category = py_call(mx_b().getattr, sk, PythonObject("UndefinedMetricWarning"), category)
-    mx_warn(message, category, 2)
+    metric_undefined(message, context)
 
 
 def mx_sorted(values: PythonObject) raises -> PythonObject:
@@ -366,63 +358,42 @@ struct MxLab(Copyable, Movable):
         self.n = n
 
 
-def mx_shape_of(obj: PythonObject) raises -> PythonObject:
-    """`_buffer.shape_of`: `.shape`, or a list's nesting, without converting."""
-    var b = mx_b()
-    var shape = py_call(b.getattr, obj, PythonObject("shape"), PythonObject(None))
-    if shape is not None:
-        return py_call(b.tuple, shape)
-    if family_isinstance(obj, Python.tuple(b.list, b.tuple)):
-        var n = mx_len(obj)
-        if n > 0 and family_isinstance(obj[0], Python.tuple(b.list, b.tuple)):
-            return Python.tuple(PythonObject(n), PythonObject(mx_len(obj[0])))
-        return Python.tuple(PythonObject(n))
-    if Bool(py=py_call(b.hasattr, obj, PythonObject("__len__"))):
-        return Python.tuple(PythonObject(mx_len(obj)))
-    return Python.tuple()
+def mx_shape_of(obj: PythonObject, context: PythonObject) raises -> PythonObject:
+    return metric_shape(obj, context)
 
 
-def mx_refuse_multilabel(y: PythonObject, name: String, caller: String) raises:
-    var shape = mx_shape_of(y)
+def mx_refuse_multilabel(y: PythonObject, name: String, caller: String, context: PythonObject) raises:
+    var shape = mx_shape_of(y, context)
     if mx_len(shape) == 2 and Int(py=shape[1]) != 1:
         raise Error("NotImplementedError: mojolearn " + caller + ": " + name
                     + " is 2-D; multilabel-indicator targets are NOT IMPLEMENTED (metrics/NOT_IMPLEMENTED.tsv), "
                     + "only binary and multiclass 1-D labels")
 
 
-def _mx_flatten(y: PythonObject) raises -> PythonObject:
-    """`_labels.flatten_labels` of a one-dimensional label input."""
-    var b = mx_b()
-    var values = y
-    if Bool(py=py_call(b.hasattr, values, PythonObject("tolist"))) and not family_isinstance(values, Python.tuple(b.list, b.tuple)):
-        values = py_call(values.tolist)
-    if family_isinstance(values, Python.tuple(b.str, b.bytes)):
-        raise Error("mojolearn: y must be a sequence of labels")
-    return mx_list(values)
+def _mx_flatten(y: PythonObject, context: PythonObject) raises -> PythonObject:
+    return metric_flatten(y, context)
 
 
 def mx_list_labels(values: PythonObject, name: String, allow_empty: Bool,
                    context: PythonObject) raises -> Tuple[PythonObject, String]:
-    """`_classification_labels`: (the labels as a list, their kind)."""
     var b = mx_b()
-    var it = Python.import_module("itertools")
-    var op = Python.import_module("operator")
-    if mx_len(mx_shape_of(values)) != 1:
+    if mx_len(mx_shape_of(values, context)) != 1:
         raise Error(name + " must be one-dimensional single-label data")
-    var labels = _mx_flatten(values)
+    var labels = _mx_flatten(values, context)
     if not allow_empty and mx_len(labels) == 0:
         raise Error(name + " must contain at least one label")
-    if Bool(py=py_call(b.all, py_call(b.map, b.isinstance, labels, py_call(it.repeat, b.str)))):
-        return (mx_list(py_call(b.map, b.str, labels)), String("string"))
-    # every label an Integral or a bool (NumPy's bool_ by its type name):
-    # the distinct types, then the ones that are neither, by name
-    var types = mx_list(mx_set(py_call(b.map, b.type, labels)))
-    var integral = Python.tuple(context["family_mexp_integral"], b.bool)
-    var fits = mx_list(py_call(b.map, b.issubclass, types, py_call(it.repeat, integral)))
-    var rest = mx_list(py_call(it.compress, types, py_call(b.map, op.not_, fits)))
-    var names = py_call(b.map, py_call(op.attrgetter, PythonObject("__name__")), rest)
-    if Bool(py=py_call(b.all, py_call(b.map, op.eq, names, py_call(it.repeat, PythonObject("bool_"))))):
-        return (mx_list(py_call(b.map, b.int, labels)), String("integer"))
+    var strings = True
+    var integers = True
+    for i in range(mx_len(labels)):  # driver-loop: admitted exact label scalar types, never numeric ABCs
+        strings = strings and py_type(labels[i]) is py_type(PythonObject(""))
+        integers = integers and metric_is_integral(labels[i], context)
+    if strings:
+        return (labels, String("string"))
+    if integers:
+        var converted = Python.list()
+        for i in range(mx_len(labels)):  # driver-loop: native integer label boxing after exact type admission
+            py_call(converted.append, metric_integer(labels[i], context))
+        return (converted, String("integer"))
     raise Error("TypeError: " + name + " must contain only strings or only integers; "
                 + "floating labels, missing labels and mixed types are unsupported")
 
@@ -504,7 +475,7 @@ def _mx_buffer_labels(values: PythonObject, name: String, context: PythonObject)
 def mx_encode(values: PythonObject, name: String, context: PythonObject) raises -> MxLab:
     """`_classification_encoded(values, name)`: the classes and the codes."""
     var b = mx_b()
-    if not family_isinstance(values, Python.tuple(b.str, b.bytes)) and mx_len(mx_shape_of(values)) == 1:
+    if not family_isinstance(values, Python.tuple(b.str, b.bytes)) and mx_len(mx_shape_of(values, context)) == 1:
         var fast = _mx_buffer_labels(values, name, context)
         if fast is not None:
             return MxLab("integer", fast[0], fast[1], Int(py=fast[1].size))
@@ -597,8 +568,8 @@ def mx_weights(sample_weight: PythonObject, n: Int, caller: String, context: Pyt
 
 def mx_pair(y_true: PythonObject, y_pred: PythonObject, sample_weight: PythonObject, caller: String,
             context: PythonObject) raises -> MxPair:
-    mx_refuse_multilabel(y_true, "y_true", caller)
-    mx_refuse_multilabel(y_pred, "y_pred", caller)
+    mx_refuse_multilabel(y_true, "y_true", caller, context)
+    mx_refuse_multilabel(y_pred, "y_pred", caller, context)
     var true = mx_encode(y_true, "y_true", context)
     var pred = mx_encode(y_pred, "y_pred", context)
     if true.n != pred.n:
@@ -615,7 +586,7 @@ def mx_pair(y_true: PythonObject, y_pred: PythonObject, sample_weight: PythonObj
 
 def mx_targets(y_true: PythonObject, caller: String, context: PythonObject) raises -> MxLab:
     """`_targets`: the encoded y_true (its classes are `present`)."""
-    mx_refuse_multilabel(y_true, "y_true", caller)
+    mx_refuse_multilabel(y_true, "y_true", caller, context)
     return mx_encode(y_true, "y_true", context)
 
 
@@ -717,7 +688,7 @@ def mx_zero_division_value(zero_division: PythonObject, context: PythonObject) r
     elif not mx_is_bool(zero_division) and mx_is_real(zero_division, context):
         var zero_one = Python.tuple(PythonObject(0), PythonObject(1))
         if py_contains(zero_one, zero_division):
-            return mx_float(zero_division)
-        if mx_isnan(mx_float(zero_division)):
+            return mx_float(zero_division, context)
+        if mx_isnan(mx_float(zero_division, context)):
             return mx_nan()
     raise Error("zero_division must be 'warn', 0.0, 1.0 or np.nan")
