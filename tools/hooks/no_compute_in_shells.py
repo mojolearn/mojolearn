@@ -229,7 +229,7 @@ def check_tree(ref, branch=False, baseline_file=None):
             new.append(h)
     stale = Counter() if branch else base - _keys(hits)
     kinds = Counter(h[2] for h in hits)
-    print(f"no_compute_in_shells: {len(hits)} hits in {len({h[0] for h in hits})} shell .mojo files at {sha[:9]} "
+    print(f"no_compute_in_shells: {len(hits)} hits in {len({h[0] for h in hits})} of {len(_shell_blobs(sha))} shell .mojo files scanned at {sha[:9]} "
           f"({kinds['loop']} untagged loops, {kinds['launch']} launches; baseline {sum(base.values())}); "
           f"per directory: {_per_dir(hits)}", file=sys.stderr)
     for (p, c), n in sorted(grown.items()):
