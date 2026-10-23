@@ -2136,6 +2136,8 @@ def binding():
     return None
 def registry():
     return REGISTRY
+def make(dict):
+    return dict()
 def connect():
     module = binding()
     entries = {}
@@ -2157,6 +2159,7 @@ def connect():
                             ("    REGISTRY['call'] = entry\n", False),
                             ("    REGISTRY.update(entries)\n", False),
                             ("    shared = registry()\n    shared['call'] = entry\n", False),
+                            ("    shared = make(registry)\n    shared['call'] = entry\n", False),
                             ("    [value() for value in [entry]]\n", False),
                             ("    alias: object = entry\n    alias()\n", False)):
         text = safe.replace("    return call, context", extra + "    return call, context")

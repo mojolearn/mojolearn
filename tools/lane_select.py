@@ -1110,6 +1110,8 @@ def _native_references_only_uncached(rel, function, exports):
     from import_metadata_effects import Source
     source = Source(_parse, lambda *args: False)
     tainted = set()
+    parameters = {p.arg for p in function.args.posonlyargs + function.args.args + function.args.kwonlyargs}
+    parameters.update(n.name for n in ast.walk(function) if isinstance(n, ast.ExceptHandler) and n.name)
     tree = _parse(rel)
     constants = [] if tree is None else [n for n in tree.body if isinstance(n, ast.Assign)]
 
@@ -1144,13 +1146,17 @@ def _native_references_only_uncached(rel, function, exports):
                         return False
             return fresh_dict(where, assigned[0], body, seen | {key})
         if isinstance(node, ast.Call):
-            if isinstance(node.func, ast.Name) and node.func.id == "dict" and source.lookup(where, "dict", body) is None:
-                return True
+            if isinstance(node.func, ast.Name) and (body is function.body and node.func.id in parameters
+                    or any(isinstance(n, ast.ExceptHandler) and n.name == node.func.id
+                           for stmt in body for n in ast.walk(stmt))):
+                return False
             target = source.target(where, node.func, body)
             if target and isinstance(target[1], ast.FunctionDef):
                 fn = target[1]
                 key = target[0], fn.name, id(fn)
-                if key in seen or fn.decorator_list:
+                if (key in seen or fn.decorator_list or node.args or node.keywords
+                        or fn.args.posonlyargs or fn.args.args or fn.args.kwonlyargs
+                        or fn.args.vararg or fn.args.kwarg):
                     return False
                 returns = [n for n in ast.walk(fn) if isinstance(n, ast.Return)]
                 return bool(returns) and all(fresh_dict(target[0], n.value, fn.body, seen | {key}) for n in returns)
@@ -1189,7 +1195,10 @@ def _native_references_only_uncached(rel, function, exports):
         return False
     for node in statements:
         if isinstance(node, ast.Call):
-            builtin = isinstance(node.func, ast.Name) and source.lookup(rel, node.func.id, function.body) is None
+            if isinstance(node.func, ast.Name) and node.func.id in parameters:
+                return False
+            builtin = (isinstance(node.func, ast.Name) and node.func.id not in parameters
+                       and source.lookup(rel, node.func.id, function.body) is None)
             dictionary_method = (isinstance(node.func, ast.Attribute)
                                  and node.func.attr in ("update", "get", "items", "keys", "values")
                                  and plain_dict(node.func.value))
