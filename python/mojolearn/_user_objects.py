@@ -48,3 +48,11 @@ def take(values, indices):
     idx = indices._as_c()
     width = 4 if idx.dtype == "<i4" else 8
     return call("take", values, idx._addr if idx.size else 0, int(idx.size), width)
+
+
+def scatter(rows, indices, values):
+    """``rows[i] = v`` for each index of ``indices`` (an int64 Array) and
+    value of ``values``, in order, up to the shorter of the two."""
+    from ._buffer import as_index_i64
+    idx = as_index_i64(indices, name="indices")._as_c()
+    call("scatter", rows, idx._addr if idx.size else 0, int(idx.size), values)

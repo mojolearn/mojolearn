@@ -25,6 +25,8 @@
 #   ("group_runs", ids)                       -> int64 run lengths of a ranking pool's group ids
 #   ("pairs", rows, weights, n_rows)          -> (int64 winner/loser words, float64 weights)
 #   ("sorted_codes", values, unknown)         -> float32 codes over sorted((str(type(v)), v))
+#   ("group_rows", codes, k)                  -> k int64 stores: the rows of each code
+#   ("group_permute", values, rows, perms)    -> values permuted within each group's rows
 #
 # A refusal comes back as ("__refuse__", exception name, message); the door
 # raises it, so the exception type and wording are the ones the Python had.
@@ -473,6 +475,44 @@ def _sorted_codes(env: _Env, values: PythonObject, unknown: PythonObject) raises
     return words
 
 
+def _group_rows(env: _Env, codes: PythonObject, k: Int) raises -> PythonObject:
+    # the rows of each code 0..k-1, increasing, one int64 store per code
+    var n = len(codes)
+    var cp = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=_address(codes))
+    var counts = List[Int](length=k, fill=0)
+    for i in range(n):  # cpu-route: int32 group codes read once by user_objects_c (group_rows)
+        counts[Int(cp[i])] += 1
+    var stores = Python.list()
+    var at = List[Int](length=k, fill=0)
+    var ptrs = List[Int](capacity=k)
+    for c in range(k):  # driver-loop: over the groups
+        var st = env.store("q", counts[c], 8)
+        ptrs.append(_address(st) if counts[c] > 0 else 0)
+        _ = py_call(stores.append, st)
+    for i in range(n):  # cpu-route: int32 group codes read once by user_objects_c (group_rows)
+        var c = Int(cp[i])
+        MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=ptrs[c])[at[c]] = Int64(i)
+        at[c] += 1
+    return stores
+
+
+def _group_permute(env: _Env, values: PythonObject, rows: PythonObject, perms: PythonObject) raises -> PythonObject:
+    # permutation_test_score's groups route: yp = list(values), then per
+    # group, yp[rows[a]] = values[rows[perm[a]]]
+    var out = py_call(env.b.list, values)
+    for g in range(len(rows)):  # driver-loop: over the groups
+        var r = rows[g]
+        var p = perms[g]
+        var m = min(len(r), len(p))
+        if m == 0:
+            continue
+        var rp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=_address(r))
+        var pp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=_address(p))
+        for a in range(m):  # cpu-route: Python label objects read once by user_objects_c (group_permute)
+            _ = py_call(out.__setitem__, PythonObject(Int(rp[a])), values[Int(rp[Int(pp[a])])])
+    return out
+
+
 def user_objects_call(call: PythonObject) raises -> PythonObject:
     var env = _Env()
     var operation = String(py=call[0])
@@ -512,6 +552,10 @@ def user_objects_call(call: PythonObject) raises -> PythonObject:
         return _pairs(env, call[1], call[2], Int(py=call[3]))
     if operation == "sorted_codes":
         return _sorted_codes(env, call[1], call[2])
+    if operation == "group_rows":
+        return _group_rows(env, call[1], Int(py=call[2]))
+    if operation == "group_permute":
+        return _group_permute(env, call[1], call[2], call[3])
     raise Error("TypeError: unknown user-object operation " + operation)
 
 
