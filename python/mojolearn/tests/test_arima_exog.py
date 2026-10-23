@@ -122,8 +122,10 @@ def test_the_saved_format_is_versioned():
     assert '_ARIMA_FORMAT = "mojolearn-arima-1"' in code
     assert '_ARIMA_FORMAT_EXOG = "mojolearn-arima-2"' in code
     # A model with no regressors keeps the old tag and the old members.
-    assert "_ARIMA_FORMAT_EXOG if n_exog else _ARIMA_FORMAT" in code
-    assert 'if n_exog:\n            arrays["exog"]' in code
+    # the native archive schema picks the tag by n_exog_ (`when` 0 / `unless` 0)
+    assert '("when", "n_exog_", 0, _archive_members(_ARIMA_FORMAT,' in code
+    assert '("unless", "n_exog_", 0, _archive_members(_ARIMA_FORMAT_EXOG,' in code
+    assert '("reshape", "exog", "_exog"' in code
 
 
 # ---------------------------------------------------------------- runtime
@@ -301,10 +303,15 @@ def test_save_accepts_a_fitted_array_in_the_native_output_store():
     rng = np.random.default_rng(11)
     series = np.ascontiguousarray(rng.standard_normal((4, 96)).astype(np.float32))
     m = mojolearn.ARIMA(order=(1, 0, 0)).fit(series)
-    held = m.llf_.astype("<f8")
-    assert isinstance(held._store, ctypes.Array), (
-        f"astype no longer returns the native output store ({type(held._store).__name__}); "
-        "this test must hold a field in that store some other way")
+    # a fitted field held in a native output store (ctypes.Array), built
+    # directly: astype only returns one above the cast helper's size cut
+    from mojolearn import _buffer
+    from mojolearn._array import Array
+    src = np.ascontiguousarray(np.asarray(m.llf_), dtype="<f8")
+    store = _buffer._output_store("d", src.size)
+    ctypes.memmove(store, src.ctypes.data, src.nbytes)
+    held = Array._owned(store, src.shape, "<f8", "C")
+    assert isinstance(held._store, ctypes.Array)
     m.llf_ = held
     with tempfile.TemporaryDirectory(prefix="arima_output_store_") as tmp:
         path = str(Path(tmp) / "m.npz")
