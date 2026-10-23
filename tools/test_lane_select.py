@@ -2098,6 +2098,70 @@ def test_native_alias_reach_does_not_add_an_unresolvable_local_name():
             cache[path] = previous
 
 
+def test_unused_native_factory_result_is_not_a_call_but_consumed_result_is():
+    path = "<native factory use>.py"
+    code = '''
+def connect():
+    module = binding()
+    entry = module.native_fit
+    return entry, {}
+
+_CALL, _CONTEXT = connect()
+
+def unrelated():
+    return 3
+
+def fit(x):
+    return _CALL(x, _CONTEXT)
+'''
+    lane_select._read.cache[path] = code
+    try:
+        nodes = lane_select._region_nodes(path, {"unrelated"})
+        deferred, live = lane_select._deferred_factory_calls(path, nodes, {"unrelated"})
+        assert (path, "connect") in deferred - live
+        nodes = lane_select._region_nodes(path, {"fit"})
+        deferred, live = lane_select._deferred_factory_calls(path, nodes, {"fit"})
+        assert (path, "connect") in live and (path, "connect") not in deferred
+    finally:
+        lane_select.reset_caches()
+
+
+def test_native_pointer_factory_proof_refuses_calls_and_unknown_escapes():
+    path = "<native pointer factory>.py"
+    safe = '''
+from types import BuiltinFunctionType
+NAMES = ("native_fit",)
+def connect():
+    module = binding()
+    entries = {}
+    for name in NAMES:
+        entry = getattr(module, name)
+        if not isinstance(entry, BuiltinFunctionType):
+            raise TypeError("native entry required")
+        entries[name] = entry
+    call = module.native_owner
+    context = {}
+    context.update(entries=entries)
+    return call, context
+'''
+    exports = {"native_fit", "native_owner"}
+    for extra, expected in (("", True), ("    entry()\n", False),
+                            ("    unknown(entries)\n", False),
+                            ("    owner.cache = entries\n", False),
+                            ("    module.native_fit()\n", False)):
+        text = safe.replace("    return call, context", extra + "    return call, context")
+        lane_select._read.cache[path] = text
+        lane_select._parse.cache.pop(path, None)
+        tree = lane_select._parse(path)
+        fn = next(n for n in tree.body if isinstance(n, ast.FunctionDef))
+        try:
+            assert lane_select._native_references_only(path, fn, exports) is expected, extra
+            got = lane_select._executed_names(path, tree.body, {"connect"}, {(path, "connect")}, exports)
+            assert bool(got & exports) is (not expected), (extra, got & exports)
+        finally:
+            lane_select.reset_caches()
+
+
 def test_runtime_controls_do_not_trigger_numerical_sweep():
     paths = ["tools/identity_iterate.py", "tools/mac_slot.py"]
     selected = lane_select.select(paths)

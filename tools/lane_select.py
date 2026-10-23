@@ -1014,6 +1014,189 @@ def _names_in_nodes(nodes):
     return out
 
 
+_DEFERRED_FACTORY_CACHE = {}
+_NATIVE_REFERENCE_CACHE = {}
+_CACHES.extend((_DEFERRED_FACTORY_CACHE, _NATIVE_REFERENCE_CACHE))
+
+
+def _deferred_factory_calls(rel, nodes, wanted):
+    key = rel, tuple(id(node) for node in nodes), None if wanted is None else frozenset(wanted)
+    if key not in _DEFERRED_FACTORY_CACHE:
+        _DEFERRED_FACTORY_CACHE[key] = _deferred_factory_calls_uncached(rel, nodes, wanted)
+    return _DEFERRED_FACTORY_CACHE[key]
+
+
+def _deferred_factory_calls_uncached(rel, nodes, wanted):
+    """Factories whose module assignment result this region never consumes.
+
+    This is only a candidate set. `_native_references_only` must separately
+    prove the factory stores native pointers without executing or leaking
+    them to an unknown consumer. Unknown statements keep the old broad map.
+    """
+    if wanted is None:
+        wanted = set()
+    from import_metadata_effects import Source
+    source = Source(_parse, lambda *args: False)
+    needed = set(wanted)
+    assignments = []
+    for top in nodes:
+        if isinstance(top, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            needed.update(n.id for n in ast.walk(top) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load))
+        elif isinstance(top, ast.Assign):
+            assignments.append(top)
+            # A native pointer passed to any setup call could run there,
+            # even if that call's result is unused.
+            for call in (n for n in ast.walk(top.value) if isinstance(n, ast.Call)):
+                for arg in call.args + [kw.value for kw in call.keywords]:
+                    needed.update(n.id for n in ast.walk(arg) if isinstance(n, ast.Name))
+        elif not isinstance(top, (ast.Import, ast.ImportFrom)):
+            needed.update(n.id for n in ast.walk(top) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load))
+    changed = True
+    while changed:
+        before = len(needed)
+        for top in assignments:
+            targets = {n.id for t in top.targets for n in ast.walk(t) if isinstance(n, ast.Name)}
+            if targets & needed:
+                needed.update(n.id for n in ast.walk(top.value) if isinstance(n, ast.Name))
+        changed = len(needed) != before
+    out, deferred_calls = set(), set()
+    for top in assignments:
+        targets = {n.id for t in top.targets for n in ast.walk(t) if isinstance(n, ast.Name)}
+        if targets & needed or not isinstance(top.value, ast.Call):
+            continue
+        target = source.target(rel, top.value.func)
+        if target and isinstance(target[1], ast.FunctionDef):
+            out.add((target[0], target[1].name))
+            deferred_calls.add(id(top.value))
+    live = set()
+    for top in nodes:
+        for call in (n for n in ast.walk(top) if isinstance(n, ast.Call) and id(n) not in deferred_calls):
+            target = source.target(rel, call.func)
+            if target and isinstance(target[1], ast.FunctionDef):
+                live.add((target[0], target[1].name))
+    return out, live
+
+
+def _native_references_only(rel, function, exports):
+    key = rel, id(function), frozenset(exports)
+    if key not in _NATIVE_REFERENCE_CACHE:
+        _NATIVE_REFERENCE_CACHE[key] = _native_references_only_uncached(rel, function, exports)
+    return _NATIVE_REFERENCE_CACHE[key]
+
+
+def _native_references_only_uncached(rel, function, exports):
+    """Prove this factory only retains its native export references.
+
+    A pointer call, an escape to an unknown consumer, a store on an unknown
+    object, or a global store refuses the proof. Helpers still keep their
+    own import/call edges. Names and comments never confer an exemption.
+    """
+    if function.decorator_list or any(isinstance(n, (ast.Global, ast.Nonlocal, ast.AnnAssign,
+                                                     ast.AugAssign, ast.NamedExpr)) for n in ast.walk(function)):
+        return False
+    from import_metadata_effects import Source
+    source = Source(_parse, lambda *args: False)
+    tainted = set()
+    tree = _parse(rel)
+    constants = [] if tree is None else [n for n in tree.body if isinstance(n, ast.Assign)]
+
+    def carries(node):
+        return any(isinstance(n, ast.Name) and n.id in tainted
+                   or isinstance(n, ast.Attribute) and n.attr in exports
+                   or isinstance(n, ast.Constant) and isinstance(n.value, str) and n.value in exports
+                   for n in ast.walk(node))
+
+    def plain_dict(node):
+        if isinstance(node, ast.Name):
+            assigned = [n.value for n in ast.walk(function) if isinstance(n, ast.Assign)
+                        and any(isinstance(t, ast.Name) and t.id == node.id for t in n.targets)]
+            loop_bound = any(isinstance(n, ast.For) and any(isinstance(t, ast.Name) and t.id == node.id
+                             for t in ast.walk(n.target)) for n in ast.walk(function))
+            if assigned and not loop_bound:
+                return all(source.shape(rel, value, body=function.body).kind == "dict" for value in assigned)
+        return source.shape(rel, node, body=function.body).kind == "dict"
+
+    def stored_names(target):
+        if isinstance(target, ast.Subscript):
+            return {n.id for n in ast.walk(target.value) if isinstance(n, ast.Name)}
+        return {n.id for n in ast.walk(target) if isinstance(n, ast.Name)}
+
+    statements = list(ast.walk(function))
+    changed = True
+    while changed:
+        before = len(tainted)
+        for node in constants + statements:
+            if isinstance(node, ast.Assign) and carries(node.value):
+                for target in node.targets:
+                    tainted.update(stored_names(target))
+            elif isinstance(node, ast.For) and carries(node.iter):
+                tainted.update(n.id for n in ast.walk(node.target) if isinstance(n, ast.Name))
+            elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "update":
+                if any(carries(arg) for arg in node.args + [kw.value for kw in node.keywords]):
+                    tainted.update(n.id for n in ast.walk(node.func.value) if isinstance(n, ast.Name))
+        changed = len(tainted) != before
+    if not tainted:
+        return False
+    for node in statements:
+        if isinstance(node, ast.Call):
+            if carries(node.func):
+                # A dict method reads/copies entries; it never invokes them.
+                if not (isinstance(node.func, ast.Attribute) and node.func.attr in ("update", "get", "items", "keys", "values")
+                        and plain_dict(node.func.value)):
+                    return False
+            if any(carries(arg) for arg in node.args + [kw.value for kw in node.keywords]):
+                builtin = isinstance(node.func, ast.Name) and source.lookup(rel, node.func.id, function.body) is None
+                if builtin and node.func.id in ("getattr", "isinstance", "type", "id",
+                                                "TypeError", "ValueError", "RuntimeError", "ImportError"):
+                    continue
+                if isinstance(node.func, ast.Attribute) and node.func.attr == "update" and plain_dict(node.func.value):
+                    continue
+                return False
+        elif isinstance(node, ast.Assign) and carries(node.value):
+            for target in node.targets:
+                if isinstance(target, ast.Attribute):
+                    return False
+                if isinstance(target, ast.Subscript) and not plain_dict(target.value):
+                    return False
+    return True
+
+
+def _executed_names(rel, nodes, wanted, deferred, exports):
+    """The usual name over-approximation, excluding proved deferred pointers."""
+    if wanted is None:
+        return _names_in_nodes(nodes)
+    skipped = {n.name for n in nodes if isinstance(n, ast.FunctionDef)
+               and (rel, n.name) in deferred and _native_references_only(rel, n, exports)}
+    needed = {n.id for top in nodes if not (isinstance(top, ast.FunctionDef) and top.name in skipped)
+              and not isinstance(top, ast.Assign)
+              for n in ast.walk(top) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)}
+    needed.update(wanted)
+    changed = True
+    while changed:
+        before = len(needed)
+        for top in nodes:
+            if isinstance(top, ast.Assign) and any(isinstance(n, ast.Name) and n.id in needed
+                    for target in top.targets for n in ast.walk(target)):
+                needed.update(n.id for n in ast.walk(top.value) if isinstance(n, ast.Name))
+        changed = len(needed) != before
+    out = set()
+    for top in nodes:
+        names = _names_in_nodes([top])
+        if isinstance(top, ast.FunctionDef) and top.name in skipped:
+            names -= exports
+        elif skipped and isinstance(top, ast.Assign):
+            targets = {n.id for target in top.targets for n in ast.walk(target) if isinstance(n, ast.Name)}
+            try:
+                ast.literal_eval(top.value)
+            except (ValueError, TypeError):
+                pass
+            else:
+                if not targets & needed:
+                    names -= exports
+        out.update(names)
+    return out
+
+
 def _own_walk(seeds, stop, follow=frozenset()):
     """file -> the names a lane reaches it for (None: whole file), walking
     the symbol-level import graph from `seeds` and entering, not following,
@@ -3019,6 +3202,14 @@ def lane_sources():
     # `_array.py`) and the host doors they import for their native helpers.
     ubiquitous_py = set.intersection(*[f for _, f, _, _ in reach.values()]) if reach else set()
 
+    connected_names = set().union(*[b for _, _, _, b in reach.values()]) if reach else set()
+    for binding in tuple(connected_names):
+        connected_names.update(routed.get(binding, ()))
+        if binding in adapted:
+            connected_names.add(f"_mojolearn_{adapted[binding]}_host")
+    native_exports = set().union(*[set(_binding_exports(os.path.join("bindings", b + ".mojo")))
+                                  for b in connected_names])
+
     own_cache = {}
 
     def _own(lane):
@@ -3043,10 +3234,17 @@ def lane_sources():
         if lane not in own_cache:
             walk = _own_walk(seeds_of[lane], sinks | ubiquitous_py, follow=seeds_of[lane] - sinks)
             declared, whole, used = set(), set(), set()
+            regions = {rel: _region_nodes(rel, wanted) for rel, wanted in walk.items() if rel not in sinks}
+            deferred, live = set(), set()
+            for rel, nodes in regions.items():
+                candidates, consumed = _deferred_factory_calls(rel, nodes, walk[rel])
+                deferred.update(candidates)
+                live.update(consumed)
+            deferred -= live
             for rel, wanted in walk.items():
                 if rel in sinks:
                     continue
-                nodes = _region_nodes(rel, wanted)
+                nodes = regions[rel]
                 found = _binding_names_in(rel, nodes)
                 for node in nodes:
                     if isinstance(node, ast.ClassDef):
@@ -3062,7 +3260,7 @@ def lane_sources():
                     # of it, and nothing named is the source alone: the kmeans
                     # lane took the whole GLM host tree through that helper.
                     whole |= found
-                used |= _names_in_nodes(nodes)
+                used |= _executed_names(rel, nodes, wanted, deferred, native_exports)
 
             def exists(b):
                 return os.path.exists(os.path.join(ROOT, "bindings", b + ".mojo"))
