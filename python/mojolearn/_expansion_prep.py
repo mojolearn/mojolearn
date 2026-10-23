@@ -4283,66 +4283,23 @@ class QuantileTransformer(_PrepBase):
         self.copy = copy
 
     def fit(self, X, y=None):
-        if self.output_distribution not in ("uniform", "normal"):
-            raise ValueError(f"mojolearn: invalid output_distribution {self.output_distribution!r}")
-        arr = _x2d(X)
-        n, d = arr.shape
-        mode = _mode()
-        perm = None
-        if self.subsample is not None and n > self.subsample:
-            # the rows are drawn without replacement in the program below (f2_perm_rows,
-            # x_prep/fam2.mojo: a keyed permutation of [0, n), one thread per draw), then
-            # gathered there; every tier (lane cpu2-l3-prep deleted the host
-            # `draw_rows_without_replacement_i32` route)
-            perm = ((0 if self.random_state is None else int(self.random_state)) & 0xFFFFFFFFFFFFFFFF,
-                    int(self.subsample))
-        n_all = n
-        if perm is not None:
-            n = perm[1]
-        nq = max(1, min(int(self.n_quantiles), n))
-        pr = _Prog()
-        xo = pr.put(arr)
-        if perm is not None:
-            ro, xs = pr.alloc(n), pr.alloc(n * d)
-            pr.stage("f2_perm_rows", n, _seed_words(pr, perm[0]), n_all, ro)
-            pr.stage("p2m_rgather", n * d, xo, d, ro, xs)
-            xo = xs
-        # the references i / (nq - 1) (0 for one quantile) on the device, in binary64
-        # rounded to float32 as the Python list was (c2_grid KIND 1, lane cpu2-l3-prep)
-        so, st, qf = pr.work(n * d), pr.alloc(6 * d), _grid(pr, [nq - 1], nq, 1)
-        qo = pr.alloc(nq * d)
-        pr.stage("sort_cols", d, xo, n, d, so, 0)
-        _cs(pr, mode, xo, n, d, st, var=False)
-        pr.stage("quantile", nq * d, so, n, d, qf, nq, qo, st)
-        # quantiles_ (nq, d): the (d, nq) block written column-major on the
-        # device (p2m_transpose; lane pyglue-numeric: a Python transpose)
-        qt = pr.alloc(nq * d)
-        pr.stage("p2m_transpose", nq * d, qo, d, nq, qt)
-        pr.run(mode)
-        self._q = pr.get(qo, nq * d)
-        self.quantiles_ = pr.get(qt, (nq, d))
-        self.references_ = pr.get(qf, nq)
-        self.n_quantiles_, self.numeric_mode_, self.n_features_in_ = nq, mode, d
-        return self
+        return _STATELESS_CALL(self, "fit", (X, y), _STATELESS_CONTEXT)
 
-    def _apply(self, X, op):
-        self._check_fitted()
-        arr = _x2d(X)
-        self._check_width(arr)
-        n, d = arr.shape
-        pr = _Prog()
-        xo, qo, ro = pr.put(arr), pr.put(self._q), pr.put(self.references_)
-        out = pr.output(n * d)
-        pr.stage(op, n * d, xo, n, d, qo, self.n_quantiles_, ro,
-                 1 if self.output_distribution == "normal" else 0, out)
-        pr.run(self.numeric_mode_)
-        return pr.get(out, (n, d))
+    def fit_transform(self, X, y=None, **fit_params):
+        """Fit to ``X``, then transform ``X``.
+
+        Returns
+        -------
+        array
+            The transformed data.
+        """
+        return _STATELESS_CALL(self, "fit_transform", (X, y), _STATELESS_CONTEXT)
 
     def transform(self, X):
-        return self._apply(X, "qt_apply")
+        return _STATELESS_CALL(self, "transform", (X,), _STATELESS_CONTEXT)
 
     def inverse_transform(self, X):
-        return self._apply(X, "qt_inverse")
+        return _STATELESS_CALL(self, "inverse_transform", (X,), _STATELESS_CONTEXT)
 
 
 def _pt_spec_depth(n, d):
@@ -7454,4 +7411,4 @@ _PROG_CALL, _PROG_CONTEXT = _connect_arena_prog(
 from ._native_prep_stateless_bridge import connect as _connect_stateless
 _STATELESS_CALL, _STATELESS_CONTEXT = _connect_stateless(
     {Binarizer: "binarizer", Normalizer: "normalizer", PolynomialFeatures: "polynomial",
-     VarianceThreshold: "variance_threshold", _SelectorMixin: "selector"})
+     VarianceThreshold: "variance_threshold", _SelectorMixin: "selector", QuantileTransformer: "quantile"})

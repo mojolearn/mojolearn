@@ -17,7 +17,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_typed, classical_wrap_array
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
-from bindings.scaler_native import _stage, _ptr
+from bindings.scaler_native import _stage, _ptr, _input
 from bindings.scaler_lifecycle_native import _entries
 from bindings.x_prep_native_owner import xprep_storage, xprep_take, xprep_values, xprep_run, xprep_r3
 from bindings.py_typed_call import py_call_typed
@@ -39,6 +39,13 @@ comptime OP_COLB_SS = 126
 comptime OP_COLB_VAR = 127
 comptime OP_KEY64 = 253
 comptime OP_GT = 255
+comptime OP_SORT_COLS = 0
+comptime OP_QUANTILE = 2
+comptime OP_QT_APPLY = 43
+comptime OP_QT_INVERSE = 74
+comptime OP_RGATHER = 204
+comptime OP_PERM_ROWS = 233
+comptime OP_GRID = 263
 # Row blocks of the blocked column statistics (_expansion_prep._XB).
 comptime ROW_BLOCK = 2048
 # x_prep_idn_fam bit 1: IDN_STATS_BLOCKED.
@@ -299,9 +306,10 @@ struct PrepLayout(Movable):
 
 
 def _col_stats(mut program: List[Int32], mut layout: PrepLayout, mode: PythonObject, entries: PythonObject,
-               xo: Int, n: Int, d: Int, out: Int) raises:
-    """`_expansion_prep._cs` with var=True: the blocked order under
-    IDN_STATS_BLOCKED on the IDENTICAL tier, else one thread per column."""
+               xo: Int, n: Int, d: Int, out: Int, variance: Bool = True) raises:
+    """`_expansion_prep._cs`: the blocked order under IDN_STATS_BLOCKED on
+    the IDENTICAL tier, else one thread per column. `variance` False skips
+    the blocked variance pass (its callers read the other rows)."""
     var blocked = String(getenv("MOJOLEARN_XPREP_BLOCKED", "1").strip()) != "0"
     var fam = 0
     if String(mode) == "identical":
@@ -313,9 +321,10 @@ def _col_stats(mut program: List[Int32], mut layout: PrepLayout, mode: PythonObj
         var part = layout.work_words(5 * nb * d)
         _stage(program, OP_COLB_PART, nb * d, xo, n, d, part, nb)
         _stage(program, OP_COLB_FOLD, d, part, nb, d, out)
-        var ss = layout.work_words(nb * d)
-        _stage(program, OP_COLB_SS, nb * d, xo, n, d, out, ss, nb)
-        _stage(program, OP_COLB_VAR, d, ss, nb, d, out)
+        if variance:
+            var ss = layout.work_words(nb * d)
+            _stage(program, OP_COLB_SS, nb * d, xo, n, d, out, ss, nb)
+            _stage(program, OP_COLB_VAR, d, ss, nb, d, out)
     else:
         _stage(program, OP_COL_STATS, d, xo, n, d, out)
 
@@ -359,14 +368,9 @@ def _variance_fit(model: PythonObject, values: PythonObject, context: PythonObje
     var limit = layout.alloc(2)
     _stage(program, OP_KEY64, d, variance, 0, key)
     _stage(program, OP_GT, d, key, limit, mask)
-    if layout.host + layout.scratch > 2147483647:
-        raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
-    _place_scratch(program, layout.host)
     var words = _f64_input(threshold, context)
     var inputs = Python.list(Python.tuple(0, values), Python.tuple(limit, Python.tuple(0, words, PythonObject(None), 2, 1)))
-    var device_scratch = layout.scratch > 0 and (py_get(entries, "x_prep_run_out") is not None or py_get(entries, "x_prep_run_scratch") is not None)
-    var arena = xprep_storage(layout.host + (0 if device_scratch else layout.scratch), context)
-    xprep_run(arena, layout.host, layout.scratch, PythonObject(None), 0, program^, inputs, entries, context)
+    var arena = _run_layout(program^, layout, inputs, entries, context)
     py_setitem(fields, "variances_", xprep_take(arena[0], variance, d, 0, context["output_context"]))
     var base = F32P(unsafe_from_address=Int(py=arena[1]))
     var support = Python.list()
@@ -425,6 +429,132 @@ def _select_transform(model: PythonObject, values: PythonObject, context: Python
     return result
 
 
+def _run_layout(var program: List[Int32], layout: PrepLayout, inputs: PythonObject, entries: PythonObject,
+                context: PythonObject) raises -> PythonObject:
+    # One run of a program laid out by `PrepLayout`; returns the arena.
+    if layout.host + layout.scratch > 2147483647:
+        raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
+    _place_scratch(program, layout.host)
+    var device_scratch = layout.scratch > 0 and (py_get(entries, "x_prep_run_out") is not None or py_get(entries, "x_prep_run_scratch") is not None)
+    var arena = xprep_storage(layout.host + (0 if device_scratch else layout.scratch), context)
+    xprep_run(arena, layout.host, layout.scratch, PythonObject(None), 0, program^, inputs, entries, context)
+    return arena
+
+
+def _vector(value: Float64, context: PythonObject) raises -> PythonObject:
+    var out = classical_typed(Python.tuple(1), "<f4", context["output_context"])
+    _ptr(out)[0] = Float32(value)
+    return out
+
+
+def _quantile_fit(model: PythonObject, values: PythonObject, context: PythonObject) raises:
+    """QuantileTransformer.fit: the optional keyed row subsample (f2_perm_rows,
+    p2m_rgather), the reference grid (c2_grid), sort_cols, column statistics,
+    quantile and the p2m_transpose of quantiles_: the stages and order of the
+    Python program."""
+    var b = Python.import_module("builtins")
+    var fields = py_fields(model)
+    var distribution = fields["output_distribution"]
+    if py_type(distribution) is not b.str or (String(distribution) != "uniform" and String(distribution) != "normal"):
+        raise Error("mojolearn: invalid output_distribution " + _repr(distribution))
+    var n_all = Int(py=values[3])
+    var d = Int(py=values[4])
+    var n = n_all
+    var mode = context["backend_fields"]["_DEFAULT_MODE"]
+    var entries = _entries(mode, context)
+    var subsample = fields["subsample"]
+    var permute = subsample is not None and n_all > Int(py=py_call(b.int, subsample))
+    var seed = PythonObject(None)
+    if permute:
+        var state = fields["random_state"]
+        seed = PythonObject(0) if state is None else py_call(b.int, state)
+        n = Int(py=py_call(b.int, subsample))
+    var nq = max(1, min(Int(py=py_call(b.int, fields["n_quantiles"])), n))
+    var layout = PrepLayout(n_all * d)
+    var inputs = Python.list(Python.tuple(0, values))
+    var program = List[Int32]()
+    var xo = 0
+    var seed_words = PythonObject(None)
+    if permute:
+        var rows = layout.alloc(n)
+        var sample = layout.alloc(n * d)
+        var so = layout.alloc(2)
+        # The uint64 seed's (low, high) 32-bit words (`_seed_words`).
+        seed_words = classical_typed(Python.tuple(2), "<f4", context["output_context"])
+        var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(seed_words)))
+        var mask = PythonObject(0xFFFFFFFF)
+        words[0] = UInt32(Int(py=py_call(b.int.__dict__["__and__"], seed, mask)))
+        words[1] = UInt32(Int(py=py_call(b.int.__dict__["__and__"], py_call(b.int.__dict__["__rshift__"], seed, PythonObject(32)), mask)))
+        _ = py_call(inputs.append, Python.tuple(so, Python.tuple(0, seed_words, PythonObject(None), 2, 1)))
+        _stage(program, OP_PERM_ROWS, n, so, n_all, rows)
+        _stage(program, OP_RGATHER, n * d, xo, d, rows, sample)
+        xo = sample
+    var sorted = layout.work_words(n * d)
+    var st = layout.alloc(6 * d)
+    var grid = layout.alloc(nq)
+    var nb = layout.alloc(1)
+    var level = _vector(Float64(nq - 1), context)
+    _ = py_call(inputs.append, Python.tuple(nb, Python.tuple(0, level, PythonObject(None), 1, 1)))
+    _stage(program, OP_GRID, nq, nb, nq, 1, grid)
+    var qo = layout.alloc(nq * d)
+    _stage(program, OP_SORT_COLS, d, xo, n, d, sorted, 0)
+    _col_stats(program, layout, mode, entries, xo, n, d, st, False)
+    _stage(program, OP_QUANTILE, nq * d, sorted, n, d, grid, nq, qo, st)
+    var qt = layout.alloc(nq * d)
+    _stage(program, OP_TRANSPOSE, nq * d, qo, d, nq, qt)
+    var arena = _run_layout(program^, layout, inputs, entries, context)
+    py_setitem(fields, "_q", xprep_take(arena[0], qo, nq * d, 0, context["output_context"]))
+    py_setitem(fields, "quantiles_", xprep_take(arena[0], qt, nq, d, context["output_context"]))
+    py_setitem(fields, "references_", xprep_take(arena[0], grid, nq, 0, context["output_context"]))
+    py_setitem(fields, "n_quantiles_", nq)
+    py_setitem(fields, "numeric_mode_", mode)
+    py_setitem(fields, "n_features_in_", d)
+    _ = seed_words^
+    _ = level^
+    _ = arena^
+
+
+def _quantile_apply(model: PythonObject, values: PythonObject, inverse: Bool, context: PythonObject) raises -> PythonObject:
+    """QuantileTransformer.transform / inverse_transform: one qt_apply or
+    qt_inverse stage over the fitted quantiles and references."""
+    var fields = py_fields(model)
+    if not py_contains(fields, "n_features_in_"):
+        raise Error("RuntimeError: mojolearn: this " + _name(model) + " instance is not fitted yet")
+    var n = Int(py=values[3])
+    var d = Int(py=values[4])
+    var fitted = fields["n_features_in_"]
+    if py_type(fitted) is not Python.import_module("builtins").int or Int(py=fitted) != d:
+        raise Error("mojolearn: X has " + String(d) + " features, " + _name(model) + " was fitted with " + String(py_call(Python.import_module("builtins").str, fitted)))
+    var entries = _entries(fields["numeric_mode_"], context)
+    var nq = Int(py=fields["n_quantiles_"])
+    var quantiles = _input(fields["_q"], 1, False, context)
+    var references = _input(fields["references_"], 1, False, context)
+    if Int(py=quantiles.size) != nq * d or Int(py=references.size) != nq:
+        raise Error("RuntimeError: QuantileTransformer fitted quantiles do not match n_quantiles_")
+    var normal = String(fields["output_distribution"]) == "normal"
+    var words = n * d
+    var qo = words
+    var ro = qo + nq * d
+    var out = ro + nq
+    var dev_out = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None and String(getenv("MOJOLEARN_XPREP_OUT", "1")) != "0"
+    var host = out + (0 if dev_out else words)
+    if host + (words if dev_out else 0) > 2147483647:
+        raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
+    var inputs = Python.list(Python.tuple(0, values),
+                             Python.tuple(qo, Python.tuple(0, quantiles, PythonObject(None), nq * d, 1)),
+                             Python.tuple(ro, Python.tuple(0, references, PythonObject(None), nq, 1)))
+    var program = List[Int32]()
+    _stage(program, OP_QT_INVERSE if inverse else OP_QT_APPLY, words, 0, n, d, qo, nq, ro, 1 if normal else 0, out)
+    var arena = xprep_storage(host, context)
+    var output_store = xprep_storage(words, context) if dev_out else PythonObject(None)
+    xprep_run(arena, host, 0, output_store, words if dev_out else 0, program^, inputs, entries, context, words if dev_out else 0)
+    var result = xprep_take(output_store[0] if dev_out else arena[0], 0 if dev_out else out, n, d, context["output_context"])
+    _ = quantiles^
+    _ = references^
+    _ = arena^
+    return result
+
+
 def prep_stateless_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var call = PythonObject(from_borrowed=args_ptr)
@@ -435,7 +565,14 @@ def prep_stateless_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> Py
         classical_connect_numpy(context)
         var kind = _kind(model, context)
         var result = PythonObject(None)
-        if operation == "fit" or operation == "fit_transform" or operation == "transform":
+        if operation == "inverse_transform" and kind == "quantile":
+            var fields = py_fields(model)
+            if not py_contains(fields, "n_features_in_"):
+                raise Error("RuntimeError: mojolearn: this " + _name(model) + " instance is not fitted yet")
+            var values = xprep_values(args[0], _entries(fields["numeric_mode_"], context), context)
+            result = _quantile_apply(model, values, True, context)
+            _ = values^
+        elif operation == "fit" or operation == "fit_transform" or operation == "transform":
             var mode = context["backend_fields"]["_DEFAULT_MODE"]
             if operation == "transform":
                 var fields = py_fields(model)
@@ -444,19 +581,26 @@ def prep_stateless_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> Py
                 mode = fields["numeric_mode_"]
             var values = xprep_values(args[0], _entries(mode, context), context)
             var selector = kind == "variance_threshold" or kind == "selector"
-            if operation == "transform":
+            if operation == "transform" and kind == "quantile":
+                result = _quantile_apply(model, values, False, context)
+            elif operation == "transform":
                 result = _select_transform(model, values, context) if selector else _transform(model, kind, values, context)
             elif kind == "selector":
                 raise Error("TypeError: this selector's fit is not a native stateless operation")
             else:
                 if kind == "variance_threshold":
                     _variance_fit(model, values, context)
+                elif kind == "quantile":
+                    _quantile_fit(model, values, context)
                 else:
                     _fit(model, kind, values, context)
                 result = model
                 if operation == "fit_transform":
                     # The X converted for the fit is the transform's input.
-                    result = _select_transform(model, values, context) if selector else _transform(model, kind, values, context)
+                    if kind == "quantile":
+                        result = _quantile_apply(model, values, False, context)
+                    else:
+                        result = _select_transform(model, values, context) if selector else _transform(model, kind, values, context)
             _ = values^
         else:
             raise Error("unknown native stateless prep operation")
