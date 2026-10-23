@@ -913,13 +913,16 @@ def xl_fit_lars(model: PythonObject, args: PythonObject, lasso: Bool, context: P
     """Lars.fit(X, y) and (`lasso`) LassoLars.fit(X, y): `_lars_fit`."""
     var fields = py_fields(model)
     var name = _name(model)
-    var max_iter = fields["n_nonzero_coefs"]
+    # LassoLars has max_iter and alpha; Lars has n_nonzero_coefs
+    var max_iter: PythonObject
     var alpha_min = Float64(0.0)
     if lasso:
         if not _ge(fields["alpha"], PythonObject(0)):
             raise Error("mojolearn LassoLars: alpha must be >= 0")
         max_iter = fields["max_iter"]
         alpha_min = _float(fields["alpha"])
+    else:
+        max_iter = fields["n_nonzero_coefs"]
     if _attr(model, "jitter", PythonObject(None)) is not None:
         raise Error("mojolearn " + name + ": jitter is not implemented")
     var entries = _xl_entries(fields, context)
