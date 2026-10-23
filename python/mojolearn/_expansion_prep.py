@@ -2006,9 +2006,9 @@ class TargetEncoder(_PrepBase):
         if len(splits) < 1:
             raise ValueError(cover)
         fold = full((n,), -1, "<i4")
-        assign = _native_helper("assign_fold_i64")  # cpu-route: input prep of a user cv splitter's index lists, before any fit
+        assign = _native_helper("assign_fold_i64")  # cpu-route: user cv splitter test index lists, one per fold, each read once by assign_fold_i64
         trains = []
-        for k, (train, test) in enumerate(splits):  # cpu-route: input prep of a user cv splitter index lists
+        for k, (train, test) in enumerate(splits):  # cpu-route: user cv splitter (train, test) pairs, one per fold, each read once by assign_fold_i64
             te = as_index_i64(test, name="test")
             if int(assign(addr_ro(te, name="test") if te.size else 0, te.size, n, k,
                           _addr_rw(fold, name="folds"))) != 0:
@@ -2018,8 +2018,8 @@ class TargetEncoder(_PrepBase):
             raise ValueError(cover)
         sizes = _class_counts(fold, len(splits))
         check = _native_helper("check_indices_i64")
-        hits = _native_helper("count_fold_hits_i64")  # cpu-route: input prep of a user cv splitter's index lists, before any fit
-        for k, tr in enumerate(trains):  # cpu-route: input prep of a user cv splitter index lists
+        hits = _native_helper("count_fold_hits_i64")  # cpu-route: user cv splitter train index lists, one per fold, each read once by count_fold_hits_i64
+        for k, tr in enumerate(trains):  # cpu-route: user cv splitter train index lists, one per fold, each read once by check_indices_i64
             # every row outside fold k exactly once: as many as there are,
             # distinct, in range and none in fold k
             if (tr.size != n - sizes[k]
@@ -2226,7 +2226,7 @@ class SimpleImputer(_PrepBase):
         column. Lane cpu3-python: the host compaction arm (`compact_notnan_f32`)
         was unreachable (the program always compacts for a callable) and is gone."""
         stats = []
-        for j in range(d):  # cpu-route: calls the user strategy callable per column
+        for j in range(d):  # cpu-route: the user strategy callable, called once per column (user code)
             stats.append(float(self.strategy(kept[j])))
         self.statistics_ = Array.from_list(stats, "<f4")
         self._fill = self.statistics_
@@ -3016,12 +3016,14 @@ def _partial_walk(est, y, n, first):
     labels = flatten_labels(y)
     if len(labels) != n:
         raise ValueError("mojolearn: X and y have different numbers of rows")
-    index = {c: i for i, c in enumerate(est.classes_)}  # cpu-route: Python object labels of any kind, the explicit label input step
-    bad = sorted({repr(v) for v in labels if v not in index})  # cpu-route: Python object labels of any kind, the explicit label input step
-    if bad:
+    # each label's index among classes_, read once natively (user_objects lookup)
+    from . import _user_objects
+    codes, missing = _user_objects.call("lookup", list(est.classes_), labels)
+    if missing:
+        bad = sorted({repr(v) for v in missing})  # glue: the refusal message over the unseen labels
         raise ValueError(f"mojolearn: The target label(s) {bad} in y do not exist in the initial classes "
                          f"{est.classes_}")
-    return first, Array.from_list([index[v] for v in labels], "<i4")  # cpu-route: Python object labels of any kind, the explicit label input step
+    return first, Array._owned(codes, (len(codes),), "<i4", "C")
 
 
 def _copy_block(pr, src, rows, cols):
@@ -3697,7 +3699,7 @@ def _estimator_covs(est, arr, codes, K, who):
     else:
         blocks = [arr.copy()]
     out = []
-    for k in range(K):  # cpu-route: fits the user covariance estimator once per class
+    for k in range(K):  # cpu-route: the user covariance estimator, fitted once per class (user code)
         est.fit(blocks[k])
         if not hasattr(est, "covariance_"):
             raise ValueError(f"mojolearn: {type(est).__name__} does not have a covariance_ attribute")
@@ -3705,7 +3707,8 @@ def _estimator_covs(est, arr, codes, K, who):
         flat = flatten_labels(cov.tolist() if hasattr(cov, "tolist") else cov)
         if len(flat) != d * d:
             raise ValueError(f"mojolearn: {who}: covariance_ of {type(est).__name__} is not ({d}, {d})")
-        out.extend(float(v) for v in flat)  # cpu-route: reads the user covariance estimator output
+        from . import _user_objects
+        out.extend(_user_objects.call("floats", flat).tolist())  # cpu-route: the user covariance_ read once by user_objects_c (floats)
     return out
 
 
@@ -6209,10 +6212,10 @@ class IterativeImputer(_PrepBase):
         Xt = as_f32_c(Xf, name="X")[0].copy()
         seq = []
         done = 0
-        for r, order in enumerate(orders):  # cpu-route: drives the user estimator per feature
+        for r, order in enumerate(orders):  # cpu-route: the user estimator, fitted once per imputation round (user code)
             check = not self.sample_posterior and bool(order)
             prev = Xt.copy() if check else None
-            for j in order:  # cpu-route: drives the user estimator per feature
+            for j in order:  # cpu-route: the user estimator, fitted once per feature (user code)
                 nbl = corr.next(j) if corr is not None else [a for a in range(dk) if a != j]  # glue: the other feature ids
                 est = _clone(self.estimator)
                 Xo, yo, Xm, rows, m = self._ii_take(Xt, mask, j, nbl, mode, fit=True)
@@ -6338,8 +6341,10 @@ class IterativeImputer(_PrepBase):
         (DEVIATION 6902), the instance's stream advanced by the entries that
         draw. The reference's zip stops at the shorter of the two outputs."""
         from ._buffer import _native
-        mu = array.array("d", mus.tolist() if hasattr(mus, "tolist") else mus)  # cpu-route: the user estimator's predict output, the explicit input step
-        sd = array.array("d", sig.tolist() if hasattr(sig, "tolist") else sig)  # cpu-route: the user estimator's predict output, the explicit input step
+        from . import _user_objects
+        # the user estimator's predictions read once natively (user_objects floats)
+        mu = _user_objects.call("floats", _user_objects.call("flatten", mus))
+        sd = _user_objects.call("floats", _user_objects.call("flatten", sig))
         k = min(len(mu), len(sd))
         out = array.array("d", bytes(8 * k))
         st = int(self._rng)

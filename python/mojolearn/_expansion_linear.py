@@ -2804,7 +2804,7 @@ def _cv_fold_ids(splits, n):
     overlapping splits take per-split roles (`_cv_roles_f32`)."""
     from ._buffer import _native
     fold = full((n,), -1, "<i4")
-    assign = _native("assign_fold_i64")  # cpu-route: input prep of a user cv splitter's index lists, before any fit
+    assign = _native("assign_fold_i64")  # cpu-route: cv split int64 index Arrays, one per fold, each read once by assign_fold_i64
     covered = 0
     for k, (_, te) in enumerate(splits):  # glue: one native scatter per split
         if int(assign(addr_ro(te, name="test") if te.size else 0, te.size, n, k, addr(fold, name="folds"))) != 0:
@@ -2813,7 +2813,7 @@ def _cv_fold_ids(splits, n):
     if covered != n:
         return None
     check = _native("check_indices_i64")
-    hits = _native("count_fold_hits_i64")  # cpu-route: input prep of a user cv splitter's index lists, before any fit
+    hits = _native("count_fold_hits_i64")  # cpu-route: cv split int64 index Arrays, one per fold, each read once by count_fold_hits_i64
     for k, (tr, te) in enumerate(splits):  # glue: one native check per split
         # every row outside fold k exactly once: as many as there are,
         # distinct, in range and none in fold k
@@ -2836,7 +2836,7 @@ def _cv_roles_f32(splits, n, name):
         # the fold words carry n as an exact float32
         raise NotImplementedError(
             f"mojolearn {name}: cv splits that are not a partition are limited to 16,777,215 rows")
-    mark = _native("mark_split_roles_f32")  # cpu-route: input prep of a user cv splitter's index lists, before any fit
+    mark = _native("mark_split_roles_f32")  # cpu-route: cv split int64 index Arrays, one per fold, each read once by mark_split_roles_f32
     roles = zeros((len(splits) * n,), "<f4")
     for k, (tr, te) in enumerate(splits):  # glue: one native scatter per side of each split
         for side, role in ((tr, 1), (te, 2)):  # glue: the two sides of one split, one native scatter each

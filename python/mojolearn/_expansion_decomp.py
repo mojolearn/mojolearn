@@ -308,7 +308,7 @@ class _M:
             return k.take_rows(self, I)
         out = _M.zeros(m, self.c)
         if m * self.c:
-            k.b.x_decomp_move(self.addr, I.addr, out.addr,  # cpu-route: host binding only (CPU-only installs), the GPU binding moved above
+            k.b.x_decomp_move(self.addr, I.addr, out.addr,  # cpu-route: host matrix (_M buffer) read once by x_decomp_move on a CPU-only install
                               [_MV_TAKE_ROWS, m * self.c, self.c, 0, 0, 1, 0, len(self.s), m * self.c, m])
         return out
 
@@ -356,7 +356,7 @@ class _M:
         k = _host_kit()
         out = _M.zeros(self.c, self.r)
         n = self.r * self.c
-        k.b.x_decomp_move(self.addr, _M._one.addr, out.addr, [_MV_TRANSPOSE, n, self.r, self.c, 0, 0, 0, n, n, 1])  # cpu-route: host binding only (CPU-only installs); a GPU binding transposed above
+        k.b.x_decomp_move(self.addr, _M._one.addr, out.addr, [_MV_TRANSPOSE, n, self.r, self.c, 0, 0, 0, n, n, 1])  # cpu-route: host matrix (_M buffer) read once by x_decomp_move on a CPU-only install
         return out
 
     def reshape(self, r, c):
@@ -464,7 +464,7 @@ def _hstack(*ms):
     off = 0
     for m in ms:  # glue: one Mojo move per argument matrix
         if m.r * m.c:
-            k.b.x_decomp_move(m.addr, _M._one.addr, out.addr,  # cpu-route: host binding only, _Kit.hstack moves on a GPU binding
+            k.b.x_decomp_move(m.addr, _M._one.addr, out.addr,  # cpu-route: host matrix (_M buffer) read once by x_decomp_move on a CPU-only install
                               [_MV_PLACE_COLS, m.r * m.c, m.c, w, off, 0, 0, m.r * m.c, r * w, 1])
         off += m.c
     return out
@@ -903,7 +903,7 @@ class _Kit:
             return out
         out = _M.zeros(m, A.c)
         if count:
-            self.b.x_decomp_move(A.addr, idx.addr, out.addr, p)  # cpu-route: host binding only (CPU-only installs); a GPU binding takes the device branch (_RES_MIN 1)
+            self.b.x_decomp_move(A.addr, idx.addr, out.addr, p)  # cpu-route: host matrix (_M buffer) read once by x_decomp_move on a CPU-only install
         return out
 
     def copy(self, A):
@@ -926,7 +926,7 @@ class _Kit:
             did = self._did(A)
             self.b.x_decomp_dev_move(did, _M._dev_one(self), did, p)
             return A
-        self.b.x_decomp_move(A.addr, _M._one.addr, A.addr, p)  # cpu-route: host binding only (CPU-only installs); a GPU binding takes the device branch (_RES_MIN 1)
+        self.b.x_decomp_move(A.addr, _M._one.addr, A.addr, p)  # cpu-route: host matrix (_M buffer) read once by x_decomp_move on a CPU-only install
         return A
 
     # ---- lane cpu2-l8-decomp (2026-10-04, re-audit L8): scalar decisions
@@ -947,7 +947,7 @@ class _Kit:
             self.b.x_decomp_dev_reduce(self._did(A), out._d.id, [n, int(op)])
             return out
         out = _M.zeros(1, 1)
-        self.b.x_decomp_reduce(A.addr, out.addr, [n, int(op)])  # cpu-route: host binding only (CPU-only installs); a GPU binding takes the device branch (_RES_MIN 1)
+        self.b.x_decomp_reduce(A.addr, out.addr, [n, int(op)])  # cpu-route: host matrix (_M buffer) read once by x_decomp_reduce on a CPU-only install
         return out
 
     def word(self, A, i=0):
@@ -972,7 +972,7 @@ class _Kit:
             return out
         out = _M.zeros(1, count)
         if count:
-            self.b.x_decomp_move(A.addr, idx.addr, out.addr, p)  # cpu-route: host binding only (CPU-only installs); a GPU binding takes the device branch (_RES_MIN 1)
+            self.b.x_decomp_move(A.addr, idx.addr, out.addr, p)  # cpu-route: host matrix (_M buffer) read once by x_decomp_move on a CPU-only install
         return out
 
     def place_strided(self, D, V, stride, off=0):
@@ -985,7 +985,7 @@ class _Kit:
         if self._use(D, V):
             self.b.x_decomp_dev_move(self._did(V), _M._dev_one(self), self._did(D), p)
             return D
-        self.b.x_decomp_move(V.addr, _M._one.addr, D.addr, p)  # cpu-route: host binding only (CPU-only installs); a GPU binding takes the device branch (_RES_MIN 1)
+        self.b.x_decomp_move(V.addr, _M._one.addr, D.addr, p)  # cpu-route: host matrix (_M buffer) read once by x_decomp_move on a CPU-only install
         return D
 
     def place_rows(self, D, V, row):
@@ -1012,7 +1012,7 @@ class _Kit:
             return out
         out = _M.zeros(n, 1)
         if n:
-            self.b.x_decomp_order_small(A.addr, out.addr, [n])  # cpu-route: host binding only (CPU-only installs); a GPU binding takes the device branch (_RES_MIN 1)
+            self.b.x_decomp_order_small(A.addr, out.addr, [n])  # cpu-route: host vector (_M buffer) read once by x_decomp_order_small on a CPU-only install
         return out
 
     def take_cols_m(self, A, idx, w):
@@ -1025,7 +1025,7 @@ class _Kit:
             return out
         out = _M.zeros(A.r, w)
         if A.r * w:
-            self.b.x_decomp_move(A.addr, idx.addr, out.addr, p)  # cpu-route: host binding only (CPU-only installs); a GPU binding takes the device branch (_RES_MIN 1)
+            self.b.x_decomp_move(A.addr, idx.addr, out.addr, p)  # cpu-route: host matrix (_M buffer) read once by x_decomp_move on a CPU-only install
         return out
 
     def count_gt(self, A, s):
@@ -1104,7 +1104,7 @@ class _Kit:
             return self._order_dev(A)[0]
         out = _M.zeros(n, 1)
         if n:
-            self.b.x_decomp_order_f(A.addr, n, out.addr)  # cpu-route: host binding only (CPU-only installs); a GPU binding sorts on the device above
+            self.b.x_decomp_order_f(A.addr, n, out.addr)  # cpu-route: host vector (_M buffer) read once by x_decomp_order_f on a CPU-only install
         return out
 
     def select_smallest(self, A, h):
@@ -1124,7 +1124,7 @@ class _Kit:
         sel = _M.zeros(h, 1)
         mask = array.array("i", [0]) * n
         if n:
-            self.b.x_decomp_select_smallest(A.addr, [n, h], sel.addr, mask.buffer_info()[0])  # cpu-route: host binding only (CPU-only installs); a GPU binding selects on the device above
+            self.b.x_decomp_select_smallest(A.addr, [n, h], sel.addr, mask.buffer_info()[0])  # cpu-route: host vector (_M buffer) read once by x_decomp_select_smallest on a CPU-only install
         return sel, mask
 
     def argmin_all(self, A):
@@ -1140,7 +1140,7 @@ class _Kit:
             c = int(self.word(cnt))
             return out.rows(0, c) if c else _M.zeros(0, 1)
         buf = _M.zeros(max(n, 1), 1)
-        c = int(self.b.x_decomp_argmin_all(A.addr, n, buf.addr)) if n else 0  # cpu-route: host binding only (CPU-only installs); a GPU binding finds them on the device above
+        c = int(self.b.x_decomp_argmin_all(A.addr, n, buf.addr)) if n else 0  # cpu-route: host vector (_M buffer) read once by x_decomp_argmin_all on a CPU-only install
         return _M(buf.s[:c], c, 1)
 
     def lu_solve(self, lu, piv, B, trans=0):
@@ -2943,7 +2943,7 @@ def _dsum_sq(k, M):
         w = array.array("d")
         w.frombytes(out.s.tobytes())   # glue: the binary64 result's two words, as bytes
         return w[0]
-    return float(k.b.x_decomp_dsum_sq(M.addr, n))  # cpu-route: host binding only (CPU-only installs); a GPU binding sums on the device above
+    return float(k.b.x_decomp_dsum_sq(M.addr, n))  # cpu-route: host matrix (_M buffer) read once by x_decomp_dsum_sq on a CPU-only install
 
 
 def _dsum(k, M):
@@ -3377,7 +3377,7 @@ def _pca_mle_rank(spectrum, n_samples, mode):
         got = array.array("f", [0.0])
         raw.x_decomp_dev_download(out.id, got.buffer_info()[0], 1)
         return int(got[0])
-    return int(k.b.x_decomp_pca_mle_rank(words.buffer_info()[0], [d, int(n_samples)]))  # cpu-route: host column binding, CPU-only installs without device entries
+    return int(k.b.x_decomp_pca_mle_rank(words.buffer_info()[0], [d, int(n_samples)]))  # cpu-route: array('d') eigenvalue words read once by x_decomp_pca_mle_rank on a CPU-only install
 
 
 # ================================================================ LU
@@ -7284,10 +7284,10 @@ class AlternatingLeastSquares(_Base):
             vals = k.take_cols_m(S.reshape(1, m), ids, c)
             return (ids.out((c,)).astype("<i4"), vals.out((c,)))
         order = array.array("i", [0]) * max(n, 1)
-        c = int(k.b.x_decomp_topn_desc(S.addr, [m, n], skip, order.buffer_info()[0])) if n else 0  # cpu-route: host binding only (CPU-only installs); a GPU binding orders on the device above
+        c = int(k.b.x_decomp_topn_desc(S.addr, [m, n], skip, order.buffer_info()[0])) if n else 0  # cpu-route: host score matrix (_M buffer) read once by x_decomp_topn_desc on a CPU-only install
         vals = array.array("f", [0.0]) * max(c, 1)
         if c:
-            k.b.x_decomp_gather(S.addr, order.buffer_info()[0], c, vals.buffer_info()[0])  # cpu-route: host binding only, the device route returned above
+            k.b.x_decomp_gather(S.addr, order.buffer_info()[0], c, vals.buffer_info()[0])  # cpu-route: host score matrix (_M buffer) read once by x_decomp_gather on a CPU-only install
         return (_fb(order[:c].tobytes(), "<i4", (c,)), _fb(vals[:c].tobytes(), "<f4", (c,)))
 
     def recommend(self, userid, user_items, N=10, filter_already_liked_items=True):
