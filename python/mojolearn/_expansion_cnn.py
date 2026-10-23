@@ -2187,38 +2187,6 @@ class _GraphKey:
     __hash__ = None
 
 
-def _graph_key(n, *arrays):
-    return _GraphKey(n, *arrays)
-
-
-def _edges(edge_index, n):
-    np = _np()
-    ei = np.asarray(edge_index)
-    if ei.ndim != 2 or ei.shape[0] != 2:
-        raise ValueError("mojolearn: edge_index must be (2, E)")
-    ei = ei.astype(np.int64)
-    if ei.size and (ei.min() < 0 or ei.max() >= n):
-        raise ValueError("mojolearn: edge_index refers to a node that does not exist")
-    return ei[0], ei[1]
-
-
-def _graph_dev(layer, b, dev, g, vals_f, vals_t=None):
-    """The resident CSR views of graph `g` and the propagation values (the
-    forward's `vals_f`, the transposed view's `vals_t`, by default
-    `g.vals_t(vals_f)`), uploaded once per graph and kept in `dev`."""
-    np = _np()
-    if layer.__dict__.get("_gdev_for") == (id(g), id(dev)) and layer.__dict__.get("_gdev_g") is g:
-        return
-    prm = [g.n, 1, g.nnz, 0]
-    dev.adopt("csr_f", b.x_cnn_csr_upload(g.csr_f.ctypes.data, prm), g.csr_f.size)
-    dev.adopt("csr_t", b.x_cnn_csr_upload(g.csr_t.ctypes.data, prm), g.csr_t.size)
-    vf = np.ascontiguousarray(vals_f, np.float32)
-    vt = g.vals_t(vf) if vals_t is None else np.ascontiguousarray(vals_t, np.float32)
-    dev.upload("vals_f", vf if vf.size else np.zeros(1, np.float32))
-    dev.upload("vals_t", vt if vt.size else np.zeros(1, np.float32))
-    layer._gdev_for, layer._gdev_g = (id(g), id(dev)), g
-
-
 class GCNConv(_Layer):
     """PyG `torch_geometric.nn.GCNConv` (flow source_to_target, cached=False):
     out = D^-1/2 (A + I) D^-1/2 (X W^T) + b, the degree over the targets'
@@ -2240,72 +2208,12 @@ class GCNConv(_Layer):
         self.weight_ = _uniform(rng, bound, (self.out_channels, self.in_channels))
         self.bias_ = np.zeros(self.out_channels, np.float32)
 
-    def _graph(self, n, edge_index, edge_weight):
-        np = _np()
-        src, dst = _edges(edge_index, n)
-        w = (np.ones(len(src), np.float32) if edge_weight is None
-             else _f32(edge_weight, "edge_weight").reshape(-1).copy())
-        if len(w) != len(src):
-            raise ValueError("mojolearn: edge_weight must have one entry per edge")
-        bl = self._binding()
-        if self.normalize and self.add_self_loops:
-            # lane fix-n1-lm-neural (IDN_GCN_LOOPS_DEV): add_remaining_self_loops
-            # built by the binding (`x_cnn_gcn_loops`, device or host column);
-            # lane py-runtime round 2: the only route (the NumPy arm is gone)
-            if not hasattr(bl, "x_cnn_gcn_loops"):
-                raise RuntimeError("mojolearn: this x_cnn binding has no x_cnn_gcn_loops (an older binary); rebuild it")
-            s32, d32 = np.ascontiguousarray(src, np.int32), np.ascontiguousarray(dst, np.int32)
-            w32 = np.ascontiguousarray(w, np.float32)
-            t = len(s32) + n
-            so, dso, wo = np.empty(t, np.int32), np.empty(t, np.int32), np.empty(t, np.float32)
-            k = int(bl.x_cnn_gcn_loops([s32.ctypes.data, d32.ctypes.data, w32.ctypes.data, so.ctypes.data,
-                                        dso.ctypes.data, wo.ctypes.data], [n, len(s32), int(self.improved)]))
-            src, dst, w = so[:k + n], dso[:k + n], wo[:k + n]
-        g = _Graph(src, dst, n, self._binding())
-        wf = np.ascontiguousarray(w[g.order_f])
-        if self.normalize:
-            vals = np.empty(g.nnz, np.float32)
-            bn = self._binding()
-            if _idn(bn, _F_GRAPH):
-                # lane fam-neural (IDN_GRAPH_M): the same two launches with
-                # one copy each way (no List staging of w, csr and vals)
-                bn.x_cnn_gcn_norm_m([wf.ctypes.data, vals.ctypes.data, g.csr_f.ctypes.data], 0, [n, 1, g.nnz, 0])
-            else:
-                bn.x_cnn_gcn_norm(wf.ctypes.data, vals.ctypes.data, g.csr_f.ctypes.data, [n, 1, g.nnz, 0])
-        else:
-            vals = wf
-        return g, vals
-
     _device_io = True
 
     def forward(self, x, edge_index, edge_weight=None):
-        np = _np()
-        b = self._binding()
-        if _is_t(x):
-            if not (_on_dev(b, x) and not _LEGACY_STEP):
-                return DeviceTensor._wrap(b, self.forward(x.numpy(), edge_index, edge_weight))
-        else:
-            x = _f32(x, "x")
-        n = x.shape[0]
-        if _LEGACY_STEP:
-            g, vals = self._graph(n, edge_index, edge_weight)
-        else:
-            key = (_graph_key(n, edge_index, edge_weight), self.improved, self.add_self_loops, self.normalize)
-            hit = getattr(self, "_gcache", None)
-            if hit is not None and hit[0] == key:
-                g, vals = hit[1]
-            else:
-                g, vals = self._graph(n, edge_index, edge_weight)
-                self._gcache = (key, (g, vals))
-        if _mixed(b) and not _LEGACY_STEP:
-            return self._forward_dev(b, x, g, vals)
-        self._xdev = None
-        h = _gemm(b, x, self.weight_, n, self.out_channels, self.in_channels, 1)
-        out = g.spmm(b, vals, h, 0)
-        if self.bias:
-            out = _add(b, out, np.ascontiguousarray(np.broadcast_to(self.bias_, out.shape)))
-        self._x, self._g, self._vals = x, g, vals
-        return out
+        # the graph, its cache and the propagation in one native call
+        # (bindings/xcnn_graph_native.mojo)
+        return _XCNN(self, "gcn_forward", (x, edge_index, edge_weight), _XCNN_CONTEXT)
 
     # lane gap-neural-overhead2 (2026-10-02): on the GPU binding the layer
     # runs on resident arrays: x goes up once and y comes down once; the
@@ -2316,36 +2224,6 @@ class GCNConv(_Layer):
     # bias of that size). The same entries' bodies on the same words; the
     # bias add is `bias_rows_at`, the same IEEE add per element as the
     # broadcast `add_at`. No bit moves.
-
-    def _forward_dev(self, b, x, g, vals):
-        np = _np()
-        n, F, D = x.shape[0], self.out_channels, self.in_channels
-        if x.ndim != 2 or x.shape[1] != D:
-            raise ValueError(f"mojolearn: x must be (n, {D})")
-        dev = _dev_of(self, b)
-        _graph_dev(self, b, dev, g, vals)
-        W = _f32(self.weight_, "b")
-        # lane idn-cnn-resident: a `DeviceTensor` x is read where it lives
-        # and the output is a resident tensor (no upload, no download)
-        xt = _is_t(x)
-        xh = x.h if xt else dev.upload("x", x)
-        hh = dev.get("h", n * F)
-        b.x_cnn_gemm_m([xh, W.ctypes.data, hh], 0b101, [n, F, D, 1])
-        out = DeviceTensor._new(b, (n, F)) if xt else np.empty((n, F), np.float32)
-        oh = out.h if xt and not self.bias else dev.get("o", n * F)
-        b.x_cnn_spmm_m([dev.h["vals_f"][0], hh, dev.h["csr_f"][0], oh], 0b1111, [n, F, g.nnz, 0])
-        if self.bias:
-            bias = _f32(self.bias_, "b").reshape(-1)
-            if bias.size != F:
-                raise ValueError("mojolearn: bias_ has the wrong size")
-            if xt:
-                b.x_cnn_map2_m([oh, bias.ctypes.data, out.h], 0b101, [4, n * F, F])
-            else:
-                b.x_cnn_map2_m([oh, bias.ctypes.data, out.ctypes.data], 0b001, [4, n * F, F])
-        elif not xt:
-            dev.download(oh, out)
-        self._x, self._g, self._vals, self._xdev = x, g, vals, (dev, xh)
-        return out
 
     def _backward_dev(self, b, G):
         np = _np()
@@ -2437,62 +2315,10 @@ class SAGEConv(_Layer):
 
     _device_io = True
 
-    def _res_form(self, b):
-        if not _mixed(b) or _LEGACY_STEP or self.project:
-            return False
-        # lane fam-neural (IDN_GRAPH_M): the max aggregation and the L2
-        # normalization have resident forms too (`x_cnn_graph_op_m`, the
-        # host entry's element functions on the words where they live)
-        if _idn(b, _F_GRAPH):
-            return True
-        return not self.normalize and self.aggr in ("mean", "sum", "add")
-
     def forward(self, x, edge_index):
-        np = _np()
-        b = self._binding()
-        if _is_t(x):
-            if not (self._res_form(b) and _on_dev(b, x)):
-                return DeviceTensor._wrap(b, self.forward(x.numpy(), edge_index))
-        else:
-            x = _f32(x, "x")
-        n = x.shape[0]
-        key = None if _LEGACY_STEP else _graph_key(n, edge_index)
-        hit = getattr(self, "_gcache", None)
-        if key is not None and hit is not None and hit[0] == key:
-            g = hit[1]
-        else:
-            src, dst = _edges(edge_index, n)
-            g = _Graph(src, dst, n, self._binding())
-            if key is not None:
-                self._gcache = (key, g)
-        if self._res_form(b):
-            return self._forward_dev(b, x, g)
-        self._xdev = None
-        xs = x
-        if self.project:
-            xs = self._relu_p.forward(self.lin.forward(x))
-        self._xs = xs
-        if self.aggr == "max":
-            agg = np.empty_like(xs)
-            self._max_aux = np.zeros(2 * xs.size, np.float32)
-            b.x_cnn_graph_op(xs.ctypes.data, xs.ctypes.data, self._max_aux.ctypes.data, agg.ctypes.data,
-                             g.csr_f.ctypes.data, [n, xs.shape[1], g.nnz, 0])
-        else:
-            agg = g.spmm(b, np.ones(g.nnz, np.float32), xs, 1 if self.aggr == "mean" else 0)
-        out = self.lin_l.forward(agg)
-        if self.root_weight:
-            out = _add(b, out, _gemm(b, x, self.weight_r_, n, self.out_channels, self.in_channels, 1))
-        self._x, self._g = x, g
-        if self.normalize:
-            # torch.nn.functional.normalize(out, p=2, dim=-1)
-            self._pre = out
-            y = np.empty_like(out)
-            self._den = np.zeros(n, np.float32)
-            self._nograph = np.zeros(n + 1, np.int32)
-            b.x_cnn_graph_op(out.ctypes.data, out.ctypes.data, self._den.ctypes.data, y.ctypes.data,
-                             self._nograph.ctypes.data, [n, out.shape[1], 0, 2])
-            self._y = out = y
-        return out
+        # the graph, its cache, the aggregation and the transforms in one
+        # native call (bindings/xcnn_graph_native.mojo)
+        return _XCNN(self, "sage_forward", (x, edge_index), _XCNN_CONTEXT)
 
     # lane gap-neural-overhead2 (2026-10-02): on the GPU binding (aggr mean
     # or sum, no projection, no normalization) the layer runs on resident
@@ -2501,63 +2327,6 @@ class SAGEConv(_Layer):
     # their sum stay on the device, and the mean backward divides by the
     # in-degree read from the resident CSR offsets (spmm mode 3). The same
     # entries' bodies on the same words: no bit moves.
-
-    def _forward_dev(self, b, x, g):
-        np = _np()
-        n, D, F = x.shape[0], self.in_channels, self.out_channels
-        if x.ndim != 2 or x.shape[1] != D:
-            raise ValueError(f"mojolearn: x must be (n, {D})")
-        dev = _dev_of(self, b)
-        mean = self.aggr == "mean"
-        if self.__dict__.get("_gdev_g") is not g or self.__dict__.get("_gdev_for") != (id(g), id(dev)):
-            ones = np.ones(g.nnz, np.float32)
-            _graph_dev(self, b, dev, g, ones, ones)
-        # lane idn-cnn-resident: a `DeviceTensor` x is read where it lives
-        # and the output is a resident tensor (no upload, no download)
-        xt = _is_t(x)
-        xh = x.h if xt else dev.upload("x", x)
-        aggh = dev.get("agg", n * D)
-        if self.aggr == "max":
-            # lane fam-neural: the max and its tie counts stay resident for the backward
-            auxh = dev.get("maxaux", 2 * n * D)
-            b.x_cnn_graph_op_m([xh, xh, auxh, aggh, dev.h["csr_f"][0]], 0b11111, [n, D, g.nnz, 0])
-        else:
-            b.x_cnn_spmm_m([dev.h["vals_f"][0], xh, dev.h["csr_f"][0], aggh], 0b1111,
-                           [n, D, g.nnz, 1 if mean else 0])
-        lin = self.lin_l
-        norm = self.normalize
-        out = DeviceTensor._new(b, (n, F)) if xt else np.empty((n, F), np.float32)
-        # with the normalization the sum lands in a resident `pre` first
-        preh = dev.get("pre", n * F) if norm else None
-        if norm and not self.root_weight:
-            olh = preh
-        else:
-            olh = out.h if xt and not self.root_weight else dev.get("ol", n * F)
-        b.x_cnn_linear_forward_m([aggh, lin.weight_.ctypes.data, lin.bias_.ctypes.data, olh], 0b1001, [n, D, F])
-        if self.root_weight:
-            Wr = _f32(self.weight_r_, "b")
-            rh = dev.get("r", n * F)
-            b.x_cnn_gemm_m([xh, Wr.ctypes.data, rh], 0b101, [n, F, D, 1])
-            if norm:
-                b.x_cnn_map2_m([olh, rh, preh], 0b111, [2, n * F])
-            elif xt:
-                b.x_cnn_map2_m([olh, rh, out.h], 0b111, [2, n * F])
-            else:
-                b.x_cnn_map2_m([olh, rh, out.ctypes.data], 0b011, [2, n * F])
-        elif not xt and not norm:
-            dev.download(olh, out)
-        self._ydev = None
-        if norm:
-            # torch.nn.functional.normalize(out, p=2, dim=-1): y and the
-            # denominators stay resident for the backward
-            denh = dev.get("den", n)
-            yh = out.h if xt else dev.get("y", n * F)
-            b.x_cnn_graph_op_m([preh, preh, denh, yh, 0], 0b01111, [n, F, 0, 2])
-            if not xt:
-                dev.download(yh, out)
-            self._ydev = (yh, denh, out if xt else None)
-        self._x, self._g, self._xs, self._xdev = x, g, x, (dev, xh, aggh)
-        return out
 
     def _backward_dev(self, b, G):
         np = _np()
@@ -2655,5 +2424,5 @@ class SAGEConv(_Layer):
 _native_xcnn_bridge.register(
     xcnn_tensor_class=DeviceTensor, xcnn_dev_class=_Dev, xcnn_maxpool_class=MaxPool2d,
     xcnn_avgpool_class=AvgPool2d, xcnn_pool1d_class=_Pool1dMixin, xcnn_conv1d_class=Conv1d,
-    xcnn_device_io_off=_DEVICE_IO_OFF,
+    xcnn_device_io_off=_DEVICE_IO_OFF, xcnn_graph_class=_Graph, xcnn_graph_key_class=_GraphKey,
 )

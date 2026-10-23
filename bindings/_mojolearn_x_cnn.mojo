@@ -72,6 +72,7 @@ from x_cnn.device import graph_op_device as graph_op_impl
 from x_cnn.device import adaptive_pool_device as adaptive_pool_impl
 from x_cnn.device import gcn_norm_device as gcn_norm_impl
 from x_cnn.device import csr_build_device as csr_build_impl
+from x_cnn.device import perm_gather_device, vals_t_device
 from x_cnn.device import gcn_loops_device
 # lane fam-neural (2026-10-04): the `_m` forms of the entries that had none
 from x_cnn.device import idn_flags, adaptive_pool_m, graph_op_m, gcn_norm_m, pad2d_m, chan_copy_m
@@ -1017,6 +1018,42 @@ def csr_upload_binding(csr_addr: PythonObject, params: PythonObject) raises -> P
     return PythonObject(h)
 
 
+def perm_gather_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """out[i] = src[idx[i]] on the device (x_cnn/device.mojo
+    perm_gather_device, lane migrate-neural-2: the graph layers' `w[order_f]`):
+    addrs = [src f32, idx i32, out f32], params = [n_src, n]. Returns n."""
+    var n_src = Int(py=params[0])
+    var n = Int(py=params[1])
+    if n < 0 or n_src < 0:
+        raise Error("x_cnn perm_gather: n >= 0 required")
+    if n == 0:
+        return PythonObject(0)
+    var src = _fp(addrs[0])
+    var idx = _ip(addrs[1])
+    var out = _fp(addrs[2])
+    with GILReleased(Python()):
+        perm_gather_device(src, idx, out, n_src, n)
+    return PythonObject(n)
+
+
+def vals_t_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`_Graph.vals_t` on the device (x_cnn/device.mojo vals_t_device):
+    addrs = [vals_f f32, order_f i32, order_t i32, out f32], params = [nnz].
+    Returns nnz."""
+    var nnz = Int(py=params[0])
+    if nnz < 0:
+        raise Error("x_cnn vals_t: nnz >= 0 required")
+    if nnz == 0:
+        return PythonObject(0)
+    var vals = _fp(addrs[0])
+    var of = _ip(addrs[1])
+    var ot = _ip(addrs[2])
+    var out = _fp(addrs[3])
+    with GILReleased(Python()):
+        vals_t_device(vals, of, ot, out, nnz)
+    return PythonObject(nnz)
+
+
 def csr_build_binding(rows_addr: PythonObject, cols_addr: PythonObject, csr_addr: PythonObject, order_addr: PythonObject, params: PythonObject) raises -> PythonObject:
     """The CSR view of an edge list, on the device (x_cnn/device.mojo
     csr_build_device): `rows`, `cols` int32 [nnz] in [0, n); `csr` int32
@@ -1495,6 +1532,8 @@ def build__mojolearn_x_cnn() -> PythonObject:
         m.def_function[csr_upload_binding]("x_cnn_csr_upload")
         m.def_function[csr_build_binding]("x_cnn_csr_build")
         m.def_function[gcn_loops_binding]("x_cnn_gcn_loops")
+        m.def_function[perm_gather_binding]("x_cnn_perm_gather")
+        m.def_function[vals_t_binding]("x_cnn_vals_t")
         m.def_function[idn_flags_binding]("x_cnn_idn_flags")
         m.def_function[idn2_flags_binding]("x_cnn_idn2_flags")
         m.def_function[neural_tape_budget_binding]("x_cnn_neural_tape_budget_bytes")

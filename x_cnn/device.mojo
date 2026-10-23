@@ -3153,3 +3153,86 @@ def gcn_loops_device(
     _ = k_d^
     _ = ctx^
     return Int(kh[0])
+
+
+# ---------------------------------------------------------------------------
+# lane migrate-neural-2: the graph layers' per-entry value moves on the device
+# (GCNConv / SAGEConv forward; they were NumPy fancy indexing on the host).
+# Copies only: the same words land in the same places.
+
+def _perm_gather_kernel(out: FP, src: FP, idx: IP, n: Int32):
+    """out[i] = src[idx[i]]."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n):
+        return
+    out[i] = src[Int(idx[i])]
+
+
+def _perm_inverse_kernel(inv: IP, order: IP, n: Int32):
+    """inv[order[i]] = i (order is a permutation of [0, n))."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n):
+        return
+    inv[Int(order[i])] = Int32(i)
+
+
+def _vals_t_kernel(out: FP, vals_f: FP, inv_f: IP, order_t: IP, n: Int32):
+    """out[j] = vals_f[inv_f[order_t[j]]]: the forward view's value of the
+    edge at transposed position j."""
+    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if j >= Int(n):
+        return
+    out[j] = vals_f[Int(inv_f[Int(order_t[j])])]
+
+
+def perm_gather_device(src_h: FP, idx_h: IP, out_h: FP, n_src: Int, n: Int) raises:
+    """out[i] = src[idx[i]] for i < n (`w[g.order_f]`); host pointers."""
+    if n <= 0:
+        return
+    var ctx = cnn_ctx()
+    var src = ctx.enqueue_create_buffer[DType.float32](max(1, n_src))
+    var idx = ctx.enqueue_create_buffer[DType.int32](n)
+    var out = ctx.enqueue_create_buffer[DType.float32](n)
+    if n_src > 0:
+        ctx.enqueue_copy(dst_buf=src, src_ptr=src_h)
+    ctx.enqueue_copy(dst_buf=idx, src_ptr=idx_h)
+    ctx.enqueue_function[_perm_gather_kernel](
+        out.unsafe_ptr(), src.unsafe_ptr(), idx.unsafe_ptr(), Int32(n),
+        grid_dim=(n + TPB - 1) // TPB, block_dim=TPB,
+    )
+    ctx.enqueue_copy(dst_ptr=out_h, src_buf=out)
+    ctx.synchronize()
+    _ = src^
+    _ = idx^
+    _ = out^
+    _ = ctx^
+
+
+def vals_t_device(vals_f_h: FP, order_f_h: IP, order_t_h: IP, out_h: FP, nnz: Int) raises:
+    """`_Graph.vals_t(vals_f)`: by_edge[order_f] = vals_f, then
+    out = by_edge[order_t]; host pointers."""
+    if nnz <= 0:
+        return
+    var ctx = cnn_ctx()
+    var vals = ctx.enqueue_create_buffer[DType.float32](nnz)
+    var of = ctx.enqueue_create_buffer[DType.int32](nnz)
+    var ot = ctx.enqueue_create_buffer[DType.int32](nnz)
+    var inv = ctx.enqueue_create_buffer[DType.int32](nnz)
+    var out = ctx.enqueue_create_buffer[DType.float32](nnz)
+    ctx.enqueue_copy(dst_buf=vals, src_ptr=vals_f_h)
+    ctx.enqueue_copy(dst_buf=of, src_ptr=order_f_h)
+    ctx.enqueue_copy(dst_buf=ot, src_ptr=order_t_h)
+    var grid = (nnz + TPB - 1) // TPB
+    ctx.enqueue_function[_perm_inverse_kernel](inv.unsafe_ptr(), of.unsafe_ptr(), Int32(nnz), grid_dim=grid, block_dim=TPB)
+    ctx.enqueue_function[_vals_t_kernel](
+        out.unsafe_ptr(), vals.unsafe_ptr(), inv.unsafe_ptr(), ot.unsafe_ptr(), Int32(nnz),
+        grid_dim=grid, block_dim=TPB,
+    )
+    ctx.enqueue_copy(dst_ptr=out_h, src_buf=out)
+    ctx.synchronize()
+    _ = vals^
+    _ = of^
+    _ = ot^
+    _ = inv^
+    _ = out^
+    _ = ctx^
