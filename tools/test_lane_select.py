@@ -2159,6 +2159,7 @@ class Unrelated:
     def fit(self):
         from ._selector_seed_unrelated import compute
         return compute()
+Chosen.fit = Chosen.fit
 ''',
         prefix + "setup.py": "def initialize(): return 1\n",
         prefix + "selected.py": "def compute(): return 2\n",

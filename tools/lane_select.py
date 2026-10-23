@@ -1378,7 +1378,7 @@ def _public_seed_members(rel, names):
             targets = top.targets if isinstance(top, ast.Assign) else [top.target]
             for target in targets:
                 for part in ast.walk(target):
-                    if isinstance(part, ast.Name):
+                    if isinstance(part, ast.Name) and isinstance(part.ctx, ast.Store):
                         if part.id in index:
                             return None  # reassigned public identities stay whole
                         index[part.id] = top
