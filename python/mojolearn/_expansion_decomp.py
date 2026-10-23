@@ -24,7 +24,6 @@ from . import _portable_math as math
 import sys
 
 from . import _backend
-from . import _portable_math as _pm
 from ._array import Array
 from ._buffer import addr_ro, as_f32_c, as_f64_c, as_i32_c, frombytes
 from ._buffer import addr as _addr, empty as _empty
@@ -1520,17 +1519,6 @@ def _svd_flip_v(Vt):
     return k.ew("mul", Vt, k.absmax_signs(Vt, False))
 
 
-def _gram_svd(k, Z):
-    """Thin SVD of Z (m x d) through the eigendecomposition of Z^T Z:
-    S descending (1 x d), Vt (d x d, rows = right singular vectors)."""
-    w, V = k.eigh(k.mm(Z, Z, ta=True))
-    d = w.c
-    order = list(range(d - 1, -1, -1))
-    S = k.ew("sqrt", w.take_cols(order))
-    Vt = V.take_cols(order).T
-    return S, _svd_flip_v(Vt)
-
-
 class _Base(SklearnTagsMixin):
     _parameters = ()
 
@@ -1594,17 +1582,8 @@ class _Base(SklearnTagsMixin):
 
 
 # ================================================================ IncrementalPCA
-def _ipca_dev_on(k):
-    """lane/apple-fast-gap-linalg2-kpca: whether this kit's binding was built
-    with -D MOJOLEARN_IPCA_FAST_DEV (FAST + Apple): IncrementalPCA.fit stacks
-    each batch's matrix on the device (no download and re-upload of the
-    centered batch) and reads its public arrays once after the last batch.
-    Lane cpu2-l8-decomp: every GPU kit in every mode (the stack is copies,
-    the same words; the IDENTICAL and NVIDIA/AMD FAST fits downloaded each
-    centered batch to stack it on the host)."""
-    return k._res()
-
-
+# Every public IncrementalPCA operation is one call into the compiled owner
+# (bindings/ipca_native.mojo, drivers x_decomp/ipca_owner.mojo).
 # Reference: scikit-learn `decomposition/_incremental_pca.py`, `partial_fit`;
 # the running mean and variance are `utils/extmath.py::_incremental_mean_and_var`.
 # Each batch's SVD is the thin SVD of the stacked matrix sklearn builds,
@@ -1687,37 +1666,7 @@ class IncrementalPCA(_Base):
         ValueError
             If X is empty or ``n_components`` is out of range.
         """
-        self.numeric_mode_ = _mode(self.numeric_mode)
-        for a in ("components_", "n_samples_seen_"):  # glue: drops two fitted attribute names
-            if hasattr(self, a):
-                delattr(self, a)
-        if _is_sparse(X):
-            n, d = X.shape
-            Xc = X.tocsr()
-            if n == 0 or d == 0:
-                raise ValueError("X: a nonempty two-dimensional input is required")
-
-            def rows(a, b):
-                return _M.from_input(Xc[a:b])
-        else:
-            M = _M.from_input(X)
-            n, d = M.r, M.c
-            rows = M.rows
-        self.batch_size_ = 5 * d if self.batch_size is None else int(self.batch_size)
-        mb = self.n_components or 0
-        dev = _ipca_dev_on(self._kit())
-        start = 0
-        for _ in range(n // self.batch_size_):  # glue: drives one device partial fit per batch (batch_size_-sized: minibatches)
-            end = start + self.batch_size_
-            if end + mb > n:
-                continue
-            self._partial(rows(start, end), publish=not dev, dev=dev)
-            start = end
-        if start < n:
-            self._partial(rows(start, n), publish=not dev, dev=dev)
-        if dev and hasattr(self, "_pending"):
-            self._publish(*self._pending)
-        return self
+        return _IPCA_CALL(self, "fit", (X,), _IPCA_CONTEXT)
 
     def partial_fit(self, X, y=None):
         """Update the model with one more batch.
@@ -1739,94 +1688,7 @@ class IncrementalPCA(_Base):
             If the number of features changed or ``n_components`` is out of
             range for this batch.
         """
-        if not hasattr(self, "numeric_mode_"):
-            self.numeric_mode_ = _mode(self.numeric_mode)
-        self._partial(_M.from_input(X))
-        return self
-
-    def _partial(self, Xb, publish=True, dev=False):
-        k = self._kit()
-        n, d = Xb.r, Xb.c
-        seen = getattr(self, "n_samples_seen_", 0)
-        prev = getattr(self, "components_m_", None) if seen else None
-        # scikit-learn's rule: the batch must hold n_components rows on the
-        # FIRST call only; a later batch stacks onto the kept components
-        # (nc + n + 1 rows), so fit's last short batch is fine.
-        if self.n_components is None:
-            nc = min(n, d) if prev is None else prev.r
-        else:
-            nc = int(self.n_components)
-            if not 1 <= nc <= d:
-                raise ValueError(f"n_components={nc} must be between 1 and n_features={d}")
-            if nc > n and prev is None:
-                raise ValueError(f"n_components={nc} must be less or equal to the batch number "
-                                 f"of samples {n} for the first partial_fit call.")
-        if prev is not None and prev.c != d:
-            raise ValueError("Number of input features has changed from the previous batch")
-        if seen + n < 2:
-            # the explained variance divides by n_samples_seen - 1
-            raise ValueError(f"Found array with {n} sample(s) (shape=({n}, {d})) while a minimum of 2 is required.")
-        if seen == 0:
-            last_mean, last_var = _M.zeros(1, d), _M.zeros(1, d)
-        else:
-            last_mean, last_var = self.mean_m_, self.var_m_
-        # _incremental_mean_and_var
-        new_sum = k.colsum(Xb)
-        total = seen + n
-        last_sum = k.ew("scale", last_mean, s=float(seen))
-        upd_mean = k.ew("scale", k.ew("add", last_sum, new_sum), s=1.0 / total)
-        bmean = k.ew("scale", new_sum, s=1.0 / n)
-        new_unnorm = k.colsum(k.ew("sqdiff", Xb, bmean))
-        if seen == 0:
-            upd_unnorm = new_unnorm
-        else:
-            last_over_new = seen / n
-            last_unnorm = k.ew("scale", last_var, s=float(seen))
-            t = k.ew("sub", k.ew("scale", last_sum, s=1.0 / last_over_new), new_sum)
-            corr = k.ew("scale", k.ew("sq", t), s=last_over_new / total)
-            upd_unnorm = k.ew("add", k.ew("add", last_unnorm, new_unnorm), corr)
-        upd_var = k.ew("scale", upd_unnorm, s=1.0 / total)
-        # the stacked matrix
-        if seen == 0:
-            Z = k.ew("sub", Xb, upd_mean)
-        else:
-            Xc = k.ew("sub", Xb, bmean)
-            mc = k.ew("scale", k.ew("sub", self.mean_m_, bmean), s=math.sqrt((seen / total) * n))
-            prev = k.ew("mul", self.components_m_, self.singular_values_m_.T)
-            Z = k.vstack([prev, Xc, mc])
-        S, Vt = _gram_svd(k, Z)
-        ev = k.ew("scale", k.ew("sq", S), s=1.0 / (total - 1))
-        tot_var = k.total(k.ew("scale", upd_var, s=float(total)))
-        evr = k.ew("div", k.ew("sq", S), tot_var)
-        self.n_samples_seen_ = total
-        self.components_m_ = Vt.rows(0, nc)
-        self.singular_values_m_ = S.cols(0, nc)
-        self.mean_m_, self.var_m_ = upd_mean, upd_var
-        self.explained_variance_m_ = ev.cols(0, nc)
-        if nc < min(d, Z.r):
-            rest = ev.cols(nc, d)
-            nv = k.ew("scale", k.total(rest), s=1.0 / rest.c)
-        else:
-            nv = _M.zeros(1, 1)
-        self.n_components_ = nc
-        self.n_features_in_ = d
-        if publish:
-            self._publish(nc, d, evr, nv)
-        else:
-            # lane/apple-fast-gap-linalg2-kpca (-D MOJOLEARN_IPCA_FAST_DEV):
-            # fit publishes the public arrays once, after its last batch
-            self._pending = (nc, d, evr, nv)
-
-    def _publish(self, nc, d, evr, nv):
-        """The public attributes from the running device/host matrices."""
-        self.__dict__.pop("_pending", None)
-        self.components_ = self.components_m_.out()
-        self.singular_values_ = self.singular_values_m_.out((nc,))
-        self.mean_ = self.mean_m_.out((d,))
-        self.var_ = self.var_m_.out((d,))
-        self.explained_variance_ = self.explained_variance_m_.out((nc,))
-        self.explained_variance_ratio_ = evr.cols(0, nc).out((nc,))
-        self.noise_variance_ = nv.s[0]
+        return _IPCA_CALL(self, "partial_fit", (X,), _IPCA_CONTEXT)
 
     def transform(self, X):
         """Project X onto the fitted components.
@@ -1846,15 +1708,22 @@ class IncrementalPCA(_Base):
         ValueError
             If X has a different number of features than the fitted data.
         """
-        self._check()
-        k = self._kit()
-        M = _M.from_input(X)
-        if M.c != self.n_features_in_:
-            raise ValueError(f"X has {M.c} features, but IncrementalPCA is expecting {self.n_features_in_}")
-        Y = k.mm(k.ew("sub", M, self.mean_m_), self.components_m_, tb=True)
-        if self.whiten:
-            Y = k.ew("div", Y, k.ew("sqrt", self.explained_variance_m_))
-        return Y.out()
+        return _IPCA_CALL(self, "transform", (X,), _IPCA_CONTEXT)
+
+    def fit_transform(self, X, y=None):
+        """Fit to X, then return ``transform(X)``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Training data.
+        y : ignored
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
+        return _IPCA_CALL(self, "fit_transform", (X,), _IPCA_CONTEXT)
 
     def inverse_transform(self, X):
         """Map projected data back to the original feature space.
@@ -1867,13 +1736,7 @@ class IncrementalPCA(_Base):
         -------
         ndarray of shape (n_samples, n_features), float32
         """
-        self._check()
-        k = self._kit()
-        Y = _M.from_input(X)
-        C = self.components_m_
-        if self.whiten:
-            C = k.ew("mul", C, k.ew("sqrt", self.explained_variance_m_).T)
-        return k.ew("add", k.mm(Y, C), self.mean_m_).out()
+        return _IPCA_CALL(self, "inverse_transform", (X,), _IPCA_CONTEXT)
 
 
 # ================================================================ random projection
@@ -1905,14 +1768,10 @@ def johnson_lindenstrauss_min_dim(n_samples, *, eps=0.1):
     >>> import mojolearn
     >>> d = mojolearn.johnson_lindenstrauss_min_dim(1000, eps=0.5)
     """
-    if not 0 < eps < 1:
-        raise ValueError("The JL bound is defined for eps in ]0, 1[")
-    if n_samples <= 0:
-        raise ValueError("The JL bound is defined for n_samples greater than zero")
     # DEVIATION 6900: eps ** 2, eps ** 3 correctly rounded and the pinned log,
-    # not the platform pow / log (a host's last bit can move the floor)
-    denominator = (_pm.powi(eps, 2) / 2) - (_pm.powi(eps, 3) / 3)
-    return int(4 * _pm.log(n_samples) / denominator)
+    # not the platform pow / log (a host's last bit can move the floor), in
+    # the compiled owner (bindings/jl_native.mojo)
+    return _JL_CALL(None, "min_dim", (n_samples, eps), _JL_CONTEXT)
 
 
 def _seed_of(random_state):
@@ -7513,3 +7372,11 @@ def _randomized_decompose(X, nc, *, center, n_oversamples, n_iter, power_iterati
         out["explained_variance"] = ev.out((nc,))
         out["explained_variance_ratio"] = k.ew("div", ev, full).out((nc,))
     return out
+
+
+# The compiled IncrementalPCA owner, connected once at import.
+from . import _native_ipca_bridge  # noqa: E402
+_IPCA_CALL, _IPCA_CONTEXT = _native_ipca_bridge.connect_public(IncrementalPCA)
+# The compiled johnson_lindenstrauss_min_dim owner.
+from . import _native_jl_bridge  # noqa: E402
+_JL_CALL, _JL_CONTEXT = _native_jl_bridge.connect_public()
