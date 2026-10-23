@@ -73,6 +73,8 @@ def classical_python_error(var error: Error, args_ptr: PyObjectPtr) -> PyObjectP
         return raise_python_exception(error_without_class(error, "AttributeError"), ExceptionType("PyExc_AttributeError"))
     if String(error).startswith("RuntimeError:"):
         return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
+    if String(error).startswith("InterruptedError:"):
+        return raise_python_exception(error_without_class(error, "InterruptedError"), ExceptionType("PyExc_InterruptedError"))
     if String(error).startswith("ZeroDivisionError:"):
         return raise_python_exception(error_without_class(error, "ZeroDivisionError"), ExceptionType("PyExc_ZeroDivisionError"))
     return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)

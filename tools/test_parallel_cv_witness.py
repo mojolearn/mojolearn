@@ -19,6 +19,7 @@ def records(workers=2):
         result[key] = dict(fixture=key, model='a' * 64, predict='b' * 64,
                            raw_predict='c' * 64, reload_predict='c' * 64,
                            loss_curve='d' * 64, score='000000000000f03f', binding_sha256='e' * 64,
+                           native_artifacts={name: 'e' * 64 for name in ('cv', 'trees', 'archive', 'gbdt')},
                            inventory=dict(kind='visible-device-inventory', vendor='cuda', pid=101 + worker,
                                           devices=[dict(ordinal=0, uuid=f'{worker + 1:032x}',
                                                         pci_bus_id=f'0000:{worker + 1:02x}:00.0')]))
@@ -108,3 +109,45 @@ def test_scorer_retains_model_and_output_witnesses_or_fails(tmp_path, monkeypatc
         if fault == 'duplicate':
             with pytest.raises(RuntimeError, match='overwrite'):
                 score_with_witness(estimator, X, values, directory=tmp_path)
+
+
+@pytest.mark.parametrize('fault', [None, 'reload', 'vendor', 'mode', 'duplicate'])
+def test_completed_native_witness_retains_actual_bytes_after_operation(tmp_path, fault):
+    import hashlib
+    import numpy as np
+    from mojolearn._parallel_cv_witness import retain_completed, array_digest
+
+    values = np.array([.25, -.5], dtype='<f4')
+    archive = b'actual bytes returned by the isolated native-witness fixture'
+    value = dict(X_test=values.reshape(2, 1), y_test=values, archive=archive,
+                 model_text='synthetic model fixture', predict=values, raw_predict=values,
+                 reload_predict=values + np.float32(1) if fault == 'reload' else values,
+                 loss_curve=values, score=.5, inventory=next(iter(records(1).values()))['inventory'],
+                 binding_sha256='e' * 64, selected_arch='simulated', selected_arch_how='unit test',
+                 binding_vendor='cpu' if fault == 'vendor' else 'cuda', binding_mode=0 if fault == 'mode' else 1,
+                 native_artifacts={name: 'e' * 64 for name in ('cv', 'trees', 'archive', 'gbdt')})
+    if fault in ('reload', 'vendor', 'mode'):
+        with pytest.raises(RuntimeError):
+            retain_completed([value], directory=tmp_path, vendor='cuda')
+        assert not list(tmp_path.glob('*.json'))
+        if fault == 'reload':
+            assert next((tmp_path / 'models').glob('*.npz')).read_bytes() == archive
+            assert len(list((tmp_path / 'arrays').glob('*.npy'))) == 6
+        return
+    retained = retain_completed([value], directory=tmp_path, vendor='cuda')
+    row = next(iter(retained.values()))
+    assert row['predict'] == array_digest(values)
+    assert row['raw_predict'] == row['reload_predict']
+    assert row['model'] == hashlib.sha256(value['model_text'].encode()).hexdigest()
+    assert next((tmp_path / 'models').glob('*.npz')).read_bytes() == archive
+    assert len(list((tmp_path / 'arrays').glob('*.npy'))) == 6
+    if fault == 'duplicate':
+        with pytest.raises(RuntimeError, match='overwrite'):
+            retain_completed([value], directory=tmp_path, vendor='cuda')
+
+
+def test_completed_native_owner_identity_cannot_be_changed_between_workers():
+    expected, actual = records(1), records(2)
+    next(iter(actual.values()))['native_artifacts']['cv'] = '0' * 64
+    with pytest.raises(ValueError, match='artifacts differ'):
+        compare_records(expected, actual, vendor='cuda', workers=2)
