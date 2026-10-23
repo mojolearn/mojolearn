@@ -7,7 +7,7 @@ are made of. Typed pointers in, no Python; the words are the ones the
 NumPy expressions they replace produced."""
 from std.memory import bitcast
 from bindings.classical_cast import classical_f32_bits
-from core.cast_in import cast_f32_bits
+from core.cast_in import cast_f32_bits, cast_i32_bits
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -84,3 +84,31 @@ def xseq_var_blocks(params: _F32P, endog: _F32P, resid: _F32P, intercept: _F32P,
     for r in range(rows):  # native result publication: one fitted row per observation
         for c in range(neqs):  # native result publication: one fitted value per variable
             fitted[r * neqs + c] = endog[(lags + r) * neqs + c] - resid[r * neqs + c]
+
+
+def neural_cast_i32_2d(addr: Int, s0: Int, s1: Int, rows: Int, cols: Int, item: Int, kind: Int,
+                       dst: _I32P):
+    """A strided (rows, cols) integer or bool array as C-ordered int32 words
+    (`cast_i32_bits`: exact, saturated outside int32)."""
+    for r in range(rows):  # native input marshaling: input rows, never a model loop
+        for c in range(cols):  # native input marshaling: one id per position
+            var bytes = _U8P(unsafe_from_address=addr + r * s0 + c * s1)
+            var raw = UInt64(0)
+            for j in range(item):  # native input marshaling: the bytes of one item
+                raw |= UInt64(bytes[j]) << UInt64(j * 8)
+            dst[r * cols + c] = bitcast[DType.int32](cast_i32_bits(raw, kind, item))
+
+
+def neural_first_bad_id(ids: _I32P, rows: Int, cols: Int, vocab: Int, target_column: Int, ignore: Int) -> Int:
+    """The flat index of the first id outside [0, vocab), or -1. Column
+    `target_column` (when >= 0) feeds only the loss and may also hold
+    `ignore`."""
+    for r in range(rows):  # native input marshaling: input rows, never a model loop
+        for c in range(cols):  # native input marshaling: one id per position
+            var v = Int(ids[r * cols + c])
+            if v >= 0 and v < vocab:
+                continue
+            if target_column >= 0 and c == target_column and v == ignore:
+                continue
+            return r * cols + c
+    return -1
