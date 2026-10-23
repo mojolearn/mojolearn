@@ -643,7 +643,8 @@ def _bgmm_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
         else:
             var value = Float64(py=_float(covariance_prior))
             cp = family_array(Python.tuple(1), "<f4", context)
-            FAMILY_F32P(unsafe_from_address=Int(py=classical_address(cp)))[0] = Float32(value)
+            var word = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(cp)))
+            word[0] = Float32(value)
             cov_mode = 3
         _ = py_call(parts.append, cp)
     var key = Python.tuple(PythonObject(k), PythonObject(d), covariance_type)
