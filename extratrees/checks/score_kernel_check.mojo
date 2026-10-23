@@ -612,6 +612,7 @@ def check_objective[
             seed,
             sab,
             Int32(0),
+            d_thresh.unsafe_ptr(),
             grid_dim=(n_blocks_dimx, N_COLS, 1),
             block_dim=(TPB, 1, 1),
         )
