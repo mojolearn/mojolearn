@@ -114,7 +114,8 @@ def optimizer_construct(owner: PythonObject, values: PythonObject, mode: PythonO
     py_setitem(fields, "_resident_wanted", values[12])
     py_setitem(fields, "lr_schedule", values[9])
     py_setitem(fields, "accumulation_steps", PythonObject(accumulation))
-    _ = py_call(context["init"], owner, values[0])
+    # typed: the registry refusal keeps its class (ValueError: params is empty)
+    _ = py_call_typed(context["init"], owner, values[0])
     py_setitem(fields, "t", PythonObject(0))
     for name in ["packed_", "total_norm_", "clip_coef_"]:  # driver-loop: over three optional result words
         py_setitem(fields, PythonObject(name), PythonObject(None))
