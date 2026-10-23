@@ -5,6 +5,7 @@
 from std.python import Python, PythonObject
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.trees_public_forest import forest_fit, forest_predict, forest_predict_proba
+from bindings.trees_public_boost import boost_operation
 
 
 def trees_public_operation(model: PythonObject, operation: String, args: PythonObject,
@@ -20,6 +21,8 @@ def trees_public_operation(model: PythonObject, operation: String, args: PythonO
         return forest_predict(model, args, context)
     if operation == "trees_forest_predict_proba":
         return forest_predict_proba(model, args, context)
+    if operation.startswith("trees_boost_"):
+        return boost_operation(model, operation, args, context)
     raise Error("unknown tree ensemble operation " + operation)
 
 
