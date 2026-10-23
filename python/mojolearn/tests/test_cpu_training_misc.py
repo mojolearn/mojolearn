@@ -196,8 +196,9 @@ def test_core_host_binding_registers_the_fold_gather():
     helpers = _read("bindings/host_helpers.mojo")
     assert "def gather_rows_bytes_binding(" in helpers
     # lane cpu2-l4-modelsel: cross-validation's fold rows are the msel store's
-    # device gather; the core host binding carries its host column
-    assert "_native('msel_take_rows')" in _read("python/mojolearn/model_selection.py")
+    # device gather; the core host binding carries its host column. The entry
+    # is connected once for the arena row owner (_native_arena_rows.py).
+    assert "'msel_take_rows'" in _read("python/mojolearn/_native_arena_rows.py")
     for name in ("msel_put", "msel_take_rows", "msel_free"):
         assert '("%s")' % name in src
         assert name in host_surface.family("core")["exports"]
