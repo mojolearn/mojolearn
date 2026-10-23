@@ -1,9 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native adapter boundary over the existing OpsSession dispatcher. No new math.
-from autograd.ops_api import (
-    OpsSession, OPS_TRANSPOSE, OPS_RESHAPE, OPS_DETACH, OPS_COPY,
-    OPS_RESHAPE_N, OPS_PERMUTE, OPS_CONCAT, OPS_NARROW, OPS_EXPAND,
-)
+from autograd.ops_api import OpsSession, OPS_COPY
 from autograd.rankn import ShapeN, RN_MAX_RANK
 from autograd.program import PROGRAM_MAX_CODE, same_shape
 from sequence.exec_trait import Exec
@@ -60,17 +57,15 @@ def run_operation[E: Exec & Movable & Deinitable](
     for j in range(count):  # driver-loop: declared input descriptors
         shapes.append(descriptor_shape(descriptors, j * WORDS))
         var integer = descriptors[j * WORDS + 1] == 1
-        # Preserve integer words only for layout/selection operations. The
-        # arithmetic kernels consume float32, not numerically converted ints.
-        var layout = code == OPS_TRANSPOSE or code == OPS_RESHAPE or code == OPS_DETACH or code == OPS_COPY or code == OPS_RESHAPE_N or code == OPS_PERMUTE or code == OPS_CONCAT or code == OPS_NARROW or code == OPS_EXPAND
+        # Integer storage is for indices and exact copies. In particular the
+        # existing embedding/slab kernels apply floating-point normalization
+        # to values: integer value tables or concatenations would lose bits.
+        # Do not advertise general integer tensor computation through this ABI.
         var ids = (code == 32 or code == 41) and j == 1
-        var selected = (code == 32 or code == 41) and j == 0
         if ids and not integer:
             raise Error("adapter: embedding and take indices must be int32")
-        if integer and not (layout or ids or selected):
+        if integer and not (code == OPS_COPY or ids):
             raise Error("adapter: this operation requires float32 inputs")
-        if code == 39 and j > 0 and descriptors[j * WORDS + 1] != descriptors[1]:
-            raise Error("adapter: concatenated tensors must share a dtype")
     var ints = List[Int]()
     var floats = List[Float32]()
     for j in range(n_ints):  # driver-loop: operation metadata

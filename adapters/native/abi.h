@@ -10,6 +10,8 @@ extern "C" {
 // Tensor storage is contiguous, positive-sized, on CPU (-1) or visible GPU 0.
 // Metadata and the error buffer are CPU memory. Operation codes and options are
 // those of autograd/ops_api.mojo, with tensor-only embedding/take index forms.
+// Value inputs are float32. Int32 inputs are admitted only as embedding/take
+// indices or for OP_COPY; argmax may produce int32. This is not integer math.
 // The output descriptor is checked against the actual result before copying.
 // Callers synchronize producers first. Execution and copies finish before return.
 int64_t mojolearn_adapter_abi(void);

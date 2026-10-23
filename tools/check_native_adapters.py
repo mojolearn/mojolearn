@@ -161,6 +161,8 @@ def main():
         refuse("pointer_index_form", lambda: operation([x], 32, [2, 3], [0]*8), "tensor indices")
         refuse("unknown_operation", lambda: operation([x], 47, [2, 3]), "unknown operation")
         refuse("integer_arithmetic", lambda: operation([ids, ids], 2, [2]), "requires float32")
+        refuse("integer_value_table", lambda: operation([x.int(), ids], 32, [2, 3], [-1], integer_output=True), "requires float32")
+        refuse("integer_concatenation", lambda: operation([ids, ids], 39, [4], [0], integer_output=True), "requires float32")
         refuse("float_indices", lambda: operation([x, ids.float()], 32, [2, 3], [-1]), "indices must be int32")
         refuse("wrong_output_dtype", lambda: operation([x], 31, [2, 3], integer_output=True), "output dtype")
         bad_ids = torch.tensor([99], dtype=torch.int32, device=device)
