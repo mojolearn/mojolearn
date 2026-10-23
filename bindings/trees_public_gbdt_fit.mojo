@@ -404,7 +404,8 @@ def _listed(value: PythonObject, context: PythonObject) raises -> PythonObject:
         return py_call(context["array_type"].tolist, value)
     if cls is b.list:
         return value
-    return py_call(b.list, value)
+    # typed, so a non-iterable reaches the caller as its TypeError
+    return py_call_typed(b.list, value)
 
 
 def _group_sizes(group_id: PythonObject, n_rows: Int, context: PythonObject) raises -> PythonObject:
