@@ -4388,41 +4388,6 @@ class CCA(_PLS):
 
 
 # ================================================================ dictionary learning / sparse PCA
-_SPARSE_ALGOS = ("lasso_lars", "lasso_cd", "lars", "omp", "threshold")
-
-
-def _sparse_encode(k, X, D, algorithm, alpha=None, n_nonzero_coefs=None, init=None, max_iter=1000, positive=False):
-    """sklearn `_dict_learning.py::_sparse_encode` + `_sparse_encode_precomputed`.
-    'lasso_lars' solves the same Lasso as 'lasso_cd' (by coordinate descent
-    from zero: the Lasso optimum does not depend on the path taken to it);
-    'lasso_cd' warm-starts from `init`; 'omp' and 'threshold' as sklearn.
-    'lars' is sklearn's Lars(fit_intercept=False, n_nonzero_coefs) of each
-    row on the dictionary's columns, on the Gram, every row at once
-    (x_decomp/cells.mojo `lars_row`, x_linear/lars.mojo's lar path)."""
-    if algorithm not in _SPARSE_ALGOS:
-        raise ValueError(f"algorithm={algorithm!r} is not carried; one of {_SPARSE_ALGOS}")
-    n, m = X.r, X.c
-    kc = D.r
-    if algorithm in ("omp", "lars"):
-        reg = n_nonzero_coefs if n_nonzero_coefs is not None else min(max(m / 10, 1), kc)
-    else:
-        reg = alpha if alpha is not None else 1.0
-    if algorithm == "lars":
-        # cgr-decomp (2026-10-03): every row's Lars on the Gram at once, one
-        # device thread a row (x_decomp/cells.mojo `lars_row`), in place of
-        # the linear lane's Lars fitted one row at a time from Python
-        return k.lars_rows(k.mm(D, D, tb=True), k.mm(X, D, tb=True), m, int(reg))
-    Q = k.mm(X, D, tb=True)                      # n x k: row i is D x_i
-    if algorithm == "threshold":
-        code = k.ew("soft", Q, s=reg)
-        return k.ew("maxs", code, s=0.0) if positive else code
-    G = k.mm(D, D, tb=True)
-    if algorithm == "omp":
-        return k.omp_rows(G, Q, int(reg))
-    W = init.copy() if (algorithm == "lasso_cd" and init is not None) else _M.zeros(n, kc)
-    return k.lasso_rows(G, Q, W, float(reg), max_iter, 1e-8, positive)
-
-
 def sparse_encode(X, dictionary, *, algorithm="lasso_lars", n_nonzero_coefs=None, alpha=None, init=None,
                   max_iter=1000, positive=False, numeric_mode=None, **_ignored):
     """Sparse-code each row of X against a fixed dictionary.
@@ -4473,57 +4438,11 @@ def sparse_encode(X, dictionary, *, algorithm="lasso_lars", n_nonzero_coefs=None
     >>> D = rng.random((5, 8), dtype=np.float32)
     >>> code = mojolearn.sparse_encode(rng.random((100, 8), dtype=np.float32), D, algorithm="omp", n_nonzero_coefs=2)
     """
-    k = _Kit(_mode(numeric_mode))
-    init_m = None if init is None else _M.from_input(init, "init")
-    return _sparse_encode(k, _M.from_input(X), _M.from_input(dictionary, "dictionary"), algorithm, alpha,
-                          n_nonzero_coefs, init_m, max_iter, positive).out()
-
-
-def _dict_learning(k, X, nc, alpha, max_iter, tol, method, seed, code_init=None, dict_init=None,
-                   positive_dict=False, positive_code=False, method_max_iter=1000):
-    """sklearn `_dict_learning.py::_dict_learning`: returns (code, D, errors, n_iter)."""
-    if code_init is not None and dict_init is not None:
-        code, D = code_init, dict_init
-    else:
-        r = min(X.r, X.c)
-        U, S, Vt = _thin_svd(k, X, r, u_based=True)
-        code, D = U, k.ew("mul", Vt, S.T)
-    r = D.r
-    if nc <= r:
-        code, D = code.cols(0, nc), D.rows(0, nc)
-    else:
-        code = k.hstack([code, _M.zeros(code.r, nc - r)])
-        D = k.vstack([D, _M.zeros(nc - r, D.c)])
-    if method not in _SPARSE_ALGOS:
-        raise ValueError(f"algorithm={method!r} is not carried; one of {_SPARSE_ALGOS}")
-    # the loop (encode, atom update, cost, stopping test) in ONE binding call
-    # (lane py-runtime-b: x_decomp/dictl.mojo on the host column, dictl_dev.mojo
-    # on resident device matrices), the same cells, solvers and draws
-    code, D = code.copy(), D.copy()
-    ea = array.array("d", [0.0]) * max(int(max_iter), 1)
-    ii, ne = k.b.x_decomp_dict_learning(
-        X.addr, code.addr, D.addr, ea.buffer_info()[0],
-        [X.r, X.c, nc, _SPARSE_ALGOS.index(method), int(max_iter), int(method_max_iter), int(bool(positive_dict)),
-         int(bool(positive_code)), int(seed) & 0xFFFFFFFF, -1, -1], [float(alpha), float(tol)])
-    errors = ea.tolist()[:int(ne)]
-    return code, D, errors, int(ii)
+    return _DL_CALL(None, "sparse_encode", (X, dictionary, algorithm, n_nonzero_coefs, alpha, init, max_iter,
+                                            positive, numeric_mode), _DL_CONTEXT)
 
 
 class _SparseCoding(_Base):
-    def _encode(self, X):
-        self._check()
-        k = self._kit()
-        M = _M.from_input(X)
-        ta = getattr(self, "transform_alpha", None)
-        if ta is None:
-            ta = getattr(self, "alpha", 1.0)
-        code = _sparse_encode(k, M, self.components_m_, self.transform_algorithm,
-                              alpha=ta, n_nonzero_coefs=self.transform_n_nonzero_coefs,
-                              max_iter=self.transform_max_iter, positive=self.positive_code)
-        if self.split_sign:
-            code = k.hstack([k.ew("maxs", code, s=0.0), k.ew("scale", k.ew("mins", code, s=0.0), s=-1.0)])
-        return code
-
     def transform(self, X):
         """Encode X as a sparse combination of the dictionary atoms.
 
@@ -4538,7 +4457,7 @@ class _SparseCoding(_Base):
         ndarray of shape (n_samples, n_components), float32
             Twice as many columns when ``split_sign=True``.
         """
-        return self._encode(X).out()
+        return _DL_CALL(self, "coding_transform", (X,), _DL_CONTEXT)
 
     def inverse_transform(self, X):
         """Rebuild data from a code: ``code @ components_``.
@@ -4553,21 +4472,7 @@ class _SparseCoding(_Base):
         -------
         ndarray of shape (n_samples, n_features), float32
         """
-        self._check()
-        k = self._kit()
-        C = _M.from_input(X, "code")
-        D = self.components_m_
-        if self.split_sign:
-            h = D.r
-            C = k.ew("sub", C.cols(0, h), C.cols(h, 2 * h))
-        return k.mm(C, D).out()
-
-
-def _check_sparse_algos(fit_algorithm, transform_algorithm):
-    if fit_algorithm not in ("lars", "cd"):
-        raise ValueError("fit_algorithm must be 'lars' or 'cd'")
-    if transform_algorithm not in _SPARSE_ALGOS:
-        raise ValueError(f"transform_algorithm must be one of {_SPARSE_ALGOS}")
+        return _DL_CALL(self, "coding_inverse", (X,), _DL_CONTEXT)
 
 
 # Reference: scikit-learn `decomposition/_dict_learning.py`:
@@ -4677,8 +4582,7 @@ class DictionaryLearning(_SparseCoding):
         -------
         self
         """
-        self.fit_transform(X)
-        return self
+        return _DL_CALL(self, "dl_fit", (X,), _DL_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit the dictionary and return the code found while fitting.
@@ -4693,26 +4597,7 @@ class DictionaryLearning(_SparseCoding):
         ndarray of shape (n_samples, n_components), float32
             Twice as many columns when ``split_sign=True``.
         """
-        self.numeric_mode_ = _mode(self.numeric_mode)
-        _check_sparse_algos(self.fit_algorithm, self.transform_algorithm)
-        if self.callback is not None:
-            raise NotImplementedError("callback is not carried")
-        k = self._kit()
-        M = _M.from_input(X)
-        nc = self.n_components if self.n_components is not None else M.c
-        ci = None if self.code_init is None else _M.from_input(self.code_init, "code_init")
-        di = None if self.dict_init is None else _M.from_input(self.dict_init, "dict_init")
-        code, D, errors, it = _dict_learning(
-            k, M, nc, float(self.alpha), self.max_iter, self.tol, "lasso_" + self.fit_algorithm,
-            _seed_of(self.random_state), ci, di, self.positive_dict, self.positive_code, self.transform_max_iter)
-        self.components_m_ = D
-        self.components_ = D.out()
-        self.error_ = errors
-        self.n_iter_ = it
-        self.n_features_in_ = M.c
-        if self.split_sign:
-            code = k.hstack([k.ew("maxs", code, s=0.0), k.ew("scale", k.ew("mins", code, s=0.0), s=-1.0)])
-        return code.out()
+        return _DL_CALL(self, "dl_fit_transform", (X,), _DL_CONTEXT)
 
 
 # Reference: `_dict_learning.py::MiniBatchDictionaryLearning`:
@@ -4824,48 +4709,7 @@ class MiniBatchDictionaryLearning(_SparseCoding):
         -------
         self
         """
-        self.numeric_mode_ = _mode(self.numeric_mode)
-        _check_sparse_algos(self.fit_algorithm, self.transform_algorithm)
-        if self.callback is not None:
-            raise NotImplementedError("callback is not carried")
-        k = self._kit()
-        M = _M.from_input(X)
-        n, m = M.r, M.c
-        nc = self.n_components if self.n_components is not None else m
-        bs = min(int(self.batch_size), n)
-        seed = _seed_of(self.random_state)
-        if self.dict_init is not None:
-            D = _M.from_input(self.dict_init, "dict_init")
-        else:
-            r = min(n, m)
-            _, S, Vt = _thin_svd(k, M, r, u_based=True)
-            D = k.ew("mul", Vt, S.T)
-        if nc <= D.r:
-            D = D.rows(0, nc)
-        else:
-            D = k.vstack([D, _M.zeros(nc - D.r, m)])
-        if self.shuffle:
-            Xt = k.take_rows(M, k.order(k.rand(1, n, seed, 50, 0)))
-        else:
-            Xt = M
-        steps_per_iter = -(-n // bs)
-        n_steps = self.max_iter * steps_per_iter
-        # the step loop (encode, the running A and B, atom update, the
-        # convergence tests) in ONE binding call (lane py-runtime-b:
-        # x_decomp/dictl.mojo, dictl_dev.mojo), the same cells and float64 tests
-        D = D.copy()
-        mni = self.max_no_improvement
-        step = int(k.b.x_decomp_dict_minibatch(
-            Xt.addr, D.addr,
-            [n, m, nc, _SPARSE_ALGOS.index("lasso_" + self.fit_algorithm), 0, int(self.transform_max_iter),
-             int(bool(self.positive_dict)), int(bool(self.positive_code)), seed & 0xFFFFFFFF, -1,
-             -1 if mni is None else int(mni), bs, n_steps], [float(self.alpha), float(self.tol)])) - 1
-        self.n_steps_ = step + 1
-        self.n_iter_ = -(-self.n_steps_ // steps_per_iter)
-        self.components_m_ = D
-        self.components_ = D.out()
-        self.n_features_in_ = m
-        return self
+        return _DL_CALL(self, "mbdl_fit", (X,), _DL_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit the dictionary, then return ``transform(X)``.
@@ -4879,14 +4723,26 @@ class MiniBatchDictionaryLearning(_SparseCoding):
         -------
         ndarray of shape (n_samples, n_components), float32
         """
-        return self.fit(X).transform(X)
+        return _DL_CALL(self, "mbdl_fit_transform", (X,), _DL_CONTEXT)
 
 
 class _BaseSparsePCA(_Base):
-    def _normalize(self, k, C):
-        nrm = k.ew("sqrt", k.rowsum(k.ew("sq", C)))
-        nrm = k.ew("select", nrm, nrm, k.const(1.0), s=0.0)
-        return k.ew("div", C, nrm)
+    # fit, fit_transform, transform and inverse_transform are one call each
+    # into the native dictionary-learning owner (bindings/dict_learning_native.mojo),
+    # which tells SparsePCA and MiniBatchSparsePCA apart by class.
+    def fit_transform(self, X, y=None):
+        """Fit the sparse components, then return ``transform(X)``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
+        return _DL_CALL(self, "spca_fit_transform", (X,), _DL_CONTEXT)
 
     # sklearn `_BaseSparsePCA.transform`: ridge_regression(components_.T,
     # (X - mean_).T, ridge_alpha, solver='cholesky').
@@ -4904,15 +4760,7 @@ class _BaseSparsePCA(_Base):
         -------
         ndarray of shape (n_samples, n_components), float32
         """
-        self._check()
-        k = self._kit()
-        Xc = k.ew("sub", _M.from_input(X), self.mean_m_)
-        C = self.components_m_
-        # lane cpu2-l8-decomp: ridge_alpha added to the diagonal where G lives
-        G = k.diag_add(k.mm(C, C, tb=True), _M.of([float(self.ridge_alpha)], 1, 1))
-        lu, piv, _ = k.lu(G)
-        U = k.lu_solve(lu, piv, k.mm(C, Xc, tb=True)).T
-        return U.out()
+        return _DL_CALL(self, "spca_transform", (X,), _DL_CONTEXT)
 
     def inverse_transform(self, X):
         """Map projected data back: ``X @ components_ + mean_``.
@@ -4925,9 +4773,7 @@ class _BaseSparsePCA(_Base):
         -------
         ndarray of shape (n_samples, n_features), float32
         """
-        self._check()
-        k = self._kit()
-        return k.ew("add", k.mm(_M.from_input(X), self.components_m_), self.mean_m_).out()
+        return _DL_CALL(self, "spca_inverse", (X,), _DL_CONTEXT)
 
 
 # Reference: scikit-learn `decomposition/_sparse_pca.py`: dictionary
@@ -5013,26 +4859,7 @@ class SparsePCA(_BaseSparsePCA):
         -------
         self
         """
-        self.numeric_mode_ = _mode(self.numeric_mode)
-        if self.method not in ("lars", "cd"):
-            raise ValueError("method must be 'lars' or 'cd'")
-        k = self._kit()
-        M = _M.from_input(X)
-        nc = self.n_components if self.n_components is not None else M.c
-        self.mean_m_ = k.colmean(M)
-        Xc = k.ew("sub", M, self.mean_m_)
-        ci = None if self.V_init is None else _M.from_input(self.V_init, "V_init").T
-        di = None if self.U_init is None else _M.from_input(self.U_init, "U_init").T
-        code, D, errors, it = _dict_learning(k, Xc.T, nc, float(self.alpha), self.max_iter, self.tol,
-                                             "lasso_" + self.method, _seed_of(self.random_state), ci, di)
-        self.components_m_ = self._normalize(k, code.T)
-        self.components_ = self.components_m_.out()
-        self.n_components_ = self.components_m_.r
-        self.error_ = errors
-        self.n_iter_ = it
-        self.mean_ = self.mean_m_.out((M.c,))
-        self.n_features_in_ = M.c
-        return self
+        return _DL_CALL(self, "spca_fit", (X,), _DL_CONTEXT)
 
 
 # MiniBatchDictionaryLearning on the centered X^T, the components its
@@ -5115,26 +4942,7 @@ class MiniBatchSparsePCA(_BaseSparsePCA):
         -------
         self
         """
-        self.numeric_mode_ = _mode(self.numeric_mode)
-        k = self._kit()
-        M = _M.from_input(X)
-        nc = self.n_components if self.n_components is not None else M.c
-        self.mean_m_ = k.colmean(M)
-        Xc = k.ew("sub", M, self.mean_m_)
-        est = MiniBatchDictionaryLearning(
-            n_components=nc, alpha=self.alpha, max_iter=self.max_iter, batch_size=self.batch_size,
-            shuffle=self.shuffle, fit_algorithm=self.method, random_state=self.random_state,
-            transform_algorithm="lasso_lars", transform_alpha=self.alpha, tol=self.tol,
-            max_no_improvement=self.max_no_improvement, numeric_mode=self.numeric_mode_)
-        XT = Xc.T
-        est.fit(XT.out())
-        self.components_m_ = self._normalize(k, est._encode(XT.out()).T)
-        self.components_ = self.components_m_.out()
-        self.n_components_ = self.components_m_.r
-        self.n_iter_ = est.n_iter_
-        self.mean_ = self.mean_m_.out((M.c,))
-        self.n_features_in_ = M.c
-        return self
+        return _DL_CALL(self, "spca_fit", (X,), _DL_CONTEXT)
 
 
 # ================================================================ LatentDirichletAllocation
@@ -7419,29 +7227,39 @@ class SparseCoder(_SparseCoding):
         self.transform_max_iter, self.numeric_mode = transform_max_iter, numeric_mode
 
     # Nothing is learned: `transform` works without `fit` (scikit-learn tags
-    # SparseCoder requires_fit=False). The parameters are checked and the
-    # dictionary uploaded at the first use, not in `__init__`, which stores
-    # them verbatim; the upload is kept for the same dictionary object.
-    def _validate_params(self):
-        _check_sparse_algos("lars", self.transform_algorithm)
+    # SparseCoder requires_fit=False). `__init__` stores the parameters
+    # verbatim; every operation checks them and reads the dictionary, in
+    # the native dictionary-learning owner.
+    def transform(self, X):
+        """Encode X as a sparse combination of the dictionary atoms.
 
-    def _prepare(self):
-        self._validate_params()
-        cached = self.__dict__.get("_dictionary_m")
-        if cached is None or cached[0] is not self.dictionary:
-            cached = (self.dictionary, _M.from_input(self.dictionary, "dictionary"))
-            self._dictionary_m = cached
-        return cached[1]
+        Uses ``transform_algorithm`` and its settings.
 
-    @property
-    def components_m_(self):
-        return self._prepare()
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
 
-    def _check(self, attr="components_"):
-        self._prepare()
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+            Twice as many columns when ``split_sign=True``.
+        """
+        return _DL_CALL(self, "coder_transform", (X,), _DL_CONTEXT)
 
-    def _kit(self):
-        return _Kit(_mode(self.numeric_mode))
+    def inverse_transform(self, X):
+        """Rebuild data from a code: ``code @ dictionary``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_components)
+            A code, as returned by ``transform`` (with ``2 * n_components``
+            columns when ``split_sign=True``).
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_features), float32
+        """
+        return _DL_CALL(self, "coder_inverse", (X,), _DL_CONTEXT)
 
     def fit(self, X, y=None):
         """Check the parameters, record the dictionary's shape and return self
@@ -7451,17 +7269,7 @@ class SparseCoder(_SparseCoding):
         -------
         self
         """
-        # scikit-learn's SparseCoder.fit: X is validated (2-D, non-empty) and
-        # must have the dictionary's number of features
-        x, _ = as_f32_c(X, ndim=2, name="X")
-        D = self._prepare()
-        if x.shape[1] != D.c:
-            raise ValueError("Dictionary and X have different numbers of features:"
-                             f"dictionary.shape: {(D.r, D.c)} X.shape: {tuple(x.shape)}")
-        self.numeric_mode_ = _mode(self.numeric_mode)
-        self.components_ = D.out()
-        self.n_components_, self.n_features_in_ = D.r, D.c
-        return self
+        return _DL_CALL(self, "coder_fit", (X,), _DL_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Return ``transform(X)``.
@@ -7475,7 +7283,7 @@ class SparseCoder(_SparseCoding):
         -------
         ndarray of shape (n_samples, n_components), float32
         """
-        return self.transform(X)
+        return _DL_CALL(self, "coder_transform", (X,), _DL_CONTEXT)
 
 
 # ================================================================ randomized arms of PCA / TruncatedSVD
@@ -7513,3 +7321,10 @@ def _randomized_decompose(X, nc, *, center, n_oversamples, n_iter, power_iterati
         out["explained_variance"] = ev.out((nc,))
         out["explained_variance_ratio"] = k.ew("div", ev, full).out((nc,))
     return out
+
+
+# The native dictionary-learning owner (bindings/dict_learning_native.mojo):
+# DictionaryLearning, MiniBatchDictionaryLearning, SparseCoder, SparsePCA,
+# MiniBatchSparsePCA and sparse_encode, one call per public operation.
+from ._native_decomp_kit_bridge import connect_public as _connect_decomp_kit  # noqa: E402
+_DL_CALL, _DL_CONTEXT = _connect_decomp_kit("dict_learning_native_call", minibatch_sparse_pca_class=MiniBatchSparsePCA)
