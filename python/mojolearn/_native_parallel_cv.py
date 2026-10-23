@@ -41,8 +41,8 @@ def connect(context, package):
     if type(io.BytesIO.getvalue) is not MethodDescriptorType:
         raise TypeError('native CV captures require the native BytesIO owner')
     artifacts = {}
-    for name, entry in (('cv', package.model_selection._NATIVE), ('trees', _gbdt_adapters._TREES),
-                        ('archive', ensemble._ARCHIVE)):  # glue: actual native owner files, including separate development DSOs
+    for name, entry in (('cv', package.model_selection._NATIVE), ('trees', _gbdt_adapters._TREES),  # glue: import-time native owner files
+                        ('archive', ensemble._ARCHIVE)):
         if type(entry) is BuiltinFunctionType:
             owner = entry.__self__
             if type(owner) is not ModuleType:

@@ -83,7 +83,7 @@ def retain_completed(completed, *, directory, vendor):
         # is admitted only after every numerical invariant below passes.
         with model_path.open('xb') as target:
             target.write(archive)
-        for name in ('X_test', 'y_test', 'predict', 'raw_predict', 'reload_predict', 'loss_curve'):
+        for name in ('X_test', 'y_test', 'predict', 'raw_predict', 'reload_predict', 'loss_curve'):  # glue: test-controller retention of six completed native outputs
             np.save(arrays / (key + '-' + name + '.npy'), np.asarray(value[name]), allow_pickle=False)
         raw, reload = array_digest(value['raw_predict']), array_digest(value['reload_predict'])
         if raw != reload:
