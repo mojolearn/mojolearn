@@ -20,8 +20,7 @@ _ENTRY = None
 _CONTEXT = None
 
 #: The tree bindings the owner launches, by numeric mode.
-_TREE_BINDINGS = ("_mojolearn_rf", "_mojolearn_trees", "_mojolearn_x_trees", "_mojolearn_gbdt",
-                  "_mojolearn_svm", "_mojolearn_x_metrics")
+_TREE_BINDINGS = ("_mojolearn_rf", "_mojolearn_trees", "_mojolearn_x_trees")
 #: The base binding's input and label helpers (`_buffer._native`), always the
 #: identical binary (they are byte moves and comparisons with no tier).
 _BASE_HELPERS = ("cast_f64_to_f32", "cast_colmajor_f64_to_f32", "transpose_f32", "all_finite_f32",
@@ -109,7 +108,8 @@ def connect():
     from . import _backend
     _backend.default_mode()  # glue: settle the process default the native mode falls back to
     context.update(
-        trees_bindings=_bindings(), trees_helpers=_helpers(), trees_classes={},
+        trees_bindings=_bindings(), trees_helpers=_helpers(), trees_classes={}, trees_defaults={},
+        trees_missing=object(),
         trees_real_type=numbers.Real, trees_integral_type=numbers.Integral,
     )
     _ENTRY, _CONTEXT = entry, context
@@ -123,6 +123,13 @@ def register(cls, kind, **tables):
     _, context = connect()
     if "trees_unavailable" in context:
         return
+    import inspect
     context["trees_classes"][cls] = kind
+    # The constructor defaults, for an estimator the owner assembles itself
+    # (a splitter='random' tree's inner forest).
+    signature = inspect.signature(cls.__init__)
+    context["trees_defaults"][cls] = {
+        name: p.default for name, p in signature.parameters.items()  # glue: the constructor's parameters, once at definition
+        if name != "self" and p.default is not inspect.Parameter.empty}
     for key, value in tables.items():  # glue: the class's fixed lookup tables, once at definition
         context.setdefault(key, value)

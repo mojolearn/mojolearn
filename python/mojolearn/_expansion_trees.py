@@ -46,11 +46,15 @@ from .randomforest import (
     RandomForestClassifier, RandomForestRegressor, _class_weight_rows, _refuse,
     _MODEL_FORMATS as _RF_MODEL_FORMATS, _SAVE_SCHEMA as _RF_SAVE_SCHEMA,
 )
-from . import _native_archive_bridge
+from . import _native_archive_bridge, _native_trees_bridge
 
 # The compiled saved-model owner, connected once at import: a tree's `save`
 # is one native call.
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
+# The compiled tree-ensemble owner: a DecisionTree*'s `fit`, `predict` and
+# `predict_proba` are one native call each (bindings/trees_public_forest.mojo;
+# splitter='random' grows one extra-trees tree there).
+_TREES, _TREES_CONTEXT = _native_trees_bridge.connect()
 
 __all__ = [
     "DecisionTreeClassifier",
@@ -169,30 +173,6 @@ def _dt_common(splitter, max_features, max_leaf_nodes):
     return None if splitter == "random" else max_leaf_nodes
 
 
-def _dt_random_fit(est, cls, X, y, fit_params=None, **extra):
-    """splitter='random': one ExtraTrees tree; its flat arrays become this
-    estimator's, and predict delegates to it. `fit_params` (the classifier's
-    sample_weight) go to the inner fit; `min_weight_fraction_leaf` to its
-    constructor."""
-    inner = cls(n_estimators=1, bootstrap=False, max_features=1.0 if est.max_features is None else est.max_features,
-                max_depth=est.max_depth, min_samples_split=est.min_samples_split,
-                min_samples_leaf=est.min_samples_leaf, max_leaf_nodes=est.max_leaf_nodes,
-                min_impurity_decrease=est.min_impurity_decrease, criterion=est.criterion,
-                min_weight_fraction_leaf=est.min_weight_fraction_leaf,
-                random_state=0 if est.random_state is None else est.random_state,
-                numeric_mode=est.numeric_mode, **extra).fit(X, y, **(fit_params or {}))
-    est._random_inner = inner
-    for name in ("_offsets", "_colid", "_quesval", "_left_child", "_leaves", "_n_trees", "_num_outputs",  # glue: copies a handful of fitted attributes
-                 "n_features_in_"):
-        setattr(est, name, getattr(inner, name))
-    if hasattr(inner, "classes_"):
-        est.classes_ = inner.classes_
-        est.n_classes_ = len(inner.classes_)
-    return est
-
-
-# sample_weight goes through the weighted RF fit entry (the weighted
-# objective; its CPU restatement is ensemble/host/rf_oracle.mojo).
 @forest_estimator("classifier")
 class DecisionTreeClassifier(RandomForestClassifier):
     """A single classification tree (CART).
@@ -323,14 +303,7 @@ class DecisionTreeClassifier(RandomForestClassifier):
         -------
         self
         """
-        if self.splitter == "random":
-            # lane sk-kernels: the ExtraTrees builder's weighted classifier
-            self._refresh_config()
-            fit_params = {} if sample_weight is None else {"sample_weight": sample_weight}
-            return _dt_random_fit(self, _ET_CLS, X, y, fit_params, class_weight=self.class_weight)
-        if sample_weight is None:
-            return self._fit_with_tree_start(X, y)
-        return self._fit_weighted(_trees_colmajor(X, self), y, sample_weight)
+        return _TREES(self, "trees_forest_fit", (X, y, sample_weight, False, None), _TREES_CONTEXT)
 
     def _fit_weighted(self, Xcm, y, sample_weight, x_finite=False, encoded=None, session=None):
         """The weighted fit on a column-major float32 X. AdaBoost calls it
@@ -395,13 +368,11 @@ class DecisionTreeClassifier(RandomForestClassifier):
         Returns an array of shape (n_samples, n_classes), columns in the
         order of ``classes_``.
         """
-        inner = getattr(self, "_random_inner", None)
-        return inner.predict_proba(X) if inner is not None else super().predict_proba(X)
+        return _TREES(self, "trees_forest_predict_proba", (X,), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict the class label of each row of ``X``."""
-        inner = getattr(self, "_random_inner", None)
-        return inner.predict(X) if inner is not None else super().predict(X)
+        return _TREES(self, "trees_forest_predict", (X,), _TREES_CONTEXT)
 
     def save(self, path):
         """Save the fitted tree to ``path``.
@@ -560,12 +531,7 @@ class DecisionTreeRegressor(RandomForestRegressor):
         -------
         self
         """
-        if self.splitter == "random":
-            # lane sk-final: the ExtraTrees builder's weighted regressor
-            self._refresh_config()
-            fit_params = {} if sample_weight is None else {"sample_weight": sample_weight}
-            return _dt_random_fit(self, ExtraTreesRegressor, X, y, fit_params)
-        return self._fit_with_tree_start(X, y, sample_weight=sample_weight)
+        return _TREES(self, "trees_forest_fit", (X, y, sample_weight, False, None), _TREES_CONTEXT)
 
     def get_depth(self):
         """Return the depth of the fitted tree."""
@@ -577,8 +543,7 @@ class DecisionTreeRegressor(RandomForestRegressor):
 
     def predict(self, X):
         """Predict the target of each row of ``X``."""
-        inner = getattr(self, "_random_inner", None)
-        return inner.predict(X) if inner is not None else super().predict(X)
+        return _TREES(self, "trees_forest_predict", (X,), _TREES_CONTEXT)
 
     def save(self, path):
         """Save the fitted tree to ``path``.
@@ -599,6 +564,8 @@ _TREE_SAVE_SCHEMA = (
 )
 _native_archive_bridge.register(DecisionTreeClassifier, _RF_MODEL_FORMATS, _TREE_SAVE_SCHEMA)
 _native_archive_bridge.register(DecisionTreeRegressor, _RF_MODEL_FORMATS, _TREE_SAVE_SCHEMA)
+_native_trees_bridge.register(DecisionTreeClassifier, "dt_classifier")
+_native_trees_bridge.register(DecisionTreeRegressor, "dt_regressor")
 
 
 def _trees_shape_native(est):

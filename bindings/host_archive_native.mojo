@@ -5,7 +5,7 @@
 from std.python import Python, PythonObject
 from std.memory import bitcast
 from std.math import isfinite
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains, py_setattr
 from bindings.sequential_description import sequential_fields
 from bindings.classical_archive_read import classical_archive_read, classical_archive_build, _archive_exact as _raw_archive_exact, _archive_string, _archive_read_repr, _archive_builtin_repr
 from bindings.classical_arrays import classical_i64, classical_f64, classical_wrap_array, classical_array, classical_address, _store_code
@@ -2287,6 +2287,13 @@ def host_archive_public_forest(cls: PythonObject, arrays: PythonObject, fmt: Str
         var classes = host_archive_class_values(arrays["classes"], context)
         py_setitem(fields, "classes_", classes)
         py_setitem(fields, "n_classes_", len(classes))
+    # The former `_mojolearn_after_fit` after a load: the five model arrays
+    # frozen (the loaded Arrays are the archive's own fresh storage) and an
+    # empty resident snapshot holder.
+    var model_names = Python.tuple("_offsets", "_colid", "_quesval", "_left_child", "_leaves")
+    for i in range(5):  # small-loop(model_names): the five model array names
+        py_setattr(fields[model_names[i]], "_readonly", PythonObject(True))
+    py_setitem(fields, "_resident_holder", Python.dict())
     return model
 
 

@@ -18,6 +18,7 @@ from bindings.host_archive_native import host_archive_build
 from bindings.archive_schema_native import archive_schema_save
 from bindings.linear_score_native import linear_regressor_score
 from bindings.host_tree_native import host_tree_operation
+from bindings.trees_public_native import trees_public_operation
 from bindings.host_inference_native import host_inference_operation
 from bindings.host_kde_fit_native import host_kde_fit
 from bindings.host_iforest_fit_native import host_iforest_fit
@@ -127,6 +128,11 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             return result.steal_data()
         if operation.startswith("host_infer_"):
             var result = host_inference_operation(model, operation, args, context["host_inference_context"], context, classical_caller_outside(context))
+            return result.steal_data()
+        if operation.startswith("trees_"):
+            # The public tree ensembles' one-call methods
+            # (bindings/trees_public_native.mojo).
+            var result = trees_public_operation(model, operation, args, context)
             return result.steal_data()
         if operation.startswith("host_tree_"):
             var result = host_tree_operation(model, operation, args, context["host_tree_context"])

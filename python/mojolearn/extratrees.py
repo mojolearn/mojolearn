@@ -90,16 +90,10 @@ Nothing in this module imports NumPy.
 
 import numbers
 
-from . import _mojolearn_trees, _native_archive_bridge
-from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_colmajor, as_f32_forest_layout, empty
-from ._labels import (
-    argmax_rows, decode_labels,
-    encode_labels, flat_view, flatten_labels, is_bool, sorted_classes,
-)
+from . import _mojolearn_trees, _native_archive_bridge, _native_trees_bridge
+from ._labels import argmax_rows, decode_labels, is_bool
 from ._mode import NumericModeMixin
-from ._forest_protocol import (ForestProtocol, forest_estimator,
-                               _forest_fit_function, _forest_fit_arrays,
-                               _rowmajor_fit_function)
+from ._forest_protocol import ForestProtocol, forest_estimator
 
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-extratrees-1"
@@ -110,6 +104,9 @@ _MODEL_FORMAT = "mojolearn-extratrees-1"
 # bindings/host_archive_native.mojo `host_archive_public_forest` builds the
 # loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
+# The compiled tree-ensemble owner: `fit`, `predict` and `predict_proba` are
+# one native call each (bindings/trees_public_forest.mojo).
+_TREES, _TREES_CONTEXT = _native_trees_bridge.connect()
 
 # estimator.mojo's max_features sentinels, same values in the same words.
 _MF_SQRT = -1
@@ -218,131 +215,11 @@ def _validate_device(device):
         )
 
 
-def _fit_params(n_rows, n_features, n_classes, cfg, device, criterion):
-    """The 22-slot params list, in _mojolearn_trees.mojo's exact order:
-    n_rows, n_features, n_classes, n_estimators, max_depth,
-    min_samples_split, min_samples_leaf, min_weight_fraction_leaf,
-    max_features_spec, max_features_fraction, min_impurity_decrease,
-    bootstrap, oob_score, random_state, warm_start, ccp_alpha,
-    has_class_weight, has_monotonic_cst, max_samples (resolved count),
-    max_leaf_nodes, device, criterion."""
-    _validate_device(device)
-    spec, fraction = _max_features_slots(cfg["max_features"])
-    return [
-        int(n_rows),
-        int(n_features),
-        int(n_classes),
-        int(cfg["n_estimators"]),
-        -1 if cfg["max_depth"] is None else int(cfg["max_depth"]),
-        int(cfg["min_samples_split"]),
-        int(cfg["min_samples_leaf"]),
-        float(cfg["min_weight_fraction_leaf"]),
-        spec,
-        fraction,
-        float(cfg["min_impurity_decrease"]),
-        1 if cfg["bootstrap"] else 0,
-        1 if cfg["oob_score"] else 0,
-        0 if cfg["random_state"] is None else int(cfg["random_state"]),
-        1 if cfg["warm_start"] else 0,
-        float(cfg["ccp_alpha"]),
-        0 if cfg["class_weight"] is None else 1,
-        0 if cfg["monotonic_cst"] is None else 1,
-        _n_samples_bootstrap(n_rows, cfg["max_samples"]),
-        -1 if cfg["max_leaf_nodes"] is None else int(cfg["max_leaf_nodes"]),
-        1,  # GPU-only ABI; constructor validation rejects other devices.
-        int(criterion),
-    ]
-
-
 class _ExtraTreesBase(ForestProtocol, NumericModeMixin):
     _BINDING = "_mojolearn_trees"
     def __init__(self, device):
         _validate_device(device)
         self.device = device
-
-    def _fit_arrays(self, X, ya, n_classes, fit_fn, rowmajor_fit_fn=None, cfg=None):
-        # Column-major is the builder's layout (cuML's `data` is
-        # column-major); `as_f32_colmajor` is that copy, named in the
-        # module docstring, and zero for a float32 F-order input
-        # (DEVIATION 2343). Its 2-D refusal reads "mojolearn: X must be
-        # 2-D, got ...", the wording `_arrays.py` used. `ya` arrives as
-        # a float32 `Array` from the caller.
-        # DEVIATION 2637: a C-order float32 X is lent row-major to the
-        # `*_rowmajor` entry, which transposes it into the pinned upload
-        # stage across the host pool (same staged bytes, one pass fewer).
-        if rowmajor_fit_fn is not None:
-            Xf, row_major = as_f32_forest_layout(X, name="X")
-            if row_major:
-                fit_fn = rowmajor_fit_fn
-        else:
-            Xf, _ = as_f32_colmajor(X, name="X")
-        n_rows, n_features = Xf.shape
-        if len(ya) != n_rows:
-            raise ValueError(
-                f"y has {len(ya)} rows, X has {n_rows}"
-            )
-        # The builder has no missing-value arm: a NaN or inf in X was
-        # quantized and split on silently (pip smoke 2026-09-22). Refused
-        # here, as cuML documents and scikit-learn's pre-1.4 forests did.
-        # FAST on Apple (lane apple-fast-rfet-scan): the binding refuses a
-        # non-finite cell through a device scan of the uploaded X
-        # (ensemble/device_finite.mojo), so this one-thread host scan of
-        # every cell is not repeated; its refusal is raised as the same
-        # ValueError below.
-        scan = getattr(self._bind("_mojolearn_trees"), "trees_device_finite_scan", None)
-        device_scan = scan is not None and int(scan()) == 1
-        if not device_scan and not all_finite(Xf):
-            raise ValueError(_NONFINITE_REFUSAL)
-        params = _fit_params(
-            n_rows, n_features, n_classes, self._cfg if cfg is None else cfg,
-            self.device, self._criterion_code,
-        )
-        # DEVIATION 2480: host-only clocks, disabled on the shipping path.
-        import os
-        from time import perf_counter
-        boundary_times = os.environ.get("MOJOLEARN_STAGE_TIMES") == "1"
-        binding_start = perf_counter() if boundary_times else 0
-        try:
-            out = fit_fn(addr_ro(Xf, name="X"), addr_ro(ya, name="y"), params)
-        except Exception as exc:
-            if device_scan and _NONFINITE_REFUSAL in str(exc):
-                raise ValueError(_NONFINITE_REFUSAL) from None
-            raise
-        binding_end = perf_counter() if boundary_times else 0
-        del Xf, ya  # the borrow ends with the call
-        (self._offsets, self._colid, self._quesval, self._left_child,
-         self._leaves, meta) = _forest_fit_arrays(out)
-        if boundary_times:
-            print("BOUNDARY_PYTHON", {"binding_ms": (binding_end - binding_start) * 1000,
-                  "array_pack_ms": (perf_counter() - binding_end) * 1000}, flush=True)
-        self.n_features_in_ = int(n_features)
-        self._n_trees = int(meta[0])
-        self._num_outputs = int(meta[1])
-        self.depth_cap_bound_ = bool(meta[2])
-        self.max_depth_resolved_ = int(meta[3])
-        self.max_features_ = int(meta[4])
-        # sklearn's private `_n_samples_bootstrap` (None without bootstrap);
-        # the count the fit USED, reported from the far side of the boundary
-        # so a check can see the knob reach it (DEVIATION 460).
-        self._n_samples_bootstrap = int(meta[5]) or None
-        return self
-
-    def _vote(self, X):
-        if not hasattr(self, "_offsets"):
-            raise RuntimeError("this estimator is not fitted yet")
-        Xa, _ = as_f32_c(X, ndim=2, name="X")
-        n_rows, n_features = Xa.shape
-        if n_features != self.n_features_in_:
-            raise ValueError(
-                f"X has {n_features} features, fit saw {self.n_features_in_}"
-            )
-        out = empty((n_rows * self._num_outputs,), "<f4")
-        wrote = self._predict_forest("et_predict", Xa, out)
-        if wrote != n_rows:
-            raise RuntimeError(
-                f"et_predict wrote {wrote} of {n_rows} rows"
-            )
-        return out.reshape((n_rows, self._num_outputs))
 
     def save(self, path):
         """Write the fitted forest to `path` as an npz file.
@@ -554,63 +431,12 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         -------
         self
         """
-        return self._fit_with_tree_start(X, y, sample_weight=sample_weight)
+        return _TREES(self, "trees_forest_fit", (X, y, sample_weight, False, None), _TREES_CONTEXT)
 
     def _fit_with_tree_start(self, X, y, tree_start=None, sample_weight=None):
-        self._refresh_config()
-        self._capture_fit_mode()
-        # DEVIATION 2340: `classes_` is a Python list of the caller's
-        # label objects under `_labels.sorted_classes`'s order rule, and
-        # the codes are one dict lookup per row (the permitted O(rows)
-        # label-encoding loop). The codes cross as float32, as before.
-        self.classes_, codes = encode_labels(y)  # DEVIATION 2500, int32 codes
-        self.n_classes_ = int(len(self.classes_))
-        if sample_weight is not None or self._cfg["class_weight"] is not None:
-            # lane sk-kernels: sample_weight times the class_weight row
-            # weight (`_trees_weighted_rows`, native) through the weighted
-            # builder (`et_classifier_fit_weighted`); the class weights
-            # are already in the rows, so the params carry none.
-            from ._expansion_trees import _trees_weighted_rows
-            weights = _trees_weighted_rows(sample_weight, self._cfg["class_weight"],
-                                           self.classes_, codes, self)
-            binding = self._bind("_mojolearn_trees")
-            if not callable(getattr(binding, "et_classifier_fit_weighted_export", None)):
-                raise RuntimeError("rebuild the trees binding for weighted ExtraTrees fits")
-            if tree_start is not None:
-                # lane sk-final: the weighted tree-ID shard
-                if not callable(getattr(binding, "et_classifier_fit_weighted_shard", None)):
-                    raise RuntimeError("rebuild the trees binding for weighted ExtraTrees shard fits")
-
-                def shard_fn(x, y, params):
-                    return binding.et_classifier_fit_weighted_shard(
-                        x, y, params, addr_ro(weights, name="sample_weight"), tree_start)
-                return self._fit_arrays(X, codes.astype("<f4"), self.n_classes_, shard_fn,
-                                        cfg=dict(self._cfg, class_weight=None))
-            weighted = _forest_fit_function(binding, "et_classifier_fit_weighted")
-            weighted_rm = _rowmajor_fit_function(binding, "et_classifier_fit_weighted")
-
-            def fit_fn(x, y, params):
-                return weighted(x, y, params, addr_ro(weights, name="sample_weight"))
-            rowmajor_fn = None
-            if weighted_rm is not None:
-                def rowmajor_fn(x, y, params):
-                    return weighted_rm(x, y, params, addr_ro(weights, name="sample_weight"))
-            return self._fit_arrays(X, codes.astype("<f4"), self.n_classes_, fit_fn,
-                                    rowmajor_fn, cfg=dict(self._cfg, class_weight=None))
-        if tree_start is not None:
-            binding = self._bind('_mojolearn_trees')
-            if not callable(getattr(binding, 'et_classifier_fit_shard', None)):
-                raise ImportError('rebuild ExtraTrees binding for global tree-ID shards')
-            def fit_fn(x, y, params):
-                return binding.et_classifier_fit_shard(x, y, params, tree_start)
-            return self._fit_arrays(X, codes.astype('<f4'), self.n_classes_, fit_fn)
-        return self._fit_arrays(
-            X,
-            codes.astype("<f4"),
-            self.n_classes_,
-            _forest_fit_function(self._bind("_mojolearn_trees"), "et_classifier_fit"),
-            _rowmajor_fit_function(self._bind("_mojolearn_trees"), "et_classifier_fit"),
-        )
+        """`fit` of the trees from global tree ID `tree_start` on (a shard of
+        a multi-device forest)."""
+        return _TREES(self, "trees_forest_fit", (X, y, sample_weight, False, tree_start), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """Class probabilities: the average of the trees' leaf class
@@ -621,7 +447,7 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         Array of shape (n_samples, n_classes), float64
             Columns in `classes_` order.
         """
-        return self._vote(X).astype("<f8")
+        return _TREES(self, "trees_forest_predict_proba", (X,), _TREES_CONTEXT)
 
     def _predict_with_proba(self, X):
         """Return labels and probabilities from one exact vote matrix.
@@ -631,9 +457,8 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         forest traversal in identity/evidence tooling without changing
         either public result.
         """
-        vote = self._vote(X)
-        return (decode_labels(self.classes_, argmax_rows(vote)),
-                vote.astype("<f8"))
+        proba = self.predict_proba(X)
+        return decode_labels(self.classes_, argmax_rows(proba)), proba
 
     def predict(self, X):
         """Predicted class labels: the argmax of `predict_proba`, first
@@ -645,19 +470,7 @@ class ExtraTreesClassifier(_ExtraTreesBase):
             An int64 or float64 `Array` for numeric labels, a Python list for
             string labels.
         """
-        if not hasattr(self, "_offsets"):
-            raise RuntimeError("this estimator is not fitted yet")
-        Xa, _ = as_f32_c(X, ndim=2, name="X")
-        _, n_features = Xa.shape
-        if n_features != self.n_features_in_:
-            raise ValueError(
-                f"X has {n_features} features, fit saw {self.n_features_in_}"
-            )
-        codes = self._predict_forest_labels(Xa)
-        if codes is not None:
-            return decode_labels(self.classes_, codes)
-        return decode_labels(self.classes_, argmax_rows(self._vote(Xa)))
-
+        return _TREES(self, "trees_forest_predict", (X,), _TREES_CONTEXT)
 
 @forest_estimator("regressor")
 # Maintainer note (moved from the docstring): GPU training produces means of
@@ -827,69 +640,12 @@ class ExtraTreesRegressor(_ExtraTreesBase):
         -------
         self
         """
-        return self._fit_with_tree_start(X, y, sample_weight=sample_weight)
+        return _TREES(self, "trees_forest_fit", (X, y, sample_weight, False, None), _TREES_CONTEXT)
 
     def _fit_with_tree_start(self, X, y, tree_start=None, sample_weight=None):
-        self._refresh_config()
-        self._capture_fit_mode()
-        ya, _ = as_f32_c(y, ndim=1, name="y")
-        code = self._criterion_code
-        if code == _CRITERION_POISSON:
-            if not all_finite(ya) or ya.min() < 0 or not ya.max() > 0:
-                raise ValueError(
-                    "criterion='poisson' requires y >= 0 with a positive sum: the"
-                    " Poisson gain is -max() for a non-positive label sum"
-                    " (objectives.cuh:251-253), which would fit a stump silently"
-                )
-        elif code in (_CRITERION_GAMMA, _CRITERION_INVERSE_GAUSSIAN):
-            if not all_finite(ya) or ya.min() <= 0:
-                raise ValueError(
-                    f"criterion={self.criterion!r} requires y > 0: its gain is"
-                    " -max() for a non-positive label sum, which would fit a stump"
-                    " silently"
-                )
-        if sample_weight is not None:
-            # lane sk-final: scikit-learn's _check_sample_weight (its
-            # wording), then the weighted builder (`et_regressor_fit_weighted`):
-            # the weights are checked again, quantized and multiplied into
-            # the labels on the device.
-            from ._sample_weight import check_sample_weight
-            weights = check_sample_weight(sample_weight, len(ya))
-            binding = self._bind("_mojolearn_trees")
-            if not callable(getattr(binding, "et_regressor_fit_weighted_export", None)):
-                raise RuntimeError("rebuild the trees binding for weighted ExtraTrees fits")
-            if tree_start is not None:
-                if not callable(getattr(binding, "et_regressor_fit_weighted_shard", None)):
-                    raise RuntimeError("rebuild the trees binding for weighted ExtraTrees shard fits")
-
-                def shard_fn(x, y, params):
-                    return binding.et_regressor_fit_weighted_shard(
-                        x, y, params, addr_ro(weights, name="sample_weight"), tree_start)
-                return self._fit_arrays(X, ya, 0, shard_fn)
-            weighted = _forest_fit_function(binding, "et_regressor_fit_weighted")
-            weighted_rm = _rowmajor_fit_function(binding, "et_regressor_fit_weighted")
-
-            def fit_fn(x, y, params):
-                return weighted(x, y, params, addr_ro(weights, name="sample_weight"))
-            rowmajor_fn = None
-            if weighted_rm is not None:
-                def rowmajor_fn(x, y, params):
-                    return weighted_rm(x, y, params, addr_ro(weights, name="sample_weight"))
-            return self._fit_arrays(X, ya, 0, fit_fn, rowmajor_fn)
-        if tree_start is not None:
-            binding = self._bind('_mojolearn_trees')
-            if not callable(getattr(binding, 'et_regressor_fit_shard', None)):
-                raise ImportError('rebuild ExtraTrees binding for global tree-ID shards')
-            def fit_fn(x, y, params):
-                return binding.et_regressor_fit_shard(x, y, params, tree_start)
-            return self._fit_arrays(X, ya, 0, fit_fn)
-        return self._fit_arrays(
-            X,
-            ya,
-            0,
-            _forest_fit_function(self._bind("_mojolearn_trees"), "et_regressor_fit"),
-            _rowmajor_fit_function(self._bind("_mojolearn_trees"), "et_regressor_fit"),
-        )
+        """`fit` of the trees from global tree ID `tree_start` on (a shard of
+        a multi-device forest)."""
+        return _TREES(self, "trees_forest_fit", (X, y, sample_weight, False, tree_start), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predicted values: the mean of the trees' predictions.
@@ -898,5 +654,17 @@ class ExtraTreesRegressor(_ExtraTreesBase):
         -------
         Array of shape (n_samples,), float64
         """
-        vote = self._vote(X)  # (n_rows, 1): one output for the regressor
-        return vote.reshape((vote.shape[0],)).astype("<f8")
+        return _TREES(self, "trees_forest_predict", (X,), _TREES_CONTEXT)
+
+
+# The forests' native owner reads these fixed tables (criteria, refusal
+# texts, max_features slot codes, deviance criterion codes) and assembles a
+# splitter='random' DecisionTree*'s inner forest from these classes.
+_ET_TABLES = dict(
+    cls_criteria=_CLASSIFIER_CRITERIA, reg_criteria=_REGRESSOR_CRITERIA, unsupported=_UNSUPPORTED_CRITERIA,
+    mf_all=_MF_ALL, mf_sqrt=_MF_SQRT, mf_log2=_MF_LOG2, poisson=_CRITERION_POISSON,
+    gamma=_CRITERION_GAMMA, inverse_gaussian=_CRITERION_INVERSE_GAUSSIAN,
+)
+_native_trees_bridge.register(ExtraTreesClassifier, "et_classifier", trees_et_tables=_ET_TABLES,
+                              trees_et_classifier=ExtraTreesClassifier, trees_et_regressor=ExtraTreesRegressor)
+_native_trees_bridge.register(ExtraTreesRegressor, "et_regressor", trees_et_tables=_ET_TABLES)

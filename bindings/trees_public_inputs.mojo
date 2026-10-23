@@ -19,7 +19,8 @@ from std.memory import bitcast
 from std.os import getenv
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr
-from bindings.py_typed_call import py_call_typed
+from std.python._cpython import PyObjectPtr
+from bindings.py_typed_call import py_call_typed, typed_python_error
 from bindings.native_buffer_owner import native_buffer_view
 from bindings.classical_arrays import classical_wrap_array, _store_code, _buffer_typestr
 from bindings.classical_pandas import native_pandas_exact, native_pandas_f32, _pd_fields, _pd_get
@@ -80,6 +81,17 @@ def trees_helper(context: PythonObject, name: String) raises -> PythonObject:
             raise Error("ImportError: mojolearn: the base binding has no `" + name + "`")
         raise Error(String(entry))
     return entry
+
+
+def trees_call(entry: PythonObject, args: PythonObject) raises -> PythonObject:
+    """`entry(*args)` for a compiled entry point and a Python list of its
+    arguments, keeping the class of a refusal the entry raises."""
+    ref cpy = Python().cpython()
+    var envelope = py_call(trees_builtins().tuple, args)
+    var result = cpy.lib.get_function[PyObjectPtr]("PyObject_CallObject")(entry._obj_ptr, envelope._obj_ptr)
+    if not result:
+        raise typed_python_error()
+    return PythonObject(from_owned=result)
 
 
 def trees_env(name: String, default: String) -> String:
@@ -460,6 +472,9 @@ def trees_check_sample_weight(source: PythonObject, n: Int, context: PythonObjec
     scikit-learn's wording. The vector may borrow the caller's float32
     buffer (the fit only reads it)."""
     var b = trees_builtins()
+    if source is None:
+        var ones = trees_full_f32(n, 1.0, context)
+        return TreesMatrix(ones, trees_address(ones), n, 1, True)
     var cls = py_type(source)
     var scalar = False
     var value = Float64(0)

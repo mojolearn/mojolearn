@@ -10,7 +10,7 @@ import inspect
 import weakref
 
 from ._array import Array
-from ._buffer import _materialize, full, empty, as_f32_c
+from ._buffer import _materialize, empty, as_f32_c
 from ._arrays import _addr, _addr_ro
 
 
@@ -308,69 +308,6 @@ class ForestProtocol:
             return None
         return False
 
-    def _prediction_function(self, sequential_name):
-        engine = self._prediction_engine()
-        native = self._bind()
-        name = sequential_name if engine == "sequential" else sequential_name + "_gpu_parallel"
-        function = getattr(native, name, None)
-        if function is None:
-            raise RuntimeError("rebuild the forest binding for inference_engine=" + repr(engine))
-        return function
-
-    def _resident_prediction_function(self, native):
-        # DEVIATION 2483: this export is predict_into[REUSE_IO=True], so X and
-        # output already cross as borrowed pointers without List staging.
-        # Keep device-buffer reuse; plain into would allocate on every call.
-        return native.forest_predict_resident_reuse_gpu
-
-    def _predict_forest(self, sequential_name, X, out):
-        """Shared RF/ET dispatch; cache nvForest-style owned device model state.
-
-        cuML 26.08.00 randomforest_common.pyx:675-693 caches its nvForest
-        model; :350-353 omits that device object from pickle. Our flat model
-        uses immutable host snapshots to make invalidation unambiguous.
-        """
-        engine = self._prediction_engine()
-        native = self._bind()
-        rows, features = X.shape
-        dimensions = (int(features), int(self._n_trees), int(self._num_outputs))
-        arrays = tuple(getattr(self, name) for name in _FOREST_ARRAYS)  # glue: the five model arrays
-        if engine == "sequential" and not self._ordered_resident_auto():
-            return self._prediction_function(sequential_name)(
-                *(_addr_ro(a) for a in arrays), _addr_ro(X),  # glue: one address per model array (five)
-                _addr(out), [int(rows), *dimensions])
-        resident = self._prepare_resident_forest(native)
-        return self._resident_prediction_function(native)(
-            resident.handle, _addr_ro(X), _addr(out),
-            [int(rows), int(features), dimensions[2]])
-
-    def _predict_forest_labels(self, X):
-        """Resident classifier codes; IDENTICAL requires the explicit T38 build."""
-        native = self._bind()
-        mode = self._effective_mode()
-        # T38/C50: capability readback selects the real compiled caller. No
-        # environment-only flag can make an incumbent binary claim this arm.
-        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-        capability = getattr(native, "forest_identical_fused_labels", None)
-        if mode == "identical":
-            if not callable(capability) or not capability():
-                return None
-            if not self._ordered_resident_auto() and self._prediction_engine() != "parallel_groves":
-                return None
-        elif mode != "fast" or self._prediction_engine() != "parallel_groves":
-            return None
-        function = getattr(native, "forest_predict_resident_labels_gpu", None)
-        if not callable(function):
-            return None
-        rows, features = X.shape
-        out = full((int(rows),), 0, "<i4")
-        resident = self._prepare_resident_forest(native)
-        wrote = function(resident.handle, _addr_ro(X), _addr(out),
-                         [int(rows), int(features), int(self._num_outputs)])
-        if wrote != rows:
-            raise RuntimeError(f"forest label prediction wrote {wrote} of {rows} rows")
-        return out
-
     def _forest_auxiliary(self, X, *, leaves=False, prefixes=False, prediction=False):
         """T39 buffer/argument plumbing; all walks and reductions are Mojo."""
         # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
@@ -477,18 +414,6 @@ class ForestProtocol:
         if holder is None:
             holder = self.__dict__["_resident_holder"] = {}
         holder["forest"] = value
-
-    def _mojolearn_after_fit(self):
-        """After every fit: freeze the five model arrays (the copy the first
-        predict used to take, so a caller's alias cannot change the model)
-        and give the instance an empty snapshot holder, dropping the last
-        fit's device snapshot."""
-        self.__dict__["_resident_holder"] = {}
-        for name in _FOREST_ARRAYS:  # glue: freezes the five model arrays
-            a = self.__dict__.get(name)
-            if (isinstance(a, Array) and a.ndim == 1 and a.dtype in ("<i4", "<f4")
-                    and a.flags["WRITEABLE"]):
-                self.__dict__[name] = _frozen_copy(a)
 
     def __getstate__(self):
         state = self.__dict__.copy()
