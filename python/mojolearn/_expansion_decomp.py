@@ -3595,29 +3595,7 @@ def solve(a, b, *, numeric_mode=None):
     >>> A = np.random.default_rng(0).random((8, 8), dtype=np.float32) + 8 * np.eye(8, dtype=np.float32)
     >>> x = mojolearn.solve(A, np.ones(8, dtype=np.float32))
     """
-    k = _Kit(_mode(numeric_mode))
-    try:
-        flags = int(getattr(k._raw(), "x_decomp_idn_flags")())
-    except (ImportError, AttributeError):
-        flags = 0
-    if not flags & 2:
-        return lu_solve(lu_factor(a, numeric_mode=numeric_mode), b, numeric_mode=numeric_mode)
-    A = _M.from_input(a, "a")
-    if A.r != A.c:
-        raise ValueError(f"expected a square matrix, got {A.r} x {A.c}")
-    n = A.r
-    vec = len(getattr(b, "shape", ())) == 1 or (not hasattr(b, "shape") and not isinstance(b[0], (list, tuple)))
-    B = _M.from_input(_row_of(b), "b").T if vec else _M.from_input(b, "b")
-    if B.r != n:
-        raise ValueError(f"b has {B.r} rows, the factorization has {n}")
-    X = B          # from_input's own store: solved in place
-    info = _M.zeros(1, 1)
-    # ORDER MATCHES x_decomp/api.mojo lu_gesv_py: (a, b in/out, info), (n, nrhs)
-    k.b.x_decomp_lu_gesv(A.addr, X.addr, info.addr, [n, B.c])
-    if int(info.s[0]):
-        import warnings
-        warnings.warn(f"Diagonal number {int(info.s[0])} is exactly zero. Singular matrix.", RuntimeWarning, stacklevel=2)
-    return X.out((n,)) if vec else X.out()
+    return _LINALG_CALL(None, "solve", (a, b, numeric_mode), _LINALG_CONTEXT)
 
 
 def _row_of(b):
@@ -3706,46 +3684,8 @@ def randomized_svd(M, n_components, *, n_oversamples=10, n_iter="auto", power_it
     >>> X = np.random.default_rng(0).random((1000, 50), dtype=np.float32)
     >>> U, s, Vt = mojolearn.randomized_svd(X, 5, random_state=0)
     """
-    k = _Kit(_mode(numeric_mode))
-    A = _rsvd_direct_input(k, M, transpose) if k.w4_flags() & 2 else None
-    U, S, Vt = _rsvd_core(k, A if A is not None else _M.from_input(M, "M"), n_components, n_oversamples, n_iter,
-                          power_iteration_normalizer, transpose, flip_sign, random_state)
-    kc = n_components
-    return U.out(), S.out((kc,)), Vt.out()
-
-
-def _rsvd_direct_input(k, M, transpose):
-    """lane/apple-fast-w4-decomp RSVD_FAST_DIRECT_IN (FAST + Apple default;
-    -D MOJOLEARN_RSVD_FAST_DIRECT_IN_OFF rolls back): M up from its own buffer into a pooled device matrix, as
-    KernelPCA's resident route and the random projections' transform do,
-    instead of `_M.from_input`'s copy into a fresh host store that the first
-    product uploads (880 MB of fresh host pages at the board's 1M x 220).
-    The same refusals in the same order (2-D nonempty, then the host
-    finiteness scan); the same words reach the device. None (the caller
-    takes `_M.from_input`) for sparse input, a binding without the resident
-    entries, or a wide input (`_rsvd_core` transposes it on the host)."""
-    if _is_sparse(M) or not k._res():
-        return None
-    a = as_f32_c(M, ndim=2, name="M")[0]
-    if a.ndim != 2 or min(a.shape) == 0:  # glue: smaller of two shape dims
-        raise ValueError("M: a nonempty two-dimensional input is required")
-    if transpose is True or (transpose == "auto" and a.shape[0] < a.shape[1]):
-        return None     # `_rsvd_core` transposes on the host: main's route
-    if k.s_flags() & 1:
-        # RSVD_FAST_DEVSCAN (FAST + Apple default, rollback _OFF; x_decomp/s_linalg_fast.mojo):
-        # upload, then the finiteness scan on the device copy (the same refusal)
-        A = _M._on_device(_DevBuf(k._raw(), a.size), a.shape[0], a.shape[1])
-        if int(k.b.x_decomp_dev_upload_scan(A._d.id, addr_ro(a, name="M"), a.size)) >= 0:
-            raise ValueError("M: input must be finite; NaN/inf are unsupported")
-        return A
-    fin = _host_all_finite(a)
-    if fin is None:
-        return None
-    if fin is False:
-        raise ValueError("M: input must be finite; NaN/inf are unsupported")
-    A = _M._on_device(_DevBuf(k._raw(), a.size), a.shape[0], a.shape[1])
-    k.b.x_decomp_dev_upload(A._d.id, addr_ro(a, name="M"), a.size)
-    return A
+    return _LINALG_CALL(None, "randomized_svd", (M, n_components, n_oversamples, n_iter, power_iteration_normalizer,
+                                                    transpose, flip_sign, random_state, numeric_mode), _LINALG_CONTEXT)
 
 
 def _rsvd_core(k, A, n_components, n_oversamples, n_iter, power_iteration_normalizer, transpose, flip_sign,
@@ -6909,3 +6849,8 @@ _MCD_CALL, _MCD_CONTEXT = _connect_decomp_kit("mcd_native_call", elliptic_envelo
 
 # The native AlternatingLeastSquares owner (bindings/als_native.mojo).
 _ALS_CALL, _ALS_CONTEXT = _connect_decomp_kit("als_native_call")
+
+
+# The native linear-algebra owner (bindings/linalg_decomp_native.mojo):
+# randomized_svd and solve.
+_LINALG_CALL, _LINALG_CONTEXT = _connect_decomp_kit("linalg_decomp_native_call")
