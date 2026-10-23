@@ -2206,3 +2206,14 @@ One run per arm, `tools/bench_graph_optimizer.py run --rounds 1` through `tools/
 
 NVIDIA leg: not run (RunPod balance under the rental floor on 2026-10-21); the default decision needs it too.
 Evidence: `~/mojolearn-evidence/boxes-20261021/amd-out/graph-opt/ab-table.tsv` and the per-workload `result.json`.
+
+## ExtraTrees defined device scratch (lane/sm120-tree-identity, 2026-10-23)
+
+A correctness fix with an A/B restore arm, not a speed experiment: every ET builder device buffer is zero filled at creation
+(`et_ws_init`, extratrees/impl/decisiontree/batched_levelalgo/builder.mojo). Cause: RTX 5090 (sm_120) et-reg digest moved run to
+run and hit CUDA_ERROR_ILLEGAL_ADDRESS after a RandomForest fit (`~/mojolearn-evidence/audit-20261023/sm120-findings.md`).
+
+| define | algorithm | branch @ sha | A/B tag | before -> after ms | verdict | reason |
+|---|---|---|---|---|---|---|
+| `MOJOLEARN_ET_WS_INIT_OFF` | ExtraTrees fit, every mode | lane/sm120-tree-identity @ bbc2c8105 | owed | owed | DEFAULT ON (fix) | restores unfilled pooled allocations; cost is one fill launch per buffer per group |
+| `MOJOLEARN_ET_WS_POISON_BYTE=<1..255>` | ExtraTrees fit | lane/sm120-tree-identity @ bbc2c8105 | n/a | n/a | DIAGNOSTIC ONLY | fills with a nonzero byte so any read-before-write moves the digest on every vendor |
