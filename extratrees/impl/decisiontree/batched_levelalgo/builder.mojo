@@ -119,6 +119,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.et_loop_kernels impo
     ETL_H_NODES,
     ETL_H_NSUB,
     ETL_H_OVERFLOW,
+    ETL_H_PART_MISMATCH,
     ETL_H_POPS,
     ETL_H_ROWS,
     ETL_H_STAT_NODES,
@@ -5923,6 +5924,15 @@ struct EtDeviceLoop(Movable):
                 + " (1 arena/FIFO capacity, 2 block-map bound, 3 pop bound,"
                 " 4 best-first frontier capacity) -- a host bound bug"
             )
+        var pm = self.word(ETL_H_PART_MISMATCH)
+        if pm != 0:
+            raise Error(
+                "ET device level loop: "
+                + String(pm)
+                + " partitioned nodes sent a different number of rows left"
+                " than their split's n_left (the search and the partition"
+                " disagree on the direction test) -- a builder bug"
+            )
 
     def init_roots(
         mut self,
@@ -6481,6 +6491,7 @@ def _et_enqueue_partition(
     n_blocks: Int,
     params: DecisionTreeParams,
     n_rows: Int32,
+    mismatch: MutPointer[Int32, MutAnyOrigin],
 ) raises:
     """THE PARTITION, on the device (deviation 203), over the batch staged
     with the partition tile: count, scan, scatter, write back. Range-
@@ -6515,6 +6526,7 @@ def _et_enqueue_partition(
             params.min_impurity_decrease,
             params.min_samples_leaf,
             PART_MB_SAB_NONE,
+            mismatch,
             grid_dim=(n_part, 1, 1),
             block_dim=(TPB, 1, 1),
         )
@@ -6747,6 +6759,7 @@ def _et_run_depthwise[
                 .unsafe_bitcast[Split]()
                 .unsafe_origin_cast[MutAnyOrigin](),
                 nb, bound_p, params, n_rows,
+                lp.hdr.unsafe_ptr().unsafe_offset(ETL_H_PART_MISMATCH).unsafe_origin_cast[MutAnyOrigin](),
             )
             clock.tick(ctx, PHASE_PARTITION)
             if trace.enabled:
@@ -6839,6 +6852,7 @@ def _et_run_bestfirst[
                 .unsafe_bitcast[Split]()
                 .unsafe_origin_cast[MutAnyOrigin](),
                 g, bound_p, params, n_rows,
+                lp.hdr.unsafe_ptr().unsafe_offset(ETL_H_PART_MISMATCH).unsafe_origin_cast[MutAnyOrigin](),
             )
             clock.tick(ctx, PHASE_PARTITION)
             if trace.enabled:
