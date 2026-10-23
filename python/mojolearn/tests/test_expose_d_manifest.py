@@ -95,7 +95,9 @@ def test_binding_exports_match_python_calls():
     }
     for binding, (py, pat) in pairs.items():
         exported, called = _exports(binding), _calls(py, pat)
-        assert called, (py, "no calls found")
+        # a family migrated to its one-native-call door (kernel_methods,
+        # mixture, resample, 2026-10-23) calls no entry from Python any more;
+        # what Python still calls must be exported
         assert called <= exported, (binding, sorted(called - exported))
         stem = binding.rsplit("/", 1)[1][len("_mojolearn_"):-len(".mojo")]
         for suffix in ("_vendor", "_numeric_mode"):

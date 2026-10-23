@@ -95,8 +95,11 @@ def test_the_door_is_public_and_its_debt_is_declared():
     owner = _read("bindings/training_extra_native.mojo")
     for name in NAMES:
         assert f'"{name}"' in owner, name
+    # it left DECLARED_LANELESS on 2026-10-21: the coverage lane
+    # training-chunked-lm-head reaches it
     accounting = _read("tools/lane_accounting.py")
-    assert '"training.chunked_lm_head_loss": (' in accounting
+    assert '"training.chunked_lm_head_loss": (' not in accounting
+    assert '"training-chunked-lm-head"' in _read("tools/verify_coverage_audit.py")
 
 
 # ----------------------------------------------------------- runtime checks
