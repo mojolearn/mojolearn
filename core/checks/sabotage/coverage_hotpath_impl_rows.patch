@@ -1,8 +1,7 @@
 diff --git a/core/hotpath_impl_rows.mojo b/core/hotpath_impl_rows.mojo
-index d84220a8f..7d713f768 100644
 --- a/core/hotpath_impl_rows.mojo
 +++ b/core/hotpath_impl_rows.mojo
-@@ -28,6 +28,25 @@ def _ftz_bits(v: Float32) -> Float32:
+@@ -28,6 +28,25 @@
      return v
  
  
@@ -28,7 +27,7 @@ index d84220a8f..7d713f768 100644
  def fold_pair_f32(dst_addr: Int, src_addr: Int, count: Int) raises -> Int:
      """cross_vendor's coordinator fold: dst[i] = ftz(ftz(dst[i]) +
      ftz(src[i])), one float32 rounding per add, elementwise."""
-@@ -155,7 +174,7 @@ def bincount2_i32(
+@@ -128,7 +147,7 @@
          comptime if HOTPATH_SABOTAGE:
              u = (u + 1) % ka
          var at = Int(bp.unsafe_load(i)) * ka + u
@@ -37,7 +36,7 @@ index d84220a8f..7d713f768 100644
      return 0
  
  
-@@ -242,7 +261,7 @@ def assign_fold_i64(idx_addr: Int, count: Int, rows: Int, f: Int32, folds_addr:
+@@ -150,7 +169,7 @@
          if fp.unsafe_load(r) != -1:
              status = 2
              break
@@ -46,7 +45,7 @@ index d84220a8f..7d713f768 100644
      return status
  
  
-@@ -282,7 +301,7 @@ def mark_split_roles_f32(
+@@ -190,7 +209,7 @@
          if rp.unsafe_load(base + row) != Float32(0):
              status = 2
              break
@@ -55,7 +54,7 @@ index d84220a8f..7d713f768 100644
      return status
  
  
-@@ -342,7 +361,8 @@ def scatter_rows_bytes_host(
+@@ -216,7 +235,8 @@
          for i in range(count):
              var r = Int(rp.unsafe_load(i))
              for b in range(width):
@@ -65,7 +64,7 @@ index d84220a8f..7d713f768 100644
      if bad:
          raise Error("scatter_rows_bytes: row index out of bounds")
      return 0
-@@ -364,7 +384,7 @@ def uniform_init_f32(
+@@ -238,7 +258,7 @@
          # lane fix-s1-shared: an explicit fma (Mojo's default fp-mode
          # contracts `lo + (hi - lo) * u` anyway); the device twin
          # (core/hotpath_device.mojo) is the same sf64_fma
@@ -74,7 +73,7 @@ index d84220a8f..7d713f768 100644
      return 0
  
  
-@@ -388,7 +408,7 @@ def normal_init_f32(
+@@ -262,7 +282,7 @@
          var cz = portable_cosf(Float32(6.283185307179586 * u2))
          # lane fix-s1-shared: an explicit fma, as the device twin's
          # sf64_fma (core/hotpath_device.mojo::_normal_init_kernel)
@@ -83,7 +82,7 @@ index d84220a8f..7d713f768 100644
      return 0
  
  
-@@ -487,6 +507,10 @@ def first_seen_i32(codes_addr: Int, rows: Int, kk: Int, enc_addr: Int, counts_ad
+@@ -329,6 +349,10 @@
              m += 1
          ep.unsafe_store(i, Int32(rank[c]))
          np.unsafe_store(rank[c], np.unsafe_load(rank[c]) + 1)
@@ -94,7 +93,7 @@ index d84220a8f..7d713f768 100644
      if bad:
          raise Error("first_seen_i32: code out of range")
      return m
-@@ -510,7 +534,7 @@ def strat_alloc_i64(counts_addr: Int, kk: Int, K: Int, dst_addr: Int) raises ->
+@@ -352,7 +376,7 @@
      for c in range(kk):
          var e = s + Int(cp.unsafe_load(c))
          for i in range(K):
@@ -103,7 +102,7 @@ index d84220a8f..7d713f768 100644
          s = e
      return 0
  
-@@ -594,7 +618,8 @@ def group_fold_assign_i32(
+@@ -436,7 +460,8 @@
              load[best] += Int(cp.unsafe_load(g))
              dp.unsafe_store(g, Int32(best))
      for g in range(mm):
@@ -113,19 +112,7 @@ index d84220a8f..7d713f768 100644
          sp.unsafe_store(f, sp.unsafe_load(f) + cp.unsafe_load(g))
      return 0
  
-@@ -678,9 +703,9 @@ def strat_group_assign_i32(
-         for c in range(kk):
-             fold_dist[best * kk + c] += dist[g * kk + c]
-             fold_n[best] += dist[g * kk + c]
--        dp.unsafe_store(g, Int32(best))
-+        dp.unsafe_store(g, Int32(_sab_swap01(best, K)))  # SABOTAGE (coverage-core-hotpath_impl_rows)
-     for f in range(K):
--        sp.unsafe_store(f, Int64(fold_n[f]))
-+        sp.unsafe_store(_sab_swap01(f, K), Int64(fold_n[f]))
-     return 0
- 
- 
-@@ -759,9 +784,9 @@ def strat_group_plan_i32(
+@@ -516,9 +541,9 @@
          for c in range(kk):
              fold_dist[best * kk + c] += dist[g * kk + c]
              fold_n[best] += dist[g * kk + c]
