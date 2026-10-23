@@ -513,12 +513,12 @@ struct DecompKit(Movable):
         var lo = max(0, min(start, self.matrices[a].rows))
         var hi = max(lo, min(stop, self.matrices[a].rows))
         var out = self.zeros(hi - lo, cols)
+        var source = self.host(a)      # `self.s[...]`: the store is read (A is a host matrix after)
         if (hi - lo) * cols:
-            var source = self.host(a)
             memcpy(dest=DecompF32(unsafe_from_address=Int(py=classical_address(self.matrices[out].host))),
                    src=DecompF32(unsafe_from_address=Int(py=classical_address(source))) + lo * cols,
                    count=(hi - lo) * cols)
-            _ = source^
+        _ = source^
         return out
 
     def cols_of(mut self, a: Int, start: Int, stop: Int) raises -> Int:
