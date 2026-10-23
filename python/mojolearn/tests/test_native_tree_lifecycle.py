@@ -77,8 +77,22 @@ def test_public_classifier_predict_reads_classlabels_native_storage(cls, labels)
         assert type(actual) is list
     else:
         assert actual.dtype == ('<i8' if type(labels[0]) is int else '<f8')
-    score = audit_native_call(model.score, x, y).assert_native()
-    assert score == np.mean(np.asarray(expected) == np.asarray(y))
+    score = audit_native_call(model.score, x, y)
+    if type(labels[0]) is float:
+        # Fit/predict retain floating class values. The existing accuracy
+        # parser (including the pre-migration trees_score_forest operation)
+        # accepts string/integer/bool labels only; score preserves that refusal.
+        assert type(score.exception) is TypeError, score.report()
+        assert str(score.exception) == (
+            'y_true must contain only strings or only integers; '
+            'floating labels, missing labels and mixed types are unsupported')
+        report = score.report()
+        assert not report['python_frames'] and not report['forbidden_native_calls'], report
+        assert not report['unresolved_native_calls'] and not report['wrapper_work'], report
+        assert not report['unobserved_existing_threads'], report
+        assert report['wrapper_entries'] == 1, report
+    else:
+        assert score.assert_native() == np.mean(np.asarray(expected) == np.asarray(y))
 
 
 def test_modified_classlabels_hook_refuses_before_invocation(monkeypatch):
