@@ -211,7 +211,7 @@ def _connect_public_forest(cls, context):
     rows, getter, previous = context['trees_constructors'][cls]
     ancestry = type.__dict__['__mro__'].__get__(cls)
     namespaces = tuple(type.__dict__['__dict__'].__get__(base) for base in ancestry)  # glue: final connected storage layout
-    hooks = tuple((name, next((row[name] for row in namespaces if name in row), None))
+    hooks = tuple((name, next((row[name] for row in namespaces if name in row), None))  # glue: import-time inherited hook lookup
                   for name, _ in previous)  # glue: fixed final constructor hook identities
     context['trees_constructors'][cls] = (rows, getter, hooks)
 
