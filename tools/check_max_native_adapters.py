@@ -50,6 +50,35 @@ def main():
         changed.view(np.int32).flat[0] ^= 1
         assert not np.array_equal(changed.view(np.int32), expected.view(np.int32))
         report["checks"].append("output_corruption_comparator_control")
+        def evaluate(name, arrays, code, expected, options="", scalars=""):
+            types = [TensorType(DType.int32 if a.dtype == np.int32 else DType.float32,
+                                a.shape, device=dev) for a in arrays]
+            output_type = TensorType(DType.int32 if expected.dtype == np.int32 else DType.float32,
+                                     expected.shape, device=dev)
+            with Graph(name, input_types=types, custom_extensions=[args.library.resolve()]) as graph:
+                result = ops.custom(f"mojolearn_operation{len(arrays)}", dev,
+                    [v.tensor for v in graph.inputs], out_types=[output_type],
+                    parameters={"library": str(args.native_library.resolve()), "code": code,
+                                "options": options, "scalars": scalars})[0].tensor
+                graph.output(result)
+            compiled = session.load(graph)
+            values = [Buffer.from_numpy(a).to(device) for a in arrays]
+            actual = compiled.execute(*values)[0].to_numpy()
+            assert actual.dtype == expected.dtype and actual.shape == expected.shape
+            assert np.array_equal(actual.view(np.int32), expected.view(np.int32)), name
+            np.savez(args.out / f"{name}.npz", expected=expected, actual=actual,
+                     **{f"input_{i}": a for i, a in enumerate(arrays)})
+            report["checks"].append(name)
+        evaluate("full_no_inputs", [], 30, np.full((2, 3), .5, np.float32), "2,3", ".5")
+        evaluate("scale_scalar_option", [x], 12, x * np.float32(.5), scalars=".5")
+        evaluate("transpose_view", [x], 13, x.T.copy())
+        ids = np.array([1, 0], dtype=np.int32)
+        evaluate("embedding_mixed_dtypes", [x, ids], 32, x[[1, 0]], "-1")
+        evaluate("take_mixed_dtypes", [x, ids], 41, x[:, [1, 0]].copy(), "1")
+        evaluate("argmax_integer_output", [x], 72, x.argmax(axis=1).astype(np.int32), "1,0,0")
+        bias = np.array([[.5, -.25]], dtype=np.float32)
+        evaluate("linear_three_inputs", [x, w, bias], 19, x @ w + bias, "0")
+        evaluate("restore_composition", [x, x], 2, x + x)
         report["complete"] = True
     except Exception:
         report["failures"].append(traceback.format_exc())
