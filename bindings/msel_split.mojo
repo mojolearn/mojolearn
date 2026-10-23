@@ -49,6 +49,8 @@ def msel_is(model: PythonObject, name: String, context: PythonObject) raises -> 
 
 def _splitter_plan(cls: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = msel_b()
+    if py_type(cls) is not py_type(py_type(PythonObject(0))):
+        raise Error("TypeError: native splitters cannot invoke Python metaclass hooks")
     var plan = py_get(context["family_msel_splitter_layouts"], cls)
     if plan is None:
         raise Error("TypeError: model selection requires a connected native splitter; Python callbacks cannot execute")
@@ -1111,6 +1113,8 @@ def msel_check_cv(cv_in: PythonObject, y: PythonObject, classifier: Bool, shuffl
         var rs = random_state if msel_truth(shuffle) else PythonObject(None)
         var kind = String("StratifiedKFold") if stratify else String("KFold")
         return msel_new_kfold(kind, cv, shuffle, rs, context)
+    if py_type(py_type(cv)) is not py_type(py_type(PythonObject(0))):
+        raise Error("TypeError: cv cannot invoke Python metaclass hooks")
     if py_contains(context["family_msel_splitter_layouts"], py_type(cv)):
         _ = _splitter_fields(cv, context)
         return cv
