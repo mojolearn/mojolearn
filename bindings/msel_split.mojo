@@ -969,10 +969,10 @@ def msel_native_discrete(y: PythonObject, context: PythonObject) raises -> Pytho
     if d != "<f4" and d != "<f8":
         return PythonObject(True)
     var c = arr if String(py=arr.order) == "C" or Int(py=arr.ndim) == 1 else family_call(arr._as_c)
-    var _keep_ret_c = PythonObject(msel_truth(family_call(integral, PythonObject(msel_addr(c)), context["family_msel_native_code"][dtype],
+    var _keep_ret_c_r972 = PythonObject(msel_truth(family_call(integral, PythonObject(msel_addr(c)), context["family_msel_native_code"][dtype],
                                                arr.size, context["family_msel_reduce_integral"])))
     _ = c  # keep the Python object alive through the native call above
-    return _keep_ret_c^
+    return _keep_ret_c_r972^
 
 
 def msel_check_cv(cv_in: PythonObject, y: PythonObject, classifier: Bool, shuffle: PythonObject,

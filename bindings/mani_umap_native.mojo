@@ -211,9 +211,9 @@ def _umap_same_bytes(a: PythonObject, b: PythonObject, count: Int) raises -> Boo
     """Whether two C-order float32 arrays hold the same bytes."""
     var pa = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(a)))
     var pb = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(b)))
-    var _keep_ret_pa = mani_same_words(pa, pb, count)
+    var _keep_ret_pa_r214 = mani_same_words(pa, pb, count)
     _ = pa  # keep the Python object alive through the native call above
-    return _keep_ret_pa^
+    return _keep_ret_pa_r214^
 
 
 def _umap_finite(value: PythonObject) raises -> Bool:

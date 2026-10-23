@@ -129,9 +129,9 @@ struct ClsProg(Movable):
         for i in range(len(values)):  # driver-loop: over a parameter list of int words
             dest[i] = Int32(values[i])
             _ = words  # keep the Python object alive through the native call above
-        var _keep_ret_words = self.put_words(words)
+        var _keep_ret_words_r132 = self.put_words(words)
         _ = words  # keep the Python object alive through the native call above
-        return _keep_ret_words^
+        return _keep_ret_words_r132^
 
     def put_codes(mut self, codes: PythonObject) raises -> Int:
         """`_Prog.put_codes`: int32 codes -> offset of their float values (i2f)."""

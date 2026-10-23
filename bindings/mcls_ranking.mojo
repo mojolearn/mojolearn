@@ -446,9 +446,9 @@ def _roc_auc(args: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = result  # keep the Python object alive through the native call above
     _ = encoded^
     _ = scores^
-    var _keep_ret_result = PythonObject(value)
+    var _keep_ret_result_r449 = PythonObject(value)
     _ = result  # keep the Python object alive through the native call above
-    return _keep_ret_result^
+    return _keep_ret_result_r449^
 
 
 # ---------------------------------------------------- precision_recall_curve

@@ -206,9 +206,9 @@ def _qn_fit_one_target(fields: PythonObject, binding: PythonObject, x: PythonObj
     _ = info  # keep the Python object alive through the native call above
     var rc = Int(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(info)))[1])
     _ = info  # keep the Python object alive through the native call above
-    var _keep_ret_info = Python.tuple(w, PythonObject(svc_int(n_iter)), PythonObject(fx), PythonObject(rc))
+    var _keep_ret_info_r209 = Python.tuple(w, PythonObject(svc_int(n_iter)), PythonObject(fx), PythonObject(rc))
     _ = info  # keep the Python object alive through the native call above
-    return _keep_ret_info^
+    return _keep_ret_info_r209^
 
 
 # ---------------------------------------------------------------- LinearSVR

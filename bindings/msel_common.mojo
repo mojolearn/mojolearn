@@ -409,9 +409,9 @@ struct MselGroups(Movable):
     def mapped(self, table: List[Int], context: PythonObject) raises -> PythonObject:
         """Each row's `table[code]` as int32 words."""
         var tbl = msel_i32_list(table, context)
-        var _keep_ret_tbl = self.mapped_words(tbl, context)
+        var _keep_ret_tbl_r412 = self.mapped_words(tbl, context)
         _ = tbl  # keep the Python object alive through the native call above
-        return _keep_ret_tbl^
+        return _keep_ret_tbl_r412^
 
     def mapped_words(self, tbl: PythonObject, context: PythonObject) raises -> PythonObject:
         var dst = msel_new(self.n, "<i4", context)
