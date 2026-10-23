@@ -7463,7 +7463,7 @@ def refuse_unattributed(sel, out=print):
     return True
 
 
-def selection_precision_limitations(lanes, by_path, sources):
+def selection_precision_limitations(lanes, by_path, sources, generated_outputs=None):
     """Report unresolved native provenance on paths kept by this selection.
 
     Reporting never supplies exclusions. A custom source map has no native
@@ -7472,15 +7472,23 @@ def selection_precision_limitations(lanes, by_path, sources):
     if _LANE_SOURCES is None or sources is not _LANE_SOURCES[0] or _LANE_PRECISION_PATHS is None:
         return []
     records = []
+    generated_outputs = generated_outputs or {}
     for lane in sorted(lanes):
         affected = _LANE_PRECISION_PATHS.get(lane, {})
         for index, record in enumerate(_LANE_SOURCES[1][lane].get("precision_limitations", ())):
             flag = 1 << index
+            via_outputs = {path: sorted(output for output in generated_outputs.get(path, ())
+                                        if affected.get(output, 0) & flag)
+                           for path, selected in by_path.items() if lane in selected}
+            via_outputs = {path: outputs for path, outputs in via_outputs.items() if outputs}
             paths = sorted(path for path, selected in by_path.items()
-                           if lane in selected and affected.get(path, 0) & flag)
+                           if lane in selected and (affected.get(path, 0) & flag or path in via_outputs))
             if paths:
-                records.append(dict(record, lane=lane, paths=paths,
-                                    provenance="conservative export closure; possible path, not an execution trace"))
+                row = dict(record, lane=lane, paths=paths,
+                           provenance="conservative export closure; possible path, not an execution trace")
+                if via_outputs:
+                    row["generated_outputs"] = via_outputs
+                records.append(row)
     return records
 
 
@@ -7505,7 +7513,7 @@ def select(paths, ref=None, sources=None, backend=None):
     every = sorted(sources)
     rev = reverse_map(sources)
     lanes, reasons, unattributed, inert = set(), {}, [], []
-    by_path, every_rules = {}, {}
+    by_path, every_rules, generated_outputs = {}, {}, {}
     chains, mojo_graph = {}, None        # lane -> how a Mojo definition edit reached it
 
     def all_lanes_by_rule(path, why):
@@ -7706,6 +7714,7 @@ def select(paths, ref=None, sources=None, backend=None):
             hit = set(gen[0]) & set(every)
             lanes.update(hit)
             by_path[path] = hit
+            generated_outputs[path] = gen[1]
             reasons[path] = (f"{len(hit)} lane(s): a generator; it moves bits only through the committed "
                              f"outputs it writes ({', '.join(gen[1][:3])}{'...' if len(gen[1]) > 3 else ''})")
             continue
@@ -7819,7 +7828,7 @@ def select(paths, ref=None, sources=None, backend=None):
     return dict(lanes=sorted(lanes, key=every.index), fallback=False, reasons=reasons,
                 unattributed=sorted(unattributed), inert=sorted(inert), total=len(every),
                 every_rules=every_rules, chains=chains,
-                precision_limitations=selection_precision_limitations(lanes, by_path, sources),
+                precision_limitations=selection_precision_limitations(lanes, by_path, sources, generated_outputs),
                 by_path={p: sorted(v, key=every.index) for p, v in by_path.items()})
 
 
