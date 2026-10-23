@@ -1041,6 +1041,7 @@ def _deferred_factory_calls_uncached(rel, nodes, wanted):
     assignments = []
     opaque_namespace = False
     for top in nodes:
+        parents = {child: parent for parent in ast.walk(top) for child in ast.iter_child_nodes(parent)}
         if isinstance(top, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             needed.update(n.id for n in ast.walk(top) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load))
             needed.update(n.value for n in ast.walk(top) if isinstance(n, ast.Constant)
@@ -1055,7 +1056,15 @@ def _deferred_factory_calls_uncached(rel, nodes, wanted):
         elif not isinstance(top, (ast.Import, ast.ImportFrom)):
             needed.update(n.id for n in ast.walk(top) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load))
         for call in (n for n in ast.walk(top) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)):
-            if call.func.id in ("globals", "locals", "vars", "eval", "exec") or (
+            parent = parents.get(call)
+            literal_lookup = (isinstance(parent, ast.Subscript) and isinstance(parent.slice, ast.Constant)
+                              and isinstance(parent.slice.value, str))
+            if isinstance(parent, ast.Attribute) and parent.attr == "get":
+                consumer = parents.get(parent)
+                literal_lookup = (isinstance(consumer, ast.Call) and consumer.func is parent and consumer.args
+                                  and isinstance(consumer.args[0], ast.Constant) and isinstance(consumer.args[0].value, str))
+            if (call.func.id in ("globals", "locals", "vars") and not literal_lookup
+                    or call.func.id in ("eval", "exec")) or (
                     call.func.id == "getattr" and len(call.args) >= 2 and not isinstance(call.args[1], ast.Constant)):
                 opaque_namespace = True
     if opaque_namespace:

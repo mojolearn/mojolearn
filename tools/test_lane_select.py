@@ -2125,6 +2125,19 @@ def fit(x):
     finally:
         lane_select.reset_caches()
 
+    for lookup, deferred_result in (("globals().get('_CONNECTION_METADATA')", True),
+                                    ("globals()['_CONNECTION_METADATA']", True),
+                                    ("globals().get('_CALL')", False),
+                                    ("globals().get(name)", False),
+                                    ("globals()", False)):
+        lane_select._read.cache[path] = code.replace("return 3", "return " + lookup)
+        try:
+            nodes = lane_select._region_nodes(path, {"unrelated"})
+            deferred, live = lane_select._deferred_factory_calls(path, nodes, {"unrelated"})
+            assert ((path, "connect") in deferred - live) is deferred_result, lookup
+        finally:
+            lane_select.reset_caches()
+
 
 def test_native_pointer_factory_proof_refuses_calls_and_unknown_escapes():
     path = "<native pointer factory>.py"
