@@ -127,6 +127,7 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 #: (`holtwinters/impl/internal/hw_estimate.mojo`: 0 heuristic, 1 estimated).
 #: "cuml" is an alias of "heuristic": it is cuML's fit, bit for bit.
 _HW_INIT_CODES = {"estimated": 1, "heuristic": 0, "cuml": 0}
+_TSA_CONTEXT["hw_init_codes"] = _HW_INIT_CODES
 
 
 def _series_major(y, name):
@@ -678,56 +679,9 @@ class ExponentialSmoothing:
             ``eps > 0``, ``n >= start_periods * seasonal_periods``; or for
             non-finite (or, multiplicative, non-positive) data.
         """
-        from ._cpu_reference import require_training
-        require_training(self)
-        data, n = self._check_dims(self.endog)
-        self._data = data  # kept alive across the call (_buffer.py)
-        components_len = (n - self.seasonal_periods) * self.ts_num
-        if components_len <= 0:
-            # This layer has to size the output buffers BEFORE the Mojo
-            # side validates, so it needs its own guard against a negative
-            # allocation. It is not a second copy of a rule:
-            # `holtwinters_validate_params` refuses `n < start_periods *
-            # frequency`, which is strictly stronger, and that refusal is
-            # the one a caller normally sees.
-            raise ValueError(
-                "mojolearn ExponentialSmoothing: n "
-                f"({n}) must exceed seasonal_periods ({self.seasonal_periods})"
-            )
-        comps = empty((3 * components_len,), "<f4")
-        stats = empty((4 * self.ts_num,), "<f4")
-        flags = empty((2 * self.ts_num,), "<i4")
-        self._bind().holtwinters_fit(
-            addr_ro(data, name="endog"),
-            addr(comps, name="components"),
-            addr(stats, name="stats"),
-            addr(flags, name="flags"),
-            # ORDER MATCHES bindings/_mojolearn_tsa.mojo::holtwinters_fit_binding.
-            #   0 n, 1 batch_size, 2 frequency, 3 start_periods, 4 eps,
-            #   5 init_method (0 heuristic, 1 estimated)
-            [
-                int(n),
-                int(self.ts_num),
-                int(self.seasonal_periods),
-                int(self.start_periods),
-                float(self.eps),
-                _HW_INIT_CODES[self.initialization_method],
-            ],
-            self.seasonal,
-        )
-        b = self.ts_num
-        # stats LAYOUT -- the same words as in bindings/_mojolearn_tsa.mojo
-        # and holtwinters/estimator.mojo:
-        #   [0 * ts_num, 1 * ts_num)   sse
-        #   [1 * ts_num, 2 * ts_num)   alpha
-        #   [2 * ts_num, 3 * ts_num)   beta
-        #   [3 * ts_num, 4 * ts_num)   gamma
-        # flags LAYOUT -- the same words as in the other two files:
-        #   [0 * ts_num, 1 * ts_num)   niter
-        #   [1 * ts_num, 2 * ts_num)   criterion
-        # (Array slices copy; each attribute owns its `(ts_num,)` block.)
-        return self._set_fitted(n, comps, stats[0:b], stats[b:2 * b], stats[2 * b:3 * b],
-                                stats[3 * b:4 * b], flags[0:b], flags[b:2 * b])
+        # `_check_dims`, the fit and `_set_fitted` in one native call
+        # (bindings/tsa_hw_native.mojo); the constraints are the binding's.
+        return _TSA(self, "hw_fit", (), _TSA_CONTEXT)
 
     def _set_fitted(self, n, comps, sse, alpha, beta, gamma, n_iter, criterion):
         """The fitted state from the packed components and the per-series
@@ -890,57 +844,7 @@ class ExponentialSmoothing:
         Array, float32
             Shapes as for :meth:`forecast`, with ``end - start`` steps.
         """
-        if not self.fit_executed_flag:
-            raise ValueError(
-                "mojolearn ExponentialSmoothing: fit() the model before predict()"
-            )
-        n, b = int(self.n), int(self.ts_num)
-        end = n if end is None else end
-        for label, value in (("start", start), ("end", end)):  # glue: the two start and end arguments
-            if not isinstance(value, int) or isinstance(value, bool):
-                raise TypeError(
-                    f"mojolearn ExponentialSmoothing: {label} must be int, got {type(value)}"
-                )
-        if index is not None and (not isinstance(index, int) or isinstance(index, bool)):
-            raise TypeError(
-                "mojolearn ExponentialSmoothing: index must be int or None, "
-                f"got {type(index)}"
-            )
-        if start < 0 or end <= start:
-            raise ValueError(
-                f"mojolearn ExponentialSmoothing: need 0 <= start < end (start={start}, end={end})"
-            )
-        if index is not None and (index < 0 or index >= b):
-            raise IndexError(
-                f"mojolearn ExponentialSmoothing: index input: {index} outside "
-                f"of range [0, {b})"
-            )
-        binding = self._bind()
-        steps = end - start
-        if start >= n:
-            fc = empty(((end - n) * b,), "<f4")
-            binding.holtwinters_forecast(
-                addr_ro(self._comps, name="components"), addr(fc, name="out"),
-                [n, b, int(self.seasonal_periods), int(end - n)], self.seasonal,
-            )
-            return self._shaped(fc[(start - n) * b:], steps, index)
-        out = empty((steps * b,), "<f4")
-        k_in = min(end, n) - start
-        base = addr(out, name="out")
-        # ORDER MATCHES bindings/holtwinters_host_predict.mojo::holtwinters_predict_binding.
-        #   0 n, 1 batch_size, 2 frequency, 3 start, 4 end
-        binding.holtwinters_predict(
-            addr_ro(self._comps, name="components"), base,
-            [n, b, int(self.seasonal_periods), int(start), int(start + k_in)], self.seasonal,
-        )
-        if end > n:
-            # The forecast writes its `(end - n) * ts_num` values straight
-            # after the in-sample block of the same time-major buffer.
-            binding.holtwinters_forecast(
-                addr_ro(self._comps, name="components"), base + 4 * k_in * b,
-                [n, b, int(self.seasonal_periods), int(end - n)], self.seasonal,
-            )
-        return self._shaped(out, steps, index)
+        return _TSA(self, "hw_predict", (start, end, index), _TSA_CONTEXT)
 
     # -- saved models (lane/inference-holtwinters, 2026-09-15) ----------------
 
@@ -1000,18 +904,7 @@ class ExponentialSmoothing:
         -------
         Array of shape (ts_num,) or float32
         """
-        if not self.fit_executed_flag:
-            raise ValueError(
-                "mojolearn ExponentialSmoothing: fit() the model before score()"
-            )
-        if index is None:
-            return self.sse_
-        if index < 0 or index >= self.ts_num:
-            raise IndexError(
-                f"mojolearn ExponentialSmoothing: index input: {index} outside "
-                f"of range [0, {self.ts_num})"
-            )
-        return self.sse_[index]
+        return _TSA(self, "hw_score", (index,), _TSA_CONTEXT)
 
     _LAZY_COMPONENTS = ("level_", "trend_", "season_")
 

@@ -33,4 +33,22 @@ def connect():
         except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError) as error:
             bindings[mode] = type(error).__name__ + ": " + str(error)
     context["tsa_bindings"] = bindings
+    hw = {}
+    names = ("holtwinters_fit", "holtwinters_forecast", "holtwinters_predict")
+    for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: the two numeric modes, connected once
+        try:
+            module = _backend.binding("_mojolearn_tsa", mode)
+            symbols = {}
+            for name in names:  # glue: fixed compiled entry names
+                fn = getattr(module, name, None)
+                if isinstance(fn, BuiltinFunctionType):
+                    symbols[name] = fn
+            hw[mode] = symbols
+        except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError) as error:
+            hw[mode] = type(error).__name__ + ": " + str(error)
+    context["hw_bindings"] = hw
+    context["hw_entry_names"] = names
+    # the host inference class reads its loaded forecast binding from the
+    # module table at call time (its own load loads it)
+    context["hw_host_module"] = "mojolearn._host._mojolearn_forecast_host"
     return entry, context

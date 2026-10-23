@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
-"""`tsa_native_call(None, operation, args, context)`: the one native call of
-`kpss_test` and `select_d` (python/mojolearn/_tsa_impl.py).
+"""`tsa_native_call(model, operation, args, context)`: the one native call of
+`kpss_test` and `select_d` (python/mojolearn/_tsa_impl.py), and of
+ExponentialSmoothing's fit, predict and score (bindings/tsa_hw_native.mojo).
 
 The series are admitted and laid out series-major (the column-major
 float32 form of `(n_obs, n_series)`; a 1-D series as it is), the
@@ -18,6 +19,7 @@ from bindings.classical_arrays import classical_input, classical_address, classi
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value
 from core.xseq_marshal import xseq_cast_nd, tsa_flags_u8
+from bindings.tsa_hw_native import hw_fit, hw_predict, hw_score
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -134,6 +136,13 @@ def tsa_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
             return tsa_kpss(call[2], context).steal_data()
         if operation == "select_d":
             return tsa_select_d(call[2], context).steal_data()
+        # ExponentialSmoothing (bindings/tsa_hw_native.mojo)
+        if operation == "hw_fit":
+            return hw_fit(call[0], context).steal_data()
+        if operation == "hw_predict":
+            return hw_predict(call[0], call[2], context).steal_data()
+        if operation == "hw_score":
+            return hw_score(call[0], call[2], context).steal_data()
         raise Error("RuntimeError: unknown tsa operation " + operation)
     except error:
         var text = String(error)
@@ -145,4 +154,8 @@ def tsa_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
             return raise_python_exception(error_without_class(error, "ImportError"), ExceptionType("PyExc_ImportError"))
         if text.startswith("NotImplementedError:"):
             return raise_python_exception(error_without_class(error, "NotImplementedError"), ExceptionType("PyExc_NotImplementedError"))
+        if text.startswith("IndexError:"):
+            return raise_python_exception(error_without_class(error, "IndexError"), ExceptionType("PyExc_IndexError"))
+        if text.startswith("AttributeError:"):
+            return raise_python_exception(error_without_class(error, "AttributeError"), ExceptionType("PyExc_AttributeError"))
         return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)
