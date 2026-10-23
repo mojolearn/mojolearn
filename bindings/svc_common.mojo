@@ -16,7 +16,7 @@
 # codes are the ones `encode_labels` returned for a flat label list.
 from std.memory import memcpy
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields, py_attr
 from bindings.classical_arrays import classical_address, classical_is_array, classical_wrap_array
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
 from bindings.family_common import (
@@ -276,7 +276,7 @@ def _svc_check_label_kinds(labels: PythonObject, context: PythonObject) raises:
     var head = labels
     if len(refused) > 0:
         var refused_set = family_call(b.frozenset, refused)
-        var flags = family_call(b.list, family_call(b.map, refused_set.__contains__, family_call(b.map, b.type, labels)))
+        var flags = family_call(b.list, family_call(b.map, py_attr(refused_set, "__contains__"), family_call(b.map, b.type, labels)))
         stop = Int(py=family_call(flags.index, PythonObject(True)))
         head = family_call(operator.getitem, labels, family_call(b.slice, PythonObject(stop)))
     if Bool(py=family_call(b.any, family_call(b.map, operator.ne, head, head))):
@@ -304,7 +304,7 @@ def svc_sorted_classes(labels: PythonObject, context: PythonObject) raises -> Py
         _svc_check_label_kinds(labels, context)
     var classes = family_call(b.sorted, family_call(b.dict.fromkeys, labels))
     var index = family_call(b.dict, family_call(b.zip, classes, family_call(b.range, PythonObject(len(classes)))))
-    var store = family_call(context["array_type"], PythonObject("i"), family_call(b.map, index.__getitem__, labels))
+    var store = family_call(context["array_type"], PythonObject("i"), family_call(b.map, py_attr(index, "__getitem__"), labels))
     var codes = classical_wrap_array(store, Python.tuple(PythonObject(n)), "<i4", "C", context)
     return Python.tuple(classes, codes)
 
@@ -363,7 +363,7 @@ def svc_decode(classes: PythonObject, codes: PythonObject, context: PythonObject
             return out
     # the label output step: the class objects, one per code (C-level map
     # over the int64 store)
-    var values = family_call(b.list, family_call(b.map, classes.__getitem__, codes._store))
+    var values = family_call(b.list, family_call(b.map, py_attr(classes, "__getitem__"), codes._store))
     if kind == 2:
         return values
     try:
@@ -493,9 +493,9 @@ def svc_accuracy(y_true: PythonObject, y_pred: PythonObject, n_pred: Int, contex
     var present = family_call(b.sorted, family_call(family_call(b.set, true).union, pred))
     var big_l = len(present)
     var index = family_call(b.dict, family_call(b.zip, present, family_call(b.range, PythonObject(big_l))))
-    var yt = classical_wrap_array(family_call(context["array_type"], PythonObject("i"), family_call(b.map, index.__getitem__, true)),
+    var yt = classical_wrap_array(family_call(context["array_type"], PythonObject("i"), family_call(b.map, py_attr(index, "__getitem__"), true)),
                                   Python.tuple(PythonObject(n)), "<i4", "C", context)
-    var yp = classical_wrap_array(family_call(context["array_type"], PythonObject("i"), family_call(b.map, index.__getitem__, pred)),
+    var yp = classical_wrap_array(family_call(context["array_type"], PythonObject("i"), family_call(b.map, py_attr(index, "__getitem__"), pred)),
                                   Python.tuple(PythonObject(n)), "<i4", "C", context)
     var prog = _Prog(context["family_metrics_ops"])
     var a = prog.put_i32(yt)

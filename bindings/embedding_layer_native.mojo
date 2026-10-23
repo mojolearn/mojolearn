@@ -22,7 +22,7 @@ from std.ffi import _Global
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains, py_attr
 from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_public_door import TensorView, tensor_view, new_array, contiguous_addr
 from bindings.optimizer_device_native import shape_count
@@ -341,7 +341,7 @@ def embedding_layer_lifetime_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi(
         var name = args[2]
         if String(py=name) == "weight":
             _drop_table(fields, context)
-        _ = py_call(_b().object.__setattr__, model, name, args[3])
+        _ = py_call(py_attr(_b().object, "__setattr__"), model, name, args[3])
         return PythonObject(None).steal_data()
     except error:
         if len(args) == 2:

@@ -19,7 +19,7 @@ from std.math import isfinite, floor, copysign
 from std.memory import bitcast
 from std.os import getenv
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields, py_attr
 from bindings.py_typed_call import py_call_typed
 from bindings.host_archive_native import host_archive_gbdt_state
 from bindings.classical_arrays import classical_wrap_array
@@ -1142,7 +1142,7 @@ def _adapter_params(model: PythonObject, context: PythonObject) raises -> Python
     """`_GBDTAdapter.get_params()`."""
     var t = _adapter_tables(context)
     var cls = py_type(model)
-    if not (cls.__init__ is t["base"].__init__):
+    if not (py_attr(cls, "__init__") is py_attr(t["base"], "__init__")):
         raise Error("TypeError: GBDT adapter subclasses with custom constructors need their own parameter protocol")
     var fields = py_fields(model)
     var names = t["names"]

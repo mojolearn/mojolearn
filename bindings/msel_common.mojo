@@ -13,7 +13,7 @@
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields, py_attr
 from bindings.optimizer_public_words import stash_python_error, PYTHON_ERROR_PENDING, _restore_python_error
 from bindings.classical_arrays import classical_address, classical_wrap_array
 from bindings.family_common import (
@@ -540,7 +540,7 @@ struct MselRng(Movable):
         var arena = _reg_run(prog, PythonObject(None), context)
         _ = prog^
         var store = py_call(Python.import_module("array").array, PythonObject("i"))
-        _ = py_call(store.frombytes, py_call(py_call(arena.__getitem__, py_call(msel_b().slice, PythonObject(o), PythonObject(o + size))).tobytes))
+        _ = py_call(store.frombytes, py_call(py_call(py_attr(arena, "__getitem__"), py_call(msel_b().slice, PythonObject(o), PythonObject(o + size))).tobytes))
         return py_call(msel_b().list, store)
 
     def approximate_modes(mut self, counts: List[Int], n_train: Int, n_test: Int,

@@ -24,7 +24,7 @@
 # native entry, the same calibrators). IDENTICAL never took it; the x_prep
 # kernels stay in place for the prep family.
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr, py_fields
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr, py_fields, py_attr
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_wrap_array, _store_code
 from bindings.trees_public_inputs import (
@@ -88,7 +88,7 @@ def _copy_block(array: PythonObject, start: Int, stop: Int, typestr: String, con
     var b = trees_builtins()
     var item = trees_itemsize(typestr)
     var view = py_call(b.memoryview, array._store)
-    var raw = py_call(py_call(view.cast, "B").__getitem__, py_call(b.slice, PythonObject(start * item), PythonObject(stop * item)))
+    var raw = py_call(py_attr(py_call(view.cast, "B"), "__getitem__"), py_call(b.slice, PythonObject(start * item), PythonObject(stop * item)))
     var store = py_call(context["array_type"], PythonObject(_store_code(typestr)))
     _ = py_call(store.frombytes, py_call(raw.tobytes))
     return classical_wrap_array(store, Python.tuple(stop - start), typestr, "C", context)
@@ -982,7 +982,7 @@ def _label_columns(Y: PythonObject, xt: PythonObject, context: PythonObject) rai
     if kind is None:
         if py_type(dtype) is not b.str:
             return PythonObject(None)
-        kind = py_call(py_call(dtype.lstrip, "<>=|").__getitem__, py_call(b.slice, PythonObject(0), PythonObject(1)))
+        kind = py_call(py_attr(py_call(dtype.lstrip, "<>=|"), "__getitem__"), py_call(b.slice, PythonObject(0), PythonObject(1)))
     var k = String(kind)
     if k != "f" and k != "i" and k != "u":
         return PythonObject(None)
@@ -1179,7 +1179,7 @@ def _multioutput_classifier_score(model: PythonObject, X: PythonObject, y: Pytho
     var xn = trees_table(context, _mode(py_fields(model), context), "_mojolearn_x_neighbors")
     _ = py_call_typed(trees_entry(xn, "xn_row_all_zero"), Python.list(_A(miss), _A(hit)), Python.list(_P(n), _P(m)),
                       Python.list())
-    var store = py_call(py_call(context["array_type"], PythonObject("i"), Python.list(PythonObject(1))).__mul__, PythonObject(n))
+    var store = py_call(py_attr(py_call(context["array_type"], PythonObject("i"), Python.list(PythonObject(1))), "__mul__"), PythonObject(n))
     var ones = classical_wrap_array(store, Python.tuple(n), "<i4", "C", context)
     var mode = py_get(py_fields(model), "numeric_mode")
     return PythonObject(trees_accuracy(ones, hit, sample_weight, mode, context))

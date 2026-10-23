@@ -16,7 +16,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
-from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains, py_attr
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_typed, classical_wrap_array, classical_c_order
@@ -2419,7 +2419,7 @@ def _target_run(model: PythonObject, values: PythonObject, info: TargetInfo, fol
         # every row in no fold (`full((max(n, 1),), -1, "<i4")`: all-ones words)
         var b = Python.import_module("builtins")
         var m = max(n, 1)
-        var ones = py_call(py_call(b.bytes, Python.list(255)).__mul__, PythonObject(4 * m))
+        var ones = py_call(py_attr(py_call(b.bytes, Python.list(255)), "__mul__"), PythonObject(4 * m))
         var store = py_call(context["array_type"], "i", ones)
         fo = _put_codes(p, classical_wrap_array(store, Python.tuple(m), "<i4", "C", context))
     else:

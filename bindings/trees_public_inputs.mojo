@@ -18,7 +18,7 @@ from std.math import isfinite
 from std.memory import bitcast
 from std.os import getenv
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr, py_attr
 from std.python._cpython import PyObjectPtr
 from bindings.py_typed_call import py_call_typed, typed_python_error
 from bindings.native_buffer_owner import native_buffer_view
@@ -134,7 +134,7 @@ def trees_full_f32(count: Int, value: Float64, context: PythonObject) raises -> 
     """`_buffer.full((count,), value, '<f4')`: one float32 conversion of
     `value`, the store repeated in C (`array.array.__mul__`)."""
     var one = py_call(context["array_type"], PythonObject("f"), Python.list(PythonObject(value)))
-    var store = py_call(one.__mul__, PythonObject(count))
+    var store = py_call(py_attr(one, "__mul__"), PythonObject(count))
     return classical_wrap_array(store, Python.tuple(count), "<f4", "C", context)
 
 

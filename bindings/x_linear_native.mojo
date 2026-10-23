@@ -23,7 +23,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
-from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains, py_attr
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_wrap_array
@@ -738,7 +738,7 @@ def _xl_set_linear(fields: PythonObject, out_buf: PythonObject, d: Int, context:
 def _xl_tweedie_link(fields: PythonObject) raises -> Int:
     """TweedieRegressor._link_code."""
     var p = _float(fields["power"])
-    if p < 0 or (0 < p and p < 1):
+    if p < 0 or (p > 0 and p < 1):
         raise Error("mojolearn TweedieRegressor: power=" + _str(PythonObject(p)) + " is not implemented (power 0 or >= 1)")
     var link = fields["link"]
     if _eq(link, PythonObject("auto")):
@@ -1517,7 +1517,7 @@ def _xl_cv_fold_ids(splits: PythonObject, n: Int, context: PythonObject) raises 
 def _xl_full_i32(n: Int, value: Int, context: PythonObject) raises -> PythonObject:
     """`full((n,), value, '<i4')`: the store repeated in C."""
     var one = py_call(context["array_type"], PythonObject("i"), Python.list(PythonObject(value)))
-    var store = py_call(one.__mul__, PythonObject(n))
+    var store = py_call(py_attr(one, "__mul__"), PythonObject(n))
     return classical_wrap_array(store, Python.tuple(n), "<i4", "C", context)
 
 
@@ -1779,7 +1779,7 @@ def _xl_enetcv(model: PythonObject, fields: PythonObject, args: PythonObject, l1
     var L = len(l1_ratios)
     for i in range(L):  # driver-loop: over the l1_ratio grid
         var r = Float64(py=l1_ratios[i])
-        if not (0 < r and r <= 1):
+        if not (r > 0 and r <= 1):
             raise Error("mojolearn " + name + ": l1_ratio must be in (0, 1]")
     var entries = _xl_entries(fields, context)
     var x = _xl_matrix(args[0], context)

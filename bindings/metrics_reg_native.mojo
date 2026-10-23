@@ -412,7 +412,7 @@ def _check_alpha(alpha: PythonObject, context: PythonObject) raises -> Float64:
     if not _metric_real(alpha, context):
         raise Error("alpha must be a real number in [0, 1]")
     var value = Float64(py=family_call(b.float, alpha))
-    if not (0 <= value and value <= 1):
+    if not (value >= 0 and value <= 1):
         raise Error("alpha must be a real number in [0, 1]")
     return value
 
@@ -529,7 +529,7 @@ def _tweedie_check(flags_y: Int, flags_p: Int, power: Float64, shown: String, ar
     if power < 0:
         if p_nonpos:
             raise Error(msg + "strictly positive y_pred.")
-    elif 1 <= power and power < 2:
+    elif power >= 1 and power < 2:
         if y_neg or p_nonpos:
             raise Error(msg + "non-negative y and strictly positive y_pred.")
     elif power >= 2:

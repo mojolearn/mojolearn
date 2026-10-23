@@ -10,7 +10,7 @@
 # do not move.
 from std.memory import memcpy
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_get, py_type, py_setattr
+from bindings.py_balanced import py_call, py_get, py_type, py_setattr, py_attr
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.native_buffer_owner import native_storage_allocate
@@ -65,7 +65,7 @@ def rs_code(table_name: String, value: PythonObject, name: String, where: String
     var b = Python.import_module("builtins")
     var table = rs_state(context)[table_name]
     if family_is_str(value):
-        if not lin_truth(py_call(table.__contains__, value)):
+        if not lin_truth(py_call(py_attr(table, "__contains__"), value)):
             raise Error("mojolearn " + where + ": " + name + " must be one of "
                         + family_repr(py_call(b.sorted, table)) + ", got " + family_repr(value))
         return table[value]
@@ -489,7 +489,7 @@ def _rs_take(a: PythonObject, idx: LinBuf, context: PythonObject) raises -> Pyth
             var picked = Python.list()
             for t in range(count):  # cpu-route: object rows taken by index [py-data-loop]
                 _ = py_call(picked.append, PythonObject(Int(rows[t])))
-            return family_call(arr.__getitem__, family_call(numpy.asarray, picked, numpy.intp))
+            return family_call(py_attr(arr, "__getitem__"), family_call(numpy.asarray, picked, numpy.intp))
         var out = _rs_output(arr, count, arr.dtype, context)
         var dst = Int(py=classical_address(out))
         var nd = len(v.shape)
@@ -528,7 +528,7 @@ def _rs_take(a: PythonObject, idx: LinBuf, context: PythonObject) raises -> Pyth
         return out
     var picked = Python.list()
     for t in range(count):  # cpu-route: Python list input taken by index [py-data-loop]
-        _ = py_call(picked.append, family_call(a.__getitem__, PythonObject(Int(rows[t]))))
+        _ = py_call(picked.append, family_call(py_attr(a, "__getitem__"), PythonObject(Int(rows[t]))))
     return picked
 
 

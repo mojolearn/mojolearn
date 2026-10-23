@@ -11,7 +11,7 @@
 # gpc_ovr_combine), and stores the fit as `_set_fitted` did. The same entries on
 # the same inputs in the same order: the bits do not move.
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem, py_attr
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
@@ -91,7 +91,7 @@ def gpc_validate(model: PythonObject, context: PythonObject) raises:
                     + "(DEVIATION 1761)")
     if family_isinstance(max_iter, b.bool) or not family_isinstance(max_iter, b.int):
         raise Error("TypeError: " + String(_NAME) + ": max_iter_predict must be an int, got " + family_repr(max_iter))
-    if Bool(py=py_call(b.int.__lt__, max_iter, PythonObject(1))):
+    if Bool(py=py_call(py_attr(b.int, "__lt__"), max_iter, PythonObject(1))):
         raise Error(String(_NAME) + ": max_iter_predict must be at least 1, got " + String(py_call(b.str, max_iter)))
     if Bool(py=family_call(b.bool, warm_start)):
         raise Error("NotImplementedError: " + String(_NAME) + ": warm_start=True is refused. It starts the Newton "

@@ -20,7 +20,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains, py_attr
 from bindings.classical_arrays import classical_address
 from bindings.native_process_pool import (
     process_pool_create, process_pool_map, process_pool_close,
@@ -83,7 +83,7 @@ def _devices(devices: PythonObject) raises:
     if len(selected) == 0:
         raise Error("ValueError: devices must be distinct nonnegative integer indices")
     for i in range(len(selected)):  # driver-loop: over the admitted device indices
-        if py_type(selected[i]) is not b.int or Int(py=selected[i]) < 0 or Bool(py=py_call(seen.__contains__, selected[i])):
+        if py_type(selected[i]) is not b.int or Int(py=selected[i]) < 0 or Bool(py=py_call(py_attr(seen, "__contains__"), selected[i])):
             raise Error("ValueError: devices must be distinct nonnegative integer indices")
         _ = py_call(seen.add, selected[i])
 

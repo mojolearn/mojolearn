@@ -13,7 +13,7 @@ under the same names; the graph is the module's `_Graph` record.
 NumPy is called for allocation and dtype conversion only.
 """
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains, py_attr
 from bindings.py_typed_call import py_call_typed
 from bindings.xcnn_common import (
     xcnn_builtins, xcnn_entries, xcnn_entry, xcnn_mixed, xcnn_idn, XCNN_F_GRAPH, xcnn_is_t, xcnn_on_dev,
@@ -265,7 +265,7 @@ def _gcn_graph(fields: PythonObject, entries: PythonObject, n: Int, edge_index: 
     if edge_weight is None:
         w = py_call(np.ones, len(src), np.float32)
     else:
-        w = py_call(py_call(xcnn_f32(edge_weight, "edge_weight", context).reshape, -1).copy)
+        w = py_call(py_attr(py_call(xcnn_f32(edge_weight, "edge_weight", context).reshape, -1), "copy"))
     if len(w) != len(src):
         raise Error("ValueError: mojolearn: edge_weight must have one entry per edge")
     if Bool(py=fields["normalize"]) and Bool(py=fields["add_self_loops"]):

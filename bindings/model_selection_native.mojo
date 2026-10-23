@@ -8,7 +8,7 @@
 # is the caller's fitted estimator's own (a mojolearn estimator's is itself
 # one native call); its exception reaches the caller unchanged.
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setattr
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setattr, py_attr
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.family_common import family_repr, family_is_str, family_isinstance, family_call
 from bindings.msel_common import msel_get_scorer, msel_score
@@ -97,7 +97,7 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
     if operation == "family_msel_grid_len":
         return PythonObject(msel_grid_len(py_call(b.getattr, model, PythonObject("param_grid"))))
     if operation == "family_msel_grid_item":
-        return family_call(msel_grid_list(py_call(b.getattr, model, PythonObject("param_grid"))).__getitem__, args[0])
+        return family_call(py_attr(msel_grid_list(py_call(b.getattr, model, PythonObject("param_grid"))), "__getitem__"), args[0])
     if operation == "family_msel_sampler":
         return msel_sampler_list(_msel_attr(model, "param_distributions"), _msel_attr(model, "n_iter"),
                                  _msel_attr(model, "random_state"), context)

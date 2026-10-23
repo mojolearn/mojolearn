@@ -139,7 +139,7 @@ def _umap_parameters(model: PythonObject, context: PythonObject) raises -> Pytho
         raise Error("UMAP learning_rate must be positive")
     if repulsion < 0:
         raise Error("UMAP repulsion_strength must be nonnegative")
-    if not (0 <= min_dist and min_dist <= spread) or spread <= 0:
+    if not (min_dist >= 0 and min_dist <= spread) or spread <= 0:
         raise Error("UMAP requires 0 <= min_dist <= spread and spread > 0")
     if not (0 <= mix and mix <= 1):
         raise Error("UMAP set_op_mix_ratio must be in [0, 1]")
@@ -304,7 +304,7 @@ def _umap_target(model: PythonObject, y: PythonObject, n: Int, context: PythonOb
     var fields = py_fields(model)
     var tm = family_field(fields, "target_metric")
     var w = _umap_scalar(family_field(fields, "target_weight"), "target_weight")
-    if not (0 <= w and w <= 1):
+    if not (w >= 0 and w <= 1):
         raise Error("UMAP target_weight must be in [0, 1]")
     var tk = _umap_integer(family_field(fields, "target_n_neighbors"), "target_n_neighbors", -1, _I64_MAX)
     if Bool(py=py_call(op.contains, Python.tuple(PythonObject(0), PythonObject(1)), tk)):

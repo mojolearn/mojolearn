@@ -36,7 +36,7 @@ from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from bindings.py_balanced import py_call, py_type
+from bindings.py_balanced import py_call, py_type, py_attr
 from core.user_objects import group_run_sizes
 
 comptime KIND_STR = 0         # isinstance(v, str)
@@ -146,7 +146,7 @@ def _lookup(env: _Env, classes: PythonObject, values: PythonObject) raises -> Py
     # unseen values in first-seen order
     var index = Python.dict()
     for i in range(len(classes)):  # cpu-route: Python list of class objects read once by user_objects_c (lookup)
-        _ = py_call(index.__setitem__, classes[i], PythonObject(i))
+        _ = py_call(py_attr(index, "__setitem__"), classes[i], PythonObject(i))
     var n = len(values)
     var codes = env.store("i", n, 4)
     var out = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=_address(codes))
@@ -289,7 +289,7 @@ def _transpose(env: _Env, cols: PythonObject) raises -> PythonObject:
 def _scatter(env: _Env, rows: PythonObject, address: Int, count: Int, vals: PythonObject) raises -> PythonObject:
     var n = min(count, len(vals))
     for k in range(n):  # cpu-route: Python prediction objects read once by user_objects_c (scatter)
-        _ = py_call(rows.__setitem__, PythonObject(_index_at(address, k, 8)), vals[k])
+        _ = py_call(py_attr(rows, "__setitem__"), PythonObject(_index_at(address, k, 8)), vals[k])
     return PythonObject(None)
 
 
@@ -472,7 +472,7 @@ def _sorted_codes(env: _Env, values: PythonObject, unknown: PythonObject) raises
         width *= 2
     var code = Python.dict()
     for r in range(m):  # driver-loop: over the distinct classes
-        _ = py_call(code.__setitem__, keys[order[r]][1], PythonObject(r))
+        _ = py_call(py_attr(code, "__setitem__"), keys[order[r]][1], PythonObject(r))
     var words = env.store("f", n, 4)
     var out = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=_address(words))
     for i in range(n):  # cpu-route: categorical y label objects read once by user_objects_c (sorted_codes)
@@ -518,7 +518,7 @@ def _group_permute(env: _Env, values: PythonObject, rows: PythonObject, perms: P
         var rp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=_address(r))
         var pp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=_address(p))
         for a in range(m):  # cpu-route: Python label objects read once by user_objects_c (group_permute)
-            _ = py_call(out.__setitem__, PythonObject(Int(rp[a])), values[Int(rp[Int(pp[a])])])
+            _ = py_call(py_attr(out, "__setitem__"), PythonObject(Int(rp[a])), values[Int(rp[Int(pp[a])])])
     return out
 
 

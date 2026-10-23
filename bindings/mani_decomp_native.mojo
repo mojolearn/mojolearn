@@ -14,7 +14,7 @@
 # kit's own objects, so transform reads it where fit left it. Bits unchanged.
 from std.math import sqrt
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_get, py_fields, py_setitem, py_contains
+from bindings.py_balanced import py_call, py_get, py_fields, py_setitem, py_contains, py_attr
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
     family_repr, family_str, family_is_str, family_is_int, family_type_name, family_call, family_call_kw,
@@ -284,7 +284,7 @@ def _mani_lanczos_top(mut k: MKit, a: PythonObject, nc: Int) raises -> Tuple[Boo
         qm = mk_dev_view(qd._d, j, n, ctx)
     else:
         var store = mk_store(qd, ctx)
-        qm = mk_new(py_call(store.__getitem__, py_call(Python.import_module("builtins").slice, PythonObject(0),
+        qm = mk_new(py_call(py_attr(store, "__getitem__"), py_call(Python.import_module("builtins").slice, PythonObject(0),
                                                        PythonObject(j * n))), j, n, ctx)
     var v = k.mm(qm, yt, True, False)
     _ = ab^

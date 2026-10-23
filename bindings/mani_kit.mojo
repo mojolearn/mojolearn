@@ -17,7 +17,7 @@
 # Apple FAST precise LLE entries) are the Python kit's own tests.
 from std.memory import memcpy
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_get, py_setattr, py_setitem
+from bindings.py_balanced import py_call, py_get, py_setattr, py_setitem, py_attr
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.classical_arrays import classical_address, classical_wrap_array
 from bindings.family_common import FAMILY_F32P, FAMILY_F64P, family_call, family_entry, family_as_f32, family_as_f32_dense
@@ -268,7 +268,7 @@ def mk_rows(m: PythonObject, a: Int, b: Int, ctx: PythonObject) raises -> Python
             idx.append(i)
         return mk_dev_gather(m, MV_TAKE_ROWS, idx, ctx)
     var store = mk_store(m, ctx)
-    var part = py_call(store.__getitem__, py_call(Python.import_module("builtins").slice,
+    var part = py_call(py_attr(store, "__getitem__"), py_call(Python.import_module("builtins").slice,
                                                   PythonObject(a * c), PythonObject(b * c)))
     return mk_new(part, b - a, c, ctx)
 
@@ -970,7 +970,7 @@ struct MKit(Movable):
                                family_call(self.fn("x_decomp_argmin_all"), pa, PythonObject(n),
                                            mk_addr(buf, self.ctx))))
         var store = mk_store(buf, self.ctx)
-        var part = py_call(store.__getitem__, py_call(Python.import_module("builtins").slice,
+        var part = py_call(py_attr(store, "__getitem__"), py_call(Python.import_module("builtins").slice,
                                                       PythonObject(0), PythonObject(c)))
         return mk_new(part, c, 1, self.ctx)
 

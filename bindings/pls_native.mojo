@@ -17,7 +17,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
-from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains, py_attr
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_host_f32
 from bindings.decomp_kit_native import (
@@ -192,7 +192,7 @@ def _pls_fit(model: PythonObject, x_source: PythonObject, y_source: PythonObject
         for k in range(6):  # driver-loop: over the six fitted blocks
             outs[k] = kit.cols_of(outs[k], 0, done)
     var all_iterations = py_call(b.list, its)
-    py_setitem(fields, "n_iter_", py_call(all_iterations.__getitem__, py_call(b.slice, 0, nits)))
+    py_setitem(fields, "n_iter_", py_call(py_attr(all_iterations, "__getitem__"), py_call(b.slice, 0, nits)))
     var x_rotations = _rotation(kit, outs[0], outs[4])
     var y_rotations = _rotation(kit, outs[1], outs[5])
     var coef = kit.mm(x_rotations, outs[5], tb=True)

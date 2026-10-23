@@ -12,7 +12,7 @@
 # draws, so every result is unchanged.
 from std.memory import memcpy
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields, py_attr
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.classical_arrays import classical_wrap_array
 from bindings.family_common import (
@@ -78,7 +78,7 @@ def msel_grid_list(param_grid: PythonObject) raises -> PythonObject:
             continue
         var values = Python.list()
         for j in range(len(keys)):  # driver-loop: over a grid's parameters
-            _ = py_call(values.append, family_call(b.list, family_call(g.__getitem__, keys[j])))
+            _ = py_call(values.append, family_call(b.list, family_call(py_attr(g, "__getitem__"), keys[j])))
         var combos = family_call(b.list, msel_apply(itertools.product, py_call(b.tuple, values)))
         for c in range(len(combos)):  # driver-loop: over candidates
             _ = py_call(out.append, family_call(b.dict, py_call(b.zip, keys, combos[c])))
@@ -133,7 +133,7 @@ def msel_sampler_list(dists: PythonObject, n_iter_in: PythonObject, random_state
         n_iter = PythonObject(len(grid))
     var rng = MselRng(random_state, context)
     var perm = rng.permutation(len(grid), context)
-    var head = py_call(perm.__getitem__, py_call(msel_b().slice, PythonObject(None), n_iter))
+    var head = py_call(py_attr(perm, "__getitem__"), py_call(msel_b().slice, PythonObject(None), n_iter))
     return py_call(msel_b().list, py_call(msel_b().map, py_call(msel_b().getattr, grid, PythonObject("__getitem__")), head))
 
 
@@ -343,7 +343,7 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
     elif msel_truth(py_call(b.callable, refit)):
         var best_index = family_call(b.int, family_call(refit, results))
         py_setattr(model, "best_index_", best_index)
-        best_params = family_call(candidates.__getitem__, best_index)
+        best_params = family_call(py_attr(candidates, "__getitem__"), best_index)
         py_setattr(model, "best_params_", best_params)
     if not refit_false:
         var best = msel_clone(estimator, False, context)
@@ -386,7 +386,7 @@ def msel_validation_curve(args: PythonObject, context: PythonObject) raises -> P
             _ = family_call_kw(family_call(b.getattr, est, PythonObject("set_params")), params)
             var r = msel_cross_validate_run(est, yf, rows, scoring, True, False, False, error_score, context)
             if len(r.names) != 1 or r.names[0] != "score":
-                _ = family_call(Python.dict().__getitem__, PythonObject("train_score"))
+                _ = family_call(py_attr(Python.dict(), "__getitem__"), PythonObject("train_score"))
             for i in range(len(r.train[0])):  # driver-loop: over folds
                 tr.append(r.train[0][i])
                 te.append(r.test[0][i])

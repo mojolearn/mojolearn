@@ -389,7 +389,7 @@ def _roc_options(args: PythonObject, context: PythonObject) raises -> PythonObje
         var ok = not mc_is_bool(max_fpr) and mc_is_real(max_fpr)
         if ok:
             var v = mc_float(max_fpr)
-            ok = 0 < v and v <= 1
+            ok = v > 0 and v <= 1
         if not ok:
             raise Error("Expected max_fpr in range (0, 1], got: " + family_repr(max_fpr))
     if not multiclass:

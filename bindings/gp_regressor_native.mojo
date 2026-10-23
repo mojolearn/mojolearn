@@ -13,7 +13,7 @@
 # The same entries on the same inputs: the bits do not move.
 from std.memory import memcpy
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem, py_attr
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_validate import classical_view
@@ -120,7 +120,7 @@ def _gpr_validate(model: PythonObject, context: PythonObject) raises:
         var bad = not _is_integral(random_state)
         if not bad:
             var seed = family_call(b.int, random_state)
-            bad = not (Bool(py=py_call(b.int.__ge__, seed, PythonObject(0)))
+            bad = not (Bool(py=py_call(py_attr(b.int, "__ge__"), seed, PythonObject(0)))
                        and Bool(py=py_call(b.int.__lt__, seed, context["family_gp_seed_bound"])))
         if bad:
             raise Error(String(_GPR) + ": random_state must be None "
@@ -232,8 +232,8 @@ def _gpr_optimize(model: PythonObject, binding: PythonObject, x: PythonObject, t
     # _validate_params); the kernel then draws no restart point.
     var seed = PythonObject(0) if fields["_random_state"] is None else fields["_random_state"]
     var b = Python.import_module("builtins")
-    var low = py_call(b.int.__and__, seed, PythonObject(0xFFFFFFFF))
-    var high = py_call(b.int.__and__, py_call(b.int.__rshift__, seed, PythonObject(32)), PythonObject(0xFFFFFFFF))
+    var low = py_call(py_attr(b.int, "__and__"), seed, PythonObject(0xFFFFFFFF))
+    var high = py_call(b.int.__and__, py_call(py_attr(b.int, "__rshift__"), seed, PythonObject(32)), PythonObject(0xFFFFFFFF))
     var ext = _gpr_ext(model, binding, context)
     # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_optimize_binding.
     # x, y, kinds, kparams, ls_len, ls, free, bounds, theta_out, values_out, runs_out;
@@ -480,7 +480,7 @@ def _gpr_sample_y(model: PythonObject, args: PythonObject, context: PythonObject
     var bad = not _is_integral(seed)
     if not bad:
         var value = family_call(b.int, seed)
-        bad = not (Bool(py=py_call(b.int.__ge__, value, PythonObject(0)))
+        bad = not (Bool(py=py_call(py_attr(b.int, "__ge__"), value, PythonObject(0)))
                    and Bool(py=py_call(b.int.__lt__, value, context["family_gp_seed_bound"])))
     if bad:
         raise Error(String(_GPR) + ": sample_y needs random_state to "
@@ -501,7 +501,7 @@ def _gpr_sample_y(model: PythonObject, args: PythonObject, context: PythonObject
     var ext = _gpr_ext(model, args[0], context)
     var params = Python.list(PythonObject(n_train), fields["n_features_in_"], PythonObject(n_star),
                              PythonObject(len(arrays[0])), arrays[4], fields["info_"], PythonObject(n),
-                             py_call(b.int.__and__, seed, PythonObject(0xFFFFFFFF)),
+                             py_call(py_attr(b.int, "__and__"), seed, PythonObject(0xFFFFFFFF)),
                              py_call(b.int.__rshift__, seed, PythonObject(32)))
     _gpr_tail(fields, params)
     # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_sample_y_binding.

@@ -598,7 +598,7 @@ def _optics_fit(model: PythonObject, binding: PythonObject, source: PythonObject
     if _eq(method, PythonObject("dbscan")) and Float64(py=eps) > Float64(py=max_eps):
         raise Error("Specify an epsilon smaller than " + family_str(max_eps) + ". Got " + family_str(eps) + ".")
     var xi = _float(_attr(model, "xi"))
-    if not (0 <= Float64(py=xi) and Float64(py=xi) <= 1):
+    if not (Float64(py=xi) >= 0 and Float64(py=xi) <= 1):
         raise Error("xi must be in [0, 1]")
     if metric == _OPTICS_PRECOMPUTED and n != d:
         raise Error("metric='precomputed' needs a square distance matrix, got (" + String(n) + ", " + String(d) + ")")

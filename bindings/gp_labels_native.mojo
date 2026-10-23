@@ -11,7 +11,7 @@
 # str and bool classes decode to the label objects. The shell hands over the
 # base binding (`_backend.binding("_mojolearn", "identical")`, `_buffer._native`'s).
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_attr
 from bindings.classical_arrays import classical_address, classical_is_array
 from bindings.family_common import (
     family_repr, family_isinstance, family_call, family_entry, family_array, FAMILY_F64P, FAMILY_I64P,
@@ -203,10 +203,10 @@ def _gp_check_kinds(labels: PythonObject) raises:
     if len(refused) > 0:
         try:
             stop = Int(py=py_call(Python.import_module("operator").indexOf,
-                                  py_call(b.map, refused.__contains__, py_call(b.map, b.type, labels)), PythonObject(True)))
+                                  py_call(b.map, py_attr(refused, "__contains__"), py_call(b.map, b.type, labels)), PythonObject(True)))
         except:
             stop = -1
-    var head = labels if stop < 0 else py_call(labels.__getitem__, py_call(b.slice, PythonObject(0), PythonObject(stop)))
+    var head = labels if stop < 0 else py_call(py_attr(labels, "__getitem__"), py_call(b.slice, PythonObject(0), PythonObject(stop)))
     _gp_no_nan(head)
     if stop >= 0:
         raise Error("mojolearn: label " + family_repr(labels[stop]) + " is neither a number nor a str")
@@ -227,7 +227,7 @@ def _gp_sorted_classes(labels: PythonObject, context: PythonObject) raises -> Py
         _gp_check_kinds(labels)
     var classes = family_call(b.sorted, py_call(b.dict.fromkeys, labels))
     var table = py_call(b.dict, py_call(b.zip, classes, py_call(b.range, PythonObject(len(classes)))))
-    var codes = family_call(b.list, py_call(b.map, table.__getitem__, labels))
+    var codes = family_call(b.list, py_call(b.map, py_attr(table, "__getitem__"), labels))
     return Python.tuple(classes, _schema_label_store(codes, "i", "<i4", context))
 
 
@@ -291,4 +291,4 @@ def gp_decode_labels(classes: PythonObject, codes: PythonObject, base: PythonObj
             _ = table^
             return out
     var rows = family_call(py_call(b.memoryview, codes._store).tolist)
-    return family_call(b.list, py_call(b.map, classes.__getitem__, rows))
+    return family_call(b.list, py_call(b.map, py_attr(classes, "__getitem__"), rows))

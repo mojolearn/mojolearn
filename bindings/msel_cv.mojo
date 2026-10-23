@@ -13,7 +13,7 @@
 from std.memory import memcpy
 from std.time import perf_counter_ns
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields, py_attr
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.family_common import (
     family_array, family_call, family_call_kw, family_isinstance, family_is_str, family_repr, family_str, family_type_name,
@@ -70,7 +70,7 @@ def msel_clone(value: PythonObject, parameter: Bool, context: PythonObject) rais
     var actual = family_call_kw(family_call(b.getattr, result, PythonObject("get_params")), keywords)
     var names = py_call(b.list, parameters)
     for i in range(len(names)):  # driver-loop: over estimator parameters
-        if family_call(actual.__getitem__, names[i]) is not parameters[names[i]]:
+        if family_call(py_attr(actual, "__getitem__"), names[i]) is not parameters[names[i]]:
             raise Error("RuntimeError: estimator constructor must retain its parameter objects for cloning")
     return result
 
@@ -552,7 +552,7 @@ def _row_view(arr: PythonObject, a: Int, b: Int, context: PythonObject) raises -
     py_setattr(view, "_store", arr._store)
     py_setattr(view, "_base", arr)
     py_setattr(view, "_pin", arr._pin)
-    py_setattr(view, "_mv", py_call(arr._mv.__getitem__, py_call(bi.slice, PythonObject(a * per), PythonObject(b * per))))
+    py_setattr(view, "_mv", py_call(py_attr(arr._mv, "__getitem__"), py_call(bi.slice, PythonObject(a * per), PythonObject(b * per))))
     py_setattr(view, "_addr", PythonObject(Int(py=arr._addr) + a * per * item))
     py_setattr(view, "_readonly", PythonObject(True))
     var shape = Python.list()
@@ -712,13 +712,13 @@ def _place(preds: PythonObject, tests: PythonObject, n: Int, res: PythonObject, 
             numeric = False
     var width = Python.tuple()
     if numeric:
-        width = py_call(b.tuple, py_call(preds[count - 1].shape.__getitem__, py_call(b.slice, PythonObject(1), PythonObject(None))))
+        width = py_call(b.tuple, py_call(py_attr(preds[count - 1].shape, "__getitem__"), py_call(b.slice, PythonObject(1), PythonObject(None))))
     var same = numeric
     var integral = numeric and len(width) == 0
     if numeric:
         for f in range(count):  # driver-loop: over folds (shape checks)
             var p = preds[f]
-            if not msel_cmp("eq", py_call(b.tuple, py_call(p.shape.__getitem__, py_call(b.slice, PythonObject(1), PythonObject(None)))), width):
+            if not msel_cmp("eq", py_call(b.tuple, py_call(py_attr(p.shape, "__getitem__"), py_call(b.slice, PythonObject(1), PythonObject(None)))), width):
                 same = False
             var d = String(py=p.dtype)
             if not (d.startswith("<i") or d.startswith("<u")):

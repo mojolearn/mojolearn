@@ -27,7 +27,7 @@
 # converts X once for the fit and the transform.
 from std.math import ceil
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields, py_attr
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_wrap_array, _store_code
 from bindings.trees_public_inputs import (
@@ -148,7 +148,7 @@ def _copy_i32(array: PythonObject, start: Int, stop: Int, context: PythonObject)
     """`array[start:stop]` of a flat int32 Array: a block copy in C."""
     var b = trees_builtins()
     var view = py_call(b.memoryview, array._store)
-    var raw = py_call(py_call(view.__getitem__, py_call(b.slice, PythonObject(start), PythonObject(stop))).tobytes)
+    var raw = py_call(py_call(py_attr(view, "__getitem__"), py_call(b.slice, PythonObject(start), PythonObject(stop))).tobytes)
     var store = py_call(context["array_type"], PythonObject("i"))
     _ = py_call(store.frombytes, raw)
     return classical_wrap_array(store, Python.tuple(stop - start), "<i4", "C", context)

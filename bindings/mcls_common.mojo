@@ -20,7 +20,7 @@
 #   back from the arena as `prog.ints` / `prog.words` read them.
 from std.memory import memcpy, bitcast
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setattr, py_setitem, py_fields
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setattr, py_setitem, py_fields, py_attr
 from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
 from bindings.classical_arrays import classical_address, classical_is_array, classical_dtype_str, classical_wrap_array
 from bindings.classical_attributes import classical_connect_numpy
@@ -427,7 +427,7 @@ def mc_encode_store(store: PythonObject, count: Int, context: PythonObject) rais
                                PythonObject(0), PythonObject(0), PythonObject(0)))
     if k < 0:
         raise Error("RuntimeError: prepare_targets refused integer labels")
-    var head = family_call(classes.__getitem__, family_call(b.slice, PythonObject(0), PythonObject(k)))
+    var head = family_call(py_attr(classes, "__getitem__"), family_call(b.slice, PythonObject(0), PythonObject(k)))
     return Python.tuple(family_call(head.tolist), codes)
 
 
@@ -480,7 +480,7 @@ def mc_labels(values: PythonObject, name: String, context: PythonObject) raises 
     var classes = mc_sorted(mc_set(labels))
     var index = mc_index(classes)
     # cpu-route: str or Python int labels, the explicit label input step (dict lookups by builtins map)
-    var codes = mc_i32_array(family_call(b.list, family_call(b.map, index.__getitem__, labels)), context)
+    var codes = mc_i32_array(family_call(b.list, family_call(b.map, py_attr(index, "__getitem__"), labels)), context)
     return McLabels(String(listed[1]), mc_len(labels), classes, codes)
 
 
@@ -520,7 +520,7 @@ def mc_map_equal(labels: McLabels, value: PythonObject, context: PythonObject) r
 def mc_selected(labels: PythonObject, kind: String, observed: PythonObject) raises -> PythonObject:
     """`_metrics_impl._selected_labels`."""
     if labels is None:
-        return family_call(observed.copy)
+        return family_call(py_attr(observed, "copy"))
     var listed = mc_label_list(labels, "labels", False)
     if String(listed[1]) != kind:
         raise Error("TypeError: labels must use the same type as the targets")
