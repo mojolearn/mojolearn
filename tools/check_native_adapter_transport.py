@@ -29,6 +29,8 @@ def main():
         report.update(torch=torch.__version__, hip=torch.version.hip,
                       hardware=torch.cuda.get_device_name(0),
                       native_sha256=hashlib.sha256(args.library.read_bytes()).hexdigest())
+        command = json.loads(args.torch_library.with_name('torch-build-command.json').read_text())
+        assert '-DMOJOLEARN_ADAPTER_TEST_HOST_STAGING=1' not in command, 'reference must use the production device route'
         torch.ops.load_library(str(args.torch_library.resolve()))
         lib = ctypes.CDLL(str(args.library.resolve()))
         call = lib.mojolearn_adapter_operation_host_buffers
