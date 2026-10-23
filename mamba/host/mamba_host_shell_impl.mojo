@@ -386,6 +386,25 @@ def _m3_owned_export_run(mut s: M3OwnedHostSession, a: List[Int], dm: Int, dims:
     _write(a[8], w.w_out, dm * dims.d_inner)
 
 
+def _m3_owned_state_run(mut s: M3OwnedHostSession, a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int) raises -> Int:
+    """`mamba3_forward` (carried state) on the owned weights: the host
+    forward `_mamba3_run` with its nine weight slots pointing at the
+    installed snapshot instead of caller arrays (lane migrate-neural-2's
+    `mamba3_state_owned`, host column). Returns the post-call buf_len."""
+    ref w = s.weights.value()
+    var slots = a.copy()
+    slots[1] = Int(w.norm_w.unsafe_ptr())
+    slots[2] = Int(w.w_in.unsafe_ptr())
+    slots[3] = Int(w.dt_bias.unsafe_ptr())
+    slots[4] = Int(w.bnorm_w.unsafe_ptr())
+    slots[5] = Int(w.cnorm_w.unsafe_ptr())
+    slots[6] = Int(w.b_bias.unsafe_ptr())
+    slots[7] = Int(w.c_bias.unsafe_ptr())
+    slots[8] = Int(w.d_skip.unsafe_ptr())
+    slots[9] = Int(w.w_out.unsafe_ptr())
+    return _mamba3_run(slots, b, l, dm, q0, pend, False)
+
+
 def _nn40_host_require(s: M3OwnedHostSession, dm: Int, generation: Int) raises:
     if not NN40_OWNED_WEIGHTS or s.busy or not s.usable or not s.weights:
         raise Error("mamba3 owned host: no usable installed snapshot")

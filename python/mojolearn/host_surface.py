@@ -2915,6 +2915,8 @@ FAMILIES = (
             "mamba2_forward", "mamba2_decode_step", "mamba2_backward",
             "mamba3_forward", "mamba3_forward_fresh", "mamba3_decode_step",
             "mamba3_backward",
+            # the carried-state forward on the owned snapshot (lane migrate-neural-2)
+            "mamba3_state_owned",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "mamba1_profile", "mamba3_owned_weights_enabled", "mamba3_prefill_session_create",
             "mamba3_prefill_session_reports_optional", "mamba3_prefill_session_info", "mamba3_prefill_session_close",

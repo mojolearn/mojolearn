@@ -94,6 +94,7 @@ from mamba.host.mamba_host_shell_impl import (
     M3OwnedHostSession,
     _m3_owned_install_run,
     _m3_owned_forward_run,
+    _m3_owned_state_run,
     _m3_owned_backward_run,
     _m3_owned_export_run,
     _nn40_host_require,
@@ -365,6 +366,7 @@ def build__mojolearn_mamba_host() -> PythonObject:
         m.def_function[mamba3_owned_close_binding]("mamba3_prefill_session_close")
         m.def_function[mamba3_owned_install_binding]("mamba3_prefill_session_install_weights")
         m.def_function[mamba3_owned_forward_binding]("mamba3_prefill_session_forward_owned")
+        m.def_function[mamba3_state_owned_binding]("mamba3_state_owned")
         m.def_function[mamba3_owned_backward_binding]("mamba3_prefill_session_backward_owned")
         m.def_function[mamba3_owned_export_binding]("mamba3_prefill_session_export_weights")
         m.def_function[mamba3_forward_binding]("mamba3_forward")
@@ -439,6 +441,37 @@ def mamba3_owned_forward_binding(session: PythonObject, addrs: PythonObject, par
     owner[].busy = False
     owner[].weight_reuses += 1
     return PythonObject(0)
+
+
+def mamba3_state_owned_binding(session: PythonObject, addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`mamba3_state_owned` (host column): `mamba3_forward` (step 0) or
+    `mamba3_decode_step` (step 1) on the installed owned snapshot; `addrs`
+    the same twenty-five as `mamba3_forward` (the nine weight slots are not
+    read); `params` = [B, L, d_model, buf_len, pending, generation, step].
+    Returns the post-call buf_len."""
+    var owner = session.downcast_value_ptr[M3OwnedHostSession]()
+    var a = _addrs(addrs, 25, String("mamba3_state_owned"))
+    if len(params) != 7:
+        raise Error("mamba3_state_owned: params must contain 7 values (B, L, d_model, buf_len, pending, generation, step)")
+    var b = Int(py=params[0]); var l = Int(py=params[1]); var dm = Int(py=params[2])
+    var q0 = Int(py=params[3]); var pend = Int(py=params[4]); var generation = Int(py=params[5])
+    var step = Int(py=params[6])
+    _nn40_host_require(owner[], dm, generation)
+    if step != 0 and step != 1:
+        raise Error("mamba3_state_owned: step must be 0 or 1")
+    if step == 1 and l != 1:
+        raise Error("mamba3_state_owned: a decode step is one token (L = 1)")
+    owner[].busy = True
+    var out_len = 0
+    try:
+        with GILReleased(Python()):
+            out_len = _m3_owned_state_run(owner[], a, b, l, dm, q0, pend)
+    except error:
+        owner[].busy = False
+        raise error
+    owner[].busy = False
+    owner[].weight_reuses += 1
+    return PythonObject(out_len)
 
 
 def mamba3_owned_backward_binding(session: PythonObject, addrs: PythonObject, params: PythonObject) raises -> PythonObject:
