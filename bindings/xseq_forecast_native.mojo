@@ -50,7 +50,7 @@ def _store(fields: PythonObject, name: String, value: PythonObject) raises:
     py_setitem(fields, PythonObject(name), value)
 
 
-def _letter(text: String, index: Int) -> String:
+def _letter(text: String, index: Int) raises -> String:
     return String(text[byte=index:index + 1])
 
 

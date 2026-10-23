@@ -232,6 +232,9 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
         raise Error("TypeError: optimizer requires native argument tuples")
     if operation.startswith("seqdev_"):
         return sequence_device_operation(operation, owner, values, mode, context)
+    if operation == "residual_dropout" or operation == "residual_dropout_backward":
+        # the explicit residual layer runs in identical mode only
+        return training_residual_dropout(operation, values, optimizer_entries(PythonObject("identical"), context))
     if operation.startswith("seqln_") or operation.startswith("seqmoe_"):
         return sequence_layers_operation(operation, owner, values, mode, context)
     if operation.startswith("seq_"):
@@ -268,9 +271,6 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
         return training_chunked_lm_head(values, entries, context)
     if operation == "mlp_inference_sessions":
         return training_mlp_sessions(values, entries)
-    if operation == "residual_dropout" or operation == "residual_dropout_backward":
-        # the explicit residual layer runs in identical mode only
-        return training_residual_dropout(operation, values, optimizer_entries(PythonObject("identical"), context))
     if operation == "binding":
         return entries["module"]
     if operation == "raw_io":

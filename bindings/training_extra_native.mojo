@@ -108,12 +108,12 @@ def training_residual_dropout(operation: String, values: PythonObject, entries: 
 
 # ---------------------------------------------------------------- float32 operands
 
-def _c32(value: PythonObject, name: String, where: String, mut view: TensorView,
+def _c32(value: PythonObject, name: String, site: String, mut view: TensorView,
          mut keep: List[List[Float32]]) raises -> Int:
     """`_training_impl._c32`: a native float32 buffer, refused by name
     otherwise and when empty; the address of its values in C order."""
     if not tensor_view(value, view) or base_format(view.fmt) != "f" or view.itemsize != 4:
-        raise Error("TypeError: mojolearn." + where + ": " + name + " must be float32")
+        raise Error("TypeError: mojolearn." + site + ": " + name + " must be float32")
     if len(view.shape) == 0 and not view.is_array:
         view.shape.append(1)
         view.strides.append(4)
@@ -130,26 +130,26 @@ def _c32(value: PythonObject, name: String, where: String, mut view: TensorView,
 def training_chunked_lm_head(values: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
     """values: (hidden, weight, targets, return_grad)."""
     var b = Python.import_module("builtins")
-    var where = String("training.chunked_lm_head_loss")
+    var site = String("training.chunked_lm_head_loss")
     var keep = List[List[Float32]]()
     var hv = TensorView()
     var wv = TensorView()
-    var ha = _c32(values[0], "hidden", where, hv, keep)
-    var wa = _c32(values[1], "weight", where, wv, keep)
+    var ha = _c32(values[0], "hidden", site, hv, keep)
+    var wa = _c32(values[1], "weight", site, wv, keep)
     if len(hv.shape) != 2 or len(wv.shape) != 2:
-        raise Error("ValueError: mojolearn." + where + ": hidden must be (rows, width) and weight (vocab, width)")
+        raise Error("ValueError: mojolearn." + site + ": hidden must be (rows, width) and weight (vocab, width)")
     var rows = hv.shape[0]
     var width = hv.shape[1]
     var vocab = wv.shape[0]
     if width != wv.shape[1]:
-        raise Error("ValueError: mojolearn." + where + ": hidden has width " + String(width) + ", weight has width "
+        raise Error("ValueError: mojolearn." + site + ": hidden has width " + String(width) + ", weight has width "
                     + String(wv.shape[1]))
     if vocab < 2:
-        raise Error("ValueError: mojolearn." + where + ": vocab must be at least 2, got " + String(vocab))
+        raise Error("ValueError: mojolearn." + site + ": vocab must be at least 2, got " + String(vocab))
     var targets = embedding_indices(values[2], context)
     var count = Int(py=targets[2])
     if count != rows:
-        raise Error("ValueError: mojolearn." + where + ": " + String(count) + " targets for " + String(rows) + " rows")
+        raise Error("ValueError: mojolearn." + site + ": " + String(count) + " targets for " + String(rows) + " rows")
     var loss = new_array([1], "<f4")
     var row_max = new_array([rows], "<f4")
     var row_denom = new_array([rows], "<f4")
@@ -177,16 +177,16 @@ def training_chunked_lm_head(values: PythonObject, entries: PythonObject, contex
 def training_mlp_sessions(values: PythonObject, entries: PythonObject) raises -> PythonObject:
     """values: (inputs, weight1, bias1, weight2, bias2)."""
     var b = Python.import_module("builtins")
-    var where = String("mlp_inference_sessions")
+    var site = String("mlp_inference_sessions")
     var keep = List[List[Float32]]()
     var w1v = TensorView()
     var b1v = TensorView()
     var w2v = TensorView()
     var b2v = TensorView()
-    var w1 = _c32(values[1], "weight1", where, w1v, keep)
-    var b1 = _c32(values[2], "bias1", where, b1v, keep)
-    var w2 = _c32(values[3], "weight2", where, w2v, keep)
-    var b2 = _c32(values[4], "bias2", where, b2v, keep)
+    var w1 = _c32(values[1], "weight1", site, w1v, keep)
+    var b1 = _c32(values[2], "bias1", site, b1v, keep)
+    var w2 = _c32(values[3], "weight2", site, w2v, keep)
+    var b2 = _c32(values[4], "bias2", site, b2v, keep)
     if len(w1v.shape) != 2 or len(w2v.shape) != 2:
         raise Error("ValueError: MLP session weights must be matrices")
     var hidden = w1v.shape[0]
@@ -202,11 +202,11 @@ def training_mlp_sessions(values: PythonObject, entries: PythonObject) raises ->
     var views = List[TensorView]()
     for i in range(len(inputs)):  # driver-loop: over the caller's session arrays
         var view = TensorView()
-        var address = _c32(inputs[i], "session input", where, view, keep)
+        var address = _c32(inputs[i], "session input", site, view, keep)
         _ = py_call(py_call(b.getattr, shapes, "append"), py_ints(view.shape))
         _ = py_call(py_call(b.getattr, addresses, "append"), PythonObject(address))
         views.append(view^)
-    var total_rows: Int
+    var total_rows = 0
     try:
         total_rows = Int(py=py_call_typed(_entry(entries, "mlp_sessions_rows", "mojolearn: this training binding lacks "),
                                           shapes, PythonObject(width)))
