@@ -1014,10 +1014,16 @@ class Release:
     def __init__(self, args, runner=None):
         self.args = args
         self.version = args.version
+        self.release_modes = release_reuse.parse_modes(getattr(args, "release_modes", None)
+                                                       or release_reuse.release_modes())
         ev = Path(os.environ.get("MOJOLEARN_EVIDENCE_ROOT", os.path.expanduser("~/mojolearn-evidence")))
         self.base = Path(args.state_dir) if args.state_dir else ev / "release" / self.version
         self.state_path = self.base / "state.json"
         self.state = self.load()
+        if self.state.get("steps") and release_reuse.record_modes(self.state) != self.release_modes:
+            raise SystemExit("release: tier selection differs from retained release state; use a new "
+                             "--state-dir to preserve the previous artifacts and qualification")
+        self.state["release_modes"] = list(self.release_modes)
         # A release packed as the one combined wheel (0.8.20 and earlier) is
         # not resumable: the combined layout is gone.
         redo = set((getattr(args, "redo", "") or "").split(","))
@@ -1131,6 +1137,7 @@ class Release:
 
     def run(self, cmd, env=None, log=None, cwd=None):
         """Run one command to completion; its output teed to `log` when given."""
+        env = {"MOJOLEARN_RELEASE_MODES": " ".join(self.release_modes), **(env or {})}
         shown = " ".join(shlex.quote(str(c)) for c in cmd)
         extra = " ".join(f"{k}={shlex.quote(str(v))}" for k, v in (env or {}).items())
         where = f"(in {cwd}) " if cwd and Path(cwd) != ROOT else ""
@@ -1158,6 +1165,7 @@ class Release:
             raise StepFailed(f"{what or cmd[0]} exited {rc}" + (f"; log {log}" if log else ""))
 
     def spawn(self, cmd, env):
+        env = dict(env, MOJOLEARN_RELEASE_MODES=" ".join(self.release_modes))
         if self.runner:
             return self.runner(cmd, env, None, detach=True)
         proc = subprocess.Popen(cmd, cwd=ROOT, env=env, stdin=subprocess.DEVNULL,
@@ -1395,6 +1403,7 @@ class Release:
             # earlier freeze is taken when what it built or tested is unchanged.
             earlier = [c for c in self.state.get("earlier_commits", []) + [self.state.get("commit")] if c]
             self.state = {"version": self.version, "commit": head, "earlier_commits": earlier,
+                          "release_modes": list(self.release_modes),
                           "frozen_at": now(), "steps": {k: v for k, v in self.state["steps"].items()
                                                         if k.startswith("freeze-")}}
             self._plan = self._overlay = self._leg_env = self._tooling = None
@@ -1453,7 +1462,8 @@ class Release:
         token = f"release-{self.version}-{self.commit[:12]}-{int(time.time())}"
         wf_ref = os.environ.get("MOJOLEARN_XCC_WORKFLOW_REF", "main")
         self.must(["gh", "workflow", "run", self.XCC_WORKFLOW, "--ref", wf_ref, "-f", f"ref={base}",
-                   "-f", f"commit={self.commit}", "-f", f"archs={self.XCC_ARCHS}", "-f", f"token={token}"],
+                   "-f", f"commit={self.commit}", "-f", f"archs={self.XCC_ARCHS}",
+                   "-f", "tiers=" + ",".join(self.release_modes), "-f", f"token={token}"],
                   what="gh workflow run " + self.XCC_WORKFLOW)
         if self.dry:
             return f"would dispatch {self.XCC_WORKFLOW} on {self.commit[:12]} vs {prev.get('version')} and wait"
@@ -1484,7 +1494,8 @@ class Release:
             if self._plan is not None:
                 return self._plan
             doc = read_json(self.plan_path)
-            if doc and doc.get("schema") == release_reuse.PLAN_SCHEMA and doc.get("commit") == self.commit:
+            if (doc and doc.get("schema") == release_reuse.PLAN_SCHEMA and doc.get("commit") == self.commit
+                    and release_reuse.record_modes(doc) == self.release_modes):
                 if self.readonly:
                     self._plan = doc
                     return doc
@@ -1498,7 +1509,8 @@ class Release:
             # <evidence>/release/<version>/<commit12>/) is weighed beside the PyPI record and
             # wins when it reuses more (release_reuse.candidate_builds, Andrew 2026-10-15)
             self._plan = release_reuse.make_plan(self.commit, self.evidence / "release" / "identities",
-                                                 builders_override=override or None, evidence_root=self.evidence)
+                                                 builders_override=override or None, evidence_root=self.evidence,
+                                                 modes=self.release_modes)
             return self._plan
 
     def step_reuse_plan(self):
@@ -1515,7 +1527,8 @@ class Release:
         if self.dry:
             return "would write " + str(self.plan_path) + "; " + summary
         old = read_json(self.plan_path) or {}
-        if old.get("commit") != self.commit or old.get("builders_override") != plan.get("builders_override"):
+        if (old.get("commit") != self.commit or old.get("builders_override") != plan.get("builders_override")
+                or release_reuse.record_modes(old) != self.release_modes):
             write_json(self.plan_path, plan)
         return (f"against {prev.get('version', 'no published release')}"
                 f"{' ' + (prev.get('channel') or 'pypi') if prev else ''}: {summary}; {self.plan_path}")
@@ -1688,7 +1701,8 @@ class Release:
         sys.path.insert(0, str(ROOT / "tools"))
         import mac_slot
         slots = str(min(4, mac_slot.slot_count()))
-        env = dict(MOJOLEARN_PACKAGE_BYTE_LM="1", MOJOLEARN_BUILD_JOBS=slots, MOJOLEARN_COMPILE_JOBS="1")
+        env = dict(MOJOLEARN_PACKAGE_BYTE_LM="1", MOJOLEARN_BUILD_JOBS=slots, MOJOLEARN_COMPILE_JOBS="1",
+                   MOJOLEARN_RELEASE_MODES=" ".join(self.release_modes))
         plan = self.plan()
         src = self.src
         reuse = release_reuse.plan_rows(plan, release_reuse.MACOS, "REUSE")
@@ -2975,6 +2989,13 @@ def main(argv=None):
                          "DigitalOcean has a GPU droplet live (default MOJOLEARN_AMD_PROVIDER, else auto)")
     ap.add_argument("--state-dir", default="", help=argparse.SUPPRESS)
     args = ap.parse_args(argv)
+    # Current releases focus on identical. Explicit legacy selections remain
+    # available for reproducing older layouts, and are recorded in every plan.
+    try:
+        modes = release_reuse.release_modes(default=("identical",))
+    except ValueError as exc:
+        ap.error(str(exc))
+    args.release_modes = modes
     if not VERSION_RE.match(args.version):
         ap.error("version must look like 0.8.15 (or 0.9.0a1)")
     if args.status and (args.dry_run or args.only or args.redo or args.refreeze):
@@ -2983,6 +3004,9 @@ def main(argv=None):
         ap.error("--hopper-box and --smoke-via steer the GPU wheel smokes; they need --gpu-smoke")
     explicit = args.build_backend
     r = Release(args)  # resolves an unset --build-backend from the source's layout
+    if modes != release_reuse.TIERS and args.build_backend != "cpu-box":
+        ap.error("selected release tiers require --build-backend cpu-box; legacy remote backends "
+                 "do not forward a tier selection")
     merged_gha = release_github_build.commit_merged(r.commit)
     if args.build_backend == "github" and merged_gha:
         ap.error(f"--build-backend github: {release_github_build.merged_refusal(max(release_github_build.NEEDED_GIB.values()))}")

@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 import re
 import struct
+from release_modes import record_modes
 
 MODES = {'fast': 0, 'identical': 1}
 # Every binding of _backend._MODULES except the byte LM, which expected_bindings
@@ -182,7 +183,7 @@ def expected_jobs(audit):
     # lanes launch and every other binding refuses by name under fast);
     # every other surface is an identical-only family and
     # runs under identical alone.
-    jobs = {('smoke', m) for m in MODES} | {(s, 'identical') for s in SURFACES}
+    jobs = {('smoke', m) for m in record_modes(audit)} | {(s, 'identical') for s in SURFACES}
     if is_release_profile(audit):  # DEVIATION 2290
         jobs.add(('byte-lm', 'identical'))
     return jobs
@@ -597,9 +598,10 @@ def smoke_retained(out):
     rows = [line.split('\t') for line in (out / 'results.tsv').read_text().splitlines() if line.strip()]
     require(rows and all(len(r) == 3 for r in rows), 'Malformed retained statuses')
     seen = {(s_, m): r for s_, m, r in rows}
-    require(SMOKE_JOBS <= set(seen), 'Smoke surface missing from retained statuses')
-    require(all(seen[j] == '0' for j in SMOKE_JOBS), 'Smoke surface failed on this architecture')
-    for mode in MODES:
+    smoke_jobs = {('smoke', m) for m in record_modes(audit)}
+    require(smoke_jobs <= set(seen), 'Smoke surface missing from retained statuses')
+    require(all(seen[j] == '0' for j in smoke_jobs), 'Smoke surface failed on this architecture')
+    for mode in record_modes(audit):
         installed = json.loads((out / ('smoke-' + mode + '.installed.json')).read_text())
         require(installed.get('mode') == mode, 'Smoke record is for another mode')
         require(installed.get('vendor') == audit.get('qualification_vendor'),

@@ -219,6 +219,7 @@ import json, pathlib, sys
 out = pathlib.Path(sys.argv[1])
 sys.path.insert(0, str(pathlib.Path.cwd() / 'tools'))
 from verify_linux_surface_qualification import MERGED_INDEX, MODES, expected_set_files
+from release_modes import record_modes, release_modes
 before = json.loads((out / 'preflight.json').read_text())
 proof = json.loads((out / 'build/build-provenance.json').read_text())
 if (proof.get('complete') is not True or proof.get('build_exit') != 0
@@ -239,14 +240,18 @@ prefix = 'mojolearn/' + before['vendor'] + '/' + next(iter(built)) + '/'
 # set directories; per-binding ships one file per binding, merged one file per
 # group of bindings/merged_groups.json plus each directory's index.
 layout = proof.get('binding_layout', 'per-binding')
+modes = record_modes(proof)
+if modes != release_modes():
+    raise SystemExit('Build proof tier selection differs from the requested release')
 if layout not in ('merged', 'per-binding'):
     raise SystemExit('Build proof has no single binding layout: ' + repr(layout))
-expected_count = sum(len(expected_set_files(mode, True, layout)) for mode in MODES)
+expected_count = sum(len(expected_set_files(mode, True, layout)) for mode in modes)
 if len(proof.get('extensions', {})) != expected_count or not all(p.startswith(prefix) for p in proof['extensions']):
     raise SystemExit('Built architecture differs from physical GPU witness')
 indexes = proof.get('merged_indexes') or {}
 if layout == 'merged':
-    want = {prefix + d + MERGED_INDEX for d in ('', 'identical/', 'host/')}
+    want = {prefix + ('' if mode == 'fast' else mode + '/') + MERGED_INDEX for mode in modes}
+    want.add(prefix + 'host/' + MERGED_INDEX)
     if set(indexes) != want:
         raise SystemExit('Merged build lacks an index: ' + repr(sorted(set(indexes) ^ want)))
     # The byte LM: a member of the identical index exactly once, of no fast one.

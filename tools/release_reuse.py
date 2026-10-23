@@ -86,6 +86,7 @@ sys.path.insert(0, str(ROOT / "packaging" / "linux"))
 import bincache  # noqa: E402
 import stage_libs  # noqa: E402
 from pack_wheel import HOST_NAMES, TIERS, tier_names  # noqa: E402
+from release_modes import parse_modes, record_modes, release_modes  # noqa: E402
 
 SCHEMA = "mojolearn.binding-identity.v2"
 #: The identity every release up to 0.8.18 recorded: builder files by
@@ -111,9 +112,9 @@ HOST_LEG = ("cuda", "sm_89")
 LINUX_BUILDERS = ("packaging/linux/build_sets.sh", "packaging/linux/stage_libs.py",
                   "tools/release061_remote_build.sh", "tools/linux_surface_qualification.sh",
                   "packaging/linux/binding_timeout.sh", "packaging/linux/ptx_contract.py",
-                  "packaging/linux/cubin_contract.py")
+                  "packaging/linux/cubin_contract.py", "tools/release_modes.py")
 MACOS_BUILDERS = ("packaging/macos/build_release_wheel.sh", "packaging/macos/stage_dylibs.py",
-                  "python/setup.py")
+                  "python/setup.py", "tools/release_modes.py")
 PORTABLE_MATH = "packaging/portable_math"
 GENERATORS = "tokenizer/tools"
 NVIDIA_IMAGE_RE = re.compile(r'LEG_IMAGE_NVIDIA="\$\{MOJOLEARN_GEMM_LEG_IMAGE_NVIDIA:-([^}]+)\}"')
@@ -475,15 +476,16 @@ class Binding:
                     name=self.name, script=self.script, archive_path=self.archive_path, set_rel=self.set_rel)
 
 
-def bindings(target):
+def bindings(target, modes=None):
+    modes = TIERS if modes is None else parse_modes(modes)
     rows = []
     if target == LINUX:
         for vendor, arch in LINUX_SETS:
-            for tier in TIERS:
+            for tier in modes:
                 for name in tier_names(tier, True):
                     rows.append(Binding(target, vendor, arch, tier, name))
     else:
-        for tier in TIERS:
+        for tier in modes:
             for name in tier_names(tier, True, vendor="metal"):
                 rows.append(Binding(target, "metal", "apple", tier, name))
     for name in HOST_NAMES:
@@ -914,7 +916,7 @@ def upgrade_v1(rows, runtime, commit, cache_dir, root=ROOT):
 
 # ---------------------------------------------------------------- the plan
 def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, builders_override=None,
-              evidence_root=None, candidates=None):
+              evidence_root=None, candidates=None, modes=None):
     """The REUSE/BUILD plan of COMMIT. `builders_override` ({builder: sha256})
     replaces a builder's bytes in every identity: the release's route overlay
     runs the tooling checkout's copy of a builder on the box
@@ -927,6 +929,7 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, buil
     bindings (runtime closure included), ties going to the newer build. With
     no candidate the plan is exactly the PyPI one. Every REUSE row names its
     build in `reuse_from`; `considered` lists every source weighed."""
+    modes = release_modes() if modes is None else parse_modes(modes)
     commit = git("rev-parse", commit + "^{commit}", root=root).strip()
     if prev is None:
         prev = previous_release(root)
@@ -949,7 +952,7 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, buil
         facts = dict(facts, builders=dict(facts["builders"], **builders_override), builder_views=views)
     if host_toolchain is None:
         host_toolchain = darwin_toolchain()
-    current = [(b, identity(b, facts, host_toolchain)) for target in (LINUX, MACOS) for b in bindings(target)]
+    current = [(b, identity(b, facts, host_toolchain)) for target in (LINUX, MACOS) for b in bindings(target, modes)]
     rt = runtime_identity(facts)
     sources = reuse_sources(prev, candidates, commit) or [None]
     plans = []
@@ -986,7 +989,7 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, buil
     return dict(schema=PLAN_SCHEMA, commit=commit, made=dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                 previous=prev, previous_identities_from=prev_source, considered=considered, rows=rows, runtime=runtime,
                 legs=legs, leg_reasons=why, host_toolchain=host_toolchain,
-                builders_override=dict(sorted((builders_override or {}).items())))
+                builders_override=dict(sorted((builders_override or {}).items())), release_modes=list(modes))
 
 
 def _decide(commit, root, cache_dir, facts, current, rt, prev):
