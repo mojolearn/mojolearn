@@ -60,8 +60,8 @@ struct McPair(Movable):
 def mc_pair(y_true: PythonObject, y_pred: PythonObject, sample_weight: PythonObject, caller: String,
             context: PythonObject) raises -> McPair:
     """`_expansion_metrics._pair(y_true, y_pred, sample_weight, caller)`."""
-    mc_refuse_multilabel(y_true, "y_true", caller)
-    mc_refuse_multilabel(y_pred, "y_pred", caller)
+    mc_refuse_multilabel(y_true, "y_true", caller, context)
+    mc_refuse_multilabel(y_pred, "y_pred", caller, context)
     var true = mc_labels(y_true, "y_true", context)
     var pred = mc_labels(y_pred, "y_pred", context)
     if true.n != pred.n:
@@ -257,7 +257,7 @@ def _confusion_weighted(args: PythonObject, context: PythonObject) raises -> Pyt
     """`confusion_matrix_weighted`; args = (binding, y_true, y_pred, labels,
     sample_weight, normalize, numeric_mode)."""
     var pair = mc_pair(args[1], args[2], args[4], "confusion_matrix", context)
-    var chosen = mc_selected(args[3], pair.true.kind, pair.present)
+    var chosen = mc_selected(args[3], pair.true.kind, pair.present, context)
     if mc_len(family_call(mc_set(chosen).intersection, pair.true.classes)) == 0:
         raise Error("At least one label specified must be in y_true")
     var k = mc_len(chosen)
@@ -311,7 +311,7 @@ def _confusion(args: PythonObject, context: PythonObject) raises -> PythonObject
     if args[4] is not None:
         return _confusion_weighted(args, context)
     var pair = mc_classification_pair(args[1], args[2], context)
-    var selected = mc_selected(args[3], pair.true.kind, pair.present)
+    var selected = mc_selected(args[3], pair.true.kind, pair.present, context)
     if mc_len(family_call(mc_set(selected).intersection, pair.true.classes)) == 0:
         raise Error("At least one label specified must be in y_true")
     var k = mc_len(selected)
@@ -337,22 +337,22 @@ def _confusion(args: PythonObject, context: PythonObject) raises -> PythonObject
 # ----------------------------------------------- precision, recall, f-score
 
 
-def _zero_division_value(zero_division: PythonObject) raises -> Float64:
+def _zero_division_value(zero_division: PythonObject, context: PythonObject) raises -> Float64:
     """`_expansion_metrics._zero_division_value`."""
     if mc_is_str(zero_division):
         if String(zero_division) == "warn":
             return 0.0
-    elif not mc_is_bool(zero_division) and mc_is_real(zero_division):
+    elif not mc_is_bool(zero_division) and mc_is_real(zero_division, context):
         if mc_in(zero_division, Python.tuple(PythonObject(0), PythonObject(1))):
-            return mc_float(zero_division)
-        var v = mc_float(zero_division)
+            return mc_float(zero_division, context)
+        var v = mc_float(zero_division, context)
         if v != v:
             return v
     raise Error("zero_division must be 'warn', 0.0, 1.0 or np.nan")
 
 
 def _set_wise_labels(present: PythonObject, kind: String, average: PythonObject, labels: PythonObject,
-                     pos_label: PythonObject, caller: String) raises -> PythonObject:
+                     pos_label: PythonObject, caller: String, context: PythonObject) raises -> PythonObject:
     """`_expansion_metrics._set_wise_labels`."""
     var b = mc_b()
     var averages = Python.tuple(PythonObject(None), PythonObject("micro"), PythonObject("macro"),
@@ -366,7 +366,7 @@ def _set_wise_labels(present: PythonObject, kind: String, average: PythonObject,
         if mc_len(present) > 2:
             raise Error("Target is multiclass but average='binary'. Please choose another "
                         + "average setting, one of [None, 'micro', 'macro', 'weighted'].")
-        var positive = mc_positive(pos_label)
+        var positive = mc_positive(pos_label, context)
         if String(positive[1]) != kind:
             raise Error("pos_label must use the same type as the targets")
         if not mc_in(positive[0], present) and mc_len(present) >= 2:
@@ -376,9 +376,9 @@ def _set_wise_labels(present: PythonObject, kind: String, average: PythonObject,
     if not mc_in(pos_label, Python.tuple(PythonObject(None), PythonObject(1))):
         mc_warn("Note that pos_label (set to " + family_repr(pos_label) + ") is ignored when average != 'binary' "
                 + "(got " + family_repr(average) + "). You may use labels=[pos_label] to specify a single positive class.",
-                b.UserWarning)
+                b.UserWarning, context)
     if labels is not None:
-        return mc_selected(labels, kind, present)
+        return mc_selected(labels, kind, present, context)
     return mc_list(present)
 
 
@@ -388,11 +388,11 @@ def _prf_weighted(args: PythonObject, metric: Int, context: PythonObject) raises
     y_true, y_pred, labels, pos_label, average, sample_weight,
     zero_division, numeric_mode)."""
     var zero_division = args[8]
-    var zv = _zero_division_value(zero_division)
+    var zv = _zero_division_value(zero_division, context)
     var pair = mc_pair(args[2], args[3], args[7], "precision_recall_fscore_support", context)
     var average = args[6]
     var chosen = _set_wise_labels(pair.present, pair.true.kind, average, args[4], args[5],
-                                  "precision_recall_fscore_support")
+                                  "precision_recall_fscore_support", context)
     var order = mc_extend_order(chosen, pair.present)
     var k = mc_len(chosen)
     # `_epi_codes(average, zero_division)`; beta = 1: FMODE 2, beta^2 = 1
@@ -448,7 +448,7 @@ def _prf(args: PythonObject, context: PythonObject) raises -> PythonObject:
             raise Error("average must be 'binary', 'micro', 'macro', 'weighted' or None")
     var zero_division = args[8]
     var warn = mc_is_str(zero_division) and String(zero_division) == "warn"
-    if not warn and (mc_is_bool(zero_division) or not mc_is_real(zero_division)
+    if not warn and (mc_is_bool(zero_division) or not mc_is_real(zero_division, context)
                      or not mc_in(zero_division, Python.tuple(PythonObject(0), PythonObject(1)))):
         raise Error("zero_division must be 'warn', 0 or 1")
     var pair = mc_classification_pair(args[2], args[3], context)
@@ -458,7 +458,7 @@ def _prf(args: PythonObject, context: PythonObject) raises -> PythonObject:
     if code == 1:
         if mc_len(observed) > 2:
             raise Error("average='binary' requires at most two observed classes")
-        var pos = mc_positive(args[5])
+        var pos = mc_positive(args[5], context)
         if String(pos[1]) != pair.true.kind:
             raise Error("pos_label must use the same type as the targets")
         var label = pos[0]
@@ -469,7 +469,7 @@ def _prf(args: PythonObject, context: PythonObject) raises -> PythonObject:
             _ = family_call(selected.append, label)
         positive = Int(py=family_call(selected.index, label))
     else:
-        selected = mc_selected(args[4], pair.true.kind, observed)
+        selected = mc_selected(args[4], pair.true.kind, observed, context)
     var selected_count = mc_len(selected)
     var all_labels = mc_extend_order(selected, observed)
     if mc_len(all_labels) > 715827882:
@@ -556,18 +556,18 @@ def mc_row_mean(mut prog: McProg, s: Int, cols: Int, y: Int, n: Int, kind: Int, 
 
 def mc_targets(y_true: PythonObject, caller: String, context: PythonObject) raises -> McLabels:
     """`_targets`: the multilabel refusal, then the encoded labels."""
-    mc_refuse_multilabel(y_true, "y_true", caller)
+    mc_refuse_multilabel(y_true, "y_true", caller, context)
     return mc_labels(y_true, "y_true", context)
 
 
-def mc_pos_label(pos_label: PythonObject, kind: String, classes: PythonObject, caller: String) raises -> PythonObject:
+def mc_pos_label(pos_label: PythonObject, kind: String, classes: PythonObject, caller: String, context: PythonObject) raises -> PythonObject:
     """`_expansion_metrics._pos_label`."""
     if pos_label is None:
         if kind != "integer" or not mc_in(classes, mc_binary_sets()):
             raise Error("y_true takes value in " + family_str(classes) + " and pos_label is not specified: either make "
                         + "y_true take value in {0, 1} or {-1, 1} or pass pos_label explicitly.")
         return PythonObject(1)
-    var positive = mc_positive(pos_label)
+    var positive = mc_positive(pos_label, context)
     if String(positive[1]) != kind:
         raise Error("pos_label must use the same type as y_true")
     return positive[0]
@@ -607,7 +607,7 @@ def _log_loss_options(args: PythonObject, context: PythonObject) raises -> Pytho
         var labels = args[4]
         var classes = present
         if labels is not None:
-            classes = mc_selected(labels, true.kind, present)
+            classes = mc_selected(labels, true.kind, present, context)
             if mc_len(family_call(mc_set(present).difference, classes)) > 0:
                 raise Error("y_true contains values not belonging to the passed labels")
         classes = mc_sorted(classes)
@@ -651,7 +651,7 @@ def _log_loss(args: PythonObject, context: PythonObject) raises -> PythonObject:
     if args[3] is not None:
         return _log_loss_options(args, context)
     var true = mc_labels(args[0], "y_true", context)
-    var selected = mc_selected(args[4], true.kind, true.classes)
+    var selected = mc_selected(args[4], true.kind, true.classes, context)
     if mc_len(selected) < 2:
         raise Error("log_loss requires at least two labels; pass labels for one observed class")
     if mc_len(family_call(mc_set(true.classes).difference, selected)) > 0:

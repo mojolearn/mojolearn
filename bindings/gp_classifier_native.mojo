@@ -506,7 +506,7 @@ def gp_classifier_operation(model: PythonObject, operation: String, args: Python
         # `score(X, y)`: predict, the row-count refusal, then
         # `accuracy_fraction(y, pred)`; args = (binding, base binding, X, y).
         var pred = _gpc_predict(model, Python.tuple(args[0], args[1], args[2]), context)
-        var shape = mc_shape_of(args[3])
+        var shape = mc_shape_of(args[3], context)
         var n_truth = 0
         if Int(py=py_call(Python.import_module("builtins").len, shape)) > 0:
             n_truth = Int(py=py_call(Python.import_module("builtins").int, shape[0]))

@@ -19,6 +19,9 @@
 #   `_metrics_run`, the one native call `_run` made); the result words read
 #   back from the arena as `prog.ints` / `prog.words` read them.
 from std.memory import memcpy, bitcast
+from bindings.metrics_native_support import metric_is_real, metric_float, metric_integer, metric_is_integral_type, metric_warn, metric_undefined
+from bindings.metrics_native_inputs import metric_shape, metric_flatten
+from bindings.classical_pandas import classical_admit_value
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setattr, py_setitem, py_fields
 from bindings.py_attr import py_attr
@@ -86,14 +89,13 @@ def mc_is_bool(value: PythonObject) raises -> Bool:
     return family_isinstance(value, mc_b().bool) or String(py_type(value).__name__) == "bool_"
 
 
-def mc_is_real(value: PythonObject) raises -> Bool:
-    """`isinstance(value, numbers.Real)`."""
-    return family_isinstance(value, Python.import_module("numbers").Real)
+def mc_is_real(value: PythonObject, context: PythonObject) raises -> Bool:
+    return metric_is_real(value, context)
 
 
-def mc_float(value: PythonObject) raises -> Float64:
+def mc_float(value: PythonObject, context: PythonObject) raises -> Float64:
     """`float(value)`."""
-    return Float64(py=family_call(mc_b().float, value))
+    return metric_float(value, context)
 
 
 def mc_int(value: PythonObject) raises -> Int:
@@ -129,24 +131,12 @@ def mc_index(order: PythonObject) raises -> PythonObject:
     return family_call(b.dict, family_call(b.zip, order, family_call(b.range, PythonObject(mc_len(order)))))
 
 
-def mc_warn(message: String, category: PythonObject) raises:
-    """`warnings.warn(message, category, stacklevel=2)`: attributed to the
-    public function's caller, as the Python helpers' stacklevels were."""
-    var keywords = Python.dict()
-    py_setitem(keywords, "stacklevel", PythonObject(2))
-    _ = family_call_kw(Python.import_module("warnings").warn, keywords, PythonObject(message), category)
+def mc_warn(message: String, category: PythonObject, context: PythonObject) raises:
+    metric_warn(message, category, context)
 
 
 def mc_undefined(message: String, context: PythonObject) raises:
-    """`_expansion_metrics._undefined_warning` (`_undefined_category()`):
-    scikit-learn's UndefinedMetricWarning when the caller imported
-    sklearn.exceptions, else mojolearn's."""
-    var b = mc_b()
-    var category = context["family_metrics_undefined"]
-    var sk = py_get(Python.import_module("sys").modules, PythonObject("sklearn.exceptions"), PythonObject(None))
-    if sk is not None:
-        category = py_call(b.getattr, sk, PythonObject("UndefinedMetricWarning"), category)
-    mc_warn(message, category)
+    metric_undefined(message, context)
 
 
 def mc_entry(binding: PythonObject, name: String) raises -> PythonObject:
@@ -181,21 +171,8 @@ def mc_f64_array(values: PythonObject, context: PythonObject) raises -> PythonOb
 # ------------------------------------------------------------ shapes, formats
 
 
-def mc_shape_of(obj: PythonObject) raises -> PythonObject:
-    """`_buffer.shape_of`: `.shape` when the object has one, the nesting of
-    a list or tuple, `(len,)` of a sized object, else `()`."""
-    var b = mc_b()
-    var shape = family_call(b.getattr, obj, PythonObject("shape"), PythonObject(None))
-    if shape is not None:
-        return family_call(b.tuple, shape)
-    if mc_is_list_like(obj):
-        var size = mc_len(obj)
-        if size > 0 and mc_is_list_like(obj[0]):
-            return Python.tuple(PythonObject(size), PythonObject(mc_len(obj[0])))
-        return Python.tuple(PythonObject(size))
-    if Bool(py=py_call(b.hasattr, obj, PythonObject("__len__"))):
-        return Python.tuple(PythonObject(mc_len(obj)))
-    return Python.tuple()
+def mc_shape_of(obj: PythonObject, context: PythonObject) raises -> PythonObject:
+    return metric_shape(obj, context)
 
 
 def mc_rank(shape: PythonObject) raises -> Int:
@@ -213,6 +190,7 @@ def mc_buffer_format(obj: PythonObject, context: PythonObject) raises -> String:
     """`linear_model._buffer_format`: the struct format code of a buffer,
     its byte-order prefix stripped; MC_NO_FORMAT for an object without a
     buffer (a list, a scalar)."""
+    classical_admit_value(obj, context)
     if classical_is_array(obj, context):
         var dtype = String(obj.dtype)
         if dtype == "<f4":
@@ -254,55 +232,23 @@ def mc_dtype_name(obj: PythonObject, context: PythonObject) raises -> String:
     return "type " + String(py_type(obj).__name__)
 
 
-def mc_flatten(obj: PythonObject) raises -> PythonObject:
-    """`linear_model._flatten` / `_labels.flatten_labels`'s walk: `tolist()`
-    of an array, a list or tuple flattened level by level (a level whose
-    every item is a list or tuple: the column vector `[[a], [b]]`), a
-    scalar as a one-element list."""
-    var b = mc_b()
-    var value = obj
-    if Bool(py=py_call(b.hasattr, value, PythonObject("tolist"))) and not mc_is_list_like(value):
-        value = family_call(value.tolist)
-    if not mc_is_list_like(value):
-        return Python.list(value)
-    var items = family_call(b.list, value)
-    var chain = Python.import_module("itertools").chain
-    var nested = Python.tuple(b.list, b.tuple)
-    for _ in range(64):  # driver-loop: over the nesting depth of one label list
-        var size = mc_len(items)
-        if size == 0:
-            break
-        var flags = family_call(b.list, family_call(b.map, b.isinstance, items,
-                                                       family_call(Python.import_module("itertools").repeat, nested)))
-        if not Bool(py=family_call(b.all, flags)):
-            break
-        items = family_call(b.list, family_call(chain.from_iterable, items))
-    return items
+def mc_flatten(obj: PythonObject, context: PythonObject) raises -> PythonObject:
+    return metric_flatten(obj, context)
 
 
 def mc_types_all(types: PythonObject, classes: PythonObject) raises -> Bool:
-    """Every type in the set `types` is a subclass of `classes`."""
-    var b = mc_b()
-    var listed = family_call(b.list, types)
-    for i in range(mc_len(listed)):  # driver-loop: over the distinct label types
-        if not Bool(py=family_call(b.issubclass, listed[i], classes)):
+    var listed = mc_list(types)
+    for i in range(mc_len(listed)):  # driver-loop: no Python metaclass/subclass hook executes
+        if listed[i] is not classes:
             return False
     return True
 
 
-def mc_types_integral(types: PythonObject) raises -> Bool:
-    """`isinstance(v, numbers.Integral) or is_bool(v)` for every label, by
-    its exact type."""
-    var b = mc_b()
-    var integral = Python.import_module("numbers").Integral
-    var listed = family_call(b.list, types)
-    for i in range(mc_len(listed)):  # driver-loop: over the distinct label types
-        var t = listed[i]
-        if Bool(py=family_call(b.issubclass, t, integral)) or Bool(py=family_call(b.issubclass, t, b.bool)):
-            continue
-        if String(t.__name__) == "bool_":
-            continue
-        return False
+def mc_types_integral(types: PythonObject, context: PythonObject) raises -> Bool:
+    var listed = mc_list(types)
+    for i in range(mc_len(listed)):  # driver-loop: exact native label type identities
+        if not metric_is_integral_type(listed[i], context):
+            return False
     return True
 
 
@@ -312,7 +258,7 @@ def mc_is_integer_labels(obj: PythonObject, context: PythonObject) raises -> Boo
     var fmt = mc_buffer_format(obj, context)
     if fmt != MC_NO_FORMAT:
         return fmt.byte_length() == 1 and String("bBhHiIlLqQnN").find(fmt) >= 0
-    var leaves = mc_flatten(obj)
+    var leaves = mc_flatten(obj, context)
     if mc_len(leaves) == 0:
         return False
     var types = mc_types(leaves)
@@ -325,7 +271,7 @@ def mc_is_float64(obj: PythonObject, context: PythonObject) raises -> Bool:
     var fmt = mc_buffer_format(obj, context)
     if fmt != MC_NO_FORMAT:
         return fmt == "d"
-    return py_contains(mc_types(mc_flatten(obj)), mc_b().float)
+    return py_contains(mc_types(mc_flatten(obj, context)), mc_b().float)
 
 
 # ------------------------------------------------------------------- labels
@@ -347,28 +293,27 @@ struct McLabels(Movable):
         self.codes = codes
 
 
-def mc_label_list(values: PythonObject, name: String, allow_empty: Bool) raises -> PythonObject:
+def mc_label_list(values: PythonObject, name: String, allow_empty: Bool, context: PythonObject) raises -> PythonObject:
     """`_metrics_impl._classification_labels`: (labels, kind) of a 1-D
     label sequence, the explicit label input step."""
     var b = mc_b()
-    if mc_rank(mc_shape_of(values)) != 1:
+    if mc_rank(mc_shape_of(values, context)) != 1:
         raise Error(name + " must be one-dimensional single-label data")
     var source = values
-    if Bool(py=py_call(b.hasattr, source, PythonObject("tolist"))) and not mc_is_list_like(source):
-        source = family_call(source.tolist)
     if family_isinstance(source, Python.tuple(b.str, b.bytes)):
         raise Error("mojolearn: y must be a sequence of labels")
-    var labels = mc_flatten(source)
+    var labels = mc_flatten(source, context)
     var size = mc_len(labels)
     if not allow_empty and size == 0:
         raise Error(name + " must contain at least one label")
     var types = mc_types(labels)
     if mc_types_all(types, b.str):
-        # cpu-route: str labels, the explicit label input step (builtins map)
-        return Python.tuple(family_call(b.list, family_call(b.map, b.str, labels)), PythonObject("string"))
-    if mc_types_integral(types):
-        # cpu-route: Python int labels, the explicit label input step (builtins map)
-        return Python.tuple(family_call(b.list, family_call(b.map, b.int, labels)), PythonObject("integer"))
+        return Python.tuple(labels, PythonObject("string"))
+    if mc_types_integral(types, context):
+        var converted = Python.list()
+        for index in range(mc_len(labels)):  # driver-loop: native integer boxing after exact type admission
+            py_call(converted.append, metric_integer(labels[index], context))
+        return Python.tuple(converted, PythonObject("integer"))
     raise Error("TypeError: " + name + " must contain only strings or only integers; "
                 + "floating labels, missing labels and mixed types are unsupported")
 
@@ -461,7 +406,7 @@ def mc_fast_labels(values: PythonObject, context: PythonObject) raises -> Python
                 _ = native_buffer_view(values)
             except:
                 return PythonObject(None)
-        if mc_rank(mc_shape_of(values)) != 1:
+        if mc_rank(mc_shape_of(values, context)) != 1:
             return PythonObject(None)
         var packed = mc_int_store(values, context)
         if packed is None:
@@ -479,7 +424,7 @@ def mc_labels(values: PythonObject, name: String, context: PythonObject) raises 
     var fast = mc_fast_labels(values, context)
     if fast is not None:
         return McLabels("integer", Int(py=fast[2]), fast[0], fast[1])
-    var listed = mc_label_list(values, name, False)
+    var listed = mc_label_list(values, name, False, context)
     var labels = listed[0]
     var classes = mc_sorted(mc_set(labels))
     var index = mc_index(classes)
@@ -523,11 +468,11 @@ def mc_map_equal(labels: McLabels, value: PythonObject, context: PythonObject) r
     return mc_gather(labels, family_call(b.list, family_call(b.map, b.int, eq)), context)
 
 
-def mc_selected(labels: PythonObject, kind: String, observed: PythonObject) raises -> PythonObject:
+def mc_selected(labels: PythonObject, kind: String, observed: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_metrics_impl._selected_labels`."""
     if labels is None:
         return family_call(py_attr(observed, "copy"))
-    var listed = mc_label_list(labels, "labels", False)
+    var listed = mc_label_list(labels, "labels", False, context)
     if String(listed[1]) != kind:
         raise Error("TypeError: labels must use the same type as the targets")
     var selected = listed[0]
@@ -549,15 +494,15 @@ def mc_extend_order(chosen: PythonObject, present: PythonObject) raises -> Pytho
     return out
 
 
-def mc_positive(pos_label: PythonObject) raises -> PythonObject:
+def mc_positive(pos_label: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_classification_labels([pos_label], "pos_label")`: (value, kind)."""
-    var listed = mc_label_list(Python.list(pos_label), "pos_label", False)
+    var listed = mc_label_list(Python.list(pos_label), "pos_label", False, context)
     return Python.tuple(listed[0][0], listed[1])
 
 
-def mc_refuse_multilabel(y: PythonObject, name: String, caller: String) raises:
+def mc_refuse_multilabel(y: PythonObject, name: String, caller: String, context: PythonObject) raises:
     """`_expansion_metrics._refuse_multilabel`."""
-    var shape = mc_shape_of(y)
+    var shape = mc_shape_of(y, context)
     if mc_rank(shape) == 2 and mc_dim(shape, 1) != 1:
         raise Error("NotImplementedError: mojolearn " + caller + ": " + name + " is 2-D; multilabel-indicator "
                     + "targets are NOT IMPLEMENTED (metrics/NOT_IMPLEMENTED.tsv), only binary and multiclass 1-D labels")
@@ -566,9 +511,9 @@ def mc_refuse_multilabel(y: PythonObject, name: String, caller: String) raises:
 # ------------------------------------------------------------- the 1-D loaders
 
 
-def mc_vector_shape(x: PythonObject, name: String) raises -> PythonObject:
+def mc_vector_shape(x: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
     """`_vector_shape`: (shape, column) of a 1-D input or an (n, 1) column."""
-    var shape = mc_shape_of(x)
+    var shape = mc_shape_of(x, context)
     var column = mc_rank(shape) == 2 and mc_dim(shape, 1) == 1
     if mc_rank(shape) != 1 and not column:
         raise Error("mojolearn metrics: " + name + " must be 1-D, got shape " + family_str(shape))
@@ -581,7 +526,7 @@ def mc_i32_1d(x: PythonObject, name: String, context: PythonObject) raises -> Py
     """`_metrics_impl._as_i32_1d`: integer labels that fit in int32, as an
     int32 C-order Array of n entries."""
     var b = mc_b()
-    _ = mc_vector_shape(x, name)
+    _ = mc_vector_shape(x, name, context)
     if not mc_is_integer_labels(x, context):
         raise Error("mojolearn metrics: " + name + " must be an integer label array, got "
                     + mc_dtype_name(x, context) + "; the ported kernels take int32 labels")
@@ -589,7 +534,7 @@ def mc_i32_1d(x: PythonObject, name: String, context: PythonObject) raises -> Py
     var count: Int
     if mc_is_list_like(x):
         # `as_i64_c` of a list: its exact Python ints (a column list flattened)
-        var flat = mc_flatten(x)
+        var flat = mc_flatten(x, context)
         store = family_call(Python.import_module("array").array, PythonObject("q"), flat)
         count = mc_len(store)
     else:
@@ -614,7 +559,7 @@ def mc_i32_1d(x: PythonObject, name: String, context: PythonObject) raises -> Py
 def mc_f32_1d(x: PythonObject, name: String, require_finite: Bool, context: PythonObject) raises -> PythonObject:
     """`_metrics_impl._as_f32_1d`: a float32 C-order array of n entries
     (an (n, 1) column is the same words)."""
-    var vs = mc_vector_shape(x, name)
+    var vs = mc_vector_shape(x, name, context)
     if mc_is_float64(x, context):
         raise Error("TypeError: mojolearn metrics: " + name + " is float64; the float64 overloads of "
                     + "r2_score, kl_divergence and silhouette_score are NOT implemented "

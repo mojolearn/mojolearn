@@ -433,8 +433,8 @@ def _top_k(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var present = true.classes
     var n = true.n
     var s = mx_scores(args[1], n, caller, -1, "y_score", context)
-    var binary = mx_len(present) <= 2 and not (labels is not None and mx_len(labels) > 2)
     var classes = present if labels is None else mx_selected(labels, true.kind, present, context)
+    var binary = mx_len(present) <= 2 and not (labels is not None and mx_len(classes) > 2)
     if labels is not None:
         if not mx_eq(classes, mx_sorted(classes)):
             raise Error("Parameter 'labels' must be ordered.")

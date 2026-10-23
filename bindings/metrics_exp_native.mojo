@@ -8,15 +8,19 @@
 # and label pieces in bindings/metrics_exp_common.mojo.
 from std.python import Python, PythonObject
 from bindings.classical_attributes import classical_connect_numpy
+from bindings.classical_pandas import classical_admit_value
+from bindings.metrics_native_support import metric_arguments
 from bindings.metrics_exp_cls import metrics_exp_cls_operation
 from bindings.metrics_exp_curve import metrics_exp_curve_operation
 from bindings.metrics_exp_rank import metrics_exp_rank_operation
 from bindings.metrics_exp_cluster import metrics_exp_cluster_operation
 
 
-def metrics_exp_operation(model: PythonObject, operation: String, args: PythonObject,
+def metrics_exp_operation(model: PythonObject, operation: String, var args: PythonObject,
          context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
+    classical_admit_value(args, context)
+    args = metric_arguments(args, 0, context)
     if operation.startswith("family_mexp_cls_"):
         return metrics_exp_cls_operation(operation, args, context)
     if operation.startswith("family_mexp_curve_"):
