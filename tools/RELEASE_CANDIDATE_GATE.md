@@ -40,6 +40,11 @@ builds on appropriate build machines. The commands build no wheel and publish
 nothing. `autograd_smoke.py build-commands --vendor VENDOR --mojo MOJO --bin-dir
 DIR --target-accelerator TARGET` still prints the underlying commands without
 executing them.
+The NVIDIA/AMD executables require a Linux x86-64 build host and explicitly use
+`--target-cpu x86-64-v3`, matching the wheels' portable host instruction set.
+The receipt records that baseline, and admission rejects older unpinned
+commands. Metal's command remains unchanged. Compiler worker counts and the
+GPU target are independent of this host instruction-set choice.
 An interrupted build can use `--resume` with the same directory, source,
 compiler, target and flags. Completed artifact hashes are checked and reused;
 old failed logs are retained. Changing any of those inputs requires a fresh

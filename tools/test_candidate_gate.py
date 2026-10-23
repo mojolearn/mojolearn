@@ -69,10 +69,11 @@ def artifacts(tmp_path, vendor='nvidia'):
         path = directory/name
         path.write_bytes(b'inert fixture; tests never execute this file')
         path.chmod(0o755)
-        rows.append(dict(file=name, source=source, source_sha256='b'*64, command=['mojo', 'build', source],
+        rows.append(dict(file=name, source=source, source_sha256='b'*64,
+                         command=['mojo', 'build', '--target-cpu', 'x86-64-v3', source],
                          exit_code=0, sha256=A.sha(path)))
     doc = dict(schema=A.SCHEMA, state='built', source_commit=COMMIT, vendor=vendor, target='sm_89',
-               compiler=dict(sha256='c'*64), files=rows)
+               target_cpu='x86-64-v3', compiler=dict(sha256='c'*64), files=rows)
     (directory/'build-manifest.json').write_text(json.dumps(doc))
     return directory
 
@@ -174,6 +175,8 @@ def test_published_gate_mode_stays_explicit_and_uploads_no_candidate(tmp_path):
 
 
 def test_autograd_resume_reuses_verified_completed_bytes_without_compiling(tmp_path, monkeypatch):
+    monkeypatch.setattr(A.platform, 'system', lambda: 'Linux')
+    monkeypatch.setattr(A.platform, 'machine', lambda: 'x86_64')
     root = tmp_path/'source'
     root.mkdir()
     compiler = tmp_path/'mojo'
@@ -201,12 +204,40 @@ def test_autograd_resume_reuses_verified_completed_bytes_without_compiling(tmp_p
     args = SimpleNamespace(out=str(tmp_path/'outputs'), source_commit=COMMIT, vendor='nvidia',
                            target='sm_89', mojo=str(compiler), compile_jobs=2, resume=False)
     assert A.build(args) == 0 and len(calls) == 8
+    manifest = json.loads((Path(args.out)/'build-manifest.json').read_text())
+    assert manifest['target_cpu'] == 'x86-64-v3'
+    assert all(command[command.index('--target-cpu')+1] == 'x86-64-v3' for command in calls)
     args.resume = True
     assert A.build(args) == 0 and len(calls) == 8
     args.compile_jobs = 3
     with pytest.raises(RuntimeError, match='completed autograd artifact changed'):
         A.build(args)
     assert len(calls) == 8
+
+
+@pytest.mark.parametrize('change', ['missing-receipt-target', 'host-native-command', 'missing-command-flag'])
+def test_autograd_admission_refuses_unpinned_host_code(tmp_path, change):
+    directory = artifacts(tmp_path)
+    path = directory/'build-manifest.json'
+    doc = json.loads(path.read_text())
+    if change == 'missing-receipt-target':
+        doc.pop('target_cpu')
+    elif change == 'host-native-command':
+        command = doc['files'][0]['command']
+        command[command.index('--target-cpu')+1] = 'native'
+    else:
+        doc['files'][0]['command'] = ['mojo', 'build', doc['files'][0]['source']]
+    path.write_text(json.dumps(doc))
+    with pytest.raises(ValueError, match='host CPU baseline'):
+        A.validate(path, 'nvidia', COMMIT)
+
+
+@pytest.mark.parametrize('system,machine', [('Darwin', 'arm64'), ('Linux', 'aarch64')])
+def test_gpu_gate_builder_refuses_a_different_host_abi(monkeypatch, system, machine):
+    monkeypatch.setattr(A.platform, 'system', lambda: system)
+    monkeypatch.setattr(A.platform, 'machine', lambda: machine)
+    with pytest.raises(RuntimeError, match='Linux x86-64 build host'):
+        A.build(SimpleNamespace())
 
 
 def test_gate_receipt_cannot_reuse_published_or_other_candidate_hashes(tmp_path):

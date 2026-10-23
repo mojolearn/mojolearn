@@ -41,6 +41,18 @@ def test_registry_covers_public_training_and_all_tape_integrations():
                 assert command[command.index("--target-accelerator") + 1] == target
 
 
+@pytest.mark.parametrize("vendor", ["nvidia", "amd"])
+def test_linux_check_commands_use_the_portable_host_isa(vendor):
+    for command in smoke.build_commands(vendor, "mojo", "/build"):
+        assert command.count("--target-cpu") == 1
+        assert command[command.index("--target-cpu") + 1] == "x86-64-v3"
+
+
+def test_metal_check_commands_keep_their_existing_host_target():
+    assert all("--target-cpu" not in command
+               for command in smoke.build_commands("metal", "mojo", "/build"))
+
+
 @pytest.mark.parametrize("actual,mode", [("cpu", 1), ("hip", 1), ("cuda", 0)])
 def test_actual_binding_must_match_vendor_and_mode(monkeypatch, actual, mode):
     binding = types.SimpleNamespace(x_sequence_vendor=lambda: actual, x_sequence_numeric_mode=lambda: mode)
