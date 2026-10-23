@@ -341,6 +341,9 @@ def msel_first_seen(y: PythonObject, context: PythonObject) raises -> PythonObje
         return PythonObject(None)
     var b = msel_b()
     var classes = Python.tuple(b.TypeError, b.ValueError, b.OverflowError)
+    # An unavailable/replaced helper is a binding refusal, not a label
+    # conversion miss eligible for the alternate encoding definition.
+    var first_entry = msel_entry("x_metrics_first_rows", context)
     var n = 0
     try:
         n = msel_n_samples(y, context)
@@ -348,7 +351,7 @@ def msel_first_seen(y: PythonObject, context: PythonObject) raises -> PythonObje
         if gc.m < 1:
             return PythonObject(None)
         var first = msel_new(gc.m, "<i8", context)
-        _ = family_call(family_call(context["family_msel_xm"], PythonObject(None)).x_metrics_first_rows,
+        _ = family_call(first_entry,
                         PythonObject(msel_addr(gc.codes)), PythonObject(n), PythonObject(gc.m),
                         PythonObject(msel_addr(first)))
         _ = first  # keep the Python object alive through the native call above

@@ -92,9 +92,10 @@ def validate_receipt(report):
     if set(profile) != PROFILE_FILES or any(not re.fullmatch('[0-9a-f]{64}', str(h)) for h in profile.values()):
         raise ValueError('CV source profile is missing or malformed')
     bindings = report.get('bindings', {})
-    if set(bindings) != {'_mojolearn_gbdt'} or any(
-        v.get('vendor') != report['vendor'] or not re.fullmatch('[0-9a-f]{64}', str(v.get('sha256')))
-        for v in bindings.values()):
+    required_bindings = {'_mojolearn_gbdt', '_native_cv', '_native_trees', '_native_archive', '_native_gbdt'}
+    if (set(bindings) != required_bindings
+            or bindings['_mojolearn_gbdt'].get('vendor') != report['vendor']
+            or any(not re.fullmatch('[0-9a-f]{64}', str(v.get('sha256'))) for v in bindings.values())):
         raise ValueError('CV native provenance is missing or malformed')
     inputs = report.get('inputs', {})
     if set(inputs) != {'X', 'classifier', 'regressor'} or any(not re.fullmatch('[0-9a-f]{64}', str(v)) for v in inputs.values()):

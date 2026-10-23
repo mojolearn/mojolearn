@@ -473,6 +473,9 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
                 _ = out  # keep the Python object alive through the native call above
                 tr = out
             _ = py_call(orders.append, tr)
+        # Each gather reads a raw address into a permutation owned by this
+        # list. Keep every permutation alive through the final fold's call.
+        _ = perms^
     else:
         for f in range(nf):  # driver-loop: over folds
             _ = py_call(orders.append, msel_index_i64(folds[f][0], context))
