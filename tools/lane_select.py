@@ -1707,6 +1707,8 @@ def _mojo_import_targets(rel):
 
 _SYMBOL_STEPS = {}
 _CACHES.append(_SYMBOL_STEPS)
+_SYMBOL_NAMES = {}
+_CACHES.append(_SYMBOL_NAMES)
 
 
 def _mojo_named_imports(rel, idents):
@@ -1753,10 +1755,11 @@ def _mojo_symbol_step(rel, name):
     idents = set(_MOJO_IDENT_RE.findall("\n".join(bodies)))
     out = _mojo_named_imports(rel, idents)
     _SYMBOL_STEPS[key] = out
+    _SYMBOL_NAMES[key] = idents
     return out
 
 
-def _mojo_symbol_reach(pending):
+def _mojo_symbol_reach(pending, names=None):
     """(files reached by name, files to close over whole) for imported
     symbols `pending` [(file, name)], followed DEFINITION BY DEFINITION.
 
@@ -1780,6 +1783,8 @@ def _mojo_symbol_reach(pending):
             whole.add(node[0])
             continue
         reached.add(node[0])
+        if names is not None:
+            names.update(_SYMBOL_NAMES.get(node, ()))
         stack.extend(step)
     return reached, whole
 
@@ -2866,6 +2871,7 @@ def lane_sources():
     family_of_binding = {f["binding"]: f["family"] for f in hs.FAMILIES}
     seed_cache = {}
     read_by_name = {}        # seed_cache key -> the files of it read definition by definition
+    native_names = {}        # seed_cache key -> names used by the reached native bodies
 
     def binding_seeds(src, used, wide=True):
         """The Mojo files ONE binding contributes to a lane whose door calls
@@ -2918,11 +2924,13 @@ def lane_sources():
                 # each of them handed the k-means oracles to the scaler lanes.
                 seed_cache[key] = {src} if wide == "narrow" else _mojo_closure([src])
                 read_by_name[key] = {src} if wide == "narrow" else set()
+                native_names[key] = set() if wide == "narrow" else set().union(*[
+                    set(_MOJO_IDENT_RE.findall(_read(f))) for f in seed_cache[key] if f.endswith(".mojo")])
             else:
                 blocks = _mojo_blocks_for(src)
                 syms = _mojo_import_symbols(src)
                 params = _binding_export_params(src)
-                seeds, pending = set(), []
+                seeds, pending, named = set(), [], set()
                 for export in hit:
                     if export not in exports:
                         # REGISTERED BY A FUNCTION THE BINDING IMPORTS
@@ -2966,14 +2974,20 @@ def lane_sources():
                                     r"\b%s\b" % re.escape(other), body):
                                 stack.append(other)
                     body = "\n".join(bodies)
+                    named.update(_MOJO_IDENT_RE.findall(body))
                     pending.extend(_mojo_named_imports(src, set(_MOJO_IDENT_RE.findall(body))))
                 # An imported symbol is followed definition by definition
                 # into the file defining it (`_mojo_symbol_reach`), so a
                 # thin-shell binding's impl module does not hand every
                 # export's oracles to every lane.
-                reached, whole = _mojo_symbol_reach(pending)
-                seed_cache[key] = _mojo_closure(seeds | whole) | reached | {src}
-                read_by_name[key] = (reached | {src}) - _mojo_closure(seeds | whole)
+                reached, whole = _mojo_symbol_reach(pending, named)
+                closed = _mojo_closure(seeds | whole)
+                seed_cache[key] = closed | reached | {src}
+                read_by_name[key] = (reached | {src}) - closed
+                for f in closed:
+                    if f.endswith(".mojo"):
+                        named.update(_MOJO_IDENT_RE.findall(_read(f)))
+                native_names[key] = named
         if wide is not False:
             narrowed_files.update(read_by_name[key])
         return seed_cache[key]
@@ -3076,7 +3090,7 @@ def lane_sources():
         # callers of `qn_fit`. The own walk stops at the files every lane
         # reaches, so its names are what this lane itself asks of a binding:
         # `all_finite_f32` through `_buffer.py`, never `byte_lm_run`.
-        used = _own(lane)[1]
+        used = set(_own(lane)[1])
         mojo = set()
         binding_use = {}
         # EVERY BINDING CONTRIBUTION, RECORDED (lane/lane-select-mojo,
@@ -3087,6 +3101,32 @@ def lane_sources():
         # (the old whole-file rule stands for that lane).
         calls = seed_calls[lane] = []
         narrowed_files = set()     # files a contribution read per definition, not closed over
+
+        # Public operations now call native owners, which call numerical
+        # exports by the names in their ABI tables. Python-only name scanning
+        # missed, for example, UMAP's fit exports after fit moved to Mojo.
+        # Close the existing binding set over names in the native bodies it
+        # actually reaches. Unresolved bodies keep the same whole-file rule.
+        connected = set(bindings)
+        for binding in bindings:
+            connected.update(routed.get(binding, ()))
+            if binding in adapted:
+                connected.add(f"_mojolearn_{adapted[binding]}_host")
+        native_sources = [(os.path.join("bindings", b + ".mojo"),
+                           True if _whole(lane, b) else "narrow") for b in sorted(connected)]
+        exports_available = set().union(*[set(_binding_exports(src)) | set(_delegated_exports(src))
+                                         for src, _ in native_sources])
+        while True:
+            found = set()
+            for src, wide in native_sources:
+                binding_seeds(src, used, wide)
+                exports = set(_binding_exports(src)) | set(_delegated_exports(src))
+                key = (src, tuple(sorted(used & exports)), wide)
+                found.update(native_names[key] & exports_available)
+            fresh = found - used
+            if not fresh:
+                break
+            used.update(fresh)
 
         def recorded_seeds(src, wide=True):
             got = binding_seeds(src, used, wide)

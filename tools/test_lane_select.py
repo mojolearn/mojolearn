@@ -2042,8 +2042,8 @@ def test_native_helpers_keep_symbol_reach_across_multiple_dispatch_layers():
         "<door>.mojo": ({"entry": "def entry():\n    first()"}, ""),
         "<first>.mojo": ({"first": "def first():\n    chosen()"}, ""),
         "<hub>.mojo": ({
-            "chosen": "def chosen():\n    arithmetic()\n    first()",
-            "unrelated": "def unrelated():\n    other_arithmetic()",
+            "chosen": 'def chosen():\n    arithmetic()\n    first()\n    entries["numerical_export"]()',
+            "unrelated": 'def unrelated():\n    other_arithmetic()\n    entries["unused_export"]()',
         }, ""),
         "<kernel>.mojo": ({"arithmetic": "def arithmetic():\n    pass"}, ""),
     }
@@ -2059,13 +2059,16 @@ def test_native_helpers_keep_symbol_reach_across_multiple_dispatch_layers():
     }
     defs, targets = lane_select._mojo_defs_for, lane_select._mojo_import_targets
     saved_steps = dict(lane_select._SYMBOL_STEPS)
+    saved_names = dict(lane_select._SYMBOL_NAMES)
     try:
         lane_select._mojo_defs_for = files.get
         lane_select._mojo_import_targets = lambda rel: imports.get(rel, ({}, set()))
         lane_select._SYMBOL_STEPS.clear()
-        reached, whole = lane_select._mojo_symbol_reach([("<door>.mojo", "entry")])
+        names = set()
+        reached, whole = lane_select._mojo_symbol_reach([("<door>.mojo", "entry")], names)
         assert reached == set(files) and not whole, (reached, whole)
         assert "<unrelated>.mojo" not in reached | whole
+        assert "numerical_export" in names and "unused_export" not in names
         _, whole = lane_select._mojo_symbol_reach([("<hub>.mojo", "unknown")])
         assert whole == {"<hub>.mojo"}, "unknown call targets must keep the whole module"
         _, whole = lane_select._mojo_symbol_reach([("<hub>.mojo", None)])
@@ -2074,6 +2077,8 @@ def test_native_helpers_keep_symbol_reach_across_multiple_dispatch_layers():
         lane_select._mojo_defs_for, lane_select._mojo_import_targets = defs, targets
         lane_select._SYMBOL_STEPS.clear()
         lane_select._SYMBOL_STEPS.update(saved_steps)
+        lane_select._SYMBOL_NAMES.clear()
+        lane_select._SYMBOL_NAMES.update(saved_names)
 
 
 def test_native_alias_reach_does_not_add_an_unresolvable_local_name():
