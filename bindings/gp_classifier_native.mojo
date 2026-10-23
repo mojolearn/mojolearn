@@ -185,8 +185,12 @@ def _gpc_fit_binary(ext: PythonObject, x: PythonObject, codes: PythonObject, arr
                     classical_address(l_out), classical_address(pi), classical_address(wsr),
                     classical_address(scalars), classical_address(y01)),
         Python.list(PythonObject(n_rows), PythonObject(n_cols), PythonObject(len(arrays[0])), arrays[4], max_iter, k))
+    _ = scalars  # keep the Python object alive through the native call above
     var sp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(scalars)))
-    return _gpc_binary(context, y01, l_out, pi, wsr, sp[0], Int(py=family_call(b.int, n_iter)), Int(sp[2]))
+    _ = scalars  # keep the Python object alive through the native call above
+    var _keep_ret_scalars = _gpc_binary(context, y01, l_out, pi, wsr, sp[0], Int(py=family_call(b.int, n_iter)), Int(sp[2]))
+    _ = scalars  # keep the Python object alive through the native call above
+    return _keep_ret_scalars^
 
 
 def _gpc_set_fitted(fields: PythonObject, x: PythonObject, classes: PythonObject, fits: PythonObject,

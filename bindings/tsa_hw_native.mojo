@@ -262,15 +262,18 @@ def hw_predict(model: PythonObject, args: PythonObject, context: PythonObject) r
         var fc = tsa_array("f", "<f4", Python.tuple((end - n) * b), (end - n) * b, 4, context)
         _ = py_call_typed(_entry(entries, "holtwinters_forecast"), classical_address(comps), classical_address(fc),
                           Python.list(n, b, period, end - n), fields["seasonal"])
+        _ = comps  # keep the Python object alive through the native call above
         return _shaped(fields, fc, (start - n) * b, steps, index, context)
     var out = tsa_array("f", "<f4", Python.tuple(steps * b), steps * b, 4, context)
     var k_in = min(end, n) - start
     var base = Int(py=classical_address(out))
     _ = py_call_typed(_entry(entries, "holtwinters_predict"), classical_address(comps), PythonObject(base),
                       Python.list(n, b, period, start, start + k_in), fields["seasonal"])
+    _ = comps  # keep the Python object alive through the native call above
     if end > n:
         _ = py_call_typed(_entry(entries, "holtwinters_forecast"), classical_address(comps),
                           PythonObject(base + 4 * k_in * b), Python.list(n, b, period, end - n), fields["seasonal"])
+        _ = comps  # keep the Python object alive through the native call above
     return _shaped(fields, out, 0, steps, index, context)
 
 

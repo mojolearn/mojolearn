@@ -639,6 +639,7 @@ def xl_one_class(model: PythonObject, operation: String, source: PythonObject, c
         var codes = _xl_codes(model, x, fields["coef_"], icpt, False, -1, 1, entries, context)
         var wide = labels_vector(x.rows, "<i8", context)
         labels_cast(labels_address(codes), "<i4", labels_address(wide), "<i8", x.rows, context)
+        _ = codes  # keep the Python object alive through the native call above
         result = wide
     else:
         var intercept = PythonObject(-offset) if operation == "decision_function" else PythonObject(0.0)
@@ -1447,17 +1448,24 @@ def _xl_default_folds(n: Int, k: Int, context: PythonObject) raises -> PythonObj
     _ = py_call_typed(_xl_helper(context, "fold_ids"), PythonObject(0), PythonObject(n), PythonObject(0), PythonObject(k),
                       PythonObject(labels_address(class_counts)), PythonObject(labels_address(fold_store)),
                       PythonObject(labels_address(fold_counts)))
+    _ = class_counts  # keep the Python object alive through the native call above
+    _ = fold_store  # keep the Python object alive through the native call above
+    _ = fold_counts  # keep the Python object alive through the native call above
     var select = _xl_helper(context, "select_fold_i64")
     var counts = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=labels_address(fold_counts))
+    _ = fold_counts  # keep the Python object alive through the native call above
     var out = Python.list()
     for fold in range(k):  # driver-loop: over the cv folds
         var size = Int(counts[fold])
+        _ = fold_counts  # keep the Python object alive through the native call above
         var test = labels_vector(size, "<i8", context)
         var train = labels_vector(n - size, "<i8", context)
         var scratch = labels_vector(n, "<i8", context)
         var got = _int(py_call_typed(select, PythonObject(labels_address(fold_store)), PythonObject(n), PythonObject(fold),
                                      PythonObject(labels_address(test) if size > 0 else labels_address(scratch)),
                                      PythonObject(labels_address(train) if n - size > 0 else labels_address(scratch))))
+        _ = fold_store  # keep the Python object alive through the native call above
+        _ = scratch  # keep the Python object alive through the native call above
         if got != size:
             raise Error("RuntimeError: mojolearn: select_fold_i64 disagrees with fold_ids")
         _ = py_call(out.append, Python.tuple(train, test))
@@ -1477,8 +1485,11 @@ def _xl_kfold_ids_f32(n: Int, k: PythonObject, context: PythonObject) raises -> 
     _ = py_call_typed(_xl_helper(context, "fold_ids"), PythonObject(0), PythonObject(n), PythonObject(0),
                       PythonObject(folds), PythonObject(0), PythonObject(labels_address(ids)),
                       PythonObject(labels_address(counts)))
+    _ = ids  # keep the Python object alive through the native call above
+    _ = counts  # keep the Python object alive through the native call above
     var out = labels_vector(n, "<f4", context)
     labels_cast(labels_address(ids), "<i4", labels_address(out), "<f4", n, context)
+    _ = ids  # keep the Python object alive through the native call above
     return out
 
 

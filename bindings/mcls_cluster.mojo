@@ -80,6 +80,7 @@ def _cluster_call(binding: PythonObject, entry: String, prepared: PythonObject, 
     var codes = prepared[0]
     var n = Int(py=prepared[1])
     var base = Int(py=classical_address(codes))
+    _ = codes  # keep the Python object alive through the native call above
     var params = _params(n, 0, Int(py=prepared[2]))
     for i in range(mc_len(extra)):  # small-loop(extra: the trailing scalars of one entry call): at most one beta
         _ = py_call(params.append, extra[i])

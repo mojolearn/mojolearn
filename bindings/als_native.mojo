@@ -64,17 +64,21 @@ def als_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
         var loss = Bool(py=fields["calculate_training_loss"])
         var params = Python.list(n, m, f, iterations, Int(use_cg), decomp_int(fields["cg_steps"]), Int(loss))
         var ac = kit.address(c)
+        _ = c  # keep the Python object alive through the native call above
         var ax = kit.address(x)
         var ay = kit.address(y)
         var count = decomp_int(py_call(kit.entries["x_decomp_als_fit"], ac, ax, ay, classical_address(losses_store),
                                        params, Python.list(decomp_float(fields["regularization"]))))
+        _ = losses_store  # keep the Python object alive through the native call above
         kit.wrote_host(x)
         kit.wrote_host(y)
         if loss:
             var losses = Python.list()
             var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(losses_store)))
+            _ = losses_store  # keep the Python object alive through the native call above
             for i in range(min(count, slots)):  # driver-loop: over the fit's recorded iterations
                 _ = py_call(losses.append, PythonObject(words[i]))
+                _ = losses_store  # keep the Python object alive through the native call above
             py_setitem(fields, "training_loss_", losses)
         var users = kit.publish(x)
         var items = kit.publish(y)
@@ -119,6 +123,7 @@ def _topn(mut kit: DecompKit, s: Int, count: Int, skip: Int, context: PythonObje
     if c:
         var sa = kit.address(s)
         _ = py_call(kit.entries["x_decomp_gather"], sa, order_address, c, kit.address(values))
+        _ = values  # keep the Python object alive through the native call above
     var labels = _typed(c, "<i4", "i", 4, context)
     var scores = _typed(c, "<f4", "f", 4, context)
     if c:
@@ -126,6 +131,7 @@ def _topn(mut kit: DecompKit, s: Int, count: Int, skip: Int, context: PythonObje
                src=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=order_address), count=c)
         memcpy(dest=DecompF32(unsafe_from_address=Int(py=scores._addr)),
                src=DecompF32(unsafe_from_address=Int(py=kit.address(values))), count=c)
+        _ = values  # keep the Python object alive through the native call above
     _ = order^
     return Python.tuple(labels, scores)
 

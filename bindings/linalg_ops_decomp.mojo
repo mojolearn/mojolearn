@@ -75,6 +75,7 @@ def _lin_tsqr_release(mut kit: LinKit, context: PythonObject):
     try:
         var one = lin_new([1], "<f4", context)
         _ = family_call(kit.entry("x_decomp_tsqr_q"), PythonObject(one.addr), PythonObject(one.addr), lin_ints(1, 1, 0))
+        _ = one  # keep the Python object alive through the native call above
     except:
         pass
 
@@ -215,11 +216,13 @@ def _lin_qr_q(a: LinBuf, mode: String, context: PythonObject) raises -> PythonOb
                 # R's rows signed so its diagonal is non-negative, and C the
                 # diagonal of those signs (x_decomp/api.mojo r_signs_py)
                 _ = family_call(kit.entry("x_decomp_r_signs"), PythonObject(r.addr), PythonObject(signs.addr), lin_ints(cols))
+                _ = signs  # keep the Python object alive through the native call above
                 signed = True
             finally:
                 if not signed:
                     _lin_tsqr_release(kit, context)
             var q = _lin_tsqr_q(kit, signs.addr, rows, cols, cols, context)
+            _ = signs  # keep the Python object alive through the native call above
             return _lin_named("QRResult", Python.tuple(q.keep, r.keep), context)
         var tau = 0
         var held = kit.of_buffer(a.addr, rows, cols)
@@ -312,6 +315,7 @@ def _lin_svd(args: PythonObject, context: PythonObject) raises -> PythonObject:
                 # Tried: the 2^-40 cut + Householder U_R branch here (qfix bit 1).
                 # Restore: git apply experiments/removed/MOJOLEARN_SVD_QFIX.patch; record in docs/TOMBSTONES.md.
                 var r_held = kit.of_buffer(r.addr, cols, cols)
+                _ = r  # keep the Python object alive through the native call above
                 var ur = _lin_svd_tall(kit, r_held, False, context, s, vt)
                 c_store = kit.out(ur)
                 done = True
@@ -319,6 +323,7 @@ def _lin_svd(args: PythonObject, context: PythonObject) raises -> PythonObject:
                 if not done:
                     _lin_tsqr_release(kit, context)
             var u = _lin_tsqr_q(kit, Int(py=classical_address(c_store)), rows, cols, cols, context)
+            _ = c_store  # keep the Python object alive through the native call above
             var result = _lin_named("SVDResult", Python.tuple(u.keep, kit.out_vector(s, cols), kit.out(vt)), context)
             _ = a^
             return result

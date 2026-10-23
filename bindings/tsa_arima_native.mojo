@@ -147,6 +147,7 @@ def _series_major(source: PythonObject, context: PythonObject) raises -> PythonO
         arr = tsa_array("f", "<f4", Python.tuple(1, cols), cols, 4, context)
         memcpy(dest=_F32P(unsafe_from_address=Int(py=classical_address(arr))),
                src=_F32P(unsafe_from_address=Int(py=classical_address(flat))), count=cols)
+        _ = flat  # keep the Python object alive through the native call above
     return Python.tuple(arr, rows, cols, copied, rank)
 
 
@@ -206,6 +207,7 @@ def _exog_array(source: PythonObject, batch: Int, n_rows: Int, y_ndim: Int, name
     var out = tsa_array("f", "<f4", Python.tuple(s0, s1, s2), s0 * s1 * s2, 4, context)
     memcpy(dest=_F32P(unsafe_from_address=Int(py=classical_address(out))),
            src=_F32P(unsafe_from_address=Int(py=classical_address(flat))), count=s0 * s1 * s2)
+    _ = flat  # keep the Python object alive through the native call above
     return Python.tuple(out, s2)
 
 
@@ -414,4 +416,6 @@ def arima_predict(model: PythonObject, args: PythonObject, context: PythonObject
                       classical_address(fut), classical_address(fields["params_"]), classical_address(out),
                       Python.list(batch, n_obs, start, end, order[0], order[1], order[2], order[3], order[4], order[5],
                                   order[6], Int(py=fields["k_"]), n_exog))
+    _ = ex  # keep the Python object alive through the native call above
+    _ = fut  # keep the Python object alive through the native call above
     return out

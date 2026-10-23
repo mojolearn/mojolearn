@@ -164,14 +164,18 @@ def _agglo_legacy(model: PythonObject, args: PythonObject, context: PythonObject
                     classical_address(info),
                     Python.list(PythonObject(n_rows), PythonObject(n_cols), PythonObject(k), PythonObject(metric),
                                 PythonObject(use_knn)))
+    _ = info  # keep the Python object alive through the native call above
     var words = FAMILY_I32P(unsafe_from_address=Int(py=classical_address(info)))
+    _ = info  # keep the Python object alive through the native call above
     py_setitem(fields, "labels_", labels)
     py_setitem(fields, "children_", children)
     py_setitem(fields, "n_clusters_", PythonObject(k))
     py_setitem(fields, "n_leaves_", PythonObject(n_rows))
     # -1 on a CPU-only install: the host binding runs Kruskal.
     py_setitem(fields, "n_boruvka_rounds_", PythonObject(Int(words[0])))
+    _ = info  # keep the Python object alive through the native call above
     py_setitem(fields, "n_connected_components_", PythonObject(Int(words[1])))
+    _ = info  # keep the Python object alive through the native call above
     py_setitem(fields, "n_features_in_", PythonObject(n_cols))
     var predicting = Bool(py=family_field(fields, "prediction_data"))
     var fit_x = cfb_borrow_copy(x, source, context) if predicting else PythonObject(None)
@@ -223,8 +227,10 @@ def _agglo_x(model: PythonObject, args: PythonObject, context: PythonObject) rai
         var zero = family_entry(args[3], "xn_row_all_zero", context)
         _ = family_call(zero, Python.list(classical_address(x), classical_address(zrow)),
                         Python.list(PythonObject(n), PythonObject(d)), Python.list())
+        _ = zrow  # keep the Python object alive through the native call above
         if cfb_any_positive_i32(FAMILY_I32P(unsafe_from_address=Int(py=classical_address(zrow))), n):
             raise Error("Cosine affinity cannot be used when X contains zero vectors")
+        _ = zrow  # keep the Python object alive through the native calls above
     var n_clusters = family_field(fields, "n_clusters")
     if n_clusters is not None:
         var k = Int(py=family_call(b.int, n_clusters))
