@@ -11,7 +11,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.native_transport import (
-    TRANSPORT_BOUNDARY, transport_initialize, transport_listen, transport_accept,
+    transport_initialize, transport_listen, transport_accept, transport_port, transport_timeout,
     transport_connect, transport_send, transport_receive, transport_close,
     transport_spawn, transport_wait, transport_terminate, transport_clock,
     transport_sleep, _transport_json,
@@ -66,7 +66,7 @@ def process_initialize(executable: String, environ: PythonObject, vendor: String
     transport_initialize()
 
 
-def _process_environment(devices: PythonObject, group: PythonObject) raises -> List[String]:
+def _process_environment(devices: PythonObject, group: PythonObject, overrides: PythonObject = PythonObject(None)) raises -> List[String]:
     var p = PROCESS_BOUNDARY.get_or_create_ptr()
     var bi = p[].bi
     var env = bi.dict()
@@ -112,6 +112,24 @@ def _process_environment(devices: PythonObject, group: PythonObject) raises -> L
                    String("FOREST"), String("SVM"), String("GP"), String("GMM"),
                    String("RESAMPLE"), String("DBSCAN"), String("NEIGHBORS"), String("HIERARCHY")]:
         py_setitem(env, "MOJOLEARN_" + family + "_DEVICE_COUNT", String(len(group)))
+    if overrides is not None:
+        if py_type(overrides) is not bi.dict:
+            raise Error("process: worker environment overrides require an exact dict")
+        var override_keys = py_call(bi.list, overrides)
+        for i in range(len(override_keys)):  # driver-loop: admit before dict hashing or string protocols
+            if py_type(override_keys[i]) is not bi.str:
+                raise Error("process: worker environment keys require exact strings")
+        for i in range(len(override_keys)):  # driver-loop: copy admitted worker setup metadata
+            var key = override_keys[i]
+            var value = overrides[key]
+            if py_type(value) is not bi.str:
+                raise Error("process: worker environment values require exact strings")
+            # Setup metadata cannot override routing, visibility, numeric mode
+            # or inherited library search paths. This is the one fixed native
+            # CV dependency flag, consumed only during worker import/setup.
+            if String(key) != "MOJOLEARN_NATIVE_CV_NUMPY" or (String(value) != "0" and String(value) != "1"):
+                raise Error("process: unsupported worker environment override")
+            py_setitem(env, key, value)
     var result = List[String]()
     keys = py_call(bi.list, env)
     for i in range(len(keys)):  # driver-loop: over native process environment records
@@ -206,15 +224,30 @@ def _process_reap(pid: Int) raises:
 
 
 def process_pool_close(pool: PythonObject) raises:
+    _process_pool_close(pool, False)
+
+
+def _process_pool_close(pool: PythonObject, abort: Bool) raises:
     var workers = pool["workers"]
     var bi = PROCESS_BOUNDARY.get_or_create_ptr()[].bi
     py_setitem(pool, "workers", bi.list())
     py_setitem(pool, "closed", True)
     var failure = String()
+    if abort:
+        # Cancel every owned child before serial reaping; do not spend one
+        # full grace interval per still-running peer or drain its reply.
+        for i in range(len(workers)):  # driver-loop: signal the authenticated owned worker set
+            try:
+                transport_terminate(Int(py=workers[i]["pid"]))
+            except:
+                pass  # Reap below distinguishes an already-exited child.
     for i in range(len(workers)):  # driver-loop: over owned worker sockets and process IDs
         var worker = workers[i]
-        if worker["socket"] is not None:
+        if worker["socket"] is not None and not abort:
             try:
+                # Cleanup must not inherit the unbounded training timeout.
+                # A nonreading worker can fill its socket before close starts.
+                transport_timeout(worker["socket"], 1.0)
                 process_send(worker["socket"], "close", -1, PythonObject(None))
             except:
                 # Failed workers can already have closed their socket. Their
@@ -248,8 +281,7 @@ def process_pool_start(pool: PythonObject) raises:
     if p[].vendor == "cpu" and cooperative and len(devices) != 1:
         raise Error("NotImplementedError: cooperative neural updates across multiple CPU devices have no host implementation")
     var server = transport_listen("127.0.0.1", 0, 120.0)
-    var socket_type = TRANSPORT_BOUNDARY.get_or_create_ptr()[].socket
-    var port = Int(py=py_call(socket_type.getsockname, server)[1])
+    var port = transport_port(server)
     var groups = 1 if cooperative else len(devices)
     try:
         for i in range(groups):  # driver-loop: over native worker process groups
@@ -258,7 +290,7 @@ def process_pool_start(pool: PythonObject) raises:
                 group = py_call(bi.list, devices)
             else:
                 _ = py_call(group.append, devices[i])
-            var env = _process_environment(devices, group)
+            var env = _process_environment(devices, group, py_get(pool, "environment"))
             var token = String(py_call(p[].random, 32).hex())
             var argv = List[String]()
             argv.append(String(p[].executable))
@@ -282,12 +314,12 @@ def process_pool_start(pool: PythonObject) raises:
             # Existing local model workers have no training-operation timeout.
             # Keep only the connection handshake bounded; large supported
             # model steps must not acquire a new two-minute runtime limit.
-            _ = py_call(socket_type.settimeout, connection, PythonObject(None))
+            transport_timeout(connection, -1.0)
             py_setitem(worker, "identity", hello)
     except error:
         transport_close(server)
         try:
-            process_pool_close(pool)
+            _process_pool_close(pool, String(error).startswith("InterruptedError:"))
         except cleanup_error:
             raise Error("RuntimeError: native process startup failed: " + String(error) + "; cleanup also failed: " + String(cleanup_error))
         py_setitem(pool, "closed", False)
@@ -321,6 +353,8 @@ def process_pool_map(pool: PythonObject, requests: PythonObject) raises -> Pytho
                         raise Error("process: unexpected worker response")
                     _ = py_call(result.append, reply[1])
                 except error:
+                    if String(error).startswith("InterruptedError:"):
+                        raise error  # Cancel instead of draining unbounded peer replies.
                     if failure == "":
                         failure = String(error)
             if failure != "":
@@ -330,7 +364,7 @@ def process_pool_map(pool: PythonObject, requests: PythonObject) raises -> Pytho
             py_setitem(pool, "sequence", sequence)
     except error:
         try:
-            process_pool_close(pool)
+            _process_pool_close(pool, String(error).startswith("InterruptedError:"))
         except cleanup_error:
             raise Error("RuntimeError: native process request failed: " + String(error) + "; cleanup also failed: " + String(cleanup_error))
         py_setitem(pool, "closed", False)
@@ -360,7 +394,7 @@ def process_pool_call(pool: PythonObject, worker_index: Int, request: PythonObje
         py_setitem(pool, "sequence", sequence + 1)
     except error:
         try:
-            process_pool_close(pool)
+            _process_pool_close(pool, String(error).startswith("InterruptedError:"))
         except cleanup_error:
             raise Error("RuntimeError: native process request failed: " + String(error) + "; cleanup also failed: " + String(cleanup_error))
         py_setitem(pool, "closed", False)
@@ -385,7 +419,7 @@ def process_worker_connect(argv: PythonObject) raises -> PythonObject:
     py_setitem(hello, "pid", p[].pid())
     py_setitem(hello, "vendor", p[].vendor)
     transport_send(socket, hello, PythonObject(None))
-    _ = py_call(TRANSPORT_BOUNDARY.get_or_create_ptr()[].socket.settimeout, socket, PythonObject(None))
+    transport_timeout(socket, -1.0)
     return socket
 
 
@@ -430,7 +464,7 @@ def process_call(operation: String, args: PythonObject) raises -> PythonObject:
     elif operation == "worker_echo":
         process_echo_worker(args)
     elif operation == "environment":
-        var env = _process_environment(args[0], args[1])
+        var env = _process_environment(args[0], args[1], args[2] if len(args) > 2 else PythonObject(None))
         var out = PROCESS_BOUNDARY.get_or_create_ptr()[].bi.list()
         for i in range(len(env)):  # driver-loop: over verifier-visible process environment entries
             _ = py_call(out.append, env[i])
@@ -446,6 +480,8 @@ def process_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectP
         var result = process_call(String(args[0]), args[1])
         return result.steal_data()
     except error:
+        if String(error).startswith("InterruptedError:"):
+            return raise_python_exception(error_without_class(error, "InterruptedError"), ExceptionType("PyExc_InterruptedError"))
         if String(error).startswith("NotImplementedError:"):
             return raise_python_exception(error_without_class(error, "NotImplementedError"), ExceptionType("PyExc_NotImplementedError"))
         if String(error).startswith("RuntimeError:"):

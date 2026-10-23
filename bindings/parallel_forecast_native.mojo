@@ -361,6 +361,8 @@ def parallel_forecast_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") ->
         return result.steal_data()
     except error:
         var message = String(error)
+        if message.startswith("InterruptedError:"):
+            return raise_python_exception(error_without_class(error, "InterruptedError"), ExceptionType("PyExc_InterruptedError"))
         if message.startswith("TypeError:"):
             return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
         if message.startswith("RuntimeError:"):

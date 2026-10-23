@@ -590,6 +590,8 @@ def parallel_causal_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> P
             var nil = PythonObject(None)
             return nil.steal_data()
         var message = String(error)
+        if message.startswith("InterruptedError:"):
+            return raise_python_exception(error_without_class(error, "InterruptedError"), ExceptionType("PyExc_InterruptedError"))
         if message.startswith("RuntimeError:"):
             return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
         if message.startswith("TypeError:"):

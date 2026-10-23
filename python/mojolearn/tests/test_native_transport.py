@@ -21,7 +21,7 @@ def native():
 @pytest.fixture
 def sockets(native):
     server = native('listen', ('127.0.0.1', 0, 5.0))
-    client = socket.create_connection(server.getsockname(), timeout=5)
+    client = socket.create_connection(native('address', (server, False)), timeout=5)
     accepted = native('accept', (server, 5.0))
     try:
         yield client, accepted
@@ -126,3 +126,276 @@ def test_native_process_arguments_environment_exit_and_missing_executable(native
     missing = audit_native_call(native, 'spawn', ('/does-not-exist-mojolearn-test',
                                                  ['/does-not-exist-mojolearn-test'], env))
     assert_native_failure(missing)
+
+
+def test_native_timeout_and_explicit_close_are_not_empty_success(native):
+    server = native('listen', ('127.0.0.1', 0, 0.05))
+    try:
+        audit = audit_native_call(native, 'accept', (server, 0.05))
+        assert_native_failure(audit)
+        assert 'timed out' in str(audit.exception)
+    finally:
+        native('close', (server,))
+    native('close', (server,))
+    audit = audit_native_call(native, 'port', (server,))
+    assert_native_failure(audit)
+    assert 'closed' in str(audit.exception)
+
+
+def test_native_handle_destruction_closes_connection(native):
+    # A capsule has no cycle and owns exactly one descriptor. Dropping the
+    # last binding handle must close it even without an explicit close call.
+    server = native('listen', ('127.0.0.1', 0, 5.0))
+    client = socket.create_connection(native('address', (server, False)), timeout=5)
+    accepted = native('accept', (server, 5.0))
+    try:
+        del accepted
+        assert client.recv(1) == b''
+    finally:
+        client.close()
+        native('close', (server,))
+
+
+def test_native_receive_releases_gil_for_application_producer(sockets, native):
+    import threading
+    import time
+    client, accepted = sockets
+    wire = b'\x00\x00\x00\x0c{"nbytes":0}'
+    # The producer is test/application code, outside the native-operation
+    # checker. The old socket C implementation released the GIL here too.
+    def produce():
+        time.sleep(0.03)
+        client.sendall(wire)
+    producer = threading.Thread(target=produce)
+    producer.start()
+    try:
+        assert native('receive', (accepted, 0)) == ({'nbytes': 0}, b'')
+    finally:
+        producer.join(timeout=2)
+    assert not producer.is_alive()
+
+
+@pytest.mark.parametrize('kind', ['array', 'numpy', 'memoryview'])
+def test_native_send_retains_supported_buffer_bytes(sockets, native, kind):
+    import array
+    if kind == 'numpy':
+        import numpy as np
+        value = np.arange(8, dtype='i4')
+    else:
+        value = array.array('i', range(8))
+        if kind == 'memoryview':
+            value = memoryview(value)
+    expected = memoryview(value).cast('B').tobytes()
+    client, accepted = sockets
+    audited = audit_native_call(native, 'send', (accepted, {}, value))
+    audited.assert_native()
+    size, = struct.unpack('>I', receive_exact(client, 4))
+    assert json.loads(receive_exact(client, size)) == {'nbytes': len(expected)}
+    assert receive_exact(client, len(expected)) == expected
+
+
+def test_transport_refuses_python_buffer_and_dictionary_key_hooks(sockets, native):
+    calls = []
+    class Foreign:
+        def __buffer__(self, flags):
+            calls.append('buffer')
+            return memoryview(b'bad')
+        def __eq__(self, other):
+            calls.append('eq')
+            return other == 'nbytes'
+        def __hash__(self):
+            return hash('nbytes')
+    foreign = Foreign()
+    header = {foreign: 1}
+    calls.clear()
+    _, accepted = sockets
+    for metadata, payload in [({}, foreign), (header, b'')]:
+        audited = audit_native_call(native, 'send', (accepted, metadata, payload))
+        assert_native_failure(audited)
+    assert calls == []
+
+
+def test_posix_transport_does_not_invoke_python_audit_hooks():
+    import subprocess
+    import sys
+    import textwrap
+    program = textwrap.dedent('''\
+        import json, os, signal, socket, sys
+        from mojolearn import _backend
+        native = _backend.load_host_module('_mojolearn_tokenizer_host').native_transport_call
+        native('initialize', ())
+        active, events = [False], []
+        def hook(event, args):
+            if active[0] and (event.startswith('socket.') or event in
+                             ('os.posix_spawn', 'os.kill', 'time.sleep')):
+                events.append(event)
+                raise RuntimeError('native operation invoked an application audit hook')
+        sys.addaudithook(hook)
+        active[0] = True
+        try:
+            socket.socket()
+        except RuntimeError:
+            pass
+        finally:
+            active[0] = False
+        assert events == ['socket.__new__'], events
+        events.clear()
+        server = client = accepted = None
+        pid = None
+        active[0] = True
+        try:
+            server = native('listen', ('127.0.0.1', 0, 5.0))
+            port = native('port', (server,))
+            client = native('connect', ('localhost', port, 5.0))
+            accepted = native('accept', (server, 5.0))
+            native('send', (client, {'message': 'native'}, b'payload'))
+            assert native('receive', (accepted, 7)) == (
+                {'message': 'native', 'nbytes': 7}, b'payload')
+            assert native('address', (client, True))[1] == port
+            pid = native('spawn', ('/bin/sleep', ['/bin/sleep', '60'], ['PATH=/usr/bin:/bin']))
+            assert native('wait', (pid, True)) == -1
+            native('terminate', (pid, signal.SIGTERM))
+            status = native('wait', (pid, False))
+            pid = None
+            assert os.waitstatus_to_exitcode(status) == -signal.SIGTERM
+        finally:
+            active[0] = False
+            if pid is not None:
+                os.kill(pid, signal.SIGKILL)
+                os.waitpid(pid, 0)
+            for handle in (accepted, client, server):
+                if handle is not None:
+                    native('close', (handle,))
+        assert events == [], events
+        print(json.dumps({'events': events, 'transport': 'complete'}))
+    ''')
+    result = subprocess.run([sys.executable, '-c', program], text=True,
+                            capture_output=True, timeout=45)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert json.loads(result.stdout.strip().splitlines()[-1]) == {
+        'events': [], 'transport': 'complete'}
+
+
+def test_native_ipv6_address_matches_independent_socket(native):
+    server = native('listen', ('::1', 0, 5.0))
+    address = native('address', (server, False))
+    client = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+    client.settimeout(5)
+    accepted = None
+    try:
+        assert len(address) == 4 and address[0] == '::1'
+        client.connect(address)
+        accepted = native('accept', (server, 5.0))
+        assert native('address', (accepted, True)) == client.getsockname()
+        native('send', (accepted, {}, b'v6'))
+        count, = struct.unpack('>I', receive_exact(client, 4))
+        assert json.loads(receive_exact(client, count)) == {'nbytes': 2}
+        assert receive_exact(client, 2) == b'v6'
+    finally:
+        client.close()
+        if accepted is not None:
+            native('close', (accepted,))
+        native('close', (server,))
+
+
+def test_owned_transport_descriptors_do_not_survive_exec(native, tmp_path):
+    import sys
+    # Compare actual descriptor identity before/after native listen, then
+    # inspect that same OS identity in a directly spawned independent child.
+    fd_directory = '/proc/self/fd' if os.path.isdir('/proc/self/fd') else '/dev/fd'
+    before = set(os.listdir(fd_directory))
+    server = native('listen', ('127.0.0.1', 0, 5.0))
+    output = tmp_path / 'descriptor-check.json'
+    try:
+        new = set(os.listdir(fd_directory)) - before
+        identities = {}
+        for name in new:
+            try:
+                stat = os.fstat(int(name))
+            except OSError:
+                continue  # the enumeration directory itself is already closed
+            identities[name] = [stat.st_dev, stat.st_ino, stat.st_mode]
+        assert len(identities) == 1, identities
+        script = '''import json, os, sys
+expected = json.loads(sys.argv[1])
+leaked = []
+for name, identity in expected.items():
+    try:
+        stat = os.fstat(int(name))
+    except OSError:
+        continue
+    if [stat.st_dev, stat.st_ino, stat.st_mode] == identity:
+        leaked.append(name)
+with open(sys.argv[2], 'w') as output:
+    json.dump(leaked, output)
+'''
+        pid = native('spawn', (sys.executable,
+            [sys.executable, '-c', script, json.dumps(identities), str(output)],
+            [key + '=' + value for key, value in os.environ.items()]))
+        status = native('wait', (pid, False))
+        assert os.waitstatus_to_exitcode(status) == 0
+        assert json.loads(output.read_text()) == []
+    finally:
+        native('close', (server,))
+
+
+@pytest.mark.parametrize('operation', ['accept', 'receive', 'wait', 'sleep'])
+@pytest.mark.parametrize('handler_raises', [False, True])
+def test_interrupted_syscalls_return_without_swallowing_signal_handlers(operation, handler_raises):
+    import subprocess
+    import sys
+    import textwrap
+    program = textwrap.dedent('''\
+        import json, os, signal, sys, time
+        from mojolearn import _backend
+        native = _backend.load_host_module('_mojolearn_tokenizer_host').native_transport_call
+        native('initialize', ())
+        operation, handler_raises = sys.argv[1], sys.argv[2] == 'True'
+        seen, handles, pid = [], [], None
+        class SignalRaised(Exception):
+            pass
+        def handler(signum, frame):
+            seen.append(signum)
+            if handler_raises:
+                raise SignalRaised('application signal handler preserved')
+        signal.signal(signal.SIGALRM, handler)
+        if operation in ('accept', 'receive'):
+            server = native('listen', ('127.0.0.1', 0, 60.0))
+            handles.append(server)
+            args = (server, 60.0)
+            if operation == 'receive':
+                client = native('connect', ('127.0.0.1', native('port', (server,)), 60.0))
+                handles.append(client)
+                accepted = native('accept', (server, 60.0))
+                handles.append(accepted)
+                native('timeout', (accepted, -1.0))
+                args = (accepted, 0)
+        elif operation == 'wait':
+            pid = native('spawn', ('/bin/sleep', ['/bin/sleep', '60'], ['PATH=/usr/bin:/bin']))
+            args = (pid, False)
+        else:
+            args = (60.0,)
+        started = time.monotonic()
+        outcome = None
+        signal.setitimer(signal.ITIMER_REAL, 0.1)
+        try:
+            native(operation, args)
+        except (InterruptedError, SignalRaised) as error:
+            outcome = type(error).__name__
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            elapsed = time.monotonic() - started
+            if pid is not None:
+                os.kill(pid, signal.SIGKILL)
+                os.waitpid(pid, 0)
+            for handle in reversed(handles):
+                native('close', (handle,))
+        assert elapsed < 3, elapsed
+        assert seen == [signal.SIGALRM], seen
+        assert outcome == ('SignalRaised' if handler_raises else 'InterruptedError'), outcome
+        print(json.dumps({'operation': operation, 'outcome': outcome, 'elapsed': elapsed}))
+    ''')
+    result = subprocess.run([sys.executable, '-c', program, operation, str(handler_raises)],
+                            capture_output=True, text=True, timeout=15)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert json.loads(result.stdout.strip().splitlines()[-1])['operation'] == operation
