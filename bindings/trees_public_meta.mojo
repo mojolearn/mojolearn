@@ -473,3 +473,151 @@ def _splits(xt: PythonObject, cv: PythonObject, X: PythonObject, y: PythonObject
         if low != 1 or high != 1:
             raise Error("cross_val_predict only works for partitions: every row must be in exactly one test set")
     return out
+
+
+# ------------------------------------------------------------------ Voting
+
+
+def _voting_weights(model: PythonObject) raises -> PythonObject:
+    """`VotingClassifier._weights`: one float per fitted member."""
+    var b = trees_builtins()
+    var m = len(_attr(model, "estimators_", Python.list()))
+    var given = _attr(model, "weights", PythonObject(None))
+    var w = Python.list()
+    if given is None:
+        for _ in range(m):  # driver-loop: over members
+            _ = py_call(w.append, PythonObject(1.0))
+    else:
+        var items = py_call(b.list, given)
+        for i in range(len(items)):  # driver-loop: over the user weights (one per member)
+            _ = py_call(w.append, py_call_typed(b.float, items[i]))
+    if len(w) != m:
+        raise Error("weights has " + String(len(w)) + " entries, there are " + String(m) + " estimators")
+    return w
+
+
+def _voting_fit(model: PythonObject, X: PythonObject, y: PythonObject, sample_weight: PythonObject,
+                classifier: Bool, context: PythonObject) raises -> PythonObject:
+    var fields = py_fields(model)
+    var owner = _owner(model)
+    if classifier:
+        var voting = _attr(model, "voting", PythonObject(None))
+        if not py_contains(Python.tuple("hard", "soft"), voting):
+            raise Error("voting must be 'hard' or 'soft'")
+    _refuse_jobs(model, True, "the members fit one after another.")
+    var Xa = _x_array(X, context)
+    var target = y
+    if classifier:
+        var labels = trees_encode_labels(y, context)
+        _set(model, "classes_", labels.classes)
+        _set(model, "n_classes_", PythonObject(len(labels.classes)))
+        target = labels.codes
+    var active = _active(_attr(model, "estimators", PythonObject(None)), owner)
+    var weights = _member_weights(active.names, active.ests, sample_weight, _rows(Xa), context)
+    var fitted = Python.list()
+    _set(model, "estimators_", fitted)
+    for i in range(len(active.ests)):  # driver-loop: over members
+        var e = _clone(active.ests[i])
+        _fit_member(e, Xa, target, weights)
+        _ = py_call(fitted.append, e)
+    _set(model, "named_estimators_", _named(active.names, fitted))
+    _set(model, "n_features_in_", PythonObject(_cols(Xa)))
+    _set(model, "_fitted", PythonObject(True))
+    if classifier:
+        _ = _voting_weights(model)
+    _ = fields
+    return model
+
+
+def _voting_soft(model: PythonObject, xt: PythonObject, Xa: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`VotingClassifier._soft`: the weighted average of the members'
+    probabilities, class-major (n * k)."""
+    var n = _rows(Xa)
+    var k = Int(py=_attr(model, "n_classes_", PythonObject(0)))
+    var acc = _class_zero(xt, n * k, context)
+    var w = _voting_weights(model)
+    var members = _attr(model, "estimators_", Python.list())
+    for i in range(len(members)):  # driver-loop: over members
+        var e = members[i]
+        _acc_cols_w(xt, acc, py_call(e.predict_proba, Xa), _sub_cols(e, context), n, k, Float64(py=w[i]), context)
+    _scale(xt, acc, _fsum(w, context))
+    return acc
+
+
+def _voting_predict_proba(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    if String(_attr(model, "voting", PythonObject(""))) == "hard":
+        raise Error("AttributeError: predict_proba is not available when voting='hard'")
+    var Xa = _check_x(model, X, context)
+    var xt = _xt(py_fields(model), context)
+    var k = Int(py=_attr(model, "n_classes_", PythonObject(0)))
+    return trees_reshape(_voting_soft(model, xt, Xa, context), Python.tuple(_rows(Xa), k), context)
+
+
+def _voting_predict(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    var Xa = _check_x(model, X, context)
+    var xt = _xt(py_fields(model), context)
+    var n = _rows(Xa)
+    var k = Int(py=_attr(model, "n_classes_", PythonObject(0)))
+    var acc: PythonObject
+    if String(_attr(model, "voting", PythonObject(""))) == "soft":
+        acc = _voting_soft(model, xt, Xa, context)
+    else:
+        acc = _zeros(n * k, context)
+        var w = _voting_weights(model)
+        var members = _attr(model, "estimators_", Python.list())
+        for i in range(len(members)):  # driver-loop: over members
+            _acc_votes(xt, acc, _i32_vec(py_call(members[i].predict, Xa), "codes", context), n, k, Float64(py=w[i]))
+    return trees_decode_labels(_attr(model, "classes_", PythonObject(None)), _argmax(xt, acc, n, k, context), context)
+
+
+def _voting_transform(model: PythonObject, X: PythonObject, classifier: Bool, context: PythonObject) raises -> PythonObject:
+    var Xa = _check_x(model, X, context)
+    var xt = _xt(py_fields(model), context)
+    var n = _rows(Xa)
+    var members = _attr(model, "estimators_", Python.list())
+    var m = len(members)
+    var soft = classifier and String(_attr(model, "voting", PythonObject(""))) == "soft"
+    var k = Int(py=_attr(model, "n_classes_", PythonObject(0))) if classifier else 1
+    var width = m * k if soft else m
+    var out = _zeros(n * width, context)
+    var rows = _arange(xt, n, context)
+    for j in range(m):  # driver-loop: over members
+        var e = members[j]
+        if soft:
+            var p = _zeros(n * k, context)
+            _acc_cols_w(xt, p, py_call(e.predict_proba, Xa), _sub_cols(e, context), n, k, 1.0, context)
+            var blk = trees_f32(trees_reshape(p, Python.tuple(n, k), context), 2, "C", "p", context)
+            _ = _place(xt, out, n, width, blk, rows, j * k)
+            _ = blk^
+        else:
+            var blk = _out2d(trees_f32(py_call(e.predict, Xa), 1, "C", "codes" if classifier else "p", context).keep, n, context)
+            _ = _place(xt, out, n, width, blk, rows, j)
+            _ = blk^
+    return trees_reshape(out, Python.tuple(n, width), context)
+
+
+def _voting_regress(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`VotingRegressor.predict`: the weighted average of the members'
+    predictions."""
+    var b = trees_builtins()
+    var Xa = _check_x(model, X, context)
+    var xt = _xt(py_fields(model), context)
+    var n = _rows(Xa)
+    var members = _attr(model, "estimators_", Python.list())
+    var m = len(members)
+    var given = _attr(model, "weights", PythonObject(None))
+    var w = Python.list()
+    if given is None:
+        for _ in range(m):  # driver-loop: over members
+            _ = py_call(w.append, PythonObject(1.0))
+    else:
+        var items = py_call(b.list, given)
+        for i in range(len(items)):  # driver-loop: over the user weights (one per member)
+            _ = py_call(w.append, py_call_typed(b.float, items[i]))
+    if len(w) != m:
+        raise Error("weights has " + String(len(w)) + " entries, there are " + String(m) + " estimators")
+    var acc = _zeros(n, context)
+    for i in range(m):  # driver-loop: over members
+        _acc_w(xt, acc, py_call(members[i].predict, Xa), n, Float64(py=w[i]), context)
+    _scale(xt, acc, _fsum(w, context))
+    return acc
