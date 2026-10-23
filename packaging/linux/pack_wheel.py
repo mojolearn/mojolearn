@@ -261,6 +261,7 @@ SetDir = collections.namedtuple("SetDir", "vendor arch files libs manifest hosts
 # used to carry its own regex over _version.py and the literals '0.6.1' and
 # 'release-0.6.1'; the version was never published under that number.
 sys.path.append(str(REPO / "tools"))
+from release_modes import record_modes, release_modes  # noqa: E402
 from verify_linux_surface_qualification import (  # noqa: E402
     OPTIONAL_ARCHES, PLUGIN_ARCHES, RELEASE_PROFILE, RELEASE_PROFILES, REGISTERED_ARCHES, load_gpu_plugins,
     normalise_arch, release_contract, release_version, wheel_host_bindings)
@@ -353,6 +354,7 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
     the assembly profile recorded.
     """
     profile = profile or RELEASE_PROFILE
+    modes = release_modes()
     required = RELEASE_061_SETS if required is None else set(required)
     keys = [(s.vendor, s.arch) for s in sets]
     keyset = set(keys)
@@ -459,6 +461,8 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
     for path in proof_paths:
         raw = pathlib.Path(path).read_bytes()
         proof = json.loads(raw)
+        if record_modes(proof) != modes:
+            raise SystemExit('Architecture proof tier selection differs from the requested release')
         from staged_native_admission import complete_native_proof
         if not complete_native_proof(proof, source_root):
             raise SystemExit('Incomplete architecture build or staged-admission proof')
@@ -477,11 +481,11 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
         # members checked through the proof's merged_indexes below.
         if binding_layout == 'merged':
             required = {f'mojolearn/{key[0]}/{key[1]}/' + ('' if mode == 'fast' else mode + '/') + f
-                        for mode in TIERS for f in merged_layout.plan(mode, True)}
+                        for mode in modes for f in merged_layout.plan(mode, True)}
         else:
             required = {f'mojolearn/{key[0]}/{key[1]}/' +
                         ('' if mode == 'fast' else mode + '/') + name + '.so'
-                        for mode in TIERS for name in tier_names(mode, True)}
+                        for mode in modes for name in tier_names(mode, True)}
         if proof.get('binding_layout', 'per-binding') != binding_layout:
             raise SystemExit(f'The build proof of {"/".join(key)} records the binding layout '
                              f'{proof.get("binding_layout", "per-binding")!r}; the set is {binding_layout}')
@@ -567,7 +571,7 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
     n_reused = sum(1 for o in origin.values() if o['origin'] == 'reused')
     n_admitted = sum(1 for o in origin.values() if o['origin'] == 'staged-admission')
     return dict(schema='mojolearn.linux-payload.v1', version=version,
-                release_profile='alpha-api', assembly_profile=profile,
+                release_profile='alpha-api', assembly_profile=profile, release_modes=list(modes),
                 source_commit=commit, source_inventory=inventory,
                 sets=set_records,
                 extensions=payload,
@@ -583,8 +587,8 @@ def release_inventory(sets, proof_paths, version, source_root=REPO, required=Non
                     'unsupported_modes': ['fast']}
                     for n in ('_mojolearn_byte_lm',) + tuple(host_record) + IDENTICAL_ONLY_NAMES},
                     **{n: {
-                    'included': True, 'supported_modes': ['fast', 'identical'],
-                    'unsupported_modes': []}
+                    'included': True, 'supported_modes': list(modes),
+                    'unsupported_modes': [m for m in TIERS if m not in modes]}
                     for n in FAST_CLASSICAL_NAMES}},
                 # One record per host binding, keyed by basename, so the
                 # payload says which host families this wheel carries rather
@@ -875,6 +879,7 @@ def load_set(path, include_byte_lm=False, host_witnesses_by_name=None):
     host binding built for this release when a witnessed set holds the same
     bytes. Each directory of a set (fast, identical/, host/) is per-binding or
     merged (merged_layout); a set never mixes the two."""
+    modes = release_modes()
     path = pathlib.Path(path).resolve()
     vendor = path.name
     if vendor not in LINUX_VENDORS:
@@ -910,6 +915,12 @@ def load_set(path, include_byte_lm=False, host_witnesses_by_name=None):
         # beside the index.
         tier_layouts = {}
         for tier in TIERS:
+            if tier in modes:
+                continue
+            unused = adir if tier == 'fast' else adir / tier
+            if any(unused.glob('_mojolearn*.so')) or (unused / MERGED_INDEX).exists():
+                raise SystemExit(f'pack_wheel: unselected {tier} artifacts in {unused}')
+        for tier in modes:
             d = adir if tier == "fast" else adir / tier
             tier_layouts[tier] = set_dir_layout(d, tier_names(tier, carry_byte_lm),
                                                 plan_key=tier, byte_lm=carry_byte_lm)
@@ -1019,7 +1030,7 @@ def load_set(path, include_byte_lm=False, host_witnesses_by_name=None):
                 raise SystemExit(
                     f"pack_wheel: {adir}/arch_readback.txt and readback.txt name different host bindings")
             if carry_byte_lm:
-                expected_rows = {(tier, name) for tier in TIERS
+                expected_rows = {(tier, name) for tier in modes
                                  for name in tier_names(tier, True)}
                 for witness, expected_value in (('readback.txt', vendor), ('arch_readback.txt', arch)):
                     rows = [line.split() for line in (adir / witness).read_text().splitlines()
@@ -1067,7 +1078,7 @@ def load_set(path, include_byte_lm=False, host_witnesses_by_name=None):
                              "fast, identical and host directories; a set is built in one layout")
         layout = next(iter(kinds))
         files = {}
-        for tier in TIERS:
+        for tier in modes:
             d = adir if tier == "fast" else adir / tier
             kind, tfiles = tier_layouts[tier]
             sub = "" if tier == "fast" else tier + "/"

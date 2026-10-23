@@ -20,6 +20,7 @@ import re
 import zipfile
 
 from staged_native_admission import complete_native_proof
+from release_modes import record_modes
 
 import compare_ordered_python
 import verify_linux_surface_qualification as surface
@@ -226,6 +227,9 @@ def inspect_wheel(wheel, root, flat_python=False, byte_lm=False, host_out=None, 
         # wheel it exists to admit. Found by running the installed qualification
         # on a real device for the first time.
         paths = [n for n in archive.namelist() if not n.endswith('/')]
+        mode_records = [n for n in paths if n.endswith('.dist-info/LINUX_PAYLOAD.json')]
+        require(len(mode_records) <= 1, 'Ambiguous release tier metadata')
+        modes = record_modes(json.loads(archive.read(mode_records[0])) if mode_records else {})
         require(len(paths) == len(set(paths)), 'Duplicate wheel member')
         require(all(not PurePosixPath(p).is_absolute() and '..' not in PurePosixPath(p).parts
                     and '\\' not in p for p in paths), 'Invalid wheel member path')
@@ -268,11 +272,13 @@ def inspect_wheel(wheel, root, flat_python=False, byte_lm=False, host_out=None, 
             elif path.endswith('/' + surface.MERGED_INDEX):
                 raise ValueError('Unexpected merged index location: ' + path)
         require(declared == set(paths), 'RECORD does not cover the complete wheel')
+        require({mode for _, _, mode in sets} == set(modes),
+                'Final wheel tiers differ from release metadata')
         require({v for v, _, _ in sets} == set(vendors),
                 'Final release wheel must contain ' + ' and '.join(v.upper() for v in sorted(vendors)))
         layouts, checked = [], set()
         for vendor, arch in {(v, a) for v, a, _ in sets}:
-            for mode in surface.MODES:
+            for mode in modes:
                 where = '/'.join((vendor, arch, mode))
                 prefix = prefixes.get((vendor, arch, mode))
                 require(prefix is not None, 'Incomplete final wheel set: ' + where)
@@ -421,6 +427,7 @@ def release_audit(wheel, source_root, proof_root, runtime_key, wheel_sha=None, v
     with zipfile.ZipFile(wheel) as archive:
         member = 'mojolearn-' + version + '.dist-info/LINUX_PAYLOAD.json'
         payload = json.loads(archive.read(member))
+        modes = record_modes(payload)
         require(payload.get('schema') == 'mojolearn.linux-payload.v1'
                 and payload.get('version') == version
                 and (surface.is_release_profile(payload)
@@ -474,6 +481,7 @@ def release_audit(wheel, source_root, proof_root, runtime_key, wheel_sha=None, v
         proof_path = proof_root / (key.replace('/', '-') + '.json')
         proof = json.loads(proof_path.read_text())
         require(complete_native_proof(proof, source_root), 'Failed architecture build')
+        require(record_modes(proof) == modes, 'Architecture proof release tiers differ from the payload')
         require(proof.get('source_inventory') == inventory and proof.get('source_sha256') == source_sha
                 and re.fullmatch('[0-9a-f]{40}', proof.get('source_commit', ''))
                 and proof['source_commit'] == payload.get('source_commit'), 'Different architecture source')
@@ -486,7 +494,7 @@ def release_audit(wheel, source_root, proof_root, runtime_key, wheel_sha=None, v
         proved = proof.get('extensions')
         proved = ({build_layout_member(m): h for m, h in proved.items()} if isinstance(proved, dict)
                   and all(EXTENSION.fullmatch(m) for m in proved) else proved)
-        require(len(expected) == sum(len(surface.expected_set_files(mode, True, layout)) for mode in surface.MODES)
+        require(len(expected) == sum(len(surface.expected_set_files(mode, True, layout)) for mode in modes)
                 and proved == expected, 'Architecture build bytes differ')
         # The leg's indexes (build layout) are the wheel's for this set, and the
         # leg built the wheel's layout. A proof from before the merged bindings
@@ -511,6 +519,8 @@ def release_audit(wheel, source_root, proof_root, runtime_key, wheel_sha=None, v
                  source_sha256=source_sha, build_provenance_sha256=proof_hashes[runtime_key],
                  architecture_build_proofs=proof_hashes, extension_hashes=extensions,
                  host_extension_hashes=host_extensions, sets=sets)
+    if 'release_modes' in payload:
+        audit['release_modes'] = list(modes)
     # Only a merged wheel's audit carries the indexes (installed members load
     # from the files they name), so a per-binding audit is the one it always was.
     if layout == 'merged':
