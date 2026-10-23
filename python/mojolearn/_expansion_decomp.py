@@ -6656,6 +6656,9 @@ class AlternatingLeastSquares(_Base):
         self.use_cg, self.calculate_training_loss = use_cg, calculate_training_loss
         self.random_state, self.numeric_mode, self.cg_steps = random_state, numeric_mode, cg_steps
 
+    # fit, recommend and similar_items are one call each into the native
+    # AlternatingLeastSquares owner (bindings/als_native.mojo).
+
     def fit(self, user_items, show_progress=False):
         """Fit user and item factors.
 
@@ -6676,68 +6679,13 @@ class AlternatingLeastSquares(_Base):
         ValueError
             If ``use_cg=True`` and ``cg_steps < 1``.
         """
-        self.numeric_mode_ = _mode(self.numeric_mode)
-        k = self._kit()
-        R = _M.from_input(user_items, "user_items")
-        n, m = R.r, R.c
-        C = R if self.alpha == 1.0 else k.ew("scale", R, s=self.alpha)
-        seed = _seed_of(self.random_state)
-        f = int(self.factors)
-        X = k.ew("scale", k.rand(n, f, seed, 80, 0), s=0.01)
-        Y = k.ew("scale", k.rand(m, f, seed, 81, 0), s=0.01)
-        if self.use_cg and int(self.cg_steps) < 1:
-            raise ValueError("AlternatingLeastSquares: cg_steps must be >= 1")
-        # the sweeps (and the losses) in ONE binding call (lane py-runtime-b:
-        # x_decomp/als.mojo on the host column, the item half-sweep on C^T;
-        # x_decomp/als_dev.mojo on the GPU binding, C resident and the item
-        # half-sweep through strides, as the kit ran them)
-        X, Y = X.copy(), Y.copy()
-        iters = int(self.iterations)
-        la = array.array("d", [0.0]) * max(iters, 1)
-        cnt = int(k.b.x_decomp_als_fit(C.addr, X.addr, Y.addr, la.buffer_info()[0],
-                                       [n, m, f, iters, int(bool(self.use_cg)), int(self.cg_steps),
-                                        int(bool(self.calculate_training_loss))], [float(self.regularization)]))
-        losses = la.tolist()[:cnt]
-        if self.calculate_training_loss:
-            self.training_loss_ = losses
-        self.user_factors_m_, self.item_factors_m_ = X, Y
-        self.user_factors, self.item_factors = X.out(), Y.out()
-        # sklearn-style fitted names (the board harness and docs read these)
-        self.user_factors_, self.item_factors_ = self.user_factors, self.item_factors
-        self.components_m_ = Y
-        return self
+        return _ALS_CALL(self, "fit", (user_items,), _ALS_CONTEXT)
 
-    def _check_fit(self):
-        if not hasattr(self, "user_factors_m_"):
-            raise RuntimeError("AlternatingLeastSquares is not fitted; call fit first")
-
-    def _topn(self, k, S, N, skip):
-        """(ids, scores) of the N best entries of the score row S by (-score,
-        id), skipping the nonzero entries of the float32 row at address
-        `skip` (0: none): x_decomp/moves.mojo `topn_desc` and `gather`."""
-        from ._buffer import frombytes as _fb
-        m = S.r * S.c
-        n = max(min(N, m), 0)
-        if n and k._use(S):
-            # lane cpu3-python: the (-score, id) order on the device, the
-            # skipped items last; the N first ids and their scores gathered there
-            sk = None
-            if skip:
-                sk = _M.zeros(1, m)
-                ctypes.memmove(sk.addr, skip, 4 * m)   # glue: the caller's skip row, one C copy
-            o, cnt = k._order_dev(S, neg=1, skip=sk)
-            c = min(n, int(k.word(cnt)))
-            if not c:
-                return (_fb(b"", "<i4", (0,)), _fb(b"", "<f4", (0,)))
-            ids = o.rows(0, c)
-            vals = k.take_cols_m(S.reshape(1, m), ids, c)
-            return (ids.out((c,)).astype("<i4"), vals.out((c,)))
-        order = array.array("i", [0]) * max(n, 1)
-        c = int(k.b.x_decomp_topn_desc(S.addr, [m, n], skip, order.buffer_info()[0])) if n else 0  # cpu-route: host binding only (CPU-only installs); a GPU binding orders on the device above
-        vals = array.array("f", [0.0]) * max(c, 1)
-        if c:
-            k.b.x_decomp_gather(S.addr, order.buffer_info()[0], c, vals.buffer_info()[0])  # cpu-route: host binding only, the device route returned above
-        return (_fb(order[:c].tobytes(), "<i4", (c,)), _fb(vals[:c].tobytes(), "<f4", (c,)))
+    # A recommender has no transform, so it has no fit_transform either.
+    @available_if(lambda self: hasattr(self, "transform"))
+    def fit_transform(self, X, y=None):
+        """Not available: this estimator has no ``transform``."""
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute 'fit_transform'")
 
     def recommend(self, userid, user_items, N=10, filter_already_liked_items=True):
         """Return the top N items for one user.
@@ -6767,20 +6715,7 @@ class AlternatingLeastSquares(_Base):
         ValueError
             If ``N`` is negative or ``user_items`` has no matching row.
         """
-        self._check_fit()
-        k = self._kit()
-        U = self.user_factors_m_.rows(userid, userid + 1)
-        S = k.mm(U, self.item_factors_m_, tb=True)
-        if int(N) < 0:
-            raise ValueError(f"recommend: N must be non-negative, got {N}")
-        skip = 0
-        if filter_already_liked_items and user_items is not None:
-            R = _M.from_input(user_items, "user_items")
-            if R.c != S.c or not (R.r == 1 or 0 <= userid < R.r):
-                raise ValueError(f"recommend: user_items of shape ({R.r}, {R.c}) has no row {userid} "
-                                 f"over the {S.c} items")
-            skip = R.addr + 4 * (0 if R.r == 1 else int(userid)) * R.c
-        return self._topn(k, S, int(N), skip)
+        return _ALS_CALL(self, "recommend", (userid, user_items, N, filter_already_liked_items), _ALS_CONTEXT)
 
     def similar_items(self, itemid, N=10):
         """Return the N items most similar to one item.
@@ -6799,15 +6734,7 @@ class AlternatingLeastSquares(_Base):
         ids : ndarray of shape (<= N,), int32
         scores : ndarray of shape (<= N,), float32
         """
-        self._check_fit()
-        k = self._kit()
-        Y = self.item_factors_m_
-        nrm = k.ew("sqrt", k.rowsum(k.ew("sq", Y)))
-        Yn = k.ew("div", Y, nrm)
-        S = k.mm(Yn.rows(itemid, itemid + 1), Yn, tb=True)
-        if int(N) < 0:
-            raise ValueError(f"similar_items: N must be non-negative, got {N}")
-        return self._topn(k, S, int(N), 0)
+        return _ALS_CALL(self, "similar_items", (itemid, N), _ALS_CONTEXT)
 
 
 class SparseCoder(_SparseCoding):
@@ -6978,3 +6905,7 @@ _PLS_CALL, _PLS_CONTEXT = _connect_decomp_kit("pls_native_call", pls_regression_
 
 # The native MinCovDet owner (bindings/mcd_native.mojo): MinCovDet, EllipticEnvelope.
 _MCD_CALL, _MCD_CONTEXT = _connect_decomp_kit("mcd_native_call", elliptic_envelope_class=EllipticEnvelope)
+
+
+# The native AlternatingLeastSquares owner (bindings/als_native.mojo).
+_ALS_CALL, _ALS_CONTEXT = _connect_decomp_kit("als_native_call")

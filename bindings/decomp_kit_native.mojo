@@ -1007,3 +1007,25 @@ struct DecompKit(Movable):
         _ = py_call(self.entries["x_decomp_lu_aux"], al, pa, self.address(pm), self.address(im),
                     self.address(diag), self.address(st), params)
         return (st, diag)
+
+    # ---- top-N orders (AlternatingLeastSquares)
+    def order_dev(mut self, a: Int, neg: Int, skip: Int) raises -> Tuple[Int, Int]:
+        # `_Kit._order_dev(A, neg, skip)` on a resident kit: (n x 1 order, 1 x 1 count).
+        var n = self.size(a)
+        if n >= XD_F32_INDEX_MAX:
+            raise Error("x_decomp: order_f exceeds the float32 index bound")
+        self.refuse_nan(a)
+        var out = self.device_output(n, 1)
+        var count = self.device_output(1, 1)
+        var sid = self.device(skip) if skip >= 0 else self.device(a)
+        var da = self.device(a)
+        _ = py_call(self.entries["x_decomp_dev_order_f"], da, sid, self.matrices[out].device,
+                    self.matrices[count].device, Python.list(n, neg, 1 if skip >= 0 else 0))
+        return (out, count)
+
+    def take_cols_m(mut self, a: Int, idx: Int, w: Int) raises -> Int:
+        # `_Kit.take_cols_m`: columns idx[0 .. w) of A.
+        var rows = self.matrices[a].rows
+        var cols = self.matrices[a].cols
+        var params = Python.list(XD_TAKE_COLS, rows * w, w, cols, 0, 0, 0, rows * cols, rows * w, w)
+        return self._move(a, idx, rows, w, params, rows * w > 0 and self.use(a, idx))

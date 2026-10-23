@@ -13,7 +13,7 @@ _OPTIONAL = ("dev_ew", "dev_alloc", "dev_free", "dev_upload", "dev_download", "d
              "dev_code_rows", "dev_lu", "pls_fit",
              "eigh", "dev_eigh", "reduce", "argmin_all", "dev_argmin_all", "select_smallest",
              "dev_select_smallest", "lu_aux", "dev_lu_aux", "mcd", "chi2_quantile", "consistency_factor",
-             "dev_mcd_cov")
+             "dev_mcd_cov", "als_fit", "topn_desc", "gather")
 
 
 def _entries(binding):
