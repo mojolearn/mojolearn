@@ -15,7 +15,9 @@ and without contraction, and compares the fused multiply-adds per function.
     python3 tools/contraction_census.py build --out DIR --target T --mode M
         [--only build_gbdt.sh,gbdt] [--cache-dir D]
         T: host (this Mac, arm64), host-x86 (x86-64-v3 Linux, cross),
-           nvidia (sm_90a PTX, cross), amd (gfx942, cross);
+           nvidia (sm_90a PTX, cross), nvidia-sm89 / nvidia-sm120 (PTX,
+           cross; compare the two default builds to find kernels whose
+           fusion differs by architecture), amd (gfx942, cross);
         M: default or off (`--fp-mode contract=off`).
         Runs the REAL bindings/build_*.sh scripts with a `pixi` shim on PATH
         that turns their one `mojo build` into `--emit asm` into
@@ -64,6 +66,13 @@ TARGETS = {
     "host": {"column": "cpu", "accel": None, "x86": False},
     "host-x86": {"column": "cpu", "accel": None, "x86": True},
     "nvidia": {"column": "nvidia", "accel": "sm_90a", "x86": False},
+    # lane sm120-tree-identity (2026-10-23): the two NVIDIA architectures the
+    # RTX 5090 findings set against each other. `compare DIR/nvidia-sm89/default
+    # DIR/nvidia-sm120/default` names every kernel whose fused multiply-adds
+    # (or ptxas-fusable plain mul->add pairs) differ between the archs: an
+    # IDENTICAL kernel listed there rests on the architecture's code generator.
+    "nvidia-sm89": {"column": "nvidia", "accel": "sm_89", "x86": False},
+    "nvidia-sm120": {"column": "nvidia", "accel": "sm_120", "x86": False},
     "amd": {"column": "amd", "accel": "gfx942", "x86": False},
 }
 
