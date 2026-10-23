@@ -47,7 +47,7 @@ SCHEMA = "mojolearn.release-route-overlay.v1"
 #: size the build with it on the box (lane/build-parallelism), so a source
 #: frozen before it existed still gets it with the driver that calls it.
 BOX_OVERLAY = ("tools/release061_remote_build.sh", "tools/nvidia_serial_guard.py", "tools/amd_serial_guard.py",
-               "tools/cpu_build_guard.py", "tools/bincache.py", "tools/build_sizing.py")
+               "tools/cpu_build_guard.py", "tools/bincache.py", "tools/build_sizing.py", "tools/release_modes.py")
 #: Everything that drives a Linux build leg: the local runners, the box
 #: helpers and BOX_OVERLAY. Their bytes at the tooling commit are the tooling
 #: digest a reused leg must match.

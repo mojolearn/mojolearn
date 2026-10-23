@@ -34,8 +34,8 @@ this shell's MOJOLEARN_MERGED_BINDINGS for cpu-box):
   gpu-legs  the RunPod NVIDIA and DigitalOcean/Hot Aisle AMD GPU boxes.
 
 SEVERABLE PIPELINES (2026-09-25). After the common steps a release is six
-pipelines that run at once in one invocation, each publishing as soon as ITS
-OWN gates pass; a failure in one never blocks or undoes another:
+build pipelines that run at once in one invocation. Before any publication,
+both vendor candidate gates must pass for the actual packed wheel hashes:
   macos       macos-build -> macos-smoke -> publish-macos
   core-linux  linux-builds -> linux-wait -> linux-assemble -> linux-pack
               -> publish-core-linux (mojolearn-core; FIRST on Linux)
@@ -150,14 +150,15 @@ THE STEPS
                      pip download of the Linux file, sha256 compared (Linux), and
                      the package set pip resolves for `mojolearn`,
                      `mojolearn-nvidia` and `mojolearn-amd` (Linux)
-  gate-nvidia        } THE RELEASE GATE (2026-10-22), after that vendor's publish: tools/release_lq_smoke.py
+  gate-nvidia        } THE RELEASE GATE, after linux-pack and before any publish: tools/release_lq_smoke.py
   gate-amd           }   --gate runs tools/gate_smoke_box.py <vendor> <version> ... all ON the held lq box
                          (never the Mac, nothing rented): the 5 s smoke over the WHOLE plan, the autograd
                          smoke, then one scored run per arm of every plan line vs its peers (opponents from
                          the box's store when already scored); only the reports come home to
-                         <version>/<commit12>/gate-<vendor>/. Done only on verdict PASS
+                         <version>/<commit12>/gate-<vendor>/<artifact-id>/. Done only on verdict PASS
+                         for the candidate core/vendor/PTX hashes and frozen autograd artifacts
   record             bench/results/release_verification/<date>_pypi_<v>/, committed; waits for both
-                     gates and refuses while a published Linux vendor has no passing gate
+                     gates and preserves their candidate artifact provenance
 
 Nothing is published without `--publish none|testpypi|pypi`; without it both
 pipelines stop at their publish step and say so.
@@ -172,8 +173,8 @@ mojolearn` installs everything; `pip install mojolearn-nvidia` or
 `mojolearn-amd` installs the core and that vendor. THE CORE PUBLISHES FIRST,
 then PTX, then the VENDORS, and the Linux mojolearn LAST (it resolves only
 once all of them are on the index). Each column gates its own plugin (its
-wheel smoke against the admitted reference table); a failed vendor holds
-the Linux mojolearn, never the core or the other vendor. Each package is its
+wheel smoke against the admitted reference table); a failed candidate gate
+holds every publication. Each package is its
 own GitHub release and workflow dispatch (the workflow uploads it to its own
 PyPI project); column and ledger entries stay keyed to one wheel's sha256
 (the plugin's, with the core's recorded beside it). macOS is unchanged: the
@@ -928,15 +929,19 @@ HOPPER_NOT_RUN = "not run (no Hopper box held)"
 PUBLISH_STEPS = tuple(pipeline["publish"] for pipeline in PIPELINES.values())
 AFTER["finish-line"] = list(PUBLISH_STEPS)
 # THE RELEASE GATE (2026-10-22, Andrew: every exposed API "measured if appropriate with apples-to-apples
-# comparison against peers, and the measurements should be in the smoke test"): after a vendor's plugin is on
-# PyPI, tools/gate_smoke_box.py ... all runs ON that vendor's held lq box (tools/release_lq_smoke.py --gate;
-# a box job, never a Mac job, nothing rented): setup from the published wheels, the 5 s smoke over the WHOLE
+# comparison against peers, and the measurements should be in the smoke test"): before ANY publication,
+# tools/gate_smoke_box.py ... all runs ON both held vendor boxes (tools/release_lq_smoke.py --gate;
+# a box job, never a Mac job, nothing rented): setup from the actual candidate wheels, the 5 s smoke over the WHOLE
 # plan, the autograd smoke, and one scored run per arm of every plan line (opponents from the box's store when
 # already scored). The record step waits for both gates to settle and refuses to record a published Linux
 # vendor whose gate did not PASS, so a release cannot skip it.
 GATE_VENDORS = {"nvidia": "publish-nvidia", "amd": "publish-amd"}
 STEP_TABLE[STEP_TABLE.index(next(r for r in STEP_TABLE if r[0] == "finish-line")):0] = [
-    ("gate-" + v, "finish", [pub], None) for v, pub in GATE_VENDORS.items()]
+    ("gate-" + v, "finish", ["linux-pack"], None) for v in GATE_VENDORS]
+# There is no candidate-version PyPI prerequisite: both gates install the
+# local core/vendor files emitted by linux-pack, including NVIDIA's PTX wheel.
+STEP_TABLE = [(name, pipeline, needs + (["gate-"+v for v in GATE_VENDORS] if name.startswith('publish-') else []), resource)
+              for name, pipeline, needs, resource in STEP_TABLE]
 AFTER["record"] = ["gate-" + v for v in GATE_VENDORS]
 
 PIPELINE_OF = {s: p for s, p, _, _ in STEP_TABLE}
@@ -1014,10 +1019,16 @@ class Release:
     def __init__(self, args, runner=None):
         self.args = args
         self.version = args.version
+        self.release_modes = release_reuse.parse_modes(getattr(args, "release_modes", None)
+                                                       or release_reuse.release_modes())
         ev = Path(os.environ.get("MOJOLEARN_EVIDENCE_ROOT", os.path.expanduser("~/mojolearn-evidence")))
         self.base = Path(args.state_dir) if args.state_dir else ev / "release" / self.version
         self.state_path = self.base / "state.json"
         self.state = self.load()
+        if self.state.get("steps") and release_reuse.record_modes(self.state) != self.release_modes:
+            raise SystemExit("release: tier selection differs from retained release state; use a new "
+                             "--state-dir to preserve the previous artifacts and qualification")
+        self.state["release_modes"] = list(self.release_modes)
         # A release packed as the one combined wheel (0.8.20 and earlier) is
         # not resumable: the combined layout is gone.
         redo = set((getattr(args, "redo", "") or "").split(","))
@@ -1131,6 +1142,7 @@ class Release:
 
     def run(self, cmd, env=None, log=None, cwd=None):
         """Run one command to completion; its output teed to `log` when given."""
+        env = {"MOJOLEARN_RELEASE_MODES": " ".join(self.release_modes), **(env or {})}
         shown = " ".join(shlex.quote(str(c)) for c in cmd)
         extra = " ".join(f"{k}={shlex.quote(str(v))}" for k, v in (env or {}).items())
         where = f"(in {cwd}) " if cwd and Path(cwd) != ROOT else ""
@@ -1158,6 +1170,7 @@ class Release:
             raise StepFailed(f"{what or cmd[0]} exited {rc}" + (f"; log {log}" if log else ""))
 
     def spawn(self, cmd, env):
+        env = dict(env, MOJOLEARN_RELEASE_MODES=" ".join(self.release_modes))
         if self.runner:
             return self.runner(cmd, env, None, detach=True)
         proc = subprocess.Popen(cmd, cwd=ROOT, env=env, stdin=subprocess.DEVNULL,
@@ -1395,6 +1408,7 @@ class Release:
             # earlier freeze is taken when what it built or tested is unchanged.
             earlier = [c for c in self.state.get("earlier_commits", []) + [self.state.get("commit")] if c]
             self.state = {"version": self.version, "commit": head, "earlier_commits": earlier,
+                          "release_modes": list(self.release_modes),
                           "frozen_at": now(), "steps": {k: v for k, v in self.state["steps"].items()
                                                         if k.startswith("freeze-")}}
             self._plan = self._overlay = self._leg_env = self._tooling = None
@@ -1453,7 +1467,8 @@ class Release:
         token = f"release-{self.version}-{self.commit[:12]}-{int(time.time())}"
         wf_ref = os.environ.get("MOJOLEARN_XCC_WORKFLOW_REF", "main")
         self.must(["gh", "workflow", "run", self.XCC_WORKFLOW, "--ref", wf_ref, "-f", f"ref={base}",
-                   "-f", f"commit={self.commit}", "-f", f"archs={self.XCC_ARCHS}", "-f", f"token={token}"],
+                   "-f", f"commit={self.commit}", "-f", f"archs={self.XCC_ARCHS}",
+                   "-f", "tiers=" + ",".join(self.release_modes), "-f", f"token={token}"],
                   what="gh workflow run " + self.XCC_WORKFLOW)
         if self.dry:
             return f"would dispatch {self.XCC_WORKFLOW} on {self.commit[:12]} vs {prev.get('version')} and wait"
@@ -1484,7 +1499,8 @@ class Release:
             if self._plan is not None:
                 return self._plan
             doc = read_json(self.plan_path)
-            if doc and doc.get("schema") == release_reuse.PLAN_SCHEMA and doc.get("commit") == self.commit:
+            if (doc and doc.get("schema") == release_reuse.PLAN_SCHEMA and doc.get("commit") == self.commit
+                    and release_reuse.record_modes(doc) == self.release_modes):
                 if self.readonly:
                     self._plan = doc
                     return doc
@@ -1498,7 +1514,8 @@ class Release:
             # <evidence>/release/<version>/<commit12>/) is weighed beside the PyPI record and
             # wins when it reuses more (release_reuse.candidate_builds, Andrew 2026-10-15)
             self._plan = release_reuse.make_plan(self.commit, self.evidence / "release" / "identities",
-                                                 builders_override=override or None, evidence_root=self.evidence)
+                                                 builders_override=override or None, evidence_root=self.evidence,
+                                                 modes=self.release_modes)
             return self._plan
 
     def step_reuse_plan(self):
@@ -1515,7 +1532,8 @@ class Release:
         if self.dry:
             return "would write " + str(self.plan_path) + "; " + summary
         old = read_json(self.plan_path) or {}
-        if old.get("commit") != self.commit or old.get("builders_override") != plan.get("builders_override"):
+        if (old.get("commit") != self.commit or old.get("builders_override") != plan.get("builders_override")
+                or release_reuse.record_modes(old) != self.release_modes):
             write_json(self.plan_path, plan)
         return (f"against {prev.get('version', 'no published release')}"
                 f"{' ' + (prev.get('channel') or 'pypi') if prev else ''}: {summary}; {self.plan_path}")
@@ -1688,7 +1706,8 @@ class Release:
         sys.path.insert(0, str(ROOT / "tools"))
         import mac_slot
         slots = str(min(4, mac_slot.slot_count()))
-        env = dict(MOJOLEARN_PACKAGE_BYTE_LM="1", MOJOLEARN_BUILD_JOBS=slots, MOJOLEARN_COMPILE_JOBS="1")
+        env = dict(MOJOLEARN_PACKAGE_BYTE_LM="1", MOJOLEARN_BUILD_JOBS=slots, MOJOLEARN_COMPILE_JOBS="1",
+                   MOJOLEARN_RELEASE_MODES=" ".join(self.release_modes))
         plan = self.plan()
         src = self.src
         reuse = release_reuse.plan_rows(plan, release_reuse.MACOS, "REUSE")
@@ -2269,6 +2288,11 @@ class Release:
         target = self.args.publish
         if target is None:
             raise StepHeld("publication needs an explicit --publish none|testpypi|pypi; stopping here")
+        if not self.dry:
+            blocked = [(vendor, self.gate_ok(vendor)) for vendor in GATE_VENDORS]
+            if any(not verdict[0] for _, verdict in blocked):
+                raise StepFailed('publication requires both candidate gates: '+ '; '.join(
+                    vendor+': '+verdict[1] for vendor, verdict in blocked if not verdict[0]))
         witness = self.linux_final() if platform in SPLIT_PACKAGES and platform != "linux" else wheel
         if not self.dry and wheel and witness and wheel_commit(witness) != self.commit:
             raise StepFailed(f"the {platform} wheel {wheel.name} records source {wheel_commit(witness)}, not the frozen "
@@ -2479,14 +2503,53 @@ class Release:
                     published=self.published_platforms(), legs=legs, columns=cols)
 
     # ------------------------------------------------------------ the release gate
+    def candidate_gate_wheels(self, vendor):
+        packages = ['linux', vendor] + (['nvidia-ptx'] if vendor == 'nvidia' else [])
+        wheels = []
+        for package in packages:
+            path = self.split_final(package)
+            if not path:
+                if not self.dry:
+                    raise StepFailed('candidate gate requires the packed '+package+' wheel')
+                path = self.rel/'linux/final'/f'{SPLIT_PACKAGES[package][1]}-{self.version}-py3-none-manylinux_2_28_x86_64.whl'
+            wheels.append(Path(path))
+        return wheels
+
+    def candidate_gate_identity(self, vendor):
+        import candidate_wheel_install as C
+        wheels = self.candidate_gate_wheels(vendor)
+        if self.dry:
+            return dict(source='candidate', version=self.version, vendor=vendor,
+                        source_commit=self.commit, release_modes=list(self.release_modes),
+                        wheels={path.name: 'DRY-RUN' for path in wheels})
+        key = (vendor, self.version, self.commit, tuple((str(path), path.stat().st_size,
+               path.stat().st_mtime_ns, path.stat().st_ctime_ns) for path in wheels))
+        cache = getattr(self, '_candidate_gate_identities', {})
+        if key not in cache:
+            cache[key] = C.identity(C.build_manifest(self.version, vendor, wheels, self.commit))
+            self._candidate_gate_identities = cache
+        identity = cache[key]
+        if release_reuse.record_modes(identity) != self.release_modes:
+            raise StepFailed('candidate wheel release modes differ from the selected release modes')
+        return identity
+
     def gate_out(self, vendor):
-        return self.rel / f"gate-{vendor}"
+        identity = self.candidate_gate_identity(vendor)
+        stamp = hashlib.sha256(json.dumps(identity, sort_keys=True).encode()).hexdigest()[:20]
+        return self.rel / f"gate-{vendor}" / stamp
 
     def gate_ok(self, vendor):
         """(ok, why): the gate report that came home for this version and vendor says PASS."""
-        doc = read_json(self.gate_out(vendor) / "gate-smoke.json")
+        try:
+            identity = self.candidate_gate_identity(vendor)
+            output = self.gate_out(vendor)
+        except (StepFailed, OSError, ValueError, KeyError, zipfile.BadZipFile) as error:
+            return False, 'candidate artifacts are not ready: '+str(error)
+        doc = read_json(output / "gate-smoke.json")
         if not doc:
-            return False, f"no gate report at {self.gate_out(vendor) / 'gate-smoke.json'}"
+            return False, f"no gate report at {output / 'gate-smoke.json'}"
+        if doc.get('input_mode') != 'candidate' or doc.get('candidate') != identity:
+            return False, 'gate report does not identify these candidate wheel hashes and source'
         if doc.get("version") != self.version or doc.get("vendor") != vendor:
             return False, f"the gate report is for {doc.get('vendor')} {doc.get('version')}"
         sys.path.insert(0, str(ROOT / "tools"))
@@ -2495,23 +2558,35 @@ class Release:
         if verdict != "PASS" or doc.get("verdict") != "PASS":
             return False, f"verdict {verdict}: " + "; ".join(why or doc.get("verdict_reasons") or [])
         m = doc.get("measure") or {}
+        if (not m.get('expected') or m.get('expected') != m.get('planned_whole_plan')
+                or not (m.get('pairs') or {}).get('matched')):
+            return False, 'candidate gate lacks complete measured-plan/pair evidence'
+        artifacts = doc.get('autograd_artifacts') or {}
+        if artifacts.get('source_commit') != self.commit or artifacts.get('vendor') != vendor or len(artifacts.get('files', [])) != 8:
+            return False, 'candidate gate lacks the eight source-matched autograd artifacts'
         return True, (f"PASS: smoke {doc.get('smoke_lines')} lines {doc.get('counts')}, measured "
                       f"{m.get('expected')} lines (board {m.get('board')})")
 
     def run_gate(self, vendor):
-        if self.args.publish != "pypi":
-            return "skipped (the gate installs the PyPI wheels; not published to PyPI)"
         ok, why = self.gate_ok(vendor)
         if ok:
             return why
         box = LQ_COLUMN_BOX[vendor]
         work = self.rel / "gates"
+        output = self.gate_out(vendor)
+        artifacts = Path(getattr(self.args, 'gate_autograd_root', None) or self.rel/'autograd-bin')/vendor
+        if not self.dry:
+            from gate_autograd_artifacts import validate
+            validate(artifacts/'build-manifest.json', vendor, self.commit)
         cmd = [PY, "tools/release_lq_smoke.py", "--gate", vendor, self.version, "--box", box,
                "--tag", f"rel-{self.version}-gate-{vendor}",
-               "--remote-dir", f"/root/release-gate/{self.version}/{vendor}",
-               "--out", str(self.gate_out(vendor)), "--state", str(work / f"{vendor}.lq.json"),
+               "--remote-dir", f"/root/results-release-gate/{self.version}/{vendor}/{output.name}",
+               "--out", str(output), "--state", str(work / f"{vendor}-{output.name}.lq.json"),
                "--branch", getattr(self.args, "smoke_branch", None) or "main",
+               '--candidate-source-commit', self.commit, '--gate-autograd-dir', str(artifacts),
                "--max-job-hours", "40", "--max-wait-hours", "72"]
+        for wheel in self.candidate_gate_wheels(vendor):
+            cmd += ['--candidate-wheel', str(wheel)]
         if not self.dry:
             work.mkdir(parents=True, exist_ok=True)
         self.must(cmd, log=work / f"gate-{vendor}.log", what=f"the {vendor} release gate on lq box {box}")
@@ -2964,6 +3039,7 @@ def main(argv=None):
                          "the sm_90a payload publishes unsmoked on its GitHub build receipt (--smoke-via lq)")
     ap.add_argument("--smoke-branch", default="main",
                     help="the branch whose tree runs the smoke on the lq box (default main)")
+    ap.add_argument('--gate-autograd-root', help='precompiled gate artifacts under nvidia/ and amd/, each with build-manifest.json (default release-dir/autograd-bin)')
     ap.add_argument("--smoke-gpu", default="", help="RunPod GPU(s) for the Linux smoke, |-separated, walked on no stock (default the 4090, L40S, L40, RTX 6000 Ada)")
     _amd_env = os.environ.get("MOJOLEARN_AMD_PROVIDER") or "auto"
     ap.add_argument("--amd-provider", default=_amd_env if _amd_env in ("auto", "runpod", "hotaisle", "do") else "auto",
@@ -2975,6 +3051,13 @@ def main(argv=None):
                          "DigitalOcean has a GPU droplet live (default MOJOLEARN_AMD_PROVIDER, else auto)")
     ap.add_argument("--state-dir", default="", help=argparse.SUPPRESS)
     args = ap.parse_args(argv)
+    # Current releases focus on identical. Explicit legacy selections remain
+    # available for reproducing older layouts, and are recorded in every plan.
+    try:
+        modes = release_reuse.release_modes(default=("identical",))
+    except ValueError as exc:
+        ap.error(str(exc))
+    args.release_modes = modes
     if not VERSION_RE.match(args.version):
         ap.error("version must look like 0.8.15 (or 0.9.0a1)")
     if args.status and (args.dry_run or args.only or args.redo or args.refreeze):
@@ -2983,6 +3066,9 @@ def main(argv=None):
         ap.error("--hopper-box and --smoke-via steer the GPU wheel smokes; they need --gpu-smoke")
     explicit = args.build_backend
     r = Release(args)  # resolves an unset --build-backend from the source's layout
+    if modes != release_reuse.TIERS and args.build_backend != "cpu-box":
+        ap.error("selected release tiers require --build-backend cpu-box; legacy remote backends "
+                 "do not forward a tier selection")
     merged_gha = release_github_build.commit_merged(r.commit)
     if args.build_backend == "github" and merged_gha:
         ap.error(f"--build-backend github: {release_github_build.merged_refusal(max(release_github_build.NEEDED_GIB.values()))}")

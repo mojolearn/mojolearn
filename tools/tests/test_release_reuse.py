@@ -151,6 +151,41 @@ class IdentityTests(unittest.TestCase):
         self.assertEqual(rr.compare(rr.identity(gpu, e), None)[0], "BUILD")
         self.assertIn("new binding", rr.compare(rr.identity(gpu, e), None)[1])
 
+    def test_declared_python_build_helper_survives_archive_and_moves_identity(self):
+        helper = self.repo / "tools/release_modes.py"
+        before = rr.facts_for_commit(self.cur, self.cache, self.repo)
+        self.assertEqual(before["builders"]["tools/release_modes.py"], sha(helper.read_bytes()))
+        helper.write_text(helper.read_text() + 'DEFAULT_MODES = ("identical",)\n')
+        subprocess.run(["git", "-C", str(self.repo), "commit", "-q", "-am", "build mode helper"],
+                       check=True, env=self.env)
+        after = rr.facts_for_commit("HEAD", self.cache, self.repo)
+        for binding in two_bindings():
+            with self.subTest(target=binding.target, binding=binding.name):
+                a = rr.identity(binding, before, dict(xcode="16"))
+                b = rr.identity(binding, after, dict(xcode="16"))
+                self.assertEqual(rr.compare(b, a), ("BUILD", "changed: builders"))
+
+    def test_old_filtered_tree_cache_is_recomputed(self):
+        self.cache.mkdir()
+        path = self.cache / (self.cur + ".json")
+        path.write_text(json.dumps(dict(schema="mojolearn.release-tree-facts.v2", commit=self.cur,
+                                        facts={"stale_missing_python_helper": True})))
+        facts = rr.facts_for_commit(self.cur, self.cache, self.repo)
+        self.assertEqual(facts["builders"]["tools/release_modes.py"],
+                         sha((self.repo / "tools/release_modes.py").read_bytes()))
+        self.assertEqual(json.loads(path.read_text())["schema"], rr.FACTS_SCHEMA)
+
+    def test_actually_missing_python_build_helper_still_refuses_reuse(self):
+        before = rr.facts_for_commit(self.cur, self.cache, self.repo)
+        subprocess.run(["git", "-C", str(self.repo), "rm", "-q", "tools/release_modes.py"],
+                       check=True, env=self.env)
+        subprocess.run(["git", "-C", str(self.repo), "commit", "-q", "-m", "missing build helper"],
+                       check=True, env=self.env)
+        after = rr.facts_for_commit("HEAD", self.cache, self.repo)
+        gpu = two_bindings()[0]
+        self.assertEqual(rr.compare(rr.identity(gpu, after), rr.identity(gpu, before)),
+                         ("BUILD", "unreadable identity: builder script missing: tools/release_modes.py"))
+
     def test_runtime_identity_follows_toolchain_and_portable_math(self):
         a = rr.facts_for_commit(self.prev, self.cache, self.repo)
         (self.repo / "packaging" / "portable_math").mkdir()

@@ -198,8 +198,21 @@ fi
 # and keep verify_wheel.sh's copy of the variable set the same for one release
 # or the verifier fails the wheel for lacking a tier it was never asked to
 # build. pyproject.toml's package-data glob carries both directories.
-MODES="${MOJOLEARN_RELEASE_MODES:-fast identical}"
+MODES=$(python3 tools/release_modes.py) || exit 2
+export MOJOLEARN_RELEASE_MODES="$MODES"
 echo "== numeric tiers in this wheel: $MODES"
+# Refuse an old unselected tier before spending time compiling. Keep its
+# artifacts intact; use a clean source checkout for this release selection.
+for _tier in fast identical; do
+    case " $MODES " in *" $_tier "*) continue ;; esac
+    _dir="$PKG/$_tier"; [ "$_tier" != fast ] || _dir="$PKG"
+    for _old in "$_dir"/_mojolearn*.so; do
+        if [ -e "$_old" ] || [ -L "$_old" ]; then
+            echo "unselected $_tier artifact $_old; use a clean release source checkout" >&2
+            exit 2
+        fi
+    done
+done
 if [ "$PACKAGE_BYTE_LM" = 1 ]; then
     case " $MODES " in *' identical '*) ;; *) echo 'Byte LM requires the identical tier' >&2; exit 2 ;; esac
 fi

@@ -200,10 +200,18 @@ def _in_site_packages(path):
 
 def refusal(manifest, loaded):
     """None when every manifest file is what the interpreter loaded; otherwise the reason."""
+    if manifest and manifest.get('schema') == 'mojolearn-candidate-wheel-manifest/1':
+        from candidate_wheel_install import refusal as candidate_refusal
+        return candidate_refusal(manifest, loaded)
     if not manifest or manifest.get("schema") != SCHEMA:
         return "no PyPI wheel manifest"
     if not manifest.get("all_digests_match"):
         return "the manifest's files do not match PyPI's digests"
+    return installed_refusal(manifest, loaded)
+
+
+def installed_refusal(manifest, loaded):
+    """Common installed-byte checks; provenance is validated by each source mode."""
     if not loaded or loaded.get("error"):
         return "could not read the installed distributions: %s" % (loaded or {}).get("error")
     version = manifest["version"]
