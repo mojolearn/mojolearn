@@ -14,6 +14,15 @@ from bindings.neighbors_native import neighbors_operation
 from bindings.metrics_reg_native import metrics_reg_operation
 from bindings.cluster_native import cluster_operation
 from bindings.svm_mixture_native import svm_mixture_operation
+from bindings.svc_native import svc_operation
+from bindings.gp_native import gp_operation
+from bindings.metrics_cls_native import metrics_cls_operation
+from bindings.metrics_exp_native import metrics_exp_operation
+from bindings.cluster_fit_a_native import cluster_fit_a_operation
+from bindings.cluster_fit_b_native import cluster_fit_b_operation
+from bindings.mixture_native import mixture_operation
+from bindings.manifold_native import manifold_operation
+from bindings.linalg_ops_native import linalg_ops_operation
 
 
 def family_operation(model: PythonObject, operation: String, args: PythonObject,
@@ -34,4 +43,26 @@ def family_operation(model: PythonObject, operation: String, args: PythonObject,
         return linalg_operation(model, operation, args, context)
     if operation.startswith("family_msel_"):
         return msel_operation(model, operation, args, context)
+    if operation.startswith("family_svc_"):
+        return svc_operation(model, operation, args, context)
+    if operation.startswith("family_gp_"):
+        return gp_operation(model, operation, args, context)
+    if operation.startswith("family_mcls_"):
+        return metrics_cls_operation(model, operation, args, context)
+    if operation.startswith("family_mexp_"):
+        return metrics_exp_operation(model, operation, args, context)
+    if operation.startswith("family_cfa_"):
+        return cluster_fit_a_operation(model, operation, args, context)
+    if operation.startswith("family_cfb_"):
+        return cluster_fit_b_operation(model, operation, args, context)
+    if operation.startswith("family_mix_"):
+        return mixture_operation(model, operation, args, context)
+    if operation.startswith("family_mani_"):
+        return manifold_operation(model, operation, args, context)
+    if operation.startswith("family_lin_"):
+        return linalg_ops_operation(model, operation, args, context)
+    if operation.startswith("family_rs_"):
+        return linalg_ops_operation(model, operation, args, context)
+    if operation.startswith("family_pg_"):
+        return linalg_ops_operation(model, operation, args, context)
     raise Error("RuntimeError: unknown family operation " + operation)
