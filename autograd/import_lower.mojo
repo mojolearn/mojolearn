@@ -2019,15 +2019,14 @@ def onnx_import_file[E: Exec & Movable & Deinitable, KIND: Int](
     `sid` in one call (this module's docstring); the graph and its bytes are
     released before it returns."""
     var h = onnx_read(path)
-    var res: OnnxImport
     try:
-        res = _import_read[E, KIND](h, sid, names, flat, src)
+        var res = _import_read[E, KIND](h, sid, names, flat, src)
+        onnx_close(h)
+        return res^
     except e:
         var msg = String(e)
-        onnx_close(h)
+        onnx_close(h)  # a handle already closed is a no-op
         raise Error(msg)
-    onnx_close(h)
-    return res^
 
 
 # ------------------------------------------------- a graph from words --
