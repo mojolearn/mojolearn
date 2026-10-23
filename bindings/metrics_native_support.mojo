@@ -9,6 +9,7 @@ from bindings.native_numpy_metadata import native_numpy_module_fields
 from bindings.classical_warnings import classical_warning, _warning_class_fields
 from bindings.optimizer_public_words import stash_python_error
 from bindings.native_scalar_decode import native_scalar_buffer
+from bindings.native_caller_frame import native_frame_globals
 
 
 def metric_is_bool(value: PythonObject, context: PythonObject) raises -> Bool:
@@ -89,10 +90,7 @@ def metric_warning_location(stacklevel: Int) raises -> PythonObject:
         raise cpy.unsafe_get_error()
     var code = PythonObject(from_owned=pointer)
     var line = cpy.lib.get_function[Int32]("PyFrame_GetLineNumber")(frame._obj_ptr)
-    pointer = cpy.lib.get_function[PyObjectPtr]("PyFrame_GetGlobals")(frame._obj_ptr)
-    if not pointer:
-        raise cpy.unsafe_get_error()
-    var fields = PythonObject(from_owned=pointer)
+    var fields = native_frame_globals(frame)
     var module = py_get(fields, "__name__", "<unknown>")
     if py_type(module) is not py_type(PythonObject("")):
         raise Error("TypeError: warning module names must be native strings")
