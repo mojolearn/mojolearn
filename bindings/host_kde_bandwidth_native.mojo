@@ -2,11 +2,13 @@
 # KDE bandwidth conversion policy; bytes are decoded by the shared native
 # scalar implementation, while warning/error timing stays at the consumer.
 from std.python import Python, PythonObject
+from std.python._cpython import PyObjectPtr
 from std.memory import bitcast
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.native_numpy_metadata import native_numpy_dtype, native_numpy_module_fields
 from bindings.native_scalar_decode import native_scalar_buffer
 from bindings.classical_warnings import classical_warning
+from bindings.native_caller_frame import native_frame_globals
 from core.native_scalar_decode import native_scalar_real
 from core.native_temporal_scalar import temporal_result_kind
 
@@ -26,12 +28,31 @@ def kde_bandwidth_code(value: PythonObject, context: PythonObject) raises -> Str
 
 
 def kde_bandwidth_warning(message: String, category: PythonObject, context: PythonObject) raises:
-    var frame = py_call(context["classical_getframe"], 1)
-    var module = py_get(frame.f_globals, "__name__", "")
+    # Match the existing _getframe(1) warning location without sys._getframe
+    # or frame.f_code access: their audit events run application Python.
+    # This is the same public CPython path as host feature-name warnings.
+    ref cpy = Python().cpython()
+    var pointer = cpy.lib.get_function[PyObjectPtr]("PyEval_GetFrame")()
+    if not pointer:
+        raise Error("ValueError: call stack is not deep enough")
+    var current = PythonObject(from_borrowed=pointer)
+    pointer = cpy.lib.get_function[PyObjectPtr]("PyFrame_GetBack")(current._obj_ptr)
+    _ = current^
+    if not pointer:
+        if cpy.lib.get_function[PyObjectPtr]("PyErr_Occurred")():
+            raise cpy.unsafe_get_error()
+        raise Error("ValueError: call stack is not deep enough")
+    var frame = PythonObject(from_owned=pointer)
+    pointer = cpy.lib.get_function[PyObjectPtr]("PyFrame_GetCode")(frame._obj_ptr)
+    if not pointer:
+        raise cpy.unsafe_get_error()
+    var code = PythonObject(from_owned=pointer)
+    var line = cpy.lib.get_function[Int32]("PyFrame_GetLineNumber")(frame._obj_ptr)
+    var module = py_get(native_frame_globals(frame), "__name__", "")
     if py_type(module) is not py_type(PythonObject("")):
         module = PythonObject("")
     classical_warning(message, category, context,
-        Python.tuple(frame.f_code.co_filename, frame.f_lineno, module), "HostInferenceWarning")
+        Python.tuple(code.co_filename, Int(line), module), "HostInferenceWarning")
 
 
 def kde_numpy_release(context: PythonObject) raises -> Int:
