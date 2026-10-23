@@ -285,6 +285,7 @@ def identical_optimizer_step_host(
     momentum: Float32,
     dampening: Float32,
     max_norm: Float32,
+    negate: Bool = False,
 ) raises -> Int:
     """One step of `mojolearn.identical.optimizer.fp32.v1` from host memory.
     Returns the total element count, `offsets[J]`.
@@ -388,7 +389,7 @@ def identical_optimizer_step_host(
     var n_done = identical_optimizer_step_resident_host(
         ctx, param_ptr, grad_ptr, m_state, v_state, p_buf, g_buf, p_stage, g_stage, offsets_ptr, init_ptr,
         info_ptr, n_tensors, kind, t, nesterov, lr, beta1, beta2, eps,
-        weight_decay, momentum, dampening, max_norm,
+        weight_decay, momentum, dampening, max_norm, negate,
     )
     ctx.enqueue_copy(dst_ptr=m_ptr, src_buf=m_state)
     ctx.enqueue_copy(dst_ptr=v_ptr, src_buf=v_state)
@@ -1034,12 +1035,16 @@ def identical_optimizer_step_resident_host(
     momentum: Float32,
     dampening: Float32,
     max_norm: Float32,
+    negate: Bool = False,
 ) raises -> Int:
     """The resident step with all four transfers (parameters and gradient
     up, parameters and the clipped gradient down): the entry every caller
-    before lane fam2-neural used, unchanged in what it does."""
+    before lane fam2-neural used, unchanged in what it does. `negate` is
+    `maximize=True`: the sign flip runs on the device gradient buffer inside
+    the step (lane migrate-neural-2; the same exact XOR the host round trip
+    `negate_through_device` ran, so the same bits)."""
     return identical_optimizer_step_resident_io(
-        ctx, param_ptr, grad_ptr, m_state, v_state, p_buf, g_buf, p_stage, g_stage, offsets_ptr, init_ptr, info_ptr, n_tensors, kind, t, nesterov, lr, beta1, beta2, eps, weight_decay, momentum, dampening, max_norm, OPT_IO_ALL,
+        ctx, param_ptr, grad_ptr, m_state, v_state, p_buf, g_buf, p_stage, g_stage, offsets_ptr, init_ptr, info_ptr, n_tensors, kind, t, nesterov, lr, beta1, beta2, eps, weight_decay, momentum, dampening, max_norm, OPT_IO_ALL, negate,
     )
 
 

@@ -34,35 +34,21 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from training.accumulate_multi_gpu import parallel_accumulate_host
+from training.samba_ops import samba_accumulate_device
 from training.clip_multi_gpu import parallel_clip_grad_norm_host
 from training.dev_tensors import IDN_TRAIN_DEV_TENSORS, train_dev_alloc, train_dev_copy, train_dev_view, train_dev_free
 from training.estimator import (
-    IDN_MAXIMIZE_DEV, IDN_OPT_PARAMS_RESIDENT, OPT_IO_ALL,
+    IDN_MAXIMIZE_DEV, IDN_OPT_PARAMS_RESIDENT, OPT_IO_ALL, OPT_IO_UP_P, OPT_IO_DOWN_P,
     identical_clip_grad_norm_addrs_host,
     identical_optimizer_step_resident_host,
     identical_optimizer_step_resident_io,
-    maximize_negate_device, opt_download_staged, opt_pool_buffers,
+    opt_download_staged, opt_pool_buffers,
 )
 from training.optimizer_multi_gpu import parallel_optimizer_step_host
 from training.optimizer_public_common import (
     F32P, I32P, Flat, GRADS_DEVICE, GRADS_HOST, GRADS_RESIDENT, OptHyper, PublicStep, PublicStepOut,
     gather, registry_check, resident_wanted_by_env, scatter, sizes_check, stack_microbatches, step_lr,
 )
-
-
-def negate_through_device(ctx: DeviceContext, src: F32P, dst: F32P, n: Int) raises:
-    """dst[0:n] = `maximize_negate(src[0:n])` ON THE DEVICE: one bulk upload,
-    one sign-flip launch (`maximize_negate_device`), one bulk download. The
-    flip is exact, so the bits are the host loop's on every column. `src`
-    and `dst` may be the same buffer. (Moved from the training binding.)"""
-    if n <= 0:
-        return
-    var d = ctx.enqueue_create_buffer[DType.float32](n)
-    ctx.enqueue_copy(dst_buf=d, src_ptr=src)
-    maximize_negate_device(ctx, d, n)
-    ctx.enqueue_copy(dst_ptr=dst, src_buf=d)
-    ctx.synchronize()
-    _ = d^
 
 
 # ===========================================================================
@@ -244,33 +230,20 @@ def per_call_step(
     maximize: Bool,
 ) raises -> Int:
     """`optimizer_step`: the per-call step on host moments (moved from the
-    training binding, word for word)."""
-    var n_total = 0
+    training binding, word for word). `maximize` flips the sign of the
+    uploaded gradient on the device inside the step and back before the
+    clipped download (lane migrate-neural-2: it was an upload, a flip and a
+    download into a host copy, then the step's own upload of that copy). The
+    step reads -g either way and the caller's gradient keeps its sign, so the
+    bits are the same."""
     if maximize:
-        # The step reads a negated COPY, so the caller's gradient is never
-        # negated, not even for the length of the call; a clipped
-        # gradient is written back through the same sign flip.
         if n_tensors < 1 or op[n_tensors] < Int32(0):
             raise Error("optimizer_step: maximize needs a registry with offsets[J] >= 0")
-        var n_flat = Int(op[n_tensors])
-        var neg = List[Float32](length=max(n_flat, 1), fill=Float32(0.0))
-        var np_ = neg.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
-        negate_through_device(ctx, gp, np_, n_flat)
-        n_total = parallel_optimizer_step_host(
-            ctx, pp, np_, mp, vp, op, ip, fp, n_tensors, kind, t, nesterov,
-            lr, beta1, beta2, eps, weight_decay, momentum, dampening,
-            max_norm,
-        )
-        if max_norm > Float32(0.0):
-            negate_through_device(ctx, np_, gp, n_flat)
-        _ = neg^  # `np_` is untracked: keep the copy alive past its last use
-    else:
-        n_total = parallel_optimizer_step_host(
-            ctx, pp, gp, mp, vp, op, ip, fp, n_tensors, kind, t, nesterov,
-            lr, beta1, beta2, eps, weight_decay, momentum, dampening,
-            max_norm,
-        )
-    return n_total
+    return parallel_optimizer_step_host(
+        ctx, pp, gp, mp, vp, op, ip, fp, n_tensors, kind, t, nesterov,
+        lr, beta1, beta2, eps, weight_decay, momentum, dampening,
+        max_norm, maximize,
+    )
 
 
 def resident_step(
@@ -280,55 +253,34 @@ def resident_step(
     maximize: Bool,
 ) raises -> Int:
     """`optimizer_resident_step`: the step with the moments in the device
-    slot (moved from the training binding, word for word)."""
+    slot (moved from the training binding, word for word). `maximize` flips
+    the sign on the device gradient buffer inside the step (see
+    `per_call_step`; same bits)."""
     var h = _device_slot(opt_pool_handle(handle, 0))
-    var n_total = 0
     var pool = OPT_POOL.get_or_create_ptr()
     if maximize:
         if n_tensors < 1 or op[n_tensors] < Int32(0):
             raise Error("optimizer_resident_step: maximize needs a registry with offsets[J] >= 0")
-        var n_flat = Int(op[n_tensors])
-        var neg = List[Float32](length=max(n_flat, 1), fill=Float32(0.0))
-        var np_ = neg.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
-        negate_through_device(ctx, gp, np_, n_flat)
-        # the parameter/gradient device buffers: the handle's pooled pair on
-        # Apple, a fresh pair per step elsewhere (lane neural-pass34)
-        var pooled = opt_pool_buffers()
-        var pb = ctx.enqueue_create_buffer[DType.float32](1 if pooled else pool[].held[h])
-        var gb = ctx.enqueue_create_buffer[DType.float32](1 if pooled else pool[].held[h])
-        if pooled:
-            n_total = identical_optimizer_step_resident_host(
-                ctx, pp, np_, pool[].m[h], pool[].v[h], pool[].p[h], pool[].g[h], pool[].sp[h], pool[].sg[h], op, ip, fp, n_tensors,
-                kind, t, nesterov, lr, beta1, beta2, eps, weight_decay,
-                momentum, dampening, max_norm,
-            )
-        else:
-            n_total = identical_optimizer_step_resident_host(
-                ctx, pp, np_, pool[].m[h], pool[].v[h], pb, gb, pool[].sp[h], pool[].sg[h], op, ip, fp, n_tensors,
-                kind, t, nesterov, lr, beta1, beta2, eps, weight_decay,
-                momentum, dampening, max_norm,
-            )
-        if max_norm > Float32(0.0):
-            negate_through_device(ctx, np_, gp, n_flat)
-        _ = neg^  # `np_` is untracked: keep the copy alive past its last use
+    # the parameter/gradient device buffers: the handle's pooled pair on
+    # Apple, a fresh pair per step elsewhere (lane neural-pass34)
+    var pooled = opt_pool_buffers()
+    var pb = ctx.enqueue_create_buffer[DType.float32](1 if pooled else pool[].held[h])
+    var gb = ctx.enqueue_create_buffer[DType.float32](1 if pooled else pool[].held[h])
+    var n_total: Int
+    if pooled:
+        n_total = identical_optimizer_step_resident_host(
+            ctx, pp, gp, pool[].m[h], pool[].v[h], pool[].p[h], pool[].g[h], pool[].sp[h], pool[].sg[h], op, ip, fp, n_tensors,
+            kind, t, nesterov, lr, beta1, beta2, eps, weight_decay,
+            momentum, dampening, max_norm, maximize,
+        )
     else:
-        # the parameter/gradient device buffers: the handle's pooled pair on
-        # Apple, a fresh pair per step elsewhere (lane neural-pass34)
-        var pooled = opt_pool_buffers()
-        var pb = ctx.enqueue_create_buffer[DType.float32](1 if pooled else pool[].held[h])
-        var gb = ctx.enqueue_create_buffer[DType.float32](1 if pooled else pool[].held[h])
-        if pooled:
-            n_total = identical_optimizer_step_resident_host(
-                ctx, pp, gp, pool[].m[h], pool[].v[h], pool[].p[h], pool[].g[h], pool[].sp[h], pool[].sg[h], op, ip, fp, n_tensors,
-                kind, t, nesterov, lr, beta1, beta2, eps, weight_decay,
-                momentum, dampening, max_norm,
-            )
-        else:
-            n_total = identical_optimizer_step_resident_host(
-                ctx, pp, gp, pool[].m[h], pool[].v[h], pb, gb, pool[].sp[h], pool[].sg[h], op, ip, fp, n_tensors,
-                kind, t, nesterov, lr, beta1, beta2, eps, weight_decay,
-                momentum, dampening, max_norm,
-            )
+        n_total = identical_optimizer_step_resident_host(
+            ctx, pp, gp, pool[].m[h], pool[].v[h], pb, gb, pool[].sp[h], pool[].sg[h], op, ip, fp, n_tensors,
+            kind, t, nesterov, lr, beta1, beta2, eps, weight_decay,
+            momentum, dampening, max_norm, maximize,
+        )
+    _ = pb^
+    _ = gb^
     return n_total
 
 
@@ -441,6 +393,12 @@ def _open_slot(ctx: DeviceContext, req: PublicStep) raises -> Int:
     return h
 
 
+def _single_device() -> Bool:
+    """One optimizer device (the multi-device accumulate shards the columns
+    on the host side of each device and keeps its host result)."""
+    return String(getenv("MOJOLEARN_OPTIMIZER_DEVICE_COUNT", "1")) == "1"
+
+
 def _on_device(h: Int) raises -> Bool:
     var pool = OPT_POOL.get_or_create_ptr()
     return not pool[].on_host[h]
@@ -485,10 +443,25 @@ def public_step(ctx: DeviceContext, req: PublicStep) raises -> PublicStepOut:
         var io = 0
         var fg = Flat()
         var g_host = req.g_mode == GRADS_HOST
-        if req.a_count > 1:
+        var acc_dev = False
+        if req.a_count > 1 and _single_device():
             # step_accumulated on device parameters: the clause 9.2 tree on
-            # the host-given microbatches, then the combined gradient goes up
-            # (it is not written back: the caller's microbatches stay as given)
+            # the host-given microbatches straight into the slot's gradient
+            # buffer, and the step reads it there (lane migrate-neural-2: it
+            # was downloaded and uploaded again; the caller's microbatches
+            # stay as given, so nothing comes back down)
+            var stacked = stack_microbatches(req)
+            opt_dev_pair(ctx, h)
+            var pool = OPT_POOL.get_or_create_ptr()
+            _ = samba_accumulate_device(
+                ctx, pool[].g[h], stacked.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), req.n_total,
+                req.a_count, req.tokens,
+            )
+            _ = stacked^
+            acc_dev = True
+        elif req.a_count > 1:
+            # several optimizer devices: the column-sharded tree on the host
+            # side of each device, then the combined gradient goes up
             var stacked = stack_microbatches(req)
             fg.own = List[Float32](unsafe_uninit_length=req.n_total)
             fg.packed = True
@@ -514,7 +487,7 @@ def public_step(ctx: DeviceContext, req: PublicStep) raises -> PublicStepOut:
         elif not req.g_dev:
             raise Error("RuntimeError: mojolearn optimizer step_device: no gradient on the device "
                         "(pass grads or call grads_to_device)")
-        var gp = fg.ptr() if (g_host or req.a_count > 1) else fp
+        var gp = fg.ptr() if (g_host or (req.a_count > 1 and not acc_dev)) else fp
         _ = resident_step_io(
             ctx, h, io, fp, gp, op, ip, fp, req.j, hy.kind, t, hy.nesterov, lr, beta1, beta2, eps, wd,
             mom, damp, max_norm if clip else Float32(0.0), hy.maximize,
@@ -528,7 +501,31 @@ def public_step(ctx: DeviceContext, req: PublicStep) raises -> PublicStepOut:
         var fp_ = gather(req.p_addr, req.p_bytes, 0, req.j, req.n_total)
         var fg = Flat()
         var g_packed: Bool
-        if req.a_count > 1:
+        # the state's slot, opened on the first step; an optimizer built
+        # with `resident=False` keeps its state in its own host arrays
+        # (exp_avg / exp_avg_sq), as it always did, and has no slot
+        h = -1
+        if req.resident_wanted != 0:
+            h = _open_slot(ctx, req)
+        var acc_dev = False
+        comptime if IDN_OPT_PARAMS_RESIDENT:
+            acc_dev = req.a_count > 1 and h >= 0 and _on_device(h) and _single_device()
+        if acc_dev:
+            # step_accumulated with the moments in a device slot: the tree
+            # writes the combined gradient into the slot's gradient buffer
+            # and the step reads it there (lane migrate-neural-2: it was
+            # downloaded here and uploaded again by the step). The same tree
+            # and the same step, so the same bits.
+            var stacked = stack_microbatches(req)
+            opt_dev_pair(ctx, h)
+            var pool = OPT_POOL.get_or_create_ptr()
+            _ = samba_accumulate_device(
+                ctx, pool[].g[h], stacked.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), req.n_total,
+                req.a_count, req.tokens,
+            )
+            _ = stacked^
+            g_packed = req.j > 1
+        elif req.a_count > 1:
             # step_accumulated: the clause 9.2 balanced tree in ascending
             # microbatch index, then the step on the combined gradient
             var stacked = stack_microbatches(req)
@@ -544,16 +541,16 @@ def public_step(ctx: DeviceContext, req: PublicStep) raises -> PublicStepOut:
             fg = gather(req.g_addr, req.g_bytes, 0, req.j, req.n_total)
             g_packed = fg.packed
         packed = 1 if (fp_.packed or g_packed) else 0
-        # the state's slot, opened on the first step; an optimizer built
-        # with `resident=False` keeps its state in its own host arrays
-        # (exp_avg / exp_avg_sq), as it always did, and has no slot
-        h = -1
-        if req.resident_wanted != 0:
-            h = _open_slot(ctx, req)
         var pp = fp_.ptr()
-        var gp = fg.ptr()
+        var gp = fg.ptr() if not acc_dev else fp
         var mn = max_norm if clip else Float32(0.0)
-        if h >= 0 and _on_device(h):
+        if acc_dev:
+            # parameters up and down; the gradient is already in the slot
+            _ = resident_step_io(
+                ctx, h, OPT_IO_UP_P | OPT_IO_DOWN_P, pp, gp, op, ip, fp, req.j, hy.kind, t, hy.nesterov, lr,
+                beta1, beta2, eps, wd, mom, damp, mn, hy.maximize,
+            )
+        elif h >= 0 and _on_device(h):
             var dev_flip = False
             comptime if IDN_OPT_PARAMS_RESIDENT and IDN_MAXIMIZE_DEV:
                 dev_flip = hy.maximize
