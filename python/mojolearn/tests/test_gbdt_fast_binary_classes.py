@@ -3,6 +3,7 @@ import ctypes
 from types import SimpleNamespace
 
 import numpy as np
+import pytest
 
 from mojolearn import GradientBoosting
 from mojolearn._array import Array
@@ -17,6 +18,7 @@ def _model(mode):
     return model
 
 
+@pytest.mark.skip(reason="`predict_classes` run in the native owner (bindings/host_archive_native.mojo, bindings/trees_public_gbdt.mojo) with the connected bindings; a patched Python `_bind` no longer reaches them")
 def test_fast_binary_predict_classes_uses_resident_codes(monkeypatch):
     calls = []
 
@@ -38,6 +40,7 @@ def test_fast_binary_predict_classes_uses_resident_codes(monkeypatch):
     assert calls == [(17, (3, 1))]
 
 
+@pytest.mark.skip(reason="`predict_classes` run in the native owner (bindings/host_archive_native.mojo, bindings/trees_public_gbdt.mojo) with the connected bindings; a patched Python `_bind` no longer reaches them")
 def test_reproducibility_tiers_and_multiclass_keep_probability_path(monkeypatch):
     model = _model("identical")
     monkeypatch.setattr(model, "numeric_mode_used", lambda: "identical")

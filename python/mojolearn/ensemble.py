@@ -131,16 +131,15 @@ import struct
 # that reason turned out not to exist: the kernels were
 # being lost to `MACOSX_DEPLOYMENT_TARGET` in the environment plus a compiler
 # cache that does not key on it, and the basename never mattered.
-from . import _backend, _mojolearn_gbdt, _native_archive_bridge, _serialize
+from . import _backend, _mojolearn_gbdt, _native_archive_bridge, _native_trees_bridge
 from ._mode import NumericModeMixin
 from ._sample_weight import check_sample_weight
 from ._array import Array
 from ._buffer import (
     as_f32_forest_layout,
-    addr, addr_ro, all_finite, as_f32_c, as_f32_colmajor, as_i64_c,
-    empty, zeros, _native,
+    addr_ro, all_finite, as_f32_c, as_f32_colmajor, zeros,
 )
-from ._labels import argmax_rows, finite_integer_codes, flat_view, is_bool
+from ._labels import finite_integer_codes, flat_view, is_bool
 
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-gbdt-1"
@@ -148,6 +147,10 @@ _MODEL_FORMAT = "mojolearn-gbdt-1"
 # The compiled saved-model owner, connected once at import: `save` is one
 # native call (the schema registered after `GradientBoosting`).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
+# The compiled tree-ensemble owner: `predict`, `predict_proba`,
+# `predict_classes`, the tree inspection reads and the OrderedRMSE and
+# FeatureFreq fits are one native call each (bindings/trees_public_gbdt.mojo).
+_TREES, _TREES_CONTEXT = _native_trees_bridge.connect()
 
 
 def _model_text_sha256(text):
@@ -1948,9 +1951,10 @@ class GradientBoosting(NumericModeMixin):
         # except where the contract permits one (label codes).
         # DEVIATION 2980: a refit drops the device copy of the previous
         # model HERE, not at the next call. The copy is also keyed on the
-        # text's sha256 (`_resident_handle`), so a subclass fit that
-        # replaces `model_` without passing here is served a fresh copy.
-        self._release_resident()
+        # text's bytes (bindings/trees_public_gbdt.mojo `gbdt_resident`), so
+        # a subclass fit that replaces `model_` without passing here is
+        # served a fresh copy. Dropping the holder releases the copy.
+        self.__dict__.pop("_resident", None)
         # lane/apple-fast-sym-feat: a FAST Apple binding built with the
         # device quantizer (`gbdt_fit_row_major_available`) takes a C-order
         # float32 array as it is through `gbdt_fit_rowmajor` and transposes
@@ -2286,59 +2290,6 @@ class GradientBoosting(NumericModeMixin):
     # pickle or deepcopy, and a handle is meaningful only for the binding
     # (tier, vendor) that minted it.
 
-    def _resident_handle(self, binding):
-        """The handle of the device-resident copy of `model_`, prepared on
-        the first call and reused while the text is the same bytes; None
-        where the loaded binding has no `gbdt_resident_prepare` (a binary
-        built before DEVIATION 2980, a CPU-only install's proxy, which
-        refuses an absent name with ImportError), in which case the call
-        takes the per-call parse.
-
-        The fast check is object identity on the text (`str` is
-        immutable, and the entry keeps a reference so the id cannot be
-        reused). A different object is hashed and compared to the sha256
-        the entry was prepared from: the same text keeps the handle, a
-        new text releases it and prepares again."""
-        try:
-            prepare = binding.gbdt_resident_prepare
-        except (ImportError, AttributeError):
-            return None
-        text = self.model_
-        cached = getattr(self, "_resident", None)
-        if cached is not None:
-            c_binding, c_text, c_sha, c_handle = cached
-            if c_binding is binding and c_text is text:
-                return c_handle
-            sha = _model_text_sha256(text)
-            if c_binding is binding and c_sha == sha:
-                self._resident = (binding, text, sha, c_handle)
-                return c_handle
-            self._release_resident()
-        else:
-            sha = _model_text_sha256(text)
-        handle = int(prepare(text))
-        self._resident = (binding, text, sha, handle)
-        return handle
-
-    def _release_resident(self):
-        """Drop the device copy, if one is held. Quiet on a binding that
-        cannot be reached any more (interpreter shutdown) and on a handle
-        already released."""
-        cached = getattr(self, "_resident", None)
-        if cached is None:
-            return
-        self._resident = None
-        try:
-            cached[0].gbdt_resident_release(cached[3])
-        except Exception:  # noqa: BLE001
-            pass
-
-    def __del__(self):
-        try:
-            self._release_resident()
-        except Exception:  # noqa: BLE001
-            pass
-
     def __getstate__(self):
         """A pickle or a deepcopy carries no device handle: the integer is
         meaningful only in the process and registry that minted it, and an
@@ -2347,39 +2298,6 @@ class GradientBoosting(NumericModeMixin):
         state = self.__dict__.copy()
         state.pop("_resident", None)
         return state
-
-    def _check_fitted_layout(self, X):
-        """`_check_fitted` for the resident door (DEVIATION 2980):
-        `(array, n_rows, row_major)`. A 2-D float32 C-order input is a
-        zero-copy borrow with `row_major` True and the native staging pass
-        transposes it (DEVIATION 2637's shape for the forests); every other
-        input takes the column-major materialization exactly as before."""
-        if self.model_ is None:
-            raise RuntimeError("mojolearn: predict() before fit()")
-        Xa, row_major = as_f32_forest_layout(X, name="X")
-        n_rows, n_features = Xa.shape
-        if n_features != self.n_features_in_:
-            raise ValueError(
-                f"mojolearn: model was fitted on {self.n_features_in_} "
-                f"features, got {n_features}"
-            )
-        return Xa, n_rows, row_major
-
-    def _check_fitted(self, X):
-        if self.model_ is None:
-            raise RuntimeError("mojolearn: predict() before fit()")
-        # one column-major materialization at most (zero for float32
-        # F-order input); see DEVIATION 1887 in `_buffer.as_f32_colmajor`.
-        # The returned `Array` owns the storage the binding reads; the
-        # caller keeps it in a local across the Mojo call.
-        Xa, _ = as_f32_colmajor(X, name="X")
-        n_rows, n_features = Xa.shape
-        if n_features != self.n_features_in_:
-            raise ValueError(
-                f"mojolearn: model was fitted on {self.n_features_in_} "
-                f"features, got {n_features}"
-            )
-        return Xa, n_rows
 
     def predict(self, X):
         """Return raw scores (not probabilities) as a float32 ``mojolearn.Array``.
@@ -2398,69 +2316,7 @@ class GradientBoosting(NumericModeMixin):
         -------
         mojolearn.Array
         """
-        if self.model_ is None:
-            raise RuntimeError("mojolearn: predict() before fit()")
-        binding = self._bind("_mojolearn_gbdt")
-
-        # A CPU-trained model whose text carries CTR tables or a tensor CTR
-        # registry: the gbdt host binding's walk refuses those records by
-        # name, and the CPU restatement of their apply is `HostGBDT`
-        # (`forest_host_gbdt_expand_ctr`, the same expand_raw_columns /
-        # expand_tensor_ctr_columns the device applies), the reader a CPU
-        # column already uses for a GPU-saved CTR model.
-        if _has_ctr_records(self.model_) and _binding_vendor(binding) == "cpu":
-            return binding.gbdt_ctr_predict(
-                X, loss=self.loss, text=self.model_,
-                n_features_in=self.n_features_in_, approx_dim=self.approx_dim_,
-                n_classes=self.n_classes_, estimator=type(self).__name__,
-            )
-
-        # DEVIATION 2980: the parsed, packed and uploaded model stays on
-        # the device between calls; the per-call parse below is the door
-        # for a binary without the entry point
-        handle = self._resident_handle(binding)
-        if handle is not None:
-            Xa, n_rows, row_major = self._check_fitted_layout(X)
-            out = empty((n_rows * self.approx_dim_,), "<f4")
-            width = binding.gbdt_resident_predict(
-                handle, addr_ro(Xa, name="X"),
-                addr(out, name="predict output"),
-                [n_rows, _PREDICT_RAW, 1 if row_major else 0],
-            )
-            if width != self.approx_dim_:
-                raise RuntimeError(
-                    f"mojolearn: predict wrote width {width}, expected "
-                    f"{self.approx_dim_}"
-                )
-            if self.approx_dim_ == 1:
-                return out
-            return out.reshape((n_rows, width))
-
-        Xa, n_rows = self._check_fitted(X)
-        if self.approx_dim_ > 1:
-            out = empty((n_rows * self.approx_dim_,), "<f4")
-            width = binding.gbdt_predict_multi(
-                self.model_, addr_ro(Xa, name="X"),
-                addr(out, name="predict output"),
-                [n_rows, _PREDICT_RAW],
-            )
-            if width != self.approx_dim_:
-                raise RuntimeError(
-                    f"mojolearn: predict wrote width {width}, expected "
-                    f"{self.approx_dim_}"
-                )
-            return out.reshape((n_rows, width))
-
-        out = empty((n_rows,), "<f4")
-        wrote = binding.gbdt_predict(
-            self.model_, addr_ro(Xa, name="X"),
-            addr(out, name="predict output"), [n_rows]
-        )
-        if wrote != n_rows:
-            raise RuntimeError(
-                f"mojolearn: predict wrote {wrote} of {n_rows} rows"
-            )
-        return out
+        return _TREES(self, "trees_gbdt_predict", (X,), _TREES_CONTEXT)
 
     # MultiClass softmax is their Probability (eval_processing.h:214-221); OneVsAll elementwise sigmoid is
     # MultiProbability (:222-226). The device applies the transform, so the max-subtraction matches
@@ -2485,103 +2341,7 @@ class GradientBoosting(NumericModeMixin):
         -------
         mojolearn.Array
         """
-        if self.loss in MULTI_OUTPUT_LOSSES:
-            if self.model_ is None:
-                raise RuntimeError("mojolearn: predict_proba() before fit()")
-            # 54a8143a libs/model/eval_processing.h:214-226:
-            # MultiProbability applies CalcSigmoid elementwise.
-            mode = (_PREDICT_SIGMOID if self.loss == "MultiClassOneVsAll"
-                    else _PREDICT_SOFTMAX)
-            binding = self._bind("_mojolearn_gbdt")
-            handle = self._resident_handle(binding)  # DEVIATION 2980
-            if handle is not None:
-                Xa, n_rows, row_major = self._check_fitted_layout(X)
-                out = empty((n_rows * self.n_classes_,), "<f4")
-                width = binding.gbdt_resident_predict(
-                    handle, addr_ro(Xa, name="X"),
-                    addr(out, name="predict_proba output"),
-                    [n_rows, mode, 1 if row_major else 0],
-                )
-            else:
-                Xa, n_rows = self._check_fitted(X)
-                out = empty((n_rows * self.n_classes_,), "<f4")
-                width = binding.gbdt_predict_multi(
-                    self.model_, addr_ro(Xa, name="X"),
-                    addr(out, name="predict_proba output"), [n_rows, mode]
-                )
-            if width != self.n_classes_:
-                raise RuntimeError(
-                    f"mojolearn: predict_proba wrote width {width}, "
-                    f"expected {self.n_classes_}"
-                )
-            return out.reshape((n_rows, width))
-
-        if self.loss not in ("Logloss", "CrossEntropy"):
-            raise ValueError(
-                f"mojolearn: predict_proba is defined for Logloss, "
-                f"CrossEntropy, MultiClass and MultiClassOneVsAll; this model was fitted with "
-                f"{self.loss!r}. Use predict() and apply the link "
-                f"yourself."
-            )
-        if self.model_ is None:
-            raise RuntimeError("mojolearn: predict_proba() before fit()")
-        binding = self._bind("_mojolearn_gbdt")
-        handle = self._resident_handle(binding)
-        if handle is not None:
-            Xa, n_rows, row_major = self._check_fitted_layout(X)
-            # DEVIATION 2980: both columns from the resident call, written
-            # by the binding as float64 `[1 - p, p]` with `p` exactly
-            # `gbdt_sigmoid`'s value over the exact widening of the raw
-            # float32 (`gbdt_sigmoid_pair`'s statements, DEVIATION 2902);
-            # the float32 raw array and its `astype` never exist
-            out = empty((n_rows, 2), "<f8")
-            width = binding.gbdt_resident_predict(
-                handle, addr_ro(Xa, name="X"), addr(out, name="proba"),
-                [n_rows, _PREDICT_SIGMOID_PAIR, 1 if row_major else 0],
-            )
-            if int(width) != 2:
-                raise RuntimeError(
-                    f"mojolearn: predict_proba wrote width {width}, expected 2"
-                )
-            return out
-        raw = self.predict(X).astype("<f8")  # exact widening
-        n_rows = raw.shape[0]
-        # DEVIATION 258 made the IDENTICAL tier take the portable double
-        # exp of `gbdt_sigmoid` so the probability bits are the same on
-        # every host, while fast kept `1 / (1 +
-        # np.exp(-raw))` with the host libm's last bit.
-        # DEVIATION 2332: EVERY TIER now routes through `gbdt_sigmoid`.
-        # IDENTICAL's bits do not move (same call as before). The FAST
-        # `predict_proba` bits DO move, from numpy's exp to
-        # the binding's portable exp, by at most the last-bit difference
-        # between two exps; FAST has no bitwise card on proba, and
-        # FAST is never asked a bitwise question. `1 - p` is the same one
-        # float64 subtraction as before, so column 0 keeps its bits.
-        # a CPU-only install's binding proxy raises ImportError, by name, for
-        # an entry point its host family does not export
-        try:
-            pair = getattr(binding, "gbdt_sigmoid_pair", None)
-        except (ImportError, AttributeError):
-            pair = None
-        if pair is not None:
-            # DEVIATION 2902 (lane/infer-speed-trees, 2026-09-17): both
-            # columns from the binding in one pass. `p` is `gbdt_sigmoid`'s
-            # value and `1 - p` is the same one IEEE double subtraction the
-            # comprehension below computed per row; the bits are unchanged,
-            # only the O(rows) Python loop is gone.
-            out = empty((n_rows, 2), "<f8")
-            wrote = pair(addr_ro(raw, name="raw"), addr(out, name="proba"), n_rows)
-            if int(wrote) != n_rows:
-                raise RuntimeError(
-                    f"mojolearn: gbdt_sigmoid_pair wrote {wrote} of {n_rows} rows"
-                )
-            return out
-        # Lane pyglue-sweep (Oct 3): the `[1 - p, p]` Python comprehension
-        # for a binary without `gbdt_sigmoid_pair` is gone; such a binary
-        # refuses by name (every GPU and host gbdt binding exports it).
-        raise RuntimeError(
-            "mojolearn: this gbdt binding predates gbdt_sigmoid_pair; rebuild it"
-        )
+        return _TREES(self, "trees_gbdt_predict_proba", (X,), _TREES_CONTEXT)
 
     def predict_classes(self, X):
         """Return the predicted class codes (argmax of ``predict_proba``).
@@ -2599,95 +2359,7 @@ class GradientBoosting(NumericModeMixin):
         mojolearn.Array
             int64 dense class codes of shape ``(n_samples,)``.
         """
-        if self.loss not in MULTI_OUTPUT_LOSSES + (
-            "Logloss", "CrossEntropy",
-        ):
-            raise ValueError(
-                f"mojolearn: predict_classes needs a classification loss; "
-                f"this model was fitted with {self.loss!r}."
-            )
-        if self.numeric_mode_used() == "fast":
-            binding = self._bind("_mojolearn_gbdt")
-            if self.loss in ("Logloss", "CrossEntropy"):
-                direct = getattr(binding, "gbdt_resident_binary_classes", None)
-                if callable(direct):
-                    handle = self._resident_handle(binding)
-                    if handle is not None:
-                        Xa, n_rows, row_major = self._check_fitted_layout(X)
-                        out = empty((n_rows,), "<i8")
-                        wrote = direct(
-                            handle, addr_ro(Xa, name="X"),
-                            addr(out, name="class codes"),
-                            [n_rows, 1 if row_major else 0],
-                        )
-                        if wrote != n_rows:
-                            raise RuntimeError(
-                                f"mojolearn: predict_classes wrote {wrote} of {n_rows} rows"
-                            )
-                        return out
-            # At wider multiclass widths the already-parallel probability pass
-            # plus native argmax is faster than fusing the exact transform here.
-            elif self.n_classes_ <= 3 and self.grow_policy == "SymmetricTree":
-                if self.model_ is None:
-                    raise RuntimeError("mojolearn: predict_proba() before fit()")
-                handle = self._resident_handle(binding)
-                if handle is not None:
-                    Xa, n_rows, row_major = self._check_fitted_layout(X)
-                    out = empty((n_rows,), "<i8")
-                    mode = (_PREDICT_CLASSES_PINNED
-                            if self.loss == "MultiClass"
-                            else _PREDICT_CLASSES_OVA)
-                    width = binding.gbdt_resident_predict(
-                        handle, addr_ro(Xa, name="X"),
-                        addr(out, name="predict_classes output"),
-                        [n_rows, mode, 1 if row_major else 0],
-                    )
-                    if int(width) != 1:
-                        raise RuntimeError(
-                            f"mojolearn: predict_classes wrote width {width}, expected 1"
-                        )
-                    return out
-        return argmax_rows(self.predict_proba(X))
-
-    def _tree_metadata(self):
-        """Read host model metadata without selecting a GPU extension.
-
-        This is archive inspection, not a second model evaluator. Float
-        values come exclusively from the authoritative IEEE bits.
-        """
-        if self.model_ is None:
-            raise RuntimeError("mojolearn: tree inspection before fit()")
-        counts, dimensions, leaves = [], [], []
-        declared_trees = None
-        for line in str(self.model_).splitlines():  # cpu-route: model text metadata parsed for inspection [py-data-loop]
-            fields = line.split()
-            if not fields:
-                continue
-            if fields[0] == "trees":
-                declared_trees = int(fields[1])
-            elif fields[0] in ("tree", "ntree"):
-                if int(fields[1]) != len(counts):
-                    raise ValueError("mojolearn: invalid tree order in model metadata")
-                size, dim = int(fields[3]), int(fields[5])
-                if size < 0 or dim < 1 or (fields[0] == "tree" and size > 31):
-                    raise ValueError("mojolearn: invalid tree dimensions in model metadata")
-                counts.append((1 << size) if fields[0] == "tree" else size + 1)
-                dimensions.append(dim)
-                leaves.append([])
-            elif fields[0] == "leaf":
-                tree, index = int(fields[1]), int(fields[2])
-                if tree < 0 or tree >= len(leaves) or index != len(leaves[tree]):
-                    raise ValueError("mojolearn: invalid leaf order in model metadata")
-                bits = int(fields[3].split("/")[1], 16)
-                if not 0 <= bits <= 0xffffffff:
-                    raise ValueError("mojolearn: invalid leaf bits in model metadata")
-                leaves[tree].append(bits)
-        if declared_trees != len(counts) or any(
-            len(values) != count * dim
-            for values, count, dim in zip(leaves, counts, dimensions)  # glue: leaf count check over the trees
-        ):
-            raise ValueError("mojolearn: incomplete tree metadata")
-        return counts, leaves
+        return _TREES(self, "trees_gbdt_predict_classes", (X,), _TREES_CONTEXT)
 
     def get_tree_leaf_counts(self):
         """Return the number of leaves in each tree, as in CatBoost.
@@ -2697,8 +2369,7 @@ class GradientBoosting(NumericModeMixin):
         mojolearn.Array
             uint32 array with one entry per tree.
         """
-        counts, _ = self._tree_metadata()
-        return Array.from_list([int(c) for c in counts], "<u4")  # glue: leaf counts per tree as words
+        return _TREES(self, "trees_gbdt_leaf_counts", (), _TREES_CONTEXT)
 
     def get_leaf_values(self):
         """Return the stored leaf values, tree-major then leaf-major.
@@ -2713,9 +2384,7 @@ class GradientBoosting(NumericModeMixin):
         mojolearn.Array
             float64 array.
         """
-        _, leaves = self._tree_metadata()
-        values = [_f32_bits_to_float(bits) for tree in leaves for bits in tree]  # cpu-route: model text metadata parsed for inspection [py-data-loop]
-        return Array.from_list(values, "<f8")
+        return _TREES(self, "trees_gbdt_leaf_values", (), _TREES_CONTEXT)
 
     # The payload is model_, the text format check-model-io gates bit-for-bit; the loader reads the hex-bits
     # half of each float, and nothing here formats a number. The model text carries the quantization borders
@@ -2751,64 +2420,14 @@ class GradientBoosting(NumericModeMixin):
         -------
         GradientBoosting
         """
-        arrays = _serialize.read_npz(path, _MODEL_FORMAT)
-        saved_as = _serialize.scalar_str(arrays, "estimator")
-        if saved_as != cls.__name__:
-            raise ValueError(
-                f"mojolearn: {path!r} was saved by {saved_as}, not "
-                f"{cls.__name__}"
-            )
-        obj = cls.__new__(cls)
-        # Restore before even gbdt_model_dim binds an extension. Old format-1
-        # archives omitted this optional field and retain their historical
-        # process-default behavior; malformed new metadata must never fall
-        # back to that legacy interpretation.
-        obj.numeric_mode = None
-        if "numeric_mode" in arrays:
-            mode = _one_string(arrays["numeric_mode"])
-            if mode is None:
-                raise ValueError("mojolearn: saved numeric_mode must be one string")
-            if mode not in ("fast", "identical"):
-                raise ValueError(f"mojolearn: invalid saved numeric_mode {mode!r}")
-            obj.numeric_mode = mode
-        obj.loss = _serialize.scalar_str(arrays, "loss")
-        obj.model_ = _serialize.exact(arrays, "model", "<u1").tobytes().decode("utf-8")
-        meta = _serialize.exact(arrays, "meta", "<i8")
-        obj.n_features_in_ = int(meta[0])
-        binding = obj._bind("_mojolearn_gbdt")
-        if _has_ctr_records(obj.model_) and _binding_vendor(binding) == "cpu":
-            # the host binding's parser refuses CTR records by name; the
-            # dim comes from the CPU binding's CTR reader (_gbdt_host)
-            obj.approx_dim_ = int(binding.gbdt_ctr_model_dim(obj.model_))
-        else:
-            obj.approx_dim_ = int(binding.gbdt_model_dim(obj.model_))
-        if obj.approx_dim_ != int(meta[1]):
-            raise ValueError(
-                f"mojolearn: {path!r} stores approx_dim {int(meta[1])} but "
-                f"its model text holds {obj.approx_dim_}; the file is "
-                "corrupt"
-            )
-        obj.n_classes_ = None if int(meta[2]) < 0 else int(meta[2])
-        obj.best_iteration_ = None if int(meta[3]) < 0 else int(meta[3])
-        obj.stopped_early_ = bool(int(meta[4]))
-        # the first element, whether the member is 0-d (a 0.6.x file) or
-        # one-element (this version's `save`)
-        bias = _serialize.exact(arrays, "bias", "<f8").tolist()
-        while isinstance(bias, list):
-            bias = bias[0]
-        obj.bias_ = float(bias)
-        obj.loss_curve_ = None
-        obj.test_loss_curve_ = None
-        return obj
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
-
-# `save` is one native call: bindings/archive_schema_native.mojo writes this
-# schema, the members, dtypes and refusals of the 0.8.55 Python `save` (the
-# model text as UTF-8 `<u1` bytes, the numeric mode `predict` would use now,
-# the int64 meta and the float64 bias). `load` stays Python: the class
-# defines `__del__` (it releases a device-resident copy), which native archive
-# loading refuses, and the load binds the GBDT binding to read the model's
-# output dimension from its text.
+# `save` and `load` are one native call each: bindings/archive_schema_native.mojo
+# writes this schema, the members, dtypes and refusals of the 0.8.55 Python
+# `save` (the model text as UTF-8 `<u1` bytes, the numeric mode `predict` would
+# use now, the int64 meta and the float64 bias), and
+# bindings/host_archive_native.mojo `host_archive_public_gbdt` builds the loaded
+# model, reading the output dimension through the GBDT binding connected here.
 _native_archive_bridge.register(GradientBoosting, _MODEL_FORMAT, (
     ("need", "model_", "AttributeError", "'{cls}' object has no attribute 'model_'"),
     ("need_set", "model_", "RuntimeError", "mojolearn: save() before fit()"),
@@ -2821,7 +2440,7 @@ _native_archive_bridge.register(GradientBoosting, _MODEL_FORMAT, (
                     ("none", "n_classes_", -1), ("none", "best_iteration_", -1),
                     ("bool", "stopped_early_"))),
     ("f8", "bias", (("float", "bias_"),)),
-))
+), host_archive_gbdt_bindings=_native_trees_bridge.bindings())
 
 
 def _has_ctr_records(text):
@@ -2901,100 +2520,7 @@ class ExperimentalTwoLevelFeatureFreq(GradientBoosting):
         -------
         self
         """
-        Xa, _ = as_f32_colmajor(X, name="X")
-        n_rows, n_features = Xa.shape
-        if n_rows == 0 or n_features < 2:
-            raise ValueError("mojolearn: experimental FeatureFreq needs rows and columns")
-        if any(i < 0 or i >= n_features for i in self.sources):  # glue: validates the sources argument indices
-            raise ValueError(
-                f"mojolearn: sources {self.sources!r} outside {n_features} features"
-            )
-        if not all_finite(Xa):
-            raise ValueError(
-                "mojolearn: experimental FeatureFreq X must be finite"
-            )
-        # DEVIATION 2335 retired (lane pyglue-sweep, Oct 3): each column of
-        # the column-major storage is checked by the base binding's helpers
-        # at its own address (`reduce_stat` min / max / integral,
-        # `cast_elements` + `bincount_i64` for the dense 0..k-1 coding)
-        # instead of `set()` / `sorted()` over the column in Python.
-        stat = _native("reduce_stat")
-        base = addr_ro(Xa, name="X")
-        for f in self.sources:  # glue: dispatches the named source columns
-            col = base + 4 * f * n_rows
-            hi = float(stat(col, 0, n_rows, 1))
-            if (not int(stat(col, 0, n_rows, 4)) or float(stat(col, 0, n_rows, 0)) < 0):
-                raise ValueError(
-                    "mojolearn: experimental FeatureFreq source columns must "
-                    "contain non-negative integer category codes"
-                )
-            k = int(hi) + 1
-            dense = 2 <= k <= n_rows
-            if dense:
-                codes = empty((n_rows,), "<i8")
-                _native("cast_elements")(col, 0, addr(codes, name="codes"), 3, n_rows)
-                counts = empty((k,), "<i8")
-                _native("bincount_i64")(addr_ro(codes, name="codes"), 3, n_rows, k,
-                                        addr(counts, name="counts"), 0)
-                dense = counts.min() > 0
-            if not dense:
-                raise ValueError(
-                    "mojolearn: every experimental FeatureFreq source must "
-                    f"be densely coded 0..k-1; column {f} has codes up to {int(hi)} "
-                    "with at least one missing (or fewer than two codes)"
-                )
-        source_set = set(self.sources)
-        for f in range(n_features):  # glue: constant-column check, one native stat per feature
-            if f in source_set:
-                continue
-            col = base + 4 * f * n_rows
-            if float(stat(col, 0, n_rows, 0)) == float(stat(col, 0, n_rows, 1)):
-                raise ValueError(
-                    "mojolearn: experimental FeatureFreq numeric columns "
-                    f"must vary; column {f} is constant"
-                )
-        ya, _ = as_f32_c(y, ndim=1, name="y")
-        if ya.shape[0] != n_rows or not all_finite(ya):
-            raise ValueError("mojolearn: y must be finite with one value per row")
-        if sample_weight is None:
-            weights = ya  # unread while params[2] == 0
-            n_weights = 0
-        else:
-            weights, _ = as_f32_c(sample_weight, ndim=1, name="sample_weight")
-            if weights.shape[0] != n_rows:
-                raise ValueError(
-                    "mojolearn: sample_weight must have one value per row"
-                )
-            if not all_finite(weights) or weights.min() < 0:
-                raise ValueError(
-                    "mojolearn: sample_weight must be finite and non-negative"
-                )
-            if not weights.max() > 0.0:
-                raise ValueError("mojolearn: sample_weight must have positive sum")
-            n_weights = n_rows
-        source_array = Array.from_list([int(i) for i in self.sources], "<u4")  # glue: packs the sources argument tuple
-        self.model_ = self._bind(
-            "_mojolearn_gbdt"
-        ).gbdt_fit_two_level_feature_freq(
-            addr_ro(Xa, name="X"), addr_ro(ya, name="y"),
-            addr_ro(weights, name="sample_weight"),
-            addr_ro(source_array, name="sources"),
-            [
-                n_rows, n_features, n_weights, source_array.size,
-                float(self.learning_rate), float(self.l2_leaf_reg),
-                int(self.random_state),
-            ],
-        )
-        self.n_features_in_ = n_features
-        self.approx_dim_ = 1
-        self.n_classes_ = None
-        self.bias_ = 0.0
-        self.best_iteration_ = 0
-        self.stopped_early_ = False
-        self.loss_curve_ = None
-        self.test_loss_curve_ = None
-        return self
-
+        return _TREES(self, "trees_gbdt_feature_freq_fit", (X, y, sample_weight), _TREES_CONTEXT)
 
 # Former docstring: Numeric ordered RMSE with one explicit row permutation. Fits symmetric trees using
 # independent prefix approximation cursors and one full-data cursor for exported leaves. Supports finite
@@ -3077,93 +2603,7 @@ class OrderedRMSE(GradientBoosting):
         -------
         self
         """
-        self._ordered_options(self.n_estimators, self.max_depth,
-                              self.border_count, self.learning_rate,
-                              self.l2_leaf_reg)
-        Xa, _ = as_f32_colmajor(X, name="X")
-        n_rows, n_features = Xa.shape
-        if n_rows < 4 or n_rows > _U32_MAX or n_features < 1:
-            raise ValueError("mojolearn: ordered RMSE requires >=4 rows and >=1 feature")
-        if not all_finite(Xa):
-            raise ValueError("mojolearn: ordered RMSE X must be finite")
-        try:
-            ya, _ = as_f32_c(y, ndim=1, name="y")
-        except (TypeError, ValueError):
-            raise ValueError("mojolearn: y must be one-dimensional with one value per row") from None
-        if ya.shape[0] != n_rows:
-            raise ValueError("mojolearn: y must be one-dimensional with one value per row")
-        if not all_finite(ya):
-            raise ValueError("mojolearn: y must be finite")
-        # DEVIATION 2337: the permutation is validated as int64 -- a list
-        # is refused if any entry is not an integer (floats and bools were
-        # refused by dtype kind before), a buffer by its dtype -- then
-        # bounds and bijectivity are `min`/`max`/`set` over the storage
-        # view (C-driven, O(rows)), and a uint32 copy is what crosses,
-        # the dtype the binding reads and the old code passed.
-        bijection_error = ValueError(
-            "mojolearn: permutation must be an integer bijection of row ids"
-        )
-        if isinstance(permutation, (list, tuple)):
-            if any(is_bool(v) or not isinstance(v, numbers.Integral)
-                   for v in permutation):  # cpu-route: user permutation Python list type check [py-data-loop]
-                raise bijection_error
-        else:
-            dtype = getattr(permutation, "dtype", None)
-            if dtype is not None:
-                kind = getattr(dtype, "kind", None) or str(dtype).lstrip("<>|=")[:1]
-                if kind not in ("i", "u"):
-                    raise bijection_error
-        try:
-            order64, _ = as_i64_c(permutation, ndim=1, name="permutation")
-        except (TypeError, ValueError, OverflowError):
-            raise bijection_error from None
-        # n distinct ids in [0, n) are a bijection: the base binding's
-        # `check_indices_i64` (range, then a bit set) answers both in one
-        # pass (lane pyglue-sweep, Oct 3: was min/max/set over the rows)
-        if order64.shape[0] != n_rows or n_rows < 1 or int(_native("check_indices_i64")(
-                addr_ro(order64, name="permutation"), n_rows, n_rows)) != 0:
-            raise bijection_error
-        order = order64.astype("<u4")
-        if sample_weight is None:
-            weights = ya  # unread while params[2] == 0
-            n_weights = 0
-        else:
-            try:
-                weights, _ = as_f32_c(sample_weight, ndim=1, name="sample_weight")
-            except (TypeError, ValueError):
-                raise ValueError("mojolearn: sample_weight must have one value per row") from None
-            if weights.shape[0] != n_rows:
-                raise ValueError("mojolearn: sample_weight must have one value per row")
-            if not all_finite(weights) or weights.min() < 0:
-                raise ValueError("mojolearn: sample_weight must be finite and non-negative")
-            if not weights.max() > 0:
-                raise ValueError("mojolearn: sample_weight must have positive sum")
-            n_weights = n_rows
-        binding = self._bind("_mojolearn_gbdt")
-        if not hasattr(binding, "gbdt_fit_ordered_rmse"):
-            raise RuntimeError(
-                "mojolearn: this GBDT binary predates OrderedRMSE; "
-                "install or build a matching native extension"
-            )
-        model = binding.gbdt_fit_ordered_rmse(
-            addr_ro(Xa, name="X"), addr_ro(ya, name="y"),
-            addr_ro(weights, name="sample_weight"),
-            addr_ro(order, name="permutation"),
-            [n_rows, n_features, n_weights, order.size,
-             int(self.n_estimators), int(self.max_depth), int(self.border_count),
-             float(self.learning_rate), float(self.l2_leaf_reg)],
-        )
-        self.model_ = model
-        self.n_features_in_ = n_features
-        self.approx_dim_ = 1
-        self.n_classes_ = None
-        self.bias_ = 0.0
-        self.best_iteration_ = None
-        self.stopped_early_ = False
-        self.loss_curve_ = None
-        self.test_loss_curve_ = None
-        return self
-
+        return _TREES(self, "trees_gbdt_ordered_fit", (X, y, permutation, sample_weight), _TREES_CONTEXT)
 
 # Separate sklearn prediction contracts; legacy GradientBoosting stays unchanged.
 from ._gbdt_adapters import GradientBoostingClassifier, GradientBoostingRegressor

@@ -2365,6 +2365,93 @@ def host_archive_gbdt(cls: PythonObject, arrays: PythonObject, context: PythonOb
     return model
 
 
+def _archive_one_string(value: PythonObject) raises -> PythonObject:
+    """`ensemble._one_string`: the single str a loaded member holds, or
+    None."""
+    var b = Python.import_module("builtins")
+    var item = value
+    while py_type(item) is b.list or py_type(item) is b.tuple:  # driver-loop: over the nesting depth of a stored string field
+        if len(item) != 1:
+            return PythonObject(None)
+        item = item[0]
+    if py_type(item) is b.str:
+        return item
+    return PythonObject(None)
+
+
+def host_archive_public_gbdt(cls: PythonObject, arrays: PythonObject, path: PythonObject,
+                             context: PythonObject) raises -> PythonObject:
+    """`GradientBoosting.load` (and OrderedRMSE / FeatureFreq, which
+    inherit it): the model exactly as the Python loader built it from
+    `cls.__new__(cls)`, with its refusals in its order. The output
+    dimension comes from the model text through the GBDT binding's
+    `gbdt_model_dim` (or, for a CTR text on the CPU binding, the native
+    text reader), as the loader read it."""
+    var b = Python.import_module("builtins")
+    var saved = _archive_string(arrays, "estimator", context)
+    if String(py=saved) != String(py=cls.__name__):
+        raise Error(host_archive_where(path, context) + " was saved by " + String(saved) + ", not " + String(cls.__name__))
+    var model = host_archive_allocate(cls, context)
+    var fields = sequential_fields(model)
+    py_setitem(fields, "numeric_mode", PythonObject(None))
+    if py_contains(arrays, "numeric_mode"):
+        var mode = _archive_one_string(arrays["numeric_mode"])
+        if mode is None:
+            raise Error("mojolearn: saved numeric_mode must be one string")
+        if String(mode) != "fast" and String(mode) != "identical":
+            raise Error("mojolearn: invalid saved numeric_mode " + _archive_builtin_repr(mode))
+        py_setitem(fields, "numeric_mode", mode)
+    py_setitem(fields, "loss", _archive_string(arrays, "loss", context))
+    var stored = _archive_exact(arrays, "model", "<u1", context)
+    var text = py_call(py_call(b.bytes, stored._mv).decode, "utf-8")
+    py_setitem(fields, "model_", text)
+    var meta = _archive_exact(arrays, "meta", "<i8", context)
+    py_setitem(fields, "n_features_in_", host_archive_meta_word(meta, 0))
+    # `obj._bind("_mojolearn_gbdt")`: the saved mode, else the process default.
+    var mode = fields["numeric_mode"]
+    if mode is None:
+        mode = context["backend_fields"]["_DEFAULT_MODE"]
+    var tables = py_get(context, "host_archive_gbdt_bindings")
+    if tables is None:
+        raise Error("ImportError: mojolearn: the GBDT binding is not connected to the archive owner")
+    var table = py_get(tables, String(py_call(py_call(mode.strip).lower)))
+    if table is None:
+        raise Error("numeric_mode must be fast, identical or None")
+    if py_type(table) is b.str:
+        raise Error(String(table))
+    var t = String(text)
+    var ctr = ("\nctr_columns " in t or t.startswith("ctr_columns ") or "\nctr_table " in t or t.startswith("ctr_table ")
+               or "\ntensor_ctr_registry " in t or t.startswith("tensor_ctr_registry "))
+    var vendor = py_get(table, "gbdt_vendor")
+    var cpu = vendor is not None and String(py_call(b.str, py_call(vendor))) == "cpu"
+    var dim = 0
+    if ctr and cpu:
+        dim = Int(py=host_archive_gbdt_state(text, context)["dim"])
+    else:
+        var entry = py_get(table, "gbdt_model_dim")
+        if entry is None:
+            raise Error("AttributeError: the GBDT binding has no gbdt_model_dim")
+        dim = Int(py=py_call(entry, text))
+    py_setitem(fields, "approx_dim_", PythonObject(dim))
+    var saved_dim = host_archive_meta_word(meta, 1)
+    if dim != saved_dim:
+        raise Error(host_archive_where(path, context) + " stores approx_dim " + String(saved_dim) + " but "
+                    + "its model text holds " + String(dim) + "; the file is "
+                    + "corrupt")
+    var classes = host_archive_meta_word(meta, 2)
+    py_setitem(fields, "n_classes_", PythonObject(None) if classes < 0 else PythonObject(classes))
+    var best = host_archive_meta_word(meta, 3)
+    py_setitem(fields, "best_iteration_", PythonObject(None) if best < 0 else PythonObject(best))
+    py_setitem(fields, "stopped_early_", PythonObject(host_archive_meta_word(meta, 4) != 0))
+    var bias = _archive_exact(arrays, "bias", "<f8", context)
+    if Int(py=bias.size) < 1:
+        raise Error("IndexError: list index out of range")
+    py_setitem(fields, "bias_", PythonObject(classical_f64(bias, 0)))
+    py_setitem(fields, "loss_curve_", PythonObject(None))
+    py_setitem(fields, "test_loss_curve_", PythonObject(None))
+    return model
+
+
 def host_archive_public_owner(path: PythonObject, arrays: PythonObject, cls: PythonObject,
                               context: PythonObject) raises -> PythonObject:
     """`Class.load(path)` of a public estimator: the format tag and the
@@ -2501,6 +2588,8 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         model = host_archive_svm(cls, arrays, fmt == "mojolearn-svc-1", path, context)
     elif public_owner is not None and (fmt.startswith("mojolearn-randomforest-1") or fmt.startswith("mojolearn-extratrees-1")):
         model = host_archive_public_forest(cls, arrays, fmt, fmt.startswith("mojolearn-extratrees-1"), path, context)
+    elif public_owner is not None and fmt == "mojolearn-gbdt-1":
+        model = host_archive_public_gbdt(cls, arrays, path, context)
     elif fmt == "mojolearn-gbdt-1":
         model = host_archive_gbdt(cls, arrays, context)
     elif py_contains(context["host_archive_forest_formats"], fmt):

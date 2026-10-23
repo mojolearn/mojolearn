@@ -173,6 +173,8 @@ def _dt_common(splitter, max_features, max_leaf_nodes):
     return None if splitter == "random" else max_leaf_nodes
 
 
+# sample_weight goes through the weighted RF fit entry (the weighted
+# objective; its CPU restatement is ensemble/host/rf_oracle.mojo).
 @forest_estimator("classifier")
 class DecisionTreeClassifier(RandomForestClassifier):
     """A single classification tree (CART).

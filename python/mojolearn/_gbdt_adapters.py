@@ -8,12 +8,10 @@ sklearn Pipeline does not automatically transform a supplied eval_set.
 """
 import inspect
 
-from ._array import Array
-from ._buffer import all_finite, empty, as_f32_c
-from ._labels import decode_labels, encode_labels
+from ._buffer import all_finite, as_f32_c
+from ._labels import encode_labels
 
-from . import _backend, _metrics_impl as metrics
-from ._arrays import _addr, _addr_ro
+from . import _backend, _metrics_impl as metrics, _native_trees_bridge
 from .ensemble import GradientBoosting
 from ._mode import PublicOutputsMixin
 
@@ -21,6 +19,10 @@ from ._mode import PublicOutputsMixin
 # One NotFittedError for the package; an instance of scikit-learn's too when
 # scikit-learn is imported (see mojolearn.exceptions).
 from .exceptions import NotFittedError, not_fitted_error  # noqa: F401
+
+# The compiled tree-ensemble owner: `decision_function`, `predict` and
+# `predict_proba` are one native call each (bindings/trees_public_gbdt.mojo).
+_TREES, _TREES_CONTEXT = _native_trees_bridge.connect()
 
 
 class _GBDTAdapter(PublicOutputsMixin):
@@ -268,38 +270,18 @@ class GradientBoostingClassifier(_GBDTAdapter):
         A positive margin favors the positive (larger) class; a zero margin
         predicts the negative class.
         """
-        self._check_fitted()
-        return self._learner_.predict(X)
-
-    def _binary_output(self, X, probabilities):
-        if not probabilities and self.numeric_mode_ == 'fast':
-            return self._learner_.predict_classes(X)
-        margins = as_f32_c(self.decision_function(X), ndim=1, name="margins")[0]
-        if margins.ndim != 1 or not all_finite(margins):
-            raise ValueError('Classifier margins must be finite scalar Float32 values')
-        n = len(margins)
-        binding = _backend.binding('_mojolearn_gbdt', self.numeric_mode_)
-        if probabilities:
-            output = empty((n, 2), '<f4')
-            wrote = binding.gbdt_binary_probabilities(_addr_ro(margins), _addr(output), [n])
-        else:
-            output = empty(n, '<i4')
-            wrote = binding.gbdt_binary_classes(_addr_ro(margins), _addr(output), [n])
-        if wrote != (2 * n if probabilities else n):
-            raise RuntimeError('GBDT binary output returned an unexpected row count')
-        return output
+        return _TREES(self, "trees_gbdt_adapter_decision", (X,), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """Return float32 probabilities of shape ``(n_samples, 2)``.
 
         Columns are ``[negative, positive]`` in ``classes_`` order.
         """
-        return self._binary_output(X, True)
+        return _TREES(self, "trees_gbdt_adapter_proba", (X,), _TREES_CONTEXT)
 
     def predict(self, X):
         """Return the predicted class labels, using the original label values."""
-        self._check_fitted()
-        return decode_labels(self.classes_, self._binary_output(X, False))
+        return _TREES(self, "trees_gbdt_adapter_predict", (X,), _TREES_CONTEXT)
 
     # The accuracy is metrics.accuracy_score on the pinned-sum path.
     def score(self, X, y, sample_weight=None):
@@ -314,10 +296,9 @@ class GradientBoostingClassifier(_GBDTAdapter):
             raise TypeError('score labels must have the training label type')
         vocabulary = {label: i for i, label in enumerate(self.classes_)}  # glue: two-label binary vocabulary
         encoded = metrics._label_map(target, lambda label: vocabulary.get(label, -1))
-        return metrics.accuracy_score(encoded, self._binary_output(X, False),
+        return metrics.accuracy_score(encoded, _TREES(self, "trees_gbdt_adapter_codes", (X,), _TREES_CONTEXT),
                                       sample_weight=sample_weight,
                                       numeric_mode=self.numeric_mode_)
-
 
 class GradientBoostingRegressor(_GBDTAdapter):
     """Gradient-boosted tree regressor with a scikit-learn interface.
@@ -426,8 +407,7 @@ class GradientBoostingRegressor(_GBDTAdapter):
 
     def predict(self, X):
         """Return float32 predictions of shape ``(n_samples,)``."""
-        self._check_fitted()
-        return self._learner_.predict(X)
+        return _TREES(self, "trees_gbdt_adapter_decision", (X,), _TREES_CONTEXT)
 
     # R2 is metrics.r2_score on the pinned-sum path.
     def score(self, X, y, sample_weight=None):

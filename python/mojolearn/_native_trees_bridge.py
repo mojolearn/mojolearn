@@ -20,13 +20,13 @@ _ENTRY = None
 _CONTEXT = None
 
 #: The tree bindings the owner launches, by numeric mode.
-_TREE_BINDINGS = ("_mojolearn_rf", "_mojolearn_trees", "_mojolearn_x_trees")
+_TREE_BINDINGS = ("_mojolearn_rf", "_mojolearn_trees", "_mojolearn_x_trees", "_mojolearn_gbdt")
 #: The base binding's input and label helpers (`_buffer._native`), always the
 #: identical binary (they are byte moves and comparisons with no tier).
 _BASE_HELPERS = ("cast_f64_to_f32", "cast_colmajor_f64_to_f32", "transpose_f32", "all_finite_f32",
                  "all_finite_f64", "prepare_targets", "bincount_i64", "class_ratio_f64",
                  "gather_rows_bytes", "argmax_rows_f32", "argmax_rows_f64", "gather_i64", "gather_f64",
-                 "unique_inverse", "reduce_stat", "cast_elements")
+                 "unique_inverse", "reduce_stat", "cast_elements", "check_indices_i64")
 
 
 def _unavailable(error):
@@ -42,6 +42,13 @@ def _unavailable(error):
 def _entries(module):
     # glue: retain the binding's compiled entry points once at connection
     from types import BuiltinFunctionType, ModuleType
+    from . import _backend
+    if isinstance(module, _backend._HostBinding):
+        # A CPU-only install: the family's host binding serves the entries
+        # the canonical binding name stands for.
+        basename = _backend._HOST_MODULES.get(module.__name__.rsplit(".", 1)[-1])
+        if basename is not None and type(_backend.load_host_module(basename)) is ModuleType:
+            module = _backend.load_host_module(basename)
     if type(module) is not ModuleType:
         # A missing tier or a refusing stub: touching it states the reason.
         try:
@@ -114,6 +121,12 @@ def connect():
     )
     _ENTRY, _CONTEXT = entry, context
     return _ENTRY, _CONTEXT
+
+
+def bindings():
+    """The connected tree binding tables by numeric mode (for the archive
+    owner's loaders), or None without the compiled owner."""
+    return connect()[1].get("trees_bindings")
 
 
 def register(cls, kind, **tables):
