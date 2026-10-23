@@ -1393,8 +1393,7 @@ class BayesianGaussianMixture(_XCluster):
             exceeds the number of samples, `n_init` or `max_iter` is below
             1, or a prior has the wrong shape.
         """
-        self._fit(X)
-        return self
+        return _NATIVE(self, "family_mix_bgmm_fit", (self._bind(), X), _NATIVE_CONTEXT)
 
     def fit_predict(self, X, y=None):
         """Fit the mixture on `X` and return the component of each row.
@@ -1411,125 +1410,7 @@ class BayesianGaussianMixture(_XCluster):
         labels : Array of shape (n_samples,), int32
             Most likely component of each training row.
         """
-        return self._fit(X)
-
-    def _fit(self, X):
-        ctypes = {"full": 0, "tied": 1, "diag": 2, "spherical": 3}
-        if self.covariance_type not in ctypes:
-            raise ValueError(f"covariance_type must be one of {sorted(ctypes)}, got {self.covariance_type!r}")
-        ct = ctypes[self.covariance_type]
-        inits = {"kmeans": 0, "random": 1, "k-means++": 2, "random_from_data": 3}
-        if self.init_params not in inits:
-            raise ValueError(f"init_params must be one of {sorted(inits)}, got {self.init_params!r}")
-        if self.weight_concentration_prior_type not in ("dirichlet_process", "dirichlet_distribution"):
-            raise ValueError("weight_concentration_prior_type must be 'dirichlet_process' or "
-                             "'dirichlet_distribution'")
-        x = _f32(X)
-        n, d = x.shape
-        k = int(self.n_components)
-        if k < 1 or n < k:
-            raise ValueError(f"Expected n_samples >= n_components but got n_components = {k}, n_samples = {n}")
-        if int(self.n_init) < 1 or int(self.max_iter) < 1:
-            raise ValueError("n_init and max_iter must be >= 1")
-        # glue: the priors and any warm state as byte copies (`_aux`); the
-        # binding expands a diag or spherical covariance prior to d x d
-        # (`x_cluster/entries.mojo::bgmm_entry`, ip[9] = 2 or 3)
-        parts = []
-        cov_mode = 0
-        if self.mean_prior is not None:
-            mp = _buffer.as_f32_c(self.mean_prior, ndim=None, name="mean_prior")[0]
-            if mp.size != d:
-                raise ValueError(f"The parameter 'means' should have the shape of ({d},)")
-            parts.append(mp)
-        if self.covariance_prior is not None:
-            if ct in (0, 1):
-                cp = _f32(self.covariance_prior, "covariance_prior")
-                if cp.shape != (d, d):
-                    raise ValueError(f"The parameter '{self.covariance_type} covariance prior' should have the "
-                                     f"shape of ({d}, {d})")
-                cov_mode = 1
-            elif ct == 2:
-                cp = _buffer.as_f32_c(self.covariance_prior, ndim=None, name="covariance_prior")[0]
-                if cp.size != d:
-                    raise ValueError(f"The parameter 'diag covariance prior' should have the shape of ({d},)")
-                cov_mode = 2
-            else:
-                cp = _buffer.as_f32_c([float(self.covariance_prior)], ndim=None, name="covariance_prior")[0]
-                cov_mode = 3
-            parts.append(cp)
-        prev = getattr(self, "_warm", None)
-        warm = bool(self.warm_start) and prev is not None and prev[0] == (k, d, self.covariance_type)
-        if warm:
-            parts.append(self._warm[1])
-        a = _aux(*parts)
-        none = -1.0
-        fp = [none if self.weight_concentration_prior is None else float(self.weight_concentration_prior),
-              none if self.mean_precision_prior is None else float(self.mean_precision_prior),
-              none if self.degrees_of_freedom_prior is None else float(self.degrees_of_freedom_prior),
-              float(self.reg_covar), float(self.tol), float(getattr(self, "lower_bound_", 0.0)) if warm else 0.0]
-        ip = [n, d, k, 1 if self.weight_concentration_prior_type == "dirichlet_process" else 0,
-              int(self.max_iter), int(self.n_init), inits[self.init_params],
-              _seed(self.random_state), 1 if self.mean_prior is not None else 0,
-              cov_mode, ct, 1 if warm else 0]
-        f, i, s = self._call(_E_BGMM, x, a, ip, fp)
-        self.weights_ = Array._from_flat(f[0], (k,), "<f4")
-        self.means_ = Array._from_flat(f[1], (k, d), "<f4")
-        self._full_pchol = Array._from_flat(f[3], (k, d, d), "<f4")
-        # f[13], f[14], f[15]: the binding's by-type forms (bgmm_entry)
-        self.covariances_ = self._by_type(f[13], k, d, ct)
-        self.precisions_cholesky_ = self._by_type(f[14], k, d, ct)
-        if self.weight_concentration_prior_type == "dirichlet_process":
-            self.weight_concentration_ = (Array._from_flat(f[4], (k,), "<f4"), Array._from_flat(f[5], (k,), "<f4"))
-        else:
-            self.weight_concentration_ = Array._from_flat(f[4], (k,), "<f4")
-        self.mean_precision_ = Array._from_flat(f[6], (k,), "<f4")
-        self.degrees_of_freedom_ = (float(f[7][0]) if ct == 1 else Array._from_flat(f[7], (k,), "<f4"))
-        self._log_consts = Array._from_flat(f[8], (k,), "<f4")
-        self.mean_prior_ = Array._from_flat(f[9], (d,), "<f4")
-        cpf = f[15]
-        if ct == 2:
-            self.covariance_prior_ = Array._from_flat(cpf, (d,), "<f4")
-        elif ct == 3:
-            self.covariance_prior_ = float(cpf[0])
-        else:
-            self.covariance_prior_ = Array._from_flat(cpf, (d, d), "<f4")
-        self.lower_bound_ = float(s[0])
-        self.n_iter_ = int(s[1])
-        self.converged_ = bool(s[2])
-        # the state a warm_start refit resumes from (full per-component matrices)
-        self._warm = ((k, d, self.covariance_type),
-                      list(f[11]) + list(f[4]) + (list(f[5]) if len(f[5]) else [0.0] * k) + list(f[6])
-                      + list(f[1]) + list(f[7]) + list(f[2]) + list(f[3]))
-        self.weight_concentration_prior_ = float(s[3])
-        self.mean_precision_prior_ = float(s[4])
-        self.degrees_of_freedom_prior_ = float(s[5])
-        self.n_features_in_ = d
-        return Array._from_flat(i[0], (n,), "<i4")
-
-    @staticmethod
-    def _by_type(flat, k, d, ct):
-        """The binding's by-type values (`bgmm_entry` f[13], f[14]: full
-        k x d x d, tied d x d, diag k x d, spherical k) under the covariance
-        type's shape (as scikit-learn's attributes). Shapes only."""
-        if ct == 0:
-            return Array._from_flat(flat, (k, d, d), "<f4")
-        if ct == 1:
-            return Array._from_flat(flat, (d, d), "<f4")
-        if ct == 2:
-            return Array._from_flat(flat, (k, d), "<f4")
-        return Array._from_flat(flat, (k,), "<f4")
-
-    def _score(self, X, flags=0):
-        self._check_fitted("means_")
-        x = self._input_like_fit(X)
-        n, d = x.shape
-        k = self.means_.shape[0]
-        ip = [n, d, k, flags] if flags else [n, d, k]
-        # glue: the model block as byte copies (`_aux`)
-        f, i, sc = self._call(_E_BGMM_SCORE, x, _aux(self.means_, self._full_pchol, self._log_consts), ip)
-        if flags:
-            return f, sc, n, k, i[0]
-        return f[0], f[1], n, k, i[0]
+        return _NATIVE(self, "family_mix_bgmm_fit_predict", (self._bind(), X), _NATIVE_CONTEXT)
 
     def predict(self, X):
         """Most likely component of each row of `X`.
@@ -1551,10 +1432,7 @@ class BayesianGaussianMixture(_XCluster):
         RuntimeError
             If the model is not fitted.
         """
-        # the labels come from the device score (`bodies.argmax_row`: the
-        # first largest log responsibility, the lowest index on a tie)
-        _, _, n, _, labels = self._score(X)
-        return Array._from_flat(labels, (n,), "<i4")
+        return _NATIVE(self, "family_mix_bgmm_predict", (self._bind(), X), _NATIVE_CONTEXT)
 
     def predict_proba(self, X):
         """Responsibility of each component for each row of `X`.
@@ -1574,9 +1452,7 @@ class BayesianGaussianMixture(_XCluster):
         RuntimeError
             If the model is not fitted.
         """
-        # the exp of every log responsibility in the binding (bodies.exp_cell)
-        f, _, n, k, _ = self._score(X, 1)
-        return Array._from_flat(f[2], (n, k), "<f4")
+        return _NATIVE(self, "family_mix_bgmm_predict_proba", (self._bind(), X), _NATIVE_CONTEXT)
 
     def score_samples(self, X):
         """Log-likelihood of each row of `X` under the mixture.
@@ -1596,8 +1472,7 @@ class BayesianGaussianMixture(_XCluster):
         RuntimeError
             If the model is not fitted.
         """
-        _, lpn, n, _, _ = self._score(X)
-        return Array._from_flat(lpn, (n,), "<f4")
+        return _NATIVE(self, "family_mix_bgmm_score_samples", (self._bind(), X), _NATIVE_CONTEXT)
 
     def score(self, X, y=None):
         """Mean log-likelihood of the rows of `X`.
@@ -1619,6 +1494,4 @@ class BayesianGaussianMixture(_XCluster):
         RuntimeError
             If the model is not fitted.
         """
-        # the float-float fold of log_prob_norm in the binding
-        _, sc, n, _, _ = self._score(X, 2)
-        return sc[0] / n
+        return _NATIVE(self, "family_mix_bgmm_score", (self._bind(), X), _NATIVE_CONTEXT)
