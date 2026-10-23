@@ -135,7 +135,7 @@ def test_binding_dispatches_and_refuses_by_name():
     impl = _read("gbdt/host/gbdt_host_entries_impl.mojo")
     assert 'kind == String("ntree")' in impl and 'kind == String("node")' in impl
     assert "n_trees, 1, non_symmetric," in impl, "the predict walk takes the model's shape"
-    assert "_ = node_left^" in src and "_ = node_right^" in src, "keep-alives past the walk"
+    assert "_ = node_left^" in impl and "_ = node_right^" in impl, "keep-alives past the walk"
 
 
 def test_sabotage_reaches_both_policies():

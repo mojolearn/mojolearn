@@ -4583,3 +4583,6 @@ def main(argv=None):
 
 if __name__ == "__main__":
     sys.exit(main())
+
+import os as _o
+_ARM = _o.path.join('armprobedir', 'x' + '.bin')
