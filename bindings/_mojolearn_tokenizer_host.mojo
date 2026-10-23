@@ -118,6 +118,7 @@ from bindings.minmax_native import minmax_lifecycle_c
 from bindings.maxabs_native import maxabs_lifecycle_c
 from bindings.robust_native import robust_lifecycle_c
 from bindings.arena_rows_native import arena_rows_c
+from bindings.arena_prog_native import arena_prog_c
 from bindings.generator_draw_native import generator_draw_c
 from checks.kernel_matrix import (
     COLUMN_CPU,
@@ -191,12 +192,10 @@ from tokenizer.impl.tokenizer_host_shell_impl import (
     spelled_merges_text,
     spelled_vocab_tokens,
     tokenizer_append_bytes,
-    tokenizer_store_i32,
     tokenizer_store_i64,
     tokens_gather_rows_into,
     tokens_gather_rows_width,
     trained_vocab_settle,
-    vocab_check_merges,
     vocab_check_pairs,
     vocab_decode_ids,
     vocab_encode_ids,
@@ -809,144 +808,6 @@ def tokens_gather_rows_binding(addresses: PythonObject, dims: PythonObject) rais
     return PythonObject(tokens_gather_rows_into(src, dst, batch, length, width, lo, modulus, base))
 
 
-def tokenizer_pretokenize_binding(
-    text_addr: PythonObject, n_bytes: PythonObject, pattern: PythonObject, out_addr: PythonObject
-) raises -> PythonObject:
-    """Pre-token boundaries of `n_bytes` uint8 under `pattern` (0 GPT-2,
-    1 Llama 3, 2 Qwen 2) as int64 at `out_addr` (`n_bytes + 1` suffices).
-    Returns how many."""
-    var n = _index(n_bytes)
-    var text = _u8_list(_index(text_addr) if n > 0 else 0, n)
-    var bounds = pretokenize_pattern(text, builtin_unicode_classes(), _index(pattern))
-    tokenizer_store_i64(_i64_ptr(_index(out_addr)), bounds)
-    return PythonObject(len(bounds))
-
-
-def _specials(addresses: PythonObject, first: Int, n_specials: Int,
-              mut arena: List[UInt8], mut lengths: List[Int], mut ids: List[Int]) raises:
-    lengths = _i64_list(_index(addresses[first + 1]) if n_specials > 0 else 0, n_specials)
-    var total = _bytes_total(lengths)
-    arena = _u8_list(_index(addresses[first]) if total > 0 else 0, total)
-    ids = _i64_list(_index(addresses[first + 2]) if n_specials > 0 else 0, n_specials)
-
-
-def vocab_load_bytes_binding(addresses: PythonObject, dims: PythonObject) raises -> PythonObject:
-    """`models.Tokenizer(tokens, merges, ...)`: `addresses` `[token_bytes,
-    token_lengths, merge_bytes, merge_lengths (two per merge), special_bytes,
-    special_lengths, special_ids]`, `dims` `[n_tokens, n_merges,
-    n_specials, pattern, ignore_merges]`."""
-    var n = _index(dims[0])
-    var nm = _index(dims[1])
-    var ns = _index(dims[2])
-    var pattern = _index(dims[3])
-    var ignore = _index(dims[4]) != 0
-    var lengths = _i64_list(_index(addresses[1]) if n > 0 else 0, n)
-    var total = _bytes_total(lengths)
-    var arena = _u8_list(_index(addresses[0]) if total > 0 else 0, total)
-    var table = table_from_tokens(arena, lengths)
-    var mlen = _i64_list(_index(addresses[3]) if nm > 0 else 0, 2 * nm)
-    var mtotal = _bytes_total(mlen)
-    var marena = _u8_list(_index(addresses[2]) if mtotal > 0 else 0, mtotal)
-    vocab_check_merges(table, marena, mlen, n, nm, ignore)
-    var sp_arena = List[UInt8]()
-    var sp_lengths = List[Int]()
-    var sp_ids = List[Int]()
-    _specials(addresses, 4, ns, sp_arena, sp_lengths, sp_ids)
-    var tok = VocabTokenizer(table^, builtin_unicode_classes(), pattern)
-    tok.set_specials(sp_arena, sp_lengths, sp_ids)
-    var handle = VocabHandle()
-    handle.tok = tok^
-    return PythonObject(alloc=handle^)
-
-
-def vocab_load_spelled_binding(
-    vocab: PythonObject, merges: PythonObject, addresses: PythonObject, dims: PythonObject
-) raises -> PythonObject:
-    """`models.Tokenizer._from_json`: `vocab` the `model.vocab` object with
-    the added tokens taken out, `merges` the `model.merges` list,
-    `addresses` `[special_bytes, special_lengths, special_ids]`, `dims`
-    `[n_specials, pattern, ignore_merges]`."""
-    var ns = _index(dims[0])
-    var pattern = _index(dims[1])
-    var ignore = _index(dims[2]) != 0
-    var table = _table_from_spelled(vocab, merges, False, ignore)
-    var sp_arena = List[UInt8]()
-    var sp_lengths = List[Int]()
-    var sp_ids = List[Int]()
-    _specials(addresses, 0, ns, sp_arena, sp_lengths, sp_ids)
-    var tok = VocabTokenizer(table^, builtin_unicode_classes(), pattern)
-    tok.set_specials(sp_arena, sp_lengths, sp_ids)
-    var handle = VocabHandle()
-    handle.tok = tok^
-    return PythonObject(alloc=handle^)
-
-
-def vocab_info_binding(handle: PythonObject) raises -> PythonObject:
-    """`[n_ranks, n_vocab, max_token_bytes]`."""
-    var owner = handle.downcast_value_ptr[VocabHandle]()
-    if not owner[].tok:
-        raise Error("tokenizer host: the handle holds no vocabulary")
-    var out = Python.list()
-    _ = py_call(out.append, PythonObject(owner[].tok.value().n_ranks()))
-    _ = py_call(out.append, PythonObject(owner[].tok.value().n_vocab()))
-    _ = py_call(out.append, PythonObject(owner[].tok.value().max_token_bytes()))
-    return out
-
-
-def vocab_encode_binding(
-    handle: PythonObject, text_addr: PythonObject, n_bytes: PythonObject,
-    out_addr: PythonObject, out_cap: PythonObject, allow_special: PythonObject
-) raises -> PythonObject:
-    """`models.Tokenizer.encode_bytes`: ids as int32 at `out_addr`
-    (`out_cap = n_bytes` suffices). Returns the count."""
-    var owner = handle.downcast_value_ptr[VocabHandle]()
-    if not owner[].tok:
-        raise Error("tokenizer host: the handle holds no vocabulary")
-    var n = _index(n_bytes)
-    var cap = _index(out_cap)
-    var allow = _flag(allow_special, "allow_special")
-    if n <= 0:
-        return PythonObject(0)
-    var text = _u8_list(_index(text_addr), n)
-    var ids = owner[].tok.value().encode(text, allow)
-    if len(ids) > cap:
-        raise Error("vocab_encode: " + String(len(ids)) + " ids do not fit " + String(cap))
-    tokenizer_store_i32(i32_ptr(_index(out_addr)), ids)
-    return PythonObject(len(ids))
-
-
-def vocab_pretokenize_binding(
-    handle: PythonObject, text_addr: PythonObject, n_bytes: PythonObject, out_addr: PythonObject
-) raises -> PythonObject:
-    var owner = handle.downcast_value_ptr[VocabHandle]()
-    if not owner[].tok:
-        raise Error("tokenizer host: the handle holds no vocabulary")
-    var n = _index(n_bytes)
-    var text = _u8_list(_index(text_addr) if n > 0 else 0, n)
-    var bounds = owner[].tok.value().pretokenize(text)
-    tokenizer_store_i64(_i64_ptr(_index(out_addr)), bounds)
-    return PythonObject(len(bounds))
-
-
-def vocab_decode_binding(
-    handle: PythonObject, seq: PythonObject, out_addr: PythonObject, out_cap: PythonObject
-) raises -> PythonObject:
-    """`models.Tokenizer.decode_bytes` over a Python sequence of ids; an
-    added id renders its content, an id that is neither a rank nor an added
-    token is refused by value and position."""
-    var owner = handle.downcast_value_ptr[VocabHandle]()
-    if not owner[].tok:
-        raise Error("tokenizer host: the handle holds no vocabulary")
-    var ids = _ids_from_seq(seq)
-    var out = vocab_decode_ids(owner[].tok.value(), ids)
-    var cap = _index(out_cap)
-    if len(out) > cap:
-        raise Error("vocab_decode: " + String(len(out)) + " bytes do not fit " + String(cap))
-    if len(out) > 0:
-        memcpy(dest=_u8_ptr(_index(out_addr)), src=out.unsafe_ptr(), count=len(out))
-    return PythonObject(len(out))
-
-
 def _py_bytes_list(raw: PythonObject) raises -> List[UInt8]:
     """The bytes of a Python bytes-like object, one memcpy through an
     `array('B')` buffer (no Python loop over the bytes)."""
@@ -1462,6 +1323,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(maxabs_lifecycle_c, "maxabs_scaler_native_call")
         module.def_py_c_function(robust_lifecycle_c, "robust_scaler_native_call")
         module.def_py_c_function(arena_rows_c, "arena_rows_native_call")
+        module.def_py_c_function(arena_prog_c, "arena_prog_native_call")
         module.def_py_c_function(scaler_attribute_c, "standard_scaler_attribute_call")
         module.def_py_c_function(generator_draw_c, "generator_draw")
         module.def_py_c_function(samba_config_c, "samba_config_call")
@@ -1490,14 +1352,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_function[bpe_encode_corpus_binding]("bpe_encode_corpus")
         module.def_function[bpe_train_corpus_binding]("bpe_train_corpus")
         module.def_function[tokens_gather_rows_binding]("tokens_gather_rows")
-        module.def_function[tokenizer_pretokenize_binding]("tokenizer_pretokenize")
         _ = module.add_type[VocabHandle]("_VocabHandle")
-        module.def_function[vocab_load_bytes_binding]("vocab_load_bytes")
-        module.def_function[vocab_load_spelled_binding]("vocab_load_spelled")
-        module.def_function[vocab_info_binding]("vocab_info")
-        module.def_function[vocab_encode_binding]("vocab_encode")
-        module.def_function[vocab_pretokenize_binding]("vocab_pretokenize")
-        module.def_function[vocab_decode_binding]("vocab_decode")
         module.def_py_c_function(_vocab_public_c[0], "vocab_init_public")
         module.def_py_c_function(_vocab_public_c[1], "vocab_spelled_public")
         module.def_py_c_function(_vocab_public_c[2], "vocab_json_public")
@@ -1544,7 +1399,6 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(causal_model_c[0], "causal_model_init")
         module.def_py_c_function(causal_model_c[1], "causal_model_load")
         module.def_py_c_function(causal_model_c[2], "causal_model_read_weights")
-        module.def_function[generation_initialize_binding]("generation_initialize")
         _ = module.add_type[GenerationHandle]("_GenerationHandle")
         _ = module.add_type[RemoteStateLifetime]("_RemoteStateLifetime")
         module.def_py_c_function(causal_public_c[0], "causal_lm_admit")

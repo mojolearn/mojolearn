@@ -248,7 +248,9 @@ def install_fit_tracking(cls):
         for name in _NEEDS_FIT:  # glue: unwraps the method names that need a fit
             method = getattr(cls, name, None)
             if getattr(method, "_mojolearn_needs_fit", False):  # guarded on a stateful base
-                method = method.__wrapped__
+                # a native method (native_method) owns its guard and has no
+                # Python wrapper to remove; it stays as it is
+                method = getattr(method, "__wrapped__", method)
             if inspect.isfunction(method) and not getattr(method, "_mojolearn_validates", False):
                 method = _needs_fit(method, name, require_fit=False)  # validates X, needs no fit
             if method is not None and method is not getattr(cls, name, None):

@@ -222,36 +222,6 @@ def optimizer_resident_step_binding(
     return PythonObject(n_total)
 
 
-def optimizer_resident_put_binding(
-    handle: PythonObject, which: PythonObject, addr: PythonObject, n_total: PythonObject,
-) raises -> PythonObject:
-    """Host `n_total` floats into the handle's parameter (which = 0) or
-    gradient (which = 1) device buffer. Returns `n_total`."""
-    var h = Int(py=handle)
-    var w = Int(py=which)
-    var n = Int(py=n_total)
-    var src = F32P(unsafe_from_address=Int(py=addr))
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        n = resident_put(ctx, h, w, src, n)
-    return PythonObject(n)
-
-
-def optimizer_resident_get_binding(
-    handle: PythonObject, which: PythonObject, addr: PythonObject, n_total: PythonObject,
-) raises -> PythonObject:
-    """The handle's parameter (which = 0) or gradient (which = 1) device
-    buffer into host memory (`n_total` floats). Returns `n_total`."""
-    var h = Int(py=handle)
-    var w = Int(py=which)
-    var n = Int(py=n_total)
-    var dst = F32P(unsafe_from_address=Int(py=addr))
-    with GILReleased(Python()):
-        var ctx = neural_ctx[_NEURAL_CTX]()
-        n = resident_get(ctx, h, w, dst, n)
-    return PythonObject(n)
-
-
 def optimizer_resident_step_io_binding(
     param_addr: PythonObject,
     grad_addr: PythonObject,

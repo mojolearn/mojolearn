@@ -97,6 +97,22 @@ class count is derived from them, as their `TClassificationTargetHelper`
 derives it.
 """
 
+# The public names: the boosting estimators and their option tables defined here, and
+# scikit-learn's ensemble names resolved lazily from the package (_sklearn_modules.LAYOUT).
+__all__ = [
+    'GradientBoosting', 'GradientBoostingClassifier', 'GradientBoostingRegressor', 'OrderedRMSE',
+    'ExperimentalTwoLevelFeatureFreq', 'catboost_auto_learning_rate', 'LOSSES',
+    'MULTI_OUTPUT_LOSSES', 'MULTI_REGRESSION_LOSSES', 'BORDER_TYPES', 'BOOTSTRAP_TYPES',
+    'BOOSTING_TYPES', 'LEAF_ESTIMATION_GRADIENT', 'LEAF_ESTIMATION_NEWTON', 'LEAF_ESTIMATION_EXACT',
+    'LEAF_ESTIMATION_SIMPLE', 'SCORE_FUNCTION_SOLAR_L2', 'SCORE_FUNCTION_COSINE',
+    'SCORE_FUNCTION_NEWTON_L2', 'SCORE_FUNCTION_NEWTON_COSINE', 'SCORE_FUNCTION_LOO_L2',
+    'SCORE_FUNCTION_SAT_L2', 'SCORE_FUNCTION_L2', 'SCORE_FUNCTIONS', 'GROW_POLICIES', 'NAN_MODES',
+    'OD_TYPES', 'AdaBoostClassifier', 'AdaBoostRegressor', 'BaggingClassifier', 'BaggingRegressor',
+    'ExtraTreesClassifier', 'ExtraTreesRegressor', 'IsolationForest', 'RandomForestClassifier',
+    'RandomForestRegressor', 'RandomTreesEmbedding', 'StackingClassifier', 'StackingRegressor',
+    'VotingClassifier', 'VotingRegressor',
+]
+
 import hashlib
 import itertools
 import numbers
@@ -115,19 +131,23 @@ import struct
 # that reason turned out not to exist: the kernels were
 # being lost to `MACOSX_DEPLOYMENT_TARGET` in the environment plus a compiler
 # cache that does not key on it, and the basename never mattered.
-from . import _backend, _mojolearn_gbdt, _serialize
+from . import _backend, _mojolearn_gbdt, _native_archive_bridge, _serialize
 from ._mode import NumericModeMixin
 from ._sample_weight import check_sample_weight
 from ._array import Array
 from ._buffer import (
     as_f32_forest_layout,
     addr, addr_ro, all_finite, as_f32_c, as_f32_colmajor, as_i64_c,
-    empty, frombytes, zeros, _native,
+    empty, zeros, _native,
 )
 from ._labels import argmax_rows, finite_integer_codes, flat_view, is_bool
 
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-gbdt-1"
+
+# The compiled saved-model owner, connected once at import: `save` is one
+# native call (the schema registered after `GradientBoosting`).
+_ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
 
 def _model_text_sha256(text):
@@ -487,21 +507,54 @@ def _c_round(number, precision):
 
 def catboost_auto_learning_rate(loss, n_rows, iterations, use_best_model,
                                 boost_from_average, table=None):
-    """`TAutoLRParamsGuesser::GetLearningRate` (`options_helper.cpp:252-262`)
-    for the GPU learner, or None where their `NeedToUpdate` (`:245-249`) has
-    no row for the key.
+    """The learning rate ``GradientBoosting`` picks when ``learning_rate`` is unset.
 
-        customIterationConstant  = exp(C * log(iterations) + D)
-        defaultIterationConstant = exp(C * log(1000) + D)
-        defaultLearningRate      = exp(A * log(n_rows) + B)
-        learning_rate = Round(min(default * custom / defaultIter, 0.5), 6)
+    It is CatBoost's automatic learning rate for its GPU learner:
+    ``exp(A * log(n_rows) + B)``, scaled by the iteration count, capped at 0.5
+    and rounded to six decimals, with coefficients for the ``'RMSE'``,
+    ``'Logloss'`` and ``'MultiClass'`` losses.
 
-    stored in their `TOption<float>` (`boosting_options.h:26`), so the fit
-    receives it rounded to float32. `exp` and `log` are this package's
-    portable binary64 routines rather than the host libm theirs call, so a
-    value within one ulp of a sixth-decimal rounding boundary could round the
-    other way; no such key was found on the checked grid.
+    Parameters
+    ----------
+    loss : str
+        Loss name, for example ``'Logloss'``.
+    n_rows : int
+        Number of training rows.
+    iterations : int
+        Number of boosting iterations (``n_estimators``).
+    use_best_model : bool
+        Whether the fit keeps the best iteration on an evaluation set.
+    boost_from_average : bool
+        Whether the fit starts from the target average.
+    table : dict, optional
+        Coefficient table to use instead of the GPU learner's.
+
+    Returns
+    -------
+    float or None
+        The learning rate, or ``None`` when CatBoost has no automatic rate for
+        this loss and setting (``GradientBoosting`` then uses 0.03).
+
+    Example
+    -------
+    >>> from mojolearn import ensemble
+    >>> ensemble.catboost_auto_learning_rate('Logloss', 10000, 1000, False, False)
+    0.029701
     """
+    # `TAutoLRParamsGuesser::GetLearningRate` (`options_helper.cpp:252-262`)
+    # for the GPU learner, or None where their `NeedToUpdate` (`:245-249`) has
+    # no row for the key.
+    #
+    #     customIterationConstant  = exp(C * log(iterations) + D)
+    #     defaultIterationConstant = exp(C * log(1000) + D)
+    #     defaultLearningRate      = exp(A * log(n_rows) + B)
+    #     learning_rate = Round(min(default * custom / defaultIter, 0.5), 6)
+    #
+    # stored in their `TOption<float>` (`boosting_options.h:26`), so the fit
+    # receives it rounded to float32. `exp` and `log` are this package's
+    # portable binary64 routines rather than the host libm theirs call, so a
+    # value within one ulp of a sixth-decimal rounding boundary could round the
+    # other way; no such key was found on the checked grid.
     target = {"Logloss": "Logloss", "MultiClass": "MultiClass",
               "RMSE": "RMSE"}.get(loss)
     if target is None:
@@ -2680,46 +2733,7 @@ class GradientBoosting(NumericModeMixin):
         path : str or path-like
             Destination file.
         """
-        if self.model_ is None:
-            raise RuntimeError("mojolearn: save() before fit()")
-        # Persist the tier prediction would use now, including an inherited
-        # process default. Saving None would let a different process silently
-        # turn an IDENTICAL model into FAST arithmetic after loading.
-        mode = getattr(self, "numeric_mode", None) or _backend.default_mode()
-        if not isinstance(mode, str) or mode.strip().lower() not in (
-            "fast", "identical"
-        ):
-            raise ValueError(f"mojolearn: cannot save invalid numeric_mode {mode!r}")
-        mode = mode.strip().lower()
-        # DEVIATION 2334: the members are `Array`s and plain str (which
-        # `_serialize.write_npz` encodes as the `<U` scalar member
-        # `np.asarray(str)` gave). `bias` is a one-element float64 member,
-        # the shape `write_npz` gives a 0-d value anyway (the 0.6.x writer
-        # promoted 0-d to `(1,)` through `np.ascontiguousarray`), so the
-        # file bytes are those of a 0.6.x save of the same model; the
-        # loader on both sides reads the first element.
-        model_bytes = str(self.model_).encode("utf-8")
-        arrays = {
-            "format": _MODEL_FORMAT,
-            "numeric_mode": mode,
-            "estimator": type(self).__name__,
-            "loss": self.loss,
-            "model": frombytes(model_bytes, "<u1", (len(model_bytes),)),
-            "meta": Array.from_list(
-                [
-                    int(self.n_features_in_),
-                    int(self.approx_dim_),
-                    -1 if self.n_classes_ is None else int(self.n_classes_),
-                    -1 if self.best_iteration_ is None
-                    else int(self.best_iteration_),
-                    1 if self.stopped_early_ else 0,
-                ],
-                "<i8",
-            ),
-            # raw float64 bytes, already parsed from the text's BITS half
-            "bias": Array.from_list([float(self.bias_)], "<f8"),
-        }
-        return _serialize.write_npz(path, arrays)
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -2786,6 +2800,28 @@ class GradientBoosting(NumericModeMixin):
         obj.loss_curve_ = None
         obj.test_loss_curve_ = None
         return obj
+
+
+# `save` is one native call: bindings/archive_schema_native.mojo writes this
+# schema, the members, dtypes and refusals of the 0.8.55 Python `save` (the
+# model text as UTF-8 `<u1` bytes, the numeric mode `predict` would use now,
+# the int64 meta and the float64 bias). `load` stays Python: the class
+# defines `__del__` (it releases a device-resident copy), which native archive
+# loading refuses, and the load binds the GBDT binding to read the model's
+# output dimension from its text.
+_native_archive_bridge.register(GradientBoosting, _MODEL_FORMAT, (
+    ("need", "model_", "AttributeError", "'{cls}' object has no attribute 'model_'"),
+    ("need_set", "model_", "RuntimeError", "mojolearn: save() before fit()"),
+    ("format", "format", _MODEL_FORMAT),
+    ("mode", "numeric_mode", "mojolearn: "),
+    ("estimator", "estimator"),
+    ("array", "loss", "loss"),
+    ("utf8", "model", "model_"),
+    ("i8", "meta", (("int", "n_features_in_"), ("int", "approx_dim_"),
+                    ("none", "n_classes_", -1), ("none", "best_iteration_", -1),
+                    ("bool", "stopped_early_"))),
+    ("f8", "bias", (("float", "bias_"),)),
+))
 
 
 def _has_ctr_records(text):

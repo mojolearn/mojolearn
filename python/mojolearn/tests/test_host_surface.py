@@ -269,6 +269,19 @@ def _gpu_only_lanes():
                    if isinstance(k, ast.Constant) and isinstance(k.value, str)}
             assert len(out) == len(node.value.keys), \
                 "GPU_ONLY_LANES has keys this reader did not parse"
+            # The lane modules under tools/identity_lanes/ add their own
+            # entries with `GPU_ONLY_LANES["lane"] = "why"` on the same dict
+            # (coverage.py, native_owners.py), so those are the mechanism too.
+            for path in sorted((ROOT / "tools/identity_lanes").glob("*.py")):
+                for sub in ast.parse(path.read_text()).body:
+                    if not isinstance(sub, ast.Assign):
+                        continue
+                    for t in sub.targets:
+                        if (isinstance(t, ast.Subscript) and isinstance(t.value, ast.Name)
+                                and t.value.id == "GPU_ONLY_LANES"):
+                            assert isinstance(t.slice, ast.Constant) and isinstance(t.slice.value, str), \
+                                f"{path.name}: a GPU_ONLY_LANES key this reader did not parse"
+                            out.add(t.slice.value)
             return out
     raise AssertionError("tools/identity_break.py defines no GPU_ONLY_LANES dict")
 
@@ -561,10 +574,12 @@ def test_gbdt_ctr_models_cover_every_fixture():
     # lane/laneless-public-classes (2026-09-19), when `saved-model-host-infer`
     # joined the family: that lane FITS on the fixture and saves, so it needs
     # no bundled model, and an equality here would have forced a second
-    # meaning onto this tuple.
+    # meaning onto this tuple. `saved-model-host-infer-trees` (lane verify-gaps,
+    # 2026-10-22) also fits on the fixture and saves (Extra Trees and a
+    # default-engine forest regressor), so it needs no bundled model either.
     assert set(host_surface.GBDT_CTR_MODEL_LANES) <= set(host_surface.family("forest")["training_lanes"])
     assert set(host_surface.family("forest")["training_lanes"]) - set(host_surface.GBDT_CTR_MODEL_LANES) \
-        == {"saved-model-host-infer"}
+        == {"saved-model-host-infer", "saved-model-host-infer-trees"}
 
 
 def test_workflow_wires_the_gaps_7_lanes():

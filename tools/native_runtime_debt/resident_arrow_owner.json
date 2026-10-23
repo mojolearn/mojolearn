@@ -1,0 +1,27 @@
+{
+  "scope": "model_selection._Resident and _arena_io DeviceCache/resident constructor/reinitialization, release, close, context exit, resident scope and take",
+  "status": "resolved",
+  "resolved_on": "lane/arena-resident-v2",
+  "reason": "The lifecycle no longer inspects owner graphs, so the Arrow owner-inspection gap no longer matters. Every native free runs while every owner is still held; the emptied mapping is published before the first GIL-releasing free; every slot is attempted and the first failure is retained; failed entries are republished; owners are released as the operation's last step, before the first failure is restored. A hidden Arrow owner's finalizer (PyForeignBuffer::base_, PyBuffer::py_buf_) therefore runs inside the operation but after all native work, sees a closed cache, and cannot replace the error. Ordinary Arrow-backed pandas owners (float64/int64[pyarrow] columns, string[pyarrow] index) stay supported; no narrowed draft, no refusal, no Python fallback, no deferred destruction outside the operation.",
+  "superseded": {
+    "status": "held_not_default_ready",
+    "branch": "lane/runtime-arena-resident@0f7e10729",
+    "dropped": "bindings/pandas_owner_lifetime.mojo owner-graph admission and its pandas class registry; recoverable at 0f7e10729"
+  },
+  "code": [
+    "bindings/arena_cache_release.mojo",
+    "bindings/arena_resident_native.mojo",
+    "bindings/arena_materialize_native.mojo (arena_resident_take, arena_resident_entry)",
+    "bindings/arena_rows_native.mojo (dispatch)"
+  ],
+  "tests": [
+    "python/mojolearn/tests/test_resident_lifecycle_native.py::test_arrow_owner_finalizer_runs_after_every_free_and_publication",
+    "python/mojolearn/tests/test_resident_lifecycle_native.py::test_lifecycle_is_native_for_every_supported_owner",
+    "python/mojolearn/tests/test_cache_release_native.py::test_arrow_owner_finalizer_runs_after_every_free"
+  ],
+  "evidence_root": "/Users/andrewhendel/mojolearn-evidence/takeover-0856-20261021/arena-lifecycle-lane",
+  "pending": [
+    "one orchestrator compile of _mojolearn_native_host (merged host group)",
+    "the tests above on an installed CPU and GPU package with pandas and pyarrow"
+  ]
+}

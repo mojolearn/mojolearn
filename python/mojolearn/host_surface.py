@@ -691,8 +691,7 @@ TRAINING_LANE_NAMES = {
     # precision-recall curve, the three regression errors, the Rand index, the
     # KL divergence and trustworthiness through
     # metrics/host/classification_oracle.mojo, exported under the GPU binding's
-    # names from the metrics host binding (the log loss's probability check,
-    # probability_rows_f32, from the core host binding). IDENTICAL x4 on all
+    # names from the metrics host binding. IDENTICAL x4 on all
     # nine train cells on the M4's CPU column (one core) before the gate ran,
     # and the sabotage build DIVERGENT on all nine.
     "metrics-classification": "the classification, ranking and regression metrics",
@@ -1621,23 +1620,21 @@ FAMILIES = (
             "neural_prefill_call", "parallel_byte_call", "parallel_causal_call",
             "parallel_mlp_call", "parallel_neural_call", "pca_native_call",
             "samba_config_call", "samba_native_call", "sequential_native_call",
-            "small_mlp_call", "standard_scaler_fit_native", "standard_scaler_native_call", "minmax_scaler_native_call", "maxabs_scaler_native_call", "robust_scaler_native_call", "standard_scaler_attribute_call",
+            "small_mlp_call", "standard_scaler_fit_native", "standard_scaler_native_call", "minmax_scaler_native_call", "maxabs_scaler_native_call", "robust_scaler_native_call", "arena_rows_native_call", "arena_prog_native_call", "standard_scaler_attribute_call",
             "tokenizer_host_numeric_mode", "tokenizer_host_vendor",
             "tokenizer_host_column", "tokenizer_host_sabotage", "bpe_load",
             "bpe_n_vocab", "bpe_max_token_bytes", "bpe_encode", "bpe_encode_batch",
             "bpe_decode", "bpe_train", "bpe_trained_sizes", "bpe_trained_copy",
             "bpe_load_tokens", "bpe_load_spelled", "bpe_ranks_text", "bpe_decode_seq",
             "bpe_decode_batch", "bpe_render", "bpe_encode_corpus", "bpe_train_corpus",
-            "tokens_gather_rows", "tokenizer_pretokenize", "vocab_load_bytes",
-            "vocab_load_spelled", "vocab_info", "vocab_encode", "vocab_pretokenize",
-            "vocab_decode",
+            "tokens_gather_rows",
             # vocabulary identity digest (core/sha256.mojo)
             "sha256_hex",
             # registered 2026-10-20 (f872423a4, a4b0106ee, 12fa2ed0f): the
             # optimizer's resident finalization, the vocabulary fingerprint
             # that binds resumable text state to its tokenizer, and the
             # generation coordinator's setup
-            "optimizer_finalize", "optimizer_native", "optimizer_device_finalize", "vocab_fingerprint", "generation_initialize",
+            "optimizer_finalize", "optimizer_native", "optimizer_device_finalize", "vocab_fingerprint",
             "host_archive_finalize_call", "host_svr_attribute_call", "host_svc_attribute_call",
         ),
         gate="pixi run check-tokenizer and python/mojolearn/tests/test_tokenizer_surface.py",
@@ -1784,7 +1781,7 @@ FAMILIES = (
             "radius_neighbors_count", "radius_neighbors_fill", "rbc_knn_search", "transpose_f32",
             "cast_colmajor_f64_to_f32", "nonzero_f64_count", "nonzero_f64_fill", "cast_f64_to_f32", "all_finite_f32",
             "all_finite_f64", "gather_i64", "gather_f64", "gather_rows_bytes", "argmax_rows_f32",
-            "argmax_rows_f64", "argmax_last_rows_f32", "probability_rows_f32",
+            "argmax_rows_f64", "argmax_last_rows_f32",
             # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3104): the helpers
             # of bindings/hotpath_helpers.mojo that stand in for per-row Python,
             # and the ORDER RULE's label encoder (DEVIATION 2500) a CPU-only
@@ -1805,22 +1802,23 @@ FAMILIES = (
             "msel_rebase_offsets_i32", "msel_split_table_i32", "msel_group_fold_perm_i32",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "unique_inverse", "arange_i64", "leave_range_i64",
+            # lane migrate-shared-labels: the shared argument-and-label entry
+            "prepare_targets",
             "mask_from_indices_u8", "select_mask_u8_i64", "count_mask_u8",
             "next_combination_i64", "ic_running_min_f64", "ic_running_min_f32",
-            "fold_pair_f32", "threshold_labels_i64", "scale_shift_ftz_f32",
-            "bincount_i64", "compact_notnan_f32", "gather_keep_neg_i32",
-            "dot_rows_f32", "assign_fold_i64", "count_fold_hits_i64", "mark_split_roles_f32",
-            "split_table_i32", "scatter_rows_bytes", "uniform_init_f32",
-            "normal_init_f32", "epoch_order_i32", "adam_hyper_f64",
-            "mean_std_f32", "first_seen_i32", "strat_fold_assign_i32",
-            "strat_alloc_i64", "ocsvm_alpha_init_f32", "weighted_pick_i32",
-            "draw_rows_without_replacement_i32", "weighted_draw_rows_i32", "group_fold_assign_i32",
-            "strat_group_assign_i32", "strat_group_plan_i32", "bincount2_i32", "strided_copy_bytes", "check_lengths_i64",
+            "fold_pair_f32", "threshold_labels_i64",
+            "bincount_i64",
+            "assign_fold_i64", "count_fold_hits_i64", "mark_split_roles_f32",
+            "scatter_rows_bytes", "uniform_init_f32",
+            "normal_init_f32", "adam_hyper_f64",
+            "first_seen_i32", "strat_fold_assign_i32",
+            "strat_alloc_i64",
+            "group_fold_assign_i32",
+            "strat_group_plan_i32", "bincount2_i32", "strided_copy_bytes", "check_lengths_i64",
             "ragged_rows_bytes", "nsum_f64", "row_means_f64",
             "truncnorm_draws", "fsum_f64", "row_stds_f64",
-            "lr_schedule_values", "lr_onecycle_fill", "lr_decide",
-            "lr_schedule_exact", "lr_onecycle_exact", "lr_pow_values",
-            "lr_schedule_exact_block", "lr_onecycle_exact_block", "class_ratio_f64",
+            "lr_schedule_exact",
+            "lr_schedule_exact_block", "class_ratio_f64",
             "shard_topk_merge_f32",
         ),
         gate="tools/classical_host_gate.py (cpu-identity-gate.yml)",
@@ -2302,8 +2300,8 @@ FAMILIES = (
             "rf_regressor_fit_session_export", "rf_regressor_fit_session_rows_export",
             "rf_classifier_fit_weighted_session_export",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
-            "rf_classifier_fit_aux_export", "rf_regressor_fit_aux_export", "rf_classifier_fit_oob_export",
-            "rf_regressor_fit_oob_export", "rf_regressor_fit_dart_export",
+            "rf_classifier_fit_aux_export", "rf_regressor_fit_aux_export",
+            "rf_regressor_fit_dart_export",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2364,8 +2362,8 @@ FAMILIES = (
             "gp_host_numeric_mode", "gp_host_vendor", "gp_host_column",
             "gp_host_sabotage", "gp_vendor", "gp_numeric_mode",
             "gpr_fit", "gpr_predict", "gpr_sample_y", "gpr_lml_grad", "gp_log64", "gp_theta_params", "gpr_predict_cov",
-            "gp_restart_uniforms", "gpc_fit", "gpc_predict", "cholesky_profile_jitter",
-            "cholesky_factor", "cholesky_solve", "gpr_optimize", "gp_py2mojo",
+            "gpc_fit", "gpc_predict", "cholesky_profile_jitter",
+            "cholesky_factor", "cholesky_solve", "gpr_optimize",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "gpc_ovr_combine",
         ),
@@ -2574,7 +2572,7 @@ FAMILIES = (
         exports=(
             "gp_infer_host_numeric_mode", "gp_infer_host_vendor",
             "gp_infer_host_column", "gp_infer_host_sabotage",
-            "gp_vendor", "gp_numeric_mode", "gpr_predict", "gpc_predict", "gp_py2mojo",
+            "gp_vendor", "gp_numeric_mode", "gpr_predict", "gpc_predict",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "gpc_ovr_combine",
         ),
@@ -3514,8 +3512,10 @@ PUBLIC_PENDING_LANES = {
     "native-schedule-series": "no reference",
     "optim-owner-lifecycle": "no reference",
     "optim-io-capability": "no reference",
-    "optim-resident-io": "no reference",
-    "sequence-device-release": "no reference",
+    # GPU only (identity_break.GPU_ONLY_LANES): the CPU bindings hold no
+    # resident buffers, so no CPU column can state these two.
+    "optim-resident-io": "no cpu route",
+    "sequence-device-release": "no cpu route",
     # THIRTEEN LANES LEFT THIS TABLE ON 2026-09-20, on a watched run and not
     # on an argument (lane/verifier-full-exposure). The promotion rule in
     # `public_reference_lanes()` is "a covered lane, in a release record's
@@ -3817,7 +3817,9 @@ PUBLIC_PENDING_LANES = {
     "saved-model-host-infer-trees": "no reference",
     "hf-causal-lm-text": "no reference",
     "hf-model-surface": "no reference",
-    "training-device-cross-entropy": "no reference",
+    # GPU only (tools/identity_lanes/coverage.py GPU_ONLY_LANES): the CPU
+    # training binding has no device array pool.
+    "training-device-cross-entropy": "no cpu route",
     "classical-float16-sequences": "no reference",
     }
 # lane/lowbit-int15 (2026-09-29) held gemm-int15 here until a release record

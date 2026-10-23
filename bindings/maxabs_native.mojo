@@ -6,6 +6,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
+from bindings.scaler_tags_native import scaler_tags
 from bindings.classical_attributes import classical_connect_numpy, classical_check_layout
 from bindings.classical_arrays import classical_address, classical_typed
 from bindings.classical_metadata import classical_is_fitted
@@ -15,6 +16,7 @@ from bindings.scaler_native import _input, _ptr, _stage, _copy_row
 from bindings.scaler_lifecycle_native import _entries, _public_result
 from bindings.x_prep_native_inputs import _target, _values
 from bindings.x_prep_native_owner import xprep_r3, xprep_storage, xprep_take, xprep_values, xprep_run
+from core.scaler_fit_impl import scaler_refuse_infinite
 
 
 def maxabs_fit(model: PythonObject, source: PythonObject, target: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -70,6 +72,9 @@ def maxabs_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
         maximum = xprep_take(arena[0],ma,d,0,context["output_context"])
         scale = xprep_take(arena[0],sc,d,0,context["output_context"])
         _ = arena^
+    # scikit-learn refuses an infinite input (NaN alone is allowed); the
+    # native column maxima of |X| are infinite exactly for those columns.
+    scaler_refuse_infinite(_ptr(maximum),d,"ValueError: Input X contains infinity or a value too large for dtype('float64').")
     py_setitem(fields,"max_abs_",maximum)
     py_setitem(fields,"scale_",scale)
     py_setitem(fields,"n_features_in_",d)
@@ -142,6 +147,8 @@ def maxabs_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
                     raise Error("mojolearn: invalid parameter for MaxAbsScaler")
                 py_setitem(fields,names[k],options[names[k]])
             result = model
+        elif operation == "tags":
+            result = scaler_tags(model,context,PythonObject(None))
         elif operation == "is_fitted":
             result = classical_is_fitted(model)
         elif operation == "fit" or operation == "fit_transform":
@@ -167,6 +174,8 @@ def maxabs_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
                 return raise_python_exception(nested)
         if String(error).startswith("TypeError:"):
             return raise_python_exception(error_without_class(error,"TypeError"),ExceptionType.TypeError)
+        if String(error).startswith("AttributeError:"):
+            return raise_python_exception(error_without_class(error,"AttributeError"),ExceptionType("PyExc_AttributeError"))
         if String(error).startswith("ImportError:"):
             return raise_python_exception(error_without_class(error,"ImportError"),ExceptionType("PyExc_ImportError"))
         if String(error).startswith("RuntimeError:"):

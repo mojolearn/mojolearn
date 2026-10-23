@@ -320,66 +320,6 @@ def op_lp_iterate(
     _ = ctx^
 
 
-def op_pr_iterate(
-    q: Int, x: Int, p: Int, dw: Int, dangling: Int, info: Int,
-    n: Int, max_iter: Int, thr_hi: Int, thr_lo: Int, alpha: Float32,
-) raises:
-    """PageRank.fit's power iteration (`pagerank_step` then `absdiff_sum`
-    per iteration, x <- the step) with Q resident. `thr` is Python's
-    n * tol as float64 bits. `x` in: the start, out: the last iterate.
-    info (int32 x 2): iterations run, converged."""
-    var thr = bitcast[DType.float64]((UInt64(thr_hi) << UInt64(32)) | UInt64(thr_lo))
-    var ctx = xn_ctx()
-    var d_q = _buf(ctx, q, n * n, True)
-    var d_a = _buf(ctx, x, n, True)
-    var d_b = _buf(ctx, 0, n, False)
-    var d_p = _buf(ctx, p, n, True)
-    var d_dw = _buf(ctx, dw, n, True)
-    var d_dg = _buf_i(ctx, dangling, n, True)
-    var d_s = _buf(ctx, 0, 1, False)
-    var d_part = ctx.enqueue_create_buffer[DType.float32](max(xn_fold_blocks(n), 1))
-    var hs = List[Float32](length=1, fill=Float32(0))
-    var cur: FP = d_a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var nxt: FP = d_b.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
-    var cur_is_a = True
-    var n_iter = 0
-    var converged = False
-    for it in range(max_iter):
-        ctx.enqueue_function[pagerank_step_kernel](
-            d_q.unsafe_ptr(), cur, d_p.unsafe_ptr(), d_dw.unsafe_ptr(), d_dg.unsafe_ptr(), nxt,
-            Int64(n), alpha, grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
-        )
-        _absdiff_launch(ctx, nxt, cur, _p(d_s), _p(d_part), n)
-        ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=d_s)
-        ctx.synchronize()
-        var t = cur
-        cur = nxt
-        nxt = t
-        cur_is_a = not cur_is_a
-        n_iter = it + 1
-        if Float64(hs[0]) < thr:
-            converged = True
-            break
-    if cur_is_a:
-        _down(ctx, d_a, x, n)
-    else:
-        _down(ctx, d_b, x, n)
-    ctx.synchronize()
-    var inf = IP(unsafe_from_address=info)
-    inf.unsafe_store(0, Int32(n_iter))
-    inf.unsafe_store(1, Int32(1 if converged else 0))
-    _ = hs^
-    _ = d_q^
-    _ = d_a^
-    _ = d_b^
-    _ = d_p^
-    _ = d_dw^
-    _ = d_dg^
-    _ = d_s^
-    _ = d_part^
-    _ = ctx^
-
-
 
 def op_pr_iterate_sparse(
     a: Int, x: Int, p: Int, dw: Int, info: Int,

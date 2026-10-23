@@ -125,8 +125,7 @@ _CHECKPOINT_LIMIT = 2 * 1024 * 1024
 #: `numpy.finfo(numpy.float32).max`, as a Python float.
 _F32_MAX = 3.4028234663852886e+38
 #: DEVIATION 2514: the native entries a resident session needs. A binding
-#: missing any of them refuses with ImportError; there is no fallback to
-#: the mirror-in/mirror-out `byte_lm_session_run`.
+#: missing any of them refuses with ImportError.
 #: The native refusal of an id outside [0, vocab) (training/byte_lm.mojo
 #: `byte_validate_tokens`), mapped back to the public ValueError.
 _TOKEN_REFUSAL = 'token ID outside configured vocabulary'

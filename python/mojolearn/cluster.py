@@ -2,8 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """k-means on the GPU. Reference: cuVS."""
 
-from . import _mojolearn, _serialize
-from ._array import Array
+from . import _mojolearn, _native_archive_bridge
 from ._sample_weight import check_sample_weight
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty, zeros
 from ._mode import NumericModeMixin
@@ -14,6 +13,12 @@ from ._mode import NumericModeMixin
 #: not tags of their own, because a second tag is a second loader and this
 #: repo has already paid for a second lane set.
 _KMEANS_FORMAT = "mojolearn-kmeans-1"
+
+# The compiled saved-model owner, connected once at import: `save` and
+# `load` are one native call each (bindings/archive_schema_native.mojo
+# writes the schema registered below the class; host_archive_native.mojo
+# builds the loaded model).
+_ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
 INIT_KMEANS_PLUS_PLUS = 0
 INIT_RANDOM = 1
@@ -469,38 +474,6 @@ class KMeans(NumericModeMixin):
         """
         return self.fit(X, sample_weight=sample_weight).transform(X)
 
-    def _saved_metric(self):
-        """The metric NAME `save` writes, and its code. A metric the class
-        does not serve is refused here by name, before a file exists."""
-        code = self._metric_code()
-        if code not in _METRIC_SAVED:
-            raise ValueError(
-                f"mojolearn KMeans.save: metric {self.metric!r} is code {code}, "
-                f"which is not one of {sorted(_METRIC_SAVED)}"
-            )
-        name = self.metric if isinstance(self.metric, str) else _METRIC_SAVED[code]
-        return name, code
-
-    def _saved_init(self):
-        """The init NAME `save` writes, and its code."""
-        if isinstance(self.init, str):
-            if self.init not in _INIT_NAMES:
-                raise ValueError(
-                    f"mojolearn KMeans.save: init must be one of "
-                    f"{sorted(_INIT_NAMES)}, got {self.init!r}"
-                )
-            return self.init, _INIT_NAMES[self.init]
-        if callable(self.init) or not isinstance(self.init, int) or isinstance(self.init, bool):
-            # an array or a callable: its centers took the 'array' path
-            return "array", INIT_ARRAY
-        code = int(self.init)
-        if code not in _INIT_SAVED:
-            raise ValueError(
-                f"mojolearn KMeans.save: init code {code} is not one of "
-                f"{sorted(_INIT_SAVED)}"
-            )
-        return _INIT_SAVED[code], code
-
     # Format `_KMEANS_FORMAT` (lane/kmeans-save, 2026-09-16), written by
     # `_serialize.write_npz`. `host_model` predicts through
     # `_mojolearn_core_host`'s `kmeans_predict`/`kmeans_transform`
@@ -530,29 +503,7 @@ class KMeans(NumericModeMixin):
         ValueError
             If `metric` or `init` is not one the model supports.
         """
-        centers = getattr(self, "cluster_centers_", None)
-        if centers is None:
-            raise RuntimeError("this estimator is not fitted yet")
-        from .linear_model import _saved_mode
-        metric_name, metric_code = self._saved_metric()
-        init_name, init_code = self._saved_init()
-        k, d = centers.shape
-        labels = self.labels_
-        return _serialize.write_npz(path, {
-            "format": _KMEANS_FORMAT,
-            "estimator": type(self).__name__,
-            "numeric_mode": _saved_mode(self),
-            "metric": metric_name,
-            "init": init_name,
-            "centers": centers,
-            "labels": labels,
-            "meta": Array.from_list(
-                [k, d, int(labels.size), int(self.n_iter_), metric_code, init_code,
-                 int(self.max_iter), int(self.n_init), int(self.random_state)], "<i8"),
-            "reals": Array.from_list(
-                [float(self.inertia_), float(self.sum_scale_), float(self.weight_scale_),
-                 float(self.tol), float(self.oversampling_factor)], "<f8"),
-        })
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -578,66 +529,33 @@ class KMeans(NumericModeMixin):
             inconsistent (field counts, center shape, label count), or names a
             metric or `init` the class does not support.
         """
-        from .linear_model import _check_saved_by, _restore_mode
-        arrays = _serialize.read_npz(path, _KMEANS_FORMAT)
-        _check_saved_by(arrays, path, cls)
-        meta = _serialize.exact(arrays, "meta", "<i8")
-        reals = _serialize.exact(arrays, "reals", "<f8")
-        if meta.size != 9 or reals.size != 5:
-            raise ValueError(
-                f"mojolearn: {path!r} holds {meta.size} meta fields and {reals.size} "
-                f"reals, 9 and 5 are needed"
-            )
-        k, d, n_fit, n_iter, metric_code, init_code, max_iter, n_init, seed = (
-            int(meta[i]) for i in range(9)  # glue: unpacks the fixed meta vector
-        )
-        if k < 1 or d < 1:
-            raise ValueError(f"mojolearn: {path!r} holds an empty model ({k} centers of {d} features)")
-        metric = _serialize.scalar_str(arrays, "metric")
-        init = _serialize.scalar_str(arrays, "init")
-        if metric not in _METRIC_NAMES:
-            raise ValueError(
-                f"mojolearn: {path!r} metric {metric!r} is not one KMeans serves "
-                f"({sorted(_METRIC_NAMES)})"
-            )
-        if _METRIC_NAMES[metric] != metric_code:
-            raise ValueError(
-                f"mojolearn: {path!r} names metric {metric!r} (code "
-                f"{_METRIC_NAMES[metric]}) but its meta holds code {metric_code}"
-            )
-        if init not in _INIT_NAMES:
-            raise ValueError(
-                f"mojolearn: {path!r} init {init!r} is not one KMeans serves "
-                f"({sorted(_INIT_NAMES)})"
-            )
-        if _INIT_NAMES[init] != init_code:
-            raise ValueError(
-                f"mojolearn: {path!r} names init {init!r} (code {_INIT_NAMES[init]}) "
-                f"but its meta holds code {init_code}"
-            )
-        obj = cls(n_clusters=k, init=init, n_init=n_init, max_iter=max_iter,
-                  tol=float(reals[3]), random_state=seed, metric=metric,
-                  oversampling_factor=float(reals[4]))
-        _restore_mode(obj, arrays)
-        centers = _serialize.exact(arrays, "centers", "<f4")
-        if centers.ndim != 2 or tuple(centers.shape) != (k, d):
-            raise ValueError(
-                f"mojolearn: {path!r} centers shape {tuple(centers.shape)} is not "
-                f"({k}, {d}); the centroid count and the dimensionality disagree"
-            )
-        labels = _serialize.exact(arrays, "labels", "<i4")
-        if labels.ndim != 1 or labels.size != n_fit:
-            raise ValueError(
-                f"mojolearn: {path!r} labels hold {labels.size} values, the fit had {n_fit} rows"
-            )
-        obj.cluster_centers_ = centers
-        obj.labels_ = labels
-        obj.n_features_in_ = d
-        obj.n_iter_ = n_iter
-        obj.inertia_ = float(reals[0])
-        obj.sum_scale_ = float(reals[1])
-        obj.weight_scale_ = float(reals[2])
-        return obj
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+
+
+# The saved model, written natively from this schema (bindings/
+# archive_schema_native.mojo) with the bytes `_serialize.write_npz` wrote:
+# the metric and init NAME and code come from the fixed tables above, and
+# the refusals keep the wording and order of the former Python save.
+_native_archive_bridge.register(KMeans, _KMEANS_FORMAT, (
+    ("need_set", "cluster_centers_", "RuntimeError", "this estimator is not fitted yet"),
+    ("choice", "metric", "@metric", dict(_METRIC_NAMES), dict(_METRIC_SAVED), None, "ValueError",
+     f"mojolearn: metric must be one of {sorted(_METRIC_NAMES)}, got {{value}}",
+     f"mojolearn KMeans.save: metric {{value}} is code {{code}}, which is not one of {sorted(_METRIC_SAVED)}"),
+    ("choice", "init", "@init", dict(_INIT_NAMES), dict(_INIT_SAVED), ("array", INIT_ARRAY), "ValueError",
+     f"mojolearn KMeans.save: init must be one of {sorted(_INIT_NAMES)}, got {{value}}",
+     f"mojolearn KMeans.save: init code {{code}} is not one of {sorted(_INIT_SAVED)}"),
+    ("need", "labels_", "AttributeError", "'{cls}' object has no attribute 'labels_'"),
+    *_native_archive_bridge.head(_KMEANS_FORMAT),
+    ("str", "metric", ("@metric", 0)),
+    ("str", "init", ("@init", 0)),
+    ("array", "centers", "cluster_centers_"),
+    ("array", "labels", "labels_"),
+    ("i8", "meta", (("dim", "cluster_centers_", 0), ("dim", "cluster_centers_", 1), ("size", "labels_"),
+                    ("int", "n_iter_"), ("int", ("@metric", 1)), ("int", ("@init", 1)),
+                    ("int", "max_iter"), ("int", "n_init"), ("int", "random_state"))),
+    ("f8", "reals", (("float", "inertia_"), ("float", "sum_scale_"), ("float", "weight_scale_"),
+                     ("float", "tol"), ("float", "oversampling_factor"))),
+), host_archive_kmeans_metrics=dict(_METRIC_NAMES), host_archive_kmeans_starts=dict(_INIT_NAMES))
 
 
 __all__ = ["KMeans"]

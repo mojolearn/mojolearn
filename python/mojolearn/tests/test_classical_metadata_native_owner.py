@@ -129,7 +129,7 @@ def test_native_score_preserves_existing_grouped_program_and_independent_value(m
 
     from mojolearn import _expansion_metrics, _backend
     with monkeypatch.context() as patch:
-        patch.setattr(_expansion_metrics, "_execute", forbidden)
+        patch.setattr(_expansion_metrics._Prog, "run", forbidden)
         patch.setattr(_backend, "binding", forbidden)
         actual = np.float64(clean(audit_native_call(native_score, model, x, y)))
     assert actual.view("u8") == expected.view("u8")

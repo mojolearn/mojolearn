@@ -124,10 +124,16 @@
       "numeric_profile_measured",
       "numeric_profiles",
       "ops",
+      "parallel_classical",
+      "parallel_ensemble",
       "parallel_forecasting",
       "parallel_gaussian_process",
+      "parallel_graph",
       "parallel_ivf",
       "parallel_model_selection",
+      "parallel_neighbors",
+      "parallel_neighbors_reference",
+      "parallel_preprocessing",
       "preprocessing",
       "resample",
       "select_d",
@@ -661,6 +667,53 @@
       "preprocessing.SplineTransformer",
       "preprocessing.TargetEncoder",
       "svm.OneClassSVM"
+    ],
+    "python/mojolearn/parallel_classical.py": [
+      "apply_kernel_method",
+      "bootstrap",
+      "fit_arima",
+      "fit_cholesky",
+      "fit_coordinate_descent",
+      "fit_dbscan",
+      "fit_exponential_smoothing",
+      "fit_gaussian_mixture",
+      "fit_gaussian_process",
+      "fit_gram_estimator",
+      "fit_hdbscan",
+      "fit_kernel_method",
+      "fit_kmeans",
+      "fit_logistic",
+      "fit_svm",
+      "monte_carlo_integrate",
+      "permutation_test",
+      "predict_gaussian_mixture",
+      "predict_gaussian_process",
+      "predict_svm",
+      "solve_cholesky",
+      "transform_rbf_sampler"
+    ],
+    "python/mojolearn/parallel_ensemble.py": [
+      "ParallelForestPredictor",
+      "fit_boosting",
+      "fit_feature_freq",
+      "fit_forest",
+      "fit_isolation_forest",
+      "fit_ordered_rmse",
+      "score_isolation_forest"
+    ],
+    "python/mojolearn/parallel_graph.py": [
+      "fit_graph",
+      "transform_umap"
+    ],
+    "python/mojolearn/parallel_neighbors.py": [
+      "ParallelQueries"
+    ],
+    "python/mojolearn/parallel_neighbors_reference.py": [
+      "ReferenceShardedNeighbors"
+    ],
+    "python/mojolearn/parallel_preprocessing.py": [
+      "fit_scaler",
+      "transform_scaler"
     ]
   },
   "cases": [
@@ -4395,6 +4448,15 @@
       "alias_of": "mojolearn.VotingRegressor"
     },
     {
+      "algorithm": "mojolearn.ensemble.catboost_auto_learning_rate",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/ensemble.py",
+      "canonical_algorithm": "mojolearn.ensemble.catboost_auto_learning_rate",
+      "symbol_origin": "mojolearn.ensemble.catboost_auto_learning_rate"
+    },
+    {
       "algorithm": "mojolearn.f_classif",
       "status": "missing",
       "cases": [],
@@ -6434,6 +6496,285 @@
       "symbol_origin": "mojolearn.ops.Session"
     },
     {
+      "algorithm": "mojolearn.parallel_classical",
+      "status": "not_algorithm",
+      "cases": [],
+      "reason": "Configuration/state/metadata/container or namespace export; not a numerical algorithm.",
+      "source": "python/mojolearn/__init__.py",
+      "canonical_algorithm": "mojolearn.parallel_classical",
+      "symbol_origin": "mojolearn.parallel_classical"
+    },
+    {
+      "algorithm": "mojolearn.parallel_classical.apply_kernel_method",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_classical.py",
+      "canonical_algorithm": "mojolearn.parallel_classical.apply_kernel_method",
+      "symbol_origin": "mojolearn.parallel_classical.apply_kernel_method"
+    },
+    {
+      "algorithm": "mojolearn.parallel_classical.bootstrap",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_classical.py",
+      "canonical_algorithm": "mojolearn.parallel_classical.bootstrap",
+      "symbol_origin": "mojolearn.parallel_classical.bootstrap"
+    },
+    {
+      "algorithm": "mojolearn.parallel_classical.fit_arima",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_classical.py",
+      "canonical_algorithm": "mojolearn.parallel_classical.fit_arima",
+      "symbol_origin": "mojolearn.parallel_classical.fit_arima"
+    },
+    {
+      "algorithm": "mojolearn.parallel_classical.fit_cholesky",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_classical.py",
+      "canonical_algorithm": "mojolearn.parallel_classical.fit_cholesky",
+      "symbol_origin": "mojolearn.parallel_classical.fit_cholesky"
+    },
+    {
+      "algorithm": "mojolearn.parallel_classical.fit_coordinate_descent",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_classical.py",
+      "canonical_algorithm": "mojolearn.parallel_classical.fit_coordinate_descent",
+      "symbol_origin": "mojolearn.parallel_classical.fit_coordinate_descent"
+    },
+    {
+      "algorithm": "mojolearn.parallel_classical.fit_dbscan",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_classical.py",
+      "canonical_algorithm": "mojolearn.parallel_classical.fit_dbscan",
+      "symbol_origin": "mojolearn.parallel_classical.fit_dbscan"
+    },
+    {
+      "algorithm": "mojolearn.parallel_classical.fit_exponential_smoothing",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_classical.py",
+      "canonical_algorithm": "mojolearn.parallel_classical.fit_exponential_smoothing",
+      "symbol_origin": "mojolearn.parallel_classical.fit_exponential_smoothing"
+    },
+    {
+      "algorithm": "mojolearn.parallel_classical.fit_gaussian_mixture",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_classical.py",
+      "canonical_algorithm": "mojolearn.parallel_classical.fit_gaussian_mixture",
+      "symbol_origin": "mojolearn.parallel_classical.fit_gaussian_mixture"
+    },
+    {
+      "algorithm": "mojolearn.parallel_classical.fit_gaussian_process",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_classical.py",
+      "canonical_algorithm": "mojolearn.parallel_classical.fit_gaussian_process",
+      "symbol_origin": "mojolearn.parallel_classical.fit_gaussian_process"
+    },
+    {
+      "algorithm": "mojolearn.parallel_classical.fit_gram_estimator",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_classical.py",
+      "canonical_algorithm": "mojolearn.parallel_classical.fit_gram_estimator",
+      "symbol_origin": "mojolearn.parallel_classical.fit_gram_estimator"
+    },
+    {
+      "algorithm": "mojolearn.parallel_classical.fit_hdbscan",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_classical.py",
+      "canonical_algorithm": "mojolearn.parallel_classical.fit_hdbscan",
+      "symbol_origin": "mojolearn.parallel_classical.fit_hdbscan"
+    },
+    {
+      "algorithm": "mojolearn.parallel_classical.fit_kernel_method",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_classical.py",
+      "canonical_algorithm": "mojolearn.parallel_classical.fit_kernel_method",
+      "symbol_origin": "mojolearn.parallel_classical.fit_kernel_method"
+    },
+    {
+      "algorithm": "mojolearn.parallel_classical.fit_kmeans",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_classical.py",
+      "canonical_algorithm": "mojolearn.parallel_classical.fit_kmeans",
+      "symbol_origin": "mojolearn.parallel_classical.fit_kmeans"
+    },
+    {
+      "algorithm": "mojolearn.parallel_classical.fit_logistic",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_classical.py",
+      "canonical_algorithm": "mojolearn.parallel_classical.fit_logistic",
+      "symbol_origin": "mojolearn.parallel_classical.fit_logistic"
+    },
+    {
+      "algorithm": "mojolearn.parallel_classical.fit_svm",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_classical.py",
+      "canonical_algorithm": "mojolearn.parallel_classical.fit_svm",
+      "symbol_origin": "mojolearn.parallel_classical.fit_svm"
+    },
+    {
+      "algorithm": "mojolearn.parallel_classical.monte_carlo_integrate",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_classical.py",
+      "canonical_algorithm": "mojolearn.parallel_classical.monte_carlo_integrate",
+      "symbol_origin": "mojolearn.parallel_classical.monte_carlo_integrate"
+    },
+    {
+      "algorithm": "mojolearn.parallel_classical.permutation_test",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_classical.py",
+      "canonical_algorithm": "mojolearn.parallel_classical.permutation_test",
+      "symbol_origin": "mojolearn.parallel_classical.permutation_test"
+    },
+    {
+      "algorithm": "mojolearn.parallel_classical.predict_gaussian_mixture",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_classical.py",
+      "canonical_algorithm": "mojolearn.parallel_classical.predict_gaussian_mixture",
+      "symbol_origin": "mojolearn.parallel_classical.predict_gaussian_mixture"
+    },
+    {
+      "algorithm": "mojolearn.parallel_classical.predict_gaussian_process",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_classical.py",
+      "canonical_algorithm": "mojolearn.parallel_classical.predict_gaussian_process",
+      "symbol_origin": "mojolearn.parallel_classical.predict_gaussian_process"
+    },
+    {
+      "algorithm": "mojolearn.parallel_classical.predict_svm",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_classical.py",
+      "canonical_algorithm": "mojolearn.parallel_classical.predict_svm",
+      "symbol_origin": "mojolearn.parallel_classical.predict_svm"
+    },
+    {
+      "algorithm": "mojolearn.parallel_classical.solve_cholesky",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_classical.py",
+      "canonical_algorithm": "mojolearn.parallel_classical.solve_cholesky",
+      "symbol_origin": "mojolearn.parallel_classical.solve_cholesky"
+    },
+    {
+      "algorithm": "mojolearn.parallel_classical.transform_rbf_sampler",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_classical.py",
+      "canonical_algorithm": "mojolearn.parallel_classical.transform_rbf_sampler",
+      "symbol_origin": "mojolearn.parallel_classical.transform_rbf_sampler"
+    },
+    {
+      "algorithm": "mojolearn.parallel_ensemble",
+      "status": "not_algorithm",
+      "cases": [],
+      "reason": "Configuration/state/metadata/container or namespace export; not a numerical algorithm.",
+      "source": "python/mojolearn/__init__.py",
+      "canonical_algorithm": "mojolearn.parallel_ensemble",
+      "symbol_origin": "mojolearn.parallel_ensemble"
+    },
+    {
+      "algorithm": "mojolearn.parallel_ensemble.ParallelForestPredictor",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_ensemble.py",
+      "canonical_algorithm": "mojolearn.parallel_ensemble.ParallelForestPredictor",
+      "symbol_origin": "mojolearn.parallel_ensemble.ParallelForestPredictor"
+    },
+    {
+      "algorithm": "mojolearn.parallel_ensemble.fit_boosting",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_ensemble.py",
+      "canonical_algorithm": "mojolearn.parallel_ensemble.fit_boosting",
+      "symbol_origin": "mojolearn.parallel_ensemble.fit_boosting"
+    },
+    {
+      "algorithm": "mojolearn.parallel_ensemble.fit_feature_freq",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_ensemble.py",
+      "canonical_algorithm": "mojolearn.parallel_ensemble.fit_feature_freq",
+      "symbol_origin": "mojolearn.parallel_ensemble.fit_feature_freq"
+    },
+    {
+      "algorithm": "mojolearn.parallel_ensemble.fit_forest",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_ensemble.py",
+      "canonical_algorithm": "mojolearn.parallel_ensemble.fit_forest",
+      "symbol_origin": "mojolearn.parallel_ensemble.fit_forest"
+    },
+    {
+      "algorithm": "mojolearn.parallel_ensemble.fit_isolation_forest",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_ensemble.py",
+      "canonical_algorithm": "mojolearn.parallel_ensemble.fit_isolation_forest",
+      "symbol_origin": "mojolearn.parallel_ensemble.fit_isolation_forest"
+    },
+    {
+      "algorithm": "mojolearn.parallel_ensemble.fit_ordered_rmse",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_ensemble.py",
+      "canonical_algorithm": "mojolearn.parallel_ensemble.fit_ordered_rmse",
+      "symbol_origin": "mojolearn.parallel_ensemble.fit_ordered_rmse"
+    },
+    {
+      "algorithm": "mojolearn.parallel_ensemble.score_isolation_forest",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_ensemble.py",
+      "canonical_algorithm": "mojolearn.parallel_ensemble.score_isolation_forest",
+      "symbol_origin": "mojolearn.parallel_ensemble.score_isolation_forest"
+    },
+    {
       "algorithm": "mojolearn.parallel_forecasting",
       "status": "not_algorithm",
       "cases": [],
@@ -6506,6 +6847,33 @@
       "symbol_origin": "mojolearn.parallel_gaussian_process.predict_gaussian_process_classifier"
     },
     {
+      "algorithm": "mojolearn.parallel_graph",
+      "status": "not_algorithm",
+      "cases": [],
+      "reason": "Configuration/state/metadata/container or namespace export; not a numerical algorithm.",
+      "source": "python/mojolearn/__init__.py",
+      "canonical_algorithm": "mojolearn.parallel_graph",
+      "symbol_origin": "mojolearn.parallel_graph"
+    },
+    {
+      "algorithm": "mojolearn.parallel_graph.fit_graph",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_graph.py",
+      "canonical_algorithm": "mojolearn.parallel_graph.fit_graph",
+      "symbol_origin": "mojolearn.parallel_graph.fit_graph"
+    },
+    {
+      "algorithm": "mojolearn.parallel_graph.transform_umap",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_graph.py",
+      "canonical_algorithm": "mojolearn.parallel_graph.transform_umap",
+      "symbol_origin": "mojolearn.parallel_graph.transform_umap"
+    },
+    {
       "algorithm": "mojolearn.parallel_ivf",
       "status": "not_algorithm",
       "cases": [],
@@ -6541,6 +6909,69 @@
       "source": "python/mojolearn/parallel_model_selection.py",
       "canonical_algorithm": "mojolearn.parallel_model_selection.cross_val_score",
       "symbol_origin": "mojolearn.parallel_model_selection.cross_val_score"
+    },
+    {
+      "algorithm": "mojolearn.parallel_neighbors",
+      "status": "not_algorithm",
+      "cases": [],
+      "reason": "Configuration/state/metadata/container or namespace export; not a numerical algorithm.",
+      "source": "python/mojolearn/__init__.py",
+      "canonical_algorithm": "mojolearn.parallel_neighbors",
+      "symbol_origin": "mojolearn.parallel_neighbors"
+    },
+    {
+      "algorithm": "mojolearn.parallel_neighbors.ParallelQueries",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_neighbors.py",
+      "canonical_algorithm": "mojolearn.parallel_neighbors.ParallelQueries",
+      "symbol_origin": "mojolearn.parallel_neighbors.ParallelQueries"
+    },
+    {
+      "algorithm": "mojolearn.parallel_neighbors_reference",
+      "status": "not_algorithm",
+      "cases": [],
+      "reason": "Configuration/state/metadata/container or namespace export; not a numerical algorithm.",
+      "source": "python/mojolearn/__init__.py",
+      "canonical_algorithm": "mojolearn.parallel_neighbors_reference",
+      "symbol_origin": "mojolearn.parallel_neighbors_reference"
+    },
+    {
+      "algorithm": "mojolearn.parallel_neighbors_reference.ReferenceShardedNeighbors",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_neighbors_reference.py",
+      "canonical_algorithm": "mojolearn.parallel_neighbors_reference.ReferenceShardedNeighbors",
+      "symbol_origin": "mojolearn.parallel_neighbors_reference.ReferenceShardedNeighbors"
+    },
+    {
+      "algorithm": "mojolearn.parallel_preprocessing",
+      "status": "not_algorithm",
+      "cases": [],
+      "reason": "Configuration/state/metadata/container or namespace export; not a numerical algorithm.",
+      "source": "python/mojolearn/__init__.py",
+      "canonical_algorithm": "mojolearn.parallel_preprocessing",
+      "symbol_origin": "mojolearn.parallel_preprocessing"
+    },
+    {
+      "algorithm": "mojolearn.parallel_preprocessing.fit_scaler",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_preprocessing.py",
+      "canonical_algorithm": "mojolearn.parallel_preprocessing.fit_scaler",
+      "symbol_origin": "mojolearn.parallel_preprocessing.fit_scaler"
+    },
+    {
+      "algorithm": "mojolearn.parallel_preprocessing.transform_scaler",
+      "status": "missing",
+      "cases": [],
+      "reason": "No bounded standalone whole-operation fixture has been reviewed for this public algorithm. Existing kernel evidence does not fill this cell.",
+      "source": "python/mojolearn/parallel_preprocessing.py",
+      "canonical_algorithm": "mojolearn.parallel_preprocessing.transform_scaler",
+      "symbol_origin": "mojolearn.parallel_preprocessing.transform_scaler"
     },
     {
       "algorithm": "mojolearn.parallel_training.ParallelByteLanguageModelTrainer",
@@ -7286,13 +7717,13 @@
   ],
   "inventory_note": "Inventory includes public aliases, metadata and namespace exports. not_algorithm rows are explicit exclusions from algorithm coverage; missing rows remain visible. ready means a source fixture exists, never that compile/runtime/backend validation passed.",
   "census": {
-    "public_export_rows": 603,
+    "public_export_rows": 645,
     "alias_rows": 101,
-    "canonical_non_algorithm_exports": 60,
-    "canonical_algorithm_entries": 442,
+    "canonical_non_algorithm_exports": 66,
+    "canonical_algorithm_entries": 478,
     "canonical_status_counts": {
       "blocked": 9,
-      "missing": 389,
+      "missing": 425,
       "ready": 44
     },
     "note": "Algorithm entries include public numerical/helper operations as well as estimator classes; no per-estimator completeness is implied by this denominator."

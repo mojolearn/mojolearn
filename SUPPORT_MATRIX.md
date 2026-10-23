@@ -97,7 +97,7 @@ Every name below is exported from `mojolearn` or one of its submodules.
 | Training | `SmallMLPTrainer`, `SGD`, `Adam`, `AdamW`, `clip_grad_norm_`, `cross_entropy`, and the `training` primitives `embedding_forward`, `embedding_backward`, `rms_norm_forward`, `rms_norm_backward`, `linear_forward`, `linear_backward` |
 | Language models | `LanguageModelTrainer`, `LanguageModelConfig`, `LanguageModelInference`, `LanguageModelHostTrainer`, `SmallByteLanguageModelTrainer`, `ByteLanguageModelConfig`, `ParallelByteLanguageModelTrainer`, `PooledByteLanguageModelTrainer`, `OffloadedByteLanguageModelTrainer` |
 | Tokenizers | `BpeTokenizer` (the user supplies the vocabulary), `lm_corpus` |
-| Multi-GPU | `ParallelNeuralTrainer`, `parallel_forecasting`, `parallel_gaussian_process`, `parallel_ivf`, `parallel_model_selection` |
+| Multi-GPU | `ParallelNeuralTrainer`, `parallel_classical`, `parallel_ensemble`, `parallel_forecasting`, `parallel_gaussian_process`, `parallel_graph`, `parallel_ivf`, `parallel_model_selection`, `parallel_neighbors`, `parallel_neighbors_reference`, `parallel_preprocessing` |
 | Cross-vendor training (experimental) | `mojolearn.cross_vendor` |
 | Runtime | `numeric_mode`, `set_numeric_mode`, `vendor`, `gpu_arch` |
 

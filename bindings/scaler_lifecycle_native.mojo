@@ -8,6 +8,7 @@ from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_pyth
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
+from bindings.py_typed_call import py_call_typed
 from bindings.native_error_class import error_without_class
 from bindings.classical_attributes import classical_connect_numpy, classical_getattribute, classical_check_layout
 from bindings.classical_arrays import classical_typed, classical_input, classical_address, classical_is_array, classical_is_f32, classical_c_order, classical_i64, classical_dtype_str
@@ -16,6 +17,7 @@ from bindings.classical_archive_read import classical_archive_read, _archive_exa
 from bindings.classical_exceptions import classical_not_fitted_class
 from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.classical_pandas import native_pandas_exact, classical_admit_value
+from bindings.scaler_tags_native import scaler_tags
 from bindings.sequential_inputs import sequential_input
 from bindings.sequential_admission import _ordinary_torch
 from bindings.native_torch_admission import native_torch_numpy
@@ -36,7 +38,7 @@ def _entries(mode: PythonObject, context: PythonObject) raises -> PythonObject:
     if py_type(entries) is b.str:
         raise Error("ImportError: " + String(entries))
     var expected = 1 if String(mode) == "identical" else 0
-    if Int(py=py_call(entries["preprocessing_numeric_mode"])) != expected or Int(py=py_call(entries["x_prep_numeric_mode"])) != expected:
+    if Int(py=py_call_typed(entries["preprocessing_numeric_mode"])) != expected or Int(py=py_call_typed(entries["x_prep_numeric_mode"])) != expected:
         raise Error("RuntimeError: Scaler native numeric mode disagrees with requested mode")
     return entries
 
@@ -63,7 +65,7 @@ def _direct(entries: PythonObject, name: String) raises -> PythonObject:
 
 
 def _run(mut arena: List[Float32], mut program: List[Int32], entries: PythonObject) raises:
-    _ = py_call(entries["x_prep_run"], Int(arena.unsafe_ptr()), len(arena), Int(program.unsafe_ptr()), len(program) // 16)
+    _ = py_call_typed(entries["x_prep_run"], Int(arena.unsafe_ptr()), len(arena), Int(program.unsafe_ptr()), len(program) // 16)
 
 
 def _features(fields: PythonObject) raises -> Int:
@@ -207,7 +209,7 @@ def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
     else:
         finite = scaler_all_finite(_ptr(values), n*d)
         var filled = values if finite else _nan_fill(values, entries, context)
-        _ = py_call(entries["standard_transform"], classical_address(filled), Int(ap+2*d), Int(ap+3*d), classical_address(output), params)
+        _ = py_call_typed(entries["standard_transform"], classical_address(filled), Int(ap+2*d), Int(ap+3*d), classical_address(output), params)
         if not scaler_all_finite(_ptr(output), n*d):
             raise Error("StandardScaler transform overflowed in Float32")
         _ = filled^
@@ -570,6 +572,8 @@ def scaler_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
                 _ = py_call(fields.clear)
                 _ = scaler_initialize(model,values)
             result = model
+        elif op == "tags":
+            result = scaler_tags(model,context,Python.tuple("float32"))
         elif op == "is_fitted":
             result = PythonObject(_fitted(py_fields(model)))
         elif op == "transform":
@@ -598,6 +602,8 @@ def scaler_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
                 return raise_python_exception(nested)
         if String(error).startswith("TypeError:"):
             return raise_python_exception(error_without_class(error,"TypeError"),ExceptionType.TypeError)
+        if String(error).startswith("AttributeError:"):
+            return raise_python_exception(error_without_class(error,"AttributeError"),ExceptionType("PyExc_AttributeError"))
         if String(error).startswith("ImportError:"):
             return raise_python_exception(error_without_class(error,"ImportError"),ExceptionType("PyExc_ImportError"))
         if String(error).startswith("RuntimeError:"):

@@ -69,33 +69,6 @@ def threshold_labels_i64(
     return 0
 
 
-def scale_shift_ftz_f32(
-    src_addr: Int, count: Int, fa: Float32, fb: Float32, o: Int, dst_addr: Int,
-) raises -> Int:
-    """Elementwise float32, each step one rounding then `ftz`: op 0 dst =
-    ftz(ftz(a * v) + b); op 1 dst = ftz(sqrt(ftz(v * a))); op 2 dst =
-    ftz(v * a). src and dst may be the same buffer."""
-    if count < 0 or o < 0 or o > 2:
-        raise Error("scale_shift_ftz_f32: bad n or op")
-    if count == 0:
-        return 0
-    var sp = _ptr[DType.float32](src_addr)
-    var dp = _ptr[DType.float32](dst_addr)
-    for i in range(count):
-        var v = sp.unsafe_load(i)
-        var r: Float32
-        if o == 0:
-            r = _ftz_bits(_ftz_bits(fa * v) + fb)
-        elif o == 1:
-            r = _ftz_bits(sqrt(_ftz_bits(v * fa)))
-        else:
-            r = _ftz_bits(v * fa)
-        comptime if HOTPATH_SABOTAGE:
-            r = -r
-        dp.unsafe_store(i, r)
-    return 0
-
-
 def bincount_i64(
     src_addr: Int, c: Int, count: Int, kk: Int, counts_addr: Int, accumulate: Bool,
 ) raises -> Int:
@@ -159,71 +132,6 @@ def bincount2_i32(
     return 0
 
 
-def compact_notnan_f32(src_addr: Int, count: Int, st: Int, dst_addr: Int) raises -> Int:
-    """dst = the non-NaN values of src[0], src[stride], ..., in order;
-    returns their count."""
-    if count < 0 or st < 1:
-        raise Error("compact_notnan_f32: n >= 0, stride >= 1")
-    if count == 0:
-        return 0
-    var sp = _ptr[DType.float32](src_addr)
-    var dp = _ptr[DType.float32](dst_addr)
-    var m = 0
-    for i in range(count):
-        var v = sp.unsafe_load(i * st)
-        if v == v:
-            dp.unsafe_store(m, v)
-            m += 1
-    return m
-
-
-def gather_keep_neg_i32(
-    table_addr: Int, nt: Int, src_addr: Int, count: Int, dst_addr: Int,
-) raises -> Int:
-    """dst[i] = table[src[i]] for src[i] >= 0, else src[i]; int32. A
-    non-negative value outside the table raises before any write."""
-    if count < 0 or nt < 0:
-        raise Error("gather_keep_neg_i32: n and n_table must be non-negative")
-    if count == 0:
-        return 0
-    var tp = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=table_addr)
-    var sp = _ptr[DType.int32](src_addr)
-    var dp = _ptr[DType.int32](dst_addr)
-    var bad = False
-    for i in range(count):
-        if Int(sp.unsafe_load(i)) >= nt:
-            bad = True
-            break
-    if not bad:
-        for i in range(count):
-            var v = sp.unsafe_load(i)
-            dp.unsafe_store(i, tp.unsafe_load(Int(v)) if v >= 0 else v)
-    if bad:
-        raise Error("gather_keep_neg_i32: index out of range")
-    return 0
-
-
-def dot_rows_f32(a_addr: Int, x_addr: Int, rows: Int, cols: Int, dst_addr: Int) raises -> Int:
-    """dst[j] = float32(sum_i a[i] * x[i, j]), the sum in float64 in row
-    order (one fixed fold): SVC's linear coef_."""
-    if rows < 0 or cols < 0:
-        raise Error("dot_rows_f32: m and d must be non-negative")
-    if cols == 0:
-        return 0
-    var dp = _ptr[DType.float32](dst_addr)
-    var acc = List[Float64](length=cols, fill=0.0)
-    if rows > 0:
-        var ap = _ptr[DType.float32](a_addr)
-        var xp = _ptr[DType.float32](x_addr)
-        for i in range(rows):
-            var a = Float64(ap.unsafe_load(i))
-            for j in range(cols):
-                acc[j] = acc[j] + a * Float64(xp.unsafe_load(i * cols + j))
-    for j in range(cols):
-        dp.unsafe_store(j, Float32(acc[j]))
-    return 0
-
-
 def assign_fold_i64(idx_addr: Int, count: Int, rows: Int, f: Int32, folds_addr: Int) raises -> Int:
     """folds[idx[i]] = fold for the m int64 test indices of one split.
     Returns 0, 1 when an index is outside [0, n), 2 on an overlap."""
@@ -284,40 +192,6 @@ def mark_split_roles_f32(
             break
         rp.unsafe_store(base + row, value)
     return status
-
-
-def split_table_i32(
-    perm_addr: Int, mm: Int, te: Int, tr: Int, counts_addr: Int, table_addr: Int, sums_addr: Int,
-) raises -> Int:
-    """One GroupShuffleSplit draw as a per-group side table and the row
-    sums of each side."""
-    if mm < 1 or te < 0 or tr < 0 or te + tr > mm:
-        raise Error("split_table_i32: bad sizes")
-    var pp = _ptr[DType.int64](perm_addr)
-    var cp = _ptr[DType.int64](counts_addr)
-    var tp = _ptr[DType.int32](table_addr)
-    var sp = _ptr[DType.int64](sums_addr)
-    var c_tr = Int64(0)
-    var c_te = Int64(0)
-    var bad = False
-    for g in range(mm):
-        tp.unsafe_store(g, 2)
-    for i in range(te + tr):
-        var g = Int(pp.unsafe_load(i))
-        if g < 0 or g >= mm:
-            bad = True
-            break
-        if i < te:
-            tp.unsafe_store(g, 1)
-            c_te += cp.unsafe_load(g)
-        else:
-            tp.unsafe_store(g, 0)
-            c_tr += cp.unsafe_load(g)
-    if bad:
-        raise Error("split_table_i32: group index out of range")
-    sp.unsafe_store(0, c_tr)
-    sp.unsafe_store(1, c_te)
-    return 0
 
 
 def scatter_rows_bytes_host(
@@ -392,18 +266,6 @@ def normal_init_f32(
     return 0
 
 
-def epoch_order_i32(dst_addr: Int, count: Int, shuffle: Bool, state_addr: Int) raises -> Int:
-    """One epoch's row order (sequence/schedule.mojo `fill_epoch_order`)."""
-    if count < 1:
-        raise Error("epoch_order_i32: n must be positive")
-    var dp = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=dst_addr)
-    var stp = _ptr[DType.uint64](state_addr)
-    var s = stp.unsafe_load(0)
-    fill_epoch_order(dp, count, shuffle, s)
-    stp.unsafe_store(0, s)
-    return 0
-
-
 @always_inline
 def _powi64(b: Float64, e: Int) -> Float64:
     """b ** e for e >= 0 by squaring, in a fixed order (the same bits on
@@ -441,26 +303,6 @@ def adam_hyper_f64(
         dp.unsafe_store(row + 6, wd)
         dp.unsafe_store(row + 7, dec)
         dp.unsafe_store(row + 8, 1.0 - lr * wd)
-    return 0
-
-
-def mean_std_f32(src_addr: Int, count: Int, st: Int, dst_addr: Int) raises -> Int:
-    """dst (float64, 2) = [mean, population std], two passes in float64 in
-    row order."""
-    if count < 1 or st < 1:
-        raise Error("mean_std_f32: n >= 1, stride >= 1")
-    var sp = _ptr[DType.float32](src_addr)
-    var dp = _ptr[DType.float64](dst_addr)
-    var s = Float64(0)
-    for i in range(count):
-        s += Float64(sp.unsafe_load(i * st))
-    var mean = s / Float64(count)
-    var q = Float64(0)
-    for i in range(count):
-        var dv = Float64(sp.unsafe_load(i * st)) - mean
-        q += dv * dv
-    dp.unsafe_store(0, mean)
-    dp.unsafe_store(1, sqrt(q / Float64(count)))
     return 0
 
 
@@ -599,91 +441,6 @@ def group_fold_assign_i32(
     return 0
 
 
-def strat_group_assign_i32(
-    yenc_addr: Int, gidx_addr: Int, pa: Int, dst_addr: Int, sizes_addr: Int,
-    nn: Int, kk: Int, mm: Int, K: Int,
-) raises -> Int:
-    """StratifiedGroupKFold's fold of each of the m groups (scikit-learn 1.9
-    `_find_best_fold`). Returns 1 when the largest class has fewer rows than
-    n_folds, else 0."""
-    if nn < 0 or kk < 1 or mm < 1 or K < 1:
-        raise Error("strat_group_assign_i32: bad sizes")
-    var yp = _ptr[DType.int32](yenc_addr)
-    var gp = _ptr[DType.int32](gidx_addr)
-    var dp = _ptr[DType.int32](dst_addr)
-    var sp = _ptr[DType.int64](sizes_addr)
-    var counts = List[Int](length=kk, fill=0)
-    var dist = List[Int](length=mm * kk, fill=0)
-    for i in range(nn):
-        var c = Int(yp.unsafe_load(i))
-        var g = Int(gp.unsafe_load(i))
-        if c < 0 or c >= kk or g < 0 or g >= mm:
-            raise Error("strat_group_assign_i32: a code is out of range")
-        counts[c] += 1
-        dist[g * kk + c] += 1
-    var most = 0
-    for c in range(kk):
-        most = max(most, counts[c])
-    if most < K:
-        return 1
-    var order = List[Int](capacity=mm)
-    if pa != 0:
-        var pp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=pa)
-        for j in range(mm):
-            order.append(Int(pp.unsafe_load(j)))
-    else:
-        for j in range(mm):
-            order.append(j)
-    # -std per group in `order`'s positions, stably sorted ascending
-    var keys = List[Float64](capacity=mm)
-    for j in range(mm):
-        var g = order[j]
-        var tot = Float64(0)
-        for c in range(kk):
-            tot += Float64(dist[g * kk + c])
-        var mu = tot / Float64(kk)
-        var ss = Float64(0)
-        for c in range(kk):
-            var dv = Float64(dist[g * kk + c]) - mu
-            ss += dv * dv
-        keys.append(-sqrt(ss / Float64(kk)))
-    var pos = _stable_order_f64(keys)
-    var fold_dist = List[Int](length=K * kk, fill=0)
-    var fold_n = List[Int](length=K, fill=0)
-    var col = List[Float64](length=K, fill=0)
-    for t in range(mm):
-        var g = order[pos[t]]
-        var best = -1
-        var best_score = Float64(0)
-        var best_n = 0
-        for f in range(K):
-            var score = Float64(0)
-            for c in range(kk):
-                var mu = Float64(0)
-                for j in range(K):
-                    var v = fold_dist[j * kk + c] + (dist[g * kk + c] if j == f else 0)
-                    col[j] = Float64(v) / Float64(counts[c])
-                    mu += col[j]
-                mu = mu / Float64(K)
-                var ss = Float64(0)
-                for j in range(K):
-                    var dv = col[j] - mu
-                    ss += dv * dv
-                score += sqrt(ss / Float64(K))
-            score = score / Float64(kk)
-            if best < 0 or score < best_score or (score == best_score and fold_n[f] < best_n):
-                best = f
-                best_score = score
-                best_n = fold_n[f]
-        for c in range(kk):
-            fold_dist[best * kk + c] += dist[g * kk + c]
-            fold_n[best] += dist[g * kk + c]
-        dp.unsafe_store(g, Int32(best))
-    for f in range(K):
-        sp.unsafe_store(f, Int64(fold_n[f]))
-    return 0
-
-
 def strat_group_plan_i32(
     dist_addr: Int, pa: Int, dst_addr: Int, sizes_addr: Int, kk: Int, mm: Int, K: Int,
 ) raises -> Int:
@@ -762,133 +519,6 @@ def strat_group_plan_i32(
         dp.unsafe_store(g, Int32(best))
     for f in range(K):
         sp.unsafe_store(f, Int64(fold_n[f]))
-    return 0
-
-
-@always_inline
-def _sm64_next(mut state: UInt64) -> UInt64:
-    """Python `_splitmix64`: state += golden, then the splitmix64 mix of it."""
-    state = state + UInt64(0x9E3779B97F4A7C15)
-    var z = state
-    z = (z ^ (z >> 30)) * UInt64(0xBF58476D1CE4E5B9)
-    z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
-    return z ^ (z >> 31)
-
-
-def draw_rows_without_replacement_i32(nn: Int, kk: Int, seed: UInt64, dst_addr: Int) raises -> Int:
-    """k distinct rows of n, ascending, int32 at dst: a splitmix64 partial
-    Fisher-Yates then the first k sorted."""
-    if nn < 0 or kk < 0 or kk > nn:
-        raise Error("draw_rows_without_replacement_i32: 0 <= k <= n")
-    var state = seed
-    var dp = _ptr[DType.int32](dst_addr)
-    var perm = List[Int](capacity=nn)
-    for i in range(nn):
-        perm.append(i)
-    for i in range(kk):
-        var z = _sm64_next(state)
-        var j = i + Int(z % UInt64(nn - i))
-        var t = perm[i]
-        perm[i] = perm[j]
-        perm[j] = t
-    var mark = List[Bool](length=nn, fill=False)
-    for i in range(kk):
-        mark[perm[i]] = True
-    var at = 0
-    for r in range(nn):
-        if mark[r]:
-            dp.unsafe_store(at, Int32(r))
-            at += 1
-    return 0
-
-
-def weighted_draw_rows_i32(w_addr: Int, nn: Int, kk: Int, seed: UInt64, dst_addr: Int) raises -> Int:
-    """k rows drawn with replacement in proportion to the float32 weights
-    (bisect_right over the binary64 running sum)."""
-    if nn < 1 or kk < 0:
-        raise Error("weighted_draw_rows_i32: n >= 1, k >= 0")
-    var state = seed
-    var wp = _ptr[DType.float32](w_addr)
-    var dp = _ptr[DType.int32](dst_addr)
-    var cum = List[Float64](capacity=nn)
-    var acc = Float64(0)
-    for i in range(nn):
-        acc += Float64(wp.unsafe_load(i))
-        cum.append(acc)
-    for t in range(kk):
-        var z = _sm64_next(state)
-        var target = Float64(z >> 11) * 1.1102230246251565e-16 * acc
-        # bisect_right: the first index whose running sum exceeds target
-        var lo = 0
-        var hi = nn
-        while lo < hi:
-            var mid = (lo + hi) // 2
-            if target < cum[mid]:
-                hi = mid
-            else:
-                lo = mid + 1
-        dp.unsafe_store(t, Int32(min(lo, nn - 1)))
-    return 0
-
-
-def weighted_pick_i32(m_addr: Int, n: Int, j: Int, kk: Int, state_addr: Int, dst_addr: Int) raises -> Int:
-    """IterativeImputer's n_nearest_features draw for feature `j`; returns
-    the number of picks written (ascending, int32)."""
-    if n < 1 or j < 0 or j >= n or kk < 0:
-        raise Error("weighted_pick_i32: bad sizes")
-    var mp = _ptr[DType.float32](m_addr)
-    var sp = _ptr[DType.uint64](state_addr)
-    var dp = _ptr[DType.int32](dst_addr)
-    var state = sp.unsafe_load(0)
-    var chosen = List[Bool](length=n, fill=False)
-    for _ in range(kk):
-        var tot = Float64(0)
-        var last = -1
-        for a in range(n):
-            var w = Float64(mp.unsafe_load(a * n + j))
-            if not chosen[a] and w > 0:
-                tot += w
-                last = a
-        if last < 0:
-            raise Error("weighted_pick_i32: no feature left to draw")
-        var u = Float64(_sm64_next(state) >> 11) * 1.1102230246251565e-16 * tot
-        var pick = last
-        var cum = Float64(0)
-        for a in range(n):
-            var w = Float64(mp.unsafe_load(a * n + j))
-            if not chosen[a] and w > 0:
-                cum += w
-                if cum > u:
-                    pick = a
-                    break
-        chosen[pick] = True
-    sp.unsafe_store(0, state)
-    var at = 0
-    for a in range(n):
-        if chosen[a]:
-            dp.unsafe_store(at, Int32(a))
-            at += 1
-    return at
-
-
-def ocsvm_alpha_init_f32(c_addr: Int, mm: Int, v: Float64, weighted: Bool, dst_addr: Int) raises -> Int:
-    """libsvm's solve_one_class start: alpha_i = min(C_i, nu_l) while
-    nu_l > 0, nu_l reduced by each (the rest 0)."""
-    if mm < 0:
-        raise Error("ocsvm_alpha_init_f32: m >= 0")
-    var cp = _ptr[DType.float32](c_addr)
-    var dp = _ptr[DType.float32](dst_addr)
-    var nl = v * Float64(mm)
-    if weighted:
-        nl = Float64(0)
-        for i in range(mm):
-            nl += Float64(cp.unsafe_load(i)) * v
-    for i in range(mm):
-        var a = Float64(0)
-        if nl > 0:
-            a = min(Float64(cp.unsafe_load(i)), nl)
-            nl -= a
-        dp.unsafe_store(i, Float32(a))
     return 0
 
 

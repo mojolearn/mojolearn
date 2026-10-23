@@ -86,7 +86,6 @@ from core.mojolearn_shell_impl import (
     cast_f64_to_f32_host,
     nonzero_f64_count_host,
     nonzero_f64_fill_host,
-    probability_rows_f32_host,
     tiled_transpose_to_f32,
 )
 from core.dense_coo import (
@@ -112,9 +111,9 @@ from core.hotpath_device import (
 from core.label_rows_device import LRD_MAX_N, device_argmax_rows, device_argmax_last_f32
 from bindings.normal_dist_helpers import truncnorm_draws_binding
 from bindings.lr_table_helpers import (
-    lr_decide_binding, lr_onecycle_fill_binding, lr_schedule_values_binding, lr_schedule_exact_binding,
-    lr_onecycle_exact_binding, lr_pow_values_binding, lr_schedule_exact_block_binding,
-    lr_onecycle_exact_block_binding, lr_schedule_at_c, lr_schedule_fill_binding, lr_schedule_series_c,
+    lr_schedule_exact_binding,
+    lr_schedule_exact_block_binding,
+    lr_schedule_at_c, lr_schedule_fill_binding, lr_schedule_series_c,
 )
 from bindings.optimizer_public_door import entry_init
 from bindings.array_helpers import (
@@ -128,24 +127,12 @@ from core.rows_bytes_device import device_gather_rows_bytes, device_scatter_rows
 from core.ic_min_device import device_ic_running_min
 from bindings.hotpath_helpers import (
     next_combination_i64_binding,
-    scale_shift_ftz_f32_binding,
-    compact_notnan_f32_binding,
-    gather_keep_neg_i32_binding,
-    dot_rows_f32_binding,
     assign_fold_i64_binding,
     count_fold_hits_i64_binding,
     mark_split_roles_f32_binding,
-    split_table_i32_binding,
-    epoch_order_i32_binding,
     adam_hyper_f64_binding,
-    mean_std_f32_binding,
     strat_alloc_i64_binding,
-    ocsvm_alpha_init_f32_binding,
-    weighted_pick_i32_binding,
-    draw_rows_without_replacement_i32_binding,
-    weighted_draw_rows_i32_binding,
     group_fold_assign_i32_binding,
-    strat_group_assign_i32_binding,
     strat_group_plan_i32_binding,
 )
 # lane fam2-shared (2026-10-04): these eighteen helpers run on the device in
@@ -1019,7 +1006,6 @@ def rbc_knn_search_binding(
 # ===========================================================================
 
 
-
 def cast_f64_to_f32_binding(
     src_addr: PythonObject, dst_addr: PythonObject, n: PythonObject
 ) raises -> PythonObject:
@@ -1274,44 +1260,8 @@ def all_finite_f64_binding(
     return PythonObject(ok)
 
 
-
-# NumPy-free host input validation and byte gathering. These do no learning:
+# NumPy-free host byte gathering. These do no learning:
 # metric arithmetic and estimator work remain in the GPU bindings.
-def probability_rows_f32_binding(
-    src_addr: PythonObject, dst_addr: PythonObject, rows: PythonObject,
-    cols: PythonObject, binary: PythonObject,
-) raises -> PythonObject:
-    var nr = Int(py=rows)
-    var nc = Int(py=cols)
-    var bin = Int(py=binary)
-    if nr < 0 or nc <= 0 or (bin != 0 and bin != 1):
-        raise Error("probability_rows_f32: invalid dimensions or binary flag")
-    if bin == 1 and nc != 1:
-        raise Error("probability_rows_f32: binary input must have one column")
-    if nr == 0:
-        return PythonObject(0)
-    var src = _f32_ptr(Int(py=src_addr))
-    # Multiclass validation never reads or writes dst.
-    var dst = src
-    if bin == 1:
-        dst = _f32_ptr(Int(py=dst_addr))
-    var nonfinite = False
-    var outside = False
-    var bad_sum = False
-    with GILReleased(Python()):
-        var flags = probability_rows_f32_host(src, dst, nr, nc, bin)
-        nonfinite = flags.nonfinite
-        outside = flags.outside
-        bad_sum = flags.bad_sum
-    if nonfinite:
-        return PythonObject(1)
-    if outside:
-        return PythonObject(2)
-    if bad_sum:
-        return PythonObject(3)
-    return PythonObject(0)
-
-
 def gather_rows_bytes_binding(
     src_addr: PythonObject, dst_addr: PythonObject, indices_addr: PythonObject,
     source_rows: PythonObject, output_rows: PythonObject, row_bytes: PythonObject,
@@ -1822,6 +1772,136 @@ def unique_inverse_binding(
     return PythonObject(k)
 
 
+# ===========================================================================
+# THE SHARED ARGUMENT-AND-LABEL ENTRY (public runtime migration, plan section
+# 1 item 1, lane migrate-shared-labels). One native call takes a label
+# vector and/or a sample-weight vector and returns the ORDER RULE's classes
+# and codes and the weight verdict, so `_labels.encode_labels`,
+# `_labels.unique_inverse` and `_sample_weight.check_sample_weight` each make
+# this ONE call (they made up to three before, plus the Python glue between
+# them). It composes the SAME helpers those paths called, in the same order,
+# so no output byte moves: `encode_labels_<dt>` (capped encoder), then
+# `cast_elements` + `unique_inverse` past the cap, `all_finite_<f>` and
+# `reduce_stat` min/max for the weights. The core host binding carries the
+# same body over its host twins under the same name.
+#
+#   labels: `y_addr` != 0 points at `n` values of dtype code `y_code`
+#     (0 f32, 1 f64, 2 i32, 3 i64, 4 u32, 5 u8). The k sorted classes land
+#     WIDENED at `classes_addr` (n slots of 64 bits: float64 for float
+#     labels, int64 for integer labels), one int32 code per row at
+#     `codes_addr`. A NaN label raises the ORDER RULE's message.
+#   weights: `w_addr` != 0 points at `n` weights of code `w_code` (0 or 1).
+#     `w_flags` bit 1 allows negative weights, bit 2 an all-zero vector.
+#
+# Returns k (0 without labels), or a negative status for refused weights:
+# PT_W_NONFINITE, PT_W_NEGATIVE, PT_W_ALL_ZERO (the Python glue raises
+# scikit-learn's message for each). Labels are checked before weights.
+# ===========================================================================
+
+comptime PT_ENCODE_CAP = 4096
+comptime PT_W_NONFINITE = -3
+comptime PT_W_NEGATIVE = -4
+comptime PT_W_ALL_ZERO = -5
+comptime PT_ALLOW_NEGATIVE = 1
+comptime PT_ALLOW_ALL_ZERO = 2
+
+
+def _pt_encode(
+    y_addr: PythonObject, y_code: Int, n: PythonObject, classes_addr: Int,
+    cap: Int, codes_addr: PythonObject,
+) raises -> Int:
+    """The capped encoder `encode_labels_<dt>` for dtype code `y_code`."""
+    var ca = PythonObject(classes_addr)
+    var cp = PythonObject(cap)
+    if y_code == 0:
+        return Int(py=encode_labels_f32_binding(y_addr, n, ca, cp, codes_addr))
+    if y_code == 1:
+        return Int(py=encode_labels_f64_binding(y_addr, n, ca, cp, codes_addr))
+    if y_code == 2:
+        return Int(py=encode_labels_i32_binding(y_addr, n, ca, cp, codes_addr))
+    if y_code == 3:
+        return Int(py=encode_labels_i64_binding(y_addr, n, ca, cp, codes_addr))
+    if y_code == 4:
+        return Int(py=encode_labels_u32_binding(y_addr, n, ca, cp, codes_addr))
+    if y_code == 5:
+        return Int(py=encode_labels_u8_binding(y_addr, n, ca, cp, codes_addr))
+    raise Error("prepare_targets: label dtype code must be 0..5, got " + String(y_code))
+
+
+def prepare_targets_binding(
+    y_addr: PythonObject, y_code: PythonObject, n: PythonObject,
+    classes_addr: PythonObject, codes_addr: PythonObject,
+    w_addr: PythonObject, w_code: PythonObject, w_flags: PythonObject,
+) raises -> PythonObject:
+    """See the block comment above."""
+    var count = Int(py=n)
+    if count < 0:
+        raise Error("prepare_targets: n must be non-negative, got " + String(count))
+    var k = 0
+    if Int(py=y_addr) != 0:
+        if count < 1:
+            raise Error("prepare_targets: labels need n >= 1")
+        if Int(py=classes_addr) == 0 or Int(py=codes_addr) == 0:
+            raise Error("prepare_targets: null label output address")
+        var yc = Int(py=y_code)
+        var wide_kind = 0 if (yc == 0 or yc == 1) else 1
+        var wide_code = 1 if wide_kind == 0 else 3
+        var cap = count if count < PT_ENCODE_CAP else PT_ENCODE_CAP
+        if yc == wide_code:
+            # 64-bit labels: the encoder writes the classes in place
+            k = _pt_encode(y_addr, yc, n, Int(py=classes_addr), cap, codes_addr)
+        else:
+            var tmp = List[UInt64](length=cap, fill=0)
+            var tmp_addr = Int(tmp.unsafe_ptr())
+            k = _pt_encode(y_addr, yc, n, tmp_addr, cap, codes_addr)
+            if k > 0:
+                # widen the k classes (exact: float32 -> float64, int -> int64)
+                _ = cast_elements_binding(
+                    PythonObject(tmp_addr), y_code, classes_addr,
+                    PythonObject(wide_code), PythonObject(k),
+                )
+            _ = tmp^
+        if k < 0:
+            # more classes than the cap, or a NaN label: `unique_inverse` over
+            # the widened labels (no cap; it raises the NaN refusal)
+            if yc == wide_code:
+                k = Int(py=unique_inverse_binding(
+                    y_addr, n, PythonObject(wide_kind), classes_addr, codes_addr
+                ))
+            else:
+                var wide = List[UInt64](length=count, fill=0)
+                var wide_addr = Int(wide.unsafe_ptr())
+                var st = Int(py=cast_elements_binding(
+                    y_addr, y_code, PythonObject(wide_addr), PythonObject(wide_code), n
+                ))
+                if st != 0:
+                    raise Error("prepare_targets: labels do not widen to 64 bits")
+                k = Int(py=unique_inverse_binding(
+                    PythonObject(wide_addr), n, PythonObject(wide_kind), classes_addr, codes_addr
+                ))
+                _ = wide^
+    if Int(py=w_addr) != 0 and count > 0:
+        var wc = Int(py=w_code)
+        var flags = Int(py=w_flags)
+        var fin: Int
+        if wc == 1:
+            fin = Int(py=all_finite_f64_binding(w_addr, n))
+        elif wc == 0:
+            fin = Int(py=all_finite_f32_binding(w_addr, n))
+        else:
+            raise Error("prepare_targets: weight dtype code must be 0 or 1, got " + String(wc))
+        if fin == 0:
+            return PythonObject(PT_W_NONFINITE)
+        var lo = Float64(py=reduce_stat_binding(w_addr, w_code, n, PythonObject(0)))
+        if (flags & PT_ALLOW_NEGATIVE) == 0 and lo < 0:
+            return PythonObject(PT_W_NEGATIVE)
+        if (flags & PT_ALLOW_ALL_ZERO) == 0:
+            var hi = Float64(py=reduce_stat_binding(w_addr, w_code, n, PythonObject(1)))
+            if not (hi > 0 or lo < 0):
+                return PythonObject(PT_W_ALL_ZERO)
+    return PythonObject(k)
+
+
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
@@ -1859,10 +1939,11 @@ def build__mojolearn() -> PythonObject:
         m.def_function[nonzero_f32_fill_binding]("nonzero_f32_fill")
         m.def_function[knn_affinity_f32_binding]("knn_affinity_f32")
         m.def_function[unique_inverse_binding]("unique_inverse")
+        # lane migrate-shared-labels: the shared argument-and-label entry
+        m.def_function[prepare_targets_binding]("prepare_targets")
         # DEVIATION 2325: the three host helpers of DEVIATION 2303.
         m.def_function[all_finite_f32_binding]("all_finite_f32")
         m.def_function[all_finite_f64_binding]("all_finite_f64")
-        m.def_function[probability_rows_f32_binding]("probability_rows_f32")
         m.def_function[gather_rows_bytes_binding]("gather_rows_bytes")
         # lane cpu2-l4-modelsel: model selection on the device (host column on the core host binding)
         m.def_function[msel_put_binding]("msel_put")
@@ -1903,30 +1984,18 @@ def build__mojolearn() -> PythonObject:
         m.def_function[ic_running_min_f32_binding]("ic_running_min_f32")
         m.def_function[fold_pair_f32_binding]("fold_pair_f32")
         m.def_function[threshold_labels_i64_binding]("threshold_labels_i64")
-        m.def_function[scale_shift_ftz_f32_binding]("scale_shift_ftz_f32")
         m.def_function[bincount_i64_binding]("bincount_i64")
-        m.def_function[compact_notnan_f32_binding]("compact_notnan_f32")
-        m.def_function[gather_keep_neg_i32_binding]("gather_keep_neg_i32")
-        m.def_function[dot_rows_f32_binding]("dot_rows_f32")
         m.def_function[assign_fold_i64_binding]("assign_fold_i64")
         m.def_function[count_fold_hits_i64_binding]("count_fold_hits_i64")
         m.def_function[mark_split_roles_f32_binding]("mark_split_roles_f32")
-        m.def_function[split_table_i32_binding]("split_table_i32")
         m.def_function[scatter_rows_bytes_binding]("scatter_rows_bytes")
         m.def_function[uniform_init_f32_binding]("uniform_init_f32")
         m.def_function[normal_init_f32_binding]("normal_init_f32")
-        m.def_function[epoch_order_i32_binding]("epoch_order_i32")
         m.def_function[adam_hyper_f64_binding]("adam_hyper_f64")
-        m.def_function[mean_std_f32_binding]("mean_std_f32")
         m.def_function[first_seen_i32_binding]("first_seen_i32")
         m.def_function[strat_fold_assign_i32_binding]("strat_fold_assign_i32")
         m.def_function[strat_alloc_i64_binding]("strat_alloc_i64")
-        m.def_function[ocsvm_alpha_init_f32_binding]("ocsvm_alpha_init_f32")
-        m.def_function[weighted_pick_i32_binding]("weighted_pick_i32")
-        m.def_function[draw_rows_without_replacement_i32_binding]("draw_rows_without_replacement_i32")
-        m.def_function[weighted_draw_rows_i32_binding]("weighted_draw_rows_i32")
         m.def_function[group_fold_assign_i32_binding]("group_fold_assign_i32")
-        m.def_function[strat_group_assign_i32_binding]("strat_group_assign_i32")
         m.def_function[strat_group_plan_i32_binding]("strat_group_plan_i32")
         m.def_function[bincount2_i32_binding]("bincount2_i32")
         m.def_function[strided_copy_bytes_binding]("strided_copy_bytes")
@@ -1937,14 +2006,8 @@ def build__mojolearn() -> PythonObject:
         m.def_function[truncnorm_draws_binding]("truncnorm_draws")
         m.def_function[fsum_f64_binding]("fsum_f64")
         m.def_function[row_stds_f64_binding]("row_stds_f64")
-        m.def_function[lr_schedule_values_binding]("lr_schedule_values")
-        m.def_function[lr_onecycle_fill_binding]("lr_onecycle_fill")
-        m.def_function[lr_decide_binding]("lr_decide")
         m.def_function[lr_schedule_exact_binding]("lr_schedule_exact")
-        m.def_function[lr_onecycle_exact_binding]("lr_onecycle_exact")
-        m.def_function[lr_pow_values_binding]("lr_pow_values")
         m.def_function[lr_schedule_exact_block_binding]("lr_schedule_exact_block")
-        m.def_function[lr_onecycle_exact_block_binding]("lr_onecycle_exact_block")
         m.def_function[lr_schedule_fill_binding]("lr_schedule_fill")
         m.def_py_c_function(lr_schedule_at_c, "lr_schedule_at")
         m.def_py_c_function(lr_schedule_series_c, "lr_schedule_series")

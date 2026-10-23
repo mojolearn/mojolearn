@@ -6,6 +6,7 @@
 # qualification of arbitrary Python callbacks as native execution.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
+from bindings.py_typed_call import py_call_typed
 from autograd.weight_frontend_pyapi import _checkpoint, _record
 from autograd.program_io import ProgramInput
 from bindings.sequential_description import sequential_fields, sequential_program, sequential_table
@@ -120,9 +121,9 @@ def sequential_load_weights(model: PythonObject, args: PythonObject, context: Py
     var program = sequential_program(model, PythonObject(width), sample)
     var table = sequential_table(model)
     var entries = sequential_entries(model, context)
-    var counts = py_call(entries["model_n_params"], program, table)
+    var counts = py_call_typed(entries["model_n_params"], program, table)
     var params = sequential_array(Python.tuple(counts[0]), context["float32"], context)
-    counts = py_call(entries["model_import_params"], program, table, records, keys, sequential_address(params))
+    counts = py_call_typed(entries["model_import_params"], program, table, records, keys, sequential_address(params))
     # Raw addresses remain borrowed until the native transfer has completed.
     _ = owners^
     _ = tensor_owners^

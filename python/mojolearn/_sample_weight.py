@@ -4,21 +4,18 @@ scikit-learn's `sklearn.utils.validation._check_sample_weight`, with its
 wording (its estimator checks match on it): a scalar becomes a constant
 vector; a list, tuple, pandas Series or buffer becomes a 1-D float vector of
 exactly n_samples entries; negative, NaN and infinite entries are refused,
-and so is an all-zero vector. The scans are the base binding's native
-reductions (`Array.min`, `Array.max`, `all_finite`): no Python loop over
-the weights.
+and so is an all-zero vector. The scans are ONE native call, the shared
+argument-and-label entry `prepare_targets` (`_labels.prepare_targets`):
+the finiteness scan and the min/max reductions it ran as three calls
+before, in the same order, with no Python loop over the weights.
 
 The returned Array may BORROW the caller's buffer (a float32 C-contiguous
 input is not copied). A caller that writes into the weights must pass
 `copy=True`, so the caller's array is never changed.
 """
 
-from ._buffer import all_finite, as_f32_c, as_f64_c, full
-
-#: scikit-learn's own message for an all-zero weight vector; its
-#: check_all_zero_sample_weights_error matches "weight" ... "zero".
-ZERO_WEIGHTS_MSG = "Sample weights must contain at least one non-zero number."
-NEGATIVE_WEIGHTS_MSG = "Negative values in data passed to `sample_weight`"
+from ._buffer import as_f32_c, as_f64_c, full
+from ._labels import NEGATIVE_WEIGHTS_MSG, ZERO_WEIGHTS_MSG, prepare_targets
 
 
 def check_sample_weight(sample_weight, n_samples, *, dtype="<f4", copy=False,
@@ -70,11 +67,6 @@ def check_sample_weight(sample_weight, n_samples, *, dtype="<f4", copy=False,
                 w = w.copy()
     if n == 0:
         return w
-    if not all_finite(w):
-        raise ValueError("Input sample_weight contains NaN or infinity.")
-    if not allow_negative and w.min() < 0:  # glue: native min of the weights
-        raise ValueError(NEGATIVE_WEIGHTS_MSG)
-    if not allow_all_zero and not (w.max() > 0 or w.min() < 0):  # glue: native reductions
-        raise ValueError(ZERO_WEIGHTS_MSG)
+    prepare_targets(None, w, n, allow_negative=allow_negative, allow_all_zero=allow_all_zero)
     return w
 

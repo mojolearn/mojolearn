@@ -16,8 +16,7 @@
 `GaussianMixture` fits a mixture of Gaussians by expectation-maximization,
 with scikit-learn's parameter names and meanings.
 """
-from . import _backend, _serialize
-from ._array import Array
+from . import _backend, _native_archive_bridge
 from ._buffer import addr, addr_ro, as_f32_c, empty
 from ._mode import NumericModeMixin
 
@@ -30,6 +29,12 @@ _MODE_CODE = {"fast": 0, "identical": 1}
 #: max_iter, random_state], `reals` `<f8` [lower_bound_, tol, reg_covar],
 #: `covariance_type` and `init_params` as text.
 _GMM_FORMAT = "mojolearn-gmm-1"
+
+# The compiled saved-model owner, connected once at import: `save` and
+# `load` are one native call each (bindings/archive_schema_native.mojo
+# writes the schema registered below the class; host_archive_native.mojo
+# builds the loaded model).
+_ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
 #: Refused by absence on the Mojo side (`GmmParams` has no such field,
 #: DEVIATION 1734), so refused by NAME here rather than accepted and
@@ -388,29 +393,7 @@ class GaussianMixture(NumericModeMixin):
             If the model was fitted with options outside the default
             configuration (see the class description).
         """
-        if not hasattr(self, "weights_"):
-            raise RuntimeError("this estimator is not fitted yet")
-        if getattr(self, "_ext", None) is not None:
-            raise NotImplementedError("mojolearn GaussianMixture: save() carries the default fit's model "
-                                      "format only; a fit with the options routed to x_cluster is not saved "
-                                      "(x_cluster/NOT_IMPLEMENTED.tsv)")
-        from .linear_model import _saved_mode
-        k, d = self.means_.shape
-        return _serialize.write_npz(path, {
-            "format": _GMM_FORMAT,
-            "estimator": type(self).__name__,
-            "numeric_mode": _saved_mode(self),
-            "covariance_type": str(self.covariance_type),
-            "init_params": str(self.init_params),
-            "weights": self.weights_,
-            "means": self.means_.reshape((k * d,)),
-            "covariances": self.covariances_.reshape((k * d * d,)),
-            "precisions_cholesky": self.precisions_cholesky_.reshape((k * d * d,)),
-            "log_det_chol": self.log_det_chol_,
-            "ints": Array.from_list([k, d, int(self.n_iter_), 1 if self.converged_ else 0,
-                                     int(self.max_iter), int(self.random_state)], "<i8"),
-            "reals": Array.from_list([float(self.lower_bound_), float(self.tol), float(self.reg_covar)], "<f8"),
-        })
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -434,37 +417,7 @@ class GaussianMixture(NumericModeMixin):
             If the file is of another format or estimator, or is truncated or
             inconsistent.
         """
-        from .linear_model import _check_saved_by, _restore_mode
-        arrays = _serialize.read_npz(path, _GMM_FORMAT)
-        _check_saved_by(arrays, path, cls)
-        ints = _serialize.exact(arrays, "ints", "<i8")
-        reals = _serialize.exact(arrays, "reals", "<f8")
-        if ints.size != 6 or reals.size != 3:
-            raise ValueError(f"mojolearn: {path!r} holds {ints.size} ints and {reals.size} reals, 6 and 3 are needed")
-        k, d, n_iter, converged, max_iter, seed = (int(ints[i]) for i in range(6))  # glue: unpacks the fixed int vector
-        if k < 1 or d < 1:
-            raise ValueError(f"mojolearn: {path!r} holds an empty model")
-        obj = cls(n_components=k, covariance_type=_serialize.scalar_str(arrays, "covariance_type"),
-                  tol=float(reals[1]), reg_covar=float(reals[2]), max_iter=max_iter,
-                  init_params=_serialize.scalar_str(arrays, "init_params"), random_state=seed)
-        _restore_mode(obj, arrays)
-        sizes = dict(weights=k, means=k * d, covariances=k * d * d, precisions_cholesky=k * d * d, log_det_chol=k)
-        got = {}
-        for name, size in sizes.items():  # glue: checks saved array names
-            a = _serialize.exact(arrays, name, "<f4")
-            if a.ndim != 1 or a.size != size:
-                raise ValueError(f"mojolearn: {path!r} {name} holds {a.size} values, {size} are needed")
-            got[name] = a
-        obj.n_features_in_ = d
-        obj.weights_ = got["weights"]
-        obj.means_ = got["means"].reshape((k, d))
-        obj.covariances_ = got["covariances"].reshape((k, d, d))
-        obj.precisions_cholesky_ = got["precisions_cholesky"].reshape((k, d, d))
-        obj.log_det_chol_ = got["log_det_chol"]
-        obj.n_iter_ = n_iter
-        obj.converged_ = bool(converged)
-        obj.lower_bound_ = float(reals[0])
-        return obj
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
     def _score_bic_aic(self, X):
         if getattr(self, "_ext", None) is not None:
@@ -591,6 +544,29 @@ class GaussianMixture(NumericModeMixin):
             [n, seed & 0xFFFFFFFF, seed >> 32],
         )
         return x.reshape((n, d)), y
+
+
+# The saved model, written natively from this schema (bindings/
+# archive_schema_native.mojo) with the bytes `_serialize.write_npz` wrote;
+# the refusals keep the wording and order of the former Python save.
+_native_archive_bridge.register(GaussianMixture, _GMM_FORMAT, (
+    _native_archive_bridge.fitted("weights_"),
+    ("refuse_set", "_ext", "NotImplementedError",
+     "mojolearn GaussianMixture: save() carries the default fit's model format only; a fit with the "
+     "options routed to x_cluster is not saved (x_cluster/NOT_IMPLEMENTED.tsv)"),
+    ("need", "means_", "AttributeError", "'{cls}' object has no attribute 'means_'"),
+    *_native_archive_bridge.head(_GMM_FORMAT),
+    ("str", "covariance_type", "covariance_type"),
+    ("str", "init_params", "init_params"),
+    ("array", "weights", "weights_"),
+    ("flat", "means", "means_"),
+    ("flat", "covariances", "covariances_"),
+    ("flat", "precisions_cholesky", "precisions_cholesky_"),
+    ("array", "log_det_chol", "log_det_chol_"),
+    ("i8", "ints", (("dim", "means_", 0), ("dim", "means_", 1), ("int", "n_iter_"), ("bool", "converged_"),
+                    ("int", "max_iter"), ("int", "random_state"))),
+    ("f8", "reals", (("float", "lower_bound_"), ("float", "tol"), ("float", "reg_covar"))),
+))
 
 
 __all__ = ["GaussianMixture"]

@@ -39,11 +39,9 @@ import ctypes
 import inspect
 import itertools
 from . import _portable_math as math
-import mmap
 import numbers
 import operator
 import os
-import time
 
 from . import _backend
 from . import _portable_math as _pm
@@ -228,8 +226,8 @@ _II_CH = 1024
 #:   te_arrays       TargetEncoder hands targets and folds over as arrays
 _R3_NAMES = ("imputer_nosort", "mapped", "view", "work", "te_arrays")
 _R3_DEFAULT = ("imputer_nosort", "mapped", "view", "work", "te_arrays")
-#: the smallest block (words) that is mapped, and the smallest read that is a view
-_MAP_MIN_WORDS = 2 ** 18
+#: the smallest read that is a view (the smallest mapped block, 2**18 words,
+#: is bindings/arena_prog_native.mojo PREP_MAP_MIN_WORDS)
 _VIEW_MIN_WORDS = 2 ** 20
 
 #: lane gap-nb-maxabs-grp (2026-10-02), two A/B switches (unset or anything
@@ -252,7 +250,7 @@ _VIEW_MIN_WORDS = 2 ** 20
 #:                            means and variances take the blocked order for
 #:                            n > _XB rows (GaussianNB's theta_, var_ and
 #:                            epsilon_; non-integer feature counts).
-_DIRECT_MIN_WORDS = 2 ** 20
+#: _DIRECT_MIN_WORDS (2**20 words) is bindings/arena_prog_native.mojo PREP_DIRECT_MIN_WORDS
 #: x_prep/blocked.mojo XB: the rows a block unit folds
 _XB = 2048
 #: CategoricalNB's block histograms hold at most this many words; past it
@@ -341,17 +339,6 @@ def _r3(name):
     if name in off:
         return False
     return name in _R3_DEFAULT or name in names("MOJOLEARN_XPREP_R3_ON")
-
-
-def _zero_words(n, code="f"):
-    """(store, address) of n zeroed 4-byte words: an array.array, or for a
-    large block (`mapped`) a memoryview of an anonymous mapping."""
-    n = max(int(n), 1)
-    if n >= _MAP_MIN_WORDS and _r3("mapped"):
-        m = mmap.mmap(-1, 4 * n)
-        return memoryview(m).cast(code), ctypes.addressof(ctypes.c_char.from_buffer(m))
-    a = array.array(code, bytes(4 * n))
-    return a, a.buffer_info()[0]
 
 
 def _take(store, off, n, shape, code):
@@ -505,116 +492,21 @@ class _Prog:
                             + [0] * (_PARAMS - len(params)))
 
     def run(self, mode):
-        prof = os.environ.get("MOJOLEARN_XPREP_PROFILE", "0") == "1"
-        t_run = time.perf_counter() if prof else 0.0
-        binding = _prep_binding(mode)
-        # Resolve the mandatory entry before probing optional GPU optimizations:
-        # host facades raise ImportError (not AttributeError) for absent exports.
-        # A missing host binary or mandatory implementation must still fail.
-        run = binding.x_prep_run
-        run_out = _optional_prep_entry(binding, "x_prep_run_out")
-        H, sc, on = self.size, self.scratch_size, self.out_size or 0
-        has_out = run_out is not None
-        dev_out = has_out and on > 0 and os.environ.get("MOJOLEARN_XPREP_OUT", "1") != "0"
-        run_scratch = _optional_prep_entry(binding, "x_prep_run_scratch") if sc > 0 and not has_out else None
-        dev_scratch = sc > 0 and (has_out or run_scratch is not None)
-        if H + sc + on > 2 ** 31 - 1:
-            raise ValueError("x_prep: the program exceeds the native Int32 indexing bound")
-        # layout: the host arena, then (host) the output unless the device keeps it,
-        # then the scratch, then (device) the output
-        ha = H + (0 if dev_out else on)
-        sbase, obase = ha, (ha + sc if dev_out else H)
-        host_words = ha + (0 if dev_scratch else sc)
-        arena, base = _zero_words(host_words)
-        t_alloc = time.perf_counter() if prof else 0.0
-        run_ranges = (_optional_prep_entry(binding, "x_prep_run_ranges")
-                      if (dev_scratch or sc == 0) and _arena_io.ranges_enabled() else None)
-        spans = []
-        direct = None
-        gathered = []
-        for off, arr, _ in self._inputs:  # glue: walks the program input buffers once
-            if not arr.size:
-                continue
-            if isinstance(arr, _arena_io.DeviceRows):
-                # device-rows input (lane cpu4-misc): the fold's rows gathered
-                # on the device out of the base X, put once into this binding's
-                # store; a binding without the gather copies the host rows
-                slot = None
-                if run_ranges is not None:
-                    if direct is None and _arena_io.DeviceCache.supports(binding, "x_prep"):
-                        direct = _arena_io.DeviceCache(binding, "x_prep")
-                    slot = _arena_io.rows_slot(binding, "x_prep", arr, direct)
-                if slot is not None:
-                    gathered.append(slot)
-                    spans.append((off, off + arr.size, slot))
-                    continue
-                arr = arr.materialize()
-            inout = (off, off + arr.size) in self._inout
-            cache = (_arena_io.active_cache(binding, "x_prep", arr.size)
-                     if run_ranges is not None and not inout else None)
-            if (cache is None and run_ranges is not None and not inout and arr.size >= _DIRECT_MIN_WORDS
-                    and _switch("MOJOLEARN_XPREP_DIRECT")):
-                # MOJOLEARN_XPREP_DIRECT: up from the input's own buffer into a
-                # slot freed when the run ends (no copy into the host arena)
-                # TOMBSTONE: lane fg-knn-nb G3 (MOJOLEARN_XPREP_NO_SLOT_HOP, x_prep_run_ranges_host host spans) deleted 2026-10-09
-                # (lane postmerge-act-2): slower on the average, gaussian-nb istella NV 1.25x / AMD 1.00x, taxi 1.02x / 1.03x
-                # (nv n0668->n0630, amd a1066->a1090), accuracy SAME, same digests; code recoverable at main 5c137b55e.
-                if direct is None and _arena_io.DeviceCache.supports(binding, "x_prep"):
-                    direct = _arena_io.DeviceCache(binding, "x_prep")
-                cache = direct
-            if cache is not None:
-                # resident (lane py-shared): copied from the store on the device;
-                # the host words stay zero and `_check` refuses a read of them
-                spans.append((off, off + arr.size, cache.id_of(arr)))
-                continue
-            ctypes.memmove(base + 4 * off, addr_ro(arr, name="input"), 4 * arr.size)
-            spans.append((off, off + arr.size, -1))
-        self._in_spans = [(lo, hi) for lo, hi, _ in spans if (lo, hi) not in self._inout]  # glue: walks the program span records
-        prog = array.array("i", [(v.off + (sbase if v.kind == "s" else obase)) if isinstance(v, _Scratch) else v
-                                 for s in self._stages for v in s] or [0])  # glue: flattens the stage parameter records
-        nst = len(self._stages)
-        self._out, self._out_at = None, obase
-        t_in = time.perf_counter() if prof else 0.0
-        if run_ranges is not None:
-            # the shared ranges runner (lane py-shared, core/arena_io.mojo):
-            # the inputs go up, the rest of the host arena starts zero on the
-            # device, and everything but the inputs comes back
-            ins = _arena_io.input_ranges(spans)
-            outs = _arena_io.output_ranges(_arena_io.complement(ins, ha) + [list(s) for s in self._inout])  # glue: walks the program span records
-            ia, oa = _arena_io.pack_ins(ins), _arena_io.pack_outs(outs)
-            out, out_addr = _zero_words(on, self._out_code) if dev_out else (None, 0)
-            try:
-                run_ranges(base, prog.buffer_info()[0], out_addr,
-                           (ha, sc if dev_scratch else 0, on if dev_out else 0, nst),
-                           (ia.buffer_info()[0], len(ins), oa.buffer_info()[0], len(outs)))
-            finally:
-                for slot in gathered:  # glue: frees each fold-rows slot
-                    binding.x_prep_dev_free(slot)
-                if direct is not None:
-                    direct.close()
-            self._out = out
-        elif dev_out:
-            out, out_addr = _zero_words(on, self._out_code)
-            run_out(base, prog.buffer_info()[0], out_addr, (ha, sc if dev_scratch else 0, on, nst))
-            self._out = out
-        elif dev_scratch:
-            if has_out:
-                run_out(base, prog.buffer_info()[0], 0, (ha, sc, 0, nst))
-            else:
-                run_scratch(base, ha, sc, prog.buffer_info()[0], nst)
-        else:
-            run(base, host_words, prog.buffer_info()[0], nst)
-        self.arena = arena
-        for fn in self._after:  # glue: the program's post-run refusal hooks
+        """Run the program on the x_prep binding (GPU, or the host binding on
+        a CPU-only install): one native call that owns the arena layout and
+        stores, the input copies, resident, direct and device-gathered
+        inputs, the range descriptors and the run
+        (bindings/arena_prog_native.mojo). The program's refusals
+        (`_after`) run before its first result is read."""
+        return _PROG_CALL(self, "x_prep_run", (mode,), _PROG_CONTEXT)
+
+    def _refuse(self):
+        """Run the program's post-run refusals once, before any result is
+        read (lane fam2-prep-metrics: refusals a program decides on the
+        device, e.g. `_stage_partial_codes`)."""
+        hooks, self._after = self._after, []
+        for fn in hooks:  # glue: the program's post-run refusal hooks
             fn(self)
-        if prof:
-            # one line per program (the device's XPPHASE lines come in the same order)
-            inv = {v: k for k, v in _OPS.items()}  # glue: debug print of stage names
-            print("XPPROG ops=" + "+".join(inv.get(st[0], str(st[0])) for st in self._stages)  # glue: debug print of stage names
-                  + f" arena={ha} scratch={sc} out={on} dev_out={int(bool(dev_out))} ranges={int(run_ranges is not None)}"
-                  + f" alloc_s={t_alloc - t_run:.4f} inputs_s={t_in - t_alloc:.4f}"
-                  + f" call_s={time.perf_counter() - t_in:.4f}", flush=True)
-        return self
 
     def _check(self, off, n):
         """An input's words never come back from the device (the ranges
@@ -627,6 +519,8 @@ class _Prog:
                                      "which never comes back")
 
     def _read(self, off, shape, code):
+        if self._after:
+            self._refuse()
         shape = tuple(shape) if isinstance(shape, (tuple, list)) else (int(shape),)
         n = 1
         for s in shape:  # glue: walks the shape tuple entries
@@ -658,6 +552,8 @@ class _Prog:
 
     def values(self, off, n):
         """Python floats of n arena entries (for integer bookkeeping)."""
+        if self._after:
+            self._refuse()
         self._check(off, n)
         return self.arena[off:off + n].tolist()
 
@@ -861,6 +757,9 @@ class RobustScaler(_PrepBase):
         """Set constructor parameters and return this scaler."""
         return _ROBUST_CALL(self, "set_params", (params,), _ROBUST_CONTEXT)
 
+    def __sklearn_tags__(self):
+        return _ROBUST_CALL(self, "tags", (), _ROBUST_CONTEXT)
+
     def __sklearn_is_fitted__(self):
         return _ROBUST_CALL(self, "is_fitted", (), _ROBUST_CONTEXT)
 
@@ -933,6 +832,9 @@ class MaxAbsScaler(_PrepBase):
     def set_params(self, **params):
         """Set constructor parameters and return this scaler."""
         return _MAXABS_CALL(self, "set_params", (params,), _MAXABS_CONTEXT)
+
+    def __sklearn_tags__(self):
+        return _MAXABS_CALL(self, "tags", (), _MAXABS_CONTEXT)
 
     def __sklearn_is_fitted__(self):
         return _MAXABS_CALL(self, "is_fitted", (), _MAXABS_CONTEXT)
@@ -3195,7 +3097,14 @@ class GaussianNB(_Classifier):
         self.priors = priors
         self.var_smoothing = var_smoothing
 
+    def _refuse(self):
+        vs = self.var_smoothing
+        if isinstance(vs, bool) or not isinstance(vs, numbers.Real) or not vs >= 0:
+            raise ValueError("The 'var_smoothing' parameter of GaussianNB must be a float in the range "
+                             f"[0.0, inf). Got {vs!r} instead.")
+
     def fit(self, X, y, sample_weight=None):
+        self._refuse()
         arr = _x2d(X)
         n, d = arr.shape
         codes = self._encode_y(y, n)
@@ -3229,6 +3138,7 @@ class GaussianNB(_Classifier):
         return self
 
     def partial_fit(self, X, y, classes=None, sample_weight=None):
+        self._refuse()
         arr = _x2d(X)
         n, d = arr.shape
         first, codes = _partial_codes(self, y, classes, n, defer=True)
@@ -5975,6 +5885,9 @@ class _NeighbourDraws:
 # < tol * max|X_observed|. Every draw (random order, neighbours, posterior
 # samples) comes from random_state by splitmix64 (sklearn draws numpy's; None
 # is seed 0).
+_INF = float("inf")
+
+
 class IterativeImputer(_PrepBase):
     """Impute missing values by modeling each feature from the others, round by round.
 
@@ -6082,6 +5995,10 @@ class IterativeImputer(_PrepBase):
         self.keep_empty_features = keep_empty_features
 
     def _refuse(self):
+        mi = self.max_iter
+        if isinstance(mi, bool) or not isinstance(mi, numbers.Integral) or mi < 0:
+            raise ValueError("The 'max_iter' parameter of IterativeImputer must be an int in the range "
+                             f"[0, inf). Got {mi!r} instead.")
         if self.imputation_order not in ("ascending", "descending", "roman", "arabic", "random"):
             raise ValueError(f"mojolearn: invalid imputation_order {self.imputation_order!r}")
         nnf = self.n_nearest_features
@@ -6187,6 +6104,10 @@ class IterativeImputer(_PrepBase):
                 pr.stage("c2_ii_ord", dk, missd, dk, pos, R, ordw, lens)
         pr.run(mode)
         scale = pr.values(sc, 1)[0]
+        if scale == _INF:
+            # the device's largest |observed value| (c2_colmax) is infinite
+            # exactly when an observed entry is; scikit-learn refuses it
+            raise ValueError("Input X contains infinity or a value too large for dtype('float64').")
         self._indicator = [j for j, c in enumerate(pr.values(st, d)) if int(c) < n] if self.add_indicator else []  # glue: indicator column index list from device counts (d-sized: feature count)
         ln = pr.get_i32(lens, R).tolist() if dk else [0] * R
         ow = pr.get_i32(ordw, R * dk).tolist() if dk else []
@@ -7586,3 +7507,9 @@ _MAXABS_CALL, _MAXABS_CONTEXT = _connect_maxabs_scaler(MaxAbsScaler)
 from ._native_robust_bridge import connect as _connect_robust_scaler
 from ._native_scaler_bridge import register_subclass as _register_robust_scaler
 _ROBUST_CALL, _ROBUST_CONTEXT = _connect_robust_scaler(RobustScaler, _X_PREP2_QSELECT)
+
+
+# Import-time connection; `_Prog.run` hands each program off once to Mojo.
+from ._native_arena_prog import connect as _connect_arena_prog
+_PROG_CALL, _PROG_CONTEXT = _connect_arena_prog(
+    "x_prep", _Prog, _Scratch, {v: k for k, v in _OPS.items()})  # glue: the stage names of the profiling line, once at import

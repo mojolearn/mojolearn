@@ -61,6 +61,12 @@ apis = {
     'mojolearn.parallel_model_selection': ['cross_val_score'],
     'mojolearn.parallel_gaussian_process': ['fit_gaussian_process_classifier', 'predict_gaussian_process_classifier'],
     'mojolearn.parallel_forecasting': ['predict_arima', 'forecast_arima', 'predict_exponential_smoothing', 'forecast_exponential_smoothing'],
+    'mojolearn.parallel_classical': ['fit_kmeans', 'fit_logistic', 'fit_svm', 'fit_gaussian_process', 'fit_arima', 'transform_rbf_sampler'],
+    'mojolearn.parallel_ensemble': ['fit_forest', 'fit_boosting', 'fit_isolation_forest', 'fit_ordered_rmse', 'fit_feature_freq', 'ParallelForestPredictor'],
+    'mojolearn.parallel_graph': ['fit_graph', 'transform_umap'],
+    'mojolearn.parallel_neighbors': ['ParallelQueries'],
+    'mojolearn.parallel_neighbors_reference': ['ReferenceShardedNeighbors'],
+    'mojolearn.parallel_preprocessing': ['fit_scaler', 'transform_scaler'],
 }
 for name, symbols in apis.items():
     module = importlib.import_module(name)

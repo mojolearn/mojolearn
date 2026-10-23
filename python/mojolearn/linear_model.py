@@ -15,6 +15,7 @@ What is still Python here is named at each site: label encoding
 """
 
 import array
+import numbers
 from . import _portable_math as math
 
 from . import _backend, _mojolearn_estimators, _serialize
@@ -23,10 +24,10 @@ from ._buffer import (
     addr, addr_ro, all_finite, as_f32_c, as_f64_c, empty, view, zeros,
 )
 from ._labels import (
-    argmax_rows, classes_from_member, classes_member, decode_labels,
+    argmax_rows, decode_labels,
     encode_labels, flatten_labels, sorted_classes, threshold_codes,
 )
-from . import _native_classical_bridge
+from . import _native_archive_bridge, _native_classical_bridge
 from ._mode import NumericModeMixin
 from ._sample_weight import check_sample_weight
 
@@ -39,6 +40,12 @@ from ._sample_weight import check_sample_weight
 #: the binding, so the file carries the exact value predict uses.
 _LINEAR_FORMAT = "mojolearn-linear-1"
 _LOGISTIC_FORMAT = "mojolearn-logistic-1"
+
+# The compiled saved-model owner, connected once at import: LogisticRegression's
+# `save` and `load` are one native call each (bindings/archive_schema_native.mojo
+# writes the schema registered below the class; host_archive_native.mojo
+# builds the loaded model).
+_ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
 
 def _saved_mode(est):
@@ -83,21 +90,9 @@ def _round_f32(v):
     return array.array("f", (float(v),))[0]
 
 
-def _shape_of(obj):
-    """The shape of an array-like WITHOUT converting it: `.shape` when the
-    object has one (ndarray, Array, memoryview), the nesting of a list or
-    tuple otherwise. Used only to raise the estimator's own message before
-    `_buffer` would raise its generic one."""
-    shape = getattr(obj, "shape", None)
-    if shape is not None:
-        return tuple(shape)
-    if isinstance(obj, (list, tuple)):
-        if obj and isinstance(obj[0], (list, tuple)):
-            return (len(obj), len(obj[0]))
-        return (len(obj),)
-    if hasattr(obj, "__len__"):
-        return (len(obj),)
-    return ()
+# `_shape_of` is the conversion layer's `shape_of` (lane migrate-shared-labels):
+# reading an argument's shape is argument checking, the shell's job.
+from ._buffer import shape_of as _shape_of  # noqa: E402
 
 
 def _labels_1d(y):
@@ -1517,19 +1512,7 @@ class LogisticRegression(NumericModeMixin):
         RuntimeError
             If the model is not fitted.
         """
-        if not hasattr(self, "_w"):
-            raise RuntimeError("this estimator is not fitted yet")
-        arrays = {
-            "format": _LOGISTIC_FORMAT,
-            "estimator": type(self).__name__,
-            "numeric_mode": _saved_mode(self),
-            "w": self._w,
-            "classes": classes_member(self.classes_),
-            "meta": Array.from_list(
-                [int(self.n_features_in_), 1 if self.fit_intercept else 0], "<i8"
-            ),
-        }
-        return _serialize.write_npz(path, arrays)
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -1554,25 +1537,18 @@ class LogisticRegression(NumericModeMixin):
             If the file was saved by a different estimator or its fields do
             not match.
         """
-        arrays = _serialize.read_npz(path, _LOGISTIC_FORMAT)
-        _check_saved_by(arrays, path, cls)
-        meta = _serialize.exact(arrays, "meta", "<i8")
-        if meta.size != 2:
-            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 2 are needed")
-        obj = cls(fit_intercept=bool(int(meta[1])))
-        _restore_mode(obj, arrays)
-        cols = int(meta[0])
-        obj.classes_ = classes_from_member(arrays["classes"])
-        if len(obj.classes_) < 2:
-            raise ValueError(f"mojolearn: {path!r} must carry at least two classes")
-        n_targets = obj._n_targets()
-        w = _serialize.exact(arrays, "w", "<f4")
-        if w.ndim != 1 or w.size != (cols + (1 if obj.fit_intercept else 0)) * n_targets:
-            raise ValueError(f"mojolearn: {path!r} w does not match n_features_in_, fit_intercept and the class count")
-        obj._w = w
-        obj.coef_, obj.intercept_ = _coef_from_w(w, cols, n_targets, obj.fit_intercept)
-        obj.n_features_in_ = cols
-        return obj
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+
+
+# The file: `_w` as fitted, `classes_` as `_labels.classes_member` wrote it
+# (<i8, <f8 or a <U list) and `meta` <i8 [n_features_in_, fit_intercept].
+_native_archive_bridge.register(LogisticRegression, _LOGISTIC_FORMAT, (
+    _native_archive_bridge.fitted("_w"),
+    *_native_archive_bridge.head(_LOGISTIC_FORMAT),
+    ("array", "w", "_w"),
+    ("class_table", "classes", "classes_", numbers.Integral, numbers.Real),
+    ("i8", "meta", (("int", "n_features_in_"), ("bool", "fit_intercept"))),
+))
 
 
 def _qn_row_weights(est, sample_weight, class_weight, classes, codes, n):

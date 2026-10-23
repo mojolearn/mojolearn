@@ -16,12 +16,12 @@ from x_decomp.api import (
     absmax_sign_run, lars_rows_run, lasso_rows_run, lda_rows_run, lu_aux_run, omp_rows_run, qr_r_run, r_signs_run,
     rand_gamma_run, rank_above_run, tsqr_r_run,
     accuracy_run, argmin_all_run, dsum_sq_run, gather_run, geqrf_run, idn_flags_run, lda_online_run, lu_gesv_run, mcd_run,
-    move_run, ols_tsqr_r_run, order_f_run, orgqr_run, pca_mle_rank_host_run, scatter_run, select_smallest_run,
-    sign_labels_run, topn_desc_run, triu_nonzero_run, tsqr_q_run,
+    move_run, ols_tsqr_r_run, order_f_run, orgqr_run, pca_mle_rank_host_run, select_smallest_run,
+    topn_desc_run, tsqr_q_run,
 )
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.exec_trait import Exec
-from x_decomp.moves import F64Ptr, PY2MOJO_DECOMP, argsort_f32, iso_order
+from x_decomp.moves import F64Ptr, PY2MOJO_DECOMP, argsort_f32
 
 
 def _f(addr: PythonObject) raises -> F32Ptr:
@@ -687,49 +687,12 @@ def gather_py(src: PythonObject, idx: PythonObject, m: PythonObject, dst: Python
     return PythonObject(n)
 
 
-def scatter_py(dst: PythonObject, idx: PythonObject, m: PythonObject, src: PythonObject) raises -> PythonObject:
-    """dst[idx[a]] = src[a] for a < m, in order (exact copies)."""
-    var n = Int(py=m)
-    var pd = _f(dst)
-    var pi = _i(idx)
-    var ps = _f(src)
-    with GILReleased(Python()):
-        scatter_run(pd, pi, n, ps)
-    return PythonObject(n)
-
-
-def triu_nonzero_py(dis: PythonObject, n: PythonObject, pos: PythonObject, mir: PythonObject) raises -> PythonObject:
-    """The row-major positions of the nonzero strict upper triangle of an
-    n x n matrix (and their mirrors); returns their count."""
-    var nn = Int(py=n)
-    var pd = _f(dis)
-    var pp = _i(pos)
-    var pm = _i(mir)
-    var m = 0
-    with GILReleased(Python()):
-        m = triu_nonzero_run(pd, nn, pp, pm)
-    return PythonObject(m)
-
-
 def argsort_f32_py(x: PythonObject, m: PythonObject, order: PythonObject) raises -> PythonObject:
     """The stable order of x (m float32 values); NaN refused."""
     var n = Int(py=m)
     var px = _f(x)
     var po = _i(order)
     argsort_f32(px, n, po)
-    return PythonObject(n)
-
-
-def iso_order_py(
-    x: PythonObject, y: PythonObject, xorder: PythonObject, m: PythonObject, order: PythonObject
-) raises -> PythonObject:
-    """The stable order by (x, y) given the stable order by x; NaN refused."""
-    var n = Int(py=m)
-    var px = _f(x)
-    var py_ = _f(y)
-    var pxo = _i(xorder)
-    var po = _i(order)
-    iso_order(px, py_, pxo, n, po)
     return PythonObject(n)
 
 
@@ -791,13 +754,6 @@ def argmin_all_py(x: PythonObject, m: PythonObject, dst: PythonObject) raises ->
     """The positions (exact floats) of every value equal to the minimum; their count."""
     var n = Int(py=m)
     return PythonObject(argmin_all_run(Int(py=x), n, Int(py=dst)))
-
-
-def sign_labels_py(x: PythonObject, m: PythonObject, dst: PythonObject) raises -> PythonObject:
-    """int32 1 where x >= 0, else -1."""
-    var n = Int(py=m)
-    sign_labels_run(Int(py=x), n, Int(py=dst))
-    return PythonObject(n)
 
 
 def accuracy_py(y: PythonObject, pred: PythonObject, w: PythonObject, m: PythonObject) raises -> PythonObject:

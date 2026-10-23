@@ -12,6 +12,7 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_contains, py_get, py_setattr, py_setitem, py_type
+from bindings.py_typed_call import py_call_typed
 from std.memory import memcpy
 from bindings.generation_buffers import (
     GENERATION_BOUNDARY, generation_array, generation_address, generation_copy,
@@ -607,9 +608,9 @@ def causal_lm_forward_binding(model: PythonObject, value: PythonObject, supplied
 
 
 def _resident_close(entries: PythonObject, lm: PythonObject, sessions: PythonObject) raises:
-    _ = py_call(entries["causal_lm_session_close"], lm)
+    _ = py_call_typed(entries["causal_lm_session_close"], lm)
     for i in range(len(sessions)):  # driver-loop: over layer decode sessions
-        _ = py_call(entries["transformer_decode_session_close"], sessions[i])
+        _ = py_call_typed(entries["transformer_decode_session_close"], sessions[i])
 
 
 def causal_lm_resident_binding(model: PythonObject, value: PythonObject, maximum: PythonObject, last_logits: PythonObject, supplied_state: PythonObject) raises -> PythonObject:

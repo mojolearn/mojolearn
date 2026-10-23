@@ -91,11 +91,18 @@ class StepLR(_PowSched):
     Parameters
     ----------
     base_lr : float
-        Learning rate of the first step. Must be finite.
+        Learning rate of the first step. Must be finite and >= 0.
     step_size : int
-        Number of steps between decays. Must be >= 1, otherwise `ValueError`.
+        Number of steps between decays. Must be an integer >= 1.
     gamma : float, default 0.1
-        Multiplicative decay factor. Must be finite.
+        Multiplicative decay factor. Must be finite and >= 0.
+
+    Raises
+    ------
+    TypeError
+        If `base_lr` or `gamma` is not a real number, or `step_size` is not an integer.
+    ValueError
+        If `base_lr` or `gamma` is not finite or negative, or `step_size` < 1.
 
     Notes
     -----
@@ -129,9 +136,16 @@ class ExponentialLR(_PowSched):
     Parameters
     ----------
     base_lr : float
-        Learning rate of the first step. Must be finite.
+        Learning rate of the first step. Must be finite and >= 0.
     gamma : float
-        Multiplicative decay factor per step. Must be finite.
+        Multiplicative decay factor per step. Must be finite and >= 0.
+
+    Raises
+    ------
+    TypeError
+        If `base_lr` or `gamma` is not a real number.
+    ValueError
+        If `base_lr` or `gamma` is not finite or negative.
 
     Notes
     -----

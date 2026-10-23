@@ -887,20 +887,6 @@ class _Kit:
             self.b.x_decomp_trisolve(lu.addr, idx.addr, B.addr, out.addr, [n, w, int(trans)])
         return out
 
-    def knn_select(self, D, k, exclude_self):
-        """(indices as floats, values) of each row's k smallest entries of D,
-        ascending by (value, column), column r skipped in row r when
-        exclude_self (x_decomp/cells.mojo `knn_select_row`)."""
-        n, m = D.r, D.c
-        if n * k and self._use(D):
-            I, V = self._dout(n, k), self._dout(n, k)
-            self.b.x_decomp_dev_knn_select(self._did(D), V._d.id, I._d.id, [n, m, k, int(bool(exclude_self))])
-            return I, V
-        I, V = _M.zeros(n, k), _M.zeros(n, k)
-        if n * k:
-            self.b.x_decomp_knn_select(D.addr, V.addr, I.addr, [n, m, k, int(bool(exclude_self))])
-        return I, V
-
     # ---- data movement and orders (lane apple-fast-py2mojo-decomp, x_decomp/moves.mojo)
 
     def take_rows(self, A, idx, m=None, ist=1, ioff=0, radd=0):
@@ -1439,31 +1425,6 @@ class _Kit:
         W, flags = _M.zeros(n, k), _M.zeros(n, 1)
         self.b.x_decomp_barycenter_rows(X.addr, Y.addr, idx.addr, W.addr, flags.addr, [n, Y.r, X.c, k], float(reg))
         return W
-
-    def als_resident(self, C):
-        """Whether `als` runs on the device with C resident (the GPU binding
-        with x_decomp_dev_als_rows): the item half-sweep then reads C through
-        strides (`trans=True`), so no transpose is built."""
-        return self._use(C) and hasattr(self._raw(), "x_decomp_dev_als_rows")
-
-    def als(self, C, Y, reg, trans=False):
-        """One implicit least_squares half-sweep: every row's factor from the
-        confidences C (n x m; with trans, the rows are C's columns) and the
-        other side's factors Y (m x f). trans needs `als_resident(C)`."""
-        if trans or self.als_resident(C):
-            n, m = (C.c, C.r) if trans else (C.r, C.c)
-            f = Y.c
-            YtY = self.mm(Y, Y, ta=True)
-            X, flags = self._dout(n, f), self._dout(n, 1)
-            su, si = (1, C.c) if trans else (C.c, 1)
-            self.b.x_decomp_dev_als_rows(self._did(C), self._did(Y), self._did(YtY), X._d.id, flags._d.id,
-                                         [n, m, f, su, si, C.r * C.c], float(reg))
-            return X
-        n, f = C.r, Y.c
-        YtY = self.mm(Y, Y, ta=True)
-        X, flags = _M.zeros(n, f), _M.zeros(n, 1)
-        self.b.x_decomp_als_rows(C.addr, Y.addr, YtY.addr, X.addr, flags.addr, [n, C.c, f], float(reg))
-        return X
 
     def geqrf(self, A):
         """(h, tau): LAPACK geqrf's factored form of A (m x n, any shape): R on
@@ -6734,13 +6695,6 @@ def _masked_cov(k, M, m, assume_centered):
 def _mahal(k, X, loc, P):
     Xc = k.ew("sub", X, loc)
     return k.rowsum(k.ew("mul", k.mm(Xc, P), Xc))
-
-
-def _chi2_cdf(k, dof, m):
-    """P(chi2_dof <= m): the regularized lower incomplete gamma P(dof/2, m/2)
-    (lane py-runtime-b: x_decomp/chi2.mojo `chi2_cdf`, the prefactor through
-    the cells' logs, lgamma and exp on float32 words, the series in float64)."""
-    return float(k.b.x_decomp_chi2_cdf(float(dof), float(m)))
 
 
 def _chi2_quantile(k, dof, upper):

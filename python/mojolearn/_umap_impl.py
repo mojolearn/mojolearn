@@ -4,7 +4,7 @@
 from . import _portable_math as math
 import operator
 
-from . import _backend
+from . import _backend, _native_archive_bridge
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty
 from ._mode import NumericModeMixin
 from .linear_model import _round_f32
@@ -14,6 +14,12 @@ _F32_MAX = 3.4028234663852886e+38
 
 #: The saved-model format tag (`UMAP.save`, lane/inference-forecast-umap-pca).
 _UMAP_FORMAT = "mojolearn-umap-1"
+
+# The compiled saved-model owner, connected once at import: `save` and
+# `load` are one native call each (bindings/archive_schema_native.mojo
+# writes the schema registered after the class; host_archive_native.mojo
+# `host_archive_umap` builds the loaded model).
+_ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
 
 def _integer(value, name, minimum, maximum=(1 << 63) - 1):
@@ -531,29 +537,7 @@ class UMAP(NumericModeMixin):
         ValueError
             If the model is not fitted.
         """
-        if not hasattr(self, "_transform_training"):
-            raise ValueError("UMAP save requires a successful fit")
-        from . import _serialize
-        from ._array import Array
-        c = self._transform_config
-        arrays = {
-            "format": _UMAP_FORMAT,
-            "estimator": type(self).__name__,
-            "numeric_mode": self._transform_mode,
-            "metric": str(self.metric),
-            "init": self.init if isinstance(self.init, str) else "array",
-            # option parity (lane/algos-decomp): metric code, minkowski p, a, b
-            "extras": Array.from_list([float(v) for v in c[11:15]], "<f8"),  # glue: four saved option scalars
-            "training": self._transform_training,
-            "embedding": self._transform_embedding,
-            "meta": Array.from_list(
-                [int(c[0]), int(c[1]), int(c[2]), int(c[7]), int(c[10]),
-                 1 if self.n_epochs is None else 0,
-                 1 if getattr(self, "input_copied_", False) else 0],
-                "<i8"),
-            "controls": Array.from_list([c[3], c[4], c[5], c[6], c[8], c[9]], "<f4"),
-        }
-        return _serialize.write_npz(path, arrays)
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -578,48 +562,28 @@ class UMAP(NumericModeMixin):
         ValueError
             If the file is not a UMAP model or its contents are inconsistent.
         """
-        from . import _serialize
-        from .decomposition import _check_saved_by, _restore_mode
-        arrays = _serialize.read_npz(path, _UMAP_FORMAT)
-        _check_saved_by(arrays, path, cls)
-        meta = _serialize.exact(arrays, "meta", "<i8")
-        controls = _serialize.exact(arrays, "controls", "<f4")
-        if meta.size != 7 or controls.size != 6:
-            raise ValueError(f"mojolearn: {path!r} holds {meta.size} meta and {controls.size} control "
-                             "fields; 7 and 6 are needed")
-        m = [int(meta[i]) for i in range(7)]  # glue: unpacks the fixed meta vector
-        f = [float(controls[i]) for i in range(6)]  # glue: unpacks the fixed controls vector
-        init = _serialize.scalar_str(arrays, "init")
-        ex = [-1.0, 2.0, 0.0, 0.0]
-        if "extras" in arrays:
-            e = _serialize.exact(arrays, "extras", "<f8")
-            if e.size != 4:
-                raise ValueError(f"mojolearn: {path!r} holds {e.size} extras; 4 are needed")
-            ex = [float(e[i]) for i in range(4)]  # glue: unpacks four saved extras
-        obj = cls(n_neighbors=m[0], n_components=m[1], n_epochs=None if m[5] else m[2],
-                  random_state=m[3], min_dist=f[0], spread=f[1], set_op_mix_ratio=f[2],
-                  local_connectivity=f[3], metric=_serialize.scalar_str(arrays, "metric"),
-                  init="spectral" if init == "array" else init, learning_rate=f[4],
-                  repulsion_strength=f[5], negative_sample_rate=m[4],
-                  a=ex[2] if ex[2] > 0 else None, b=ex[3] if ex[3] > 0 else None,
-                  metric_kwds={"p": ex[1]} if int(ex[0]) == 9 else None)
-        _restore_mode(obj, arrays)
-        config = tuple(obj._parameters()) + tuple(obj._extras())
-        saved = (m[0], m[1], m[2], f[0], f[1], f[2], f[3], m[3], f[4], f[5], m[4],
-                 int(ex[0]), ex[1], ex[2], ex[3])
-        if config != saved:
-            raise ValueError(f"mojolearn: {path!r} controls {saved} do not survive validation as {config}")
-        training = _serialize.exact(arrays, "training", "<f4")
-        embedding = _serialize.exact(arrays, "embedding", "<f4")
-        if (training.ndim != 2 or embedding.ndim != 2 or embedding.shape[0] != training.shape[0]
-                or embedding.shape[1] != m[1]):
-            raise ValueError(f"mojolearn: {path!r} training {tuple(training.shape)} and embedding "
-                             f"{tuple(embedding.shape)} do not agree with n_components={m[1]}")
-        obj._transform_training = training
-        obj._transform_embedding = embedding
-        obj._transform_config = config
-        obj._transform_mode = obj.numeric_mode
-        obj.embedding_ = embedding.copy()
-        obj.n_features_in_ = int(training.shape[1])
-        obj.input_copied_ = bool(m[6])
-        return obj
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+
+
+def _config(i):
+    return ("_transform_config", i)
+
+
+_native_archive_bridge.register(UMAP, _UMAP_FORMAT, (
+    ("need", "_transform_training", "ValueError", "UMAP save requires a successful fit"),
+    ("format", "format", _UMAP_FORMAT),
+    ("estimator", "estimator"),
+    ("str", "numeric_mode", "_transform_mode"),
+    ("str", "metric", "metric"),
+    ("init_name", "init", "init", "array"),
+    # option parity (lane/algos-decomp): metric code, minkowski p, a, b
+    ("f8", "extras", (("float", _config(11)), ("float", _config(12)),
+                      ("float", _config(13)), ("float", _config(14)))),
+    ("array", "training", "_transform_training"),
+    ("array", "embedding", "_transform_embedding"),
+    ("i8", "meta", (("int", _config(0)), ("int", _config(1)), ("int", _config(2)),
+                    ("int", _config(7)), ("int", _config(10)), ("noneflag", "n_epochs"),
+                    ("bool_or", "input_copied_", False))),
+    ("f4", "controls", (("float", _config(3)), ("float", _config(4)), ("float", _config(5)),
+                        ("float", _config(6)), ("float", _config(8)), ("float", _config(9)))),
+), host_archive_umap_metrics=dict(_METRICS))

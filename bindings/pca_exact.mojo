@@ -7,6 +7,7 @@ from std.memory import memcpy, bitcast
 from core.pca_exact_impl import pca_check_state, pca_widen_spectrum
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_contains, py_get, py_setitem, py_type
+from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_array, classical_host_f32, classical_word
 from bindings.sequential_inputs import sequential_input
 from bindings.sequential_arrays import sequential_array, sequential_address
@@ -155,7 +156,7 @@ def pca_exact_fit(model: PythonObject, args: PythonObject, entries: PythonObject
                     Python.list(rows, cols, nc))
     if fraction or mle:
         var keep_in = pca_mle(variance, rows, entries, context) if mle else -1
-        var finish = py_call(entries["pca_rank_finish"], sequential_address(ratio), sequential_address(variance),
+        var finish = py_call_typed(entries["pca_rank_finish"], sequential_address(ratio), sequential_address(variance),
                                                 Python.list(nc, keep_in), PythonObject(frac))
         nc = Int(py=finish[0])
         noise = finish[1]
@@ -202,20 +203,20 @@ def pca_transform(model: PythonObject, source: PythonObject, inverse: Bool,
         var singular = pca_state_array(fields, "singular_values_", Python.tuple(dims.components), context, True, True)
         var variance = pca_state_array(fields, "explained_variance_", Python.tuple(dims.components), context, True, True)
         if inverse:
-            _ = py_call(entries["pca_whiten_inverse_transform"], sequential_address(x), sequential_address(components),
+            _ = py_call_typed(entries["pca_whiten_inverse_transform"], sequential_address(x), sequential_address(components),
                     sequential_address(singular), sequential_address(mean), sequential_address(output),
                     Python.list(rows, dims.features, dims.components, dims.rows))
         else:
-            _ = py_call(entries["pca_whiten_transform"], sequential_address(x), sequential_address(mean),
+            _ = py_call_typed(entries["pca_whiten_transform"], sequential_address(x), sequential_address(mean),
                     sequential_address(components), sequential_address(singular), sequential_address(output),
                     Python.list(rows, dims.features, dims.components, dims.rows))
         _ = singular^
         _ = variance^
     elif inverse:
-        _ = py_call(entries["inverse_transform"], sequential_address(x), sequential_address(components),
+        _ = py_call_typed(entries["inverse_transform"], sequential_address(x), sequential_address(components),
                 sequential_address(mean), sequential_address(output), Python.list(rows, dims.features, dims.components, 1))
     else:
-        _ = py_call(entries["pca_transform"], sequential_address(x), sequential_address(mean), sequential_address(components),
+        _ = py_call_typed(entries["pca_transform"], sequential_address(x), sequential_address(mean), sequential_address(components),
                                     sequential_address(output), Python.list(rows, dims.features, dims.components))
     _ = x^
     _ = components^

@@ -73,13 +73,13 @@ returns `HostGaussianProcessClassifier`, bound to the host binding on any
 box.
 """
 
-from . import _backend, _serialize
+from . import _backend, _native_archive_bridge
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty, frombytes
-from ._gp_impl import _MODE_CODE, ConstantKernel, Kernel, RBF
+from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty
+import numbers
+
+from ._gp_impl import _KERNEL_NODES, _MODE_CODE, ConstantKernel, Kernel, RBF
 from ._labels import (
-    classes_from_member,
-    classes_member,
     decode_labels,
     encode_labels,
 )
@@ -89,6 +89,12 @@ from ._mode import NumericModeMixin
 _GPC_FORMAT = "mojolearn.gpc.v1"
 _ESTIMATOR = "GaussianProcessClassifier"
 _NAME = "mojolearn GaussianProcessClassifier"
+
+# The compiled saved-model owner, connected once at import: `save` and
+# `load` are one native call each (bindings/archive_schema_native.mojo
+# writes the schema registered below the class; host_archive_native.mojo
+# builds the loaded model).
+_ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
 
 def _gpc_all(ext):
@@ -117,13 +123,6 @@ def _ovr_combine(ext, cols, n_star):
         [int(n_star)],
     )
     return proba, codes
-
-
-def _stacked(blocks, dtype, shape):
-    """The fits' same-shape buffers as one (len(blocks),) + shape Array, joined
-    as bytes (no per-element Python)."""
-    raw = b"".join(a.tobytes() for a in blocks)  # glue: joins one buffer per class fit
-    return frombytes(raw, dtype, (len(blocks),) + tuple(shape))
 
 
 def _kernel_arrays(kernel):
@@ -790,37 +789,7 @@ class GaussianProcessClassifier(NumericModeMixin):
         path : str or path-like
             Destination file.
         """
-        if not hasattr(self, "estimators_"):
-            raise RuntimeError(f"{_NAME}: call fit before save")
-        mode = getattr(self, "numeric_mode", None) or _backend.default_mode()
-        if not isinstance(mode, str) or mode.strip().lower() not in _MODE_CODE:
-            raise ValueError(f"{_NAME}: cannot save invalid numeric_mode {mode!r}")
-        kinds, kparams, ls_len, ls, n_ls = _kernel_arrays(self._kernel)
-        n_train, n_features = self.X_train_.shape
-        fits = self.estimators_
-        arrays = {
-            "format": _GPC_FORMAT,
-            "estimator": _ESTIMATOR,
-            "numeric_mode": mode.strip().lower(),
-            "classes": classes_member(self.classes_),
-            "x": self.X_train_,
-            "kinds": kinds,
-            "kparams": kparams,
-            "ls_len": ls_len,
-            "ls": ls,
-            # n_train, n_features, n_estimators, max_iter_predict, n_ls, n_classes
-            "meta": Array.from_list([int(n_train), int(n_features), len(fits),
-                                     int(self._max_iter_predict), int(n_ls),
-                                     int(self.n_classes_)], "<i8"),
-            "y": _stacked([e.y_train_ for e in fits], "<f4", (n_train,)),  # glue: one buffer per class fit
-            "L": _stacked([e.L_ for e in fits], "<f4", (n_train * n_train,)),  # glue: one buffer per class fit
-            "pi": _stacked([e.pi_ for e in fits], "<f4", (n_train,)),  # glue: one buffer per class fit
-            "wsr": _stacked([e.W_sr_ for e in fits], "<f4", (n_train,)),  # glue: one buffer per class fit
-            "lml": Array.from_list([float(e.log_marginal_likelihood_value_) for e in fits], "<f8"),  # glue: saved per-class fit scalars
-            "n_iter": Array.from_list([int(e.n_iter_) for e in fits], "<i8"),  # glue: saved per-class fit scalars
-            "nb": Array.from_list([int(e.nb_) for e in fits], "<i8"),  # glue: saved per-class fit scalars
-        }
-        return _serialize.write_npz(path, arrays)
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -841,67 +810,34 @@ class GaussianProcessClassifier(NumericModeMixin):
         -------
         GaussianProcessClassifier
         """
-        arrays = _serialize.read_npz(path, _GPC_FORMAT)
-        saved_as = _serialize.scalar_str(arrays, "estimator")
-        if saved_as != _ESTIMATOR:
-            raise ValueError(f"mojolearn: {path!r} was saved by {saved_as}, not {_ESTIMATOR}")
-        mode = _serialize.scalar_str(arrays, "numeric_mode")
-        if mode not in _MODE_CODE:
-            raise ValueError(f"mojolearn: invalid saved numeric_mode {mode!r}")
-        meta = _serialize.exact(arrays, "meta", "<i8").tolist()
-        if len(meta) != 6:
-            raise ValueError(f"mojolearn: {path!r} meta holds {len(meta)} fields, 6 are needed")
-        n_train, n_features, n_est, max_iter, n_ls, n_classes = (int(v) for v in meta)  # glue: six saved meta fields
-        kinds = _serialize.exact(arrays, "kinds", "<i4").tolist()
-        kparams = _serialize.exact(arrays, "kparams", "<f4").tolist()
-        ls_len = _serialize.exact(arrays, "ls_len", "<i4").tolist()
-        table = _serialize.exact(arrays, "ls", "<f4").tolist()
-        if len(kparams) != len(kinds) or len(ls_len) != len(kinds) or sum(ls_len) != n_ls:  # glue: kernel node count check
-            raise ValueError(f"mojolearn: {path!r} kernel arrays disagree with each other")
-        nodes, off = [], 0
-        for k, p, ln in zip(kinds, kparams, ls_len):  # glue: rebuilds the kernel's postfix nodes
-            nodes.append((k, p, table[off:off + ln]))
-            off += ln
-        obj = cls(kernel=_SavedKernel(nodes), max_iter_predict=max_iter)
-        obj._validate_params()
-        obj.numeric_mode = mode
-        x = _serialize.exact(arrays, "x", "<f4")
-        if tuple(x.shape) != (n_train, n_features):
-            raise ValueError(f"mojolearn: {path!r} x has shape {tuple(x.shape)}, meta says "
-                             f"({n_train}, {n_features})")
-        classes = classes_from_member(arrays["classes"])
-        want_est = 1 if n_classes == 2 else n_classes
-        if len(classes) != n_classes or n_classes < 2 or n_est != want_est:
-            raise ValueError(f"mojolearn: {path!r} holds {len(classes)} classes and {n_est} "
-                             f"binary fits for n_classes {n_classes}")
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
-        def rows(name, dtype, width):
-            a = _serialize.exact(arrays, name, dtype)
-            if tuple(a.shape) != ((n_est, width) if width else (n_est,)):
-                raise ValueError(f"mojolearn: {path!r} {name} has shape {tuple(a.shape)}")
-            return a
 
-        ys = rows("y", "<f4", n_train)
-        ls_ = rows("L", "<f4", n_train * n_train)
-        pis = rows("pi", "<f4", n_train)
-        wsrs = rows("wsr", "<f4", n_train)
-        lmls = rows("lml", "<f8", 0)
-        iters = rows("n_iter", "<i8", 0)
-        nbs = rows("nb", "<i8", 0)
-        fits = []
-        for e in range(n_est):  # glue: one loaded fit per class
-            # row e of each saved block, copied by memoryview runs (no per-element Python)
-            fits.append(_BinaryLaplace(
-                ys[e],
-                ls_[e].reshape((n_train, n_train)),
-                pis[e],
-                wsrs[e],
-                float(lmls[e]), int(iters[e]), int(nbs[e]),
-            ))
-        obj._set_fitted(x, classes, fits)
-        if n_est > 1:
-            obj.log_marginal_likelihood_value_ = obj.log_marginal_likelihood_value_
-        return obj
+# The file: the kernel as `_kernel_arrays` packs it, the float32 training
+# inputs, the classes as `_labels.classes_member` wrote them, `meta` <i8
+# [n_train, n_features, n_estimators, max_iter_predict, n_ls, n_classes] and
+# each binary fit's state stacked in class order.
+_GPC_KERNEL_NODES = dict(_KERNEL_NODES)
+_GPC_KERNEL_NODES[_SavedKernel] = ("nodes", "_node_list")
+_native_archive_bridge.register(GaussianProcessClassifier, _GPC_FORMAT, (
+    _native_archive_bridge.fitted("estimators_", f"{_NAME}: call fit before save"),
+    ("format", "format", _GPC_FORMAT),
+    ("format", "estimator", _ESTIMATOR),
+    ("mode", "numeric_mode", f"{_NAME}: "),
+    ("kernel", "_kernel", _GPC_KERNEL_NODES, "<f4", "kinds", "kparams", "ls_len", "ls"),
+    ("class_table", "classes", "classes_", numbers.Integral, numbers.Real),
+    ("array", "x", "X_train_"),
+    ("i8", "meta", (("dim", "X_train_", 0), ("dim", "X_train_", 1), ("len", "estimators_"),
+                    ("int", "_max_iter_predict"), ("kernel_ls", "_kernel", _GPC_KERNEL_NODES),
+                    ("int", "n_classes_"))),
+    ("stack", "y", "estimators_", "y_train_", "<f4", ("dim", "X_train_", 0)),
+    ("stack", "L", "estimators_", "L_", "<f4", ("mul", ("dim", "X_train_", 0), ("dim", "X_train_", 0))),
+    ("stack", "pi", "estimators_", "pi_", "<f4", ("dim", "X_train_", 0)),
+    ("stack", "wsr", "estimators_", "W_sr_", "<f4", ("dim", "X_train_", 0)),
+    ("each", "lml", "estimators_", "log_marginal_likelihood_value_", "<f8"),
+    ("each", "n_iter", "estimators_", "n_iter_", "<i8"),
+    ("each", "nb", "estimators_", "nb_", "<i8"),
+), host_archive_gpc_saved_kernel=_SavedKernel, host_archive_binary_laplace=_BinaryLaplace)
 
 
 __all__ = ["GaussianProcessClassifier"]

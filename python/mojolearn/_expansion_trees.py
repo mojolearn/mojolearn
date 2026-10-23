@@ -44,7 +44,13 @@ from ._forest_protocol import (forest_estimator, _forest_fit_arrays, _forest_fit
 from .extratrees import ExtraTreesRegressor, ExtraTreesClassifier as _ET_CLS
 from .randomforest import (
     RandomForestClassifier, RandomForestRegressor, _class_weight_rows, _refuse,
+    _MODEL_FORMATS as _RF_MODEL_FORMATS, _SAVE_SCHEMA as _RF_SAVE_SCHEMA,
 )
+from . import _native_archive_bridge
+
+# The compiled saved-model owner, connected once at import: a tree's `save`
+# is one native call.
+_ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
 __all__ = [
     "DecisionTreeClassifier",
@@ -403,9 +409,7 @@ class DecisionTreeClassifier(RandomForestClassifier):
         Raises ``NotImplementedError`` for a tree fitted with
         ``splitter="random"``.
         """
-        if getattr(self, "_random_inner", None) is not None:
-            raise NotImplementedError("a splitter='random' tree saves through ExtraTrees; not carried yet")
-        return super().save(path)
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
 
 def _dt_tier_bins(est):
@@ -582,9 +586,19 @@ class DecisionTreeRegressor(RandomForestRegressor):
         Raises ``NotImplementedError`` for a tree fitted with
         ``splitter="random"``.
         """
-        if getattr(self, "_random_inner", None) is not None:
-            raise NotImplementedError("a splitter='random' tree saves through ExtraTrees; not carried yet")
-        return super().save(path)
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
+
+
+# A tree saves in the random forest format, refusing a splitter='random'
+# tree first (bindings/archive_schema_native.mojo runs the schema); `load`
+# is the random forest's one native call.
+_TREE_SAVE_SCHEMA = (
+    ("refuse_set", "_random_inner", "NotImplementedError",
+     "a splitter='random' tree saves through ExtraTrees; not carried yet"),
+    *_RF_SAVE_SCHEMA,
+)
+_native_archive_bridge.register(DecisionTreeClassifier, _RF_MODEL_FORMATS, _TREE_SAVE_SCHEMA)
+_native_archive_bridge.register(DecisionTreeRegressor, _RF_MODEL_FORMATS, _TREE_SAVE_SCHEMA)
 
 
 def _trees_shape_native(est):
@@ -4404,6 +4418,7 @@ class CalibratedClassifierCV(ClassifierScoreMixin, _TreesWrapperBase):
         pr.stage("cal_lofo_merge", FK * d, cnt_fk, mean_fk, var_fk, F, K, d, tcnt, theta, var)
         ntr, cmean, cvar = pr.work(F), pr.work(F * d), pr.work(F * d)
         pr.stage("cal_lofo_merge", F * d, cnt_f, mean_f, var_f, F, 1, d, ntr, cmean, cvar)
+        base._refuse()
         eps, vs = pr.alloc(F), pr.put_scalar(base.var_smoothing)
         pr.stage("cal_eps_folds", F, cvar, F, d, eps, vs)
         prior, const = pr.alloc(FK), pr.alloc(FK)

@@ -54,21 +54,18 @@ from . import _portable_math as math
 import numbers
 
 from . import _backend
-from . import _serialize
+from . import _native_archive_bridge
 from ._array import Array
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, as_f64_c, empty, zeros
 from ._sample_weight import check_sample_weight
-from ._labels import argmax_rows, classes_from_member, classes_member, decode_labels, encode_labels, sorted_classes, threshold_codes
+from ._labels import argmax_rows, decode_labels, encode_labels, sorted_classes, threshold_codes
 from ._mode import NumericModeMixin, available_if, is_fitted as _is_fitted
 from ._scale_gamma import scale_gamma, scale_gamma_x
 from .linear_model import (
     _accuracy_host,
-    _check_saved_by,
     _labels_1d,
     _r2_sums,
-    _restore_mode,
     _round_f32,
-    _saved_mode,
     _shape_of,
 )
 
@@ -76,6 +73,13 @@ from .linear_model import (
 _SVC_FORMAT = "mojolearn-svc-1"
 #: `SVR.save`'s format tag (lane/inference-svm, 2026-09-15).
 _SVR_FORMAT = "mojolearn-svr-1"
+
+# The compiled saved-model owner, connected once at import: `save` and
+# `load` are one native call each (bindings/archive_schema_native.mojo
+# writes the schemas registered at the end of this module;
+# host_archive_native.mojo builds the loaded model with the refusals and
+# messages of the Python loaders it replaced).
+_ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
 # cuML's `KernelType` values (kernel_params.hpp). Only two are implemented.
 _KERNEL_LINEAR = 0
@@ -353,46 +357,10 @@ def _precomputed_columns(binding, q, support):
     bytes, no arithmetic). What the solver's decision reads as its kernel
     tile."""
     # `support` is the fitted int32 Array (a fit's own rows, or a load's,
-    # checked against n_features_in_ there: `_check_support_bounds`); q has
+    # checked against n_features_in_ by the native loader); q has
     # n_features_in_ columns (`_query`), so every index is in range and no
     # per-predict Python pass over it runs (lane cpu2-l10-linear)
     return _gather(binding, q, None, _i32(support))
-
-
-def _check_support_bounds(support, n_cols, path):
-    """`load` (the explicit CPU-only load route): every precomputed support
-    index of a saved model must name one of its n_cols training columns.
-    An Array is checked by the native min and max; only a failing file is
-    walked, to name its first bad index (lane py-runtime-b)."""
-    if isinstance(support, Array):
-        if not support.size or (int(support.min()) >= 0 and int(support.max()) < n_cols):
-            return
-        support = support.tolist()
-    for s in support:                 # glue: load-time validation of a saved file
-        if not 0 <= int(s) < n_cols:
-            raise ValueError(
-                f"mojolearn: {path!r} kernel='precomputed' support index {int(s)} is outside the "
-                f"model's {n_cols} columns")
-
-
-def _concat_f32(blocks):
-    """The float32 elements of every block, in order, as one flat Array
-    (byte copies; the saved pair arrays)."""
-    return _concat_words([as_f32_c(b, ndim=None, name="block")[0] for b in blocks], "<f4")  # glue: byte copies of the saved pair blocks
-
-
-def _concat_words(parts, dtype):
-    """The 4-byte elements of every C-order Array in `parts`, in order, as
-    one flat `dtype` Array (byte copies)."""
-    from ._bufcheck import memcopy
-    parts = [p._as_c() for p in parts]  # glue: byte copies of the saved pair blocks
-    out = empty((max(sum(p.size for p in parts), 0),), dtype)  # glue: byte copies of the saved pair blocks
-    at = addr(out, name="pairs") if out.size else 0
-    for p in parts:  # glue: byte copies of the saved pair blocks
-        if p.size:
-            memcopy(at, addr_ro(p, name="block"), 4 * p.size)
-            at += 4 * p.size
-    return out
 
 
 #: `svc_pair_epilogue` modes (svm/impl/svc_rows.mojo): the epilogues
@@ -1241,41 +1209,17 @@ class SVC(NumericModeMixin):
 
     def _set_ovo(self, classes, pairs, x, n_cols):
         """scikit-learn's multiclass attributes from the per-pair machines
-        (also `load`'s path, where `x` is None and the rows come from each
-        pair's own support vectors)."""
-        native = self._bind(_EXT_NAME)
-        if x is not None:
-            self._set_ovo_native(native, classes, pairs, x, n_cols)
-            return
-        # `load` (lane py-runtime-b: the per-vector Python dicts are gone):
-        # the same layout call as `fit`, with the row bound max(support) + 1;
-        # each original row's position in the saved pairs by one native
-        # scatter (a repeated row names the same X bytes), then the support
-        # rows by native gathers out of the saved pair rows
-        from ._buffer import _native
-        ps = _concat_words([_i32(p["support"]) for p in pairs], "<i4")  # glue: per-pair support arrays and sizes
-        total = ps.size
-        sv_all = _concat_f32([p["sv"] for p in pairs]).reshape((total, n_cols))  # glue: per-pair support arrays and sizes
-        n_rows = int(ps.max()) + 1 if total else 0
-        pos = zeros((max(n_rows, 1),), "<i8")
-        if total:
-            ps64 = ps.astype("<i8")
-            at = empty((total,), "<i8")
-            _native("arange_i64")(addr(at, name="positions"), 0, total)
-            _native("scatter_rows_bytes")(addr_ro(at, name="positions"), addr_ro(ps64, name="support"), total, 8,
-                                          addr(pos, name="row positions"), n_rows)
-        self._set_ovo_native(native, classes, pairs, None, n_cols, n_rows=n_rows, saved=(sv_all, pos))
+        and the fitted rows `x` (a saved model's are built natively by
+        `load`, bindings/host_archive_native.mojo)."""
+        self._set_ovo_native(self._bind(_EXT_NAME), classes, pairs, x, n_cols)
 
-    def _set_ovo_native(self, native, classes, pairs, x, n_cols, n_rows=None, saved=None):
+    def _set_ovo_native(self, native, classes, pairs, x, n_cols):
         """`_set_ovo` in the binding (lane/apple-fast-py2mojo-linear,
         `svm/impl/svc_ovo_layout.mojo`): the same support_ order, dual_coef_
         cells and n_support_, then support_vectors_ as the gather of X at
-        support_ (the bytes the per-class dict held). `load` passes x None,
-        the row bound and `saved` = (the saved pair rows, each original
-        row's position in them)."""
+        support_ (the bytes the per-class dict held)."""
         k = len(classes)
-        if x is not None:
-            n_rows = x.shape[0]
+        n_rows = x.shape[0]
         sup_arrays = [_i32(p["support"]) for p in pairs]  # glue: per-pair support arrays and sizes
         ms = [p["dual"].shape[1] for p in pairs]  # glue: per-pair support arrays and sizes
         cap = min(n_rows, sum(ms))  # glue: per-pair support arrays and sizes
@@ -1296,19 +1240,7 @@ class SVC(NumericModeMixin):
         self._pairs = pairs
         if n_sv:
             self.support_ = support[:n_sv]
-            if x is not None:
-                self.support_vectors_ = _gather(native, x, self.support_)
-            else:
-                from ._buffer import _native
-                sv_all, pos = saved
-                sup64 = self.support_.astype("<i8")
-                at = empty((n_sv,), "<i8")
-                _native("gather_i64")(addr_ro(pos, name="row positions"), n_rows, addr_ro(sup64, name="support_"),
-                                      n_sv, addr(at, name="saved positions"))
-                sv = empty((n_sv, n_cols), "<f4")
-                _native("gather_rows_bytes")(addr_ro(sv_all, name="saved rows"), addr(sv, name="support_vectors_"),
-                                             addr_ro(at, name="saved positions"), sv_all.shape[0], n_sv, 4 * n_cols)
-                self.support_vectors_ = sv
+            self.support_vectors_ = _gather(native, x, self.support_)
             self.dual_coef_ = dual[:(k - 1) * n_sv].reshape((k - 1, n_sv))
         else:
             self.support_ = zeros((0,), "<i4")
@@ -1635,59 +1567,7 @@ class SVC(NumericModeMixin):
         RuntimeError
             If the model has not been fitted.
         """
-        if not hasattr(self, "dual_coef_"):
-            raise RuntimeError("this estimator is not fitted yet")
-        arrays = {
-            "format": _SVC_FORMAT,
-            "estimator": type(self).__name__,
-            "numeric_mode": _saved_mode(self),
-            "kernel": str(self._hp_kernel),
-            "gamma": str(self._hp_gamma),
-            "dual_coef": self.dual_coef_,
-            "support_vectors": self.support_vectors_,
-            "support": self.support_,
-            "intercept": self.intercept_,
-            "classes": classes_member(self.classes_),
-            "labels": Array.from_list([float(self._label0), float(self._label1)], "<f8"),
-            "hyper": Array.from_list(
-                [float(self._hp_C), float(self._hp_tol), float(self._hp_cache_size), float(self._gamma)],
-                "<f8",
-            ),
-        }
-        if self.__dict__.get("_pairs") is None:
-            arrays["meta"] = Array.from_list(
-                [int(self.n_features_in_), int(self.n_support_), int(self.n_iter_),
-                 int(self._hp_max_iter), int(self._hp_nochange_steps), int(self._hp_degree)],
-                "<i8",
-            )
-        if self._hp_kernel in ("poly", "sigmoid"):
-            # Only for poly and sigmoid, so every linear and rbf file keeps its bytes.
-            arrays["coef0"] = Array.from_list([float(self._hp_coef0)], "<f8")
-        ab = self.__dict__.get("_prob_ab")
-        if ab is not None:
-            # probability=True only, so every other file keeps its bytes:
-            # the per-pair sigmoid (A, B), binary64.
-            arrays["prob_ab"] = Array.from_list([v for pair in ab for v in pair], "<f8")  # glue: saved per-pair metadata words
-        pairs = self.__dict__.get("_pairs")
-        if pairs is not None:
-            # MULTICLASS ONLY, so every binary file keeps its bytes: the
-            # one-vs-one machines themselves, concatenated in pair order
-            # ([i, j, n_support, n_iter] per pair), from which `load`
-            # rebuilds the public attributes exactly as `fit` built them.
-            nf = int(self.n_features_in_)
-            arrays["meta"] = Array.from_list(
-                [nf, len(self.support_.tolist()), sum(p["n_iter"] for p in pairs),  # glue: saved per-pair metadata words
-                 int(self._hp_max_iter), int(self._hp_nochange_steps), int(self._hp_degree)], "<i8")
-            arrays["labels"] = Array.from_list([0.0, 1.0], "<f8")
-            arrays["shape"] = str(self.decision_function_shape)
-            arrays["break_ties"] = Array.from_list([1 if self._hp_break_ties else 0], "<i8")
-            arrays["pair_meta"] = Array.from_list(
-                [v for p in pairs for v in (p["i"], p["j"], p["dual"].shape[1], p["n_iter"])], "<i8")  # glue: saved per-pair metadata words
-            arrays["pair_b"] = Array.from_list([p["b"] for p in pairs], "<f4")  # glue: saved per-pair metadata words
-            arrays["pair_support"] = _concat_words([_i32(p["support"]) for p in pairs], "<i4")  # glue: per-pair support arrays and sizes
-            arrays["pair_dual"] = _concat_f32([p["dual"] for p in pairs])  # glue: saved per-pair metadata words
-            arrays["pair_sv"] = _concat_f32([p["sv"] for p in pairs])  # glue: saved per-pair metadata words
-        return _serialize.write_npz(path, arrays)
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -1710,121 +1590,7 @@ class SVC(NumericModeMixin):
         ValueError
             If the file is not a valid saved `SVC`.
         """
-        arrays = _serialize.read_npz(path, _SVC_FORMAT)
-        _check_saved_by(arrays, path, cls)
-        meta = _serialize.exact(arrays, "meta", "<i8")
-        if meta.size != 6:
-            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 6 are needed")
-        hyper = _serialize.exact(arrays, "hyper", "<f8")
-        if hyper.size != 4:
-            raise ValueError(f"mojolearn: {path!r} hyper holds {hyper.size} fields, 4 are needed")
-        gamma_setting = _serialize.scalar_str(arrays, "gamma")
-        kernel_setting = _serialize.scalar_str(arrays, "kernel")
-        coef0 = 0.0
-        if kernel_setting in ("poly", "sigmoid"):
-            coef0_arr = _serialize.exact(arrays, "coef0", "<f8")
-            if coef0_arr.size != 1:
-                raise ValueError(f"mojolearn: {path!r} coef0 must hold one float64")
-            coef0 = float(coef0_arr[0])
-        obj = cls(
-            C=float(hyper[0]),
-            kernel=_serialize.scalar_str(arrays, "kernel"),
-            gamma=gamma_setting if gamma_setting in ("auto", "scale") else float(gamma_setting),
-            tol=float(hyper[1]),
-            cache_size=float(hyper[2]),
-            max_iter=int(meta[3]),
-            nochange_steps=int(meta[4]),
-            degree=int(meta[5]),
-            coef0=coef0,
-        )
-        _restore_mode(obj, arrays)
-        obj._validate_params()
-        nf, n_support = int(meta[0]), int(meta[1])
-        if "prob_ab" in arrays:
-            flat = _serialize.exact(arrays, "prob_ab", "<f8").tolist()
-            obj.probability = True
-            obj._hp_probability = True
-            obj._prob_ab = [(flat[2 * i], flat[2 * i + 1]) for i in range(len(flat) // 2)]  # glue: saved per-pair metadata words
-            obj.probA_ = Array.from_list(flat[0::2], "<f8")
-            obj.probB_ = Array.from_list(flat[1::2], "<f8")
-        if "pair_meta" in arrays:
-            return cls._load_ovo(obj, arrays, path, nf, hyper)
-        dual = _serialize.exact(arrays, "dual_coef", "<f4")
-        if dual.ndim != 2 or tuple(dual.shape) != (1, n_support):
-            raise ValueError(f"mojolearn: {path!r} dual_coef shape {tuple(dual.shape)} is not (1, {n_support})")
-        sv = _serialize.exact(arrays, "support_vectors", "<f4")
-        if sv.ndim != 2 or tuple(sv.shape) != (n_support, nf):
-            raise ValueError(f"mojolearn: {path!r} support_vectors shape {tuple(sv.shape)} is not ({n_support}, {nf})")
-        support = _serialize.exact(arrays, "support", "<i4")
-        if support.ndim != 1 or support.size != n_support:
-            raise ValueError(f"mojolearn: {path!r} support does not match n_support_")
-        if kernel_setting == "precomputed":
-            _check_support_bounds(support, nf, path)
-        intercept = _serialize.exact(arrays, "intercept", "<f4")
-        if intercept.ndim != 1 or intercept.size != 1:
-            raise ValueError(f"mojolearn: {path!r} intercept must hold one float32")
-        labels = _serialize.exact(arrays, "labels", "<f8")
-        if labels.size != 2:
-            raise ValueError(f"mojolearn: {path!r} labels must hold the two solver labels")
-        obj.classes_ = classes_from_member(arrays["classes"])
-        if len(obj.classes_) != 2:
-            raise ValueError(f"mojolearn: {path!r} must carry exactly two classes")
-        obj.n_features_in_ = nf
-        obj.n_support_ = n_support
-        obj.n_iter_ = int(meta[2])
-        obj.intercept_ = intercept
-        obj.support_ = support
-        obj.support_vectors_ = sv
-        obj.dual_coef_ = dual
-        obj._gamma = float(hyper[3])
-        obj._label0 = float(labels[0])
-        obj._label1 = float(labels[1])
-        return obj
-
-    @classmethod
-    def _load_ovo(cls, obj, arrays, path, nf, hyper):
-        """The multiclass half of `load`: the per-pair machines, then the
-        public attributes through `_set_ovo`, as `fit` sets them."""
-        classes = classes_from_member(arrays["classes"])
-        k = len(classes)
-        pm = _serialize.exact(arrays, "pair_meta", "<i8").tolist()
-        n_pairs = k * (k - 1) // 2
-        if k < 3 or len(pm) != 4 * n_pairs:
-            raise ValueError(f"mojolearn: {path!r} pair_meta does not hold {n_pairs} pairs")
-        pb = _serialize.exact(arrays, "pair_b", "<f4").tolist()
-        # the per-pair blocks stay Arrays, cut by copying slices (lane
-        # py-runtime-b: no Python list of every saved value)
-        ps = _serialize.exact(arrays, "pair_support", "<i4").reshape((-1,))
-        if obj._hp_kernel == "precomputed":
-            _check_support_bounds(ps, nf, path)
-        pd = _serialize.exact(arrays, "pair_dual", "<f4").reshape((-1,))
-        pv = _serialize.exact(arrays, "pair_sv", "<f4").reshape((-1,))
-        total = sum(pm[4 * q + 2] for q in range(n_pairs))  # glue: pair metadata check over the class pairs
-        if len(pb) != n_pairs or ps.size != total or pd.size != total or pv.size != total * nf:
-            raise ValueError(f"mojolearn: {path!r} pair arrays do not match pair_meta")
-        pairs, at, q = [], 0, 0
-        for i in range(k):  # glue: pair metadata check over the class pairs
-            for j in range(i + 1, k):  # glue: pair metadata check over the class pairs
-                pi, pj, n_sv, n_iter = pm[4 * q:4 * q + 4]
-                if (pi, pj) != (i, j):
-                    raise ValueError(f"mojolearn: {path!r} pair {q} is ({pi}, {pj}), not ({i}, {j})")
-                pairs.append(dict(
-                    i=i, j=j,
-                    dual=pd[at:at + n_sv].reshape((1, n_sv)),
-                    sv=pv[at * nf:(at + n_sv) * nf].reshape((n_sv, nf)),
-                    support=ps[at:at + n_sv], b=pb[q], n_iter=int(n_iter)))
-                at += n_sv
-                q += 1
-        shape = _serialize.scalar_str(arrays, "shape")
-        ties = bool(_serialize.exact(arrays, "break_ties", "<i8").tolist()[0])
-        obj.decision_function_shape = "ovo" if shape == "ovo" else "ovr"
-        obj.break_ties = ties and obj.decision_function_shape == "ovr"
-        obj._hp_break_ties = obj.break_ties
-        obj._set_ovo(classes, pairs, None, nf)
-        obj._gamma = float(hyper[3])
-        obj._label0 = 0.0
-        obj._label1 = 1.0
-        return obj
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
 
 def _as_targets(y, n_rows):
@@ -2528,32 +2294,7 @@ class SVR(NumericModeMixin):
         RuntimeError
             If the model has not been fitted.
         """
-        if not hasattr(self, "dual_coef_"):
-            raise RuntimeError("this estimator is not fitted yet")
-        return _serialize.write_npz(path, {
-            "format": _SVR_FORMAT,
-            "estimator": type(self).__name__,
-            "numeric_mode": _saved_mode(self),
-            "kernel": str(self._hp_kernel),
-            "gamma": str(self._hp_gamma),
-            "dual_coef": self.dual_coef_,
-            "support_vectors": self.support_vectors_,
-            "support": self.support_,
-            "intercept": self.intercept_,
-            "hyper": Array.from_list(
-                [float(self._hp_C), float(self._hp_epsilon), float(self._hp_tol),
-                 float(self._hp_cache_size), float(self._gamma)],
-                "<f8",
-            ),
-            "meta": Array.from_list(
-                [int(self.n_features_in_), int(self.n_support_), int(self.n_iter_),
-                 int(self._hp_max_iter), int(self._hp_nochange_steps)],
-                "<i8",
-            ),
-            # Only for poly and sigmoid, so every linear and rbf file keeps its bytes.
-            **({"kernel_params": Array.from_list([float(self._hp_degree), float(self._hp_coef0)], "<f8")}
-               if self._hp_kernel in ("poly", "sigmoid") else {}),
-        })
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -2576,57 +2317,73 @@ class SVR(NumericModeMixin):
         ValueError
             If the file is not a valid saved `SVR`.
         """
-        arrays = _serialize.read_npz(path, _SVR_FORMAT)
-        _check_saved_by(arrays, path, cls)
-        meta = _serialize.exact(arrays, "meta", "<i8")
-        if meta.size != 5:
-            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 5 are needed")
-        hyper = _serialize.exact(arrays, "hyper", "<f8")
-        if hyper.size != 5:
-            raise ValueError(f"mojolearn: {path!r} hyper holds {hyper.size} fields, 5 are needed")
-        gamma_setting = _serialize.scalar_str(arrays, "gamma")
-        kernel_setting = _serialize.scalar_str(arrays, "kernel")
-        degree, coef0 = 3, 0.0
-        if kernel_setting in ("poly", "sigmoid"):
-            kpar = _serialize.exact(arrays, "kernel_params", "<f8")
-            if kpar.size != 2:
-                raise ValueError(f"mojolearn: {path!r} kernel_params must hold degree and coef0")
-            degree, coef0 = int(kpar[0]), float(kpar[1])
-        obj = cls(
-            C=float(hyper[0]),
-            epsilon=float(hyper[1]),
-            kernel=kernel_setting,
-            degree=degree,
-            coef0=coef0,
-            gamma=gamma_setting if gamma_setting in ("auto", "scale") else float(gamma_setting),
-            tol=float(hyper[2]),
-            cache_size=float(hyper[3]),
-            max_iter=int(meta[3]),
-            nochange_steps=int(meta[4]),
-        )
-        _restore_mode(obj, arrays)
-        obj._validate_params()
-        nf, n_support = int(meta[0]), int(meta[1])
-        dual = _serialize.exact(arrays, "dual_coef", "<f4")
-        if dual.ndim != 2 or tuple(dual.shape) != (1, n_support):
-            raise ValueError(f"mojolearn: {path!r} dual_coef shape {tuple(dual.shape)} is not (1, {n_support})")
-        sv = _serialize.exact(arrays, "support_vectors", "<f4")
-        if sv.ndim != 2 or tuple(sv.shape) != (n_support, nf):
-            raise ValueError(f"mojolearn: {path!r} support_vectors shape {tuple(sv.shape)} is not ({n_support}, {nf})")
-        support = _serialize.exact(arrays, "support", "<i4")
-        if support.ndim != 1 or support.size != n_support:
-            raise ValueError(f"mojolearn: {path!r} support does not match n_support_")
-        if kernel_setting == "precomputed":
-            _check_support_bounds(support, nf, path)
-        intercept = _serialize.exact(arrays, "intercept", "<f4")
-        if intercept.ndim != 1 or intercept.size != 1:
-            raise ValueError(f"mojolearn: {path!r} intercept must hold one float32")
-        obj.n_features_in_ = nf
-        obj.n_support_ = n_support
-        obj.n_iter_ = int(meta[2])
-        obj.intercept_ = intercept
-        obj.support_ = support
-        obj.support_vectors_ = sv
-        obj.dual_coef_ = dual
-        obj._gamma = float(hyper[4])
-        return obj
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+
+
+_native_archive_bridge.register(
+    SVC, _SVC_FORMAT, (
+        _native_archive_bridge.fitted("dual_coef_"),
+        *_native_archive_bridge.head(_SVC_FORMAT),
+        ("str", "kernel", "_hp_kernel"),
+        ("str", "gamma", "_hp_gamma"),
+        ("array", "dual_coef", "dual_coef_"),
+        ("array", "support_vectors", "support_vectors_"),
+        ("array", "support", "support_"),
+        ("array", "intercept", "intercept_"),
+        ("classes", "classes", "classes_"),
+        ("f8", "labels", (("float", "_label0"), ("float", "_label1"))),
+        ("f8", "hyper", (("float", "_hp_C"), ("float", "_hp_tol"), ("float", "_hp_cache_size"),
+                         ("float", "_gamma"))),
+        ("when_none", "_pairs", (
+            ("i8", "meta", (("int", "n_features_in_"), ("int", "n_support_"), ("int", "n_iter_"),
+                            ("int", "_hp_max_iter"), ("int", "_hp_nochange_steps"), ("int", "_hp_degree"))),
+        )),
+        # Only for poly and sigmoid, so every linear and rbf file keeps its bytes.
+        ("when_in", "_hp_kernel", ("poly", "sigmoid"), (
+            ("f8", "coef0", (("float", "_hp_coef0"),)),
+        )),
+        # probability=True only: the per-pair sigmoid (A, B), binary64.
+        ("when_set", "_prob_ab", (
+            ("rows", "prob_ab", "<f8", "_prob_ab", (("float", ("_", 0)), ("float", ("_", 1)))),
+        )),
+        # Multiclass only: the one-vs-one machines, concatenated in pair
+        # order ([i, j, n_support, n_iter] per pair), from which `load`
+        # rebuilds the public attributes exactly as `fit` built them.
+        ("when_set", "_pairs", (
+            ("i8", "meta", (("int", "n_features_in_"), ("dim", "support_", 0), ("sum", "_pairs", "n_iter"),
+                            ("int", "_hp_max_iter"), ("int", "_hp_nochange_steps"), ("int", "_hp_degree"))),
+            ("f8", "labels", (("const", 0.0), ("const", 1.0))),
+            ("str", "shape", "decision_function_shape"),
+            ("i8", "break_ties", (("bool", "_hp_break_ties"),)),
+            ("rows", "pair_meta", "<i8", "_pairs", (("int", ("_", "i")), ("int", ("_", "j")),
+                                                     ("dim", ("_", "dual"), 1), ("int", ("_", "n_iter")))),
+            ("rows", "pair_b", "<f4", "_pairs", (("float", ("_", "b")),)),
+            ("concat", "pair_support", "<i4", "_pairs", "support"),
+            ("concat", "pair_dual", "<f4", "_pairs", "dual"),
+            ("concat", "pair_sv", "<f4", "_pairs", "sv"),
+        )),
+    ),
+    host_archive_svm_kernels=dict(_SVC_KERNELS),
+    host_archive_svm_refused=dict(_SVC_REFUSED_KERNELS),
+    host_archive_svr_refused=dict(_SVR_REFUSED_KERNELS),
+)
+_native_archive_bridge.register(
+    SVR, _SVR_FORMAT, (
+        _native_archive_bridge.fitted("dual_coef_"),
+        *_native_archive_bridge.head(_SVR_FORMAT),
+        ("str", "kernel", "_hp_kernel"),
+        ("str", "gamma", "_hp_gamma"),
+        ("array", "dual_coef", "dual_coef_"),
+        ("array", "support_vectors", "support_vectors_"),
+        ("array", "support", "support_"),
+        ("array", "intercept", "intercept_"),
+        ("f8", "hyper", (("float", "_hp_C"), ("float", "_hp_epsilon"), ("float", "_hp_tol"),
+                         ("float", "_hp_cache_size"), ("float", "_gamma"))),
+        ("i8", "meta", (("int", "n_features_in_"), ("int", "n_support_"), ("int", "n_iter_"),
+                        ("int", "_hp_max_iter"), ("int", "_hp_nochange_steps"))),
+        # Only for poly and sigmoid, so every linear and rbf file keeps its bytes.
+        ("when_in", "_hp_kernel", ("poly", "sigmoid"), (
+            ("f8", "kernel_params", (("float", "_hp_degree"), ("float", "_hp_coef0"))),
+        )),
+    ),
+)

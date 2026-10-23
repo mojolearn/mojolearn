@@ -75,7 +75,7 @@ speed claim.
 from . import _portable_math as math
 import numbers
 
-from . import _backend
+from . import _backend, _native_archive_bridge
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty
 
@@ -121,16 +121,6 @@ def _as_length_scale(length_scale, what):
 
 #: FLT_MIN, the smallest normal binary32; `_ftz` flushes anything below it.
 _FLT_MIN = 1.1754943508222875e-38
-
-
-def _gp_py2mojo(ext):
-    """True when the binding `ext` applies normalize_y's un-normalization
-    itself (lane apple-fast-py2mojo-cluster: the mean, std, covariance and
-    sample_y draws, `gaussian_process/unnorm.mojo`). A
-    `-D MOJOLEARN_PY2MOJO_cluster_OFF` build answers 0 and the Python loops
-    below run (the A/B switch)."""
-    fn = getattr(ext, "gp_py2mojo", None)
-    return fn is not None and int(fn()) == 1
 
 
 def _gpr_ptr(ext):
@@ -502,6 +492,26 @@ class _SavedKernel(Kernel):
 #: mean and std from it on a CPU through the inference-only gp binding, with
 #: normalize_y's scale-back in `predict` as on the GPU.
 _GP_FORMAT = "mojolearn-gp-1"
+
+# The compiled saved-model owner, connected once at import:
+# GaussianProcessRegressor's `save` and `load` are one native call each
+# (bindings/archive_schema_native.mojo writes the schema registered below
+# the class; host_archive_native.mojo builds the loaded model).
+_ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
+
+#: Each kernel class's postfix node layout, the fields its `_nodes()` reads:
+#: ("leaf", kind, param field or None for 0.0, length-scale field or None),
+#: ("pair", left, right, op field) or ("nodes", the saved node list). The
+#: compiled save reads a fitted kernel through it
+#: (bindings/archive_schema_native.mojo "kernel").
+_KERNEL_NODES = {
+    ConstantKernel: ("leaf", _K_CONST, "constant_value", None),
+    WhiteKernel: ("leaf", _K_WHITE, "noise_level", None),
+    RBF: ("leaf", _K_RBF, None, "length_scale"),
+    Matern: ("leaf", _K_MATERN, "nu", "length_scale"),
+    _Combined: ("pair", "a", "b", "op"),
+    _SavedKernel: ("nodes", "_SavedKernel__nodes"),
+}
 
 
 # Maintainer notes (moved from the docstring):
@@ -1204,30 +1214,7 @@ class GaussianProcessRegressor(NumericModeMixin):
         path : str or path-like
             Destination file.
         """
-        if not hasattr(self, "alpha_"):
-            raise RuntimeError("this estimator is not fitted yet")
-        from . import _serialize
-        from .linear_model import _saved_mode
-        nodes = self.kernel_._nodes()
-        table = [float(v) for _, _, ls in nodes for v in ls]  # glue: packs the kernel length-scale hyperparameters
-        n = int(self.X_train_.shape[0])
-        return _serialize.write_npz(path, {
-            "format": _GP_FORMAT,
-            "estimator": type(self).__name__,
-            "numeric_mode": _saved_mode(self),
-            "X_train": self.X_train_,
-            "L": self.L_.reshape((n * n,)),
-            "alpha": self.alpha_,
-            "kinds": Array.from_list([int(k) for k, _, _ in nodes], "<i4"),  # glue: packs the kernel's postfix nodes
-            "params": Array.from_list([float(p) for _, p, _ in nodes], "<f8"),  # glue: packs the kernel's postfix nodes
-            "ls_len": Array.from_list([len(ls) for _, _, ls in nodes], "<i4"),  # glue: packs the kernel's postfix nodes
-            "ls": Array.from_list(table if table else [1.0], "<f8"),
-            "ints": Array.from_list([int(self.n_features_in_), int(self.info_),
-                                     1 if getattr(self, "normalize_y_", False) else 0, len(table)], "<i8"),
-            "reals": Array.from_list([float(self._alpha), float(getattr(self, "_y_train_mean", 0.0)),
-                                      float(getattr(self, "_y_train_std", 1.0)),
-                                      float(self.log_marginal_likelihood_value_)], "<f8"),
-        })
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -1247,50 +1234,7 @@ class GaussianProcessRegressor(NumericModeMixin):
         -------
         GaussianProcessRegressor
         """
-        from . import _serialize
-        from .linear_model import _check_saved_by, _restore_mode
-        arrays = _serialize.read_npz(path, _GP_FORMAT)
-        _check_saved_by(arrays, path, cls)
-        ints = _serialize.exact(arrays, "ints", "<i8")
-        reals = _serialize.exact(arrays, "reals", "<f8")
-        if ints.size != 4 or reals.size != 4:
-            raise ValueError(f"mojolearn: {path!r} holds {ints.size} ints and {reals.size} reals, 4 and 4 are needed")
-        d, info, norm, n_ls = (int(ints[i]) for i in range(4))  # glue: four saved meta fields
-        x = _serialize.exact(arrays, "X_train", "<f4")
-        if x.ndim != 2 or x.shape[1] != d or x.shape[0] < 1:
-            raise ValueError(f"mojolearn: {path!r} X_train has shape {tuple(x.shape)}, ints say {d} features")
-        n = int(x.shape[0])
-        l_flat = _serialize.exact(arrays, "L", "<f4")
-        dual = _serialize.exact(arrays, "alpha", "<f4")
-        if l_flat.size != n * n or dual.ndim != 1 or dual.size != n:
-            raise ValueError(f"mojolearn: {path!r} L or alpha does not match {n} training rows")
-        kinds = _serialize.exact(arrays, "kinds", "<i4")
-        params = _serialize.exact(arrays, "params", "<f8")
-        ls_len = _serialize.exact(arrays, "ls_len", "<i4")
-        ls = _serialize.exact(arrays, "ls", "<f8")
-        if not (kinds.size == params.size == ls_len.size) or kinds.size < 1:
-            raise ValueError(f"mojolearn: {path!r} carries a malformed kernel spec")
-        lens = [int(ls_len[i]) for i in range(ls_len.size)]  # glue: saved length-scale count per node
-        if sum(lens) != n_ls or ls.size != max(n_ls, 1):  # glue: checks the saved kernel node lengths
-            raise ValueError(f"mojolearn: {path!r} length scale table does not match its node lengths")
-        nodes, off = [], 0
-        for i in range(kinds.size):  # glue: rebuilds the kernel's postfix nodes
-            nodes.append((int(kinds[i]), float(params[i]), [float(ls[off + j]) for j in range(lens[i])]))  # glue: rebuilds the kernel's postfix nodes
-            off += lens[i]
-        obj = cls(kernel=_SavedKernel(nodes), alpha=float(reals[0]), normalize_y=bool(norm))
-        obj._validate_params()
-        _restore_mode(obj, arrays)
-        obj.X_train_ = x
-        obj.kernel_ = obj._kernel
-        obj.n_features_in_ = d
-        obj.L_ = l_flat.reshape((n, n))
-        obj.alpha_ = dual
-        obj.info_ = info
-        obj.normalize_y_ = bool(norm)
-        obj._y_train_mean = float(reals[1])
-        obj._y_train_std = float(reals[2])
-        obj.log_marginal_likelihood_value_ = float(reals[3])
-        return obj
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
     # -- the rest of sklearn's surface, honored or refused by name ----------
 
@@ -1496,3 +1440,19 @@ class GaussianProcessRegressor(NumericModeMixin):
         if ss_tot == 0.0:
             return 1.0 if ss_res == 0.0 else 0.0
         return 1.0 - ss_res / ss_tot
+
+
+# The file: see `_GP_FORMAT`. The kernel step comes first: `save` read the
+# fitted kernel's nodes before anything else.
+_native_archive_bridge.register(GaussianProcessRegressor, _GP_FORMAT, (
+    _native_archive_bridge.fitted("alpha_"),
+    ("kernel", "kernel_", _KERNEL_NODES, "<f8", "kinds", "params", "ls_len", "ls"),
+    *_native_archive_bridge.head(_GP_FORMAT),
+    ("array", "X_train", "X_train_"),
+    ("flat", "L", "L_"),
+    ("array", "alpha", "alpha_"),
+    ("i8", "ints", (("int", "n_features_in_"), ("int", "info_"),
+                    ("bool_or", "normalize_y_", False), ("kernel_ls", "kernel_", _KERNEL_NODES))),
+    ("f8", "reals", (("float", "_alpha"), ("float_or", "_y_train_mean", 0.0),
+                     ("float_or", "_y_train_std", 1.0), ("float", "log_marginal_likelihood_value_"))),
+), host_archive_gp_saved_kernel=_SavedKernel)
