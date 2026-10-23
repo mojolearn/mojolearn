@@ -207,6 +207,12 @@ comptime _DEVCTX_SLOT = "MojoCoreContextIdentical" if _DEVCTX_MODE == _DEVCTX_ID
 
 
 from cluster.estimator import kmeans_fit, kmeans_predict, kmeans_transform
+from cluster.resident_centers import (
+    kmeans_centers_prepare,
+    kmeans_centers_release,
+    kmeans_predict_resident,
+    kmeans_transform_resident,
+)
 from neighbors.impl.detail.knn_brute_force import KNN_METHOD_AUTO
 from neighbors.resident_index import (
     knn_index_classify,
@@ -794,6 +800,143 @@ def kmeans_transform_binding(
         var ctx = process_ctx[_DEVCTX_SLOT]()
         kmeans_transform(ctx, xp, ns, nf, nc, cp, op, mm)
         ctx.synchronize()
+    return PythonObject(ns)
+
+
+def kmeans_fit_transform_binding(
+    x_addr: PythonObject,
+    out_centroids_addr: PythonObject,
+    out_labels_addr: PythonObject,
+    weights_addr: PythonObject,
+    out_transform_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`kmeans_fit` and then `kmeans_transform` of the fitted rows, with X
+    uploaded once (lane migrate-classical-b2, `KMeans.fit_transform`).
+    `params` and the returns are `kmeans_fit_binding`'s;
+    `out_transform_addr` is `n_samples x n_clusters` float32, written with
+    the distances to the final centroids from the design and centroids
+    already on the device (`cluster/estimator.mojo::kmeans_transform_device`,
+    the same kernels and bytes as a separate `kmeans_transform`)."""
+    if len(params) != 10 and len(params) != 11:
+        raise Error(
+            "kmeans_fit: params must hold 10 or 11 values, got "
+            + String(len(params))
+        )
+    var xp = _f32_ptr(Int(py=x_addr))
+    var cp = _f32_ptr(Int(py=out_centroids_addr))
+    var lp = _u32_ptr(Int(py=out_labels_addr))
+    var wp = _f32_ptr(Int(py=weights_addr))
+    var tp = _f32_ptr(Int(py=out_transform_addr))
+    var ns = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var nc = Int(py=params[2])
+    var nw = Int(py=params[3])
+    var mi = Int(py=params[4])
+    var tl = Float64(py=params[5])
+    var sd = UInt64(Int(py=params[6]))
+    var ninit = Int(py=params[7])
+    var ii = Int(py=params[8])
+    var mm = Int(py=params[9])
+    var ovs = Float64(2.0)
+    if len(params) == 11:
+        ovs = Float64(py=params[10])
+    var inertia = Float64(0.0)
+    var n_iter = 0
+    var sum_scale = Float64(0.0)
+    var weight_scale = Float64(0.0)
+    with GILReleased(Python()):
+        var ctx = process_ctx[_DEVCTX_SLOT]()
+        var r = kmeans_fit(
+            ctx, xp, ns, nf, nc, cp, lp, wp, nw, mi, tl, sd, ninit, ii, mm,
+            0.0, ovs,
+            lazy_shift=False,
+            transform_out=tp,
+        )
+        inertia = r.inertia
+        n_iter = r.n_iter
+        sum_scale = r.sum_scale
+        weight_scale = r.weight_scale
+        ctx.synchronize()
+    var out = Python.list()
+    out.append(PythonObject(inertia))
+    out.append(PythonObject(n_iter))
+    out.append(PythonObject(sum_scale))
+    out.append(PythonObject(weight_scale))
+    return out
+
+
+def kmeans_centers_prepare_binding(
+    centers_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """Upload fitted centroids ONCE and return the handle
+    `kmeans_predict_resident` / `kmeans_transform_resident` read (lane
+    migrate-classical-b2). `params` is `[n_clusters, n_features]`. Release
+    with `kmeans_centers_release`."""
+    if len(params) != 2:
+        raise Error("kmeans_centers_prepare: params must hold n_clusters, n_features")
+    var cp = _f32_ptr(Int(py=centers_addr))
+    var nc = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var handle: Int
+    with GILReleased(Python()):
+        handle = kmeans_centers_prepare(cp, nc, nf)
+    return PythonObject(handle)
+
+
+def kmeans_centers_release_binding(handle: PythonObject) raises -> PythonObject:
+    """Drop resident centroids."""
+    kmeans_centers_release(Int(py=handle))
+    return PythonObject(None)
+
+
+def kmeans_predict_resident_binding(
+    handle: PythonObject,
+    x_addr: PythonObject,
+    out_labels_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`kmeans_predict` over resident centroids: the same `params`
+    (n_samples, n_features, n_clusters, metric). Returns n_samples."""
+    if len(params) != 4:
+        raise Error(
+            "kmeans_predict: params must hold 4 values, got "
+            + String(len(params))
+        )
+    var xp = _f32_ptr(Int(py=x_addr))
+    var lp = _u32_ptr(Int(py=out_labels_addr))
+    var ns = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var nc = Int(py=params[2])
+    var mm = Int(py=params[3])
+    var h = Int(py=handle)
+    with GILReleased(Python()):
+        kmeans_predict_resident(h, xp, ns, nf, nc, lp, mm)
+    return PythonObject(ns)
+
+
+def kmeans_transform_resident_binding(
+    handle: PythonObject,
+    x_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`kmeans_transform` over resident centroids: the same `params`
+    (n_samples, n_features, n_clusters, metric). Returns n_samples."""
+    if len(params) != 4:
+        raise Error(
+            "kmeans_transform: params must hold 4 values, got "
+            + String(len(params))
+        )
+    var xp = _f32_ptr(Int(py=x_addr))
+    var op = _f32_ptr(Int(py=out_addr))
+    var ns = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var nc = Int(py=params[2])
+    var mm = Int(py=params[3])
+    var h = Int(py=handle)
+    with GILReleased(Python()):
+        kmeans_transform_resident(h, xp, ns, nf, nc, op, mm)
     return PythonObject(ns)
 
 
@@ -1923,6 +2066,11 @@ def build__mojolearn() -> PythonObject:
         m.def_function[kmeans_fit_binding]("kmeans_fit")
         m.def_function[kmeans_predict_binding]("kmeans_predict")
         m.def_function[kmeans_transform_binding]("kmeans_transform")
+        m.def_function[kmeans_fit_transform_binding]("kmeans_fit_transform")
+        m.def_function[kmeans_centers_prepare_binding]("kmeans_centers_prepare")
+        m.def_function[kmeans_centers_release_binding]("kmeans_centers_release")
+        m.def_function[kmeans_predict_resident_binding]("kmeans_predict_resident")
+        m.def_function[kmeans_transform_resident_binding]("kmeans_transform_resident")
         m.def_function[radius_neighbors_count_binding](
             "radius_neighbors_count"
         )

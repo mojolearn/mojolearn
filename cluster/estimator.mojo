@@ -288,8 +288,17 @@ def kmeans_fit(
     requested_sum_scale: Float64 = 0.0,
     oversampling_factor: Float64 = 2.0,
     lazy_shift: Bool = False,
+    transform_out: Optional[MutPointer[Float32, MutUntrackedOrigin]] = None,
 ) raises -> KMeansFitResult:
     """Fit k-means on host-resident row-major data. See THE POLICY CHOICES.
+
+    `transform_out` (lane migrate-classical-b2, `KMeans.fit_transform`):
+    when given, `n_samples x n_clusters` float32 that receives
+    `kmeans_transform` of the fitted rows against the final centroids,
+    computed from the design and the centroids already on the device
+    (`kmeans_transform_device`, the same kernels in the same order as a
+    separate `kmeans_transform` call over the same bytes), so X is
+    uploaded once.
 
     `lazy_shift` sets `KMeansParams.lazy_shift` (the lazy convergence read,
     FAST on Apple only; IVF-PQ's codebooks pass True, 2026-10-04).
@@ -432,11 +441,16 @@ def kmeans_fit(
     # 2026-09-18 (lane/kmeans-cosine-capability). The call is kept rather
     # than folded to `Int32(0)` so that this measurement stays on the path
     # of anyone who goes looking for the flag. Do not simplify it away.
-    return _kmeans_fit_tail(
+    var fitted = _kmeans_fit_tail(
         ctx, x, x_norm, weights, centroids, labels, min_dist, n_samples, n_features,
         n_clusters, out_centroids_ptr, out_labels_ptr, max_iter, tol, seed, n_init, init,
         metric, oversampling_factor, sum_scale, weight_scale, lazy_shift=lazy_shift,
     )
+    if transform_out:
+        kmeans_transform_device(
+            ctx, x, n_samples, n_features, n_clusters, centroids, transform_out.value(), metric
+        )
+    return fitted
 
 
 
@@ -764,12 +778,47 @@ def kmeans_transform(
     var centroids = ctx.enqueue_create_buffer[DType.float32](
         n_clusters * n_features
     )
+    ctx.synchronize()
+    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    ctx.enqueue_copy(dst_buf=centroids, src_ptr=centroids_ptr)
+    kmeans_transform_device(
+        ctx, x, n_samples, n_features, n_clusters, centroids, out_ptr, metric
+    )
+
+
+def kmeans_transform_device(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_features: Int,
+    n_clusters: Int,
+    mut centroids: DeviceBuffer[DType.float32],
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    metric: Int = METRIC_L2_EXPANDED,
+) raises:
+    """`kmeans_transform` on rows and centroids already on the device (lane
+    migrate-classical-b2): the norms, the fused distance kernel and the
+    read-back into `out_ptr`, statement for statement the body
+    `kmeans_transform` runs after its upload, so the bits are the same.
+    `KMeans.fit_transform` passes the fit's own device design and final
+    centroids; `kmeans_transform_resident` the resident centroids."""
+    if n_samples < 1 or n_features < 1 or n_clusters < 1:
+        raise Error(
+            "kmeans_transform needs n_samples, n_features and n_clusters >= 1: got "
+            + String(n_samples)
+            + ", "
+            + String(n_features)
+            + ", "
+            + String(n_clusters)
+        )
+    var params = KMeansParams.default()
+    params.n_clusters = n_clusters
+    params.metric = metric
+    params.validate()
     var x_norm = ctx.enqueue_create_buffer[DType.float32](n_samples)
     var centroid_norm = ctx.enqueue_create_buffer[DType.float32](n_clusters)
     var out = ctx.enqueue_create_buffer[DType.float32](n_samples * n_clusters)
     ctx.synchronize()
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
-    ctx.enqueue_copy(dst_buf=centroids, src_ptr=centroids_ptr)
     var take_sqrt = Int32(0)
     if centroid_norms_take_sqrt(metric):
         take_sqrt = Int32(1)

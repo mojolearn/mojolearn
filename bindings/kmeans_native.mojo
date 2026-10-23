@@ -7,11 +7,18 @@
 # `kmeans_fit` / `kmeans_predict` / `kmeans_transform` with the argument lists
 # `bindings/_mojolearn.mojo` documents, and stores the fitted attributes. The
 # kernels and their inputs are unchanged, so the bits are too.
+# Lane migrate-classical-b2: `fit_transform` uploads X once
+# (`kmeans_fit_transform`), and `predict` / `transform` read the fitted
+# centroids from a device copy minted at the first query after a fit
+# (`kmeans_centers_prepare`, cluster/resident_centers.mojo) instead of
+# uploading them per call; a binding without those doors (the CPU host
+# binding) takes the per-call entries as before.
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
+from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.family_common import (
     FAMILY_F32P, family_repr, family_str, family_is_str, family_is_int, family_isinstance,
     family_type_name, family_call, family_call_kw, family_entry, family_array, family_view,
@@ -19,6 +26,71 @@ from bindings.family_common import (
 )
 
 comptime _INIT_ARRAY = 2
+comptime _HOLDER = "_resident_holder"
+
+
+def _kmeans_optional_entry(binding: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+    """The binding's compiled entry `name`, or None where the loaded binding
+    has no such door (the CPU host binding refuses an absent name with
+    ImportError, a module with AttributeError: both mean "no residency
+    here", and the pending exception is discarded)."""
+    try:
+        return family_entry(binding, name, context)
+    except error:
+        if String(error) != PYTHON_ERROR_PENDING:
+            raise error
+        _ = optimizer_python_error(error)
+        ref cpy = Python().cpython()
+        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        return PythonObject(None)
+
+
+def _kmeans_release(model: PythonObject) raises:
+    """Drop the resident centroids, if held, through the minting binding's
+    `kmeans_centers_release`. Quiet on a binding that cannot be reached any
+    more and on a handle already released (a copied instance)."""
+    var b = Python.import_module("builtins")
+    var holder = py_get(py_fields(model), PythonObject(_HOLDER), PythonObject(None))
+    if holder is None or py_type(holder) is not b.dict:
+        return
+    var held = py_get(holder, PythonObject("index"), PythonObject(None))
+    if held is None:
+        return
+    py_setitem(holder, "index", PythonObject(None))
+    try:
+        _ = py_call(py_call(b.getattr, held[2], PythonObject("kmeans_centers_release")), held[1])
+    except:
+        pass
+
+
+def _kmeans_resident(model: PythonObject, binding: PythonObject, centers: PythonObject, c: PythonObject,
+                     k: Int, d: Int, context: PythonObject) raises -> PythonObject:
+    """The handle of the device copy of the fitted centroids, uploaded at
+    the first query after a fit and reused while `cluster_centers_` is the
+    same object (the held key keeps a reference to it, so it cannot be
+    replaced by a new array at the same address) and the binding is the one
+    that minted it; None where the binding has no resident door. The holder
+    dictionary changes, never the model's `__dict__` keys after a fit."""
+    var prepare = _kmeans_optional_entry(binding, "kmeans_centers_prepare", context)
+    if prepare is None:
+        return PythonObject(None)
+    var b = Python.import_module("builtins")
+    var fields = py_fields(model)
+    var holder = py_get(fields, PythonObject(_HOLDER), PythonObject(None))
+    if holder is None or py_type(holder) is not b.dict:
+        holder = Python.dict()
+        py_setitem(fields, _HOLDER, holder)
+    var held = py_get(holder, PythonObject("index"), PythonObject(None))
+    if held is not None:
+        if held[0][0] is centers and held[2] is binding and Int(py=held[0][1]) == k and Int(py=held[0][2]) == d:
+            return held[1]
+        _kmeans_release(model)
+    var handle = family_call(prepare, classical_address(c), Python.list(PythonObject(k), PythonObject(d)))
+    # The minting binding travels with the handle: the release (here, and
+    # the native finalizer when the instance is dropped) is its own
+    # `kmeans_centers_release`.
+    py_setitem(holder, "index", Python.tuple(Python.tuple(centers, PythonObject(k), PythonObject(d)), handle, binding))
+    return handle
 
 
 def _kmeans_nonfinite(name: String, where: String) -> Error:
@@ -70,8 +142,13 @@ def _kmeans_callable_init(init: PythonObject, source: PythonObject, k: PythonObj
     return family_call_kw(init, keywords, data, k)
 
 
-def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`KMeans.fit(X, sample_weight)`; returns the fitted labels."""
+def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
+                transform: Bool = False) raises -> PythonObject:
+    """`KMeans.fit(X, sample_weight)`; returns the fitted labels, or with
+    `transform` the distances of the fitted rows to the final centroids
+    (`KMeans.fit_transform`): one `kmeans_fit_transform` call, X uploaded
+    once, where the binding has that door; otherwise the fit and then the
+    transform, as before."""
     classical_connect_numpy(context)
     var b = Python.import_module("builtins")
     var binding = args[0]
@@ -151,8 +228,18 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     _ = py_call(params.append, PythonObject(init_code))
     _ = py_call(params.append, PythonObject(metric_code))
     _ = py_call(params.append, oversampling)
-    var fit = family_entry(binding, "kmeans_fit", context)
-    var result = family_call(fit, classical_address(x), classical_address(centers), classical_address(labels),
+    var result: PythonObject
+    var distances = PythonObject(None)
+    var joint = PythonObject(None)
+    if transform:
+        joint = _kmeans_optional_entry(binding, "kmeans_fit_transform", context)
+    if joint is not None:
+        distances = family_array(Python.tuple(n, k), "<f4", context)
+        result = family_call(joint, classical_address(x), classical_address(centers), classical_address(labels),
+                             classical_address(weights), classical_address(distances), params)
+    else:
+        var fit = family_entry(binding, "kmeans_fit", context)
+        result = family_call(fit, classical_address(x), classical_address(centers), classical_address(labels),
                              classical_address(weights), params)
     _ = x^
     _ = weights^
@@ -163,6 +250,14 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     py_setitem(fields, "sum_scale_", result[2])
     py_setitem(fields, "weight_scale_", result[3])
     py_setitem(fields, "n_features_in_", PythonObject(d))
+    # The last fit's resident centroids are released; the next query
+    # uploads the new ones once (`_kmeans_resident`).
+    _kmeans_release(model)
+    py_setitem(fields, _HOLDER, Python.dict())
+    if transform:
+        if distances is None:
+            return _kmeans_inference(model, binding, source, True, context)
+        return distances
     return labels
 
 
@@ -187,14 +282,23 @@ def _kmeans_inference(model: PythonObject, binding: PythonObject, source: Python
     # kmeans_transform_binding: n_samples, n_features, n_clusters, metric.
     var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(k), PythonObject(metric_code))
     var out: PythonObject
+    var handle = _kmeans_resident(model, binding, centers, c, k, d, context)
     if transform:
         out = family_array(Python.tuple(n, k), "<f4", context)
-        _ = family_call(family_entry(binding, "kmeans_transform", context), classical_address(x),
-                        classical_address(c), classical_address(out), params)
+        if handle is not None:
+            _ = family_call(family_entry(binding, "kmeans_transform_resident", context), handle,
+                            classical_address(x), classical_address(out), params)
+        else:
+            _ = family_call(family_entry(binding, "kmeans_transform", context), classical_address(x),
+                            classical_address(c), classical_address(out), params)
     else:
         out = family_array(Python.tuple(n), "<i4", context)
-        _ = family_call(family_entry(binding, "kmeans_predict", context), classical_address(x),
-                        classical_address(c), classical_address(out), params)
+        if handle is not None:
+            _ = family_call(family_entry(binding, "kmeans_predict_resident", context), handle,
+                            classical_address(x), classical_address(out), params)
+        else:
+            _ = family_call(family_entry(binding, "kmeans_predict", context), classical_address(x),
+                            classical_address(c), classical_address(out), params)
     _ = x^
     _ = c^
     return out
@@ -209,8 +313,19 @@ def kmeans_operation(model: PythonObject, operation: String, args: PythonObject,
     if operation == "family_kmeans_fit_predict":
         return _kmeans_fit(model, args, context)
     if operation == "family_kmeans_fit_transform":
-        _ = _kmeans_fit(model, args, context)
-        return _kmeans_inference(model, args[0], args[1], True, context)
+        return _kmeans_fit(model, args, context, True)
+    if operation == "family_kmeans_getstate":
+        # A pickle or a deepcopy carries no device handle: it is meaningful
+        # only in the process and registry that minted it. The copy uploads
+        # its own centroids at its first query.
+        var state = py_call(Python.import_module("builtins").dict, py_fields(model))
+        _ = py_call(state.pop, PythonObject(_HOLDER), PythonObject(None))
+        return state
+    if operation == "family_kmeans_setstate":
+        var fields = py_fields(model)
+        _ = py_call(fields.update, args[0])
+        py_setitem(fields, _HOLDER, Python.dict())
+        return PythonObject(None)
     if operation == "family_kmeans_predict":
         return _kmeans_inference(model, args[0], args[1], False, context)
     if operation == "family_kmeans_transform":
