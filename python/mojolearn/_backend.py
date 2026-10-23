@@ -1452,11 +1452,15 @@ def load_door_host(basename):
         return module
     prefix = _host_prefix(basename)
     path = door_host_binary_path(basename)
-    if not os.path.exists(path):
-        raise ImportError(
-            f"mojolearn: {path} is not built. Build it with bindings/build_{prefix}.sh")
     name = _HOST_MODULE_PREFIX + basename
     module = sys.modules.get(name)
+    override = os.environ.get(f"MOJOLEARN_{prefix.upper()}_BINARY", "").strip()
+    if module is None and not override and not os.path.exists(path) and basename in _merged.merged_members(host_dir()):
+        # a merged host build carries the door binding inside the merged file
+        module = load_host_module(basename)
+    if module is None and not os.path.exists(path):
+        raise ImportError(
+            f"mojolearn: {path} is not built. Build it with bindings/build_{prefix}.sh")
     if module is None:
         loader = importlib.machinery.ExtensionFileLoader(name, path)
         spec = importlib.util.spec_from_loader(name, loader, origin=path)
