@@ -1706,16 +1706,15 @@ def _mojo_import_targets(rel):
 
 
 _SYMBOL_STEPS = {}
+_CACHES.append(_SYMBOL_STEPS)
 
 
 def _mojo_named_imports(rel, idents):
     """The (file, name) nodes the identifiers `idents`, written in `rel`, are
-    imported as (`_mojo_import_targets`, and `_mojo_import_symbols` for the
-    package files the old scan named), plus every star-imported file whole."""
+    imported as, plus every star-imported file whole. Keep the ORIGINAL name
+    of an aliased import: adding its local alias as a second unresolved node
+    would close the same file over whole and undo the symbol-level walk."""
     out = []
-    for sym, files in _mojo_import_symbols(rel).items():
-        if sym in idents:
-            out.extend((f, sym) for f in files)
     targets, whole = _mojo_import_targets(rel)
     for local, nodes in targets.items():
         if local in idents:
@@ -1761,36 +1760,27 @@ def _mojo_symbol_reach(pending):
     """(files reached by name, files to close over whole) for imported
     symbols `pending` [(file, name)], followed DEFINITION BY DEFINITION.
 
-    A THIN-SHELL BINDING MOVED THE MULTIPLEXER ONE HOP DOWN (2026-10-21). The
-    per-export scan in `lane_sources` reads the export's body in the binding
-    and, for every imported symbol it names, closed over the WHOLE file
-    defining it. When `bindings/_mojolearn_estimators_host.mojo` became a door
-    that calls one function of `core/estimators_host_impl.mojo` per export, that
-    impl file became what the binding used to be: one module importing the
-    PCA, DBSCAN, scaler, ridge and k-NN oracles at once. Every lane calling
-    any export of the binding then took every oracle, and
-    `preprocessing/host/scaler_oracle.mojo` selected 503 of 530 lanes, k-means
-    among them. So a symbol that names a top-level definition of the file the
-    binding imports it from (`_mojo_units`: a function with its overloads, a
-    struct or trait with all its methods, a `comptime` value) is read the way
-    the binding's own export is: its text and the file's residue, and the
-    same-file definitions it names. That file is reached; every file those
-    definitions import a name from is closed over WHOLE, exactly as the
-    binding's direct imports were before. ONE HOP, ON PURPOSE: it undoes what
-    the thin shell moved and nothing more, so every file below the impl
-    module keeps the file-level closure the Mojo conformance inversion
-    (`test_the_mojo_conformance_inversion_holds_over_the_whole_tree`) is
-    stated over. A symbol the file does not define (a package re-export, a
-    module) or a file `_mojo_units` cannot read with certainty is closed over
-    whole, the old answer."""
-    reached, whole = set(), set()
-    for node in set(pending):
+    Native doors can contain several layers of helpers; the old one-hop
+    limit made the next layer's unrelated imports dependencies of every
+    caller. Follow named definitions to a fixed point instead. Overloads,
+    all struct methods and module residue remain included by
+    `_mojo_symbol_step`. Unknown definitions, module objects, star imports
+    and unreadable syntax retain the whole-file fallback. `lane_sources`
+    additionally closes the trait/conformer edges for every file read by
+    name, including these deeper helpers."""
+    reached, whole, seen = set(), set(), set()
+    stack = list(pending)
+    while stack:
+        node = stack.pop()
+        if node in seen:
+            continue
+        seen.add(node)
         step = None if node[1] is None else _mojo_symbol_step(*node)
         if step is None:
             whole.add(node[0])
             continue
         reached.add(node[0])
-        whole |= {f for f, _ in step if f != node[0]}
+        stack.extend(step)
     return reached, whole
 
 

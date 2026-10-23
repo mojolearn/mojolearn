@@ -2031,6 +2031,68 @@ def test_an_aliased_mojo_import_is_recorded_under_the_name_the_body_uses():
             f"{rel} is run by both umap lanes and the map names {sorted(lanes)}"
 
 
+def test_native_helpers_keep_symbol_reach_across_multiple_dispatch_layers():
+    """Adding a helper layer must not make its unused imports executable.
+
+    The unrelated function deliberately shares the second helper module.
+    A cycle and a missing implementation exercise termination and the
+    conservative fallback; neither can silently erase a dependency.
+    """
+    files = {
+        "<door>.mojo": ({"entry": "def entry():\n    first()"}, ""),
+        "<first>.mojo": ({"first": "def first():\n    chosen()"}, ""),
+        "<hub>.mojo": ({
+            "chosen": "def chosen():\n    arithmetic()\n    first()",
+            "unrelated": "def unrelated():\n    other_arithmetic()",
+        }, ""),
+        "<kernel>.mojo": ({"arithmetic": "def arithmetic():\n    pass"}, ""),
+    }
+    imports = {
+        "<door>.mojo": ({"first": {("<first>.mojo", "first")}}, set()),
+        "<first>.mojo": ({"chosen": {("<hub>.mojo", "chosen")}}, set()),
+        "<hub>.mojo": ({
+            "arithmetic": {("<kernel>.mojo", "arithmetic")},
+            "first": {("<first>.mojo", "first")},
+            "other_arithmetic": {("<unrelated>.mojo", "other_arithmetic")},
+        }, set()),
+        "<kernel>.mojo": ({}, set()),
+    }
+    defs, targets = lane_select._mojo_defs_for, lane_select._mojo_import_targets
+    saved_steps = dict(lane_select._SYMBOL_STEPS)
+    try:
+        lane_select._mojo_defs_for = files.get
+        lane_select._mojo_import_targets = lambda rel: imports.get(rel, ({}, set()))
+        lane_select._SYMBOL_STEPS.clear()
+        reached, whole = lane_select._mojo_symbol_reach([("<door>.mojo", "entry")])
+        assert reached == set(files) and not whole, (reached, whole)
+        assert "<unrelated>.mojo" not in reached | whole
+        _, whole = lane_select._mojo_symbol_reach([("<hub>.mojo", "unknown")])
+        assert whole == {"<hub>.mojo"}, "unknown call targets must keep the whole module"
+        _, whole = lane_select._mojo_symbol_reach([("<hub>.mojo", None)])
+        assert whole == {"<hub>.mojo"}, "module objects must keep the whole module"
+    finally:
+        lane_select._mojo_defs_for, lane_select._mojo_import_targets = defs, targets
+        lane_select._SYMBOL_STEPS.clear()
+        lane_select._SYMBOL_STEPS.update(saved_steps)
+
+
+def test_native_alias_reach_does_not_add_an_unresolvable_local_name():
+    """The local alias is usable in its importer, not in the target module."""
+    path = "<aliased native door>.mojo"
+    cache = lane_select._mojo_import_targets.cache
+    previous = cache.get(path)
+    cache[path] = ({"local_alias": {("<native impl>.mojo", "original")}}, set())
+    try:
+        assert lane_select._mojo_named_imports(path, {"local_alias"}) == [
+            ("<native impl>.mojo", "original")]
+        assert lane_select._mojo_named_imports(path, {"original"}) == []
+    finally:
+        if previous is None:
+            cache.pop(path, None)
+        else:
+            cache[path] = previous
+
+
 def test_runtime_controls_do_not_trigger_numerical_sweep():
     paths = ["tools/identity_iterate.py", "tools/mac_slot.py"]
     selected = lane_select.select(paths)
