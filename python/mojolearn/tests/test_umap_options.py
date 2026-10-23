@@ -37,6 +37,9 @@ def test_refused_by_name(kw, err):
 
 
 def test_target_metric_refused_by_name():
-    m = UMAP(target_metric="hamming")
+    # The target is checked inside the compiled fit (bindings/mani_umap_native.mojo),
+    # before any kernel runs.
+    X = [[float(i), float(i % 3)] for i in range(10)]
+    m = UMAP(target_metric="hamming", n_neighbors=2)
     with pytest.raises(NotImplementedError):
-        m._target([0, 1, 2], 3)
+        m.fit(X, [0, 1, 2, 0, 1, 2, 0, 1, 2, 0])

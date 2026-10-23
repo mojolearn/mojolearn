@@ -14,7 +14,7 @@ first imported, after the package, so both may rely on every module existing:
                                import `_classical_host` INSIDE it and subclass
                                its `_HostBound`; never import it at module level
 """
-from . import _native_archive_bridge
+from . import _native_archive_bridge, _native_family_bridge
 from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty
 from ._mode import NumericModeMixin
 
@@ -23,6 +23,9 @@ from ._mode import NumericModeMixin
 # the schema registered at the end of this module
 # (bindings/archive_schema_native.mojo).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
+# The compiled family owner, connected once at import: TSNE's `fit` and
+# `fit_transform` are one native call each (bindings/mani_tsne_native.mojo).
+_NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 
 __all__ = ["IVFPQIndex", "TSNE", "CagraIndex", "IVFSQIndex", "IVFRaBitQIndex", "refine"]
 
@@ -612,19 +615,6 @@ class TSNE(NumericModeMixin):
         self.init = init
         self.random_state = random_state
 
-    def _init(self, x, n, seed, k=2):
-        """The caller's start array (n, k) float32 ('pca' and 'random' are
-        built in the binding, x_ann/tsne_init.mojo)."""
-        from ._optional_numpy import require_numpy
-        np = require_numpy('_expansion_ann')
-        init = self.init
-        if isinstance(init, str):
-            raise ValueError(f"mojolearn TSNE: init must be 'pca', 'random' or an array, got {init!r}")
-        y0 = np.ascontiguousarray(np.asarray(init, dtype=np.float32))
-        if y0.shape != (n, k):
-            raise ValueError(f"mojolearn TSNE: an init array must have shape ({n}, {k}), got {y0.shape}")
-        return y0
-
     def fit(self, X, y=None):
         """Compute the embedding of `X`.
 
@@ -649,77 +639,8 @@ class TSNE(NumericModeMixin):
         TypeError
             If `max_iter` or `random_state` is not an int.
         """
-        from ._optional_numpy import require_numpy
-        np = require_numpy('_expansion_ann')
-        x, _ = as_f32_c(X, ndim=2, name="X")
-        n, d = (int(s) for s in x.shape)  # glue: two shape integers of the input
-        if n < 2:
-            # scikit-learn's TSNE validates X with ensure_min_samples=2
-            raise ValueError(f"Found array with {n} sample(s) (shape=({n}, {d})) while a minimum of 2 "
-                             "is required by TSNE.")
-        # n_components 1 runs the two-dimensional kernels with a second
-        # column that stays +0 (x_ann/tsne_init.mojo `tsne_init_y0`)
-        if isinstance(self.n_components, bool) or self.n_components not in (1, 2):
-            raise ValueError(f"mojolearn TSNE: n_components must be 1 or 2, got {self.n_components!r}")
-        k = int(self.n_components)
-        max_iter = _ann_int("TSNE", "max_iter", self.max_iter)
-        seed = _ann_int("TSNE", "random_state", self.random_state)
-        perplexity = float(self.perplexity)
-        # scikit-learn's rules: perplexity > 0 (its parameter constraint) and
-        # perplexity < n_samples (`_check_params_vs_input`), in its words
-        if not perplexity > 0.0:
-            raise ValueError(f"The 'perplexity' parameter of TSNE must be a float in the range "
-                             f"(0.0, inf). Got {self.perplexity!r} instead.")
-        if perplexity >= n:
-            raise ValueError(f"perplexity ({self.perplexity}) must be less than n_samples ({n})")
-        exag = float(self.early_exaggeration)
-        if self.learning_rate == "auto":
-            lr = max(n / exag / 4.0, 50.0)
-        else:
-            lr = float(self.learning_rate)
-        post_factor = float(self.post_exaggeration_learning_rate_factor)
-        if not 0.0 < post_factor < float("inf"):
-            raise ValueError("mojolearn TSNE: post_exaggeration_learning_rate_factor must be positive and finite, "
-                             f"got {self.post_exaggeration_learning_rate_factor!r}")
-        exploration = min(self._EXPLORATION_MAX_ITER, max_iter)
-        native = self._bind()
-        tail = []
-        init = self.init
-        if isinstance(init, str) and init in ("random", "pca"):
-            # the binding builds the start (x_ann/tsne_init.mojo): mode 1
-            # random from random_state, mode 2 the PCA embedding scaled
-            if init == "random":
-                y0 = empty((2,), "<f4")
-                mode = 1
-            else:
-                from .decomposition import PCA
-                pca = PCA(n_components=k)
-                mode_name = getattr(self, "numeric_mode", None)
-                if mode_name is not None:
-                    pca.numeric_mode = mode_name
-                y0 = np.ascontiguousarray(np.asarray(pca.fit_transform(x), dtype=np.float32))
-                mode = 2
-            s64 = seed & ((1 << 64) - 1)
-            tail = [mode, s64 & 0xFFFFFFFF, s64 >> 32, k]
-        else:
-            y0 = self._init(x, n, seed, k)    # the caller's array (or a refusal)
-            tail = [0, 0, 0, k]
-        emb = empty((n * k,), "<f4")
-        kl = empty((1,), "<f4")
-        native.x_ann_tsne_fit(
-            # x, y0, y_out, kl_out
-            [addr_ro(x, name="X"), addr_ro(y0, name="init"), addr(emb, name="embedding_"), addr(kl, name="kl")],
-            # n, d, max_iter, exploration_iters, perplexity, early_exaggeration, learning_rate,
-            # post_exaggeration_learning_rate_factor (the binding forms the product)
-            # (+ init mode, random_state low, high: the binding builds y0; n_components)
-            [n, d, max_iter, exploration, perplexity, exag, lr, post_factor] + tail,
-        )
-        self.embedding_ = emb.reshape((n, k))
-        self.kl_divergence_ = float(np.asarray(kl)[0])
-        self.n_iter_ = max_iter
-        self.learning_rate_ = lr
-        self.n_features_in_ = d
-        return self
+        return _NATIVE(self, "family_mani_tsne_fit", (self._bind(), self._bind("_mojolearn_estimators"), X),
+                       _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Compute the embedding of `X` and return it.
@@ -736,7 +657,8 @@ class TSNE(NumericModeMixin):
         embedding : ndarray of shape (n_samples, n_components), float32
             The embedding, also stored in `embedding_`.
         """
-        return self.fit(X).embedding_
+        return _NATIVE(self, "family_mani_tsne_fit_transform",
+                       (self._bind(), self._bind("_mojolearn_estimators"), X), _NATIVE_CONTEXT)
 
 
 # IDENTICAL by construction (x_ann/cagra_core.mojo). random_state r >= 0
