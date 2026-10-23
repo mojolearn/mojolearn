@@ -47,3 +47,65 @@ Before 402, after 310.
   its own lane.
 - ensemble.py `_tree_metadata` (2662, 2717) parses the model text in Python for
   `get_tree_leaf_counts` / `get_leaf_values`; a native metadata entry in the trees binding is owed.
+
+## 2026-10-22, lane purge-user-objects (from purge-cpu-routes 1e3e2c5c2)
+
+Counts: before 310, after 186 (`git grep -c '# cpu-route:' HEAD -- python/mojolearn ':!python/mojolearn/tests'`).
+Public runtime baseline: python 360 -> 265, orchestrated 473 -> 568, native 200.
+
+### Removed
+
+| site | tags | now |
+|---|---|---|
+| importers/torch_export.py (the torch.export reader) | 59 | deleted. `import_model` takes an ONNX file; a torch object raises `ValueError` naming `torch.onnx.export(model, args, "model.onnx")`. |
+| importers/_graph.py `graph_words`, the Python branch of `resolve` | 18 | deleted, with `onnx_from_words` (autograd/import_lower.mojo, import_lower_pyapi.mojo, both x_sequence bindings) that only it used. |
+
+Docs: docs-site/user_guide/autograd.md "Import a pretrained model" is the two-step path. Tools retargeted to
+export ONNX first: models/_catalog.py (verify_catalog_entry), tools/real_model_import.py, tools/import_compare.py
+`--torch`, tools/autograd_smoke.py import-torch-smoke and real-model-smoke. No identity lane or sabotage arm named
+the reader; tools/verify_coverage_audit.py drops its `onnx_from_words` n/a row.
+
+### Moved into the native user-object reader
+
+bindings/user_objects_native.mojo (`user_objects_c`, tokenizer host entry `user_objects_native_call`; typed kernel
+core/user_objects.mojo `group_run_sizes`; door python/mojolearn/_user_objects.py) reads the object once:
+
+| site (before) | object | op |
+|---|---|---|
+| model_selection.py `_take_rows`, `_take_any`; resample.py `_take` | Python list of label objects | take |
+| model_selection.py `_encode_first_seen` | label objects (str/mixed) | first_seen |
+| model_selection.py `check_cv` stratify test | label objects | kinds |
+| model_selection.py scorer `predict_proba[:, 1]` of a Python list | external estimator's probability rows | column_f32 |
+| model_selection.py label-object prediction placement | per-fold prediction lists | scatter, flatten, floats, kinds |
+| model_selection.py `permutation_test_score` definition route | label objects, group labels | take, first_seen, group_rows, group_permute |
+| ensemble.py `_group_sizes_rowwise`, `_group_sizes_by_runs`, `_group_id_key` | group_id objects (int/str/bytes) | group_runs (the row walk is the tests' oracle) |
+| ensemble.py `_pairs_arrays` | user index pairs, pairs_weight | pairs |
+| ensemble.py permutation type check | user permutation list | kinds |
+| _umap_impl.py categorical target | label objects ordered by (type, value) | kinds, sorted_codes |
+| _metrics_impl.py `_classification_labels`, `_label_map` | str / int label objects | kinds, strs, ints, first_seen + gather_i32 |
+| linear_model.py `_flatten`, `_is_integer_labels` | nested user y | flatten, kinds |
+| _array.py `_flatten` (ragged walk) | ragged user list, Arrays inside it | nested |
+| _expansion_trees.py multi-output fit / predict | label rows and decoded columns | column, transpose |
+| _expansion_prep.py `_partial_walk` | partial_fit labels against classes_ | lookup |
+| _expansion_prep.py `_numeric_labels`, `_label_classes`, `_label_codes`, `_multilabel_indicator` | label lists, list-of-lists y | f32_exact, kinds, floats, indicator |
+| _expansion_prep.py LabelEncoder.inverse_transform, LabelBinarizer decode | code lists, class objects | ints + check_indices_i64, take |
+| _expansion_prep.py user covariance_, IterativeImputer predictions, `_pred_f64` | user estimator outputs | flatten, floats |
+| _portable_math.py `fsum` twin | Python scalars | floats (then nsum_f64) |
+
+### Kept, the object named (`# cpu-route: <object> read once by <entry>`)
+
+- Native host-binding calls: _expansion_decomp.py (17, `_M` host buffers on CPU-only installs), _spectral_impl.py (4),
+  _class_weights.py, _x_sequence_prophet.py, _byte_lm_impl.py, _cast_in.py (numpy.asarray), importers/onnx.py (5),
+  tokenizer.py binding loads (2), model_selection.py plan entries (5), _expansion_linear.py (3),
+  _expansion_trees.py (4), and the per-fold cv splitter reads (_expansion_prep.py 4, model_selection.py, _expansion_trees.py).
+- User code: the strategy callable, the covariance estimator per class, IterativeImputer's estimator (4).
+- tokenizer.py `_byte_to_char` is a verification fixture (tests and identity tools only).
+
+### Left to the lanes that own them
+
+- _labels.py (10) and _expansion_prep.py LabelEncoder / LabelBinarizer / MultiLabelBinarizer transform and fit
+  (`index` maps, MLB flatten and offsets, 13): lane/migrate-classical-a (str-label encoder) and lane/migrate-shared-labels.
+- ensemble.py `_tree_metadata` (2): lane/migrate-trees.
+- _training_impl.py (4), _native_optimizer_bridge.py (2), _native_samba_bridge.py (2), _x_sequence_rnn.py (1): lane/migrate-neural.
+- _native_pca_bridge.py (2): removed on lane/migrate-classical-a.
+- tokenizer.py text packing / decoding (4): Python str documents in and out (text step).
