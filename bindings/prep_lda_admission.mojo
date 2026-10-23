@@ -82,9 +82,9 @@ def lda_native_set_params(model: PythonObject, fields: PythonObject, values: Pyt
     return model
 
 
-def lda_native_labels(value: PythonObject, context: PythonObject, fitting: Bool = False) raises:
+def lda_native_labels(value: PythonObject, context: PythonObject, fitting: Bool = False, name: String = "LinearDiscriminantAnalysis") raises:
     if fitting and value is None:
-        raise Error("LinearDiscriminantAnalysis requires y to be passed, but the target y is None.")
+        raise Error(name + " requires y to be passed, but the target y is None.")
     classical_admit_value(value, context)
     # An exact object ndarray may still hold arbitrary Python scalar objects.
     # Reading/flattening the references is native; admission precedes hashing,
@@ -94,13 +94,20 @@ def lda_native_labels(value: PythonObject, context: PythonObject, fitting: Bool 
     if fitting:
         var b = Python.import_module("builtins")
         var shape = labels_shape_of(value, context)
-        if len(shape) == 2 and shape[1] == 1 and py_type(value) is not b.list and py_type(value) is not b.tuple:
+        if len(shape) == 2 and shape[1] == 1 and py_type(value) is not b.list and py_type(value) is not b.tuple and py_type(value) is not b.memoryview:
             metric_warn(COLUMN_WARNING, _warning_category(context), context)
+        var numeric_float = True
+        if py_type(value) is context["array_class"]:
+            numeric_float = String(value.dtype).startswith("<f")
+        elif py_type(value) is py_get(context, "ndarray"):
+            numeric_float = String(value.dtype.kind) == "f"
+        elif py_type(value) is b.list or py_type(value) is b.tuple:
+            numeric_float = len(flat) > 0 and metric_is_real(flat[0], context) and not metric_is_integral(flat[0], context)
         for i in range(len(flat)):  # driver-loop: preserve the public classifier target admission before encoding
-            if metric_is_real(flat[i], context) and not metric_is_integral(flat[i], context):
+            if numeric_float and metric_is_real(flat[i], context) and not metric_is_integral(flat[i], context):
                 var number = metric_float(flat[i], context)
                 if not isfinite(number):
-                    raise Error("Input y contains NaN or infinity (LinearDiscriminantAnalysis).")
+                    raise Error("Input y contains NaN or infinity (" + name + ").")
                 if floor(number) != number:
                     raise Error("Unknown label type: continuous. Maybe you are trying to fit a classifier, which expects discrete classes on a regression target with continuous values.")
 

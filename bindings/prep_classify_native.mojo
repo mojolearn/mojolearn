@@ -1478,7 +1478,7 @@ def _class_counts(mut pr: ClsProg, co: Int, n: Int, K: Int) -> Int:
 # ---------------------------------------------------------------- the door
 
 
-def _dispatch(model: PythonObject, operation: String, args: PythonObject, var context: PythonObject) raises -> PythonObject:
+def _dispatch(model: PythonObject, operation: String, var args: PythonObject, var context: PythonObject) raises -> PythonObject:
     if py_type(py_type(model)) is not py_type(py_type(PythonObject(0))):
         raise Error("TypeError: native classifiers cannot invoke Python metaclass hooks")
     var kind = cls_kind(model, context)
@@ -1495,6 +1495,7 @@ def _dispatch(model: PythonObject, operation: String, args: PythonObject, var co
         if operation == "set_params":
             return lda_native_set_params(model, fields, args[0], context)
         if operation == "fit" or operation == "fit_transform" or operation == "score":
+            args = Python.tuple(args[0], classifier_label_list(args[1], context))
             lda_native_labels(args[1], context, operation != "score")
         if operation != "fit" and operation != "fit_transform":
             lda_require_fitted(model, operation, context)
