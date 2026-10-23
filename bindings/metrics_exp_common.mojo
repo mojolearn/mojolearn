@@ -54,6 +54,11 @@ def mx_len(value: PythonObject) raises -> Int:
     return Int(py=py_call(mx_b().len, value))
 
 
+def mx_attr(value: PythonObject, name: String) raises -> PythonObject:
+    """`getattr(value, name)` (names PythonObject spells as its own methods)."""
+    return py_call(mx_b().getattr, value, PythonObject(name))
+
+
 def mx_truthy(value: PythonObject) raises -> Bool:
     return Bool(py=py_call(mx_b().bool, value))
 
@@ -169,7 +174,7 @@ def mx_missing(present: PythonObject, classes: PythonObject) raises -> Bool:
 def mx_label_order(chosen: PythonObject, present: PythonObject) raises -> PythonObject:
     """`_label_order`: `chosen` then every present label not in it."""
     var it = Python.import_module("itertools")
-    var rest = mx_list(py_call(it.filterfalse, mx_set(chosen).__contains__, present))
+    var rest = mx_list(py_call(it.filterfalse, mx_attr(mx_set(chosen), "__contains__"), present))
     return mx_list(chosen) + rest
 
 
@@ -451,7 +456,7 @@ def _mx_buffer_labels(values: PythonObject, name: String, context: PythonObject)
             return PythonObject(None)
         var lo = py_call(b.min, values)
         var hi = py_call(b.max, values)
-        if Bool(py=lo < -9223372036854775808) or Bool(py=hi > 9223372036854775807):
+        if Bool(py=lo < PythonObject(Int.MIN)) or Bool(py=hi > PythonObject(Int.MAX)):
             return PythonObject(None)
         var store = py_call(context["array_type"], PythonObject("q"), values)
         source = classical_wrap_array(store, Python.tuple(PythonObject(n)), "<i8", "C", context)
@@ -499,7 +504,7 @@ def mx_encode(values: PythonObject, name: String, context: PythonObject) raises 
     var classes = mx_sorted(mx_set(labels))
     var index = mx_index(classes)
     var n = mx_len(labels)
-    var store = py_call(context["array_type"], PythonObject("i"), py_call(b.map, index.__getitem__, labels))
+    var store = py_call(context["array_type"], PythonObject("i"), py_call(b.map, mx_attr(index, "__getitem__"), labels))
     var codes = classical_wrap_array(store, Python.tuple(PythonObject(n)), "<i4", "C", context)
     return MxLab(listed[1], classes, codes, n)
 
@@ -625,7 +630,7 @@ def mx_pos_label_ok(kind: String, classes: PythonObject) raises -> Bool:
     return kind == "integer" and py_contains(allowed, classes)
 
 
-struct MxMat(Movable):
+struct MxMat(Copyable, Movable):
     """A validated float32 C-ordered matrix: (rows, cols) and its rank."""
     var a: PythonObject
     var rows: Int

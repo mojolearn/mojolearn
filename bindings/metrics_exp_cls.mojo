@@ -21,7 +21,7 @@ from bindings.metrics_exp_common import (
     MX_NONE, MxProg, MxArena, MxLab, MxPair, mx_run, mx_b, mx_len, mx_truthy, mx_eq, mx_is_bool, mx_is_str,
     mx_is_real, mx_float, mx_nan, mx_inf, mx_isnan, mx_isinf, mx_raise_obj, mx_zero_division, mx_warn, mx_undefined,
     mx_sorted, mx_set, mx_list, mx_label_order, mx_str_list, mx_encode, mx_selected, mx_codes, mx_pair,
-    mx_list_labels, mx_union_sorted, mx_zero_division_value,
+    mx_list_labels, mx_union_sorted, mx_zero_division_value, mx_attr,
 )
 
 # cm_epi kinds (x_metrics/cm_epi.mojo, op 59)
@@ -610,20 +610,20 @@ def _report(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var widths = mx_list(py_call(b.map, b.len, names)) + Python.list(PythonObject(12), digits)
     var width = py_call(b.max, widths)
     var head_fmt = PythonObject("{:>{width}s}  {:>9} {:>9} {:>9} {:>9}")
-    var out = family_call_kw(head_fmt.format, _fmt_kw(width, PythonObject(None)), PythonObject(""), headers[0],
+    var out = family_call_kw(mx_attr(head_fmt, "format"), _fmt_kw(width, PythonObject(None)), PythonObject(""), headers[0],
                              headers[1], headers[2], headers[3]) + PythonObject("\n\n")
     var row_fmt = PythonObject("{:>{width}s}  {:>9.{digits}f} {:>9.{digits}f} {:>9.{digits}f} {:>9}\n")
     for i in range(n_rows):  # driver-loop: over the report's label rows
         var row = rows[i]
-        out = out + family_call_kw(row_fmt.format, _fmt_kw(width, digits), row[0], row[1], row[2], row[3], row[4])
+        out = out + family_call_kw(mx_attr(row_fmt, "format"), _fmt_kw(width, digits), row[0], row[1], row[2], row[3], row[4])
     out = out + PythonObject("\n")
     if micro_is_accuracy:
         var acc_fmt = PythonObject("{:>{width}s}  {:>9.{digits}} {:>9.{digits}} {:>9.{digits}f} {:>9}\n")
-        out = out + family_call_kw(acc_fmt.format, _fmt_kw(width, digits), PythonObject("accuracy"), PythonObject(""),
+        out = out + family_call_kw(mx_attr(acc_fmt, "format"), _fmt_kw(width, digits), PythonObject("accuracy"), PythonObject(""),
                                    PythonObject(""), report["accuracy"], total)
     for i in range(mx_len(avg_rows)):  # small-loop(3: the report's average rows): at most three
         var row = avg_rows[i]
-        out = out + family_call_kw(row_fmt.format, _fmt_kw(width, digits), row[0], row[1], row[2], row[3], row[4])
+        out = out + family_call_kw(mx_attr(row_fmt, "format"), _fmt_kw(width, digits), row[0], row[1], row[2], row[3], row[4])
     return out
 
 
