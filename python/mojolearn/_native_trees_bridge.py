@@ -21,14 +21,14 @@ _CONTEXT = None
 
 #: The tree bindings the owner launches, by numeric mode.
 _TREE_BINDINGS = ("_mojolearn_rf", "_mojolearn_trees", "_mojolearn_x_trees", "_mojolearn_metrics",
-                  "_mojolearn_svm", "_mojolearn_gbdt")
+                  "_mojolearn_svm", "_mojolearn_gbdt", "_mojolearn_estimators", "_mojolearn_x_neighbors")
 #: The base binding's input and label helpers (`_buffer._native`), always the
 #: identical binary (they are byte moves and comparisons with no tier).
 _BASE_HELPERS = ("cast_f64_to_f32", "cast_colmajor_f64_to_f32", "transpose_f32", "all_finite_f32",
                  "all_finite_f64", "prepare_targets", "bincount_i64", "class_ratio_f64",
                  "gather_rows_bytes", "argmax_rows_f32", "argmax_rows_f64", "gather_i64", "gather_f64",
                  "unique_inverse", "reduce_stat", "cast_elements", "gather_i32", "fsum_f64",
-                 "check_indices_i64")
+                 "check_indices_i64", "equal_elements")
 
 
 def _unavailable(error):
@@ -128,7 +128,7 @@ def connect():
     _backend.default_mode()  # glue: settle the process default the native mode falls back to
     context.update(
         trees_bindings=_bindings(), trees_helpers=_helpers(), trees_classes={}, trees_defaults={},
-        trees_boost_classes={},
+        trees_boost_classes={}, trees_meta_classes={},
         trees_missing=object(), trees_namespace=types.SimpleNamespace,
         trees_real_type=numbers.Real, trees_integral_type=numbers.Integral,
     )
@@ -172,3 +172,13 @@ def register_boost(cls, kind, **tables):
     context["trees_boost_classes"][cls] = kind
     for key, value in tables.items():  # glue: the class's fixed lookup tables, once at definition
         context.setdefault(key, value)
+
+
+def register_meta(cls, kind):
+    """Connect one meta-estimator class at its definition: `kind` names its
+    schema in bindings/trees_public_meta.mojo ("voting_classifier",
+    "stacking_regressor", "multioutput_classifier", "ovr", "calibrated", ...)."""
+    _, context = connect()
+    if "trees_unavailable" in context:
+        return
+    context["trees_meta_classes"][cls] = kind
