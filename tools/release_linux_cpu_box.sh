@@ -92,7 +92,11 @@ if [[ -z "${MOJOLEARN_BUILD_JOBS:-}" ]]; then
 fi
 build_rss_gib="" build_cores=""
 if [[ "$BINDING_LAYOUT" = merged ]]; then
+    # The cap follows the box: the AMD merged identical compile with eight compiler workers peaked at
+    # 92 GiB on a 114 GiB box (2026-10-22, killed under the fixed 64 GiB cap while the CUDA sets peaked
+    # at 48). Leave 8 GiB to the system; the guard still stops a runaway.
     build_rss_gib=$MERGED_RSS_GIB
+    ((mem_gib - 8 > build_rss_gib)) && build_rss_gib=$((mem_gib - 8))
     build_cores=$ncpu
     ((build_cores <= 128)) || build_cores=128
     ((mem_gib >= 56)) || say "WARNING: ${mem_gib} GiB on this box; one merged identical compile peaked at 46.4 GB"

@@ -928,10 +928,23 @@ rented). On the box, `python3 tools/gate_smoke_box.py <vendor> <version> <out> a
    are merged into `measure-*/board/board.json` (put on the rolling main board with
    `tools/main_board_ingest.py --gate-board <box>=<path>`).
 
-The step is done only on verdict PASS (no FAILED smoke line, autograd exit 0, every plan line measured). The
+The step is done only on verdict PASS (no FAILED smoke line, autograd exit 0, every plan line measured, every
+opponent pair MATCHED). The
 `record` step refuses while a published Linux vendor has no passing gate, so a release cannot skip it. To run
 a gate by hand on a held box: `lq add nv CMD main gate-<version>-nvidia 'python3 tools/gate_smoke_box.py nvidia
 <version> /root/release-gate/<version>/nvidia/out all'` (and `amd` likewise).
+
+Apples-to-apples is enforced, not reported (Andrew, 2026-10-22): our `identical` mode is the only difference
+between a pair. Every opponent pair on the gate board must read MATCHED in its race's parameter check
+(`tools/board_pairing.py` `params_state` over the race's `params_check`, read back from each constructed arm).
+An opponent whose explicit parameters cannot be read back or differ is refused for that cell with the reason:
+the cell shows ours alone, the gate verdict is FAIL, and every refusal is listed in the gate report
+(`gate-smoke.json` `measure.pairs`, the verdict reasons, `measure-*/board/pair-check.json`). On every board
+(`tools/bench_board.py` save and render, `tools/main_board_ingest.py`) a pair that is not MATCHED shows no
+ratio and is never a best opponent: it reads `refused: <reason>`, or `unchecked` for an opponent copied from an
+older board that was never re-raced with the check. Copied cells stay visible as `unchecked` until the gate
+re-races their line and `--gate-board` replaces them with checked (or refused) cells.
+`tools/board_clock_audit.py` exits 1 on any ratio stored from an unchecked or refused pair.
 
 ## 7. Publish the docs and the site (docs.mojolearn.org, mojolearn.org)
 

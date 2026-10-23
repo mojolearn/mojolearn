@@ -2048,6 +2048,8 @@ def save_result(path, result):
     result["updated"] = now_utc()
     # Andrew 2026-10-10: every row names its exact hardware and version; never mix GPU models in a column.
     HW.annotate_release(result)
+    # Andrew 2026-10-22: no stored ratio from an opponent pair whose parameters are not MATCHED
+    enforce_pairs(result)
     tmp = path + ".tmp"
     with open(tmp, "w") as fh:
         # Audit history makes these machine-readable boards large. One-space
@@ -2761,13 +2763,16 @@ def ours_of(cells, which):
     return None
 
 
-def add_ratios(cells):
+def add_ratios(cells, race=None):
     """ratio_ours_identical_over / ratio_ours_fast_over: our GPU median divided
     by this OPPONENT arm median, computed only when both sides completed every
     round. Our CPU is never in a ratio (Andrew, Oct 2 2026).
     Andrew 2026-10-10: every row names its exact hardware and version; never mix GPU models in a column.
     An opponent row whose hardware differs from ours (tools/board_hardware.py comparable) gets no ratio:
-    `hardware_comparable` False, rendered NOT-COMPARABLE (different hardware)."""
+    `hardware_comparable` False, rendered NOT-COMPARABLE (different hardware).
+    Andrew 2026-10-22: with `race` given, an opponent whose parameter pairing with ours is not MATCHED
+    (board_pairing.params_state: unchecked legacy copy, or refused) gets no ratio; save_result and
+    render_board apply the same rule to every race, so no board shows a ratio from an unmatched pair."""
     HW.mark(cells)
     # 2026-10-22: an opponent arm its lane refuses by name never stands as an opponent, whichever board or
     # store the cell came from (refused_lane_arm); its times are withdrawn before any ratio or best opponent
@@ -2805,7 +2810,40 @@ def add_ratios(cells):
             c["ratio_ours_arm"] = {m: o["arm"] for m, o in (("identical", ours_id), ("fast", ours_fast)) if o}
         else:
             c.pop("ratio_ours_arm", None)
+    if race is not None:
+        PAIR.enforce_params(dict(race, cells=cells, infer_cells=[]))
     return cells
+
+
+def enforce_pairs(result):
+    """board_pairing.enforce_params over every race (and page-only extra race) of a board, in place."""
+    for group in ("races", "extra_races"):
+        for rr in (result.get(group) or {}).values():
+            PAIR.enforce_params(rr)
+    return result
+
+
+def pair_report(result):
+    """The release gate's pair check of a board (Andrew, 2026-10-22): every judged opponent pair (an opponent
+    cell with a completed time on comparable hardware, the cells a ratio would be printed for) and its
+    board_pairing.params_state. -> {"matched": n, "unchecked": [{race, arm, reason}], "refused": [...]}."""
+    out = {"matched": 0, "unchecked": [], "refused": []}
+    for group in ("races", "extra_races"):
+        for rid, rr in sorted((result.get(group) or {}).items()):
+            for kind in ("cells", "infer_cells"):
+                for c in rr.get(kind) or []:
+                    if (not PAIR.is_opponent(c) or c.get("status") not in TIMED_STATUSES or not c.get("median_ms")
+                            or c.get("hardware_comparable") is False):
+                        continue
+                    state, why = PAIR.params_state(rr, c)
+                    if state == PAIR.PAIR_MATCHED:
+                        out["matched"] += 1
+                        continue
+                    row = {"race": rid, "arm": c.get("arm"), "reason": why}
+                    if kind == "infer_cells":
+                        row["batch"] = c.get("batch")
+                    out[state].append(row)
+    return out
 
 
 HASH_MATCH_CHARS = 16   # box_job.sh / main_board_ingest keep the first 16 hex characters of an output digest
@@ -2884,8 +2922,10 @@ def neural_headline(rr):
     out = {"ours_ms": ours["median_ms"] if ours else None, "note": IDENTITY_TAX_NOTE}
     for prec in ("bf16", "fp32"):
         # Andrew 2026-10-10: every row names its exact hardware and version; never mix GPU models in a column.
+        # 2026-10-22: only an arm whose parameter pairing is MATCHED can stand as the best opponent
         arms = [c for c in ok if c.get("library") != "mojolearn" and _torch_gpu_precision(c.get("arm")) == prec
-                and c.get("hardware_comparable") is not False]
+                and c.get("hardware_comparable") is not False
+                and PAIR.params_state(rr, c)[0] == PAIR.PAIR_MATCHED]
         best = min(arms, key=lambda c: c["median_ms"]) if arms else None
         out[prec] = None if best is None else {
             "arm": best["arm"], "ms": best["median_ms"],
@@ -3855,9 +3895,14 @@ def _clock_ratio(r):
 
 def ratio_text(c, field):
     """A stored ratio, or NOT-COMPARABLE (different hardware) for an opponent row whose hardware differs from ours.
-    Andrew 2026-10-10: every row names its exact hardware and version; never mix GPU models in a column."""
+    Andrew 2026-10-10: every row names its exact hardware and version; never mix GPU models in a column.
+    Andrew 2026-10-22: an opponent whose parameter pairing is not MATCHED shows `unchecked` (a legacy copy)
+    or `refused: <reason>`, never a ratio (board_pairing.enforce_params)."""
     if c.get("hardware_comparable") is False:
         return HW.NOT_COMPARABLE
+    txt = PAIR.pair_text(c)
+    if txt is not None:
+        return clean(txt)
     return _f(c.get(field), 3)
 
 
@@ -3891,6 +3936,7 @@ def render_board(result):
         for _b in sorted({str(c.get("batch")) for c in _ic}):
             HW.mark([c for c in _ic if str(c.get("batch")) == _b])
     CLOCKS.annotate_result(result)      # derived `clock` + ratio-clock fields, this copy only
+    enforce_pairs(result)               # 2026-10-22: an unmatched pair shows unchecked / refused, no ratio
     CALLS.annotate_board(result)        # the call line of cells stored before it existed, this copy only
     box = result.get("box") or {}
     cfg = result.get("config") or {}

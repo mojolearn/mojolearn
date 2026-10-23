@@ -864,19 +864,27 @@ def _(ml, X, yc, yr, Xh=None):
                      flags=d(flags)))
 
 
-#: The 64 byte tokens of the `hf-causal-lm-text` vocabulary: the fixture
-#: model's vocabulary is 64 (HF_LM_VOCAB), and a tokenizer for it must not
-#: hand the model an id at or above 64, nor decode one it cannot spell.
+#: The 64 byte tokens the `hf-causal-lm-text` vocabulary puts at ids 0..63:
+#: the fixture model's vocabulary is 64 (HF_LM_VOCAB), and the prompt is
+#: spelled in these bytes only, so the tokenizer never hands the model an id at
+#: or above 64. The other 192 bytes follow at ids 64..255 because byte-level
+#: BPE needs every byte.
 _COVERAGE_TEXT_ALPHABET = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ."
 
 
 def _coverage_text_tokenizers(ml):
-    """The same 64-token byte-level vocabulary three ways: `Tokenizer(...)`,
+    """The same 256-token byte-level vocabulary three ways: `Tokenizer(...)`,
     `Tokenizer._from_json` on its `tokenizer.json` object (`vocab_json_public`)
     and `Tokenizer._from_spelled` on its GPT-2 spelled vocabulary
-    (`vocab_spelled_public`)."""
+    (`vocab_spelled_public`). Byte-level BPE needs every one of the 256 bytes
+    (the vocabulary build refuses one that lacks any), so ids 0..63 are the
+    64-byte alphabet, which is the fixture model's vocabulary, and ids 64..255
+    carry the other 192 bytes. The prompt is spelled in the alphabet and the
+    model emits ids below 64 only, so ids 64..255 are never encoded or
+    decoded."""
     tk = ml.models.tokenizer
-    tokens = [bytes([c]) for c in _COVERAGE_TEXT_ALPHABET]  # glue: the 64 one-byte tokens
+    rest = bytes(b for b in range(256) if b not in _COVERAGE_TEXT_ALPHABET)  # glue: the 192 other bytes
+    tokens = [bytes([c]) for c in _COVERAGE_TEXT_ALPHABET + rest]  # glue: the 256 one-byte tokens
     spelled = ml.tokenizer._byte_to_char()
     vocab = {spelled[t[0]]: i for i, t in enumerate(tokens)}  # glue: GPT-2 spelling of each token
     data = dict(version="1.0", truncation=None, padding=None, added_tokens=[], normalizer=None,
@@ -900,7 +908,8 @@ def _coverage_text_tokenizers(ml):
 def _(ml, X, yc, yr, Xh=None):
     """CausalLM.generate_text and stream_text (`causal_lm_generate_text`,
     `causal_lm_text_stream`) on the `hf-causal-lm` lane's Llama fixture with a
-    64-token byte-level tokenizer built three ways (`Tokenizer(...)`,
+    256-token byte-level tokenizer (ids 0..63 the fixture's 64-byte alphabet)
+    built three ways (`Tokenizer(...)`,
     `Tokenizer._from_json`, `Tokenizer._from_spelled`); the prompt is the
     fixture's first 24 bytes spelled in that alphabet. The text continuation is
     held byte for byte in the cell to the stream read two tokens at a time, to

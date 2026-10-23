@@ -268,12 +268,41 @@ def annotate_cells(cells):
 
 
 def annotate_result(result):
-    """annotate_cells over every race (and page-only extra race) of a board."""
+    """annotate_cells over every race (and page-only extra race) of a board. A clock ratio is derived only
+    for an opponent whose parameter pairing with ours is MATCHED (board_pairing.params_state, Andrew
+    2026-10-22); the stored `ratio_ours_*_over` fields are left as they are (audit_board judges them)."""
     for group in ("races", "extra_races"):
         for rr in (result.get(group) or {}).values():
-            annotate_cells(rr.get("cells") or [])
-            annotate_cells(rr.get("infer_cells") or [])
+            for kind in ("cells", "infer_cells"):
+                annotate_cells(rr.get(kind) or [])
+                for c in rr.get(kind) or []:
+                    if PAIR.is_opponent(c) and PAIR.params_state(rr, c)[0] != PAIR.PAIR_MATCHED:
+                        c["ratio_ours_identical_clock"] = c["ratio_ours_fast_clock"] = None
     return result
+
+
+def unmatched_ratios(result):
+    """Every ratio a board stores for an opponent pair that is not MATCHED (board_pairing.params_state:
+    an unchecked legacy copy or a refused pair). Andrew 2026-10-22: such a pair never shows a ratio, so the
+    audit fails on any of these. -> [{race, arm, field, value, state, reason}]."""
+    bad = []
+    for group in ("races", "extra_races"):
+        for rid, rr in sorted((result.get(group) or {}).items()):
+            for kind in ("cells", "infer_cells"):
+                for c in rr.get(kind) or []:
+                    if not PAIR.is_opponent(c):
+                        continue
+                    fields = [f for f in ("ratio_ours_identical_over", "ratio_ours_fast_over")
+                              if c.get(f) is not None]
+                    if not fields:
+                        continue
+                    state, why = PAIR.params_state(rr, c)
+                    if state == PAIR.PAIR_MATCHED:
+                        continue
+                    for f in fields:
+                        bad.append({"race": rid, "arm": c.get("arm"), "batch": c.get("batch"), "field": f,
+                                    "value": c.get(f), "state": state, "reason": why})
+    return bad
 
 
 # ---------------------------------------------------------------------------
@@ -422,16 +451,21 @@ def main(argv=None):
             ap.error("--board wants NAME=PATH, got %r" % spec)
         with open(path) as fh:
             result = json.load(fh)
+        unmatched = unmatched_ratios(result)     # before annotate_result: the stored ratios as printed
         rows, pairs = audit_board(name, result)
         summary = summarize(rows, pairs)
         neither, mixed, est = rerun_candidates(rows, pairs)
         with open(os.path.join(args.out, name + ".json"), "w") as fh:
             json.dump({"board": name, "source": os.path.abspath(path), "summary": summary,
-                       "rerun_estimate": est, "neither": neither, "cells": rows, "pairs": pairs},
+                       "rerun_estimate": est, "neither": neither, "cells": rows, "pairs": pairs,
+                       "unmatched_ratios": unmatched},
                       fh, indent=1, sort_keys=True)
         with open(os.path.join(args.out, name + ".md"), "w") as fh:
             fh.write(render_md(name, rows, pairs, summary, neither, mixed, est))
-        overall[name] = {"summary": summary, "rerun_estimate": est}
+        overall[name] = {"summary": summary, "rerun_estimate": est, "unmatched_ratios": len(unmatched)}
+        for u in unmatched[:20]:
+            print("UNMATCHED-RATIO board=%s race=%s arm=%s %s=%s %s: %s"
+                  % (name, u["race"], u["arm"], u["field"], u["value"], u["state"], u["reason"]))
         print("CLOCKS board=%s cells=%d both=%d one=%d (whole %d, kernel %d) none=%d "
               "(no_time %d, with_time %d) pairs=%s mixed_our_cells=%d our_arm_s=%.1f"
               % (name, summary["cells"], summary["derivable_both"], summary["derivable_one"],
@@ -441,6 +475,11 @@ def main(argv=None):
                  est["our_cells_to_rerun"], est["our_arm_s"]))
     with open(os.path.join(args.out, "summary.json"), "w") as fh:
         json.dump(overall, fh, indent=1, sort_keys=True)
+    # Andrew 2026-10-22: a ratio printed from an unchecked or refused pair fails the audit
+    n_bad = sum(v["unmatched_ratios"] for v in overall.values())
+    if n_bad:
+        print("AUDIT FAIL: %d ratio(s) from opponent pairs whose parameters are not MATCHED" % n_bad)
+        return 1
     return 0
 
 

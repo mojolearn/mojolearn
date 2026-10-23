@@ -184,10 +184,16 @@ class MainBoardIngest(unittest.TestCase):
         self.assertIn("newer run bbbbbbbbb/n0006 failed: not_ready", c["source"])
         self.assertEqual(nv["main_board"]["identity"], {"DIFFER": 1, "MATCH": 1, "n/a": 1})
         self.assertEqual(nv["main_board"]["failed_runs"], 2)
-        # opponent copied from the stored board, ratio recomputed from the two stored medians
+        # opponent copied from the stored board: a legacy copy never re-raced with a parameter check, so it
+        # shows `unchecked` and no ratio (Andrew 2026-10-22) until the release gate re-races the line
         opp = next(x for x in rr["cells"] if x["arm"] == "cuml-gpu")
         self.assertEqual(opp["copied_from"]["board"], "opp-fixture-nv")
-        self.assertAlmostEqual(opp["ratio_ours_identical_over"], 150.0 / 200.0)
+        self.assertIsNone(opp["ratio_ours_identical_over"])
+        self.assertEqual(opp["params_pair"]["state"], "unchecked")
+        self.assertIn("legacy copy from opp-fixture-nv", opp["params_pair"]["reason"])
+        with open(os.path.join(self.out, "main-nvidia-l40s", "BOARD.md")) as fh:
+            row = next(l for l in fh.read().splitlines() if l.startswith("| cuml-gpu |"))
+        self.assertIn("| unchecked | unchecked |", row)
         self.assertTrue(opp["source"].startswith("copied from opp-fixture-nv"))
         # the default main bb summary is on the board; the grid bb job is not
         trees = nv["races"]["trees/gbdt-depthwise/taxi/rows=full"]
@@ -301,6 +307,27 @@ class PairedSessions(unittest.TestCase):
         self.assertEqual(kept["cells"][1],race["cells"][1])
         self.assertEqual(kept["cells"][0]["measurement"],own["measurement"])
         self.assertNotIn("preserved_race",kept["cells"][0]["main_board"]["observation"])
+
+    def test_gate_board_refused_pair_enters_refused_not_as_a_legacy_copy(self):
+        """Andrew 2026-10-22: a gate race whose parameter check refused its opponent enters with the gate's own
+        opponent refused by reason (no ratio, ours alone), never with an older board's unchecked copy."""
+        board=self.board();race=next(iter(board["races"].values()))
+        race.update(params_check="REFUSED",params={"arms":{"ours":{},"cuml-gpu":{}},"verdict":"REFUSED",
+                    "problems":["cuml-gpu: C is 1.0 (C) on ours and 2.0 (C) on cuml-gpu"]})
+        race["cells"][1]["ratio_ours_identical_over"]=2.0
+        with tempfile.TemporaryDirectory() as d:
+            p=os.path.join(d,"board.json")
+            with open(p,"w") as f:json.dump(board,f)
+            obs=MB.gate_observations(BB,["nv="+p],FakeGit(),MB.Skips())
+        self.assertEqual(len(obs),1)
+        self.assertTrue(obs[0]["gate_refused"])
+        winners,failures,ledger=MB.choose(obs)
+        out=MB.assemble(BB,"nvidia-l40s",winners,ledger,MB.identity_index(obs),[],{},"2026-10-22",failures)
+        rr=next(iter(out["races"].values()))
+        opp=next(c for c in rr["cells"] if c["arm"]=="cuml-gpu")
+        self.assertIsNone(opp["ratio_ours_identical_over"])
+        self.assertEqual(opp["params_pair"],{"state":"refused","reason":"cuml-gpu: C is 1.0 (C) on ours and 2.0 (C) on cuml-gpu"})
+        self.assertEqual(BB.pair_report(out)["refused"][0]["arm"],"cuml-gpu")
 
     def test_mixed_worker_hardware_is_refused(self):
         board=self.board();race=next(iter(board["races"].values()))
