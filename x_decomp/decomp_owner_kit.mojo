@@ -19,6 +19,7 @@ from x_decomp.exec_trait import Exec
 from x_decomp.pca_randomized import RDev, RKit
 from x_decomp.nmf import NmfArgs
 from x_decomp.fa_em import FaArgs
+from x_decomp.lda_fit import LdaArgs
 
 # x_decomp/cells.mojo op codes (`_OP` in _expansion_decomp.py)
 comptime OP_ADD = 0
@@ -113,6 +114,27 @@ trait DecompDev:
 
     @staticmethod
     def fa_transform(x: Int, mean: Int, pm: Int, dst: Int, n: Int, d: Int, nc: Int) raises:
+        ...
+
+    @staticmethod
+    def lda_rows(x: Int, ew: Int, d: Int, e: Int, n: Int, k: Int, v: Int, max_iter: Int, prior: Float64,
+                 tol: Float64) raises:
+        """`x_decomp_dev_lda_rows` on device ids (the GPU binding only)."""
+        ...
+
+    @staticmethod
+    def lda_bound(x: Int, ddt: Int, dcomp: Int, dst: Int, n: Int, k: Int, v: Int, floor: Float64) raises:
+        """`x_decomp_dev_lda_bound` on device ids (the GPU binding only)."""
+        ...
+
+    @staticmethod
+    def lda_fit(px: F32Ptr, pc: F32Ptr, pe: F32Ptr, n: Int, v: Int, nc: Int, a: LdaArgs, mut draw: Int,
+                mut nbi: Int) raises -> Int:
+        ...
+
+    @staticmethod
+    def lda_online(px: F32Ptr, pc: F32Ptr, pe: F32Ptr, n: Int, v: Int, nc: Int, bs: Int, mdi: Int, seed: Int,
+                   mut draw: Int, mut nbi: Int, fv: List[Float64]) raises:
         ...
 
 

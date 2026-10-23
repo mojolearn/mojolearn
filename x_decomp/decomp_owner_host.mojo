@@ -10,6 +10,8 @@ from x_decomp.ica import ica_solve_run
 from x_decomp.nmf import NmfArgs, nmf_nndsvd_run, nmf_solve_run
 from x_decomp.fa_em import FaArgs, fa_em_main_run
 from x_decomp.rotation import ortho_rotation_run
+from x_decomp.lda_fit import LdaArgs, lda_fit_run
+from x_decomp.api import lda_online_run
 
 
 struct HostDecomp(DecompDev):
@@ -77,3 +79,24 @@ struct HostDecomp(DecompDev):
     @staticmethod
     def fa_transform(x: Int, mean: Int, pm: Int, dst: Int, n: Int, d: Int, nc: Int) raises:
         raise Error("x_decomp: no FAST Apple FactorAnalysis on the host binding")
+
+    @staticmethod
+    def lda_rows(x: Int, ew: Int, d: Int, e: Int, n: Int, k: Int, v: Int, max_iter: Int, prior: Float64,
+                 tol: Float64) raises:
+        raise Error("x_decomp: no resident matrices on the host binding")
+
+    @staticmethod
+    def lda_bound(x: Int, ddt: Int, dcomp: Int, dst: Int, n: Int, k: Int, v: Int, floor: Float64) raises:
+        raise Error("x_decomp: no resident matrices on the host binding")
+
+    @staticmethod
+    def lda_fit(px: F32Ptr, pc: F32Ptr, pe: F32Ptr, n: Int, v: Int, nc: Int, a: LdaArgs, mut draw: Int,
+                mut nbi: Int) raises -> Int:
+        return lda_fit_run[HostExec](px, pc, pe, n, v, nc, a, draw, nbi)
+
+    @staticmethod
+    def lda_online(px: F32Ptr, pc: F32Ptr, pe: F32Ptr, n: Int, v: Int, nc: Int, bs: Int, mdi: Int, seed: Int,
+                   mut draw: Int, mut nbi: Int, fv: List[Float64]) raises:
+        var got = lda_online_run[HostExec](px, pc, pe, n, v, nc, bs, mdi, seed, draw, nbi, fv)
+        draw = got[0]
+        nbi = got[1]

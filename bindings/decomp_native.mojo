@@ -8,10 +8,11 @@ from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
-from bindings.py_balanced import py_call, py_get, py_type
+from bindings.py_balanced import py_call, py_get, py_type, py_fields
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.ica_native import ica_fit, ica_project
 from bindings.fa_native import fa_fit, fa_query
+from bindings.lda_native import lda_fit, lda_partial_fit, lda_project, lda_query
 from bindings.nmf_native import nmf_fit, nmf_fit_transform, nmf_inverse_transform, nmf_transform
 
 
@@ -85,6 +86,24 @@ def decomp_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPt
                 result = fa_query(model, args[0], 4, context)
             else:
                 raise Error("unknown private FactorAnalysis operation")
+        elif family == "LatentDirichletAllocation":
+            if operation == "fit":
+                _ = lda_fit(model, args[0], context)
+                result = model
+            elif operation == "fit_transform":
+                # the transform projects the X the fit converted: one conversion
+                var x = lda_fit(model, args[0], context)
+                result = lda_project(model, py_fields(model), x, 2, Bool(py=args[1]), context)
+            elif operation == "partial_fit":
+                result = lda_partial_fit(model, args[0], context)
+            elif operation == "transform":
+                result = lda_query(model, args[0], 2, Bool(py=args[1]), context)
+            elif operation == "score":
+                result = lda_query(model, args[0], 3, False, context)
+            elif operation == "perplexity":
+                result = lda_query(model, args[0], 4, Bool(py=args[1]), context)
+            else:
+                raise Error("unknown private LatentDirichletAllocation operation")
         else:
             raise Error("unknown private decomposition estimator")
         return result.steal_data()

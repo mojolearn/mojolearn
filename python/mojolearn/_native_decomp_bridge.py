@@ -5,7 +5,7 @@ expansion's estimators (bindings/decomp_native.mojo)."""
 #: The compiled decomp drivers the owners call (a build without one refuses
 #: that operation by name).
 ENTRY_NAMES = ("x_decomp_ica_fit", "x_decomp_ica_project", "x_decomp_nmf_fit", "x_decomp_nmf_inverse",
-               "x_decomp_fa_fit", "x_decomp_fa_query")
+               "x_decomp_fa_fit", "x_decomp_fa_query", "x_decomp_lda_owner")
 
 
 def connect(classes):

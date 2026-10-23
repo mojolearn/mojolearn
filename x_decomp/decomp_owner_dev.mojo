@@ -13,7 +13,10 @@ from x_decomp.nmf_dev import nmf_nndsvd_dev_run, nmf_solve_dev_run
 from x_decomp.fa_em import FaArgs
 from x_decomp.fa_em_dev import fa_em_main_dev_run
 from x_decomp.rotation_dev import ortho_rotation_dev_run
-from x_decomp.resident import IDN_QR_R_RESIDENT, dev_qr_r_run
+from x_decomp.resident import IDN_QR_R_RESIDENT, dev_lda_bound_run, dev_lda_rows_run, dev_qr_r_run
+from x_decomp.lda_fit import LdaArgs
+from x_decomp.lda_fit_dev import lda_fit_dev_run
+from x_decomp.kit_device import lda_online_dev_run
 from x_decomp.fa_fast import (
     FA_FAST_APPLE, FA_GRAM_DF, FA_GRAM_ONCE, FA_ITER_DEVICE, FA_TRANSFORM_FUSED, fa_em_run, fa_gram_run,
     fa_transform_run,
@@ -96,3 +99,22 @@ struct DevDecomp(DecompDev):
     @staticmethod
     def fa_transform(x: Int, mean: Int, pm: Int, dst: Int, n: Int, d: Int, nc: Int) raises:
         _ = fa_transform_run(x, mean, pm, dst, n, d, nc)
+
+    @staticmethod
+    def lda_rows(x: Int, ew: Int, d: Int, e: Int, n: Int, k: Int, v: Int, max_iter: Int, prior: Float64,
+                 tol: Float64) raises:
+        _ = dev_lda_rows_run(x, ew, d, e, n, k, v, max_iter, prior, tol)
+
+    @staticmethod
+    def lda_bound(x: Int, ddt: Int, dcomp: Int, dst: Int, n: Int, k: Int, v: Int, floor: Float64) raises:
+        _ = dev_lda_bound_run(x, ddt, dcomp, dst, n, k, v, floor)
+
+    @staticmethod
+    def lda_fit(px: F32Ptr, pc: F32Ptr, pe: F32Ptr, n: Int, v: Int, nc: Int, a: LdaArgs, mut draw: Int,
+                mut nbi: Int) raises -> Int:
+        return lda_fit_dev_run(px, pc, pe, n, v, nc, a, draw, nbi)
+
+    @staticmethod
+    def lda_online(px: F32Ptr, pc: F32Ptr, pe: F32Ptr, n: Int, v: Int, nc: Int, bs: Int, mdi: Int, seed: Int,
+                   mut draw: Int, mut nbi: Int, fv: List[Float64]) raises:
+        lda_online_dev_run(px, pc, pe, n, v, nc, bs, mdi, seed, draw, nbi, fv)

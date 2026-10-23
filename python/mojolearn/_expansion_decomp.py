@@ -4529,12 +4529,6 @@ class MiniBatchSparsePCA(_BaseSparsePCA):
 
 
 # ================================================================ LatentDirichletAllocation
-_F64_EPS = 2.220446049250313e-16
-
-
-def _dirichlet_expectation_2d(k, A):
-    """psi(A) - psi(rowsum(A)) (sklearn `_online_lda_fast.pyx`)."""
-    return k.ew("sub", k.ew("digamma", A), k.ew("digamma", k.rowsum(A)))
 
 
 # Reference: scikit-learn `decomposition/_lda.py` with
@@ -4640,98 +4634,6 @@ class LatentDirichletAllocation(_Base):
         self.max_doc_update_iter, self.n_jobs, self.verbose = max_doc_update_iter, n_jobs, verbose
         self.random_state, self.numeric_mode = random_state, numeric_mode
 
-    def _check_X(self, X, whom):
-        M = _M.from_input(X)
-        if _any_negative(M):
-            raise ValueError(f"Negative values in data passed to {whom}")
-        return M
-
-    def _init(self, k, d):
-        nc = self.n_components
-        self.doc_topic_prior_ = 1.0 / nc if self.doc_topic_prior is None else self.doc_topic_prior
-        self.topic_word_prior_ = 1.0 / nc if self.topic_word_prior is None else self.topic_word_prior
-        self._seed = _seed_of(self.random_state)
-        self._draw = 0
-        self.n_batch_iter_ = 1
-        self.n_iter_ = 0
-        self.components_m_ = k.ew("scale", k.rand_gamma(nc, d, self._seed, 60, 100.0), s=0.01)
-        self._exp_dir = k.ew("exp", _dirichlet_expectation_2d(k, self.components_m_))
-
-    def _e_step(self, k, X, cal_sstats, random_init):
-        n, nc = X.r, self.components_m_.r
-        if random_init:
-            self._draw += 1
-            Dt = k.ew("scale", k.rand_gamma(n, nc, self._seed, 61 + self._draw, 100.0), s=0.01)
-        else:
-            Dt = k.const(1.0, n, nc)
-        Et = k.ew("exp", _dirichlet_expectation_2d(k, Dt))
-        ss = None
-        if cal_sstats:
-            ss = self._fused_estep_ss(k, X, Dt, Et)     # FAST + Apple + define only, else None
-        if ss is None:
-            Dt, Et = k.lda_rows(X, self._exp_dir, Dt, Et, self.doc_topic_prior_, self.max_doc_update_iter,
-                                self.mean_change_tol)
-        if cal_sstats and ss is None:
-            norm_phi = k.ew("adds", k.mm(Et, self._exp_dir), s=_F64_EPS)
-            R = k.ew("div", X, norm_phi)
-            ss = k.ew("mul", k.mm(Et, R, ta=True), self._exp_dir)
-        return Dt, ss
-
-    def _fused_estep_ss(self, k, X, Dt, Et):
-        """FAST only (lane apple-fast-nb): the E-step's document loop and the
-        sufficient statistics in one launch, `x_decomp_dev_lda_estep_ss`
-        (x_decomp/lda_fast.mojo), exported by the GPU binding only when built
-        FAST on Apple (default; off with -D MOJOLEARN_LDA_FUSED_SS_OFF). Dt and Et are updated in
-        place on the device as `lda_rows` does. None (the caller runs main's
-        chain) under IDENTICAL, without the export, off the resident path, or
-        past the kernel's caps."""
-        if k.mode != "fast" or not X.r or not k._use(X, self._exp_dir, Dt, Et):
-            return None
-        try:
-            fn = getattr(k._raw(), "x_decomp_dev_lda_estep_ss")
-        except Exception:       # the host proxy raises ImportError for an absent export
-            return None
-        nc, v = self._exp_dir.r, self._exp_dir.c
-        ss = k._dout(nc, v)
-        ok = fn(k._did(X), k._did(self._exp_dir), k._did(Dt), k._did(Et), ss._d.id,
-                [X.r, nc, v, int(self.max_doc_update_iter)],
-                [float(self.doc_topic_prior_), float(self.mean_change_tol)])
-        return ss if int(ok) else None
-
-    def _em_step(self, k, X, total_samples, batch_update):
-        _, ss = self._e_step(k, X, True, True)
-        if batch_update:
-            self.components_m_ = k.ew("adds", ss, s=self.topic_word_prior_)
-        else:
-            # (offset + n_batch_iter)^(-decay) through the cells' log and exp
-            # (Python's ** is the platform libm's pow)
-            weight = k.ew("exp", k.ew("scale", k.ew("logs", k.const(self.learning_offset + self.n_batch_iter_),
-                                                    s=1e-30), s=-self.learning_decay)).s[0]
-            doc_ratio = float(total_samples) / X.r
-            upd = k.ew("adds", k.ew("scale", ss, s=doc_ratio), s=self.topic_word_prior_)
-            self.components_m_ = k.ew("add", k.ew("scale", self.components_m_, s=1 - weight),
-                                      k.ew("scale", upd, s=weight))
-        self._exp_dir = k.ew("exp", _dirichlet_expectation_2d(k, self.components_m_))
-        self.n_batch_iter_ += 1
-
-    def _online_pass(self, k, M, total_samples):
-        """`for a in range(0, n, batch_size): self._em_step(k, M.rows(a, b),
-        total_samples, False)` in ONE binding call (x_decomp/lda_online.mojo,
-        lane/py-decomp-nbrs): the same cells, draws and float32 scalars per
-        mini-batch (cgr-decomp: the MOJOLEARN_XD_LDA_PYTHON loop arm is
-        deleted)."""
-        bs = self.batch_size
-        if isinstance(bs, bool) or not isinstance(bs, int) or bs < 1:
-            raise ValueError("batch_size must be a positive integer")
-        C, E = self.components_m_, self._exp_dir
-        nc, v = C.r, C.c
-        self._draw, self.n_batch_iter_ = k.b.x_decomp_lda_online(
-            M.addr, C.addr, E.addr,
-            [M.r, v, nc, bs, int(self.max_doc_update_iter), int(self._seed) & 0xFFFFFFFF, self._draw,
-             self.n_batch_iter_],
-            [float(self.doc_topic_prior_), float(self.topic_word_prior_), float(self.learning_offset),
-             float(self.learning_decay), float(self.mean_change_tol), float(total_samples)])
-
     def fit(self, X, y=None):
         """Fit the topic model to a document-term matrix.
 
@@ -4745,39 +4647,7 @@ class LatentDirichletAllocation(_Base):
         -------
         self
         """
-        self.numeric_mode_ = _mode(self.numeric_mode)
-        if self.learning_method not in ("batch", "online"):
-            raise ValueError("learning_method must be 'batch' or 'online'")
-        k = self._kit()
-        M = self._check_X(X, "LatentDirichletAllocation.fit")
-        n, d = M.r, M.c
-        self._init(k, d)
-        if self.learning_method == "online":
-            bs = self.batch_size
-            if isinstance(bs, bool) or not isinstance(bs, int) or bs < 1:
-                raise ValueError("batch_size must be a positive integer")
-        # the fit loop (batch EM steps or online epochs, the perplexity
-        # checks) in ONE binding call (lane py-runtime-b: x_decomp/lda_fit.mojo
-        # on the host column, lda_fit_dev.mojo on resident device matrices):
-        # the same cells, draws and float64 bound arithmetic
-        C, E = self.components_m_.copy(), self._exp_dir.copy()
-        nc, v = C.r, C.c
-        it, self._draw, self.n_batch_iter_ = k.b.x_decomp_lda_fit(
-            M.addr, C.addr, E.addr,
-            [n, v, nc, int(self.max_iter), int(self.learning_method == "online"),
-             int(self.batch_size) if self.learning_method == "online" else 1, int(self.max_doc_update_iter),
-             int(self._seed) & 0xFFFFFFFF, self._draw, self.n_batch_iter_, int(self.evaluate_every)],
-            [float(self.doc_topic_prior_), float(self.topic_word_prior_), float(self.learning_offset),
-             float(self.learning_decay), float(self.mean_change_tol), float(n), float(self.perp_tol)])
-        self.components_m_, self._exp_dir = C, E
-        it = int(it)
-        self.n_iter_ = it
-        Dt, _ = self._e_step(k, M, False, False)
-        self.bound_ = self._perplexity(k, M, Dt)
-        self.components_ = self.components_m_.out()
-        self.exp_dirichlet_component_ = self._exp_dir.out()
-        self.n_features_in_ = d
-        return self
+        return _DECOMP_CALL(self, "fit", (X,), _DECOMP_CONTEXT)
 
     def partial_fit(self, X, y=None):
         """Update the model with one batch of documents (online learning).
@@ -4793,23 +4663,7 @@ class LatentDirichletAllocation(_Base):
         -------
         self
         """
-        if not hasattr(self, "components_m_"):
-            self.numeric_mode_ = _mode(self.numeric_mode)
-        k = self._kit()
-        M = self._check_X(X, "LatentDirichletAllocation.partial_fit")
-        if not hasattr(self, "components_m_"):
-            self._init(k, M.c)
-        self._online_pass(k, M, self.total_samples)
-        self.components_ = self.components_m_.out()
-        self.exp_dirichlet_component_ = self._exp_dir.out()
-        self.n_features_in_ = M.c
-        return self
-
-    def _unnormalized(self, X):
-        self._check()
-        k = self._kit()
-        M = self._check_X(X, "LatentDirichletAllocation.transform")
-        return k, M, self._e_step(k, M, False, False)[0]
+        return _DECOMP_CALL(self, "partial_fit", (X,), _DECOMP_CONTEXT)
 
     def transform(self, X, *, normalize=True):
         """Return the topic distribution of each document.
@@ -4825,10 +4679,7 @@ class LatentDirichletAllocation(_Base):
         -------
         ndarray of shape (n_samples, n_components), float32
         """
-        k, M, Dt = self._unnormalized(X)
-        if normalize:
-            Dt = k.ew("div", Dt, k.rowsum(Dt))
-        return Dt.out()
+        return _DECOMP_CALL(self, "transform", (X, normalize), _DECOMP_CONTEXT)
 
     def fit_transform(self, X, y=None, *, normalize=True):
         """Fit the model, then return ``transform(X, normalize=normalize)``.
@@ -4843,49 +4694,7 @@ class LatentDirichletAllocation(_Base):
         -------
         ndarray of shape (n_samples, n_components), float32
         """
-        return self.fit(X).transform(X, normalize=normalize)
-
-    def _loglik(self, k, prior, distr, dirichlet, size):
-        s1 = k.total(k.ew("mul", k.ew("scale", k.ew("adds", distr, s=-prior), s=-1.0), dirichlet)).s[0]
-        s2 = k.total(k.ew("adds", k.ew("lgamma", distr), s=-k.ew("lgamma", k.const(prior)).s[0])).s[0]
-        lg_ps = k.ew("lgamma", k.const(prior * size)).s[0]
-        s3 = k.total(k.ew("scale", k.ew("adds", k.ew("lgamma", k.rowsum(distr)), s=-lg_ps), s=-1.0)).s[0]
-        return s1 + s2 + s3
-
-    def _approx_bound(self, k, M, Dt, sub_sampling=False):
-        n, v = M.r, M.c
-        nc = self.components_m_.r
-        ddt = _dirichlet_expectation_2d(k, Dt)             # n x k
-        dcomp = _dirichlet_expectation_2d(k, self.components_m_)   # k x v
-        floor = 1.1754943508222875e-38
-        if n * v and k._use(M, ddt, dcomp) and hasattr(k._raw(), "x_decomp_dev_lda_bound"):
-            # lane gap-lda-als: the same ew cells per (i, w) in one kernel,
-            # no n x v term matrix per topic (the L40S text-block OOM)
-            P = k._dout(n, v)
-            k.b.x_decomp_dev_lda_bound(k._did(M), k._did(ddt), k._did(dcomp), P._d.id, [n, nc, v], [floor])
-            score = k.total(P).s[0]
-        else:
-            # the host column (lane py-runtime-b): the same ew cells per
-            # (i, w) in `x_decomp_lda_bound` (x_decomp/chi2.mojo, the CPU
-            # twin of lda_bound_kernel), folded by the kit's total
-            P = _M.zeros(n, v)
-            if n * v:
-                k.b.x_decomp_lda_bound(M.addr, ddt.addr, dcomp.addr, P.addr, [n, nc, v], [floor])
-            score = k.total(P).s[0]
-        score += self._loglik(k, self.doc_topic_prior_, Dt, ddt, nc)
-        if sub_sampling:
-            score *= float(self.total_samples) / n
-        score += self._loglik(k, self.topic_word_prior_, self.components_m_, dcomp, v)
-        return score
-
-    def _perplexity(self, k, M, Dt, sub_sampling=False):
-        bound = self._approx_bound(k, M, Dt, sub_sampling)
-        word_cnt = k.total(M).s[0]
-        if sub_sampling:
-            word_cnt *= float(self.total_samples) / M.r
-        if not word_cnt:
-            return math.inf
-        return self._kit().ew("exp", k.const(-bound / word_cnt)).s[0]
+        return _DECOMP_CALL(self, "fit_transform", (X, normalize), _DECOMP_CONTEXT)
 
     def score(self, X, y=None):
         """Return the approximate log-likelihood (variational bound) of X.
@@ -4899,8 +4708,7 @@ class LatentDirichletAllocation(_Base):
         -------
         float
         """
-        k, M, Dt = self._unnormalized(X)
-        return self._approx_bound(k, M, Dt)
+        return _DECOMP_CALL(self, "score", (X,), _DECOMP_CONTEXT)
 
     def perplexity(self, X, sub_sampling=False):
         """Return the approximate perplexity of X.
@@ -4917,8 +4725,7 @@ class LatentDirichletAllocation(_Base):
         float
             Infinity when X has no words.
         """
-        k, M, Dt = self._unnormalized(X)
-        return self._perplexity(k, M, Dt, sub_sampling)
+        return _DECOMP_CALL(self, "perplexity", (X, sub_sampling), _DECOMP_CONTEXT)
 
 
 # ================================================================ manifold: Isomap, MDS, LLE
@@ -6915,4 +6722,6 @@ _JL_CALL, _JL_CONTEXT = _native_jl_bridge.connect_public()
 # The compiled owner of the decomposition estimators whose public operations
 # are one native call each (bindings/decomp_native.mojo): FastICA, ...
 from . import _native_decomp_bridge  # noqa: E402
-_DECOMP_CALL, _DECOMP_CONTEXT = _native_decomp_bridge.connect_public({"FastICA": FastICA, "NMF": NMF, "FactorAnalysis": FactorAnalysis})
+_DECOMP_CALL, _DECOMP_CONTEXT = _native_decomp_bridge.connect_public({
+    "FastICA": FastICA, "NMF": NMF, "FactorAnalysis": FactorAnalysis,
+    "LatentDirichletAllocation": LatentDirichletAllocation})

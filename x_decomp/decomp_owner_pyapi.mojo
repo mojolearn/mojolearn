@@ -15,6 +15,8 @@ from x_decomp.ica_owner import ica_fit_run, ica_project_run
 from x_decomp.nmf import nmf_args_checked
 from x_decomp.nmf_owner import nmf_inverse_run, nmf_run
 from x_decomp.fa_owner import fa_fit_run, fa_query_run
+from x_decomp.lda_fit import LdaArgs
+from x_decomp.lda_owner import lda_run
 
 
 def door_ptr(p: PythonObject, i: Int) raises -> F32Ptr:
@@ -171,3 +173,38 @@ def fa_query_py[E: Exec, D: RDev, RES: Bool, X: DecompDev](p: PythonObject) rais
     with GILReleased(Python()):
         value = fa_query_run[E, D, RES, X](op, x, n, d, nc, pc, ps, pm, out)
     return PythonObject(value)
+
+
+def lda_py[E: Exec, D: RDev, RES: Bool, X: DecompDev](p: PythonObject, f: PythonObject, message: PythonObject) raises -> PythonObject:
+    """One LatentDirichletAllocation operation. p = [op (0 fit, 1
+    partial_fit, 2 transform, 3 score, 4 perplexity), x, n, v, nc, fresh,
+    flag (normalize / sub_sampling), components in, exp_dir in, components
+    out, exp_dir out, out, max_iter, online, batch_size,
+    max_doc_update_iter, seed mod 2^32, draw, n_batch_iter, evaluate_every];
+    f = [doc prior, topic prior, offset, decay, mean_change_tol, total
+    samples, perp_tol]; message the negativity refusal. Returns (n_iter_,
+    draw, n_batch_iter, value)."""
+    if len(p) != 20 or len(f) != 7:
+        raise Error("x_decomp_lda: params must hold op, the input, the state, the options and outputs")
+    var op = Int(py=p[0])
+    var x = door_ptr(p, 1)
+    var n = door_dim(p, 2)
+    var v = door_dim(p, 3)
+    var nc = door_dim(p, 4)
+    var fresh = Int(py=p[5]) != 0
+    var flag = Int(py=p[6]) != 0
+    var ci = door_ptr(p, 7)
+    var ei = door_ptr(p, 8)
+    var co = door_ptr(p, 9)
+    var eo = door_ptr(p, 10)
+    var out = door_ptr(p, 11)
+    var a = LdaArgs(Int(py=p[12]), Int(py=p[13]) != 0, Int(py=p[14]), Int(py=p[15]), Int(py=p[16]), Int(py=p[19]),
+                    Float64(py=f[0]), Float64(py=f[1]), Float64(py=f[2]), Float64(py=f[3]), Float64(py=f[4]),
+                    Float64(py=f[5]), Float64(py=f[6]))
+    var draw = Int(py=p[17])
+    var nbi = Int(py=p[18])
+    var text = String(message)
+    var got = Tuple[Int, Float64](0, 0.0)
+    with GILReleased(Python()):
+        got = lda_run[E, D, RES, X](op, x, n, v, nc, fresh, a, draw, nbi, flag, ci, ei, co, eo, out, text)
+    return Python.tuple(PythonObject(got[0]), PythonObject(draw), PythonObject(nbi), PythonObject(got[1]))
