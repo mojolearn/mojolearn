@@ -545,6 +545,9 @@ def _xl_sgd(model: PythonObject, fields: PythonObject, entries: PythonObject, x:
                 fp.append(Float64(cwp[c]))
             for c in range(n_classes):  # driver-loop: over the classes' negative weights (model structure)
                 fp.append(1.0)
+        # cwp borrows prep's class-weight Array. Retain its owner until the
+        # binary or multiclass parameter reads finish; the pointer owns nothing.
+        _ = prep^
         has_cw = 1
     var auto = _isinstance(batch_size, _b().str) and _eq(batch_size, PythonObject("auto"))
     var batch = -1
