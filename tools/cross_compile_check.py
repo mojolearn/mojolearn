@@ -179,6 +179,18 @@ def run_one(cmd, out, timeout, stall, cwd=ROOT, poll=2.0, cpu_probe=group_cpu_se
             sleep=time.sleep, retain=None, env=None):
     """(verdict, seconds, log_tail). The compiler runs in its own process
     group so a kill takes every child with it."""
+    import math
+    from build_process import cancellation_scope, stop_group
+    if (not math.isfinite(timeout) or timeout <= 0 or not math.isfinite(stall) or stall < 0
+            or not math.isfinite(poll) or poll < 0):
+        raise ValueError('compile timeout must be finite and positive; stall/poll finite and nonnegative')
+    def output_stamp():
+        try:
+            value = Path(out).stat()
+            return value.st_ino, value.st_size, value.st_mtime_ns, value.st_ctime_ns
+        except FileNotFoundError:
+            return None
+    before_output = output_stamp()
     retain = Path(retain) if retain else None
     if retain:
         retain.mkdir(parents=True, exist_ok=True)
@@ -200,28 +212,39 @@ def run_one(cmd, out, timeout, stall, cwd=ROOT, poll=2.0, cpu_probe=group_cpu_se
         raise
     last_cpu, last_move = -1.0, t0
     verdict = None
-    while verdict is None:
-        rc = p.poll()
-        now = clock()
-        if rc is not None:
-            verdict = "PASS" if rc == 0 and Path(out).is_file() else "FAIL"
-            break
-        if now - t0 >= timeout:
-            verdict = "TIMEOUT"
-            break
-        if stall:
-            cpu = cpu_probe(p.pid)
-            if cpu is not None and cpu > last_cpu + 0.5:
-                last_cpu, last_move = cpu, now
-            elif cpu is not None and now - last_move >= stall:
-                verdict = "STALLED"
-                break
-        sleep(poll)
-    if p.poll() is None:
-        try:
-            os.killpg(p.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
+    interrupted = None
+    try:
+        with cancellation_scope():
+            while verdict is None:
+                rc = p.poll()
+                now = clock()
+                if rc is not None:
+                    stamp = output_stamp()
+                    fresh = stamp is not None and stamp != before_output and stamp[1] > 0
+                    verdict = "PASS" if rc == 0 and Path(out).is_file() and fresh else "FAIL"
+                    if rc == 0 and not fresh:
+                        record['error'] = 'compiler returned without a fresh nonempty output'
+                    break
+                if now - t0 >= timeout:
+                    verdict = "TIMEOUT"
+                    break
+                if stall:
+                    cpu = cpu_probe(p.pid)
+                    # A completed child can lower the sum of live-child CPU.
+                    # Start the next phase's activity clock from that new sum.
+                    if cpu is not None and (cpu > last_cpu + 0.5 or cpu < last_cpu):
+                        last_cpu, last_move = cpu, now
+                    elif cpu is not None and now - last_move >= stall:
+                        verdict = "STALLED"
+                        break
+                sleep(poll)
+    except BaseException as error:
+        interrupted = error
+        verdict = 'INTERRUPTED'
+        record['error'] = type(error).__name__+': '+str(error)
+    finally:
+        # A launcher exiting is not proof its compiler descendants exited.
+        stop_group(p.pid)
         p.wait()
     secs = clock() - t0
     if retain:
@@ -231,6 +254,8 @@ def run_one(cmd, out, timeout, stall, cwd=ROOT, poll=2.0, cpu_probe=group_cpu_se
     log.seek(0)
     text = log.read()
     log.close()
+    if interrupted is not None:
+        raise interrupted
     tail = [ln for ln in text.splitlines() if "error" in ln][:6] if verdict == "FAIL" else []
     if verdict == "FAIL" and not tail:
         tail = text.splitlines()[-6:]

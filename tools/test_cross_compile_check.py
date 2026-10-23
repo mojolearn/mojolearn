@@ -126,6 +126,56 @@ def test_exit_zero_without_the_library_is_a_fail(tmp_path):
     assert xcc.run_one(cmd, out, timeout=30, stall=0, poll=0.05)[0] == "FAIL"
 
 
+def test_exit_zero_cannot_reuse_an_unchanged_stale_library(tmp_path):
+    cmd, out = fake(tmp_path, "noout")
+    out.write_bytes(b'previous compile')
+    assert xcc.run_one(cmd, out, timeout=30, stall=0, poll=.05)[0] == 'FAIL'
+    assert out.read_bytes() == b'previous compile'
+
+
+def test_successful_launcher_leaves_no_compiler_children(tmp_path):
+    from test_build_process import assert_gone, alive
+    import os
+    import signal
+    child = 'import signal,time;signal.signal(signal.SIGTERM,signal.SIG_IGN);time.sleep(60)'
+    out = tmp_path/'built.so'
+    program = ('import subprocess,sys,pathlib,time;'
+               f'p=subprocess.Popen([sys.executable,"-c",{child!r}]);'
+               'pathlib.Path("child.pid").write_text(str(p.pid));'
+               'pathlib.Path("built.so").write_bytes(b"new");time.sleep(.15)')
+    verdict, _, _ = xcc.run_one([PY, '-c', program], out, 5, 0, cwd=tmp_path, poll=.03)
+    pid = int((tmp_path/'child.pid').read_text())
+    try:
+        assert verdict == 'PASS'
+        assert_gone(pid)
+    finally:
+        if alive(pid):
+            os.kill(pid, signal.SIGKILL)
+
+
+def test_monitor_exception_still_reaps_and_retains_failure(tmp_path):
+    import pytest
+    from test_build_process import assert_gone
+    cmd, out = fake(tmp_path, 'sleep')
+    seen = []
+    def broken(pid):
+        seen.append(pid)
+        raise RuntimeError('CPU sample unavailable')
+    with pytest.raises(RuntimeError, match='CPU sample unavailable'):
+        xcc.run_one(cmd, out, 5, 1, cwd=tmp_path, poll=.03, cpu_probe=broken, retain=tmp_path/'retained')
+    assert_gone(seen[0])
+    report = json_mod.loads((tmp_path/'retained/execution.json').read_text())
+    assert report['complete'] and report['verdict'] == 'INTERRUPTED'
+
+
+def test_invalid_build_deadline_refuses_before_process(tmp_path):
+    import pytest
+    cmd, out = fake(tmp_path, 'pass')
+    with pytest.raises(ValueError):
+        xcc.run_one(cmd, out, float('nan'), 0)
+    assert not out.exists()
+
+
 def test_timeout_kills_a_busy_compiler(tmp_path):
     cmd, out = fake(tmp_path, "spin")
     t0 = time.monotonic()
