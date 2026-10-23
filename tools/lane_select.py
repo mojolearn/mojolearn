@@ -3585,10 +3585,15 @@ def lane_sources():
         # `all_finite_f32` through `_buffer.py`, never `byte_lm_run`.
         used = set(_own(lane)[1])
         limitations = own_limitations[lane]
+        limitation_keys = sorted(limitations)
         origins = {}
-        for key, record in limitations.items():
-            origins.setdefault(record["export"], set()).add(key)
-        limitation_paths = precision_paths[lane] = {key: {record["source"]} for key, record in limitations.items()}
+        limitation_paths = precision_paths[lane] = {}
+        # Bitsets avoid duplicating each lane's thousands of source paths
+        # once per unresolved reference. This affects reporting only.
+        for index, key in enumerate(limitation_keys):
+            record, flag = limitations[key], 1 << index
+            origins[record["export"]] = origins.get(record["export"], 0) | flag
+            limitation_paths[record["source"]] = limitation_paths.get(record["source"], 0) | flag
         mojo = set()
         binding_use = {}
         # EVERY BINDING CONTRIBUTION, RECORDED (lane/lane-select-mojo,
@@ -3625,12 +3630,14 @@ def lane_sources():
                 # Reporting follows the same conservative export fixed point.
                 # Joining several exports may over-attribute a limitation, so
                 # this is a possible provenance path, never a runtime trace.
-                tags = set().union(*(origins.get(name, set()) for name in used & exports))
+                tags = 0
+                for name in used & exports:
+                    tags |= origins.get(name, 0)
                 if tags:
                     for name in reached_exports:
-                        previous = origins.setdefault(name, set())
-                        if tags - previous:
-                            previous.update(tags)
+                        previous = origins.get(name, 0)
+                        if tags & ~previous:
+                            origins[name] = previous | tags
                             origins_grew = True
             fresh = found - used
             if not fresh and not origins_grew:
@@ -3641,9 +3648,12 @@ def lane_sources():
             got = binding_seeds(src, used, wide)
             exports_of = _binding_exports(src)
             calls.append((src, wide, tuple(sorted(e for e in used if e in exports_of)), frozenset(got)))
-            tags = set().union(*(origins.get(name, set()) for name in used & (exports_of.keys() | _delegated_exports(src).keys())))
-            for tag in tags:
-                limitation_paths[tag].update(got)
+            tags = 0
+            for name in used & (exports_of.keys() | _delegated_exports(src).keys()):
+                tags |= origins.get(name, 0)
+            if tags:
+                for file in got:
+                    limitation_paths[file] = limitation_paths.get(file, 0) | tags
             return got
         source_only_hosts = set()
         for binding in bindings:
@@ -3738,7 +3748,7 @@ def lane_sources():
                          declared=sorted(declared),
                          families=sorted(fams), mojo=len(mojo), exports=len(used),
                          ubiquitous=sorted(ubiquitous), binding_use=binding_use,
-                         precision_limitations=[limitations[key] for key in sorted(limitations)])
+                         precision_limitations=[limitations[key] for key in limitation_keys])
     global _LANE_SEED_CALLS, _LANE_PRECISION_PATHS
     _LANE_SEED_CALLS = seed_calls
     _LANE_PRECISION_PATHS = precision_paths
@@ -7445,10 +7455,11 @@ def selection_precision_limitations(lanes, by_path, sources):
         return []
     records = []
     for lane in sorted(lanes):
-        for record in _LANE_SOURCES[1][lane].get("precision_limitations", ()):
-            key = (record["source"], record["line"], record["export"], record["implementation"], record["function"])
-            affected = _LANE_PRECISION_PATHS.get(lane, {}).get(key, ())
-            paths = sorted(path for path, selected in by_path.items() if lane in selected and path in affected)
+        affected = _LANE_PRECISION_PATHS.get(lane, {})
+        for index, record in enumerate(_LANE_SOURCES[1][lane].get("precision_limitations", ())):
+            flag = 1 << index
+            paths = sorted(path for path, selected in by_path.items()
+                           if lane in selected and affected.get(path, 0) & flag)
             if paths:
                 records.append(dict(record, lane=lane, paths=paths,
                                     provenance="conservative export closure; possible path, not an execution trace"))

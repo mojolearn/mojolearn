@@ -2183,7 +2183,7 @@ def test_native_dispatch_limitations_report_source_evidence_without_excluding_pa
         assert {record["use"] for record in records.values()} == {"call", "retained-reference"}
         sources = {"example": {"kernel.mojo", "unrelated.mojo"}}
         lane_select._LANE_SOURCES = (sources, {"example": {"precision_limitations": list(records.values())}})
-        lane_select._LANE_PRECISION_PATHS = {"example": {key: {"kernel.mojo"} for key in records}}
+        lane_select._LANE_PRECISION_PATHS = {"example": {"kernel.mojo": (1 << len(records)) - 1}}
         by_path = {"kernel.mojo": {"example"}, "unrelated.mojo": {"example"}}
         report = lane_select.selection_precision_limitations({"example"}, by_path, sources)
         assert len(report) == 2 and all(row["paths"] == ["kernel.mojo"] for row in report)
