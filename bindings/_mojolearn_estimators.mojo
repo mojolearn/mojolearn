@@ -73,6 +73,11 @@ comptime _DEVCTX_SLOT = "MojoEstimatorsContextIdentical" if _DEVCTX_MODE == _DEV
 
 
 from core.labeled_reference_predict import labeled_reference_predict
+from bindings.labeled_reference_resident_binding import (
+    labeled_reference_prepare_binding,
+    labeled_reference_release_binding,
+    labeled_reference_predict_resident_binding,
+)
 from dbscan.estimator import dbscan_fit
 from kde.estimator import kde_score_samples_host_ptr
 from kde.resident_fit import (
@@ -1515,6 +1520,9 @@ def build__mojolearn_estimators() -> PythonObject:
         m.def_function[dbscan_core_arrays_binding]("dbscan_core_arrays")
         m.def_function[estimators_py2mojo_cluster_binding]("estimators_py2mojo_cluster")
         m.def_function[labeled_reference_predict_binding]("labeled_reference_predict")
+        m.def_function[labeled_reference_prepare_binding]("labeled_reference_prepare")
+        m.def_function[labeled_reference_release_binding]("labeled_reference_release")
+        m.def_function[labeled_reference_predict_resident_binding]("labeled_reference_predict_resident")
         m.def_function[kde_score_samples_binding]("kde_score_samples")
         m.def_function[kde_fit_prepare_binding]("kde_fit_prepare")
         m.def_function[kde_fast_immutable_fit_binding]("kde_fast_immutable_fit")
