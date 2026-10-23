@@ -27,11 +27,15 @@ args = sys.argv[1:]
 tool = pathlib.Path(sys.argv[0]).name
 root = pathlib.Path(os.environ["BOX_REPO_DIR"])
 with open(os.environ["FAKE_EVENTS"], "a") as f:
-    f.write(json.dumps([tool, args, os.environ.get("MOJOLEARN_NUMERIC_MODE")]) + "\n")
+    f.write(json.dumps([tool, args, os.environ.get("MOJOLEARN_NUMERIC_MODE"),
+                       os.environ.get("MOJOLEARN_COMPILE_JOBS")]) + "\n")
 if tool == "nvidia-smi":
     if "-L" in args: print("GPU 0: Fake GPU")
     elif any("compute_cap" in a for a in args): print("8.9")
     else: print("NVIDIA L40S")
+elif tool == "rocm-smi":
+    if "--showid" in args: print("GPU[0]")
+    else: print("MI325X")
 elif tool == "flock":
     sys.exit(int(os.environ.get("FAKE_LOCK_RC", "0")))
 elif tool == "mojo":
@@ -103,7 +107,7 @@ def box(tmp_path):
     sha = git(repo, "rev-parse", "HEAD")
     bindir = tmp_path / "bin"
     bindir.mkdir()
-    for tool in ("pixi", "nvidia-smi", "fake-python", "sha256sum", "flock", "mojo"):
+    for tool in ("pixi", "nvidia-smi", "rocm-smi", "fake-python", "sha256sum", "flock", "mojo"):
         p = bindir / tool
         p.write_text("#!" + sys.executable + "\n" + SHIM)
         p.chmod(0o755)
@@ -124,10 +128,10 @@ def box(tmp_path):
     return repo, sha, env
 
 
-def run(box, **overrides):
+def run(box, vendor="nvidia", **overrides):
     repo, sha, env = box
     env = dict(env, **overrides)
-    result = subprocess.run(["bash", str(CONTROLLER), "nvidia", sha], env=env,
+    result = subprocess.run(["bash", str(CONTROLLER), vendor, sha], env=env,
                             text=True, capture_output=True, timeout=20)
     output = Path(env["BOX_OUT_DIR"])
     log = (output / "job.log").read_text() if (output / "job.log").exists() else result.stderr
@@ -230,3 +234,31 @@ def test_explicit_job_remains_opt_in(box):
     rc, log, _, _ = run(box, BOX_JOBS="dist")
     assert rc == 0, log
     assert "JOB dist start" in log and "DIST SKIP gpus=1" in log
+
+
+@pytest.mark.parametrize("vendor,gpu_workers,overrides", [
+    ("nvidia", "2", {}),
+    ("amd", "8", {}),
+    ("amd", "4", {"MOJOLEARN_AMD_COMPILE_JOBS": "4"}),
+    ("amd", "6", {"BOX_GPU_COMPILE_JOBS": "6", "BOX_HOST_COMPILE_JOBS": "3"}),
+])
+def test_per_set_compiler_workers_follow_release_policy(box, vendor, gpu_workers, overrides):
+    # A generic inherited one-worker cap reproduced the release builder's known
+    # AMD merged compiler crash. It must not override per-set defaults.
+    rc, log, events, out = run(box, vendor=vendor, MOJOLEARN_COMPILE_JOBS="1", **overrides)
+    assert rc == 0, log
+    builds = [json.loads(line) for line in events.splitlines() if line.startswith("[")]
+    builds = [row for row in builds if row[0] == "pixi" and "bindings/merged_build.sh" in row[1]]
+    host_workers = overrides.get("BOX_HOST_COMPILE_JOBS", "2")
+    assert [row[3] for row in builds] == [gpu_workers, host_workers]
+    for tag, workers in (("gpu-identical", gpu_workers), ("host", host_workers)):
+        assert f"MOJOLEARN_COMPILE_JOBS={workers}" in (out / f"build-{tag}.command").read_text()
+    assert f"gpu_compile_jobs\t{gpu_workers}\n" in (out / "run.tsv").read_text()
+    assert f"host_compile_jobs\t{host_workers}\n" in (out / "run.tsv").read_text()
+
+
+@pytest.mark.parametrize("setting,value", [("BOX_GPU_COMPILE_JOBS", "0"), ("BOX_HOST_COMPILE_JOBS", "33")])
+def test_invalid_per_set_worker_count_refuses_before_install(box, setting, value):
+    rc, log, events, _ = run(box, **{setting: value})
+    assert rc != 0, log
+    assert '"install"' not in events

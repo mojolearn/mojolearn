@@ -7,7 +7,9 @@
 # lane gets its NVIDIA/AMD digests without re-fitting every row. Everything
 # logs in a NEW /root/results-merged-* directory (BOX_OUT_DIR overrides it).
 # BOX_REPO_DIR defaults to /root/mojolearn and must already be clean at <sha>.
-# Builds run serially: merged-set peak memory has no qualified parallel budget.
+# Sets build serially: merged-set peak memory has no qualified parallel budget.
+# Compiler workers follow packaging/linux/build_sets.sh: AMD GPU 8, NVIDIA 2,
+# host 2. BOX_GPU_COMPILE_JOBS / BOX_HOST_COMPILE_JOBS override individual sets.
 # Old installed sets are preserved under previous/ before new sets activate.
 #
 # Then the owed GPU evidence (2026-10-21, docs/plans/BOX_JOBS_20261021.md), each
@@ -99,8 +101,20 @@ else
   LABEL=nvidia-${GPU:-gpu}-$ARCH
   NGPU=$(nvidia-smi -L 2>/dev/null | grep -c '^GPU ')
 fi
-st "label $LABEL gpus=$NGPU; build jobs=1 (merged-set memory budget unqualified)"
-printf 'commit\t%s\nvendor\t%s\narch\t%s\nbuilds\t%s\njobs\t1\n' "$SHA" "$V" "$ARCH" "$BOX_BUILDS" > "$O/run.tsv"
+# Match the release worker policy, independently of set concurrency. Its AMD
+# evidence records a merged -j1 compiler crash and a successful -j8 build.
+# A caller's generic MOJOLEARN_COMPILE_JOBS must not silently put AMD back on
+# that known failing default or change the byte-stable host worker policy.
+GPU_COMPILE_JOBS=2
+if [ "$V" = amd ]; then GPU_COMPILE_JOBS=${MOJOLEARN_AMD_COMPILE_JOBS:-8}; fi
+GPU_COMPILE_JOBS=${BOX_GPU_COMPILE_JOBS:-$GPU_COMPILE_JOBS}
+HOST_COMPILE_JOBS=${BOX_HOST_COMPILE_JOBS:-2}
+for workers in "$GPU_COMPILE_JOBS" "$HOST_COMPILE_JOBS"; do
+  [[ $workers =~ ^[1-9][0-9]?$ && $workers -le 32 ]] || die "per-set compiler workers must be 1..32"
+done
+st "label $LABEL gpus=$NGPU; concurrent sets=1; compiler workers gpu=$GPU_COMPILE_JOBS host=$HOST_COMPILE_JOBS"
+printf 'commit\t%s\nvendor\t%s\narch\t%s\nbuilds\t%s\njobs\t1\ngpu_compile_jobs\t%s\nhost_compile_jobs\t%s\n' \
+  "$SHA" "$V" "$ARCH" "$BOX_BUILDS" "$GPU_COMPILE_JOBS" "$HOST_COMPILE_JOBS" > "$O/run.tsv"
 pixi install --locked > "$O/pixi.log" 2>&1; rc=$?; st "pixi rc=$rc"
 [ "$rc" = 0 ] || die "pixi install failed; no build or verification"
 PY=$(pixi run -q python -c 'import sys; print(sys.executable)') || die "cannot locate Python"
@@ -112,6 +126,7 @@ sha256sum "$COMPILER" pixi.lock pixi.toml bindings/merged_build.sh tools/merged_
   > "$O/toolchain-input-sha256.txt" || die "cannot retain toolchain inputs"
 printf 'variable\tvalue\n' > "$O/build-environment.tsv"
 for name in MOJOLEARN_LINUX_CPU MOJOLEARN_COMPILE_JOBS MOJOLEARN_BUILD_DEFINE_FLAGS \
+  MOJOLEARN_AMD_COMPILE_JOBS BOX_GPU_COMPILE_JOBS BOX_HOST_COMPILE_JOBS \
   MOJOLEARN_BUILD_EXTRA_DEFINES MOJOLEARN_MOJO_BUILD_FLAGS MOJOLEARN_MERGED_PYTHON \
   MOJOLEARN_EXTRA_DEFINES MOJOLEARN_MAMBA_DEFINES MOJOLEARN_ATTENTION_MEMORY_PROFILE \
   MOJOLEARN_ALLOW_NO_GPU CC CFLAGS LDFLAGS LD_LIBRARY_PATH TMPDIR; do
@@ -134,8 +149,10 @@ mb() {
 }
 failed=0
 for b in $BOX_BUILDS; do case $b in
-  gpu-identical) mb "$b" identical MOJOLEARN_GPU_ARCHS="$ARCH" MOJOLEARN_TARGET_COLUMN="$V" || failed=1;;
-  host) mb "$b" host MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_GPU_ARCHS= || failed=1;;
+  gpu-identical) mb "$b" identical MOJOLEARN_GPU_ARCHS="$ARCH" MOJOLEARN_TARGET_COLUMN="$V" \
+    MOJOLEARN_COMPILE_JOBS="$GPU_COMPILE_JOBS" || failed=1;;
+  host) mb "$b" host MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_GPU_ARCHS= \
+    MOJOLEARN_COMPILE_JOBS="$HOST_COMPILE_JOBS" || failed=1;;
 esac; done
 [ "$failed" = 0 ] || die "required build failed; previous artifacts untouched; no verification"
 for d in identical host; do
