@@ -812,3 +812,378 @@ def _stacking_predict_proba(model: PythonObject, X: PythonObject, context: Pytho
     var acc = _class_zero(xt, n * k, context)
     _acc_cols_w(xt, acc, py_call(final_.predict_proba, Xm), _sub_cols(final_, context), n, k, 1.0, context)
     return trees_reshape(acc, Python.tuple(n, k), context)
+
+
+# ------------------------------------------------------------- MultiOutput
+
+
+def _multioutput_y(Y: PythonObject) raises:
+    """`_trees_multioutput_y`: scikit-learn's refusal of a 1-D target."""
+    var b = trees_builtins()
+    var nd = _attr(Y, "ndim", PythonObject(None))
+    if nd is None and Bool(py=py_call(b.isinstance, Y, Python.tuple(b.list, b.tuple))):
+        var nested = len(Y) > 0 and Bool(py=py_call(b.isinstance, Y[0], Python.tuple(b.list, b.tuple)))
+        nd = PythonObject(2 if nested else 1)
+    if nd is not None and Int(py=py_call(b.int, nd)) < 2:
+        raise Error("y must have at least two dimensions for multi-output regression but has only one.")
+
+
+def _ridge_multi_entry(model: PythonObject, est: PythonObject, sample_weight: PythonObject,
+                       context: PythonObject) raises -> PythonObject:
+    """`_multiout_ridge_entry`: the estimators binding table when it has the
+    one-program ridge (FAST + Apple builds) and `est` is a plain Ridge, else
+    None."""
+    var ridge = _import("mojolearn.linear_model", "Ridge")
+    var plain = py_type(est) is ridge
+    if plain:
+        # Ridge checks its parameters at fit; this route skips Ridge.fit.
+        _ = py_call(est._validate_params)
+    if sample_weight is not None or not plain or _truthy(_attr(est, "normalize", PythonObject(False))):
+        return PythonObject(None)
+    try:
+        var table = trees_table(context, _mode(py_fields(est), context), "_mojolearn_estimators")
+        if trees_entry(table, "ridge_fit_multi") is None:
+            return PythonObject(None)
+        return table
+    except:
+        return PythonObject(None)
+
+
+def _multioutput_ridge_fit(model: PythonObject, table: PythonObject, Xa: PythonObject, Ya: PythonObject,
+                           context: PythonObject) raises -> PythonObject:
+    """`MultiOutputRegressor._fit_ridge_multi`: every target in one ridge
+    program (glm/impl/ridge_multi.mojo)."""
+    var n = _rows(Xa)
+    var d = _cols(Xa)
+    var m = _cols(Ya)
+    var est = _attr(model, "estimator", PythonObject(None))
+    var intercept = _truthy(_attr(est, "fit_intercept", PythonObject(True)))
+    var xm: PythonObject
+    var work_x = Xa
+    if intercept:
+        # `_column_means(b, Xa, None)` (`_means`: lm_col_sums, lm_means_finish)
+        # then `_center` (lm_center).
+        var sums = _zeros(d, context)
+        _ = py_call_typed(trees_entry(table, "lm_col_sums"), _A(Xa), _A(sums), Python.list(_P(n), _P(d)))
+        var m64 = _zeros(d, context)
+        xm = trees_vector(d, "<f4", context)
+        _ = py_call_typed(trees_entry(table, "lm_means_finish"), _A(sums), _A(m64), _A(xm),
+                          Python.list(_P(d), _P(n), _P(0)), _F(0.0))
+        work_x = trees_empty(Python.tuple(n, d), "<f4", context)
+        _ = py_call_typed(trees_entry(table, "lm_center"), _A(Xa), _A(xm), _A(work_x), Python.list(_P(n), _P(d)))
+    else:
+        xm = trees_vector(d, "<f4", context)
+    var coef = trees_vector(m * d, "<f4", context)
+    var ymean = trees_vector(m, "<f4", context)
+    var icpt32 = trees_vector(m, "<f4", context)
+    var params = Python.list(_P(n), _P(d), _P(m), py_call_typed(trees_builtins().float, _attr(est, "alpha", PythonObject(1.0))),
+                             _P(1 if intercept else 0))
+    if intercept:
+        _ = py_call(params.append, _A(xm))
+        _ = py_call(params.append, _A(icpt32))
+    _ = py_call_typed(trees_entry(table, "ridge_fit_multi"), _A(work_x), _A(Ya), _A(coef), _A(ymean), params)
+    var fitted = Python.list()
+    var ym = _F32P(unsafe_from_address=trees_address(ymean))
+    var ic = _F32P(unsafe_from_address=trees_address(icpt32))
+    for j in range(m):  # driver-loop: over the output columns (one fitted ridge each)
+        var e = _clone(est)
+        _set(e, "solver_", PythonObject("eig"))
+        _set(e, "coef_", _copy_block(coef, j * d, (j + 1) * d, "<f4", context))
+        _set(e, "_x_mean", xm)
+        _set(e, "_y_mean", PythonObject(Float64(ym[j]) if intercept else 0.0))
+        _set(e, "intercept_", PythonObject(Float64(ic[j]) if intercept else 0.0))
+        _set(e, "n_features_in_", PythonObject(d))
+        _ = py_call(fitted.append, e)
+    _set(model, "estimators_", fitted)
+    _set(model, "_multi_ridge", Python.tuple(coef, icpt32, m))
+    _set(model, "n_features_in_", PythonObject(d))
+    _set(model, "_fitted", PythonObject(True))
+    return model
+
+
+def _multioutput_regressor_fit(model: PythonObject, X: PythonObject, y: PythonObject, sample_weight: PythonObject,
+                               context: PythonObject) raises -> PythonObject:
+    _refuse_jobs(model, False, "the columns fit one after another.")
+    var xt = _xt(py_fields(model), context)
+    var Xa = _x_array(X, context)
+    _multioutput_y(y)
+    var Ya = _f32_array(y, 2, "y", context)
+    if _rows(Ya) != _rows(Xa):
+        raise Error("y has " + String(_rows(Ya)) + " rows, X has " + String(_rows(Xa)))
+    var est = _attr(model, "estimator", PythonObject(None))
+    _require_member(est, _owner(model))
+    var weights = _member_weights(Python.list(PythonObject(None)), Python.list(est), sample_weight, _rows(Xa), context)
+    _set(model, "_multi_ridge", PythonObject(None))
+    var table = _ridge_multi_entry(model, est, weights, context)
+    if table is not None and _cols(Ya) > 0:
+        return _multioutput_ridge_fit(model, table, Xa, Ya, context)
+    var n = _rows(Xa)
+    var fitted = Python.list()
+    _set(model, "estimators_", fitted)
+    var rows = _arange(xt, n, context)
+    for j in range(_cols(Ya)):  # driver-loop: over the output columns (one member each)
+        var e = _clone(est)
+        var col = _codes_array(Python.list(PythonObject(j)), context)
+        var yj = trees_reshape(_gather(xt, trees_address(Ya), n, _cols(Ya), rows, col, context), Python.tuple(n), context)
+        _fit_member(e, Xa, yj, weights)
+        _ = py_call(fitted.append, e)
+    _set(model, "n_features_in_", PythonObject(_cols(Xa)))
+    _set(model, "_fitted", PythonObject(True))
+    return model
+
+
+def _multioutput_regressor_predict(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    var Xa = _check_x(model, X, context)
+    var xt = _xt(py_fields(model), context)
+    var n = _rows(Xa)
+    var members = _attr(model, "estimators_", Python.list())
+    var m = len(members)
+    var mr = _attr(model, "_multi_ridge", PythonObject(None))
+    if mr is not None:
+        var outputs = Int(py=mr[2])
+        var out = trees_empty(Python.tuple(n, outputs), "<f4", context)
+        var table = trees_table(context, _mode(py_fields(members[0]), context), "_mojolearn_estimators")
+        _ = py_call_typed(trees_entry(table, "ridge_predict_multi"), _A(Xa), _A(mr[0]), _A(mr[1]), _A(out),
+                          Python.list(_P(n), _P(_cols(Xa)), _P(outputs)))
+        return out
+    var out = _zeros(n * m, context)
+    var rows = _arange(xt, n, context)
+    for j in range(m):  # driver-loop: over members
+        var blk = _out2d(py_call(members[j].predict, Xa), n, context)
+        _ = _place(xt, out, n, m, blk, rows, j)
+        _ = blk^
+    return trees_reshape(out, Python.tuple(n, m), context)
+
+
+def _has_buffer(value: PythonObject) raises -> Bool:
+    """`_buffer._has_buffer`: `memoryview(value)` succeeds."""
+    try:
+        var view = py_call(trees_builtins().memoryview, value)
+        _ = py_call(view.release)
+        return True
+    except:
+        return False
+
+
+def _label_columns(Y: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_trees_label_words(Y)` then its native transpose: a numeric 2-D label
+    buffer as `(T, n, m)`, T the (m, n) 8-byte words (float64 for a float
+    dtype, int64 for an integer one) whose rows are the label columns; None
+    for anything else (bool, str, object, nested lists, uint64), which keeps
+    the Python rows."""
+    var b = trees_builtins()
+    var dtype = _attr(Y, "dtype", PythonObject(None))
+    var nd = _attr(Y, "ndim", PythonObject(None))
+    if nd is None or not Bool(py=nd == PythonObject(2)):
+        return PythonObject(None)
+    var kind = _attr(dtype, "kind", PythonObject(None))
+    if kind is None:
+        if py_type(dtype) is not b.str:
+            return PythonObject(None)
+        kind = py_call(py_call(dtype.lstrip, "<>=|").__getitem__, py_call(b.slice, PythonObject(0), PythonObject(1)))
+    var k = String(kind)
+    if k != "f" and k != "i" and k != "u":
+        return PythonObject(None)
+    var target = String("<f8") if k == "f" else String("<i8")
+    try:
+        var view = trees_view(Y, "Y", context)
+        if view.ndim() != 2:
+            return PythonObject(None)
+        if k != "f" and view.typestr != "<i1" and view.typestr != "<i4" and view.typestr != "<i8" and view.typestr != "|i1" and view.typestr != "|u1" and view.typestr != "<u1" and view.typestr != "<u2" and view.typestr != "<u4":
+            return PythonObject(None)
+        var n = view.shape[0]
+        var m = view.shape[1]
+        var T = trees_vector(m * n, target, context)
+        if view.c_order():
+            var W = trees_vector(n * m, target, context)
+            trees_cast(view.addr, view.typestr, trees_address(W), target, n * m, context)
+            var xt = trees_table(context, "identical", "_mojolearn_x_trees")
+            _ = py_call_typed(_x(xt, "x_trees_transpose_f64"), _A(W), _A(T), Python.list(_P(n), _P(m)))
+        elif view.f_order():
+            # a column-major buffer's storage is already the (m, n) columns
+            trees_cast(view.addr, view.typestr, trees_address(T), target, n * m, context)
+        else:
+            return PythonObject(None)
+        _ = view^
+        return Python.tuple(T, n, m)
+    except:
+        return PythonObject(None)
+
+
+def _multioutput_classifier_fit(model: PythonObject, X: PythonObject, y: PythonObject, sample_weight: PythonObject,
+                                context: PythonObject) raises -> PythonObject:
+    var b = trees_builtins()
+    _refuse_jobs(model, False, "the columns fit one after another.")
+    var Xa = _x_array(X, context)
+    var n = _rows(Xa)
+    var nd = _attr(y, "ndim", PythonObject(None))
+    if nd is not None and Bool(py=nd == PythonObject(1)):
+        raise Error("y must have at least two dimensions for multi-output classification but has only one.")
+    var target = y
+    var listed = Bool(py=py_call(b.isinstance, y, Python.tuple(b.list, b.tuple)))
+    if not listed and not _has_buffer(y) and Bool(py=py_call(b.callable, _attr(y, "__array__", PythonObject(None)))):
+        # A pandas DataFrame has no buffer and iterates its column names:
+        # its own `__array__` hands back the host block.
+        target = py_call(y.__array__)
+    _multioutput_y(target)
+    var est = _attr(model, "estimator", PythonObject(None))
+    _require_member(est, _owner(model))
+    var weights = _member_weights(Python.list(PythonObject(None)), Python.list(est), sample_weight, n, context)
+    var fitted = Python.list()
+    var classes = Python.list()
+    var columns = _label_columns(target, context)
+    if columns is not None:
+        var T = columns[0]
+        var rows_n = Int(py=columns[1])
+        var m = Int(py=columns[2])
+        if rows_n != n:
+            raise Error("Y has " + String(rows_n) + " rows, X has " + String(n))
+        _set(model, "estimators_", fitted)
+        _set(model, "classes_", classes)
+        for j in range(m):  # driver-loop: over the output columns (one member each)
+            var labels = trees_encode_labels(_copy_block(T, j * rows_n, (j + 1) * rows_n, String(T.dtype), context), context)
+            var e = _clone(est)
+            _fit_member(e, Xa, labels.codes, weights)
+            _ = py_call(fitted.append, e)
+            _ = py_call(classes.append, labels.classes)
+    else:
+        var rows = Python.list()
+        if _has(target, "tolist"):
+            rows = py_call(target.tolist)  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time
+        else:
+            rows = py_call(b.list, py_call(b.map, b.list, target))  # cpu-route: label objects (str/mixed) no Array holds
+        if len(rows) != n:
+            raise Error("y has " + String(len(rows)) + " rows, X has " + String(n))
+        if len(rows) > 0 and not _has(rows[0], "__len__"):
+            raise Error("y must have at least two dimensions for multi-output classification but has only one.")
+        var m = len(rows[0])
+        _set(model, "estimators_", fitted)
+        _set(model, "classes_", classes)
+        var getter = Python.import_module("operator").itemgetter
+        for j in range(m):  # driver-loop: over the output columns (one member each)
+            var column = py_call(b.list, py_call(b.map, py_call(getter, PythonObject(j)), rows))  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time
+            var labels = trees_encode_labels(column, context)
+            var e = _clone(est)
+            _fit_member(e, Xa, labels.codes, weights)
+            _ = py_call(fitted.append, e)
+            _ = py_call(classes.append, labels.classes)
+    _set(model, "n_features_in_", PythonObject(_cols(Xa)))
+    _set(model, "_fitted", PythonObject(True))
+    return model
+
+
+def _multioutput_classifier_predict(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    var b = trees_builtins()
+    var Xa = _check_x(model, X, context)
+    var xt = _xt(py_fields(model), context)
+    var n = _rows(Xa)
+    var members = _attr(model, "estimators_", Python.list())
+    var classes = _attr(model, "classes_", Python.list())
+    var cols = Python.list()
+    var stacked = True
+    var all_int = True
+    for j in range(len(members)):  # driver-loop: over members
+        var col = trees_decode_labels(classes[j], _i32_vec(py_call(members[j].predict, Xa), "codes", context), context)
+        _ = py_call(cols.append, col)
+        if py_type(col) is not context["array_class"]:
+            stacked = False
+        elif String(col.dtype) != "<i8":
+            all_int = False
+            if String(col.dtype) != "<f8":
+                stacked = False
+    if stacked:
+        var kind = String("<i8") if all_int else String("<f8")
+        var addrs = Python.list()
+        var keep = Python.list()
+        for j in range(len(cols)):  # driver-loop: over members
+            var col = cols[j]
+            if String(col.dtype) != kind:
+                var wide = trees_vector(n, kind, context)
+                trees_cast(trees_address(col), String(col.dtype), trees_address(wide), kind, n, context)
+                col = wide
+            _ = py_call(keep.append, col)
+            _ = py_call(addrs.append, _A(col))
+        var out = trees_vector(n * len(cols), kind, context)
+        _ = py_call_typed(_x(xt, "x_trees_stack_w64"), addrs, _A(out), Python.list(_P(n)))
+        _ = keep
+        return trees_reshape(out, Python.tuple(n, len(cols)), context)
+    # label objects (str, mixed) no Array holds: row tuples of them
+    var lists = Python.list()
+    for j in range(len(cols)):  # driver-loop: over members
+        var col = cols[j]
+        _ = py_call(lists.append, py_call(col.tolist) if _has(col, "tolist") else col)
+    var ints = True
+    for j in range(len(lists)):  # driver-loop: over members (each column's first label)
+        if len(lists[j]) > 0 and not Bool(py=py_call(b.isinstance, lists[j][0], b.int)):
+            ints = False
+    var zipped = py_call(b.list, py_call(b.map, b.list, _call_kw(b.zip, py_call(b.tuple, lists), Python.dict())))  # cpu-route: label objects (str/mixed) no Array holds
+    return py_call(context["array_class"].from_list, zipped, PythonObject("<i8" if ints else "<f8"))
+
+
+def _multioutput_classifier_proba(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    var Xa = _check_x(model, X, context)
+    var xt = _xt(py_fields(model), context)
+    var n = _rows(Xa)
+    var members = _attr(model, "estimators_", Python.list())
+    var classes = _attr(model, "classes_", Python.list())
+    var out = Python.list()
+    for j in range(len(members)):  # driver-loop: over members
+        var k = len(classes[j])
+        var acc = _zeros(n * k, context)
+        _acc_cols_w(xt, acc, py_call(members[j].predict_proba, Xa), _sub_cols(members[j], context), n, k, 1.0, context)
+        _ = py_call(out.append, trees_reshape(acc, Python.tuple(n, k), context))
+    return out
+
+
+def _multioutput_classifier_score(model: PythonObject, X: PythonObject, y: PythonObject, sample_weight: PythonObject,
+                                  context: PythonObject) raises -> PythonObject:
+    """`MultiOutputClassifier.score`: the (weighted) fraction of rows whose
+    every output matches."""
+    var b = trees_builtins()
+    var pred = _multioutput_classifier_predict(model, X, context)
+    var truth = trees_view(y, "y", context)
+    var shown = py_call(b.tuple, pred.shape)
+    var truth_shape = Python.list()
+    for k in range(truth.ndim()):  # driver-loop: over array rank metadata
+        _ = py_call(truth_shape.append, PythonObject(truth.shape[k]))
+    if not Bool(py=py_call(b.tuple, truth_shape) == shown):
+        raise Error("y has shape " + _repr(py_call(b.tuple, truth_shape)) + ", the predictions have shape " + _repr(shown))
+    var n = _rows(pred)
+    var m = _cols(pred)
+    # One mismatch flag per cell (the base binding's elementwise compare at
+    # one exact dtype), one all-match flag per row (x_neighbors
+    # `xn_row_all_zero`), then the (weighted) accuracy of those flags.
+    var pdt = String(pred.dtype)
+    var tdt = truth.typestr
+    var t_int = tdt == "<i4" or tdt == "<i8" or tdt == "<u4" or tdt == "<u1" or tdt == "<u2" or tdt == "<i1"
+    var p_int = pdt == "<i8"
+    var size = n * m
+    var eq = py_call(context["array_type"], PythonObject("B"), py_call(context["native_bytes_type"], size))
+    var equal = trees_helper(context, "equal_elements")
+    var tc = trees_vector(size, "<i8" if t_int else "<f8", context)
+    trees_cast(truth.addr, tdt, trees_address(tc), "<i8" if t_int else "<f8", size, context)
+    if t_int == p_int:
+        _ = py_call_typed(equal, _A(tc), _A(pred), _P(3 if p_int else 1), _P(size), py_call(eq.buffer_info)[0])
+    else:
+        var ints = tc if t_int else pred
+        var flts = pred if t_int else tc
+        _ = py_call_typed(equal, _A(ints), _A(flts), _P(9), _P(size), py_call(eq.buffer_info)[0])
+    _ = truth^
+    var flip = py_call(b.bytes.maketrans, py_call(b.bytes, Python.list(PythonObject(0), PythonObject(1))),
+                       py_call(b.bytes, Python.list(PythonObject(1), PythonObject(0))))
+    var miss_u1 = py_call(context["array_type"], PythonObject("B"), py_call(py_call(eq.tobytes).translate, flip))
+    var miss = trees_vector(size, "<i4", context)
+    _cast_u1(miss_u1, miss, size, context)
+    var hit = trees_vector(n, "<i4", context)
+    var xn = trees_table(context, _mode(py_fields(model), context), "_mojolearn_x_neighbors")
+    _ = py_call_typed(trees_entry(xn, "xn_row_all_zero"), Python.list(_A(miss), _A(hit)), Python.list(_P(n), _P(m)),
+                      Python.list())
+    var store = py_call(py_call(context["array_type"], PythonObject("i"), Python.list(PythonObject(1))).__mul__, PythonObject(n))
+    var ones = classical_wrap_array(store, Python.tuple(n), "<i4", "C", context)
+    var mode = py_get(py_fields(model), "numeric_mode")
+    return PythonObject(trees_accuracy(ones, hit, sample_weight, mode, context))
+
+
+def _cast_u1(source: PythonObject, out: PythonObject, size: Int, context: PythonObject) raises:
+    """`astype("<i4")` of a uint8 flag store."""
+    trees_cast(Int(py=py_call(source.buffer_info)[0]), "<u1", trees_address(out), "<i4", size, context)
