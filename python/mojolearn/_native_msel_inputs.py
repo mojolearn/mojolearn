@@ -33,12 +33,12 @@ def connect(context, resident_context):
     try:
         # glue: first-seen stratification uses this existing metrics export;
         # select its owner here, never through a Python loader during split.
-        entry = _metrics_binding(None).x_metrics_first_rows
+        entry = _metrics_binding(None).x_metrics_first_rows  # glue: retain the compiled entry at import; no first-rows work executes here
         if type(entry) is not BuiltinFunctionType:
             raise TypeError('model selection requires the compiled x_metrics_first_rows entry')
-        entries['x_metrics_first_rows'] = entry
+        entries['x_metrics_first_rows'] = entry  # glue: retain fixed native entry identity for product calls
     except Exception as error:
-        entries['x_metrics_first_rows'] = _refusal(error)
+        entries['x_metrics_first_rows'] = _refusal(error)  # glue: retain import failure metadata without running the operation
     context.update(label_context())
     context.update(family_msel_entries=entries, family_msel_resident_context=resident_context)
     layouts = {}
