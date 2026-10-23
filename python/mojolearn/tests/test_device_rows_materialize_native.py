@@ -202,7 +202,9 @@ def test_materialize_refuses_application_hooks_before_execution(owner, hook, mon
         elif hook == 'object_float':
             rows.base = np.array([[Foreign()]], dtype='O')
         elif hook == 'resident_entry':
-            owner._take = forbidden
+            # through the patch context, so the fixture's close sees its
+            # connected entry again
+            patch.setattr(owner, '_take', forbidden)
         elif hook == 'array_slot':
             patch.setattr(Array, '_mv', property(forbidden))
         elif hook == 'row_key':
