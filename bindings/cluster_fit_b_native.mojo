@@ -4,6 +4,7 @@
 from std.python import Python, PythonObject
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.cfb_dbscan import cfb_dbscan_operation
+from bindings.cfb_agglo import cfb_agglo_operation
 
 
 def cluster_fit_b_operation(model: PythonObject, operation: String, args: PythonObject,
@@ -11,4 +12,6 @@ def cluster_fit_b_operation(model: PythonObject, operation: String, args: Python
     classical_connect_numpy(context)
     if operation.startswith("family_cfb_dbscan_"):
         return cfb_dbscan_operation(model, operation, args, context)
+    if operation.startswith("family_cfb_agglo_"):
+        return cfb_agglo_operation(model, operation, args, context)
     raise Error("RuntimeError: unknown family operation " + operation)
