@@ -43,7 +43,7 @@ def posix_sleep(seconds: Float64) raises:
     ref cpy = Python().cpython()
     var release = cpy.lib.get_function[PosixBytes]("PyEval_SaveThread")
     var restore = cpy.lib.get_function[NoneType]("PyEval_RestoreThread")
-    while True:
+    while True:  # driver-loop: retry interrupted native sleep using its remaining interval
         var thread = release()
         var status = external_call["nanosleep", c_int](request.unsafe_ptr(), remaining.unsafe_ptr())
         var number = posix_errno()

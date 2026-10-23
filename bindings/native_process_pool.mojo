@@ -119,7 +119,7 @@ def _process_environment(devices: PythonObject, group: PythonObject, overrides: 
         for i in range(len(override_keys)):  # driver-loop: admit before dict hashing or string protocols
             if py_type(override_keys[i]) is not bi.str:
                 raise Error("process: worker environment keys require exact strings")
-        for i in range(len(override_keys)):
+        for i in range(len(override_keys)):  # driver-loop: copy admitted worker setup metadata
             var key = override_keys[i]
             var value = overrides[key]
             if py_type(value) is not bi.str:

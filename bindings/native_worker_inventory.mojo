@@ -42,7 +42,7 @@ def _inventory_integer(record: PythonObject, key: String) raises -> Int:
 def _inventory_utf8(pointer: MutPointer[Int8, MutUntrackedOrigin], maximum: Int) raises -> PythonObject:
     var bi = TRANSPORT_BOUNDARY.get_or_create_ptr()[].bi
     var bytes = bi.bytearray()
-    for i in range(maximum):
+    for i in range(maximum):  # small-loop(the bounded driver name byte record)
         if pointer[i] == 0:
             break
         _ = py_call(bytes.append, Int(UInt8(pointer[i])))
@@ -65,11 +65,11 @@ def native_worker_inventory(vendor: String, environ: PythonObject) raises -> Pyt
     # The connected os.environ._data dictionary has native bytes keys/values.
     # Admit before lookups so a foreign equal/hash protocol cannot execute.
     var keys = py_call(bi.list, environ)
-    for i in range(len(keys)):
+    for i in range(len(keys)):  # driver-loop: admit native environment keys before visibility lookup
         if py_type(keys[i]) is not bi.bytes:
             raise Error("worker inventory: environment keys require exact bytes")
     var visibility = bi.dict()
-    for key in [String("CUDA_VISIBLE_DEVICES"), String("HIP_VISIBLE_DEVICES"), String("ROCR_VISIBLE_DEVICES")]:
+    for key in [String("CUDA_VISIBLE_DEVICES"), String("HIP_VISIBLE_DEVICES"), String("ROCR_VISIBLE_DEVICES")]:  # small-loop(the three visibility variable names)
         var raw_key = py_call(PythonObject(key).encode, "ascii")
         var value = py_get(environ, raw_key)
         if value is not None:
@@ -107,9 +107,9 @@ def native_worker_inventory(vendor: String, environ: PythonObject) raises -> Pyt
         var bus = Array[Int8, 64](uninitialized=True)
         # Initialize sentinels too: do not scan unbounded memory if a driver
         # returns malformed nonterminated metadata.
-        for j in range(256):
+        for j in range(256):  # small-loop(the fixed driver name output buffer)
             name[j] = 0
-        for j in range(64):
+        for j in range(64):  # small-loop(the fixed PCI address output buffer)
             bus[j] = 0
         var name_call = String("cuDeviceGetName") if cuda else String("hipDeviceGetName")
         var bus_call = String("cuDeviceGetPCIBusId") if cuda else String("hipDeviceGetPCIBusId")
@@ -139,7 +139,7 @@ def _inventory_hex(text: String, count_min: Int, count_max: Int) -> Bool:
     if text.byte_length() < count_min or text.byte_length() > count_max:
         return False
     var bytes = text.as_bytes()
-    for i in range(len(bytes)):
+    for i in range(len(bytes)):  # small-loop(the bounded UUID or PCI hexadecimal field)
         var byte = bytes[i]
         if not (UInt8(48) <= byte <= UInt8(57)) and not (UInt8(97) <= byte <= UInt8(102)):
             return False

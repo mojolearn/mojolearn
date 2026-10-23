@@ -303,7 +303,7 @@ def transport_send(socket: PythonObject, header: PythonObject, payload: PythonOb
         if numpy is None or cls is not native_numpy_type("ndarray", t[].numpy_context):
             raise Error("transport: payload requires a native contiguous buffer; Python buffer hooks are not accepted")
     var header_keys = py_call(t[].bi.list, header)
-    for i in range(len(header_keys)):
+    for i in range(len(header_keys)):  # driver-loop: admit native frame keys before inserting payload length
         if py_type(header_keys[i]) is not t[].bi.str:
             raise Error("transport: JSON header keys must be strings")
     var bytes = t[].bi.bytes() if payload is None else py_call(py_call(t[].bi.memoryview, payload).cast, "B")
