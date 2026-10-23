@@ -1836,7 +1836,8 @@ def render_markdown(audit, path):
     w("RETAINED means that numeric reference parts have linked record metadata in the captured reference "
       "table. It does not establish complete fixtures, all vendor columns, installed-package execution, "
       "source applicability or admission of this candidate. The JSON preserves the actual parts, columns "
-      "and source records. Intentionally partial records remain partial. OWED means no numeric reference "
+      "and source records, including observed values that differ from the saved reference. "
+      "RETAINED does not mean those columns agree. Intentionally partial records remain partial. OWED means no numeric reference "
       "is retained; UNKNOWN means the evidence is unavailable or inconsistent. Candidate admission: "
       "**not assessed**.")
     w("")
@@ -1850,6 +1851,20 @@ def render_markdown(audit, path):
                           if item["status"] == status)
         w(f"| {status} | {len(selected)} |")
     w("")
+    comparisons = references.get("column_comparisons")
+    if comparisons is not None:
+        w(f"Linked recorded column values: {comparisons['equal']} equal to their saved reference, "
+          f"{comparisons['different']} different, and {comparisons['n/a']} explicitly N/A. "
+          "These are historical observations, not current-candidate identity or admission results.")
+        w("")
+        different = sorted((lane, item["differing_columns"]) for lane, item in references["lanes"].items()
+                           if item.get("differing_columns"))
+        if different:
+            w("| lane with differing recorded values | column counts |")
+            w("|---|---|")
+            for lane, columns in different:
+                w(f"| `{lane}` | " + ", ".join(f"{column} {count}" for column, count in sorted(columns.items())) + " |")
+            w("")
     for status in ("OWED", "UNKNOWN"):
         selected = sorted(lane for lane, item in references["lanes"].items()
                           if item["status"] == status)
