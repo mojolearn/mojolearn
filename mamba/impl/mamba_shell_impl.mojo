@@ -946,7 +946,7 @@ def _mamba3_run_owned(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int,
 
 def _mamba3_run_on[discard_state: Bool = False](
     ctx: DeviceContext, mut dw: Mamba3DeviceWeights, a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int,
-    phase_tick: Int,
+    var phase_tick: Int,
 ) raises -> Int:
     """`_mamba3_run` after its weights are on the device: the state upload,
     the block, the downloads and the one wait."""
