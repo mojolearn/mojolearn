@@ -2775,19 +2775,6 @@ class FastICA(_Base):
 _LOG_2PI = 1.8378770664093453
 
 
-def _f32_store(a):
-    """An `array.array('f')` holding a float32 Array's bytes (one memcpy)."""
-    st = array.array("f")
-    st.frombytes(a.tobytes())
-    return st
-
-
-def _support_of(mask, n):
-    """A 0/1 int32 membership store as a public '<u1' Array (the Mojo cast helper)."""
-    from ._buffer import frombytes as _fb
-    return _fb(mask.tobytes(), "<i4", (n,)).astype("<u1")
-
-
 def _dsum_sq(k, M):
     """The binary64 sum of the squares of M's float32 values (each square
     exact), DSUM_CHUNK values per partial then the partials folded the same
@@ -3467,29 +3454,7 @@ def solve(a, b, *, numeric_mode=None):
     >>> A = np.random.default_rng(0).random((8, 8), dtype=np.float32) + 8 * np.eye(8, dtype=np.float32)
     >>> x = mojolearn.solve(A, np.ones(8, dtype=np.float32))
     """
-    k = _Kit(_mode(numeric_mode))
-    try:
-        flags = int(getattr(k._raw(), "x_decomp_idn_flags")())
-    except (ImportError, AttributeError):
-        flags = 0
-    if not flags & 2:
-        return lu_solve(lu_factor(a, numeric_mode=numeric_mode), b, numeric_mode=numeric_mode)
-    A = _M.from_input(a, "a")
-    if A.r != A.c:
-        raise ValueError(f"expected a square matrix, got {A.r} x {A.c}")
-    n = A.r
-    vec = len(getattr(b, "shape", ())) == 1 or (not hasattr(b, "shape") and not isinstance(b[0], (list, tuple)))
-    B = _M.from_input(_row_of(b), "b").T if vec else _M.from_input(b, "b")
-    if B.r != n:
-        raise ValueError(f"b has {B.r} rows, the factorization has {n}")
-    X = B          # from_input's own store: solved in place
-    info = _M.zeros(1, 1)
-    # ORDER MATCHES x_decomp/api.mojo lu_gesv_py: (a, b in/out, info), (n, nrhs)
-    k.b.x_decomp_lu_gesv(A.addr, X.addr, info.addr, [n, B.c])
-    if int(info.s[0]):
-        import warnings
-        warnings.warn(f"Diagonal number {int(info.s[0])} is exactly zero. Singular matrix.", RuntimeWarning, stacklevel=2)
-    return X.out((n,)) if vec else X.out()
+    return _LINALG_CALL(None, "solve", (a, b, numeric_mode), _LINALG_CONTEXT)
 
 
 def _row_of(b):
@@ -3578,46 +3543,8 @@ def randomized_svd(M, n_components, *, n_oversamples=10, n_iter="auto", power_it
     >>> X = np.random.default_rng(0).random((1000, 50), dtype=np.float32)
     >>> U, s, Vt = mojolearn.randomized_svd(X, 5, random_state=0)
     """
-    k = _Kit(_mode(numeric_mode))
-    A = _rsvd_direct_input(k, M, transpose) if k.w4_flags() & 2 else None
-    U, S, Vt = _rsvd_core(k, A if A is not None else _M.from_input(M, "M"), n_components, n_oversamples, n_iter,
-                          power_iteration_normalizer, transpose, flip_sign, random_state)
-    kc = n_components
-    return U.out(), S.out((kc,)), Vt.out()
-
-
-def _rsvd_direct_input(k, M, transpose):
-    """lane/apple-fast-w4-decomp RSVD_FAST_DIRECT_IN (FAST + Apple default;
-    -D MOJOLEARN_RSVD_FAST_DIRECT_IN_OFF rolls back): M up from its own buffer into a pooled device matrix, as
-    KernelPCA's resident route and the random projections' transform do,
-    instead of `_M.from_input`'s copy into a fresh host store that the first
-    product uploads (880 MB of fresh host pages at the board's 1M x 220).
-    The same refusals in the same order (2-D nonempty, then the host
-    finiteness scan); the same words reach the device. None (the caller
-    takes `_M.from_input`) for sparse input, a binding without the resident
-    entries, or a wide input (`_rsvd_core` transposes it on the host)."""
-    if _is_sparse(M) or not k._res():
-        return None
-    a = as_f32_c(M, ndim=2, name="M")[0]
-    if a.ndim != 2 or min(a.shape) == 0:  # glue: smaller of two shape dims
-        raise ValueError("M: a nonempty two-dimensional input is required")
-    if transpose is True or (transpose == "auto" and a.shape[0] < a.shape[1]):
-        return None     # `_rsvd_core` transposes on the host: main's route
-    if k.s_flags() & 1:
-        # RSVD_FAST_DEVSCAN (FAST + Apple default, rollback _OFF; x_decomp/s_linalg_fast.mojo):
-        # upload, then the finiteness scan on the device copy (the same refusal)
-        A = _M._on_device(_DevBuf(k._raw(), a.size), a.shape[0], a.shape[1])
-        if int(k.b.x_decomp_dev_upload_scan(A._d.id, addr_ro(a, name="M"), a.size)) >= 0:
-            raise ValueError("M: input must be finite; NaN/inf are unsupported")
-        return A
-    fin = _host_all_finite(a)
-    if fin is None:
-        return None
-    if fin is False:
-        raise ValueError("M: input must be finite; NaN/inf are unsupported")
-    A = _M._on_device(_DevBuf(k._raw(), a.size), a.shape[0], a.shape[1])
-    k.b.x_decomp_dev_upload(A._d.id, addr_ro(a, name="M"), a.size)
-    return A
+    return _LINALG_CALL(None, "randomized_svd", (M, n_components, n_oversamples, n_iter, power_iteration_normalizer,
+                                                    transpose, flip_sign, random_state, numeric_mode), _LINALG_CONTEXT)
 
 
 def _rsvd_core(k, A, n_components, n_oversamples, n_iter, power_iteration_normalizer, transpose, flip_sign,
@@ -3679,30 +3606,6 @@ def _rsvd_core(k, A, n_components, n_oversamples, n_iter, power_iteration_normal
     return U.cols(0, kc), S.cols(0, kc), Vt.rows(0, kc)
 
 
-#: x_decomp/tsqr_core.mojo TS_MAX_N: the widest [A | B] the TSQR takes
-_TS_MAX_N = 512
-
-
-def _f32_input(X, name, ndim):
-    """A C-contiguous float32 Array of X (no copy when it already is one),
-    NaN/inf refused as `_M.from_input` refuses them."""
-    if _is_sparse(X):
-        X = X.toarray()
-    a = as_f32_c(X, ndim=ndim, name=name)[0]
-    if min(a.shape) == 0:  # glue: smaller of two shape dims
-        raise ValueError(f"{name}: a nonempty input is required")
-    fin = _host_all_finite(a)
-    if fin is False:
-        raise ValueError(f"{name}: input must be finite; NaN/inf are unsupported")
-    if fin is None:
-        _M.from_input(a if a.ndim == 2 else a.reshape(a.shape[0], 1), name)
-    return a
-
-
-def _tsqr_lstsq_on(m, nn, nrhs):
-    return nn >= 1 and nrhs >= 1 and nn + nrhs <= _TS_MAX_N and m >= nn + nrhs
-
-
 def _tsqr_lstsq_core(k, a_arr, b_arr, m, nn, nrhs, rcond, equilibrate=False, Ra=None):
     """(X nn x nrhs, residuals _M 1 x nrhs or None, rank, S 1 x nn) of
     min ||A X - B|| through the blocked TSQR of [A | B] (lane
@@ -3752,24 +3655,6 @@ def _tsqr_lstsq_core(k, a_arr, b_arr, m, nn, nrhs, rcond, equilibrate=False, Ra=
     return X, res, rank, S
 
 
-def _lstsq_tsqr(k, a, b, vec, rcond):
-    """`lstsq` through the blocked TSQR when it serves the shape (tall,
-    [A | B] at most _TS_MAX_N wide), else None (the SVD route below)."""
-    a_arr = _f32_input(a, "a", 2)
-    m, nn = a_arr.shape
-    b_arr = _f32_input(b, "b", 1 if vec else 2)
-    nrhs = 1 if vec else b_arr.shape[1]
-    if b_arr.shape[0] != m:
-        raise ValueError("Incompatible dimensions")
-    if not _tsqr_lstsq_on(m, nn, nrhs):
-        return None
-    if rcond is None:
-        rcond = _F32_EPS * max(m, nn)
-    X, res, rank, S = _tsqr_lstsq_core(k, a_arr, b_arr, m, nn, nrhs, rcond)
-    resid = res.out((nrhs,)) if res is not None else _M.zeros(1, 0).out((0,))
-    return (X.out((nn,)) if vec else X.out()), resid, rank, S.out((nn,))
-
-
 # A tall a with N + nrhs <= 512 takes the blocked TSQR of [a | b] and the
 # SVD of its small R (`_tsqr_lstsq_core`); any other shape the QR +
 # one-sided Jacobi SVD of a (or of a^T).
@@ -3815,45 +3700,10 @@ def lstsq(a, b, rcond=None, *, numeric_mode=None):
     >>> A = rng.random((100, 4), dtype=np.float32)
     >>> x, res, rank, s = mojolearn.lstsq(A, rng.random(100, dtype=np.float32))
     """
-    k = _Kit(_mode(numeric_mode))
-    vec = len(getattr(b, "shape", ())) == 1 or (not hasattr(b, "shape") and not isinstance(b[0], (list, tuple)))
-    got = _lstsq_tsqr(k, a, b, vec, rcond)
-    if got is not None:
-        return got
-    A = _M.from_input(a, "a")
-    m, nn = A.r, A.c
-    B = _M.from_input(_row_of(b), "b").T if vec else _M.from_input(b, "b")
-    if B.r != m:
-        raise ValueError("Incompatible dimensions")
-    r = min(m, nn)
-    U, S, Vt = _thin_svd(k, A, r, u_based=True)
-    if rcond is None:
-        rcond = _F32_EPS * max(m, nn)
-    cut = _f32(k.word(S, 0) * rcond) if r else 0.0
-    rank = k.count_gt(S, cut)       # lane cpu2-l8-decomp: two words, not S
-    inv = k.ew("recip", k.ew("select", S, S, _M.zeros(1, 1), s=cut))
-    X = k.mm(Vt, k.ew("mul", k.mm(U, B, ta=True), inv.T), ta=True)
-    if rank == nn and m > nn:
-        res = k.colsum(k.ew("sq", k.ew("sub", B, k.mm(A, X))))
-        resid = res.out((B.c,))
-    else:
-        resid = _M.zeros(1, 0).out((0,))
-    return (X.out((nn,)) if vec else X.out()), resid, rank, S.out((r,))
+    return _LINALG_CALL(None, "lstsq", (a, b, rcond, numeric_mode), _LINALG_CONTEXT)
 
 
 # ================================================================ PLS / CCA
-def _pinv(k, A, rcond=None):
-    """Moore-Penrose pseudo-inverse through the thin SVD (Gram eigh):
-    V diag(1/s) U^T, singular values at or below cond * s_max dropped
-    (cond = max(shape) * float32 eps, sklearn `_pinv2_old`'s rule)."""
-    r = min(A.r, A.c)
-    U, S, Vt = _thin_svd(k, A, r, u_based=True)
-    cond = (max(A.r, A.c) * _F32_EPS) if rcond is None else rcond
-    cut = _f32(S.s[0] * cond) if r else 0.0
-    inv = k.ew("recip", k.ew("select", S, S, _M.zeros(1, 1), s=cut))
-    return k.mm(Vt, k.ew("mul", U, inv), ta=True, tb=True)
-
-
 def _dot(k, a, b):
     """a . b for two column vectors (n x 1): one gemm cell, rows ascending."""
     return k.mm(a, b, ta=True)
@@ -3871,23 +3721,12 @@ class _PLS(RegressorScoreMixin, _Base):
     _deflation = "regression"
     _pmode = "A"
 
+    # fit, fit_transform, transform, inverse_transform and predict are one
+    # call each into the native PLS owner (bindings/pls_native.mojo), which
+    # reads `_deflation` / `_pmode` from the class.
     def __init__(self, n_components=2, *, scale=True, max_iter=500, tol=1e-06, copy=True, numeric_mode=None):
         self.n_components, self.scale, self.max_iter, self.tol, self.copy = n_components, scale, max_iter, tol, copy
         self.numeric_mode = numeric_mode
-
-    def _xy(self, X, Y):
-        from ._sk_validate import _array_like
-        Y = _array_like(Y)  # an `__array__`-only Y (scikit-learn's _NotAnArray) as its array
-        M = _M.from_input(X)
-        vec = Y is not None and (len(getattr(Y, "shape", ())) == 1 or
-                                 (not hasattr(Y, "shape") and not isinstance(Y[0], (list, tuple))))
-        Ym = None
-        if Y is not None:
-            Ym = _M.from_input(_row_of(Y), "Y").T if vec else _M.from_input(Y, "Y")
-        return M, Ym, vec
-
-    def _validate_params(self):
-        """Parameter checks, run at the start of `fit` (none here)."""
 
     def __sklearn_tags__(self):
         # scikit-learn's _PLS tags: a projection model, not scored as a
@@ -3895,18 +3734,6 @@ class _PLS(RegressorScoreMixin, _Base):
         tags = super().__sklearn_tags__()
         tags.regressor_tags.poor_score = True
         return tags
-
-    def _center_scale(self, k, A):
-        n = A.r
-        mean = k.colmean(A)
-        Ac = k.ew("sub", A, mean)
-        if self.scale:
-            std = k.ew("sqrt", k.ew("scale", k.colsum(k.ew("sq", Ac)), s=1.0 / (n - 1)))
-            std = k.ew("select", std, std, k.const(1.0), s=0.0)
-            Ac = k.ew("div", Ac, std)
-        else:
-            std = k.const(1.0, 1, A.c)
-        return Ac, mean, std
 
     def fit(self, X, Y):
         """Fit the model to X and Y.
@@ -3925,63 +3752,7 @@ class _PLS(RegressorScoreMixin, _Base):
         ValueError
             If Y is missing or ``n_components`` is out of range.
         """
-        self._validate_params()
-        self.numeric_mode_ = _mode(self.numeric_mode)
-        k = self._kit()
-        M, Ym, vec = self._xy(X, Y)
-        if Ym is None:
-            raise ValueError(f"{type(self).__name__} requires y to be passed, but the target y is None.")
-        n, p, q = M.r, M.c, Ym.c
-        # scikit-learn's check_X_y / check_array(ensure_min_samples=2) wording,
-        # before the 1 / (n - 1) of the scaling
-        if Ym.r != n:
-            raise ValueError(f"Found input variables with inconsistent numbers of samples: [{n}, {Ym.r}]")
-        if n < 2:
-            raise ValueError(f"Found array with {n} sample(s) (shape=({n}, {p})) while a minimum of 2 is required.")
-        nc = int(self.n_components)
-        bound = p if self._deflation == "regression" else min(n, p, q)
-        if not 1 <= nc <= bound:
-            raise ValueError(f"n_components == {nc}, while 1 <= n_components <= {bound} is required")
-        self._predict_1d = vec
-        Xk, self._x_mean, self._x_std = self._center_scale(k, M)
-        Yk, self._y_mean, self._y_std = self._center_scale(k, Ym)
-        norm_y = self._deflation == "canonical"
-        # the component loop (NIPALS `_power` or the SVD pair, the flips and
-        # the deflations) in ONE binding call (lane py-runtime-b:
-        # x_decomp/pls.mojo on the host column, pls_dev.mojo on resident
-        # device matrices), the same cells, counts and tolerance tests
-        svd_algo = getattr(self, "algorithm", "nipals") == "svd"
-        outs = [_M.zeros(r, nc) for r in (p, q, n, n, p, q)]  # glue: six output blocks
-        its = array.array("i", [0]) * nc
-        done, nits = k.b.x_decomp_pls_fit(
-            Xk.addr, Yk.addr, [o.addr for o in outs], its.buffer_info()[0],  # glue: six output addresses
-            [n, p, q, nc, int(self.max_iter), 1 if self._pmode == "B" else 0, int(norm_y),
-             int(self._deflation == "canonical"), int(svd_algo)], [float(self.tol)])
-        done, nits = int(done), int(nits)
-        if done < nc:
-            import warnings
-            warnings.warn(f"y residual is constant at iteration {done}", stacklevel=2)
-            outs = [o.cols(0, done) for o in outs]  # glue: the fitted columns of six blocks
-        self.n_iter_ = its.tolist()[:nits]
-        (self.x_weights_m_, self.y_weights_m_, self._x_scores_m, self._y_scores_m, self.x_loadings_m_,
-         self.y_loadings_m_) = outs
-        self.x_rotations_m_ = k.mm(self.x_weights_m_, _pinv(k, k.mm(self.x_loadings_m_, self.x_weights_m_, ta=True)))
-        self.y_rotations_m_ = k.mm(self.y_weights_m_, _pinv(k, k.mm(self.y_loadings_m_, self.y_weights_m_, ta=True)))
-        coef = k.mm(self.x_rotations_m_, self.y_loadings_m_, tb=True)          # p x q
-        coef = k.ew("div", k.ew("mul", coef, self._y_std), self._x_std.T).T     # q x p
-        self.coef_m_ = coef
-        for name in ("x_weights", "y_weights", "x_loadings", "y_loadings", "x_rotations", "y_rotations"):  # glue: loops over six attribute names
-            setattr(self, name + "_", getattr(self, name + "_m_").out())
-        self.coef_ = coef.out()
-        self.intercept_ = self._y_mean.out((q,))
-        self._x_scores, self._y_scores = self._x_scores_m.out(), self._y_scores_m.out()
-        self.n_features_in_ = p
-        self.components_m_ = self.x_rotations_m_
-        return self
-
-    def _check_fitted(self):
-        if not hasattr(self, "coef_m_"):
-            raise RuntimeError(f"{type(self).__name__} is not fitted; call fit first")
+        return _PLS_CALL(self, "fit", (X, Y, None), _PLS_CONTEXT)
 
     def transform(self, X, y=None, Y=None, copy=True):
         """Project X (and optionally Y) onto the fitted rotations.
@@ -4000,15 +3771,7 @@ class _PLS(RegressorScoreMixin, _Base):
         y_scores : ndarray of shape (n_samples, n_components), float32
             Returned only when Y is given.
         """
-        self._check_fitted()
-        Y = y if y is not None else Y
-        k = self._kit()
-        M, Ym, vec = self._xy(X, Y)
-        xs = k.mm(k.ew("div", k.ew("sub", M, self._x_mean), self._x_std), self.x_rotations_m_)
-        if Ym is None:
-            return xs.out()
-        ys = k.mm(k.ew("div", k.ew("sub", Ym, self._y_mean), self._y_std), self.y_rotations_m_)
-        return xs.out(), ys.out()
+        return _PLS_CALL(self, "transform", (X, y, Y), _PLS_CONTEXT)
 
     def inverse_transform(self, X, y=None, Y=None):
         """Map scores back to the original X (and optionally Y) space.
@@ -4026,16 +3789,7 @@ class _PLS(RegressorScoreMixin, _Base):
         Y_reconstructed : ndarray of shape (n_samples, n_targets), float32
             Returned only when Y scores are given.
         """
-        self._check_fitted()
-        k = self._kit()
-        Z = _M.from_input(X)
-        Xr = k.ew("add", k.ew("mul", k.mm(Z, self.x_loadings_m_, tb=True), self._x_std), self._x_mean)
-        Y = y if y is not None else Y
-        if Y is None:
-            return Xr.out()
-        W = _M.from_input(Y, "Y")
-        Yr = k.ew("add", k.ew("mul", k.mm(W, self.y_loadings_m_, tb=True), self._y_std), self._y_mean)
-        return Xr.out(), Yr.out()
+        return _PLS_CALL(self, "inverse_transform", (X, y, Y), _PLS_CONTEXT)
 
     def predict(self, X, copy=True):
         """Predict targets for X.
@@ -4051,11 +3805,7 @@ class _PLS(RegressorScoreMixin, _Base):
         ndarray of shape (n_samples,) or (n_samples, n_targets), float32
             One-dimensional when the model was fitted with a 1-D Y.
         """
-        self._check_fitted()
-        k = self._kit()
-        M = _M.from_input(X)
-        P = k.ew("add", k.mm(k.ew("sub", M, self._x_mean), self.coef_m_, tb=True), self._y_mean)
-        return P.out((P.r,)) if self._predict_1d else P.out()
+        return _PLS_CALL(self, "predict", (X,), _PLS_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit the model, then return ``transform(X, y)``.
@@ -4069,7 +3819,7 @@ class _PLS(RegressorScoreMixin, _Base):
         -------
         x_scores, y_scores : ndarray of shape (n_samples, n_components), float32
         """
-        return self.fit(X, y).transform(X, y)
+        return _PLS_CALL(self, "fit_transform", (X, y, None), _PLS_CONTEXT)
 
 
 # NIPALS, mode A, regression deflation.
@@ -4134,9 +3884,7 @@ class PLSRegression(_PLS):
         -------
         self
         """
-        super().fit(X, y if y is not None else Y)
-        self.x_scores_, self.y_scores_ = self._x_scores, self._y_scores
-        return self
+        return _PLS_CALL(self, "fit", (X, y, Y), _PLS_CONTEXT)
 
 
 # Mode A, canonical deflation.
@@ -4194,10 +3942,6 @@ class PLSCanonical(_PLS):
         self.algorithm = algorithm
         super().__init__(n_components, scale=scale, max_iter=max_iter, tol=tol, copy=copy, numeric_mode=numeric_mode)
 
-    def _validate_params(self):
-        if self.algorithm not in ("nipals", "svd"):
-            raise ValueError("PLSCanonical: algorithm must be 'nipals' or 'svd'")
-
 
 # NIPALS, mode B (the pseudo-inverses of X and Y), canonical deflation.
 class CCA(_PLS):
@@ -4247,41 +3991,6 @@ class CCA(_PLS):
 
 
 # ================================================================ dictionary learning / sparse PCA
-_SPARSE_ALGOS = ("lasso_lars", "lasso_cd", "lars", "omp", "threshold")
-
-
-def _sparse_encode(k, X, D, algorithm, alpha=None, n_nonzero_coefs=None, init=None, max_iter=1000, positive=False):
-    """sklearn `_dict_learning.py::_sparse_encode` + `_sparse_encode_precomputed`.
-    'lasso_lars' solves the same Lasso as 'lasso_cd' (by coordinate descent
-    from zero: the Lasso optimum does not depend on the path taken to it);
-    'lasso_cd' warm-starts from `init`; 'omp' and 'threshold' as sklearn.
-    'lars' is sklearn's Lars(fit_intercept=False, n_nonzero_coefs) of each
-    row on the dictionary's columns, on the Gram, every row at once
-    (x_decomp/cells.mojo `lars_row`, x_linear/lars.mojo's lar path)."""
-    if algorithm not in _SPARSE_ALGOS:
-        raise ValueError(f"algorithm={algorithm!r} is not carried; one of {_SPARSE_ALGOS}")
-    n, m = X.r, X.c
-    kc = D.r
-    if algorithm in ("omp", "lars"):
-        reg = n_nonzero_coefs if n_nonzero_coefs is not None else min(max(m / 10, 1), kc)
-    else:
-        reg = alpha if alpha is not None else 1.0
-    if algorithm == "lars":
-        # cgr-decomp (2026-10-03): every row's Lars on the Gram at once, one
-        # device thread a row (x_decomp/cells.mojo `lars_row`), in place of
-        # the linear lane's Lars fitted one row at a time from Python
-        return k.lars_rows(k.mm(D, D, tb=True), k.mm(X, D, tb=True), m, int(reg))
-    Q = k.mm(X, D, tb=True)                      # n x k: row i is D x_i
-    if algorithm == "threshold":
-        code = k.ew("soft", Q, s=reg)
-        return k.ew("maxs", code, s=0.0) if positive else code
-    G = k.mm(D, D, tb=True)
-    if algorithm == "omp":
-        return k.omp_rows(G, Q, int(reg))
-    W = init.copy() if (algorithm == "lasso_cd" and init is not None) else _M.zeros(n, kc)
-    return k.lasso_rows(G, Q, W, float(reg), max_iter, 1e-8, positive)
-
-
 def sparse_encode(X, dictionary, *, algorithm="lasso_lars", n_nonzero_coefs=None, alpha=None, init=None,
                   max_iter=1000, positive=False, numeric_mode=None, **_ignored):
     """Sparse-code each row of X against a fixed dictionary.
@@ -4332,57 +4041,11 @@ def sparse_encode(X, dictionary, *, algorithm="lasso_lars", n_nonzero_coefs=None
     >>> D = rng.random((5, 8), dtype=np.float32)
     >>> code = mojolearn.sparse_encode(rng.random((100, 8), dtype=np.float32), D, algorithm="omp", n_nonzero_coefs=2)
     """
-    k = _Kit(_mode(numeric_mode))
-    init_m = None if init is None else _M.from_input(init, "init")
-    return _sparse_encode(k, _M.from_input(X), _M.from_input(dictionary, "dictionary"), algorithm, alpha,
-                          n_nonzero_coefs, init_m, max_iter, positive).out()
-
-
-def _dict_learning(k, X, nc, alpha, max_iter, tol, method, seed, code_init=None, dict_init=None,
-                   positive_dict=False, positive_code=False, method_max_iter=1000):
-    """sklearn `_dict_learning.py::_dict_learning`: returns (code, D, errors, n_iter)."""
-    if code_init is not None and dict_init is not None:
-        code, D = code_init, dict_init
-    else:
-        r = min(X.r, X.c)
-        U, S, Vt = _thin_svd(k, X, r, u_based=True)
-        code, D = U, k.ew("mul", Vt, S.T)
-    r = D.r
-    if nc <= r:
-        code, D = code.cols(0, nc), D.rows(0, nc)
-    else:
-        code = k.hstack([code, _M.zeros(code.r, nc - r)])
-        D = k.vstack([D, _M.zeros(nc - r, D.c)])
-    if method not in _SPARSE_ALGOS:
-        raise ValueError(f"algorithm={method!r} is not carried; one of {_SPARSE_ALGOS}")
-    # the loop (encode, atom update, cost, stopping test) in ONE binding call
-    # (lane py-runtime-b: x_decomp/dictl.mojo on the host column, dictl_dev.mojo
-    # on resident device matrices), the same cells, solvers and draws
-    code, D = code.copy(), D.copy()
-    ea = array.array("d", [0.0]) * max(int(max_iter), 1)
-    ii, ne = k.b.x_decomp_dict_learning(
-        X.addr, code.addr, D.addr, ea.buffer_info()[0],
-        [X.r, X.c, nc, _SPARSE_ALGOS.index(method), int(max_iter), int(method_max_iter), int(bool(positive_dict)),
-         int(bool(positive_code)), int(seed) & 0xFFFFFFFF, -1, -1], [float(alpha), float(tol)])
-    errors = ea.tolist()[:int(ne)]
-    return code, D, errors, int(ii)
+    return _DL_CALL(None, "sparse_encode", (X, dictionary, algorithm, n_nonzero_coefs, alpha, init, max_iter,
+                                            positive, numeric_mode), _DL_CONTEXT)
 
 
 class _SparseCoding(_Base):
-    def _encode(self, X):
-        self._check()
-        k = self._kit()
-        M = _M.from_input(X)
-        ta = getattr(self, "transform_alpha", None)
-        if ta is None:
-            ta = getattr(self, "alpha", 1.0)
-        code = _sparse_encode(k, M, self.components_m_, self.transform_algorithm,
-                              alpha=ta, n_nonzero_coefs=self.transform_n_nonzero_coefs,
-                              max_iter=self.transform_max_iter, positive=self.positive_code)
-        if self.split_sign:
-            code = k.hstack([k.ew("maxs", code, s=0.0), k.ew("scale", k.ew("mins", code, s=0.0), s=-1.0)])
-        return code
-
     def transform(self, X):
         """Encode X as a sparse combination of the dictionary atoms.
 
@@ -4397,7 +4060,7 @@ class _SparseCoding(_Base):
         ndarray of shape (n_samples, n_components), float32
             Twice as many columns when ``split_sign=True``.
         """
-        return self._encode(X).out()
+        return _DL_CALL(self, "coding_transform", (X,), _DL_CONTEXT)
 
     def inverse_transform(self, X):
         """Rebuild data from a code: ``code @ components_``.
@@ -4412,21 +4075,7 @@ class _SparseCoding(_Base):
         -------
         ndarray of shape (n_samples, n_features), float32
         """
-        self._check()
-        k = self._kit()
-        C = _M.from_input(X, "code")
-        D = self.components_m_
-        if self.split_sign:
-            h = D.r
-            C = k.ew("sub", C.cols(0, h), C.cols(h, 2 * h))
-        return k.mm(C, D).out()
-
-
-def _check_sparse_algos(fit_algorithm, transform_algorithm):
-    if fit_algorithm not in ("lars", "cd"):
-        raise ValueError("fit_algorithm must be 'lars' or 'cd'")
-    if transform_algorithm not in _SPARSE_ALGOS:
-        raise ValueError(f"transform_algorithm must be one of {_SPARSE_ALGOS}")
+        return _DL_CALL(self, "coding_inverse", (X,), _DL_CONTEXT)
 
 
 # Reference: scikit-learn `decomposition/_dict_learning.py`:
@@ -4536,8 +4185,7 @@ class DictionaryLearning(_SparseCoding):
         -------
         self
         """
-        self.fit_transform(X)
-        return self
+        return _DL_CALL(self, "dl_fit", (X,), _DL_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit the dictionary and return the code found while fitting.
@@ -4552,26 +4200,7 @@ class DictionaryLearning(_SparseCoding):
         ndarray of shape (n_samples, n_components), float32
             Twice as many columns when ``split_sign=True``.
         """
-        self.numeric_mode_ = _mode(self.numeric_mode)
-        _check_sparse_algos(self.fit_algorithm, self.transform_algorithm)
-        if self.callback is not None:
-            raise NotImplementedError("callback is not carried")
-        k = self._kit()
-        M = _M.from_input(X)
-        nc = self.n_components if self.n_components is not None else M.c
-        ci = None if self.code_init is None else _M.from_input(self.code_init, "code_init")
-        di = None if self.dict_init is None else _M.from_input(self.dict_init, "dict_init")
-        code, D, errors, it = _dict_learning(
-            k, M, nc, float(self.alpha), self.max_iter, self.tol, "lasso_" + self.fit_algorithm,
-            _seed_of(self.random_state), ci, di, self.positive_dict, self.positive_code, self.transform_max_iter)
-        self.components_m_ = D
-        self.components_ = D.out()
-        self.error_ = errors
-        self.n_iter_ = it
-        self.n_features_in_ = M.c
-        if self.split_sign:
-            code = k.hstack([k.ew("maxs", code, s=0.0), k.ew("scale", k.ew("mins", code, s=0.0), s=-1.0)])
-        return code.out()
+        return _DL_CALL(self, "dl_fit_transform", (X,), _DL_CONTEXT)
 
 
 # Reference: `_dict_learning.py::MiniBatchDictionaryLearning`:
@@ -4683,48 +4312,7 @@ class MiniBatchDictionaryLearning(_SparseCoding):
         -------
         self
         """
-        self.numeric_mode_ = _mode(self.numeric_mode)
-        _check_sparse_algos(self.fit_algorithm, self.transform_algorithm)
-        if self.callback is not None:
-            raise NotImplementedError("callback is not carried")
-        k = self._kit()
-        M = _M.from_input(X)
-        n, m = M.r, M.c
-        nc = self.n_components if self.n_components is not None else m
-        bs = min(int(self.batch_size), n)
-        seed = _seed_of(self.random_state)
-        if self.dict_init is not None:
-            D = _M.from_input(self.dict_init, "dict_init")
-        else:
-            r = min(n, m)
-            _, S, Vt = _thin_svd(k, M, r, u_based=True)
-            D = k.ew("mul", Vt, S.T)
-        if nc <= D.r:
-            D = D.rows(0, nc)
-        else:
-            D = k.vstack([D, _M.zeros(nc - D.r, m)])
-        if self.shuffle:
-            Xt = k.take_rows(M, k.order(k.rand(1, n, seed, 50, 0)))
-        else:
-            Xt = M
-        steps_per_iter = -(-n // bs)
-        n_steps = self.max_iter * steps_per_iter
-        # the step loop (encode, the running A and B, atom update, the
-        # convergence tests) in ONE binding call (lane py-runtime-b:
-        # x_decomp/dictl.mojo, dictl_dev.mojo), the same cells and float64 tests
-        D = D.copy()
-        mni = self.max_no_improvement
-        step = int(k.b.x_decomp_dict_minibatch(
-            Xt.addr, D.addr,
-            [n, m, nc, _SPARSE_ALGOS.index("lasso_" + self.fit_algorithm), 0, int(self.transform_max_iter),
-             int(bool(self.positive_dict)), int(bool(self.positive_code)), seed & 0xFFFFFFFF, -1,
-             -1 if mni is None else int(mni), bs, n_steps], [float(self.alpha), float(self.tol)])) - 1
-        self.n_steps_ = step + 1
-        self.n_iter_ = -(-self.n_steps_ // steps_per_iter)
-        self.components_m_ = D
-        self.components_ = D.out()
-        self.n_features_in_ = m
-        return self
+        return _DL_CALL(self, "mbdl_fit", (X,), _DL_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit the dictionary, then return ``transform(X)``.
@@ -4738,14 +4326,26 @@ class MiniBatchDictionaryLearning(_SparseCoding):
         -------
         ndarray of shape (n_samples, n_components), float32
         """
-        return self.fit(X).transform(X)
+        return _DL_CALL(self, "mbdl_fit_transform", (X,), _DL_CONTEXT)
 
 
 class _BaseSparsePCA(_Base):
-    def _normalize(self, k, C):
-        nrm = k.ew("sqrt", k.rowsum(k.ew("sq", C)))
-        nrm = k.ew("select", nrm, nrm, k.const(1.0), s=0.0)
-        return k.ew("div", C, nrm)
+    # fit, fit_transform, transform and inverse_transform are one call each
+    # into the native dictionary-learning owner (bindings/dict_learning_native.mojo),
+    # which tells SparsePCA and MiniBatchSparsePCA apart by class.
+    def fit_transform(self, X, y=None):
+        """Fit the sparse components, then return ``transform(X)``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+        y : ignored
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+        """
+        return _DL_CALL(self, "spca_fit_transform", (X,), _DL_CONTEXT)
 
     # sklearn `_BaseSparsePCA.transform`: ridge_regression(components_.T,
     # (X - mean_).T, ridge_alpha, solver='cholesky').
@@ -4763,15 +4363,7 @@ class _BaseSparsePCA(_Base):
         -------
         ndarray of shape (n_samples, n_components), float32
         """
-        self._check()
-        k = self._kit()
-        Xc = k.ew("sub", _M.from_input(X), self.mean_m_)
-        C = self.components_m_
-        # lane cpu2-l8-decomp: ridge_alpha added to the diagonal where G lives
-        G = k.diag_add(k.mm(C, C, tb=True), _M.of([float(self.ridge_alpha)], 1, 1))
-        lu, piv, _ = k.lu(G)
-        U = k.lu_solve(lu, piv, k.mm(C, Xc, tb=True)).T
-        return U.out()
+        return _DL_CALL(self, "spca_transform", (X,), _DL_CONTEXT)
 
     def inverse_transform(self, X):
         """Map projected data back: ``X @ components_ + mean_``.
@@ -4784,9 +4376,7 @@ class _BaseSparsePCA(_Base):
         -------
         ndarray of shape (n_samples, n_features), float32
         """
-        self._check()
-        k = self._kit()
-        return k.ew("add", k.mm(_M.from_input(X), self.components_m_), self.mean_m_).out()
+        return _DL_CALL(self, "spca_inverse", (X,), _DL_CONTEXT)
 
 
 # Reference: scikit-learn `decomposition/_sparse_pca.py`: dictionary
@@ -4872,26 +4462,7 @@ class SparsePCA(_BaseSparsePCA):
         -------
         self
         """
-        self.numeric_mode_ = _mode(self.numeric_mode)
-        if self.method not in ("lars", "cd"):
-            raise ValueError("method must be 'lars' or 'cd'")
-        k = self._kit()
-        M = _M.from_input(X)
-        nc = self.n_components if self.n_components is not None else M.c
-        self.mean_m_ = k.colmean(M)
-        Xc = k.ew("sub", M, self.mean_m_)
-        ci = None if self.V_init is None else _M.from_input(self.V_init, "V_init").T
-        di = None if self.U_init is None else _M.from_input(self.U_init, "U_init").T
-        code, D, errors, it = _dict_learning(k, Xc.T, nc, float(self.alpha), self.max_iter, self.tol,
-                                             "lasso_" + self.method, _seed_of(self.random_state), ci, di)
-        self.components_m_ = self._normalize(k, code.T)
-        self.components_ = self.components_m_.out()
-        self.n_components_ = self.components_m_.r
-        self.error_ = errors
-        self.n_iter_ = it
-        self.mean_ = self.mean_m_.out((M.c,))
-        self.n_features_in_ = M.c
-        return self
+        return _DL_CALL(self, "spca_fit", (X,), _DL_CONTEXT)
 
 
 # MiniBatchDictionaryLearning on the centered X^T, the components its
@@ -4974,26 +4545,7 @@ class MiniBatchSparsePCA(_BaseSparsePCA):
         -------
         self
         """
-        self.numeric_mode_ = _mode(self.numeric_mode)
-        k = self._kit()
-        M = _M.from_input(X)
-        nc = self.n_components if self.n_components is not None else M.c
-        self.mean_m_ = k.colmean(M)
-        Xc = k.ew("sub", M, self.mean_m_)
-        est = MiniBatchDictionaryLearning(
-            n_components=nc, alpha=self.alpha, max_iter=self.max_iter, batch_size=self.batch_size,
-            shuffle=self.shuffle, fit_algorithm=self.method, random_state=self.random_state,
-            transform_algorithm="lasso_lars", transform_alpha=self.alpha, tol=self.tol,
-            max_no_improvement=self.max_no_improvement, numeric_mode=self.numeric_mode_)
-        XT = Xc.T
-        est.fit(XT.out())
-        self.components_m_ = self._normalize(k, est._encode(XT.out()).T)
-        self.components_ = self.components_m_.out()
-        self.n_components_ = self.components_m_.r
-        self.n_iter_ = est.n_iter_
-        self.mean_ = self.mean_m_.out((M.c,))
-        self.n_features_in_ = M.c
-        return self
+        return _DL_CALL(self, "spca_fit", (X,), _DL_CONTEXT)
 
 
 # ================================================================ LatentDirichletAllocation
@@ -6476,99 +6028,6 @@ class LocallyLinearEmbedding(_Base):
 
 
 # ================================================================ robust covariance
-def _pinvh(k, A):
-    """scipy.linalg.pinvh: V diag(1/w) V^T over |w| > max|w| * n * float32 eps."""
-    w, V = k.eigh(A)
-    # lane cpu2-l8-decomp: max |w| is one word; the cutoff mask is a select
-    # cell where w lives
-    wmax = k.word(k.reduce(w, k._SEL_MAXABS)) if w.c else 0.0
-    cut = _f32(wmax * A.r * _F32_EPS)
-    inv = k.ew("select", k.ew("abs", w), k.ew("recip", w), _M.zeros(1, 1), s=cut)
-    return k.mm(k.ew("mul", V, inv), V, tb=True)
-
-
-def _slogdet(k, A):
-    """(sign, log|det|) from the LU factorization (getrf; sums ascending)."""
-    lu, piv, info = k.lu(A)
-    st, diag, _, _ = k.lu_aux(lu, piv)
-    if st[1] > 0:
-        return 0.0, -math.inf
-    neg = int(st[2]) + int(st[3])
-    ld = k.total(k.ew("logs", k.ew("abs", diag), s=1.1754943508222875e-38)).s[0]
-    return (-1.0 if neg % 2 else 1.0), ld
-
-
-def _fast_logdet(k, A):
-    sign, ld = _slogdet(k, A)
-    return ld if sign > 0 else -math.inf
-
-
-def _emp_cov(k, Xs, assume_centered=False):
-    """sklearn empirical_covariance: (X - mean)^T (X - mean) / n."""
-    if assume_centered:
-        return k.ew("scale", k.mm(Xs, Xs, ta=True), s=1.0 / Xs.r)
-    Xc = k.ew("sub", Xs, k.colmean(Xs))
-    return k.ew("scale", k.mm(Xc, Xc, ta=True), s=1.0 / Xs.r)
-
-
-def _f32_below(x):
-    """The largest float32 strictly below the float x: v < x is v <= this for
-    every float32 v (the kit's `le` cell takes the same decision)."""
-    f = _f32(x)
-    if f < x:
-        return f
-    b = array.array("f", [f])
-    u = array.array("I", b.tobytes())
-    if f > 0.0:
-        u[0] -= 1
-    elif f == 0.0:
-        u[0] = 0x80000001          # the least negative subnormal
-    else:
-        u[0] += 1
-    return array.array("f", u.tobytes())[0]
-
-
-def _masked_cov(k, M, m, assume_centered):
-    """sklearn's location and empirical covariance of the rows of M whose
-    mask entry (m, n x 1, 0 or 1) is 1, on the device: the masked rows are
-    exact zeros in the products, the count is the mask's total."""
-    cnt = k.total(m).s[0]
-    Xm = k.ew("mul", M, m)
-    if assume_centered:
-        loc = _M.zeros(1, M.c)
-        Xc = Xm
-    else:
-        loc = k.ew("scale", k.colsum(Xm), s=1.0 / cnt)
-        Xc = k.ew("mul", k.ew("sub", M, loc), m)
-    # Experiment: only the MCD masked covariance seam; binding presence is
-    # compile-gated FAST+Apple. Python schedules device buffers, no host math.
-    ordered = getattr(k.b, "x_decomp_dev_mcd_cov", None)
-    if ordered is not None and k._use(Xc) and Xc.r > 0 and Xc.c > 0:
-        gram = k._dout(Xc.c, Xc.c)
-        ordered(k._did(Xc), gram._d.id, [Xc.r, Xc.c])
-    else:
-        gram = k.mm(Xc, Xc, ta=True)
-    return loc, k.ew("scale", gram, s=1.0 / cnt)
-
-
-def _mahal(k, X, loc, P):
-    Xc = k.ew("sub", X, loc)
-    return k.rowsum(k.ew("mul", k.mm(Xc, P), Xc))
-
-
-def _chi2_quantile(k, dof, upper):
-    """The point m with P(chi2_dof > m) = upper (scipy chi2.isf), by bisection
-    (lane py-runtime-b: x_decomp/chi2.mojo `chi2_quantile`)."""
-    return float(k.b.x_decomp_chi2_quantile(float(dof), float(upper)))
-
-
-def _consistency_factor(k, p, num, den=1):
-    """sklearn `_robust_covariance.py::_consistency_factor` (Pison 2002):
-    alpha / chi2.cdf(chi2.ppf(alpha, p), p + 2) with alpha = num / den, all in
-    Mojo (x_decomp/chi2.mojo `consistency_factor`)."""
-    return float(k.b.x_decomp_consistency_factor(float(p), float(num), float(den)))
-
-
 # Reference: scikit-learn `covariance/_robust_covariance.py`:
 # `c_step`/`_c_step`, `select_candidates`, `fast_mcd`, `MinCovDet.fit`,
 # `correct_covariance`, `reweight_covariance`. The random subsets are
@@ -6630,66 +6089,13 @@ class MinCovDet(_Base):
         self.store_precision, self.assume_centered = store_precision, assume_centered
         self.support_fraction, self.random_state, self.numeric_mode = support_fraction, random_state, numeric_mode
 
-    def _mcd_1d(self, k, X, h):
-        """sklearn fast_mcd's one-feature shortcut: the shortest window of h
-        sorted values (every tie of the minimum width kept), the location the
-        mean of their midpoints, the support the h values nearest it (ties to
-        the lower index), the variance of the support."""
-        return self._mcd_1d_native(k, X, h)
-
-    def _mcd_1d_native(self, k, X, h):
-        """`_mcd_1d` with its orders, gathers, window minimum and support in
-        x_decomp/moves.mojo (lane apple-fast-py2mojo-decomp): the same
-        (value, index) orders, the same kit cells on the same values."""
-        n = X.r
-        xs = k.take_rows(X, k.order(X))
-        if h < n:
-            diff = k.ew("sub", xs.rows(h, n), xs.rows(0, n - h))
-            starts = k.argmin_all(diff)
-            mids = k.ew("scale", k.ew("add", k.take_rows(xs, starts, radd=h), k.take_rows(xs, starts)), s=0.5)
-            loc = k.colmean(mids)
-            cen = k.ew("abs", k.ew("sub", X, loc))
-            sel, mask = k.select_smallest(cen, h)
-            Xs = k.take_rows(X, sel)
-            # the device form's membership is a 0 / 1 float matrix (lane cpu3-python)
-            support = mask.out((n,)).astype("<u1") if isinstance(mask, _M) else _support_of(mask, n)
-        else:
-            loc = k.colmean(X)
-            Xs = X
-            support = _support_of(array.array("i", [1]) * n, n)
-        cov = _emp_cov(k, Xs)
-        P = _pinvh(k, cov)
-        return loc, cov, support, _mahal(k, X, loc, P)
-
-    def _fast_mcd_native(self, k, X, h):
-        """fast_mcd for two or more features in ONE binding call
-        (x_decomp/mcd.mojo, lane/py-decomp-nbrs): the same C-steps, cells,
-        draws and (value, index) orders as the Python driver below, which
-        made 12 to 40 kit calls per C-step. Only the O(1) plan integers are
-        computed here, with the float expressions they always used."""
-        n, p = X.r, X.c
-        plan = [0] * 7
-        if n > 500:
-            n_sub = n // 300
-            n_ss = n // n_sub
-            n_m = min(1500, n)
-            plan = [n_sub, n_ss, int(math.ceil(n_ss * (h / float(n)))), max(10, 500 // n_sub),
-                    n_m, int(math.ceil(n_m * (h / float(n)))), 10 if n > 1500 else 1]
-        loc, cov, dist = _M.zeros(1, p), _M.zeros(p, p), _M.zeros(n, 1)
-        sup = array.array("i", [0]) * n
-        k.b.x_decomp_mcd(X.addr, loc.addr, cov.addr, sup.buffer_info()[0], dist.addr,
-                         [n, p, h, int(self._seed) & 0xFFFFFFFF] + plan)
-        return loc, cov, _support_of(sup, n), dist
-
-    def _fast_mcd(self, k, X):
-        n, p = X.r, X.c
-        # scikit-learn's fast_mcd: the default support size is capped at n
-        # (n <= p otherwise asks for more support points than rows)
-        h = (min(int(math.ceil(0.5 * (n + p + 1))), n) if self.support_fraction is None
-             else int(self.support_fraction * n))
-        if p == 1:
-            return self._mcd_1d(k, X, h)
-        return self._fast_mcd_native(k, X, h)
+    # Every operation is one call into the native MinCovDet owner
+    # (bindings/mcd_native.mojo). A covariance estimator has no transform,
+    # so it has no fit_transform either (scikit-learn's TransformerMixin).
+    @available_if(lambda self: hasattr(self, "transform"))
+    def fit_transform(self, X, y=None):
+        """Not available: this estimator has no ``transform``."""
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute 'fit_transform'")
 
     def fit(self, X, y=None):
         """Fit the robust location and covariance.
@@ -6703,46 +6109,7 @@ class MinCovDet(_Base):
         -------
         self
         """
-        self.numeric_mode_ = _mode(self.numeric_mode)
-        k = self._kit()
-        M = _M.from_input(X)
-        n, p = M.r, M.c
-        _min_samples(n, p, "MinCovDet")
-        self._seed = _seed_of(self.random_state)
-        self._draws = 0
-        loc, cov, support, dist = self._fast_mcd(k, M)
-        if self.assume_centered:
-            loc = _M.zeros(1, p)
-            sm = _M(_f32_store(support.astype("<f4")), n, 1)
-            _, cov = _masked_cov(k, M, sm, True)
-            dist = k.rowsum(k.ew("mul", k.mm(M, _pinvh(k, cov)), M))
-        self.raw_location_m_, self.raw_covariance_m_ = loc, cov
-        self.raw_location_ = loc.out((p,))
-        self.raw_covariance_ = cov.out()
-        self.raw_support_ = support
-        # correct_covariance: consistency at the normal model (the corrected
-        # matrix is returned by sklearn and not kept; dist_ is rescaled)
-        n_support = int(support.sum())  # glue: Array.sum is the Mojo reduce helper
-        corr = _consistency_factor(k, p, n_support, n)
-        dist = k.ew("scale", dist, s=1.0 / corr)
-        # reweight_covariance
-        thr = _chi2_quantile(k, p, 0.025)
-        # the reweighting mask dist < thr on the device (`le` against the
-        # float32 just below thr: the same decision), then the masked moments
-        mm = k.ew("le", dist, _M.of([_f32_below(thr)], 1, 1))
-        locr, covr = _masked_cov(k, M, mm, self.assume_centered)
-        covr = k.ew("scale", covr, s=_consistency_factor(k, p, 0.975))
-        mask = mm.out((n,)).astype("<u1")
-        self.location_m_, self.covariance_m_ = locr, covr
-        self.precision_m_ = _pinvh(k, covr)
-        self.location_ = locr.out((p,))
-        self.covariance_ = covr.out()
-        self.precision_ = self.precision_m_.out() if self.store_precision else None
-        self.support_ = mask
-        self.dist_m_ = _mahal(k, M, locr, self.precision_m_)
-        self.dist_ = self.dist_m_.out((n,))
-        self.n_features_in_ = p
-        return self
+        return _MCD_CALL(self, "fit", (X,), _MCD_CONTEXT)
 
     def mahalanobis(self, X):
         """Return squared Mahalanobis distances under the fitted model.
@@ -6760,11 +6127,7 @@ class MinCovDet(_Base):
         RuntimeError
             If the model is not fitted.
         """
-        if not hasattr(self, "precision_m_"):
-            raise RuntimeError("MinCovDet is not fitted; call fit first")
-        k = self._kit()
-        d = _mahal(k, _M.from_input(X), self.location_m_, self.precision_m_)
-        return d.out((d.r,))
+        return _MCD_CALL(self, "mahalanobis", (X,), _MCD_CONTEXT)
 
     def get_precision(self):
         """Return the precision matrix (pseudo-inverse of ``covariance_``).
@@ -6775,7 +6138,7 @@ class MinCovDet(_Base):
         -------
         ndarray of shape (n_features, n_features), float32
         """
-        return self.precision_m_.out()
+        return _MCD_CALL(self, "get_precision", (), _MCD_CONTEXT)
 
     def score(self, X, y=None):
         """Return the Gaussian log-likelihood of X under the fitted model.
@@ -6792,13 +6155,7 @@ class MinCovDet(_Base):
         -------
         float
         """
-        k = self._kit()
-        M = _M.from_input(X)
-        cov = _emp_cov(k, k.ew("sub", M, self.location_m_), assume_centered=True)
-        tr = k.total(k.ew("mul", cov, self.precision_m_)).s[0]
-        _, ld = _slogdet(k, self.precision_m_)
-        p = M.c
-        return -(p * _LOG_2PI) / 2.0 - 0.5 * tr + 0.5 * ld
+        return _MCD_CALL(self, "score", (X,), _MCD_CONTEXT)
 
 
 class EllipticEnvelope(MinCovDet):
@@ -6868,26 +6225,7 @@ class EllipticEnvelope(MinCovDet):
         -------
         self
         """
-        if not 0 < self.contamination <= 0.5:
-            raise ValueError("contamination must be in (0, 0.5]")
-        super().fit(X)
-        k = self._kit()
-        # the two order statistics the interpolation reads: sorted(-d)[i]
-        # is -(d in ascending order)[n - 1 - i] (negation is exact)
-        dm = self.dist_m_
-        nv = dm.r * dm.c
-        q = 100.0 * self.contamination / 100.0 * (nv - 1)
-        lo = int(math.floor(q))
-        hi = min(lo + 1, nv - 1)
-        # lane cpu3-python: the kit's order (a device radix sort on a GPU
-        # binding), then the two order statistics one word each
-        o = k.order(dm)
-        vlo = -k.word(dm, int(k.word(o, nv - 1 - lo)))
-        vhi = -k.word(dm, int(k.word(o, nv - 1 - hi)))
-        # held as the float32 the device subtracts, so decision_function is
-        # exactly score_samples - offset_ rounded once
-        self.offset_ = _f32(vlo + (vhi - vlo) * (q - lo))
-        return self
+        return _MCD_CALL(self, "fit", (X,), _MCD_CONTEXT)
 
     def score_samples(self, X):
         """Return the negated squared Mahalanobis distance of each sample.
@@ -6900,9 +6238,7 @@ class EllipticEnvelope(MinCovDet):
         -------
         ndarray of shape (n_samples,), float64
         """
-        k = self._kit()
-        d = _mahal(k, _M.from_input(X), self.location_m_, self.precision_m_)
-        return k.ew("scale", d, s=-1.0).out((d.r,))
+        return _MCD_CALL(self, "score_samples", (X,), _MCD_CONTEXT)
 
     def decision_function(self, X):
         """Return ``score_samples(X) - offset_``; negative means outlier.
@@ -6915,9 +6251,7 @@ class EllipticEnvelope(MinCovDet):
         -------
         ndarray of shape (n_samples,), float64
         """
-        k = self._kit()
-        d = _mahal(k, _M.from_input(X), self.location_m_, self.precision_m_)
-        return k.ew("adds", k.ew("scale", d, s=-1.0), s=-self.offset_).out((d.r,))
+        return _MCD_CALL(self, "decision_function", (X,), _MCD_CONTEXT)
 
     def predict(self, X):
         """Label each sample 1 (inlier) or -1 (outlier).
@@ -6930,17 +6264,7 @@ class EllipticEnvelope(MinCovDet):
         -------
         ndarray of shape (n_samples,), int32
         """
-        from ._buffer import frombytes as _fb
-        k = self._kit()
-        d = _mahal(k, _M.from_input(X), self.location_m_, self.precision_m_)
-        dec = k.ew("adds", k.ew("scale", d, s=-1.0), s=-self.offset_)
-        if not d.r:
-            return _fb(b"", "<i4", (0,))
-        # lane cpu3-python: 1 where dec >= 0 (-dec <= 0), else -1 (NaN: -1),
-        # in the kit's cells on either binding
-        ge = k.ew("le", k.ew("scale", dec, s=-1.0), _M.of([0.0], 1, 1))
-        lab = k.ew("select", ge, _M.of([1.0], 1, 1), _M.of([-1.0], 1, 1), s=0.5)
-        return lab.out((d.r,)).astype("<i4")
+        return _MCD_CALL(self, "predict", (X,), _MCD_CONTEXT)
 
     def fit_predict(self, X, y=None):
         """Fit the model, then return ``predict(X)``.
@@ -6954,7 +6278,7 @@ class EllipticEnvelope(MinCovDet):
         -------
         ndarray of shape (n_samples,), int32
         """
-        return self.fit(X).predict(X)
+        return _MCD_CALL(self, "fit_predict", (X,), _MCD_CONTEXT)
 
     # Lane cpu4-python: the x_metrics device program (`accuracy_fraction`:
     # exact match counts, the weight total its PairSum, the ratio binary64
@@ -7066,6 +6390,9 @@ class AlternatingLeastSquares(_Base):
         self.use_cg, self.calculate_training_loss = use_cg, calculate_training_loss
         self.random_state, self.numeric_mode, self.cg_steps = random_state, numeric_mode, cg_steps
 
+    # fit, recommend and similar_items are one call each into the native
+    # AlternatingLeastSquares owner (bindings/als_native.mojo).
+
     def fit(self, user_items, show_progress=False):
         """Fit user and item factors.
 
@@ -7086,68 +6413,13 @@ class AlternatingLeastSquares(_Base):
         ValueError
             If ``use_cg=True`` and ``cg_steps < 1``.
         """
-        self.numeric_mode_ = _mode(self.numeric_mode)
-        k = self._kit()
-        R = _M.from_input(user_items, "user_items")
-        n, m = R.r, R.c
-        C = R if self.alpha == 1.0 else k.ew("scale", R, s=self.alpha)
-        seed = _seed_of(self.random_state)
-        f = int(self.factors)
-        X = k.ew("scale", k.rand(n, f, seed, 80, 0), s=0.01)
-        Y = k.ew("scale", k.rand(m, f, seed, 81, 0), s=0.01)
-        if self.use_cg and int(self.cg_steps) < 1:
-            raise ValueError("AlternatingLeastSquares: cg_steps must be >= 1")
-        # the sweeps (and the losses) in ONE binding call (lane py-runtime-b:
-        # x_decomp/als.mojo on the host column, the item half-sweep on C^T;
-        # x_decomp/als_dev.mojo on the GPU binding, C resident and the item
-        # half-sweep through strides, as the kit ran them)
-        X, Y = X.copy(), Y.copy()
-        iters = int(self.iterations)
-        la = array.array("d", [0.0]) * max(iters, 1)
-        cnt = int(k.b.x_decomp_als_fit(C.addr, X.addr, Y.addr, la.buffer_info()[0],
-                                       [n, m, f, iters, int(bool(self.use_cg)), int(self.cg_steps),
-                                        int(bool(self.calculate_training_loss))], [float(self.regularization)]))
-        losses = la.tolist()[:cnt]
-        if self.calculate_training_loss:
-            self.training_loss_ = losses
-        self.user_factors_m_, self.item_factors_m_ = X, Y
-        self.user_factors, self.item_factors = X.out(), Y.out()
-        # sklearn-style fitted names (the board harness and docs read these)
-        self.user_factors_, self.item_factors_ = self.user_factors, self.item_factors
-        self.components_m_ = Y
-        return self
+        return _ALS_CALL(self, "fit", (user_items,), _ALS_CONTEXT)
 
-    def _check_fit(self):
-        if not hasattr(self, "user_factors_m_"):
-            raise RuntimeError("AlternatingLeastSquares is not fitted; call fit first")
-
-    def _topn(self, k, S, N, skip):
-        """(ids, scores) of the N best entries of the score row S by (-score,
-        id), skipping the nonzero entries of the float32 row at address
-        `skip` (0: none): x_decomp/moves.mojo `topn_desc` and `gather`."""
-        from ._buffer import frombytes as _fb
-        m = S.r * S.c
-        n = max(min(N, m), 0)
-        if n and k._use(S):
-            # lane cpu3-python: the (-score, id) order on the device, the
-            # skipped items last; the N first ids and their scores gathered there
-            sk = None
-            if skip:
-                sk = _M.zeros(1, m)
-                ctypes.memmove(sk.addr, skip, 4 * m)   # glue: the caller's skip row, one C copy
-            o, cnt = k._order_dev(S, neg=1, skip=sk)
-            c = min(n, int(k.word(cnt)))
-            if not c:
-                return (_fb(b"", "<i4", (0,)), _fb(b"", "<f4", (0,)))
-            ids = o.rows(0, c)
-            vals = k.take_cols_m(S.reshape(1, m), ids, c)
-            return (ids.out((c,)).astype("<i4"), vals.out((c,)))
-        order = array.array("i", [0]) * max(n, 1)
-        c = int(k.b.x_decomp_topn_desc(S.addr, [m, n], skip, order.buffer_info()[0])) if n else 0  # cpu-route: host binding only (CPU-only installs); a GPU binding orders on the device above
-        vals = array.array("f", [0.0]) * max(c, 1)
-        if c:
-            k.b.x_decomp_gather(S.addr, order.buffer_info()[0], c, vals.buffer_info()[0])  # cpu-route: host binding only, the device route returned above
-        return (_fb(order[:c].tobytes(), "<i4", (c,)), _fb(vals[:c].tobytes(), "<f4", (c,)))
+    # A recommender has no transform, so it has no fit_transform either.
+    @available_if(lambda self: hasattr(self, "transform"))
+    def fit_transform(self, X, y=None):
+        """Not available: this estimator has no ``transform``."""
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute 'fit_transform'")
 
     def recommend(self, userid, user_items, N=10, filter_already_liked_items=True):
         """Return the top N items for one user.
@@ -7177,20 +6449,7 @@ class AlternatingLeastSquares(_Base):
         ValueError
             If ``N`` is negative or ``user_items`` has no matching row.
         """
-        self._check_fit()
-        k = self._kit()
-        U = self.user_factors_m_.rows(userid, userid + 1)
-        S = k.mm(U, self.item_factors_m_, tb=True)
-        if int(N) < 0:
-            raise ValueError(f"recommend: N must be non-negative, got {N}")
-        skip = 0
-        if filter_already_liked_items and user_items is not None:
-            R = _M.from_input(user_items, "user_items")
-            if R.c != S.c or not (R.r == 1 or 0 <= userid < R.r):
-                raise ValueError(f"recommend: user_items of shape ({R.r}, {R.c}) has no row {userid} "
-                                 f"over the {S.c} items")
-            skip = R.addr + 4 * (0 if R.r == 1 else int(userid)) * R.c
-        return self._topn(k, S, int(N), skip)
+        return _ALS_CALL(self, "recommend", (userid, user_items, N, filter_already_liked_items), _ALS_CONTEXT)
 
     def similar_items(self, itemid, N=10):
         """Return the N items most similar to one item.
@@ -7209,15 +6468,7 @@ class AlternatingLeastSquares(_Base):
         ids : ndarray of shape (<= N,), int32
         scores : ndarray of shape (<= N,), float32
         """
-        self._check_fit()
-        k = self._kit()
-        Y = self.item_factors_m_
-        nrm = k.ew("sqrt", k.rowsum(k.ew("sq", Y)))
-        Yn = k.ew("div", Y, nrm)
-        S = k.mm(Yn.rows(itemid, itemid + 1), Yn, tb=True)
-        if int(N) < 0:
-            raise ValueError(f"similar_items: N must be non-negative, got {N}")
-        return self._topn(k, S, int(N), 0)
+        return _ALS_CALL(self, "similar_items", (itemid, N), _ALS_CONTEXT)
 
 
 class SparseCoder(_SparseCoding):
@@ -7278,29 +6529,39 @@ class SparseCoder(_SparseCoding):
         self.transform_max_iter, self.numeric_mode = transform_max_iter, numeric_mode
 
     # Nothing is learned: `transform` works without `fit` (scikit-learn tags
-    # SparseCoder requires_fit=False). The parameters are checked and the
-    # dictionary uploaded at the first use, not in `__init__`, which stores
-    # them verbatim; the upload is kept for the same dictionary object.
-    def _validate_params(self):
-        _check_sparse_algos("lars", self.transform_algorithm)
+    # SparseCoder requires_fit=False). `__init__` stores the parameters
+    # verbatim; every operation checks them and reads the dictionary, in
+    # the native dictionary-learning owner.
+    def transform(self, X):
+        """Encode X as a sparse combination of the dictionary atoms.
 
-    def _prepare(self):
-        self._validate_params()
-        cached = self.__dict__.get("_dictionary_m")
-        if cached is None or cached[0] is not self.dictionary:
-            cached = (self.dictionary, _M.from_input(self.dictionary, "dictionary"))
-            self._dictionary_m = cached
-        return cached[1]
+        Uses ``transform_algorithm`` and its settings.
 
-    @property
-    def components_m_(self):
-        return self._prepare()
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
 
-    def _check(self, attr="components_"):
-        self._prepare()
+        Returns
+        -------
+        ndarray of shape (n_samples, n_components), float32
+            Twice as many columns when ``split_sign=True``.
+        """
+        return _DL_CALL(self, "coder_transform", (X,), _DL_CONTEXT)
 
-    def _kit(self):
-        return _Kit(_mode(self.numeric_mode))
+    def inverse_transform(self, X):
+        """Rebuild data from a code: ``code @ dictionary``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_components)
+            A code, as returned by ``transform`` (with ``2 * n_components``
+            columns when ``split_sign=True``).
+
+        Returns
+        -------
+        ndarray of shape (n_samples, n_features), float32
+        """
+        return _DL_CALL(self, "coder_inverse", (X,), _DL_CONTEXT)
 
     def fit(self, X, y=None):
         """Check the parameters, record the dictionary's shape and return self
@@ -7310,17 +6571,7 @@ class SparseCoder(_SparseCoding):
         -------
         self
         """
-        # scikit-learn's SparseCoder.fit: X is validated (2-D, non-empty) and
-        # must have the dictionary's number of features
-        x, _ = as_f32_c(X, ndim=2, name="X")
-        D = self._prepare()
-        if x.shape[1] != D.c:
-            raise ValueError("Dictionary and X have different numbers of features:"
-                             f"dictionary.shape: {(D.r, D.c)} X.shape: {tuple(x.shape)}")
-        self.numeric_mode_ = _mode(self.numeric_mode)
-        self.components_ = D.out()
-        self.n_components_, self.n_features_in_ = D.r, D.c
-        return self
+        return _DL_CALL(self, "coder_fit", (X,), _DL_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Return ``transform(X)``.
@@ -7334,7 +6585,7 @@ class SparseCoder(_SparseCoding):
         -------
         ndarray of shape (n_samples, n_components), float32
         """
-        return self.transform(X)
+        return _DL_CALL(self, "coder_transform", (X,), _DL_CONTEXT)
 
 
 # ================================================================ randomized arms of PCA / TruncatedSVD
@@ -7380,3 +6631,28 @@ _IPCA_CALL, _IPCA_CONTEXT = _native_ipca_bridge.connect_public(IncrementalPCA)
 # The compiled johnson_lindenstrauss_min_dim owner.
 from . import _native_jl_bridge  # noqa: E402
 _JL_CALL, _JL_CONTEXT = _native_jl_bridge.connect_public()
+
+
+# The native dictionary-learning owner (bindings/dict_learning_native.mojo):
+# DictionaryLearning, MiniBatchDictionaryLearning, SparseCoder, SparsePCA,
+# MiniBatchSparsePCA and sparse_encode, one call per public operation.
+from ._native_decomp_kit_bridge import connect_public as _connect_decomp_kit  # noqa: E402
+_DL_CALL, _DL_CONTEXT = _connect_decomp_kit("dict_learning_native_call", minibatch_sparse_pca_class=MiniBatchSparsePCA)
+
+
+# The native PLS owner (bindings/pls_native.mojo): PLSRegression, PLSCanonical, CCA.
+_PLS_CALL, _PLS_CONTEXT = _connect_decomp_kit("pls_native_call", pls_regression_class=PLSRegression,
+                                              pls_canonical_class=PLSCanonical)
+
+
+# The native MinCovDet owner (bindings/mcd_native.mojo): MinCovDet, EllipticEnvelope.
+_MCD_CALL, _MCD_CONTEXT = _connect_decomp_kit("mcd_native_call", elliptic_envelope_class=EllipticEnvelope)
+
+
+# The native AlternatingLeastSquares owner (bindings/als_native.mojo).
+_ALS_CALL, _ALS_CONTEXT = _connect_decomp_kit("als_native_call")
+
+
+# The native linear-algebra owner (bindings/linalg_decomp_native.mojo):
+# randomized_svd and solve.
+_LINALG_CALL, _LINALG_CONTEXT = _connect_decomp_kit("linalg_decomp_native_call")
