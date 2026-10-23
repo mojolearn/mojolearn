@@ -231,6 +231,7 @@ def _predict_hw(estimator: PythonObject, start_obj: PythonObject, end_obj: Pytho
         var part = tsa_array("f", "<f4", Python.tuple(3 * steps * w), 3 * steps * w, 4, context)
         # rows r = component * steps + step: dst[r * w + j] = src[r * batch + lo + j]
         forecast_gather_cols(Int(py=classical_address(part)), Int(py=classical_address(comps)), 3 * steps, batch, lo, w)
+        _ = comps  # keep the Python object alive through the native call above
         py_setitem(state, "_comps", part)
         _ = py_call(requests.append, Python.tuple("hw_predict_shard", state, Python.tuple(start, end)))
     var parts = _run(requests, devices)

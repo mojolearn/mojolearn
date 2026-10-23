@@ -679,6 +679,7 @@ def _bagging_oob_outputs(xt: PythonObject, fields: PythonObject, x: TreesMatrix,
             var p = _f32_vector(_member_predict(members[i], xs, context), context)
             out = trees_vector(m, "<f8", context)
             trees_cast(p.addr, "<f4", trees_address(out), "<f8", m, context)
+            _ = p  # keep the Python object alive through the native call above
         _ = py_call_typed(_x(xt, "x_trees_accumulate_rows"), _A(acc), _A(out), _A(oob), Python.list(_P(n), _P(k), _P(m)))
         _ = py_call_typed(_x(xt, "x_trees_count_rows"), _A(counts), _A(oob), Python.list(_P(n), _P(m)))
     return Python.tuple(acc, counts)
@@ -748,6 +749,7 @@ def _bagging_proba(model: PythonObject, fields: PythonObject, X: PythonObject, c
         var proba = _member_proba(batched[0], xa, context)
         var out = trees_empty(Python.tuple(n, k), "<f8", context)
         trees_cast(trees_address(proba), "<f4", trees_address(out), "<f8", n * k, context)
+        _ = proba  # keep the Python object alive through the native call above
         return out
     var xt = _xt(fields, context)
     var acc = _class_major(xt, Python.list(_F(0.0)), n * k, context)
@@ -781,6 +783,7 @@ def bagging_predict(model: PythonObject, args: PythonObject, classifier: Bool, c
         var p = _f32_vector(_member_predict(batched[0], xa, context), context)
         var out = trees_vector(n, "<f8", context)
         trees_cast(p.addr, "<f4", trees_address(out), "<f8", n, context)
+        _ = p  # keep the Python object alive through the native call above
         return out
     var xt = _xt(fields, context)
     var acc = trees_vector(n, "<f8", context)
@@ -968,6 +971,7 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
             var pred = _f32_vector(_member_predict(member, xa, context), context)
             _ = py_call_typed(_x(xt, "x_trees_r2_step"), _A(w), _P(pred.addr), _A(y_array), _A(stats),
                               Python.list(_P(n), _P(loss), _F(lr), _P(1 if it == m - 1 else 0), _P(1 if is_dt else 0)))
+            _ = pred  # keep the Python object alive through the native call above
             var status = _f64_word(stats, 0)
             var total = _f64_word(stats, 3)
             if status == 2.0:
@@ -1071,6 +1075,7 @@ def ada_predict(model: PythonObject, args: PythonObject, classifier: Bool, conte
     for j in range(m):  # driver-loop: over the member estimators
         var p = _f32_vector(_member_predict(members[j], xa, context), context)
         _ = py_call_typed(_x(xt, "x_trees_put_f32"), _A(preds), _P(p.addr), Python.list(_P(j * n), _P(n)))
+        _ = p  # keep the Python object alive through the native call above
     var b = trees_builtins()
     var weights_store = py_call(context["array_type"], PythonObject("d"), py_call(b.map, b.float, fields["estimator_weights_"]))
     var weights = classical_wrap_array(weights_store, Python.tuple(m), "<f8", "C", context)

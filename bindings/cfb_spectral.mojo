@@ -249,6 +249,7 @@ def _rbf_affinity(x: PythonObject, gamma: Float64, xdecomp: PythonObject, contex
             var done = family_call(alloc, PythonObject(1))
             _ = py_call(ids.append, done)
             _ = family_call(upload, done, classical_address(zero), PythonObject(1))
+            _ = zero  # keep the Python object alive through the native call above
             var params_scale = Python.list(PythonObject(_OP_SCALE), PythonObject(nn), PythonObject(n), PythonObject(1),
                                            PythonObject(3), PythonObject(1), PythonObject(3))
             var dscaled = family_call(alloc, PythonObject(max(nn, 1)))
@@ -332,13 +333,17 @@ def _knn_affinity(fields: PythonObject, source: PythonObject, clustering: Bool, 
                                 classical_address(vals) if sp and nnz else zero,
                                 classical_address(a), classical_address(status)),
                     Python.list(PythonObject(n), PythonObject(k), PythonObject(nnz), PythonObject(1 if sp else 0)))
+    _ = status  # keep the Python object alive through the native call above
     var words = FAMILY_I32P(unsafe_from_address=Int(py=classical_address(status)))
+    _ = status  # keep the Python object alive through the native call above
     var code = Int(words[0])
+    _ = status  # keep the Python object alive through the native call above
     if code == 1:
         raise Error("mojolearn SpectralEmbedding: a precomputed distance is negative or NaN")
     if code == 2:
         raise Error("mojolearn SpectralEmbedding: row " + String(Int(words[1])) + " of the precomputed graph has "
                     + String(Int(words[2])) + " stored distances, fewer than n_neighbors=" + String(k))
+        _ = status  # keep the Python object alive through the native call above
     py_setitem(fields, "affinity_matrix_", a)
     return a
 

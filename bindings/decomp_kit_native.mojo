@@ -421,8 +421,12 @@ struct DecompKit(Movable):
             var ib = one if b < 0 else b
             var ic = one if c < 0 else c
             var ab = self.address(ib)
+            _ = ib  # keep the Python object alive through the native call above
             var ac = self.address(ic)
+            _ = ic  # keep the Python object alive through the native call above
             _ = py_call(self.entries["x_decomp_ew"], aa, ab, ac, self.address(out), params, PythonObject(scalar))
+            _ = ic  # keep the Python object alive through the native call above
+            _ = ib  # keep the Python object alive through the native call above
         return out
 
     # ---- products and sums
@@ -570,9 +574,11 @@ struct DecompKit(Movable):
         var aa = self.address(a)
         var one = self.one_host
         var ai = self.address(one)
+        _ = one  # keep the Python object alive through the native call above
         var ao = self.address(out)
         _ = py_call(self.entries["x_decomp_move"], aa, ai, ao,
                     Python.list(XD_TRANSPOSE, n, rows, cols, 0, 0, 0, n, n, 1))
+        _ = one  # keep the Python object alive through the native call above
         return out
 
     def reshape(mut self, a: Int, rows: Int, cols: Int) raises -> Int:
@@ -608,8 +614,10 @@ struct DecompKit(Movable):
                     var am = self.address(m)
                     var one = self.one_host
                     var ai = self.address(one)
+                    _ = one  # keep the Python object alive through the native call above
                     var ao = self.address(out)
                     _ = py_call(self.entries["x_decomp_move"], am, ai, ao, params)
+                    _ = one  # keep the Python object alive through the native call above
             offset += self.matrices[m].cols
         return out
 
@@ -671,7 +679,9 @@ struct DecompKit(Movable):
         var ad = self.address(d)
         var one = self.one_host
         var ai = self.address(one)
+        _ = one  # keep the Python object alive through the native call above
         _ = py_call(self.entries["x_decomp_move"], av, ai, ad, params)
+        _ = one  # keep the Python object alive through the native call above
         self.wrote_host(d)
         return d
 
@@ -882,6 +892,7 @@ struct DecompKit(Movable):
         var aw = self.address(w)
         _ = py_call(self.entries["x_decomp_lasso_rows"], ag, aq, aw, self.address(its),
                     Python.list(rows, cols, max_iter, positive), Python.list(alpha, tol))
+        _ = its  # keep the Python object alive through the native call above
         self.wrote_host(w)
         return w
 
@@ -903,6 +914,7 @@ struct DecompKit(Movable):
             var aq = self.address(q)
             _ = py_call(self.entries["x_decomp_lars_rows"], ag, aq, self.address(w), self.address(na),
                         Python.list(rows, cols, m, nnz))
+            _ = na  # keep the Python object alive through the native call above
         return w
 
     def omp_rows(mut self, g: Int, q: Int, nnz: Int) raises -> Int:
@@ -922,6 +934,7 @@ struct DecompKit(Movable):
         var aq = self.address(q)
         _ = py_call(self.entries["x_decomp_omp_rows"], ag, aq, self.address(w), self.address(na),
                     Python.list(rows, cols, nnz))
+        _ = na  # keep the Python object alive through the native call above
         return w
 
     # ---- reductions, selections and factor companions (MinCovDet)
@@ -1024,10 +1037,14 @@ struct DecompKit(Movable):
             var dl = self.matrices[lu].device
             _ = py_call(self.entries["x_decomp_dev_lu_aux"], dl, pa, self.address(pm), self.address(im),
                         self.address(diag), self.address(st), params)
+            _ = im  # keep the Python object alive through the native call above
+            _ = pm  # keep the Python object alive through the native call above
             return (st, diag)
         var al = self.address(lu)
         _ = py_call(self.entries["x_decomp_lu_aux"], al, pa, self.address(pm), self.address(im),
                     self.address(diag), self.address(st), params)
+        _ = im  # keep the Python object alive through the native call above
+        _ = pm  # keep the Python object alive through the native call above
         return (st, diag)
 
     # ---- top-N orders (AlternatingLeastSquares)

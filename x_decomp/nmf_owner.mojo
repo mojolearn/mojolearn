@@ -115,6 +115,8 @@ def _init[E: Exec, D: RDev, RES: Bool, X: DecompDev](
     var h = kit.zeros(nc, d)
     var r = kit.r(s) * kit.c(s)
     _ = X.nmf_nndsvd(kit.ptr(u), kit.ptr(s), kit.ptr(vt), kit.ptr(w), kit.ptr(h), n, d, r, nc)
+    _ = vt  # keep the Python object alive through the native call above
+    _ = u  # keep the Python object alive through the native call above
     var z = kit.zeros(1, 1)
     var lo: Float64 = 1e-6
     var hi: Float64 = 1e-13

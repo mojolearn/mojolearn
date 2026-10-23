@@ -567,6 +567,7 @@ def _native_labels(view: LabelsView, bool_source: Bool, context: PythonObject) r
                                 PythonObject(_encode_code(view.typestr)), PythonObject(n),
                                 PythonObject(labels_address(classes_store)), PythonObject(labels_address(codes)),
                                 PythonObject(0), PythonObject(0), PythonObject(0)))
+        _ = classes_store  # keep the Python object alive through the native call above
     except error:
         var message = String(error)
         if "NaN label" in message:
@@ -580,12 +581,16 @@ def _native_labels(view: LabelsView, bool_source: Bool, context: PythonObject) r
     for i in range(k):  # driver-loop: over the k distinct classes
         if wide_float:
             _ = py_call(classes.append, PythonObject(_F64P(unsafe_from_address=labels_address(classes_store))[i]))
+            _ = classes_store  # keep the Python object alive through the native call above
         else:
             var v = Int(_I64P(unsafe_from_address=labels_address(classes_store))[i])
+            _ = classes_store  # keep the Python object alive through the native call above
             if bool_source:
                 _ = py_call(classes.append, PythonObject(v != 0))
+                _ = classes_store  # keep the Python object alive through the native call above
             else:
                 _ = py_call(classes.append, PythonObject(v))
+                _ = classes_store  # keep the Python object alive through the native call above
     return ClassicalLabels(classes, codes, n)
 
 
@@ -783,6 +788,7 @@ def labels_decode_labels(classes: PythonObject, codes: PythonObject, context: Py
     if String(codes.dtype) == "<i4":
         wide_codes = labels_vector(n, "<i8", context)
         labels_cast(labels_address(codes), "<i4", labels_address(wide_codes), "<i8", n, context)
+        _ = wide_codes  # keep the Python object alive through the native call above
     if (kind == "int" or kind == "float") and k > 0:
         var table = labels_vector(k, "<i8" if kind == "int" else "<f8", context)
         var fits = True
@@ -793,18 +799,24 @@ def labels_decode_labels(classes: PythonObject, codes: PythonObject, context: Py
                     fits = False
                     break
                 _I64P(unsafe_from_address=labels_address(table))[i] = Int64(Int(py=py_call(b.int, v)))
+                _ = table  # keep the Python object alive through the native call above
             else:
                 _F64P(unsafe_from_address=labels_address(table))[i] = Float64(py=py_call(b.float, classes[i]))
+                _ = table  # keep the Python object alive through the native call above
         if fits:
             var out = labels_vector(n, "<i8" if kind == "int" else "<f8", context)
             var fn_obj = labels_helper(context, "gather_i64" if kind == "int" else "gather_f64")
             _ = py_call_typed(fn_obj, PythonObject(labels_address(table)), PythonObject(k),
                               PythonObject(labels_address(wide_codes)), PythonObject(n), PythonObject(labels_address(out)))
+            _ = table  # keep the Python object alive through the native call above
+            _ = wide_codes  # keep the Python object alive through the native call above
             return out
     var values = Python.list()
     var p = _I64P(unsafe_from_address=labels_address(wide_codes))
+    _ = wide_codes  # keep the Python object alive through the native call above
     for i in range(n):  # cpu-route: str or bool classes decode to Python objects, the explicit label output step
         _ = py_call(values.append, classes[Int(p[i])])
+        _ = wide_codes  # keep the Python object alive through the native call above
     return values
 
 
@@ -845,15 +857,22 @@ def labels_class_weight_rows(class_weight: PythonObject, labels: ClassicalLabels
                                      "ImportError")
         _ = py_call_typed(count_entry, PythonObject(labels_address(labels.codes) if n else 0),
                           PythonObject(labels_address(counts)), Python.list(n, k))
+        _ = counts  # keep the Python object alive through the native call above
         var wide = labels_vector(k, "<i8", context)
         labels_cast(labels_address(counts), "<i4", labels_address(wide), "<i8", k, context)
+        _ = wide  # keep the Python object alive through the native call above
+        _ = counts  # keep the Python object alive through the native call above
         var w64 = labels_vector(k, "<f8", context)
         if k and Int(py=py_call_typed(labels_helper(context, "class_ratio_f64"), PythonObject(labels_address(wide)),
                                       PythonObject(k), PythonObject(n), PythonObject(0), PythonObject(labels_address(w64)))):
             raise Error("ZeroDivisionError: division by zero")
+        _ = wide  # keep the Python object alive through the native calls above
+        _ = w64  # keep the Python object alive through the native calls above
         var p = _F64P(unsafe_from_address=labels_address(w64))
+        _ = w64  # keep the Python object alive through the native call above
         for i in range(k):  # driver-loop: over the k class weights for the argument checks below
             _ = py_call(objects.append, PythonObject(p[i]))
+            _ = w64  # keep the Python object alive through the native call above
     else:
         var unknown = py_call(py_call(b.set, class_weight).difference, classes)
         if len(unknown) > 0:
@@ -876,12 +895,14 @@ def labels_class_weight_rows(class_weight: PythonObject, labels: ClassicalLabels
         return PythonObject(None)
     var narrowed = labels_vector(k, "<f4", context)
     var q = _F32P(unsafe_from_address=labels_address(narrowed))
+    _ = narrowed  # keep the Python object alive through the native call above
     var top = Float32(0)
     for i in range(k):  # driver-loop: over the k class weights narrowed to float32
         var f32 = Float32(values[i])
         if not isfinite(f32) or (values[i] > 0 and f32 == 0):
             raise Error("class weights must remain finite and nonzero when positive in Float32")
         q[i] = f32
+        _ = narrowed  # keep the Python object alive through the native call above
         if i == 0 or f32 > top:
             top = f32
     if top <= 0:
@@ -892,6 +913,7 @@ def labels_class_weight_rows(class_weight: PythonObject, labels: ClassicalLabels
                                     "ImportError")
         _ = py_call_typed(rows_entry, PythonObject(labels_address(labels.codes)), PythonObject(labels_address(narrowed)),
                           PythonObject(labels_address(out)), Python.list(n, k))
+        _ = narrowed  # keep the Python object alive through the native call above
     return out
 
 
@@ -1256,11 +1278,14 @@ def _codes(labels: ScoreLabels, order: PythonObject, context: PythonObject) rais
         var k = len(labels.classes)
         var table = labels_vector(k, "<i4", context)
         var t = _I32P(unsafe_from_address=labels_address(table))
+        _ = table  # keep the Python object alive through the native call above
         for i in range(k):  # driver-loop: over the distinct class labels
             t[i] = Int32(Int(py=py_get(index, labels.classes[i], PythonObject(-1))))
+            _ = table  # keep the Python object alive through the native call above
         _ = py_call_typed(labels_helper(context, "gather_i32"), PythonObject(labels_address(table)), PythonObject(k),
                           PythonObject(labels_address(labels.codes)), PythonObject(labels.n),
                           PythonObject(labels_address(out)))
+        _ = table  # keep the Python object alive through the native call above
         return out
     var p = _I32P(unsafe_from_address=labels_address(out))
     for i in range(labels.n):  # cpu-route: Python object labels mapped per row, the explicit label input step

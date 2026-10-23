@@ -2124,6 +2124,7 @@ def host_archive_svm_ovo(fields: PythonObject, arrays: PythonObject, features: I
     var out_iterations = host_archive_typed(Python.tuple(pair_count), "<i4", context)
     var bias_words = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out_bias)))
     var saved_bias = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(bias_flat)))
+    _ = bias_flat  # keep the Python object alive through the native call above
     var iteration_words = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out_iterations)))
     var offset = 0
     var q = 0
@@ -2145,6 +2146,7 @@ def host_archive_svm_ovo(fields: PythonObject, arrays: PythonObject, features: I
             var pv = host_archive_slice_words(vectors, offset * features, n * features, Python.tuple(n, features), "<f4", context)
             var ps = host_archive_slice_words(support, offset, n, Python.tuple(n), "<i4", context)
             var bias_value = Float64(saved_bias[q])
+            _ = bias_flat  # keep the Python object alive through the native call above
             py_setitem(pair, "i", i)
             py_setitem(pair, "j", j)
             py_setitem(pair, "dual", pd)

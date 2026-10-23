@@ -73,6 +73,7 @@ def _e_step[E: Exec, D: RDev, RES: Bool, X: DecompDev](
     var its = kit.zeros(n, 1)
     lda_rows_run[E](kit.ptr(m), kit.ptr(exp_dir), kit.ptr(dt), kit.ptr(et), kit.ptr(its), n, nc, v, max_iter,
                     Float32(prior), Float32(tol))
+    _ = its  # keep the Python object alive through the native call above
     return dt
 
 

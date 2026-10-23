@@ -231,8 +231,10 @@ def _minibatch_fit(mut kit: DecompKit, x: Int, nc: Int, dict_init: Int, p: Pytho
     _ = py_call(params.append, n_steps)
     var floats = Python.list(decomp_float(p["alpha"]), decomp_float(p["tol"]))
     var ax = kit.address(xt)
+    _ = xt  # keep the Python object alive through the native call above
     var ad = kit.address(d)
     var step = decomp_int(py_call(kit.entries["x_decomp_dict_minibatch"], ax, ad, params, floats)) - 1
+    _ = xt  # keep the Python object alive through the native call above
     kit.wrote_host(d)
     return (d, step + 1, per_pass)
 

@@ -158,15 +158,23 @@ def training_chunked_lm_head(values: PythonObject, entries: PythonObject, contex
     if not Bool(py=py_call_typed(b.bool, values[3])):
         _ = py_call_typed(_entry(entries, "chunked_lm_head_v2_loss", "mojolearn: this training binding lacks "),
                           Python.list(loss._addr, row_max._addr, row_denom._addr, ha, wa, targets[1]), plist)
+        _ = row_denom  # keep the Python object alive through the native call above
+        _ = row_max  # keep the Python object alive through the native call above
+        _ = loss  # keep the Python object alive through the native call above
         result = PythonObject(Float64(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=loss._addr))[0]))
+        _ = loss  # keep the Python object alive through the native call above
     else:
         var d_hidden = new_array([rows, width], "<f4")
         var d_weight = new_array([vocab, width], "<f4")
         _ = py_call_typed(_entry(entries, "chunked_lm_head_v2_train", "mojolearn: this training binding lacks "),
                           Python.list(loss._addr, row_max._addr, row_denom._addr, d_hidden._addr, d_weight._addr,
                                       ha, wa, targets[1]), plist)
+        _ = row_denom  # keep the Python object alive through the native call above
+        _ = row_max  # keep the Python object alive through the native call above
+        _ = loss  # keep the Python object alive through the native call above
         result = Python.tuple(Float64(MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=loss._addr))[0]),
                               d_hidden, d_weight)
+        _ = loss  # keep the Python object alive through the native call above
     _ = keep^
     _ = targets^
     return result

@@ -75,6 +75,7 @@ def _lin_tsqr_release(mut kit: LinKit, context: PythonObject):
     try:
         var one = lin_new([1], "<f4", context)
         _ = family_call(kit.entry("x_decomp_tsqr_q"), PythonObject(one.addr), PythonObject(one.addr), lin_ints(1, 1, 0))
+        _ = one  # keep the Python object alive through the native call above
     except:
         pass
 
@@ -215,12 +216,16 @@ def _lin_qr_q(a: LinBuf, mode: String, context: PythonObject) raises -> PythonOb
                 # R's rows signed so its diagonal is non-negative, and C the
                 # diagonal of those signs (x_decomp/api.mojo r_signs_py)
                 _ = family_call(kit.entry("x_decomp_r_signs"), PythonObject(r.addr), PythonObject(signs.addr), lin_ints(cols))
+                _ = signs  # keep the Python object alive through the native call above
                 signed = True
             finally:
                 if not signed:
                     _lin_tsqr_release(kit, context)
             var q = _lin_tsqr_q(kit, signs.addr, rows, cols, cols, context)
-            return _lin_named("QRResult", Python.tuple(q.keep, r.keep), context)
+            _ = signs  # keep the Python object alive through the native call above
+            var _keep_ret_signs = _lin_named("QRResult", Python.tuple(q.keep, r.keep), context)
+            _ = signs  # keep the Python object alive through the native call above
+            return _keep_ret_signs^
         var tau = 0
         var held = kit.of_buffer(a.addr, rows, cols)
         var h = kit.geqrf(held, tau)
@@ -234,10 +239,16 @@ def _lin_qr_q(a: LinBuf, mode: String, context: PythonObject) raises -> PythonOb
         if mode == "complete":
             var full_q = kit.orgqr(h, tau, rows)
             var q = kit.out(full_q)
-            return _lin_named("QRResult", Python.tuple(q, _lin_triu(kit, h, rows, context)), context)
+            _ = signs  # keep the Python object alive through the native call above
+            var _keep_ret_signs = _lin_named("QRResult", Python.tuple(q, _lin_triu(kit, h, rows, context)), context)
+            _ = signs  # keep the Python object alive through the native call above
+            return _keep_ret_signs^
         var reduced_q = kit.orgqr(h, tau, kk)
         var q = kit.out(reduced_q)
-        return _lin_named("QRResult", Python.tuple(q, _lin_triu(kit, h, kk, context)), context)
+        _ = signs  # keep the Python object alive through the native call above
+        var _keep_ret_signs = _lin_named("QRResult", Python.tuple(q, _lin_triu(kit, h, kk, context)), context)
+        _ = signs  # keep the Python object alive through the native call above
+        return _keep_ret_signs^
     finally:
         kit.close()
 
@@ -312,14 +323,18 @@ def _lin_svd(args: PythonObject, context: PythonObject) raises -> PythonObject:
                 # Tried: the 2^-40 cut + Householder U_R branch here (qfix bit 1).
                 # Restore: git apply experiments/removed/MOJOLEARN_SVD_QFIX.patch; record in docs/TOMBSTONES.md.
                 var r_held = kit.of_buffer(r.addr, cols, cols)
+                _ = r  # keep the Python object alive through the native call above
                 var ur = _lin_svd_tall(kit, r_held, False, context, s, vt)
+                _ = r  # keep the Python object alive through the native call above
                 c_store = kit.out(ur)
                 done = True
             finally:
                 if not done:
                     _lin_tsqr_release(kit, context)
             var u = _lin_tsqr_q(kit, Int(py=classical_address(c_store)), rows, cols, cols, context)
+            _ = c_store  # keep the Python object alive through the native call above
             var result = _lin_named("SVDResult", Python.tuple(u.keep, kit.out_vector(s, cols), kit.out(vt)), context)
+            _ = c_store  # keep the Python object alive through the native call above
             _ = a^
             return result
         var m = kit.of_buffer(a.addr, rows, cols)
@@ -345,19 +360,24 @@ def _lin_svd(args: PythonObject, context: PythonObject) raises -> PythonObject:
             var w_abs = kit.ew(OP_ABS, w)
             var s = kit.take_cols_m(w_abs, order, rows)
             var u = kit.take_cols_m(v, order, rows)
+            _ = c_store  # keep the Python object alive through the native call above
             var ut = kit.transpose(u)
+            _ = c_store  # keep the Python object alive through the native call above
             var w_ordered = kit.take_cols_m(w, order, rows)
             var w_signs = kit.neg_signs(w_ordered)
             var signs = kit.reshape(w_signs, rows, 1)
             var vt = kit.ew(OP_MUL, ut, signs)
             var result = _lin_named("SVDResult", Python.tuple(kit.out(u), kit.out_vector(s, rows), kit.out(vt)), context)
+            _ = c_store  # keep the Python object alive through the native call above
             _ = a^
             return result
         if rows >= cols:
             var s = 0
             var vt = 0
             var u = _lin_svd_tall(kit, m, full, context, s, vt)
+            _ = c_store  # keep the Python object alive through the native call above
             var result = _lin_named("SVDResult", Python.tuple(kit.out(u), kit.out_vector(s, cols), kit.out(vt)), context)
+            _ = c_store  # keep the Python object alive through the native call above
             _ = a^
             return result
         var s = 0
