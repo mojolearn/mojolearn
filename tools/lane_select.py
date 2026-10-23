@@ -1358,6 +1358,62 @@ def _executed_names(rel, nodes, wanted, deferred, exports):
     return out
 
 
+def _public_seed_members(rel, names):
+    """Retain local classes/helpers used by a selected public root.
+
+    Named imports used only as metadata need not run class methods, but a
+    lane's actual public root may construct another local class, inherit its
+    methods or return it through a helper. Follow those local definitions as
+    part of the root; decorated roots and opaque namespace reads stay whole.
+    """
+    if names is None:
+        return None
+    tree = _parse(rel)
+    if tree is None:
+        return None
+    index = {n.name: n for n in tree.body
+             if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))}
+    for top in tree.body:
+        if isinstance(top, (ast.Assign, ast.AnnAssign)):
+            targets = top.targets if isinstance(top, ast.Assign) else [top.target]
+            for target in targets:
+                for part in ast.walk(target):
+                    if isinstance(part, ast.Name):
+                        if part.id in index:
+                            return None  # reassigned public identities stay whole
+                        index[part.id] = top
+    out, stack = set(names), list(names)
+    while stack:
+        name = stack.pop()
+        node = index.get(name)
+        if node is None:
+            continue
+        if getattr(node, "decorator_list", ()):
+            return None
+        parents = {child: parent for parent in ast.walk(node) for child in ast.iter_child_nodes(parent)}
+        for sub in ast.walk(node):
+            if isinstance(sub, ast.Call) and isinstance(sub.func, ast.Name):
+                if sub.func.id in ("eval", "exec"):
+                    return None
+                if sub.func.id in ("globals", "locals", "vars"):
+                    parent = parents.get(sub)
+                    key = parent.slice.value if isinstance(parent, ast.Subscript) and isinstance(parent.slice, ast.Constant) else None
+                    if isinstance(parent, ast.Attribute) and parent.attr == "get":
+                        consumer = parents.get(parent)
+                        if (isinstance(consumer, ast.Call) and consumer.func is parent and consumer.args
+                                and isinstance(consumer.args[0], ast.Constant)):
+                            key = consumer.args[0].value
+                    if not isinstance(key, str):
+                        return None
+                    if key in index and key not in out:
+                        out.add(key)
+                        stack.append(key)
+            if isinstance(sub, ast.Name) and sub.id in index and sub.id not in out:
+                out.add(sub.id)
+                stack.append(sub.id)
+    return out
+
+
 def _own_walk(seeds, stop, follow=frozenset(), seed_names=None):
     """file -> the names a lane reaches it for (None: whole file), walking
     the symbol-level import graph from `seeds` and entering, not following,
@@ -1365,7 +1421,8 @@ def _own_walk(seeds, stop, follow=frozenset(), seed_names=None):
     reaches runs whole (the backward edge of `_python_closure`,
     `_extender_fires`). Optional `seed_names` preserves a named public root;
     an absent/None root still means the whole module."""
-    wanted, stack = {}, [(s, None if seed_names is None else seed_names.get(s), None) for s in seeds]
+    wanted, stack = {}, [(s, None if seed_names is None else _public_seed_members(s, seed_names.get(s)), None)
+                         for s in seeds]
     edges = extenders()
     walked = {}                  # file -> the `wanted` its imports were last read for
     asked = {}                   # file -> {importer: the names it asks for, None whole}

@@ -2147,7 +2147,11 @@ def test_named_public_seed_avoids_other_classes_but_keeps_import_effects():
         prefix + "door.py": '''
 from ._selector_seed_setup import initialize
 ready = initialize()
-class Chosen:
+class Base:
+    def inherited(self):
+        from ._selector_seed_inherited import compute
+        return compute()
+class Chosen(Base):
     def fit(self):
         from ._selector_seed_selected import compute
         return compute()
@@ -2158,6 +2162,7 @@ class Unrelated:
 ''',
         prefix + "setup.py": "def initialize(): return 1\n",
         prefix + "selected.py": "def compute(): return 2\n",
+        prefix + "inherited.py": "def compute(): return 4\n",
         prefix + "unrelated.py": "def compute(): return 3\n",
     }
     listing, extenders = lane_select._PYTHON_FILES, lane_select.extenders
@@ -2168,8 +2173,9 @@ class Unrelated:
         lane_select.extenders = lambda: {}
         door = prefix + "door.py"
         reached = lane_select._own_walk({door}, set(), seed_names={door: {"Chosen"}})
-        assert reached[door] == {"Chosen"}
+        assert reached[door] == {"Chosen", "Base"}
         assert prefix + "setup.py" in reached and prefix + "selected.py" in reached
+        assert prefix + "inherited.py" in reached
         assert prefix + "unrelated.py" not in reached
         whole = lane_select._own_walk({door}, set())
         assert prefix + "unrelated.py" in whole
