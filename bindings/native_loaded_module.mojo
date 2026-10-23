@@ -53,20 +53,20 @@ def native_loaded_module(name: String) raises -> PythonObject:
     if not registry:
         raise Error("ImportError: native execution requires import-time module connections")
     var metadata = PythonObject(from_owned=cpy.Py_NewRef(registry))
-    var fields = _loaded_fields(metadata)
-    var raw = _loaded_lookup(fields._obj_ptr, "CONNECTIONS")
+    # CONNECTIONS is private import-only metadata, like the binding context
+    # tables. Do not rescan its fixed records on every lookup; all mutable
+    # target modules and the exports actually consumed remain checked below.
+    var fields = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(metadata._obj_ptr)
+    if not fields:
+        cpy.lib.get_function[NoneType]("PyErr_Clear")()
+        raise Error("TypeError: native module connection metadata is not a module")
+    var raw = _loaded_lookup(fields, "CONNECTIONS")
     if not raw:
         raise Error("ImportError: native module connection metadata is absent")
     var connections = PythonObject(from_owned=cpy.Py_NewRef(raw))
-    var tuple_type = _loaded_type(Python.tuple())
-    var string_type = _loaded_type(PythonObject(""))
-    if _loaded_type(connections) is not tuple_type:
-        raise Error("TypeError: native module connection records require an exact tuple")
     # driver-loop: over the fixed import-time module inventory
     for i in range(len(connections)):  # small-loop(connections: registered modules): selects the fixed native setup record
         var record = connections[i]
-        if _loaded_type(record) is not tuple_type or len(record) != 3 or _loaded_type(record[0]) is not string_type:
-            raise Error("TypeError: malformed native module connection record")
         if String(record[0]) != name:
             continue
         var found = _loaded_lookup(modules, name)
@@ -77,13 +77,9 @@ def native_loaded_module(name: String) raises -> PythonObject:
             raise Error("TypeError: native module connection was replaced: " + name)
         var module_fields = _loaded_fields(module)
         var exports = record[2]
-        if _loaded_type(exports) is not tuple_type:
-            raise Error("TypeError: native module export records require an exact tuple")
         # driver-loop: over exact identities of registered native exports
         for j in range(len(exports)):  # small-loop(exports: registered native names): validates fixed export identities before use
             var item = exports[j]
-            if _loaded_type(item) is not tuple_type or len(item) != 2 or _loaded_type(item[0]) is not string_type:
-                raise Error("TypeError: malformed native module export record")
             var current = cpy.lib.get_function[PyObjectPtr]("PyDict_GetItemWithError")(module_fields._obj_ptr, item[0]._obj_ptr)
             if not current or current != item[1]._obj_ptr:
                 raise Error("TypeError: native module connection export changed: " + name + "." + String(item[0]))
