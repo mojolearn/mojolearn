@@ -1,0 +1,167 @@
+{
+  "schema": "mojolearn.native-adapter-qualification.v1",
+  "date": "2026-10-23",
+  "source_commit": "758662bfdcf57fab7dacad3ad789bb61cd05b6ce",
+  "numerical_source_base": "2d3f916547e9412c4b8fa802da6e472221b6cc24",
+  "status": "passed for the listed AMD and rented-host cases",
+  "optional": true,
+  "enabled_by_default": false,
+  "numerical_kernel_changes": false,
+  "hardware": "AMD Instinct MI300X VF",
+  "target": "gfx942",
+  "compiler": "Mojo 1.0.0 (ed45d567)",
+  "frameworks": {
+    "torch": "2.13.0+rocm7.2",
+    "hip": "7.2.53211",
+    "max": "26.5.0"
+  },
+  "native_sha256": "8d5d790b2fdef98c7922a2a06b6cf3f0216913f362e58ef6411a151ceae695d5",
+  "torch_extension_sha256": "579850c7ad53257254dbfce697ec39aab8b693ad8cbedf50c637c541d7dd826a",
+  "max_package_sha256": "c849aa5196fbcc8f3d0274b4449a5242b1b74329990a9a614fcd3d893af646d5",
+  "entry_points": {
+    "torch": "torch.ops.mojolearn.operation",
+    "max": [
+      "mojolearn_relu",
+      "mojolearn_matmul",
+      "mojolearn_operation0",
+      "mojolearn_operation1",
+      "mojolearn_operation2",
+      "mojolearn_operation3"
+    ]
+  },
+  "contract": {
+    "mode": "identical",
+    "storage": "contiguous float32, positive extents, rank at most eight",
+    "integer_storage": "int32 indices for embedding/take, int32 copies and argmax outputs; integer value computation is refused",
+    "devices": "CPU or visible GPU zero; this record qualifies AMD GPU execution and rented Linux CPU ABI checks",
+    "ownership": "input buffers are copied into native executor storage; outputs are copied to framework-owned storage",
+    "synchronization": "producer stream is synchronized before native execution; native queue is drained before return",
+    "gradients": "requires_grad inputs are refused by this inference entry",
+    "runtime": "product additions are Mojo/C++; Python files are external build/test controllers",
+    "torch_linkage": "extension links libtorch, torch_cpu and c10; no libtorch_python or CPython symbols",
+    "max_linkage": "public Mojo C FFI calls the same frozen native library used by Torch"
+  },
+  "qualification": {
+    "torch": {
+      "passed": 40,
+      "failures": [],
+      "cases": [
+        "add",
+        "subtract",
+        "multiply",
+        "relu",
+        "copy",
+        "matmul",
+        "transpose_materialization",
+        "reshape",
+        "broadcast",
+        "int32_copy",
+        "copy_preserves_special_float_words",
+        "embedding_indices",
+        "take_indices",
+        "int32_argmax",
+        "concat",
+        "scale",
+        "full_without_inputs",
+        "clip",
+        "ownership_and_input_unchanged",
+        "producer_on_nondefault_stream",
+        "shape_mismatch",
+        "strided_input",
+        "unsupported_dtype",
+        "unsupported_backward",
+        "pointer_index_form",
+        "unknown_operation",
+        "integer_arithmetic",
+        "integer_value_table",
+        "integer_concatenation",
+        "float_indices",
+        "wrong_output_dtype",
+        "out_of_bounds_indices",
+        "session_only_gather",
+        "repeated_and_after_error",
+        "torch_fullgraph_capture",
+        "torch_inductor_custom_op",
+        "native_torchscript_composition",
+        "torch_export_custom_ops",
+        "output_word_negative_control",
+        "native_registration_present"
+      ]
+    },
+    "max": {
+      "passed": 10,
+      "failures": [],
+      "cases": [
+        "compiled_matmul_relu_composition_repeated",
+        "output_corruption_comparator_control",
+        "full_no_inputs",
+        "scale_scalar_option",
+        "transpose_view",
+        "embedding_mixed_dtypes",
+        "take_mixed_dtypes",
+        "argmax_integer_output",
+        "linear_three_inputs",
+        "restore_composition"
+      ]
+    },
+    "cpu_abi": {
+      "passed": 6,
+      "cases": [
+        "cpu_add",
+        "repeated_calls",
+        "output_shape_refusal",
+        "unknown_code_refusal",
+        "host_pointer_option_refusal",
+        "restored_after_error"
+      ]
+    },
+    "direct_tape": {
+      "passed": 48,
+      "comparison": "exact output words on the same AMD GPU",
+      "log": "final/direct.log"
+    },
+    "fault_controls": {
+      "wrong_torch_dispatch": true,
+      "native_stall_reached_and_timed_out": true,
+      "wrong_max_dispatch": true,
+      "original_artifacts_unchanged": true,
+      "restored_runs_passed": true
+    },
+    "all_phase_exit_codes": 0
+  },
+  "identity_evidence": {
+    "new_cross_vendor_campaign": false,
+    "local_apple_builds_or_tests": false,
+    "scope": "Existing kernel evidence remains applicable to unchanged numerical source and flags; these checks establish adapter behavior on AMD only."
+  },
+  "pending_or_excluded": [
+    "NVIDIA and Apple adapter compilation/runtime qualification",
+    "Automatic lowering of arbitrary PyTorch/FX/Hugging Face models",
+    "PyTorch autograd/backward and native training adapters",
+    "General integer arithmetic, noncontiguous inputs, other dtypes and multiple visible GPUs",
+    "Exhaustive operation/shape coverage; the listed cases are the tested matrix",
+    "MAX heterogeneous calls with more than three inputs",
+    "New Hugging Face pipeline or sklearn workflow qualification",
+    "PyPI packaging, paper/public documentation updates and performance measurements"
+  ],
+  "existing_importers_and_estimators": "unchanged; their separate release qualification is outside this adapter record",
+  "evidence": {
+    "local": "/Users/andrewhendel/mojolearn-evidence/adapters-20261023",
+    "r2_key": "measurements/native-adapters/2026-10-23/758662bfd-amd-all-evidence.tgz",
+    "archive_sha256": "5ed670a769f6cf0f8e06fb615fa03e16b030cc96b0e7fdd57f0201d62fd3f487",
+    "r2_full_readback_verified": true,
+    "retained_file_hashes_verified": 309,
+    "includes": [
+      "complete build/test/failure logs",
+      "source bytes and source receipts",
+      "native and Torch shared libraries",
+      "MAX packages",
+      "direct Tape reference executable",
+      "saved TorchScript/exported graphs",
+      "MAX input/output arrays",
+      "fault-injected sources and artifacts",
+      "hardware and environment snapshots"
+    ]
+  },
+  "handoff_reminder": "Keep logs out of context: save complete output to files, use targeted rg/grep with bounded surrounding lines and short tails, and summarize exit status, coverage, failures, and evidence paths. Expand only relevant diagnostic blocks; never hide failures or infer full success from filtered output."
+}
