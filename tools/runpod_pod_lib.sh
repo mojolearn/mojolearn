@@ -9,8 +9,19 @@
 #
 # The caller sets: TMPD (private temp dir), CURLRC (a path inside it),
 # POD_NAME, and defines die(). Nothing here creates a pod.
-RP=${RP:-https://rest.runpod.io/v1}
+RP_V1=${RP_V1:-${RP:-https://rest.runpod.io/v1}}
+RP=${RP:-$RP_V1}
 RP_V2=${RP_V2:-https://api.runpod.io/v2}
+RP_API_VERSION=${RP_API_VERSION:-1}
+
+rp_select_api() {
+    case "$1" in
+        1) RP=$RP_V1 ;;
+        2) RP=$RP_V2 ;;
+        *) echo "invalid persisted RunPod API version: $1" >&2; return 2 ;;
+    esac
+    RP_API_VERSION=$1
+}
 
 load_key() {
     _kf="${MOJOLEARN_RUNPOD_KEY_FILE:-$HOME/.mojolearn_runpod_key}"
@@ -36,8 +47,8 @@ rp_call() {  # METHOD URL [json file]; sets RP_CODE, body in $TMPD/rp.body
 }
 
 rp_py() {  # python over the parsed body `d` (a list becomes {"items": [...]})
-    python3 - "$TMPD/rp.body" "$@" <<'PYEOF' 2>/dev/null || true
-import json, sys
+    python3 - "$TMPD/rp.body" "$RP_API_VERSION" "$@" <<'PYEOF' 2>/dev/null || true
+import json, re, sys
 try:
     d = json.load(open(sys.argv[1]))
 except Exception:
@@ -45,32 +56,47 @@ except Exception:
 raw_pods = d if isinstance(d, list) else (d.get("items", d.get("pods")) if isinstance(d, dict) else None)
 valid_pods = isinstance(raw_pods, list) and all(
     isinstance(p, dict) and isinstance(p.get("id"), str) and p["id"] for p in raw_pods)
+if sys.argv[2] == '2' or isinstance(d, dict) and 'pagination' in d:
+    page = d.get('pagination') if isinstance(d, dict) else None
+    valid_pods = valid_pods and isinstance(page, dict) and page.get('hasNextPage') is False and 'nextCursor' in page and page['nextCursor'] is None
 if isinstance(d, list):
     d = {"items": d}
-what = sys.argv[2]
+what = sys.argv[3]
 pods = d.get("items") or d.get("pods") or []
 if what == "id":
-    print(d.get("id") or "")
+    pod_id = d.get("id")
+    if isinstance(pod_id, str) and re.fullmatch(r'[A-Za-z0-9_-]+', pod_id):
+        print(pod_id)
 elif what == "cost":
-    print(d.get("costPerHr") or d.get("adjustedCostPerHr") or "")
+    print(d.get("cost", d.get("costPerHr") or d.get("adjustedCostPerHr") or ""))
 elif what == "ssh":
+    if sys.argv[2] == '2':
+        direct = (d.get('ssh') or {}).get('direct')
+        if isinstance(direct, dict):
+            host, port, user = direct.get('host'), direct.get('port'), direct.get('username')
+            if (isinstance(host, str) and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9.:-]*', host)
+                and isinstance(user, str) and re.fullmatch(r'[A-Za-z_][A-Za-z0-9_-]*', user)
+                and type(port) is int and 1 <= port <= 65535):
+                print('-p %s %s@%s' % (port, user, host))
+        sys.exit(0)
     ip = d.get("publicIp") or ""
     pm = d.get("portMappings") or {}
     port = pm.get("22") if isinstance(pm, dict) else ""
     if ip and port:
         print("-p %s root@%s" % (port, ip))
 elif what == "status":
-    print(d.get("desiredStatus") or "")
+    print(d.get("status") or d.get("desiredStatus") or "")
 elif what == "names":
     for p in pods:
-        print("%s\t%s\t%s\t%s" % (p.get("id"), p.get("name"), p.get("desiredStatus"), p.get("costPerHr")))
+        print("%s\t%s\t%s\t%s" % (p.get("id"), p.get("name"), p.get("status", p.get("desiredStatus")), p.get("cost", p.get("costPerHr"))))
 elif what == "byname":
-    print(" ".join(str(p.get("id")) for p in pods if p.get("name") == sys.argv[3]))
+    if valid_pods:
+        print(" ".join(str(p.get("id")) for p in pods if p.get("name") == sys.argv[4]))
 elif what == "listingvalid":
     print("yes" if valid_pods else "no")
 elif what == "hasid":
     if valid_pods:
-        print("yes" if any(p.get("id") == sys.argv[3] for p in raw_pods) else "no")
+        print("yes" if any(p.get("id") == sys.argv[4] for p in raw_pods) else "no")
 PYEOF
 }
 
@@ -98,7 +124,8 @@ verify_gone() {  # pod id; 0 when the API says it is gone
 }
 
 delete_pod() {
-    for _u in "$RP/pods/$1" "$RP_V2/pods/$1"; do
+    _fallback=$RP_V2; [ "$RP" != "$RP_V2" ] || _fallback=$RP_V1
+    for _u in "$RP/pods/$1" "$_fallback/pods/$1"; do
         rp_call DELETE "$_u"
         echo "  DELETE $_u -> HTTP $RP_CODE"
         case "$RP_CODE" in 2*|404) break ;; esac
@@ -123,6 +150,10 @@ value = json.load(open(sys.argv[1]))
 pods = value if isinstance(value, list) else value.get('items', value.get('pods')) if isinstance(value, dict) else None
 if not isinstance(pods, list) or not all(isinstance(p, dict) and isinstance(p.get('id'), str) and p['id'] for p in pods):
     raise SystemExit('invalid pod listing schema')
+if '@API@' == '2' or isinstance(value, dict) and 'pagination' in value:
+    page = value.get('pagination') if isinstance(value, dict) else None
+    if not isinstance(page, dict) or page.get('hasNextPage') is not False or 'nextCursor' not in page or page['nextCursor'] is not None:
+        raise SystemExit('incomplete pod listing; absence is unproven')
 if sys.argv[2] == 'byname':
     print(' '.join(p['id'] for p in pods if p.get('name') == sys.argv[3]))
 else:
@@ -136,7 +167,12 @@ while [ "$attempt" -lt 8 ]; do
     attempt=$((attempt + 1))
     code=$(curl -K "$D/curlrc" --connect-timeout 10 --max-time 30 -o "$D/pods.json" -w '%{http_code}' "@RP@/pods" 2>>"$D/deadman.log") || code=000
     case "$code" in 2*) ;; *) sleep 15; continue ;; esac
-    matched=$(read_pods byname "@NAME@" 2>>"$D/deadman.log") || { sleep 15; continue; }
+    matched=$(read_pods byname "@NAME@" 2>>"$D/deadman.log") || {
+        # A partial listing cannot locate an unknown create or prove absence.
+        # A retained owned ID can still be deleted; verification remains owed.
+        [ -n "$ids" ] || { sleep 15; continue; }
+        matched=""
+    }
     [ -n "$ids" ] || ids="$matched"
     if [ -z "$ids" ]; then
         echo "$(date -u +%FT%TZ) no matching pod in valid listing after deadman deadline" >> "$D/deadman.log"
@@ -147,7 +183,7 @@ while [ "$attempt" -lt 8 ]; do
     for id in $ids; do
         listed=$(read_pods hasid "$id" 2>>"$D/deadman.log") || listed=unknown
         state_code=$(curl -K "$D/curlrc" --connect-timeout 10 --max-time 30 -o "$D/pod.json" -w '%{http_code}' "@RP@/pods/$id" 2>>"$D/deadman.log") || state_code=000
-        state=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("desiredStatus", ""))' "$D/pod.json" 2>/dev/null) || state=unknown
+        state=$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(d.get("status") or d.get("desiredStatus", ""))' "$D/pod.json" 2>/dev/null) || state=unknown
         if [ "$listed" = no ] && { [ "$state_code" = 404 ] || { [ "$state_code" = 200 ] && [ "$state" = TERMINATED ]; }; }; then
             continue
         fi
@@ -168,7 +204,8 @@ done
 echo "$(date -u +%FT%TZ) TEARDOWN UNCONFIRMED after bounded retries; credential retained for recovery" >> "$D/deadman.log"
 exit 1
 DM_EOF
-    sed -i.bak -e "s|@SECS@|$2|g" -e "s|@NAME@|$POD_NAME|g" -e "s|@RP@|$RP|g" -e "s|@RPV2@|$RP_V2|g" "$1/deadman.sh"
+    _fallback=$RP_V2; [ "$RP" != "$RP_V2" ] || _fallback=$RP_V1
+    sed -i.bak -e "s|@SECS@|$2|g" -e "s|@NAME@|$POD_NAME|g" -e "s|@RP@|$RP|g" -e "s|@RPV2@|$_fallback|g" -e "s|@API@|$RP_API_VERSION|g" "$1/deadman.sh"
     rm -f "$1/deadman.sh.bak"
     if grep -q '@[A-Z0-9]*@' "$1/deadman.sh"; then return 1; fi
     sh -n "$1/deadman.sh"

@@ -36,6 +36,7 @@ def copy_words[E: Exec](mut ex: E, src: FP, dst: FP, count: Int) raises:
 def run_operation[E: Exec & Movable & Deinitable](
     var ex: E, code: Int, descriptors: IP, count: Int, output: IP,
     int_args: IP, n_ints: Int, float_args: FP, n_floats: Int,
+    host_buffers: Bool = False,
 ) raises:
     if code < 1 or code > PROGRAM_MAX_CODE or code == 47:
         raise Error("adapter: unknown operation code")
@@ -81,7 +82,13 @@ def run_operation[E: Exec & Movable & Deinitable](
             # ownership contract, including operations which inspect integer
             # indices. This first adapter does not claim zero-copy execution.
             var buf = s.ex.alloc(shapes[j].count())
-            copy_words(s.ex, FP(unsafe_from_address=descriptors[offset]), buf, shapes[j].count())
+            var source = FP(unsafe_from_address=descriptors[offset])
+            if host_buffers:
+                # Supported native transfer API: storage transport only. The
+                # session still owns a DeviceExec and executes all math there.
+                s.ex.upload(buf, source, shapes[j].count())
+            else:
+                copy_words(s.ex, source, buf, shapes[j].count())
             var handle = s._leaf(buf, shapes[j], descriptors[offset + 1] == 1)
             s.owned[s._slot(handle)] = Int(buf)
             handles.append(handle)
@@ -95,7 +102,11 @@ def run_operation[E: Exec & Movable & Deinitable](
         # materialization entry as ordinary public result consumption.
         var tensor = s.tensor(result)
         var source = s.tape.value_of(s.ex, tensor)
-        copy_words(s.ex, source, FP(unsafe_from_address=output[0]), expected.count())
+        var destination = FP(unsafe_from_address=output[0])
+        if host_buffers:
+            s.ex.download(destination, source, expected.count())
+        else:
+            copy_words(s.ex, source, destination, expected.count())
         s.ex.sync()
     except error:
         s.close()

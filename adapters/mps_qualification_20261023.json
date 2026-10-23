@@ -1,0 +1,106 @@
+{
+  "schema": "mojolearn.native-adapter-mps-transport-qualification.v1",
+  "date": "2026-10-23",
+  "product_source_commit": "991f6ade5cb12ced6d2f00937007aa8abd57737c",
+  "test_source_commit": "a87c716343fb0ca3ec6d8f11667fdc003c108fa0",
+  "numerical_source_base": "ac7eadac74cb9c6d88ce2bfaeaa92e16c959f4d7",
+  "numerical_kernel_changes": false,
+  "optional": true,
+  "enabled_by_default": false,
+  "pypi_packaged": false,
+  "implementation": {
+    "torch_mps": "Native blocking ATen storage copies, Mojo DeviceExec GPU arithmetic, native result copy to MPS",
+    "abi": "Additive ABI 1 mojolearn_adapter_operation_host_buffers entry; existing device-buffer entry preserved",
+    "cpu_math_fallback": false,
+    "python_runtime_added": false,
+    "transport_cost": "Host staging and all synchronization are inside the operation; no zero-copy or performance claim",
+    "storage": "contiguous float32 values; supported int32 indices/copy/argmax outputs",
+    "devices": "CPU or visible GPU zero; MPS uses host staging",
+    "gradients": "requires_grad refused; inference only"
+  },
+  "validation": {
+    "amd": {
+      "status": "passed for the listed cases",
+      "hardware": "AMD Instinct MI300X VF",
+      "target": "gfx942",
+      "compiler": "Mojo 1.0.0 (ed45d567)",
+      "torch": "2.13.0+rocm7.2",
+      "hip": "7.2.53211",
+      "max": "26.5.0",
+      "production_torch_checks": 43,
+      "forced_host_staging_torch_checks": 43,
+      "host_vs_device_buffer_exact_word_cases": 48,
+      "direct_tape_exact_word_cases": 48,
+      "max_checks": 10,
+      "cpu_abi_checks": 6,
+      "host_buffer_entry_refuses_cpu": true,
+      "one_bit_negative_control": true,
+      "fault_controls": {
+        "torch_faults": {
+          "controls": [
+            {
+              "fault": "wrong-operation",
+              "detected": true
+            },
+            {
+              "fault": "stall",
+              "detected": true
+            }
+          ],
+          "restored_exit_code": 0,
+          "original_unchanged": true
+        },
+        "staged_faults": {
+          "controls": [
+            {
+              "fault": "wrong-operation",
+              "detected": true
+            },
+            {
+              "fault": "stall",
+              "detected": true
+            }
+          ],
+          "restored_exit_code": 0,
+          "original_unchanged": true
+        }
+      }
+    },
+    "apple_mps": {
+      "status": "pending",
+      "built": false,
+      "executed": false,
+      "reason": "No local Apple builds/tests authorized in this lane; actual Apple MPS execution and macOS linking belong to the packaging/test handoff"
+    },
+    "nvidia": {
+      "status": "pending; not executed for this change"
+    },
+    "cross_vendor_identity": {
+      "status": "pending; AMD transport checks are not a three-vendor identity result"
+    },
+    "installed_wheels": {
+      "status": "pending"
+    }
+  },
+  "hashes": {
+    "libmojolearn_adapter.so": "c4b49862338749a37cbb1b42caaae3da56cad35999cf00c96981e83d4ffe5e86",
+    "mojolearn_torch.so": "eeb3511d5ae84ccfd0fea1be33caf8f0f7448b53f1368d1b90fdbd38f3f5f0f8",
+    "mojolearn_ops.mojoc": "c849aa5196fbcc8f3d0274b4449a5242b1b74329990a9a614fcd3d893af646d5",
+    "direct_check": "19e2cb2b077231d81c6bab31e17ad55a252ec42722a73c0929e0e45000b781b9"
+  },
+  "evidence": {
+    "local": "/Users/andrewhendel/mojolearn-evidence/mps-adapters-20261023",
+    "r2_key": "measurements/native-adapters/2026-10-23/mps-991f6ade5-amd-evidence.tgz",
+    "archive_sha256": "061c1e2b6a4221a961f13d58dc445ad3ae02f54eb0db4d201173978e224c60d8",
+    "r2_full_readback_verified": true,
+    "retained_files_verified": 190,
+    "compiled_adapter_sources_match_product_commit": true
+  },
+  "pending": [
+    "Actual Apple MPS build and execution, Metal kernel trace and macOS dependency relocation",
+    "NVIDIA adapter qualification and cross-vendor comparison of matching retained outputs",
+    "Installed PyPI wheel packaging/activation and supported Torch/MAX version matrix",
+    "Automatic arbitrary model conversion, native training/backward, other dtypes/layouts and multi-GPU support"
+  ],
+  "handoff": "adapters/PACKAGING_HANDOFF_20261023.txt"
+}

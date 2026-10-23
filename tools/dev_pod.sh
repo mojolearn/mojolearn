@@ -77,7 +77,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 STATE_ROOT="${MOJOLEARN_DEVPOD_STATE:-$HOME/mojolearn-evidence/devpods}"
-# Comma-separated; RunPod places the pod on whichever of these has stock.
+# Comma-separated; v2 tries one GPU type at a time after confirmed stock refusals.
 # Identity needs any NVIDIA; speed is judged before/after on the SAME pod.
 # 2026-09-28: 13 H100s at $3.49/h cost too much in four hours. Identity work
 # needs no H100: the default list stops at the cheap cards, and an H100/H200/A100/B200 in
@@ -93,6 +93,9 @@ MAX_LEASE_MIN="${MOJOLEARN_DEVPOD_MAX_LEASE_MIN:-240}"
 # GPUs per NVIDIA pod: 1, except the shared pods tools/nvidia_central.sh brings up (4x/2x).
 NV_GPU_COUNT="${MOJOLEARN_DEVPOD_GPU_COUNT:-1}"
 [[ "$NV_GPU_COUNT" =~ ^[1-8]$ ]] || { echo "dev_pod: MOJOLEARN_DEVPOD_GPU_COUNT must be 1..8" >&2; exit 2; }
+# NVIDIA uses v2's >=13.0 CUDA floor, required by pinned MAX. An explicit
+# MOJOLEARN_DEVPOD_ALLOWED_CUDA_VERSIONS=13.0,13.2 selects an exact set, but
+# empty/malformed values or ANY version below 13.0 refuse before a create.
 NV_IMAGE="${MOJOLEARN_DEVPOD_IMAGE:-runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04}"
 AMD_GPUS="${MOJOLEARN_DEVPOD_AMD_GPUS:-AMD Instinct MI300X OAM}"
 AMD_IMAGE="${MOJOLEARN_DEVPOD_AMD_IMAGE:-rocm/dev-ubuntu-22.04:6.4.1-complete}"
@@ -185,6 +188,10 @@ load_state() {
     [ -f "$D/state.env" ] || die "no box for $KEY (run: $0 up $lane_arg${VENDOR:+ --vendor $VENDOR})"
     . "$D/state.env"
     PROVIDER=${PROVIDER:-runpod}; BOX_SUDO=${BOX_SUDO:-0}; BOX_ENV=${BOX_ENV:-}; BOX_DIR=${BOX_DIR:-/root/mojolearn}
+    if [ "$PROVIDER" = runpod ]; then
+        # Older state files keep their v1 lifecycle; new NVIDIA rentals persist v2.
+        rp_select_api "${RUNPOD_API_VERSION:-1}" || die "invalid RunPod state API"
+    fi
     HA_RES=${HA_RES:-virtual_machines}
 }
 box_cmd() {  # the command string ssh runs: as root on every provider
@@ -304,37 +311,22 @@ echo HEAD=\$(git rev-parse HEAD)" < /dev/null 2>&1) || { printf '%s\n' "$_out" >
 # was created, the per-attempt dead-man disarmed).
 runpod_create() {  # <retry minutes> <gpus> <image> <amd 0|1>
     POD_NAME="mojolearn-dev-$KEY-$(date -u +%m%d%H%M)"
+    if [ "$4" = 1 ]; then rp_select_api 1; else rp_select_api 2; fi
+    # Keep complete request/response evidence outside D: a confirmed failed
+    # create may remove D, but must never erase the provider's diagnosis.
+    _request_evidence="$STATE_ROOT/$KEY.requests-$(date -u +%Y%m%dT%H%M%SZ)-$$"
+    ( umask 077; mkdir -p "$_request_evidence" ) || die "cannot retain rental evidence"
     rp_call GET "$RP/pods"; case "$RP_CODE" in 2*) ;; *) die "pod listing HTTP $RP_CODE" ;; esac
-    python3 - "$TMPD/create.json" "$POD_NAME" "$3" "$2" "$DISK_GB" "$4" "$ROOT/tools/runpod_ssh_bootstrap.sh" "$( [ "$4" = 1 ] && echo 1 || echo "$NV_GPU_COUNT")" <<'PY'
-import json, os, sys
-from pathlib import Path
-out, name, image, gpus, disk, amd, bootstrap, count = sys.argv[1:]
-req = {"name": name, "imageName": image, "gpuTypeIds": [g.strip() for g in gpus.split(",") if g.strip()], "gpuCount": int(count),
-       "cloudType": "SECURE", "containerDiskInGb": int(disk), "volumeInGb": 0,
-       "ports": ["22/tcp"], "supportPublicIp": True, "interruptible": False}
-# Optional placement filters; defaults preserve existing lane behavior.
-cloud = os.environ.get("MOJOLEARN_DEVPOD_CLOUD_TYPE", "SECURE")
-if cloud not in ("SECURE", "COMMUNITY"):
-    raise SystemExit("MOJOLEARN_DEVPOD_CLOUD_TYPE must be SECURE or COMMUNITY")
-req["cloudType"] = cloud
-if os.environ.get("MOJOLEARN_DEVPOD_MIN_VCPU"):
-    minimum = int(os.environ["MOJOLEARN_DEVPOD_MIN_VCPU"])
-    if minimum < 1:
-        raise SystemExit("MOJOLEARN_DEVPOD_MIN_VCPU must be positive")
-    req["minVCPUPerGPU"] = minimum
-if amd != "1":
-    # THE PINNED MAX NEEDS AN NVIDIA DRIVER >= 580 (CUDA 13.0). On an older
-    # host a GPU binding built without a named arch fails in the pass manager
-    # and a loaded one refuses the driver (lane/algos-ann's H100 pod, 570.211,
-    # 2026-09-27); RunPod filters hosts before provisioning on this field
-    # (tools/kmeans_host_recording_nvidia_leg.sh, gemm_remote_leg.sh).
-    req["allowedCudaVersions"] = ["13.0"]
-if amd == "1" and image.startswith("rocm/"):
-    # plain ROCm images have no ssh; the repo's bootstrap, as release_wheel_smoke.sh --vendor hip
-    req["dockerEntrypoint"] = ["/bin/bash", "-lc"]
-    req["dockerStartCmd"] = [Path(bootstrap).read_text()]
-json.dump(req, open(out, "w"), indent=2)
-PY
+    cp "$TMPD/rp.body" "$_request_evidence/list-before.json" || die "cannot retain pre-create listing"
+    [ "$(rp_py listingvalid)" = yes ] || die "pod listing incomplete or invalid; no create attempted"
+    if [ "$4" = 1 ]; then
+        python3 "$ROOT/tools/runpod_gpu_request.py" "$TMPD/create.json" "$POD_NAME" "$3" "$2" "$DISK_GB" 1 \
+            "$ROOT/tools/runpod_ssh_bootstrap.sh" 1 "" || die "AMD placement validation failed; no create attempted"
+    else
+        python3 "$ROOT/tools/runpod_gpu_request.py" v2 "$TMPD/create.json" "$POD_NAME" "$3" "$2" "$DISK_GB" "$NV_GPU_COUNT" 0 \
+            || die "CUDA/placement validation failed; no create attempted"
+    fi
+    cp "$TMPD/create.json" "$D/create_request.json" || die "cannot retain validated create request"
     # OUT OF STOCK IS RETRIED, NOTHING ELSE IS (2026-09-27). Each attempt arms its own
     # dead-man before the create and disarms it when nothing was created; a
     # create that fails for any reason but stock dies at once. Every attempt is
@@ -345,24 +337,41 @@ PY
     while :; do
         attempt=$(( attempt + 1 ))
         POD_ID=""
+        if [ "$4" != 1 ]; then
+            python3 "$ROOT/tools/runpod_gpu_request.py" v2 "$TMPD/create.json" "$POD_NAME" "$3" "$2" "$DISK_GB" "$NV_GPU_COUNT" "$((attempt - 1))" \
+                || die "CUDA/placement validation failed; no create attempted"
+        fi
+        cp "$TMPD/create.json" "$_request_evidence/request-$attempt.json" || die "cannot retain request; no create attempted"
+        cp "$TMPD/create.json" "$D/create_request.json" || die "cannot retain request; no create attempted"
         arm_mac_deadman $(( READY_TIMEOUT + minutes * 60 + 600 ))
-        say "creating $POD_NAME on RunPod (any of: $2), attempt $attempt. THE BILL STARTS HERE."
+        say "creating $POD_NAME on RunPod API v$RP_API_VERSION (requested types: $2), attempt $attempt. THE BILL STARTS HERE."
         rp_call POST "$RP/pods" "$TMPD/create.json"
-        cp "$TMPD/rp.body" "$D/create_response.json"
+        _create_code=$RP_CODE
+        cp "$TMPD/rp.body" "$_request_evidence/response-$attempt.json" || die "cannot retain create response; dead-man stays armed"
+        printf '%s\n' "$_create_code" > "$_request_evidence/http-$attempt.txt" || die "cannot retain create status; dead-man stays armed"
+        cp "$TMPD/rp.body" "$D/create_response.json" || die "cannot retain create response; dead-man stays armed"
         POD_ID=$(rp_py id)
         [ -z "$POD_ID" ] || break
         _body=$(head -c 300 "$TMPD/rp.body"); rp_call GET "$RP/pods"
+        cp "$TMPD/rp.body" "$_request_evidence/list-after-$attempt.json" || die "cannot retain create recovery listing; dead-man stays armed"
+        case "$RP_CODE" in 2*) ;; *) die "create unresolved; listing HTTP $RP_CODE; dead-man stays armed; evidence $_request_evidence" ;; esac
+        [ "$(rp_py listingvalid)" = yes ] || die "create unresolved; listing incomplete; dead-man stays armed; evidence $_request_evidence"
         POD_ID=$(rp_py byname "$POD_NAME" | awk '{print $1}')
         if [ -n "$POD_ID" ]; then
             echo "$POD_ID" > "$D/deadman/pod_id.txt"; delete_pod "$POD_ID"
             die "create response unparsed but $POD_ID exists by name; deleted, dead-man stays armed"
+        fi
+        if [ "$RP_API_VERSION" = 2 ]; then
+            # A timeout, 5xx, or malformed successful response is not proof
+            # that no pod will appear. Never create a second pod on uncertainty.
+            case "$_create_code" in 4??) ;; *) die "create HTTP $_create_code unresolved; dead-man stays armed; evidence $_request_evidence" ;; esac
         fi
         _p=$(cat "$D/deadman.pid"); pkill -P "$_p" 2>/dev/null || true; kill "$_p" 2>/dev/null || true
         rm -rf "$D/deadman" "$D/deadman.pid"
         printf '%s attempt %s: nothing created: %s\n' "$(date -u +%FT%TZ)" "$attempt" "$_body" >> "$attempts_log"
         if ! printf '%s' "$_body" | grep -qiE 'no (gpu )?instances|currently available|out of stock|insufficient|not enough|no available|unavailable'; then
             rm -rf "$D"
-            die "create failed, nothing was created, and not for stock: $_body"
+            die "create failed, nothing was created, and not for stock: $_body (full response: $_request_evidence)"
         fi
         if [ "$(now)" -ge "$retry_until" ]; then
             say "RunPod out of stock for $1 min ($attempt attempts, $attempts_log); nothing was created"
@@ -399,6 +408,7 @@ write_state() {
         printf 'PROVIDER=%q\nVENDOR=%q\nPOD_ID=%q\nPOD_NAME=%q\nSSH_TARGET=%q\nCOST_HR=%q\nGPU=%q\nBOX_SUDO=%q\nBOX_ENV=%q\nBOX_DIR=%q\n' \
             "$PROVIDER" "$VENDOR" "$POD_ID" "$POD_NAME" "$SSH_TARGET" "$COST_HR" "$GPU" "$BOX_SUDO" "$BOX_ENV" "$BOX_DIR"
         [ "$PROVIDER" != runpod ] || [ "$VENDOR" != nvidia ] || printf 'GPU_COUNT=%q\n' "$NV_GPU_COUNT"
+        [ "$PROVIDER" != runpod ] || printf 'RUNPOD_API_VERSION=%q\n' "$RP_API_VERSION"
         [ "$PROVIDER" != amdhost ] || printf 'SLOT=%q\n' "$SLOT"
         [ -z "${HOST_SLOTS:-}" ] || printf 'HOST_SLOTS=%q\n' "$HOST_SLOTS"
         if [ "$PROVIDER" = hotaisle ]; then
@@ -495,6 +505,7 @@ host)
     ;;
 up)
     [ ! -f "$D/state.env" ] || die "$KEY already has a box ($D/state.env); down it first"
+    [ ! -s "$D/deadman.pid" ] || die "$KEY has an unresolved rental/dead-man; recover its retained evidence before another create"
     if [ "$VENDOR" != amd ]; then
         # 2026-09-28: one or two shared RunPod pods, never one per lane. A lane
         # never rents its own NVIDIA pod; every lane submits to the shared pods.
