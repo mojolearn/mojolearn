@@ -231,30 +231,6 @@ def _as_i32_1d(x, name):
     return a.astype("<i4")
 
 
-def _as_f32_1d(x, name, *, require_finite=True):
-    shape, column = _vector_shape(x, name)
-    if _is_float64(x):
-        # Named rather than silent: cuML has a float64 overload of r2_score,
-        # kl_divergence and silhouette_score and this implementation does not, because
-        # Apple's GPU has no float64 (mojolearn-hardware-limits). The cast is
-        # the caller's to make, so the precision they run at is the precision
-        # they asked for.
-        raise TypeError(
-            f"mojolearn metrics: {name} is float64; the float64 overloads of "
-            "r2_score, kl_divergence and silhouette_score are NOT implemented "
-            "(no float64 on this GPU). Cast to float32 yourself so the "
-            "precision you run at is the one you chose."
-        )
-    out, _ = as_f32_c(x, ndim=len(shape), name=name)
-    if column:
-        out = out.reshape((shape[0],))
-    if require_finite and not all_finite(out):
-        raise ValueError(
-            f"mojolearn metrics: {name} contains NaN or infinity; refused "
-            "here (metrics/README.md HAND-OFF ask 3) rather than letting it "
-            "reach a kernel whose answer for it is a washed sentinel"
-        )
-    return out
 
 
 def _sample_weight_f32(sample_weight, n, caller):
@@ -286,15 +262,6 @@ def _sample_weight_f32(sample_weight, n, caller):
     return w
 
 
-def _pair_1d(a, b, name_a, name_b, loader):
-    x = loader(a, name_a)
-    y = loader(b, name_b)
-    if x.shape[0] != y.shape[0]:
-        raise ValueError(
-            f"mojolearn metrics: {name_a} has {x.shape[0]} entries and "
-            f"{name_b} has {y.shape[0]}; they must be the same length"
-        )
-    return x, y
 
 
 def _prepare_cluster_labels(labels_true, labels_pred):
@@ -419,32 +386,8 @@ def accuracy_score(
     ...                        np.array([0, 1, 0, 0], dtype=np.int32))
     0.75
     """
-    if not is_bool(normalize):
-        raise ValueError("normalize must be a bool")
-    if not normalize:
-        # The COUNT (lane/metrics, 2026-09-27): exact integer matches, or the
-        # Float32 PairSum of the matching rows' weights, from the x_metrics
-        # binding (strings or integers, like scikit-learn). The fraction
-        # keeps its original kernel and bits.
-        from ._expansion_metrics import accuracy_count
-        return accuracy_count(y_true, y_pred, sample_weight, numeric_mode)
-    yt, yp = _pair_1d(y_true, y_pred, "y_true", "y_pred", _as_i32_1d)
-    if sample_weight is not None:
-        w = _sample_weight_f32(sample_weight, int(yt.shape[0]), "accuracy_score")
-        # ORDER MATCHES bindings/_mojolearn_metrics.mojo::accuracy_score_weighted_binding.
-        # n
-        return float(
-            _get_binding(numeric_mode).accuracy_score_weighted(
-                _addr_ro(yt), _addr_ro(yp), _addr_ro(w), [int(yt.shape[0])]
-            )
-        )
-    # ORDER MATCHES bindings/_mojolearn_metrics.mojo::accuracy_score_binding.
-    # n
-    return float(
-        _get_binding(numeric_mode).accuracy_score(
-            _addr_ro(yt), _addr_ro(yp), [int(yt.shape[0])]
-        )
-    )
+    return _NATIVE(None, "family_mcls_accuracy", (_get_binding(numeric_mode), y_true, y_pred, normalize, sample_weight,
+                                                   numeric_mode), _NATIVE_CONTEXT)
 
 
 # Maintainer notes: backed by `ML::Metrics::rand_index` (cuML
@@ -1341,59 +1284,8 @@ def log_loss(y_true, y_pred, *, normalize=True, sample_weight=None, labels=None,
     >>> p = np.array([0.1, 0.9, 0.8, 0.35], dtype=np.float32)
     >>> loss = metrics.log_loss(y, p)
     """
-    if sample_weight is not None:
-        # lane/metrics: the weighted mean of the clipped -log p_true rows.
-        if not is_bool(normalize):
-            raise ValueError("normalize must be a bool")
-        from ._expansion_metrics import log_loss_options
-        return log_loss_options(y_true, y_pred, normalize, sample_weight, labels, numeric_mode)
-    if not is_bool(normalize):
-        raise ValueError("normalize must be a bool")
-    true, kind = _classification_encoded(y_true, "y_true")
-    selected = _selected_labels(labels, kind, sorted(_label_set(true)))  # glue: sorts the distinct class labels
-    if len(selected) < 2:
-        raise ValueError("log_loss requires at least two labels; pass labels for one observed class")
-    mapping = {label: i for i, label in enumerate(selected)}  # glue: class index table
-    if any(label not in mapping for label in _label_set(true)):  # glue: checks the label set against the selected labels
-        raise ValueError("y_true contains a label missing from labels")
-    probabilities = materialize_f32_lists(y_pred, "input")[0]
-    if probabilities.dtype != "<f4":
-        raise TypeError("log_loss probabilities must have dtype float32")
-    if probabilities.ndim not in (1, 2):
-        raise ValueError("log_loss probabilities must have shape (n,), (n,1) or (n,k)")
-    if probabilities.shape[0] != len(true):
-        raise ValueError("y_true and probability row counts differ")
-    binary = probabilities.ndim == 1 or probabilities.shape[1] == 1
-    if binary:
-        if len(selected) != 2:
-            raise ValueError("one-column probabilities require exactly two labels")
-    elif probabilities.shape[1] < 2 or probabilities.shape[1] != len(selected):
-        raise ValueError("probability columns must match the label count (at least two)")
-    if len(true) > 2147483647 or probabilities.size > 2147483647 or (binary and 2 * len(true) > 2147483647):
-        raise ValueError("log_loss exceeds the native Int32 indexing bound")
-    probabilities = as_f32_c(probabilities, ndim=probabilities.ndim, name="probabilities")[0]
-    if not len(true):
-        raise ValueError("log_loss requires at least one sample")
-    # lane cpu2-l7-metrics: the probabilities' check (finite, in [0, 1], rows
-    # summing to one), the binary [1 - p, p] layout, the clipped -log p_true
-    # per row, its PairSum and the mean run in ONE x_metrics device program
-    # (x_metrics/tail.mojo proba_rows, ranking.mojo row_metric, rank_epi.mojo
-    # MEAN); no host probability_rows_f32 pass
-    from ._expansion_metrics import _Prog, _put_proba, _proba_code, _row_mean
-    encoded = _label_map(true, mapping.__getitem__)
-    n, k = len(true), len(selected)
-    prog = _Prog()
-    S, flags = _put_proba(prog, probabilities, n, k, binary)
-    Y = prog.put_i32(encoded)
-
-    def check(prog):
-        code = _proba_code(prog, flags)
-        if code:
-            reasons = {1: "must be finite", 2: "must lie in [0,1]",
-                       3: "rows must sum to one within sqrt(float32 eps)"}
-            raise ValueError("log_loss probabilities " + reasons.get(code, "failed native validation"))
-    return float(_row_mean(S, k, Y, n, "logloss", None, numeric_mode, prog=prog, normalize=bool(normalize),
-                           after=(check,)))
+    return _NATIVE(None, "family_mcls_log_loss", (y_true, y_pred, normalize, sample_weight, labels, numeric_mode),
+                   _NATIVE_CONTEXT)
 
 
 def _binary_ranking_inputs(y_true, y_score, sample_weight):
@@ -1632,84 +1524,10 @@ def confusion_matrix(y_true, y_pred, *, labels=None, sample_weight=None,
     >>> C = metrics.confusion_matrix(np.array([0, 1, 2, 2], dtype=np.int32),
     ...                              np.array([0, 2, 2, 1], dtype=np.int32))
     """
-    if normalize is not None and (not isinstance(normalize, str) or
-                                  normalize not in ("true", "pred", "all")):
-        raise ValueError("normalize must be None, 'true', 'pred' or 'all'")
-    if sample_weight is not None:
-        # lane/metrics: Float64 cells, each the Float32 PairSum of its rows'
-        # weights (x_metrics binding); the unweighted call keeps its bits.
-        from ._expansion_metrics import confusion_matrix_weighted
-        return confusion_matrix_weighted(y_true, y_pred, labels, sample_weight, normalize, numeric_mode)
-    true, pred, kind, observed = _classification_pair(y_true, y_pred, sample_weight)
-    selected = _selected_labels(labels, kind, observed)
-    if not set(selected).intersection(_label_set(true)):
-        raise ValueError("At least one label specified must be in y_true")
-    if len(selected) > 4096:
-        raise ValueError("confusion_matrix supports at most 4096 output labels")
-    yt, yp = _encode_classification(true, pred, selected)
-    norm = {None: 0, "true": 1, "pred": 2, "all": 3}[normalize]
-    result = empty((len(selected), len(selected)), "<i8" if norm == 0 else "<f4")
-    _get_binding(numeric_mode).confusion_matrix(
-        _addr_ro(yt), _addr_ro(yp), _addr(result), [len(true), len(selected), norm])
-    return result
+    return _NATIVE(None, "family_mcls_confusion", (_get_binding(numeric_mode), y_true, y_pred, labels, sample_weight,
+                                                    normalize, numeric_mode), _NATIVE_CONTEXT)
 
 
-def _precision_recall_fscore(y_true, y_pred, *, labels, pos_label, average,
-                            sample_weight, zero_division, numeric_mode, metric):
-    if sample_weight is not None:
-        # lane/metrics: the weighted sums come from the x_metrics binding;
-        # the unweighted call keeps its binding and its bits.
-        from ._expansion_metrics import _prf_weighted
-        return _prf_weighted(y_true, y_pred, labels, pos_label, average, sample_weight,
-                             zero_division, numeric_mode, metric)
-    averages = {None: 0, "binary": 1, "micro": 2, "macro": 3, "weighted": 4}
-    if average is not None and (not isinstance(average, str) or average not in averages):
-        raise ValueError("average must be 'binary', 'micro', 'macro', 'weighted' or None")
-    warn = isinstance(zero_division, str) and zero_division == "warn"
-    if not warn and (is_bool(zero_division) or
-                     not isinstance(zero_division, numbers.Real) or
-                     zero_division not in (0, 1)):
-        raise ValueError("zero_division must be 'warn', 0 or 1")
-    true, pred, kind, observed = _classification_pair(y_true, y_pred, sample_weight)
-    positive = 0
-    if average == "binary":
-        if len(observed) > 2:
-            raise ValueError("average='binary' requires at most two observed classes")
-        positive_labels, positive_kind = _classification_labels([pos_label], "pos_label")
-        if positive_kind != kind:
-            raise ValueError("pos_label must use the same type as the targets")
-        positive_label = positive_labels[0]
-        if positive_label not in observed and len(observed) == 2:
-            raise ValueError("pos_label is not a valid observed label")
-        selected = observed.copy()
-        if positive_label not in selected:
-            selected.append(positive_label)
-        positive = selected.index(positive_label)
-    else:
-        selected = _selected_labels(labels, kind, observed)
-    selected_count = len(selected)
-    # Keep classes outside the requested output set for false-positive and
-    # false-negative accounting. Truncating confusion first would be wrong.
-    selected_set = set(selected)
-    all_labels = selected + [v for v in observed if v not in selected_set]  # glue: appends the observed class labels
-    if len(all_labels) > 715827882:
-        raise ValueError("classification metrics exceed the native class-index bound")
-    yt, yp = _encode_classification(true, pred, all_labels)
-    width = selected_count if average is None else 1
-    output = empty(3 * width + 3, '<f4')
-    _get_binding(numeric_mode).precision_recall_fscore(
-        _addr_ro(yt), _addr_ro(yp), _addr(output),
-        [len(true), len(all_labels), averages[average], positive,
-         0 if warn else int(zero_division), selected_count])
-    if warn and output[3 * width + metric] != 0:
-        import warnings
-        from ._expansion_metrics import _undefined_category
-        name = ("Precision", "Recall", "F-score")[metric]
-        warnings.warn(f"{name} is ill-defined and being set to 0.0 due to zero "
-                      "denominator; use zero_division to control this behavior.",
-                      _undefined_category(), stacklevel=3)
-    values = output[metric * width:(metric + 1) * width]
-    return values.copy() if average is None else float(values[0])
 
 
 def precision_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
@@ -1751,9 +1569,8 @@ def precision_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary
     >>> p = metrics.precision_score(np.array([0, 1, 1, 0], dtype=np.int32),
     ...                             np.array([0, 1, 0, 1], dtype=np.int32))
     """
-    return _precision_recall_fscore(y_true, y_pred, labels=labels, pos_label=pos_label,
-        average=average, sample_weight=sample_weight, zero_division=zero_division,
-        numeric_mode=numeric_mode, metric=0)
+    return _NATIVE(None, "family_mcls_prf", (_get_binding(numeric_mode), 0, y_true, y_pred, labels, pos_label, average,
+                                              sample_weight, zero_division, numeric_mode), _NATIVE_CONTEXT)
 
 
 def recall_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
@@ -1796,9 +1613,8 @@ def recall_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
     >>> r = metrics.recall_score(np.array([0, 1, 1, 0], dtype=np.int32),
     ...                          np.array([0, 1, 0, 1], dtype=np.int32))
     """
-    return _precision_recall_fscore(y_true, y_pred, labels=labels, pos_label=pos_label,
-        average=average, sample_weight=sample_weight, zero_division=zero_division,
-        numeric_mode=numeric_mode, metric=1)
+    return _NATIVE(None, "family_mcls_prf", (_get_binding(numeric_mode), 1, y_true, y_pred, labels, pos_label, average,
+                                              sample_weight, zero_division, numeric_mode), _NATIVE_CONTEXT)
 
 
 def f1_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
@@ -1841,9 +1657,8 @@ def f1_score(y_true, y_pred, *, labels=None, pos_label=1, average="binary",
     >>> f1 = metrics.f1_score(np.array([0, 1, 1, 0], dtype=np.int32),
     ...                       np.array([0, 1, 0, 1], dtype=np.int32), average='macro')
     """
-    return _precision_recall_fscore(y_true, y_pred, labels=labels, pos_label=pos_label,
-        average=average, sample_weight=sample_weight, zero_division=zero_division,
-        numeric_mode=numeric_mode, metric=2)
+    return _NATIVE(None, "family_mcls_prf", (_get_binding(numeric_mode), 2, y_true, y_pred, labels, pos_label, average,
+                                              sample_weight, zero_division, numeric_mode), _NATIVE_CONTEXT)
 
 
 # ===========================================================================
