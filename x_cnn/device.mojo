@@ -3160,12 +3160,12 @@ def gcn_loops_device(
 # (GCNConv / SAGEConv forward; they were NumPy fancy indexing on the host).
 # Copies only: the same words land in the same places.
 
-def _perm_gather_kernel(out: FP, src: FP, idx: IP, n: Int32):
+def _perm_gather_kernel(out_buf: FP, src: FP, idx: IP, n: Int32):
     """out[i] = src[idx[i]]."""
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i >= Int(n):
         return
-    out[i] = src[Int(idx[i])]
+    out_buf[i] = src[Int(idx[i])]
 
 
 def _perm_inverse_kernel(inv: IP, order: IP, n: Int32):
@@ -3176,13 +3176,13 @@ def _perm_inverse_kernel(inv: IP, order: IP, n: Int32):
     inv[Int(order[i])] = Int32(i)
 
 
-def _vals_t_kernel(out: FP, vals_f: FP, inv_f: IP, order_t: IP, n: Int32):
+def _vals_t_kernel(out_buf: FP, vals_f: FP, inv_f: IP, order_t: IP, n: Int32):
     """out[j] = vals_f[inv_f[order_t[j]]]: the forward view's value of the
     edge at transposed position j."""
     var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if j >= Int(n):
         return
-    out[j] = vals_f[Int(inv_f[Int(order_t[j])])]
+    out_buf[j] = vals_f[Int(inv_f[Int(order_t[j])])]
 
 
 def perm_gather_device(src_h: FP, idx_h: IP, out_h: FP, n_src: Int, n: Int) raises:

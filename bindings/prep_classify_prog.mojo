@@ -93,12 +93,12 @@ struct ClsProg(Movable):
             return self.alloc(n)
         return self.scratch(n)
 
-    def put(mut self, value: PythonObject, inout: Bool = False) raises -> Int:
+    def put(mut self, value: PythonObject, in_out: Bool = False) raises -> Int:
         """`_Prog.put` of an admitted float32 buffer (or DeviceRows)."""
         var size = Int(py=value.size)
         var offset = self.alloc(size)
         _ = py_call(self.inputs.append, Python.tuple(offset, value, "f"))
-        if inout and size > 0:
+        if in_out and size > 0:
             _ = py_call(self.inout.append, Python.tuple(offset, offset + size))
         return offset
 
@@ -108,13 +108,13 @@ struct ClsProg(Movable):
         _ = py_call(self.inputs.append, Python.tuple(offset, words, "i"))
         return offset
 
-    def put_list(mut self, values: List[Float64], context: PythonObject, inout: Bool = False) raises -> Int:
+    def put_list(mut self, values: List[Float64], context: PythonObject, in_out: Bool = False) raises -> Int:
         """`_Prog.put_list`: float32 words of a parameter list ([0.0] when empty)."""
         var words = f32_array(len(values), context)
         var dest = F32P(unsafe_from_address=Int(py=classical_address(words)))
         for i in range(len(values)):  # driver-loop: over a parameter list (priors, scalars, model-structure words)
             dest[i] = Float32(values[i])
-        return self.put(words, inout)
+        return self.put(words, in_out)
 
     def put_scalar(mut self, value: Float64, context: PythonObject) raises -> Int:
         var one = List[Float64]()
