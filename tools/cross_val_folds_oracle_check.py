@@ -121,14 +121,6 @@ def _load_identity_break():
     return module
 
 
-class _FoldClf:
-    """A classifier stand-in, as the lane uses. Nothing is fitted."""
-    _estimator_type = "classifier"
-
-    def get_params(self, deep=False):
-        return {}
-
-
 class _FoldReg:
     _estimator_type = "regressor"
 
@@ -391,6 +383,8 @@ def arm_switch(rep, ms, work):
 
 def arm_order(rep, ms, work, rng):
     """What the assignment pins and what only `split_descriptor` pins."""
+    from mojolearn import LogisticRegression
+
     name, labels, _classifier, X = work[0]
     n = len(labels)
     # A permutation that keeps the LABEL SEQUENCE: rotate the rows of each
@@ -418,10 +412,13 @@ def arm_order(rep, ms, work, rng):
                _sha(*[Xp[np.asarray(b)] for b in after]))
 
     y = np.ascontiguousarray(np.asarray(labels, dtype=np.int32))
-    d0 = ms.split_descriptor(X, y, estimator=_FoldClf(), cv=5)
-    d1 = ms.split_descriptor(Xp, y, estimator=_FoldClf(), cv=5)
+    # Exact native classifier metadata only: no fitting, RNG consumption or
+    # descriptor field depends on this estimator's parameters or identity.
+    classifier = LogisticRegression(numeric_mode="identical")
+    d0 = ms.split_descriptor(X, y, estimator=classifier, cv=5)
+    d1 = ms.split_descriptor(Xp, y, estimator=classifier, cv=5)
     rep.same("ORDER", f"{name}: split_descriptor reproduces its own sha256",
-             d0["sha256"], ms.split_descriptor(X, y, estimator=_FoldClf(), cv=5)["sha256"])
+             d0["sha256"], ms.split_descriptor(X, y, estimator=classifier, cv=5)["sha256"])
     rep.differ("ORDER", f"{name}: split_descriptor's sha256 MOVES when the rows move "
                         "(what catches a descriptor that stopped reading X)",
                d0["sha256"], d1["sha256"])
@@ -432,7 +429,7 @@ def arm_order(rep, ms, work, rng):
              d0["fold_assignment_sha256"], d1["fold_assignment_sha256"])
     shuffled = np.ascontiguousarray(X[rng.permutation(n)])
     rep.differ("ORDER", f"{name}: an arbitrary permutation moves split_descriptor too",
-               d0["sha256"], ms.split_descriptor(shuffled, y, estimator=_FoldClf(), cv=5)["sha256"])
+               d0["sha256"], ms.split_descriptor(shuffled, y, estimator=classifier, cv=5)["sha256"])
 
 
 def arm_encoding(rep, ms, work):
