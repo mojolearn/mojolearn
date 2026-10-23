@@ -781,6 +781,9 @@ struct MKit(Movable):
         var ia = self.did(a)
         _ = family_call(self.fn("x_decomp_dev_lu_aux"), ia, lu._d.id, pm._d.id, im._d.id, diag._d.id, st._d.id,
                         mk_ints([n, 1 if clamp else 0]))
+        # The unused diagonal is still a kernel output: its numeric id does
+        # not retain the pooled device buffer while the call is running.
+        _ = diag^
         var stats = List[Float64]()
         for i in range(4):  # small-loop(stats: the four lu_aux status words): 4
             stats.append(mk_at(st, i, self.ctx))
@@ -1000,6 +1003,9 @@ struct MKit(Movable):
             var ia = self.did(a)
             var sid = self.did(a)
             _ = family_call(self.fn("x_decomp_dev_order_f"), ia, sid, out._d.id, cnt._d.id, mk_ints([n, 0, 0]))
+            # Keep the scratch owner through the call, even though only the
+            # sorted indices are returned. An id alone does not own a buffer.
+            _ = cnt^
             return out
         var out = mk_zeros(n, 1, self.ctx)
         if n > 0:
