@@ -287,6 +287,11 @@ def _index_locked(args):
                 del files[other]
     files[fname] = names
     idx["format"] = INDEX_FORMAT
+    # A release rebuild can replace a previously activated development index.
+    # Only the development controller writes a complete development receipt;
+    # do not retain that old label/provenance after a direct merged rebuild.
+    idx.pop("layout", None)
+    idx.pop("provenance", None)
     p = index_path(args.outdir)
     tmp = p.with_suffix(".json.tmp")
     tmp.write_text(json.dumps(idx, indent=1, sort_keys=True) + "\n")

@@ -187,10 +187,18 @@ while read -r stem cls members; do
     "$PY" tools/merged_bindings.py root --stem "$stem" --members "$members" --out "$root" < /dev/null
     count=$(printf '%s' "$members" | tr ',' '\n' | grep -c .)
     echo "== $dir/$stem.so: $count members ($cls flags)"
-    pixi_env_flags=""
-    [ "$layout" != development ] || pixi_env_flags="--environment default"
+    if [ "$layout" = development ]; then
+        # development_build.py fingerprints this exact installed compiler.
+        # An activated environment or a task named "mojo" must not replace it.
+        compiler="$here/.pixi/envs/default/bin/mojo"
+        [ -x "$compiler" ] || { echo "merged_build: install the default pixi environment first" >&2; exit 2; }
+        set -- pixi run --manifest-path "$here/pixi.toml" --environment default \
+            --locked --no-install --executable "$compiler"
+    else
+        set -- pixi run mojo
+    fi
     # shellcheck disable=SC2086  # the flag strings are deliberately word-split
-    pixi run $pixi_env_flags mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
+    "$@" build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} ${MOJOLEARN_BUILD_DEFINE_FLAGS:-} \
         $base_flags $class_flags $link_flags $mode_flags $column_flags $extra_flags \
         -I . -I bindings \
         "$root" -o "$tmpdir/$stem.so" < /dev/null

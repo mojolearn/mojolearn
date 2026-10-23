@@ -1,6 +1,9 @@
 """Development build dependency/cache/activation contracts; no Mojo compilation."""
 import json
+import os
 from pathlib import Path
+import shutil
+import subprocess
 import sys
 
 import pytest
@@ -9,6 +12,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import bincache
 import development_build as dev
 import merged_bindings as merged
+
+SOURCE_REPO = Path(__file__).resolve().parent.parent
 
 
 FACTS = {"available": True, "compiler_sha256": "test-compiler", "version": "test", "os": "test"}
@@ -293,3 +298,45 @@ def test_host_target_normalization_and_refusals(repo, tmp_path):
         plan(repo, tmp_path, dict(ENV, MOJOLEARN_BUILD_DEFINES="MOJOLEARN_TEST_SABOTAGE=1"))
     with pytest.raises(dev.BuildError, match="outside"):
         dev.make_plan(repo, repo / "cache", ["host"], ENV, facts=FACTS, plat="linux")
+
+
+def test_development_shell_executes_the_fingerprinted_compiler(repo, tmp_path):
+    # Capture the actual shell command with inert tool shims. This exercises
+    # group/root/index assembly without invoking any native compiler.
+    for relative in ("bindings/merged_build.sh", "bindings/build_defines.sh", "tools/merged_bindings.py"):
+        shutil.copy2(SOURCE_REPO / relative, repo / relative)
+    compiler = write(repo, ".pixi/envs/default/bin/mojo", "#!/bin/sh\nexit 99\n")
+    compiler.chmod(0o755)
+    bin_dir = tmp_path / "bin"
+    uname = write(bin_dir, "uname", '#!/bin/sh\ncase "$1" in -m) echo x86_64;; *) echo Linux;; esac\n')
+    uname.chmod(0o755)
+    capture = tmp_path / "compiler-argv.json"
+    pixi = write(bin_dir, "pixi", '#!' + sys.executable + '\nimport json, os, pathlib, sys\n'
+        'pathlib.Path(os.environ["CAPTURE"]).write_text(json.dumps(sys.argv[1:]))\n'
+        'pathlib.Path(sys.argv[sys.argv.index("-o") + 1]).write_bytes(b"inert-native-output")\n')
+    pixi.chmod(0o755)
+    output = tmp_path / "output"
+    env = dict(os.environ, PATH=str(bin_dir) + os.pathsep + os.environ["PATH"], CAPTURE=str(capture),
+               MOJOLEARN_MERGED_PYTHON=sys.executable, MOJOLEARN_GPU_ARCHS="sm_89",
+               MOJOLEARN_NUMERIC_MODE="identical", MOJOLEARN_PACKAGE_BYTE_LM="1",
+               PIXI_ENVIRONMENT_NAME="unrelated-active-environment")
+    result = subprocess.run(["sh", "bindings/merged_build.sh", "gpu", "--layout", "development",
+        "--group", "_mojolearn_dev_trees", "--outdir", str(output), "--rootdir", str(tmp_path / "roots")],
+        cwd=repo, env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stdout + result.stderr
+    command = json.loads(capture.read_text())
+    assert command[:9] == ["run", "--manifest-path", str(repo / "pixi.toml"), "--environment", "default",
+                           "--locked", "--no-install", "--executable", str(compiler)]
+    assert command[9] == "build"
+    assert (output / "_mojolearn_dev_trees.so").read_bytes() == b"inert-native-output"
+
+
+def test_return_to_release_index_removes_development_metadata(repo, tmp_path):
+    from types import SimpleNamespace
+    directory = tmp_path / "installed"
+    dev.atomic_json(directory / "_mojolearn_merged.json", {"format": 1, "layout": "development",
+        "files": {".development/old/tree.so": [A], ".development/old/dense.so": [B, BYTE]},
+        "provenance": {"tree": "old"}})
+    merged.cmd_index(SimpleNamespace(outdir=str(directory), stem="_mojolearn_native", members=",".join([A, B, BYTE])))
+    index = json.loads((directory / "_mojolearn_merged.json").read_text())
+    assert index == {"format": 1, "files": {"_mojolearn_native.so": [A, B, BYTE]}}
