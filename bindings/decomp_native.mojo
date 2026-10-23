@@ -12,6 +12,7 @@ from bindings.py_balanced import py_call, py_get, py_type, py_fields
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.ica_native import ica_fit, ica_project
 from bindings.fa_native import fa_fit, fa_query
+from bindings.kpca_native import kpca_fit, kpca_fit_transform, kpca_transform
 from bindings.lda_native import lda_fit, lda_partial_fit, lda_project, lda_query
 from bindings.nmf_native import nmf_fit, nmf_fit_transform, nmf_inverse_transform, nmf_transform
 
@@ -104,6 +105,15 @@ def decomp_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPt
                 result = lda_query(model, args[0], 4, Bool(py=args[1]), context)
             else:
                 raise Error("unknown private LatentDirichletAllocation operation")
+        elif family == "KernelPCA":
+            if operation == "fit":
+                result = kpca_fit(model, args[0], context)
+            elif operation == "fit_transform":
+                result = kpca_fit_transform(model, args[0], context)
+            elif operation == "transform":
+                result = kpca_transform(model, args[0], context)
+            else:
+                raise Error("unknown private KernelPCA operation")
         else:
             raise Error("unknown private decomposition estimator")
         return result.steal_data()

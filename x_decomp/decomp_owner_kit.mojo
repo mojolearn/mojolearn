@@ -137,6 +137,21 @@ trait DecompDev:
                    mut draw: Int, mut nbi: Int, fv: List[Float64]) raises:
         ...
 
+    @staticmethod
+    def sqdist(a: Int, b: Int, dst: Int, na: Int, nb: Int, d: Int) raises:
+        """`x_decomp_dev_sqdist` on device ids (the GPU binding only)."""
+        ...
+
+    @staticmethod
+    def lanczos_dev(ia: Int, iq: Int, iab: Int, n: Int, j0: Int, j1: Int, cap: Int) raises:
+        """`x_decomp_dev_lanczos` on device ids (the GPU binding only)."""
+        ...
+
+    @staticmethod
+    def lanczos_host(pa: F32Ptr, pq: F32Ptr, pab: F32Ptr, n: Int, j0: Int, j1: Int, cap: Int) raises:
+        """`x_decomp_lanczos` on host words (the host binding only)."""
+        ...
+
 
 def words_of(ref words: List[Float32]) -> F32Ptr:
     return F32Ptr(unsafe_from_address=Int(words.unsafe_ptr()))

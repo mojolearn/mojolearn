@@ -12,6 +12,7 @@ from x_decomp.fa_em import FaArgs, fa_em_main_run
 from x_decomp.rotation import ortho_rotation_run
 from x_decomp.lda_fit import LdaArgs, lda_fit_run
 from x_decomp.api import lda_online_run
+from x_decomp.lanczos_host import lanczos_run
 
 
 struct HostDecomp(DecompDev):
@@ -100,3 +101,15 @@ struct HostDecomp(DecompDev):
         var got = lda_online_run[HostExec](px, pc, pe, n, v, nc, bs, mdi, seed, draw, nbi, fv)
         draw = got[0]
         nbi = got[1]
+
+    @staticmethod
+    def sqdist(a: Int, b: Int, dst: Int, na: Int, nb: Int, d: Int) raises:
+        raise Error("x_decomp: no resident matrices on the host binding")
+
+    @staticmethod
+    def lanczos_dev(ia: Int, iq: Int, iab: Int, n: Int, j0: Int, j1: Int, cap: Int) raises:
+        raise Error("x_decomp: no resident matrices on the host binding")
+
+    @staticmethod
+    def lanczos_host(pa: F32Ptr, pq: F32Ptr, pab: F32Ptr, n: Int, j0: Int, j1: Int, cap: Int) raises:
+        _ = lanczos_run(pa, pq, pab, n, j0, j1, cap)

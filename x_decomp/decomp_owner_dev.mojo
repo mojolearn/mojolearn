@@ -13,7 +13,8 @@ from x_decomp.nmf_dev import nmf_nndsvd_dev_run, nmf_solve_dev_run
 from x_decomp.fa_em import FaArgs
 from x_decomp.fa_em_dev import fa_em_main_dev_run
 from x_decomp.rotation_dev import ortho_rotation_dev_run
-from x_decomp.resident import IDN_QR_R_RESIDENT, dev_lda_bound_run, dev_lda_rows_run, dev_qr_r_run
+from x_decomp.resident import IDN_QR_R_RESIDENT, dev_lda_bound_run, dev_lda_rows_run, dev_qr_r_run, dev_sqdist_run
+from x_decomp.lanczos_dev import dev_lanczos_run
 from x_decomp.lda_fit import LdaArgs
 from x_decomp.lda_fit_dev import lda_fit_dev_run
 from x_decomp.kit_device import lda_online_dev_run
@@ -118,3 +119,15 @@ struct DevDecomp(DecompDev):
     def lda_online(px: F32Ptr, pc: F32Ptr, pe: F32Ptr, n: Int, v: Int, nc: Int, bs: Int, mdi: Int, seed: Int,
                    mut draw: Int, mut nbi: Int, fv: List[Float64]) raises:
         lda_online_dev_run(px, pc, pe, n, v, nc, bs, mdi, seed, draw, nbi, fv)
+
+    @staticmethod
+    def sqdist(a: Int, b: Int, dst: Int, na: Int, nb: Int, d: Int) raises:
+        _ = dev_sqdist_run(a, b, dst, na, nb, d, 0, 2.0)
+
+    @staticmethod
+    def lanczos_dev(ia: Int, iq: Int, iab: Int, n: Int, j0: Int, j1: Int, cap: Int) raises:
+        _ = dev_lanczos_run(ia, iq, iab, n, j0, j1, cap)
+
+    @staticmethod
+    def lanczos_host(pa: F32Ptr, pq: F32Ptr, pab: F32Ptr, n: Int, j0: Int, j1: Int, cap: Int) raises:
+        raise Error("x_decomp: the GPU binding runs Lanczos on resident matrices")

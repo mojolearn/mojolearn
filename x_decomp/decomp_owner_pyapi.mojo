@@ -17,6 +17,7 @@ from x_decomp.nmf_owner import nmf_inverse_run, nmf_run
 from x_decomp.fa_owner import fa_fit_run, fa_query_run
 from x_decomp.lda_fit import LdaArgs
 from x_decomp.lda_owner import lda_run
+from x_decomp.kpca_owner import kpca_eig_run
 
 
 def door_ptr(p: PythonObject, i: Int) raises -> F32Ptr:
@@ -208,3 +209,29 @@ def lda_py[E: Exec, D: RDev, RES: Bool, X: DecompDev](p: PythonObject, f: Python
     with GILReleased(Python()):
         got = lda_run[E, D, RES, X](op, x, n, v, nc, fresh, a, draw, nbi, flag, ci, ei, co, eo, out, text)
     return Python.tuple(PythonObject(got[0]), PythonObject(draw), PythonObject(nbi), PythonObject(got[1]))
+
+
+def kpca_eig_py[E: Exec, D: RDev, RES: Bool, X: DecompDev](p: PythonObject, f: PythonObject) raises -> PythonObject:
+    """KernelPCA.fit's eigenpairs. p = [centered kernel (n x n; unread when
+    resident), x (n x d; read when resident), resident, n, d, n_components
+    (-1: None), lanczos, remove_zero_eig, values (n room), vectors (n x
+    kept room), cols (n), all (1)]; f = [gamma]. Returns the kept count."""
+    if len(p) != 12 or len(f) != 1:
+        raise Error("x_decomp_kpca_eig: params must hold the kernel, the input, the options and four outputs")
+    var kc = door_ptr(p, 0)
+    var x = door_ptr(p, 1)
+    var resident = Int(py=p[2]) != 0
+    var n = door_dim(p, 3)
+    var d = door_dim(p, 4)
+    var requested = Int(py=p[5])
+    var lanczos = Int(py=p[6]) != 0
+    var remove_zero = Int(py=p[7]) != 0
+    var pv = door_ptr(p, 8)
+    var pe = door_ptr(p, 9)
+    var pc = door_ptr(p, 10)
+    var pa = door_ptr(p, 11)
+    var gamma = Float64(py=f[0])
+    var kept = 0
+    with GILReleased(Python()):
+        kept = kpca_eig_run[E, D, RES, X](kc, x, resident, n, d, gamma, requested, lanczos, remove_zero, pv, pe, pc, pa)
+    return PythonObject(kept)
