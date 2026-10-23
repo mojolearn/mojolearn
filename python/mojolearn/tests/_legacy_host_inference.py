@@ -153,6 +153,31 @@ def kernel_model(model, X, name, public=True):
     return out.reshape((m, q))
 
 
+def _validate_whiten_state(model):
+    """The deleted `PCA._validate_whiten_state` (lane migrate-classical-a2
+    moved PCA's checks into the native owner); this oracle keeps its own
+    copy: dtypes, shapes and layouts of the four whitening arrays."""
+    from mojolearn._array import Array
+
+    def view(value):
+        if isinstance(value, Array):
+            return value
+        try:
+            return Array.from_buffer(value)
+        except (TypeError, ValueError):
+            return None
+
+    for name, shape in (("components_", (model.n_components_, model.n_features_in_)),
+                        ("mean_", (model.n_features_in_,)),
+                        ("singular_values_", (model.n_components_,)),
+                        ("explained_variance_", (model.n_components_,))):
+        a = view(getattr(model, name, None))
+        if a is None or a.dtype != "<f4" or tuple(a.shape) != shape or not a.flags["C_CONTIGUOUS"]:
+            raise ValueError(f"mojolearn PCA whitening requires finite C-order float32 {name} with shape {shape}")
+    if model.n_samples_ < 2:
+        raise ValueError("mojolearn PCA whitening requires fit rows >=2 and nonnegative singular values/variance")
+
+
 def projection(model, X, name, inverse=False):
     """Frozen 32011bb32 decomposition preparation and CPU kernel contract."""
     # Test-only oracle: use the unchanged numerical bindings while retaining
@@ -166,7 +191,7 @@ def projection(model, X, name, inverse=False):
     out = empty((rows, features if inverse else components), "<f4")
     binding = model._bind("_mojolearn_estimators")
     if name == "PCA" and model.whiten:
-        model._validate_whiten_state()
+        _validate_whiten_state(model)
         if inverse:
             binding.pca_whiten_inverse_transform(addr_ro(x, name="z"),
                 addr_ro(model.components_, name="components_"), addr_ro(model.singular_values_, name="singular_values_"),

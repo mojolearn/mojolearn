@@ -247,9 +247,7 @@ def tsvd_fit(model: PythonObject, source: PythonObject, context: PythonObject) r
                     + "'arpack' is scipy's svds (implicitly restarted Lanczos), a different algorithm; "
                     + "accepting the name and running the Gram arm would be a silent substitution, which is "
                     + "why this raises (decomposition/NOT_IMPLEMENTED.tsv)")
-    if _host_only(model):
-        raise Error("ImportError: mojolearn: no CPU implementation of the TruncatedSVD fit on the host class; "
-                    + "the host TruncatedSVD transforms a saved model only")
+    var host = _host_only(model)
     var x = decomp_input(source, "TruncatedSVD", context)
     py_setitem(fields, "input_copied_", PythonObject(decomp_copied(source, context)))
     var rows = Int(py=x.shape[0])
@@ -258,7 +256,10 @@ def tsvd_fit(model: PythonObject, source: PythonObject, context: PythonObject) r
         raise Error(_too_small(rows, cols))
     var nc = _components(fields, rows, cols)
     var mode = _mode(fields, context)
-    var entries = _entries(mode, context)
+    # the host class trains on the CPU: the estimators host binding of its
+    # `_bind` serves the same entry names (CPU TRAINING IS PUBLIC)
+    var entries = (py_call(Python.import_module("builtins").vars, py_call(model._bind, "_mojolearn_estimators"))
+                   if host else _entries(mode, context))
     if algorithm == "randomized":
         _randomized(model, fields, x, rows, cols, nc, mode, context)
     else:
