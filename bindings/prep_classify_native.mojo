@@ -12,6 +12,7 @@
 # scoring program instead of a second program over a downloaded block (the same
 # matmul stage over the same words).
 from std.memory import memcpy
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -1501,7 +1502,7 @@ def _dispatch(model: PythonObject, operation: String, var args: PythonObject, va
             lda_native_labels(args[1], context, operation != "score")
         if operation != "fit" and operation != "fit_transform":
             lda_require_fitted(model, operation, context)
-            fields = py_call(Python.import_module("builtins").dict, fields)
+            fields = py_call(native_loaded_module("builtins").dict, fields)
             py_setitem(fields, "classes_", classifier_label_list(fields["classes_"], context))
     elif kind == "gnb" and py_get(context, "cv_fixed_owner") is not None:
         context = fixed_owner_context(context)

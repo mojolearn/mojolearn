@@ -7,6 +7,7 @@
 # refusals keep the Python functions' wording and order. A delegated method
 # is the caller's fitted estimator's own (a mojolearn estimator's is itself
 # one native call); its exception reaches the caller unchanged.
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setattr, py_setitem
 from bindings.py_attr import py_attr
@@ -45,7 +46,7 @@ def _msel_best(model: PythonObject, context: PythonObject) raises -> PythonObjec
 
 def msel_operation(model: PythonObject, operation: String, args: PythonObject,
                    context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if operation.startswith("family_msel_parallel_"):
         return msel_parallel_operation(operation, args, context)
     if operation == "family_msel_search_init":

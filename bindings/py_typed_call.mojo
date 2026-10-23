@@ -3,6 +3,7 @@
 # callee raises (another native entry's ValueError/TypeError/... refusal), so
 # the caller's door re-raises that class instead of a bare Exception. Kept out
 # of bindings/py_balanced.mojo so only the doors that use it rebuild.
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call
@@ -34,7 +35,7 @@ def typed_python_error() -> Error:
                 or name == "RuntimeError" or name == "NotImplementedError" or name == "ZeroDivisionError"
                 or name == "OverflowError" or name == "ArithmeticError" or name == "ImportError"
                 or name == "FileNotFoundError"):
-            var b = Python.import_module("builtins")
+            var b = native_loaded_module("builtins")
             if py_call(b.getattr, b, PythonObject(name)) is cls:
                 return Error(name + ": " + String(error))
     except:

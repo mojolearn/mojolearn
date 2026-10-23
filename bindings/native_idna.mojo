@@ -7,6 +7,7 @@ unicodedata's compiled C database; all mapping, validation and encoding control
 runs in Mojo. Python codec registration/search/encode functions are never used.
 """
 from std.ffi import _Global
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 from core.native_idna_impl import idna_punycode
@@ -36,7 +37,7 @@ comptime IDNA_BOUNDARY = _Global[
 
 def idna_initialize() raises:
     var b = IDNA_BOUNDARY.get_or_create_ptr()
-    b[].bi = Python.import_module("builtins")
+    b[].bi = native_loaded_module("builtins")
     var unicode = Python.import_module("unicodedata").ucd_3_2_0
     b[].normalize = unicode.normalize
     b[].category = unicode.category

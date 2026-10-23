@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Fixed scorer records call verified compiled estimator/metric entries. The
 # Python function objects identify import-time plans; they are never invoked.
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.family_common import family_call, family_array
@@ -23,7 +24,7 @@ def msel_metric_plan(function: PythonObject, context: PythonObject) raises -> Py
 
 
 def msel_scorer_fields(scorer: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = context["family_msel_scorer_class"]
     if py_type(scorer) is not cls:
         raise Error("TypeError: Python scorer callbacks are not accepted; use get_scorer or make_scorer with a native metric")
@@ -43,7 +44,7 @@ def msel_scorer_fields(scorer: PythonObject, context: PythonObject) raises -> Py
 
 def msel_metric_call(function: PythonObject, y: PythonObject, predicted: PythonObject,
                      keywords: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var plan = msel_metric_plan(function, context)
     var entry = plan["entry"]
     if entry is None or py_type(entry) is not py_type(b.len):
@@ -96,7 +97,7 @@ def _scorer_column(predicted: PythonObject, context: PythonObject) raises -> Pyt
     var rows = Int(py=array.shape[0])
     var result = family_array(Python.tuple(rows), "<f4", context)
     var entry = context["family_msel_entries"]["msel_proba_column"]
-    if py_type(entry) is not py_type(Python.import_module("builtins").len):
+    if py_type(entry) is not py_type(native_loaded_module("builtins").len):
         raise Error("ImportError: native probability column entry is unavailable")
     _ = family_call(entry, classical_address(array), context["family_msel_codes"][array.dtype],
                     PythonObject(rows), PythonObject(2), PythonObject(1), classical_address(result))
@@ -107,7 +108,7 @@ def _scorer_column(predicted: PythonObject, context: PythonObject) raises -> Pyt
 
 def msel_scorer_call(scorer: PythonObject, estimator: PythonObject, x: PythonObject, y: PythonObject,
                      sample_weight: PythonObject, memo: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = msel_scorer_fields(scorer, context)
     var model = msel_estimator_plan(estimator, context)
     var methods = fields["_response_method"]

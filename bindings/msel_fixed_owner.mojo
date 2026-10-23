@@ -2,6 +2,7 @@
 # Admission/parameter updates for exact built-in estimator schemas whose
 # constructors only store the supplied parameter objects. Numerical work
 # continues through each estimator's existing native owner.
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.classical_attributes import classical_check_layout, _type_fields
@@ -15,7 +16,7 @@ def _parameter(name: PythonObject, value: PythonObject, context: PythonObject) r
     classical_admit_value(value, context)
     if py_contains(context["cv_fixed_owner"]["sequence_parameters"], name):
         return
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_type(value)
     if value is not None and cls is not b.int and cls is not b.float and cls is not b.bool and cls is not b.str and not _one_of(cls, context["scalar_types"]):
         raise Error("TypeError: native CV scalar configuration cannot invoke conversion or array computation hooks")
@@ -63,7 +64,7 @@ def fixed_owner_fields(model: PythonObject, context: PythonObject) raises -> Pyt
 
 def fixed_owner_set_params(model: PythonObject, values: PythonObject,
                            context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = fixed_owner_fields(model, context)
     var plan = context["cv_fixed_owner"]
     if py_type(values) is not b.dict:

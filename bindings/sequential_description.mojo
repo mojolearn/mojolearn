@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Native Sequential model-description and option metadata."""
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.sequential_admission import sequential_integer, sequential_admit_value
 from bindings.py_balanced import py_call, py_contains, py_fields, py_setitem
@@ -20,7 +21,7 @@ def _positive(value: PythonObject, name: String, low: Int, context: PythonObject
 
 
 def _shape(value: PythonObject, name: String, infer: Bool, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var source = py_call(b.tuple, value)
     sequential_admit_value(source, context)
     if len(source) < 1 or len(source) > 6:
@@ -36,7 +37,7 @@ def _shape(value: PythonObject, name: String, infer: Bool, context: PythonObject
 
 def sequential_append(model: PythonObject, code: PythonObject, a0: PythonObject,
                       a1: PythonObject, f: PythonObject, supplied: PythonObject) raises:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var args = Python.list(a0, a1, 0, 0, 0, 0) if supplied is None else py_call(b.list, supplied)
     var fields = sequential_fields(model)
     _ = py_call(fields["_layers"].append, Python.tuple(code, a0, a1, f, py_call(b.tuple, args)))
@@ -44,7 +45,7 @@ def sequential_append(model: PythonObject, code: PythonObject, a0: PythonObject,
 
 def _arguments(kind: String, supplied: PythonObject, keywords: PythonObject,
                names: PythonObject, defaults: PythonObject, required: Int) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if len(supplied) > len(names):
         raise Error("TypeError: " + kind + " received too many positional arguments")
     var result = py_call(b.list, defaults)
@@ -69,7 +70,7 @@ def _arguments(kind: String, supplied: PythonObject, keywords: PythonObject,
 
 def sequential_add(model: PythonObject, kind_arg: PythonObject, supplied: PythonObject,
                    keywords: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if not Bool(py=py_call(b.isinstance, kind_arg, b.str)):
         raise Error("kind must name a supported Sequential layer")
     var kind = String(kind_arg.lower())
@@ -141,7 +142,7 @@ def sequential_add(model: PythonObject, kind_arg: PythonObject, supplied: Python
 
 
 def sequential_compile(model: PythonObject, options: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var loss = options[0]
     var optimizer = options[1]
     var schedule = options[9]
@@ -174,7 +175,7 @@ def sequential_compile(model: PythonObject, options: PythonObject, context: Pyth
 
 
 def sequential_program(model: PythonObject, n_features: PythonObject, sample: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var layers = sequential_fields(model)["_layers"]
     var result = Python.list()
     if sample is None:
@@ -221,7 +222,7 @@ def sequential_layers(model: PythonObject, context: PythonObject) raises -> Pyth
 
 
 def sequential_sample(model: PythonObject, value: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = sequential_fields(model)
     var shape = fields["input_shape"]
     var nd = Int(py=value.ndim)

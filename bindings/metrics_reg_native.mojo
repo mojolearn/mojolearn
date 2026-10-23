@@ -15,6 +15,7 @@
 # Python `words(out, 2, "d")` read them. Same program, same kernels: the
 # bits do not move.
 from std.memory import memcpy, bitcast
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setattr, py_setitem, py_fields
 from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
@@ -313,7 +314,7 @@ def _reg_target(source: PythonObject, name: String, caller: String, context: Pyt
     """One `_Reg` target: `materialize_f32_lists`, the float32 dtype rule,
     (n,) as (n, 1), the nonempty rank rule, C order, finite. Returns
     (array, n, n_outputs)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var view = classical_view(source, context, name)
     var typestr = classical_dtype_str(view, context)
     if (typestr == "<f8" or typestr == "<i8") and not classical_is_array(source, context):
@@ -382,7 +383,7 @@ def _reg_new(args: PythonObject, multioutput: PythonObject, caller: String, vari
              context: PythonObject) raises -> _Reg:
     """`_Reg(y_true, y_pred, sample_weight, multioutput, caller)` from
     args = (y_true, y_pred, sample_weight, ...)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var y = _reg_target(args[0], "y_true", caller, context)
     var p = _reg_target(args[1], "y_pred", caller, context)
     var n = Int(py=y[1])
@@ -422,7 +423,7 @@ def _metric_real(value: PythonObject, context: PythonObject) raises -> Bool:
 
 def _check_alpha(alpha: PythonObject, context: PythonObject) raises -> Float64:
     """`_expansion_metrics._check_alpha`: a real number in [0, 1]."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if not _metric_real(alpha, context):
         raise Error("alpha must be a real number in [0, 1]")
     var value = metric_float(alpha, context)
@@ -491,7 +492,7 @@ def _max_error(args: PythonObject, context: PythonObject) raises -> PythonObject
 
 def _explained_variance(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """args = (y_true, y_pred, sample_weight, multioutput, force_finite, mode)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var r = _reg_new(args, args[3], "explained_variance_score", True, context)
     var terms = context["family_metrics_terms"]
     var sq = Int(py=terms["sq"])
@@ -518,7 +519,7 @@ def _explained_variance(args: PythonObject, context: PythonObject) raises -> Pyt
 def _tweedie_power(power: PythonObject, context: PythonObject) raises -> Float64:
     if not _metric_real(power, context):
         raise Error("power must be a real number")
-    return Float64(py=family_call(Python.import_module("builtins").float, power))
+    return Float64(py=family_call(native_loaded_module("builtins").float, power))
 
 
 def _tweedie_check(flags_y: Int, flags_p: Int, power: Float64, shown: String, arena: PythonObject) raises:
@@ -548,7 +549,7 @@ def _tweedie(args: PythonObject, power_obj: PythonObject, caller: String, d2: Bo
         raise Error("Multioutput not supported in " + caller)
     if d2 and r.n < 2:
         _undefined("D^2 score is not well-defined with less than two samples.", context)
-        return py_call(Python.import_module("builtins").float, PythonObject("nan"))
+        return py_call(native_loaded_module("builtins").float, PythonObject("nan"))
     var terms = context["family_metrics_terms"]
     var tweedie = Int(py=terms["tweedie"])
     r.program(power, context)
@@ -584,7 +585,7 @@ def _d2_pinball(args: PythonObject, alpha_obj: PythonObject, context: PythonObje
     var r = _reg_new(args, args[3], "d2_pinball_score", False, context)
     if r.n < 2:
         _undefined("D^2 score is not well-defined with less than two samples.", context)
-        return py_call(Python.import_module("builtins").float, PythonObject("nan"))
+        return py_call(native_loaded_module("builtins").float, PythonObject("nan"))
     var terms = context["family_metrics_terms"]
     var pinball = Int(py=terms["pinball"])
     r.program(alpha, context)
@@ -601,7 +602,7 @@ def _d2_pinball(args: PythonObject, alpha_obj: PythonObject, context: PythonObje
 def _r2_options(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`r2_score_options`: SS_res over SS_tot per output, one program;
     args = (y_true, y_pred, sample_weight, multioutput, force_finite, mode)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var r = _reg_new(args, args[3], "r2_score", True, context)
     if r.n < 2:
         _undefined("R^2 score is not well-defined with less than two samples.", context)

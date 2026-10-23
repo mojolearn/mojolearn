@@ -3,6 +3,7 @@
 # bounds, dtype validation and member dispatch stay here. Connected C codecs
 # only decompress bytes; Python zipfile/ast/NumPy load helpers never execute.
 from std.collections import Dict
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
@@ -695,7 +696,7 @@ def classical_archive_read(path: PythonObject, context: PythonObject) raises -> 
 
 def _archive_dtype_name(value: PythonObject, context: PythonObject) raises -> String:
     # The dtype a refusal names, as `_serialize._dtype_name` named it.
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if classical_is_array(value, context) or (classical_numpy(context) and py_type(value) is context["ndarray"]):
         return classical_dtype_str(value, context)
     if py_type(value) is b.str:

@@ -3,6 +3,7 @@
 # estimator at a time; the driver sends a complete wave before reading it in
 # fold order. No Python task loop, pickle reducer, estimator or scorer callback.
 from std.ffi import external_call
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem
@@ -33,7 +34,7 @@ def msel_parallel_initialize(context: PythonObject) raises:
 
 
 def _devices(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(value) is not b.tuple and py_type(value) is not b.list:
         raise Error("TypeError: devices must be an explicit list or tuple of distinct nonnegative integers")
     if len(value) == 0:
@@ -77,7 +78,7 @@ def _worker_error(error: Error, context: PythonObject) raises -> String:
         for i in range(3):  # small-loop(release the three original references even if packaging fails)
             if words[i] != 0:
                 cpy.lib.get_function[NoneType]("Py_DecRef")(words[i])
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var name = String("native worker exception")
     if owned[0] is not None and py_type(owned[0]) is b.type:
         name = String(py_call(b.type.__dict__["__name__"].__get__, owned[0]))
@@ -92,7 +93,7 @@ def _worker_error(error: Error, context: PythonObject) raises -> String:
 
 
 def _fold(request: PythonObject, inventory: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(request) is not b.tuple or len(request) != 9 or py_type(request[1]) is not b.int or py_type(request[8]) is not b.bool:
         raise Error("ValueError: malformed native CV fold request")
     var estimator = msel_parallel_model_unpack(request[2], context)
@@ -118,7 +119,7 @@ def _worker_request(socket: PythonObject, envelope: PythonObject, mut inventory:
     var sequence = Int(py=py_get(envelope[0], "sequence", -1))
     try:
         var request = envelope[1]
-        var b = Python.import_module("builtins")
+        var b = native_loaded_module("builtins")
         if py_type(request) is not b.tuple or len(request) < 1 or py_type(request[0]) is not b.str:
             raise Error("ValueError: malformed native CV worker request")
         var result = PythonObject(None)
@@ -153,7 +154,7 @@ def msel_parallel_worker(argv: PythonObject, context: PythonObject) raises:
 
 
 def msel_parallel_require_batch(result: PythonObject, start: Int, count: Int) raises:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(result) is not b.list or len(result) != count:
         raise Error("ValueError: cross-validation workers returned an incomplete fold batch")
     for i in range(len(result)):  # driver-loop: validate all reply envelopes before consuming any score

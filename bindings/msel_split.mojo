@@ -15,6 +15,7 @@
 # refusals are still raised at the first `next`.
 from std.memory import memcpy
 from std.os import getenv
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
 from bindings.classical_arrays import classical_wrap_array
@@ -575,7 +576,7 @@ def msel_strat_group_split(x: PythonObject, y: PythonObject, groups: PythonObjec
         n_classes = Int(py=fs[1])
     else:
         var got = _encode_first_seen(msel_labels_list(y, "y", context), context)
-        var store = family_call(Python.import_module("array").array, PythonObject("i"), got[0])
+        var store = family_call(native_loaded_module("array").array, PythonObject("i"), got[0])
         yenc = classical_wrap_array(store, Python.tuple(len(store)), "<i4", "C", context)
         n_classes = Int(py=got[1])
     if Int(py=yenc.size) != n:
@@ -652,7 +653,7 @@ def msel_loo_split(x: PythonObject, model: PythonObject, context: PythonObject) 
     if n <= 1:
         raise Error("Cannot perform LeaveOneOut with n_samples=" + String(n) + ".")
     var b = msel_b()
-    var items = py_call(b.zip, py_call(Python.import_module("itertools").repeat, PythonObject(n)),
+    var items = py_call(b.zip, py_call(native_loaded_module("itertools").repeat, PythonObject(n)),
                         py_call(b.range, PythonObject(n)))
     return msel_lazy(model, "family_msel_split_loo_at", items, context)
 
@@ -686,7 +687,7 @@ def msel_lpo_split(x: PythonObject, model: PythonObject, context: PythonObject) 
         _ = py_call(one.append, Python.tuple(msel_arange(0, n, context), msel_new(0, "<i8", context)))
         return one
     var b = msel_b()
-    var itertools = Python.import_module("itertools")
+    var itertools = native_loaded_module("itertools")
     var combos = py_call(itertools.combinations, py_call(b.range, PythonObject(n)), PythonObject(p))
     var items = py_call(b.zip, py_call(itertools.repeat, PythonObject(n)), combos)
     return msel_lazy(model, "family_msel_split_lpo_at", items, context)
@@ -695,7 +696,7 @@ def msel_lpo_split(x: PythonObject, model: PythonObject, context: PythonObject) 
 def msel_lpo_at(args: PythonObject, context: PythonObject) raises -> PythonObject:
     """One LeavePOut split: the combination's rows as the test set."""
     var n = Int(py=args[0])
-    var combo = family_call(Python.import_module("array").array, PythonObject("q"), args[1])
+    var combo = family_call(native_loaded_module("array").array, PythonObject("q"), args[1])
     var k = len(combo)
     var result = msel_split_indices(Int(py=py_call(combo.buffer_info)[0]) if k else 0, k, n, context)
     # The integer address does not retain its array owner. Keep the complete
@@ -737,7 +738,7 @@ def msel_logo_split(x: PythonObject, groups: PythonObject, model: PythonObject,
         raise Error("The groups parameter contains fewer than 2 unique groups (" + family_str(gc.classes) + "). "
                     + "LeaveOneGroupOut expects at least 2.")
     var b = msel_b()
-    var items = py_call(b.zip, py_call(Python.import_module("itertools").repeat, _group_state(gc)),
+    var items = py_call(b.zip, py_call(native_loaded_module("itertools").repeat, _group_state(gc)),
                         py_call(b.range, PythonObject(gc.m)))
     return msel_lazy(model, "family_msel_split_logo_at", items, context)
 
@@ -759,7 +760,7 @@ def msel_lpgo_split(x: PythonObject, groups: PythonObject, model: PythonObject,
         raise Error("The groups parameter contains fewer than (or equal to) n_groups (" + family_str(n_groups)
                     + ") numbers of unique groups (" + family_str(gc.classes) + ").")
     var b = msel_b()
-    var itertools = Python.import_module("itertools")
+    var itertools = native_loaded_module("itertools")
     var combos = py_call(itertools.combinations, py_call(b.range, PythonObject(gc.m)), n_groups)
     var items = py_call(b.zip, py_call(itertools.repeat, _group_state(gc)), combos)
     return msel_lazy(model, "family_msel_split_lpgo_at", items, context)
@@ -1016,7 +1017,7 @@ def msel_n_splits(model: PythonObject, x: PythonObject, y: PythonObject, groups:
     """`<splitter>.get_n_splits(X, y, groups)`."""
     var b = msel_b()
     _ = _splitter_fields(model, context)
-    var math = Python.import_module("math")
+    var math = native_loaded_module("math")
     if msel_is(model, "LeaveOneOut", context):
         if x is None:
             raise Error("The 'X' parameter should not be None.")
@@ -1050,7 +1051,7 @@ def _comb(n: PythonObject, k: PythonObject) raises -> PythonObject:
     """`_comb(n, k)`: n choose k in exact integers, 0 outside [0, n]."""
     if msel_cmp("lt", k, PythonObject(0)) or msel_cmp("gt", k, n):
         return PythonObject(0)
-    return family_call(Python.import_module("math").comb, n, k)
+    return family_call(native_loaded_module("math").comb, n, k)
 
 
 # ---------------------------------------------------------------- check_cv
@@ -1098,7 +1099,7 @@ def msel_check_cv(cv_in: PythonObject, y: PythonObject, classifier: Bool, shuffl
             stratify = msel_truth(native)
         elif classifier and y is not None:
             var labels = msel_flatten(y, context)
-            var itertools = Python.import_module("itertools")
+            var itertools = native_loaded_module("itertools")
             var all_str = msel_truth(family_call(b.all, py_call(b.map, b.isinstance, labels, py_call(itertools.repeat, b.str))))
             if all_str:
                 stratify = True

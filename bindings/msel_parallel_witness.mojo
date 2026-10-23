@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native completed-fold capture. The testing controller retains these actual
 # bytes after the public operation; no scorer/capture callback enters a fold.
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.family_common import family_call
@@ -47,7 +48,7 @@ def _artifacts(context: PythonObject) raises -> PythonObject:
 
 def msel_parallel_capture(model: PythonObject, x: PythonObject, y: PythonObject,
                           score: PythonObject, inventory: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var metadata = context["family_msel_parallel"]
     if py_type(metadata["binding_vendor"]) is not py_type(b.len) or py_type(metadata["binding_mode"]) is not py_type(b.len):
         raise Error("TypeError: CV capture requires native vendor and numeric-mode witnesses")

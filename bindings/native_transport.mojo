@@ -3,6 +3,7 @@
 # only for exact builtin containers and an opaque fd-owning capsule. Calling
 # CPython's socket/posix wrappers would invoke Python audit hooks.
 from std.ffi import _Global, c_int, c_uint, c_size_t, external_call
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -46,13 +47,13 @@ comptime TRANSPORT_BOUNDARY = _Global[
 
 def transport_initialize() raises:
     var t = TRANSPORT_BOUNDARY.get_or_create_ptr()
-    t[].bi = Python.import_module("builtins")
+    t[].bi = native_loaded_module("builtins")
     var entry = Python.import_module("_json").encode_basestring_ascii
     if py_type(entry) is not py_type(t[].bi.len):
         raise Error("transport: JSON quoting requires its native C entry")
     t[].json_string = entry
-    var array_module = Python.import_module("array")
-    if py_type(array_module) is not py_type(Python.import_module("sys")):
+    var array_module = native_loaded_module("array")
+    if py_type(array_module) is not py_type(native_loaded_module("sys")):
         raise Error("transport: array buffers require their native module")
     var array_type = py_get(native_numpy_module_fields(array_module), "array")
     if py_type(array_type) is not t[].bi.type:
@@ -68,7 +69,7 @@ def transport_initialize() raises:
         raise Error("transport: array buffer type has a different extension owner")
     t[].array_type = array_type
     t[].numpy_context = t[].bi.dict()
-    py_setitem(t[].numpy_context, "modules", Python.import_module("sys").modules)
+    py_setitem(t[].numpy_context, "modules", native_loaded_module("sys").modules)
     idna_initialize()
 
 

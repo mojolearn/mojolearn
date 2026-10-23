@@ -5,6 +5,7 @@
 # torch.utils._python_dispatch helpers. The C entries are the ones used by
 # those helpers in the supported installed Torch, and are checked before cache.
 from std.ffi import _Global
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem
 
@@ -35,15 +36,15 @@ comptime NATIVE_TORCH = _Global[StorageType=NativeTorchBoundary,
 
 
 def _torch_type_fields(cls: PythonObject) raises -> PythonObject:
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     # Use type's native dictionary descriptor, bypassing a custom metaclass's
     # __getattribute__ and any user property named __dict__.
     return py_call(bi.type.__dict__["__dict__"].__get__, cls)
 
 
 def native_torch_exact(cls: PythonObject) raises -> Bool:
-    var bi = Python.import_module("builtins")
-    var sys = Python.import_module("sys")
+    var bi = native_loaded_module("builtins")
+    var sys = native_loaded_module("sys")
     var module = py_get(sys.modules, "torch._tensor")
     if module is None or py_type(module) is not py_type(sys):
         return False
@@ -58,8 +59,8 @@ def native_torch_exact(cls: PythonObject) raises -> Bool:
 
 def _torch_connect() raises:
     var cache = NATIVE_TORCH.get_or_create_ptr()
-    var bi = Python.import_module("builtins")
-    var sys = Python.import_module("sys")
+    var bi = native_loaded_module("builtins")
+    var sys = native_loaded_module("sys")
     var module = py_get(sys.modules, "torch._C")
     if module is None or py_type(module) is not py_type(sys):
         raise Error("TypeError: Torch native mode admission requires its compiled extension")
@@ -154,7 +155,7 @@ def native_torch_admit(value: PythonObject) raises:
     var cls = py_type(value)
     if cls is not cache[].tensor and cls is not cache[].parameter:
         raise Error("TypeError: Torch buffers require an exact Tensor or Parameter without Python subclass hooks")
-    var bi = Python.import_module("builtins")
+    var bi = native_loaded_module("builtins")
     var hierarchy = py_call(bi.type.__dict__["__mro__"].__get__, cls)
     var has_base = False
     for i in range(len(hierarchy)):  # driver-loop: over native Tensor class ancestry metadata

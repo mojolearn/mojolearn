@@ -2,6 +2,7 @@
 # StandardScaler.fit owns admission, buffers, route selection, launches and
 # fitted-state publication here. The existing statistics kernels are unchanged.
 from std.memory import memcpy, bitcast
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -25,7 +26,7 @@ def _ptr(value: PythonObject) raises -> F32P:
 
 def _input(source: PythonObject, ndim: Int, strict: Bool, context: PythonObject) raises -> PythonObject:
     classical_admit_value(source, context)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var prepared = source
     if native_pandas_exact(source):
         prepared = native_pandas_f32(source, context, strict, True)
@@ -78,7 +79,7 @@ def _copy_row(source: F32P, count: Int, context: PythonObject) raises -> PythonO
 
 
 def _bool(value: PythonObject, context: PythonObject) raises -> Bool:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(value) is not b.bool:
         var numpy = py_get(context, "bool_types")
         if numpy is None or py_type(value) is not numpy[1]:
@@ -88,7 +89,7 @@ def _bool(value: PythonObject, context: PythonObject) raises -> Bool:
 
 def scaler_fit(model: PythonObject, source: PythonObject, weight_source: PythonObject, context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var fields = py_fields(model)
     _ = _bool(fields["copy"], context)
     var with_mean = _bool(fields["with_mean"], context)

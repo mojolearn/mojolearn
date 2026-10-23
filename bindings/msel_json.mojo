@@ -2,6 +2,7 @@
 # Canonical split descriptor JSON. Mojo owns traversal; the connected CPython
 # C encoder supplies JSON's exact ASCII string escaping, including surrogates.
 from std.math import isfinite
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get
 from bindings.msel_inputs import msel_admit
@@ -10,7 +11,7 @@ from bindings.msel_inputs import msel_admit
 def _text(value: PythonObject, context: PythonObject, depth: Int) raises -> String:
     if depth >= 1000:
         raise Error("RecursionError: maximum recursion depth exceeded while encoding a JSON object")
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var kind = py_type(value)
     if value is None:
         return "null"
@@ -53,7 +54,7 @@ def _text(value: PythonObject, context: PythonObject, depth: Int) raises -> Stri
 
 def msel_canonical(value: PythonObject, context: PythonObject) raises -> PythonObject:
     msel_admit(value, context)
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     if py_type(context["family_msel_json_string"]) is not py_type(b.len):
         raise Error("TypeError: split descriptor string encoding requires the connected C entry")
     return py_call(PythonObject(_text(value, context, 0)).encode, "ascii")

@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Exact native search/container storage. No Python attribute or subclass hooks.
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_slice_native import py_slice, py_slice_from
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
@@ -8,7 +9,7 @@ from bindings.arena_materialize_native import _array
 
 
 def msel_search_plan(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var cls = py_type(model)
     if py_type(cls) is not b.type:
         raise Error("TypeError: native search refuses Python metaclass hooks")
@@ -30,7 +31,7 @@ def msel_search_plan(model: PythonObject, context: PythonObject) raises -> Pytho
 
 
 def msel_search_fields(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var plan = msel_search_plan(model, context)
     var fields = py_call(plan["fields_get"], model, py_type(model))
     var keys = py_call(b.list, fields.keys())
@@ -55,7 +56,7 @@ def msel_search_initialize(model: PythonObject, args: PythonObject,
 
 
 def msel_parameter_values(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     msel_admit(value, context)
     var cls = py_type(value)
     if cls is b.str or cls is b.bytes:
