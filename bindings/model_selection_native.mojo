@@ -11,6 +11,10 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setattr
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.family_common import family_repr, family_is_str, family_isinstance, family_call
+from bindings.msel_split import (
+    msel_split, msel_n_splits, msel_loo_at, msel_lpo_at, msel_logo_at, msel_lpgo_at, msel_check_cv,
+    msel_train_test_split, msel_truth,
+)
 
 
 def _msel_attr(model: PythonObject, name: String) raises -> PythonObject:
@@ -87,4 +91,20 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
                                  _msel_attr(model, "refit"))
         var best = _msel_best(model)
         return msel_score(best, args[0], args[1], scorer, context)
+    if operation == "family_msel_split":
+        return msel_split(model, args[0], args[1], args[2], context)
+    if operation == "family_msel_n_splits":
+        return msel_n_splits(model, args[0], args[1], args[2], context)
+    if operation == "family_msel_split_loo_at":
+        return msel_loo_at(args, context)
+    if operation == "family_msel_split_lpo_at":
+        return msel_lpo_at(args, context)
+    if operation == "family_msel_split_logo_at":
+        return msel_logo_at(args, context)
+    if operation == "family_msel_split_lpgo_at":
+        return msel_lpgo_at(args, context)
+    if operation == "family_msel_check_cv":
+        return msel_check_cv(args[0], args[1], msel_truth(args[2]), args[3], args[4], context)
+    if operation == "family_msel_train_test_split":
+        return msel_train_test_split(args[0], args[1], args[2], args[3], args[4], args[5], context)
     raise Error("RuntimeError: unknown model_selection operation " + operation)

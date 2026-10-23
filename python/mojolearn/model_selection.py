@@ -369,6 +369,8 @@ def _order_digest(value, name):
 # `estimator` is required (not defaulted) when cv is None or an integer:
 # `_classifier(None)` is False, which would silently describe a classifier's
 # stratified folds as plain KFold ones.
+
+
 def split_descriptor(X, y, *, estimator=None, cv=None, groups=None):
     """Describe a cross-validation split so a run can be reproduced.
 
@@ -1067,35 +1069,7 @@ class KFold(_KFoldBase):
 
         Raises ``ValueError`` when ``n_splits`` exceeds the number of rows.
         """
-        n = self._check_n(X)
-        if self.shuffle:
-            # the permutation and every fold's (train, test) rows in one
-            # device program, the rows as Int64 words (lane metrics-apple2)
-            rng = _rng(self.random_state)
-            got = fold_rows(n, self.n_splits, rng=rng)
-            if got is not None:
-                yield from got
-                return
-            # past the device table's bound: the same draw as Int64 rows, each
-            # fold's block masked and selected in Mojo (lane cgr4-py-compute)
-            perm = rng.permutation_rows([n])[0]
-            whole = Array._owned(perm, (n,), '<i8', 'C')
-            start = 0
-            for fold in range(self.n_splits):  # glue: one native row split per fold (n_splits sized)
-                size = n // self.n_splits + (fold < n % self.n_splits)
-                yield _split_indices(whole[start:start + size], n)
-                start += size
-            return
-        # contiguous blocks by the core helpers (fold_ids with no codes,
-        # select_fold_i64)
-        yield from _native_default_folds(range(n), self.n_splits, False)
-
-    def _check_n(self, X):
-        n = _n_samples(X)
-        if self.n_splits > n:
-            raise ValueError(f'Cannot have number of splits n_splits={self.n_splits} greater than the '
-                             f'number of samples: n_samples={n}.')
-        return n
+        yield from _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
 class StratifiedKFold(_KFoldBase):
@@ -1135,79 +1109,7 @@ class StratifiedKFold(_KFoldBase):
         has fewer than ``n_splits`` members, and warns when the smallest
         class does.
         """
-        enc, k, counts, alloc = self._fold_plan(y)
-        rng = _rng(self.random_state) if self.shuffle else None
-        if self.n_splits <= 256:
-            # every row's fold and every fold's (train, test) rows in one
-            # device program (strat_codes + fold_rows), the rows as Int64
-            # words (lane metrics-apple2)
-            got = stratified_fold_rows(enc, counts, alloc, self.n_splits, rng)
-            if got is not None:
-                yield from got
-                return
-            rng = _rng(self.random_state) if self.shuffle else None
-        # the same assignment by `strat_fold_assign_i32`, then each fold's
-        # rows by `select_fold_i64` (lane cgr4-py-compute: no Python row loop)
-        folds = self._fold_of_rows(enc, k, counts, alloc, rng)
-        n = enc.size
-        sizes = _zeros_i64(self.n_splits)
-        _native('bincount_i64')(_addr_ro(folds), 2, n, self.n_splits, _addr(sizes), 0)
-        select = _native('select_fold_i64')
-        for f, size in enumerate(sizes.tolist()):  # glue: one native row split per fold (n_splits sized)
-            test, train = empty((size,), '<i8'), empty((n - size,), '<i8')
-            scratch = empty((n,), '<i8')
-            select(_addr_ro(folds), n, f, _addr(test) if size else _addr(scratch),
-                   _addr(train) if n - size else _addr(scratch))
-            yield train, test
-
-    def _fold_plan(self, y):
-        """(first-seen int32 codes Array, classes, class counts, alloc):
-        alloc[i][c] = class c's rows in fold i (sklearn's _make_test_folds).
-        The x_metrics first-rows route (`_first_seen_native`), else the
-        labels encoded by `encode_labels` and renumbered by first appearance
-        in Mojo (`first_seen_i32`): no per-row Python either way."""
-        fs = _first_seen_native(y)
-        if fs is not None:
-            enc, k, counts = fs
-        else:
-            from ._labels import encode_labels
-            classes, codes = encode_labels(y)
-            n = codes.size
-            enc = empty((n,), '<i4')
-            cnt = _zeros_i64(max(len(classes), 1))
-            k = int(_native('first_seen_i32')(_addr_ro(codes), n, max(len(classes), 1), _addr(enc), _addr(cnt)))
-            counts = cnt.tolist()[:k]
-        if not counts or max(counts) < self.n_splits:  # glue: fold count checks over the k class counts
-            raise ValueError(f'n_splits={self.n_splits} cannot be greater than the number of members in '
-                             'each class.')
-        if min(counts) < self.n_splits:  # glue: fold count checks over the k class counts
-            warnings.warn(f'The least populated class in y has only {min(counts)} members, which is less '
-                          f'than n_splits={self.n_splits}.', UserWarning, stacklevel=3)
-        # alloc[i][c] = the positions p of class c in sorted(enc) (the run
-        # [s, e)) with p % n_splits == i: an int64 (K, k) Array from the base
-        # binding's `strat_alloc_i64` (lane pyglue-numeric: a Python table)
-        K = self.n_splits
-        alloc = empty((K, k), '<i8')
-        cnt = array.array('q', counts)
-        _native('strat_alloc_i64')(cnt.buffer_info()[0], k, K, _addr(alloc))  # cpu-route: fold allocation plan over folds x classes, not rows
-        return enc, k, counts, alloc
-
-    def _fold_of_rows(self, enc, k, counts, alloc, rng):
-        """Each row's test fold as an int32 Array (sklearn's
-        _make_test_folds; with `rng`, each class's fold sequence permuted by
-        its draw), by `strat_fold_assign_i32`."""
-        n, K = enc.size, self.n_splits
-        cnt = array.array('q', counts)
-        perms = None
-        if rng is not None:
-            perms = array.array('q')
-            for p in rng.permutation_rows(counts):  # glue: concatenates the k per-class device draws
-                perms.frombytes(p.tobytes())
-        out = empty((n,), '<i4')
-        _native('strat_fold_assign_i32')(_addr_ro(enc), n, k, K, _addr_ro(alloc),
-                                         perms.buffer_info()[0] if perms is not None and len(perms) else 0,
-                                         cnt.buffer_info()[0], _addr(out))
-        return out
+        yield from _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
 class GroupKFold(_KFoldBase):
@@ -1244,31 +1146,7 @@ class GroupKFold(_KFoldBase):
         ``groups`` is required. Raises ``ValueError`` when ``n_splits``
         exceeds the number of distinct groups.
         """
-        n = _n_samples(X)
-        gc = _GroupCodes.get(groups, n, 'groups')
-        m = gc.m
-        if self.n_splits > m:
-            raise ValueError(f'Cannot have number of splits n_splits={self.n_splits} greater than the '
-                             f'number of groups: {m}.')
-        # each group's fold and each fold's row count by the base binding's
-        # `group_fold_assign_i32` (the assignment `_test_folds` makes; lane
-        # pyglue-numeric: Python loops over the groups), gathered per row
-        perm = _rng(self.random_state).permutation_rows([m])[0] if self.shuffle else None
-        to_fold = array.array('i', bytes(4 * m))
-        sizes = array.array('q', bytes(8 * self.n_splits))
-        counts = array.array('q', gc.counts)
-        if perm is not None:
-            # shuffled: the permuted groups' runs on the device (lane
-            # cpu2-l4-modelsel); the unshuffled greedy below is sequential
-            # by definition (each group goes to the fold lightest after
-            # every larger group) and stays the binding's group-level loop
-            _native('msel_group_fold_perm_i32')(counts.buffer_info()[0], m, self.n_splits,
-                                                perm.buffer_info()[0], to_fold.buffer_info()[0],
-                                                sizes.buffer_info()[0])
-        else:
-            _native('group_fold_assign_i32')(counts.buffer_info()[0], m, self.n_splits, 0,  # cpu-route: sequential greedy fold plan over groups, not rows
-                                             to_fold.buffer_info()[0], sizes.buffer_info()[0])
-        yield from gc.split_by_fold(to_fold, self.n_splits, sizes)
+        yield from _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
 class StratifiedGroupKFold(_KFoldBase):
@@ -1306,38 +1184,7 @@ class StratifiedGroupKFold(_KFoldBase):
         ``y`` and ``groups`` are required. Raises ``ValueError`` when
         ``n_splits`` is greater than the number of members of a class.
         """
-        n = _n_samples(X)
-        gc = _GroupCodes.get(groups, n, 'groups')
-        # the class codes in first-seen order (natively; the dict encoder for
-        # labels the native encoder refuses: glue over label objects), each
-        # group's fold and each fold's rows by the base binding's
-        # `strat_group_assign_i32` (lane pyglue-numeric: `_assign`'s Python
-        # loops over the rows and groups), gathered per row
-        fs = _first_seen_native(y)
-        if fs is not None:
-            yenc, k = fs[0], fs[1]
-        else:
-            codes, k = _encode_first_seen(_labels_list(y))
-            yenc = Array._owned(array.array('i', codes), (len(codes),), '<i4', 'C')
-        if yenc.size != n:
-            raise ValueError(f'y has {yenc.size} labels for {n} samples')
-        m = gc.m
-        perm = _rng(self.random_state).permutation_rows([m])[0] if self.shuffle else None
-        to_fold = array.array('i', bytes(4 * m))
-        sizes = array.array('q', bytes(8 * self.n_splits))
-        # lane cpu4-python: the group x class table over the rows is the
-        # device's 2-D bincount (`bincount2_i32`); only the group-level
-        # greedy plan (`strat_group_plan_i32`, sequential by definition like
-        # GroupKFold's) reads it
-        dist = array.array('q', bytes(8 * m * k))
-        _native('bincount2_i32')(_addr_ro(yenc), _addr_ro(gc.codes), [n, k, m], dist.buffer_info()[0])
-        bad = int(_native('strat_group_plan_i32')(  # cpu-route: sequential greedy fold plan over groups, not rows
-            [dist.buffer_info()[0], perm.buffer_info()[0] if perm is not None else 0,
-             to_fold.buffer_info()[0], sizes.buffer_info()[0]], [k, m, self.n_splits]))
-        if bad:
-            raise ValueError(f'n_splits={self.n_splits} cannot be greater than the number of members in '
-                             'each class.')
-        yield from gc.split_by_fold(to_fold, self.n_splits, sizes)
+        yield from _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
 class TimeSeriesSplit(_Splitter):
@@ -1383,18 +1230,7 @@ class TimeSeriesSplit(_Splitter):
         Raises ``ValueError`` when there are too few rows for ``n_splits``,
         ``test_size`` and ``gap``.
         """
-        n = _n_samples(X)
-        folds = self.n_splits + 1
-        test_size = self.test_size if self.test_size is not None else n // folds
-        if folds > n:
-            raise ValueError(f'Cannot have number of folds={folds} greater than the number of samples={n}.')
-        if n - self.gap - test_size * self.n_splits <= 0:
-            raise ValueError(f'Too many splits={self.n_splits} for number of samples={n} with '
-                             f'test_size={test_size} and gap={self.gap}.')
-        for start in range(n - self.n_splits * test_size, n, test_size):  # glue: one index range pair per split (n_splits sized)
-            end = start - self.gap
-            lo = end - self.max_train_size if self.max_train_size and self.max_train_size < end else 0
-            yield _as_index(range(lo, end)), _as_index(range(start, start + test_size))
+        yield from _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
 class LeaveOneOut(_Splitter):
@@ -1413,24 +1249,14 @@ class LeaveOneOut(_Splitter):
 
     def get_n_splits(self, X=None, y=None, groups=None):
         """Return the number of rows of ``X`` (``X`` is required)."""
-        if X is None:
-            raise ValueError("The 'X' parameter should not be None.")
-        return _n_samples(X)
+        return _NATIVE(self, "family_msel_n_splits", (X, y, groups), _NATIVE_CONTEXT)
 
     def split(self, X, y=None, groups=None):
         """Yield ``(train, test)`` int64 row-index arrays, one per row.
 
         Raises ``ValueError`` when ``X`` has fewer than two rows.
         """
-        n_splits = _n_samples(X)
-        if n_splits <= 1:
-            raise ValueError(f'Cannot perform LeaveOneOut with n_samples={n_splits}.')
-        leave = _native('leave_range_i64')
-        # split s: test row s, train every other row, written in Mojo
-        for s in range(n_splits):  # glue: one native leave-range call per split
-            train, test = empty((n_splits - 1,), '<i8'), empty((1,), '<i8')
-            leave(n_splits, s, s + 1, _addr(train), _addr(test))
-            yield train, test
+        yield from _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
 class LeavePOut(_Splitter):
@@ -1459,30 +1285,14 @@ class LeavePOut(_Splitter):
 
     def get_n_splits(self, X=None, y=None, groups=None):
         """Return ``n_samples choose p``."""
-        return _comb(_n_samples(X), self.p)
+        return _NATIVE(self, "family_msel_n_splits", (X, y, groups), _NATIVE_CONTEXT)
 
     def split(self, X, y=None, groups=None):
         """Yield ``(train, test)`` int64 row-index arrays for each combination.
 
         Raises ``ValueError`` when ``p`` is not less than the number of rows.
         """
-        n = _n_samples(X)
-        if n <= self.p:
-            raise ValueError(f'p={self.p} must be strictly less than the number of samples={n}')
-        p = int(self.p)
-        if p < 0:
-            raise ValueError('r must be non-negative')
-        if p < 1:
-            # itertools.combinations(range(n), 0): one empty test set
-            yield _arange_rows(0, n), empty((0,), '<i8')
-            return
-        # the combinations in lexicographic order, advanced in Mojo
-        combo = _arange_rows(0, p)
-        step = _native('next_combination_i64')  # cpu-route: LeavePOut combinatorics, one p-sized step per split
-        while True:
-            yield _split_indices(combo, n)
-            if not int(step(_addr(combo), p, n)):
-                return
+        yield from _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
 class LeaveOneGroupOut(_Splitter):
@@ -1504,7 +1314,7 @@ class LeaveOneGroupOut(_Splitter):
 
     def get_n_splits(self, X=None, y=None, groups=None):
         """Return the number of distinct values in ``groups``."""
-        return len(set(_labels_list(groups, 'groups')))
+        return _NATIVE(self, "family_msel_n_splits", (X, y, groups), _NATIVE_CONTEXT)
 
     def split(self, X, y=None, groups=None):
         """Yield ``(train, test)`` int64 row-index arrays, one per group.
@@ -1512,14 +1322,7 @@ class LeaveOneGroupOut(_Splitter):
         Raises ``ValueError`` when ``groups`` has fewer than two distinct
         values.
         """
-        n = _n_samples(X)
-        gc = _GroupCodes.get(groups, n, 'groups')
-        if gc.m <= 1:
-            raise ValueError(f'The groups parameter contains fewer than 2 unique groups ({gc.classes}). '
-                             'LeaveOneGroupOut expects at least 2.')
-        # each group's rows straight from the codes (lane/py-misc-msel)
-        for gi in range(gc.m):  # glue: one native row split per group (m groups)
-            yield gc.rows(gc.codes, gi, gc.counts[gi])
+        yield from _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
 class LeavePGroupsOut(_Splitter):
@@ -1550,7 +1353,7 @@ class LeavePGroupsOut(_Splitter):
 
     def get_n_splits(self, X=None, y=None, groups=None):
         """Return ``n_distinct_groups choose n_groups``."""
-        return _comb(len(set(_labels_list(groups, 'groups'))), self.n_groups)
+        return _NATIVE(self, "family_msel_n_splits", (X, y, groups), _NATIVE_CONTEXT)
 
     def split(self, X, y=None, groups=None):
         """Yield ``(train, test)`` int64 row-index arrays for each combination.
@@ -1558,17 +1361,7 @@ class LeavePGroupsOut(_Splitter):
         Raises ``ValueError`` when ``n_groups`` is not less than the number
         of distinct groups.
         """
-        n = _n_samples(X)
-        gc = _GroupCodes.get(groups, n, 'groups')
-        if self.n_groups >= gc.m:
-            raise ValueError(f'The groups parameter contains fewer than (or equal to) n_groups '
-                             f'({self.n_groups}) numbers of unique groups ({gc.classes}).')
-        # the chosen groups as a per-group table, gathered per row (lane/py-misc-msel)
-        for combo in itertools.combinations(range(gc.m), self.n_groups):  # glue: one per-group table per combination of groups
-            table = [0] * gc.m
-            for g in combo:  # glue: one per-group table per combination of groups
-                table[g] = 1
-            yield gc.rows(gc.mapped(table), 1, sum(gc.counts[g] for g in combo))  # glue: one per-group table per combination of groups
+        yield from _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
 class _Repeated:
@@ -1586,7 +1379,7 @@ class _Repeated:
 
     def get_n_splits(self, X=None, y=None, groups=None):
         """Return ``n_splits * n_repeats``."""
-        return self.cv(**self.cvargs).get_n_splits(X, y, groups) * self.n_repeats
+        return _NATIVE(self, "family_msel_n_splits", (X, y, groups), _NATIVE_CONTEXT)
 
     def split(self, X, y=None, groups=None):
         """Yield ``(train, test)`` int64 row-index arrays, repeat by repeat.
@@ -1595,12 +1388,7 @@ class _Repeated:
         seed derived from ``random_state``, so the whole sequence is fixed by
         ``random_state``.
         """
-        # Repeat r draws its own seed from the base seed, so every repeat is
-        # a different shuffle and the whole sequence is fixed by random_state.
-        base = _rng(self.random_state)
-        for r in range(self.n_repeats):  # glue: one splitter run per repeat (n_repeats sized)
-            seed = _mix_seed(base.seed, r)
-            yield from self.cv(random_state=seed, shuffle=True, **self.cvargs).split(X, y, groups)
+        yield from _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
 def _mix_seed(seed, r):
@@ -1753,22 +1541,13 @@ class ShuffleSplit(_Splitter):
         """Return the number of splits, ``n_splits``."""
         return self.n_splits
 
-    def _sizes(self, n):
-        return _validate_shuffle_split(n, self.test_size, self.train_size, self._default_test_size)
-
     def split(self, X, y=None, groups=None):
         """Yield ``(train, test)`` int64 row-index arrays for each split.
 
         Raises ``ValueError`` for sizes out of range or summing to more than
         the number of rows.
         """
-        n = _n_samples(X)
-        n_train, n_test = self._sizes(n)
-        rng = _rng(self.random_state)
-        # the permutations as Int64 rows, sliced as arrays (lane metrics-apple2)
-        for perm in rng.permutation_rows([n] * self.n_splits):  # glue: one device permutation per split (n_splits sized)
-            yield (Array._owned(perm[n_test:n_test + n_train], (n_train,), '<i8', 'C'),
-                   Array._owned(perm[:n_test], (n_test,), '<i8', 'C'))
+        yield from _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
 class GroupShuffleSplit(ShuffleSplit):
@@ -1809,24 +1588,7 @@ class GroupShuffleSplit(ShuffleSplit):
 
         ``groups`` is required.
         """
-        gc = _GroupCodes.get(groups, _n_samples(X), 'groups')
-        # each group's side (0 train, 1 test, 2 neither) as a table
-        # gathered per row, the same draws (lane/py-misc-msel)
-        # each draw's per-group side table and side sizes in Mojo
-        # (`split_table_i32`; lane cgr4-py-compute; on the device since
-        # lane cpu2-l4-modelsel, `msel_split_table_i32`), gathered per row
-        m = gc.m
-        n_train, n_test = self._sizes(m)
-        rng = _rng(self.random_state)
-        counts = array.array('q', gc.counts)
-        table = array.array('i', bytes(4 * m))
-        sums = array.array('q', [0, 0])
-        for perm in rng.permutation_rows([m] * self.n_splits):  # glue: one device permutation per split (n_splits sized)
-            _native('msel_split_table_i32')(perm.buffer_info()[0], m, n_test, n_train,
-                                            counts.buffer_info()[0], table.buffer_info()[0],
-                                            sums.buffer_info()[0])
-            words = gc.mapped(table)
-            yield gc.only(words, 0, sums[0]), gc.only(words, 1, sums[1])
+        yield from _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
 class StratifiedShuffleSplit(ShuffleSplit):
@@ -1873,56 +1635,7 @@ class StratifiedShuffleSplit(ShuffleSplit):
         member, or when the training or test set is smaller than the number
         of classes.
         """
-        # lane py-runtime-b: the core-helper route is the only one (the
-        # Python row route is deleted)
-        yield from self._native_split(y)
-
-    def _native_split(self, y):
-        """`split`'s rows by the core helpers (lane/py-misc-msel):
-        each class's ascending rows once (`select_fold_i64` on the codes),
-        then per split the same draws in the same order, the permuted rows
-        by `gather_i64` straight into the train and test arrays, and the
-        final shuffles by `gather_i64` again. A generator after its checks,
-        which raise before the first draw exactly as `split` does."""
-        n0 = 0 if y is None else (
-            len(y) if not hasattr(y, 'shape') else (int(y.shape[0]) if len(y.shape) else 0))
-        gc = _GroupCodes.get(y, n0, 'y')  # raises the definition's error for y None
-        gather64 = _native('gather_i64')
-        n, k, counts = gc.n, gc.m, gc.counts
-        n_train, n_test = self._sizes(n)
-        if min(counts) < 2:  # glue: least populated class check over k class counts
-            raise ValueError('The least populated classes in y have only 1 member, which is too few. The '
-                             'minimum number of groups for any class cannot be less than 2.')
-        if n_train < k:
-            raise ValueError(f'The train_size = {n_train} should be greater or equal to the number of classes = {k}')
-        if n_test < k:
-            raise ValueError(f'The test_size = {n_test} should be greater or equal to the number of classes = {k}')
-        rows = [gc.only(gc.codes, c, counts[c]) for c in range(k)]  # glue: one native row selection per class (k classes)
-        rng = _rng(self.random_state)
-
-        def gen():
-            for _ in range(self.n_splits):  # glue: one split per iteration (n_splits sized)
-                # scikit-learn's _approximate_mode for train then test, in
-                # one device program (x_metrics approx_mode; lane py-runtime-b)
-                n_i, t_i = rng.approximate_modes(counts, n_train, n_test)
-                tr_len, te_len = sum(n_i), sum(t_i)  # glue: train and test sizes summed over k classes
-                train = empty((tr_len,), '<i8')
-                test = empty((te_len,), '<i8')
-                at_tr = at_te = 0
-                for c, perm in enumerate(rng.permutation_rows(counts)):  # glue: one native row selection per class (k classes)
-                    p0 = perm.buffer_info()[0]
-                    tab = _addr_ro(rows[c])
-                    gather64(tab, counts[c], p0, n_i[c], _addr(train) + 8 * at_tr)
-                    gather64(tab, counts[c], p0 + 8 * n_i[c], t_i[c], _addr(test) + 8 * at_te)
-                    at_tr += n_i[c]
-                    at_te += t_i[c]
-                ptr, pte = rng.permutation_rows([tr_len, te_len])
-                out_tr = empty((tr_len,), '<i8')
-                out_te = empty((te_len,), '<i8')
-                gather64(_addr_ro(train), tr_len, ptr.buffer_info()[0], tr_len, _addr(out_tr))
-                gather64(_addr_ro(test), te_len, pte.buffer_info()[0], te_len, _addr(out_te))
-                yield out_tr, out_te
-        return gen()
+        yield from _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
 class PredefinedSplit(_Splitter):
@@ -1954,23 +1667,13 @@ class PredefinedSplit(_Splitter):
         self._folds = _index_copy(test_fold)
         self.test_fold = self._folds.tolist()
 
-    def _codes(self):
-        return _GroupCodes.get(self._folds, self._folds.size, 'test_fold')
-
     def get_n_splits(self, X=None, y=None, groups=None):
         """Return the number of distinct fold values other than -1."""
-        from ._labels import encode_labels
-        classes = encode_labels(self._folds)[0]
-        return len(classes) - (1 if -1 in classes else 0)  # glue: membership test over the fold values
+        return _NATIVE(self, "family_msel_n_splits", (X, y, groups), _NATIVE_CONTEXT)
 
     def split(self, X=None, y=None, groups=None):
         """Yield ``(train, test)`` int64 row-index arrays for each fold."""
-        gc = self._codes()
-        # the sorted fold values natively, each fold's rows by its code
-        # (lane/py-misc-msel)
-        for c, f in enumerate(gc.classes):  # glue: one native row split per fold value
-            if f != -1:
-                yield gc.rows(gc.codes, c, gc.counts[c])
+        yield from _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
 def _index_copy(value):
@@ -2078,26 +1781,7 @@ def check_cv(cv=5, y=None, *, classifier=False, shuffle=False, random_state=None
     >>> y = np.random.default_rng(0).integers(0, 2, 1000)
     >>> cv = check_cv(5, y, classifier=True)
     """
-    cv = 5 if cv is None else cv
-    if isinstance(cv, numbers.Integral) and not is_bool(cv):
-        stratify = False
-        native = _native_discrete(y) if classifier and y is not None else None
-        if native is not None:
-            stratify = native
-        elif classifier and y is not None:
-            labels = flatten_labels(y)
-            stratify = (all(isinstance(v, str) for v in labels) or  # cpu-route: stratify test over label objects (str/mixed) after the native route declines [py-data-loop]
-                        all(isinstance(v, numbers.Integral) or
-                            (isinstance(v, numbers.Real) and math.isfinite(v) and float(v).is_integer())
-                            for v in labels))  # cpu-route: stratify test over label objects (str/mixed) after the native route declines [py-data-loop]
-        kind = StratifiedKFold if stratify else KFold
-        return kind(cv, shuffle=shuffle, random_state=random_state if shuffle else None)
-    if callable(getattr(cv, 'split', None)):
-        return cv
-    if isinstance(cv, str) or not hasattr(cv, '__iter__'):
-        raise ValueError(f'Expected cv as an integer, cross-validation object (from '
-                         f'sklearn.model_selection) or an iterable. Got {cv!r}.')
-    return _IterableCV(cv)
+    return _NATIVE(None, "family_msel_check_cv", (cv, y, classifier, shuffle, random_state), _NATIVE_CONTEXT)
 
 
 def train_test_split(*arrays, test_size=None, train_size=None, random_state=None, shuffle=True,
@@ -2152,25 +1836,8 @@ def train_test_split(*arrays, test_size=None, train_size=None, random_state=None
     >>> X_train, X_test, y_train, y_test = train_test_split(
     ...     X, y, test_size=0.2, random_state=0)
     """
-    if not arrays:
-        raise ValueError('At least one array required as input')
-    n = _n_samples(arrays[0])
-    if any(_n_samples(a) != n for a in arrays):  # glue: sample-count check over the input arrays
-        raise ValueError('Found input variables with inconsistent numbers of samples: '
-                         f'{[_n_samples(a) for a in arrays]}')
-    n_train, n_test = _validate_shuffle_split(n, test_size, train_size, 0.25)
-    if not shuffle:
-        if stratify is not None:
-            raise ValueError('Stratified train/test split is not implemented for shuffle=False')
-        train, test = _as_index(range(n_train)), _as_index(range(n_train, n_train + n_test))
-    else:
-        cls = StratifiedShuffleSplit if stratify is not None else ShuffleSplit
-        cv = cls(n_splits=1, test_size=n_test, train_size=n_train, random_state=random_state)
-        train, test = next(cv.split(arrays[0], stratify))
-    out = []
-    for a in arrays:  # glue: sample-count check over the input arrays
-        out.extend([_take_any(a, train), _take_any(a, test)])
-    return out
+    return _NATIVE(None, "family_msel_train_test_split",
+                   (arrays, test_size, train_size, random_state, shuffle, stratify), _NATIVE_CONTEXT)
 
 
 def _take_any(values, indices):
@@ -2284,6 +1951,7 @@ def _device_rows_ok(estimator, scoring=None):
 
 
 # ---------------------------------------------------------------- scorers
+
 
 class _Scorer:
     def __init__(self, score_func, sign, kwargs, response_method, name):
@@ -2502,6 +2170,7 @@ def _score(estimator, X, y, scorer, memo=None):
 
 
 # ---------------------------------------------------------------- validation
+
 
 def _cv_folds(estimator, X, y, cv, groups):
     """(X, y, folds) with every fold validated before any fit."""
@@ -3737,3 +3406,30 @@ from . import _native_family_bridge  # noqa: E402
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 _native_family_bridge.tables(family_msel_scorers=_scorer_table(), family_msel_scorer_class=_Scorer,
                              family_msel_real=numbers.Real)
+# glue: the fixed tables of the native splitters, cross-validation and
+# search (bindings/msel_*.mojo), connected once: the model_selection
+# classes the owner builds and dispatches on, the base binding helper
+# resolver (`_native`: binding acquisition), the x_metrics binding resolver,
+# the input step it hands the caller's objects to (`_materialize`,
+# `flatten_labels`, `encode_labels`), dtype code tables, the resident row
+# store's compiled door and the family door itself (for the lazy per-split
+# iterators).
+from ._array import _NATIVE_CODE as _ARRAY_CODE, _REDUCE_INTEGRAL  # noqa: E402
+from ._labels import encode_labels as _encode_labels, _NATIVE_ENCODE  # noqa: E402
+from ._expansion_metrics import _binding as _x_metrics_binding  # noqa: E402
+_native_family_bridge.tables(
+    family_msel_classes=dict(
+        KFold=KFold, StratifiedKFold=StratifiedKFold, GroupKFold=GroupKFold,
+        StratifiedGroupKFold=StratifiedGroupKFold, TimeSeriesSplit=TimeSeriesSplit, LeaveOneOut=LeaveOneOut,
+        LeavePOut=LeavePOut, LeaveOneGroupOut=LeaveOneGroupOut, LeavePGroupsOut=LeavePGroupsOut,
+        _Repeated=_Repeated, ShuffleSplit=ShuffleSplit, GroupShuffleSplit=GroupShuffleSplit,
+        StratifiedShuffleSplit=StratifiedShuffleSplit, PredefinedSplit=PredefinedSplit, _IterableCV=_IterableCV,
+        ParameterGrid=ParameterGrid, ParameterSampler=ParameterSampler, GridSearchCV=GridSearchCV,
+        RandomizedSearchCV=RandomizedSearchCV, Array=Array),
+    family_msel_native=_native, family_msel_xm=_x_metrics_binding, family_msel_miss=object(),
+    family_msel_integral=numbers.Integral, family_msel_materialize=_materialize,
+    family_msel_flatten=flatten_labels, family_msel_encode=_encode_labels, family_msel_codes=dict(_MSEL_CODE),
+    family_msel_native_code=dict(_ARRAY_CODE), family_msel_reduce_integral=_REDUCE_INTEGRAL,
+    family_msel_native_encode=frozenset(_NATIVE_ENCODE),
+    family_msel_resident_class=_Resident, family_msel_resident_call=_RESIDENT_CALL,
+    family_msel_resident_context=_RESIDENT_CONTEXT, family_msel_door=_NATIVE)

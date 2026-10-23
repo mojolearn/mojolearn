@@ -45,15 +45,10 @@ def msel_native(name: String, context: PythonObject) raises -> PythonObject:
 
 
 def msel_entry(name: String, context: PythonObject) raises -> PythonObject:
-    """A base binding helper, resolved once per owner call into the
-    context's cache (the resolver caches too)."""
-    var cache = context["family_msel_entries"]
-    var hit = py_get(cache, PythonObject(name))
-    if hit is not None:
-        return hit
-    var entry = msel_native(name, context)
-    py_setitem(cache, PythonObject(name), entry)
-    return entry
+    """A base binding helper, resolved at each use as `_native(name)` was
+    (its own cache keeps the lookup one dict read; a planted callable is
+    seen)."""
+    return msel_native(name, context)
 
 
 def msel_try(callable: PythonObject, args: PythonObject, classes: PythonObject,
