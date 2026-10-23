@@ -809,7 +809,9 @@ def _schema_flatten(fields: PythonObject, step: PythonObject, values: PythonObje
         var labels = element
         if py_type(element) is not b.list and py_type(element) is not b.tuple:
             var parts = _schema_bytes(element, context)
-            labels = py_call(b.list, py_call(context["array_type"], _store_code(parts[0]), parts[1]))
+            var store = py_call(context["array_type"], _store_code(parts[0]))
+            _ = py_call(store.frombytes, parts[1])
+            labels = py_call(b.list, store)
         for i in range(len(labels)):  # driver-loop: over one output's class labels
             _ = py_call(packed.append, py_call(b.float if dtype == "<f8" else b.int, labels[i]))
         _ = py_call(counts.append, PythonObject(len(labels)))
