@@ -439,122 +439,7 @@ def matmul(a, b, *, transpose_a=False, transpose_b=False, out=None,
     >>> b = np.random.default_rng(1).random((32, 64), dtype=np.float32)
     >>> c = np.asarray(linalg.matmul(a, b, transpose_b=True))
     """
-    if identical:
-        require_identical()
-    else:
-        # Still loads and version-checks the binary, so `identical=False` is
-        # an opt-out of the GUARANTEE and not of the sanity checks.
-        numeric_mode()
-
-    key = (bool(transpose_a), bool(transpose_b))
-    if key not in _OPS:
-        raise ValueError(
-            "mojolearn.linalg.matmul: transpose_a=True with transpose_b=True "
-            f"is refused. {PROFILE} has exactly three operations (contract "
-            "section 0.1: OP_NN, OP_NT, OP_TN) and a.T @ b.T is not one of "
-            "them. This function will not materialize a transpose to fake a "
-            "fourth. If you want it, write the identity yourself:\n"
-            "    np.ascontiguousarray(np.asarray(matmul(b, a)).T)\n"
-            "which is (b @ a).T == a.T @ b.T, runs as OP_NN, and leaves the "
-            "extra step visible in your source where you can price it."
-        )
-    op = _OPS[key]
-
-    a_arr = _operand(a, "a")
-    b_arr = _operand(b, "b")
-
-    # THE SHAPES, contract section 0.1. `k` is read off `a` and CHECKED
-    # against `b`, because a k mismatch that is not caught here is an
-    # out-of-bounds read on the device.
-    if transpose_a:
-        k, m = a_arr.shape          # OP_TN: a is k x m
-    else:
-        m, k = a_arr.shape          # OP_NN, OP_NT: a is m x k
-    if transpose_b:
-        n, kb = b_arr.shape         # OP_NT: b is n x k
-    else:
-        kb, n = b_arr.shape         # OP_NN, OP_TN: b is k x n
-    if k != kb:
-        raise ValueError(
-            f"mojolearn.linalg.matmul: contracted extents disagree, a gives "
-            f"k={k} and b gives k={kb} (a.shape={a_arr.shape}, "
-            f"b.shape={b_arr.shape}, transpose_a={bool(transpose_a)}, "
-            f"transpose_b={bool(transpose_b)}). The row-major shapes for each "
-            "op are in this function's table and in contract section 0.1."
-        )
-
-    if out is None:
-        out_arr = empty((m, n), "<f4")
-    else:
-        # DEVIATION 2401: `out` is ANY writable buffer with the right shape
-        # and a float32 format, judged through `_buffer.view` -- the four
-        # checks are the ones the `isinstance(out, np.ndarray)` spelling
-        # made, in the same order and the same words, minus the type name.
-        out_arr = out
-        try:
-            pb = probe(out_arr)
-        except TypeError:
-            raise TypeError(
-                "mojolearn.linalg.matmul: out must be a numpy array, a "
-                "mojolearn.Array or any other writable float32 buffer "
-                f"(anything supporting the buffer protocol), got "
-                f"{type(out_arr).__name__}"
-            ) from None
-        if not is_native_f32(pb.format):
-            raise TypeError(
-                "mojolearn.linalg.matmul: out has dtype "
-                f"{dtype_name(out_arr, pb)}, and the profile's output is "
-                "float32 (contract section 1). Refused rather than cast on "
-                "the way out."
-            )
-        if pb.shape != (m, n):
-            raise ValueError(
-                f"mojolearn.linalg.matmul: out has shape {pb.shape}, "
-                f"want ({m}, {n})"
-            )
-        if not pb.c_contiguous:
-            raise ValueError(
-                "mojolearn.linalg.matmul: out must be C-contiguous; the "
-                "device writes it directly (contract section 2). A "
-                "non-contiguous out cannot be written in place, and copying "
-                "into it afterwards would make `out` a lie about where the "
-                "result was produced."
-            )
-        if pb.readonly:
-            raise ValueError(
-                "mojolearn.linalg.matmul: out is read-only, refusing to "
-                "write to it; the device writes `out` directly (contract "
-                "section 2) and a read-only buffer handed to it is memory "
-                "corruption, not an exception."
-            )
-
-    # `params` is, in this exact order (mirrored word for word in
-    # `bindings/_mojolearn_linalg.mojo::gemm_binding`):
-    #
-    #     0  m       rows of C
-    #     1  n       columns of C
-    #     2  k       the contracted extent
-    #     3  op      0 = OP_NN, 1 = OP_NT, 2 = OP_TN
-    #
-    # A silent reorder here is a WRONG ANSWER and not a crash: swap m and n on
-    # a square shape and the call still returns a full matrix of plausible
-    # floats. If you change this list, change the comment in the binding in
-    # the same edit.
-    params = [int(m), int(n), int(k), int(op)]
-
-    binding = _load()
-    # `a_arr`, `b_arr` and `out_arr` are held in locals across the call. The
-    # Mojo side takes raw addresses, borrows and retains nothing, which is
-    # only sound while the owning objects are alive (`_buffer.py`).
-    #
-    # THE OUTPUT ADDRESS COMES FIRST, mirroring `identical_gemm(ctx, c, a, b,
-    # ...)`. Swapping it with `a` writes the device's output over the caller's
-    # input matrix, which is memory corruption and not an exception.
-    # `addr` (writable) for the output, `addr_ro` for the operands.
-    binding.gemm(addr(out_arr, name="out"), addr_ro(a_arr, name="a"),
-                 addr_ro(b_arr, name="b"), params)
-    return out_arr
-
+    return _NATIVE(None, "family_lin_matmul", (_load(), a, b, transpose_a, transpose_b, out, identical), _NATIVE_CONTEXT)
 
 
 # ===========================================================================
@@ -584,29 +469,6 @@ def _lowbit_binding():
     return b
 
 
-def _operand_bits(x, name):
-    """A 2-D uint16 buffer of bf16 bits, C-contiguous, kept alive."""
-    try:
-        pb = probe(x)
-    except TypeError:
-        raise TypeError(
-            f"mojolearn.linalg: {name} must be a uint16 buffer of bf16 bits "
-            f"(profile {PROFILE_BF16}); got {type(x).__name__}"
-        ) from None
-    if dtype_name(x, pb) != "uint16":
-        raise TypeError(
-            f"mojolearn.linalg: {name} has dtype {dtype_name(x, pb)}; the "
-            f"bf16 profile takes bf16 BITS in a uint16 buffer, which "
-            "to_bf16() produces. Refused rather than reinterpreted."
-        )
-    if pb.ndim != 2:
-        raise ValueError(f"mojolearn.linalg: {name} must be 2-D, got {pb.ndim}-D")
-    if nelems(pb.shape) == 0:
-        raise ValueError(f"mojolearn.linalg: {name} has no elements")
-    a, _ = as_u16_c(x, ndim=2, name=name)
-    return a
-
-
 # Contract gemm/IDENTICAL_LOWBIT_CONTRACT.md L-2 (from_bf16: L-1; int8: L-3, L-4, L-6; int15: W-1..W-4).
 def to_bf16(x):
     """Convert float32 to bfloat16 bits.
@@ -622,14 +484,7 @@ def from_bf16(bits):
 
     Returns a float32 `mojolearn.Array` of the same shape.
     """
-    a, _ = as_u16_c(bits, ndim=None, name="bits")
-    pb = probe(a)
-    n = nelems(pb.shape)
-    if n == 0:
-        raise ValueError("mojolearn.linalg.from_bf16: bits has no elements")
-    out = empty(pb.shape, "<f4")
-    _lowbit_binding().from_bf16(addr(out, name="out"), addr_ro(a, name="bits"), [int(n)])
-    return out
+    return _NATIVE(None, "family_lin_from_bf16", (_load(), bits), _NATIVE_CONTEXT)
 
 
 def from_f16(bits):
@@ -657,57 +512,12 @@ def quantize_int8(x):
     exponents : mojolearn.Array of int32
         One per row; ``row = codes * 2**exponent``.
     """
-    a = _operand(x, "x")
-    rows, cols = probe(a).shape
-    codes = empty((rows, cols), "<i1")
-    exps = empty((rows,), "<i4")
-    _lowbit_binding().quantize_int8(addr(codes, name="codes"), addr(exps, name="exponents"),
-                                    addr_ro(a, name="x"), [int(rows), int(cols)])
-    return codes, exps
+    return _NATIVE(None, "family_lin_quantize_int8", (_load(), x), _NATIVE_CONTEXT)
 
 
 def dequantize_int8(codes, exponents):
     """Recover float32 values ``codes * 2**exponents[row]`` exactly from `quantize_int8` output."""
-    q, _ = as_i8_c(codes, ndim=2, name="codes")
-    e, _ = as_i32_c(exponents, ndim=1, name="exponents")
-    rows, cols = probe(q).shape
-    if probe(e).shape != (rows,):
-        raise ValueError(
-            f"mojolearn.linalg.dequantize_int8: exponents has shape "
-            f"{probe(e).shape}, want ({rows},)"
-        )
-    out = empty((rows, cols), "<f4")
-    _lowbit_binding().dequantize_int8(addr(out, name="out"), addr_ro(q, name="codes"),
-                                      addr_ro(e, name="exponents"), [int(rows), int(cols)])
-    return out
-
-
-def _op_and_shape(a_shape, b_shape, transpose_a, transpose_b, who):
-    if transpose_a and transpose_b:
-        raise ValueError(
-            f"mojolearn.linalg.{who}: transpose_a and transpose_b together "
-            "is not one of the contract's three operations (section 0.1); "
-            "write (b @ a).T with the flags swapped, in your own source."
-        )
-    if transpose_a:
-        op = OP_TN
-        k, m = a_shape
-        kb, n = b_shape
-    elif transpose_b:
-        op = OP_NT
-        m, k = a_shape
-        n, kb = b_shape
-    else:
-        op = OP_NN
-        m, k = a_shape
-        kb, n = b_shape
-    if k != kb:
-        raise ValueError(
-            f"mojolearn.linalg.{who}: contracted extents differ, a gives "
-            f"k={k} and b gives k={kb} (a.shape={a_shape}, b.shape={b_shape}, "
-            f"transpose_a={transpose_a}, transpose_b={transpose_b})"
-        )
-    return op, m, n, k
+    return _NATIVE(None, "family_lin_dequantize_int8", (_load(), codes, exponents), _NATIVE_CONTEXT)
 
 
 def matmul_bf16(a, b, *, transpose_a=False, transpose_b=False, out=None):
@@ -719,24 +529,7 @@ def matmul_bf16(a, b, *, transpose_a=False, transpose_b=False, out=None):
     gives the same bits. `transpose_a`, `transpose_b` and `out` behave as in `matmul`.
     Requires the identical build.
     """
-    a_bits = False
-    try:
-        pa = probe(a)
-        a_bits = dtype_name(a, pa) == "uint16"
-    except TypeError:
-        pass
-    a_arr = _operand_bits(a, "a") if a_bits else _operand(a, "a")
-    b_arr = _operand_bits(b, "b")
-    op, m, n, k = _op_and_shape(probe(a_arr).shape, probe(b_arr).shape,
-                                transpose_a, transpose_b, "matmul_bf16")
-    out_arr = _out_or_new(out, m, n, "matmul_bf16")
-    # `params` is, in this exact order (mirrored word for word in
-    # `bindings/_mojolearn_linalg.mojo::gemm_bf16_binding`):
-    #     0 m, 1 n, 2 k, 3 op, 4 a_bf16
-    params = [int(m), int(n), int(k), int(op), 1 if a_bits else 0]
-    _lowbit_binding().gemm_bf16(addr(out_arr, name="out"), addr_ro(a_arr, name="a"),
-                                addr_ro(b_arr, name="b"), params)
-    return out_arr
+    return _NATIVE(None, "family_lin_matmul_bf16", (_load(), a, b, transpose_a, transpose_b, out), _NATIVE_CONTEXT)
 
 
 def matmul_int8(a, b, *, out=None):
@@ -748,21 +541,7 @@ def matmul_int8(a, b, *, out=None):
     It is the product of the rounded operands, not the float32 product. `out` behaves
     as in `matmul`. Requires the identical build.
     """
-    qa, ea = _int8_operand(a, "a")
-    qb, eb = _int8_operand(b, "b")
-    m, k = probe(qa).shape
-    n, kb = probe(qb).shape
-    if k != kb:
-        raise ValueError(
-            f"mojolearn.linalg.matmul_int8: contracted extents differ, a "
-            f"gives k={k} and b gives k={kb}"
-        )
-    out_arr = _out_or_new(out, m, n, "matmul_int8")
-    # `params` is `[m, n, k]`, mirrored in `gemm_int8_binding`.
-    _lowbit_binding().gemm_int8(addr(out_arr, name="out"), addr_ro(qa, name="a codes"),
-                                addr_ro(ea, name="a exponents"), addr_ro(qb, name="b codes"),
-                                addr_ro(eb, name="b exponents"), [int(m), int(n), int(k)])
-    return out_arr
+    return _NATIVE(None, "family_lin_matmul_int8", (_load(), a, b, out), _NATIVE_CONTEXT)
 
 
 def _int8_operand(x, name):
@@ -787,24 +566,6 @@ def _int8_operand(x, name):
 # ===========================================================================
 
 
-def _int15_binding():
-    b = _load()
-    require_identical()
-    got = getattr(b, "int15_profile_version", None)
-    if got is None:
-        raise RuntimeError(
-            "mojolearn.linalg: the loaded linalg extension predates the "
-            "fifteen-bit profile; rebuild it with bindings/build_linalg.sh"
-        )
-    v = int(got())
-    if v != INT15_PROFILE_VERSION:
-        raise RuntimeError(
-            f"mojolearn.linalg: the loaded extension implements fifteen-bit "
-            f"profile version {v}, this wrapper expects {INT15_PROFILE_VERSION}"
-        )
-    return b
-
-
 def quantize_int15(x):
     """Quantize a 2-D float32 matrix to fifteen-bit codes stored as two int8 planes.
 
@@ -820,60 +581,12 @@ def quantize_int15(x):
     exponents : mojolearn.Array of int32
         One per row.
     """
-    a = _operand(x, "x")
-    rows, cols = probe(a).shape
-    hi = empty((rows, cols), "<i1")
-    lo = empty((rows, cols), "<i1")
-    exps = empty((rows,), "<i4")
-    # `addrs` is, in this exact order (mirrored word for word in
-    # `bindings/_mojolearn_linalg.mojo::quantize_int15_binding`):
-    #     0 hi, 1 lo, 2 exponents, 3 x
-    addrs = [addr(hi, name="hi"), addr(lo, name="lo"), addr(exps, name="exponents"),
-             addr_ro(a, name="x")]
-    _int15_binding().quantize_int15(addrs, [int(rows), int(cols)])
-    return hi, lo, exps
-
-
-def _int15_planes(x, name, who):
-    hi, _ = as_i8_c(x[0], ndim=2, name=name + " hi")
-    lo, _ = as_i8_c(x[1], ndim=2, name=name + " lo")
-    e, _ = as_i32_c(x[2], ndim=1, name=name + " exponents")
-    shape = probe(hi).shape
-    if probe(lo).shape != shape:
-        raise ValueError(
-            f"mojolearn.linalg.{who}: {name} lo has shape {probe(lo).shape}, "
-            f"hi has {shape}"
-        )
-    if probe(e).shape != (shape[0],):
-        raise ValueError(
-            f"mojolearn.linalg.{who}: {name} exponents has shape "
-            f"{probe(e).shape}, want ({shape[0]},)"
-        )
-    return hi, lo, e
+    return _NATIVE(None, "family_lin_quantize_int15", (_load(), x), _NATIVE_CONTEXT)
 
 
 def dequantize_int15(hi, lo, exponents):
     """Recover float32 values ``(hi * 128 + lo) * 2**exponents[row]`` from `quantize_int15` output."""
-    h, l, e = _int15_planes((hi, lo, exponents), "operand", "dequantize_int15")
-    rows, cols = probe(h).shape
-    out = empty((rows, cols), "<f4")
-    # `addrs`: 0 y, 1 hi, 2 lo, 3 exponents (mirrored in the binding).
-    addrs = [addr(out, name="out"), addr_ro(h, name="hi"), addr_ro(l, name="lo"),
-             addr_ro(e, name="exponents")]
-    _int15_binding().dequantize_int15(addrs, [int(rows), int(cols)])
-    return out
-
-
-def _int15_operand(x, name):
-    if isinstance(x, tuple) and len(x) == 3:
-        return _int15_planes(x, name, "matmul_int15")
-    if isinstance(x, tuple):
-        raise TypeError(
-            f"mojolearn.linalg.matmul_int15: {name} is a tuple of {len(x)}; a "
-            "fifteen-bit operand is (hi, lo, exponents) from quantize_int15, "
-            "or a float32 matrix"
-        )
-    return quantize_int15(_operand(x, name))
+    return _NATIVE(None, "family_lin_dequantize_int15", (_load(), hi, lo, exponents), _NATIVE_CONTEXT)
 
 
 def matmul_int15(a, b, *, out=None):
@@ -887,30 +600,7 @@ def matmul_int15(a, b, *, out=None):
     larger values raise `ValueError`. `out` behaves as in `matmul`. Requires the
     identical build.
     """
-    ah, al, ea = _int15_operand(a, "a")
-    bh, bl, eb = _int15_operand(b, "b")
-    m, k = probe(ah).shape
-    n, kb = probe(bh).shape
-    if k != kb:
-        raise ValueError(
-            f"mojolearn.linalg.matmul_int15: contracted extents differ, a "
-            f"gives k={k} and b gives k={kb}"
-        )
-    if k > INT15_MAX_K:
-        raise ValueError(
-            f"mojolearn.linalg.matmul_int15: k={k} is above {INT15_MAX_K}, the "
-            f"largest contracted extent {PROFILE_INT15} accepts (contract W-4)"
-        )
-    out_arr = _out_or_new(out, m, n, "matmul_int15")
-    # `addrs` is, in this exact order (mirrored word for word in
-    # `bindings/_mojolearn_linalg.mojo::gemm_int15_binding`):
-    #     0 c, 1 a hi, 2 a lo, 3 a exponents, 4 b hi, 5 b lo, 6 b exponents
-    # THE OUTPUT ADDRESS COMES FIRST, as in every product of this module.
-    addrs = [addr(out_arr, name="out"),
-             addr_ro(ah, name="a hi"), addr_ro(al, name="a lo"), addr_ro(ea, name="a exponents"),
-             addr_ro(bh, name="b hi"), addr_ro(bl, name="b lo"), addr_ro(eb, name="b exponents")]
-    _int15_binding().gemm_int15(addrs, [int(m), int(n), int(k)])
-    return out_arr
+    return _NATIVE(None, "family_lin_matmul_int15", (_load(), a, b, out), _NATIVE_CONTEXT)
 
 
 def _out_or_new(out, m, n, who):
