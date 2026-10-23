@@ -249,12 +249,23 @@ def _connect_parallel_byte_native():
     runtime = _tokenizer_binding()._module.parallel_byte_call
     mode = _backend.default_mode()
     vendor = _backend.vendor()
-    selected = _backend.binding("_mojolearn_byte_lm", mode)
-    # The registry validates the installed CPU owner before constructing its
-    # legacy adapter. Cache its stored native module, never adapter methods.
-    # Byte-LM owns registered Mojo types: preserve the one-mode-per-process
-    # contract, including a fresh process selected as Apple fast at import.
-    modes = {mode: selected._host if vendor == "cpu" else selected}
+    try:
+        selected = _backend.binding("_mojolearn_byte_lm", mode)
+    except ImportError:
+        # A set built without the byte LM still imports: merged_groups.json
+        # packs `_mojolearn_byte_lm` into the Linux identical set only, and
+        # only with MOJOLEARN_PACKAGE_BYTE_LM=1, so a Linux process in fast
+        # mode (or any set built with it off) has none. The byte-LM trainers
+        # then refuse at use ("Byte-LM numeric mode is not installed",
+        # bindings/parallel_byte_native.mojo) instead of the whole package
+        # failing at `import mojolearn` (AMD verify fast, 2026-10-23).
+        modes = {}
+    else:
+        # The registry validates the installed CPU owner before constructing its
+        # legacy adapter. Cache its stored native module, never adapter methods.
+        # Byte-LM owns registered Mojo types: preserve the one-mode-per-process
+        # contract, including a fresh process selected as Apple fast at import.
+        modes = {mode: selected._host if vendor == "cpu" else selected}
     runtime("initialize", (Array, ByteLanguageModelConfig, modes, vendor))
     return runtime
 
