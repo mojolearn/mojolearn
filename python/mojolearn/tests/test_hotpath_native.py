@@ -505,7 +505,9 @@ _NATIVE_LABELS = {"int8", "int16", "int32", "int64", "uint8", "uint16", "uint32"
 @pytest.mark.parametrize("name", list(_metric_label_inputs()))
 def test_classification_labels_match(name):
     y = _metric_label_inputs()[name]
-    expect = ("encode_labels_i64",) if name in ("int64", "strided", "one class", "binary",
+    # lane migrate-shared-labels: a numeric label vector is encoded by the one
+    # prepare_targets call (it runs encode_labels_<dtype> inside the binding)
+    expect = ("prepare_targets",) if name in ("int64", "strided", "one class", "binary",
                                                 "minus one one", "uint64") else ()
     ref = _same(lambda: M._classification_encoded(y, "y_true"), expect, group="metrics")
     if name in _NATIVE_LABELS and not _EXPECT_SABOTAGE:
@@ -727,14 +729,17 @@ class _Count:
         return False
 
 
-def _pinned(module, name, fn, answers=True):
+def _pinned(module, name, fn, answers=True, ref_fn=None):
     # The reference arm: the seam declines (returns None, its "not taken"
     # answer), so the caller runs the Python routine it stands in for.
+    # ref_fn: the reference for a seam that no longer declines (it is always
+    # taken, so there is no routine behind it to fall back to).
     real = getattr(module, name)
-    setattr(module, name, lambda *args, **kwargs: None)
+    if ref_fn is None:
+        setattr(module, name, lambda *args, **kwargs: None)
     try:
         with _python_arm():
-            ref = _outcome(fn)
+            ref = _outcome(fn if ref_fn is None else ref_fn)
     finally:
         setattr(module, name, real)
     with _Count(module, name) as new_count:
@@ -743,6 +748,18 @@ def _pinned(module, name, fn, answers=True):
         assert bool(new_count.answered) == answers, (name, new_count.answered, answers)
     assert new == ref, f"{name}: new arm {new!r:.300} != reference {ref!r:.300}"
     return ref
+
+
+def _general_sorted_classes(y):
+    """`sorted_classes` through the general label walk (the kind check and the
+    ORDER RULE), the definition `_sorted_plain_classes` specializes. Since lane
+    migrate-shared-labels the plain seam is always taken (it no longer
+    declines), so declining it would leave `sorted_classes` answering None."""
+    labels = list(y)
+    if not labels:
+        raise ValueError("mojolearn: y is empty")
+    _labels._check_label_kinds(labels)
+    return _labels._classes_and_codes(labels)
 
 
 @pytest.mark.parametrize("name", list(_label_lists()))
@@ -755,7 +772,7 @@ def test_plain_label_lists_match_the_label_loop(name):
     big = name == "huge ints"
     if isinstance(y, list):
         _pinned(_labels, "_sorted_plain_classes", lambda: _labels.sorted_classes(y),
-                answers=plain)
+                answers=plain, ref_fn=lambda: _general_sorted_classes(y))
     _pinned(_labels, "_plain_labels", lambda: _labels.flatten_labels(y),
             answers=plain or big or name == "tuple")
     if plain and name != "nan":
@@ -766,7 +783,8 @@ def test_plain_label_lists_match_the_label_loop(name):
 def test_first_seen_object_is_kept_by_the_plain_path():
     for y in ([True, 1, 1.0, 0, False, 0.0] * 50, [1.0, 1, True, -0.0, 0, False] * 50,
               [0.0, -0.0] * 99, [-0.0, 0.0] * 99):
-        ref = _pinned(_labels, "_sorted_plain_classes", lambda: _labels.sorted_classes(y))
+        ref = _pinned(_labels, "_sorted_plain_classes", lambda: _labels.sorted_classes(y),
+                      ref_fn=lambda: _general_sorted_classes(y))
         assert ref[0][0] == "ok"
 
 
