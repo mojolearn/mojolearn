@@ -107,8 +107,10 @@ def test_refusals_by_name():
 
 
 def test_pairs_validation():
-    assert _pairs_arrays([(3, 1), [0, 2]], None, 4) == ([3, 1, 0, 2], [1.0, 1.0])
-    assert _pairs_arrays(np.array([[1, 0]]), [2.5], 2) == ([1, 0], [2.5])
+    flat, w = _pairs_arrays([(3, 1), [0, 2]], None, 4)
+    assert (list(flat), list(w)) == ([3, 1, 0, 2], [1.0, 1.0])
+    flat, w = _pairs_arrays(np.array([[1, 0]]), [2.5], 2)
+    assert (list(flat), list(w)) == ([1, 0], [2.5])
     with pytest.raises(ValueError, match="isn't equal to 2"):
         _pairs_arrays([(1, 2, 3)], None, 4)
     with pytest.raises(ValueError, match="must be an integer"):

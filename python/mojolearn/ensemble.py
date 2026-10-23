@@ -141,6 +141,7 @@ from ._buffer import (
     empty, zeros, _native,
 )
 from ._labels import argmax_rows, finite_integer_codes, flat_view, is_bool
+from . import _user_objects
 
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-gbdt-1"
@@ -180,23 +181,6 @@ LOSSES = (
     "MultiRMSE",
 )
 
-def _group_id_key(value, index):
-    """The bytes CatBoost hashes for one group id
-    (`_catboost.pyx:2171-2196`, `get_id_object_bytes_string_representation`):
-    a string or bytes object as itself, an integer as its decimal spelling.
-    A float, a bool or anything else is refused in their words."""
-    if isinstance(value, bytes):
-        return value
-    if isinstance(value, str):
-        return value.encode("utf-8")
-    if isinstance(value, numbers.Integral) and not isinstance(value, bool):
-        return str(int(value)).encode("ascii")
-    raise ValueError(
-        f"mojolearn: group_id[{index}] object ({value!r}) is unsuitable "
-        "(should be string or integral type)"
-    )
-
-
 def _group_sizes(group_id, n_rows):
     """`group_id` as the pool's run lengths, in row order.
 
@@ -220,71 +204,11 @@ def _group_sizes(group_id, n_rows):
         )
     if n_rows > 0xFFFFFFFF:
         raise ValueError("mojolearn: group_id needs at most 2**32 - 1 rows")
-    sizes = _group_sizes_by_runs(ids)
-    if sizes is None:
-        sizes = _group_sizes_rowwise(ids)
-    return sizes
-
-
-def _group_sizes_rowwise(ids):
-    """The definition: one key per row, in row order, and every refusal."""
-    sizes = []
-    seen = set()
-    last = None
-    for i, value in enumerate(ids):  # cpu-route: group_id label objects (int/str/bytes) checked for contiguous runs [py-data-loop]
-        key = _group_id_key(value, i)
-        if i > 0 and key == last:
-            sizes[-1] += 1
-            continue
-        if key in seen:
-            raise ValueError(
-                "mojolearn: group Ids are not consecutive: the rows of group "
-                f"{value!r} are split into more than one run (row {i}); "
-                "CatBoost requires every group's rows to be contiguous"
-            )
-        seen.add(key)
-        sizes.append(1)
-        last = key
-    return sizes
-
-
-def _group_sizes_by_runs(ids):
-    """`_group_sizes_rowwise`'s answer with one key per RUN of equal ids, or
-    None when the row walk must decide.
-
-    The row walk spent 1,278 ms on Istella-S's 2,043,304 ids
-    (bench/results/istella_ranking_2026-09-15), a fixed cost of every
-    ranking fit. `itertools.groupby` finds the runs of `==` ids in C. Equal
-    ids of ONE type (int, str or bytes, exactly) spell the same key, so a
-    run is keyed once, by its first id, and adjacent runs with the same key
-    (7 then "7") merge as the row walk merges them. Everything else returns
-    None: a run mixing types (5 and 5.0, or 1 and True, compare equal), an
-    id of any other type, an id whose `==` raises, and a repeated group,
-    so the row walk owns every refusal, its wording and its row index.
-    """
-    sizes = []
-    seen = set()
-    last = None
-    try:
-        for value, run in itertools.groupby(ids):  # cpu-route: group_id label objects (int/str/bytes) checked for contiguous runs [py-data-loop]
-            kind = type(value)
-            if kind is not int and kind is not str and kind is not bytes:
-                return None
-            members = list(run)
-            if set(map(type, members)) != {kind}:
-                return None
-            key = _group_id_key(value, 0)
-            if key == last:
-                sizes[-1] += len(members)
-                continue
-            if key in seen:
-                return None
-            seen.add(key)
-            sizes.append(len(members))
-            last = key
-    except Exception:
-        return None
-    return sizes
+    # the ids read once natively: CatBoost's key per id (`_catboost.pyx:2171-2196`,
+    # a string or bytes as itself, an integer as its decimal spelling, a float,
+    # bool or anything else refused in their words), then the runs of equal
+    # keys, a repeated group refused (bindings/user_objects_native.mojo)
+    return _user_objects.call("group_runs", ids)
 
 
 def _pairs_arrays(pairs, pairs_weight, n_rows):
@@ -298,40 +222,12 @@ def _pairs_arrays(pairs, pairs_weight, n_rows):
     rows = pairs.tolist() if hasattr(pairs, "tolist") else list(pairs)
     if len(rows) == 0:
         raise ValueError("mojolearn: pairs is empty")
-    flat = []
-    for i, pair in enumerate(rows):  # cpu-route: user pairs list of Python index pairs validated and flattened [py-data-loop]
-        if len(pair) != 2:
-            raise ValueError(f"mojolearn: Length of pairs[{i}] isn't equal to 2.")
-        for j, index in enumerate(pair):  # cpu-route: user pairs list of Python index pairs validated and flattened [py-data-loop]
-            if not isinstance(index, numbers.Integral) or isinstance(index, bool):
-                raise ValueError(
-                    f"mojolearn: Invalid pairs[{i}][{j}] = '{index}' value "
-                    f"type={type(index)}: must be an integer."
-                )
-            if not 0 <= int(index) < n_rows:
-                raise ValueError(
-                    f"mojolearn: pairs[{i}][{j}] = {int(index)} is outside the "
-                    f"{n_rows} rows"
-                )
-        if int(pair[0]) == int(pair[1]):
-            raise ValueError(f"mojolearn: pairs[{i}] pairs row {int(pair[0])} with itself")
-        flat.extend((int(pair[0]), int(pair[1])))
-    if pairs_weight is None:
-        weights = [1.0] * len(rows)
-    else:
-        weights = pairs_weight.tolist() if hasattr(pairs_weight, "tolist") else list(pairs_weight)
-        if len(weights) != len(rows):
-            raise ValueError(
-                f"mojolearn: len(pairs_weight) = {len(weights)} is not equal to "
-                f"len(pairs) = {len(rows)} "
-            )
-        for i, w in enumerate(weights):  # cpu-route: user pairs list of Python index pairs validated and flattened [py-data-loop]
-            if not isinstance(w, numbers.Real) or not math.isfinite(float(w)) or float(w) < 0:
-                raise ValueError(
-                    f"mojolearn: pairs_weight[{i}] must be a finite nonnegative number"
-                )
-        weights = [float(w) for w in weights]  # cpu-route: user pairs list of Python index pairs validated and flattened [py-data-loop]
-    return flat, weights
+    if pairs_weight is not None:
+        pairs_weight = pairs_weight.tolist() if hasattr(pairs_weight, "tolist") else list(pairs_weight)
+    # each pair and weight read once natively, checked in their Pool's order
+    # (bindings/user_objects_native.mojo): int64 winner, loser words and
+    # float64 weights
+    return _user_objects.call("pairs", rows, pairs_weight, int(n_rows))
 
 
 #: Their GPU target keeps numClasses - 1 planes for MultiClass and
@@ -2143,7 +2039,7 @@ class GradientBoosting(NumericModeMixin):
         pairs_weight_holder = None
         if group_id is not None:
             sizes = _group_sizes(group_id, n_rows)
-            group_holder = Array.from_list(sizes, "<u4")
+            group_holder = Array._owned(sizes, (len(sizes),), "<i8", "C").astype("<u4")
             fixed = 35 + int(params[34])
             tail = list(params[fixed:])
             tail += [-1.0, -1.0, 1.0][len(tail):]
@@ -2158,8 +2054,8 @@ class GradientBoosting(NumericModeMixin):
                                addr_ro(group_holder, name="group_id")]
                 else:
                     flat, weights = _pairs_arrays(pairs, pairs_weight, n_rows)
-                    pairs_holder = Array.from_list(flat, "<u4")
-                    pairs_weight_holder = Array.from_list(weights, "<f4")
+                    pairs_holder = Array._owned(flat, (len(flat),), "<i8", "C").astype("<u4")
+                    pairs_weight_holder = Array._owned(weights, (len(weights),), "<f8", "C").astype("<f4")
                     params += [addr_ro(pairs_holder, name="pairs"), len(weights),
                                addr_ro(pairs_weight_holder, name="pairs_weight")]
         if self.od_type is not None and self.od_type not in OD_TYPES:
@@ -3104,8 +3000,8 @@ class OrderedRMSE(GradientBoosting):
             "mojolearn: permutation must be an integer bijection of row ids"
         )
         if isinstance(permutation, (list, tuple)):
-            if any(is_bool(v) or not isinstance(v, numbers.Integral)
-                   for v in permutation):  # cpu-route: user permutation Python list type check [py-data-loop]
+            got = _user_objects.kinds(permutation)
+            if got[_user_objects.KIND_PLAIN_INT] != len(permutation):
                 raise bijection_error
         else:
             dtype = getattr(permutation, "dtype", None)

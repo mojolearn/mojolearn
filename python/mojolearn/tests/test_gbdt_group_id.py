@@ -8,6 +8,8 @@ lands. The refusal is raised inside the binding (`gbdt/train.mojo::train`
 on a GPU install, `bindings/_mojolearn_gbdt_host.mojo::gbdt_fit_binding` on
 a CPU-only one), so the fit tests below prove the sizes cross the ABI tail.
 """
+import numbers
+
 import numpy as np
 import pytest
 
@@ -19,21 +21,21 @@ REFUSAL = "group_id is read only by the querywise and pairwise losses"
 
 
 def test_runs_of_uneven_size_including_one():
-    assert _group_sizes([5, 5, 5, 9, "x", "x"], 6) == [3, 1, 2]
-    assert _group_sizes(["a"], 1) == [1]
-    assert _group_sizes([0, 1, 2, 3], 4) == [1, 1, 1, 1]
+    assert list(_group_sizes([5, 5, 5, 9, "x", "x"], 6)) == [3, 1, 2]
+    assert list(_group_sizes(["a"], 1)) == [1]
+    assert list(_group_sizes([0, 1, 2, 3], 4)) == [1, 1, 1, 1]
 
 
 def test_integer_and_string_spellings_are_one_group():
     # CatBoost hashes ToString<i64>(id) for an integer and the string itself
     # for a string, so 7 and "7" are the same group id
-    assert _group_sizes([7, "7", np.int64(7), b"7"], 4) == [4]
+    assert list(_group_sizes([7, "7", np.int64(7), b"7"], 4)) == [4]
 
 
 def test_numpy_integer_arrays():
     ids = np.array([3, 3, 1, 1, 1, 2], dtype=np.int32)
-    assert _group_sizes(ids, 6) == [2, 3, 1]
-    assert _group_sizes(np.array(["q1", "q1", "q2"]), 3) == [2, 1]
+    assert list(_group_sizes(ids, 6)) == [2, 3, 1]
+    assert list(_group_sizes(np.array(["q1", "q1", "q2"]), 3)) == [2, 1]
 
 
 @pytest.mark.parametrize("bad", [1.0, np.float32(2.0), True, None, (1,)])
@@ -96,50 +98,65 @@ def test_a_fit_without_group_id_packs_the_old_layout():
     assert len(params) == 35
 
 
-# --- the run-based grouping (lane/gbdt-group-sizes, 2026-09-17) -------------
-# `_group_sizes_by_runs` keys one id per run; `_group_sizes_rowwise` is the
-# definition. The first two tests pin WHICH path answers, so the differential
-# below cannot pass by always deferring to the row walk.
+# --- the native grouping (lane purge-user-objects, 2026-10-22) ----------------
+# `_group_sizes` reads the ids once natively (bindings/user_objects_native.mojo
+# group_runs); the row walk below is the former Python definition, kept here
+# as the oracle: the same sizes, or the same exception type and words.
+
+def _group_id_key(value, index):
+    if isinstance(value, bytes):
+        return value
+    if isinstance(value, str):
+        return value.encode("utf-8")
+    if isinstance(value, numbers.Integral) and not isinstance(value, bool):
+        return str(int(value)).encode("ascii")
+    raise ValueError(
+        f"mojolearn: group_id[{index}] object ({value!r}) is unsuitable "
+        "(should be string or integral type)"
+    )
+
+
+def _group_sizes_rowwise(ids):
+    sizes, seen, last = [], set(), None
+    for i, value in enumerate(ids):
+        key = _group_id_key(value, i)
+        if i > 0 and key == last:
+            sizes[-1] += 1
+            continue
+        if key in seen:
+            raise ValueError(
+                "mojolearn: group Ids are not consecutive: the rows of group "
+                f"{value!r} are split into more than one run (row {i}); "
+                "CatBoost requires every group's rows to be contiguous"
+            )
+        seen.add(key)
+        sizes.append(1)
+        last = key
+    return sizes
+
 
 def _outcome(fn, *args):
     try:
-        return ("ok", fn(*args))
+        return ("ok", list(fn(*args)))
     except Exception as exc:  # the type and the words are both the contract
         return (type(exc).__name__, str(exc))
 
 
-def test_run_path_answers_plain_ids():
-    from mojolearn.ensemble import _group_sizes_by_runs
-    assert _group_sizes_by_runs([4, 4, 4, 2, 2, 9]) == [3, 2, 1]
-    assert _group_sizes_by_runs(["a", "a", "b"]) == [2, 1]
-    assert _group_sizes_by_runs([b"q", b"q"]) == [2]
-    # adjacent runs that spell one key merge, as the row walk merges them
-    assert _group_sizes_by_runs([7, 7, "7", b"7", 8]) == [4, 1]
-    assert _group_sizes_by_runs([]) == []
-
-
 @pytest.mark.parametrize("ids", [
-    [5, 5.0],            # equal under ==, and the float is refused
-    [1, True],           # equal under ==, and the bool is refused
-    [True, True],        # a bool is not an int here
-    [1.5],
-    [None],
-    [3, 3, 4, 3],        # a repeated group: the row walk words the refusal
-    [np.int64(3), 3],    # a list holding a NumPy scalar: not exactly int
-    [np.array([1, 2]), 1],  # == returns an array; its truth value raises
+    [4, 4, 4, 2, 2, 9], ["a", "a", "b"], [b"q", b"q"], [7, 7, "7", b"7", 8], [],
+    [5, 5.0], [1, True], [True, True], [1.5], [None], [3, 3, 4, 3], [np.int64(3), 3],
+    [np.array([1, 2]), 1],
 ])
-def test_run_path_defers(ids):
-    from mojolearn.ensemble import _group_sizes_by_runs
-    assert _group_sizes_by_runs(ids) is None
+def test_native_grouping_equals_the_row_walk(ids):
+    assert _outcome(_group_sizes, ids, len(ids)) == _outcome(_group_sizes_rowwise, ids), ids
 
 
-def test_runs_equal_the_row_walk_on_random_ids():
+def test_native_grouping_equals_the_row_walk_on_random_ids():
     import random
-    from mojolearn.ensemble import _group_sizes_rowwise
     rng = random.Random(20260917)
     spell = [lambda v: v, lambda v: str(v), lambda v: str(v).encode("ascii")]
     odd = [5.0, True, None, (1,), 2.5]
-    deferred = answered = 0
+    refused = answered = 0
     for case in range(400):
         ids = []
         for group in rng.sample(range(40), rng.randint(1, 12)):
@@ -156,11 +173,10 @@ def test_runs_equal_the_row_walk_on_random_ids():
         if want[0] == "ok":
             answered += 1
         else:
-            deferred += 1
-    assert answered > 100 and deferred > 100, (answered, deferred)
+            refused += 1
+    assert answered > 100 and refused > 100, (answered, refused)
 
 
-def test_a_two_million_id_pool_is_grouped_by_runs():
-    from mojolearn.ensemble import _group_sizes_by_runs
+def test_a_two_million_id_pool_is_grouped():
     ids = [q for q in range(20000) for _ in range(100)]
-    assert _group_sizes_by_runs(ids) == [100] * 20000
+    assert list(_group_sizes(ids, len(ids))) == [100] * 20000
