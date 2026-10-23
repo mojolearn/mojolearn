@@ -28,9 +28,11 @@ from bindings.prep_lda_admission import (
 )
 from bindings.classifier_public_lifecycle import classifier_label_list, classifier_after_fit
 from bindings.classical_metadata import classical_is_fitted
+from bindings.classical_pandas import classical_admit_value
+from bindings.msel_fixed_owner import fixed_owner_context, fixed_owner_fields, fixed_owner_set_params
 from bindings.scaler_lifecycle_native import _public_result
 from bindings.classical_labels import classical_encode_labels, classical_decode_labels, classical_accuracy, labels_check_sample_weight
-from bindings.x_prep_native_inputs import _values
+from bindings.x_prep_native_inputs import _values, _rows_fields
 from bindings.arena_cache_release import arena_cache_release_operation
 from bindings.prep_classify_prog import ClsProg, NONE, f32_array, i32_array, f32_input
 from bindings.prep_classify_common import (
@@ -1501,6 +1503,18 @@ def _dispatch(model: PythonObject, operation: String, var args: PythonObject, va
             lda_require_fitted(model, operation, context)
             fields = py_call(Python.import_module("builtins").dict, fields)
             py_setitem(fields, "classes_", classifier_label_list(fields["classes_"], context))
+    elif kind == "gnb" and py_get(context, "cv_fixed_owner") is not None:
+        context = fixed_owner_context(context)
+        fields = fixed_owner_fields(model, context)
+        if operation == "cv_set_params":
+            return fixed_owner_set_params(model, args[0], context)
+        for i in range(len(args)):  # driver-loop: fixed public arguments, including native resident-fold handles
+            if i == 0 and py_type(args[i]) is context["maxabs_rows_class"]:
+                _ = _rows_fields(args[i], context)
+            else:
+                classical_admit_value(args[i], context)
+        if operation == "fit" or operation == "score":
+            lda_native_labels(args[1], context, operation == "fit", "GaussianNB")
     else:
         fields = py_fields(model)
     if operation == "predict":
