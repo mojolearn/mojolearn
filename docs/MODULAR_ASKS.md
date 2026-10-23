@@ -164,3 +164,17 @@ bounds before calling it. The public repeated archive-load regression covers
 successful consumed state and late schema errors in fresh interpreters. This
 source repair is pending native build and execution at this checkpoint; the
 original shutdown failure and unaffected accepted evidence remain retained.
+
+## sm_120 AOT miscompiles a SIMD lane written under a per-lane guard (2026-10-23)
+
+**What we see.** Binaries built with `--target-accelerator sm_120` (RunPod RTX 5090, driver 580.178.04) return wrong
+values for one lane of a SIMD local whose lanes are each written under their own `if` inside a `comptime for`. The same
+source is right on sm_89, gfx942, Apple and under JIT on the same GPU (first seen 2026-09-14 in `core/gram_splitk.mojo`).
+On 2026-10-23 it changed the tree structure of every Ordered-boosting GBDT fit (5 identity lanes: 8-leaf trees where every
+other column grows 64) while the PTX fused-op census for sm_89 vs sm_120 was identical, which points past the PTX at the
+sm_120 back end.
+
+**The ask.** Fix lane-masked insert/extract of SIMD values held in registers on sm_120 (or the ptxas path it reaches), and
+add a regression test for a guarded per-lane write in an unrolled loop. Until then our kernels keep such scratch in
+`InlineArray` or write every lane unconditionally from a selected value (lane/sm120-tree-identity 45b2db146); no compiler
+output is patched.
