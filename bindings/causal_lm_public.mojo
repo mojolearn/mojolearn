@@ -440,10 +440,12 @@ def causal_layer_run(model: PythonObject, i: Int, x: PythonObject, supplied_stat
     var y = generation_array([b, l, d])
     var addresses = PythonObject(None)
     var params = PythonObject(None)
+    # every layer kind: a state a decode session holds resident is refused by name
+    var gb = GENERATION_BOUNDARY.get_or_create_ptr()
+    if py_call(gb[].bi.getattr, st, "_resident_session", PythonObject(None)) is not None:
+        raise Error("CausalLM: layer state is owned by a decode session (resident in it); sync_state() or close it first")
     if kind == "transformer":
         var g = GENERATION_BOUNDARY.get_or_create_ptr()
-        if py_call(g[].bi.getattr, st, "_resident_session", PythonObject(None)) is not None:
-            raise Error("CausalLM: layer state is owned by a decode session")
         var old_profile = py_call(g[].bi.getattr, st, "arithmetic_profile", PythonObject(None))
         var profile_id = py_get(blk, "_arithmetic_profile", PythonObject(None))
         if old_profile is None and Int(py=st.cached_tokens) != 0 and Bool(py=py_get(blk, "_arithmetic_profile_changed", PythonObject(False))):
