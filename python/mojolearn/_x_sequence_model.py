@@ -659,7 +659,7 @@ def _connect_sequential_bindings():
         try:
             module = _backend.binding("_mojolearn_x_sequence", mode)
             symbols = {}
-            for name in ("x_sequence_vendor", "x_sequence_numeric_mode", "model_n_params", "model_fit", "model_predict", "model_labels", "model_gather_labels", "model_import_params", "model_save_checkpoint", "model_load_checkpoint", "model_checkpoint_info", "verify_digest", "verify_file_sha256", "verify_model_info", "verify_fill"):  # glue: resolve existing compiled ABI symbols at import
+            for name in ("x_sequence_vendor", "x_sequence_numeric_mode", "model_n_params", "model_fit", "model_predict", "model_labels", "model_gather_labels", "model_predict_labels", "model_fit_labels", "model_import_params", "model_save_checkpoint", "model_load_checkpoint", "model_checkpoint_info", "verify_digest", "verify_file_sha256", "verify_model_info", "verify_fill"):  # glue: resolve existing compiled ABI symbols at import
                 entry = getattr(module, name)
                 if not isinstance(entry, BuiltinFunctionType):
                     raise TypeError(f"Sequential requires a compiled {name}")

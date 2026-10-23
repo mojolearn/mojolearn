@@ -98,6 +98,16 @@ def model_fit_py[E: Exec](
     state[FS_EPOCH] values, read when resuming)], and ip[14] = resume (0/1);
     loss_curve then holds state[FS_EPOCH] + epochs values. Returns the epochs
     completed in all (the earlier ones included)."""
+    return _model_fit_run(ex, addrs, prog, ip, fp, 0, 0)
+
+
+def _model_fit_run[E: Exec](
+    mut ex: E, addrs: PythonObject, prog: PythonObject, ip: PythonObject, fp: PythonObject,
+    codes_dev: Int, n_classes: Int,
+) raises -> PythonObject:
+    """`model_fit_py`'s body; `codes_dev` names class codes already on the
+    executor (0: read addrs[1]) and `n_classes` > 0 cuts the validation
+    classes descriptor to that many classes."""
     var validated = len(addrs) == 13 and len(ip) == 16
     var stateful = (len(addrs) == FIT_ADDRS_STATE and len(ip) == FIT_INTS_STATE) or validated
     var plain = len(addrs) == FIT_ADDRS and len(ip) == FIT_INTS
@@ -124,6 +134,8 @@ def model_fit_py[E: Exec](
             var classes = CastIn.f32_c(0, 1, 1)
             if cfg.target != 0:
                 classes = cast_in_of(addrs[10], "training classes")
+                if n_classes > 0:
+                    classes.rows = n_classes
             validation = Optional[FitValidation](FitValidation(
                 cast_in_of(addrs[8], "validation X"), cast_in_of(addrs[9], "validation y"),
                 classes, fptr(addrs[11], "validation curve"), ival(ip, 15) != 0,
@@ -137,11 +149,15 @@ def model_fit_py[E: Exec](
         var prev = fptr(addrs[3], "loss_curve")
         if resume and Int(state[FS_EPOCH]) > 0:
             prev = fptr(addrs[7], "earlier loss_curve")
-        _ = model_fit_state(ex, spec, cfg, cast_in_of(addrs[0], "X"), cast_in_of(addrs[1], "y"), N,
+        var y = CastIn.f32_c(0, 1, 1) if codes_dev != 0 else cast_in_of(addrs[1], "y")
+        _ = model_fit_state(ex, spec, cfg, cast_in_of(addrs[0], "X"), y, N,
                             fptr(addrs[2], "params"), fptr(addrs[3], "loss_curve"),
-                            fptr(addrs[4], "m"), fptr(addrs[5], "v"), state, prev, resume, validation)
+                            fptr(addrs[4], "m"), fptr(addrs[5], "v"), state, prev, resume, validation,
+                            codes_dev)
         n_iter = Int(state[FS_EPOCH])
     else:
+        if codes_dev != 0:
+            raise Error("model_fit_labels: requires the training-state addresses")
         n_iter = model_fit(ex, spec, cfg, cast_in_of(addrs[0], "X"), cast_in_of(addrs[1], "y"), N,
                            fptr(addrs[2], "params"), fptr(addrs[3], "loss_curve"))
     if profile:
@@ -169,6 +185,71 @@ def model_predict_py[E: Exec](
     if ival(ip, 2) == 4 or ival(ip, 2) == 5:
         return PythonObject(N)
     return PythonObject(N * spec.out_features())
+
+
+def model_predict_labels_py[E: Exec](
+    mut ex: E, addrs: PythonObject, prog: PythonObject, ptab: PythonObject, ip: PythonObject,
+) raises -> PythonObject:
+    """Sequential.predict of a classifier in one call (lane migrate-neural-2):
+    `model_predict`'s argmax (transform 4) or threshold (5) codes stay on the
+    executor and are gathered there into the labels. addrs = [X descriptor,
+    params address, classes address, labels address (n items of the
+    classes' dtype)]; ip = [N, chunk, transform, k, item size]. Returns N.
+    The same launches as `model_predict` then `model_gather_labels`."""
+    if len(addrs) != 4 or len(ip) != 5:
+        raise Error("model_predict_labels: requires 4 addresses and [N, chunk, transform, k, item size]")
+    var transform = ival(ip, 2)
+    if transform != 4 and transform != 5:
+        raise Error("model_predict_labels: transform must be 4 (argmax) or 5 (threshold)")
+    var spec = parse_model(_ints(prog), _floats(ptab, 0))
+    var N = ival(ip, 0)
+    if ival(addrs, 2) == 0 or ival(addrs, 3) == 0:
+        raise Error("model_gather_labels: null buffer address")
+    model_predict(ex, spec, cast_in_of(addrs[0], "X"), N, fptr(addrs[1], "params"),
+                  FP(unsafe_from_address=ival(addrs, 3)), ival(ip, 1), transform,
+                  ival(addrs, 2), ival(ip, 3), ival(ip, 4))
+    return PythonObject(N)
+
+
+def model_fit_labels_check(lab: PythonObject) raises -> Tuple[CastIn, Int, Int, Int, Int]:
+    """`model_fit_labels`' label arguments: lab = [y descriptor (one label
+    per row), classes address (n slots of y's dtype), model outputs, loss
+    target (1 cross_entropy, 2 bce_with_logits)]. Returns (labels, sort
+    kind, classes address, outputs, target)."""
+    if len(lab) != 4:
+        raise Error("model_fit_labels: the labels take [y descriptor, classes address, outputs, target]")
+    var c = cast_in_of(lab[0], "y")
+    if c.cols != 1:
+        raise Error("model_labels: the labels must be one per row")
+    var classes_addr = ival(lab, 1)
+    if classes_addr == 0:
+        raise Error("model_labels: null buffer address")
+    var target = ival(lab, 3)
+    if target != 1 and target != 2:
+        raise Error("model_fit_labels: target must be 1 (cross_entropy) or 2 (bce_with_logits)")
+    return (c, label_kind_of(c.kind, c.itemsize, "y"), classes_addr, ival(lab, 2), target)
+
+
+def model_fit_labels_py[E: Exec](
+    mut ex: E, k: Int, codes: FP, n_out: Int, target: Int, addrs: PythonObject, prog: PythonObject,
+    ip: PythonObject, fp: PythonObject,
+) raises -> PythonObject:
+    """Sequential.fit of a classifier after the label sort (lane
+    migrate-neural-2): `k` classes found, their N codes already in the
+    executor buffer `codes`; the class-count refusals of the door, then
+    `model_fit_py`'s resumable fit reading the codes there (addrs[1], the
+    target slot, is not read; a validation classes descriptor in addrs[10]
+    is cut to the k classes). Returns [k, epochs run]."""
+    var count = Int(py=model_labels_result(k))
+    if target == 1 and count != n_out:
+        raise Error("the labels have " + String(count) + " classes but the model has " + String(n_out) + " outputs")
+    if target == 2 and (count != 2 or n_out != 1):
+        raise Error("bce_with_logits needs two classes and a model with one output")
+    var n_iter = _model_fit_run(ex, addrs, prog, ip, fp, Int(codes), count)
+    var out = Python.list()
+    _ = py_call(out.append, PythonObject(count))
+    _ = py_call(out.append, n_iter)
+    return out
 
 
 def model_labels_check(src: PythonObject, classes_addr: PythonObject, codes_addr: PythonObject) raises -> Tuple[CastIn, Int]:

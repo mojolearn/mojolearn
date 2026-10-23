@@ -1064,7 +1064,7 @@ def vendor_used(numeric_mode=None):
     -------
     str
     """
-    return _backend.read_vendor(_load(numeric_mode))
+    return _load(numeric_mode).training_vendor()
 
 
 # ===================================================================
@@ -1954,42 +1954,7 @@ def chunked_lm_head_loss(hidden, weight, targets, return_grad=False,
     >>> targets = rng.integers(0, 1000, 64)
     >>> loss, dh, dw = mojolearn.chunked_lm_head_loss(hidden, weight, targets, return_grad=True)
     """
-    where = "training.chunked_lm_head_loss"
-    h = _c32(hidden, "hidden", where)
-    w = _c32(weight, "weight", where)
-    if h.ndim != 2 or w.ndim != 2:
-        raise ValueError(
-            "mojolearn.%s: hidden must be (rows, width) and weight "
-            "(vocab, width)" % where)
-    rows, width = (int(d) for d in h.shape)  # glue: two shape dimensions only
-    vocab, width_w = (int(d) for d in w.shape)  # glue: two shape dimensions only
-    if width != width_w:
-        raise ValueError(
-            "mojolearn.%s: hidden has width %d, weight has width %d"
-            % (where, width, width_w))
-    if vocab < 2:
-        raise ValueError("mojolearn.%s: vocab must be at least 2, got %d"
-                         % (where, vocab))
-    t = as_i32_c(targets, ndim=None, name="targets")[0].reshape((-1,))
-    if int(t.size) != rows:
-        raise ValueError(
-            "mojolearn.%s: %d targets for %d rows" % (where, int(t.size), rows))
-    loss = zeros((1,), "<f4")
-    row_max = empty((rows,), "<f4")
-    row_denom = empty((rows,), "<f4")
-    plist = [rows, vocab, width]
-    binding = _load(numeric_mode)
-    if not return_grad:
-        binding.chunked_lm_head_v2_loss(
-            [_addr(loss), _addr(row_max), _addr(row_denom),
-             _addr_ro(h), _addr_ro(w), _addr_ro(t)], plist)
-        return float(loss[0])
-    d_hidden = empty((rows, width), "<f4")
-    d_weight = empty((vocab, width), "<f4")
-    binding.chunked_lm_head_v2_train(
-        [_addr(loss), _addr(row_max), _addr(row_denom), _addr(d_hidden),
-         _addr(d_weight), _addr_ro(h), _addr_ro(w), _addr_ro(t)], plist)
-    return float(loss[0]), d_hidden, d_weight
+    return _OPT_NATIVE("chunked_lm_head_loss", None, (hidden, weight, targets, return_grad), numeric_mode, _OPT_CONTEXT)
 
 
 # The native NN64 switch selects packed projection versus separate projection calls.
@@ -2024,34 +1989,7 @@ def mlp_inference_sessions(inputs, weight1, bias1, weight2, bias2, numeric_mode=
     ValueError
         When the weight, bias and session shapes do not agree.
     """
-    w1 = _c32(weight1, "weight1", "mlp_inference_sessions")
-    b1 = _c32(bias1, "bias1", "mlp_inference_sessions")
-    w2 = _c32(weight2, "weight2", "mlp_inference_sessions")
-    b2 = _c32(bias2, "bias2", "mlp_inference_sessions")
-    if len(w1.shape) != 2 or len(w2.shape) != 2:
-        raise ValueError("MLP session weights must be matrices")
-    hidden, width = w1.shape
-    out_width, hidden2 = w2.shape
-    if hidden2 != hidden or b1.shape != (hidden,) or b2.shape != (out_width,):
-        raise ValueError("MLP session weight/bias shapes do not agree")
-    # API objects and their shape metadata only; row values stay in buffers.
-    sessions = [_c32(x, "session input", "mlp_inference_sessions") for x in inputs]  # glue: converts caller session arrays
-    shapes = [x.shape for x in sessions]  # glue: session shape tuples only
-    native = _load(numeric_mode)
-    # The binding checks every (rows, width) shape and returns the total
-    # rows, so the output size is Mojo's number, not a Python sum.
-    try:
-        total_rows = int(native.mlp_sessions_rows(shapes, width))
-    except Exception as exc:
-        raise ValueError(str(exc)) from exc
-    output = _buffers.empty((total_rows, out_width), '<f4')
-    addrs = [_addr_ro(x) for x in sessions]  # glue: session buffer addresses
-    wrote = int(native.mlp_sessions(
-        [_addr(output), _addr_ro(w1), _addr_ro(b1), _addr_ro(w2), _addr_ro(b2)],
-        addrs, shapes, [width, hidden, out_width]))
-    if wrote != output.size:
-        raise RuntimeError("MLP sessions returned an invalid output count")
-    return output
+    return _OPT_NATIVE("mlp_inference_sessions", None, (inputs, weight1, bias1, weight2, bias2), numeric_mode, _OPT_CONTEXT)
 
 
 # Import-time ABI connection only; finalization never invokes the selector.

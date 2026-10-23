@@ -41,6 +41,7 @@ np = require_numpy('_x_sequence_moe')
 from . import _backend
 from ._buffer import InitStream
 from ._x_sequence_device import SequenceDeviceTensor, is_seq_tensor
+from ._training_impl import _OPT_NATIVE as _SEQ_NATIVE, _OPT_CONTEXT as _SEQ_CONTEXT
 
 
 _WEIGHTS = ("router", "gate_up_proj", "down_proj")
@@ -238,28 +239,6 @@ class MoEBlock:
             if getattr(self, name).shape != want:
                 raise ValueError(f"MoEBlock: {name} has shape {getattr(self, name).shape}, expected {want}")
 
-    def _forward_dev(self, x):
-        """`forward` on a resident x (lane neural-io-2): y and the routing
-        outputs as resident tensors; None when x's binding has no device
-        MoE entry (the caller reads x back and runs the host-array entry)."""
-        b = x.b
-        if not (callable(getattr(b, "moe_forward_dev", None)) and hasattr(b, "moe_weights_put")):
-            return None
-        if x.ndim < 1 or x.shape[-1] != self.D or x.size == 0:
-            raise ValueError(f"MoEBlock: x must have shape (..., {self.D})")
-        T = x.size // self.D
-        self._check_weights()
-        h = self._weights_handle(b)
-        # every cell of the four outputs is stored by the route and the combine: no fill
-        y = SequenceDeviceTensor._new(b, x.shape)
-        logits = SequenceDeviceTensor._new(b, (T, self.E))
-        sel = SequenceDeviceTensor._new(b, (T, self.k))
-        w = SequenceDeviceTensor._new(b, (T, self.k))
-        b.moe_forward_dev([x.h, y.h, logits.h, sel.h, w.h],
-                          [T, self.D, self.F, self.E, self.k, int(self.norm_topk_prob), h])
-        object.__setattr__(self, "_routing", [logits, sel, w, None])
-        return y
-
     def forward(self, x):
         """Apply the block to `x` of shape (..., hidden_size); also callable as ``block(x)``.
 
@@ -276,36 +255,7 @@ class MoEBlock:
         y : ndarray of float32
             Output with the shape of `x`.
         """
-        if is_seq_tensor(x):
-            y = self._forward_dev(x)
-            if y is not None:
-                return y
-            x = x.numpy()
-        x = np.asarray(x)
-        if x.dtype == np.float64:
-            raise TypeError("MoEBlock: float64 is refused; pass float32")
-        shape = x.shape
-        X = np.ascontiguousarray(x, dtype=np.float32).reshape(-1, self.D)
-        T = X.shape[0]
-        # the binding downloads every cell of the four outputs (lane neural-io-2: np.empty,
-        # not np.zeros: no host zero pass over 4 T (D + E + 2k) bytes; the words are the same)
-        y = np.empty((T, self.D), np.float32)
-        logits = np.empty((T, self.E), np.float32)
-        sel = np.empty((T, self.k), np.float32)
-        w = np.empty((T, self.k), np.float32)
-        b = _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
-        ip = [T, self.D, self.F, self.E, self.k, int(self.norm_topk_prob)]
-        if hasattr(b, "moe_weights_put"):
-            self._check_weights()
-            h = self._weights_handle(b)
-            b.moe_forward([X.ctypes.data, X.ctypes.data, X.ctypes.data, X.ctypes.data, y.ctypes.data,
-                           logits.ctypes.data, sel.ctypes.data, w.ctypes.data], ip + [h])
-        else:
-            r, gu, dn = (np.ascontiguousarray(a) for a in (self.router, self.gate_up_proj, self.down_proj))  # glue: three contiguous weight buffers for the binding
-            b.moe_forward([X.ctypes.data, r.ctypes.data, gu.ctypes.data, dn.ctypes.data, y.ctypes.data,
-                           logits.ctypes.data, sel.ctypes.data, w.ctypes.data], ip)
-        object.__setattr__(self, "_routing", [logits, sel, w, None])
-        return y.reshape(shape)
+        return _SEQ_NATIVE("seqmoe_forward", self, (x,), None, _SEQ_CONTEXT)
 
     __call__ = forward
 

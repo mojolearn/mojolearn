@@ -66,12 +66,19 @@ def _narrow_kernel(cls: _U64, k_: Int32, kind: Int32, isz: Int32, dst: FP, words
 
 def device_unique_inverse_cast(
     ctx: DeviceContext, src: CastIn, label_kind: Int, classes_addr: Int, codes_addr: Int,
+    codes_on_device: Bool = False,
 ) raises -> Int:
     """Sorted distinct labels of the caller's (n, 1) label array `src` into
     host classes_addr (n slots of src's item size, the first k written) and
     one int32 code per row into host codes_addr. Returns k, or -2 for a NaN
     label. `src` must have passed CastIn.check with cols == 1; label_kind is
-    core/cast_in.mojo label_kind_of's."""
+    core/cast_in.mojo label_kind_of's.
+
+    `codes_on_device`: codes_addr is a device buffer of n words on `ctx`
+    (an executor allocation) and the codes are emitted straight into it and
+    stay there (lane migrate-neural-2: Sequential's fit reads them where they
+    are instead of downloading them for its own upload). The same kernels,
+    so the same codes."""
     var n = src.rows
     var size = src.itemsize
     var nbytes = src.nbytes()
@@ -84,7 +91,13 @@ def device_unique_inverse_cast(
     var d_raw = ctx.enqueue_create_buffer[DType.float32](words)
     ctx.enqueue_copy(dst_buf=d_raw, src_ptr=h_raw.unsafe_ptr())
     var d_src = ctx.enqueue_create_buffer[DType.uint64](n)
-    var d_codes = ctx.enqueue_create_buffer[DType.int32](n)
+    var d_codes: DeviceBuffer[DType.int32]
+    if codes_on_device:
+        d_codes = DeviceBuffer[DType.int32](
+            ctx, MutPointer[Int32, MutAnyOrigin](unsafe_from_address=codes_addr), n, owning=False,
+        )
+    else:
+        d_codes = ctx.enqueue_create_buffer[DType.int32](n)
     var d_classes = ctx.enqueue_create_buffer[DType.uint64](n)
     ctx.enqueue_function[_widen_kernel](
         FP(unsafe_from_address=Int(d_raw.unsafe_ptr())), Int32(n), Int32(src.kind), Int32(size), Int32(src.s0),
@@ -107,7 +120,8 @@ def device_unique_inverse_cast(
     )
     var h_out = ctx.enqueue_create_host_buffer[DType.float32](out_words)
     ctx.enqueue_copy(dst_ptr=h_out.unsafe_ptr(), src_buf=d_out)
-    ctx.enqueue_copy(dst_ptr=MutPointer[Int32, MutAnyOrigin](unsafe_from_address=codes_addr), src_buf=d_codes)
+    if not codes_on_device:
+        ctx.enqueue_copy(dst_ptr=MutPointer[Int32, MutAnyOrigin](unsafe_from_address=codes_addr), src_buf=d_codes)
     ctx.synchronize()
     memcpy(dest=_BP(unsafe_from_address=classes_addr), src=_BP(unsafe_from_address=Int(h_out.unsafe_ptr())), count=k * size)
     _ = h_raw^

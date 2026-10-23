@@ -20,10 +20,13 @@ from ._optional_numpy import require_numpy
 from ._mode import ClassifierScoreMixin, ParamsMixin, RegressorScoreMixin
 np = require_numpy('_x_sequence_rnn')
 
-from . import _backend
-from ._labels import argmax_rows, unique_inverse
+from . import _native_xseq_bridge
 
-_BINDING = "_mojolearn_x_sequence"
+# Package-import connection: every public operation below is ONE call into
+# the compiled owner (bindings/xseq_neural_native.mojo), which admits the
+# inputs, encodes the labels, draws the weights, builds the schedule and
+# optimizer arguments and runs `rnn_fit` / `rnn_predict`.
+_XSEQ, _XSEQ_CONTEXT = _native_xseq_bridge.connect()
 
 CELLS = {"rnn_tanh": 0, "rnn_relu": 1, "lstm": 2, "gru": 3}
 GATES = {0: 1, 1: 1, 2: 4, 3: 3}
@@ -39,44 +42,6 @@ _OPT_DEFAULTS = {
     "nadam": dict(betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0, momentum_decay=4e-3,
                   decoupled_weight_decay=False),
 }
-
-
-def binding(numeric_mode=None):
-    return _backend.binding("_mojolearn_x_sequence", numeric_mode)
-
-
-def optimizer_arguments(name, options):
-    """(kind, flags, [f1, f2, eps, weight_decay, f7, initial_accumulator])
-    for the binding's optimizer slots, PyTorch's defaults under `options`."""
-    if name not in OPTIMIZERS:
-        raise ValueError(f"optimizer must be one of {sorted(OPTIMIZERS)}, got {name!r}")
-    o = dict(_OPT_DEFAULTS[name])
-    unknown = set(options or {}) - set(o)
-    if unknown:
-        raise ValueError(f"optimizer {name!r} takes no option(s) {sorted(unknown)}; it takes {sorted(o)}")
-    o.update(options or {})
-    kind = OPTIMIZERS[name]
-    if name == "sgd":
-        if o["nesterov"] and (o["momentum"] <= 0 or o["dampening"] != 0):
-            raise ValueError("sgd: nesterov needs momentum > 0 and dampening 0 (torch.optim.SGD)")
-        return kind, int(bool(o["nesterov"])), [o["momentum"], 0.0, 0.0, o["weight_decay"], o["dampening"], 0.0]
-    if name in ("adam", "adamw", "adamax"):
-        b1, b2 = o["betas"]
-        if not (0.0 <= b1 < 1.0 and 0.0 <= b2 < 1.0):
-            raise ValueError(f"{name}: betas must lie in [0, 1)")
-        return kind, 0, [b1, b2, o["eps"], o["weight_decay"], 0.0, 0.0]
-    if name == "nadam":
-        b1, b2 = o["betas"]
-        if o["momentum_decay"] < 0:
-            raise ValueError("nadam: momentum_decay must be >= 0")
-        return kind, int(bool(o["decoupled_weight_decay"])), [b1, b2, o["eps"], o["weight_decay"],
-                                                               o["momentum_decay"], 0.0]
-    if name == "lion":
-        b1, b2 = o["betas"]
-        return kind, 0, [b1, b2, 0.0, o["weight_decay"], 0.0, 0.0]
-    if name == "rmsprop":
-        return kind, int(bool(o["centered"])), [0.0, o["alpha"], o["eps"], o["weight_decay"], o["momentum"], 0.0]
-    return kind, 0, [o["lr_decay"], 0.0, o["eps"], o["weight_decay"], 0.0, o["initial_accumulator_value"]]
 
 
 def _f32(a, name):
@@ -116,9 +81,6 @@ class _RecurrentBase(ParamsMixin):
             return CELLS["rnn_" + self.nonlinearity]
         return CELLS[self._CELL]
 
-    def _ints(self):
-        return [self._cell(), self.n_features_in_, int(self.hidden_size), int(self.num_layers), self.n_outputs_]
-
     def _layout(self):
         """[(torch name, shape)] in the binding's flat order."""
         G, H = GATES[self._cell()], int(self.hidden_size)
@@ -128,16 +90,6 @@ class _RecurrentBase(ParamsMixin):
             out += [(f"weight_ih_l{l}", (G * H, din)), (f"weight_hh_l{l}", (G * H, H)),
                     (f"bias_ih_l{l}", (G * H,)), (f"bias_hh_l{l}", (G * H,))]
         return out + [("head.weight", (self.n_outputs_, H)), ("head.bias", (self.n_outputs_,))]
-
-    def _init_params(self, rng):
-        """Every parameter U(-1/sqrt(H), 1/sqrt(H)) in layout order, one flat
-        float32 block drawn in Mojo from the seeded stream (`_buffer.InitStream`;
-        lane cgr4-py-compute: it was numpy's Generator)."""
-        k = 1.0 / float(np.sqrt(float(self.hidden_size)))  # glue: scalar init bound from hidden_size
-        total = sum(int(np.prod(s)) for _, s in self._layout())  # glue: parameter tensor sizes of the layout
-        out = np.empty(total, dtype=np.float32)
-        rng.fill_uniform(out.ctypes.data, total, -k, k)
-        return out
 
     def state_dict(self):
         """{torch name: array}: `nn.LSTM`/`nn.GRU`/`nn.RNN` names for the
@@ -159,80 +111,10 @@ class _RecurrentBase(ParamsMixin):
         self.params_ = np.ascontiguousarray(np.concatenate(parts), dtype=np.float32)  # glue: packs user weight tensors into the flat buffer
         return self
 
-    # ------------------------------------------------------------ data
-    def _check_X(self, X, fitting):
-        X = _f32(X, "X")
-        if X.ndim != 3:
-            raise ValueError("X must be 3-D: (n_samples, n_timesteps, n_features)")
-        if fitting:
-            self.n_features_in_ = int(X.shape[2])
-        elif X.shape[2] != self.n_features_in_:
-            raise ValueError(f"X has {X.shape[2]} features, the model was fitted on {self.n_features_in_}")
-        return X
-
-    def _schedule(self, n, rng):
-        """(epochs, bs, shuffle, seed): the minibatch schedule's scalars.
-        Every epoch's row order is built on the executor by `rnn_fit` (lane
-        cpu4-python: `op_mlp_perm`, the MLP's Feistel permutation keyed by
-        the epoch, or the identity without shuffle; the host Fisher-Yates
-        `epoch_schedule` is gone); step k of epoch e covers rows
-        [j bs, j bs + min(bs, n - j bs)) of it, j = k mod ceil(n / bs)."""
-        bs = max(1, min(int(self.batch_size), n))
-        epochs = int(self.max_epochs)
-        if epochs * n >= 2 ** 31 - 1:
-            raise ValueError(f"max_epochs * n_samples must be below 2^31 - 1, got {epochs} * {n}")
-        seed = rng.child_seed() if hasattr(rng, "child_seed") else int(rng.integers(0, 2 ** 63, dtype=np.int64))
-        return epochs, bs, bool(self.shuffle), seed
-
-    def _lrs(self, n_steps):
-        """The learning rate of every optimizer step: `lr_schedule.lr_at(t)`
-        (t one-based) when a schedule is set, else `learning_rate`."""
-        if self.lr_schedule is not None:
-            table = getattr(self.lr_schedule, "lr_values", None)
-            got = table(n_steps) if table is not None else None
-            if got is not None:
-                return np.frombuffer(got, dtype=np.float32).copy()
-            return np.asarray([self.lr_schedule.lr_at(t) for t in range(1, n_steps + 1)], dtype=np.float32)  # cpu-route: a user schedule object's own lr_at, the explicit input step
-        return np.full(n_steps, self.learning_rate, dtype=np.float32)
-
-    def _fit(self, X, target):
-        X = self._check_X(X, True)
-        n, T = int(X.shape[0]), int(X.shape[1])
-        if n < 1 or T < 1:
-            raise ValueError("X needs at least one sample and one time step")
-        from ._buffer import InitStream
-        rng = InitStream(None if self.random_state is None else int(self.random_state))
-        self.params_ = self._init_params(rng)
-        epochs, bs, shuffle, seed = self._schedule(n, rng)
-        n_steps = epochs * (-(-n // bs))
-        kind, flags, fp = optimizer_arguments(self.optimizer, self.optimizer_options)
-        lrs = self._lrs(n_steps)
-        losses = np.zeros(n_steps, dtype=np.float32)
-        ip = self._ints() + [self._TASK, n, T, epochs, bs, kind, flags,
-                             int(shuffle), seed & 0xFFFFFFFF, seed >> 32]
-        b = binding(self.numeric_mode)
-        b.rnn_fit([X.ctypes.data, target.ctypes.data,
-                   self.params_.ctypes.data, losses.ctypes.data, lrs.ctypes.data],
-                  ip, [float(v) for v in fp])  # glue: the optimizer float arguments
-        self.loss_curve_ = losses
-        self.n_iter_ = n_steps
-        self.n_timesteps_ = T
-        return self
-
-    def _run(self, X, want_seq=False):
-        X = self._check_X(X, False)
-        n, T = int(X.shape[0]), int(X.shape[1])
-        out = np.zeros((n, self.n_outputs_), dtype=np.float32)
-        seq = np.zeros((n, T, int(self.hidden_size)) if want_seq else (1,), dtype=np.float32)
-        ip = self._ints() + [self._TASK, n, T, int(self.predict_chunk), int(want_seq)]
-        binding(self.numeric_mode).rnn_predict(
-            [X.ctypes.data, self.params_.ctypes.data, out.ctypes.data, seq.ctypes.data], ip)
-        return out, seq
-
     def hidden_sequence(self, X):
         """The top layer's hidden states h_1..h_T, (n_samples, n_timesteps,
         hidden_size): `nn.LSTM(..., batch_first=True)(X)[0]`."""
-        return self._run(X, want_seq=True)[1]
+        return _XSEQ(self, "rnn_hidden_sequence", (X,), _XSEQ_CONTEXT)
 
 
 class _RecurrentRegressor(RegressorScoreMixin, _RecurrentBase):
@@ -241,15 +123,29 @@ class _RecurrentRegressor(RegressorScoreMixin, _RecurrentBase):
     _TASK = 0
 
     def fit(self, X, y):
-        y = _f32(y, "y")
-        self._y_1d = y.ndim == 1
-        Y = y.reshape(len(y), -1)
-        self.n_outputs_ = int(Y.shape[1])
-        return self._fit(X, np.ascontiguousarray(Y))
+        return _XSEQ(self, "rnn_fit", (X, y), _XSEQ_CONTEXT)
 
     def predict(self, X):
-        out = self._run(X)[0]
-        return out[:, 0].copy() if self._y_1d else out
+        return _XSEQ(self, "rnn_predict", (X,), _XSEQ_CONTEXT)
+
+    def score(self, X, y, sample_weight=None):
+        """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_timesteps, n_features)
+            Test sequences.
+        y : array-like of shape (n_samples,) or (n_samples, n_outputs)
+            True targets.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            R^2, averaged uniformly over outputs; 1.0 is a perfect fit.
+        """
+        return _XSEQ(self, "rnn_score", (X, y, sample_weight), _XSEQ_CONTEXT)
 
 
 class _RecurrentClassifier(ClassifierScoreMixin, _RecurrentBase):
@@ -258,22 +154,13 @@ class _RecurrentClassifier(ClassifierScoreMixin, _RecurrentBase):
     _TASK = 1
 
     def fit(self, X, y):
-        y = np.asarray(y)
-        # sorted classes and inverse codes on the device (_labels.unique_inverse)
-        cls, inv = unique_inverse(y)
-        self.classes_ = np.asarray(cls).astype(y.dtype, copy=False) if y.dtype.kind in "biuf" else np.asarray(cls)
-        inv = np.asarray(inv)
-        if len(self.classes_) < 2:
-            raise ValueError("classification needs at least two classes")
-        self.n_outputs_ = int(len(self.classes_))
-        return self._fit(X, np.ascontiguousarray(inv.astype(np.float32)))
+        return _XSEQ(self, "rnn_fit", (X, y), _XSEQ_CONTEXT)
 
     def predict_proba(self, X):
-        return self._run(X)[0]
+        return _XSEQ(self, "rnn_predict_proba", (X,), _XSEQ_CONTEXT)
 
     def predict(self, X):
-        # the first-max-wins row argmax in Mojo (`argmax_rows`)
-        return self.classes_[np.asarray(argmax_rows(np.ascontiguousarray(self.predict_proba(X))))]
+        return _XSEQ(self, "rnn_predict", (X,), _XSEQ_CONTEXT)
 
 
 class LSTMRegressor(_RecurrentRegressor):
@@ -320,8 +207,9 @@ class LSTMRegressor(_RecurrentRegressor):
     predict_chunk : int, default 4096
         Rows processed per chunk at prediction time.
     lr_schedule : object or None, default None
-        A schedule such as `StepLR`, `ExponentialLR` or `OneCycleLR` (anything with a
-        one-based `lr_at(t)`); it sets the learning rate of every optimizer step.
+        A built-in schedule (`ConstantLR`, `WarmupLinearLR`, `WarmupCosineLR`, `StepLR`,
+        `ExponentialLR` or `OneCycleLR`); it sets the learning rate of every optimizer step.
+        Any other object raises `TypeError`.
 
     Attributes
     ----------
@@ -408,8 +296,9 @@ class LSTMClassifier(_RecurrentClassifier):
     predict_chunk : int, default 4096
         Rows processed per chunk at prediction time.
     lr_schedule : object or None, default None
-        A schedule such as `StepLR`, `ExponentialLR` or `OneCycleLR` (anything with a
-        one-based `lr_at(t)`); it sets the learning rate of every optimizer step.
+        A built-in schedule (`ConstantLR`, `WarmupLinearLR`, `WarmupCosineLR`, `StepLR`,
+        `ExponentialLR` or `OneCycleLR`); it sets the learning rate of every optimizer step.
+        Any other object raises `TypeError`.
 
     Attributes
     ----------
@@ -501,8 +390,9 @@ class GRURegressor(_RecurrentRegressor):
     predict_chunk : int, default 4096
         Rows processed per chunk at prediction time.
     lr_schedule : object or None, default None
-        A schedule such as `StepLR`, `ExponentialLR` or `OneCycleLR` (anything with a
-        one-based `lr_at(t)`); it sets the learning rate of every optimizer step.
+        A built-in schedule (`ConstantLR`, `WarmupLinearLR`, `WarmupCosineLR`, `StepLR`,
+        `ExponentialLR` or `OneCycleLR`); it sets the learning rate of every optimizer step.
+        Any other object raises `TypeError`.
 
     Attributes
     ----------
@@ -589,8 +479,9 @@ class GRUClassifier(_RecurrentClassifier):
     predict_chunk : int, default 4096
         Rows processed per chunk at prediction time.
     lr_schedule : object or None, default None
-        A schedule such as `StepLR`, `ExponentialLR` or `OneCycleLR` (anything with a
-        one-based `lr_at(t)`); it sets the learning rate of every optimizer step.
+        A built-in schedule (`ConstantLR`, `WarmupLinearLR`, `WarmupCosineLR`, `StepLR`,
+        `ExponentialLR` or `OneCycleLR`); it sets the learning rate of every optimizer step.
+        Any other object raises `TypeError`.
 
     Attributes
     ----------
@@ -682,8 +573,9 @@ class RNNRegressor(_RecurrentRegressor):
     predict_chunk : int, default 4096
         Rows processed per chunk at prediction time.
     lr_schedule : object or None, default None
-        A schedule such as `StepLR`, `ExponentialLR` or `OneCycleLR` (anything with a
-        one-based `lr_at(t)`); it sets the learning rate of every optimizer step.
+        A built-in schedule (`ConstantLR`, `WarmupLinearLR`, `WarmupCosineLR`, `StepLR`,
+        `ExponentialLR` or `OneCycleLR`); it sets the learning rate of every optimizer step.
+        Any other object raises `TypeError`.
 
     Attributes
     ----------
@@ -771,8 +663,9 @@ class RNNClassifier(_RecurrentClassifier):
     predict_chunk : int, default 4096
         Rows processed per chunk at prediction time.
     lr_schedule : object or None, default None
-        A schedule such as `StepLR`, `ExponentialLR` or `OneCycleLR` (anything with a
-        one-based `lr_at(t)`); it sets the learning rate of every optimizer step.
+        A built-in schedule (`ConstantLR`, `WarmupLinearLR`, `WarmupCosineLR`, `StepLR`,
+        `ExponentialLR` or `OneCycleLR`); it sets the learning rate of every optimizer step.
+        Any other object raises `TypeError`.
 
     Attributes
     ----------
@@ -817,3 +710,9 @@ class RNNClassifier(_RecurrentClassifier):
     >>> pred = model.predict(X)
     """
     _CELL = "rnn"
+
+
+_native_xseq_bridge.register(
+    xseq_rnn_optimizers=OPTIMIZERS,
+    xseq_rnn_defaults=_OPT_DEFAULTS,
+)

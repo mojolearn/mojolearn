@@ -18,9 +18,13 @@ from ._optional_numpy import require_numpy
 from ._mode import ClassifierScoreMixin, ParamsMixin, RegressorScoreMixin
 np = require_numpy('_x_sequence_mlp')
 
-from . import _backend
-from ._buffer import _native
-from ._labels import argmax_rows, threshold_codes, unique_inverse
+from . import _native_xseq_bridge
+
+# Package-import connection: fit, predict and predict_proba are ONE call each
+# into the compiled owner (bindings/xseq_neural_native.mojo): input casts,
+# label encoding, the Glorot draws (straight into the flat parameter block
+# `mlp_fit` trains), the stopping report and the predicted labels.
+_XSEQ, _XSEQ_CONTEXT = _native_xseq_bridge.connect()
 
 _ACT = {"identity": 0, "logistic": 1, "tanh": 2, "relu": 3}
 _SOLVER = {"adam": 0, "sgd": 1}
@@ -60,121 +64,6 @@ class _BaseMLP(ParamsMixin):
         self.n_iter_no_change = n_iter_no_change
         self.max_fun = max_fun
         self.numeric_mode = numeric_mode
-
-    def _binding(self):
-        return _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
-
-    def _hidden(self):
-        h = self.hidden_layer_sizes
-        h = [h] if isinstance(h, (int, np.integer)) else list(h)
-        if any(int(v) < 1 for v in h):  # glue: hidden layer size arguments
-            raise ValueError("hidden_layer_sizes must be > 0")
-        return [int(v) for v in h]  # glue: hidden layer size arguments
-
-    def _check(self):
-        if self.solver == "lbfgs":
-            raise NotImplementedError("solver='lbfgs' is not implemented (adam and sgd are)")
-        if self.solver not in _SOLVER:
-            raise ValueError(f"solver must be one of {sorted(_SOLVER)}")
-        if self.activation not in _ACT:
-            raise ValueError(f"activation must be one of {sorted(_ACT)}")
-        if self.learning_rate not in _LR:
-            raise ValueError(f"learning_rate must be one of {sorted(_LR)}")
-        for name in ("early_stopping", "warm_start", "verbose"):  # glue: three named flag arguments
-            if getattr(self, name):
-                raise NotImplementedError(f"{name}=True is not implemented")
-        if self.learning_rate_init <= 0 or self.max_iter < 1 or self.alpha < 0:
-            raise ValueError("learning_rate_init > 0, max_iter >= 1 and alpha >= 0 are required")
-
-    def _X(self, X):
-        # scikit-learn passes float64: it is cast to float32 once, natively
-        # (`as_f32_c`, one round-to-nearest-even per element), as every
-        # other estimator's input is; the view keeps the converted Array alive
-        from ._buffer import as_f32_c
-        return np.asarray(as_f32_c(X, ndim=2, name="X")[0])
-
-    def _init(self, sizes, rng):
-        coefs, intercepts = [], []
-        for fi, fo in zip(sizes[:-1], sizes[1:]):  # glue: one pair per layer
-            factor = 2.0 if self.activation == "logistic" else 6.0
-            bound = np.sqrt(factor / (fi + fo))  # glue: one scalar init bound per layer
-            # drawn in Mojo from the seeded stream (`_buffer.InitStream`)
-            w = np.empty((fi, fo), dtype=np.float32)
-            rng.fill_uniform(w.ctypes.data, w.size, -float(bound), float(bound))
-            b = np.empty(fo, dtype=np.float32)
-            rng.fill_uniform(b.ctypes.data, b.size, -float(bound), float(bound))
-            coefs.append(w)
-            intercepts.append(b)
-        return coefs, intercepts
-
-    def _pack(self):
-        return np.ascontiguousarray(np.concatenate(  # glue: packs the per-layer weights into the flat buffer
-            [np.concatenate([w.ravel(), b]) for w, b in zip(self.coefs_, self.intercepts_)]), dtype=np.float32)  # glue: packs the per-layer weights into the flat buffer
-
-    def _unpack(self, flat):
-        off = 0
-        for i, (w, b) in enumerate(zip(self.coefs_, self.intercepts_)):  # glue: unpacks the flat buffer per layer
-            self.coefs_[i] = flat[off:off + w.size].reshape(w.shape).copy()
-            off += w.size
-            self.intercepts_[i] = flat[off:off + b.size].copy()
-            off += b.size
-
-    def _fit(self, X, Y, out_act, n_out=None):
-        """`n_out` (cpu2-l11-neural): `Y` is the (N,) int32 class codes and
-        the binding builds the target on the device: the (N, n_out) one-hot
-        for n_out > 1, the codes as the (N, 1) float target for n_out 1."""
-        self._check()
-        X = self._X(X)
-        N, D = X.shape
-        O = Y.shape[1] if n_out is None else int(n_out)
-        hidden = self._hidden()
-        sizes = [D] + hidden + [O]
-        from ._buffer import InitStream
-        rng = InitStream(None if self.random_state is None else int(self.random_state))
-        self.coefs_, self.intercepts_ = self._init(sizes, rng)
-        seed = rng.child_seed() % (2 ** 31 - 1)
-        bs = min(200, N) if self.batch_size == "auto" else int(np.clip(self.batch_size, 1, N))  # glue: scalar batch size clip
-        self.n_outputs_ = O
-        self.n_layers_ = len(sizes)
-        self.out_activation_ = ["identity", "logistic", "tanh", "relu", "softmax"][out_act]
-        self.n_features_in_ = D
-        params = self._pack()
-        curve = np.zeros(int(self.max_iter), dtype=np.float32)
-        ip = [N, D, O, _ACT[self.activation], out_act, self._LOSS_CODE, _SOLVER[self.solver],
-              _LR[self.learning_rate], int(bool(self.nesterovs_momentum)), bs, int(self.max_iter),
-              int(bool(self.shuffle)), seed, int(self.n_iter_no_change), len(hidden)] + hidden
-        if n_out is not None:
-            ip = ip + [1 if O > 1 else 2]
-        fp = [float(self.learning_rate_init), float(self.beta_1), float(self.beta_2), float(self.epsilon),
-              float(self.momentum), float(self.power_t), float(self.alpha), float(self.tol)]
-        Y = np.ascontiguousarray(Y, dtype=np.float32 if n_out is None else np.int32)
-        n_iter = int(self._binding().mlp_fit([X.ctypes.data, Y.ctypes.data, params.ctypes.data,
-                                              curve.ctypes.data], ip, fp))
-        self._unpack(params)
-        self.n_iter_ = n_iter
-        self.loss_curve_ = curve[:n_iter].tolist()
-        self.loss_ = self.loss_curve_[-1]
-        # the first-wins minimum of the curve in Mojo (`reduce_stat` 0)
-        self.best_loss_ = float(_native("reduce_stat")(curve.ctypes.data, 0, n_iter, 0))
-        self.t_ = n_iter * N
-        return self
-
-    def _forward(self, X, proba2=False):
-        X = self._X(X)
-        if X.shape[1] != self.n_features_in_:
-            raise ValueError(f"X has {X.shape[1]} features, the model was fitted on {self.n_features_in_}")
-        hidden = [w.shape[1] for w in self.coefs_[:-1]]  # glue: hidden width per layer
-        width = 2 if proba2 else self.n_outputs_
-        out = np.zeros((X.shape[0], width), dtype=np.float32)
-        params = self._pack()
-        out_act = ["identity", "logistic", "tanh", "relu", "softmax"].index(self.out_activation_)
-        ip = [X.shape[0], X.shape[1], self.n_outputs_, _ACT[self.activation], out_act, 4096, len(hidden)] + hidden
-        if proba2:
-            ip = ip + [1]
-        written = int(self._binding().mlp_predict([X.ctypes.data, params.ctypes.data, out.ctypes.data], ip))
-        if written != out.size:
-            raise RuntimeError("mlp_predict: this binding predates the two-column probability; rebuild it")
-        return out
 
 
 class MLPRegressor(RegressorScoreMixin, _BaseMLP):
@@ -281,15 +170,30 @@ class MLPRegressor(RegressorScoreMixin, _BaseMLP):
 
     def fit(self, X, y):
         """Train on `X` (n_samples, n_features) float32 and targets `y`; returns self."""
-        from ._buffer import as_f32_c
-        y = np.asarray(as_f32_c(y, ndim=None, name="y")[0])  # float64 targets cast once, natively
-        self._y_1d = y.ndim == 1
-        return self._fit(X, np.ascontiguousarray(y.reshape(len(y), -1)), 0)
+        return _XSEQ(self, "mlp_fit", (X, y), _XSEQ_CONTEXT)
 
     def predict(self, X):
         """Predicted values, (n_samples,) for a 1-D training target, else (n_samples, n_outputs)."""
-        out = self._forward(X)
-        return out[:, 0].copy() if self._y_1d else out
+        return _XSEQ(self, "mlp_predict", (X,), _XSEQ_CONTEXT)
+
+    def score(self, X, y, sample_weight=None):
+        """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,) or (n_samples, n_outputs)
+            True targets.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            R^2, averaged uniformly over outputs; 1.0 is a perfect fit.
+        """
+        return _XSEQ(self, "mlp_score", (X, y, sample_weight), _XSEQ_CONTEXT)
 
 
 class MLPClassifier(ClassifierScoreMixin, _BaseMLP):
@@ -397,37 +301,20 @@ class MLPClassifier(ClassifierScoreMixin, _BaseMLP):
 
     def fit(self, X, y):
         """Train on `X` (n_samples, n_features) float32 and 1-D labels `y`; returns self."""
-        y = np.asarray(y)
-        if y.ndim != 1:
-            raise NotImplementedError("multilabel targets are not implemented")
-        # sorted classes and inverse codes on the device (_labels.unique_inverse)
-        cls, inv = unique_inverse(y)
-        self.classes_ = np.asarray(cls).astype(y.dtype, copy=False) if y.dtype.kind in "biuf" else np.asarray(cls)
-        inv = np.asarray(inv)
-        k = len(self.classes_)
-        if k < 2:
-            raise ValueError("MLPClassifier needs at least two classes")
-        # cpu2-l11-neural: the int32 codes go down as they are; the binding
-        # builds the target on the device (`OP_ONE_HOT`).
-        codes = np.ascontiguousarray(inv, dtype=np.int32)
-        if k == 2:
-            self._LOSS_CODE = 1
-            return self._fit(X, codes, 1, n_out=1)
-        self._LOSS_CODE = 2
-        return self._fit(X, codes, 4, n_out=k)
+        return _XSEQ(self, "mlp_fit", (X, y), _XSEQ_CONTEXT)
 
     def predict_proba(self, X):
         """Class probabilities, (n_samples, n_classes), columns in `classes_` order."""
-        if self.n_outputs_ == 1:
-            # cpu2-l11-neural: [1 - p, p] written by the binding (`OP_PROBA2`)
-            return self._forward(X, proba2=True)
-        return self._forward(X)
+        return _XSEQ(self, "mlp_predict_proba", (X,), _XSEQ_CONTEXT)
 
     def predict(self, X):
         """Predicted class labels."""
-        p = self._forward(X)
-        if p.shape[1] == 1:
-            # p > 0.5 per row in Mojo (`threshold_codes`; NaN takes class 0)
-            return self.classes_[np.asarray(threshold_codes(np.ascontiguousarray(p[:, 0]), 0.5))]
-        # the first-max-wins row argmax in Mojo (`argmax_rows`)
-        return self.classes_[np.asarray(argmax_rows(p))]
+        return _XSEQ(self, "mlp_predict", (X,), _XSEQ_CONTEXT)
+
+
+_native_xseq_bridge.register(
+    xseq_mlp_activations=_ACT,
+    xseq_mlp_solvers=_SOLVER,
+    xseq_mlp_rates=_LR,
+    xseq_mlp_outputs={"identity": 0, "logistic": 1, "tanh": 2, "relu": 3, "softmax": 4},
+)

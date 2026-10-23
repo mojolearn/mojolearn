@@ -220,17 +220,14 @@ def test_learning_curve_takes_nested_prefixes_of_one_order():
 
 # ------------------------------------------------------------- 4. the RNN
 
-def test_rnn_schedule_scalars_and_uncapped_at_2_24():
-    # lane cpu4-python: the epoch orders are built on the executor by
-    # rnn_fit; the Python schedule is the scalars, and the 2^31 - 1 bound
-    # on epochs * n (not the old float32 2^24 cap) still holds
+def test_rnn_schedule_bound_is_2_31_not_2_24():
+    # the epoch orders are built on the executor by rnn_fit; the schedule
+    # scalars come from the native fit (bindings/xseq_neural_native.mojo),
+    # and the 2^31 - 1 bound on epochs * n (not the old float32 2^24 cap)
+    # still holds: refused before any weight is trained
     np = pytest.importorskip("numpy")
     from mojolearn._x_sequence_rnn import RNNRegressor
-    m = RNNRegressor(batch_size=3, max_epochs=2, shuffle=True)
-    epochs, bs, shuffle, seed = m._schedule(7, np.random.default_rng(0))
-    assert (epochs, bs, shuffle) == (2, 3, True) and 0 <= seed < 2 ** 63
-    big = RNNRegressor(batch_size=1_000_000, max_epochs=17, shuffle=False)
-    epochs, bs, shuffle, _ = big._schedule(1_000_000, np.random.default_rng(0))
-    assert epochs * 1_000_000 > 2 ** 24 and (bs, shuffle) == (1_000_000, False)
-    with pytest.raises(ValueError):
-        RNNRegressor(max_epochs=2200)._schedule(1_000_000, np.random.default_rng(0))
+    X = np.zeros((1_000_000, 1, 1), dtype=np.float32)
+    y = np.zeros(1_000_000, dtype=np.float32)
+    with pytest.raises(ValueError, match="max_epochs \\* n_samples must be below 2\\^31 - 1"):
+        RNNRegressor(max_epochs=2200).fit(X, y)

@@ -27,7 +27,12 @@ def connect(training):
                "optimizer_door_clip", "optimizer_door_accumulate", "training_numeric_mode",
                "train_dev_free", "train_dev_alloc", "train_dev_put", "train_dev_get",
                "linear_forward", "linear_backward", "linear_forward_dev", "linear_backward_dev",
-               "rms_norm_forward", "rms_norm_backward", "embedding_forward", "embedding_backward", "ce_loss", "ce_loss_dev", "accumulation_is_aligned", "optimizer_resident_download", "optimizer_resident_upload")
+               "rms_norm_forward", "rms_norm_backward", "embedding_forward", "embedding_backward", "ce_loss", "ce_loss_dev", "accumulation_is_aligned", "optimizer_resident_download", "optimizer_resident_upload",
+               "chunked_lm_head_v2_loss", "chunked_lm_head_v2_train", "mlp_sessions_rows", "mlp_sessions",
+               "residual_dropout", "residual_dropout_backward")
+    optional_entries = ("linear_forward_dev", "linear_backward_dev", "ce_loss_dev", "chunked_lm_head_v2_loss",
+                        "chunked_lm_head_v2_train", "mlp_sessions_rows", "mlp_sessions", "residual_dropout",
+                        "residual_dropout_backward")
     for mode in ("identical", "fast"):  # glue: connect every supported numeric-mode ABI at import
         try:
             binding = _backend.binding("_mojolearn_training", mode)
@@ -36,7 +41,7 @@ def connect(training):
                 try:
                     entry = getattr(binding, name)
                 except (ImportError, AttributeError, NotImplementedError):
-                    if name.startswith("train_dev_") or name in ("linear_forward_dev", "linear_backward_dev", "ce_loss_dev"):
+                    if name.startswith("train_dev_") or name in optional_entries:
                         continue
                     raise
                 if not isinstance(entry, BuiltinFunctionType):
@@ -164,7 +169,8 @@ def connect_sequence_device(training, device):
     optional = ("seq_tensor_alloc", "seq_tensor_free", "seq_tensor_upload", "seq_tensor_download", "seq_tensor_copy",
                 "optimizer_resident_open", "optimizer_resident_close", "optimizer_resident_move", "optimizer_resident_step", "optimizer_resident_step_dev",
                 "adafactor_resident_open", "adafactor_resident_step", "adafactor_resident_step_dev",
-                "lamb_resident_open", "lamb_resident_step", "lamb_resident_step_dev")
+                "lamb_resident_open", "lamb_resident_step", "lamb_resident_step_dev",
+                "layer_norm", "layer_norm_dev", "moe_forward", "moe_forward_dev", "moe_weights_put", "moe_weights_free")
     for mode in ("identical", "fast"):  # glue: connect supported sequence numeric-mode ABI symbols at import
         try:
             binding = _backend.binding("_mojolearn_x_sequence", mode)
@@ -181,4 +187,41 @@ def connect_sequence_device(training, device):
             bindings[mode] = type(error).__name__ + ": " + str(error)
     context["sequence_bindings"] = bindings
     context["sequence_device_io_off"] = device._DEVICE_IO_OFF
+    return training._OPT_NATIVE, context
+
+
+def connect_embedding(training, embedding_cls, archive_context):
+    # glue: connect the Embedding layer's compiled entries and its native
+    # lifetime descriptors once, at package import
+    from types import BuiltinFunctionType, MethodType
+    from . import _backend
+    from .tokenizer import _binding
+    context = training._OPT_CONTEXT
+    bindings = {}
+    names = ("embedding_forward", "embedding_numeric_mode", "embedding_table_release", "seq_tensor_alloc",
+             "embedding_forward_dev", "embedding_backward_dev")
+    for mode in ("identical", "fast"):  # glue: connect every supported numeric-mode ABI at import
+        try:
+            module = _backend.binding("_mojolearn_embedding", mode)
+            cells = {"module": module}
+            for name in names:  # glue: retain the compiled symbols the layer reaches
+                entry = getattr(module, name, None)
+                if isinstance(entry, BuiltinFunctionType):
+                    cells[name] = entry
+            bindings[mode] = cells
+        except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, NotImplementedError) as error:
+            bindings[mode] = type(error).__name__ + ": " + str(error)
+    context["embedding_bindings"] = bindings
+    # the host inference class's lookup binding is read from the loaded
+    # module table at call time (its own load loads it; GPU code never does)
+    context["embedding_host_module"] = "mojolearn._host._mojolearn_embedding_infer_host"
+    context["embedding_host_names"] = names
+    context["embedding_archive_context"] = archive_context.get("host_archive_context", archive_context)
+    module = _binding()._module
+    lifetime = module.embedding_layer_lifetime
+    descriptor = module.classical_attribute_descriptor
+    if not isinstance(lifetime, BuiltinFunctionType) or not isinstance(descriptor, BuiltinFunctionType):
+        raise TypeError("Embedding requires its compiled lifetime entry")
+    embedding_cls.__setattr__ = descriptor(MethodType(lifetime, context))
+    embedding_cls.__del__ = descriptor(MethodType(lifetime, context))
     return training._OPT_NATIVE, context

@@ -278,6 +278,23 @@ def gather_labels[E: Exec](
         raise Error("model_gather_labels: null buffer address")
     var dcodes = ex.alloc(n)
     ex.upload(dcodes, FP(unsafe_from_address=codes_addr), n)
+    gather_labels_device(ex, dcodes, n, classes_addr, k, itemsize, out_addr)
+    ex.free(dcodes)
+
+
+def gather_labels_device[E: Exec](
+    mut ex: E, dcodes: FP, n: Int, classes_addr: Int, k: Int, itemsize: Int, out_addr: Int,
+) raises:
+    """`gather_labels` from n float32 class codes already in the executor
+    buffer `dcodes` (lane migrate-neural-2: Sequential's predict gathers the
+    codes its argmax left on the device). The classes go up once, one
+    OP_CAST_GATHER launch, the labels come down."""
+    if n < 1 or k < 1:
+        raise Error("model_gather_labels: n and k must be positive")
+    if itemsize != 1 and itemsize != 2 and itemsize != 4 and itemsize != 8:
+        raise Error("model_gather_labels: item size must be 1, 2, 4 or 8")
+    if classes_addr == 0 or out_addr == 0:
+        raise Error("model_gather_labels: null buffer address")
     var dcls = ex.alloc((k * itemsize + 3) // 4)
     upload_bytes(ex, dcls, classes_addr, k * itemsize)
     var out_words = (n * itemsize + 3) // 4
@@ -291,6 +308,5 @@ def gather_labels[E: Exec](
     a.i2 = k
     ex.launch[OP_CAST_GATHER](a, out_words)
     download_bytes(ex, out_addr, dout, n * itemsize)
-    ex.free(dcodes)
     ex.free(dcls)
     ex.free(dout)

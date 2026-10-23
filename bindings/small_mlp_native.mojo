@@ -1096,8 +1096,29 @@ def _apply_gradients(handle: Int, gradients: PythonObject) raises -> PythonObjec
     var grads = _pack_gradients(listed)
     var entries = _mode_entries()
     var index = mlp_store_index(handle)
-    _settle(index, True)
     var store = MLP_STORE.get_or_create_ptr()
+    if _resident_enabled(entries) and py_contains(entries, "mlp_resident_apply"):
+        # The session stays open: the AdamW step runs on its weights and
+        # moments on the device (`mlp_resident_apply`, the same optimizer
+        # step `optimizer_step` runs), and the next train_step continues on
+        # it. The host copy comes down only on export (state_dict, weights,
+        # save).
+        if store[].slots[index].state.step == MLP_MAX_STEP:
+            raise Error("SmallMLPTrainer step counter is exhausted")
+        var resident = _resident_open(index, entries, max(1, store[].slots[index].resident_cap))
+        var info = List[Float32](length=3, fill=Float32(0))
+        ref st = store[].slots[index].state
+        var t = st.step + 1
+        var applied = Int(py=py_call_typed(entries["mlp_resident_apply"], PythonObject(resident),
+            Python.list(Int(grads.unsafe_ptr()), st.flags_addr(), Int(info.unsafe_ptr())),
+            Python.list(t, st.lr, st.beta1, st.beta2, st.eps, st.weight_decay)))
+        _ = info^
+        _ = grads^
+        if applied != MLP_TOTAL:
+            raise Error("RuntimeError: SmallMLPTrainer optimizer did not advance exactly one step")
+        st.step = t
+        return PythonObject(t)
+    _settle(index, True)
     var working = store[].slots[index].state.copy()
     mlp_require_state(working)
     if working.step == MLP_MAX_STEP:
@@ -1119,7 +1140,13 @@ def _predict_sessions(handle: Int, inputs: PythonObject) raises -> PythonObject:
     var bi = b[].bi
     var entries = _mode_entries()
     var index = mlp_store_index(handle)
-    _settle(index, False)
+    # an open training session is read where it is (`mlp_sessions_resident`)
+    var store0 = MLP_STORE.get_or_create_ptr()
+    var resident = store0[].slots[index].resident
+    var on_session = (resident >= 0 and py_contains(entries, "mlp_sessions_resident")
+                      and store0[].slots[index].resident_mode == _mode_name(entries))
+    if not on_session:
+        _settle(index, False)
     var listed = _items(inputs, -1, "mojolearn.mlp_inference_sessions: inputs must be a list of arrays")
     # Mojo-owned row-major copies, alive across the call.
     var sessions = List[List[Float32]]()
@@ -1150,9 +1177,14 @@ def _predict_sessions(handle: Int, inputs: PythonObject) raises -> PythonObject:
     var out = generation_array([total, 3])
     var store = MLP_STORE.get_or_create_ptr()
     ref s = store[].slots[index].state
-    var wrote = Int(py=py_call_typed(entries["mlp_sessions"],
-        Python.list(out._addr, s.params_addr(0), s.params_addr(1), s.params_addr(2), s.params_addr(3)),
-        addresses, shapes, py_ints([8, 16, 3])))
+    var wrote: Int
+    if on_session:
+        wrote = Int(py=py_call_typed(entries["mlp_sessions_resident"], PythonObject(resident),
+            Python.list(out._addr), addresses, shapes, py_ints([8, 16, 3])))
+    else:
+        wrote = Int(py=py_call_typed(entries["mlp_sessions"],
+            Python.list(out._addr, s.params_addr(0), s.params_addr(1), s.params_addr(2), s.params_addr(3)),
+            addresses, shapes, py_ints([8, 16, 3])))
     _ = sessions^
     if wrote != Int(py=out.size):
         raise Error("RuntimeError: MLP sessions returned an invalid output count")

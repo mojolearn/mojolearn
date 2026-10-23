@@ -7,8 +7,11 @@ from ._optional_numpy import require_numpy
 from ._mode import ParamsMixin
 np = require_numpy('_x_sequence_garch')
 
-from . import _backend
-from ._buffer import _native
+from . import _native_xseq_bridge
+
+# Package-import connection: fit and predict are ONE call each into the
+# compiled owner (bindings/xseq_forecast_native.mojo).
+_XSEQ, _XSEQ_CONTEXT = _native_xseq_bridge.connect()
 
 
 # Fitted on the GPU one series per thread (`sequence/garch.mojo`): arch's
@@ -115,38 +118,7 @@ class GARCH(ParamsMixin):
             If a series has fewer than 10 observations or ``y`` holds a
             non-finite value.
         """
-        y = np.asarray(y)
-        if y.dtype == np.float64:
-            raise TypeError("GARCH: float64 is refused; pass float32")
-        self._one = y.ndim == 1
-        Y = np.ascontiguousarray(y, dtype=np.float32).reshape(1, -1) if self._one else \
-            np.ascontiguousarray(y, dtype=np.float32)
-        if Y.ndim != 2 or Y.shape[1] < 10:
-            raise ValueError("GARCH: each series needs at least 10 observations")
-        # the finiteness scan in Mojo (the base binding's `all_finite_f32`)
-        if not int(_native("all_finite_f32")(Y.ctypes.data, Y.size)):
-            raise ValueError("GARCH: y holds a non-finite value")
-        B, n = Y.shape
-        h = max(1, int(horizon))
-        k = 1 + self.p + self.o + self.q
-        params = np.zeros((B, 1 + k), dtype=np.float32)
-        info = np.zeros((B, 4), dtype=np.float32)
-        sigma = np.zeros((B, n), dtype=np.float32)
-        fc = np.zeros((B, h), dtype=np.float32)
-        ip = [B, n, h, self.p, self.o, self.q, int(self.mean == "Constant")]
-        stall = getattr(self, "_fast_stall", None)    # (iterations, relative drop): the FAST stop's
-        if stall is not None:                          # quality sweep (tools/sequence_quality.py)
-            ip = ip + [int(stall[0]), int(round(float(stall[1]) * 1e9))]
-        _backend.binding("_mojolearn_x_sequence", self.numeric_mode).garch(
-            [Y.ctypes.data, params.ctypes.data, info.ctypes.data, sigma.ctypes.data, fc.ctypes.data], ip)
-        self._y = Y
-        pick = (lambda a: a[0]) if self._one else (lambda a: a)
-        self.params_ = pick(params)
-        self.loglikelihood_ = pick(info[:, 0])
-        self.n_iter_ = pick(info[:, 1].astype(np.int64))  # Nelder-Mead iterations, both runs
-        self.conditional_volatility_ = pick(sigma)
-        self._fc = fc
-        return self
+        return _XSEQ(self, "garch_fit", (y, horizon), _XSEQ_CONTEXT)
 
     def forecast(self, horizon=1):
         """Analytic conditional variance forecasts.

@@ -50,13 +50,20 @@ def parallel_optimizer_step_host(
     momentum: Float32,
     dampening: Float32,
     max_norm: Float32,
+    negate: Bool = False,
 ) raises -> Int:
+    """`negate` is `maximize=True`: each device flips the sign of its own
+    gradient buffer inside the step (the exact XOR), so the host gradient
+    keeps the caller's sign. On several devices the whole-registry clip runs
+    first on the caller-signed copy; the global norm reads squares and the
+    scale commutes with the sign flip exactly, so the bits are those of the
+    negated-copy step."""
     var devices = Int(getenv("MOJOLEARN_OPTIMIZER_DEVICE_COUNT", "1"))
     if devices == 1:
         return identical_optimizer_step_host(ctx, param_ptr, grad_ptr, m_ptr,
             v_ptr, offsets_ptr, init_ptr, info_ptr, n_tensors, kind, t,
             nesterov, lr, beta1, beta2, eps, weight_decay, momentum,
-            dampening, max_norm)
+            dampening, max_norm, negate)
     if devices < 1 or devices > 64:
         raise Error("parallel optimizer requires 1..64 devices")
     comptime if STEP_PHASE_TIMERS:
@@ -118,7 +125,7 @@ def parallel_optimizer_step_host(
     var vp = rebind[MutPointer[Float32, MutUntrackedOrigin]](v.unsafe_ptr())
     def _update(rank: Int) {imm cp, imm sp, imm fp, imm pp, imm gp, imm mp, imm vp,
         imm kind, imm t, imm nesterov, imm lr, imm beta1, imm beta2,
-        imm eps, imm weight_decay, imm momentum, imm dampening}:
+        imm eps, imm weight_decay, imm momentum, imm dampening, imm negate}:
         try:
             var first = sp[rank].first
             var count = sp[rank].count
@@ -139,7 +146,7 @@ def parallel_optimizer_step_host(
                 rebind[MutPointer[Int32, MutUntrackedOrigin]](sp[rank].flags.unsafe_ptr()),
                 rebind[MutPointer[Float32, MutUntrackedOrigin]](unused.unsafe_ptr()),
                 len(sp[rank].flags),kind,t,nesterov,lr,beta1,beta2,eps,
-                weight_decay,momentum,dampening,Float32(0))
+                weight_decay,momentum,dampening,Float32(0),negate)
             cp[rank].enqueue_copy(dst_ptr=mp+first,src_buf=m_state)
             cp[rank].enqueue_copy(dst_ptr=vp+first,src_buf=v_state)
             cp[rank].synchronize()
