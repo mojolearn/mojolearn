@@ -51,6 +51,13 @@ for b in $BOX_BUILDS; do case "$b" in
   *) st "unknown BOX_BUILDS entry $b" ;;
 esac; done
 wait
+# A build killed for memory (rc=137: three parallel builds overran the RunPod 5090's 94 GB
+# cgroup, 2026-10-23) is rebuilt alone once the others have finished and freed their memory.
+for b in $BOX_BUILDS; do grep -q "BUILD $b rc=137" $O/status.txt || continue; st "REBUILD $b alone after rc=137"; case "$b" in
+  gpu-identical) mb gpu-identical $ARCHENV MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_PACKAGE_BYTE_LM=1 ;;
+  gpu-fast) mb gpu-fast $ARCHENV MOJOLEARN_NUMERIC_MODE=fast MOJOLEARN_PACKAGE_BYTE_LM=1 ;;
+  host) mb host MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_PACKAGE_BYTE_LM=1 ;;
+esac; done
 find python/mojolearn -name "_mojolearn_native*.so" -exec ls -l {} \; | awk '{print $5, $9}' > $O/merged-files.txt; st "merged files: $(wc -l < $O/merged-files.txt)"
 # The owned host math helper: a source checkout has none until the tree's own recipe
 # builds it (packaging/portable_math/stage.py; the wheel ships it). Without it every
