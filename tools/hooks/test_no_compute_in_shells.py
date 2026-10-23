@@ -96,7 +96,7 @@ class TreeTest(unittest.TestCase):
         self.commit()
         rc, err = self.run_checker("--tree")
         self.assertEqual(rc, 0, err)
-        self.assertIn("0 hits in 0 shell .mojo files", err)
+        self.assertIn("0 hits in 0 of 1 shell .mojo files scanned", err)
 
     def test_shell_hits_fail_with_per_directory_counts(self):
         self.write("bindings/entry/x.mojo", LOOPY)
