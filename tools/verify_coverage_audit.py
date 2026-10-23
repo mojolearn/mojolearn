@@ -1524,6 +1524,24 @@ ANNOTATIONS_BY_SRC[("prep_classify_native_call", "bindings/_mojolearn_tokenizer_
     'Public naive Bayes (Gaussian, Multinomial, Bernoulli, Complement, Categorical) and LDA/QDA fit, partial_fit, predict, predict_proba, predict_log_proba, predict_joint_log_proba, score, decision_function, transform and fit_transform call prep_classify_c, which builds their x_prep programs natively, runs them on the shared arena runner and scores through the native label and accuracy steps.' + " New source only: runtime execution and identity admission remain pending.")
 
 
+# A new native owner door; these lanes consume its public outputs.
+ANNOTATIONS_BY_SRC[("tsvd_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", [],
+    'Public TruncatedSVD fit/fit_transform/transform/inverse_transform call tsvd_c, which converts X and runs the existing tsvd entries through the compiled x_decomp_tsvd_randomized / x_decomp_tsvd_tsqr drivers natively.' + " New source only: runtime execution and identity admission remain pending.")
+
+
+# A new native owner door; these lanes consume its public outputs.
+ANNOTATIONS_BY_SRC[("ipca_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", [],
+    'Public IncrementalPCA fit/partial_fit/fit_transform/transform/inverse_transform call ipca_c, which converts X and runs one compiled x_decomp_ipca_fit / _partial / _project driver natively.' + " New source only: runtime execution and identity admission remain pending.")
+
+
+# A new native owner door; these lanes consume its public outputs.
+ANNOTATIONS_BY_SRC[("jl_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", [],
+    'Public johnson_lindenstrauss_min_dim calls jl_c, which checks eps and n_samples and computes the bound natively.' + " New source only: runtime execution and identity admission remain pending.")
+
+
 # LogisticRegression's native owner is new; these lanes consume its public outputs.
 ANNOTATIONS_BY_SRC[("logistic_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
     "owed", [],
