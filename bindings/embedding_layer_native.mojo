@@ -84,9 +84,17 @@ def _entries(fields: PythonObject, context: PythonObject, model: PythonObject = 
         if saved is not None and not Bool(py=saved == "identical"):
             raise Error("ValueError: mojolearn: " + String(py=py_type(model).__name__)
                         + " runs IDENTICAL only on the host; this model was saved " + _repr(saved))
-        var host = context["embedding_host_binding"]
-        if py_type(host) is b.str:
-            raise Error(String(py=host))
+        var module = py_get(context["modules"], context["embedding_host_module"])
+        if module is None:
+            raise Error("RuntimeError: mojolearn: the host " + String(py=py_type(model).__name__)
+                        + " has no loaded lookup binding; load the model with its own load()")
+        var host = b.dict()
+        py_setitem(host, "module", module)
+        var names = context["embedding_host_names"]
+        for i in range(len(names)):  # driver-loop: over the fixed host entry names
+            var entry = py_call(b.getattr, module, names[i], PythonObject(None))
+            if entry is not None and py_type(entry) is context["device_finalizer_types"][2]:
+                py_setitem(host, names[i], entry)
         return host
     var want = _want_mode(fields, context)
     var entries = context["embedding_bindings"][want]

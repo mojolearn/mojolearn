@@ -212,16 +212,10 @@ def connect_embedding(training, embedding_cls, archive_context):
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, NotImplementedError) as error:
             bindings[mode] = type(error).__name__ + ": " + str(error)
     context["embedding_bindings"] = bindings
-    try:
-        host = _backend.load_host_module("_mojolearn_embedding_infer_host")
-        cells = {"module": host}
-        for name in names:  # glue: retain the compiled symbols the host layer reaches
-            entry = getattr(host, name, None)
-            if isinstance(entry, BuiltinFunctionType):
-                cells[name] = entry
-        context["embedding_host_binding"] = cells
-    except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, NotImplementedError) as error:
-        context["embedding_host_binding"] = type(error).__name__ + ": " + str(error)
+    # the host inference class's lookup binding is read from the loaded
+    # module table at call time (its own load loads it; GPU code never does)
+    context["embedding_host_module"] = "mojolearn._host._mojolearn_embedding_infer_host"
+    context["embedding_host_names"] = names
     context["embedding_archive_context"] = archive_context.get("host_archive_context", archive_context)
     module = _binding()._module
     lifetime = module.embedding_layer_lifetime
