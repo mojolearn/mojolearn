@@ -76,8 +76,26 @@ def native_worker_inventory(vendor: String, environ: PythonObject) raises -> Pyt
             if py_type(value) is not bi.bytes:
                 raise Error("worker inventory: environment values require exact bytes")
             py_setitem(visibility, key, py_call(value.decode, "utf-8", "surrogateescape"))
-    var library = String("libcuda.so.1") if vendor == "cuda" else String("libamdhip64.so")
-    var driver = OwnedDLHandle(library, flags=2)  # RTLD_NOW, local symbols
+    # Match the supported HIP SONAMEs in _backend's native runtime probe;
+    # a runtime-only installation need not ship an unversioned dev symlink.
+    var libraries = List[String]()
+    if vendor == "cuda":
+        libraries.append(String("libcuda.so.1"))
+    else:
+        libraries.append(String("libamdhip64.so.7"))
+        libraries.append(String("libamdhip64.so.6"))
+        libraries.append(String("libamdhip64.so"))
+    var library = String()
+    var driver = OwnedDLHandle()
+    for i in range(len(libraries)):  # small-loop(the supported driver SONAME candidates)
+        try:
+            driver = OwnedDLHandle(libraries[i], flags=2)  # RTLD_NOW, local symbols
+            library = libraries[i]
+            break
+        except:
+            pass
+    if library == "":
+        raise Error("worker inventory: supported GPU driver library could not be loaded")
     var cuda = vendor == "cuda"
     var init_name = String("cuInit") if cuda else String("hipInit")
     _inventory_status(driver.get_function[c_int](init_name)(c_uint(0)), init_name)
