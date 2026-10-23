@@ -92,6 +92,9 @@ def _entries(fields: PythonObject, context: PythonObject, model: PythonObject) r
             raise Error("ValueError: mojolearn: " + String(py=py_type(model).__name__)
                         + " runs IDENTICAL only on the host; this model was saved " + _repr(saved))
         var module = py_get(context["modules"], context["embedding_host_module"])
+        if module is None and py_contains(context, "embedding_host_loader"):
+            var loader = context["embedding_host_loader"]
+            module = py_call(loader[0], loader[1])
         if module is None:
             raise Error("RuntimeError: mojolearn: the host " + String(py=py_type(model).__name__)
                         + " has no loaded lookup binding; load the model with its own load()")

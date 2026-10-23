@@ -215,6 +215,9 @@ def connect_embedding(training, embedding_cls, archive_context):
     # the host inference class's lookup binding is read from the loaded
     # module table at call time (its own load loads it; GPU code never does)
     context["embedding_host_module"] = "mojolearn._host._mojolearn_embedding_infer_host"
+    # glue: a host model built by `host_model(path)` reaches the lookup before
+    # any own load ran; the binding loader connects it then
+    context["embedding_host_loader"] = (_backend.load_host_module, "_mojolearn_embedding_infer_host")
     context["embedding_host_names"] = names
     context["embedding_archive_context"] = archive_context.get("host_archive_context", archive_context)
     module = _binding()._module
