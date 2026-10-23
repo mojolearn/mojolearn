@@ -34,7 +34,10 @@ fi
 st "arch env: $ARCHENV ($(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)$(rocm-smi --showproductname 2>/dev/null | grep -m1 -o 'MI3[0-9A-Z]*'))"
 [ "${BOX_BUILDS:-all}" = all ] || [ -z "${BOX_BUILDS:-}" ] && find python/mojolearn -name "*.so" -delete
 command -v /usr/bin/time >/dev/null || apt-get install -y -qq time > /dev/null 2>&1
-mb() { tag=$1; shift; /usr/bin/time -v env "$@" pixi run -q sh bindings/merged_build.sh ${tag%%-*} > $O/build-$tag.log 2> $O/build-$tag.time; rc=$?
+# /usr/bin/time is missing on some RunPod community images (2026-10-23: every build rc=127); install it, else run untimed.
+[ -x /usr/bin/time ] || (apt-get install -y -q time >/dev/null 2>&1 || (apt-get update -q >/dev/null 2>&1 && apt-get install -y -q time >/dev/null 2>&1)) || true
+if [ -x /usr/bin/time ]; then TIMEV="/usr/bin/time -v"; else TIMEV=""; fi
+mb() { tag=$1; shift; $TIMEV env "$@" pixi run -q sh bindings/merged_build.sh ${tag%%-*} > $O/build-$tag.log 2> $O/build-$tag.time; rc=$?
   st "BUILD $tag rc=$rc seconds=$(grep -oP 'Elapsed \(wall clock\) time.*: \K.*' $O/build-$tag.time) peak_rss_gb=$(awk '/Maximum resident/ {printf "%.1f", $6/1048576}' $O/build-$tag.time) errors=$(grep -c ': error:' $O/build-$tag.log)"; }
 # BOX_BUILDS selects the merged builds (default all three); the identical and host
 # sets carry the byte LM on Linux only when MOJOLEARN_PACKAGE_BYTE_LM=1 (the release
@@ -48,6 +51,13 @@ for b in $BOX_BUILDS; do case "$b" in
   *) st "unknown BOX_BUILDS entry $b" ;;
 esac; done
 wait
+# A build killed for memory (rc=137: three parallel builds overran the RunPod 5090's 94 GB
+# cgroup, 2026-10-23) is rebuilt alone once the others have finished and freed their memory.
+for b in $BOX_BUILDS; do grep -q "BUILD $b rc=137" $O/status.txt || continue; st "REBUILD $b alone after rc=137"; case "$b" in
+  gpu-identical) mb gpu-identical $ARCHENV MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_PACKAGE_BYTE_LM=1 ;;
+  gpu-fast) mb gpu-fast $ARCHENV MOJOLEARN_NUMERIC_MODE=fast MOJOLEARN_PACKAGE_BYTE_LM=1 ;;
+  host) mb host MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_PACKAGE_BYTE_LM=1 ;;
+esac; done
 find python/mojolearn -name "_mojolearn_native*.so" -exec ls -l {} \; | awk '{print $5, $9}' > $O/merged-files.txt; st "merged files: $(wc -l < $O/merged-files.txt)"
 # The owned host math helper: a source checkout has none until the tree's own recipe
 # builds it (packaging/portable_math/stage.py; the wheel ships it). Without it every

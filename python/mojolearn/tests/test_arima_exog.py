@@ -226,6 +226,94 @@ def test_exog_fit_forecast_and_save_when_a_binding_can_fit():
             )
 
 
+def test_save_load_round_trip_over_every_input_kind_the_verify_lanes_pass():
+    """The verify lanes arima, arima-011, arima-seasonal-c, arima-exog and
+    arima-exog-seasonal save a model fit on a C-contiguous float32 ndarray
+    (the zero-copy input), which `save` refused with "Sequential requires a
+    memoryview over a native buffer owner" (AMD verify of 7c6e0dade). Each
+    input kind and order is fit, saved, loaded, and must forecast the same
+    bytes and carry the same fitted arrays."""
+    if not _can_fit():
+        print("SKIP: nothing in this process fits ARIMA (no GPU set, no arima host binding)")
+        return
+    import tempfile
+
+    import numpy as np
+
+    rng = np.random.default_rng(7)
+    b, n, h = 4, 128, 6
+    base = np.ascontiguousarray(rng.standard_normal((n, b)).astype(np.float32).T)
+    exog = np.ascontiguousarray(rng.standard_normal((b, n, 2)).astype(np.float32))
+    fut = np.ascontiguousarray(rng.standard_normal((b, h, 2)).astype(np.float32))
+    inputs = (
+        ("float32 C ndarray", base),
+        ("float64 ndarray", base.astype(np.float64)),
+        ("float32 F ndarray", np.asfortranarray(base)),
+        ("mojolearn Array", mojolearn.Array.from_buffer(base)),
+        ("nested list", base.tolist()),
+        ("one series", np.ascontiguousarray(base[0])),
+    )
+    orders = (
+        dict(order=(1, 0, 0)),
+        dict(order=(0, 1, 1)),
+        dict(order=(1, 0, 0), seasonal_order=(1, 0, 0, 4), trend="c"),
+    )
+    fields = ("params_", "x_", "x0_", "fx_", "n_iter_", "retcode_", "llf_", "aic_", "bic_")
+    with tempfile.TemporaryDirectory(prefix="arima_round_trip_") as tmp:
+        for label, y in inputs:
+            for k, kw in enumerate(orders):
+                for with_exog in (False, True):
+                    if with_exog and label == "one series":
+                        continue
+                    m = mojolearn.ARIMA(**kw).fit(y, exog if with_exog else None)
+                    path = str(Path(tmp) / f"m{len(label)}_{k}_{int(with_exog)}.npz")
+                    m.save(path)
+                    back = mojolearn.ARIMA.load(path)
+                    where = f"{label}, {kw}, exog={with_exog}"
+                    for name in fields:
+                        assert (np.asarray(getattr(back, name)).tobytes()
+                                == np.asarray(getattr(m, name)).tobytes()), f"{name} differs after load ({where})"
+                    future = fut if with_exog else None
+                    want = np.asarray(m.forecast(h, exog=future))
+                    got = np.asarray(back.forecast(h, exog=future))
+                    assert got.tobytes() == want.tobytes(), f"a loaded model forecast differently ({where})"
+                    # a loaded model saves again, to the same bytes
+                    again = path + ".again.npz"
+                    back.save(again)
+                    assert Path(again).read_bytes() == Path(path).read_bytes(), f"re-save differs ({where})"
+
+
+def test_save_accepts_a_fitted_array_in_the_native_output_store():
+    """`Array.astype` (and the label encoders and float64 to float32
+    converters) return Arrays over `_buffer._output_store`, a ctypes array
+    class; the 0.8.55 ARIMA kept `llf_ = stats[:batch].astype("<f8")`, and
+    `save` refused it ("Sequential requires a memoryview over a native buffer
+    owner", AMD verify of 7c6e0dade). A fitted field held in that store saves
+    and loads to the same bytes."""
+    if not _can_fit():
+        print("SKIP: nothing in this process fits ARIMA (no GPU set, no arima host binding)")
+        return
+    import ctypes
+    import tempfile
+
+    import numpy as np
+
+    rng = np.random.default_rng(11)
+    series = np.ascontiguousarray(rng.standard_normal((4, 96)).astype(np.float32))
+    m = mojolearn.ARIMA(order=(1, 0, 0)).fit(series)
+    held = m.llf_.astype("<f8")
+    assert isinstance(held._store, ctypes.Array), (
+        f"astype no longer returns the native output store ({type(held._store).__name__}); "
+        "this test must hold a field in that store some other way")
+    m.llf_ = held
+    with tempfile.TemporaryDirectory(prefix="arima_output_store_") as tmp:
+        path = str(Path(tmp) / "m.npz")
+        m.save(path)
+        back = mojolearn.ARIMA.load(path)
+        assert np.asarray(back.llf_).tobytes() == np.asarray(held).tobytes()
+        assert np.asarray(back.forecast(5)).tobytes() == np.asarray(m.forecast(5)).tobytes()
+
+
 if __name__ == "__main__":
     for name in [n for n in sorted(globals()) if n.startswith("test_")]:
         globals()[name]()
