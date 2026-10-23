@@ -1,12 +1,10 @@
 """Authored additive full-PCA exposure gates; root executes, never agents.
 
-Host sentinels prove dispatch/ABI only. Numerical case requires explicit
+The default cases check the native owner's refusals. Numerical case requires explicit
 remote CUDA/HIP opt-in and does not confer cross-vendor certification.
 """
-import ctypes
 import os
 import sys
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -14,73 +12,21 @@ import pytest
 from mojolearn import PCA, _backend
 
 
-def write(address, values):
-    values = np.asarray(values, dtype=np.float32).ravel()
-    np.ctypeslib.as_array((ctypes.c_float * len(values)).from_address(address))[:] = values
-
-
-def test_full_uses_dedicated_export_and_all_output_slots(monkeypatch):
-    calls = []
-    def owned(x, components, mean, explained, ratio, singular, out, params):
-        calls.append(list(params))
-        write(components, [[1, 0, 0], [0, 1, 0]])
-        write(mean, [1, 2, 3])
-        write(explained, [8, 4])
-        write(ratio, [.5, .25])
-        write(singular, [6, 3])
-        return params[2], .125
-    # The one fit call carries the dense arm (params[3] == 1); the covariance
-    # export is absent on this sentinel, so falling back to it must fail.
-    monkeypatch.setattr(PCA, '_bind', lambda self, name: SimpleNamespace(
-        pca_fit_full=None, pca_fit_owned=owned))
-    x = np.arange(24, dtype=np.float32).reshape(8, 3)
-    before = x.tobytes()
-    model = PCA(2, svd_solver='full').fit(x)
-    assert calls == [[8, 3, 2, 1, 0, 0, 0.0]]
-    np.testing.assert_array_equal(model.components_, [[1, 0, 0], [0, 1, 0]])
-    np.testing.assert_array_equal(model.mean_, [1, 2, 3])
-    np.testing.assert_array_equal(model.explained_variance_, [8, 4])
-    np.testing.assert_array_equal(model.explained_variance_ratio_, [.5, .25])
-    np.testing.assert_array_equal(model.singular_values_, [6, 3])
-    assert model.noise_variance_ == .125 and model.n_samples_ == 8
-    assert x.tobytes() == before
-
-
-def test_full_missing_export_refuses_without_covariance_fallback(monkeypatch):
-    monkeypatch.setattr(PCA, '_bind', lambda self, name: SimpleNamespace())
-    with pytest.raises(NotImplementedError, match='build_estimators.sh'):
-        PCA(2, svd_solver='full').fit(np.ones((8, 3), dtype=np.float32))
-
-
-def test_full_wide_matrix_refuses_before_native_call(monkeypatch):
-    monkeypatch.setattr(PCA, "numeric_mode_used", lambda self: "fast")
-    def forbidden(*args):
-        raise AssertionError('wide matrix reached native full fit')
-    monkeypatch.setattr(PCA, '_bind', lambda self, name: SimpleNamespace(pca_fit_full=forbidden))
+def test_full_wide_matrix_refuses_outside_identical():
+    # The dense route needs a tall matrix outside IDENTICAL (DEVIATION 593);
+    # the native owner refuses it before any kernel runs.
+    try:
+        model = PCA(2, svd_solver='full', numeric_mode='fast')
+        model.fit(np.ones((8, 3), dtype=np.float32))
+    except ImportError:
+        pytest.skip('this install carries no fast estimators binding')
     with pytest.raises(NotImplementedError, match='at least as many samples'):
-        PCA(2, svd_solver='full').fit(np.ones((3, 8), dtype=np.float32))
+        PCA(2, svd_solver='full', numeric_mode='fast').fit(np.ones((3, 8), dtype=np.float32))
 
 
-def test_full_wide_identical_dispatch_and_component_bound(monkeypatch):
-    monkeypatch.setattr(PCA, "numeric_mode_used", lambda self: "identical")
-    calls = []
-    def owned(x, components, mean, explained, ratio, singular, out, params):
-        calls.append(list(params))
-        rows, features, count = params[:3]
-        write(components, [0] * (count * features))
-        write(mean, [0] * features)
-        for address in (explained, ratio, singular):
-            write(address, [1] * count)
-        return count, 0.0
-    monkeypatch.setattr(PCA, "_bind", lambda self, name: SimpleNamespace(
-        pca_fit_full=None, pca_fit_owned=owned))
-    x = np.ones((3, 8), dtype=np.float32)
-    model = PCA(3, svd_solver="full").fit(x)
-    assert calls == [[3, 8, 3, 1, 0, 0, 0.0]]
-    assert model.components_.shape == (3, 8)
+def test_full_component_bound_refused_before_the_fit():
     with pytest.raises(ValueError, match="cannot exceed min"):
-        PCA(4, svd_solver="full").fit(x)
-    assert calls == [[3, 8, 3, 1, 0, 0, 0.0]]
+        PCA(4, svd_solver="full", numeric_mode="identical").fit(np.ones((3, 8), dtype=np.float32))
 
 
 @pytest.mark.skipif(

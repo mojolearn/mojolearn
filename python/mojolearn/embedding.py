@@ -11,9 +11,7 @@ each one carries the previous gradient forward (``backward(ids, dy, grad=...)``)
 There is no autograd here: the layer holds the table and computes the two calls; it
 never updates `weight` itself.
 """
-import itertools
-
-from . import _backend, _native_archive_bridge, _serialize
+from . import _backend, _native_archive_bridge
 from ._buffer import _materialize, addr, addr_ro, as_f32_c, as_i32_c, empty, frombytes
 from ._mode import NumericModeMixin
 
@@ -22,9 +20,6 @@ _NO_PADDING = -1
 #: ORDER MATCHES autograd/kernels/embedding_sort.mojo's PLAN_SCAN = 0, PLAN_SORT = 1.
 #: PLAN_AUTO = 2 is embedding/checks/embedding_identical.mojo's.
 _PLAN_CODE = {"scan": 0, "sort": 1, "auto": 2}
-#: Table tokens for the binding's resident device copy (one per layer and
-#: per assignment of `weight`; never pickled or copied with the layer).
-_TABLE_TOKENS = itertools.count(1)
 #: The saved-table format tag (`save`, `load`, `mojolearn.host_model`;
 #: lane/inference-embedding-ivf-cholesky, 2026-09-15).
 _EMBEDDING_FORMAT = "mojolearn-embedding-1"
@@ -175,45 +170,14 @@ class Embedding(NumericModeMixin):
                    numeric_mode=numeric_mode, plan=plan)
 
     # -- the resident device table (bindings/_mojolearn_embedding.mojo) ------
-
-    def __setattr__(self, name, value):
-        if name == "weight":
-            self._drop_table()
-        super().__setattr__(name, value)
+    # The layer's `__setattr__` (assigning `weight` releases the table) and
+    # `__del__` are the native lifetime entry, installed after the class
+    # (bindings/embedding_layer_native.mojo).
 
     def __getstate__(self):
         state = dict(self.__dict__)
         state.pop("_table_tok", None)
         return state
-
-    def __del__(self):
-        try:
-            self._drop_table()
-        except Exception:
-            pass
-
-    def _drop_table(self):
-        """Release this layer's resident device table, if it has one."""
-        tok = self.__dict__.pop("_table_tok", None)
-        if tok is None:
-            return
-        try:
-            release = getattr(self._extension(), "embedding_table_release", None)
-            if release is not None:
-                release(tok)
-        except Exception:
-            pass
-
-    def _table_token(self, mod):
-        """This layer's table token, or None for a binding without the
-        resident table (the host bindings)."""
-        if getattr(mod, "embedding_table_release", None) is None:
-            return None
-        tok = self.__dict__.get("_table_tok")
-        if tok is None:
-            tok = next(_TABLE_TOKENS)
-            self.__dict__["_table_tok"] = tok
-        return tok
 
     def _extension(self):
         mod = self._bind()
@@ -275,30 +239,7 @@ class Embedding(NumericModeMixin):
         -------
         Array of shape ``ids.shape + (embedding_dim,)``, float32
         """
-        flat, shape = self._ids(ids)
-        t, d = int(flat.size), self.embedding_dim
-        if device:
-            from ._x_sequence_device import SequenceDeviceTensor
-            mod = self._dev_module()
-            y = SequenceDeviceTensor._new(mod, shape + (d,))
-            tok = self._table_token(mod)
-            mod.embedding_forward_dev(
-                # ORDER MATCHES bindings/_mojolearn_embedding.mojo::embedding_forward_dev_binding.
-                [addr_ro(self.weight, name="weight"), addr_ro(flat, name="ids")], [y.h],
-                [self.num_embeddings, d, t, 0 if tok is None else tok],
-            )
-            return y
-        y = empty((t * d,), "<f4")
-        mod = self._extension()
-        tok = self._table_token(mod)
-        mod.embedding_forward(
-            # ORDER MATCHES bindings/_mojolearn_embedding.mojo::embedding_forward_binding.
-            # weight, ids, y_out
-            [addr_ro(self.weight, name="weight"), addr_ro(flat, name="ids"), addr(y, name="y")],
-            # V, d, T[, token]
-            [self.num_embeddings, d, t] if tok is None else [self.num_embeddings, d, t, tok],
-        )
-        return y.reshape(shape + (d,))
+        return _EMBEDDING_NATIVE("emblayer_forward", self, (ids, device), None, _EMBEDDING_CONTEXT)
 
     __call__ = forward
 
@@ -402,26 +343,13 @@ class Embedding(NumericModeMixin):
     @classmethod
     def load(cls, path):
         """Load a layer written by `save`. The dtype and shape are checked; nothing is cast."""
-        from .decomposition import _check_saved_by, _restore_mode
-        arrays = _serialize.read_npz(path, _EMBEDDING_FORMAT)
-        _check_saved_by(arrays, path, cls)
-        meta = _serialize.exact(arrays, "meta", "<i8")
-        if meta.size != 3:
-            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 3 are needed")
-        v, d, pad = (int(meta[i]) for i in range(3))  # glue: three metadata ints only
-        weight = _serialize.exact(arrays, "weight", "<f4")
-        if tuple(weight.shape) != (v, d):
-            raise ValueError(f"mojolearn: {path!r} weight has shape {tuple(weight.shape)}, not {(v, d)}")
-        obj = cls(v, d, padding_idx=None if pad == _NO_PADDING else pad, weight=weight,
-                  plan=_serialize.scalar_str(arrays, "plan"))
-        _restore_mode(obj, arrays)
-        return obj
+        return _EMBEDDING_NATIVE("emblayer_load", cls, (path,), None, _EMBEDDING_CONTEXT)
 
 
 # The 0.8.55 writer's members, in its order (members are written sorted).
-# Only `save` is connected: `Embedding` defines `__del__` and `__setattr__`
-# (it owns a resident device table), which the native loader does not build,
-# so `load` constructs the layer through its constructor.
+# `save` is connected here; `load` is the layer's own native entry
+# (bindings/embedding_layer_native.mojo), which builds the layer with its
+# native lifetime.
 _native_archive_bridge.register(Embedding, _EMBEDDING_FORMAT, (
     *_native_archive_bridge.head(_EMBEDDING_FORMAT),
     ("str", "plan", "plan"),
@@ -430,5 +358,11 @@ _native_archive_bridge.register(Embedding, _EMBEDDING_FORMAT, (
                     ("none", "padding_idx", _NO_PADDING))),
 ))
 
+
+# Package-import connection: the native forward/load owner and the native
+# `__setattr__` / `__del__` of the layer (bindings/embedding_layer_native.mojo).
+from . import _training_impl as _embedding_training  # noqa: E402
+from ._native_optimizer_bridge import connect_embedding as _connect_embedding  # noqa: E402
+_EMBEDDING_NATIVE, _EMBEDDING_CONTEXT = _connect_embedding(_embedding_training, Embedding, _ARCHIVE_CONTEXT)
 
 __all__ = ["Embedding"]

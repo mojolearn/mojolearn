@@ -455,6 +455,7 @@ _TRAINING_ENTRIES = (
     'mlp_sum_rows', 'ce_loss', 'optimizer_step', 'mlp_train_step', 'mlp_resident_open',
     'mlp_resident_download', 'mlp_resident_close', 'mlp_resident_step', 'mlp_resident_steps',
     'mlp_sessions', 'mlp_sessions_rows', 'sha256_hex', 'neural_arithmetic_profile',
+    'mlp_resident_apply', 'mlp_sessions_resident',
 )
 
 

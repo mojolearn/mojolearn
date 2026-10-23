@@ -62,6 +62,10 @@ IVF_LANES = ("ivf", "ivf-euclidean", "ivf-extend", "ivf-filter")
 #: three single-index lanes this file is about, and the family assertion
 #: below names it rather than widening to "contains".
 IVF_DRIVER_LANES = ("par-ivf",)
+#: `ivf-short-fill` joined on 2026-10-21 (lane/verify-coverage-audit): IVF-Flat
+#: queries with fewer candidates than neighbours asked for, a coverage lane
+#: over the same host binding.
+IVF_COVERAGE_LANES = ("ivf-short-fill",)
 #: The lanes diffed against a committed record of their own instead of the
 #: training record. Empty since release-0845: the 2026-10-14 training record
 #: (host_surface.TRAINING_GPU_COLUMNS) carries embedding, embedding-sort, ivf
@@ -87,7 +91,7 @@ def test_manifest_declares_both_families():
         fam = host_surface.family(name)
         assert fam["routes"] == route
         assert host_surface.routed_modules()[route] == f"{route}_host"
-        assert fam["training_lanes"] == lanes + (IVF_DRIVER_LANES if name == "ivf" else ())
+        assert fam["training_lanes"] == lanes + (IVF_DRIVER_LANES + IVF_COVERAGE_LANES if name == "ivf" else ())
         # Ships since lane/ship-cpu-host-families (2026-09-16): a wheel that
         # leaves the fit out cannot check the lane that hashes the fit.
         assert fam["ships_in_wheel"], "a host family with covered lanes must ship, or the lanes are unverifiable"

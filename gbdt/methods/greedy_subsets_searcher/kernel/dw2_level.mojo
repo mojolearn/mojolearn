@@ -122,9 +122,9 @@ def dw2_flags_count_kernel[GUARD: Bool = False](
                 var goes_right = (
                     feature_val == value
                 ) if one_hot else (feature_val > value)
-                if goes_right:
-                    f4[e] = UInt8(1)
-                else:
+                # # sm_120 AOT: no lane write under a per-lane guard (core/gram_splitk.mojo GRAM_STRIDED_ARM; lane sm120-tree-identity).
+                f4[e] = UInt8(1) if goes_right else UInt8(0)
+                if not goes_right:
                     v += Int32(1)
             flags.unsafe_store[width=4, alignment=4](g, f4)
         else:

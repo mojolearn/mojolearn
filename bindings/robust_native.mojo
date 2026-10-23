@@ -138,7 +138,12 @@ def _quantiles(value: PythonObject, context: PythonObject) raises -> PythonObjec
     return Python.tuple(_number(source[0],context),_number(source[1],context))
 
 
-def robust_fit(model: PythonObject, source: PythonObject, target: PythonObject, context: PythonObject) raises -> PythonObject:
+def robust_fit(model: PythonObject, source: PythonObject, target: PythonObject, context: PythonObject,
+               project: Bool = False) raises -> PythonObject:
+    """The fit; with `project` (fit_transform) the transform's affine stage
+    runs in the fit's own program on the X it already uploaded and the
+    scaled X is returned (None when the output is large enough for the
+    device output region, which the separate transform keeps)."""
     var fields = py_fields(model)
     # Preserve the public wrapper's input/target validation before fit begins.
     var mode = context["backend_fields"]["_DEFAULT_MODE"]
@@ -187,6 +192,12 @@ def robust_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
     var center = q+3*d
     var scale = center+d
     var host = scale+d+(0 if work else part_words)
+    # fit_transform: the scaled X takes n*d words after the fit's host words;
+    # the same affine stage and operands the transform program runs.
+    var fused = project and n*d < 134217728
+    var dest = host
+    if fused:
+        host += n*d
     var part = scale+d
     if work:
         sorted = host
@@ -197,9 +208,13 @@ def robust_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
     var arena = xprep_storage(host+(0 if device_scratch else scratch),context)
     var fraction_values = classical_typed(Python.tuple(3),"<f4",context["output_context"])
     var fp = _ptr(fraction_values)
+    _ = fraction_values  # keep the Python object alive through the native call above
     fp[0] = Float32(lo/100.0)
+    _ = fraction_values  # keep the Python object alive through the native call above
     fp[1] = 0.5
+    _ = fraction_values  # keep the Python object alive through the native call above
     fp[2] = Float32(hi/100.0)
+    _ = fraction_values  # keep the Python object alive through the native call above
     var inputs = Python.tuple(Python.tuple(0,values),Python.tuple(fractions,Python.tuple(0,fraction_values,PythonObject(None),3,1)))
     var program = List[Int32]()
     if not select:
@@ -213,7 +228,10 @@ def robust_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
     _stage(program,4,d,q,3,d,center,scale,0,0,2,1)
     if unit:
         _stage(program,73,d,scale,fractions)
+    if fused:
+        _stage(program,3,n*d,0,n*d,d,center if centering else -1,scale if scaling else -1,dest)
     xprep_run(arena,host,scratch,PythonObject(None),0,program^,inputs,entries,context)
+    var scaled = xprep_take(arena[0],dest,n,d,context["output_context"]) if fused else PythonObject(None)
     py_setitem(fields,"center_",xprep_take(arena[0],center,d,0,context["output_context"]) if centering else PythonObject(None))
     py_setitem(fields,"scale_",xprep_take(arena[0],scale,d,0,context["output_context"]) if scaling else PythonObject(None))
     py_setitem(fields,"numeric_mode_",mode)
@@ -223,7 +241,7 @@ def robust_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
         _ = py_call(fields.pop,"feature_names_in_")
     _ = arena^
     _ = values^
-    return model
+    return scaled if project else model
 
 
 def robust_transform(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -316,9 +334,11 @@ def robust_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
                     raise Error("TypeError: native fit_transform requires native fit and transform; call application operations explicitly")
                 if fit.__func__ is not context["robust_fit_method"] or transform.__func__ is not context["robust_transform_method"]:
                     raise Error("TypeError: native fit_transform cannot invoke Python estimator overrides; call application operations explicitly")
-            result = robust_fit(model,args[0],args[1],context)
+            result = robust_fit(model,args[0],args[1],context,operation == "fit_transform")
             if operation == "fit_transform":
-                result = _public_result(robust_transform(model,args[0],context),context)
+                if result is None:
+                    result = robust_transform(model,args[0],context)
+                result = _public_result(result,context)
         elif operation == "transform":
             result = _public_result(robust_transform(model,args[0],context),context)
         else:

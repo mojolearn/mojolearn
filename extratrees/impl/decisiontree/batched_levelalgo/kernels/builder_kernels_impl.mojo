@@ -779,10 +779,16 @@ def node_feature_range_tiled_kernel[
     var nf = k - f0
     if nf > FT:
         nf = FT
+    # NO LANE WRITE UNDER A PER-LANE GUARD (lane sm120-tree-identity,
+    # 2026-10-23): each per-feature value is computed into a scalar under its
+    # guard and its SIMD lane written unconditionally, the form the sm_120 AOT
+    # compile keeps (core/gram_splitk.mojo, GRAM_STRIDED_ARM). Same values.
     var cols = SIMD[DType.int32, FT](0)
     comptime for j in range(FT):
+        var cj = Int32(0)
         if j < nf:
-            cols[j] = colids[unsafe_offset = nid * k + f0 + j]
+            cj = colids[unsafe_offset = nid * k + f0 + j]
+        cols[j] = cj
     var lmin = SIMD[DType.float32, FT](inf[DType.float32]())
     var lmax = SIMD[DType.float32, FT](-inf[DType.float32]())
     var lmiss = SIMD[DType.int32, FT](0)
@@ -792,21 +798,29 @@ def node_feature_range_tiled_kernel[
     while i < end:
         var bases = SIMD[DType.int64, AFT_ET_RANGE_ROW_TILE](0)
         comptime for r in range(AFT_ET_RANGE_ROW_TILE):
+            var br = Int64(0)
             if i + r * stride < end:
-                bases[r] = Int64(Int(row_ids[unsafe_offset=i + r * stride]) * n)
+                br = Int64(Int(row_ids[unsafe_offset=i + r * stride]) * n)
+            bases[r] = br
         comptime for j in range(FT):
+            var m = lmiss[j]
+            var lo = lmin[j]
+            var hi = lmax[j]
             if j < nf:
                 var col = Int(cols[j])
                 comptime for r in range(AFT_ET_RANGE_ROW_TILE):
                     if i + r * stride < end:
                         var v = Float32(data_rm[unsafe_offset = Int(bases[r]) + col])
                         if v != v:
-                            lmiss[j] += 1
+                            m += 1
                         else:
-                            if range_key(v) < range_key(lmin[j]):
-                                lmin[j] = v
-                            if range_key(v) > range_key(lmax[j]):
-                                lmax[j] = v
+                            if range_key(v) < range_key(lo):
+                                lo = v
+                            if range_key(v) > range_key(hi):
+                                hi = v
+            lmiss[j] = m
+            lmin[j] = lo
+            lmax[j] = hi
         i += stride * AFT_ET_RANGE_ROW_TILE
     # One barrier for the whole tile: each warp folds its FT features with
     # shuffles, lane 0 parks them in shared memory, and thread j folds
@@ -1758,6 +1772,7 @@ def _node_feature_score_body[
     sabotage_in: Int32,
     n_cols_in: Int32,
     row_w: MutPointer[Int32, MutAnyOrigin],
+    out_threshold: MutPointer[Float32, MutAnyOrigin],
 ):
     """Steps 2, 3 and 4 of DEVIATION 137: skip, draw, and accumulate.
     WEIGHTED classification (lane sk-kernels): each row adds its
@@ -1822,6 +1837,17 @@ def _node_feature_score_body[
     var threshold = draw_threshold_device(
         key, extent, sabotage != SCORE_SAB_NO_MAX_GUARD
     )
+    # THE ONE STORED THRESHOLD (lane sm120-tree-identity, 2026-10-23): the
+    # value this pass counts `x <= threshold` against is the value the
+    # finalize publishes, the reduce keeps and the partition compares, so
+    # the split's `n_left` and the partition's direction test read the SAME
+    # word. The finalize used to redraw it in its own kernel; on an RTX 5090
+    # the partition then disagreed with `n_left` and left slots of the
+    # alternate row buffer unwritten (compute-sanitizer initcheck on
+    # `partition_writeback_kernel`). Every block of the cell draws the same
+    # word; block 0's thread 0 stores it.
+    if offset_blockid == 0 and Int(thread_idx.x) == 0:
+        out_threshold[unsafe_offset=slot] = threshold
 
     # Shared integer-count candidate, inspired by cuML computeSplitKernel's
     # shared PDF + global merge (cpp/src/decisiontree/batched-levelalgo/
@@ -2011,6 +2037,7 @@ def node_feature_score_kernel[
     seed: UInt64,
     sabotage_in: Int32,
     n_cols_in: Int32,
+    out_threshold: MutPointer[Float32, MutAnyOrigin],
 ):
     """Steps 2, 3 and 4 of DEVIATION 137: skip, draw, and accumulate.
     The unweighted kernel: `_node_feature_score_body` with WEIGHTED off
@@ -2038,6 +2065,7 @@ def node_feature_score_kernel[
         sabotage_in,
         n_cols_in,
         labels_q,
+        out_threshold,
     )
 
 
@@ -2066,6 +2094,7 @@ def node_feature_score_weighted_kernel[
     sabotage_in: Int32,
     n_cols_in: Int32,
     row_w: MutPointer[Int32, MutAnyOrigin],
+    out_threshold: MutPointer[Float32, MutAnyOrigin],
 ):
     """The classification score pass with row weights (lane sk-kernels):
     `row_w[row]` is the row's fixed-point weight (`DeviceDataset.d_weights`),
@@ -2093,6 +2122,7 @@ def node_feature_score_weighted_kernel[
         sabotage_in,
         n_cols_in,
         row_w,
+        out_threshold,
     )
 
 
@@ -2121,6 +2151,7 @@ def node_feature_score_weighted_reg_kernel[
     sabotage_in: Int32,
     n_cols_in: Int32,
     row_w: MutPointer[Int32, MutAnyOrigin],
+    out_threshold: MutPointer[Float32, MutAnyOrigin],
 ):
     """The regression score pass with row weights (lane sk-final):
     `labels_q[row]` is the row's quantized `w * y`, `row_w[row]` its
@@ -2149,6 +2180,7 @@ def node_feature_score_weighted_reg_kernel[
         sabotage_in,
         n_cols_in,
         row_w,
+        out_threshold,
     )
 
 
@@ -2175,6 +2207,7 @@ def node_feature_score_reg_tiled_kernel[
     seed: UInt64,
     quant: MutPointer[Float32, MutAnyOrigin],
     nbins: MutPointer[Int32, MutAnyOrigin],
+    out_threshold: MutPointer[Float32, MutAnyOrigin],
 ):
     """FAST, and Apple IDENTICAL (integer counts and sums, so the same
     integers in any order; trees-apple2): the REGRESSION arm of
@@ -2208,11 +2241,18 @@ def node_feature_score_reg_tiled_kernel[
     var thr = SIMD[DType.float32, FT](0)
     var active = SIMD[DType.int32, FT](0)
     var tree = tree_ids[unsafe_offset=nid].cast[DType.uint32]()
+    # NO LANE WRITE UNDER A PER-LANE GUARD (lane sm120-tree-identity,
+    # 2026-10-23): each per-feature value is computed into a scalar under its
+    # guard and its SIMD lane written unconditionally, the form the sm_120 AOT
+    # compile keeps (core/gram_splitk.mojo, GRAM_STRIDED_ARM). Same values.
     comptime for j in range(FT):
+        var cj = Int32(0)
+        var aj = Int32(0)
+        var tj = Float32(0)
         if j < nf:
             var slot = nid * k + f0 + j
             var col = Int(colids[unsafe_offset=slot])
-            cols[j] = Int32(col)
+            cj = Int32(col)
             var extent = FeatureRange(
                 in_min[unsafe_offset=slot],
                 in_max[unsafe_offset=slot],
@@ -2221,9 +2261,17 @@ def node_feature_score_reg_tiled_kernel[
             if extent.n_missing == Int32(0) and not node_feature_is_constant(
                 extent, Int32(range_len)
             ):
-                active[j] = 1
+                aj = 1
                 var key = key_for(seed, tree, node_id, UInt32(col))
-                thr[j] = draw_threshold_device(key, extent, True)
+                tj = draw_threshold_device(key, extent, True)
+                # THE ONE STORED THRESHOLD (see `_node_feature_score_body`):
+                # the value-space word the finalize publishes and the
+                # partition compares, stored before any code snap.
+                if offset_blockid == 0 and Int(thread_idx.x) == 0:
+                    out_threshold[unsafe_offset=slot] = tj
+        cols[j] = cj
+        active[j] = aj
+        thr[j] = tj
     comptime if DT != DType.float32:
         # Compare codes against the snapped border's code: thread j searches
         # feature j's borders once for the whole block.
@@ -2238,8 +2286,10 @@ def node_feature_score_reg_tiled_kernel[
             )
         barrier()
         comptime for j in range(FT):
+            var tj2 = thr[j]
             if j < nf and active[j] != 0:
-                thr[j] = s_code[j]
+                tj2 = s_code[j]
+            thr[j] = tj2
     var n_left = SIMD[DType.int32, FT](0)
     var acc_left = SIMD[DType.int32, FT](0)
     var n_seen = Int32(0)
@@ -2254,10 +2304,14 @@ def node_feature_score_reg_tiled_kernel[
         acc_total += q
         var base = row * n
         comptime for j in range(FT):
+            var nl = n_left[j]
+            var al = acc_left[j]
             if j < nf and active[j] != 0:
                 if Float32(data_rm[unsafe_offset = base + Int(cols[j])]) <= thr[j]:
-                    n_left[j] += 1
-                    acc_left[j] += q
+                    nl += 1
+                    al += q
+            n_left[j] = nl
+            acc_left[j] = al
         i += stride
     # One barrier for the whole tile (see node_feature_range_tiled_kernel).
     comptime N_WARPS = TPB // WARP_SIZE
@@ -2358,10 +2412,7 @@ def _node_feature_score_finalize_body[
     var slot = idx
     while slot < n_cells:
         var nid = slot // n_sampled_cols
-        var fslot = slot % n_sampled_cols
         var range_len = Int(work_items[unsafe_offset=nid].instances.count)
-        var node_id = UInt32(Int(work_items[unsafe_offset=nid].idx))
-        var col = Int(colids[unsafe_offset = nid * n_sampled_cols + fslot])
 
         var extent = FeatureRange(
             in_min[unsafe_offset=slot],
@@ -2385,16 +2436,11 @@ def _node_feature_score_finalize_body[
             slot += stride
             continue
 
-        var key = key_for(
-            seed,
-            tree_ids[unsafe_offset=nid].cast[DType.uint32](),
-            node_id,
-            UInt32(col),
-        )
-        var threshold = draw_threshold_device(
-            key, extent, sabotage != SCORE_SAB_NO_MAX_GUARD
-        )
-        out_threshold[unsafe_offset=slot] = threshold
+        # THE ONE STORED THRESHOLD (lane sm120-tree-identity): the score
+        # pass stored the word it counted `n_left` against in this cell
+        # (`_node_feature_score_body`, `node_feature_score_reg_tiled_kernel`);
+        # it is published as it is, never redrawn here, so the split's
+        # `quesval` and its `n_left` come from one draw.
 
         var n_left = Int(out_n_left[unsafe_offset=slot])
         var n_total = Int(out_n_total[unsafe_offset=slot])

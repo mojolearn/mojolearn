@@ -9,13 +9,15 @@ opset, the inputs and outputs, every node with its attributes, every
 initializer's dtype, shape and bytes, the source), the same refusal (the
 same problems in the same order, the same message), and ``resolve`` on both
 graphs the same Resolved (shapes, dtypes, folded integers, nodes without a
-rule, problems). Needs the x_sequence binding with the onnx_read entry."""
+rule, problems), the Python rules of ``tests/_resolve_oracle.py`` against
+Mojo's. Needs the x_sequence binding with the onnx_read entry."""
 import pytest
 
 from mojolearn import _backend
 from mojolearn.importers import UnsupportedModel
 from mojolearn.importers import onnx as native_reader
 from mojolearn.importers._graph import GraphIR, Node, TensorInfo, resolve
+from mojolearn.tests import _resolve_oracle as resolve_oracle
 from mojolearn.tests import _onnx_fixture as fx
 from mojolearn.tests import _onnx_reader_oracle as oracle
 
@@ -87,7 +89,7 @@ def _same_read(path):
 
 
 def _same_resolve(ga, gb, shapes):
-    ra, rb = resolve(ga, shapes), resolve(gb, shapes)
+    ra, rb = resolve_oracle.resolve(ga, shapes), resolve(gb, shapes)
     assert getattr(ga, "_native", None) is None and getattr(gb, "_native", None) is not None
     assert list(ra.shapes.items()) == list(rb.shapes.items()), (shapes, ra.shapes, rb.shapes)
     assert ra.dtypes == rb.dtypes, (shapes, ra.dtypes, rb.dtypes)

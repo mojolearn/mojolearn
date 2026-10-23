@@ -15,7 +15,7 @@ def as_input(x):
     from it (a list or a scalar has no buffer to pass), with no dtype cast."""
     if isinstance(x, np.ndarray):
         return x
-    return np.asarray(x)  # cpu-route: a Python sequence or scalar becomes a buffer, no cast
+    return np.asarray(x)  # cpu-route: Python sequence or scalar read once by numpy.asarray (no cast, no copy of a buffer)
 
 
 def describe(x, name):

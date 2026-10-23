@@ -21,19 +21,38 @@ comptime _FP = MutPointer[Float32, MutUntrackedOrigin]
 def nn_mlp_sessions_device(ctx: DeviceContext, inputs: List[Int], rows: List[Int],
     w1: _FP, b1: _FP, w2: _FP, b2: _FP, output: _FP,
     in_width: Int, hidden: Int, out_width: Int,
+    registry: Optional[DeviceBuffer[DType.float32]] = None,
 ) raises -> Int:
+    """`registry` (lane migrate-neural-2): the weights already on the device
+    as one flat [w1, b1, w2, b2] buffer (an open training session); the
+    sessions read them there through views instead of an upload of the host
+    copy (w1 .. b2 are then not read). The same values, so the same bits."""
     var total = nn_mlp_session_shape(inputs, rows, in_width, hidden, out_width)
     var x = ctx.enqueue_create_buffer[DType.float32](max(1, total * in_width))
     var a = ctx.enqueue_create_buffer[DType.float32](max(1, total * hidden))
     var y = ctx.enqueue_create_buffer[DType.float32](max(1, total * out_width))
-    var dw1 = ctx.enqueue_create_buffer[DType.float32](hidden * in_width)
-    var db1 = ctx.enqueue_create_buffer[DType.float32](hidden)
-    var dw2 = ctx.enqueue_create_buffer[DType.float32](out_width * hidden)
-    var db2 = ctx.enqueue_create_buffer[DType.float32](out_width)
-    ctx.enqueue_copy(dst_buf=dw1, src_ptr=w1)
-    ctx.enqueue_copy(dst_buf=db1, src_ptr=b1)
-    ctx.enqueue_copy(dst_buf=dw2, src_ptr=w2)
-    ctx.enqueue_copy(dst_buf=db2, src_ptr=b2)
+    var dw1: DeviceBuffer[DType.float32]
+    var db1: DeviceBuffer[DType.float32]
+    var dw2: DeviceBuffer[DType.float32]
+    var db2: DeviceBuffer[DType.float32]
+    if registry:
+        var n_w1 = hidden * in_width
+        var n_w2 = out_width * hidden
+        if len(registry.value()) < n_w1 + hidden + n_w2 + out_width:
+            raise Error("neural MLP sessions: the resident registry is smaller than the model")
+        dw1 = registry.value().create_sub_buffer[DType.float32](0, n_w1)
+        db1 = registry.value().create_sub_buffer[DType.float32](n_w1, hidden)
+        dw2 = registry.value().create_sub_buffer[DType.float32](n_w1 + hidden, n_w2)
+        db2 = registry.value().create_sub_buffer[DType.float32](n_w1 + hidden + n_w2, out_width)
+    else:
+        dw1 = ctx.enqueue_create_buffer[DType.float32](hidden * in_width)
+        db1 = ctx.enqueue_create_buffer[DType.float32](hidden)
+        dw2 = ctx.enqueue_create_buffer[DType.float32](out_width * hidden)
+        db2 = ctx.enqueue_create_buffer[DType.float32](out_width)
+        ctx.enqueue_copy(dst_buf=dw1, src_ptr=w1)
+        ctx.enqueue_copy(dst_buf=db1, src_ptr=b1)
+        ctx.enqueue_copy(dst_buf=dw2, src_ptr=w2)
+        ctx.enqueue_copy(dst_buf=db2, src_ptr=b2)
     var keep = List[DeviceBuffer[DType.float32]]()
     var base = 0
     for session in range(len(rows)):

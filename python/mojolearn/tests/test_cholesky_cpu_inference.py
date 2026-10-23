@@ -59,24 +59,17 @@ def test_the_door_ships_in_the_linalg_family():
 
 
 def test_cpu_fit_is_public(monkeypatch):
-    from mojolearn import KernelDensity
+    # The native fit reads compiled entries only, so the CPU-only route is
+    # driven through the real linalg host binding, not a Python stand-in.
+    try:
+        host = _backend.load_host_module("_mojolearn_linalg_host")
+    except ImportError as exc:
+        pytest.skip(f"the linalg host binding is not built here: {exc}")
     monkeypatch.setattr(_backend, "_CPU_ONLY", "test CPU")
-    calls = []
-
-    class FakeDoor:
-        def linalg_numeric_mode(self):
-            return 1
-
-        def cholesky_profile_jitter(self):
-            return 2.0 ** -20
-
-        def cholesky_factor(self, addrs, params):
-            calls.append(("factor", params))
-            return 0
-
-    monkeypatch.setattr(Cholesky, "_door", lambda self: (FakeDoor(), "linalg_numeric_mode"))
+    monkeypatch.setattr(Cholesky, "_door", lambda self: (host, "linalg_numeric_mode"))
+    monkeypatch.setattr(Cholesky, "_door_binding", lambda self: host)
     c = Cholesky().fit(np.eye(3, dtype=np.float32))
-    assert calls and calls[0][1][0] == 3 and c.info_ == 0
+    assert c.info_ == 0
 
 
 def test_the_cpu_route_is_the_shipped_binding(monkeypatch):

@@ -602,3 +602,13 @@ def __getattr__(name):
 
 def __dir__():
     return sorted(set(globals()) | set(__all__))  # glue: module attribute names for dir
+
+
+# CPU categorical GradientBoosting prediction is a native tree operation too;
+# connect its fixed host metadata after the public classes and lazy names are
+# available. The GPU package keeps explicit host APIs lazy. An unavailable
+# native tree owner has no vendor context and remains importable as before.
+from ._native_trees_bridge import connect_cpu_prediction as _connect_cpu_tree_prediction
+
+_connect_cpu_tree_prediction()
+del _connect_cpu_tree_prediction

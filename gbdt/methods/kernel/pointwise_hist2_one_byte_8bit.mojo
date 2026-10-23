@@ -230,18 +230,26 @@ struct PointHist8[origin: MutOrigin](PointHist2):
             var f = (2 * i + tid) & 6
             var bin = Int32((ci >> UInt32(24 - (f << 2))) & 255)
 
-            if bin != self.recent_bin[i]:
-                var off1 = self._slot_of(f, self.recent_bin[i], flag)
-                self._add(off1, self.recent_stat1[i])
+            var old_bin = self.recent_bin[i]
+            var s1 = self.recent_stat1[i]
+            var s2 = self.recent_stat2[i]
+            if bin != old_bin:
+                var off1 = self._slot_of(f, old_bin, flag)
+                self._add(off1, s1)
                 var off2 = off1 - 1 if flag else off1 + 1
-                self._add(off2, self.recent_stat2[i])
-
-                self.recent_bin[i] = bin
-                self.recent_stat1[i] = 0
-                self.recent_stat2[i] = 0
-
-            self.recent_stat1[i] += q1
-            self.recent_stat2[i] += q2
+                self._add(off2, s2)
+                s1 = 0
+                s2 = 0
+            # NO LANE WRITE UNDER A PER-LANE GUARD (lane sm120-tree-identity,
+            # 2026-10-23): the sm_120 AOT compile corrupts a SIMD lane written under its
+            # own guard inside a `comptime for` (core/gram_splitk.mojo, GRAM_STRIDED_ARM;
+            # on the RTX 5090 the Ordered fits stopped at depth 3 where AMD and the L40S
+            # grew depth 6). Each value is computed into a scalar under the guard and the
+            # lane is written unconditionally; the vectors stay in registers (Metal
+            # refuses thread-private arrays here). Same loads, same order, same bits.
+            self.recent_bin[i] = bin
+            self.recent_stat1[i] = s1 + q1
+            self.recent_stat2[i] = s2 + q2
 
     def add_point_2(
         mut self,

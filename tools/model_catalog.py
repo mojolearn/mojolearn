@@ -113,11 +113,12 @@ def _import_call(kind, src, shapes):
     if kind == "torchvision":
         cls, _, member = (src.get("weights") or "?.?").partition(".")
         ctor = cls.replace("_Weights", "").lower()
-        return (f"mojolearn.import_model(torch.export.export(torchvision.models.{ctor}(weights="
-                f"torchvision.models.{cls}.{member}).eval(), (x,)))")
+        return (f"torch.onnx.export(torchvision.models.{ctor}(weights=torchvision.models.{cls}.{member})"
+                f".eval(), (x,), '{ctor}.onnx', opset_version=17); mojolearn.import_model('{ctor}.onnx')")
     if kind == "hf-causal-lm":
-        return (f"mojolearn.import_model(torch.export.export(<logits of transformers.AutoModelForCausalLM."
-                f"from_pretrained({src.get('repo')!r}, revision={src.get('revision')!r})>, (input_ids,)))")
+        return (f"torch.onnx.export(<logits of transformers.AutoModelForCausalLM.from_pretrained("
+                f"{src.get('repo')!r}, revision={src.get('revision')!r})>, (input_ids,), 'lm.onnx', opset_version=17); "
+                f"mojolearn.import_model('lm.onnx')")
     name = (src.get("url") or "model.onnx").rsplit("/", 1)[-1]
     if src.get("converted_sha256"):
         name = name.rsplit(".", 1)[0] + "-opset13.onnx"

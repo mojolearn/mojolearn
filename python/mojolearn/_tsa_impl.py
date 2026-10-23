@@ -107,6 +107,12 @@ class _Binding:
 
 _mojolearn_tsa = _Binding()
 
+# The stationarity functions' compiled owner, connected once at import:
+# `kpss_test` and `select_d` are one native call each
+# (bindings/tsa_public_native.mojo).
+from . import _native_tsa_bridge  # noqa: E402
+_TSA, _TSA_CONTEXT = _native_tsa_bridge.connect()
+
 #: The saved-model format tag (`ExponentialSmoothing.save`,
 #: lane/inference-holtwinters, 2026-09-15).
 _HW_FORMAT = "mojolearn-holtwinters-1"
@@ -121,6 +127,7 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 #: (`holtwinters/impl/internal/hw_estimate.mojo`: 0 heuristic, 1 estimated).
 #: "cuml" is an alias of "heuristic": it is cuML's fit, bit for bit.
 _HW_INIT_CODES = {"estimated": 1, "heuristic": 0, "cuml": 0}
+_TSA_CONTEXT["hw_init_codes"] = _HW_INIT_CODES
 
 
 def _series_major(y, name):
@@ -254,30 +261,7 @@ def kpss_test(y, d=0, D=0, s=0, pval_threshold=0.05, return_statistic=False):
     >>> np.asarray(mojolearn.kpss_test(y)).shape
     (4,)
     """
-    flat, n_obs, batch_size = _series_major(y, "kpss_test")
-    flags = empty((batch_size,), "<i4")
-    stat = empty((batch_size,), "<f4")
-    _mojolearn_tsa.kpss_test(
-        addr_ro(flat, name="y"),
-        addr(flags, name="flags"),
-        addr(stat, name="stat"),
-        # ORDER MATCHES bindings/_mojolearn_tsa.mojo::kpss_test_binding.
-        #   0 batch_size, 1 n_obs, 2 d, 3 D, 4 s, 5 pval_threshold
-        [
-            int(batch_size),
-            int(n_obs),
-            int(d),
-            int(D),
-            int(s),
-            float(pval_threshold),
-        ],
-    )
-    # the binding writes 1 (stationary) or 0 (tsa/estimator.mojo), so a
-    # C-level cast is the flag (lane py-sequence; it was a Python loop)
-    stationary = flags.astype("<u1")
-    if return_statistic:
-        return stationary, stat
-    return stationary
+    return _TSA(None, "kpss_test", (y, d, D, s, pval_threshold, return_statistic), _TSA_CONTEXT)
 
 
 # Choose the simple differencing order `d` per series.
@@ -356,38 +340,7 @@ def select_d(y, D=0, s=0, d_max=None, pval_threshold=0.05):
     >>> np.asarray(mojolearn.select_d(y)).shape
     (4,)
     """
-    if d_max is None:
-        d_max = 2 - int(D)
-    flat, n_obs, batch_size = _series_major(y, "select_d")
-    # One native entry on every install (lane py-runtime-b): the GPU
-    # binding's selector (tsa/impl/auto_arima.mojo) or, on a CPU-only
-    # install, the host binding's `select_d` (bindings/kpss_host_test.mojo:
-    # the first stationary order of the same host KPSS test, which also
-    # refuses a d_max outside 0 <= d_max <= 2 - D by name; the check below
-    # keeps the CPU route's Python ValueError).
-    from . import _backend
-    if _backend.vendor() == "cpu":
-        limit, seasonal = int(d_max), int(D)
-        if limit < 0 or limit + seasonal > 2:
-            raise ValueError(
-                f"select_d: d_max must satisfy 0 <= d_max <= 2 - D (d_max={limit}, "
-                f"D={seasonal}), refused by name")
-    out = empty((batch_size,), "<i4")
-    _mojolearn_tsa.select_d(
-        addr_ro(flat, name="y"),
-        addr(out, name="out"),
-        # ORDER MATCHES bindings/_mojolearn_tsa.mojo::select_d_binding.
-        #   0 batch_size, 1 n_obs, 2 D, 3 s, 4 d_max, 5 pval_threshold
-        [
-            int(batch_size),
-            int(n_obs),
-            int(D),
-            int(s),
-            int(d_max),
-            float(pval_threshold),
-        ],
-    )
-    return out
+    return _TSA(None, "select_d", (y, D, s, d_max, pval_threshold), _TSA_CONTEXT)
 
 
 # Holt-Winters exponential smoothing, with the reference
@@ -726,56 +679,9 @@ class ExponentialSmoothing:
             ``eps > 0``, ``n >= start_periods * seasonal_periods``; or for
             non-finite (or, multiplicative, non-positive) data.
         """
-        from ._cpu_reference import require_training
-        require_training(self)
-        data, n = self._check_dims(self.endog)
-        self._data = data  # kept alive across the call (_buffer.py)
-        components_len = (n - self.seasonal_periods) * self.ts_num
-        if components_len <= 0:
-            # This layer has to size the output buffers BEFORE the Mojo
-            # side validates, so it needs its own guard against a negative
-            # allocation. It is not a second copy of a rule:
-            # `holtwinters_validate_params` refuses `n < start_periods *
-            # frequency`, which is strictly stronger, and that refusal is
-            # the one a caller normally sees.
-            raise ValueError(
-                "mojolearn ExponentialSmoothing: n "
-                f"({n}) must exceed seasonal_periods ({self.seasonal_periods})"
-            )
-        comps = empty((3 * components_len,), "<f4")
-        stats = empty((4 * self.ts_num,), "<f4")
-        flags = empty((2 * self.ts_num,), "<i4")
-        self._bind().holtwinters_fit(
-            addr_ro(data, name="endog"),
-            addr(comps, name="components"),
-            addr(stats, name="stats"),
-            addr(flags, name="flags"),
-            # ORDER MATCHES bindings/_mojolearn_tsa.mojo::holtwinters_fit_binding.
-            #   0 n, 1 batch_size, 2 frequency, 3 start_periods, 4 eps,
-            #   5 init_method (0 heuristic, 1 estimated)
-            [
-                int(n),
-                int(self.ts_num),
-                int(self.seasonal_periods),
-                int(self.start_periods),
-                float(self.eps),
-                _HW_INIT_CODES[self.initialization_method],
-            ],
-            self.seasonal,
-        )
-        b = self.ts_num
-        # stats LAYOUT -- the same words as in bindings/_mojolearn_tsa.mojo
-        # and holtwinters/estimator.mojo:
-        #   [0 * ts_num, 1 * ts_num)   sse
-        #   [1 * ts_num, 2 * ts_num)   alpha
-        #   [2 * ts_num, 3 * ts_num)   beta
-        #   [3 * ts_num, 4 * ts_num)   gamma
-        # flags LAYOUT -- the same words as in the other two files:
-        #   [0 * ts_num, 1 * ts_num)   niter
-        #   [1 * ts_num, 2 * ts_num)   criterion
-        # (Array slices copy; each attribute owns its `(ts_num,)` block.)
-        return self._set_fitted(n, comps, stats[0:b], stats[b:2 * b], stats[2 * b:3 * b],
-                                stats[3 * b:4 * b], flags[0:b], flags[b:2 * b])
+        # `_check_dims`, the fit and `_set_fitted` in one native call
+        # (bindings/tsa_hw_native.mojo); the constraints are the binding's.
+        return _TSA(self, "hw_fit", (), _TSA_CONTEXT)
 
     def _set_fitted(self, n, comps, sse, alpha, beta, gamma, n_iter, criterion):
         """The fitted state from the packed components and the per-series
@@ -938,57 +844,7 @@ class ExponentialSmoothing:
         Array, float32
             Shapes as for :meth:`forecast`, with ``end - start`` steps.
         """
-        if not self.fit_executed_flag:
-            raise ValueError(
-                "mojolearn ExponentialSmoothing: fit() the model before predict()"
-            )
-        n, b = int(self.n), int(self.ts_num)
-        end = n if end is None else end
-        for label, value in (("start", start), ("end", end)):  # glue: the two start and end arguments
-            if not isinstance(value, int) or isinstance(value, bool):
-                raise TypeError(
-                    f"mojolearn ExponentialSmoothing: {label} must be int, got {type(value)}"
-                )
-        if index is not None and (not isinstance(index, int) or isinstance(index, bool)):
-            raise TypeError(
-                "mojolearn ExponentialSmoothing: index must be int or None, "
-                f"got {type(index)}"
-            )
-        if start < 0 or end <= start:
-            raise ValueError(
-                f"mojolearn ExponentialSmoothing: need 0 <= start < end (start={start}, end={end})"
-            )
-        if index is not None and (index < 0 or index >= b):
-            raise IndexError(
-                f"mojolearn ExponentialSmoothing: index input: {index} outside "
-                f"of range [0, {b})"
-            )
-        binding = self._bind()
-        steps = end - start
-        if start >= n:
-            fc = empty(((end - n) * b,), "<f4")
-            binding.holtwinters_forecast(
-                addr_ro(self._comps, name="components"), addr(fc, name="out"),
-                [n, b, int(self.seasonal_periods), int(end - n)], self.seasonal,
-            )
-            return self._shaped(fc[(start - n) * b:], steps, index)
-        out = empty((steps * b,), "<f4")
-        k_in = min(end, n) - start
-        base = addr(out, name="out")
-        # ORDER MATCHES bindings/holtwinters_host_predict.mojo::holtwinters_predict_binding.
-        #   0 n, 1 batch_size, 2 frequency, 3 start, 4 end
-        binding.holtwinters_predict(
-            addr_ro(self._comps, name="components"), base,
-            [n, b, int(self.seasonal_periods), int(start), int(start + k_in)], self.seasonal,
-        )
-        if end > n:
-            # The forecast writes its `(end - n) * ts_num` values straight
-            # after the in-sample block of the same time-major buffer.
-            binding.holtwinters_forecast(
-                addr_ro(self._comps, name="components"), base + 4 * k_in * b,
-                [n, b, int(self.seasonal_periods), int(end - n)], self.seasonal,
-            )
-        return self._shaped(out, steps, index)
+        return _TSA(self, "hw_predict", (start, end, index), _TSA_CONTEXT)
 
     # -- saved models (lane/inference-holtwinters, 2026-09-15) ----------------
 
@@ -1048,18 +904,7 @@ class ExponentialSmoothing:
         -------
         Array of shape (ts_num,) or float32
         """
-        if not self.fit_executed_flag:
-            raise ValueError(
-                "mojolearn ExponentialSmoothing: fit() the model before score()"
-            )
-        if index is None:
-            return self.sse_
-        if index < 0 or index >= self.ts_num:
-            raise IndexError(
-                f"mojolearn ExponentialSmoothing: index input: {index} outside "
-                f"of range [0, {self.ts_num})"
-            )
-        return self.sse_[index]
+        return _TSA(self, "hw_score", (index,), _TSA_CONTEXT)
 
     _LAZY_COMPONENTS = ("level_", "trend_", "season_")
 

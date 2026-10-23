@@ -1168,21 +1168,11 @@ def _flatten(nested):
     fast = _flatten_fast(nested)
     if fast is not None:
         return fast
-    if isinstance(nested, (str, bytes)) or not hasattr(nested, "__len__"):
-        return (), [nested]
-    seq = list(nested)
-    if not seq:
-        return (0,), []
-    first_shape, flat = _flatten(seq[0])
-    for item in seq[1:]:  # cpu-route: flattens a ragged user Python list, the explicit input step
-        shape, vals = _flatten(item)
-        if shape != first_shape:
-            raise ValueError(
-                "mojolearn: nested sequence is not rectangular "
-                f"({shape} vs {first_shape})"
-            )
-        flat.extend(vals)
-    return (len(seq),) + first_shape, flat
+    # the general walk (a ragged or mixed nested list, Arrays inside it) reads
+    # the user's list once natively (bindings/user_objects_native.mojo nested)
+    from . import _user_objects
+    shape, flat = _user_objects.call("nested", nested, Array)
+    return tuple(shape), flat
 
 
 def _nest(a):

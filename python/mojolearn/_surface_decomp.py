@@ -51,6 +51,10 @@ FAMILIES = (
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "x_decomp_trisolve", "x_decomp_knn_select", "x_decomp_r_signs",
             "x_decomp_rank_above", "x_decomp_graph_radius_geo",
+            # lane mca2-decomp-a (2026-10-22): TruncatedSVD(algorithm='randomized').fit, one driver
+            "x_decomp_tsvd_randomized", "x_decomp_ipca_fit", "x_decomp_ipca_partial", "x_decomp_ipca_project",
+            "x_decomp_ica_fit", "x_decomp_ica_project", "x_decomp_nmf_fit", "x_decomp_nmf_inverse",
+            "x_decomp_fa_fit", "x_decomp_fa_query", "x_decomp_lda_owner", "x_decomp_kpca_eig", "x_decomp_rp_fit", "x_decomp_rp_project",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note="Ships: the decomp expansion lane's CPU route (lane/algos-decomp).",

@@ -17,6 +17,11 @@ first imported, after the package, so both may rely on every module existing:
 from . import _backend
 from ._labels import unique_inverse
 from . import _portable_math as _pm
+from . import _native_xcnn_bridge
+
+# Package-import connection: the migrated layer methods are ONE call each
+# into the compiled owner (bindings/xcnn_native.mojo).
+_XCNN, _XCNN_CONTEXT = _native_xcnn_bridge.connect()
 
 __all__ = ["Conv2d", "Conv1d", "MaxPool2d", "AvgPool2d", "MaxPool1d", "AvgPool1d", "CNNClassifier", "BatchNorm2d", "BatchNorm1d",
            "Dropout2d", "AdaptiveAvgPool2d", "AdaptiveMaxPool2d", "BasicBlock",
@@ -661,45 +666,6 @@ class Conv2d(_Layer):
         if x.shape[1] != self.in_channels:
             raise ValueError(f"mojolearn: input has {x.shape[1]} channels, the layer {self.in_channels}")
 
-    def _forward_t(self, x):
-        """`forward` of a `DeviceTensor`: x and the output stay resident."""
-        np = _np()
-        b = self._binding()
-        self._check_x(x)
-        if not self._res_ok(b, x):
-            return DeviceTensor._wrap(b, Conv2d.forward(self, x.numpy()))
-        out = _out_new(b, self._out_shape(x.shape))   # the conv stores every word
-        xp = self._pad_t(b, x)
-        prm = self._params(xp.shape)
-        if self.groups == 1:
-            self._res_w(b)   # G3: pins on first use (a no-op with the switch off)
-            pw = _pinned(self, b, "weight_", self.weight_.size)
-            pb = _pinned(self, b, "bias_", self.bias_.size)
-            if pw is not None and pb is not None:
-                # lane fam2-neural: the pinned weights are read where they live
-                b.x_cnn_conv2d_forward_m([xp.h, pw, pb, out.h], 0b1111, prm)
-            else:
-                w = np.ascontiguousarray(self.weight_, np.float32)
-                bias = np.ascontiguousarray(self.bias_, np.float32)
-                b.x_cnn_conv2d_forward_m([xp.h, w.ctypes.data, bias.ctypes.data, out.h], 0b1001, prm)
-        else:
-            # lane fam-neural (IDN_GROUP_M): each group's channels sliced,
-            # convolved and placed on the device (the host path slices with
-            # NumPy and crosses the bus twice per group); the same conv
-            # entry on the same words per group
-            dev = _dev_of(self, b)
-            og = self.out_channels // self.groups
-            xg = dev.get("xg", xp.size // self.groups)
-            yg = dev.get("yg", out.size // self.groups)
-            for g in range(self.groups):  # glue: one entry per group
-                wg = np.ascontiguousarray(self.weight_[g * og:(g + 1) * og], np.float32)
-                bg = np.ascontiguousarray(self.bias_[g * og:(g + 1) * og], np.float32)
-                b.x_cnn_chan_copy_m([xp.h, xg], 0b11, self._group_prm(xp.shape, self.in_channels, g) + [0])
-                b.x_cnn_conv2d_forward_m([xg, wg.ctypes.data, bg.ctypes.data, yg], 0b1001, prm)
-                b.x_cnn_chan_copy_m([yg, out.h], 0b11, self._group_prm(out.shape, self.out_channels, g) + [1])
-        self._x, self._xp = x, xp
-        return out
-
     def _backward_t(self, grad_out, x):
         """`backward` with a `DeviceTensor` grad_out or input."""
         np = _np()
@@ -762,36 +728,7 @@ class Conv2d(_Layer):
         return dx
 
     def forward(self, x):
-        np = _np()
-        if _is_t(x):
-            return self._forward_t(x)
-        x = _f32(x, "x")
-        if x.ndim != 4:
-            raise ValueError("mojolearn: Conv2d.forward takes (N, C, H, W)")
-        if x.shape[1] != self.in_channels:
-            raise ValueError(f"mojolearn: input has {x.shape[1]} channels, the layer {self.in_channels}")
-        b = self._binding()
-        if self._group_dev(b):
-            out = self._forward_t(DeviceTensor._wrap(b, x)).numpy()
-            self._x, self._xp = x, None
-            return out
-        xp = x
-        if self._explicit:
-            xp = np.empty(self._padded_shape(x.shape), np.float32)
-            b.x_cnn_pad2d_forward(x.ctypes.data, xp.ctypes.data, self._pad_params(x.shape))
-        prm = self._params(xp.shape)
-        out = np.empty(self._out_shape(x.shape), np.float32)
-        cg, og = self.in_channels // self.groups, self.out_channels // self.groups
-        for g in range(self.groups):  # glue: one conv launch per channel group (groups-sized: convolution groups)
-            xg = self._group(xp, g, cg)
-            wg = np.ascontiguousarray(self.weight_[g * og:(g + 1) * og])
-            bg = np.ascontiguousarray(self.bias_[g * og:(g + 1) * og])
-            yg = out if self.groups == 1 else np.empty((x.shape[0], og) + out.shape[2:], np.float32)
-            b.x_cnn_conv2d_forward(xg.ctypes.data, wg.ctypes.data, bg.ctypes.data, yg.ctypes.data, prm)
-            if self.groups > 1:
-                out[:, g * og:(g + 1) * og] = yg
-        self._x, self._xp = x, xp
-        return out
+        return _XCNN(self, "conv_forward", (x,), _XCNN_CONTEXT)
 
     def _bind_input(self, x):
         """`forward`'s input checks and explicit pad, without the conv."""
@@ -872,14 +809,11 @@ class Conv2d(_Layer):
         return X
 
     def transform(self, X):
-        out = self.forward(self._rows(X))
-        return out.reshape(out.shape[0], -1)
+        return _XCNN(self, "conv_transform", (X,), _XCNN_CONTEXT)
 
     def fit(self, X, y=None):
         """Layers carry their weights from construction; fit only records the input shape."""
-        X = self._rows(X)
-        self.n_features_in_ = int(_np().prod(X.shape[1:]))  # glue: product of the input shape entries
-        return self
+        return _XCNN(self, "conv_fit", (X,), _XCNN_CONTEXT)
 
 
 def _t4(t):
@@ -910,15 +844,7 @@ class Conv1d(Conv2d):
         return super().set_weights(w.reshape(self.out_channels, self.in_channels // self.groups, 1, -1), bias)
 
     def forward(self, x):
-        if _is_t(x):
-            if x.ndim != 3:
-                raise ValueError("mojolearn: Conv1d.forward takes (N, C, L)")
-            return _t3(super().forward(_t4(x)))
-        x = _f32(x, "x")
-        if x.ndim != 3:
-            raise ValueError("mojolearn: Conv1d.forward takes (N, C, L)")
-        out = super().forward(x[:, :, None, :])
-        return out[:, :, 0, :]
+        return _XCNN(self, "conv_forward", (x,), _XCNN_CONTEXT)
 
     def backward(self, grad_out, x=None):
         if _is_t(grad_out) or _is_t(x):
@@ -971,8 +897,7 @@ class _Pool2d(_Layer):
         return Conv2d._rows(self, X)
 
     def transform(self, X):
-        out = self.forward(self._rows(X))
-        return out.reshape(out.shape[0], -1)
+        return _XCNN(self, "pool_transform", (X,), _XCNN_CONTEXT)
 
     def fit(self, X, y=None):
         return self
@@ -1004,38 +929,7 @@ class MaxPool2d(_Pool2d):
         self.__dict__["_idx_dev"] = None
 
     def forward(self, x):
-        np = _np()
-        if _is_t(x):
-            # lane idn-cnn-resident: x, the output and the winners resident
-            b = self._binding()
-            if x.ndim != 4:
-                raise ValueError("mojolearn: MaxPool2d.forward takes (N, C, H, W)")
-            if not _on_dev(b, x):
-                return DeviceTensor._wrap(b, MaxPool2d.forward(self, x.numpy()))
-            shape = self._out_shape(x.shape)
-            out = _out_new(b, shape)   # the pool stores every word
-            h = _dev_of(self, b).get("idx", _size(shape))
-            b.x_cnn_maxpool2d_forward_m([x.h, out.h, h], 0b111, self._params(x.shape))
-            self._xshape = x.shape
-            self.__dict__.update(_idx_host=None, _idx_dev=h, _idx_shape=shape)
-            return out
-        x = _f32(x, "x")
-        if x.ndim != 4:
-            raise ValueError("mojolearn: MaxPool2d.forward takes (N, C, H, W)")
-        shape = self._out_shape(x.shape)
-        out = np.empty(shape, np.float32)
-        b = self._binding()
-        if _mixed(b):
-            dev = _dev_of(self, b)
-            h = dev.get("idx", int(np.prod(shape)))  # glue: product of the output shape entries
-            b.x_cnn_maxpool2d_forward_m([x.ctypes.data, out.ctypes.data, h], 0b100, self._params(x.shape))
-            self._xshape = x.shape
-            self.__dict__.update(_idx_host=None, _idx_dev=h, _idx_shape=shape)
-            return out
-        idx = np.empty(shape, np.int32)
-        b.x_cnn_maxpool2d_forward(x.ctypes.data, out.ctypes.data, idx.ctypes.data, self._params(x.shape))
-        self._xshape, self.indices_ = x.shape, idx
-        return out
+        return _XCNN(self, "pool_forward", (x,), _XCNN_CONTEXT)
 
     def backward(self, grad_out):
         np = _np()
@@ -1075,25 +969,7 @@ class AvgPool2d(_Pool2d):
         self.divisor_override = None if divisor_override is None else int(divisor_override)
 
     def forward(self, x):
-        np = _np()
-        if _is_t(x):
-            # lane idn-cnn-resident: x and the output resident
-            b = self._binding()
-            if x.ndim != 4:
-                raise ValueError("mojolearn: AvgPool2d.forward takes (N, C, H, W)")
-            if not _on_dev(b, x):
-                return DeviceTensor._wrap(b, AvgPool2d.forward(self, x.numpy()))
-            out = _out_new(b, self._out_shape(x.shape))   # the pool stores every word
-            b.x_cnn_avgpool2d_forward_m([x.h, out.h], 0b11, self._params(x.shape))
-            self._xshape = x.shape
-            return out
-        x = _f32(x, "x")
-        if x.ndim != 4:
-            raise ValueError("mojolearn: AvgPool2d.forward takes (N, C, H, W)")
-        out = np.empty(self._out_shape(x.shape), np.float32)
-        self._binding().x_cnn_avgpool2d_forward(x.ctypes.data, out.ctypes.data, self._params(x.shape))
-        self._xshape = x.shape
-        return out
+        return _XCNN(self, "pool_forward", (x,), _XCNN_CONTEXT)
 
     def backward(self, grad_out):
         np = _np()
@@ -1119,14 +995,7 @@ def _one(v):
 
 class _Pool1dMixin:
     def forward(self, x):
-        if _is_t(x):
-            if x.ndim != 3:
-                raise ValueError(f"mojolearn: {type(self).__name__}.forward takes (N, C, L)")
-            return _t3(super().forward(_t4(x)))
-        x = _f32(x, "x")
-        if x.ndim != 3:
-            raise ValueError(f"mojolearn: {type(self).__name__}.forward takes (N, C, L)")
-        return super().forward(x[:, :, None, :])[:, :, 0, :]
+        return _XCNN(self, "pool_forward", (x,), _XCNN_CONTEXT)
 
     def backward(self, grad_out):
         if _is_t(grad_out):
@@ -1448,230 +1317,15 @@ class CNNClassifier(_Layer):
         device for the whole fit; each step uploads its batch and labels and
         downloads its loss. The same entries' kernels on the same values in
         the same order as the per-layer calls: the bits do not move."""
-        np = _np()
-        x = self._images(X)
-        y = np.asarray(y)
-        # sorted classes and inverse codes on the device (_labels.unique_inverse)
-        cls, yi = unique_inverse(y)
-        self.classes_ = np.asarray(cls).astype(y.dtype, copy=False) if y.dtype.kind in "biuf" else np.asarray(cls)
-        yi = np.asarray(yi)
-        yi = yi.astype(np.int32)
-        self._build(len(self.classes_))
-        b = self._binding()
-        per = 2 if self.optimizer != "sgd" else 1
-        params = self._params()
-        # the epoch orders from one splitmix64 seed, permuted on the device
-        # (`x_cnn_epoch_rows` / `x_cnn_fit_epoch_d`, lane fam2-neural)
-        from ._buffer import InitStream
-        order_state = np.array([InitStream(self.random_state).seed], dtype=np.uint64)
-        n = x.shape[0]
-        k = len(self.classes_)
-        cap = min(self.batch_size, n)
-        self.losses_, self.loss_curve_ = [], []
-        with _Res(b) as R:
-            self._rw = {}
-            hp, hg, hbuf = [], [], []
-            for layer, attr, _ in params:  # glue: walks the layer parameter list
-                arr = getattr(layer, attr)
-                hp.append(R.new(arr.size))
-                R.put(hp[-1], arr)
-                hg.append(R.new(arr.size))
-                hbuf.append(R.new(per * arr.size))
-            for i, (layer, attr, _) in enumerate(params):  # glue: walks the layer parameter list
-                if attr == "weight_":
-                    self._rw[id(layer)] = (hp[i], hp[i + 1], hg[i], hg[i + 1])
-            a = self._resident(R, cap, save=True)
-            sizes = [int(getattr(layer, attr).size) for layer, attr, _ in params]  # glue: sizes of the layer parameter arrays
-            # the list forms (one optimizer call, one gather per step) on the
-            # GPU binding only: the host twin's list forms are unmeasured
-            lists = (not _LEGACY_STEP) and str(b.x_cnn_vendor()) != "cpu"
-            # the whole X and its labels resident once, at every size (lane
-            # cpu3-python: the >1 GiB route that gathered each batch's rows on
-            # the host with `gather_rows_bytes` and uploaded them is gone; GPU
-            # path, GPU only): each step gathers its rows on the binding's side
-            # (a word copy) instead of uploading them
-            row = int(np.prod(self.input_shape))  # glue: product of the input shape entries
-            xall, yall = R.new(x.size), R.new(n)
-            R.put(xall, x)
-            R.put(yall, yi)
-            step = 0
-            epoch_entry = (_EPOCH_ENTRY and not _LEGACY_STEP and hasattr(b, "x_cnn_fit_epoch_r"))
-            if epoch_entry:
-                bs = self.batch_size
-                nsteps = (n + bs - 1) // bs
-                m_last = n - (nsteps - 1) * bs
-                hw_, hb_, hgw_, hgb_ = self._rw[id(self.head_)]
-                blocks = []
-                for j, (conv, _) in enumerate(self._blocks):  # glue: walks the conv block list
-                    w_, b_, gw_, gb_ = self._rw[id(conv)]
-                    blocks.append([w_, b_, gw_, gb_, a["out"][j], a["idx"][j], a["gout"][j]] + a["saved"][j])
-                spec = dict(blocks=blocks, head=[hw_, hb_, hgw_, hgb_],
-                            a=[a["x"], a["y"], a["logits"], a["glog"], a["proba"], a.get("ghead", 0)],
-                            opt=[hp, hg, hbuf, sizes], data=[xall, yall, row], dims=[self._flat, k],
-                            plan_full=[[list(p[0]), list(p[1])] for p in self._plan(cap)[0]],  # glue: launch plan of every conv block
-                            plan_last=[[list(p[0]), list(p[1])] for p in self._plan(m_last)[0]])  # glue: launch plan of every conv block
-                sgd_row = [self.learning_rate, self.momentum, self.weight_decay, self.dampening,
-                           1.0 if self.nesterov else 0.0, 0.0]
-            # lane fam2-neural: the order, Adam's scalars and the losses on the
-            # device. Lane cpu3-python: on every build (the `_F2_EPOCH_DEV`
-            # bit only reports the define now): the host Fisher-Yates order
-            # (`epoch_order_i32`) and the host Adam scalars (`adam_hyper_f64`)
-            # are off the GPU route, no `_OFF` arm (owner rule, 2026-10-04).
-            dev_epoch = True
-            seed64 = int(order_state[0])
-            seed_lo, seed_hi = seed64 & 0xFFFFFFFF, seed64 >> 32
-            ep = -1
-            for _ in range(self.max_iter):  # glue: drives the device epochs (max_iter-sized: epochs)
-                ep += 1
-                if epoch_entry and dev_epoch:
-                    losses = np.empty(nsteps, dtype=np.float64)
-                    if self.optimizer == "sgd":
-                        fpar = [float(self.learning_rate), float(self.momentum), float(self.weight_decay),
-                                float(self.dampening), 1.0 if self.nesterov else 0.0, 0.0]
-                    else:
-                        fpar = [float(self.learning_rate), float(self.betas[0]), float(self.betas[1]),
-                                float(self.eps), float(self.weight_decay),
-                                1.0 if self.optimizer == "adamw" else 0.0]
-                    b.x_cnn_fit_epoch_d(spec, losses.ctypes.data,
-                                        [n, bs, 0 if self.optimizer == "sgd" else 1, step, ep,
-                                         1 if self.shuffle else 0, seed_lo, seed_hi], fpar)
-                    step += nsteps
-                    epoch = losses.tolist()
-                    self.losses_.extend(epoch)
-                    self.loss_curve_.append(_pm.nsum(epoch) / len(epoch))
-                    continue
-                order = np.empty(n, dtype=np.int32)
-                b.x_cnn_epoch_rows(order.ctypes.data, [n, ep, 1 if self.shuffle else 0, seed_lo, seed_hi])
-                if epoch_entry:
-                    rows = np.ascontiguousarray(order, dtype=np.int32)
-                    if self.optimizer == "sgd":
-                        hyper = np.tile(np.asarray(sgd_row, dtype=np.float64), (nsteps, 1))  # glue: builds the per-step hyperparameter table (nsteps-sized: optimizer steps)
-                        if step == 0:
-                            hyper[0, 5] = 1.0
-                    else:
-                        hyper = np.ascontiguousarray(_adam_hyper_block(
-                            step + 1, nsteps, self.learning_rate, self.betas, self.eps, self.weight_decay,
-                            self.optimizer == "adamw", b))
-                    losses = np.empty(nsteps, dtype=np.float64)
-                    b.x_cnn_fit_epoch_r(spec, rows.ctypes.data, hyper.ctypes.data, losses.ctypes.data,
-                                        [n, bs, 0 if self.optimizer == "sgd" else 1])
-                    step += nsteps
-                    epoch = losses.tolist()
-                    self.losses_.extend(epoch)
-                    # the same `_pm.nsum` as the step loop below (DEVIATION 6901; py-consolidated)
-                    self.loss_curve_.append(_pm.nsum(epoch) / len(epoch))
-                    continue
-                epoch = []
-                for s in range(0, n, self.batch_size):  # glue: drives the device minibatch steps (batch_size-sized: minibatches)
-                    idx = order[s:s + self.batch_size]
-                    m = len(idx)
-                    rows = np.ascontiguousarray(idx, dtype=np.int32)
-                    if not lists:
-                        b.x_cnn_res_gather(a["x"], xall, rows.ctypes.data, [m, row])
-                        b.x_cnn_res_gather(a["y"], yall, rows.ctypes.data, [m, 1])
-                    else:
-                        b.x_cnn_res_gather([a["x"], a["y"]], [xall, yall], rows.ctypes.data, [m, row, 1])
-                    plans = self._forward_r(b, a, m)
-                    loss = float(b.x_cnn_softmax_xent_r(a["logits"], a["y"], a["glog"], a["proba"], [m, k]))
-                    hw, _, hgw, hgb = self._rw[id(self.head_)]
-                    last = a["out"][-1] if plans else a["x"]
-                    glast = a["gout"][-1] if plans else a["ghead"]
-                    b.x_cnn_linear_backward_r(last, hw, a["glog"], glast, hgw, hgb, [m, self._flat, k])
-                    for j in range(len(self._blocks) - 1, -1, -1):  # glue: drives the backward launch per conv block
-                        conv = self._blocks[j][0]
-                        prm, pprm = plans[j][:2]
-                        w_, b_, gw_, gb_ = self._rw[id(conv)]
-                        src = a["out"][j - 1] if j > 0 else a["x"]
-                        dx = a["gout"][j - 1] if j > 0 else 0
-                        b.x_cnn_conv_block_backward_r(src, w_, b_, a["gout"][j], a["idx"][j],
-                                                      [dx, gw_, gb_] + a["saved"][j], prm, pprm)
-                    step += 1
-                    if lists:
-                        # every parameter in one binding call, the same launches in the same order
-                        if self.optimizer == "sgd":
-                            b.x_cnn_sgd_r(hp, hg, hbuf, sizes,
-                                          [self.learning_rate, self.momentum, self.weight_decay, self.dampening,
-                                           1.0 if self.nesterov else 0.0, 1.0 if step == 1 else 0.0])
-                        else:
-                            b.x_cnn_adam_r(hp, hg, hbuf, sizes, _adam_hyper(step, self.learning_rate, self.betas,
-                                                                            self.eps, self.weight_decay,
-                                                                            self.optimizer == "adamw", b))
-                    for (layer, attr, _), p_, g_, buf in zip(params, hp, hg, hbuf) if not lists else ():  # glue: one optimizer launch per parameter array
-                        size = getattr(layer, attr).size
-                        if self.optimizer == "sgd":
-                            b.x_cnn_sgd_r(p_, g_, buf, [size],
-                                          [self.learning_rate, self.momentum, self.weight_decay, self.dampening,
-                                           1.0 if self.nesterov else 0.0, 1.0 if step == 1 else 0.0])
-                        else:
-                            b.x_cnn_adam_r(p_, g_, buf, [size], _adam_hyper(step, self.learning_rate, self.betas,
-                                                                            self.eps, self.weight_decay,
-                                                                            self.optimizer == "adamw", b))
-                    epoch.append(loss)
-                self.losses_.extend(epoch)
-                # CPython 3.12+'s sum spelled out: the same bits on every Python (DEVIATION 6901)
-                self.loss_curve_.append(_pm.nsum(epoch) / len(epoch))
-            for (layer, attr, gattr), p_, g_, buf in zip(params, hp, hg, hbuf):  # glue: reads back each parameter array handle
-                arr = getattr(layer, attr)
-                setattr(layer, attr, R.get(p_, arr.shape))
-                setattr(layer, gattr, R.get(g_, arr.shape))
-            self._bufs = [R.get(buf, (per * getattr(l, at).size,)) for (l, at, _), buf in zip(params, hbuf)]  # glue: reads back each optimizer buffer handle
-            self._rw = {}
-        self.n_features_in_ = int(np.prod(self.input_shape))  # glue: product of the input shape entries
-        return self
+        # the labels, the layers, the resident arrays and every epoch in one
+        # native call (bindings/xcnn_classifier_native.mojo)
+        return _XCNN(self, "cnnclf_fit", (X, y), _XCNN_CONTEXT)
 
     def predict_proba(self, X):
-        return self._run_predict(X, False)
-
-    def _run_predict(self, X, codes):
-        """predict_proba (n, k) float32, or with `codes` each row's class
-        index (int32), the argmax on the device (`x_cnn_res_argmax`; lane
-        pyglue-numeric: numpy's argmax on the downloaded probabilities)."""
-        np = _np()
-        x = self._images(X)
-        n = x.shape[0]
-        k = len(self.classes_)
-        b = self._binding()
-        # lane/cnn-apple2: at most _PREDICT_ROWS rows per pass on one set of
-        # resident arrays (every op is per row: the same words)
-        cap = n if _LEGACY_STEP else max(1, min(n, _PREDICT_ROWS))
-        proba = np.empty((n, k), np.float32) if not codes else None
-        lab = np.empty(n, np.int32) if codes else None
-        with _Res(b) as R:
-            self._rw = {}
-            for layer in [c for c, _ in self._blocks] + [self.head_]:  # glue: walks the layer list for device copies
-                hw, hb = R.new(layer.weight_.size), R.new(layer.bias_.size)
-                R.put(hw, layer.weight_)
-                R.put(hb, layer.bias_)
-                self._rw[id(layer)] = (hw, hb)
-            a = self._resident(R, cap, train=False)
-            R.put(a["y"], np.full(cap, -1, np.int32))
-            for s in range(0, n, cap):  # glue: drives the device prediction batches (cap-sized: prediction batches)
-                m = min(cap, n - s)
-                R.put(a["x"], np.ascontiguousarray(x[s:s + m]))
-                self._forward_r(b, a, m)
-                b.x_cnn_softmax_xent_r(a["logits"], a["y"], a["glog"], a["proba"], [m, k])
-                if codes:
-                    b.x_cnn_res_argmax(a["proba"], lab[s:s + m].ctypes.data, [m, k])
-                else:
-                    b.x_cnn_res_download(a["proba"], proba[s:s + m].ctypes.data, m * k)
-            self._rw = {}
-        return lab if codes else proba
+        return _XCNN(self, "cnnclf_predict_proba", (X,), _XCNN_CONTEXT)
 
     def predict(self, X):
-        np = _np()
-        codes = self._run_predict(X, True)
-        cls = self.classes_
-        if cls.dtype.kind in "iuf":
-            # classes_[codes] by the base binding's native gather (the decode
-            # half of label encoding)
-            from ._buffer import _native
-            table = np.ascontiguousarray(cls, dtype=np.float64 if cls.dtype.kind == "f" else np.int64)
-            out = np.empty(codes.shape[0], table.dtype)
-            c64 = codes.astype(np.int64)
-            _native("gather_f64" if cls.dtype.kind == "f" else "gather_i64")(
-                table.ctypes.data, table.shape[0], c64.ctypes.data, c64.shape[0], out.ctypes.data)
-            return out.astype(cls.dtype, copy=False)
-        return cls[codes]   # glue: label objects (str, bool) no native table holds
+        return _XCNN(self, "cnnclf_predict", (X,), _XCNN_CONTEXT)
 
     def weights(self):
         """Every trained array, in layer order: [w0, b0, w1, b1, ...]."""
@@ -1804,32 +1458,6 @@ class BatchNorm2d(_Layer):
     def _res_bn(self, b):
         return self.track_running_stats and _resident(b)
 
-    def _forward_res(self, b, xh, yh, n, c, hw, dev_y):
-        """G3: `_forward_dev` with running and aux resident (no download)."""
-        np = _np()
-        d = self.__dict__
-        dev = _dev_of(self, b)
-        aux, _, batch_stats = self._prep(n, c, hw, need_running=False)
-        k = 1 - d.get("_aux_k", 1)
-        name = "aux%d" % k
-        pend = d.get("_g_dev")
-        cur = dev.h.get(name)
-        if pend is not None and cur is not None and pend[1] == cur[0]:
-            self._grads_host()   # unread gradients in the array this forward reuses
-        ah = dev.upload(name, aux)
-        if d.get("_run_dev") is not dev or "running" not in dev.h:
-            r = np.concatenate([self.running_mean_, self.running_var_]).astype(np.float32)  # glue: packs running statistics for the binding (running_mean_-sized: BatchNorm channels)
-            dev.upload("running", r)
-            d["_run_dev"] = dev
-        rh = dev.h["running"][0]
-        b.x_cnn_batchnorm_forward_m([xh, yh, rh, ah], 0b1111 if dev_y else 0b1101,
-                                    [n, c, hw, 1 if batch_stats else 0])
-        if self.training:
-            d["_run_stale"] = True
-        d["_aux_k"] = k
-        self._aux, self._aux_dev, self._mode, self._x3shape = aux, (dev, ah), batch_stats, (n, c, hw)
-        return aux
-
     def _backward_res(self, b, xh, gh, dxh, dev_dx, dev_g):
         """G3: the backward into the forward's resident aux; dgamma / dbeta
         stay there until read. False when that forward was not resident."""
@@ -1842,60 +1470,6 @@ class BatchNorm2d(_Layer):
                                      [n, c, hw, 1 if self._mode else 0])
         self.__dict__["_g_dev"] = ad
         return True
-
-    def _nchw(self, x):
-        x = _f32(x, "x")
-        shape = x.shape
-        if x.ndim == 2:
-            x = x[:, :, None]
-        n, c = x.shape[:2]
-        if c != self.num_features:
-            raise ValueError(f"mojolearn: input has {c} channels, the layer {self.num_features}")
-        return np_reshape(x, (n, c, -1)), shape
-
-    def _prep(self, n, c, hw, need_running=True):
-        """The host words of one forward: (aux, running, batch_stats); the
-        batch counter moves here, as it did in `forward`. `need_running`
-        False (G3: the running statistics are resident) gives running None."""
-        np = _np()
-        C = self.num_features
-        # PyTorch: batch statistics in training mode, and in eval mode too when
-        # nothing is tracked; momentum=None is the cumulative average 1/batches.
-        batch_stats = self.training or not self.track_running_stats
-        factor = 0.0
-        if self.training and self.track_running_stats:
-            self.num_batches_tracked_ += 1
-            factor = 1.0 / self.num_batches_tracked_ if self.momentum is None else self.momentum
-        aux = np.zeros(2 + 7 * C, np.float32)
-        aux[0], aux[1] = np.float32(self.eps), np.float32(factor)
-        aux[2 + 5 * C:2 + 6 * C] = self.weight_
-        aux[2 + 6 * C:2 + 7 * C] = self.bias_
-        if not need_running:
-            running = None
-        elif self.track_running_stats:
-            running = np.concatenate([self.running_mean_, self.running_var_]).astype(np.float32)  # glue: packs fitted running statistics for the binding (running_mean_-sized: BatchNorm channels)
-        else:
-            running = np.concatenate([np.zeros(C, np.float32), np.ones(C, np.float32)])  # glue: packs initial running statistics for the binding (C-sized: BatchNorm channels)
-        return aux, running, batch_stats
-
-    def _finish(self, running):
-        C = self.num_features
-        if self.training and self.track_running_stats:
-            self.running_mean_, self.running_var_ = running[:C].copy(), running[C:].copy()
-
-    def _forward_dev(self, b, xh, yh, n, c, hw, dev_y=True):
-        """The forward of resident x (`xh`) into resident y (`yh`, or a host
-        array's address with `dev_y` False); the backward reads `xh` (lane
-        gap-neural-overhead2)."""
-        if self._res_bn(b):
-            return self._forward_res(b, xh, yh, n, c, hw, dev_y)
-        self._aux_dev = None
-        aux, running, batch_stats = self._prep(n, c, hw)
-        b.x_cnn_batchnorm_forward_m([xh, yh, running.ctypes.data, aux.ctypes.data], 0b0011 if dev_y else 0b0001,
-                                    [n, c, hw, 1 if batch_stats else 0])
-        self._finish(running)
-        self._aux, self._mode, self._x3shape = aux, batch_stats, (n, c, hw)
-        return aux
 
     def _backward_dev(self, b, xh, gh, dxh, dev_dx=True):
         """The backward from resident g (`gh`) into resident dx (`dxh`, or a
@@ -1918,46 +1492,7 @@ class BatchNorm2d(_Layer):
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_BN_FUSE.patch; record in docs/TOMBSTONES.md.
 
     def forward(self, x):
-        np = _np()
-        if _is_t(x):
-            # lane fam-neural (IDN_LAYER_DEV_IO): a resident x is read where
-            # it lives and y is a resident tensor (the entry BasicBlock
-            # already runs this way); the backward reads x in place
-            b = self._binding()
-            if _on_dev(b, x) and _idn(b, _F_LAYER_IO) and x.ndim >= 2 and x.size > 0:
-                shape = x.shape
-                n, c = shape[:2]
-                if c != self.num_features:
-                    raise ValueError(f"mojolearn: input has {c} channels, the layer {self.num_features}")
-                hw = x.size // (n * c)
-                y = DeviceTensor._new_out(b, shape)   # bn_apply stores every word
-                self._forward_dev(b, x.h, y.h, n, c, hw, dev_y=True)
-                self._xdev, self._x, self._shape, self._xdev_dev = x.h, None, shape, _dev_of(self, b)
-                self._xt = x  # keeps the resident words alive for the backward
-                return y
-        self._xt = None
-        x3, shape = self._nchw(x)
-        n, c, hw = x3.shape
-        b = self._binding()
-        y = np.empty_like(x3)
-        if _mixed(b):
-            # lane gap-neural-overhead2: x is uploaded once and stays on the
-            # device for the backward, which read it from the host again;
-            # the backward is the gradient at the forward's input (the
-            # tensor PyTorch saves)
-            dev = _dev_of(self, b)
-            xh = dev.upload("x", x3)
-            self._forward_dev(b, xh, y.ctypes.data, n, c, hw, dev_y=False)
-            self._xdev, self._x, self._shape, self._xdev_dev = xh, None, shape, dev
-            return y.reshape(shape) if len(shape) != 2 else y[:, :, 0]
-        aux, running, batch_stats = self._prep(n, c, hw)
-        b.x_cnn_batchnorm_forward(x3.ctypes.data, y.ctypes.data, running.ctypes.data, aux.ctypes.data,
-                                  [n, c, hw, 1 if batch_stats else 0])
-        self._finish(running)
-        self._aux_dev = None
-        self._x, self._aux, self._shape, self._mode = x3, aux, shape, batch_stats
-        self._x3shape, self._xdev = x3.shape, None
-        return y.reshape(shape) if len(shape) != 2 else y[:, :, 0]
+        return _XCNN(self, "bn_forward", (x,), _XCNN_CONTEXT)
 
     def backward(self, grad_out):
         np = _np()
@@ -2003,16 +1538,11 @@ class BatchNorm2d(_Layer):
         return X
 
     def transform(self, X):
-        out = self.forward(self._rows(X))
-        return out.reshape(out.shape[0], -1)
+        return _XCNN(self, "bn_transform", (X,), _XCNN_CONTEXT)
 
     def fit(self, X, y=None):
         """One training-mode pass over X (updates the running statistics)."""
-        was = self.training
-        self.training = True
-        self.forward(self._rows(X))
-        self.training = was
-        return self
+        return _XCNN(self, "bn_fit", (X,), _XCNN_CONTEXT)
 
 
 class BatchNorm1d(BatchNorm2d):
@@ -2068,62 +1598,8 @@ class Dropout2d(_Layer):
         self.__dict__["_mask_host"] = v
         self.__dict__["_mask_dev"] = None
 
-    def _forward_t(self, b, x):
-        """lane fam-neural (IDN_LAYER_DEV_IO): x, y and the mask resident
-        (`x_cnn_dropout2d_m`, the host entry's launches); eval mode is the
-        same resident words."""
-        if not self.training:
-            self.mask_ = None
-            return x.reshape(x.shape)
-        if x.ndim not in (3, 4):
-            raise ValueError("mojolearn: Dropout2d.forward takes (N, C, H, W) or (C, H, W)")
-        s4 = ((1,) + x.shape) if x.ndim == 3 else x.shape
-        n, c = s4[:2]
-        hw = s4[2] * s4[3]
-        thresh = min(int(round(self.p * 2 ** 32)), 2 ** 32)
-        seed_lo = self.random_state & 0x7FFFFFFF
-        seed_hi = ((self.random_state >> 31) * 1000003 + self.calls_) & 0x7FFFFFFF
-        self.calls_ += 1
-        prm = [n, c, hw, seed_lo, seed_hi, thresh >> 16, thresh & 0xFFFF]
-        y = DeviceTensor._new_out(b, x.shape)   # every path stores each mask and y word
-        h = _dev_of(self, b).get("mask", x.size)
-        b.x_cnn_dropout2d_m([x.h, y.h, h], 0b111, prm, self.p)
-        self.__dict__.update(_mask_host=None, _mask_dev=h, _mask_shape=x.shape)
-        return y
-
     def forward(self, x):
-        np = _np()
-        if _is_t(x):
-            bt = self._binding()
-            if _on_dev(bt, x) and _idn(bt, _F_LAYER_IO) and x.size > 0:
-                return self._forward_t(bt, x)
-        x = _f32(x, "x")
-        if not self.training:
-            self.mask_ = None
-            return x.copy()
-        if x.ndim not in (3, 4):
-            raise ValueError("mojolearn: Dropout2d.forward takes (N, C, H, W) or (C, H, W)")
-        x4 = x[None] if x.ndim == 3 else x
-        n, c = x4.shape[:2]
-        hw = int(np.prod(x4.shape[2:]))  # glue: product of the spatial shape entries
-        thresh = min(int(round(self.p * 2 ** 32)), 2 ** 32)
-        seed_lo = self.random_state & 0x7FFFFFFF
-        seed_hi = ((self.random_state >> 31) * 1000003 + self.calls_) & 0x7FFFFFFF
-        self.calls_ += 1
-        y = np.empty_like(x4)
-        x4 = np.ascontiguousarray(x4)
-        prm = [n, c, hw, seed_lo, seed_hi, thresh >> 16, thresh & 0xFFFF]
-        b = self._binding()
-        if _mixed(b):
-            dev = _dev_of(self, b)
-            h = dev.get("mask", x4.size)
-            b.x_cnn_dropout2d_m([x4.ctypes.data, y.ctypes.data, h], 0b100, prm, self.p)
-            self.__dict__.update(_mask_host=None, _mask_dev=h, _mask_shape=x.shape)
-            return y.reshape(x.shape)
-        mask = np.empty_like(x4)
-        b.x_cnn_dropout2d(x4.ctypes.data, y.ctypes.data, mask.ctypes.data, prm, self.p)
-        self.mask_ = mask.reshape(x.shape)
-        return y.reshape(x.shape)
+        return _XCNN(self, "dropout_forward", (x,), _XCNN_CONTEXT)
 
     def backward(self, grad_out):
         np = _np()
@@ -2156,8 +1632,7 @@ class Dropout2d(_Layer):
         return dx
 
     def transform(self, X):
-        out = self.forward(BatchNorm2d._rows(self, X))
-        return out.reshape(out.shape[0], -1)
+        return _XCNN(self, "dropout_transform", (X,), _XCNN_CONTEXT)
 
     def fit(self, X, y=None):
         return self
@@ -2190,25 +1665,6 @@ class _AdaptivePool(_Layer):
         except Exception:  # noqa: BLE001  (no binding: the host arrays)
             return False
 
-    def _pool_for(self, b, k):
-        """The MaxPool2d / AvgPool2d of kernel = stride = `k` (cached under G3)."""
-        cls = MaxPool2d if self._max else AvgPool2d
-        hit = self.__dict__.get("_pool_cache")
-        if _resident(b) and hit is not None and hit[0] == k and type(hit[1]) is cls:
-            return hit[1]
-        lay = cls(k, stride=k, numeric_mode=self.numeric_mode)
-        self.__dict__["_pool_cache"] = (k, lay)
-        return lay
-
-    # lane fam-neural (2026-10-04, IDN_ADAPT_M): on a binding with the switch
-    # on, the adaptive kernel runs through `x_cnn_adaptive_pool_m`: host
-    # arrays are copied once each way (the host entry staged every array
-    # through a List), a `DeviceTensor` in gives a resident tensor out, the
-    # max winners stay on the device for the backward, and `indices_`
-    # downloads them only when read (a dividing size delegates to
-    # MaxPool2d/AvgPool2d, whose winners were downloaded on every forward
-    # here). The same element functions on the same words: no bit moves.
-
     @property
     def indices_(self):
         d = self.__dict__
@@ -2229,45 +1685,7 @@ class _AdaptivePool(_Layer):
         self.__dict__["_idx_dev"] = None
 
     def forward(self, x):
-        np = _np()
-        b = self._binding()
-        m = _idn(b, _F_ADAPT)
-        xt = _is_t(x)
-        if xt and not m:
-            x, xt = _f32(x, "x"), False
-        elif xt and not _on_dev(b, x):
-            return DeviceTensor._wrap(b, self.forward(x.numpy()))
-        elif not xt:
-            x = _f32(x, "x")
-        if x.ndim != 4:
-            raise ValueError(f"mojolearn: {type(self).__name__}.forward takes (N, C, H, W)")
-        self._xshape = tuple(x.shape)
-        d = self.__dict__
-        d["_idx_host"] = d["_idx_dev"] = None
-        if self._divides(x.shape):
-            k = (x.shape[2] // self.output_size[0], x.shape[3] // self.output_size[1])
-            self._layer = self._pool_for(b, k)
-            out = self._layer.forward(x)
-            if self._max and not m:
-                d["_idx_host"] = self._layer.indices_
-            return out
-        self._layer = None
-        n, c = x.shape[:2]
-        oshape = (n, c) + self.output_size
-        prm = [*x.shape, *self.output_size, 2 if self._max else 0]
-        if m:
-            out = _out_new(b, oshape) if xt else np.empty(oshape, np.float32)
-            h = _dev_of(self, b).get("idx", _size(oshape)) if self._max else 0
-            b.x_cnn_adaptive_pool_m([x.h if xt else x.ctypes.data, out.h if xt else out.ctypes.data, h],
-                                    (0b011 if xt else 0) | (0b100 if self._max else 0), prm)
-            if self._max:
-                d.update(_idx_dev=h, _idx_shape=oshape)
-            return out
-        out = np.empty(oshape, np.float32)
-        idx = np.zeros(oshape, np.int32)
-        b.x_cnn_adaptive_pool(x.ctypes.data, out.ctypes.data, idx.ctypes.data, prm)
-        d["_idx_host"] = idx if self._max else None
-        return out
+        return _XCNN(self, "adaptive_forward", (x,), _XCNN_CONTEXT)
 
     def backward(self, grad_out):
         np = _np()
@@ -2301,8 +1719,7 @@ class _AdaptivePool(_Layer):
         return dx
 
     def transform(self, X):
-        out = self.forward(BatchNorm2d._rows(self, X))
-        return out.reshape(out.shape[0], -1)
+        return _XCNN(self, "adaptive_transform", (X,), _XCNN_CONTEXT)
 
     def fit(self, X, y=None):
         return self
@@ -2379,76 +1796,6 @@ class BasicBlock(_Layer):
     # counters, running statistics and gradients; their own host-array
     # state (`_x`) is not filled by the block.
 
-    def _chain_ok(self, b):
-        convs = [self.conv1, self.conv2] + ([self.downsample[0]] if self.downsample else [])
-        return _mixed(b) and all(c.groups == 1 and not c._explicit for c in convs)  # glue: checks the block conv layer flags
-
-    def _conv_dev(self, b, conv, xh, xshape, name, dev):
-        oshape = conv._out_shape(xshape)
-        yh = dev.get(name, int(_np().prod(oshape)))  # glue: product of the output shape entries
-        pw, pb = conv._res_w(b)   # G3: the auto-pinned weights (None with the switch off)
-        if pw is not None and pb is not None:
-            b.x_cnn_conv2d_forward_m([xh, pw, pb, yh], 0b1111, conv._params(xshape))
-            return yh, oshape
-        w = _np().ascontiguousarray(conv.weight_)
-        bias = _np().ascontiguousarray(conv.bias_)
-        b.x_cnn_conv2d_forward_m([xh, w.ctypes.data, bias.ctypes.data, yh], 0b1001, conv._params(xshape))
-        return yh, oshape
-
-    def _bn_dev(self, b, bn, xh, shape, name, dev):
-        n, c = shape[:2]
-        hw = int(_np().prod(shape[2:]))  # glue: product of the spatial shape entries
-        if c != bn.num_features:
-            raise ValueError(f"mojolearn: input has {c} channels, the layer {bn.num_features}")
-        yh = dev.get(name, n * c * hw)
-        bn._forward_dev(b, xh, yh, n, c, hw)
-        bn._xdev, bn._x, bn._shape, bn._xdev_dev = xh, None, tuple(shape), dev
-        return yh
-
-    # TOMBSTONE: MOJOLEARN_IDN_CNN_BN_FUSE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
-    # Tried: BasicBlock._bn_dev_fused.
-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_BN_FUSE.patch; record in docs/TOMBSTONES.md.
-
-    def _forward_chain(self, b, x):
-        np = _np()
-        dev = _dev_of(self, b)
-        if x.ndim != 4:
-            raise ValueError("mojolearn: Conv2d.forward takes (N, C, H, W)")
-        if x.shape[1] != self.conv1.in_channels:
-            raise ValueError(f"mojolearn: input has {x.shape[1]} channels, the layer {self.conv1.in_channels}")
-        # lane idn-cnn-resident: a `DeviceTensor` x is read where it lives
-        xt = _is_t(x)
-        xh = x.h if xt else dev.upload("x", x)
-        # TOMBSTONE: MOJOLEARN_IDN_CNN_BN_FUSE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
-        # Tried: the fused bn1 -> relu1 and bn2 -> add -> relu2 chain (flag bit _F_BN_FUSE).
-        # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_BN_FUSE.patch; record in docs/TOMBSTONES.md.
-        c1, s1 = self._conv_dev(b, self.conv1, xh, x.shape, "c1", dev)
-        n1 = int(np.prod(s1))  # glue: product of the output shape entries
-        r1 = dev.get("r1", n1)
-        b1 = self._bn_dev(b, self.bn1, c1, s1, "b1", dev)
-        b.x_cnn_map2_m([b1, b1, r1], 0b111, [0, n1])
-        c2, s2 = self._conv_dev(b, self.conv2, r1, s1, "c2", dev)
-        n2 = int(np.prod(s2))  # glue: product of the output shape entries
-        b2 = self._bn_dev(b, self.bn2, c2, s2, "b2", dev)
-        idh = xh
-        if self.downsample:
-            d1, sd = self._conv_dev(b, self.downsample[0], xh, x.shape, "d1", dev)
-            idh = self._bn_dev(b, self.downsample[1], d1, sd, "d2", dev)
-        elif x.size != n2:
-            raise ValueError("mojolearn: the identity's shape is not the block's output shape")
-        sh = dev.get("s", n2)
-        b.x_cnn_map2_m([b2, idh, sh], 0b111, [2, n2])
-        if xt:
-            y = _out_new(b, s2)   # the ReLU stores every word
-            b.x_cnn_map2_m([sh, sh, y.h], 0b111, [0, n2])
-        else:
-            y = np.empty(s2, np.float32)
-            b.x_cnn_map2_m([sh, sh, y.ctypes.data], 0b011, [0, n2])
-        self._chain = dict(x=tuple(x.shape), xt=x if xt else None, s1=s1, s2=s2, xh=xh, c1=c1, b1=b1, r1=r1, c2=c2, s=sh,
-                           d1=self.downsample and d1, sd=self.downsample and sd)
-        self.conv1._x = self.conv1._xp = x
-        return y
-
     def _conv_back_dev(self, b, conv, xh, xshape, gh, oshape, name, dev):
         """conv's backward from resident g into resident dx `name`; sets its
         weight gradients (the same words `Conv2d.backward` sets)."""
@@ -2501,21 +1848,7 @@ class BasicBlock(_Layer):
         return dx
 
     def forward(self, x):
-        b = self._binding()
-        if _is_t(x):
-            if self._chain_ok(b) and _on_dev(b, x):
-                return self._forward_chain(b, x)
-            return DeviceTensor._wrap(b, self.forward(x.numpy()))
-        x = _f32(x, "x")
-        if self._chain_ok(b):
-            return self._forward_chain(b, x)
-        self._chain = None
-        out = self.relu1.forward(self.bn1.forward(self.conv1.forward(x)))
-        out = self.bn2.forward(self.conv2.forward(out))
-        identity = x
-        if self.downsample:
-            identity = self.downsample[1].forward(self.downsample[0].forward(x))
-        return self.relu2.forward(_add(self._binding(), out, identity))
+        return _XCNN(self, "block_forward", (x,), _XCNN_CONTEXT)
 
     def backward(self, grad_out):
         b = self._binding()
@@ -2540,8 +1873,7 @@ class BasicBlock(_Layer):
         return out
 
     def transform(self, X):
-        out = self.forward(BatchNorm2d._rows(self, X))
-        return out.reshape(out.shape[0], -1)
+        return _XCNN(self, "block_transform", (X,), _XCNN_CONTEXT)
 
     def fit(self, X, y=None):
         return self
@@ -2640,38 +1972,6 @@ class _GraphKey:
     __hash__ = None
 
 
-def _graph_key(n, *arrays):
-    return _GraphKey(n, *arrays)
-
-
-def _edges(edge_index, n):
-    np = _np()
-    ei = np.asarray(edge_index)
-    if ei.ndim != 2 or ei.shape[0] != 2:
-        raise ValueError("mojolearn: edge_index must be (2, E)")
-    ei = ei.astype(np.int64)
-    if ei.size and (ei.min() < 0 or ei.max() >= n):
-        raise ValueError("mojolearn: edge_index refers to a node that does not exist")
-    return ei[0], ei[1]
-
-
-def _graph_dev(layer, b, dev, g, vals_f, vals_t=None):
-    """The resident CSR views of graph `g` and the propagation values (the
-    forward's `vals_f`, the transposed view's `vals_t`, by default
-    `g.vals_t(vals_f)`), uploaded once per graph and kept in `dev`."""
-    np = _np()
-    if layer.__dict__.get("_gdev_for") == (id(g), id(dev)) and layer.__dict__.get("_gdev_g") is g:
-        return
-    prm = [g.n, 1, g.nnz, 0]
-    dev.adopt("csr_f", b.x_cnn_csr_upload(g.csr_f.ctypes.data, prm), g.csr_f.size)
-    dev.adopt("csr_t", b.x_cnn_csr_upload(g.csr_t.ctypes.data, prm), g.csr_t.size)
-    vf = np.ascontiguousarray(vals_f, np.float32)
-    vt = g.vals_t(vf) if vals_t is None else np.ascontiguousarray(vals_t, np.float32)
-    dev.upload("vals_f", vf if vf.size else np.zeros(1, np.float32))
-    dev.upload("vals_t", vt if vt.size else np.zeros(1, np.float32))
-    layer._gdev_for, layer._gdev_g = (id(g), id(dev)), g
-
-
 class GCNConv(_Layer):
     """PyG `torch_geometric.nn.GCNConv` (flow source_to_target, cached=False):
     out = D^-1/2 (A + I) D^-1/2 (X W^T) + b, the degree over the targets'
@@ -2693,72 +1993,12 @@ class GCNConv(_Layer):
         self.weight_ = _uniform(rng, bound, (self.out_channels, self.in_channels))
         self.bias_ = np.zeros(self.out_channels, np.float32)
 
-    def _graph(self, n, edge_index, edge_weight):
-        np = _np()
-        src, dst = _edges(edge_index, n)
-        w = (np.ones(len(src), np.float32) if edge_weight is None
-             else _f32(edge_weight, "edge_weight").reshape(-1).copy())
-        if len(w) != len(src):
-            raise ValueError("mojolearn: edge_weight must have one entry per edge")
-        bl = self._binding()
-        if self.normalize and self.add_self_loops:
-            # lane fix-n1-lm-neural (IDN_GCN_LOOPS_DEV): add_remaining_self_loops
-            # built by the binding (`x_cnn_gcn_loops`, device or host column);
-            # lane py-runtime round 2: the only route (the NumPy arm is gone)
-            if not hasattr(bl, "x_cnn_gcn_loops"):
-                raise RuntimeError("mojolearn: this x_cnn binding has no x_cnn_gcn_loops (an older binary); rebuild it")
-            s32, d32 = np.ascontiguousarray(src, np.int32), np.ascontiguousarray(dst, np.int32)
-            w32 = np.ascontiguousarray(w, np.float32)
-            t = len(s32) + n
-            so, dso, wo = np.empty(t, np.int32), np.empty(t, np.int32), np.empty(t, np.float32)
-            k = int(bl.x_cnn_gcn_loops([s32.ctypes.data, d32.ctypes.data, w32.ctypes.data, so.ctypes.data,
-                                        dso.ctypes.data, wo.ctypes.data], [n, len(s32), int(self.improved)]))
-            src, dst, w = so[:k + n], dso[:k + n], wo[:k + n]
-        g = _Graph(src, dst, n, self._binding())
-        wf = np.ascontiguousarray(w[g.order_f])
-        if self.normalize:
-            vals = np.empty(g.nnz, np.float32)
-            bn = self._binding()
-            if _idn(bn, _F_GRAPH):
-                # lane fam-neural (IDN_GRAPH_M): the same two launches with
-                # one copy each way (no List staging of w, csr and vals)
-                bn.x_cnn_gcn_norm_m([wf.ctypes.data, vals.ctypes.data, g.csr_f.ctypes.data], 0, [n, 1, g.nnz, 0])
-            else:
-                bn.x_cnn_gcn_norm(wf.ctypes.data, vals.ctypes.data, g.csr_f.ctypes.data, [n, 1, g.nnz, 0])
-        else:
-            vals = wf
-        return g, vals
-
     _device_io = True
 
     def forward(self, x, edge_index, edge_weight=None):
-        np = _np()
-        b = self._binding()
-        if _is_t(x):
-            if not (_on_dev(b, x) and not _LEGACY_STEP):
-                return DeviceTensor._wrap(b, self.forward(x.numpy(), edge_index, edge_weight))
-        else:
-            x = _f32(x, "x")
-        n = x.shape[0]
-        if _LEGACY_STEP:
-            g, vals = self._graph(n, edge_index, edge_weight)
-        else:
-            key = (_graph_key(n, edge_index, edge_weight), self.improved, self.add_self_loops, self.normalize)
-            hit = getattr(self, "_gcache", None)
-            if hit is not None and hit[0] == key:
-                g, vals = hit[1]
-            else:
-                g, vals = self._graph(n, edge_index, edge_weight)
-                self._gcache = (key, (g, vals))
-        if _mixed(b) and not _LEGACY_STEP:
-            return self._forward_dev(b, x, g, vals)
-        self._xdev = None
-        h = _gemm(b, x, self.weight_, n, self.out_channels, self.in_channels, 1)
-        out = g.spmm(b, vals, h, 0)
-        if self.bias:
-            out = _add(b, out, np.ascontiguousarray(np.broadcast_to(self.bias_, out.shape)))
-        self._x, self._g, self._vals = x, g, vals
-        return out
+        # the graph, its cache and the propagation in one native call
+        # (bindings/xcnn_graph_native.mojo)
+        return _XCNN(self, "gcn_forward", (x, edge_index, edge_weight), _XCNN_CONTEXT)
 
     # lane gap-neural-overhead2 (2026-10-02): on the GPU binding the layer
     # runs on resident arrays: x goes up once and y comes down once; the
@@ -2769,36 +2009,6 @@ class GCNConv(_Layer):
     # bias of that size). The same entries' bodies on the same words; the
     # bias add is `bias_rows_at`, the same IEEE add per element as the
     # broadcast `add_at`. No bit moves.
-
-    def _forward_dev(self, b, x, g, vals):
-        np = _np()
-        n, F, D = x.shape[0], self.out_channels, self.in_channels
-        if x.ndim != 2 or x.shape[1] != D:
-            raise ValueError(f"mojolearn: x must be (n, {D})")
-        dev = _dev_of(self, b)
-        _graph_dev(self, b, dev, g, vals)
-        W = _f32(self.weight_, "b")
-        # lane idn-cnn-resident: a `DeviceTensor` x is read where it lives
-        # and the output is a resident tensor (no upload, no download)
-        xt = _is_t(x)
-        xh = x.h if xt else dev.upload("x", x)
-        hh = dev.get("h", n * F)
-        b.x_cnn_gemm_m([xh, W.ctypes.data, hh], 0b101, [n, F, D, 1])
-        out = DeviceTensor._new(b, (n, F)) if xt else np.empty((n, F), np.float32)
-        oh = out.h if xt and not self.bias else dev.get("o", n * F)
-        b.x_cnn_spmm_m([dev.h["vals_f"][0], hh, dev.h["csr_f"][0], oh], 0b1111, [n, F, g.nnz, 0])
-        if self.bias:
-            bias = _f32(self.bias_, "b").reshape(-1)
-            if bias.size != F:
-                raise ValueError("mojolearn: bias_ has the wrong size")
-            if xt:
-                b.x_cnn_map2_m([oh, bias.ctypes.data, out.h], 0b101, [4, n * F, F])
-            else:
-                b.x_cnn_map2_m([oh, bias.ctypes.data, out.ctypes.data], 0b001, [4, n * F, F])
-        elif not xt:
-            dev.download(oh, out)
-        self._x, self._g, self._vals, self._xdev = x, g, vals, (dev, xh)
-        return out
 
     def _backward_dev(self, b, G):
         np = _np()
@@ -2890,62 +2100,10 @@ class SAGEConv(_Layer):
 
     _device_io = True
 
-    def _res_form(self, b):
-        if not _mixed(b) or _LEGACY_STEP or self.project:
-            return False
-        # lane fam-neural (IDN_GRAPH_M): the max aggregation and the L2
-        # normalization have resident forms too (`x_cnn_graph_op_m`, the
-        # host entry's element functions on the words where they live)
-        if _idn(b, _F_GRAPH):
-            return True
-        return not self.normalize and self.aggr in ("mean", "sum", "add")
-
     def forward(self, x, edge_index):
-        np = _np()
-        b = self._binding()
-        if _is_t(x):
-            if not (self._res_form(b) and _on_dev(b, x)):
-                return DeviceTensor._wrap(b, self.forward(x.numpy(), edge_index))
-        else:
-            x = _f32(x, "x")
-        n = x.shape[0]
-        key = None if _LEGACY_STEP else _graph_key(n, edge_index)
-        hit = getattr(self, "_gcache", None)
-        if key is not None and hit is not None and hit[0] == key:
-            g = hit[1]
-        else:
-            src, dst = _edges(edge_index, n)
-            g = _Graph(src, dst, n, self._binding())
-            if key is not None:
-                self._gcache = (key, g)
-        if self._res_form(b):
-            return self._forward_dev(b, x, g)
-        self._xdev = None
-        xs = x
-        if self.project:
-            xs = self._relu_p.forward(self.lin.forward(x))
-        self._xs = xs
-        if self.aggr == "max":
-            agg = np.empty_like(xs)
-            self._max_aux = np.zeros(2 * xs.size, np.float32)
-            b.x_cnn_graph_op(xs.ctypes.data, xs.ctypes.data, self._max_aux.ctypes.data, agg.ctypes.data,
-                             g.csr_f.ctypes.data, [n, xs.shape[1], g.nnz, 0])
-        else:
-            agg = g.spmm(b, np.ones(g.nnz, np.float32), xs, 1 if self.aggr == "mean" else 0)
-        out = self.lin_l.forward(agg)
-        if self.root_weight:
-            out = _add(b, out, _gemm(b, x, self.weight_r_, n, self.out_channels, self.in_channels, 1))
-        self._x, self._g = x, g
-        if self.normalize:
-            # torch.nn.functional.normalize(out, p=2, dim=-1)
-            self._pre = out
-            y = np.empty_like(out)
-            self._den = np.zeros(n, np.float32)
-            self._nograph = np.zeros(n + 1, np.int32)
-            b.x_cnn_graph_op(out.ctypes.data, out.ctypes.data, self._den.ctypes.data, y.ctypes.data,
-                             self._nograph.ctypes.data, [n, out.shape[1], 0, 2])
-            self._y = out = y
-        return out
+        # the graph, its cache, the aggregation and the transforms in one
+        # native call (bindings/xcnn_graph_native.mojo)
+        return _XCNN(self, "sage_forward", (x, edge_index), _XCNN_CONTEXT)
 
     # lane gap-neural-overhead2 (2026-10-02): on the GPU binding (aggr mean
     # or sum, no projection, no normalization) the layer runs on resident
@@ -2954,63 +2112,6 @@ class SAGEConv(_Layer):
     # their sum stay on the device, and the mean backward divides by the
     # in-degree read from the resident CSR offsets (spmm mode 3). The same
     # entries' bodies on the same words: no bit moves.
-
-    def _forward_dev(self, b, x, g):
-        np = _np()
-        n, D, F = x.shape[0], self.in_channels, self.out_channels
-        if x.ndim != 2 or x.shape[1] != D:
-            raise ValueError(f"mojolearn: x must be (n, {D})")
-        dev = _dev_of(self, b)
-        mean = self.aggr == "mean"
-        if self.__dict__.get("_gdev_g") is not g or self.__dict__.get("_gdev_for") != (id(g), id(dev)):
-            ones = np.ones(g.nnz, np.float32)
-            _graph_dev(self, b, dev, g, ones, ones)
-        # lane idn-cnn-resident: a `DeviceTensor` x is read where it lives
-        # and the output is a resident tensor (no upload, no download)
-        xt = _is_t(x)
-        xh = x.h if xt else dev.upload("x", x)
-        aggh = dev.get("agg", n * D)
-        if self.aggr == "max":
-            # lane fam-neural: the max and its tie counts stay resident for the backward
-            auxh = dev.get("maxaux", 2 * n * D)
-            b.x_cnn_graph_op_m([xh, xh, auxh, aggh, dev.h["csr_f"][0]], 0b11111, [n, D, g.nnz, 0])
-        else:
-            b.x_cnn_spmm_m([dev.h["vals_f"][0], xh, dev.h["csr_f"][0], aggh], 0b1111,
-                           [n, D, g.nnz, 1 if mean else 0])
-        lin = self.lin_l
-        norm = self.normalize
-        out = DeviceTensor._new(b, (n, F)) if xt else np.empty((n, F), np.float32)
-        # with the normalization the sum lands in a resident `pre` first
-        preh = dev.get("pre", n * F) if norm else None
-        if norm and not self.root_weight:
-            olh = preh
-        else:
-            olh = out.h if xt and not self.root_weight else dev.get("ol", n * F)
-        b.x_cnn_linear_forward_m([aggh, lin.weight_.ctypes.data, lin.bias_.ctypes.data, olh], 0b1001, [n, D, F])
-        if self.root_weight:
-            Wr = _f32(self.weight_r_, "b")
-            rh = dev.get("r", n * F)
-            b.x_cnn_gemm_m([xh, Wr.ctypes.data, rh], 0b101, [n, F, D, 1])
-            if norm:
-                b.x_cnn_map2_m([olh, rh, preh], 0b111, [2, n * F])
-            elif xt:
-                b.x_cnn_map2_m([olh, rh, out.h], 0b111, [2, n * F])
-            else:
-                b.x_cnn_map2_m([olh, rh, out.ctypes.data], 0b011, [2, n * F])
-        elif not xt and not norm:
-            dev.download(olh, out)
-        self._ydev = None
-        if norm:
-            # torch.nn.functional.normalize(out, p=2, dim=-1): y and the
-            # denominators stay resident for the backward
-            denh = dev.get("den", n)
-            yh = out.h if xt else dev.get("y", n * F)
-            b.x_cnn_graph_op_m([preh, preh, denh, yh, 0], 0b01111, [n, F, 0, 2])
-            if not xt:
-                dev.download(yh, out)
-            self._ydev = (yh, denh, out if xt else None)
-        self._x, self._g, self._xs, self._xdev = x, g, x, (dev, xh, aggh)
-        return out
 
     def _backward_dev(self, b, G):
         np = _np()
@@ -3103,3 +2204,12 @@ class SAGEConv(_Layer):
             self.grad_weight_r_ = _gemm(b, G, self._x, self.out_channels, self.in_channels, n, 2)
             dx = _add(b, _gemm(b, G, self.weight_r_, n, self.in_channels, self.out_channels, 0), dx)
         return dx
+
+
+_native_xcnn_bridge.register(
+    xcnn_tensor_class=DeviceTensor, xcnn_dev_class=_Dev, xcnn_maxpool_class=MaxPool2d,
+    xcnn_avgpool_class=AvgPool2d, xcnn_pool1d_class=_Pool1dMixin, xcnn_conv1d_class=Conv1d,
+    xcnn_device_io_off=_DEVICE_IO_OFF, xcnn_graph_class=_Graph, xcnn_graph_key_class=_GraphKey,
+    xcnn_conv2d_class=Conv2d, xcnn_relu_class=_ReLU, xcnn_linear_class=_Linear, xcnn_epoch_entry=_EPOCH_ENTRY,
+)
+_native_xcnn_bridge.connect_classifier()

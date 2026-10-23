@@ -78,6 +78,7 @@ FAMILIES = (
             "prophet_changepoints",
             # the model-description trainer (autograd/model.mojo)
             "model_fit", "model_predict", "model_n_params", "model_labels", "model_gather_labels",
+            "model_fit_labels", "model_predict_labels",
             "moe_backward", "seq_adafactor_step", "seq_lamb_step",
             "seq_optimizer_init", "seq_optimizer_step", "seq_optimizer_state",
             "seq_optimizer_import", "seq_optimizer_export", "seq_optimizer_close",
@@ -106,9 +107,9 @@ FAMILIES = (
             # weight import (autograd/weight_import.mojo; Sequential.load_state_dict, Session.load_weights)
             "model_import_params", "ops_load_weights",
             # the ONNX model reader (autograd/import_reader.mojo, import_resolve.mojo; importers.onnx.read)
-            "onnx_read", "onnx_info", "onnx_copy_blob", "onnx_resolve", "onnx_close",
+            "onnx_read", "onnx_info", "onnx_buffers", "onnx_resolve", "onnx_close",
             # the lowering onto session operations (autograd/import_lower.mojo; importers.import_model)
-            "onnx_import", "onnx_from_words",
+            "onnx_import", "onnx_import_file",
             # model verification reports (autograd/model_verify.mojo; python -m mojolearn verify-model)
             "verify_digest", "verify_file_sha256", "verify_model_info", "verify_fill",
         ),

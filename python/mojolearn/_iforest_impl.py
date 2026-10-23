@@ -36,27 +36,11 @@ one; `numpy.asarray(result)` is a zero-copy view for a caller who has
 NumPy. Nothing in this module imports NumPy.
 """
 
-import array
 import numbers
-import weakref
 
-from . import _serialize
-from ._array import Array
-from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty
-from ._labels import is_bool
+from . import _native_archive_bridge, _native_trees_bridge
 from ._mode import NumericModeMixin
 
-# THE EXTENSION LOADER LIVES IN `_svm_impl`, NOT BECAUSE THESE TWO LANES
-# HAVE ANYTHING TO DO WITH EACH OTHER -- they do not -- but because both
-# are compiled into ONE extension module, `_mojolearn_svm`, by
-# `bindings/build_svm.sh`. One loader means one place that decides which
-# numeric mode's binary is open, and one cache so the module is loaded
-# once. Read `_svm_impl._extension` before changing anything here.
-from ._svm_impl import _extension
-
-_WANT_SCORE_SAMPLES = 0
-_WANT_DECISION_FUNCTION = 1
-_WANT_PREDICT = 2
 
 #: The model file (the neighbors and density inference lane, 2026-09-15).
 #: DEVIATION 874 makes the fitted state the training matrix plus the
@@ -70,6 +54,13 @@ _WANT_PREDICT = 2
 _IFOREST_FORMAT = "mojolearn-iforest-1"
 _IFOREST_INTS = 11
 _IFOREST_REALS = 4
+
+# The compiled owners, connected once at import: `fit`, `score_samples`,
+# `decision_function`, `predict` and `fit_predict` are one call each into the
+# tree owner (bindings/trees_public_iforest.mojo); `save` and `load` one call
+# each into the saved-model owner.
+_TREES, _TREES_CONTEXT = _native_trees_bridge.connect()
+_ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
 
 # Maintainer notes (moved from the docstring): the GPU implementation is
@@ -188,272 +179,12 @@ class IsolationForest(NumericModeMixin):
         self.verbose = verbose
         self.output_type = output_type
 
-    def _validate_params(self):
-        """The parameter checks and the native knobs they resolve to, run at
-        fit. The parameters themselves stay as given."""
-        n_estimators = self.n_estimators
-        max_samples = self.max_samples
-        max_depth = self.max_depth
-        max_features = self.max_features
-        bootstrap = self.bootstrap
-        contamination = self.contamination
-        random_state = self.random_state
-        warm_start = self.warm_start
-        n_jobs = self.n_jobs
-        verbose = self.verbose
-        output_type = self.output_type
-        n_estimators = int(n_estimators)
-        if n_estimators < 1:
-            raise ValueError(
-                f"mojolearn IsolationForest: n_estimators must be at least 1, "
-                f"got {n_estimators!r}"
-            )
-        # max_samples: 0 = 'auto', 1 = int, 2 = float fraction. cuML's `fit`
-        # (isolation_forest.pyx:663-702) does the resolving; the mode is how
-        # this surface tells an int from a float across the boundary, since
-        # a params list carries no types.
-        if isinstance(max_samples, str):
-            if max_samples.lower() != "auto":
-                raise ValueError(
-                    f"mojolearn IsolationForest: max_samples={max_samples!r} "
-                    "is not a name; it is 'auto', a positive int, or a float "
-                    "in (0.0, 1.0]"
-                )
-            self._max_samples_mode = 0
-            self._max_samples_int = 256
-            self._max_samples_frac = 1.0
-        elif is_bool(max_samples):
-            raise ValueError(
-                "mojolearn IsolationForest: max_samples must be 'auto', an "
-                "int, or a float, not a bool"
-            )
-        elif isinstance(max_samples, numbers.Integral):
-            if int(max_samples) <= 0:
-                raise ValueError(
-                    "mojolearn IsolationForest: max_samples must be a "
-                    f"positive integer, got {max_samples!r}"
-                )
-            self._max_samples_mode = 1
-            self._max_samples_int = int(max_samples)
-            self._max_samples_frac = 1.0
-        else:
-            v = float(max_samples)
-            if not (0.0 < v <= 1.0):
-                raise ValueError(
-                    "mojolearn IsolationForest: float max_samples must be in "
-                    f"(0.0, 1.0], got {max_samples!r}"
-                )
-            self._max_samples_mode = 2
-            self._max_samples_int = 256
-            self._max_samples_frac = v
-
-        if max_depth is None:
-            self._max_depth = -1
-        else:
-            self._max_depth = int(max_depth)
-            if self._max_depth < 1:
-                raise ValueError(
-                    "mojolearn IsolationForest: max_depth is None (their "
-                    f"auto) or a positive int, got {max_depth!r}"
-                )
-
-        # max_features: 0 = float fraction (their default 1.0), 1 = int.
-        if is_bool(max_features):
-            raise ValueError(
-                "mojolearn IsolationForest: max_features must be an int or a "
-                "float, not a bool"
-            )
-        if isinstance(max_features, numbers.Integral):
-            if int(max_features) < 1:
-                raise ValueError(
-                    "mojolearn IsolationForest: max_features must be an int "
-                    "in [1, n_features] or a float in (0.0, 1.0], got "
-                    f"{max_features!r}"
-                )
-            self._max_features_mode = 1
-            self._max_features_int = int(max_features)
-            self._max_features_frac = 1.0
-        else:
-            v = float(max_features)
-            if not (0.0 < v <= 1.0):
-                raise ValueError(
-                    "mojolearn IsolationForest: max_features must be an int "
-                    "in [1, n_features] or a float in (0.0, 1.0], got "
-                    f"{max_features!r}"
-                )
-            self._max_features_mode = 0
-            self._max_features_int = 0
-            self._max_features_frac = v
-
-        if isinstance(contamination, str):
-            if contamination.lower() != "auto":
-                raise ValueError(
-                    "mojolearn IsolationForest: contamination must be 'auto' "
-                    f"or a float in the range (0.0, 0.5], got "
-                    f"{contamination!r}"
-                )
-            self._contamination_auto = True
-            self._contamination = 0.0
-        else:
-            v = float(contamination)
-            if not (0.0 < v <= 0.5):
-                raise ValueError(
-                    "mojolearn IsolationForest: contamination must be 'auto' "
-                    f"or a float in the range (0.0, 0.5], got "
-                    f"{contamination!r}"
-                )
-            self._contamination_auto = False
-            self._contamination = v
-
-        if random_state is None:
-            seed = 0
-        else:
-            seed = int(random_state)
-            if not (0 <= seed <= 4294967295):
-                raise ValueError(
-                    "mojolearn IsolationForest: expected "
-                    f"0 <= random_state <= 2**32 - 1, got {random_state!r}"
-                )
-        if warm_start:
-            raise NotImplementedError(
-                "mojolearn IsolationForest: warm_start=True is not supported "
-                "(cuML raises UnsupportedOnGPU for it too)"
-            )
-        if n_jobs is not None:
-            raise NotImplementedError(
-                "mojolearn IsolationForest: n_jobs is refused; it is "
-                "scikit-learn's CPU thread count and there is no CPU path in "
-                "this library to spread"
-            )
-        if verbose:
-            raise NotImplementedError(
-                "mojolearn IsolationForest: verbose is refused; this implementation "
-                "prints no log lines, so accepting it would be accepting-"
-                "and-ignoring"
-            )
-        if output_type is not None:
-            raise NotImplementedError(
-                "mojolearn IsolationForest: output_type is a cuML-internal "
-                "array-type selector; this package returns mojolearn Arrays"
-            )
-
-        self._n_estimators = n_estimators
-        self._bootstrap = bool(bootstrap)
-        self._seed = seed
-
-    def _params(self, n_train, n_features, n_query, want):
-        # ORDER MATCHES bindings/_mojolearn_svm.mojo::iforest_run_binding.
-        # n_train, n_features, n_query, n_estimators, max_samples_mode,
-        # max_samples_int, max_samples_frac, max_depth, max_features_mode,
-        # max_features_int, max_features_frac, bootstrap, random_state,
-        # contamination_auto, contamination, want
-        if "_seed" not in self.__dict__:  # an instance assembled without fit or load
-            self._validate_params()
-        return [
-            n_train,
-            n_features,
-            n_query,
-            self._n_estimators,
-            self._max_samples_mode,
-            self._max_samples_int,
-            self._max_samples_frac,
-            self._max_depth,
-            self._max_features_mode,
-            self._max_features_int,
-            self._max_features_frac,
-            1 if self._bootstrap else 0,
-            self._seed,
-            1 if self._contamination_auto else 0,
-            self._contamination,
-            want,
-        ]
-
-    def _run(self, X, want, fresh=False):
-        """One fit-and-score. DEVIATION 874: the fit happens here, every
-        time, on the training matrix `fit` kept, unless the binary keeps the
-        forest resident (IDN_IF_RESIDENT); `fresh` (what `fit` passes) asks
-        such a binary for a new forest."""
-        if not hasattr(self, "_x"):
-            raise ValueError("mojolearn IsolationForest: call fit() first")
-        q, _ = as_f32_c(X, ndim=2, name="X")
-        if q.shape[1] != self.n_features_in_:
-            raise ValueError(
-                f"mojolearn IsolationForest: X has {q.shape[1]} features, fit "
-                f"saw {self.n_features_in_}"
-            )
-        n_query = q.shape[0]
-        train = self._x  # kept in a local: the Mojo side borrows the address
-        # DEVIATION 2344: `_buffer.empty` output `Array`s; nothing here
-        # reads them on the host except the three-slot `info`.
-        # The native contract touches exactly one result address according
-        # to `want`; do not allocate the other million-row boundary buffer.
-        values = None if want == _WANT_PREDICT else empty((n_query,), "<f4")
-        labels = empty((n_query,), "<i4") if want == _WANT_PREDICT else None
-        b = self._bind("_mojolearn_svm")
-        # Lane fam2-forests (IDN_IF_RESIDENT): a binary that keeps the fitted
-        # forest resident takes a 17th param, the token of this estimator's
-        # forest (0 = fit a fresh one), and returns the token in info[3].
-        # A scoring call then runs no fit. Other binaries refit per call
-        # (DEVIATION 874), unchanged.
-        probe = getattr(b, "iforest_resident", None)
-        resident = probe is not None and int(probe()) == 1
-        info = empty((4 if resident else 3,), "<f8")
-        params = self._params(train.shape[0], train.shape[1], n_query, want)
-        if resident:
-            params.append(0 if fresh else int(self.__dict__.get("_if_token", 0)))
-        b.iforest_run(
-            addr_ro(train, name="X (training)"),
-            addr_ro(q, name="X"),
-            0 if values is None else addr(values, name="scores"),
-            0 if labels is None else addr(labels, name="labels"),
-            addr(info, name="info"),
-            params,
-        )
-        # the float32 the device subtracts (`Float32(offset_)`), so
-        # decision_function is exactly score_samples - offset_ rounded once
-        self.offset_ = array.array("f", [float(info[0])])[0]
-        self.max_samples_ = int(info[1])
-        if resident:
-            token = int(info[3])
-            if token != self.__dict__.get("_if_token", 0):
-                self._release_resident()
-                # Run while Python and the GPU binding are still alive, even
-                # for estimators retained until interpreter shutdown. Keep the
-                # native entry itself, not a late module lookup in __del__.
-                self._if_finalizer = weakref.finalize(
-                    self, b.iforest_resident_release, token
-                )
-            self._if_token = token
-        return labels if want == _WANT_PREDICT else values
-
-    def _release_resident(self):
-        """Drop this estimator's resident forest in the binding, if any."""
-        token = self.__dict__.pop("_if_token", 0)
-        finalizer = self.__dict__.pop("_if_finalizer", None)
-        if finalizer is not None:
-            try:
-                finalizer()
-            except Exception:  # noqa: BLE001 - match explicit release semantics
-                pass
-            return
-        if not token:
-            return
-        try:
-            release = getattr(self._bind("_mojolearn_svm"), "iforest_resident_release", None)
-            if release is not None:
-                release(int(token))
-        except Exception:  # noqa: BLE001 - a release that cannot run frees nothing
-            pass
-
-    def __del__(self):
-        self._release_resident()
-
     def __getstate__(self):
         # The token names a forest in THIS process's binding; a copy or an
         # unpickled estimator fits its own on its first scoring call.
         state = dict(self.__dict__)
         state.pop("_if_token", None)
-        state.pop("_if_finalizer", None)
+        state.pop("_if_lifetime", None)
         return state
 
     # sk-edges: no `sample_weight` parameter. The forest builder
@@ -473,37 +204,7 @@ class IsolationForest(NumericModeMixin):
         -------
         self
         """
-        self._validate_params()
-        x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
-        # A binary that scans the uploaded matrix on the device refuses a
-        # non-finite X inside the fit, so the host scan here would be the same
-        # refusal twice: `iforest_device_scan` (lane gap-trees-nv,
-        # IF_DEVICE_TRANSPOSE) or `iforest_device_finite_scan` (lane
-        # apple-fast-trees2, IF_FAST_ROWMAJOR, FAST on Apple).
-        b = self._bind("_mojolearn_svm")
-        scans = [getattr(b, n, None) for n in ("iforest_device_scan", "iforest_device_finite_scan")]  # glue: looks up two binding entries
-        device_scan = any(f is not None and int(f()) == 1 for f in scans)  # glue: checks two binding entries
-        if not device_scan and not all_finite(x):
-            # was a bare Exception from the native fit; scikit-learn raises
-            # ValueError for the same input
-            raise ValueError("mojolearn IsolationForest: X contains NaN or infinity")
-        had = {k: self.__dict__[k] for k in ("_x", "n_features_in_") if k in self.__dict__}  # glue: saves two attribute names
-        self._release_resident()  # the previous fit's resident forest, if any
-        self._x = x  # retained for bindings that reconstruct a missing forest
-        self.n_features_in_ = x.shape[1]
-        try:
-            self._run(x[:1], _WANT_SCORE_SAMPLES, fresh=True)  # one row, an `Array` copy
-        except Exception as exc:  # noqa: BLE001
-            msg = str(exc)
-            if device_scan and ("Input X contains" in msg or "does not accept non-finite" in msg):
-                for k in ("_x", "n_features_in_"):  # glue: restores two attribute names
-                    self.__dict__.pop(k, None)
-                self.__dict__.update(had)
-                raise ValueError(
-                    "mojolearn IsolationForest: X contains NaN or infinity"
-                ) from None
-            raise
-        return self
+        return _TREES(self, "trees_iforest_fit", (X, y), _TREES_CONTEXT)
 
     def score_samples(self, X):
         """Anomaly score of each row; lower is more anomalous.
@@ -515,7 +216,7 @@ class IsolationForest(NumericModeMixin):
         -------
         Array of shape (n_samples,), float64
         """
-        return self._run(X, _WANT_SCORE_SAMPLES)
+        return _TREES(self, "trees_iforest_score_samples", (X,), _TREES_CONTEXT)
 
     def decision_function(self, X):
         """`score_samples(X) - offset_`, computed in float32 and returned as float64; negative means
@@ -525,7 +226,7 @@ class IsolationForest(NumericModeMixin):
         -------
         Array of shape (n_samples,), float64
         """
-        return self._run(X, _WANT_DECISION_FUNCTION)
+        return _TREES(self, "trees_iforest_decision_function", (X,), _TREES_CONTEXT)
 
     def predict(self, X):
         """Label each row: -1 for an anomaly, 1 for an inlier.
@@ -534,11 +235,11 @@ class IsolationForest(NumericModeMixin):
         -------
         Array of shape (n_samples,), int32
         """
-        return self._run(X, _WANT_PREDICT)
+        return _TREES(self, "trees_iforest_predict", (X,), _TREES_CONTEXT)
 
     def fit_predict(self, X, y=None):
         """Fit on `X` and return `predict(X)`."""
-        return self.fit(X, y=y).predict(X)
+        return _TREES(self, "trees_iforest_fit_predict", (X, y), _TREES_CONTEXT)
 
     def save(self, path):
         """Write the fitted model to `path` as an npz file.
@@ -546,27 +247,7 @@ class IsolationForest(NumericModeMixin):
         The file holds the training matrix and the resolved parameters the
         forest is built from, so it is as large as the training data.
         """
-        if not hasattr(self, "_x"):
-            raise RuntimeError("this estimator is not fitted yet")
-        if "_seed" not in self.__dict__:  # an instance assembled without fit or load
-            self._validate_params()
-        from .linear_model import _saved_mode
-        return _serialize.write_npz(path, {
-            "format": _IFOREST_FORMAT,
-            "estimator": type(self).__name__,
-            "numeric_mode": _saved_mode(self),
-            "x": self._x,
-            "ints": Array.from_list([
-                int(self._n_estimators), self._max_samples_mode, self._max_samples_int,
-                self._max_depth, self._max_features_mode, self._max_features_int,
-                1 if self._bootstrap else 0, self._seed, 1 if self._contamination_auto else 0,
-                int(self.n_features_in_), int(self.max_samples_),
-            ], "<i8"),
-            "reals": Array.from_list([
-                float(self._max_samples_frac), float(self._max_features_frac),
-                float(self._contamination), float(self.offset_),
-            ], "<f8"),
-        })
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -575,37 +256,26 @@ class IsolationForest(NumericModeMixin):
         The saved parameters pass through the constructor again, so the same
         checks apply to a loaded file.
         """
-        from .linear_model import _check_saved_by, _restore_mode
-        arrays = _serialize.read_npz(path, _IFOREST_FORMAT)
-        _check_saved_by(arrays, path, cls)
-        ints = _serialize.exact(arrays, "ints", "<i8")
-        reals = _serialize.exact(arrays, "reals", "<f8")
-        if ints.size != _IFOREST_INTS or reals.size != _IFOREST_REALS:
-            raise ValueError(
-                f"mojolearn: {path!r} holds {ints.size} ints and {reals.size} reals, "
-                f"{_IFOREST_INTS} and {_IFOREST_REALS} are needed"
-            )
-        (n_est, ms_mode, ms_int, depth, mf_mode, mf_int, boot, seed, c_auto, nf,
-         ms_resolved) = (int(ints[i]) for i in range(_IFOREST_INTS))  # glue: unpacks the fixed int vector
-        ms_frac, mf_frac, contamination, offset = (float(reals[i]) for i in range(_IFOREST_REALS))  # glue: unpacks the fixed real vector
-        if ms_mode not in (0, 1, 2) or mf_mode not in (0, 1) or c_auto not in (0, 1) or boot not in (0, 1):
-            raise ValueError(f"mojolearn: {path!r} carries an unknown knob mode")
-        obj = cls(
-            n_estimators=n_est,
-            max_samples="auto" if ms_mode == 0 else (ms_int if ms_mode == 1 else ms_frac),
-            max_depth=None if depth == -1 else depth,
-            max_features=mf_int if mf_mode == 1 else mf_frac,
-            bootstrap=bool(boot),
-            contamination="auto" if c_auto else contamination,
-            random_state=seed,
-        )
-        obj._validate_params()
-        _restore_mode(obj, arrays)
-        x = _serialize.exact(arrays, "x", "<f4")
-        if x.ndim != 2 or x.shape[1] != nf or x.shape[0] < 1:
-            raise ValueError(f"mojolearn: {path!r} x has shape {tuple(x.shape)}, meta says {nf} features")
-        obj._x = x
-        obj.n_features_in_ = nf
-        obj.offset_ = offset
-        obj.max_samples_ = ms_resolved
-        return obj
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
+
+
+# `save` and `load` are one native call each (bindings/archive_schema_native.mojo
+# writes this schema, the members, dtypes and order of the 0.8.55 Python
+# `save`; bindings/host_archive_native.mojo `host_archive_public_iforest`
+# builds the loaded model with the Python loader's refusals, the saved knobs
+# checked again by the native `_validate_params`).
+_native_archive_bridge.register(IsolationForest, _IFOREST_FORMAT, (
+    ("need", "_x", "RuntimeError", "this estimator is not fitted yet"),
+    ("iforest_knobs",),
+    ("format", "format", _IFOREST_FORMAT),
+    ("estimator", "estimator"),
+    ("mode", "numeric_mode", "mojolearn: "),
+    ("array", "x", "_x"),
+    ("i8", "ints", (("int", "_n_estimators"), ("int", "_max_samples_mode"), ("int", "_max_samples_int"),
+                    ("int", "_max_depth"), ("int", "_max_features_mode"), ("int", "_max_features_int"),
+                    ("bool", "_bootstrap"), ("int", "_seed"), ("bool", "_contamination_auto"),
+                    ("int", "n_features_in_"), ("int", "max_samples_"))),
+    ("f8", "reals", (("float", "_max_samples_frac"), ("float", "_max_features_frac"),
+                     ("float", "_contamination"), ("float", "offset_"))),
+), trees_integral_type=numbers.Integral, trees_missing=object())
+_native_trees_bridge.register(IsolationForest, "iforest")

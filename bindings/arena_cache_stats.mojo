@@ -4,6 +4,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
 from bindings.optimizer_public_words import stash_python_error
+from bindings.sequence_dtype_native import sequence_dtype_create
 
 
 def _string_keys(mapping: PythonObject, context: PythonObject) raises:
@@ -113,6 +114,18 @@ def _hash_key(value: PythonObject, context: PythonObject) raises:
         var native = False
         for i in range(len(types)):  # driver-loop: exact immutable builtin hashing and equality slots
             native = native or cls is types[i]
+        if native:
+            continue
+        # The earlier read-only owner admitted exact NumPy byte/unicode
+        # scalar prefixes. Preserve that surface when get/stats share this
+        # iterative key walk; these immutable scalar slots cannot call an
+        # application's __hash__ or __eq__. Creating the native descriptor
+        # validates NumPy's connected dtype entry without importing NumPy or
+        # constructing/converting the caller's scalar. Subclasses stay out.
+        var scalar = context["cache_scalar_context"]
+        if py_get(scalar["modules"], "numpy") is not None:
+            for code in ["S", "U"]:  # driver-loop: the two supported immutable NumPy string scalar identities
+                native = native or cls is sequence_dtype_create(PythonObject(code), scalar).type
         if native:
             continue
         if cls is not context["arena_native_types"]["tuple"]:

@@ -7,10 +7,13 @@ from ._optional_numpy import require_numpy
 from ._mode import ParamsMixin
 np = require_numpy('_x_sequence_theta')
 
-from . import _backend
+from . import _native_xseq_bridge
+
+# Package-import connection: fit and predict are ONE call each into the
+# compiled owner (bindings/xseq_forecast_native.mojo).
+_XSEQ, _XSEQ_CONTEXT = _native_xseq_bridge.connect()
 
 _MODELS = {"STM": 0, "OTM": 1, "DSTM": 2, "DOTM": 3}
-_MODEL_NAMES = np.array(list(_MODELS), dtype=object)
 
 
 # Fitted on the GPU one series per thread (`sequence/theta.mojo`): auto_theta's
@@ -114,46 +117,7 @@ class AutoTheta(ParamsMixin):
         ValueError
             If a series has 3 or fewer observations.
         """
-        if X is not None:
-            raise NotImplementedError("Theta: exogenous regressors are not implemented")
-        y = np.asarray(y)
-        if y.dtype == np.float64:
-            raise TypeError("Theta: float64 is refused; pass float32")
-        self._one = y.ndim == 1
-        # a private copy: the fitted series cannot change under a stored forecast
-        self._y = np.array(y, dtype=np.float32, order="C", copy=True).reshape(1, -1) if self._one else \
-            np.array(y, dtype=np.float32, order="C", copy=True)
-        if self._y.ndim != 2 or self._y.shape[1] <= 3:
-            raise ValueError("Theta: each series needs more than 3 observations")
-        self._fitted_h = None
-        return self
-
-    def _key(self, h):
-        return (int(h), self.season_length, self.decomposition_type, self.model, self.initial_smoothed,
-                self.alpha, self.theta, self.numeric_mode)
-
-    def _run(self, h):
-        # the fit runs inside the forecast call; a repeat of the same call on
-        # the same fitted series returns the stored answer (lane py-sequence)
-        key = self._key(h)
-        cached = getattr(self, "_fitted_h", None)
-        if cached is not None and cached[0] == key:
-            self.info_, self.model_ = cached[2].copy(), list(cached[3])
-            return cached[1].copy()
-        B, n = self._y.shape
-        f = np.zeros((B, h), dtype=np.float32)
-        info = np.zeros((B, 8), dtype=np.float32)
-        mask = (int(self.initial_smoothed is not None) | 2 * int(self.alpha is not None)
-                | 4 * int(self.theta is not None))
-        fp = [0.0 if v is None else float(v) for v in (self.initial_smoothed, self.alpha, self.theta)]  # glue: the three smoothing parameter arguments
-        _backend.binding("_mojolearn_x_sequence", self.numeric_mode).theta(
-            [self._y.ctypes.data, f.ctypes.data, info.ctypes.data],
-            [B, n, int(h), self.season_length, -1 if self.model is None else _MODELS[self.model],
-             0 if self.decomposition_type == "multiplicative" else 1, mask], fp)
-        self.info_ = info
-        self.model_ = _MODEL_NAMES[info[:, 4].astype(np.intp)].tolist()
-        self._fitted_h = (key, f.copy(), info.copy(), list(self.model_))
-        return f
+        return _XSEQ(self, "theta_fit", (y, X), _XSEQ_CONTEXT)
 
     def predict(self, h, X=None, level=None):
         """Fit the theta model and forecast h steps ahead.
@@ -174,10 +138,7 @@ class AutoTheta(ParamsMixin):
             ``{"mean": forecasts}``, shaped ``(h,)`` for a single series or
             ``(batch_size, h)`` for a batch.
         """
-        if level is not None:
-            raise NotImplementedError("Theta: prediction intervals (level) are not implemented")
-        f = self._run(int(h))
-        return {"mean": f[0] if self._one else f}
+        return _XSEQ(self, "theta_predict", (h, X, level), _XSEQ_CONTEXT)
 
     def forecast(self, y, h, X=None, X_future=None, level=None, fitted=False):
         """Fit ``y`` and forecast ``h`` steps in one call.
@@ -412,3 +373,6 @@ class DynamicOptimizedTheta(AutoTheta):
     (12,)
     """
     _MODEL = "DOTM"
+
+
+_native_xseq_bridge.register(xseq_theta_codes=_MODELS, xseq_theta_models=tuple(_MODELS))

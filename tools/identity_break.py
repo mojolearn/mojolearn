@@ -6371,7 +6371,9 @@ def _(ml, X, yc, yr, Xh=None):
     expected = [a.copy() for a in shards[0]]
     for shard in shards[1:]:
         expected = [np.add(a, b, dtype=np.float32) for a, b in zip(expected, shard)]
-    got = ordered_sum_gradients(iter(shards))
+    # Native product execution accepts concrete shard containers without invoking
+    # Python iteration hooks. Keep the same shard order and numerical oracle.
+    got = ordered_sum_gradients(shards)
     if len(got) != len(expected):
         raise AssertionError("ordered gradient sum lost a tensor")
     mismatch = False

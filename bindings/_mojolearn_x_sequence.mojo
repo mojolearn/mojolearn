@@ -50,6 +50,7 @@ from sequence.x_sequence_impl import device_executors
 from autograd.program_control_grad_pyapi import ops_program_control_vjp_py
 from autograd.pyapi import model_fit_py, model_labels_check, model_labels_result, model_n_params_py, model_predict_py
 from autograd.pyapi import model_gather_labels_py
+from autograd.pyapi import model_fit_labels_check, model_fit_labels_py, model_predict_labels_py
 from autograd.pyapi import model_import_params_py, ops_load_weights_py
 from core.label_cast_device import device_unique_inverse_cast
 from sequence.exec_device import sequence_ctx
@@ -65,10 +66,10 @@ from autograd.pyapi import (
 from autograd.ops_api import OPS_DEVICE
 # the ONNX model reader and shape resolution (autograd/import_reader.mojo,
 # import_resolve.mojo): host only, the same entries in both bindings
-from autograd.import_reader_pyapi import onnx_read_py, onnx_info_py, onnx_copy_blob_py, onnx_close_py
+from autograd.import_reader_pyapi import onnx_read_py, onnx_info_py, onnx_buffers_py, onnx_close_py
 from autograd.import_resolve_pyapi import onnx_resolve_py
-# the lowering onto session operations and the GraphIR-from-words handle (autograd/import_lower.mojo)
-from autograd.import_lower_pyapi import onnx_import_py, onnx_from_words_py
+# the lowering onto session operations (autograd/import_lower.mojo)
+from autograd.import_lower_pyapi import onnx_import_py, onnx_import_file_py
 from autograd.model_verify_pyapi import verify_digest_py, verify_file_sha256_py, verify_fill_py, verify_model_info_py
 from autograd.model_checkpoint_pyapi import (
     model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py, ops_load_state_py,
@@ -242,6 +243,27 @@ def model_labels_binding(src: PythonObject, classes_addr: PythonObject, codes_ad
     var ctx = sequence_ctx()
     var k = device_unique_inverse_cast(ctx, ck[0], ck[1], Int(py=classes_addr), Int(py=codes_addr))
     return model_labels_result(k)
+
+
+def model_predict_labels_binding(addrs: PythonObject, prog: PythonObject, ptab: PythonObject, ip: PythonObject) raises -> PythonObject:
+    """Sequential.predict of a classifier: the codes and the label gather
+    stay on the executor (autograd/pyapi.mojo model_predict_labels_py)."""
+    var ex = DeviceExec()
+    return model_predict_labels_py(ex, addrs, prog, ptab, ip)
+
+
+def model_fit_labels_binding(
+    addrs: PythonObject, prog: PythonObject, ip: PythonObject, fp: PythonObject, lab: PythonObject,
+) raises -> PythonObject:
+    """Sequential.fit of a classifier in one call: the label sort writes the
+    classes to the caller's buffer and the codes into an executor buffer,
+    and the fit reads them there (autograd/pyapi.mojo model_fit_labels_py).
+    Returns [class count, epochs run]."""
+    var la = model_fit_labels_check(lab)
+    var ex = DeviceExec()
+    var codes = ex.alloc(la[0].rows)
+    var k = device_unique_inverse_cast(ex.ctx, la[0], la[1], la[2], Int(codes), True)
+    return model_fit_labels_py(ex, k, codes, la[3], la[4], addrs, prog, ip, fp)
 
 
 def model_gather_labels_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
@@ -803,8 +825,9 @@ def onnx_info_binding(h: PythonObject) raises -> PythonObject:
     return onnx_info_py(h)
 
 
-def onnx_copy_blob_binding(h: PythonObject, addr: PythonObject) raises -> PythonObject:
-    return onnx_copy_blob_py(h, addr)
+def onnx_buffers_binding(h: PythonObject) raises -> PythonObject:
+    """The address of each buffer graph h holds (the model file, its own bytes, each external data file)."""
+    return onnx_buffers_py(h)
 
 
 def onnx_resolve_binding(h: PythonObject, names: PythonObject, flat: PythonObject) raises -> PythonObject:
@@ -824,11 +847,11 @@ def onnx_import_binding(
     return onnx_import_py[DeviceExec, OPS_DEVICE](h, sid, names, flat, addrs, source)
 
 
-def onnx_from_words_binding(
-    words: PythonObject, strings: PythonObject, floats: PythonObject, addrs: PythonObject,
+def onnx_import_file_binding(
+    path: PythonObject, sid: PythonObject, names: PythonObject, flat: PythonObject, source: PythonObject,
 ) raises -> PythonObject:
-    """A graph handle from onnx_info's word layout (a torch.export GraphIR)."""
-    return onnx_from_words_py(words, strings, floats, addrs)
+    """importers.import_model of an ONNX file: read, resolve, refuse, lower and capture in session sid."""
+    return onnx_import_file_py[DeviceExec, OPS_DEVICE](path, sid, names, flat, source)
 
 
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_sequence.mojo
@@ -855,6 +878,8 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_function[model_n_params_binding]("model_n_params")
         m.def_function[model_labels_binding]("model_labels")
         m.def_function[model_gather_labels_binding]("model_gather_labels")
+        m.def_function[model_predict_labels_binding]("model_predict_labels")
+        m.def_function[model_fit_labels_binding]("model_fit_labels")
         m.def_function[model_import_params_binding]("model_import_params")
         m.def_function[ops_load_weights_binding]("ops_load_weights")
         # the operation session (autograd/ops_api.mojo)
@@ -986,11 +1011,11 @@ def build__mojolearn_x_sequence() -> PythonObject:
         # the ONNX model reader (autograd/import_reader.mojo, import_resolve.mojo)
         m.def_function[onnx_read_binding]("onnx_read")
         m.def_function[onnx_info_binding]("onnx_info")
-        m.def_function[onnx_copy_blob_binding]("onnx_copy_blob")
+        m.def_function[onnx_buffers_binding]("onnx_buffers")
         m.def_function[onnx_resolve_binding]("onnx_resolve")
         m.def_function[onnx_close_binding]("onnx_close")
         m.def_function[onnx_import_binding]("onnx_import")
-        m.def_function[onnx_from_words_binding]("onnx_from_words")
+        m.def_function[onnx_import_file_binding]("onnx_import_file")
         comptime if SEQ_MOE_DEVICE_IO:
             m.def_function[moe_forward_dev_binding]("moe_forward_dev")
         return m.finalize()

@@ -36,13 +36,10 @@ transforms from a saved model on a CPU without a GPU.
 # `1 / n_features`, one Python division, correctly rounded on every host.
 # No speed claim: the lane has no published number and this door adds none.
 
-from . import _backend, _native_archive_bridge
-from ._scale_gamma import scale_gamma, scale_gamma_x
-from ._sample_weight import check_sample_weight
-from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, as_f64_c, empty, full
-from ._lazy_out import _empty_out, _mapped_out
+from . import _backend, _native_archive_bridge, _native_family_bridge
 from ._mode import NumericModeMixin
 from ._mode import RegressorScoreMixin
+from ._metrics_impl import _get_binding
 
 #: The saved-model formats (lane/inference-linear-svm, 2026-09-15):
 #: `mojolearn.host_model(path)` predicts or transforms from each on a CPU.
@@ -55,6 +52,11 @@ _RBF_SAMPLER_FORMAT = "mojolearn-rbf-sampler-1"
 # writes the schema registered after each class; host_archive_native.mojo
 # builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
+# The compiled family owner (bindings/kernel_methods_native.mojo), connected
+# once at import: KernelRidge `fit`/`predict` and Nystroem `fit`/`transform`/
+# `fit_transform` are one native call each, handed the binding `_bind`
+# resolves; the tables it reads are connected below `_MODE_CODE`/`_KERNELS`.
+_NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 
 
 #: `checks/numerics.mojo` codes, duplicated on purpose (the GP's reason):
@@ -92,29 +94,7 @@ _KERNELS = {
 #: exactly as scikit-learn's `pairwise_kernels` ignores it.
 _NEEDS_GAMMA = frozenset({KERNEL_POLYNOMIAL, KERNEL_RBF, KERNEL_SIGMOID, KERNEL_LAPLACIAN})
 
-
-def _kernel_code(kernel, where, precomputed=False):
-    if kernel == "precomputed" and precomputed:
-        return KERNEL_PRECOMPUTED
-    if kernel == "precomputed":
-        raise ValueError(
-            f"mojolearn {where}: kernel='precomputed' is refused by name; the "
-            "lane forms the kernel matrix on the device and takes no matrix "
-            "from the caller (kernel_methods/NOT_IMPLEMENTED.tsv)"
-        )
-    if isinstance(kernel, str):
-        if kernel not in _KERNELS:
-            raise ValueError(
-                f"mojolearn {where}: kernel must be one of "
-                f"{sorted(_KERNELS)}, got {kernel!r}"
-            )
-        return _KERNELS[kernel]
-    if isinstance(kernel, bool) or not isinstance(kernel, int):
-        raise TypeError(
-            f"mojolearn {where}: kernel must be a name or a KM_KERNEL code, "
-            f"got {type(kernel).__name__}"
-        )
-    return int(kernel)
+_native_family_bridge.tables(family_km_kernels=dict(_KERNELS), family_km_mode_codes=dict(_MODE_CODE))
 
 
 def _real(v, name, where):
@@ -124,36 +104,6 @@ def _real(v, name, where):
             f"{type(v).__name__}"
         )
     return float(v)
-
-
-def _gamma_for(gamma, n_features, where, kernel=None):
-    """scikit-learn's `gamma=None` is `1 / n_features`, except for
-    `chi2_kernel`, whose own default is `gamma=1.0`."""
-    if gamma is None and kernel == KERNEL_CHI2:
-        return 1.0
-    if gamma is None:
-        return 1.0 / float(n_features)
-    return _real(gamma, "gamma", where)
-
-
-def _check_chi2_input(x, kernel, where):
-    """scikit-learn's chi2 kernels refuse negative input ("X contains
-    negative values"); so do these, before any device work."""
-    if kernel in (KERNEL_CHI2, KERNEL_ADDITIVE_CHI2) and x.size and float(x.min()) < 0.0:
-        raise ValueError(f"mojolearn {where}: X contains negative values (the chi2 kernels need x >= 0)")
-
-
-def _sqrt_weights(sample_weight, n, where):
-    """The float64 sample weights the binding takes the square roots of
-    (`np.sqrt(np.atleast_1d(sample_weight))`: each factor the correctly
-    rounded binary64 square root rounded once to float32, in Mojo). The
-    finiteness and sign checks run in the core helpers. None when
-    unweighted."""
-    if sample_weight is None:
-        return None
-    # scikit-learn's _check_sample_weight: shape, finite, >= 0, not all zero
-    # (its wording), by the base binding's reductions; read only
-    return check_sample_weight(sample_weight, n, dtype="<f8")
 
 
 class _KernelMethodBase(NumericModeMixin):
@@ -261,15 +211,6 @@ class KernelRidge(RegressorScoreMixin, _KernelMethodBase):
         self.degree = degree
         self.coef0 = coef0
 
-    def _kp(self, n_features):
-        k = _kernel_code(self.kernel, self._WHERE, precomputed=True)
-        if isinstance(self.degree, bool) or not isinstance(self.degree, int):
-            raise TypeError(
-                f"mojolearn {self._WHERE}: degree must be an int, got "
-                f"{type(self.degree).__name__}"
-            )
-        return k, int(self.degree), _gamma_for(self.gamma, n_features, self._WHERE, k), _real(self.coef0, "coef0", self._WHERE)
-
     # Maintainer notes: `kernel_ridge_fit_host`. `sample_weight` is
     # scikit-learn's `_solve_cholesky_kernel` weighted arm: `sw = sqrt(w)`
     # (binary64, rounded once to float32), `y * sw`, `K * outer(sw, sw)`,
@@ -293,51 +234,7 @@ class KernelRidge(RegressorScoreMixin, _KernelMethodBase):
         self : KernelRidge
             The fitted estimator.
         """
-        x, _ = as_f32_dense_c(X, ndim=2, name="X")
-        n, d = x.shape
-        yy, _ = as_f32_c(y, ndim=None, name="y")
-        if yy.ndim == 1:
-            t, squeeze = 1, True
-        elif yy.ndim == 2:
-            t, squeeze = yy.shape[1], False
-        else:
-            raise ValueError(f"mojolearn {self._WHERE}: y must be 1-D or 2-D, got {yy.ndim}-D")
-        if yy.shape[0] != n:
-            raise ValueError(
-                f"mojolearn {self._WHERE}: y has {yy.shape[0]} rows, X has {n}"
-            )
-        kernel, degree, gamma, coef0 = self._kp(d)
-        _check_chi2_input(x, kernel, self._WHERE)
-        if kernel == KERNEL_PRECOMPUTED and d != n:
-            raise ValueError(
-                f"mojolearn {self._WHERE}: kernel='precomputed' needs the square "
-                f"n x n kernel matrix as X, got {n} x {d}"
-            )
-        alpha = _real(self.alpha, "alpha", self._WHERE)
-        flat_y = yy.reshape((n * t,))
-        dual = empty((n * t,), "<f4")
-        scalars = empty((1,), "<f8")
-        sw = _sqrt_weights(sample_weight, n, self._WHERE)
-        tail = [] if sw is None else [addr_ro(sw, name="sample_weight")]
-        ext = self._extension()
-        # glue: the pointer entry when the binding registers it (IDENTICAL
-        # device builds, `KRR_IDN_PTR_IN`); the same addrs and params.
-        fit_fn = getattr(ext, "kernel_ridge_fit_ptr", None) or ext.kernel_ridge_fit
-        info = fit_fn(
-            # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::kernel_ridge_fit_binding.
-            # x, y, dual_out, scalars_out[, sw]
-            [addr_ro(x, name="X"), addr_ro(flat_y, name="y"), addr(dual, name="dual_coef_"), addr(scalars, name="scalars")] + tail,
-            # n, d, t, kernel, degree, gamma, coef0, alpha
-            [n, d, t, kernel, degree, gamma, coef0, alpha],
-        )
-        self.X_fit_ = x
-        self.n_features_in_ = d
-        self.n_targets_ = t
-        self._squeeze = squeeze
-        self.dual_coef_ = dual if squeeze else dual.reshape((n, t))
-        self.info_ = int(info)
-        self._kernel_params = (kernel, degree, gamma, coef0, alpha)
-        return self
+        return _NATIVE(self, "family_km_krr_fit", (self._bind(), X, y, sample_weight), _NATIVE_CONTEXT)
 
     # Maintainer note: `K(X, X_fit_) . dual_coef_` through the identical GEMM
     # (DEVIATION 1680).
@@ -355,32 +252,39 @@ class KernelRidge(RegressorScoreMixin, _KernelMethodBase):
         Array of shape (n_queries,) or (n_queries, n_targets), float32
             Predictions, 1-D when the fitted `y` was 1-D.
         """
-        if not hasattr(self, "dual_coef_"):
-            raise ValueError(f"mojolearn {self._WHERE}: call fit before predict")
-        xq, _ = as_f32_dense_c(X, ndim=2, name="X")
-        q, d = xq.shape
-        if d != self.n_features_in_:
-            raise ValueError(
-                f"mojolearn {self._WHERE}: X has {d} features, the fit had {self.n_features_in_}"
-            )
-        n, t = self.X_fit_.shape[0], self.n_targets_
-        kernel, degree, gamma, coef0, alpha = self._kernel_params
-        _check_chi2_input(xq, kernel, self._WHERE)
-        flat_dual = self.dual_coef_.reshape((n * t,))
-        out = empty((q * t,), "<f4")
-        ext = self._extension()
-        # glue: the pointer entry when the binding registers it (`KRR_IDN_PTR_IN`)
-        predict_fn = getattr(ext, "kernel_ridge_predict_ptr", None) or ext.kernel_ridge_predict
-        predict_fn(
-            # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::kernel_ridge_predict_binding.
-            # x_fit, dual, x_new, out
-            [addr_ro(self.X_fit_, name="X_fit_"), addr_ro(flat_dual, name="dual_coef_"), addr_ro(xq, name="X"), addr(out, name="predict")],
-            # n, d, t, kernel, degree, gamma, coef0, alpha, info, q
-            [n, d, t, kernel, degree, gamma, coef0, alpha, self.info_, q],
-        )
-        if self._squeeze:
-            return out
-        return out.reshape((q, t))
+        return _NATIVE(self, "family_km_krr_predict", (self._bind(), X), _NATIVE_CONTEXT)
+
+    def score(self, X, y, sample_weight=None):
+        """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,) or (n_samples, n_outputs)
+            True targets.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            R^2, averaged uniformly over outputs; 1.0 is a perfect fit.
+        """
+        return _NATIVE(self, "family_km_krr_score",
+                       (self._bind(), X, y, sample_weight, _get_binding(getattr(self, "numeric_mode", None))),
+                       _NATIVE_CONTEXT)
+
+    # The fitted X and dual live on the device after the first predict,
+    # under `_resident_holder` (bindings/kernel_methods_native.mojo). A
+    # pickle or a deepcopy carries no device handle; the copy uploads its
+    # own at its first predict. Dropping an instance releases the handle
+    # through the native finalizer connected below the classes.
+    def __getstate__(self):
+        return _NATIVE(self, "family_km_getstate", (), _NATIVE_CONTEXT)
+
+    def __setstate__(self, state):
+        _NATIVE(self, "family_km_setstate", (state,), _NATIVE_CONTEXT)
 
     # Maintainer note, file layout: `X_fit_` and `dual_coef_` (flat,
     # `n * n_targets`) as fitted, `hyper` `<f8` [gamma, coef0, alpha] as the fit
@@ -514,58 +418,7 @@ class Nystroem(_KernelMethodBase):
         self : Nystroem
             The fitted transformer.
         """
-        x, _ = as_f32_dense_c(X, ndim=2, name="X")
-        n, d = x.shape
-        kernel = _kernel_code(self.kernel, self._WHERE)
-        if isinstance(self.degree, bool) or not isinstance(self.degree, int):
-            raise TypeError(f"mojolearn {self._WHERE}: degree must be an int")
-        if isinstance(self.n_components, bool) or not isinstance(self.n_components, int):
-            raise TypeError(f"mojolearn {self._WHERE}: n_components must be an int")
-        q = int(self.n_components)
-        if q < 1:
-            raise ValueError(f"mojolearn {self._WHERE}: n_components must be positive, got {q}")
-        if q > n:
-            # scikit-learn's rule and warning (kernel_approximation.py,
-            # Nystroem.fit): the basis cannot hold more rows than X has, so
-            # n_components becomes n_samples (the full kernel)
-            import warnings
-            warnings.warn(
-                "n_components > n_samples. This is not possible.\n"
-                "n_components was set to n_samples, which results"
-                " in inefficient evaluation of the full kernel."
-            )
-            q = n
-        gamma = _gamma_for(self.gamma, d, self._WHERE, kernel)
-        _check_chi2_input(x, kernel, self._WHERE)
-        coef0 = _real(self.coef0, "coef0", self._WHERE)
-        seed = int(self.random_state)
-        components = empty((q * d,), "<f4")
-        indices = empty((q,), "<i4")
-        normalization = empty((q * q,), "<f4")
-        eigenvalues = empty((q,), "<f4")
-        eigenvectors = empty((q * q,), "<f4")
-        scalars = empty((1,), "<f8")
-        ext = self._extension()
-        # glue: the pointer entry when the binding registers it (`NYS_IDN_FIT_PTR_IN`)
-        fit_fn = getattr(ext, "nystroem_fit_ptr", None) or ext.nystroem_fit
-        sweeps = fit_fn(
-            # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::nystroem_fit_binding.
-            # x, components_out, indices_out, normalization_out, eigenvalues_out, eigenvectors_out, scalars_out
-            [addr_ro(x, name="X"), addr(components, name="components_"), addr(indices, name="component_indices_"),
-             addr(normalization, name="normalization_"), addr(eigenvalues, name="eigenvalues_"),
-             addr(eigenvectors, name="eigenvectors_"), addr(scalars, name="scalars")],
-            # n, d, kernel, degree, gamma, coef0, q, seed
-            [n, d, kernel, int(self.degree), gamma, coef0, q, seed],
-        )
-        self.n_features_in_ = d
-        self.components_ = components.reshape((q, d))
-        self.component_indices_ = indices
-        self.normalization_ = normalization.reshape((q, q))
-        self.eigenvalues_ = eigenvalues
-        self.eigenvectors_ = eigenvectors.reshape((q, q))
-        self.sweeps_ = int(sweeps)
-        self._kernel_params = (kernel, int(self.degree), gamma, coef0, seed)
-        return self
+        return _NATIVE(self, "family_km_nys_fit", (self._bind(), X), _NATIVE_CONTEXT)
 
     def transform(self, X):
         """Map `X` to the approximate kernel feature space.
@@ -580,31 +433,7 @@ class Nystroem(_KernelMethodBase):
         Array of shape (n_rows, n_components), float32
             `K(X, components_) @ normalization_.T`.
         """
-        if not hasattr(self, "components_"):
-            raise ValueError(f"mojolearn {self._WHERE}: call fit before transform")
-        x, _ = as_f32_dense_c(X, ndim=2, name="X")
-        m, d = x.shape
-        if d != self.n_features_in_:
-            raise ValueError(
-                f"mojolearn {self._WHERE}: X has {d} features, the fit had {self.n_features_in_}"
-            )
-        q = self.components_.shape[0]
-        kernel, degree, gamma, coef0, seed = self._kernel_params
-        _check_chi2_input(x, kernel, self._WHERE)
-        out = _empty_out((m * q,), "<f4")
-        flat_c = self.components_.reshape((q * d,))
-        flat_n = self.normalization_.reshape((q * q,))
-        flat_e = self.eigenvectors_.reshape((q * q,))
-        self._extension().nystroem_transform(
-            # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::nystroem_transform_binding.
-            # components, indices, normalization, eigenvalues, eigenvectors, x, out
-            [addr_ro(flat_c, name="components_"), addr_ro(self.component_indices_, name="component_indices_"),
-             addr_ro(flat_n, name="normalization_"), addr_ro(self.eigenvalues_, name="eigenvalues_"),
-             addr_ro(flat_e, name="eigenvectors_"), addr_ro(x, name="X"), addr(out, name="transform")],
-            # q, d, kernel, degree, gamma, coef0, seed, sweeps, m
-            [q, d, kernel, degree, gamma, coef0, seed, self.sweeps_, m],
-        )
-        return out.reshape((m, q))
+        return _NATIVE(self, "family_km_nys_transform", (self._bind(), X), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit to `X`, then transform `X`.
@@ -621,7 +450,7 @@ class Nystroem(_KernelMethodBase):
         Array of shape (n_samples, n_components), float32
             The transformed training data.
         """
-        return self.fit(X).transform(X)
+        return _NATIVE(self, "family_km_nys_fit_transform", (self._bind(), X), _NATIVE_CONTEXT)
 
     # Maintainer note, file layout: every model array as fitted, `hyper` `<f8`
     # [gamma, coef0] as the fit resolved them, `meta` `<i8` [n_components,
@@ -738,51 +567,7 @@ class RBFSampler(_KernelMethodBase):
         self : RBFSampler
             The fitted transformer.
         """
-        x, _ = as_f32_dense_c(X, ndim=2, name="X")
-        _, d = x.shape
-        gamma, q, seed = self._fit_params(x, d)
-        weights = empty((d * q,), "<f4")
-        offset = empty((q,), "<f4")
-        scalars = empty((2,), "<f8")
-        self._extension().rbf_sampler_fit(
-            # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::rbf_sampler_fit_binding.
-            # weights_out, offset_out, scalars_out
-            [addr(weights, name="random_weights_"), addr(offset, name="random_offset_"), addr(scalars, name="scalars")],
-            # d, q, gamma, seed
-            [d, q, gamma, seed],
-        )
-        self._set_fitted(d, q, gamma, seed, weights, offset, scalars)
-        return self
-
-    def _set_fitted(self, d, q, gamma, seed, weights, offset, scalars):
-        self.n_features_in_ = d
-        self.random_weights_ = weights.reshape((d, q))
-        self.random_offset_ = offset
-        self.sigma_ = float(scalars[0])
-        self.scale_ = float(scalars[1])
-        self._params = (gamma, seed)
-
-    def _fit_params(self, x, d):
-        """(gamma, n_components, seed) as `fit` resolves and refuses them."""
-        if isinstance(self.gamma, str) and self.gamma == "scale":
-            # scikit-learn's 1 / (n_features * X.var()), 1.0 at zero
-            # variance: the EXACT variance of the float32 cells, the
-            # reciprocal rounded once (`_scale_gamma.scale_gamma`), so every
-            # host draws from the same gamma bits.
-            gamma = scale_gamma_x(self._extension(), x, d)
-        else:
-            gamma = _real(self.gamma, "gamma", self._WHERE)
-        if isinstance(self.n_components, bool) or not isinstance(self.n_components, int):
-            raise TypeError(f"mojolearn {self._WHERE}: n_components must be an int")
-        q = int(self.n_components)
-        if q < 1:
-            # BY NAME, BEFORE ANY BUFFER. The first MI300X run of this surface
-            # (2026-09-14) saw n_components=0 refused as "null float32 buffer
-            # address": the zero-length weights buffer reached the binding's
-            # address check before anything had said which argument was wrong.
-            raise ValueError(f"mojolearn {self._WHERE}: n_components must be positive, got {q}")
-        seed = int(self.random_state)
-        return gamma, q, seed
+        return _NATIVE(self, "family_km_rbf_fit", (self._bind(), X), _NATIVE_CONTEXT)
 
     def transform(self, X):
         """Map `X` to the random Fourier feature space.
@@ -797,27 +582,7 @@ class RBFSampler(_KernelMethodBase):
         Array of shape (n_rows, n_components), float32
             `scale_ * cos(X @ random_weights_ + random_offset_)`.
         """
-        if not hasattr(self, "random_weights_"):
-            raise ValueError(f"mojolearn {self._WHERE}: call fit before transform")
-        x, _ = as_f32_dense_c(X, ndim=2, name="X")
-        m, d = x.shape
-        if d != self.n_features_in_:
-            raise ValueError(
-                f"mojolearn {self._WHERE}: X has {d} features, the fit had {self.n_features_in_}"
-            )
-        q = self.random_weights_.shape[1]
-        gamma, seed = self._params
-        out = _empty_out((m * q,), "<f4")
-        flat_w = self.random_weights_.reshape((d * q,))
-        self._extension().rbf_sampler_transform(
-            # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::rbf_sampler_transform_binding.
-            # weights, offset, x, out
-            [addr_ro(flat_w, name="random_weights_"), addr_ro(self.random_offset_, name="random_offset_"),
-             addr_ro(x, name="X"), addr(out, name="transform")],
-            # d, q, gamma, seed, sigma, scale, m
-            [d, q, gamma, seed, self.sigma_, self.scale_, m],
-        )
-        return out.reshape((m, q))
+        return _NATIVE(self, "family_km_rbf_transform", (self._bind(), X), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit to `X`, then transform `X`.
@@ -834,29 +599,7 @@ class RBFSampler(_KernelMethodBase):
         Array of shape (n_samples, n_components), float32
             The transformed training data.
         """
-        ext = self._extension()
-        resident = getattr(ext, "rbf_sampler_fit_transform_resident", None)
-        if resident is None:
-            return self.fit(X).transform(X)
-        # lane apple-fast-w2-kfeat MOJOLEARN_KM_FAST_RBF_RESIDENT
-        # (kernel_methods/rbf_resident.mojo): the draws, the upload, the
-        # projection and every download in one binding call and one wait;
-        # main's words. The output is mapped memory (no zero pass).
-        x, _ = as_f32_dense_c(X, ndim=2, name="X")
-        m, d = x.shape
-        gamma, q, seed = self._fit_params(x, d)
-        weights = empty((d * q,), "<f4")
-        offset = empty((q,), "<f4")
-        scalars = empty((2,), "<f8")
-        out = _mapped_out((m * q,))
-        resident(
-            # ORDER MATCHES kernel_methods/rbf_resident.mojo::rbf_sampler_fit_transform_binding.
-            [addr(weights, name="random_weights_"), addr(offset, name="random_offset_"), addr(scalars, name="scalars"),
-             addr_ro(x, name="X"), addr(out, name="transform")],
-            [d, q, gamma, seed, m],
-        )
-        self._set_fitted(d, q, gamma, seed, weights, offset, scalars)
-        return out.reshape((m, q))
+        return _NATIVE(self, "family_km_rbf_fit_transform", (self._bind(), X), _NATIVE_CONTEXT)
 
     # Maintainer note, file layout: the weights and offsets as drawn, `hyper`
     # `<f8` [gamma, sigma_, scale_], `meta` `<i8` [n_features, n_components,
@@ -935,6 +678,12 @@ _bridge.register(RBFSampler, _RBF_SAMPLER_FORMAT, (
     *_bridge.head(_RBF_SAMPLER_FORMAT),
 ))
 del _bridge
+
+
+# Dropping a fitted KernelRidge releases its resident X and dual through the
+# minting binding's `kernel_ridge_resident_release` (bindings/
+# host_archive_lifetime.mojo "entry" plans), held in `_resident_holder["index"]`.
+_native_archive_bridge.lifetime(KernelRidge, "kernel_ridge_resident_release", "_resident_holder")
 
 
 __all__ = ["KernelRidge", "Nystroem", "RBFSampler"]

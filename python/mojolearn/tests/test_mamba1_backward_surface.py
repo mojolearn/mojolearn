@@ -27,6 +27,10 @@ class Mamba1BackwardSurface(unittest.TestCase):
             if exc.name != "torch":
                 raise
             raise unittest.SkipTest("optional PyTorch autograd oracle is not installed") from exc
+        try:
+            import einops  # noqa: F401  (the oracle's tensor reshapes)
+        except ModuleNotFoundError as exc:
+            raise unittest.SkipTest("the optional autograd oracle needs einops, which is not installed") from exc
         cls.torch = torch
         root = Path(corpus_root()).parent.parent
         path = root / "tools" / "mamba_gradient_oracle.py"

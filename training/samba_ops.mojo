@@ -604,6 +604,26 @@ def samba_ftz_copy_kernel(
     dst.unsafe_store(i, ftz(src.unsafe_load(i)))
 
 
+def _accumulate_out(
+    ctx: DeviceContext,
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    mut out_dev: Optional[DeviceBuffer[DType.float32]],
+    src: DeviceBuffer[DType.float32],
+    n: Int,
+) raises:
+    """The accumulated `n` floats out of `src`: into the device buffer
+    `out_dev` when one is given (a device-to-device copy; the optimizer step
+    then reads it where it is), else down to the host `out_ptr`."""
+    var head = src.create_sub_buffer[DType.float32](0, n)
+    if out_dev:
+        var dst = out_dev.value().create_sub_buffer[DType.float32](0, n)
+        ctx.enqueue_copy(dst_buf=dst, src_buf=head)
+        _ = dst^
+    else:
+        ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=head)
+    _ = head^
+
+
 def samba_accumulate_buffer(
     ctx: DeviceContext,
     var src: DeviceBuffer[DType.float32],
@@ -615,6 +635,45 @@ def samba_accumulate_buffer(
     already resident in `src` (ascending microbatch index), written to the
     host `out_ptr`. Every level is one grid-wide launch; `A == 1` is one ftz
     copy on the device. The caller validated the shape. Returns `n`."""
+    var no_device = Optional[DeviceBuffer[DType.float32]](None)
+    return _samba_accumulate_core(ctx, src^, out_ptr, no_device, n, a)
+
+
+def samba_accumulate_device(
+    ctx: DeviceContext,
+    mut out_buf: DeviceBuffer[DType.float32],
+    parts_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int,
+    a: Int,
+    t_tokens: Int,
+) raises -> Int:
+    """`samba_accumulate_host` with the result left ON THE DEVICE in
+    `out_buf[0:n]` (lane migrate-neural-2: `step_accumulated` steps from the
+    resident accumulator instead of downloading it for the step to upload
+    again). The same refusals, upload and tree, so the same bits."""
+    samba_validate_accumulation(n, a, t_tokens)
+    if len(out_buf) < n:
+        raise Error("mojolearn samba ops: the accumulator buffer holds " + String(len(out_buf))
+                    + " floats, the gradient is " + String(n))
+    _refuse_host("accumulate parts", parts_ptr, n * a)
+    var src = _upload_checked(ctx, "accumulate parts", parts_ptr, n * a)
+    var out_dev = Optional[DeviceBuffer[DType.float32]](out_buf)
+    # out_ptr is not written when out_dev is set
+    var done = _samba_accumulate_core(ctx, src^, parts_ptr, out_dev, n, a)
+    _ = out_dev^
+    return done
+
+
+def _samba_accumulate_core(
+    ctx: DeviceContext,
+    var src: DeviceBuffer[DType.float32],
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    mut out_dev: Optional[DeviceBuffer[DType.float32]],
+    n: Int,
+    a: Int,
+) raises -> Int:
+    """`samba_accumulate_buffer`'s tree; the result goes out through
+    `_accumulate_out` (host pointer or device buffer)."""
     comptime if NN63_CANONICAL_SHARD_MERGE:
         if a > 1:
             # Supported multi-GPU callers own disjoint columns and deliver ALL
@@ -631,7 +690,7 @@ def samba_accumulate_buffer(
                 var hit = device_first_nonfinite(ctx, result, n)
                 if hit >= 0:
                     raise Error("mojolearn samba ops: nonfinite accumulated gradient at " + String(hit))
-            ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=result)
+            _accumulate_out(ctx, out_ptr, out_dev, result, n)
             ctx.synchronize()
             _ = ids^
             _ = first^
@@ -650,7 +709,7 @@ def samba_accumulate_buffer(
             grid_dim=(_grid(n), 1, 1),
             block_dim=(SAMBA_TPB, 1, 1),
         )
-        ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=dst)
+        _accumulate_out(ctx, out_ptr, out_dev, dst, n)
         ctx.synchronize()
         _ = src^
         _ = dst^
@@ -678,15 +737,11 @@ def samba_accumulate_buffer(
         if host_status[0] < Int32(n):
             raise Error("mojolearn samba ops: nonfinite accumulated gradient at " + String(host_status[0]))
     if from_src:
-        var view = src.create_sub_buffer[DType.float32](0, n)
-        ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=view)
+        _accumulate_out(ctx, out_ptr, out_dev, src, n)
         ctx.synchronize()
-        _ = view
     else:
-        var view = dst.create_sub_buffer[DType.float32](0, n)
-        ctx.enqueue_copy(dst_ptr=out_ptr, src_buf=view)
+        _accumulate_out(ctx, out_ptr, out_dev, dst, n)
         ctx.synchronize()
-        _ = view
     _ = live_status^
     _ = src^
     _ = dst^

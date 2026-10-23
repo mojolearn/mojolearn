@@ -26,31 +26,31 @@ py-misc-prep (strided platt/isotonic apply, `complement_pairs`, native class
 columns and 0/1 targets; its Python reference arm is deleted).
 """
 import numbers
-import os
 import weakref
 
-from . import _portable_math as math
 from . import _mojolearn_rf, _mojolearn_x_trees  # noqa: F401  the bindings this door resolves; name NO other (lane_select counts > 3 as a registry)
 from ._array import Array
-from ._buffer import _materialize, addr, addr_ro, all_finite, as_f32_c, as_f32_colmajor, as_f64_c, as_i32_c, empty, frombytes, full, zeros
-from ._buffer import _has_buffer, memory_at
-from ._labels import decode_labels, encode_labels, is_bool
+from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty, frombytes, full, zeros
+from ._buffer import memory_at
+from ._labels import is_bool
 from ._mode import NumericModeMixin, available_if
-from ._sample_weight import ZERO_WEIGHTS_MSG, check_sample_weight
 from ._class_weights import _trees_x_bind  # noqa: F401  re-exported: callers import it from this door
 from ._mode import ClassifierScoreMixin, RegressorScoreMixin
-from ._forest_protocol import (forest_estimator, _forest_fit_arrays, _forest_fit_function,
-                               forest_data_session_choice, open_forest_data_session)
+from ._forest_protocol import forest_estimator
 from .extratrees import ExtraTreesRegressor, ExtraTreesClassifier as _ET_CLS
 from .randomforest import (
-    RandomForestClassifier, RandomForestRegressor, _class_weight_rows, _refuse,
+    RandomForestClassifier, RandomForestRegressor, _refuse,
     _MODEL_FORMATS as _RF_MODEL_FORMATS, _SAVE_SCHEMA as _RF_SAVE_SCHEMA,
 )
-from . import _native_archive_bridge
+from . import _native_archive_bridge, _native_trees_bridge
 
 # The compiled saved-model owner, connected once at import: a tree's `save`
 # is one native call.
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
+# The compiled tree-ensemble owner: a DecisionTree*'s `fit`, `predict` and
+# `predict_proba` are one native call each (bindings/trees_public_forest.mojo;
+# splitter='random' grows one extra-trees tree there).
+_TREES, _TREES_CONTEXT = _native_trees_bridge.connect()
 
 __all__ = [
     "DecisionTreeClassifier",
@@ -77,75 +77,6 @@ __all__ = [
 
 
 # ----------------------------------------------------------------- helpers
-def _trees_f32_weights(values, n, name, est=None):
-    """`values` (buffer or sequence) as a float32 Array of n entries,
-    refusing non-finite and negative entries and an all-zero vector (a
-    sample weight). One native pass (`x_trees_check_weights_f32`); the
-    refusals and their wording are the per-element Python loop's."""
-    if name == "sample_weight":
-        # scikit-learn's _check_sample_weight, its wording (sk-edges)
-        return check_sample_weight(values, n)
-    arr, _ = as_f32_c(values, ndim=1, name=name)
-    if len(arr) != n:
-        raise ValueError(f"{name}.shape == ({len(arr)},), expected ({n},)!")
-    status = int(_trees_x_bind(est).x_trees_check_weights_f32(addr_ro(arr, name=name), [n]))
-    if status == 1:
-        raise ValueError(f"{name} must be finite and nonnegative")
-    if status == 2:
-        raise ValueError(f"{name}: weights must contain at least one non-zero number")
-    return arr
-
-
-def _trees_colmajor(X, est):
-    """X as a column-major float32 Array: a float32 F-order input is borrowed
-    as is (no copy); anything else goes through the lane's own threaded
-    transpose, so the weighted fit (which takes the column-major layout)
-    needs no base binding helper on a CPU-only install."""
-    Xm, _ = _materialize(X, "X")
-    if Xm.ndim == 2 and Xm.dtype == "<f4" and Xm.order == "F" and not Xm._both_orders():
-        return as_f32_colmajor(Xm, name="X")[0]
-    Xa, _ = as_f32_c(Xm, ndim=2, name="X")
-    n, d = Xa.shape
-    out = empty((d, n), "<f4")
-    _trees_x_bind(est).x_trees_transpose_f32(addr_ro(Xa, name="X"), addr(out, name="X^T"), [n, d])
-    return Array._view_of(out, (n, d), order="F")
-
-
-def _trees_weighted_rows(sample_weight, class_weight, classes, codes, est=None):
-    """Per-row float32 weights: sample_weight times the class_weight row
-    weight. Each product of two float32 values is exact in binary64, so the
-    one rounding to float32 is the correctly rounded float32 product on every
-    host (`x_trees_mul_f32`)."""
-    n = len(codes)
-    sw = _trees_f32_weights(sample_weight, n, "sample_weight", est)
-    if class_weight is None:
-        return sw
-    codes32 = codes if isinstance(codes, Array) and codes.dtype == "<i4" else as_i32_c(codes, ndim=1, name="codes")[0]
-    rows = _class_weight_rows(class_weight, classes, codes32, _trees_x_bind(est))
-    if rows is None:
-        # every class weight is 1 (a dict of ones, or 'balanced' on balanced
-        # labels): the rows are the sample weights unchanged
-        return sw
-    cw, _ = as_f32_c(rows, ndim=1, name="class_weight rows")
-    out = empty((n,), "<f4")
-    _trees_x_bind(est).x_trees_mul_f32(addr_ro(sw, name="sample_weight"), addr_ro(cw, name="class_weight"),
-                                       addr(out, name="weights"), [n])
-    return out
-
-
-def _trees_fsum_f32(b, arr):
-    """`math.fsum(arr.tolist())` of a float32 Array, bit for bit: the sum AND
-    its one rounding in the binding (x_trees_exact_sum, on the device in a
-    GPU build). A NaN or an infinity is refused (scikit-learn refuses a
-    non-finite y; lane pyglue-numeric deleted the Python fsum route)."""
-    arr, _ = as_f32_c(arr, ndim=1, name="y")
-    out, flags = empty((1,), "<f8"), empty((8,), "<i4")
-    b.x_trees_exact_sum(addr_ro(arr, name="y"), addr(out, name="sum"), addr(flags, name="flags"), [arr.size, 0])
-    if flags[0] or flags[1] or flags[2]:
-        raise ValueError("Input y contains NaN or infinity.")
-    return out[0]
-
-
 # ----------------------------------------------------------- decision trees
 # Reference: scikit-learn `sklearn/tree/_classes.py` (DecisionTreeClassifier
 # :716, DecisionTreeRegressor :1100, BaseDecisionTree.fit :230). The learner
@@ -167,28 +98,6 @@ def _dt_common(splitter, max_features, max_leaf_nodes):
         _refuse("max_leaf_nodes with splitter='best'", "best-first growth exists on the random"
                 " splitter's builder (extratrees/, DEVIATIONS 466-469); pass splitter='random'.")
     return None if splitter == "random" else max_leaf_nodes
-
-
-def _dt_random_fit(est, cls, X, y, fit_params=None, **extra):
-    """splitter='random': one ExtraTrees tree; its flat arrays become this
-    estimator's, and predict delegates to it. `fit_params` (the classifier's
-    sample_weight) go to the inner fit; `min_weight_fraction_leaf` to its
-    constructor."""
-    inner = cls(n_estimators=1, bootstrap=False, max_features=1.0 if est.max_features is None else est.max_features,
-                max_depth=est.max_depth, min_samples_split=est.min_samples_split,
-                min_samples_leaf=est.min_samples_leaf, max_leaf_nodes=est.max_leaf_nodes,
-                min_impurity_decrease=est.min_impurity_decrease, criterion=est.criterion,
-                min_weight_fraction_leaf=est.min_weight_fraction_leaf,
-                random_state=0 if est.random_state is None else est.random_state,
-                numeric_mode=est.numeric_mode, **extra).fit(X, y, **(fit_params or {}))
-    est._random_inner = inner
-    for name in ("_offsets", "_colid", "_quesval", "_left_child", "_leaves", "_n_trees", "_num_outputs",  # glue: copies a handful of fitted attributes
-                 "n_features_in_"):
-        setattr(est, name, getattr(inner, name))
-    if hasattr(inner, "classes_"):
-        est.classes_ = inner.classes_
-        est.n_classes_ = len(inner.classes_)
-    return est
 
 
 # sample_weight goes through the weighted RF fit entry (the weighted
@@ -323,63 +232,7 @@ class DecisionTreeClassifier(RandomForestClassifier):
         -------
         self
         """
-        if self.splitter == "random":
-            # lane sk-kernels: the ExtraTrees builder's weighted classifier
-            self._refresh_config()
-            fit_params = {} if sample_weight is None else {"sample_weight": sample_weight}
-            return _dt_random_fit(self, _ET_CLS, X, y, fit_params, class_weight=self.class_weight)
-        if sample_weight is None:
-            return self._fit_with_tree_start(X, y)
-        return self._fit_weighted(_trees_colmajor(X, self), y, sample_weight)
-
-    def _fit_weighted(self, Xcm, y, sample_weight, x_finite=False, encoded=None, session=None):
-        """The weighted fit on a column-major float32 X. AdaBoost calls it
-        with ONE transposed, once-checked X for all of its members
-        (`x_finite=True` skips the per-member finite scan of the same
-        bytes) and, trees-apple2, ONE `encode_labels(y)` of the same codes
-        (`encoded`, the pair this call would compute); every input the fit
-        entry sees is what `fit` hands it. trees-apple3: `session` is a
-        `ForestDataSession` that already holds this X on the device, so the
-        member stages only its labels and weights."""
-        self._refresh_config()
-        self._capture_fit_mode()
-        self.classes_, y32 = encoded if encoded is not None else encode_labels(y)
-        self.n_classes_ = int(len(self.classes_))
-        if self.n_classes_ < 2:
-            raise ValueError("y has fewer than 2 classes")
-        weights = _trees_weighted_rows(sample_weight, self.class_weight, self.classes_, y32, self)
-        binding = self._bind("_mojolearn_rf")
-        if session is not None:
-            if tuple(session.shape) != tuple(Xcm.shape):
-                raise ValueError("the forest data session holds another X")
-
-            def session_fit(x_addr, y_addr, params, criterion):
-                return session.fit_classifier_weighted(y32, params, criterion, weights)
-            return self._fit_colmajor_checked(Xcm, y32, session_fit)
-        weighted_fit = _forest_fit_function(binding, "rf_classifier_fit_weighted")
-
-        def fit_fn(x_addr, y_addr, params, criterion):
-            return weighted_fit(x_addr, y_addr, params, criterion, addr_ro(weights, name="weights"))
-        if x_finite:
-            return self._fit_colmajor_checked(Xcm, y32, fit_fn)
-        return self._fit_arrays(Xcm, y32, self.n_classes_, fit_fn)
-
-    def _fit_colmajor_checked(self, Xcm, y32, fit_fn):
-        """`RandomForestClassifier._fit_arrays` on a column-major float32 X
-        whose finite scan the caller already ran on these exact bytes: the
-        same parameters, the same entry, the same unpacking, minus that one
-        scan."""
-        n_rows, n_features = Xcm.shape
-        if len(y32) != n_rows:
-            raise ValueError(f"y has {len(y32)} rows, X has {n_rows}")
-        params = self._fit_params(n_rows, n_features, self.n_classes_)
-        out = fit_fn(addr_ro(Xcm, name="X"), addr_ro(y32, name="y"), params, self._cfg["criterion"])
-        (self._offsets, self._colid, self._quesval, self._left_child,
-         self._leaves, meta) = _forest_fit_arrays(out)
-        self.n_features_in_ = int(n_features)
-        self._n_trees = int(meta[0])
-        self._num_outputs = int(meta[1])
-        return self
+        return _TREES(self, "trees_forest_fit", (X, y, sample_weight, False, None), _TREES_CONTEXT)
 
     def get_depth(self):
         """Return the depth of the fitted tree."""
@@ -395,13 +248,11 @@ class DecisionTreeClassifier(RandomForestClassifier):
         Returns an array of shape (n_samples, n_classes), columns in the
         order of ``classes_``.
         """
-        inner = getattr(self, "_random_inner", None)
-        return inner.predict_proba(X) if inner is not None else super().predict_proba(X)
+        return _TREES(self, "trees_forest_predict_proba", (X,), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict the class label of each row of ``X``."""
-        inner = getattr(self, "_random_inner", None)
-        return inner.predict(X) if inner is not None else super().predict(X)
+        return _TREES(self, "trees_forest_predict", (X,), _TREES_CONTEXT)
 
     def save(self, path):
         """Save the fitted tree to ``path``.
@@ -410,21 +261,6 @@ class DecisionTreeClassifier(RandomForestClassifier):
         ``splitter="random"``.
         """
         return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
-
-
-def _dt_tier_bins(est):
-    """The quantile bin count a DecisionTreeRegressor fits with: its own
-    n_bins, or for n_bins=None its binding's `rf_dt_default_bins` (QUALITY
-    FIX, lane apple-fast-q-reg: 256 in a FAST build, 128 in IDENTICAL and
-    under `-D MOJOLEARN_DT_BINS_QOLD`; 128 for a binding without the export).
-    The audit numbers are at bindings/_mojolearn_rf.mojo RF_DT_DEFAULT_BINS."""
-    if getattr(est, "n_bins", None) is not None:
-        return int(est.n_bins)
-    try:
-        query = getattr(est._bind("_mojolearn_rf"), "rf_dt_default_bins", None)
-    except (AttributeError, ImportError):
-        return 128
-    return int(query()) if callable(query) else 128
 
 
 # sample_weight goes through the weighted regressor entry
@@ -539,11 +375,6 @@ class DecisionTreeRegressor(RandomForestRegressor):
         )
         self.splitter = splitter
 
-    def _fit_params(self, n_rows, n_features, n_classes):
-        params = super()._fit_params(n_rows, n_features, n_classes)
-        params[7] = _dt_tier_bins(self)   # slot 7: max_n_bins
-        return params
-
     def fit(self, X, y, sample_weight=None):
         """Fit the tree.
 
@@ -560,12 +391,7 @@ class DecisionTreeRegressor(RandomForestRegressor):
         -------
         self
         """
-        if self.splitter == "random":
-            # lane sk-final: the ExtraTrees builder's weighted regressor
-            self._refresh_config()
-            fit_params = {} if sample_weight is None else {"sample_weight": sample_weight}
-            return _dt_random_fit(self, ExtraTreesRegressor, X, y, fit_params)
-        return self._fit_with_tree_start(X, y, sample_weight=sample_weight)
+        return _TREES(self, "trees_forest_fit", (X, y, sample_weight, False, None), _TREES_CONTEXT)
 
     def get_depth(self):
         """Return the depth of the fitted tree."""
@@ -577,8 +403,7 @@ class DecisionTreeRegressor(RandomForestRegressor):
 
     def predict(self, X):
         """Predict the target of each row of ``X``."""
-        inner = getattr(self, "_random_inner", None)
-        return inner.predict(X) if inner is not None else super().predict(X)
+        return _TREES(self, "trees_forest_predict", (X,), _TREES_CONTEXT)
 
     def save(self, path):
         """Save the fitted tree to ``path``.
@@ -599,6 +424,8 @@ _TREE_SAVE_SCHEMA = (
 )
 _native_archive_bridge.register(DecisionTreeClassifier, _RF_MODEL_FORMATS, _TREE_SAVE_SCHEMA)
 _native_archive_bridge.register(DecisionTreeRegressor, _RF_MODEL_FORMATS, _TREE_SAVE_SCHEMA)
+_native_trees_bridge.register(DecisionTreeClassifier, "dt_classifier")
+_native_trees_bridge.register(DecisionTreeRegressor, "dt_regressor")
 
 
 def _trees_shape_native(est):
@@ -609,7 +436,7 @@ def _trees_shape_native(est):
     if not hasattr(est, "_offsets"):
         raise RuntimeError("this estimator is not fitted yet")
     try:
-        entry = getattr(_trees_x_bind(est), "x_trees_tree_shape", None)  # cpu-route: get_depth/get_n_leaves introspection of the fitted host model arrays, outside fit and predict
+        entry = getattr(_trees_x_bind(est), "x_trees_tree_shape", None)  # cpu-route: fitted tree handle read once by x_trees_tree_shape (get_depth/get_n_leaves)
     except ImportError:    # a host facade refuses an absent export with ImportError
         entry = None
     if not callable(entry):
@@ -649,37 +476,6 @@ def _trees_sub_seed(seed, k):
     return (seed * 1000003 + 7919 * (k + 1)) % 2147483647
 
 
-def _trees_member_weights(active, sample_weight, n_rows):
-    """scikit-learn's `_BaseVoting.fit` / stacking rule for `sample_weight`:
-    None stays None; otherwise it is checked once against X (the shared
-    helper's shape, sign and all-zero refusals) and every active member must
-    take a `sample_weight` fit parameter, else ValueError in scikit-learn's
-    words. Glue: one signature lookup per member."""
-    if sample_weight is None:
-        return None
-    import inspect
-    for name, est in active:  # glue: one signature lookup per member
-        try:
-            takes = "sample_weight" in inspect.signature(est.fit).parameters
-        except (TypeError, ValueError):
-            takes = False
-        if not takes:
-            who = "" if name is None else f" {name}"
-            raise ValueError(f"Underlying estimator{who} does not support sample weights.")
-    return check_sample_weight(sample_weight, n_rows)
-
-
-def _trees_multioutput_y(Y):
-    """scikit-learn's MultiOutput refusal of a 1-D target, in its words
-    (glue: reads the shape, or the first row's type for a nested list)."""
-    nd = getattr(Y, "ndim", None)
-    if nd is None and isinstance(Y, (list, tuple)):
-        nd = 2 if (len(Y) and isinstance(Y[0], (list, tuple))) else 1
-    if nd is not None and int(nd) < 2:
-        raise ValueError("y must have at least two dimensions for multi-output regression "
-                         "but has only one.")
-
-
 def _trees_clone(est, **overrides):
     """A fresh unfitted copy with the same constructor parameters, plus
     `overrides` for the ones the estimator has (random_state)."""
@@ -688,32 +484,6 @@ def _trees_clone(est, **overrides):
         if k in params:
             params[k] = v
     return type(est)(**params)
-
-
-def _trees_member_native(member):
-    """The forest binding a clone of `member` resolves."""
-    probe = _trees_clone(member)
-    probe._capture_fit_mode()
-    return probe._bind("_mojolearn_rf")
-
-
-def _trees_member_session(member, X, row_major, x_finite=False, default="0"):
-    """The data session (trees-apple3) for the member fits of one boosted
-    ensemble, on the forest binding a clone of `member` resolves, or None
-    (the choice is off, or the binary has no session entry). The session
-    stands in for every member's finite scan of X, so X is scanned here
-    unless the caller already did (`x_finite`)."""
-    if forest_data_session_choice(None, default) is None or not hasattr(member, "_capture_fit_mode"):
-        return None
-    probe = _trees_clone(member)
-    probe._capture_fit_mode()
-    native = probe._bind("_mojolearn_rf")
-    if not callable(getattr(native, "rf_data_session_open", None)):
-        return None
-    if not x_finite and not all_finite(X):
-        raise ValueError("X contains NaN or infinity; the forest has no missing-value arm")
-    return open_forest_data_session(native, X, row_major=row_major, mode=probe._effective_mode(),
-                                    default=default)
 
 
 # lane/apple-fast-trees-ensembles (2026-10-02): the Apple FAST switches of
@@ -725,8 +495,8 @@ def _trees_member_session(member, X, row_major, x_finite=False, default="0"):
 # Apple build since the M3 A/B (xtrees/api_pyapi.mojo XTREES_FAST_SWITCHES):
 #   MOJOLEARN_TE_NATIVE_SPLITS  the cv fold bookkeeping of Stacking /
 #     CalibratedClassifierCV, OneVsRest's targets and MultiOutputClassifier's
-#     label columns leave their Python row loops (`_trees_native_folds`,
-#     `_trees_native_glue`);
+#     label columns leave their Python row loops (`_trees_native_folds`;
+#     the native meta-estimator owner, bindings/trees_public_meta.mojo);
 #   MOJOLEARN_TE_ADA_SESSION  the AdaBoost members fit the one staged device
 #     copy of X (the exact forest data session DART opens by default);
 #   MOJOLEARN_TE_ADA_SESSION_SHARE  with it, later members reuse the first
@@ -812,79 +582,6 @@ def _trees_py2mojo(est):
     return callable(query) and int(query()) != 0
 
 
-def _trees_native_glue(est):
-    """`est` when its binding builds the cv bookkeeping (`_trees_py2mojo`,
-    or MOJOLEARN_TE_NATIVE_SPLITS on the FAST tier with a binding that
-    carries `x_trees_device_folds`), else None."""
-    return est
-
-
-def _trees_ada_session_default(est):
-    """The `MOJOLEARN_FOREST_SESSION` default an AdaBoost fit passes to
-    `_trees_member_session`: "share" under MOJOLEARN_TE_ADA_SESSION_SHARE,
-    "1" under MOJOLEARN_TE_ADA_SESSION, else main's "0" (each member stages
-    X itself unless the env says otherwise)."""
-    if _trees_switch(est, _TE_ADA_SESSION_SHARE):
-        return "share"
-    if _trees_switch(est, _TE_ADA_SESSION):
-        return "1"
-    # lane fam-forests: the IDENTICAL build's exact session (never "share")
-    if not _trees_fast_tier(est) and _trees_build_switch(est, _IDN_ADA_SESSION):
-        return "1"
-    return "0"
-
-
-def _trees_label_words(Y):
-    """A numeric 2-D label buffer as a C-order (n, m) Array of 8-byte words
-    whose `tolist()` labels are the Python ones: float64 for a float dtype,
-    int64 for a signed or unsigned int dtype that fits it; None for anything
-    else (bool, str, object, nested lists, uint64), which keeps the Python
-    rows (lane apple-fast-py2mojo-trees)."""
-    d = getattr(Y, "dtype", None)
-    if getattr(Y, "ndim", None) != 2:
-        return None
-    kind = getattr(d, "kind", None)
-    if kind is None:
-        if not isinstance(d, str):
-            return None
-        kind = d.lstrip("<>=|")[:1]
-    if kind not in ("f", "i", "u"):
-        return None
-    try:
-        if kind == "f":
-            return as_f64_c(Y, ndim=2, name="Y")[0]
-        arr, _ = _materialize(Y, "Y")
-        if arr.ndim != 2 or arr.dtype not in ("<i1", "<i2", "<i4", "<i8", "|i1", "|u1", "<u1", "<u2", "<u4"):
-            return None
-        if arr.dtype != "<i8":
-            arr = arr.astype("<i8")
-        return arr._as_c()
-    except (TypeError, ValueError):
-        return None  # the Python rows name the refusal
-
-
-def _trees_binary_proba(est, p, n):
-    """(n, 2) float64 rows (1 - p, p) of a float32 positive-class column, in
-    the binding (x_trees_binary_proba: the exact widening and one IEEE
-    subtract, the Python `[[1.0 - v, v] for v in p.tolist()]` word for word;
-    lane apple-fast-py2mojo-trees)."""
-    p = as_f32_c(p, ndim=1, name="p")[0]
-    out = empty((2 * n,), "<f8")
-    est._bind().x_trees_binary_proba(addr_ro(p, name="p"), addr(out, name="proba"), [n])
-    return out.reshape((n, 2))
-
-
-def _trees_float_dtype(Y):
-    """True for a buffer whose dtype is a float (an ndarray's `kind`, or an
-    `Array`'s format string): its `tolist()` labels are Python floats, the
-    classes a native float64 column encodes to."""
-    d = getattr(Y, "dtype", None)
-    kind = getattr(d, "kind", None)
-    if kind is not None:
-        return kind == "f"
-    return isinstance(d, str) and d.lstrip("<>=|").startswith("f")
-
-
 class _TreesEnsembleBase(NumericModeMixin):
     """The lane's binding (`_bind()`) and its row/column helpers."""
     _BINDING = "_mojolearn_x_trees"
@@ -963,12 +660,6 @@ class _TreesEnsembleBase(NumericModeMixin):
         return as_i32_c(labels_out, ndim=1, name="predicted codes")[0]
 
 
-def _trees_sub_cols(est):
-    """The ensemble columns an estimator fitted on codes predicts: its
-    classes_ ARE codes."""
-    return Array.from_list([int(c) for c in est.classes_], "<i4")  # glue: fitted member classes as k codes
-
-
 # ------------------------------------------------------------------ Bagging
 # Reference: scikit-learn `sklearn/ensemble/_bagging.py` (BaseBagging.fit
 # :330, _parallel_build_estimators :120, BaggingClassifier.predict_proba
@@ -994,33 +685,6 @@ class _BaggingBase(_TreesEnsembleBase):
         self.random_state = random_state
         self.verbose = verbose
 
-    def _validate_params(self):
-        if self.oob_score and not self.bootstrap:
-            raise ValueError("Out of bag estimation only available if bootstrap=True")
-        if self.warm_start:
-            _refuse("warm_start=True", "there is no incremental fit here.")
-        if self.n_jobs is not None:
-            _refuse("n_jobs", "the sub-fits run one after another on the device.")
-        if self.verbose:
-            _refuse("verbose", "nothing logs per estimator.")
-        if int(self.n_estimators) < 1:
-            raise ValueError("n_estimators must be >= 1")
-        _trees_seed(self.random_state)
-
-    @staticmethod
-    def _count(v, total, name):
-        if isinstance(v, numbers.Integral) and not is_bool(v):
-            k = int(v)
-        elif isinstance(v, numbers.Real):
-            if not 0.0 < float(v) <= 1.0:
-                raise ValueError(f"{name}={v} is outside (0, 1]")
-            k = int(float(v) * total)
-        else:
-            raise ValueError(f"{name} must be an int or a float")
-        if not 1 <= k <= total:
-            raise ValueError(f"{name} resolves to {k}, outside [1, {total}]")
-        return k
-
     # -- lane hr2-gbdt-host: the members as ONE forest fit -------------------
     # A bag of best-splitter decision trees over every feature, without row
     # weights or out-of-bag scoring, IS a random forest of `n_estimators`
@@ -1031,43 +695,6 @@ class _BaggingBase(_TreesEnsembleBase):
     # forest's own bootstrap stream. `estimators_` slices the forest into
     # per-tree members when it is read. `MOJOLEARN_HR2_BAGGING_MEMBERS=1`
     # keeps the per-member loop (the A/B arm; deleted once the gates pass).
-    def _batched_ok(self, base, n_rows, n, n_feat, d, sample_weight):
-        if os.environ.get("MOJOLEARN_HR2_BAGGING_MEMBERS") == "1":
-            return False
-        if type(base) not in (DecisionTreeClassifier, DecisionTreeRegressor):
-            return False
-        if base.splitter != "best" or getattr(base, "max_leaf_nodes", None) is not None:
-            return False
-        if sample_weight is not None or self.oob_score or self.bootstrap_features or n_feat != d:
-            return False
-        if not self.bootstrap and n_rows != n:
-            return False  # sampling without replacement: not the forest's draw
-        return True
-
-    def _fit_batched(self, Xa, y, base, n_rows, n, seed):
-        common = dict(n_estimators=int(self.n_estimators), criterion=base.criterion,
-                      max_depth=base.max_depth, min_samples_split=base.min_samples_split,
-                      min_samples_leaf=base.min_samples_leaf,
-                      max_features=1.0 if base.max_features is None else base.max_features,
-                      min_impurity_decrease=base.min_impurity_decrease,
-                      bootstrap=bool(self.bootstrap),
-                      max_samples=(n_rows / n) if self.bootstrap else None,
-                      random_state=seed,
-                      n_bins=_dt_tier_bins(base) if isinstance(base, DecisionTreeRegressor) else base.n_bins,
-                      numeric_mode=getattr(base, "numeric_mode", None))
-        if isinstance(base, DecisionTreeClassifier):
-            forest = RandomForestClassifier(class_weight=base.class_weight, **common)
-        else:
-            forest = RandomForestRegressor(**common)
-        forest.fit(Xa, y)
-        self._batched = (forest, base)
-        self._estimators = None
-        d = Xa.shape[1]
-        self.estimators_features_ = [self._arange(d)] * int(forest._n_trees)  # one shared all-columns array
-        self._oob_rows = []
-        self.n_features_in_ = d
-        return self
-
     @property
     def estimators_(self):
         """The fitted members, as a list of estimators."""
@@ -1111,92 +738,6 @@ class _BaggingBase(_TreesEnsembleBase):
             out.append(est)
         return out
 
-    def _fit_bags(self, X, y_sub, sample_weight, make_default):
-        Xa, _ = as_f32_c(X, ndim=2, name="X")
-        n, d = Xa.shape
-        seed = _trees_seed(self.random_state)
-        n_rows = self._count(self.max_samples, n, "max_samples")
-        n_feat = self._count(self.max_features, d, "max_features")
-        base = self.estimator if self.estimator is not None else make_default()
-        if self._batched_ok(base, n_rows, n, n_feat, d, sample_weight):
-            return self._fit_batched(Xa, y_sub(None, True), base, n_rows, n, seed)
-        # scikit-learn's _check_sample_weight: the shape, sign and all-zero
-        # refusals before any member is fitted (a bootstrap gather never
-        # reads past row n, so a too-long vector was accepted silently)
-        sw = None if sample_weight is None else check_sample_weight(sample_weight, n)
-        if sw is not None:
-            import inspect
-            try:
-                takes = "sample_weight" in inspect.signature(base.fit).parameters
-            except (TypeError, ValueError):
-                takes = False
-            if not takes:  # scikit-learn's BaseBagging refusal and words
-                raise ValueError("The base estimator doesn't support sample weight")
-        self.estimators_, self.estimators_features_, self._oob_rows = [], [], []
-        all_rows = n_rows == n and not self.bootstrap
-        all_cols = n_feat == d and not self.bootstrap_features
-        for k in range(int(self.n_estimators)):  # glue: one member fit per estimator
-            rows = self._arange(n) if all_rows else self._indices(n, n_rows, self.bootstrap, seed, 2 * k)
-            if all_cols:
-                cols = self._arange(d)
-            else:
-                cols = self._indices(d, n_feat, self.bootstrap_features, seed, 2 * k + 1)
-            Xs = Xa if (all_rows and all_cols) else self._gather(Xa, rows, cols)
-            ys = y_sub(rows, all_rows)
-            est = _trees_clone(base, random_state=_trees_sub_seed(seed, k))
-            if sw is None:
-                est.fit(Xs, ys)
-            else:
-                est.fit(Xs, ys, sample_weight=sw if all_rows else self._gather_vec(sw, rows))
-            self.estimators_.append(est)
-            self.estimators_features_.append(cols)
-            if self.oob_score:
-                self._oob_rows.append(self._oob_of(rows, n, self))
-        self.n_features_in_ = d
-        return self
-
-    @staticmethod
-    def _oob_of(rows, n, est=None):
-        """The rows a member never drew, ascending (sklearn `indices_to_mask`
-        negated): one native pass (`x_trees_unseen_rows`, on the device in a
-        GPU build)."""
-        r = rows if isinstance(rows, Array) else Array.from_list(list(rows), "<i4")
-        out = empty((max(1, n),), "<i4")
-        k = int(_trees_x_bind(est).x_trees_unseen_rows(addr_ro(r, name="rows"), addr(out, name="oob"),
-                                                       [len(r), n]))
-        return out[:k]
-
-    def _oob_outputs(self, Xa, k, member_out):
-        """(sums n x k float64, per-row member count): each member's output on
-        its out-of-bag rows, added in member order (sklearn `_set_oob_score`)."""
-        n = Xa.shape[0]
-        acc = self._class_major([0.0], n * k)  # zero votes, filled by the binding
-        # the member counts in the binding (x_trees_count_rows, int32 per row)
-        counts = zeros((n,), "<i4")
-        for est, cols, oob in zip(self.estimators_, self.estimators_features_, self._oob_rows):  # glue: one member prediction per estimator
-            m = len(oob)
-            if m == 0:
-                continue
-            out = member_out(est, self._gather(Xa, oob, cols), m)
-            self._bind().x_trees_accumulate_rows(addr(acc, name="oob"), addr_ro(out, name="member"),
-                                                 addr_ro(oob, name="rows"), [n, k, m])
-            self._bind().x_trees_count_rows(addr(counts, name="counts"), addr_ro(oob, name="rows"), [n, m])
-        return acc, counts
-
-    def _check_X(self, X):
-        if getattr(self, "_batched", None) is None and getattr(self, "_estimators", None) is None:
-            raise RuntimeError("this estimator is not fitted yet")
-        Xa, _ = as_f32_c(X, ndim=2, name="X")
-        if Xa.shape[1] != self.n_features_in_:
-            raise ValueError(f"X has {Xa.shape[1]} features, fit saw {self.n_features_in_}")
-        return Xa
-
-    def _sub_X(self, Xa, cols, rows_all):
-        if len(cols) == Xa.shape[1] and cols.tolist() == list(range(Xa.shape[1])):
-            return Xa
-        return self._gather(Xa, rows_all, cols)
-
-
 class BaggingClassifier(ClassifierScoreMixin, _BaggingBase):
     """A bagging ensemble of classifiers.
 
@@ -1213,6 +754,8 @@ class BaggingClassifier(ClassifierScoreMixin, _BaggingBase):
     ----------
     estimator : estimator or None, default=None
         The member to clone. None uses ``DecisionTreeClassifier()``.
+        Must be a mojolearn DecisionTree*, RandomForest* or ExtraTrees*
+        estimator; any other estimator raises ``NotImplementedError``.
     n_estimators : int, default=10
         Number of members; must be at least 1.
     max_samples : int or float, default=1.0
@@ -1293,44 +836,7 @@ class BaggingClassifier(ClassifierScoreMixin, _BaggingBase):
         -------
         self
         """
-        self._validate_params()
-        self.classes_, codes = encode_labels(y)
-        self.n_classes_ = len(self.classes_)
-        if self.n_classes_ < 2:
-            raise ValueError("y has fewer than 2 classes")
-        self._fit_bags(X, lambda rows, all_rows: codes if all_rows else self._gather_codes(codes, rows),
-                       sample_weight, DecisionTreeClassifier)
-        if self.oob_score:
-            self._set_oob_score(X, codes)
-        return self
-
-    def _member_proba(self, est, Xs, m):
-        """A member's class scores on Xs as dense m x k float64 (its predict_proba
-        in the columns of the classes it saw, else a one-hot vote)."""
-        k = self.n_classes_
-        out = zeros((m * k,), "<f8")
-        if hasattr(est, "predict_proba"):
-            self._acc_cols(out, est.predict_proba(Xs), _trees_sub_cols(est), m, k)
-        else:
-            self._acc_votes(out, self._codes_of(est.predict(Xs), est.classes_), m, k, 1.0)
-        return out
-
-    def _set_oob_score(self, X, codes):
-        """sklearn BaggingClassifier._set_oob_score: the out-of-bag class scores
-        summed per row, normalised (a row no member left out is uniform 1 / k,
-        DEVIATION 5605, where sklearn divides 0 / 0), accuracy of their argmax."""
-        Xa, _ = as_f32_c(X, ndim=2, name="X")
-        n, k = Xa.shape[0], self.n_classes_
-        acc, _ = self._oob_outputs(Xa, k, self._member_proba)
-        self._bind().x_trees_normalize_rows(addr(acc, name="oob"), [n, k])
-        self.oob_decision_function_ = acc.reshape((n, k))
-        # the per-row match is the native elementwise compare (two int32
-        # Arrays), not a Python loop over the rows
-        pred, truth = self._argmax(acc, n, k), as_i32_c(codes, ndim=1, name="codes")[0]
-        # the hit count in the binding
-        hit_count = int(self._bind().x_trees_count_equal(addr_ro(pred, name="pred"), addr_ro(truth, name="codes"),
-                                                         [n]))
-        self.oob_score_ = hit_count / n
+        return _TREES(self, "trees_boost_fit", (X, y, sample_weight), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """Mean of the members' class probabilities, float64.
@@ -1338,30 +844,31 @@ class BaggingClassifier(ClassifierScoreMixin, _BaggingBase):
         Returns an array of shape (n_samples, n_classes), columns in the
         order of ``classes_``.
         """
-        Xa = self._check_X(X)
-        n, k = Xa.shape[0], self.n_classes_
-        if getattr(self, "_batched", None) is not None:
-            # lane hr2-gbdt-host: the forest's mean of the trees' leaf
-            # distributions, every tree in one device walk
-            return self._batched[0].predict_proba(Xa).astype("<f8")
-        acc = self._class_major([0.0], n * k)  # zero votes, filled by the binding
-        rows_all = self._arange(n)
-        for est, cols in zip(self.estimators_, self.estimators_features_):  # glue: one member prediction per estimator
-            Xs = self._sub_X(Xa, cols, rows_all)
-            sub = _trees_sub_cols(est)
-            if hasattr(est, "predict_proba"):
-                self._acc_cols(acc, est.predict_proba(Xs), sub, n, k)
-            else:
-                codes = self._codes_of(est.predict(Xs), est.classes_)
-                self._acc_votes(acc, codes, n, k, 1.0)
-        self._scale(acc, len(self.estimators_))
-        return acc.reshape((n, k))
+        return _TREES(self, "trees_boost_predict_proba", (X,), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict the class with the highest mean probability."""
-        p = self.predict_proba(X)
-        return decode_labels(self.classes_, self._argmax(p, p.shape[0], self.n_classes_))
+        return _TREES(self, "trees_boost_predict", (X,), _TREES_CONTEXT)
 
+    def score(self, X, y, sample_weight=None):
+        """Mean accuracy of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True labels.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            Fraction of samples predicted correctly (weighted when
+            ``sample_weight`` is given).
+        """
+        return _TREES(self, "trees_boost_score", (X, y, sample_weight), _TREES_CONTEXT)
 
 class BaggingRegressor(RegressorScoreMixin, _BaggingBase):
     """A bagging ensemble of regressors.
@@ -1378,6 +885,8 @@ class BaggingRegressor(RegressorScoreMixin, _BaggingBase):
     ----------
     estimator : estimator or None, default=None
         The member to clone. None uses ``DecisionTreeRegressor()``.
+        Must be a mojolearn DecisionTree*, RandomForest* or ExtraTrees*
+        estimator; any other estimator raises ``NotImplementedError``.
     n_estimators : int, default=10
         Number of members; must be at least 1.
     max_samples : int or float, default=1.0
@@ -1453,57 +962,30 @@ class BaggingRegressor(RegressorScoreMixin, _BaggingBase):
         -------
         self
         """
-        self._validate_params()
-        y32, _ = as_f32_c(y, ndim=1, name="y")
-        self._fit_bags(X, lambda rows, all_rows: y32 if all_rows else self._gather_vec(y32, rows),
-                       sample_weight, DecisionTreeRegressor)
-        if self.oob_score:
-            self._set_oob_score(X, y32)
-        return self
-
-    def _set_oob_score(self, X, y32):
-        """sklearn BaggingRegressor._set_oob_score: the out-of-bag predictions
-        summed per row over member order, divided by their count (a row no
-        member left out divides by 1, as sklearn does), R^2 against y."""
-        Xa, _ = as_f32_c(X, ndim=2, name="X")
-        n = Xa.shape[0]
-
-
-        def member_out(est, Xs, m):
-            p, _ = as_f32_c(est.predict(Xs), ndim=1, name="prediction")
-            return p.astype("<f8")
-
-        acc, counts = self._oob_outputs(Xa, 1, member_out)
-        # the oob prediction and the three exactly rounded sums in the
-        # binding (x_trees_oob_r2, on the device in a GPU build): fsum's
-        # words. A non-finite term or an overflowing sum is refused (Python's
-        # fsum raised on both; lane pyglue-numeric deleted its row route).
-        y32, _ = as_f32_c(y32, ndim=1, name="y")
-        pred, words, flags = empty((n,), "<f8"), empty((4,), "<f8"), empty((4,), "<i4")
-        self._bind().x_trees_oob_r2([addr_ro(acc, name="oob"), addr_ro(counts, name="counts"),
-                                     addr_ro(y32, name="y"), addr(pred, name="pred"), addr(words, name="sums"),
-                                     addr(flags, name="flags")], [n])
-        if flags[0] or flags[1]:
-            raise ValueError("BaggingRegressor oob_score: a non-finite target or out-of-bag prediction, "
-                             "or a sum that overflows float64")
-        self.oob_prediction_ = pred
-        ss_tot, ss_res = words[1], words[2]
-        self.oob_score_ = 1.0 - ss_res / ss_tot if ss_tot > 0 else (1.0 if ss_res == 0 else 0.0)
+        return _TREES(self, "trees_boost_fit", (X, y, sample_weight), _TREES_CONTEXT)
 
     def predict(self, X):
         """Mean of the members' predictions, float64."""
-        Xa = self._check_X(X)
-        n = Xa.shape[0]
-        if getattr(self, "_batched", None) is not None:
-            # lane hr2-gbdt-host: the forest's mean over the trees
-            return as_f32_c(self._batched[0].predict(Xa), ndim=1, name="prediction")[0].astype("<f8")
-        acc = zeros((n,), "<f8")
-        rows_all = self._arange(n)
-        for est, cols in zip(self.estimators_, self.estimators_features_):  # glue: one member prediction per estimator
-            self._acc(acc, est.predict(self._sub_X(Xa, cols, rows_all)), n)
-        self._scale(acc, len(self.estimators_))
-        return acc
+        return _TREES(self, "trees_boost_predict", (X,), _TREES_CONTEXT)
 
+    def score(self, X, y, sample_weight=None):
+        """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True targets.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            R^2; 1.0 is a perfect fit.
+        """
+        return _TREES(self, "trees_boost_score", (X, y, sample_weight), _TREES_CONTEXT)
 
 # ----------------------------------------------------------------- AdaBoost
 # Reference: scikit-learn `sklearn/ensemble/_weight_boosting.py`
@@ -1514,40 +996,6 @@ class BaggingRegressor(RegressorScoreMixin, _BaggingBase):
 # the estimator weight and the weighted median are `xtrees/ops.mojo`
 # (`samme_step`, `r2_step`, `weighted_median`); R2's weighted bootstrap is the
 # lane's counter RNG, not numpy's `choice`.
-def _trees_normalized_weights(sample_weight, n, est=None):
-    if est is not None:
-        return _trees_normalized_weights_native(est, sample_weight, n)
-    if sample_weight is None:
-        return full((n,), 1.0 / n, "<f8")
-    sw = check_sample_weight(sample_weight, n)
-    out = zeros((max(n, 1),), "<f8")
-    status = int(_trees_x_bind(est).x_trees_normalized_weights(addr_ro(sw, name="sample_weight"),
-                                                               addr(out, name="weights"), [n]))
-    if status == 1:
-        raise ValueError("sample_weight must be finite and nonnegative")
-    if status == 2:
-        raise ValueError(ZERO_WEIGHTS_MSG)
-    return out
-
-
-def _trees_normalized_weights_native(est, sample_weight, n):
-    """`_trees_normalized_weights` in the binding (lane
-    apple-fast-py2mojo-trees): the checks, the exactly rounded total
-    (`fsum`'s word) and every v / total in one x_trees_exact_sum call, the
-    same refusals in the same order and the same float64 words."""
-    if sample_weight is None:
-        return est._class_major([1.0 / n], n)
-    sw = check_sample_weight(sample_weight, n)
-    out, flags = empty((n + 1,), "<f8"), empty((8,), "<i4")
-    est._bind().x_trees_exact_sum(addr_ro(sw, name="sample_weight"), addr(out, name="weights"),
-                                  addr(flags, name="flags"), [n, 1])
-    if flags[0] or flags[1] or flags[2] or flags[3]:
-        raise ValueError("sample_weight must be finite and nonnegative")
-    if not flags[4]:
-        raise ValueError(ZERO_WEIGHTS_MSG)
-    return out[1:n + 1]
-
-
 class _AdaBoostBase(_TreesEnsembleBase):
     def __init__(self, estimator, n_estimators, learning_rate, random_state):
         # Stored as given; `_validate_params` checks them at fit (scikit-learn's convention).
@@ -1555,30 +1003,6 @@ class _AdaBoostBase(_TreesEnsembleBase):
         self.n_estimators = n_estimators
         self.learning_rate = learning_rate
         self.random_state = random_state
-
-    def _validate_params(self):
-        if int(self.n_estimators) < 1:
-            raise ValueError("n_estimators must be >= 1")
-        if not float(self.learning_rate) > 0:
-            raise ValueError("learning_rate must be > 0")
-        _trees_seed(self.random_state)
-
-    def _w32(self, w, n):
-        """The boosting weights (summing to one) times n, float32: the
-        members' `sample_weight` (the criterion is scale-free; the factor
-        keeps the fixed-point weight plane well inside its resolution)."""
-        out = empty((n,), "<f4")
-        self._bind().x_trees_scale_to_f32(addr_ro(w, name="w"), addr(out, name="w32"), [n, float(n)])
-        return out
-
-    def _check_X(self, X):
-        if not hasattr(self, "estimators_"):
-            raise RuntimeError("this estimator is not fitted yet")
-        Xa, _ = as_f32_c(X, ndim=2, name="X")
-        if Xa.shape[1] != self.n_features_in_:
-            raise ValueError(f"X has {Xa.shape[1]} features, fit saw {self.n_features_in_}")
-        return Xa
-
 
 class AdaBoostClassifier(ClassifierScoreMixin, _AdaBoostBase):
     """An AdaBoost classifier (SAMME).
@@ -1594,6 +1018,8 @@ class AdaBoostClassifier(ClassifierScoreMixin, _AdaBoostBase):
     estimator : estimator or None, default=None
         The member to clone. None uses
         ``DecisionTreeClassifier(max_depth=1)``.
+        Must be a mojolearn DecisionTree*, RandomForest* or ExtraTrees*
+        estimator; any other estimator raises ``NotImplementedError``.
     n_estimators : int, default=50
         Maximum number of boosting rounds; must be at least 1. Boosting can
         stop earlier, as in scikit-learn.
@@ -1638,12 +1064,6 @@ class AdaBoostClassifier(ClassifierScoreMixin, _AdaBoostBase):
         super().__init__(estimator, n_estimators, learning_rate, random_state)
         self.algorithm = algorithm
 
-    def _validate_params(self):
-        if self.algorithm not in ("SAMME", "deprecated"):
-            _refuse(f"algorithm={self.algorithm!r}", "SAMME.R was removed from the reference (sklearn 1.6);"
-                    " SAMME is the algorithm.")
-        super()._validate_params()
-
     def fit(self, X, y, sample_weight=None):
         """Fit the boosted ensemble.
 
@@ -1667,92 +1087,7 @@ class AdaBoostClassifier(ClassifierScoreMixin, _AdaBoostBase):
         ValueError
             If the first member is worse than random guessing.
         """
-        self._validate_params()
-        Xa, _ = as_f32_c(X, ndim=2, name="X")
-        n = Xa.shape[0]
-        self.classes_, codes = encode_labels(y)
-        k = self.n_classes_ = len(self.classes_)
-        if k < 2:
-            raise ValueError("y has fewer than 2 classes")
-        seed = _trees_seed(self.random_state)
-        base = self.estimator if self.estimator is not None else DecisionTreeClassifier(max_depth=1)
-        # scikit-learn's AdaBoostClassifier refusal: SAMME hands every member
-        # row weights (glue: one signature lookup)
-        import inspect
-        try:
-            takes = "sample_weight" in inspect.signature(base.fit).parameters
-        except (TypeError, ValueError):
-            takes = False
-        if not takes:
-            raise ValueError(f"{type(base).__name__} doesn't support sample_weight.")
-        w = _trees_normalized_weights(sample_weight, n, self)
-        stats = zeros((4,), "<f8")
-        self.estimators_, self.estimator_weights_, self.estimator_errors_ = [], [], []
-        b = self._bind()
-        m = int(self.n_estimators)
-        # A best-splitter DecisionTreeClassifier member fits column-major X
-        # with weights: transpose and finite-scan X ONCE for every member
-        # (the member's own `fit` did both per member on the same bytes).
-        Xcm = None
-        member_enc = None
-        if type(base) is DecisionTreeClassifier and base.splitter == "best":
-            Xcm = _trees_colmajor(Xa, self)
-            if not all_finite(Xcm):
-                raise ValueError("X contains NaN or infinity; the forest has no missing-value arm")
-            # every member encodes the SAME codes: once, for all of them
-            # (`MOJOLEARN_ADABOOST_REENCODE=1` re-encodes per member, the
-            # A/B arm)
-            if os.environ.get("MOJOLEARN_ADABOOST_REENCODE") != "1":
-                member_enc = encode_labels(codes)
-        # trees-apple3: every member fits the SAME X, staged on the device
-        # once for all of them (None: each member stages it, as before)
-        session = None
-        if Xcm is not None:
-            session = _trees_member_session(base, Xcm, False, x_finite=True,
-                                            default=_trees_ada_session_default(self))
-        try:
-            self._fit_members(base, seed, m, Xa, Xcm, codes, w, n, k, member_enc, session, b, stats)
-        finally:
-            if session is not None:
-                session.close()
-        self.n_features_in_ = Xa.shape[1]
-        return self
-
-    def _fit_members(self, base, seed, m, Xa, Xcm, codes, w, n, k, member_enc, session, b, stats):
-        for it in range(m):  # glue: one member fit per estimator
-            est = _trees_clone(base, random_state=_trees_sub_seed(seed, it))
-            if Xcm is not None:
-                est._fit_weighted(Xcm, codes, self._w32(w, n), x_finite=True, encoded=member_enc,
-                                  session=session)
-            else:
-                est.fit(Xa, codes, sample_weight=self._w32(w, n))
-            pred = as_i32_c(est.predict(Xa), ndim=1, name="predicted codes")[0]
-            b.x_trees_samme_step(addr(w, name="w"), addr_ro(pred, name="pred"), addr_ro(codes, name="y"),
-                                 addr(stats, name="stats"),
-                                 [n, k, float(self.learning_rate), 1 if it == m - 1 else 0,
-                                  int(isinstance(base, DecisionTreeClassifier))])
-            status, alpha, err, total = stats.tolist()
-            if status == 2.0:
-                if not self.estimators_:
-                    raise ValueError("BaseClassifier in AdaBoostClassifier ensemble is worse than random,"
-                                     " ensemble can not be fit.")
-                break
-            self.estimators_.append(est)
-            self.estimator_weights_.append(alpha)
-            self.estimator_errors_.append(err)
-            if status == 1.0 or not total > 0:
-                break
-            if it < m - 1:
-                self._scale(w, total)
-
-    def _decision(self, Xa):
-        n, k = Xa.shape[0], self.n_classes_
-        acc = self._class_major([0.0], n * k)  # zero votes, filled by the binding
-        for est, a in zip(self.estimators_, self.estimator_weights_):  # glue: one member prediction per estimator
-            pred = as_i32_c(est.predict(Xa), ndim=1, name="predicted codes")[0]
-            self._acc_votes(acc, pred, n, k, a, -a / (k - 1))
-        self._scale(acc, math.fsum(self.estimator_weights_))  # glue: the native fsum (core fsum_f64) of the k estimator weights
-        return acc
+        return _TREES(self, "trees_boost_fit", (X, y, sample_weight), _TREES_CONTEXT)
 
     def decision_function(self, X):
         """Weighted member votes, float64.
@@ -1760,14 +1095,7 @@ class AdaBoostClassifier(ClassifierScoreMixin, _AdaBoostBase):
         Returns shape (n_samples,) for two classes (positive favors
         ``classes_[1]``) and (n_samples, n_classes) otherwise.
         """
-        Xa = self._check_X(X)
-        n, k = Xa.shape[0], self.n_classes_
-        acc = self._decision(Xa)
-        if k == 2:
-            d = empty((n,), "<f8")
-            self._bind().x_trees_margin2(addr_ro(acc, name="votes"), addr(d, name="margin"), [n, 0])
-            return d
-        return acc.reshape((n, k))
+        return _TREES(self, "trees_boost_decision_function", (X,), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """Class probabilities from the decision function (softmax), float64.
@@ -1775,30 +1103,31 @@ class AdaBoostClassifier(ClassifierScoreMixin, _AdaBoostBase):
         Returns an array of shape (n_samples, n_classes), columns in the
         order of ``classes_``.
         """
-        Xa = self._check_X(X)
-        n, k = Xa.shape[0], self.n_classes_
-        acc = self._decision(Xa)
-        if k == 2:
-            pairs = empty((n * 2,), "<f8")
-            self._bind().x_trees_margin2(addr_ro(acc, name="votes"), addr(pairs, name="pairs"), [n, 2])
-            acc = pairs
-        else:
-            self._scale(acc, k - 1)
-        self._bind().x_trees_softmax_rows(addr(acc, name="proba"), [n, k])
-        return acc.reshape((n, k))
+        return _TREES(self, "trees_boost_predict_proba", (X,), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict the class with the highest weighted vote."""
-        Xa = self._check_X(X)
-        n, k = Xa.shape[0], self.n_classes_
-        acc = self._decision(Xa)
-        if k == 2:
-            codes = empty((n,), "<i4")
-            self._bind().x_trees_margin2(addr_ro(acc, name="votes"), addr(codes, name="codes"), [n, 1])
-        else:
-            codes = self._argmax(acc, n, k)
-        return decode_labels(self.classes_, codes)
+        return _TREES(self, "trees_boost_predict", (X,), _TREES_CONTEXT)
 
+    def score(self, X, y, sample_weight=None):
+        """Mean accuracy of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True labels.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            Fraction of samples predicted correctly (weighted when
+            ``sample_weight`` is given).
+        """
+        return _TREES(self, "trees_boost_score", (X, y, sample_weight), _TREES_CONTEXT)
 
 class AdaBoostRegressor(RegressorScoreMixin, _AdaBoostBase):
     """An AdaBoost regressor (AdaBoost.R2).
@@ -1815,6 +1144,8 @@ class AdaBoostRegressor(RegressorScoreMixin, _AdaBoostBase):
     estimator : estimator or None, default=None
         The member to clone. None uses
         ``DecisionTreeRegressor(max_depth=3)``.
+        Must be a mojolearn DecisionTree*, RandomForest* or ExtraTrees*
+        estimator; any other estimator raises ``NotImplementedError``.
     n_estimators : int, default=50
         Maximum number of boosting rounds; must be at least 1. Boosting can
         stop earlier, as in scikit-learn.
@@ -1855,11 +1186,6 @@ class AdaBoostRegressor(RegressorScoreMixin, _AdaBoostBase):
         super().__init__(estimator, n_estimators, learning_rate, random_state)
         self.loss = loss
 
-    def _validate_params(self):
-        if self.loss not in self._LOSSES:
-            raise ValueError(f"loss must be one of {tuple(self._LOSSES)}, got {self.loss!r}")
-        super()._validate_params()
-
     def fit(self, X, y, sample_weight=None):
         """Fit the boosted ensemble.
 
@@ -1877,83 +1203,30 @@ class AdaBoostRegressor(RegressorScoreMixin, _AdaBoostBase):
         -------
         self
         """
-        self._validate_params()
-        Xa, _ = as_f32_c(X, ndim=2, name="X")
-        n, d = Xa.shape
-        y32, _ = as_f32_c(y, ndim=1, name="y")
-        if len(y32) != n:
-            raise ValueError(f"y has {len(y32)} rows, X has {n}")
-        seed = _trees_seed(self.random_state)
-        base = self.estimator if self.estimator is not None else DecisionTreeRegressor(max_depth=3)
-        w = _trees_normalized_weights(sample_weight, n, self)
-        stats = zeros((4,), "<f8")
-        cols = self._arange(d)
-        self.estimators_, self.estimator_weights_, self.estimator_errors_ = [], [], []
-        b = self._bind()
-        m = int(self.n_estimators)
-        # trees-apple3: a best-splitter squared-error DecisionTreeRegressor
-        # member fits rows of the SAME X, staged on the device once; the
-        # member's rows are gathered there (None: gathered on the host and
-        # staged per member, as before)
-        session = None
-        dflt = _trees_ada_session_default(self)
-        if (forest_data_session_choice(None, dflt) is not None
-                and type(base) is DecisionTreeRegressor and base.splitter == "best"
-                and base.criterion in ("squared_error", "mse")
-                and hasattr(_trees_member_native(base), "rf_regressor_fit_session_rows_export")):
-            session = _trees_member_session(base, Xa, True, default=dflt)
-        try:
-            self._fit_members(base, seed, m, Xa, y32, w, n, cols, session, b, stats)
-        finally:
-            if session is not None:
-                session.close()
-        self.n_features_in_ = d
-        return self
-
-    def _fit_members(self, base, seed, m, Xa, y32, w, n, cols, session, b, stats):
-        for it in range(m):  # glue: one member fit per estimator
-            rows = empty((n,), "<i4")
-            b.x_trees_weighted_sample(addr_ro(w, name="w"), addr(rows, name="rows"), [n, n, seed, it])
-            est = _trees_clone(base, random_state=_trees_sub_seed(seed, it))
-            if session is not None:
-                est._fit_in_session(session, self._gather_vec(y32, rows), rows=rows)
-            else:
-                est.fit(self._gather(Xa, rows, cols), self._gather_vec(y32, rows))
-            pred, _ = as_f32_c(est.predict(Xa), ndim=1, name="prediction")
-            b.x_trees_r2_step(addr(w, name="w"), addr_ro(pred, name="pred"), addr_ro(y32, name="y"),
-                              addr(stats, name="stats"),
-                              [n, self._LOSSES[self.loss], float(self.learning_rate), 1 if it == m - 1 else 0,
-                               int(isinstance(base, DecisionTreeRegressor))])
-            status, alpha, err, total = stats.tolist()
-            if status == 2.0:
-                if not self.estimators_:
-                    self.estimators_.append(est)
-                    self.estimator_weights_.append(0.0)
-                    self.estimator_errors_.append(err)
-                break
-            self.estimators_.append(est)
-            self.estimator_weights_.append(alpha)
-            self.estimator_errors_.append(err)
-            if status == 1.0 or not total > 0:
-                break
-            if it < m - 1:
-                self._scale(w, total)
+        return _TREES(self, "trees_boost_fit", (X, y, sample_weight), _TREES_CONTEXT)
 
     def predict(self, X):
         """Weighted median of the members' predictions."""
-        Xa = self._check_X(X)
-        n, m = Xa.shape[0], len(self.estimators_)
-        preds = empty((m * n,), "<f4")
-        b = self._bind()
-        for j, est in enumerate(self.estimators_):  # glue: one member prediction per estimator
-            p, _ = as_f32_c(est.predict(Xa), ndim=1, name="prediction")
-            b.x_trees_put_f32(addr(preds, name="preds"), addr_ro(p, name="p"), [j * n, n])
-        weights = Array.from_list([float(a) for a in self.estimator_weights_], "<f8")  # glue: member weights as float64 words
-        out = empty((n,), "<f4")
-        b.x_trees_weighted_median(addr_ro(preds, name="preds"), addr_ro(weights, name="weights"),
-                                  addr(out, name="median"), [n, m])
-        return out
+        return _TREES(self, "trees_boost_predict", (X,), _TREES_CONTEXT)
 
+    def score(self, X, y, sample_weight=None):
+        """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True targets.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            R^2; 1.0 is a perfect fit.
+        """
+        return _TREES(self, "trees_boost_score", (X, y, sample_weight), _TREES_CONTEXT)
 
 # --------------------------------------------------------------------- DART
 # Reference: LightGBM `src/boosting/dart.hpp` (DART::DroppingTrees,
@@ -2022,88 +1295,6 @@ class _DARTBase(_TreesEnsembleBase):
         for sd in (random_state, drop_seed, feature_fraction_seed, bagging_seed):  # glue: validates the four seed arguments
             _trees_seed(sd)
 
-    def _bag(self, n, it):
-        """The bagged rows of iteration `it` (row order), or None for all."""
-        freq, frac = int(self.subsample_freq), float(self.subsample)
-        if freq <= 0 or not frac < 1.0:
-            return None
-        start = it - it % freq
-        if getattr(self, "_bag_at", None) is not None and self._bag_at[0] == start:
-            return self._bag_at[1]
-        # the rows whose draw is below frac (none: the smallest draw's row),
-        # drawn and compacted natively (`x_trees_bag_rows`, on the device in
-        # a GPU build); the draws are `x_trees_uniform`'s stream
-        out = empty((max(1, n),), "<i4")
-        k = int(self._bind().x_trees_bag_rows(addr(out, name="bag"), [n, _trees_seed(self.bagging_seed), start, frac]))
-        self._bag_at = (start, out[:k])
-        return self._bag_at[1]
-
-    def _cols(self, d, t):
-        """The sorted feature subset of tree `t`, or None for all."""
-        frac = float(self.colsample_bytree)
-        if not frac < 1.0:
-            return None
-        cnt = max(int(d * frac + 0.5), min(1, d))
-        if cnt >= d:
-            return None
-        # without replacement the draw is already the ascending set
-        return self._indices(d, cnt, False, _trees_seed(self.feature_fraction_seed), t)
-
-    def _boost(self, Xa, y32, n_classes=1):
-        n, d = Xa.shape
-        K = int(n_classes)
-        b = self._bind()
-        seed = _trees_seed(self.random_state)
-        drop_seed = _trees_seed(self.drop_seed)
-        if self._KIND == 0:
-            inits = [_trees_fsum_f32(b, y32) / n]
-        elif self._KIND == 1:
-            p = _trees_fsum_f32(b, y32) / n
-            if not 0.0 < p < 1.0:
-                raise ValueError("y must hold both classes")
-            inits = [float(b.x_trees_log64(p / (1.0 - p)))]
-        else:
-            # the class counts and the K priors log(max(1e-15, count / n))
-            # in the binding (lane py-runtime-b: `x_trees_class_priors`)
-            cnt = empty((K,), "<i4")
-            b.x_trees_class_counts(addr_ro(y32, name="y"), addr(cnt, name="counts"), [n, K])
-            priors = empty((K,), "<f8")
-            b.x_trees_class_priors(addr_ro(cnt, name="counts"), addr(priors, name="priors"), [n, K])
-            inits = priors.tolist()
-        self.init_score_ = inits[0] if K == 1 else inits
-        lr = float(self.learning_rate)
-        l1, mds, lam = float(self.reg_alpha), float(self.max_delta_step), float(self.reg_lambda)
-        self.n_classes_ = K
-        self.trees_, self.tree_values_, self.tree_coefs_, self.tree_weights_ = [], [], [], []
-        self._bag_at = None
-        max_depth = None if self.max_depth is None or int(self.max_depth) <= 0 else int(self.max_depth)
-        # trees-apple3: members that fit every row and column of X share ONE
-        # staged copy of it (a bagged or column-sampled member gathers its
-        # own X and fits as before)
-        session = None
-        if not (float(self.subsample) < 1.0 and int(self.subsample_freq) > 0) \
-                and not float(self.colsample_bytree) < 1.0:
-            # lane/gap-nv-classical2: DART opens the exact session by default
-            # (MOJOLEARN_FOREST_SESSION=0 still turns it off). Without it each
-            # of the n_estimators members scanned, transposed, staged and
-            # uploaded the whole of X and rebuilt its quantiles; in the
-            # session each member still draws its own quantile sample, so
-            # each member's forest is the one its own fit returns.
-            session = _trees_member_session(
-                RandomForestRegressor(n_estimators=1, numeric_mode=self.numeric_mode), Xa, True,
-                default="1")
-        try:
-            # lane py-runtime-b: the round is the binding's (`x_trees_dart_*`)
-            # on every build; main's host loop over Python lists is deleted
-            self._dart_device(b, session, K)
-            self._boost_loop_device(Xa, y32, K, b, seed, drop_seed, inits, lr, l1, mds, lam, max_depth, session)
-        finally:
-            if session is not None:
-                session.close()
-        self._bag_at = None
-        self.n_features_in_ = d
-        return self
-
     # -------------------------------------------- lane/apple-fast-dart
     # The boosting round on the device (xtrees/dart_device.mojo): FAST on
     # every GPU vendor (Apple since lane/apple-fast-dart, NVIDIA and AMD since
@@ -2115,158 +1306,6 @@ class _DARTBase(_TreesEnsembleBase):
     # float32 on the device and the dropped trees come off and go back as
     # one gathered sum per row (the docstring of dart_device.mojo).
     _DART_VALUES_CAP = 1 << 26
-
-    def _dart_device(self, b, session, K):
-        """Refuses a binary without the round's entries (a FAST CPU-only
-        install, the _OFF defines) and a fit past the node or leaf-value cap
-        below (lane py-runtime-b deleted main's host loop over Python lists
-        that took them). Every other fit, with or without a forest data
-        session, bagged and column-sampled included, takes the round."""
-        if not callable(getattr(b, "x_trees_dart_open", None)):
-            raise NotImplementedError(
-                "mojolearn DART: this binary has no x_trees_dart_* round (a FAST CPU-only install or a "
-                "MOJOLEARN_*DART_DEVICE_OFF build); the host loop is removed, so the fit is refused by name")
-        node_cap = 2 * int(self.num_leaves) - 1
-        if not (1 <= node_cap <= 65535 and int(self.n_estimators) * K * node_cap <= self._DART_VALUES_CAP):
-            raise NotImplementedError(
-                f"mojolearn DART: n_estimators * classes * (2 * num_leaves - 1) must be at most "
-                f"{self._DART_VALUES_CAP} and num_leaves at most 32768 (the round's leaf-value store); refused by name")
-
-    @staticmethod
-    def _dart_thr(v):
-        """Encode the scalar skip_drop argument for the binding's 53-bit draw.
-
-        For u = m / 2**53, u < v is exactly m < ceil(v * 2**53).
-        This converts one API parameter; the binding performs all draws.
-        """
-        if not v > 0.0:
-            return 0
-        if v >= 1.0:
-            return 1 << 53
-        return int(math.ceil(v * 9007199254740992.0))
-
-    def _boost_loop_device(self, Xa, y32, K, b, seed, drop_seed, inits, lr, l1, mds, lam, max_depth, session):
-        n, d = Xa.shape
-        n_iters = int(self.n_estimators)
-        node_cap = 2 * int(self.num_leaves) - 1
-        all_cols = self._arange(d)
-        inits32 = Array.from_list([float(v) for v in inits], "<f4")  # glue: class starts as float32 words
-        skip_thr = self._dart_thr(float(self.skip_drop))
-        bad = empty((1,), "<i4")
-        # lane py-runtime-b: the tree weights, the coefficients and the weight
-        # sum live in binary64 buffers the binding updates
-        # (`x_trees_dart_thresholds` before the step, `x_trees_dart_rescale`
-        # after it), the same words main's Python lists held
-        weights64 = empty((n_iters,), "<f8")
-        coefs64 = empty((n_iters * K,), "<f8")
-        coef32 = empty((n_iters * K,), "<f4")
-        thr64 = empty((n_iters,), "<i8")
-        flags = empty((n_iters,), "<i4")
-        state = Array.from_list([0.0], "<f8")
-        book = [int(K), 1 if self.uniform_drop else 0]
-        handle = b.x_trees_dart_open(addr_ro(Xa, name="X"), addr_ro(y32, name="y"), addr_ro(inits32, name="inits"),
-                                     [n, d, K, self._KIND, n_iters, node_cap])
-        try:
-            for it in range(n_iters):  # glue: one boosting round per estimator
-                t = it
-                b.x_trees_dart_thresholds(addr(weights64, name="weights"), addr(coefs64, name="coefs"),
-                                          addr(coef32, name="coef32"), addr(thr64, name="thr"),
-                                          addr(state, name="state"), [t] + book + [int(self.max_drop)],
-                                          float(self.drop_rate))
-                # The K n-sized targets stay in the DART session's target
-                # plane (cpu4-forest): each member tree fits there
-                # (`_fit_in_dart`), as do the score, gradients and leaf sums
-                b.x_trees_dart_step(handle, addr_ro(coef32, name="coef"), addr_ro(thr64, name="thr"),
-                                    addr(flags, name="flags"), addr(bad, name="bad"),
-                                    [], [t, drop_seed, it, skip_thr])
-                if bad.tolist()[0]:
-                    raise RuntimeError("x_trees dart: a tree walk left its tree (child or column out of range)")
-                _, shrink, factor = b.x_trees_dart_rescale(addr(weights64, name="weights"),
-                                                           addr(coefs64, name="coefs"), addr_ro(flags, name="flags"),
-                                                           addr(state, name="state"),
-                                                           [t] + book + [1 if self.xgboost_dart_mode else 0], lr)
-                # the round's bag rows (device-drawn `x_trees_bag_rows`; None:
-                # every row), drawn after the step so the last round's list
-                # (its copies landed at the step's sync) may be replaced
-                rows = self._bag(n, it)
-                m = 0 if rows is None else len(rows)
-                for c in range(K):  # glue: one member tree per class (K classes)
-                    j = it * K + c
-                    cols = self._cols(d, j)
-                    tree = RandomForestRegressor(
-                        n_estimators=1, bootstrap=False, max_features=1.0, max_depth=max_depth,
-                        max_leaves=int(self.num_leaves), min_samples_leaf=int(self.min_child_samples),
-                        n_bins=int(self.max_bin), random_state=_trees_sub_seed(seed, j), n_streams=1,
-                        numeric_mode=self.numeric_mode)
-                    # the member on the DART session's X and class-c target,
-                    # at the bag rows and the tree's columns (device gathers);
-                    # the colid back in X's columns (device remap)
-                    tree._fit_in_dart(handle, c, n, d, rows=rows, cols=cols)
-                    if cols is not None:
-                        cid = tree._colid.copy()
-                        b.x_trees_remap_cols(addr(cid, name="colid"), addr_ro(cols, name="cols"),
-                                             [len(cid), len(cols)])
-                        tree._colid = cid
-                    offs = tree._offsets.tolist()
-                    lo, n_nodes = int(offs[0]), int(offs[1]) - int(offs[0])
-                    values = empty((n_nodes,), "<f4")
-                    b.x_trees_dart_add(handle, addr_ro(tree._colid, name="colid"),
-                                       addr_ro(tree._quesval, name="quesval"), addr_ro(tree._left_child, name="left"),
-                                       addr(values, name="values"),
-                                       addr_ro(rows if rows is not None else all_cols, name="bag rows"),
-                                       [j, c, lo, n_nodes, float(shrink), float(factor), lam, l1, mds, m])
-                    self.trees_.append(tree)
-                    self.tree_values_.append(values)
-        finally:
-            b.x_trees_dart_close(handle, addr(bad, name="bad"))
-        if bad.tolist()[0]:
-            raise RuntimeError("x_trees dart: a tree walk left its tree (child or column out of range)")
-        self.tree_coefs_ = coefs64.tolist()
-        self.tree_weights_ = weights64.tolist()
-
-    def _raw(self, X):
-        """Class-major raw scores (K * n) float64; K = 1 is (n,)."""
-        if not hasattr(self, "trees_"):
-            raise RuntimeError("this estimator is not fitted yet")
-        Xa, _ = as_f32_c(X, ndim=2, name="X")
-        if Xa.shape[1] != self.n_features_in_:
-            raise ValueError(f"X has {Xa.shape[1]} features, fit saw {self.n_features_in_}")
-        n, d = Xa.shape
-        K = int(getattr(self, "n_classes_", 1))
-        inits = [self.init_score_] if K == 1 else list(self.init_score_)
-        score = empty((K * n,), "<f8")
-        if n == 0:
-            return score
-        # lane cpu2-l5-trees: ONE native entry (`x_trees_dart_predict`, a device
-        # kernel on a GPU build, its host twin on the host column) walks every
-        # row through every tree and folds coef x leaf value onto the class
-        # start, trees ascending per (class, row), in soft binary64: the words
-        # main's per-tree `x_trees_apply` + host `x_trees_tree_score_add` loop
-        # wrote under IDENTICAL. Below is glue: one address per tree and array.
-        cols, ques, lefts, vals, sizes, coefs = [], [], [], [], [], []
-        for tree, values, coef in zip(self.trees_, self.tree_values_, self.tree_coefs_):  # glue: T tree addresses
-            offs = tree._offsets.tolist()
-            lo = int(offs[0])
-            cols.append(addr_ro(tree._colid, name="colid") + 4 * lo)
-            ques.append(addr_ro(tree._quesval, name="quesval") + 4 * lo)
-            lefts.append(addr_ro(tree._left_child, name="left") + 4 * lo)
-            vals.append(addr_ro(values, name="values"))
-            sizes.append(int(offs[1]) - lo)
-            coefs.append(float(coef))
-        starts = [float(v) for v in inits]  # glue: the K class starts
-        self._bind().x_trees_dart_predict(addr_ro(Xa, name="X"), [cols, ques, lefts, vals], sizes, coefs,
-                                          starts, addr(score, name="score"), [n, d, K])
-        return score
-
-    def _raw_rows(self, X):
-        """The raw scores as (n, K) row-major, K >= 2."""
-        raw = self._raw(X)
-        K = self.n_classes_
-        n = len(raw) // K
-        out = empty((n * K,), "<f8")
-        self._bind().x_trees_transpose_f64(addr_ro(raw, name="raw"), addr(out, name="raw rows"), [K, n])
-        return out.reshape((n, K))
-
 
 class DARTRegressor(RegressorScoreMixin, _DARTBase):
     """Gradient boosting with DART dropout, squared-error loss.
@@ -2368,16 +1407,30 @@ class DARTRegressor(RegressorScoreMixin, _DARTBase):
         -------
         self
         """
-        Xa, _ = as_f32_c(X, ndim=2, name="X")
-        y32, _ = as_f32_c(y, ndim=1, name="y")
-        if len(y32) != Xa.shape[0]:
-            raise ValueError(f"y has {len(y32)} rows, X has {Xa.shape[0]}")
-        return self._boost(Xa, y32)
+        return _TREES(self, "trees_boost_fit", (X, y, None), _TREES_CONTEXT)
 
     def predict(self, X):
         """Raw boosted score of each row, float64."""
-        return self._raw(X)
+        return _TREES(self, "trees_boost_predict", (X,), _TREES_CONTEXT)
 
+    def score(self, X, y, sample_weight=None):
+        """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True targets.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            R^2; 1.0 is a perfect fit.
+        """
+        return _TREES(self, "trees_boost_score", (X, y, sample_weight), _TREES_CONTEXT)
 
 class DARTClassifier(ClassifierScoreMixin, _DARTBase):
     """Gradient boosting with DART dropout, classification.
@@ -2484,16 +1537,7 @@ class DARTClassifier(ClassifierScoreMixin, _DARTBase):
         -------
         self
         """
-        Xa, _ = as_f32_c(X, ndim=2, name="X")
-        self.classes_, codes = encode_labels(y)
-        K = len(self.classes_)
-        if K < 2:
-            raise ValueError("y must hold at least two classes")
-        if len(codes) != Xa.shape[0]:
-            raise ValueError(f"y has {len(codes)} rows, X has {Xa.shape[0]}")
-        y32, _ = as_f32_c(codes, ndim=1, name="y")
-        self._KIND = 1 if K == 2 else 2
-        return self._boost(Xa, y32, 1 if K == 2 else K)
+        return _TREES(self, "trees_boost_fit", (X, y, None), _TREES_CONTEXT)
 
     def decision_function(self, X):
         """Raw boosted scores, float64.
@@ -2501,9 +1545,7 @@ class DARTClassifier(ClassifierScoreMixin, _DARTBase):
         Shape (n_samples,) for two classes (the log-odds of ``classes_[1]``),
         (n_samples, n_classes) otherwise.
         """
-        if int(getattr(self, "n_classes_", 1)) > 1:
-            return self._raw_rows(X)
-        return self._raw(X)
+        return _TREES(self, "trees_boost_decision_function", (X,), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """Class probabilities, float64, shape (n_samples, n_classes).
@@ -2511,36 +1553,31 @@ class DARTClassifier(ClassifierScoreMixin, _DARTBase):
         For two classes the columns are ``[1 - p, p]`` with ``p`` the sigmoid
         of the raw score; for more, the softmax of the per-class raw scores.
         """
-        if int(getattr(self, "n_classes_", 1)) > 1:
-            acc = self._raw_rows(X)
-            n, K = acc.shape
-            acc = acc.reshape((n * K,))
-            self._bind().x_trees_softmax_rows(addr(acc, name="proba"), [n, K])
-            return acc.reshape((n, K))
-        # the (0, raw) rows stacked natively
-        raw = self._raw(X)
-        n = len(raw)
-        acc = empty((2 * n,), "<f8")
-        # The binding borrows addresses, not array owners. Keep the zero
-        # column alive until it has been copied: an inline temporary dies
-        # after addr_ro(), before the native call, corrupting the first row.
-        zero = zeros((n,), "<f8")
-        self._bind().x_trees_stack_w64([addr_ro(zero, name="zero"), addr_ro(raw, name="raw")],
-                                       addr(acc, name="proba"), [n])
-        self._bind().x_trees_softmax_rows(addr(acc, name="proba"), [n, 2])
-        return acc.reshape((n, 2))
+        return _TREES(self, "trees_boost_predict_proba", (X,), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict the class with the highest score."""
-        if int(getattr(self, "n_classes_", 1)) > 1:
-            acc = self._raw_rows(X)
-            n, K = acc.shape
-            return decode_labels(self.classes_, self._argmax(acc.reshape((n * K,)), n, K))
-        raw = self._raw(X)
-        codes = empty((len(raw),), "<i4")
-        self._bind().x_trees_positive_codes(addr_ro(raw, name="raw"), addr(codes, name="codes"), [len(raw)])
-        return decode_labels(self.classes_, codes)
+        return _TREES(self, "trees_boost_predict", (X,), _TREES_CONTEXT)
 
+    def score(self, X, y, sample_weight=None):
+        """Mean accuracy of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True labels.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            Fraction of samples predicted correctly (weighted when
+            ``sample_weight`` is given).
+        """
+        return _TREES(self, "trees_boost_score", (X, y, sample_weight), _TREES_CONTEXT)
 
 # ----------------------------------------------------- RandomTreesEmbedding
 # Reference: scikit-learn `sklearn/ensemble/_forest.py` RandomTreesEmbedding
@@ -2624,14 +1661,6 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
         self.verbose = verbose
         self.warm_start = warm_start
 
-    def _validate_params(self):
-        if self.sparse_output:
-            _refuse("sparse_output=True", "the NumPy-free layer has no sparse container; the dense"
-                    " one-hot is returned.")
-        if self.n_jobs is not None or self.verbose or self.warm_start:
-            _refuse("n_jobs/verbose/warm_start", "not carried in pass 1.")
-        _trees_seed(self.random_state)
-
     # sk-edges: no `sample_weight` parameter. The totally random trees here
     # take no row weights (scikit-learn drops zero-weight rows from every node
     # and weighs the leaf limits), so an advertised parameter could only
@@ -2645,33 +1674,7 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
         -------
         self
         """
-        self._validate_params()
-        Xa, _ = as_f32_c(X, ndim=2, name="X")
-        n, d = Xa.shape
-        seed = _trees_seed(self.random_state)
-        u = empty((n,), "<f8")
-        self._bind().x_trees_uniform(addr(u, name="u"), [n, seed, 0])
-        yr, _ = as_f32_c(u, ndim=1, name="y")
-        self.forest_ = ExtraTreesRegressor(
-            n_estimators=int(self.n_estimators), max_depth=self.max_depth, max_features=1,
-            min_samples_split=self.min_samples_split, min_samples_leaf=self.min_samples_leaf,
-            max_leaf_nodes=self.max_leaf_nodes, min_impurity_decrease=self.min_impurity_decrease,
-            random_state=seed, numeric_mode=self.numeric_mode).fit(Xa, yr)
-        f = self.forest_
-        # the leaf numbering in the binding (a parallel scan over the leaf
-        # flags in node order; a fresh forest's offsets start at 0)
-        n_trees = len(f._offsets) - 1
-        nn = int(f._offsets[n_trees])
-        left = as_i32_c(f._left_child, ndim=1, name="left")[0]
-        node_col = empty((nn,), "<i4")
-        col = int(self._bind().x_trees_leaf_numbering(addr_ro(left, name="left"), addr(node_col, name="node_col"),
-                                                      [nn]))
-        self._tree_base = f._offsets[0:n_trees]
-        self._node_col = node_col
-        self.n_trees_ = n_trees
-        self.n_output_features_ = col
-        self.n_features_in_ = d
-        return self
+        return _TREES(self, "trees_boost_fit", (X,), _TREES_CONTEXT)
 
     def apply(self, X):
         """Leaf reached by each row in each tree.
@@ -2698,32 +1701,27 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
         Returns a dense float64 array of shape
         (n_samples, ``n_output_features_``).
         """
-        nodes = self.apply(X)
-        n = nodes.shape[0]
-        out = zeros((n * self.n_output_features_,), "<f8")
-        self._bind().x_trees_onehot_leaves(addr_ro(nodes, name="nodes"), addr_ro(self._tree_base, name="base"),
-                                           addr_ro(self._node_col, name="cols"), addr(out, name="embedding"),
-                                           [n, self.n_trees_, self.n_output_features_])
-        return out.reshape((n, self.n_output_features_))
+        return _TREES(self, "trees_boost_transform", (X,), _TREES_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit on ``X``, then return ``transform(X)``."""
-        self._validate_params()
-        return self.fit(X, y).transform(X)
+        return _TREES(self, "trees_boost_fit_transform", (X,), _TREES_CONTEXT)
+
+# The bagged and boosted ensembles' native owner (bindings/trees_public_boost.mojo):
+# each class's schema, the member classes it assembles and their fixed tables.
+_BOOST_MEMBERS = dict(trees_dt_classifier=DecisionTreeClassifier, trees_dt_regressor=DecisionTreeRegressor,
+                      trees_rf_classifier=RandomForestClassifier, trees_rf_regressor=RandomForestRegressor,
+                      trees_ada_losses=AdaBoostRegressor._LOSSES)
+_native_trees_bridge.register_boost(BaggingClassifier, "bagging_classifier", **_BOOST_MEMBERS)
+_native_trees_bridge.register_boost(BaggingRegressor, "bagging_regressor")
+_native_trees_bridge.register_boost(AdaBoostClassifier, "ada_classifier")
+_native_trees_bridge.register_boost(AdaBoostRegressor, "ada_regressor")
+_native_trees_bridge.register_boost(DARTClassifier, "dart_classifier")
+_native_trees_bridge.register_boost(DARTRegressor, "dart_regressor")
+_native_trees_bridge.register_boost(RandomTreesEmbedding, "rte")
 
 
 # ------------------------------------------------------ wrappers: helpers
-def _trees_cv(cv, default=5):
-    """An int number of folds (None: `default`), or `cv` itself when it is a
-    splitter (has `split`) or an iterable of (train, test) index pairs."""
-    if cv is None:
-        return default
-    if hasattr(cv, "split") or (not isinstance(cv, (str, bytes, numbers.Number)) and hasattr(cv, "__iter__")):
-        return cv
-    if is_bool(cv) or not isinstance(cv, numbers.Integral) or cv < 2:
-        raise ValueError(f"cv={cv!r}: an int >= 2, a splitter with split(X, y), or an iterable of"
-                         " (train, test) index pairs")
-    return int(cv)
 
 
 class _FoldRows(list):
@@ -2732,6 +1730,9 @@ class _FoldRows(list):
     __slots__ = ("_owner",)
 
 
+# The device fold law (sklearn's unshuffled StratifiedKFold / KFold) the
+# meta-estimator owner launches (bindings/trees_public_meta.mojo
+# `_native_folds`), kept here as the reference its test reads.
 def _trees_native_folds(est, n_splits, n, codes, n_classes=0):
     """`_trees_splits` for an int cv with the fold assignment and the fold
     row lists made on the device (xtrees/folds_device.mojo through
@@ -2768,78 +1769,6 @@ def _trees_native_folds(est, n_splits, n, codes, n_classes=0):
     return out
 
 
-def _trees_splits(cv, X, y, n, codes=None, partition=False, native=None, n_classes=0):
-    """[(train rows, test rows)] as int32 Arrays. An int is sklearn's
-    unshuffled StratifiedKFold (with `codes`) or KFold; a splitter object's
-    `split(X, y)` and an iterable of pairs are taken as given (sklearn
-    `check_cv`), their indices in the order they come. `partition`: every row
-    must be in exactly one test set (sklearn cross_val_predict). `native`:
-    the estimator whose binding builds an int cv's folds on the device
-    (`_trees_native_folds`; `codes` is then an int32 Array in
-    [0, n_classes)), else None."""
-    c = _trees_cv(cv)
-    # sk-edges: a y shorter than X made the device fold builder read past
-    # the codes buffer (CUDA_ERROR_ILLEGAL_ADDRESS, sticky for the whole
-    # process); scikit-learn's check_consistent_length refusal comes first.
-    n_x = getattr(X, "shape", None)
-    n_x = int(n_x[0]) if n_x is not None and len(n_x) else n
-    n_y = len(codes) if codes is not None else n
-    if len({int(n), n_x, int(n_y)}) != 1:  # glue: three row counts
-        raise ValueError("Found input variables with inconsistent numbers of samples: "
-                         f"[{n_x}, {int(n_y)}]")
-    if isinstance(c, int):
-        if native is None:
-            raise ValueError("mojolearn: an int cv needs the estimator whose binding builds the folds")
-        return _trees_native_folds(native, c, n, codes, n_classes)
-    from ._buffer import _native
-    pairs = c.split(X, y) if hasattr(c, "split") else c
-    out = []
-    seen = zeros((max(n, 1),), "<i8")
-    check = _native("check_indices_i64")
-    for pair in pairs:  # cpu-route: user cv splitter or iterable of index pairs, validated natively per pair [py-data-loop]
-        tr, te = (_trees_index_i64(v) for v in pair)  # cpu-route: user cv splitter or iterable of index pairs, validated natively per pair [py-data-loop]
-        if tr.size == 0 or te.size == 0:
-            raise ValueError("every cv split needs train and test rows")
-        for v in (tr, te):  # cpu-route: user cv splitter or iterable of index pairs, validated natively per pair [py-data-loop]
-            # range only: a repeated index is the splitter's to give
-            if int(check(addr_ro(v, name="cv rows"), v.size, n)) == 1:
-                raise ValueError(f"a cv index is outside [0, {n})")
-        _native("bincount_i64")(addr_ro(te, name="cv rows"), 3, te.size, n, addr(seen, name="seen"), 1)
-        out.append((tr.astype("<i4"), te.astype("<i4")))
-    if not out:
-        raise ValueError("cv produced no splits")
-    if partition and (seen.min() != 1 or seen.max() != 1):
-        raise ValueError("cross_val_predict only works for partitions: every row must be in exactly one test set")
-    return out
-
-
-def _trees_index_i64(v):
-    """A cv index list as an int64 Array (the native cast of an array; a
-    Python list goes in through array('q'), in C)."""
-    if isinstance(v, Array):
-        return v.astype("<i8") if v.dtype != "<i8" else v
-    try:
-        from ._buffer import _materialize
-        a, _ = _materialize(v, "cv rows")
-        return a.astype("<i8") if a.dtype != "<i8" else a
-    except (TypeError, ValueError):
-        import array as _array
-        store = _array.array("q", v)
-        return Array._owned(store, (len(store),), "<i8", "C")
-
-
-def _trees_estimators(estimators):
-    if not estimators:
-        raise ValueError("estimators must be a non-empty list of (name, estimator)")
-    names = [n for n, _ in estimators]  # glue: estimator names and drop markers
-    if len(set(names)) != len(names):
-        raise ValueError("estimator names must be unique")
-    active = [(n, e) for n, e in estimators if e != "drop"]  # glue: estimator names and drop markers
-    if not active:
-        raise ValueError("all estimators are 'drop'")
-    return active
-
-
 def _trees_output_2d(x, n):
     """A member's output as a float32 (n, c) Array (a 1-D output is c = 1)."""
     a, _ = as_f32_c(x, ndim=2, name="output") if len(getattr(x, "shape", ())) == 2 else \
@@ -2868,28 +1797,62 @@ class _FitTransformMixin:
         array of shape (n_samples, n_output_features), float64
             The transformed training data.
         """
-        return self.fit(X, y, **fit_params).transform(X)
+        return _TREES(self, "trees_meta_fit_transform", (X, y, fit_params), _TREES_CONTEXT)
+
+
+class _MetaClassifierScore:
+    """The meta-classifiers' `score`: one native call (the native predict
+    and the native accuracy)."""
+
+    def score(self, X, y, sample_weight=None):
+        """Mean accuracy of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True labels.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            Fraction of samples predicted correctly (weighted when
+            ``sample_weight`` is given).
+        """
+        return _TREES(self, "trees_meta_score", (X, y, sample_weight), _TREES_CONTEXT)
+
+
+class _MetaRegressorScore:
+    """The meta-regressors' `score`: one native call (the native predict
+    and the native R^2)."""
+
+    def score(self, X, y, sample_weight=None):
+        """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,) or (n_samples, n_outputs)
+            True targets.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            R^2, averaged uniformly over outputs; 1.0 is a perfect fit.
+        """
+        return _TREES(self, "trees_meta_score", (X, y, sample_weight), _TREES_CONTEXT)
 
 
 class _TreesWrapperBase(_TreesEnsembleBase):
-    def _check_X(self, X):
-        if not getattr(self, "_fitted", False):
-            raise RuntimeError("this estimator is not fitted yet")
-        Xa, _ = as_f32_c(X, ndim=2, name="X")
-        if Xa.shape[1] != self.n_features_in_:
-            raise ValueError(f"X has {Xa.shape[1]} features, fit saw {self.n_features_in_}")
-        return Xa
-
-    def _place(self, dst, n_rows, n_cols, out, rows, col0):
-        m = len(rows)
-        blk = _trees_output_2d(out, m)
-        self._bind().x_trees_scatter(addr(dst, name="dst"), addr_ro(blk, name="src"), addr_ro(rows, name="rows"),
-                                     [n_rows, n_cols, m, blk.shape[1], col0])
-        return blk.shape[1]
-
-    def _column(self, M, j):
-        n = M.shape[0]
-        return self._gather(M, self._arange(n), Array.from_list([j], "<i4")).reshape((n,))
+    """The meta-estimators' base: each public method is one call into
+    bindings/trees_public_meta.mojo (operations `trees_meta_*`), which
+    fits and queries the members through their own public methods."""
 
 
 # ------------------------------------------------------------------ Voting
@@ -2898,7 +1861,7 @@ class _TreesWrapperBase(_TreesEnsembleBase):
 # 'soft' = weighted np.average of predict_proba --, VotingRegressor :500 --
 # weighted np.average of predict). Members are cloned, never refitted in
 # place; n_jobs and verbose are refused by name.
-class VotingClassifier(ClassifierScoreMixin, _FitTransformMixin, _TreesWrapperBase):
+class VotingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _FitTransformMixin, _TreesWrapperBase):
     """Combine classifiers by a weighted majority vote or averaged probabilities.
 
     Follows scikit-learn's ``VotingClassifier``. ``fit`` clones every estimator
@@ -2914,6 +1877,7 @@ class VotingClassifier(ClassifierScoreMixin, _FitTransformMixin, _TreesWrapperBa
         Named mojolearn classifiers. Names must be unique; an entry whose
         estimator is the string ``"drop"`` is skipped. An empty list, duplicate
         names, or every entry ``"drop"`` raise ``ValueError``.
+        A member that is not a mojolearn estimator raises ``NotImplementedError``.
     voting : {"hard", "soft"}, default "hard"
         Majority vote on predicted labels, or argmax of the averaged
         probabilities (every member then needs ``predict_proba``). Any other
@@ -2966,19 +1930,6 @@ class VotingClassifier(ClassifierScoreMixin, _FitTransformMixin, _TreesWrapperBa
         self.flatten_transform = flatten_transform
         self.verbose = verbose
 
-    def _validate_params(self):
-        if self.voting not in ("hard", "soft"):
-            raise ValueError("voting must be 'hard' or 'soft'")
-        if self.n_jobs is not None or self.verbose:
-            _refuse("n_jobs/verbose", "the members fit one after another.")
-
-    def _weights(self):
-        m = len(self.estimators_)
-        w = [1.0] * m if self.weights is None else [float(v) for v in self.weights]  # glue: user weights argument as floats
-        if len(w) != m:
-            raise ValueError(f"weights has {len(w)} entries, there are {m} estimators")
-        return w
-
     def fit(self, X, y, sample_weight=None):
         """Fit a clone of every active estimator on ``X`` and ``y``.
 
@@ -2995,31 +1946,7 @@ class VotingClassifier(ClassifierScoreMixin, _FitTransformMixin, _TreesWrapperBa
         -------
         self
         """
-        self._validate_params()
-        Xa, _ = as_f32_c(X, ndim=2, name="X")
-        self.classes_, codes = encode_labels(y)
-        self.n_classes_ = len(self.classes_)
-        active = _trees_estimators(self.estimators)
-        sample_weight = _trees_member_weights(active, sample_weight, Xa.shape[0])
-        self.estimators_ = []
-        for _, est in active:  # glue: one member fit per estimator
-            e = _trees_clone(est)
-            e.fit(Xa, codes) if sample_weight is None else e.fit(Xa, codes, sample_weight=sample_weight)
-            self.estimators_.append(e)
-        self.named_estimators_ = dict((n, e) for (n, _), e in zip(active, self.estimators_))  # glue: named estimators map over members
-        self.n_features_in_ = Xa.shape[1]
-        self._fitted = True
-        self._weights()
-        return self
-
-    def _soft(self, Xa):
-        n, k = Xa.shape[0], self.n_classes_
-        acc = self._class_major([0.0], n * k)  # zero votes, filled by the binding
-        w = self._weights()
-        for e, wi in zip(self.estimators_, w):  # glue: one member prediction per estimator
-            self._acc_cols(acc, e.predict_proba(Xa), _trees_sub_cols(e), n, k, wi)
-        self._scale(acc, math.fsum(w))  # glue: the native fsum (core fsum_f64) of the k estimator weights
-        return acc
+        return _TREES(self, "trees_meta_fit", (X, y, sample_weight), _TREES_CONTEXT)
 
     @available_if(lambda self: self.voting != "hard")
     def predict_proba(self, X):
@@ -3032,10 +1959,7 @@ class VotingClassifier(ClassifierScoreMixin, _FitTransformMixin, _TreesWrapperBa
         -------
         array of shape (n_samples, n_classes), float64
         """
-        if self.voting == "hard":
-            raise AttributeError("predict_proba is not available when voting='hard'")
-        Xa = self._check_X(X)
-        return self._soft(Xa).reshape((Xa.shape[0], self.n_classes_))
+        return _TREES(self, "trees_meta_predict_proba", (X,), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict class labels by weighted vote (hard) or averaged probabilities (soft).
@@ -3045,15 +1969,7 @@ class VotingClassifier(ClassifierScoreMixin, _FitTransformMixin, _TreesWrapperBa
         array of shape (n_samples,)
             Labels from ``classes_``.
         """
-        Xa = self._check_X(X)
-        n, k = Xa.shape[0], self.n_classes_
-        if self.voting == "soft":
-            acc = self._soft(Xa)
-        else:
-            acc = zeros((n * k,), "<f8")
-            for e, wi in zip(self.estimators_, self._weights()):  # glue: one member prediction per estimator
-                self._acc_votes(acc, as_i32_c(e.predict(Xa), ndim=1, name="codes")[0], n, k, wi)
-        return decode_labels(self.classes_, self._argmax(acc, n, k))
+        return _TREES(self, "trees_meta_predict", (X,), _TREES_CONTEXT)
 
     def transform(self, X):
         """The members' outputs side by side.
@@ -3065,22 +1981,10 @@ class VotingClassifier(ClassifierScoreMixin, _FitTransformMixin, _TreesWrapperBa
             (n_samples, n_estimators * n_classes); with ``voting="hard"``, every
             member's predicted class code, shape (n_samples, n_estimators).
         """
-        Xa = self._check_X(X)
-        n, k, m = Xa.shape[0], self.n_classes_, len(self.estimators_)
-        width = m * k if self.voting == "soft" else m
-        out = zeros((n * width,), "<f8")
-        rows = self._arange(n)
-        for j, e in enumerate(self.estimators_):  # glue: one member prediction per estimator
-            if self.voting == "soft":
-                p = zeros((n * k,), "<f8")
-                self._acc_cols(p, e.predict_proba(Xa), _trees_sub_cols(e), n, k)
-                self._place(out, n, width, as_f32_c(p.reshape((n, k)), ndim=2, name="p")[0], rows, j * k)
-            else:
-                self._place(out, n, width, as_f32_c(e.predict(Xa), ndim=1, name="codes")[0], rows, j)
-        return out.reshape((n, width))
+        return _TREES(self, "trees_meta_transform", (X,), _TREES_CONTEXT)
 
 
-class VotingRegressor(RegressorScoreMixin, _FitTransformMixin, _TreesWrapperBase):
+class VotingRegressor(_MetaRegressorScore, RegressorScoreMixin, _FitTransformMixin, _TreesWrapperBase):
     """Average the predictions of several regressors.
 
     Follows scikit-learn's ``VotingRegressor``. ``fit`` clones every estimator
@@ -3094,6 +1998,7 @@ class VotingRegressor(RegressorScoreMixin, _FitTransformMixin, _TreesWrapperBase
         Named mojolearn regressors. Names must be unique; an entry whose
         estimator is the string ``"drop"`` is skipped. An empty list, duplicate
         names, or every entry ``"drop"`` raise ``ValueError``.
+        A member that is not a mojolearn estimator raises ``NotImplementedError``.
     weights : sequence of float, default None
         One weight per active estimator; None weighs them equally. A length
         that does not match the active estimators raises ``ValueError`` in
@@ -3133,10 +2038,6 @@ class VotingRegressor(RegressorScoreMixin, _FitTransformMixin, _TreesWrapperBase
         self.n_jobs = n_jobs
         self.verbose = verbose
 
-    def _validate_params(self):
-        if self.n_jobs is not None or self.verbose:
-            _refuse("n_jobs/verbose", "the members fit one after another.")
-
     def fit(self, X, y, sample_weight=None):
         """Fit a clone of every active estimator on ``X`` and ``y``.
 
@@ -3153,19 +2054,7 @@ class VotingRegressor(RegressorScoreMixin, _FitTransformMixin, _TreesWrapperBase
         -------
         self
         """
-        self._validate_params()
-        Xa, _ = as_f32_c(X, ndim=2, name="X")
-        active = _trees_estimators(self.estimators)
-        sample_weight = _trees_member_weights(active, sample_weight, Xa.shape[0])
-        self.estimators_ = []
-        for _, est in active:  # glue: one member fit per estimator
-            e = _trees_clone(est)
-            e.fit(Xa, y) if sample_weight is None else e.fit(Xa, y, sample_weight=sample_weight)
-            self.estimators_.append(e)
-        self.named_estimators_ = dict((n, e) for (n, _), e in zip(active, self.estimators_))  # glue: named estimators map over members
-        self.n_features_in_ = Xa.shape[1]
-        self._fitted = True
-        return self
+        return _TREES(self, "trees_meta_fit", (X, y, sample_weight), _TREES_CONTEXT)
 
     def predict(self, X):
         """Weighted average of the members' predictions.
@@ -3174,16 +2063,7 @@ class VotingRegressor(RegressorScoreMixin, _FitTransformMixin, _TreesWrapperBase
         -------
         array of shape (n_samples,), float64
         """
-        Xa = self._check_X(X)
-        n, m = Xa.shape[0], len(self.estimators_)
-        w = [1.0] * m if self.weights is None else [float(v) for v in self.weights]  # glue: user weights argument as floats
-        if len(w) != m:
-            raise ValueError(f"weights has {len(w)} entries, there are {m} estimators")
-        acc = zeros((n,), "<f8")
-        for e, wi in zip(self.estimators_, w):  # glue: one member prediction per estimator
-            self._acc(acc, e.predict(Xa), n, wi)
-        self._scale(acc, math.fsum(w))  # glue: the native fsum (core fsum_f64) of the k estimator weights
-        return acc
+        return _TREES(self, "trees_meta_predict", (X,), _TREES_CONTEXT)
 
     def transform(self, X):
         """Every member's prediction side by side.
@@ -3192,13 +2072,7 @@ class VotingRegressor(RegressorScoreMixin, _FitTransformMixin, _TreesWrapperBase
         -------
         array of shape (n_samples, n_estimators), float64
         """
-        Xa = self._check_X(X)
-        n, m = Xa.shape[0], len(self.estimators_)
-        out = zeros((n * m,), "<f8")
-        rows = self._arange(n)
-        for j, e in enumerate(self.estimators_):  # glue: one member prediction per estimator
-            self._place(out, n, m, as_f32_c(e.predict(Xa), ndim=1, name="p")[0], rows, j)
-        return out.reshape((n, m))
+        return _TREES(self, "trees_meta_transform", (X,), _TREES_CONTEXT)
 
 
 # ---------------------------------------------------------------- Stacking
@@ -3213,6 +2087,7 @@ class VotingRegressor(RegressorScoreMixin, _FitTransformMixin, _TreesWrapperBase
 # DEVIATION: the default final estimators are this library's
 # LogisticRegression and Ridge (sklearn: LogisticRegression, RidgeCV).
 class _StackingBase(_FitTransformMixin, _TreesWrapperBase):
+
     def __init__(self, estimators, final_estimator, cv, stack_method, n_jobs, passthrough, verbose):
         # Stored as given; `_validate_params` checks them at fit (scikit-learn's convention).
         self.estimators = estimators
@@ -3222,76 +2097,6 @@ class _StackingBase(_FitTransformMixin, _TreesWrapperBase):
         self.n_jobs = n_jobs
         self.passthrough = passthrough
         self.verbose = verbose
-
-    def _validate_params(self):
-        if self.n_jobs is not None or self.verbose:
-            _refuse("n_jobs/verbose", "the members fit one after another.")
-        if self.stack_method not in ("auto", "predict_proba", "decision_function", "predict"):
-            raise ValueError("stack_method must be auto, predict_proba, decision_function or predict")
-        _trees_cv(self.cv)
-
-    def _method(self, est):
-        if self.stack_method != "auto":
-            return self.stack_method
-        for m in (("predict_proba", "decision_function", "predict") if self._estimator_type == "classifier"  # glue: stack method names tried in order
-                  else ("predict",)):
-            if hasattr(est, m):
-                return m
-        return "predict"
-
-    def _out(self, est, method, Xs):
-        out = getattr(est, method)(Xs)
-        if method == "predict_proba" and self._binary:
-            n = Xs.shape[0]
-            p = _trees_output_2d(out, n)
-            return self._gather(p, self._arange(n), Array.from_list([1], "<i4"))
-        return out
-
-    def _widths(self, Xa, y_fit):
-        return None
-
-    def _fit_stack(self, X, y_fit, splits, final, sample_weight=None):
-        Xa, _ = as_f32_c(X, ndim=2, name="X")
-        n, d = Xa.shape
-        active = _trees_estimators(self.estimators)
-        # scikit-learn: the weights go to every member's fit (all rows and
-        # each fold's training rows) and to the final estimator's
-        sw = _trees_member_weights(active + [("final_estimator", final)], sample_weight, n)
-
-        def fit_member(e, Xs, ys, rows=None):
-            if sw is None:
-                return e.fit(Xs, ys)
-            return e.fit(Xs, ys, sample_weight=sw if rows is None else self._gather_vec(sw, rows))
-        self.estimators_ = []
-        for _, est in active:  # glue: one member fit per estimator
-            e = _trees_clone(est)
-            fit_member(e, Xa, y_fit(None))
-            self.estimators_.append(e)
-        self.stack_method_ = [self._method(e) for e in self.estimators_]  # glue: one stack method per member
-        widths = []
-        for e, m in zip(self.estimators_, self.stack_method_):  # glue: output widths over the members
-            widths.append(_trees_output_2d(self._out(e, m, Xa[0:2]), 2).shape[1])
-        width = sum(widths) + (d if self.passthrough else 0)  # glue: output widths over the members
-        meta = zeros((n * width,), "<f8")
-        cols = self._arange(d)
-        for tr, te in splits:  # glue: one member fit per fold and member
-            col0 = 0
-            for (_, est), m, w in zip(active, self.stack_method_, widths):  # glue: one member fit per fold and member
-                e = _trees_clone(est)
-                fit_member(e, self._gather(Xa, tr, cols), y_fit(tr), tr)
-                got = self._place(meta, n, width, self._out(e, m, self._gather(Xa, te, cols)), te, col0)
-                if got != w:
-                    raise ValueError("a member's output width changed between folds (a class missing from a fold)")
-                col0 += w
-        if self.passthrough:
-            self._place(meta, n, width, Xa, self._arange(n), sum(widths))  # glue: sum of the members' output widths
-        self._widths_ = widths
-        self.named_estimators_ = dict((nm, e) for (nm, _), e in zip(active, self.estimators_))  # glue: named estimators map over members
-        self.final_estimator_ = _trees_clone(final)
-        fit_member(self.final_estimator_, as_f32_c(meta.reshape((n, width)), ndim=2, name="meta")[0], y_fit(None))
-        self.n_features_in_ = d
-        self._fitted = True
-        return self
 
     def transform(self, X):
         """The meta features the final estimator reads.
@@ -3304,22 +2109,10 @@ class _StackingBase(_FitTransformMixin, _TreesWrapperBase):
         -------
         array of shape (n_samples, n_meta_features), float64
         """
-        Xa = self._check_X(X)
-        n, d = Xa.shape
-        width = sum(self._widths_) + (d if self.passthrough else 0)  # glue: output widths over the members
-        meta = zeros((n * width,), "<f8")
-        rows, col0 = self._arange(n), 0
-        for e, m in zip(self.estimators_, self.stack_method_):  # glue: one member prediction per estimator
-            col0 += self._place(meta, n, width, self._out(e, m, Xa), rows, col0)
-        if self.passthrough:
-            self._place(meta, n, width, Xa, rows, col0)
-        return meta.reshape((n, width))
-
-    def _meta32(self, X):
-        return as_f32_c(self.transform(X), ndim=2, name="meta")[0]
+        return _TREES(self, "trees_meta_transform", (X,), _TREES_CONTEXT)
 
 
-class StackingClassifier(ClassifierScoreMixin, _StackingBase):
+class StackingClassifier(_MetaClassifierScore, ClassifierScoreMixin, _StackingBase):
     """Stack classifiers and train a final classifier on their cross-validated outputs.
 
     Follows scikit-learn's ``StackingClassifier``. ``fit`` refits every member on
@@ -3335,9 +2128,11 @@ class StackingClassifier(ClassifierScoreMixin, _StackingBase):
     estimators : list of (str, estimator)
         Named mojolearn classifiers. Names must be unique; an entry whose
         estimator is the string ``"drop"`` is skipped.
+        A member that is not a mojolearn estimator raises ``NotImplementedError``.
     final_estimator : estimator, default None
         The classifier fitted on the meta features; None uses
         ``LogisticRegression()``.
+        Must be a mojolearn estimator; any other estimator raises ``NotImplementedError``.
     cv : int, splitter or iterable of (train, test), default None
         An int is the number of unshuffled stratified folds (``>= 2``); None
         means 5. A splitter object's ``split(X, y)`` or an iterable of index
@@ -3411,18 +2206,7 @@ class StackingClassifier(ClassifierScoreMixin, _StackingBase):
             When a member's output width differs between folds (a class missing
             from a fold's training rows).
         """
-        self._validate_params()
-        self.classes_, codes = encode_labels(y)
-        self._binary = len(self.classes_) == 2
-        nat = _trees_native_glue(self)
-        splits = _trees_splits(self.cv, X, y, len(codes), codes=codes,
-                               partition=True, native=nat, n_classes=len(self.classes_))
-        final = self.final_estimator
-        if final is None:
-            from .linear_model import LogisticRegression
-            final = LogisticRegression()
-        return self._fit_stack(X, lambda rows: codes if rows is None else self._gather_codes(codes, rows),
-                               splits, final, sample_weight)
+        return _TREES(self, "trees_meta_fit", (X, y, sample_weight), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict class labels with the final estimator on the stacked outputs.
@@ -3432,8 +2216,7 @@ class StackingClassifier(ClassifierScoreMixin, _StackingBase):
         array of shape (n_samples,)
             Labels from ``classes_``.
         """
-        codes = as_i32_c(self.final_estimator_.predict(self._meta32(X)), ndim=1, name="codes")[0]
-        return decode_labels(self.classes_, codes)
+        return _TREES(self, "trees_meta_predict", (X,), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """The final estimator's class probabilities on the stacked outputs.
@@ -3442,15 +2225,10 @@ class StackingClassifier(ClassifierScoreMixin, _StackingBase):
         -------
         array of shape (n_samples, n_classes), float64
         """
-        k = len(self.classes_)
-        Xm = self._meta32(X)
-        n = Xm.shape[0]
-        acc = self._class_major([0.0], n * k)  # zero votes, filled by the binding
-        self._acc_cols(acc, self.final_estimator_.predict_proba(Xm), _trees_sub_cols(self.final_estimator_), n, k)
-        return acc.reshape((n, k))
+        return _TREES(self, "trees_meta_predict_proba", (X,), _TREES_CONTEXT)
 
 
-class StackingRegressor(RegressorScoreMixin, _StackingBase):
+class StackingRegressor(_MetaRegressorScore, RegressorScoreMixin, _StackingBase):
     """Stack regressors and train a final regressor on their cross-validated outputs.
 
     Follows scikit-learn's ``StackingRegressor``. ``fit`` refits every member on
@@ -3466,8 +2244,10 @@ class StackingRegressor(RegressorScoreMixin, _StackingBase):
     estimators : list of (str, estimator)
         Named mojolearn regressors. Names must be unique; an entry whose
         estimator is the string ``"drop"`` is skipped.
+        A member that is not a mojolearn estimator raises ``NotImplementedError``.
     final_estimator : estimator, default None
         The regressor fitted on the meta features; None uses ``Ridge()``.
+        Must be a mojolearn estimator; any other estimator raises ``NotImplementedError``.
     cv : int, splitter or iterable of (train, test), default None
         An int is the number of unshuffled ``KFold`` folds (``>= 2``); None
         means 5. A splitter object's ``split(X, y)`` or an iterable of index
@@ -3528,15 +2308,7 @@ class StackingRegressor(RegressorScoreMixin, _StackingBase):
         -------
         self
         """
-        self._validate_params()
-        y32, _ = as_f32_c(y, ndim=1, name="y")
-        splits = _trees_splits(self.cv, X, y, len(y32), partition=True, native=_trees_native_glue(self))
-        final = self.final_estimator
-        if final is None:
-            from .linear_model import Ridge
-            final = Ridge()
-        return self._fit_stack(X, lambda rows: y32 if rows is None else self._gather_vec(y32, rows), splits, final,
-                               sample_weight)
+        return _TREES(self, "trees_meta_fit", (X, y, sample_weight), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict with the final estimator on the stacked member predictions.
@@ -3545,7 +2317,7 @@ class StackingRegressor(RegressorScoreMixin, _StackingBase):
         -------
         array of shape (n_samples,)
         """
-        return self.final_estimator_.predict(self._meta32(X))
+        return _TREES(self, "trees_meta_predict", (X,), _TREES_CONTEXT)
 
 
 # ------------------------------------------------------------- MultiOutput
@@ -3555,26 +2327,10 @@ class StackingRegressor(RegressorScoreMixin, _StackingBase):
 # 2-D buffer; a classifier's labels per column are encoded to codes.
 #: lane apple-fast-meta (FAST + Apple default, -D MOJOLEARN_MULTIOUT_RIDGE_OFF turns it off):
 #: MultiOutputRegressor(Ridge) fits every target in ONE ridge program
-#: (glm/impl/ridge_multi.mojo: X up once, one eigendecomposition, one U^T b
-#: and one V (S b) per target) and predicts every target in one launch. The
-#: estimators binding built with the define exports ridge_fit_multi; every
-#: other binding takes the per-target route below.
-def _multiout_ridge_entry(est, sample_weight):
-    """The estimators binding when it has the one-program ridge and `est`
-    is a plain Ridge (eig arm, no normalize), else None."""
-    from .linear_model import Ridge
-    if type(est) is Ridge:
-        est._validate_params()  # Ridge checks its parameters at fit; this route skips Ridge.fit
-    if sample_weight is not None or type(est) is not Ridge or est.normalize:
-        return None
-    try:
-        b = est._bind("_mojolearn_estimators")
-        return b if hasattr(b, "ridge_fit_multi") else None
-    except Exception:
-        return None
-
-
-class MultiOutputRegressor(RegressorScoreMixin, _TreesWrapperBase):
+#: (glm/impl/ridge_multi.mojo) when the estimators binding exports
+#: ridge_fit_multi; the native owner takes that route (trees_public_meta.mojo
+#: `_multioutput_ridge_fit`), every other binding the per-target route.
+class MultiOutputRegressor(_MetaRegressorScore, RegressorScoreMixin, _TreesWrapperBase):
     """Fit one regressor per target column.
 
     Follows scikit-learn's ``MultiOutputRegressor``: ``fit`` clones
@@ -3585,6 +2341,7 @@ class MultiOutputRegressor(RegressorScoreMixin, _TreesWrapperBase):
     ----------
     estimator : estimator
         A mojolearn regressor; it is cloned, never fitted in place.
+        Must be a mojolearn estimator; any other estimator raises ``NotImplementedError``.
     n_jobs : None
         Only None is accepted; any other value raises ``NotImplementedError``.
 
@@ -3614,49 +2371,6 @@ class MultiOutputRegressor(RegressorScoreMixin, _TreesWrapperBase):
         self.estimator = estimator
         self.n_jobs = n_jobs
 
-    def _validate_params(self):
-        if self.n_jobs is not None:
-            _refuse("n_jobs", "the columns fit one after another.")
-
-    def _fit_ridge_multi(self, b, Xa, Ya):
-        """The one-program fit: X centered once (Ridge.fit's own device
-        helpers), Y's columns centered and solved on the device, m Ridge
-        objects filled from the words so `estimators_` reads as before."""
-        from .linear_model import _center, _column_means
-        n, d = Xa.shape
-        m = Ya.shape[1]
-        est = self.estimator
-        if est.fit_intercept:
-            mu32 = _column_means(b, Xa, None)
-            work_x = _center(b, Xa, mu32)
-        else:
-            mu32 = [0.0] * d
-            work_x = Xa
-        coef = empty((m * d,), "<f4")
-        ymean = empty((m,), "<f4")
-        icpt32 = zeros((m,), "<f4")
-        xm = Array.from_list(mu32, "<f4") if not isinstance(mu32, Array) else mu32
-        params = [n, d, m, float(est.alpha), 1 if est.fit_intercept else 0]
-        if est.fit_intercept:
-            # the intercepts ymean - xmean . coef in the binding
-            params += [addr_ro(xm, name="xmean"), addr(icpt32, name="intercepts")]
-        b.ridge_fit_multi(addr_ro(work_x, name="X"), addr_ro(Ya, name="Y"), addr(coef, name="coef"),
-                          addr(ymean, name="ymean"), params)
-        self.estimators_ = []
-        for j in range(m):  # glue: one fitted ridge per output column
-            e = _trees_clone(est)
-            e.solver_ = "eig"
-            e.coef_ = coef[j * d:(j + 1) * d]
-            e._x_mean = xm
-            e._y_mean = float(ymean[j]) if est.fit_intercept else 0.0
-            e.intercept_ = float(icpt32[j]) if est.fit_intercept else 0.0
-            e.n_features_in_ = d
-            self.estimators_.append(e)
-        self._multi_ridge = (coef, icpt32, m)
-        self.n_features_in_ = d
-        self._fitted = True
-        return self
-
     def fit(self, X, y, sample_weight=None):
         """Fit one clone of ``estimator`` per column of ``y``.
 
@@ -3674,26 +2388,7 @@ class MultiOutputRegressor(RegressorScoreMixin, _TreesWrapperBase):
         -------
         self
         """
-        self._validate_params()
-        Xa, _ = as_f32_c(X, ndim=2, name="X")
-        _trees_multioutput_y(y)
-        Ya, _ = as_f32_c(y, ndim=2, name="y")
-        if Ya.shape[0] != Xa.shape[0]:
-            raise ValueError(f"y has {Ya.shape[0]} rows, X has {Xa.shape[0]}")
-        sample_weight = _trees_member_weights([(None, self.estimator)], sample_weight, Xa.shape[0])
-        self._multi_ridge = None
-        b = _multiout_ridge_entry(self.estimator, sample_weight)
-        if b is not None and Ya.shape[1] > 0:
-            return self._fit_ridge_multi(b, Xa, Ya)
-        self.estimators_ = []
-        for j in range(Ya.shape[1]):  # glue: one member fit per output column
-            e = _trees_clone(self.estimator)
-            yj = self._column(Ya, j)
-            e.fit(Xa, yj) if sample_weight is None else e.fit(Xa, yj, sample_weight=sample_weight)
-            self.estimators_.append(e)
-        self.n_features_in_ = Xa.shape[1]
-        self._fitted = True
-        return self
+        return _TREES(self, "trees_meta_fit", (X, y, sample_weight), _TREES_CONTEXT)
 
     def predict(self, X):
         """Every target's prediction, one column per output.
@@ -3702,21 +2397,7 @@ class MultiOutputRegressor(RegressorScoreMixin, _TreesWrapperBase):
         -------
         array of shape (n_samples, n_outputs)
         """
-        Xa = self._check_X(X)
-        n, m = Xa.shape[0], len(self.estimators_)
-        mr = getattr(self, "_multi_ridge", None)
-        if mr is not None:
-            coef, icpt, m = mr
-            out = empty((n, m), "<f4")
-            self.estimators_[0]._bind("_mojolearn_estimators").ridge_predict_multi(
-                addr_ro(Xa, name="X"), addr_ro(coef, name="coef"), addr_ro(icpt, name="intercepts"),
-                addr(out, name="predictions"), [n, Xa.shape[1], m])
-            return out
-        out = zeros((n * m,), "<f8")
-        rows = self._arange(n)
-        for j, e in enumerate(self.estimators_):  # glue: one member prediction per estimator
-            self._place(out, n, m, as_f32_c(e.predict(Xa), ndim=1, name="p")[0], rows, j)
-        return out.reshape((n, m))
+        return _TREES(self, "trees_meta_predict", (X,), _TREES_CONTEXT)
 
 
 class MultiOutputClassifier(_TreesWrapperBase):
@@ -3732,6 +2413,7 @@ class MultiOutputClassifier(_TreesWrapperBase):
     ----------
     estimator : estimator
         A mojolearn classifier; it is cloned, never fitted in place.
+        Must be a mojolearn estimator; any other estimator raises ``NotImplementedError``.
     n_jobs : None
         Only None is accepted; any other value raises ``NotImplementedError``.
 
@@ -3763,10 +2445,6 @@ class MultiOutputClassifier(_TreesWrapperBase):
         self.estimator = estimator
         self.n_jobs = n_jobs
 
-    def _validate_params(self):
-        if self.n_jobs is not None:
-            _refuse("n_jobs", "the columns fit one after another.")
-
     def fit(self, X, y, sample_weight=None):
         """Fit one clone of ``estimator`` per label column of ``y``.
 
@@ -3784,79 +2462,7 @@ class MultiOutputClassifier(_TreesWrapperBase):
         -------
         self
         """
-        self._validate_params()
-        Xa, _ = as_f32_c(X, ndim=2, name="X")
-        if getattr(y, "ndim", None) == 1:
-            raise ValueError("y must have at least two dimensions for multi-output "
-                             "classification but has only one.")
-        if (not isinstance(y, (list, tuple)) and not _has_buffer(y)
-                and callable(getattr(y, "__array__", None))):
-            # A pandas DataFrame (scikit-learn's check_sample_weights_pandas_series)
-            # has no buffer and iterates its column names: its own `__array__`
-            # hands back the host block, as `_buffer._materialize` takes X.
-            # Glue: one conversion call.
-            y = y.__array__()
-        _trees_multioutput_y(y)
-        sample_weight = _trees_member_weights([(None, self.estimator)], sample_weight, Xa.shape[0])
-        W = _trees_label_words(y)
-        if W is not None:
-            return self._fit_words(Xa, W, sample_weight)
-        Ya = None
-        if _trees_float_dtype(y):
-            # a float y: each column natively (x_trees_column_f64), the same
-            # float labels its `tolist()` rows hold
-            Ya, _ = as_f64_c(y, ndim=2, name="y")
-            rows = None
-            if Ya.shape[0] != Xa.shape[0]:
-                raise ValueError(f"y has {Ya.shape[0]} rows, X has {Xa.shape[0]}")
-            m = Ya.shape[1]
-        else:
-            # glue: label objects (str, mixed) no Array holds, per output column
-            rows = y.tolist() if hasattr(y, "tolist") else [list(r) for r in y]  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time [py-data-loop]
-            if len(rows) != Xa.shape[0]:
-                raise ValueError(f"y has {len(rows)} rows, X has {Xa.shape[0]}")
-            if rows and not hasattr(rows[0], "__len__"):
-                raise ValueError("y must have at least two dimensions for multi-output "
-                                 "classification but has only one.")
-            m = len(rows[0])
-        self.estimators_, self.classes_ = [], []
-        for j in range(m):  # glue: one member fit per estimator
-            if Ya is not None:
-                n = Ya.shape[0]
-                col = empty((n,), "<f8")
-                self._bind().x_trees_column_f64(addr_ro(Ya, name="y"), addr(col, name="column"), [n, m, j])  # cpu-route: label column extracted for encode_labels at API entry
-                classes, codes = encode_labels(col)
-            else:
-                classes, codes = encode_labels([r[j] for r in rows])  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time [py-data-loop]
-            e = _trees_clone(self.estimator)
-            e.fit(Xa, codes) if sample_weight is None else e.fit(Xa, codes, sample_weight=sample_weight)
-            self.estimators_.append(e)
-            self.classes_.append(classes)
-        self.n_features_in_ = Xa.shape[1]
-        self._fitted = True
-        return self
-
-    def _fit_words(self, Xa, W, sample_weight):
-        """`fit` for a numeric Y (`_trees_label_words`): the label columns are
-        one native transpose (x_trees_transpose_f64 moves the 8-byte words of
-        an int64 or float64 Y), each encoded natively; the same classes and
-        codes the Python `tolist()` columns gave (lane apple-fast-py2mojo-trees)."""
-        n, m = W.shape
-        if n != Xa.shape[0]:
-            raise ValueError(f"Y has {n} rows, X has {Xa.shape[0]}")
-        T = empty((m * n,), W.dtype)
-        self._bind().x_trees_transpose_f64(addr_ro(W, name="Y"), addr(T, name="Y^T"), [n, m])
-        T = T.reshape((m, n))
-        self.estimators_, self.classes_ = [], []
-        for j in range(m):  # glue: one member fit per estimator
-            classes, codes = encode_labels(T[j])
-            e = _trees_clone(self.estimator)
-            e.fit(Xa, codes) if sample_weight is None else e.fit(Xa, codes, sample_weight=sample_weight)
-            self.estimators_.append(e)
-            self.classes_.append(classes)
-        self.n_features_in_ = Xa.shape[1]
-        self._fitted = True
-        return self
+        return _TREES(self, "trees_meta_fit", (X, y, sample_weight), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict every output's labels.
@@ -3867,35 +2473,7 @@ class MultiOutputClassifier(_TreesWrapperBase):
             For numeric labels, int64 when every output's labels are integers,
             else float64.
         """
-        Xa = self._check_X(X)
-        out = self._predict_stacked(Xa)
-        if out is not None:
-            return out
-        # glue: label objects (str, mixed) no Array holds, row tuples of them
-        cols = [decode_labels(c, as_i32_c(e.predict(Xa), ndim=1, name="codes")[0]).tolist()
-                for e, c in zip(self.estimators_, self.classes_)]  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time [py-data-loop]
-        kind = "<i8" if all(isinstance(v, int) for col in cols for v in col[:1]) else "<f8"  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time [py-data-loop]
-        return Array.from_list([list(r) for r in zip(*cols)], kind)  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time [py-data-loop]
-
-    def _predict_stacked(self, Xa):
-        """`predict` with the decoded columns stacked natively
-        (x_trees_stack_w64), or None when some output's classes are not all
-        int or all float (labels no Array holds take the Python rows). The
-        dtype rule is the Python one: int64 when every column is int64, else
-        float64 with the int columns widened exactly as `Array.from_list`
-        did (lane apple-fast-py2mojo-trees)."""
-        n = Xa.shape[0]
-        cols = []
-        for e, c in zip(self.estimators_, self.classes_):  # glue: one member prediction per estimator
-            col = decode_labels(c, as_i32_c(e.predict(Xa), ndim=1, name="codes")[0])
-            if not isinstance(col, Array) or col.dtype not in ("<i8", "<f8"):
-                return None
-            cols.append(col)
-        kind = "<i8" if all(col.dtype == "<i8" for col in cols) else "<f8"  # glue: dtype check over the output columns
-        cols = [col if col.dtype == kind else col.astype(kind) for col in cols]  # glue: dtype check over the output columns
-        out = empty((n * len(cols),), kind)
-        self._bind().x_trees_stack_w64([addr_ro(col, name="column") for col in cols], addr(out, name="Y"), [n])  # glue: column addresses for the native stack
-        return out.reshape((n, len(cols)))
+        return _TREES(self, "trees_meta_predict", (X,), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """Every output's class probabilities.
@@ -3906,14 +2484,7 @@ class MultiOutputClassifier(_TreesWrapperBase):
             One float64 array of shape (n_samples, n_classes_j) per output, its
             columns in the order of ``classes_[j]``.
         """
-        Xa = self._check_X(X)
-        n = Xa.shape[0]
-        out = []
-        for e, c in zip(self.estimators_, self.classes_):  # glue: one member prediction per estimator
-            acc = zeros((n * len(c),), "<f8")
-            self._acc_cols(acc, e.predict_proba(Xa), _trees_sub_cols(e), n, len(c))
-            out.append(acc.reshape((n, len(c))))
-        return out
+        return _TREES(self, "trees_meta_predict_proba", (X,), _TREES_CONTEXT)
 
     def score(self, X, y, sample_weight=None):
         """Subset accuracy: the fraction of rows whose every output is
@@ -3934,22 +2505,7 @@ class MultiOutputClassifier(_TreesWrapperBase):
             Fraction of rows with all outputs correct (weighted when
             ``sample_weight`` is given).
         """
-        pred = self.predict(X)
-        truth, _ = _materialize(y, "y")
-        if truth.shape != pred.shape:
-            raise ValueError(f"y has shape {truth.shape}, the predictions have shape {pred.shape}")
-        n, m = pred.shape
-        # One mismatch flag per cell (the native elementwise compare), one
-        # all-match flag per row (x_neighbors `xn_row_all_zero` over the
-        # mismatch flags), then the metrics binding's (weighted) accuracy of
-        # those flags against 1.
-        miss = (truth != pred).astype("<i4")
-        hit = empty((n,), "<i4")
-        self._bind("_mojolearn_x_neighbors").xn_row_all_zero(
-            [addr_ro(miss, name="mismatch flags"), addr(hit, name="row matches")], [n, m], [])
-        from ._expansion_metrics import accuracy_fraction
-        return accuracy_fraction(full((n,), 1, "<i4"), hit, sample_weight,
-                                 getattr(self, "numeric_mode", None))
+        return _TREES(self, "trees_meta_score", (X, y, sample_weight), _TREES_CONTEXT)
 
 
 # --------------------------------------------------------------- OneVsRest
@@ -3959,7 +2515,7 @@ class MultiOutputClassifier(_TreesWrapperBase):
 # predict_proba :470 each class's positive probability, rows normalised in
 # the multiclass case). DEVIATION: a row whose scores sum to 0 is uniform,
 # where sklearn divides 0 / 0.
-class OneVsRestClassifier(ClassifierScoreMixin, _TreesWrapperBase):
+class OneVsRestClassifier(_MetaClassifierScore, ClassifierScoreMixin, _TreesWrapperBase):
     """Multiclass classification with one binary classifier per class.
 
     Follows scikit-learn's ``OneVsRestClassifier``: ``fit`` trains one clone of
@@ -3977,6 +2533,7 @@ class OneVsRestClassifier(ClassifierScoreMixin, _TreesWrapperBase):
     ----------
     estimator : estimator
         A mojolearn binary classifier; it is cloned, never fitted in place.
+        Must be a mojolearn estimator; any other estimator raises ``NotImplementedError``.
     n_jobs : None
         Only None is accepted; any other value raises ``NotImplementedError``.
     verbose : int, default 0
@@ -4009,10 +2566,6 @@ class OneVsRestClassifier(ClassifierScoreMixin, _TreesWrapperBase):
         self.n_jobs = n_jobs
         self.verbose = verbose
 
-    def _validate_params(self):
-        if self.n_jobs is not None or self.verbose:
-            _refuse("n_jobs/verbose", "the classes fit one after another.")
-
     def fit(self, X, y):
         """Fit one binary clone per class.
 
@@ -4027,49 +2580,7 @@ class OneVsRestClassifier(ClassifierScoreMixin, _TreesWrapperBase):
         -------
         self
         """
-        self._validate_params()
-        Xa, _ = as_f32_c(X, ndim=2, name="X")
-        self.classes_, codes = encode_labels(y)
-        k = len(self.classes_)
-        if k < 2:
-            raise ValueError("y has fewer than 2 classes")
-        # the 0/1 targets natively (x_trees_indicator_codes); lane py-runtime-b
-        # deleted the never-taken Python list route
-        targets = [codes] if k == 2 else [self._indicator(codes, j) for j in range(k)]  # glue: one native indicator per class (k classes)
-        self.estimators_ = []
-        for t in targets:  # glue: one member fit per estimator
-            e = _trees_clone(self.estimator)
-            e.fit(Xa, t)
-            self.estimators_.append(e)
-        self.n_features_in_ = Xa.shape[1]
-        self._fitted = True
-        return self
-
-    def _indicator(self, codes, j):
-        n = len(codes)
-        yj = empty((n,), "<i4")
-        self._bind().x_trees_indicator_codes(addr_ro(codes, name="codes"), addr(yj, name="y"), 0, [n, j])
-        return yj
-
-    def _positive(self, e, Xa):
-        """The estimator's score for class 1, float32 (n,): decision_function
-        when it has one, else predict_proba's column for code 1."""
-        n = Xa.shape[0]
-        if hasattr(e, "decision_function"):
-            return as_f32_c(e.decision_function(Xa), ndim=1, name="score")[0]
-        p = _trees_output_2d(e.predict_proba(Xa), n)
-        subs = [int(c) for c in e.classes_]  # glue: fitted member classes as k codes
-        if 1 not in subs:
-            return as_f32_c(zeros((n,), "<f8"), ndim=1, name="score")[0]
-        return self._gather(p, self._arange(n), Array.from_list([subs.index(1)], "<i4")).reshape((n,))
-
-    def _proba_positive(self, e, Xa):
-        n = Xa.shape[0]
-        p = _trees_output_2d(e.predict_proba(Xa), n)
-        subs = [int(c) for c in e.classes_]  # glue: fitted member classes as k codes
-        if 1 not in subs:
-            return as_f32_c(zeros((n,), "<f8"), ndim=1, name="p")[0]
-        return self._gather(p, self._arange(n), Array.from_list([subs.index(1)], "<i4")).reshape((n,))
+        return _TREES(self, "trees_meta_fit", (X, y, None), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict the class whose binary classifier scores highest.
@@ -4079,16 +2590,7 @@ class OneVsRestClassifier(ClassifierScoreMixin, _TreesWrapperBase):
         array of shape (n_samples,)
             Labels from ``classes_``.
         """
-        Xa = self._check_X(X)
-        n, k = Xa.shape[0], len(self.classes_)
-        if k == 2:
-            codes = as_i32_c(self.estimators_[0].predict(Xa), ndim=1, name="codes")[0]
-            return decode_labels(self.classes_, codes)
-        acc = self._class_major([0.0], n * k)  # zero votes, filled by the binding
-        rows = self._arange(n)
-        for j, e in enumerate(self.estimators_):  # glue: one member prediction per estimator
-            self._place(acc, n, k, self._positive(e, Xa), rows, j)
-        return decode_labels(self.classes_, self._argmax(acc, n, k))
+        return _TREES(self, "trees_meta_predict", (X,), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """Class probabilities.
@@ -4101,16 +2603,7 @@ class OneVsRestClassifier(ClassifierScoreMixin, _TreesWrapperBase):
         -------
         array of shape (n_samples, n_classes), float64
         """
-        Xa = self._check_X(X)
-        n, k = Xa.shape[0], len(self.classes_)
-        acc = self._class_major([0.0], n * k)  # zero votes, filled by the binding
-        rows = self._arange(n)
-        if k == 2:
-            return _trees_binary_proba(self, self._proba_positive(self.estimators_[0], Xa), n)
-        for j, e in enumerate(self.estimators_):  # glue: one member prediction per estimator
-            self._place(acc, n, k, self._proba_positive(e, Xa), rows, j)
-        self._bind().x_trees_normalize_rows(addr(acc, name="proba"), [n, k])
-        return acc.reshape((n, k))
+        return _TREES(self, "trees_meta_predict_proba", (X,), _TREES_CONTEXT)
 
 
 # ------------------------------------------------------------- Calibration
@@ -4128,38 +2621,12 @@ class OneVsRestClassifier(ClassifierScoreMixin, _TreesWrapperBase):
 #: calibrators, native columns and 0/1 targets); the Python reference route
 #: (an [fb] arm no install reached: every x_trees binding carries the strided
 #: entries) is deleted (lane apple-fast-py2mojo-trees).
+#: The x_prep one-program CalibratedClassifierCV(GaussianNB) fit
+#: (MOJOLEARN_CALIB_GNB_FOLDS, FAST + Apple) was assembled by the prep
+#: family's Python program builder; the native owner takes the reference
+#: route (bindings/trees_public_meta.mojo, header note).
 
-
-#: lane apple-fast-meta (FAST + Apple default, -D MOJOLEARN_CALIB_GNB_FOLDS_OFF turns it off):
-#: CalibratedClassifierCV(GaussianNB, method="sigmoid", ensemble=True, cv=int)
-#: as ONE x_prep program per fit and one per predict (x_prep/calib.mojo: the
-#: folds, every fold's statistics, the held-out scores and Platt's sigmoids on
-#: the device, X uploaded once). The binding built with the define exports
-#: x_prep_calib_folds; every other binding takes the reference route below.
-_CAL_XB = 2048      # rows per block of the fold-assignment partials
-_CAL_PB = 512       # rows per block of the Platt partials
-_CAL_ITERS = 40     # Newton iterations unrolled (platt_fit's cap is 100; a stopped problem's stages are no-ops)
-_CAL_TOL = 1e-5     # |gradient| / rows of the fold below this stops a problem
-
-
-def _cal_fast_consts(base, method, ensemble, cv, sample_weight):
-    """[CAL_ST, CAL_LS] of the x_prep binding's calibration program, or None
-    when the binding lacks it or the request is outside what it covers."""
-    from ._expansion_prep import GaussianNB, _mode, _optional_prep_entry, _prep_binding
-    if sample_weight is not None or method != "sigmoid" or not ensemble or not isinstance(base, GaussianNB):
-        return None
-    if base.priors is not None or not isinstance(_trees_cv(cv), int):
-        return None
-    try:
-        entry = _optional_prep_entry(_prep_binding(_mode()), "x_prep_calib_folds")
-    except Exception:
-        return None
-    if entry is None:
-        return None
-    return [int(v) for v in entry()]  # glue: binding constants as integers
-
-
-class CalibratedClassifierCV(ClassifierScoreMixin, _TreesWrapperBase):
+class CalibratedClassifierCV(_MetaClassifierScore, ClassifierScoreMixin, _TreesWrapperBase):
     """Calibrate a classifier's probabilities with cross-validation.
 
     Follows scikit-learn's ``CalibratedClassifierCV``. The calibrator reads the
@@ -4178,6 +2645,7 @@ class CalibratedClassifierCV(ClassifierScoreMixin, _TreesWrapperBase):
     estimator : estimator, default None
         The mojolearn classifier to calibrate; it is cloned, never fitted in
         place. None uses ``LinearSVC()``, as scikit-learn does.
+        Must be a mojolearn estimator; any other estimator raises ``NotImplementedError``.
     method : {"sigmoid", "isotonic"}, default "sigmoid"
         Platt's sigmoid or isotonic regression. Any other value raises
         ``ValueError``.
@@ -4226,102 +2694,6 @@ class CalibratedClassifierCV(ClassifierScoreMixin, _TreesWrapperBase):
         self.n_jobs = n_jobs
         self.ensemble = ensemble
 
-    def _validate_params(self):
-        if self.method not in ("sigmoid", "isotonic"):
-            raise ValueError("method must be 'sigmoid' or 'isotonic'")
-        if self.n_jobs is not None:
-            _refuse("n_jobs", "the folds fit one after another.")
-        if self.ensemble not in (True, False):
-            _refuse(f"ensemble={self.ensemble!r}", "True or False.")
-        _trees_cv(self.cv)
-
-    def _scores(self, e, Xa):
-        """(n, c) float64 scores: c = 1 when binary, else one column per class
-        (columns in the member's class-code order, mapped to all k)."""
-        n, k = Xa.shape[0], len(self.classes_)
-        if hasattr(e, "decision_function"):
-            out = e.decision_function(Xa)
-        else:
-            out = e.predict_proba(Xa)
-        blk = _trees_output_2d(out, n)
-        subs = [int(c) for c in e.classes_]  # glue: fitted member classes as k codes
-        if k == 2:
-            if blk.shape[1] == 1:
-                col = blk
-            else:
-                col = self._gather(blk, self._arange(n), Array.from_list([subs.index(1)], "<i4"))
-            acc = zeros((n,), "<f8")
-            self._acc(acc, col.reshape((n,)), n)
-            return acc.reshape((n, 1))
-        acc = self._class_major([0.0], n * k)  # zero votes, filled by the binding
-        self._acc_cols(acc, blk, Array.from_list(subs, "<i4"), n, k)
-        return acc.reshape((n, k))
-
-    def _fit_calibrators(self, S, codes):
-        """One calibrator per class column, the column and its 0/1 target
-        made natively (one x_trees_transpose_f64 of the score block,
-        x_trees_indicator_codes): the same float64 and int32 words the old
-        list comprehensions built."""
-        n, c = S.shape
-        b = self._bind()
-        codes = as_i32_c(codes, ndim=1, name="codes")[0]
-        St = None
-        if c > 1:
-            Sa = as_f64_c(S, ndim=2, name="scores")[0]
-            St = empty((c * n,), "<f8")
-            b.x_trees_transpose_f64(addr_ro(Sa, name="S"), addr(St, name="S^T"), [n, c])
-            St = St.reshape((c, n))
-        yj = empty((n,), "<i4")
-        y64 = empty((n,), "<f8") if self.method != "sigmoid" else None
-        cals = []
-        for j in range(c):  # glue: one calibrator per class column
-            cls = 1 if c == 1 else j
-            f = S.reshape((n,)) if c == 1 else St[j]
-            b.x_trees_indicator_codes(addr_ro(codes, name="codes"), addr(yj, name="y"),
-                                      addr(y64, name="y64") if y64 is not None else 0, [n, cls])
-            if self.method == "sigmoid":
-                ab = zeros((2,), "<f8")
-                b.x_trees_platt_fit(addr_ro(f, name="f"), addr_ro(yj, name="y"), addr(ab, name="ab"), [n])
-                cals.append(("sigmoid", tuple(ab.tolist())))
-            else:
-                kx, ky = empty((n,), "<f8"), empty((n,), "<f8")
-                m = int(b.x_trees_isotonic_fit(addr_ro(f, name="x"), addr_ro(y64, name="y"), addr(kx, name="kx"),
-                                               addr(ky, name="ky"), [n]))
-                cals.append(("isotonic", (kx[0:m], ky[0:m], m)))
-        return cals
-
-    def _calibrated(self, e, cals, Xa):
-        """The (n, k) probabilities: each calibrator reading its column of the score
-        block in place and writing its column of the (n, k) block (binary:
-        column 1, then column 0 = 1 - column 1, one IEEE subtract), then the
-        same x_trees_normalize_rows: no per-class list and no Python
-        interleave. The per-element operations are the contiguous entries'."""
-        n, k = Xa.shape[0], len(self.classes_)
-        S = as_f64_c(self._scores(e, Xa), ndim=2, name="scores")[0]
-        c = S.shape[1]
-        b = self._bind()
-        w = 2 if k == 2 else k
-        acc = empty((n * w,), "<f8")
-        for j, (kind, par) in enumerate(cals):  # glue: one calibrator per class column
-            col = 1 if k == 2 else j
-            if kind == "sigmoid":
-                b.x_trees_platt_apply_strided(addr_ro(S, name="f"), addr(acc, name="p"),
-                                              [n, par[0], par[1], n * c, c, j, n * w, w, col])
-            else:
-                kx, ky, m = par
-                b.x_trees_isotonic_predict_strided(addr_ro(kx, name="kx"), addr_ro(ky, name="ky"),
-                                                   addr_ro(S, name="t"), addr(acc, name="p"),
-                                                   [m, n, n * c, c, j, n * w, w, col])
-        if k == 2:
-            b.x_trees_complement_pairs(addr(acc, name="proba"), [n])
-            return acc
-        b.x_trees_normalize_rows(addr(acc, name="proba"), [n, k])
-        return acc
-
-    # sk-edges: no `sample_weight` parameter. scikit-learn weights the
-    # calibrators too, and the platt / isotonic fits here (x_trees_platt_fit,
-    # x_trees_isotonic_fit) take no row weights, so an advertised parameter
-    # could only refuse; it is left out until those kernels take weights.
     def fit(self, X, y):
         """Fit the classifier and its calibrators over the cross-validation folds.
 
@@ -4341,154 +2713,7 @@ class CalibratedClassifierCV(ClassifierScoreMixin, _TreesWrapperBase):
         ValueError
             When ``cv`` asks for more folds than some class has members.
         """
-        self._validate_params()
-        Xa, _ = as_f32_c(X, ndim=2, name="X")
-        n, d = Xa.shape
-        self.classes_, codes = encode_labels(y)
-        if len(self.classes_) < 2:
-            raise ValueError("y has fewer than 2 classes")
-        base = self.estimator
-        if base is None:
-            from .svm import LinearSVC
-            base = LinearSVC()
-        self._cal_fast = None
-        consts = _cal_fast_consts(base, self.method, self.ensemble, self.cv, None)
-        if consts is not None:
-            return self._fit_fast(Xa, codes, base, consts)
-        nat = _trees_native_glue(self)
-        splits = _trees_splits(self.cv, X, y, n, codes=codes,
-                               partition=not self.ensemble, native=nat, n_classes=len(self.classes_))
-        cols = self._arange(d)
-        self.calibrated_classifiers_ = []
-        if self.ensemble:
-            for tr, te in splits:  # glue: one member fit per fold
-                e = _trees_clone(base)
-                e.fit(self._gather(Xa, tr, cols), self._gather_codes(codes, tr))
-                Xte = self._gather(Xa, te, cols)
-                cals = self._fit_calibrators(self._scores(e, Xte), self._gather_codes(codes, te))
-                self.calibrated_classifiers_.append((e, cals))
-        else:
-            k = len(self.classes_)
-            c = 1 if k == 2 else k
-            S = zeros((n * c,), "<f8")
-            for tr, te in splits:  # glue: one member fit per fold
-                e = _trees_clone(base)
-                e.fit(self._gather(Xa, tr, cols), self._gather_codes(codes, tr))
-                self._place(S, n, c, as_f32_c(self._scores(e, self._gather(Xa, te, cols)), ndim=2,
-                                              name="scores")[0], te, 0)
-            e = _trees_clone(base)
-            e.fit(Xa, codes)
-            self.calibrated_classifiers_.append((e, self._fit_calibrators(S.reshape((n, c)), codes)))
-        self.n_features_in_ = d
-        self._fitted = True
-        return self
-
-    def _fit_fast(self, Xa, codes, base, consts):
-        """The one-program fit (x_prep/calib.mojo, lane apple-fast-meta): the
-        members are GaussianNB objects filled from the program's per-fold
-        words, so the reference `calibrated_classifiers_` route still reads
-        them; `_cal_fast` holds the words the one-program predict uploads."""
-        from ._expansion_prep import _NONE, _Prog, _class_stats, _mode
-        cal_st, cal_ls = consts
-        n, d = Xa.shape
-        K = len(self.classes_)
-        F = _trees_cv(self.cv)
-        c = 1 if K == 2 else K
-        FK, FC = F * K, F * c
-        nb = (n + _CAL_XB - 1) // _CAL_XB
-        nbp = (n + _CAL_PB - 1) // _CAL_PB
-        pr = _Prog()
-        xo = pr.put(Xa)
-        co = pr.put_words(codes)
-        # StratifiedKFold(shuffle=False)'s test fold of every row
-        pcnt, pmin = pr.work(nb * K), pr.work(nb * K)
-        pr.stage("cal_fold_part", nb * K, co, n, K, _CAL_XB, pcnt, pmin)
-        ccnt, cfirst, prefix = pr.alloc(K), pr.alloc(K), pr.work(nb * K)
-        pr.stage("cal_fold_scan", K, pcnt, pmin, nb, K, ccnt, cfirst, prefix)
-        rank = pr.work(n)
-        pr.stage("cal_fold_rank", nb * K, co, n, K, _CAL_XB, prefix, rank)
-        fold, pcode, foldf = pr.work(n), pr.work(n), pr.work(n)
-        pr.stage("cal_fold_assign", n, co, rank, n, K, ccnt, cfirst, F, fold, pcode, foldf)
-        # per (fold, class) and per fold column statistics -> each fold's train statistics
-        cnt_fk, mean_fk, var_fk = pr.work(FK), pr.work(FK * d), pr.work(FK * d)
-        _class_stats(pr, None, FK * d, xo, n, d, pcode, FK, cnt_fk, mean_fk, var_fk, _NONE)
-        cnt_f, mean_f, var_f = pr.work(F), pr.work(F * d), pr.work(F * d)
-        _class_stats(pr, None, F * d, xo, n, d, foldf, F, cnt_f, mean_f, var_f, _NONE)
-        tcnt, theta, var = pr.alloc(FK), pr.alloc(FK * d), pr.alloc(FK * d)
-        pr.stage("cal_lofo_merge", FK * d, cnt_fk, mean_fk, var_fk, F, K, d, tcnt, theta, var)
-        ntr, cmean, cvar = pr.work(F), pr.work(F * d), pr.work(F * d)
-        pr.stage("cal_lofo_merge", F * d, cnt_f, mean_f, var_f, F, 1, d, ntr, cmean, cvar)
-        base._refuse()
-        eps, vs = pr.alloc(F), pr.put_scalar(base.var_smoothing)
-        pr.stage("cal_eps_folds", F, cvar, F, d, eps, vs)
-        prior, const = pr.alloc(FK), pr.alloc(FK)
-        pr.stage("cal_params_folds", FK, tcnt, var, K, d, ntr, eps, prior, const)
-        # every row scored by the model that left it out
-        jll, proba = pr.work(n * K), pr.work(n * K)
-        pr.stage("cal_jll_folds", n * K, xo, n, d, theta, var, const, K, fold, jll, F)
-        pr.stage("row_softmax", n, jll, n, K, _NONE, proba)
-        # Platt's sigmoid per (fold, column): Newton with a T-step line search
-        part2 = pr.work(nbp * FC * 2)
-        pr.stage("cal_platt_init", nbp * FC, co, fold, n, F, c, _CAL_PB, part2)
-        state = pr.alloc(FC * cal_st)
-        pr.stage("cal_platt_setup", FC, part2, nbp, F, c, state)
-        part6, part_ls, tol = pr.work(nbp * FC * 6), pr.work(nbp * FC * cal_ls), pr.put_scalar(_CAL_TOL)
-        for _ in range(_CAL_ITERS):  # glue: one Newton stage pair per iteration
-            pr.stage("cal_platt_part", nbp * FC, proba, K, co, fold, n, F, c, _CAL_PB, state, part6)
-            pr.stage("cal_platt_step", FC, part6, nbp, F, c, state, tol)
-            pr.stage("cal_platt_ls_part", nbp * FC, proba, K, co, fold, n, F, c, _CAL_PB, state, part_ls, cal_ls)
-            pr.stage("cal_platt_ls_pick", FC, part_ls, nbp, F, c, state, cal_ls)
-        mode = _mode()
-        pr.run(mode)
-        counts = pr.get_i32(ccnt, K).tolist()
-        if F > max(counts):  # glue: fold count check over the k class counts
-            raise ValueError(f"n_splits={F} cannot be greater than the number of members in each class")
-        theta_a, var_a = pr.get(theta, (FK * d,)), pr.get(var, (FK * d,))
-        const_a, prior_a, tcnt_a = pr.get(const, (FK,)), pr.get(prior, (FK,)), pr.get(tcnt, (FK,))
-        eps_a, st = pr.get(eps, (F,)), pr.get(state, (FC * cal_st,))
-        self.calibrated_classifiers_ = []
-        for fo in range(F):  # glue: one fitted member per fold
-            e = _trees_clone(base)
-            e.classes_ = list(range(K))
-            e.theta_ = theta_a[fo * K * d:(fo + 1) * K * d].reshape((K, d))
-            e.var_ = var_a[fo * K * d:(fo + 1) * K * d].reshape((K, d))
-            e.class_count_ = tcnt_a[fo * K:(fo + 1) * K]
-            e.class_prior_ = prior_a[fo * K:(fo + 1) * K]
-            e.epsilon_ = float(eps_a[fo])
-            e._const = const_a[fo * K:(fo + 1) * K]
-            e._raw_var = e.var_
-            e.numeric_mode_, e.n_features_in_ = mode, d
-            cals = [("sigmoid", (float(st[(fo * c + j) * cal_st]), float(st[(fo * c + j) * cal_st + 1])))
-                    for j in range(c)]  # glue: one fitted member per fold
-            self.calibrated_classifiers_.append((e, cals))
-        self._cal_fast = dict(F=F, c=c, K=K, theta=theta_a, var=var_a, const=const_a, state=st)
-        self.n_features_in_ = d
-        self._fitted = True
-        return self
-
-    def _predict_proba_fast(self, Xa, want):
-        """The one-program predict: every member's joint log likelihood of
-        every row, softmax, the members' sigmoids averaged; `want` "proba"
-        gives the (n, K) float32 block, "predict" the int32 argmax codes."""
-        from ._expansion_prep import _NONE, _Prog, _mode
-        cf = self._cal_fast
-        F, c, K = cf["F"], cf["c"], cf["K"]
-        n, d = Xa.shape
-        pr = _Prog()
-        xo = pr.put(Xa)
-        th, va, co, sto = pr.put(cf["theta"]), pr.put(cf["var"]), pr.put(cf["const"]), pr.put(cf["state"])
-        jll, proba = pr.work(n * F * K), pr.work(n * F * K)
-        pr.stage("cal_jll_folds", n * F * K, xo, n, d, th, va, co, K, _NONE, jll, F)
-        pr.stage("row_softmax", n * F, jll, n * F, K, _NONE, proba)
-        out = pr.alloc(n * K)
-        pr.stage("cal_sigmoid_avg", n, proba, n, F, K, sto, c, out)
-        am = pr.alloc(n) if want == "predict" else _NONE
-        if am != _NONE:
-            pr.stage("row_argmax", n, out, n, K, am)
-        pr.run(_mode())
-        if want == "predict":
-            return pr.get_i32(am, n)
-        return pr.get(out, (n, K))
+        return _TREES(self, "trees_meta_fit", (X, y, None), _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """Calibrated class probabilities.
@@ -4500,16 +2725,7 @@ class CalibratedClassifierCV(ClassifierScoreMixin, _TreesWrapperBase):
         -------
         array of shape (n_samples, n_classes)
         """
-        Xa = self._check_X(X)
-        if getattr(self, "_cal_fast", None) is not None:
-            return self._predict_proba_fast(Xa, "proba")
-        n, k = Xa.shape[0], len(self.classes_)
-        acc = self._class_major([0.0], n * k)  # zero votes, filled by the binding
-        for e, cals in self.calibrated_classifiers_:  # glue: one member prediction per estimator
-            p = self._calibrated(e, cals, Xa)
-            self._acc(acc, p, n * k)
-        self._scale(acc, len(self.calibrated_classifiers_))
-        return acc.reshape((n, k))
+        return _TREES(self, "trees_meta_predict_proba", (X,), _TREES_CONTEXT)
 
     def predict(self, X):
         """Predict the class with the highest calibrated probability.
@@ -4519,10 +2735,19 @@ class CalibratedClassifierCV(ClassifierScoreMixin, _TreesWrapperBase):
         array of shape (n_samples,)
             Labels from ``classes_``.
         """
-        if getattr(self, "_cal_fast", None) is not None:
-            return decode_labels(self.classes_, self._predict_proba_fast(self._check_X(X), "predict"))
-        p = self.predict_proba(X)
-        return decode_labels(self.classes_, self._argmax(p, p.shape[0], len(self.classes_)))
+        return _TREES(self, "trees_meta_predict", (X,), _TREES_CONTEXT)
+
+
+# The meta-estimators' native owner (bindings/trees_public_meta.mojo): each
+# class's schema.
+_native_trees_bridge.register_meta(VotingClassifier, "voting_classifier")
+_native_trees_bridge.register_meta(VotingRegressor, "voting_regressor")
+_native_trees_bridge.register_meta(StackingClassifier, "stacking_classifier")
+_native_trees_bridge.register_meta(StackingRegressor, "stacking_regressor")
+_native_trees_bridge.register_meta(MultiOutputRegressor, "multioutput_regressor")
+_native_trees_bridge.register_meta(MultiOutputClassifier, "multioutput_classifier")
+_native_trees_bridge.register_meta(OneVsRestClassifier, "ovr")
+_native_trees_bridge.register_meta(CalibratedClassifierCV, "calibrated")
 
 
 # -------------------------------------------------------------------- SHAP
@@ -5025,7 +3250,7 @@ class KernelExplainer(_AgnosticExplainer):
         out = zeros((6,), "<i8")
         if M > 1:
             taddrs = tuple(addr(t, name="schedule") for t in tables)  # glue: the three schedule table addresses
-            self._bind().x_trees_kshap_schedule(taddrs, addr(out, name="schedule"), [M, nsamples])  # cpu-route: coalition-size weight schedule over M/2 sizes, launch parameters only
+            self._bind().x_trees_kshap_schedule(taddrs, addr(out, name="schedule"), [M, nsamples])  # cpu-route: three schedule Arrays read once by x_trees_kshap_schedule (launch parameters)
         m, nfixed, nfull, npaired, L, wbits = out.tolist()
         return m, nfixed, nfull, npaired, tables, L, wbits
 

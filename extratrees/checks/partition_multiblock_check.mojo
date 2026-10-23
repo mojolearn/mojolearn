@@ -651,6 +651,8 @@ def _launch_multiblock(
         grid_dim=(n_blocks, 1, 1),
         block_dim=(TPB, 1, 1),
     )
+    var d_mismatch = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.enqueue_memset(d_mismatch, Int32(0))
     ctx.enqueue_function[partition_scan_kernel[TPB]](
         d_blk_off.unsafe_ptr(),
         d_blk_left.unsafe_ptr(),
@@ -660,6 +662,7 @@ def _launch_multiblock(
         MIN_IMPURITY_DECREASE,
         MIN_SAMPLES_LEAF,
         sabotage,
+        d_mismatch.unsafe_ptr(),
         grid_dim=(n_items, 1, 1),
         block_dim=(TPB, 1, 1),
     )

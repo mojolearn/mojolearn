@@ -79,5 +79,5 @@ def _class_weight_rows(class_weight, classes, codes, xbind=None):
     # the per-row weight of each row's class: one byte-row gather in Mojo
     rows = codes if codes.dtype == "<i8" else codes.astype("<i8")
     if n:
-        _native("gather_rows_bytes")(narrowed._addr, out._addr, rows._addr, k, n, 4)  # cpu-route: callers without the trees binding (CPU-only, tests); GPU callers take x_trees_class_rows
+        _native("gather_rows_bytes")(narrowed._addr, out._addr, rows._addr, k, n, 4)  # cpu-route: int64 code and float32 weight Arrays read once by gather_rows_bytes (no trees binding)
     return out

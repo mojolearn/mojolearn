@@ -496,6 +496,18 @@ def _materialize(obj, name):
         bad = sorted(t.__name__ for t in kinds  # glue: the distinct leaf types of the input
                      if not issubclass(t, (int, bool)))
         if bad:
+            # NumPy scalar leaves (a list of float16 or float32 rows yields
+            # numpy.float16 / numpy.float32, which subclass numbers.Real but
+            # not float; numpy.int64 subclasses numbers.Integral but not
+            # int). scikit-learn's check_array takes them as numbers, as the
+            # object-dtype branch above does: a real leaf stores through
+            # float64 (exact for every half and single value), an integral
+            # one through int64. Glue: the type set, read in C, picks the
+            # store; the store casts in C.
+            import numbers
+            if all(issubclass(t, numbers.Real) for t in kinds):  # glue: the distinct leaf types of the input
+                integral = all(issubclass(t, numbers.Integral) for t in kinds)  # glue: the distinct leaf types of the input
+                return Array._from_flat(flat, shape, "<i8" if integral else "<f8"), True
             raise TypeError(f"mojolearn: {name} holds a {bad[0]}, not a number")
         return Array._from_flat(flat, shape, "<i8"), True
     with Buf(obj, name=name) as b:

@@ -54,7 +54,7 @@ def install(fake, *, fail=False, extra=0.0):
                           m=buffer(addresses[1], N).copy(),
                           v=buffer(addresses[2], N).copy(),
                           ids=buffer(addresses[3], SHAPE.batch * (SHAPE.length + 1), True).copy()))
-        if fail:
+        if (fail() if callable(fail) else fail):
             raise RuntimeError('injected native training failure')
         for slot, value in ((4, 1.0 + extra), (5, 2.0), (6, 3.0), (7, 4.0)):
             buffer(addresses[slot], N)[:] = value
@@ -119,16 +119,19 @@ def test_a_failed_step_leaves_nothing_half_applied(fake_host):
 
 
 def test_the_gradient_is_cleared_before_the_call_not_left_stale(fake_host):
-    calls = install(fake_host)
+    # the native step resolves the host entry once per trainer, so the
+    # failure is switched on inside the installed entry, not by a re-install
+    failing = {"on": False}
+    calls = install(fake_host, fail=lambda: failing["on"])
     model = trainer()
     model.train_step(ids())
     assert model.gradient_ is not None
-    install(fake_host, fail=True)
+    failing["on"] = True
     with pytest.raises(RuntimeError):
         model.train_step(ids())
     # A stale gradient from the previous step would read as this step's.
     assert model.gradient_ is None
-    assert len(calls) == 1
+    assert len(calls) == 2  # the first step and the failing one, one log
 
 
 def test_ids_must_be_the_training_batch_layout(fake_host):

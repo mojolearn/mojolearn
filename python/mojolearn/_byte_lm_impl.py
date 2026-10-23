@@ -424,7 +424,7 @@ def _sha(binding, path):
     """The SHA-256 of the file at `path`, streamed by the binding's Mojo
     file digest (`byte_lm_file_sha256`); the file never passes through
     Python."""
-    return str(binding.byte_lm_file_sha256(str(path)))  # cpu-route: hashes a source or binding file (file input)
+    return str(binding.byte_lm_file_sha256(str(path)))  # cpu-route: file path str read once by byte_lm_file_sha256 (the file never enters Python)
 
 
 def _binding_metadata(binding, shape):
@@ -1149,8 +1149,12 @@ class SmallByteLanguageModelTrainer:
         binding = _load(state_shape(self._state))
         if binding is not self._runtime_binding:
             self._suspend_session()
-            self._runtime = _binding_metadata(binding, state_shape(self._state))
+            self._runtime = None
             self._runtime_binding = binding
+        if self._runtime is None:
+            # the run metadata of the binding in use; the native train_step
+            # resolves the binding without it and leaves it for this read
+            self._runtime = _binding_metadata(binding, state_shape(self._state))
         return binding
 
     def _is_resident(self):
@@ -1309,8 +1313,9 @@ class SmallByteLanguageModelTrainer:
             ``step_result="full"`` also ``flat_gradients`` and ``gradients`` (by
             tensor name), the pre-update gradient; with ``"lean"`` also ``flags``.
         """
-        with self._lock:
-            return self._run(ids, True)
+        # the lock, the ids, the binding and the session lifecycle and the
+        # step in one native call (bindings/byte_lm_trainer_native.mojo)
+        return _LM_TRAINER(self, "train_step", (ids,), _LM_TRAINER_CONTEXT)
 
     def evaluate(self, ids):
         """Mean loss on ``ids`` without changing any state.
@@ -1717,3 +1722,25 @@ def _unique_object(pairs):
             raise ValueError('Duplicate byte-LM checkpoint key')
         result[key] = value
     return result
+
+
+def _connect_trainer():
+    # glue: connect the GPU trainer's native step owner and its fixed
+    # metadata once, at package import
+    from .tokenizer import _binding as _tokenizer_binding
+    from ._native_classical_bridge import _state_context
+    context = _state_context()
+    bindings = {}
+    for mode in _NATIVE_MODE_CODE:  # glue: the two numeric modes, connected once
+        try:
+            bindings[mode] = _backend.binding(_EXTENSION, mode)
+        except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError) as error:
+            bindings[mode] = type(error).__name__ + ": " + str(error)
+    context.update(byte_lm_bindings=bindings,
+                   byte_lm_vendors=('cpu',) if _backend._CPU_ONLY is not None else ('cuda', 'hip', 'metal'),
+                   byte_lm_profile=PROFILE, byte_lm_session_entries=_SESSION_ENTRIES,
+                   byte_lm_run_entry=_RUN_ENTRY, byte_lm_logits_pool=_LogitsPool, backend=vars(_backend))
+    return _tokenizer_binding()._module.byte_lm_trainer_call, context
+
+
+_LM_TRAINER, _LM_TRAINER_CONTEXT = _connect_trainer()

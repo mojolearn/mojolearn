@@ -1,5 +1,5 @@
-"""Engine routing and archive contracts; native arithmetic is checked separately."""
-from types import SimpleNamespace
+"""Engine routing and archive contracts, through the real public methods
+(the native forest owner, bindings/trees_public_forest.mojo); small inputs."""
 import numpy as np
 import pytest
 from mojolearn import (RandomForestClassifier, RandomForestRegressor,
@@ -18,43 +18,6 @@ def test_auto_engine_is_fast_only(cls):
     assert model.inference_engine == 'auto'
     assert model._prediction_engine() == 'sequential'
     assert cls(numeric_mode='fast', inference_engine='sequential')._prediction_engine() == 'sequential'
-
-
-@pytest.mark.parametrize('cls', CLASSES)
-def test_engine_routes_and_revalidates(cls, monkeypatch):
-    old, new = object(), object()
-    native = SimpleNamespace(predict=old, predict_gpu_parallel=new)
-    monkeypatch.setattr(_backend, 'binding', _faked(native))
-    model = cls(inference_engine='parallel_groves', numeric_mode='identical')
-    assert model.get_params()['inference_engine'] == 'parallel_groves'
-    assert model._prediction_function('predict') is new
-    model.inference_engine = 'sequential'
-    assert model._prediction_function('predict') is old
-    model.inference_engine = 'bad'
-    with pytest.raises(ValueError, match='inference_engine'):
-        model._prediction_function('predict')
-    # scikit-learn's convention: the constructor stores the value and the
-    # fit-time checks refuse it.
-    with pytest.raises(ValueError, match='inference_engine'):
-        cls(inference_engine=False)._validate_params()
-    model.inference_engine = 'parallel_groves'
-    with pytest.raises(RuntimeError, match='rebuild'):
-        model._prediction_function('absent')
-
-
-_REAL_BINDING = _backend.binding
-
-
-def _faked(native):
-    """`_backend.binding` serving `native` for the forest entries. The base
-    binding `_mojolearn` stays real: the Array helpers (`cast_elements`,
-    `reduce_stat`, ...) resolve through it once per process, so faking it
-    made a test pass or fail on whether an earlier test had cached them."""
-    def binding(name, *args, **kwargs):
-        if name == '_mojolearn':
-            return _REAL_BINDING(name, *args, **kwargs)
-        return native
-    return binding
 
 
 def fitted(cls, engine):
@@ -97,127 +60,6 @@ def test_versioned_gpu_archive_and_legacy_default(cls, tmp_path, monkeypatch):
     assert not gpu.__sklearn_is_fitted__()
 
 
-@pytest.mark.parametrize('cls', CLASSES)
-def test_resident_model_reuse_invalidation_and_lifetime(cls, monkeypatch):
-    import ctypes
-    import gc
-    import pickle
-    prepared, released, predicted = [], [], []
-
-    def prepare(*args):
-        prepared.append(args)
-        return len(prepared)
-
-    def predict(handle, x, out, dims):
-        predicted.append(handle)
-        values = np.ctypeslib.as_array((ctypes.c_float * (dims[0]*dims[2])).from_address(out))
-        values[:] = 1 / dims[2]
-        return dims[0]
-
-    native = SimpleNamespace(forest_prepare_gpu=prepare,
-                             forest_predict_resident_gpu=predict,
-                             forest_predict_resident_into_gpu=predict,
-                             forest_predict_resident_reuse_gpu=predict,
-                             forest_release_gpu=released.append)
-    monkeypatch.setattr(_backend, 'binding', _faked(native))
-    model = fitted(cls, 'parallel_groves')
-    X = np.ones((3, 1), dtype=np.float32)
-    original = model._leaves
-    call = model.predict_proba if model._num_outputs > 1 else model.predict
-    first = call(X)
-    np.testing.assert_array_equal(call(X), first)
-    assert predicted == [1, 1] and len(prepared) == 1
-    assert not model._leaves.flags["WRITEABLE"]
-    with pytest.raises(ValueError):
-        np.asarray(model._leaves).setflags(write=True)
-    original[:] = 99
-    assert model._leaves[0] == 1
-
-    restored = pickle.loads(pickle.dumps(model))
-    assert not hasattr(restored, '_resident_forest')
-    np.testing.assert_array_equal(restored.predict_proba(X) if model._num_outputs > 1
-                                  else restored.predict(X), first)
-    assert predicted[-1] == 2
-    del restored
-    gc.collect()
-    assert released == [2]
-
-    model._leaves = model._leaves.copy()
-    call(X)
-    gc.collect()
-    assert len(prepared) == 3 and predicted[-1] == 3 and 1 in released
-    model.set_params(inference_engine='sequential')
-    gc.collect()
-    assert sorted(released) == [1, 2, 3]
-
-
-def test_resident_refuses_bad_arrays_before_pointer_handoff(monkeypatch):
-    def fail(*args):
-        pytest.fail('malformed host arrays reached native pointer ABI')
-    native = SimpleNamespace(forest_prepare_gpu=fail, forest_predict_resident_gpu=fail,
-                             forest_predict_resident_into_gpu=fail,
-                             forest_predict_resident_reuse_gpu=fail,
-                             forest_release_gpu=fail)
-    monkeypatch.setattr(_backend, 'binding', _faked(native))
-    model = fitted(RandomForestRegressor, 'parallel_groves')
-    model._leaves = np.array([], dtype=np.float32)
-    with pytest.raises(ValueError, match='shapes'):
-        model.predict(np.ones((2, 1), dtype=np.float32))
-
-
-def test_resident_default_requires_reuse_binding(monkeypatch):
-    native = SimpleNamespace(forest_prepare_gpu=lambda *args: 1,
-                             forest_predict_resident_into_gpu=lambda *args: 0,
-                             forest_predict_resident_gpu=lambda *args: 0,
-                             forest_release_gpu=lambda handle: None)
-    monkeypatch.setattr(_backend, 'binding', _faked(native))
-    model = fitted(RandomForestRegressor, 'parallel_groves')
-    with pytest.raises(RuntimeError, match='rebuild'):
-        model.predict(np.ones((2, 1), dtype=np.float32))
-
-
-@pytest.mark.parametrize('cls', CLASSES)
-@pytest.mark.parametrize('mode', ['fast', 'identical'])
-def test_wp3_public_default_borrows_input_and_output(cls, mode, monkeypatch):
-    """Sabotage alternate entries so fallback cannot masquerade as reach."""
-    import ctypes
-    from mojolearn._arrays import _addr_ro
-    from mojolearn._buffer import as_f32_c
-
-    reached = []
-    def forbidden(*args):
-        pytest.fail('public prediction reached staged or uncached comparison arm')
-    def predict(handle, source, destination, dims):
-        reached.append((source, destination, tuple(dims)))
-        inp = (ctypes.c_float * dims[0]).from_address(source)
-        out = (ctypes.c_float * (dims[0] * dims[2])).from_address(destination)
-        for row in range(dims[0]):
-            for column in range(dims[2]):
-                out[row * dims[2] + column] = inp[row] + column
-        return dims[0]
-    native = SimpleNamespace(forest_prepare_gpu=lambda *args: 1,
-                             forest_predict_resident_gpu=forbidden,
-                             forest_predict_resident_into_gpu=forbidden,
-                             forest_predict_resident_reuse_gpu=predict,
-                             forest_release_gpu=lambda handle: None)
-    monkeypatch.setattr(_backend, 'binding', _faked(native))
-    model = fitted(cls, 'parallel_groves')
-    model.numeric_mode = model._fit_numeric_mode = mode
-    source, _ = as_f32_c(np.array([[2.], [7.], [-3.]], np.float32), name='X')
-    # ET widens its public outputs after this boundary; inspect its native
-    # vote buffer before that established public conversion.
-    call = model._vote if hasattr(model, "_vote") else (
-        model.predict_proba if model._num_outputs > 1 else model.predict)
-    result = call(source)
-    assert reached[0][0] == _addr_ro(source)
-    assert reached[0][1] == _addr_ro(result)
-    expected = np.array([[2. + j for j in range(model._num_outputs)],
-                         [7. + j for j in range(model._num_outputs)],
-                         [-3. + j for j in range(model._num_outputs)]], np.float32)
-    np.testing.assert_array_equal(np.asarray(result).reshape(expected.shape).view(np.uint32),
-                                  expected.view(np.uint32))
-
-
 @pytest.mark.parametrize('cls', [RandomForestClassifier, ExtraTreesClassifier])
 def test_classifier_combined_prediction_is_exact_and_traverses_once(cls, monkeypatch):
     """The evidence fast path must be the two public answers, not an approximation."""
@@ -231,147 +73,111 @@ def test_classifier_combined_prediction_is_exact_and_traverses_once(cls, monkeyp
         values = Array.from_list([[0.75, 0.25], [0.5, 0.5], [0.125, 0.875]], '<f4')
         return values[:len(X)]
 
-    if cls is RandomForestClassifier:
-        monkeypatch.setattr(model, 'predict_proba', vote)
-    else:
-        monkeypatch.setattr(model, '_vote', vote)
+    # both classifiers derive the labels from `predict_proba` (one native call)
+    monkeypatch.setattr(model, 'predict_proba', vote)
     X = np.ones((3, 1), dtype=np.float32)
     prediction, proba = model._predict_with_proba(X)
     assert calls == [3]
     np.testing.assert_array_equal(prediction, np.array([10, 10, 20]))
     expected = vote(X)
     assert calls == [3, 3]
-    expected = expected if cls is RandomForestClassifier else expected.astype('<f8')
     actual_np, expected_np = np.asarray(proba), np.asarray(expected)
     view = np.uint32 if actual_np.dtype == np.float32 else np.uint64
     np.testing.assert_array_equal(actual_np.view(view), expected_np.view(view))
 
 
-@pytest.mark.parametrize('cls', [RandomForestClassifier, ExtraTreesClassifier])
-def test_fast_classifier_predict_uses_resident_device_argmax(cls, monkeypatch):
-    """FAST labels cross as int32 codes; probability APIs keep their vote path."""
-    import ctypes
-    calls = []
-
-    def labels(handle, source, destination, dims):
-        calls.append(('labels', handle, tuple(dims)))
-        out = (ctypes.c_int32 * dims[0]).from_address(destination)
-        for row, code in enumerate((1, 0, 1)):
-            out[row] = code
-        return dims[0]
-
-    def votes(handle, source, destination, dims):
-        calls.append(('votes', handle, tuple(dims)))
-        out = (ctypes.c_float * (dims[0] * dims[2])).from_address(destination)
-        for row in range(dims[0]):
-            out[row * 2] = 0.25
-            out[row * 2 + 1] = 0.75
-        return dims[0]
-
-    native = SimpleNamespace(
-        forest_prepare_gpu=lambda *args: 7,
-        forest_predict_resident_gpu=votes,
-        forest_predict_resident_into_gpu=votes,
-        forest_predict_resident_reuse_gpu=votes,
-        forest_predict_resident_labels_gpu=labels,
-        forest_release_gpu=lambda handle: None,
-    )
-    monkeypatch.setattr(_backend, 'binding', _faked(native))
-    model = fitted(cls, 'parallel_groves')
-    model.numeric_mode = model._fit_numeric_mode = 'fast'
-    model.classes_ = [10, 20]
-    X = np.ones((3, 1), dtype=np.float32)
-    np.testing.assert_array_equal(model.predict(X), np.array([20, 10, 20]))
-    assert [call[0] for call in calls] == ['labels']
-    model.predict_proba(X)
-    assert [call[0] for call in calls] == ['labels', 'votes']
+def _data(cls):
+    rng = np.random.default_rng(0)
+    X = rng.random((40, 4), dtype=np.float32)
+    if cls._estimator_type == 'classifier':
+        return X, (X[:, 0] > 0.5).astype(np.int32)
+    return X, (2.0 * X[:, 0] + X[:, 1]).astype(np.float32)
 
 
-@pytest.mark.parametrize('cls', [RandomForestClassifier, ExtraTreesClassifier])
-def test_classifier_device_argmax_is_fast_only_and_optional(cls, monkeypatch):
-    model = fitted(cls, 'parallel_groves')
-    X = np.ones((2, 1), dtype=np.float32)
-    def forbidden(*args):
-        pytest.fail('non-FAST or sequential dispatch reached device argmax')
-    native = SimpleNamespace(forest_predict_resident_labels_gpu=forbidden)
-    monkeypatch.setattr(_backend, 'binding', _faked(native))
-    # Explicit parallel_groves does not weaken the reproducibility tier.
-    assert model._predict_forest_labels(X) is None
-    model.numeric_mode = model._fit_numeric_mode = 'fast'
-    model.inference_engine = 'sequential'
-    assert model._predict_forest_labels(X) is None
-    model.inference_engine = 'parallel_groves'
-    del native.forest_predict_resident_labels_gpu
-    assert model._predict_forest_labels(X) is None
+def real_fit(cls, engine, mode='identical'):
+    X, y = _data(cls)
+    model = cls(n_estimators=4, max_depth=3, random_state=0, inference_engine=engine, numeric_mode=mode)
+    return model.fit(X, y), X
+
+
+def _outputs(model, X):
+    return np.asarray(model.predict_proba(X) if model._estimator_type == 'classifier' else model.predict(X))
+
+
+def _bits(a):
+    a = np.ascontiguousarray(a)
+    return a.view(np.uint32 if a.dtype == np.float32 else np.uint64)
 
 
 @pytest.mark.parametrize('cls', CLASSES)
-def test_identical_auto_ordered_resident_keeps_sequential_bits_and_archive(cls, tmp_path, monkeypatch):
-    """2026-09-22: a binary compiled with the strict increasing-tree resident
-    route (`forest_ordered_resident() == 1`) serves IDENTICAL `auto` from a
-    resident snapshot prepared ORDERED, while the model still predicts and
-    saves AS 'sequential'. An explicit IDENTICAL `parallel_groves` prepares
-    the 32-grove graph (ordered flag 0), the fold its recorded columns and
-    the CPU host groves engine compute. Before the fix `auto` answered
-    'parallel_groves', wrote a groves archive and, through the compiled
-    default, moved explicit parallel_groves off the grove fold."""
-    import ctypes
-    prepared = []
+def test_engine_reported_and_revalidated(cls):
+    model, X = real_fit(cls, 'parallel_groves')
+    assert model.get_params()['inference_engine'] == 'parallel_groves'
+    assert model.inference_engine_ == 'parallel_groves'
+    sequential, _ = real_fit(cls, 'sequential')
+    assert sequential.inference_engine_ == 'sequential'
+    model.inference_engine = 'bad'
+    with pytest.raises(ValueError, match='inference_engine'):
+        model.predict(X)
+    # scikit-learn's convention: the constructor stores the value and the
+    # fit-time checks refuse it.
+    with pytest.raises(ValueError, match='inference_engine'):
+        cls(inference_engine=False).fit(*_data(cls))
 
-    def prepare(*args):
-        prepared.append(list(args[-1]))
-        return len(prepared)
 
-    def predict(handle, x, out, dims):
-        values = np.ctypeslib.as_array((ctypes.c_float * (dims[0]*dims[2])).from_address(out))
-        values[:] = 1 / dims[2]
-        return dims[0]
+@pytest.mark.parametrize('cls', CLASSES)
+def test_resident_model_reuse_freeze_and_pickle(cls):
+    import pickle
+    model, X = real_fit(cls, 'parallel_groves')
+    first = _outputs(model, X)
+    np.testing.assert_array_equal(_bits(_outputs(model, X)), _bits(first))
+    # the snapshot's arrays are read-only copies: the caller cannot write
+    # through them
+    assert model._leaves._readonly
+    restored = pickle.loads(pickle.dumps(model))
+    assert restored.__dict__.get('_resident_holder') == {}
+    np.testing.assert_array_equal(_bits(_outputs(restored, X)), _bits(first))
+    model.set_params(inference_engine='sequential')
+    assert not model.__sklearn_is_fitted__()
 
-    def sequential(*args):
-        pytest.fail('IDENTICAL auto on an ordered-resident binary took the List route')
 
-    native = SimpleNamespace(forest_ordered_resident=lambda: 1,
-                             forest_prepare_gpu=prepare,
-                             forest_predict_resident_reuse_gpu=predict,
-                             forest_release_gpu=lambda handle: None,
-                             rf_predict_proba=sequential, rf_predict_reg=sequential,
-                             et_predict=sequential, et_predict_proba=sequential)
-    monkeypatch.setattr(_backend, 'binding', _faked(native))
-    X = np.ones((3, 1), dtype=np.float32)
+def test_resident_refuses_bad_arrays_before_pointer_handoff():
+    from mojolearn._buffer import empty
+    model, X = real_fit(RandomForestRegressor, 'parallel_groves')
+    model._leaves = empty((0,), '<f4')
+    with pytest.raises(ValueError, match='shapes'):
+        model.predict(X)
 
-    auto = fitted(cls, 'auto')
+
+@pytest.mark.parametrize('cls', [RandomForestClassifier, ExtraTreesClassifier])
+@pytest.mark.parametrize('engine', ['sequential', 'parallel_groves', 'auto'])
+def test_classifier_labels_are_the_argmax_of_the_vote(cls, engine):
+    """Whichever route serves the labels (the fused device argmax or the
+    vote's argmax), they are the first-max class of `predict_proba`."""
+    model, X = real_fit(cls, engine)
+    proba = np.asarray(model.predict_proba(X))
+    expected = np.asarray(model.classes_)[np.argmax(proba, axis=1)]
+    np.testing.assert_array_equal(np.asarray(model.predict(X)), expected)
+
+
+@pytest.mark.parametrize('cls', CLASSES)
+def test_identical_auto_keeps_sequential_bits_and_archive(cls, tmp_path):
+    """IDENTICAL `auto` predicts and saves AS 'sequential' (the strict
+    increasing-tree arithmetic, served resident on a GPU binding); an
+    explicit IDENTICAL `parallel_groves` writes the groves archive."""
+    auto, X = real_fit(cls, 'auto')
+    assert auto.inference_engine_ == 'sequential'
     assert auto._prediction_engine() == 'sequential'
-    assert auto._ordered_resident_auto()
-    (auto.predict_proba if auto._num_outputs > 1 else auto.predict)(X)
-    assert prepared[-1][-1] == 1
-    path = tmp_path/'auto.npz'
+    explicit, _ = real_fit(cls, 'sequential')
+    np.testing.assert_array_equal(_bits(_outputs(auto, X)), _bits(_outputs(explicit, X)))
+    path = tmp_path / 'auto.npz'
     auto.save(path)
-    assert cls.load(path).inference_engine == 'sequential'
+    loaded = cls.load(path)
+    assert loaded.inference_engine == loaded.inference_engine_ == 'sequential'
     with np.load(path, allow_pickle=False) as z:
         assert 'parallel-groves' not in _serialize.scalar_str(z, 'format')
-
-    groves = fitted(cls, 'parallel_groves')
-    (groves.predict_proba if groves._num_outputs > 1 else groves.predict)(X)
-    assert prepared[-1][-1] == 0
-
-    # e54df7516 (t-forest, 2026-10-02): an explicit 'sequential' engine on a
-    # GPU binding runs the same ordered device kernel; no host tree walk.
-    explicit = fitted(cls, 'sequential')
-    assert explicit._ordered_resident_auto()
-    (explicit.predict_proba if explicit._num_outputs > 1 else explicit.predict)(X)
-    assert prepared[-1][-1] == 1
-
-
-def test_identical_auto_on_a_host_binding_is_sequential(monkeypatch):
-    """A CPU-only install serves the host binding through a proxy that
-    raises ImportError by name for a function it lacks; the ordered-resident
-    probe must read that as absent, not refuse every RF prediction."""
-    class Host:
-        def __getattr__(self, item):
-            raise ImportError(f'no CPU implementation of {item}')
-    monkeypatch.setattr(_backend, 'binding', lambda *args: Host())
-    model = fitted(RandomForestRegressor, 'auto')
-    assert model._prediction_engine() == 'sequential'
-    assert not model._ordered_resident_auto()
-    groves = fitted(RandomForestRegressor, 'parallel_groves')
-    assert groves._resident_ordered_flag() is None
+    groves, _ = real_fit(cls, 'parallel_groves')
+    groves.save(path)
+    with np.load(path, allow_pickle=False) as z:
+        assert 'parallel-groves' in _serialize.scalar_str(z, 'format')
+    assert cls.load(path).inference_engine_ == 'parallel_groves'

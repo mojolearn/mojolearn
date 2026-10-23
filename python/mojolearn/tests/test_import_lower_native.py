@@ -13,9 +13,7 @@ give: the same refusal (the same problems in the same order, the same
 message), or programs with the same inputs, outputs, input kinds and
 parameter count, the same saved file byte for byte (the program's
 description words and its parameter words) and the same run outputs word
-for word. A GraphIR built in Python (the Python reader's, and a
-torch.export program's) takes the words path (``onnx_from_words``) and must
-give the oracle's program too. Needs the x_sequence binding with the
+for word. Needs the x_sequence binding with the
 ``onnx_import`` entry. Prints LOWER_PARITY lines."""
 import hashlib
 
@@ -34,7 +32,7 @@ BATCH = 3  # odd and small: no board shape
 def _has_entry():
     try:
         b = _backend.binding("_mojolearn_x_sequence")
-        return hasattr(b, "onnx_import") and hasattr(b, "onnx_from_words") and hasattr(b, "ops_capture")
+        return hasattr(b, "onnx_import") and hasattr(b, "ops_capture")
     except Exception:  # noqa: BLE001  no binding in this install
         return False
 
@@ -115,17 +113,6 @@ def test_fixture_lowering_matches_oracle(tmp_path, name):
     _same_import(tmp_path, f"{name}_open", f.path, None)  # the open batch axis: a refusal
     _same_import(tmp_path, f"{name}_bad_shape", f.path, {iname: (2,)})
     _same_import(tmp_path, f"{name}_not_an_input", f.path, {iname: shape, "not_an_input": (1,)})
-
-
-def test_fixture_graph_words_path_matches_oracle(tmp_path):
-    # a GraphIR built in Python (the Python reader's) goes to Mojo as words
-    from mojolearn.tests import _onnx_reader_oracle as py_reader
-    for name in sorted(fx.FIXTURES):
-        f = fx.write_fixture(name, tmp_path)
-        iname, _, ishape = f.inputs[0]
-        g = py_reader.read(f.path)
-        assert getattr(g, "_native", None) is None
-        _same_import(tmp_path, f"{name}_words", g, {iname: (BATCH,) + tuple(ishape[1:])}, oracle_source=f.path)
 
 
 def test_lowering_test_models_match_oracle(tmp_path):
@@ -294,12 +281,3 @@ def test_refusal_sweep_lists_every_check(tmp_path):
     assert "xb" in names and "bfloat16 inputs" in msg
     for node in ("gelu_bad", "conv_strides", "pool_rect", "pad_reflect", "argmax_last", "resize", "cast_int"):
         assert node in names, (node, msg)
-
-
-def test_torch_export_matches_oracle(tmp_path):
-    torch = pytest.importorskip("torch")
-    model = torch.nn.Sequential(torch.nn.Linear(6, 5), torch.nn.LayerNorm(5), torch.nn.GELU(),
-                                torch.nn.Linear(5, 3)).eval()
-    torch.manual_seed(0)
-    ep = torch.export.export(model, (torch.zeros(BATCH, 6),))
-    _same_import(tmp_path, "torch_mlp", ep, None)

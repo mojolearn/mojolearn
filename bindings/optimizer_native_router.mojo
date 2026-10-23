@@ -1,8 +1,12 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native public-operation routing, constructors, state preparation and resident IO.
+from bindings.embedding_layer_native import emblayer_operation
+from std.os import getenv
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
+from bindings.sequence_layers_native import sequence_layers_operation
+from bindings.training_extra_native import training_chunked_lm_head, training_mlp_sessions, training_residual_dropout
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_public_words import optimizer_python_error, stash_python_error
@@ -70,9 +74,12 @@ def optimizer_betas(source: PythonObject, context: PythonObject) raises -> Pytho
     var kind = classical_cast_kind(value, item, "betas", input)
     var native = classical_is_array(value, input) or Bool(py=value.dtype.isnative)
     var addr = Int(py=classical_address(value))
+    _ = value  # keep the Python object alive through the native call above
     var stride = Int(py=value.strides[0])
     var first = _pd_double(pd_raw_at(addr, 0, item, native), kind, item)
+    _ = value  # keep the Python object alive through the native call above
     var second = _pd_double(pd_raw_at(addr, stride, item, native), kind, item)
+    _ = value  # keep the Python object alive through the native call above
     _ = value^
     return Python.tuple(first, second)
 
@@ -89,7 +96,12 @@ def optimizer_construct(owner: PythonObject, values: PythonObject, mode: PythonO
     opt_value(values[0], context)
     opt_value(values[13], context)
     refuse_kwargs(values[13], where)
-    var profile = context["profile_defaults"]["training"]
+    # the process default, resolved as `_numeric_profile.require_training`
+    # resolves it: a recorded default, else the environment, else fp32_v1
+    var profile = py_get(context["profile_defaults"], "training")
+    if profile is None:
+        var env = String(getenv("MOJOLEARN_NUMERIC_PROFILE", "")).strip()
+        profile = PythonObject(String(env) if env.byte_length() > 0 else String("fp32_v1"))
     if not Bool(py=context["profiles"][profile]["training"]):
         raise Error("NotImplementedError: the selected numeric profile is unavailable for optimizer training")
     var accumulation = Int(py=py_call(context["scalar_types"][2], values[10]))
@@ -110,7 +122,8 @@ def optimizer_construct(owner: PythonObject, values: PythonObject, mode: PythonO
     py_setitem(fields, "_resident_wanted", values[12])
     py_setitem(fields, "lr_schedule", values[9])
     py_setitem(fields, "accumulation_steps", PythonObject(accumulation))
-    _ = py_call(context["init"], owner, values[0])
+    # typed: the registry refusal keeps its class (ValueError: params is empty)
+    _ = py_call_typed(context["init"], owner, values[0])
     py_setitem(fields, "t", PythonObject(0))
     for name in ["packed_", "total_norm_", "clip_coef_"]:  # driver-loop: over three optional result words
         py_setitem(fields, PythonObject(name), PythonObject(None))
@@ -141,6 +154,8 @@ def optimizer_state_array(source: PythonObject, integer: Bool, context: PythonOb
     optimizer_state_cast(Int(py=classical_address(value)), Int(py=value.strides[0]), n, item, kind,
                          classical_is_array(value, input) or Bool(py=value.dtype.isnative),
                          MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=result._addr)), integer)
+    _ = value  # keep the Python object alive through the native call above
+    _ = result  # keep the Python object alive through the native call above
     _ = value^
     return result
 
@@ -230,6 +245,14 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
         raise Error("TypeError: optimizer requires native argument tuples")
     if operation.startswith("seqdev_"):
         return sequence_device_operation(operation, owner, values, mode, context)
+    if operation == "residual_dropout" or operation == "residual_dropout_backward":
+        # the explicit residual layer runs in identical mode only
+        return training_residual_dropout(operation, values, optimizer_entries(PythonObject("identical"), context))
+    if operation.startswith("emblayer_"):
+        # mojolearn.Embedding's forward and load (bindings/embedding_layer_native.mojo)
+        return emblayer_operation(operation, owner, values, context)
+    if operation.startswith("seqln_") or operation.startswith("seqmoe_"):
+        return sequence_layers_operation(operation, owner, values, mode, context)
     if operation.startswith("seq_"):
         return sequence_optimizer_operation(operation, owner, values, mode, context)
     if operation.startswith("device_"):
@@ -260,6 +283,10 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
         return training_embedding_operation(operation, values, entries, context)
     if operation == "cross_entropy":
         return training_cross_entropy(values, entries, context)
+    if operation == "chunked_lm_head_loss":
+        return training_chunked_lm_head(values, entries, context)
+    if operation == "mlp_inference_sessions":
+        return training_mlp_sessions(values, entries)
     if operation == "binding":
         return entries["module"]
     if operation == "raw_io":

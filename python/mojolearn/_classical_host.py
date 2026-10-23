@@ -399,26 +399,6 @@ class HostTruncatedSVD(_NativeArchiveLoad, _HostProjection, TruncatedSVD):
 class HostPCA(_NativeArchiveLoad, _HostProjection, PCA):
     _HOST_ARRAYS = ("components_", "mean_", "singular_values_")
 
-    def _whiten_binding(self):
-        """The host binding carries the whitened pair since the kde svc host
-        lane (2026-09-14); an older host build without it is refused by
-        name, as the GPU class refuses an older GPU build."""
-        binding = self._bind("_mojolearn_estimators")
-        if not all(callable(getattr(binding, name, None)) for name in
-                   ("pca_whiten_transform", "pca_whiten_inverse_transform")):
-            raise ImportError(
-                "mojolearn: this build of _mojolearn_estimators_host does not "
-                "export pca_whiten_transform and pca_whiten_inverse_transform; "
-                "rebuild it with bindings/build_estimators_host.sh"
-            )
-        return binding
-
-    def _dense_binding(self):
-        raise ImportError(
-            "mojolearn: no CPU implementation of the dense PCA fit; the host "
-            "PCA transforms a saved model only"
-        )
-
 
 class HostKernelDensity(_NativeArchiveLoad, _HostBound, KernelDensity):
     """Evaluate a saved kernel density model on the CPU."""
@@ -750,6 +730,27 @@ class HostIsolationForest(_NativeArchiveLoad, _HostBound, IsolationForest):
         >>> model = model.fit(X)
         """
         return _native_classical(self, "host_iforest_fit", (X, y), _CLASSICAL)
+
+    def fit_predict(self, X, y=None):
+        """Fit on `X` and return `predict(X)`, both on the CPU.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Dense training samples.
+        y : array-like, default=None
+            Ignored.
+
+        Returns
+        -------
+        array-like of shape (n_samples,)
+            -1 for an anomaly, 1 for an inlier.
+
+        Examples
+        --------
+        >>> labels = model.fit_predict(X)
+        """
+        return self.fit(X, y=y).predict(X)
 
     def __init_subclass__(cls, **kwargs):
         super().__init_subclass__(**kwargs)
@@ -1425,6 +1426,18 @@ try:
                          _backend.load_host_module("_mojolearn_x_prep_host"), _scaler_training)
 except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as _minmax_error:
     _scaler_host_unavailable(HostMinMaxScaler, _MINMAX_CONTEXT, _minmax_error)
+
+
+# HostLogisticRegression fits and scores through LogisticRegression's native
+# owner with fixed CPU entries; its score predicts through the classical host
+# inference owner, as its predict does.
+from .linear_model import _LR_CONTEXT
+from ._native_logistic_bridge import connect_host as _connect_logistic_host
+try:
+    _logistic_host = _backend.load_host_module(_HOST_BASENAME)
+except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as _logistic_host_error:
+    _logistic_host = _logistic_host_error
+_connect_logistic_host(HostLogisticRegression, _LR_CONTEXT, _logistic_host, _native_classical, _CLASSICAL)
 
 
 # Import-time connection of complete explicit CPU prediction owners.

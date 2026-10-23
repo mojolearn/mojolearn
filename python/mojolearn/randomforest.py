@@ -69,20 +69,10 @@ imports NumPy.
 from . import _portable_math as math
 import numbers
 
-from . import _mojolearn_rf, _native_archive_bridge
-from ._buffer import (
-    addr, addr_ro, all_finite, as_f32_c, as_f32_colmajor, as_f32_forest_layout, empty,
-)
-from ._labels import (
-    argmax_rows, decode_labels,
-    encode_labels, flat_view, flatten_labels, is_bool, sorted_classes,
-)
+from . import _mojolearn_rf, _native_archive_bridge, _native_trees_bridge
+from ._labels import argmax_rows, decode_labels, is_bool
 from ._mode import NumericModeMixin
-from ._sample_weight import check_sample_weight
-from ._class_weights import _class_weight_rows
-from ._forest_protocol import (ForestProtocol, forest_estimator,
-                               _forest_fit_function, _forest_fit_arrays,
-                               _rowmajor_fit_function, _export_fit_result)
+from ._forest_protocol import ForestProtocol, forest_estimator
 
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-randomforest-1"
@@ -93,6 +83,13 @@ _MODEL_FORMAT = "mojolearn-randomforest-1"
 # bindings/host_archive_native.mojo `host_archive_public_forest` builds the
 # loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
+
+# The compiled tree-ensemble owner, connected once at import: `fit`,
+# `predict` and `predict_proba` are one native call each
+# (bindings/trees_public_forest.mojo validates the parameters, encodes the
+# labels, checks the weights, picks the fit entry and inference engine,
+# launches the kernels and assigns the fitted state).
+_TREES, _TREES_CONTEXT = _native_trees_bridge.connect()
 
 # DEVIATION 409 (2026-09-01, RF lane). CLOSED -- ALIGNED the same day;
 # the closure paragraph is below, after the history. AS FOUND: this
@@ -422,97 +419,6 @@ class _RandomForestBase(ForestProtocol, NumericModeMixin):
             oob_score=bool(oob_score),
         )
 
-    def _fit_params(self, n_rows, n_features, n_classes):
-        """The 16-slot params list, in _mojolearn_rf.mojo's exact order:
-        n_rows, n_cols, n_classes, n_trees, max_depth, max_leaves,
-        max_features_fraction, max_n_bins, min_samples_leaf,
-        min_samples_split, min_impurity_decrease, bootstrap, max_samples,
-        seed, n_streams, max_batch_size; then, only when it is not 0, the
-        optional 17th, min_weight_fraction_leaf (a 16-slot call keeps every
-        other fit entry's contract)."""
-        cfg = self._cfg
-        params = [
-            int(n_rows),
-            int(n_features),
-            int(n_classes),
-            cfg["n_estimators"],
-            cfg["max_depth"],
-            cfg["max_leaves"],
-            _max_features_fraction(cfg["max_features"], n_features),
-            cfg["n_bins"],
-            cfg["min_samples_leaf"],
-            cfg["min_samples_split"],
-            cfg["min_impurity_decrease"],
-            1 if cfg["bootstrap"] else 0,
-            cfg["max_samples"],
-            cfg["random_state"],
-            cfg["n_streams"],
-            cfg["max_batch_size"],
-        ]
-        mwf = cfg.get("min_weight_fraction_leaf", 0.0)
-        if mwf:
-            params.append(mwf)
-        return params
-
-    def _fit_arrays(self, X, y_arr, n_classes, fit_fn, rowmajor_fit_fn=None):
-        # Column-major is the builder's layout (cuML's `data` is
-        # column-major); `as_f32_colmajor` is that copy, named in the
-        # module docstring, and zero for a float32 F-order input
-        # (DEVIATION 2341). Its 2-D refusal reads "mojolearn: X must be
-        # 2-D, got ...", the wording `_arrays.py` used.
-        # DEVIATION 2637: a C-order float32 X is lent row-major to the
-        # `*_rowmajor` entry, which transposes it into its pinned stage
-        # across the host pool (same staged bytes, one pass fewer).
-        if rowmajor_fit_fn is not None:
-            Xf, row_major = as_f32_forest_layout(X, name="X")
-            if row_major:
-                fit_fn = rowmajor_fit_fn
-        else:
-            Xf, _ = as_f32_colmajor(X, name="X")
-        n_rows, n_features = Xf.shape
-        if len(y_arr) != n_rows:
-            raise ValueError(f"y has {len(y_arr)} rows, X has {n_rows}")
-        # The builder has no missing-value arm: a NaN or inf in X was
-        # quantized and split on silently (pip smoke 2026-09-22). Refused
-        # here, as cuML documents and scikit-learn's pre-1.4 forests did.
-        # FAST on Apple (lane apple-fast-rfet-scan): the binding refuses a
-        # non-finite cell through a device scan of the uploaded X
-        # (ensemble/device_finite.mojo), so this one-thread host scan of
-        # every cell is not repeated; its refusal is raised as the same
-        # ValueError below.
-        scan = getattr(self._bind("_mojolearn_rf"), "rf_device_finite_scan", None)
-        device_scan = scan is not None and int(scan()) == 1
-        if not device_scan and not all_finite(Xf):
-            raise ValueError(_NONFINITE_REFUSAL)
-        params = self._fit_params(n_rows, n_features, n_classes)
-        try:
-            out = fit_fn(
-                addr_ro(Xf, name="X"), addr_ro(y_arr, name="y"), params,
-                self._cfg["criterion"],
-            )
-        except Exception as exc:
-            if device_scan and _NONFINITE_REFUSAL in str(exc):
-                raise ValueError(_NONFINITE_REFUSAL) from None
-            raise
-        del Xf  # the borrow ends with the call
-        (self._offsets, self._colid, self._quesval, self._left_child,
-         self._leaves, meta) = _forest_fit_arrays(out)
-        self.n_features_in_ = int(n_features)
-        self._n_trees = int(meta[0])
-        self._num_outputs = int(meta[1])
-        return self
-
-    def _check_predict_input(self, X):
-        if not hasattr(self, "_offsets"):
-            raise RuntimeError("this estimator is not fitted yet")
-        Xa, _ = as_f32_c(X, ndim=2, name="X")
-        n_rows, n_features = Xa.shape
-        if n_features != self.n_features_in_:
-            raise ValueError(
-                f"X has {n_features} features, fit saw {self.n_features_in_}"
-            )
-        return Xa, n_rows, n_features
-
     def save(self, path):
         """Write the fitted forest to `path` as an npz file.
 
@@ -650,6 +556,9 @@ class RandomForestClassifier(_RandomForestBase):
         point).
     n_classes_ : int
         Number of classes.
+    inference_engine_ : str
+        The inference engine `predict` runs: 'sequential' or
+        'parallel_groves' ('auto' resolved for the fitted numeric mode).
     n_features_in_ : int
         Number of features seen in `fit`.
     oob_score_ : float
@@ -732,81 +641,14 @@ class RandomForestClassifier(_RandomForestBase):
         -------
         self
         """
-        return self._fit_with_tree_start(X, y, feature_importances=feature_importances,
-                                         sample_weight=sample_weight)
+        return _TREES(self, "trees_forest_fit", (X, y, sample_weight, feature_importances, None), _TREES_CONTEXT)
 
     def _fit_with_tree_start(self, X, y, tree_start=None, *, feature_importances=False,
                              sample_weight=None):
-        if not is_bool(feature_importances):
-            raise ValueError("feature_importances must be a boolean fit-output request")
-        self._refresh_config()
-        self._capture_fit_mode()
-        # DEVIATION 2500: one native pass for a numeric buffer, the Python
-        # ORDER RULE for everything else; the codes cross as int32.
-        self.classes_, y32 = encode_labels(y)
-        self.n_classes_ = int(len(self.classes_))
-        if self.n_classes_ < 2:
-            raise ValueError("y has fewer than 2 classes")
-        if sample_weight is not None:
-            # scikit-learn's sample_weight (checked, float32) times the
-            # class_weight row weights, one native product per row; the
-            # weighted entry takes any per-row weights
-            from ._expansion_trees import _trees_weighted_rows
-            weights = _trees_weighted_rows(sample_weight, self.class_weight, self.classes_, y32, self)
-        else:
-            weights = (None if self.class_weight is None else
-                       _class_weight_rows(self.class_weight, self.classes_, y32,
-                                          self._bind("_mojolearn_x_trees")))
-        binding = self._bind("_mojolearn_rf")
-        self.__dict__.pop("oob_decision_function_", None)
-        self.__dict__.pop("oob_score_", None)
-        self.__dict__.pop("feature_importances_", None)
-        if self._cfg["oob_score"] or feature_importances:
-            # T15: native fit-owned bootstrap membership and split statistics
-            # produce the requested outputs without a second model fit.
-            # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-            if tree_start is not None:
-                raise ValueError("auxiliary outputs require a complete forest, not a tree-ID shard")
-            entry = getattr(binding, "rf_classifier_fit_aux_export", None)
-            if not callable(entry):
-                raise NotImplementedError("this RF binding does not expose native requested fit outputs")
-            oob = empty((len(y32), self.n_classes_), "<f8") if self._cfg["oob_score"] else None
-            score = empty((1,), "<f8") if oob is not None else None
-            importance = [None]  # glue: owns the one optional native result buffer
-            def oob_fit(x_addr, y_addr, params, criterion):
-                if feature_importances:
-                    importance[0] = empty((int(params[1]),), "<f4")
-                return _export_fit_result(binding, entry(
-                    x_addr, y_addr, params, criterion,
-                    0 if weights is None else addr_ro(weights, name="weights"),
-                    0 if oob is None else addr(oob, name="oob"),
-                    0 if score is None else addr(score, name="oob_score"),
-                    0 if importance[0] is None else addr(importance[0], name="importance")))
-            self._fit_arrays(X, y32, self.n_classes_, oob_fit)
-            if oob is not None:
-                self.oob_decision_function_ = oob
-                self.oob_score_ = float(score[0])
-            if importance[0] is not None:
-                self.feature_importances_ = importance[0]
-            return self
-        fit_fn = _forest_fit_function(binding, "rf_classifier_fit")
-        rowmajor_fn = _rowmajor_fit_function(binding, "rf_classifier_fit")
-        if weights is not None:
-            rowmajor_fn = None
-            weighted_fit = (_forest_fit_function(binding, "rf_classifier_fit_weighted")
-                            if hasattr(binding, "rf_classifier_fit_weighted") else None)
-            if weighted_fit is None:
-                raise RuntimeError("rebuild the RF binding for class_weight support")
-            def fit_fn(x_addr, y_addr, params, criterion):
-                return weighted_fit(x_addr, y_addr, params, criterion, addr_ro(weights, name="weights"))
-        if tree_start is not None:
-            if not callable(getattr(binding, 'rf_classifier_fit_shard', None)):
-                raise ImportError('rebuild RF binding for global tree-ID shards')
-            def fit_fn(x_addr, y_addr, params, criterion):
-                return binding.rf_classifier_fit_shard(x_addr, y_addr, params, criterion,
-                    tree_start, 0 if weights is None else addr_ro(weights, name='weights'))
-            rowmajor_fn = None
-        return self._fit_arrays(X, y32, self.n_classes_, fit_fn, rowmajor_fn)
+        """`fit` of the trees from global tree ID `tree_start` on (a shard of
+        a multi-device forest)."""
+        return _TREES(self, "trees_forest_fit", (X, y, sample_weight, feature_importances, tree_start),
+                      _TREES_CONTEXT)
 
     def predict_proba(self, X):
         """Class probabilities: the per-class vote fractions over the trees.
@@ -816,14 +658,7 @@ class RandomForestClassifier(_RandomForestBase):
         Array of shape (n_samples, n_classes), float32
             Columns in `classes_` order.
         """
-        Xa, n_rows, n_features = self._check_predict_input(X)
-        out = empty((n_rows * self._num_outputs,), "<f4")
-        wrote = self._predict_forest("rf_predict_proba", Xa, out)
-        if wrote != n_rows:
-            raise RuntimeError(
-                f"rf_predict_proba wrote {wrote} of {n_rows} rows"
-            )
-        return out.reshape((n_rows, self._num_outputs))
+        return _TREES(self, "trees_forest_predict_proba", (X,), _TREES_CONTEXT)
 
     def _predict_with_proba(self, X):
         """Return both classifier views after one forest traversal.
@@ -847,11 +682,7 @@ class RandomForestClassifier(_RandomForestBase):
             An int64 or float64 `Array` for numeric labels, a Python list for
             string labels.
         """
-        Xa, _, _ = self._check_predict_input(X)
-        codes = self._predict_forest_labels(Xa)
-        if codes is not None:
-            return decode_labels(self.classes_, codes)
-        return decode_labels(self.classes_, argmax_rows(self.predict_proba(Xa)))
+        return _TREES(self, "trees_forest_predict", (X,), _TREES_CONTEXT)
 
 
 # Maintainer notes (moved from the docstring): the regression criteria are
@@ -944,6 +775,9 @@ class RandomForestRegressor(_RandomForestBase):
 
     Attributes
     ----------
+    inference_engine_ : str
+        The inference engine `predict` runs: 'sequential' or
+        'parallel_groves' ('auto' resolved for the fitted numeric mode).
     n_features_in_ : int
         Number of features seen in `fit`.
     oob_score_ : float
@@ -1023,159 +857,14 @@ class RandomForestRegressor(_RandomForestBase):
         -------
         self
         """
-        return self._fit_with_tree_start(X, y, feature_importances=feature_importances,
-                                         sample_weight=sample_weight)
-
-    def _fit_in_session(self, session, y, rows=None):
-        """`fit(X, y)` for the X a `ForestDataSession` holds (trees-apple3):
-        the squared-error member fit of a boosted ensemble. Same params,
-        same entry underneath, minus the per-member staging of X (whose
-        finite scan the session ran once). With `rows` (int32 row ids,
-        repeats allowed) the fit is `fit(X[rows], y)`, the rows gathered on
-        the device."""
-        self._refresh_config()
-        self._capture_fit_mode()
-        y32, _ = as_f32_c(y, ndim=1, name="y")
-        code = self._cfg["criterion"]
-        if code != _REG_CRITERIA["squared_error"]:
-            raise ValueError("a forest data session fits squared_error members")
-        n_rows, n_features = session.shape
-        if rows is not None:
-            n_rows = len(rows)
-        if len(y32) != n_rows:
-            raise ValueError(f"y has {len(y32)} rows, X has {n_rows}")
-        params = self._fit_params(n_rows, n_features, 0)
-        out = (session.fit_regressor(y32, params, code) if rows is None
-               else session.fit_regressor_rows(rows, y32, params, code))
-        (self._offsets, self._colid, self._quesval, self._left_child,
-         self._leaves, meta) = _forest_fit_arrays(out)
-        self.n_features_in_ = int(n_features)
-        self._n_trees = int(meta[0])
-        self._num_outputs = int(meta[1])
-        return self
-
-    def _fit_in_dart(self, handle, cls, n_rows, n_features, rows=None, cols=None):
-        """The squared-error member fit of a DART round on the DART
-        session's device buffers (cpu4-forest): X and class `cls`'s fit
-        target stay where `x_trees_dart_step` left them; `rows` (int32 bag
-        rows) and `cols` (int32 sampled columns) select them on the device.
-        Same params and model export as `fit(X[rows][:, cols], target)`."""
-        self._refresh_config()
-        self._capture_fit_mode()
-        code = self._cfg["criterion"]
-        if code != _REG_CRITERIA["squared_error"]:
-            raise ValueError("a DART member fits squared_error")
-        binding = self._bind("_mojolearn_rf")
-        entry = getattr(binding, "rf_regressor_fit_dart_export", None)
-        if not callable(entry):
-            raise RuntimeError("rebuild the forest binding for DART member fits on the device")
-        m = int(n_rows) if rows is None else len(rows)
-        dc = int(n_features) if cols is None else len(cols)
-        params = self._fit_params(m, dc, 0)
-        out = _export_fit_result(binding, entry(
-            int(handle), int(cls), 0 if rows is None else addr_ro(rows, name="rows"),
-            0 if cols is None else addr_ro(cols, name="cols"), params, code))
-        (self._offsets, self._colid, self._quesval, self._left_child,
-         self._leaves, meta) = _forest_fit_arrays(out)
-        self.n_features_in_ = int(dc)
-        self._n_trees = int(meta[0])
-        self._num_outputs = int(meta[1])
-        return self
+        return _TREES(self, "trees_forest_fit", (X, y, sample_weight, feature_importances, None), _TREES_CONTEXT)
 
     def _fit_with_tree_start(self, X, y, tree_start=None, *, feature_importances=False,
                              sample_weight=None):
-        if not is_bool(feature_importances):
-            raise ValueError("feature_importances must be a boolean fit-output request")
-        self._refresh_config()
-        self._capture_fit_mode()
-        y32, _ = as_f32_c(y, ndim=1, name="y")
-        code = self._cfg["criterion"]
-        # DEVIATION 2342: the deviance-domain checks are native
-        # finiteness plus the core helper's `min`/`max` (`reduce_stat`). Poisson's "positive
-        # sum" is "some label positive" once every label is finite and
-        # non-negative, which is what the float64 sum tested; a NaN or
-        # inf label, which made that sum NaN or inf, is refused for all
-        # three criteria rather than passed to a deviance.
-        if code == _REG_CRITERIA["poisson"]:
-            if not all_finite(y32) or y32.min() < 0 or not y32.max() > 0:
-                raise ValueError(
-                    "criterion='poisson' requires y >= 0 with a positive"
-                    " sum: PoissonGain returns -max() for a non-positive"
-                    " label sum (objectives.cuh:251-253), which would fit"
-                    " a stump silently"
-                )
-        elif code in (_REG_CRITERIA["gamma"],
-                      _REG_CRITERIA["inverse_gaussian"]):
-            if not all_finite(y32) or y32.min() <= 0:
-                raise ValueError(
-                    f"criterion={self.criterion!r} requires y > 0: its"
-                    " gain returns -max() for a non-positive label sum"
-                    " (objectives.cuh:279-281, :306-308), which would fit"
-                    " a stump silently"
-                )
-        binding = self._bind("_mojolearn_rf")
-        self.__dict__.pop("oob_prediction_", None)
-        self.__dict__.pop("oob_score_", None)
-        self.__dict__.pop("feature_importances_", None)
-        if sample_weight is not None:
-            # sk-edges: scikit-learn's sample_weight through the weighted
-            # regressor entry (bindings/_mojolearn_rf.mojo
-            # rf_regressor_fit_weighted). The checked weights are float32
-            # (`_sample_weight.check_sample_weight`); their max, a native
-            # reduction, sizes the label_sum plane's fixed-point scale.
-            if tree_start is not None or self._cfg["oob_score"] or feature_importances:
-                raise NotImplementedError(
-                    "sample_weight is not implemented together with oob_score, feature "
-                    "importances or a tree-ID shard")
-            try:
-                has_weighted = callable(getattr(binding, "rf_regressor_fit_weighted_export", None))
-            except ImportError:  # a host facade refuses an absent export
-                has_weighted = False
-            if not has_weighted:
-                raise NotImplementedError(
-                    "sample_weight for a regression forest needs a forest binding that exports "
-                    "rf_regressor_fit_weighted; this install's binding predates it")
-            w = check_sample_weight(sample_weight, len(y32))
-            w_max = float(w.max())  # glue: native max reduction of the weights
-            weighted = _forest_fit_function(binding, "rf_regressor_fit_weighted")
-
-            def fit_fn(x_addr, y_addr, params, criterion):
-                return weighted(x_addr, y_addr, params, criterion, addr_ro(w, name="sample_weight"), w_max)
-            return self._fit_arrays(X, y32, 0, fit_fn)
-        if self._cfg["oob_score"] or feature_importances:
-            # T15 consumes native fit-owned OOB and importance buffers.
-            # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-            if tree_start is not None:
-                raise ValueError("auxiliary outputs require a complete forest, not a tree-ID shard")
-            entry = getattr(binding, "rf_regressor_fit_aux_export", None)
-            if not callable(entry):
-                raise NotImplementedError("this RF binding does not expose native requested fit outputs")
-            oob = empty((len(y32),), "<f8") if self._cfg["oob_score"] else None
-            score = empty((1,), "<f8") if oob is not None else None
-            importance = [None]
-            def oob_fit(x_addr, y_addr, params, criterion):
-                if feature_importances:
-                    importance[0] = empty((int(params[1]),), "<f4")
-                return _export_fit_result(binding, entry(
-                    x_addr, y_addr, params, criterion,
-                    0 if oob is None else addr(oob, name="oob"),
-                    0 if score is None else addr(score, name="oob_score"),
-                    0 if importance[0] is None else addr(importance[0], name="importance")))
-            self._fit_arrays(X, y32, 0, oob_fit)
-            if oob is not None:
-                self.oob_prediction_ = oob
-                self.oob_score_ = float(score[0])
-            if importance[0] is not None:
-                self.feature_importances_ = importance[0]
-            return self
-        if tree_start is not None:
-            if not callable(getattr(binding, 'rf_regressor_fit_shard', None)):
-                raise ImportError('rebuild RF binding for global tree-ID shards')
-            def fit_fn(x_addr, y_addr, params, criterion):
-                return binding.rf_regressor_fit_shard(x_addr, y_addr, params, criterion, tree_start)
-            return self._fit_arrays(X, y32, 0, fit_fn)
-        return self._fit_arrays(X, y32, 0, _forest_fit_function(binding, "rf_regressor_fit"),
-                                _rowmajor_fit_function(binding, "rf_regressor_fit"))
+        """`fit` of the trees from global tree ID `tree_start` on (a shard of
+        a multi-device forest)."""
+        return _TREES(self, "trees_forest_fit", (X, y, sample_weight, feature_importances, tree_start),
+                      _TREES_CONTEXT)
 
     def predict(self, X):
         """Predicted values: the mean of the trees' predictions.
@@ -1184,11 +873,16 @@ class RandomForestRegressor(_RandomForestBase):
         -------
         Array of shape (n_samples,), float32
         """
-        Xa, n_rows, n_features = self._check_predict_input(X)
-        out = empty((n_rows,), "<f4")
-        wrote = self._predict_forest("rf_predict_reg", Xa, out)
-        if wrote != n_rows:
-            raise RuntimeError(
-                f"rf_predict_reg wrote {wrote} of {n_rows} rows"
-            )
-        return out
+        return _TREES(self, "trees_forest_predict", (X,), _TREES_CONTEXT)
+
+
+# The forests' native owner (bindings/trees_public_forest.mojo) reads these
+# fixed tables: the criterion names, the refusal texts and the deviance
+# criterion codes whose targets it checks.
+_RF_TABLES = dict(
+    cls_criteria=_CLS_CRITERIA, reg_criteria=_REG_CRITERIA, unsupported=_UNSUPPORTED_CRITERIA,
+    max_leaf_nodes_why=_MAX_LEAF_NODES_WHY, poisson=_REG_CRITERIA["poisson"],
+    gamma=_REG_CRITERIA["gamma"], inverse_gaussian=_REG_CRITERIA["inverse_gaussian"],
+)
+_native_trees_bridge.register(RandomForestClassifier, "rf_classifier", trees_rf_tables=_RF_TABLES)
+_native_trees_bridge.register(RandomForestRegressor, "rf_regressor", trees_rf_tables=_RF_TABLES)

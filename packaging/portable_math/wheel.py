@@ -102,8 +102,7 @@ SOURCE_TREE_LAZY_IMPORTS = {"mojolearn/_identity_break.py": {"lane_applicability
 # The packages a pretrained model is rebuilt from, imported only inside the catalog check that rebuilds it
 # (mojolearn.models.verify_catalog_entry): the user who checks a torchvision, Hugging Face or ONNX model has its source
 # package; every other path of the wheel never imports them.
-MODEL_SOURCE_LAZY_IMPORTS = {"mojolearn/models/_catalog.py": {"torch", "torchvision", "transformers", "onnx"},
-                             "mojolearn/importers/torch_export.py": {"torch"}}
+MODEL_SOURCE_LAZY_IMPORTS = {"mojolearn/models/_catalog.py": {"torch", "torchvision", "transformers", "onnx"}}
 
 
 def sparse_output_adapter_imports(tree, relative):

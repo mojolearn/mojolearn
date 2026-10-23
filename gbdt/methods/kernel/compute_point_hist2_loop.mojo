@@ -396,19 +396,33 @@ def compute_histogram[
             var local_wt = SIMD[DType.float32, n](0)
             var local_row = SIMD[DType.uint32, n](0)
 
+            # NO LANE WRITE UNDER A PER-LANE GUARD (lane sm120-tree-identity,
+            # 2026-10-23): the sm_120 AOT compile corrupts a SIMD lane written under its
+            # own guard inside a `comptime for` (core/gram_splitk.mojo, GRAM_STRIDED_ARM;
+            # on the RTX 5090 the Ordered fits stopped at depth 3 where AMD and the L40S
+            # grew depth 6). Each value is computed into a scalar under the guard and the
+            # lane is written unconditionally; the vectors stay in registers (Metal
+            # refuses thread-private arrays here). Same loads, same order, same bits.
             comptime for k in range(n):
+                var v_row = UInt32(0)
+                var v_ci = UInt32(0)
+                var v_w = Float32(0)
+                var v_wt = Float32(0)
                 if done + k < own_iters:
-                    var idx = ldg(
+                    v_row = ldg(
                         indices.unsafe_offset(cur + stripe * k)
                     )
-                    local_row[k] = idx
-                    local_ci[k] = ldg(cindex.unsafe_offset(Int(idx)))
-                    local_w[k] = ldg(
+                    v_ci = ldg(cindex.unsafe_offset(Int(v_row)))
+                    v_w = ldg(
                         weight.unsafe_offset(cur + stripe * k)
                     )
-                    local_wt[k] = ldg(
+                    v_wt = ldg(
                         target.unsafe_offset(cur + stripe * k)
                     )
+                local_row[k] = v_row
+                local_ci[k] = v_ci
+                local_w[k] = v_w
+                local_wt[k] = v_wt
 
             cur += stripe * n
             done += n

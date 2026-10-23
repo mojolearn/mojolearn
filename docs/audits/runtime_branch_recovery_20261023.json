@@ -1,0 +1,2201 @@
+{
+  "schema": 1,
+  "audit_date": "2026-10-23",
+  "target": "28b24d4b05474a258509e2e8e2eabd0706bfc138",
+  "product_restoration": "45faad2bd",
+  "scope": "Exactly100 retained runtime-* branches:92 Oct22 and8 Oct21. Source retention reviewed against frozen target; no builds/tests in audit lane.",
+  "summary": {
+    "target": "28b24d4b05474a258509e2e8e2eabd0706bfc138",
+    "branches": 100,
+    "unique_hunks": 1517,
+    "original_hunk_occurrences": 3928,
+    "dispositions": {
+      "ADDED_SOURCE_RETAINED_EXACTLY": 1070,
+      "REWRITE_REVIEWED_SOURCE_ONLY": 190,
+      "DELETION_REVIEWED": 46,
+      "CURRENT_RUNTIME_POLICY_VIOLATION": 60,
+      "CURRENT_RUNTIME_POLICY_TOUCHPOINT": 26,
+      "LOST_WORK_RESTORED_VALIDATION_OWED": 7,
+      "QUALIFICATION_GAP_RETAINED": 63,
+      "HELD_NATIVE_WRITER_TOUCHPOINT": 53,
+      "HELD_UNMERGED_NATIVE_WRITER": 2
+    },
+    "issues": [
+      {
+        "id": "HOST_ARCHIVE_PREDICT_CALLBACK",
+        "status": "unresolved_policy_violation",
+        "current_paths": [
+          "bindings/classical_native.mojo:141",
+          "python/mojolearn/_forest_host.py:268",
+          "python/mojolearn/_forest_host.py:287"
+        ],
+        "note": "Public host_predict/proba loads model then calls Python public predict wrapper. Direct compiled dispatch must cover every supported host_model family; one-call wrapper still executes Python when reached from native code."
+      },
+      {
+        "id": "CACHE_NUMPY_PREFIX",
+        "status": "restored_validation_owed",
+        "original_commit": "58ecc0cdb",
+        "restoration_commit": "45faad2bd",
+        "current_paths": [
+          "bindings/arena_cache_stats.mojo:103",
+          "python/mojolearn/tests/test_cache_stats_native.py:241"
+        ],
+        "note": "Exact NumPy string prefix keys lost during read-only split. Six focused parameter cases added; root merged into integration3e1593113 and owns compilation/tests."
+      },
+      {
+        "id": "COLD_SKLEARN_TAGS",
+        "status": "unresolved_requirements_conflict",
+        "current_paths": [
+          "bindings/scaler_tags_native.mojo:16",
+          "bindings/classical_tags.mojo"
+        ],
+        "note": "Cold operation imports Python sklearn tag definitions. Exact classes, cold call and NumPy-free package import not simultaneously supported by present connection. No narrowing or fake types proposed."
+      },
+      {
+        "id": "OWNER_FINALIZERS",
+        "status": "unresolved_policy_violation",
+        "current_paths": [
+          "bindings/arena_resident_native.mojo",
+          "bindings/arena_cache_release.mojo:14",
+          "python/mojolearn/tests/test_resident_lifecycle_native.py:113"
+        ],
+        "note": "Releases caller-owned Python finalizers inside public close. Old pandas traversal was held because foreign Arrow owner visibility incomplete. Ordinary Arrow support must remain. Defer-to-caller, leak/quarantine, or reclassify callback as outside runtime is not an authorized repair."
+      },
+      {
+        "id": "FOREIGN_MATERIALIZE_CALLBACK",
+        "status": "unresolved_policy_violation",
+        "current_paths": [
+          "bindings/arena_materialize_native.mojo:426",
+          "python/mojolearn/_native_arena_rows.py:143",
+          "python/mojolearn/_buffer.py:412"
+        ],
+        "note": "Current foreign preparation calls Python _materialize, which invokes __array__/protocol hooks and Python loops. Exact Array/ndarray native path retained. Existing pandas native helper narrows to f32 and excludes Arrow, so not a compatible substitute."
+      },
+      {
+        "id": "ARCHIVE_POSIX_WRITE",
+        "status": "held_unmerged",
+        "original_commit": "0aa9905f2",
+        "current_paths": [
+          "bindings/classical_archive.mojo",
+          "python/mojolearn/_native_classical_bridge.py"
+        ],
+        "note": "Held branch is pathname native write only. EINTR handler/audit behavior unresolved, no native read implementation in draft. Retain source/tests; do not mark superseded."
+      }
+    ],
+    "tests_executed": false,
+    "builds_executed": false,
+    "branch_deletion_clearance": false,
+    "limitation": "Line maps and historical patch identity do not prove current reachability, runtime behavior, or native compliance. Unresolved hunks remain explicitly retained. No blanket nothing-lost claim."
+  },
+  "unmatched_commit_review": [
+    {
+      "sha": "0525bd1fdf906165ebbcd13c656fbf912423f4aa",
+      "subject": "Build StandardScaler sklearn metadata through native record slots",
+      "same_subject_in_target": [],
+      "stat": [
+        "5\t0\tbindings/scaler_lifecycle_native.mojo",
+        "124\t0\tbindings/scaler_tags_native.mojo",
+        "3\t0\tpython/mojolearn/preprocessing.py",
+        "39\t0\tpython/mojolearn/tests/test_standard_scaler_native_lifecycle.py"
+      ],
+      "branches": [
+        "lane/runtime-scaler-lifecycle"
+      ],
+      "source_patch": "patches/0525bd1fdf906165ebbcd13c656fbf912423f4aa.patch",
+      "range_diff": null,
+      "disposition": "RECORD_BUILDER_REWRITTEN_COLD_IMPORT_VIOLATION",
+      "note": "Record-slot builder exists; cold sklearn refusal changed to product Python import, violating current owner policy.",
+      "issue_ids": [
+        "COLD_SKLEARN_TAGS"
+      ]
+    },
+    {
+      "sha": "0aa9905f2096c341fc24c1edf28eda816698a567",
+      "subject": "Retain held native archive pathname IO experiment and compatibility controls",
+      "same_subject_in_target": [],
+      "stat": [
+        "146\t0\tbindings/archive_posix_native.mojo",
+        "42\t21\tbindings/classical_archive.mojo",
+        "4\t3\tpython/mojolearn/_native_classical_bridge.py",
+        "285\t0\tpython/mojolearn/tests/test_archive_path_io_native.py"
+      ],
+      "branches": [
+        "lane/runtime-archive-io"
+      ],
+      "source_patch": "patches/0aa9905f2096c341fc24c1edf28eda816698a567.patch",
+      "range_diff": null,
+      "disposition": "HELD_UNMERGED",
+      "note": "Native POSIX pathname writer remains unmerged; EINTR raising-signal/audit behavior unresolved. No native read implementation in draft.",
+      "issue_ids": [
+        "ARCHIVE_POSIX_WRITE"
+      ]
+    },
+    {
+      "sha": "0f7e107297b64760c333f83ce49ef565f9155f7a",
+      "subject": "Annotate native timezone metadata traversal",
+      "same_subject_in_target": [],
+      "stat": [
+        "1\t1\tbindings/pandas_owner_lifetime.mojo"
+      ],
+      "branches": [
+        "lane/runtime-arena-resident"
+      ],
+      "source_patch": "patches/0f7e107297b64760c333f83ce49ef565f9155f7a.patch",
+      "range_diff": null,
+      "disposition": "HELD_DRAFT_ANNOTATION",
+      "note": "Timezone traversal annotations belong to old pandas owner-admission draft. General native_owner_lifetime does not replace its Arrow/pandas capability or qualify current close.",
+      "issue_ids": [
+        "OWNER_FINALIZERS"
+      ]
+    },
+    {
+      "sha": "1c3d11e4888b66083ce89cf09301fac6457bc86d",
+      "subject": "Move explicit CPU CD and KMeans predictions into native owners",
+      "same_subject_in_target": [
+        "99d74b2df849e727b239e251774b163b74f86256"
+      ],
+      "stat": [
+        "6\t0\tbindings/classical_native.mojo",
+        "18\t8\tbindings/classical_warnings.mojo",
+        "20\t0\tbindings/host_inference_features.mojo",
+        "114\t0\tbindings/host_inference_native.mojo",
+        "62\t0\tbindings/host_inference_preparation.mojo",
+        "21\t0\tcore/host_inference_impl.mojo",
+        "72\t0\tpython/mojolearn/_classical_host.py",
+        "48\t0\tpython/mojolearn/tests/_legacy_host_inference.py",
+        "233\t0\tpython/mojolearn/tests/test_host_inference_native.py"
+      ],
+      "branches": [
+        "lane/runtime-host-kde-mode",
+        "lane/runtime-host-density-constructors",
+        "lane/runtime-host-kde-constructor",
+        "lane/runtime-host-kde-fit",
+        "lane/runtime-host-iforest",
+        "lane/runtime-host-kde",
+        "lane/runtime-host-svc",
+        "lane/runtime-host-svr",
+        "lane/runtime-host-logistic",
+        "lane/runtime-host-sparse-overflow",
+        "lane/runtime-host-projection",
+        "lane/runtime-host-sparse-admission",
+        "lane/runtime-host-model"
+      ],
+      "source_patch": "patches/1c3d11e4888b66083ce89cf09301fac6457bc86d.patch",
+      "range_diff": "range-diffs/1c3d11e4888b66083ce89cf09301fac6457bc86d.diff",
+      "disposition": "EQUIVALENT_EDITS_ON_CHANGED_BASE",
+      "note": "Full retained range-diff reviewed: edit differences are surrounding integration context; same-subject match alone was not used as proof.",
+      "issue_ids": []
+    },
+    {
+      "sha": "23fa3ae02e33f1360d0cfe70cd7434c416222bdc",
+      "subject": "Move host SVR prediction and coefficient attributes into Mojo",
+      "same_subject_in_target": [
+        "ea19c90b2f5a81cd7ce0703d1cef8d4655a6c045"
+      ],
+      "stat": [
+        "2\t0\tbindings/_mojolearn_tokenizer_host.mojo",
+        "6\t0\tbindings/host_inference_native.mojo",
+        "208\t0\tbindings/host_svr_native.mojo",
+        "21\t0\tcore/host_svr_impl.mojo",
+        "42\t3\tpython/mojolearn/_classical_host.py",
+        "37\t0\tpython/mojolearn/tests/_legacy_host_inference.py",
+        "391\t0\tpython/mojolearn/tests/test_host_svr_native.py"
+      ],
+      "branches": [
+        "lane/runtime-host-kde-mode",
+        "lane/runtime-host-density-constructors",
+        "lane/runtime-host-kde-constructor",
+        "lane/runtime-host-kde-fit",
+        "lane/runtime-host-iforest",
+        "lane/runtime-host-kde",
+        "lane/runtime-host-svc",
+        "lane/runtime-host-svr"
+      ],
+      "source_patch": "patches/23fa3ae02e33f1360d0cfe70cd7434c416222bdc.patch",
+      "range_diff": "range-diffs/23fa3ae02e33f1360d0cfe70cd7434c416222bdc.diff",
+      "disposition": "EQUIVALENT_EDITS_ON_CHANGED_BASE",
+      "note": "Full retained range-diff reviewed: edit differences are surrounding integration context; same-subject match alone was not used as proof.",
+      "issue_ids": []
+    },
+    {
+      "sha": "24d055be1e524b795e10893571ec375f4d755e25",
+      "subject": "Checkpoint held native resident lifecycle and Arrow owner blocker",
+      "same_subject_in_target": [
+        "1b173327beccaf6a56518d541518889c20289e80"
+      ],
+      "stat": [
+        "170\t0\tbindings/arena_resident_native.mojo",
+        "4\t1\tbindings/arena_rows_native.mojo",
+        "283\t0\tbindings/pandas_owner_lifetime.mojo",
+        "52\t1\tpython/mojolearn/_native_arena_rows.py",
+        "5\t16\tpython/mojolearn/model_selection.py",
+        "347\t0\tpython/mojolearn/tests/test_resident_lifecycle_native.py",
+        "102\t0\ttools/native_runtime_debt/resident_arrow_owner.json",
+        "7\t1\ttools/qualify_native_runtime_installed.py",
+        "14\t0\ttools/test_arena_rows_connection.py",
+        "12\t0\ttools/test_qualify_native_runtime_installed.py"
+      ],
+      "branches": [
+        "lane/runtime-arena-resident"
+      ],
+      "source_patch": "patches/24d055be1e524b795e10893571ec375f4d755e25.patch",
+      "range_diff": "range-diffs/24d055be1e524b795e10893571ec375f4d755e25.diff",
+      "disposition": "PARTIAL_REBUILD_CURRENT_POLICY_FAILURE",
+      "note": "V2 first retained inert draft; later connected lifecycle removed owner admission. Original hidden Arrow-owner blocker remains unresolved in semantics.",
+      "issue_ids": [
+        "OWNER_FINALIZERS"
+      ]
+    },
+    {
+      "sha": "2816d4d050d97b9d8f0f0ec27298b80acd8b90a5",
+      "subject": "Move IsolationForest depth-state arithmetic into native owner",
+      "same_subject_in_target": [
+        "8cfbe8b3fed4ac67eb7168293ad7c6d42c465ec5"
+      ],
+      "stat": [
+        "242\t0\tbindings/host_iforest_depth_native.mojo",
+        "8\t74\tbindings/host_iforest_fit_native.mojo",
+        "183\t0\tcore/native_depth_state.mojo",
+        "2\t0\tpython/mojolearn/_classical_host.py",
+        "35\t0\tpython/mojolearn/_native_iforest_depth.py",
+        "216\t0\tpython/mojolearn/tests/test_iforest_depth_native.py",
+        "5\t0\ttools/qualify_native_runtime_installed.py",
+        "60\t0\ttools/test_iforest_depth_connection.py",
+        "12\t0\ttools/test_qualify_native_runtime_installed.py"
+      ],
+      "branches": [
+        "lane/runtime-iforest-depth"
+      ],
+      "source_patch": "patches/2816d4d050d97b9d8f0f0ec27298b80acd8b90a5.patch",
+      "range_diff": "range-diffs/2816d4d050d97b9d8f0f0ec27298b80acd8b90a5.diff",
+      "disposition": "EQUIVALENT_EDITS_ON_CHANGED_BASE",
+      "note": "Full retained range-diff reviewed: edit differences are surrounding integration context; same-subject match alone was not used as proof.",
+      "issue_ids": []
+    },
+    {
+      "sha": "2d8d800c61a5f3949ac3c6f95d4b132030c7c6f7",
+      "subject": "Move complete host archive routing into native saved-model builders",
+      "same_subject_in_target": [
+        "585ede57b8ea55cb1fa75d10b26162f591acabc0"
+      ],
+      "stat": [
+        "2\t2\tbindings/classical_native.mojo",
+        "193\t24\tbindings/host_archive_native.mojo",
+        "159\t0\tcore/host_archive_gbdt.mojo",
+        "16\t0\tcore/host_archive_impl.mojo",
+        "33\t25\tpython/mojolearn/_classical_host.py",
+        "7\t44\tpython/mojolearn/_forest_host.py",
+        "11\t28\tpython/mojolearn/_gbdt_host.py",
+        "6\t2\tpython/mojolearn/_native_host_archive_bridge.py",
+        "4\t1\tpython/mojolearn/tests/test_gbdt_host_ctr.py",
+        "3\t1\tpython/mojolearn/tests/test_host_archive_native.py",
+        "198\t0\tpython/mojolearn/tests/test_host_model_native_router.py"
+      ],
+      "branches": [
+        "lane/runtime-host-kde-mode",
+        "lane/runtime-host-density-constructors",
+        "lane/runtime-host-kde-constructor",
+        "lane/runtime-host-kde-fit",
+        "lane/runtime-host-iforest",
+        "lane/runtime-host-kde",
+        "lane/runtime-host-svc",
+        "lane/runtime-host-svr",
+        "lane/runtime-host-logistic",
+        "lane/runtime-host-sparse-overflow",
+        "lane/runtime-host-projection",
+        "lane/runtime-host-sparse-admission",
+        "lane/runtime-host-model"
+      ],
+      "source_patch": "patches/2d8d800c61a5f3949ac3c6f95d4b132030c7c6f7.patch",
+      "range_diff": "range-diffs/2d8d800c61a5f3949ac3c6f95d4b132030c7c6f7.diff",
+      "disposition": "EQUIVALENT_EDITS_ON_CHANGED_BASE",
+      "note": "Full retained range-diff reviewed: edit differences are surrounding integration context; same-subject match alone was not used as proof.",
+      "issue_ids": []
+    },
+    {
+      "sha": "50cbd6d335f37ed26cfc3266e1553506f179e3b0",
+      "subject": "Own DeviceRows materialization through native resident snapshots",
+      "same_subject_in_target": [
+        "54cd01bffc233ab354c63552410ce2c7428ead3c"
+      ],
+      "stat": [
+        "53\t0\tbindings/arena_array_metadata.mojo",
+        "481\t0\tbindings/arena_materialize_native.mojo",
+        "9\t51\tbindings/arena_rows_native.mojo",
+        "1\t3\tpython/mojolearn/_arena_io.py",
+        "18\t2\tpython/mojolearn/_native_arena_rows.py",
+        "237\t0\tpython/mojolearn/tests/test_device_rows_materialize_native.py",
+        "5\t0\ttools/qualify_native_runtime_installed.py",
+        "27\t2\ttools/test_arena_rows_connection.py",
+        "10\t0\ttools/test_qualify_native_runtime_installed.py"
+      ],
+      "branches": [
+        "lane/runtime-arena-materialize"
+      ],
+      "source_patch": "patches/50cbd6d335f37ed26cfc3266e1553506f179e3b0.patch",
+      "range_diff": "range-diffs/50cbd6d335f37ed26cfc3266e1553506f179e3b0.diff",
+      "disposition": "EQUIVALENT_EDITS_ON_CHANGED_BASE",
+      "note": "Full retained range-diff reviewed: edit differences are surrounding integration context; same-subject match alone was not used as proof.",
+      "issue_ids": []
+    },
+    {
+      "sha": "5458c9471bb4f12ebecbc8ec1616014e6259e1ac",
+      "subject": "Use retained native sequence identities for KDE weight shape admission",
+      "same_subject_in_target": [
+        "5ec4488fc0a201c8a921814581d023d785a0e620"
+      ],
+      "stat": [
+        "1\t1\tbindings/host_kde_fit_native.mojo",
+        "1\t0\tpython/mojolearn/_classical_host.py",
+        "30\t0\tpython/mojolearn/tests/test_host_kde_fit_native.py"
+      ],
+      "branches": [
+        "lane/runtime-host-kde-layout-list",
+        "lane/runtime-host-kde-native-options",
+        "lane/runtime-host-iforest-fit-v3",
+        "lane/runtime-host-kde-attributes-v2",
+        "lane/runtime-host-iforest-fit-v2",
+        "lane/runtime-host-kde-empty-weights",
+        "lane/runtime-host-iforest-fit-v4"
+      ],
+      "source_patch": "patches/5458c9471bb4f12ebecbc8ec1616014e6259e1ac.patch",
+      "range_diff": "range-diffs/5458c9471bb4f12ebecbc8ec1616014e6259e1ac.diff",
+      "disposition": "EQUIVALENT_EDITS_ON_CHANGED_BASE",
+      "note": "Full retained range-diff reviewed: edit differences are surrounding integration context; same-subject match alone was not used as proof.",
+      "issue_ids": []
+    },
+    {
+      "sha": "58ecc0cdb815fe9acb4af7de16adf5a7b79feff3",
+      "subject": "Own read-only cache lookup and resident statistics natively",
+      "same_subject_in_target": [],
+      "stat": [
+        "289\t0\tbindings/arena_cache_readonly.mojo",
+        "8\t2\tbindings/arena_rows_native.mojo",
+        "3\t7\tpython/mojolearn/_arena_io.py",
+        "34\t1\tpython/mojolearn/_native_arena_rows.py",
+        "460\t0\tpython/mojolearn/tests/test_cache_readonly_native.py",
+        "4\t0\ttools/qualify_native_runtime_installed.py",
+        "28\t1\ttools/test_arena_rows_connection.py",
+        "10\t0\ttools/test_qualify_native_runtime_installed.py"
+      ],
+      "branches": [
+        "lane/runtime-cache-readonly"
+      ],
+      "source_patch": "patches/58ecc0cdb815fe9acb4af7de16adf5a7b79feff3.patch",
+      "range_diff": null,
+      "disposition": "SPLIT_WITH_CONFIRMED_LOSS_RESTORED",
+      "note": "Stats/get split preserved main behavior but exact NumPy string prefixes and corresponding test were lost. Restored45faad2bd; integration validation owed.",
+      "issue_ids": [
+        "CACHE_NUMPY_PREFIX"
+      ]
+    },
+    {
+      "sha": "65ae41fc4d71c471c27dba32f82facc3aab2742f",
+      "subject": "Own explicit CPU SVC inference and attributes natively",
+      "same_subject_in_target": [
+        "2ff09d69ed25e3cd7c053ac20908c59ec0b16a97"
+      ],
+      "stat": [
+        "2\t0\tbindings/_mojolearn_tokenizer_host.mojo",
+        "8\t2\tbindings/host_inference_native.mojo",
+        "377\t0\tbindings/host_svc_native.mojo",
+        "101\t2\tpython/mojolearn/_classical_host.py",
+        "78\t0\tpython/mojolearn/tests/_legacy_host_inference.py",
+        "574\t0\tpython/mojolearn/tests/test_host_svc_native.py"
+      ],
+      "branches": [
+        "lane/runtime-host-kde-mode",
+        "lane/runtime-host-density-constructors",
+        "lane/runtime-host-kde-constructor",
+        "lane/runtime-host-kde-fit",
+        "lane/runtime-host-iforest",
+        "lane/runtime-host-kde",
+        "lane/runtime-host-svc"
+      ],
+      "source_patch": "patches/65ae41fc4d71c471c27dba32f82facc3aab2742f.patch",
+      "range_diff": "range-diffs/65ae41fc4d71c471c27dba32f82facc3aab2742f.diff",
+      "disposition": "EQUIVALENT_EDITS_ON_CHANGED_BASE",
+      "note": "Full retained range-diff reviewed: edit differences are surrounding integration context; same-subject match alone was not used as proof.",
+      "issue_ids": []
+    },
+    {
+      "sha": "731fffd2ab205f0fa45fd58ccab6ec750f48fd91",
+      "subject": "Preserve NumPy 1.26 negative-storage exceptions without Python hooks",
+      "same_subject_in_target": [
+        "866c50deab003d2cb23983980b9b86259bfb033c"
+      ],
+      "stat": [
+        "2\t1\tbindings/sequence_array_native.mojo",
+        "56\t11\tbindings/sequence_dtype_native.mojo",
+        "86\t0\tpython/mojolearn/tests/test_sequence_dtype_alias_native.py"
+      ],
+      "branches": [
+        "lane/runtime-numpy126-aliases"
+      ],
+      "source_patch": "patches/731fffd2ab205f0fa45fd58ccab6ec750f48fd91.patch",
+      "range_diff": "range-diffs/731fffd2ab205f0fa45fd58ccab6ec750f48fd91.diff",
+      "disposition": "EQUIVALENT_EDITS_ON_CHANGED_BASE",
+      "note": "Full retained range-diff reviewed: edit differences are surrounding integration context; same-subject match alone was not used as proof.",
+      "issue_ids": []
+    },
+    {
+      "sha": "73e9222da387b94dedea7bef15ecbd58b02164bf",
+      "subject": "Guard cache cleanup exception identity and register upload qualification",
+      "same_subject_in_target": [
+        "530d15e559d11d3c4fcaaea893c8f8706f6357fb"
+      ],
+      "stat": [
+        "12\t1\tpython/mojolearn/_native_arena_rows.py",
+        "27\t0\ttools/qualify_native_runtime_installed.py",
+        "31\t0\ttools/test_arena_rows_connection.py",
+        "29\t0\ttools/test_qualify_native_runtime_installed.py"
+      ],
+      "branches": [
+        "lane/runtime-cache-upload-review"
+      ],
+      "source_patch": "patches/73e9222da387b94dedea7bef15ecbd58b02164bf.patch",
+      "range_diff": "range-diffs/73e9222da387b94dedea7bef15ecbd58b02164bf.diff",
+      "disposition": "EQUIVALENT_EDITS_ON_CHANGED_BASE",
+      "note": "Full retained range-diff reviewed: edit differences are surrounding integration context; same-subject match alone was not used as proof.",
+      "issue_ids": []
+    },
+    {
+      "sha": "8306242d8275961db4df23fe7b62759f20ac780e",
+      "subject": "Register bounded installed cache live and entry qualification",
+      "same_subject_in_target": [
+        "c879243567c698efa083197d4a8e0bf8dcc71b40"
+      ],
+      "stat": [
+        "16\t0\ttools/qualify_native_runtime_installed.py",
+        "21\t0\ttools/test_qualify_native_runtime_installed.py"
+      ],
+      "branches": [
+        "lane/runtime-cache-construction",
+        "lane/runtime-cache-lifecycle"
+      ],
+      "source_patch": "patches/8306242d8275961db4df23fe7b62759f20ac780e.patch",
+      "range_diff": "range-diffs/8306242d8275961db4df23fe7b62759f20ac780e.diff",
+      "disposition": "EQUIVALENT_EDITS_ON_CHANGED_BASE",
+      "note": "Full retained range-diff reviewed: edit differences are surrounding integration context; same-subject match alone was not used as proof.",
+      "issue_ids": []
+    },
+    {
+      "sha": "8318ccc23443b3d09f96285a58c3146268e4668a",
+      "subject": "Connect cold NumPy metadata without mutable builtin callbacks",
+      "same_subject_in_target": [
+        "ea2eac5b06d0663139ba883b45c1757004b23030"
+      ],
+      "stat": [
+        "18\t11\tbindings/classical_attributes.mojo",
+        "25\t6\tbindings/native_numpy_metadata.mojo",
+        "96\t37\tpython/mojolearn/tests/test_late_numpy_native_metadata.py",
+        "4\t0\ttools/qualify_native_runtime_installed.py"
+      ],
+      "branches": [
+        "lane/runtime-late-numpy-builtins"
+      ],
+      "source_patch": "patches/8318ccc23443b3d09f96285a58c3146268e4668a.patch",
+      "range_diff": "range-diffs/8318ccc23443b3d09f96285a58c3146268e4668a.diff",
+      "disposition": "EQUIVALENT_EDITS_ON_CHANGED_BASE",
+      "note": "Full retained range-diff reviewed: edit differences are surrounding integration context; same-subject match alone was not used as proof.",
+      "issue_ids": []
+    },
+    {
+      "sha": "90c8a201ecb40b074c8480d16abad89f6c3bef3a",
+      "subject": "Register bounded installed cache capability qualification",
+      "same_subject_in_target": [
+        "1c9d62ddbd341ff31643b91709a44d9f430497e9"
+      ],
+      "stat": [
+        "5\t0\ttools/qualify_native_runtime_installed.py",
+        "18\t0\ttools/test_qualify_native_runtime_installed.py"
+      ],
+      "branches": [
+        "lane/runtime-cache-construction"
+      ],
+      "source_patch": "patches/90c8a201ecb40b074c8480d16abad89f6c3bef3a.patch",
+      "range_diff": "range-diffs/90c8a201ecb40b074c8480d16abad89f6c3bef3a.diff",
+      "disposition": "EQUIVALENT_EDITS_ON_CHANGED_BASE",
+      "note": "Full retained range-diff reviewed: edit differences are surrounding integration context; same-subject match alone was not used as proof.",
+      "issue_ids": []
+    },
+    {
+      "sha": "96a747d637cf2e394fd12a986c1b4e1f5c03e7a1",
+      "subject": "Finalize saved CPU model resources through native descriptors",
+      "same_subject_in_target": [
+        "e30b8584ac5a340a7d1e8abb8d77870becb2ff9e"
+      ],
+      "stat": [
+        "2\t0\tbindings/_mojolearn_tokenizer_host.mojo",
+        "51\t0\tbindings/host_archive_lifetime.mojo",
+        "8\t2\tbindings/host_archive_native.mojo",
+        "14\t1\tpython/mojolearn/_classical_host.py",
+        "24\t2\tpython/mojolearn/_native_host_archive_bridge.py",
+        "41\t0\tpython/mojolearn/tests/test_host_archive_native.py"
+      ],
+      "branches": [
+        "lane/runtime-host-kde-mode",
+        "lane/runtime-host-density-constructors",
+        "lane/runtime-host-kde-constructor",
+        "lane/runtime-host-kde-fit",
+        "lane/runtime-host-iforest",
+        "lane/runtime-host-kde",
+        "lane/runtime-host-svc",
+        "lane/runtime-host-svr",
+        "lane/runtime-host-logistic",
+        "lane/runtime-host-sparse-overflow",
+        "lane/runtime-host-projection",
+        "lane/runtime-host-sparse-admission",
+        "lane/runtime-host-model"
+      ],
+      "source_patch": "patches/96a747d637cf2e394fd12a986c1b4e1f5c03e7a1.patch",
+      "range_diff": "range-diffs/96a747d637cf2e394fd12a986c1b4e1f5c03e7a1.diff",
+      "disposition": "EQUIVALENT_EDITS_ON_CHANGED_BASE",
+      "note": "Full retained range-diff reviewed: edit differences are surrounding integration context; same-subject match alone was not used as proof.",
+      "issue_ids": []
+    },
+    {
+      "sha": "9818b67b1d4551a8f5ab54fb07bd2336524fb9cb",
+      "subject": "Retain native builtin identities for owner release admission",
+      "same_subject_in_target": [
+        "9cb5b9ef2d85ac396e43853139a2c3f15b672d46"
+      ],
+      "stat": [
+        "13\t13\tbindings/native_owner_lifetime.mojo",
+        "5\t1\tpython/mojolearn/_native_owner_lifetime.py",
+        "54\t0\tpython/mojolearn/tests/test_native_owner_builtin_identity.py",
+        "4\t0\ttools/qualify_native_runtime_installed.py",
+        "9\t0\ttools/test_arena_rows_connection.py",
+        "10\t0\ttools/test_qualify_native_runtime_installed.py"
+      ],
+      "branches": [
+        "lane/runtime-arena-resident"
+      ],
+      "source_patch": "patches/9818b67b1d4551a8f5ab54fb07bd2336524fb9cb.patch",
+      "range_diff": "range-diffs/9818b67b1d4551a8f5ab54fb07bd2336524fb9cb.diff",
+      "disposition": "EQUIVALENT_EDITS_ON_CHANGED_BASE",
+      "note": "Full retained range-diff reviewed: edit differences are surrounding integration context; same-subject match alone was not used as proof.",
+      "issue_ids": []
+    },
+    {
+      "sha": "aaac8309621c6aca5418861f58bfbcaf433515a0",
+      "subject": "Move explicit host IsolationForest fit orchestration into native owner",
+      "same_subject_in_target": [
+        "b4bb89d9d4929ce2b450a2195d2db2176209c2e9"
+      ],
+      "stat": [
+        "7\t0\tbindings/classical_native.mojo",
+        "369\t0\tbindings/host_iforest_fit_native.mojo",
+        "169\t0\tbindings/host_iforest_scalar_repr.mojo",
+        "28\t1\tpython/mojolearn/_classical_host.py",
+        "196\t0\tpython/mojolearn/tests/_legacy_host_iforest_fit.py",
+        "352\t0\tpython/mojolearn/tests/test_host_iforest_fit_native.py"
+      ],
+      "branches": [
+        "lane/runtime-host-iforest-fit-v4"
+      ],
+      "source_patch": "patches/aaac8309621c6aca5418861f58bfbcaf433515a0.patch",
+      "range_diff": "range-diffs/aaac8309621c6aca5418861f58bfbcaf433515a0.diff",
+      "disposition": "EQUIVALENT_EDITS_ON_CHANGED_BASE",
+      "note": "Full retained range-diff reviewed: edit differences are surrounding integration context; same-subject match alone was not used as proof.",
+      "issue_ids": []
+    },
+    {
+      "sha": "ccd85762a314f8be821b88338d63ae2f82e7aa40",
+      "subject": "Preserve native KDE string scalar options without conversion callbacks",
+      "same_subject_in_target": [
+        "166a9c611411c0e0a61e28292d3a09a67774c72f"
+      ],
+      "stat": [
+        "6\t2\tbindings/host_inference_native.mojo",
+        "54\t12\tbindings/host_kde_native.mojo",
+        "2\t0\tpython/mojolearn/_classical_host.py",
+        "56\t0\tpython/mojolearn/tests/test_host_kde_native.py"
+      ],
+      "branches": [
+        "lane/runtime-host-kde-layout-list",
+        "lane/runtime-host-kde-native-options",
+        "lane/runtime-host-iforest-fit-v3",
+        "lane/runtime-host-iforest-fit-v4"
+      ],
+      "source_patch": "patches/ccd85762a314f8be821b88338d63ae2f82e7aa40.patch",
+      "range_diff": "range-diffs/ccd85762a314f8be821b88338d63ae2f82e7aa40.diff",
+      "disposition": "EQUIVALENT_EDITS_ON_CHANGED_BASE",
+      "note": "Full retained range-diff reviewed: edit differences are surrounding integration context; same-subject match alone was not used as proof.",
+      "issue_ids": []
+    },
+    {
+      "sha": "e4e5c3c76075974ff9627f0e2989596c7ecb6c45",
+      "subject": "Preserve native dtype failure exception contracts",
+      "same_subject_in_target": [
+        "870a10539ce536839ba9250f1c3b6e66d35a6754"
+      ],
+      "stat": [
+        "84\t16\tbindings/sequence_dtype_native.mojo",
+        "39\t0\tpython/mojolearn/tests/test_sequence_array_native_candidate.py"
+      ],
+      "branches": [
+        "lane/runtime-sequence-array"
+      ],
+      "source_patch": "patches/e4e5c3c76075974ff9627f0e2989596c7ecb6c45.patch",
+      "range_diff": "range-diffs/e4e5c3c76075974ff9627f0e2989596c7ecb6c45.diff",
+      "disposition": "SUPERSEDED_WITH_EXTENDED_REPAIR",
+      "note": "Replacement adds same validated dtype-creation repair to newer StringDType T and concrete dtype class paths; existing patch behavior preserved.",
+      "issue_ids": []
+    },
+    {
+      "sha": "f9fbfff2b874cf2ab8d4c81f373a5728174b48f4",
+      "subject": "Guard cache cleanup exception identity and register upload qualification",
+      "same_subject_in_target": [
+        "530d15e559d11d3c4fcaaea893c8f8706f6357fb"
+      ],
+      "stat": [
+        "12\t1\tpython/mojolearn/_native_arena_rows.py",
+        "27\t0\ttools/qualify_native_runtime_installed.py",
+        "31\t0\ttools/test_arena_rows_connection.py",
+        "29\t0\ttools/test_qualify_native_runtime_installed.py"
+      ],
+      "branches": [
+        "lane/runtime-cache-construction",
+        "lane/runtime-cache-lifecycle"
+      ],
+      "source_patch": "patches/f9fbfff2b874cf2ab8d4c81f373a5728174b48f4.patch",
+      "range_diff": "range-diffs/f9fbfff2b874cf2ab8d4c81f373a5728174b48f4.diff",
+      "disposition": "EQUIVALENT_EDITS_ON_CHANGED_BASE",
+      "note": "Full retained range-diff reviewed: edit differences are surrounding integration context; same-subject match alone was not used as proof.",
+      "issue_ids": []
+    }
+  ],
+  "branches": [
+    {
+      "branch": "lane/runtime-optimizer-array-owner",
+      "head": "313782c4929cc40009ea5a54dbb079608c49f851",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 16,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 4
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-host-kde-layout-list",
+      "head": "afc48042d63630d0df2f689943b950bc8ae558bf",
+      "unmatched_commits": [
+        "5458c9471bb4f12ebecbc8ec1616014e6259e1ac",
+        "ccd85762a314f8be821b88338d63ae2f82e7aa40"
+      ],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 25,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 9,
+        "DELETION_REVIEWED": 3,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 6,
+        "CURRENT_RUNTIME_POLICY_TOUCHPOINT": 1
+      },
+      "issue_ids": [
+        "FOREIGN_MATERIALIZE_CALLBACK",
+        "HOST_ARCHIVE_PREDICT_CALLBACK",
+        "OWNER_FINALIZERS"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-training-rms-current",
+      "head": "29dbde3300968506eac9e1ebed3a5d30e5fbca12",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 14,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 3
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-host-kde-native-options",
+      "head": "ccd85762a314f8be821b88338d63ae2f82e7aa40",
+      "unmatched_commits": [
+        "5458c9471bb4f12ebecbc8ec1616014e6259e1ac",
+        "ccd85762a314f8be821b88338d63ae2f82e7aa40"
+      ],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 23,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 9,
+        "DELETION_REVIEWED": 3,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 6,
+        "CURRENT_RUNTIME_POLICY_TOUCHPOINT": 1
+      },
+      "issue_ids": [
+        "FOREIGN_MATERIALIZE_CALLBACK",
+        "HOST_ARCHIVE_PREDICT_CALLBACK",
+        "OWNER_FINALIZERS"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-host-iforest-fit-v3",
+      "head": "ccd85762a314f8be821b88338d63ae2f82e7aa40",
+      "unmatched_commits": [
+        "5458c9471bb4f12ebecbc8ec1616014e6259e1ac",
+        "ccd85762a314f8be821b88338d63ae2f82e7aa40"
+      ],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 23,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 9,
+        "DELETION_REVIEWED": 3,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 6,
+        "CURRENT_RUNTIME_POLICY_TOUCHPOINT": 1
+      },
+      "issue_ids": [
+        "FOREIGN_MATERIALIZE_CALLBACK",
+        "HOST_ARCHIVE_PREDICT_CALLBACK",
+        "OWNER_FINALIZERS"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-robust-lifecycle",
+      "head": "d9fce33ba0e36731fcc0cddfc92b85406eb0037b",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 15,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 8
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-host-kde-attributes-v2",
+      "head": "7260422838f5764d5360ecfa0adb832410a8706c",
+      "unmatched_commits": [
+        "5458c9471bb4f12ebecbc8ec1616014e6259e1ac"
+      ],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 19,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 7,
+        "DELETION_REVIEWED": 1,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 6,
+        "CURRENT_RUNTIME_POLICY_TOUCHPOINT": 1
+      },
+      "issue_ids": [
+        "FOREIGN_MATERIALIZE_CALLBACK",
+        "HOST_ARCHIVE_PREDICT_CALLBACK",
+        "OWNER_FINALIZERS"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-host-iforest-fit-v2",
+      "head": "7260422838f5764d5360ecfa0adb832410a8706c",
+      "unmatched_commits": [
+        "5458c9471bb4f12ebecbc8ec1616014e6259e1ac"
+      ],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 19,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 7,
+        "DELETION_REVIEWED": 1,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 6,
+        "CURRENT_RUNTIME_POLICY_TOUCHPOINT": 1
+      },
+      "issue_ids": [
+        "FOREIGN_MATERIALIZE_CALLBACK",
+        "HOST_ARCHIVE_PREDICT_CALLBACK",
+        "OWNER_FINALIZERS"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-cache-upload",
+      "head": "0c96c54572ff5084024b9f66c07a5476a21d2bc4",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 14,
+        "DELETION_REVIEWED": 2,
+        "LOST_WORK_RESTORED_VALIDATION_OWED": 2,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 4,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 3,
+        "CURRENT_RUNTIME_POLICY_TOUCHPOINT": 3
+      },
+      "issue_ids": [
+        "CACHE_NUMPY_PREFIX",
+        "FOREIGN_MATERIALIZE_CALLBACK",
+        "OWNER_FINALIZERS"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-host-kde-empty-weights",
+      "head": "5458c9471bb4f12ebecbc8ec1616014e6259e1ac",
+      "unmatched_commits": [
+        "5458c9471bb4f12ebecbc8ec1616014e6259e1ac"
+      ],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 16,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 6,
+        "DELETION_REVIEWED": 1,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 6,
+        "CURRENT_RUNTIME_POLICY_TOUCHPOINT": 1
+      },
+      "issue_ids": [
+        "FOREIGN_MATERIALIZE_CALLBACK",
+        "HOST_ARCHIVE_PREDICT_CALLBACK",
+        "OWNER_FINALIZERS"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-arena-materialize",
+      "head": "5ebf54098b2ab84b34ed47e99e1089012d128959",
+      "unmatched_commits": [
+        "50cbd6d335f37ed26cfc3266e1553506f179e3b0"
+      ],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 21,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 6,
+        "DELETION_REVIEWED": 1,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 3,
+        "QUALIFICATION_GAP_RETAINED": 3,
+        "CURRENT_RUNTIME_POLICY_TOUCHPOINT": 1
+      },
+      "issue_ids": [
+        "FOREIGN_MATERIALIZE_CALLBACK",
+        "OWNER_FINALIZERS"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-host-kde-mode",
+      "head": "b0185c7aac3987c725abf32df95519d0e31350d5",
+      "unmatched_commits": [
+        "96a747d637cf2e394fd12a986c1b4e1f5c03e7a1",
+        "2d8d800c61a5f3949ac3c6f95d4b132030c7c6f7",
+        "1c3d11e4888b66083ce89cf09301fac6457bc86d",
+        "23fa3ae02e33f1360d0cfe70cd7434c416222bdc",
+        "65ae41fc4d71c471c27dba32f82facc3aab2742f"
+      ],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 120,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 5,
+        "DELETION_REVIEWED": 4,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 10
+      },
+      "issue_ids": [
+        "HOST_ARCHIVE_PREDICT_CALLBACK"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-host-density-constructors",
+      "head": "b0185c7aac3987c725abf32df95519d0e31350d5",
+      "unmatched_commits": [
+        "96a747d637cf2e394fd12a986c1b4e1f5c03e7a1",
+        "2d8d800c61a5f3949ac3c6f95d4b132030c7c6f7",
+        "1c3d11e4888b66083ce89cf09301fac6457bc86d",
+        "23fa3ae02e33f1360d0cfe70cd7434c416222bdc",
+        "65ae41fc4d71c471c27dba32f82facc3aab2742f"
+      ],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 120,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 5,
+        "DELETION_REVIEWED": 4,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 10
+      },
+      "issue_ids": [
+        "HOST_ARCHIVE_PREDICT_CALLBACK"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-maxabs-transport",
+      "head": "3c6c3a18bcfe9e0d55e3d95d58cb7b384a4e58e0",
+      "unmatched_commits": [],
+      "dispositions": {
+        "DELETION_REVIEWED": 4,
+        "ADDED_SOURCE_RETAINED_EXACTLY": 32,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 4
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-host-density-save-public",
+      "head": "449191482e8bc2e14223addcf3f45105ca282e8a",
+      "unmatched_commits": [],
+      "dispositions": {
+        "HELD_NATIVE_WRITER_TOUCHPOINT": 30,
+        "ADDED_SOURCE_RETAINED_EXACTLY": 30,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 2,
+        "DELETION_REVIEWED": 1,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 1
+      },
+      "issue_ids": [
+        "ARCHIVE_POSIX_WRITE",
+        "HOST_ARCHIVE_PREDICT_CALLBACK"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-device-rows-lifecycle",
+      "head": "e31eb23992c12d4cbd89547e3ac29f6bfdf16583",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 6,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 1,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 1,
+        "CURRENT_RUNTIME_POLICY_TOUCHPOINT": 1
+      },
+      "issue_ids": [
+        "FOREIGN_MATERIALIZE_CALLBACK",
+        "OWNER_FINALIZERS"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-cache-construction",
+      "head": "90c8a201ecb40b074c8480d16abad89f6c3bef3a",
+      "unmatched_commits": [
+        "f9fbfff2b874cf2ab8d4c81f373a5728174b48f4",
+        "8306242d8275961db4df23fe7b62759f20ac780e",
+        "90c8a201ecb40b074c8480d16abad89f6c3bef3a"
+      ],
+      "dispositions": {
+        "REWRITE_REVIEWED_SOURCE_ONLY": 4,
+        "ADDED_SOURCE_RETAINED_EXACTLY": 6,
+        "LOST_WORK_RESTORED_VALIDATION_OWED": 2,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 6,
+        "QUALIFICATION_GAP_RETAINED": 4,
+        "CURRENT_RUNTIME_POLICY_TOUCHPOINT": 4
+      },
+      "issue_ids": [
+        "CACHE_NUMPY_PREFIX",
+        "FOREIGN_MATERIALIZE_CALLBACK",
+        "OWNER_FINALIZERS"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-arena-lifecycle",
+      "head": "3c6c3a18bcfe9e0d55e3d95d58cb7b384a4e58e0",
+      "unmatched_commits": [],
+      "dispositions": {
+        "DELETION_REVIEWED": 4,
+        "ADDED_SOURCE_RETAINED_EXACTLY": 32,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 4
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-host-kde-constructor",
+      "head": "319948a39996f3775a67f8ce7f1a57d34dec272a",
+      "unmatched_commits": [
+        "96a747d637cf2e394fd12a986c1b4e1f5c03e7a1",
+        "2d8d800c61a5f3949ac3c6f95d4b132030c7c6f7",
+        "1c3d11e4888b66083ce89cf09301fac6457bc86d",
+        "23fa3ae02e33f1360d0cfe70cd7434c416222bdc",
+        "65ae41fc4d71c471c27dba32f82facc3aab2742f"
+      ],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 119,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 5,
+        "DELETION_REVIEWED": 4,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 11
+      },
+      "issue_ids": [
+        "HOST_ARCHIVE_PREDICT_CALLBACK"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-host-kde-fit",
+      "head": "2492463122b54916d5cb88bd16ebd8949ba60516",
+      "unmatched_commits": [
+        "96a747d637cf2e394fd12a986c1b4e1f5c03e7a1",
+        "2d8d800c61a5f3949ac3c6f95d4b132030c7c6f7",
+        "1c3d11e4888b66083ce89cf09301fac6457bc86d",
+        "23fa3ae02e33f1360d0cfe70cd7434c416222bdc",
+        "65ae41fc4d71c471c27dba32f82facc3aab2742f"
+      ],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 107,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 5,
+        "DELETION_REVIEWED": 4,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 12
+      },
+      "issue_ids": [
+        "HOST_ARCHIVE_PREDICT_CALLBACK"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-host-iforest",
+      "head": "a3c4011d020ba9260fe629f76e1d4966a7b0ba0a",
+      "unmatched_commits": [
+        "96a747d637cf2e394fd12a986c1b4e1f5c03e7a1",
+        "2d8d800c61a5f3949ac3c6f95d4b132030c7c6f7",
+        "1c3d11e4888b66083ce89cf09301fac6457bc86d",
+        "23fa3ae02e33f1360d0cfe70cd7434c416222bdc",
+        "65ae41fc4d71c471c27dba32f82facc3aab2742f"
+      ],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 105,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 5,
+        "DELETION_REVIEWED": 4,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 12
+      },
+      "issue_ids": [
+        "HOST_ARCHIVE_PREDICT_CALLBACK"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-host-kde",
+      "head": "2dc56912a683f14d1fb2a45156049da811e96488",
+      "unmatched_commits": [
+        "96a747d637cf2e394fd12a986c1b4e1f5c03e7a1",
+        "2d8d800c61a5f3949ac3c6f95d4b132030c7c6f7",
+        "1c3d11e4888b66083ce89cf09301fac6457bc86d",
+        "23fa3ae02e33f1360d0cfe70cd7434c416222bdc",
+        "65ae41fc4d71c471c27dba32f82facc3aab2742f"
+      ],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 105,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 5,
+        "DELETION_REVIEWED": 4,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 10
+      },
+      "issue_ids": [
+        "HOST_ARCHIVE_PREDICT_CALLBACK"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-host-svc",
+      "head": "6095dc7cd9979d77b319a8f63071e6ca16bb396e",
+      "unmatched_commits": [
+        "96a747d637cf2e394fd12a986c1b4e1f5c03e7a1",
+        "2d8d800c61a5f3949ac3c6f95d4b132030c7c6f7",
+        "1c3d11e4888b66083ce89cf09301fac6457bc86d",
+        "23fa3ae02e33f1360d0cfe70cd7434c416222bdc",
+        "65ae41fc4d71c471c27dba32f82facc3aab2742f"
+      ],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 102,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 4,
+        "DELETION_REVIEWED": 4,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 9
+      },
+      "issue_ids": [
+        "HOST_ARCHIVE_PREDICT_CALLBACK"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-training-linear",
+      "head": "9fbe53ac5f77d4e50cf29996b8ea38866da7bec9",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 26,
+        "DELETION_REVIEWED": 2,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 3
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-numpy126-aliases",
+      "head": "99a210cb3d168b89fe9395f9faae4d6aa0f23b7b",
+      "unmatched_commits": [
+        "731fffd2ab205f0fa45fd58ccab6ec750f48fd91"
+      ],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 8
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-native-owner-lifetime",
+      "head": "bdfe221b23b24cb371a31ced7fef3bbd25585f00",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 5,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 3,
+        "DELETION_REVIEWED": 1,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 4,
+        "CURRENT_RUNTIME_POLICY_TOUCHPOINT": 1
+      },
+      "issue_ids": [
+        "FOREIGN_MATERIALIZE_CALLBACK",
+        "OWNER_FINALIZERS"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-array-status-repair",
+      "head": "0a99ef317c239da4e8b34e6cdd77eaade939fb22",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 17,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 2
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-arena-resident",
+      "head": "0f7e107297b64760c333f83ce49ef565f9155f7a",
+      "unmatched_commits": [
+        "9818b67b1d4551a8f5ab54fb07bd2336524fb9cb",
+        "24d055be1e524b795e10893571ec375f4d755e25",
+        "0f7e107297b64760c333f83ce49ef565f9155f7a"
+      ],
+      "dispositions": {
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 8,
+        "ADDED_SOURCE_RETAINED_EXACTLY": 15,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 6,
+        "QUALIFICATION_GAP_RETAINED": 5,
+        "CURRENT_RUNTIME_POLICY_TOUCHPOINT": 2
+      },
+      "issue_ids": [
+        "FOREIGN_MATERIALIZE_CALLBACK",
+        "OWNER_FINALIZERS"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-archive-io",
+      "head": "0aa9905f2096c341fc24c1edf28eda816698a567",
+      "unmatched_commits": [
+        "0aa9905f2096c341fc24c1edf28eda816698a567"
+      ],
+      "dispositions": {
+        "HELD_UNMERGED_NATIVE_WRITER": 2,
+        "HELD_NATIVE_WRITER_TOUCHPOINT": 30,
+        "ADDED_SOURCE_RETAINED_EXACTLY": 26,
+        "DELETION_REVIEWED": 1
+      },
+      "issue_ids": [
+        "ARCHIVE_POSIX_WRITE"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-host-svr",
+      "head": "23fa3ae02e33f1360d0cfe70cd7434c416222bdc",
+      "unmatched_commits": [
+        "96a747d637cf2e394fd12a986c1b4e1f5c03e7a1",
+        "2d8d800c61a5f3949ac3c6f95d4b132030c7c6f7",
+        "1c3d11e4888b66083ce89cf09301fac6457bc86d",
+        "23fa3ae02e33f1360d0cfe70cd7434c416222bdc"
+      ],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 100,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 4,
+        "DELETION_REVIEWED": 4,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 9
+      },
+      "issue_ids": [
+        "HOST_ARCHIVE_PREDICT_CALLBACK"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-host-logistic",
+      "head": "86a36fb8ad587d0340d6604cbda5d2d6f892cf9b",
+      "unmatched_commits": [
+        "96a747d637cf2e394fd12a986c1b4e1f5c03e7a1",
+        "2d8d800c61a5f3949ac3c6f95d4b132030c7c6f7",
+        "1c3d11e4888b66083ce89cf09301fac6457bc86d"
+      ],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 97,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 4,
+        "DELETION_REVIEWED": 4,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 9
+      },
+      "issue_ids": [
+        "HOST_ARCHIVE_PREDICT_CALLBACK"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-host-sparse-overflow",
+      "head": "6f84c6d099828303c2748376fac344e50f2e75f6",
+      "unmatched_commits": [
+        "96a747d637cf2e394fd12a986c1b4e1f5c03e7a1",
+        "2d8d800c61a5f3949ac3c6f95d4b132030c7c6f7",
+        "1c3d11e4888b66083ce89cf09301fac6457bc86d"
+      ],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 94,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 4,
+        "DELETION_REVIEWED": 4,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 9
+      },
+      "issue_ids": [
+        "HOST_ARCHIVE_PREDICT_CALLBACK"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-host-projection",
+      "head": "59087164e3290a7990c3151363b48c795ac5a3d1",
+      "unmatched_commits": [
+        "96a747d637cf2e394fd12a986c1b4e1f5c03e7a1",
+        "2d8d800c61a5f3949ac3c6f95d4b132030c7c6f7",
+        "1c3d11e4888b66083ce89cf09301fac6457bc86d"
+      ],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 94,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 4,
+        "DELETION_REVIEWED": 4,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 9
+      },
+      "issue_ids": [
+        "HOST_ARCHIVE_PREDICT_CALLBACK"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-host-sparse-admission",
+      "head": "15b109e947b5d52b756ec099c9e55301b2aaaae6",
+      "unmatched_commits": [
+        "96a747d637cf2e394fd12a986c1b4e1f5c03e7a1",
+        "2d8d800c61a5f3949ac3c6f95d4b132030c7c6f7",
+        "1c3d11e4888b66083ce89cf09301fac6457bc86d"
+      ],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 91,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 4,
+        "DELETION_REVIEWED": 4,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 10
+      },
+      "issue_ids": [
+        "HOST_ARCHIVE_PREDICT_CALLBACK"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-host-model",
+      "head": "b06171d3bb57a4f031bdaa5a262950bd114e0c02",
+      "unmatched_commits": [
+        "96a747d637cf2e394fd12a986c1b4e1f5c03e7a1",
+        "2d8d800c61a5f3949ac3c6f95d4b132030c7c6f7",
+        "1c3d11e4888b66083ce89cf09301fac6457bc86d"
+      ],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 91,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 4,
+        "DELETION_REVIEWED": 4,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 10
+      },
+      "issue_ids": [
+        "HOST_ARCHIVE_PREDICT_CALLBACK"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-training-rms",
+      "head": "202b60dcb02d370a15341bf504741c9f26951621",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 26,
+        "DELETION_REVIEWED": 2,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 3
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-owner-qualification",
+      "head": "9c453728f686cb9d62fd09084f4bc0890e7a1f37",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 16,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 2,
+        "DELETION_REVIEWED": 1
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-installed-owner-scope",
+      "head": "861ac59e2f1c9b1a95bbd64bf6732c359cd5ad66",
+      "unmatched_commits": [],
+      "dispositions": {
+        "QUALIFICATION_GAP_RETAINED": 26
+      },
+      "issue_ids": [
+        "OWNER_FINALIZERS"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-host-kde-temporal",
+      "head": "b949cbab4c45454f1af9a771327ebf78a27b3055",
+      "unmatched_commits": [],
+      "dispositions": {
+        "REWRITE_REVIEWED_SOURCE_ONLY": 2,
+        "ADDED_SOURCE_RETAINED_EXACTLY": 12
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-host-kde-attributes",
+      "head": "473fcf9906f24e62aaad35db19fe024c1e58392e",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 12,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 5,
+        "DELETION_REVIEWED": 1,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 6,
+        "CURRENT_RUNTIME_POLICY_TOUCHPOINT": 1
+      },
+      "issue_ids": [
+        "FOREIGN_MATERIALIZE_CALLBACK",
+        "HOST_ARCHIVE_PREDICT_CALLBACK",
+        "OWNER_FINALIZERS"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-host-iforest-fit",
+      "head": "473fcf9906f24e62aaad35db19fe024c1e58392e",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 12,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 5,
+        "DELETION_REVIEWED": 1,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 6,
+        "CURRENT_RUNTIME_POLICY_TOUCHPOINT": 1
+      },
+      "issue_ids": [
+        "FOREIGN_MATERIALIZE_CALLBACK",
+        "HOST_ARCHIVE_PREDICT_CALLBACK",
+        "OWNER_FINALIZERS"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-host-density-save-owner",
+      "head": "8f5dc02b9ef5f148c16ea631db740210d246c7af",
+      "unmatched_commits": [],
+      "dispositions": {
+        "HELD_NATIVE_WRITER_TOUCHPOINT": 30,
+        "ADDED_SOURCE_RETAINED_EXACTLY": 26,
+        "DELETION_REVIEWED": 1
+      },
+      "issue_ids": [
+        "ARCHIVE_POSIX_WRITE"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-host-density-308-repair",
+      "head": "9ac0fdf1c46dd2cb4d880cb817264e2cb2b16292",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 6,
+        "HELD_NATIVE_WRITER_TOUCHPOINT": 1,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 3
+      },
+      "issue_ids": [
+        "ARCHIVE_POSIX_WRITE",
+        "FOREIGN_MATERIALIZE_CALLBACK"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-cache-lifecycle",
+      "head": "8306242d8275961db4df23fe7b62759f20ac780e",
+      "unmatched_commits": [
+        "f9fbfff2b874cf2ab8d4c81f373a5728174b48f4",
+        "8306242d8275961db4df23fe7b62759f20ac780e"
+      ],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 5,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 2,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 4,
+        "QUALIFICATION_GAP_RETAINED": 4,
+        "CURRENT_RUNTIME_POLICY_TOUCHPOINT": 4
+      },
+      "issue_ids": [
+        "FOREIGN_MATERIALIZE_CALLBACK",
+        "OWNER_FINALIZERS"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-cache-get",
+      "head": "a91cd749f6e917cd157ac6d49a1f89a0d72672bb",
+      "unmatched_commits": [],
+      "dispositions": {
+        "REWRITE_REVIEWED_SOURCE_ONLY": 5,
+        "ADDED_SOURCE_RETAINED_EXACTLY": 11,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 2,
+        "QUALIFICATION_GAP_RETAINED": 4,
+        "CURRENT_RUNTIME_POLICY_TOUCHPOINT": 3
+      },
+      "issue_ids": [
+        "FOREIGN_MATERIALIZE_CALLBACK",
+        "OWNER_FINALIZERS"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-audit-native-origins",
+      "head": "a6559a8203e3c4505db59382556b533082fd6aa3",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 13
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-sequence-strings",
+      "head": "5b114f8b5d6a5888fa1d5eab3efd6ed958406c21",
+      "unmatched_commits": [],
+      "dispositions": {
+        "REWRITE_REVIEWED_SOURCE_ONLY": 15,
+        "ADDED_SOURCE_RETAINED_EXACTLY": 74,
+        "DELETION_REVIEWED": 2
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-sequence-array",
+      "head": "e4e5c3c76075974ff9627f0e2989596c7ecb6c45",
+      "unmatched_commits": [
+        "e4e5c3c76075974ff9627f0e2989596c7ecb6c45"
+      ],
+      "dispositions": {
+        "REWRITE_REVIEWED_SOURCE_ONLY": 15,
+        "ADDED_SOURCE_RETAINED_EXACTLY": 72,
+        "DELETION_REVIEWED": 2
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-optimizer-scalar-constructors",
+      "head": "c945027b30733864bbf0c636ffd1f2d24df70f1f",
+      "unmatched_commits": [],
+      "dispositions": {
+        "DELETION_REVIEWED": 3,
+        "ADDED_SOURCE_RETAINED_EXACTLY": 63,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 8
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-training-device-finalizer",
+      "head": "195b354f720ea5e555e0dd22e57facc247ba47de",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 20,
+        "DELETION_REVIEWED": 2
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-string-repairs",
+      "head": "5dcc6f6dfe30c82abb0c66c897b966081a63ac1a",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 14,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 3,
+        "DELETION_REVIEWED": 1
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-sequence-format-math",
+      "head": "2da4640f92901ed7f4f362e861da10fc58ed4a93",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 16,
+        "DELETION_REVIEWED": 2
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-native-scalar-decoder",
+      "head": "10c76152db66cbc3e8ee0b7712dbe7cf6162a01a",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 5,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 2,
+        "QUALIFICATION_GAP_RETAINED": 1
+      },
+      "issue_ids": [
+        "OWNER_FINALIZERS"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-macos-wheel-floor",
+      "head": "f5d188ab8ba1f37a959d66088994204b2c0fe782",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 52,
+        "DELETION_REVIEWED": 2
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-host-kde-scalar-compat",
+      "head": "d623aff8f2a55fe0aa7dfd1544fe3efd3a42e217",
+      "unmatched_commits": [],
+      "dispositions": {
+        "REWRITE_REVIEWED_SOURCE_ONLY": 4,
+        "ADDED_SOURCE_RETAINED_EXACTLY": 9
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-host-density-save",
+      "head": "8195f53682f67281348931aeef5142af37e2c602",
+      "unmatched_commits": [],
+      "dispositions": {
+        "HELD_NATIVE_WRITER_TOUCHPOINT": 30,
+        "ADDED_SOURCE_RETAINED_EXACTLY": 23,
+        "DELETION_REVIEWED": 1,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 1
+      },
+      "issue_ids": [
+        "ARCHIVE_POSIX_WRITE"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-host-density-constructors-v2",
+      "head": "73785fb1874bb675d8a334fa477fb4aaac2a3c02",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 12,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 5,
+        "DELETION_REVIEWED": 1,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 6
+      },
+      "issue_ids": [
+        "FOREIGN_MATERIALIZE_CALLBACK",
+        "HOST_ARCHIVE_PREDICT_CALLBACK",
+        "OWNER_FINALIZERS"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-binding-provenance",
+      "head": "c7571db17284b783c55cbe2097a65a1ac424ab29",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 27
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-optimizer-list-constructors",
+      "head": "15d88858aa51cfdeb53b4515ef47422872844c04",
+      "unmatched_commits": [],
+      "dispositions": {
+        "DELETION_REVIEWED": 1,
+        "ADDED_SOURCE_RETAINED_EXACTLY": 45,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 7
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-optimizer-config-order",
+      "head": "52b3aa9ed5db1d0eec3699052e6f95976e61f1df",
+      "unmatched_commits": [],
+      "dispositions": {
+        "DELETION_REVIEWED": 1,
+        "ADDED_SOURCE_RETAINED_EXACTLY": 37,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 7
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-optimizer-container-admission",
+      "head": "b18cbde07a7b129f7ebfec329c385efacff2fdd8",
+      "unmatched_commits": [],
+      "dispositions": {
+        "DELETION_REVIEWED": 1,
+        "ADDED_SOURCE_RETAINED_EXACTLY": 35,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 7
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-training-cross-entropy",
+      "head": "dd0627dfcc6612902d67e22e29d2a596cea15d4b",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 27,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 7
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-training-embedding-reviewed",
+      "head": "4ee1db29fafd3fc43b054113ec6020dd4802150f",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 21,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 5
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-optimizer-cold-owners",
+      "head": "9b1e41806f2e54ebe59e672297cbd2e38196b8ce",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 21,
+        "DELETION_REVIEWED": 1,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 3
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-optimizer-owner-allocation",
+      "head": "52ce3b81fa51fc5a81b5b9fb399655ea80441c3a",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 19,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 3
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-host-iforest-fit-v4",
+      "head": "80b440c0f05269590fcf74973c73895f9831bb4b",
+      "unmatched_commits": [
+        "5458c9471bb4f12ebecbc8ec1616014e6259e1ac",
+        "ccd85762a314f8be821b88338d63ae2f82e7aa40",
+        "aaac8309621c6aca5418861f58bfbcaf433515a0"
+      ],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 26,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 12,
+        "DELETION_REVIEWED": 3,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 7,
+        "CURRENT_RUNTIME_POLICY_TOUCHPOINT": 1
+      },
+      "issue_ids": [
+        "FOREIGN_MATERIALIZE_CALLBACK",
+        "HOST_ARCHIVE_PREDICT_CALLBACK",
+        "OWNER_FINALIZERS"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-training-embedding",
+      "head": "ec1bda43b1b046216a347270787e1d3cb3d952d7",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 4
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-sequence-shutdown",
+      "head": "f06a8071023c5f5e6e809471d3f12adbb435cc10",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 5,
+        "DELETION_REVIEWED": 1
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-sequence-print-options",
+      "head": "0512a2f217f182ad49058df641bf88df68aa27fc",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 21
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-sequence-array-public",
+      "head": "71b3075adf6cba52ad4b1a7ba5f5d8b19571de7e",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 14,
+        "DELETION_REVIEWED": 1
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-samba-resident-owner",
+      "head": "0cdc5898d887a6b4dba0af7d78856591523e701f",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 2
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-row-key-fixture",
+      "head": "9f3e249064050e149c841a2cb5a2d6c6f55b62b5",
+      "unmatched_commits": [],
+      "dispositions": {
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 1
+      },
+      "issue_ids": [
+        "FOREIGN_MATERIALIZE_CALLBACK"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-native-slice-owners",
+      "head": "b37c0b4834f1180630a1aeef1a12b79a405ad90a",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 3,
+        "QUALIFICATION_GAP_RETAINED": 3
+      },
+      "issue_ids": [
+        "OWNER_FINALIZERS"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-loss-config-repairs",
+      "head": "16652f9680247a28054cbcf38315cfa87a5a6270",
+      "unmatched_commits": [],
+      "dispositions": {
+        "DELETION_REVIEWED": 1,
+        "ADDED_SOURCE_RETAINED_EXACTLY": 8
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-late-numpy-builtins",
+      "head": "8318ccc23443b3d09f96285a58c3146268e4668a",
+      "unmatched_commits": [
+        "8318ccc23443b3d09f96285a58c3146268e4668a"
+      ],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 20,
+        "DELETION_REVIEWED": 1,
+        "QUALIFICATION_GAP_RETAINED": 2
+      },
+      "issue_ids": [
+        "OWNER_FINALIZERS"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-kde-temporal-repair",
+      "head": "d4a26e5a07ca5a8954aed33aae1d54627c849feb",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 9
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-iforest-depth",
+      "head": "2816d4d050d97b9d8f0f0ec27298b80acd8b90a5",
+      "unmatched_commits": [
+        "2816d4d050d97b9d8f0f0ec27298b80acd8b90a5"
+      ],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 10,
+        "DELETION_REVIEWED": 1,
+        "QUALIFICATION_GAP_RETAINED": 3
+      },
+      "issue_ids": [
+        "OWNER_FINALIZERS"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-host-iforest-repr-version",
+      "head": "97aaa55dcae73e3ab52c6c884cc1a0a3bdab01a8",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 2
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-host-iforest-fit-c1-repair",
+      "head": "6955775454b594f4e3da6426260613ca28fde214",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 9,
+        "DELETION_REVIEWED": 1
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-density-load-e9-repair",
+      "head": "263e54feeb6527dca47fb9779b39cf6064cdaa82",
+      "unmatched_commits": [],
+      "dispositions": {
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 1,
+        "ADDED_SOURCE_RETAINED_EXACTLY": 2
+      },
+      "issue_ids": [
+        "HOST_ARCHIVE_PREDICT_CALLBACK"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-cache-upload-review",
+      "head": "73e9222da387b94dedea7bef15ecbd58b02164bf",
+      "unmatched_commits": [
+        "73e9222da387b94dedea7bef15ecbd58b02164bf"
+      ],
+      "dispositions": {
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 2,
+        "QUALIFICATION_GAP_RETAINED": 4,
+        "CURRENT_RUNTIME_POLICY_TOUCHPOINT": 1
+      },
+      "issue_ids": [
+        "FOREIGN_MATERIALIZE_CALLBACK",
+        "OWNER_FINALIZERS"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-cache-upload-errors",
+      "head": "c860d74b5b8d728eec8fd08696435167bc040c89",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 2
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-cache-stats-fixture",
+      "head": "1dd70b219e0c25a8eef4e9cf604db6746eb468a6",
+      "unmatched_commits": [],
+      "dispositions": {
+        "DELETION_REVIEWED": 1,
+        "ADDED_SOURCE_RETAINED_EXACTLY": 2
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-cache-stats",
+      "head": "1c7f1d9f0f13734b1b60c68f7393826f3d9b9cc3",
+      "unmatched_commits": [],
+      "dispositions": {
+        "LOST_WORK_RESTORED_VALIDATION_OWED": 1,
+        "ADDED_SOURCE_RETAINED_EXACTLY": 5,
+        "DELETION_REVIEWED": 1,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 2,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 2,
+        "QUALIFICATION_GAP_RETAINED": 3,
+        "CURRENT_RUNTIME_POLICY_TOUCHPOINT": 3
+      },
+      "issue_ids": [
+        "CACHE_NUMPY_PREFIX",
+        "FOREIGN_MATERIALIZE_CALLBACK",
+        "OWNER_FINALIZERS"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-cache-readonly",
+      "head": "58ecc0cdb815fe9acb4af7de16adf5a7b79feff3",
+      "unmatched_commits": [
+        "58ecc0cdb815fe9acb4af7de16adf5a7b79feff3"
+      ],
+      "dispositions": {
+        "LOST_WORK_RESTORED_VALIDATION_OWED": 2,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 3,
+        "DELETION_REVIEWED": 1,
+        "ADDED_SOURCE_RETAINED_EXACTLY": 4,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 3,
+        "QUALIFICATION_GAP_RETAINED": 3,
+        "CURRENT_RUNTIME_POLICY_TOUCHPOINT": 6
+      },
+      "issue_ids": [
+        "CACHE_NUMPY_PREFIX",
+        "FOREIGN_MATERIALIZE_CALLBACK",
+        "OWNER_FINALIZERS"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-cache-key-fixtures",
+      "head": "abb9a9ed819ae736d294bcacfdbe8e4e7898885e",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 5
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-audit-hook-scope",
+      "head": "d4839fd12e0c68728c222c8a0a24b5758b98b6ac",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 8
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-archive-unicode",
+      "head": "d8cc10ed0b375f09f669f268f77ae06e22d69195",
+      "unmatched_commits": [],
+      "dispositions": {
+        "REWRITE_REVIEWED_SOURCE_ONLY": 2,
+        "HELD_NATIVE_WRITER_TOUCHPOINT": 5,
+        "ADDED_SOURCE_RETAINED_EXACTLY": 5
+      },
+      "issue_ids": [
+        "ARCHIVE_POSIX_WRITE"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-archive-slice-owner",
+      "head": "9faa453cacf1b32a837d74ebd1ea6b30441de287",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 24,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 1
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-archive-reader-repairs",
+      "head": "cbac362a6d51ae2f3e1971975d300c44d0715b48",
+      "unmatched_commits": [],
+      "dispositions": {
+        "HELD_NATIVE_WRITER_TOUCHPOINT": 1,
+        "ADDED_SOURCE_RETAINED_EXACTLY": 4
+      },
+      "issue_ids": [
+        "ARCHIVE_POSIX_WRITE"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-archive-reader",
+      "head": "5c58a41afe1074e7be26e6f0037bd84fe4cf2544",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 20,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 7,
+        "DELETION_REVIEWED": 3
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-archive-lifetime-fixture",
+      "head": "64687aac4e2ee9be5280d178e074caa303d246db",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 4
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-sequence-optimizers",
+      "head": "399e547497a50b5e675ea6d0393b9e78f7ba0466",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 70,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 5,
+        "DELETION_REVIEWED": 2
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-optimizer",
+      "head": "60142151ae0696064bbc531de839291a7360671a",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 126,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 9,
+        "DELETION_REVIEWED": 2
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-minmax-lifecycle",
+      "head": "227ebaea46989dc4d3f9d0a1eec8f5b3dec86788",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 28,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 3,
+        "DELETION_REVIEWED": 2,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 2
+      },
+      "issue_ids": [
+        "COLD_SKLEARN_TAGS"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-scaler-route-audit",
+      "head": "e63a32945a322014bb7f540e7d0b66689c589be2",
+      "unmatched_commits": [],
+      "dispositions": {
+        "REWRITE_REVIEWED_SOURCE_ONLY": 3,
+        "ADDED_SOURCE_RETAINED_EXACTLY": 24
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-scaler-lifecycle",
+      "head": "0525bd1fdf906165ebbcd13c656fbf912423f4aa",
+      "unmatched_commits": [
+        "0525bd1fdf906165ebbcd13c656fbf912423f4aa"
+      ],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 18,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 7,
+        "CURRENT_RUNTIME_POLICY_VIOLATION": 2,
+        "HELD_NATIVE_WRITER_TOUCHPOINT": 3,
+        "DELETION_REVIEWED": 3
+      },
+      "issue_ids": [
+        "ARCHIVE_POSIX_WRITE",
+        "COLD_SKLEARN_TAGS"
+      ],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-selector-integration",
+      "head": "d2154864f2a687e47d6a89172965f76c2de36a63",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 8
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-maxabs-lifecycle",
+      "head": "a4dca9f74c9cae55f5c229e47cd6f583dd971717",
+      "unmatched_commits": [],
+      "dispositions": {
+        "ADDED_SOURCE_RETAINED_EXACTLY": 9,
+        "REWRITE_REVIEWED_SOURCE_ONLY": 3
+      },
+      "issue_ids": [],
+      "unresolved_hunks": []
+    },
+    {
+      "branch": "lane/runtime-release-repairs",
+      "head": "4725f452f67a5fea164ac220da74553b8c253dc0",
+      "unmatched_commits": [],
+      "dispositions": {},
+      "issue_ids": [],
+      "unresolved_hunks": []
+    }
+  ],
+  "evidence_directory": "~/mojolearn-evidence/codex-recovery-20261023/branch-review",
+  "evidence_index": {
+    "target": "28b24d4b05474a258509e2e8e2eabd0706bfc138",
+    "authoritative_files": {
+      "inventory.json": {
+        "bytes": 316169,
+        "sha256": "1fd6afc17f30a29eff15d58055af9c7c61962e07ff32e4020fd9e15d40c5b070"
+      },
+      "review-ledger.json": {
+        "bytes": 22556662,
+        "sha256": "9b455125a2ff5eeb6e2a9f2b2de06c6d72687f445a7f9aad2ae0869fde02fac8"
+      },
+      "branch-review.tsv": {
+        "bytes": 10261,
+        "sha256": "6950803c0a461eb19f5ce58409e1bad36ef8eed62f1896fbd176279d5456bb3e"
+      },
+      "hunk-review.tsv": {
+        "bytes": 212163,
+        "sha256": "e831677e54fa8e0d9f2def3ee1d8999fa151b23148aca9d636497ef62df96ba2"
+      },
+      "semantic-review.json": {
+        "bytes": 114970,
+        "sha256": "4ce0c6bad2f7e789d6f9b7a7a1b10b2cd945c0d573af95729d0bc46d8a9dc129"
+      },
+      "commit-review.json": {
+        "bytes": 26725,
+        "sha256": "6542f2af61973dbaa92505b63cb4b19719450c6988bf95f4313afd99678d8da0"
+      },
+      "test-evidence.json": {
+        "bytes": 61483,
+        "sha256": "67d4c0c8878d4f1145ef2d0f2fbc557d7bd33b874dc0ec803b1fa09136ee5dc9"
+      },
+      "policy-remediation.json": {
+        "bytes": 6792,
+        "sha256": "f2c335ff868d80934b185462b164cb2f4b1a4963258037c4f6ccbdec384783a6"
+      },
+      "build_review_ledger.py": {
+        "bytes": 8723,
+        "sha256": "86cac10243c5f159acc7ddc264c55e1600c6e2221c6b1712e79f88e63eecff6c"
+      },
+      "write_semantic_review.py": {
+        "bytes": 27189,
+        "sha256": "2ccbcc059254deb095ac3c70fe850694b20193f5695140a1ebf58489da7744be"
+      },
+      "finalize_review.py": {
+        "bytes": 12076,
+        "sha256": "1b747913adaa8841075b87741a54652d6448160bccf75c08e8de98bb07a9a9c4"
+      },
+      "host-archive-field-review.json": {
+        "bytes": 26646,
+        "sha256": "28efb2ede1d72f8bc35d30586326292260365809a1127146ba1546c1cbfc72d8"
+      }
+    },
+    "superseded_exploratory_artifacts": [
+      "hunks.json (draft parser did not exclude next file header from final removed hunk; authoritative ledger validates all counts and source slices)",
+      "final-source-differences.txt",
+      "review-rewrites.json",
+      "large-rewrites.json",
+      "small-rewrites.txt",
+      "medium-rewrites.txt"
+    ],
+    "branch_count": 100,
+    "hunk_count": 1517,
+    "source_review_unclassified_hunks": 0,
+    "native_compliance_not_proven": true,
+    "deletion_clearance": false,
+    "product_commit": "45faad2bd",
+    "lane": "lane/codex-branch-recovery-20261023"
+  }
+}

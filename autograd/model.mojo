@@ -25,7 +25,7 @@ from autograd.layers import NeuralRules, layer_norm
 from autograd.data import AUTOGRAD_GATHER_EPOCH, gather_epoch, gather_epoch_fits
 from autograd.model_ops import OP_AGM_INIT_UNIFORM, OP_AGM_ROW_ARGMAX, OP_AGM_THRESHOLD
 from core.cast_in import CAST_KIND_SIGNED, CastIn
-from autograd.cast_ops import upload_cast, validation_codes
+from autograd.cast_ops import gather_labels_device, upload_cast, validation_codes
 # Description version 2 (lane ag-rankn-python, docs/plans/AUTOGRAD_RANKN.md
 # section 5): per-sample input shapes of any rank and the shape layers.
 from autograd.rankn import RN_MAX_RANK, ShapeN
@@ -877,7 +877,7 @@ def model_fit[E: Exec](
 def model_fit_state[E: Exec](
     mut ex: E, spec: ModelSpec, cfg_in: FitConfig, X: CastIn, Y: CastIn, N: Int, Pio: FP, curve: FP,
     Mio: FP, Vio: FP, St: IP64, curve_prev: FP, resume: Bool,
-    validation: Optional[FitValidation] = None,
+    validation: Optional[FitValidation] = None, codes_dev: Int = 0,
 ) raises -> Int:
     """Train the model on X (N, n_inputs) and Y; returns the epochs run.
 
@@ -907,6 +907,10 @@ def model_fit_state[E: Exec](
     False), curve_prev holds the St[FS_EPOCH] earlier epochs' losses and
     curve receives all of them, the earlier ones first. Without `resume`,
     curve[0:epochs run] receives this fit's.
+
+    `codes_dev` (lane migrate-neural-2): the N class codes already in an
+    executor buffer (the label sort wrote them there); Y is then not read.
+    The codes feed the same one-hot launch, so the same words.
     """
     var cfg = cfg_in.copy()
     var start = 0
@@ -945,10 +949,14 @@ def model_fit_state[E: Exec](
     var dY = ex.alloc(N * TW)
     if cfg.target == TARGET_CODES or cfg.target == TARGET_CODE_VALUES:
         # the codes' int32 bits travel in float32 words (op_one_hot reads them)
-        if Y.count() != N or Y.kind != CAST_KIND_SIGNED or Y.itemsize != 4 or not Y.is_c_order():
-            raise Error("model fit: the class codes must be N C-contiguous int32")
-        var dC = ex.alloc(N)
-        ex.upload(dC, FP(unsafe_from_address=Y.addr), N)
+        var dC: FP
+        if codes_dev != 0:
+            dC = FP(unsafe_from_address=codes_dev)
+        else:
+            if Y.count() != N or Y.kind != CAST_KIND_SIGNED or Y.itemsize != 4 or not Y.is_c_order():
+                raise Error("model fit: the class codes must be N C-contiguous int32")
+            dC = ex.alloc(N)
+            ex.upload(dC, FP(unsafe_from_address=Y.addr), N)
         var oh = Args()
         oh.p0 = dC
         oh.p1 = dY
@@ -1194,6 +1202,7 @@ def model_fit_state[E: Exec](
 
 def model_predict[E: Exec](
     mut ex: E, spec: ModelSpec, X: CastIn, N: Int, Pin: FP, dst: FP, chunk: Int, transform: Int,
+    classes_addr: Int = 0, n_classes: Int = 0, class_itemsize: Int = 0,
 ) raises:
     """dst (N, out) = the model's output on X (N, n_inputs), optionally
     through a row softmax (OUT_SOFTMAX) or an elementwise sigmoid
@@ -1201,7 +1210,12 @@ def model_predict[E: Exec](
     the sigmoid p into dst instead; OUT_ARGMAX (the first-max-wins row
     argmax) and OUT_THRESHOLD (one output, sigmoid p > 0.5) write N float32
     class codes. Dropout is the identity. Rows run in chunks of `chunk`
-    so the tape's scratch stays bounded."""
+    so the tape's scratch stays bounded.
+
+    With `classes_addr` (OUT_ARGMAX / OUT_THRESHOLD; lane migrate-neural-2)
+    the codes stay on the executor and `gather_labels_device` writes the
+    N labels classes[code] (`n_classes` items of `class_itemsize` bytes) to
+    `dst`: the same launches, and only the labels come down."""
     if N < 1 or N >= MODEL_MAX_ROWS or chunk < 1:
         raise Error("model predict: the number of samples must be between 1 and 2^24 - 1 and chunk >= 1")
     if transform < OUT_RAW or transform > OUT_THRESHOLD:
@@ -1254,8 +1268,11 @@ def model_predict[E: Exec](
             ex.launch[OP_AGM_ROW_ARGMAX](q, N)
         else:
             ex.launch[OP_AGM_THRESHOLD](q, N)
-        ex.sync()
-        ex.download(dst, codes, N)
+        if classes_addr != 0:
+            gather_labels_device(ex, codes, N, classes_addr, n_classes, class_itemsize, Int(dst))
+        else:
+            ex.sync()
+            ex.download(dst, codes, N)
     else:
         ex.sync()
         ex.download(dst, dout, N * O)

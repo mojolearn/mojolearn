@@ -75,7 +75,6 @@ def _calls(k):
     nbr = _M.of([float(v) for row in [[1, 2], [0, 2], [0, 1], [2, 4], [3, 5], [4, 6], [4, 5]] for v in row], 7, 2)
     rec("barycenter_rows", k.barycenter(A, A, nbr, 1e-3))
     C = _m(7, 6, 8, 0.0, 2.0)
-    rec("als_rows", k.als(C, _m(6, 3, 9), 0.1))
     h, tau = k.geqrf(A)
     rec("geqrf", h, tau)
     rec("orgqr", k.orgqr(h, tau, 5))

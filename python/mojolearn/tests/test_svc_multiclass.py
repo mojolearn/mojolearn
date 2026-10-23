@@ -68,7 +68,7 @@ def test_each_pair_is_the_binary_solver_on_its_rows():
 def test_gamma_scale_is_resolved_on_the_whole_x():
     x, y = _data()
     m = _fit_or_skip(x, y, gamma="scale")
-    from mojolearn._scale_gamma import scale_gamma
+    from mojolearn.tests._scale_gamma_oracle import scale_gamma
     assert m._gamma == scale_gamma(x.ravel().tolist(), x.shape[1])
 
 

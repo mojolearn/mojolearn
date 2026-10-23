@@ -161,7 +161,7 @@
     "input_kind": "image",
     "seed": 0
    },
-   "import": "mojolearn.import_model(torch.export.export(torchvision.models.mobilenet_v3_small(weights=torchvision.models.MobileNet_V3_Small_Weights.IMAGENET1K_V1).eval(), (x,)))",
+   "import": "torch.onnx.export(torchvision.models.mobilenet_v3_small(weights=torchvision.models.MobileNet_V3_Small_Weights.IMAGENET1K_V1).eval(), (x,), 'mobilenet_v3_small.onnx', opset_version=17); mojolearn.import_model('mobilenet_v3_small.onnx')",
    "inputs": [
     {
      "dtype": "float32",
@@ -316,7 +316,7 @@
     "input_kind": "image",
     "seed": 0
    },
-   "import": "mojolearn.import_model(torch.export.export(torchvision.models.resnet18(weights=torchvision.models.ResNet18_Weights.IMAGENET1K_V1).eval(), (x,)))",
+   "import": "torch.onnx.export(torchvision.models.resnet18(weights=torchvision.models.ResNet18_Weights.IMAGENET1K_V1).eval(), (x,), 'resnet18.onnx', opset_version=17); mojolearn.import_model('resnet18.onnx')",
    "inputs": [
     {
      "dtype": "float32",
@@ -616,7 +616,7 @@
     "input_kind": "ids",
     "seed": 0
    },
-   "import": "mojolearn.import_model(torch.export.export(<logits of transformers.AutoModelForCausalLM.from_pretrained('HuggingFaceTB/SmolLM2-135M', revision='93efa2f097d58c2a74874c7e644dbc9b0cee75a2')>, (input_ids,)))",
+   "import": "torch.onnx.export(<logits of transformers.AutoModelForCausalLM.from_pretrained('HuggingFaceTB/SmolLM2-135M', revision='93efa2f097d58c2a74874c7e644dbc9b0cee75a2')>, (input_ids,), 'lm.onnx', opset_version=17); mojolearn.import_model('lm.onnx')",
    "inputs": [
     {
      "dtype": "int64",
@@ -768,7 +768,7 @@
     "input_kind": "image",
     "seed": 0
    },
-   "import": "mojolearn.import_model(torch.export.export(torchvision.models.squeezenet1_1(weights=torchvision.models.SqueezeNet1_1_Weights.IMAGENET1K_V1).eval(), (x,)))",
+   "import": "torch.onnx.export(torchvision.models.squeezenet1_1(weights=torchvision.models.SqueezeNet1_1_Weights.IMAGENET1K_V1).eval(), (x,), 'squeezenet1_1.onnx', opset_version=17); mojolearn.import_model('squeezenet1_1.onnx')",
    "inputs": [
     {
      "dtype": "float32",

@@ -92,6 +92,7 @@ TMPD=$(mktemp -d "${TMPDIR:-/tmp}/mojolearn-cpu-leg.XXXXXX")
 CURLRC="$TMPD/rp.curlrc"
 CREATE_ATTEMPTED=0
 POD_ID=""; POD_TERMINATED=0; DEADMAN_PID=""; DEADMAN_DIR=""; SSH_TARGET=""; COST_HR=""
+ARCHIVE_STATE=""; RESULTS_RETAINED=0
 T_POST=""; T_SSH=""; T_ARMED=""; T_STAGED=""; T_DONE=""; T_FETCHED=""; T_DEL0=""; T_DEL1=""
 
 # ---------------------------------------------------------------------------
@@ -257,6 +258,8 @@ write_box_script() {
 set -u
 R=@BOXREPO@
 OUT=/root/leg_out
+mkdir -p /root/results-cpu-leg
+ln -s /root/results-cpu-leg "$OUT"
 MAP=/root/.mojolearn_cache/urls.tsv
 C=/root/.mojolearn_cache/work
 PIXIVER=@PIXIVER@
@@ -475,6 +478,46 @@ if cost and post and del1:
 PYEOF
 }
 
+# Retain the actual result bytes, including native libraries, before deletion.
+# A generic box archive intentionally excludes libraries and cannot prove this.
+retain_results() {
+    [ "${RESULTS_RETAINED:-0}" = 1 ] && return 0
+    [ -n "${SSH_TARGET:-}" ] || return 0  # no work was staged before SSH
+    mkdir -p "$OUT/remote"
+    # Resolve only the result-root link. Following every nested link would
+    # archive shared compiler caches through a fault-arm checkout's .pixi.
+    # Actual files, including large native binaries, remain unfiltered.
+    bssh 'if [ -d /root/leg_out ]; then cp /root/leg_box.log /root/leg_out/ 2>/dev/null || true; fi; mkdir -p /root/leg_out; { date -u; uname -a; cat /sys/fs/cgroup/cpu.max /sys/fs/cgroup/memory.max 2>/dev/null; } > /root/leg_out/retention-hardware.txt; python3 - /root/leg_out /root/results-cpu-leg-retained.tgz' > "$OUT/retention-remote.sha256" 2> "$OUT/retention.log" <<'RETENTION_PY' || return 1
+import hashlib
+from pathlib import Path
+import sys
+import tarfile
+
+result_root = Path(sys.argv[1]).resolve(strict=True)
+archive_path = Path(sys.argv[2])
+if not result_root.is_dir():
+    raise NotADirectoryError(result_root)
+with tarfile.open(archive_path, "w:gz", compresslevel=6, dereference=False) as archive:
+    archive.add(result_root, arcname="leg_out")
+digest = hashlib.sha256()
+with archive_path.open("rb") as stream:
+    for block in iter(lambda: stream.read(1024 * 1024), b""):
+        digest.update(block)
+print(digest.hexdigest(), archive_path)
+RETENTION_PY
+    bssh 'cat /root/results-cpu-leg-retained.tgz' > "$OUT/results-complete.tgz" 2>> "$OUT/retention.log" || return 1
+    local expected actual
+    expected=$(awk 'NR==1 {print $1}' "$OUT/retention-remote.sha256")
+    actual=$(shasum -a 256 "$OUT/results-complete.tgz" | awk '{print $1}')
+    [ -n "$expected" ] && [ "$expected" = "$actual" ] || return 1
+    gzip -t "$OUT/results-complete.tgz" 2>> "$OUT/retention.log" || return 1
+    tar xzf "$OUT/results-complete.tgz" -C "$OUT/remote" 2>> "$OUT/retention.log" || return 1
+    local key="measurements/runpod-cpu/$POD_NAME/results-complete.tgz"
+    sh "$ROOT/tools/dataset_store.sh" put-file "$OUT/results-complete.tgz" "$key" >> "$OUT/retention.log" 2>&1 || return 1
+    printf '%s\n' "$key" > "$OUT/R2_OK"
+    RESULTS_RETAINED=1
+}
+
 teardown() {
     _rc=$?
     trap - EXIT INT TERM
@@ -482,10 +525,20 @@ teardown() {
         echo
         echo "== teardown (exit $_rc) =="
         bssh 'rm -f /root/.mojolearn_cache/urls.tsv /root/.mojolearn_bincache/urls.tsv' > /dev/null 2>&1 || true
-        T_DEL0=$(now)
-        delete_pod "$POD_ID"
-        if verify_gone "$POD_ID"; then POD_TERMINATED=1; fi
-        T_DEL1=$(now)
+        if retain_results; then
+            T_DEL0=$(now)
+            delete_pod "$POD_ID"
+            if verify_gone "$POD_ID"; then
+                POD_TERMINATED=1
+                if [ -n "${ARCHIVE_STATE:-}" ] && [ -d "$ARCHIVE_STATE" ]; then
+                    mv "$ARCHIVE_STATE" "$ARCHIVE_STATE.down-$(date -u +%Y%m%dT%H%M%SZ)"
+                fi
+            fi
+            T_DEL1=$(now)
+        else
+            echo "RESULT RETENTION FAILED; refusing deletion. Box lease remains armed; retry retention before expiry."
+            _rc=1
+        fi
         { echo "pod=$POD_ID"; echo "name=$POD_NAME"; echo "terminated_verified=$POD_TERMINATED"; echo "exit=$_rc"; echo "at=$(date -u +%FT%TZ)"; } >> "$OUT/teardown.txt"
         write_timings
     fi
@@ -618,6 +671,10 @@ done
 T_SSH=$(now)
 cp "$TMPD/rp.body" "$OUT/pod_ready.json"
 say "ssh up ($SSH_TARGET) after $((T_SSH - T_POST))s; cost \$${COST_HR:-?}/hr"
+ARCHIVE_STATE="${MOJOLEARN_DEVPOD_STATE:-$HOME/mojolearn-evidence/devpods}/cpu-$LANE-$POD_ID"
+mkdir -p "$ARCHIVE_STATE"
+{ printf 'PROVIDER=runpod\nPOD_ID=%q\nSSH_TARGET=%q\nOWNER=%q\n' "$POD_ID" "$SSH_TARGET" "cpu-leg:$LANE"; } > "$ARCHIVE_STATE/state.env"
+
 
 say "arming the ON-POD watchdog ($LEASE minutes)"
 _hp=$(printf '%s' "$SSH_TARGET" | awk '{print "[" substr($3, index($3, "@") + 1) "]:" $2}')
@@ -697,8 +754,7 @@ T_DONE=$(now)
 
 say "fetching \$LEG_OUT"
 mkdir -p "$OUT/remote"
-bssh 'cp /root/leg_box.log /root/leg_out/ 2>/dev/null; tar czf - -C /root leg_out' | ( cd "$OUT/remote" && tar xzf - ) \
-    || echo "  FETCH FAILED"
+retain_results || die "result retention failed; teardown will retry and refuses deletion on failure"
 T_FETCHED=$(now)
 if [ -f "$OUT/remote/leg_out/bincache/uploads.tsv" ]; then
     sh "$ROOT/tools/bincache_leg.sh" promote "$OUT/remote/leg_out/bincache" > "$OUT/bincache_promote.log" 2>&1 || true

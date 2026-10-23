@@ -4019,14 +4019,19 @@ def ours_initial_state(lane, D):
     X, y = D["X"], np.asarray(D["y"])
     n = int(X.shape[0])
     if s["kind"] == "seqmodel":
-        # _x_sequence_rnn._RecurrentBase._fit's first steps, in its order
-        est._check_X(X, True)
+        # the recurrent fit's first steps (bindings/xseq_neural_native.mojo `_rnn_fit`), restated
+        # in its order: every parameter U(-1/sqrt(H), 1/sqrt(H)) in layout order from the seeded
+        # stream, then the schedule seed
+        est.n_features_in_ = int(np.asarray(X).shape[2])
         est.n_outputs_ = (int(np.unique(y).shape[0]) if s["task"] == "clf"
                           else int(np.asarray(y, np.float32).reshape(n, -1).shape[1]))
         rng = InitStream(None if est.random_state is None else int(est.random_state))
-        est.params_ = est._init_params(rng)
+        total = sum(int(np.prod(shape)) for _, shape in est._layout())
+        bound = 1.0 / float(np.sqrt(float(est.hidden_size)))
+        est.params_ = np.empty(total, dtype=np.float32)
+        rng.fill_uniform(est.params_.ctypes.data, total, -bound, bound)
         state = {k: np.ascontiguousarray(v, np.float32) for k, v in est.state_dict().items()}
-        epochs, _bs, shuffle, seed = est._schedule(n, rng)
+        epochs, shuffle, seed = int(est.max_epochs), bool(est.shuffle), rng.child_seed()
     elif s["kind"] == "cnnclf":
         # _expansion_cnn.CNNClassifier.fit's first steps: the layers (their InitStream draws),
         # then one splitmix64 seed for every epoch's order

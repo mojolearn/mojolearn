@@ -141,11 +141,11 @@ def _source(corpus_path):
 
 def _split_points(ranges, n):
     points = {0, n}
-    for r in ranges.values():  # cpu-route: split points of the corpus text ranges (text input)
-        for x in r:  # cpu-route: split points of the corpus text ranges (text input)
+    for r in ranges.values():  # glue: at most three manifest ranges, two ends each
+        for x in r:  # glue: at most three manifest ranges, two ends each
             if 0 <= x <= n:
                 points.add(x)
-    return sorted(points)  # cpu-route: sorts the corpus split points (text input)
+    return sorted(points)  # glue: at most eight manifest split points
 
 
 # The document rule (no document spans a declared range boundary; at most

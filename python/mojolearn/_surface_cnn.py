@@ -50,6 +50,7 @@ FAMILIES = (
             "x_cnn_idn2_flags", "x_cnn_epoch_rows", "x_cnn_adam_hyper_d", "x_cnn_fit_epoch_d",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "x_cnn_csr_build", "x_cnn_gcn_loops", "x_cnn_bounded_im2col",
+            "x_cnn_perm_gather", "x_cnn_vals_t",
             "x_cnn_neural_tape_budget_bytes", "x_cnn_numerical_profile",
         ),
         gate="tools/identity_break.py (tools/algos_lane_check.sh)",

@@ -20,6 +20,8 @@ from bindings.native_process_pool import (
 from bindings.native_transport import transport_close
 from bindings.py_balanced import py_call, py_get, py_setattr, py_setitem, py_type
 from bindings.parallel_neural_admission import neural_admit
+from core.sha256 import Sha256
+from bindings.sha256_door import sha256_update, sha256_update_text
 
 
 struct ParallelNeuralBoundary(Defaultable, Movable):
@@ -31,6 +33,9 @@ struct ParallelNeuralBoundary(Defaultable, Movable):
     var samba_context: PythonObject
     var admission_context: PythonObject
     var lock: PythonObject
+    #: a worker process's resident model (lane migrate-neural-2): a dict
+    #: {epoch, version, state, model} kept across requests
+    var cache: PythonObject
 
     def __init__(out self):
         self.bi = PythonObject(None)
@@ -41,6 +46,7 @@ struct ParallelNeuralBoundary(Defaultable, Movable):
         self.samba_context = PythonObject(None)
         self.admission_context = PythonObject(None)
         self.lock = PythonObject(None)
+        self.cache = PythonObject(None)
 
 
 comptime PARALLEL_NEURAL_BOUNDARY = _Global[
@@ -127,6 +133,10 @@ def _neural_init(owner: PythonObject, model: PythonObject, devices: PythonObject
     py_setattr(owner, "_lock", b[].lock())
     py_setattr(owner, "_closed", False)
     py_setattr(owner, "_gradients", PythonObject(None))
+    py_setattr(owner, "_cache_epoch", PythonObject(0))
+    py_setattr(owner, "_cache_version", PythonObject(0))
+    py_setattr(owner, "_cache_digest", PythonObject(""))
+    py_setattr(owner, "_cache_history", b[].bi.list())
 
 
 def _neural_ids(value: PythonObject) raises -> PythonObject:
@@ -145,9 +155,12 @@ def _neural_ids(value: PythonObject) raises -> PythonObject:
     _ = py_call(packed.frombytes, py_call(view.tobytes, "C"))
     var out = generation_array([rows, columns], "i")
     var dst = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr))
+    _ = out  # keep the Python object alive through the native call above
     var column_major = own and String(value.order) == "F"
     var signed = fmt == "b" or fmt == "h" or fmt == "i" or fmt == "l" or fmt == "q"
     samba_ids_into(Int(py=packed.buffer_info()[0]), Int(py=packed.itemsize), signed, rows, columns, column_major, dst)
+    _ = out  # keep the Python object alive through the native call above
+    _ = packed  # keep the Python object alive through the native call above
     _ = packed^
     return out
 
@@ -161,6 +174,132 @@ def _neural_request(operation: String, state: PythonObject, args: PythonObject) 
     return py_call(bi.tuple, request)
 
 
+comptime _CACHE_MISS = "parallel neural: worker cache miss"
+#: how many committed steps a delta request carries (a worker further behind
+#: takes the full state again)
+comptime _CACHE_HISTORY = 4
+
+
+def _digest_into(mut h: Sha256, value: PythonObject) raises -> Bool:
+    """Hash a model state (dicts, lists, tuples, arrays, scalars) into `h`;
+    False for a value it cannot describe exactly (the caller then sends the
+    full state)."""
+    var b = PARALLEL_NEURAL_BOUNDARY.get_or_create_ptr()
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    if value is None or py_type(value) is b[].bi.bool or py_type(value) is b[].bi.int or py_type(value) is b[].bi.float or py_type(value) is b[].bi.str:
+        sha256_update_text(h, py_call(b[].bi.repr, value))
+        h.update_text(String("\n"))
+        return True
+    if py_type(value) is b[].bi.dict:
+        var keys = py_call(b[].bi.sorted, py_call(b[].bi.list, value))
+        h.update_text(String("{"))
+        for i in range(len(keys)):  # driver-loop: over state record fields
+            sha256_update_text(h, py_call(b[].bi.repr, keys[i]))
+            if not _digest_into(h, value[keys[i]]):
+                return False
+        h.update_text(String("}"))
+        return True
+    if py_type(value) is b[].bi.list or py_type(value) is b[].bi.tuple:
+        h.update_text(String("["))
+        for i in range(len(value)):  # driver-loop: over state record items
+            if not _digest_into(h, value[i]):
+                return False
+        h.update_text(String("]"))
+        return True
+    if py_type(value) is g[].array_cls:
+        sha256_update_text(h, value.shape)
+        sha256_update_text(h, value.dtype)
+        sha256_update(h, py_call(value._mv.tobytes, "C"))
+        return True
+    if py_type(value) is b[].bi.bytes or py_type(value) is b[].bi.bytearray:
+        sha256_update(h, value)
+        return True
+    return False
+
+
+def _state_digest(state: PythonObject) raises -> String:
+    """The committed model state's digest, or "" when it cannot be taken."""
+    var h = Sha256()
+    if not _digest_into(h, state):
+        return String()
+    return h.hexdigest()
+
+
+def _cache_header(owner: PythonObject, snapshot: PythonObject, full: Bool) raises -> PythonObject:
+    """The request's model slot: the full state with the owner's epoch and
+    version (the worker keeps it), or only the epoch, the version and the
+    last committed step deltas (the worker brings its resident copy up to
+    the version by applying them)."""
+    var b = PARALLEL_NEURAL_BOUNDARY.get_or_create_ptr()
+    var header = b[].bi.dict()
+    py_setitem(header, "epoch", owner._cache_epoch)
+    py_setitem(header, "version", owner._cache_version)
+    py_setitem(header, "full", snapshot if full else PythonObject(None))
+    py_setitem(header, "history", b[].bi.list() if full else owner._cache_history)
+    return header
+
+
+def _worker_model(header: PythonObject, samba: Bool) raises -> PythonObject:
+    """The worker's resident state (and, for Samba, its resident model) at
+    the header's version: replaced by a full state, else advanced by the
+    step deltas. A worker that cannot reach the version refuses with the
+    cache-miss words and the owner resends the full state."""
+    var b = PARALLEL_NEURAL_BOUNDARY.get_or_create_ptr()
+    if b[].cache is None:
+        b[].cache = b[].bi.dict()
+    var cache = b[].cache
+    var full = header["full"]
+    if full is not None:
+        py_setitem(cache, "epoch", header["epoch"])
+        py_setitem(cache, "version", header["version"])
+        py_setitem(cache, "state", full)
+        py_setitem(cache, "model", _neural_samba("from_state", _neural_values(full)) if samba else PythonObject(None))
+        return cache
+    if py_get(cache, "state") is None or not Bool(py=cache["epoch"] == header["epoch"]):
+        raise Error(_CACHE_MISS)
+    var have = Int(py=cache["version"])
+    var want = Int(py=header["version"])
+    if have > want:
+        raise Error(_CACHE_MISS)
+    var history = header["history"]
+    for i in range(len(history)):  # driver-loop: over committed step deltas in version order
+        var entry = history[i]
+        var version = Int(py=entry[0])
+        if version <= have:
+            continue
+        if version != have + 1:
+            raise Error(_CACHE_MISS)
+        var state = cache["state"]
+        var updated = PythonObject(None)
+        if samba:
+            var update_state = state
+            if entry[2] is not None:
+                update_state = py_call(b[].bi.dict, state)
+                py_setitem(update_state, "rng", entry[2])
+            var values = _neural_values(update_state)
+            _ = py_call(values.append, entry[1])
+            updated = _neural_samba("apply", values)
+            var publish = _neural_values(cache["model"])
+            _ = py_call(publish.append, updated)
+            _ = _neural_samba("publish", publish)
+        else:
+            updated = mlp_apply_from_state(state, entry[1])
+        py_setitem(cache, "state", updated)
+        have = version
+        py_setitem(cache, "version", have)
+    if have != want:
+        raise Error(_CACHE_MISS)
+    return cache
+
+
+def _neural_requests(owner: PythonObject, header: PythonObject, shard_args: PythonObject) raises -> PythonObject:
+    var b = PARALLEL_NEURAL_BOUNDARY.get_or_create_ptr()
+    var requests = b[].bi.list()
+    for i in range(len(shard_args)):  # driver-loop: over logical training shards in immutable reduction order
+        _ = py_call(requests.append, _neural_request(String(owner._operation) + "_cached", header, shard_args[i]))
+    return requests
+
+
 def _neural_train(owner: PythonObject, supplied: PythonObject) raises -> PythonObject:
     var b = PARALLEL_NEURAL_BOUNDARY.get_or_create_ptr()
     if Bool(py=owner._closed):
@@ -171,7 +310,7 @@ def _neural_train(owner: PythonObject, supplied: PythonObject) raises -> PythonO
     var snapshot = _neural_snapshot(owner)
     py_setattr(owner, "_gradients", PythonObject(None))
     try:
-        var requests = b[].bi.list()
+        var shard_args = b[].bi.list()
         var stream = PythonObject(None)
         var next_rng = PythonObject(None)
         var samba = String(owner._operation) == "samba_gradient"
@@ -199,8 +338,23 @@ def _neural_train(owner: PythonObject, supplied: PythonObject) raises -> PythonO
                 var inputs = mlp_batch(shard[0])
                 _ = py_call(args.append, inputs)
                 _ = py_call(args.append, mlp_targets(shard[1], Int(py=inputs.shape[0])))
-            _ = py_call(requests.append, _neural_request(String(owner._operation), snapshot, py_call(b[].bi.tuple, args)))
-        var results = process_pool_map(owner._pool, requests)
+            _ = py_call(shard_args.append, py_call(b[].bi.tuple, args))
+        # The workers keep the model resident (lane migrate-neural-2): when
+        # the owner's state is the one it last committed, a request carries
+        # only the committed step deltas; otherwise (first step, a change made
+        # outside this trainer, a worker that fell behind) the full state.
+        var digest = _state_digest(snapshot)
+        var cached = digest != "" and String(owner._cache_digest) == digest and Int(py=owner._cache_version) > 0
+        if not cached:
+            py_setattr(owner, "_cache_epoch", PythonObject(Int(py=owner._cache_epoch) + 1))
+            py_setattr(owner, "_cache_history", b[].bi.list())
+        var results = PythonObject(None)
+        try:
+            results = process_pool_map(owner._pool, _neural_requests(owner, _cache_header(owner, snapshot, not cached), shard_args))
+        except error:
+            if not cached or String(error).find(_CACHE_MISS) < 0:
+                raise error
+            results = process_pool_map(owner._pool, _neural_requests(owner, _cache_header(owner, snapshot, True), shard_args))
         var losses = b[].bi.list()
         var parts = b[].bi.list()
         for i in range(len(results)):  # driver-loop: over returned logical shard loss/gradient records
@@ -215,6 +369,16 @@ def _neural_train(owner: PythonObject, supplied: PythonObject) raises -> PythonO
         var updated = process_pool_map(owner._update_pool, update_requests)[0]
         _neural_publish(owner, updated[0])
         py_setattr(owner, "_gradients", updated[1])
+        # the committed step as a delta the workers replay: the ordered-sum
+        # gradient and the generator state the update read
+        var version = Int(py=owner._cache_version) + 1
+        var history = py_call(b[].bi.list, owner._cache_history)
+        _ = py_call(history.append, Python.tuple(version, updated[1], next_rng))
+        while len(history) > _CACHE_HISTORY:  # driver-loop: over retained committed steps (at most a few)
+            _ = py_call(history.pop, 0)
+        py_setattr(owner, "_cache_history", history)
+        py_setattr(owner, "_cache_version", version)
+        py_setattr(owner, "_cache_digest", PythonObject(_state_digest(_neural_snapshot(owner))))
         var result = b[].bi.dict()
         py_setitem(result, "losses", py_call(b[].bi.tuple, losses))
         py_setitem(result, "completed_steps", updated[2])
@@ -281,6 +445,17 @@ def neural_worker_dispatch(request: PythonObject) raises -> PythonObject:
     var operation = String(request[0])
     var state = request[1]
     var args = request[2]
+    if operation == "mlp_gradient_cached":
+        return mlp_gradients_from_state(_worker_model(state, False)["state"], args[0], args[1])
+    if operation == "samba_gradient_cached":
+        var cache = _worker_model(state, True)
+        var values = _neural_values(cache["model"])
+        _ = py_call(values.append, args[0])
+        _ = py_call(values.append, args[1])
+        _ = py_call(values.append, PythonObject(None))
+        _ = py_call(values.append, args[2])
+        _ = py_call(values.append, args[3])
+        return _neural_samba("model_gradients", values)
     if operation == "mlp_gradient":
         return mlp_gradients_from_state(state, args[0], args[1])
     if operation == "samba_gradient":

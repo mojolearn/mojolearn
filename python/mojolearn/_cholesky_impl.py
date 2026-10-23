@@ -45,7 +45,7 @@ purpose (its header, point 3).
 
 NO SPEED CLAIM. The lane has no published number and this door adds none.
 """
-from . import _backend, _native_archive_bridge
+from . import _backend, _native_archive_bridge, _native_family_bridge
 from ._buffer import addr, addr_ro, as_f32_c, empty
 from ._mode import NumericModeMixin
 
@@ -53,6 +53,12 @@ from ._mode import NumericModeMixin
 #: purpose (the GP's reason): the read-back must not share a table with
 #: the thing it checks.
 _MODE_CODE = {"fast": 0, "identical": 1}
+
+# The compiled family owner (bindings/linalg_native.mojo), connected once at
+# import: `fit` is one native call, handed the binding `_door_binding`
+# resolves.
+_NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
+_native_family_bridge.tables(family_chol_mode_codes=dict(_MODE_CODE))
 
 #: The saved-model format tag (`save`, `load`, `mojolearn.host_model`).
 _CHOLESKY_FORMAT = "mojolearn-cholesky-1"
@@ -150,9 +156,15 @@ class Cholesky(NumericModeMixin):
         name of its tier read-back). A CPU-only route answers attributes it
         lacks with a by-name ImportError, so the read-back is chosen by
         route, never probed."""
+        return self._door_binding(), ("linalg_numeric_mode" if _backend._CPU_ONLY is not None else "gp_numeric_mode")
+
+    def _door_binding(self):
+        """The module of `_door`: the CPU binding on a CPU-only install,
+        else this object's tier of the GPU binding. (The native fit reads
+        the read-back name from the same CPU-only state.)"""
         if _backend._CPU_ONLY is not None:
-            return self._bind(_CPU_BINDING), "linalg_numeric_mode"
-        return self._bind(), "gp_numeric_mode"
+            return self._bind(_CPU_BINDING)
+        return self._bind()
 
     def _extension(self):
         """The door's binding for THIS object's tier, with the binary's
@@ -189,32 +201,7 @@ class Cholesky(NumericModeMixin):
         `A` is a square 2-D float32 matrix, otherwise `ValueError`. A failed factorization
         sets ``info_ != 0`` instead of raising.
         """
-        a, _ = as_f32_c(A, ndim=2, name="A")
-        n, m = a.shape
-        if n != m:
-            raise ValueError(
-                f"mojolearn Cholesky: A must be square, got shape {a.shape}"
-            )
-        jitter = self.profile_jitter() if self.jitter is None else self.jitter
-        l_out = empty((n * n,), "<f4")
-        # info, nb, logdet, jitter -- in that order.
-        scalars = empty((4,), "<f8")
-        # Every array addressed below is bound to a local in this frame,
-        # which is what keeps the addresses alive (`_arrays.py`).
-        info = self._extension().cholesky_factor(
-            # ORDER MATCHES bindings/_mojolearn_gp.mojo::cholesky_factor_binding.
-            # a, l_out, scalars_out
-            [addr_ro(a, name="A"), addr(l_out, name="L_"), addr(scalars, name="scalars")],
-            # n, jitter
-            [n, jitter],
-        )
-        self.n_ = n
-        self.L_ = l_out.reshape((n, n))
-        self.info_ = int(info)
-        self.nb_ = int(scalars[1])
-        self._logdet = float(scalars[2])
-        self.jitter_ = float(scalars[3])
-        return self
+        return _NATIVE(self, "family_chol_fit", (self._door_binding(), A), _NATIVE_CONTEXT)
 
     @property
     def logdet_(self):

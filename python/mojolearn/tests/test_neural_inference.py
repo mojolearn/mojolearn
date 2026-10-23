@@ -378,7 +378,8 @@ def test_samba_forward_rows_ragged_and_refusals(binding, tied):
         assert not yr[i, n:].any()
     with pytest.raises(ValueError, match=r"\[0, vocab\)"):
         inf.forward(np.full((1, 2), 256, np.int32))
-    with pytest.raises(TypeError, match="state must be a SambaState"):
+    # the native admission refuses a non-native argument first (samba_admission)
+    with pytest.raises(TypeError, match="state must be a SambaState|native input types"):
         inf.forward(ids, state=object())
     for name in ("loss", "train_step"):
         with pytest.raises(NotImplementedError, match="inference is forward only"):

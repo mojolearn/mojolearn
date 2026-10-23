@@ -1075,7 +1075,22 @@ def find_optimal_split_cosine_kernel[
             var sel = SIMD[DType.float32, CS_U](0)
             var wtl = SIMD[DType.float32, CS_U](0)
             var stl = SIMD[DType.float32, CS_U](0)
+            # NO LANE WRITE UNDER A PER-LANE GUARD (lane sm120-tree-identity,
+            # 2026-10-23): the sm_120 AOT compile corrupts a SIMD lane written under its
+            # own guard inside a `comptime for` (core/gram_splitk.mojo, GRAM_STRIDED_ARM;
+            # on the RTX 5090 the Ordered fits stopped at depth 3 where AMD and the L40S
+            # grew depth 6). Each value is computed into a scalar under the guard and the
+            # lane is written unconditionally; the vectors stay in registers (Metal
+            # refuses thread-private arrays here). Same loads, same order, same bits.
             comptime for u in range(CS_U):
+                var v_plw = Float32(0)
+                var v_pls = Float32(0)
+                var v_ptw = Float32(0)
+                var v_pts = Float32(0)
+                var v_wel = Float32(0)
+                var v_sel = Float32(0)
+                var v_wtl = Float32(0)
+                var v_stl = Float32(0)
                 if u < cnt:
                     var kk = k0 + u
                     var leaf = kk // pairs
@@ -1086,10 +1101,10 @@ def find_optimal_split_cosine_kernel[
                     var test_off = Int(
                         helper.data_partition_offset(UInt32(leaf), UInt32(fold + 1))
                     )
-                    plw[u] = ldg(parts.unsafe_offset(3 * learn_off + 0))
-                    pls[u] = ldg(parts.unsafe_offset(3 * learn_off + 1))
-                    ptw[u] = ldg(parts.unsafe_offset(3 * test_off + 0))
-                    pts[u] = ldg(parts.unsafe_offset(3 * test_off + 1))
+                    v_plw = ldg(parts.unsafe_offset(3 * learn_off + 0))
+                    v_pls = ldg(parts.unsafe_offset(3 * learn_off + 1))
+                    v_ptw = ldg(parts.unsafe_offset(3 * test_off + 0))
+                    v_pts = ldg(parts.unsafe_offset(3 * test_off + 1))
                     var h_learn = (
                         bin_feature_count
                         * Int(helper.histogram_offset(UInt32(leaf), UInt32(fold)))
@@ -1100,10 +1115,18 @@ def find_optimal_split_cosine_kernel[
                         * Int(helper.histogram_offset(UInt32(leaf), UInt32(fold + 1)))
                         * 2
                     )
-                    wel[u] = bin_sums.unsafe_load(current + h_learn)
-                    sel[u] = bin_sums.unsafe_load(current + h_learn + 1)
-                    wtl[u] = bin_sums.unsafe_load(current + h_test)
-                    stl[u] = bin_sums.unsafe_load(current + h_test + 1)
+                    v_wel = bin_sums.unsafe_load(current + h_learn)
+                    v_sel = bin_sums.unsafe_load(current + h_learn + 1)
+                    v_wtl = bin_sums.unsafe_load(current + h_test)
+                    v_stl = bin_sums.unsafe_load(current + h_test + 1)
+                plw[u] = v_plw
+                pls[u] = v_pls
+                ptw[u] = v_ptw
+                pts[u] = v_pts
+                wel[u] = v_wel
+                sel[u] = v_sel
+                wtl[u] = v_wtl
+                stl[u] = v_stl
             comptime for u in range(CS_U):
                 if u < cnt:
                     var part_learn_weight = plw[u]

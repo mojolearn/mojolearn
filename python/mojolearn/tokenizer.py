@@ -137,7 +137,7 @@ def _ro(buf, name):
 
 
 def _binding():
-    return _Entries(_backend.load_host_module(_EXTENSION))  # cpu-route: CPU tokenizer binding, text encoding and decoding before the runtime
+    return _Entries(_backend.load_host_module(_EXTENSION))  # cpu-route: tokenizer host binding module loaded once by load_host_module (text input step)
 
 
 #: The fast tier's Apple GPU tokenizer (`tokenizer/fast/`, built by
@@ -174,7 +174,7 @@ def _byte_to_char():
     order."""
     fixed = set(range(0x21, 0x7F)) | set(range(0xA1, 0xAD)) | set(range(0xAE, 0x100))
     out, extra = {}, 256
-    for b in range(256):  # cpu-route: byte to char table of the text encoding
+    for b in range(256):  # cpu-route: verification fixture text: the byte table the tests and identity tools compare, not a runtime route
         if b in fixed:
             out[b] = chr(b)
         else:
@@ -819,7 +819,7 @@ def _native_trainer(required):
     """The binding when it exports `bpe_train`, else None (or the reason,
     raised, when `required`)."""
     try:
-        module = _backend.load_host_module(_EXTENSION)  # cpu-route: CPU BPE trainer binding, vocabulary training on text input
+        module = _backend.load_host_module(_EXTENSION)  # cpu-route: tokenizer host binding module loaded once by load_host_module (vocabulary training on text)
     except (ImportError, AttributeError) as exc:
         if required:
             raise ImportError(f"mojolearn: backend='mojo' needs the tokenizer host binding: {exc}") from exc

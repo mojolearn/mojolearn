@@ -7,6 +7,11 @@ from ._mode import ParamsMixin
 np = require_numpy('_x_sequence_var')
 
 from . import _backend
+from . import _native_xseq_bridge
+
+# Package-import connection: fit is ONE call into the compiled owner
+# (bindings/xseq_forecast_native.mojo), which builds the result object too.
+_XSEQ, _XSEQ_CONTEXT = _native_xseq_bridge.connect()
 
 
 class VARResults:
@@ -154,22 +159,7 @@ class VAR(ParamsMixin):
         numpy.linalg.LinAlgError
             If the lagged design is rank deficient.
         """
-        if ic is not None:
-            raise NotImplementedError("VAR.fit: information-criterion order selection (ic=) is not implemented")
-        if method != "ols":
-            raise ValueError("VAR.fit: method must be 'ols'")
-        if trend not in ("c", "n"):
-            raise NotImplementedError(f"VAR.fit: trend={trend!r} is not implemented ('c' and 'n' are)")
-        p = int(maxlags)
-        kt = 1 if trend == "c" else 0
-        n, K = self._endog.shape
-        m = kt + K * p
-        params = np.zeros((m, K), dtype=np.float32)
-        sigma = np.zeros((K, K), dtype=np.float32)
-        resid = np.zeros((max(n - p, 1), K), dtype=np.float32)
-        code = _backend.binding("_mojolearn_x_sequence", self.numeric_mode).var_fit(
-            [self._endog.ctypes.data, params.ctypes.data, sigma.ctypes.data, resid.ctypes.data], [n, K, p, kt])
-        if int(code):
-            raise np.linalg.LinAlgError(  # glue: raises the numpy error class
-                f"VAR.fit: the lagged design is rank deficient (Cholesky pivot of column {int(code) - 1})")
-        return VARResults(self._endog, params, sigma, resid, p, kt, self.numeric_mode)
+        return _XSEQ(self, "var_fit", (maxlags, method, ic, trend), _XSEQ_CONTEXT)
+
+
+_native_xseq_bridge.register(xseq_var_results=VARResults)

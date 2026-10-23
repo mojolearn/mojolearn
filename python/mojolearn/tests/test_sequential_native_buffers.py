@@ -97,6 +97,19 @@ def test_native_standard_buffers_and_nested_arrays_preserve_existing_fit_and_pre
     assert actual.tobytes() == expected[6].tobytes()
 
 
+
+def _fitted_classes(labels, n_classes):
+    """`classes_` after one real fit: the labels are sorted into class codes
+    inside the fit, on the device (model_fit_labels); `_targets` hands them
+    over as they are, with a classes buffer of their dtype."""
+    labels_array = np.asarray(labels)
+    out = Sequential().linear(n_classes).compile(loss="cross_entropy", optimizer="sgd", lr=0.01)
+    y, descriptor, target, classes_buffer = out._targets(labels, len(labels_array), n_classes, "cross_entropy")
+    assert target == 1 and classes_buffer.dtype == labels_array.dtype
+    x = np.zeros((len(labels_array), 1), "f4")
+    out.fit(x, labels, epochs=1, batch_size=min(64, len(labels_array)))
+    return out.classes_
+
 def test_native_nested_scalar_dtype_promotion_matches_all_numeric_dtype_pairs():
     types = [np.dtype(s) for s in ("?", "i1", "i2", "i4", "i8", "u1", "u2", "u4", "u8", "f2", "f4", "f8")]
     out = Sequential().linear(2)
@@ -104,13 +117,14 @@ def test_native_nested_scalar_dtype_promotion_matches_all_numeric_dtype_pairs():
         for right in types:
             supplied_y = [left.type(0), right.type(1), left.type(1), right.type(0)]
             expected = np.asarray(supplied_y)
-            wanted_classes, wanted_codes = np.unique(expected, return_inverse=True)
-            codes, descriptor, target = audit_native_call(out._targets, supplied_y, 4, 2,
-                                                          "cross_entropy").assert_native()
+            wanted_classes = np.unique(expected)
+            y, descriptor, target, _ = audit_native_call(out._targets, supplied_y, 4, 2,
+                                                         "cross_entropy").assert_native()
             assert target == 1 and descriptor[3:5] == [4, 1]
-            assert out.classes_.dtype == expected.dtype, (left, right)
-            assert out.classes_.tobytes() == wanted_classes.tobytes(), (left, right)
-            assert codes.tobytes() == wanted_codes.astype("i4").tobytes(), (left, right)
+            assert y.dtype == expected.dtype and y.tobytes() == expected.tobytes(), (left, right)
+            classes = _fitted_classes(supplied_y, 2)
+            assert classes.dtype == expected.dtype, (left, right)
+            assert classes.tobytes() == wanted_classes.tobytes(), (left, right)
 
 
 @pytest.mark.parametrize("labels", [
@@ -124,10 +138,11 @@ def test_native_sequence_dtype_promotion_preserves_integer_range_and_signed_zero
     expected = np.asarray(supplied_y)
     classes, codes = np.unique(expected, return_inverse=True)
     out = Sequential().linear(len(classes))
-    actual, _, _ = audit_native_call(out._targets, supplied_y, 4, len(classes), "cross_entropy").assert_native()
-    assert out.classes_.dtype == expected.dtype
-    assert out.classes_.tobytes() == classes.tobytes()
-    assert actual.tobytes() == codes.astype("i4").tobytes()
+    actual, _, _, _ = audit_native_call(out._targets, supplied_y, 4, len(classes), "cross_entropy").assert_native()
+    assert actual.dtype == expected.dtype and actual.tobytes() == expected.tobytes()
+    fitted = _fitted_classes(supplied_y, len(classes))
+    assert fitted.dtype == expected.dtype
+    assert fitted.tobytes() == classes.tobytes()
 
 
 def test_native_buffer_and_sequence_admission_do_not_call_numpy_conversion(monkeypatch):
@@ -180,23 +195,17 @@ def test_native_half_labels_preserve_every_non_nan_encoding():
     # unstable sort may choose either signed-zero representative otherwise.
     _, first, expected = np.unique(labels, return_index=True, return_inverse=True)
     classes = labels[first]
-    out = Sequential().linear(len(classes))
-    codes, _, _ = audit_native_call(out._targets, labels, len(labels), len(classes),
-                                    "cross_entropy").assert_native()
-    assert out.classes_.dtype == np.dtype("f2")
-    assert out.classes_.tobytes() == classes.tobytes()
-    assert codes.tobytes() == expected.astype("i4").tobytes()
+    fitted = _fitted_classes(labels, len(classes))
+    assert fitted.dtype == np.dtype("f2")
+    assert fitted.tobytes() == classes.tobytes()
 
 
 def test_native_uint64_label_order_preserves_both_halves_and_extremes():
     labels = np.array([2**64 - 1, 0, 2**63, 2**63 - 1, 1, 2**63 + 1,
                        2**64 - 1, 0, 2**63], "u8")
     classes, expected = np.unique(labels, return_inverse=True)
-    out = Sequential().linear(len(classes))
-    codes, _, _ = audit_native_call(out._targets, labels, len(labels), len(classes),
-                                    "cross_entropy").assert_native()
-    assert out.classes_.tobytes() == classes.tobytes()
-    assert codes.tobytes() == expected.astype("i4").tobytes()
+    fitted = _fitted_classes(labels, len(classes))
+    assert fitted.tobytes() == classes.tobytes()
 
 
 @pytest.mark.parametrize("train_dtype,validation_dtype", [
@@ -239,7 +248,5 @@ def test_native_validation_refuses_out_of_domain_label_without_wrapping(train_dt
                                    [0x8000, 0x0000, 0x3C00, 0x0000]])
 def test_native_half_equal_zeros_keep_first_input_bits(words):
     labels = np.array(words, "u2").view("f2")
-    out = Sequential().linear(2)
-    codes, _, _ = audit_native_call(out._targets, labels, 4, 2, "cross_entropy").assert_native()
-    assert out.classes_.view("u2").tolist() == [words[0], 0x3C00]
-    assert codes.tolist() == [0, 0, 1, 0]
+    fitted = _fitted_classes(labels, 2)
+    assert fitted.view("u2").tolist() == [words[0], 0x3C00]

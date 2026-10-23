@@ -69,6 +69,7 @@ from kernel_methods.km_binding_impl import (
     km_rbf_sampler_fit_run as _rbf_sampler_fit_run,
     km_rbf_sampler_transform_run as _rbf_sampler_transform_run,
     km_nystroem_fit_ptr_run,
+    km_nystroem_fit_transform_ptr_run,
     km_sqrt_weights,
 )
 
@@ -76,6 +77,11 @@ from kernel_methods.km_binding_impl import (
 from svm.impl.scale_gamma_device_pyapi import scale_gamma_limbs_device_binding, py2mojo_linear_flags_binding
 from kernel_methods.estimator import _family_ctx as _sg_family_ctx
 from kernel_methods.rbf_resident import KM_FAST_RBF_RESIDENT
+from kernel_methods.krr_resident import (
+    kernel_ridge_resident_prepare,
+    kernel_ridge_resident_release,
+    kernel_ridge_predict_resident,
+)
 from kernel_methods.rbf_resident_pyapi import rbf_sampler_fit_transform_binding, rbf_staged_binding
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -339,7 +345,115 @@ def kernel_ridge_predict_ptr_binding(
     with GILReleased(Python()):
         var trace = IdentityTrace()
         kernel_ridge_predict_ptr_into(xfaddr, daddr, xnaddr, n, d, t, kp, q, op, trace)
+        _ = xfaddr  # keep the Python object alive through the native call above
     return PythonObject(0)
+
+
+def kernel_ridge_resident_prepare_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """Lane migrate-classical-b2 (registered with the KRR_IDN_PTR_IN
+    pointer entries): upload a fit's `X_fit_` and `dual_coef_` ONCE and
+    return the handle `kernel_ridge_predict_resident` reads. `addrs` is
+    `[x_fit, dual]`, `params` `[n, d, t]`. Release with
+    `kernel_ridge_resident_release`."""
+    if len(addrs) != 2 or len(params) != 3:
+        raise Error("kernel_ridge_resident_prepare: addrs must hold x_fit, dual and params n, d, t")
+    var xfaddr = Int(_f32_ptr(Int(py=addrs[0])))
+    var daddr = Int(_f32_ptr(Int(py=addrs[1])))
+    var n = Int(py=params[0])
+    var d = Int(py=params[1])
+    var t = Int(py=params[2])
+    var handle: Int
+    with GILReleased(Python()):
+        handle = kernel_ridge_resident_prepare(xfaddr, daddr, n, d, t)
+    return PythonObject(handle)
+
+
+def kernel_ridge_resident_release_binding(handle: PythonObject) raises -> PythonObject:
+    """Drop a resident KernelRidge fit."""
+    kernel_ridge_resident_release(Int(py=handle))
+    return PythonObject(None)
+
+
+def kernel_ridge_predict_resident_binding(
+    handle: PythonObject, addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`kernel_ridge_predict_ptr` over a resident fit: `addrs` is `[x_new,
+    out]`, `params` `kernel_ridge_predict_binding`'s ten values. Returns 0."""
+    if len(addrs) != 2:
+        raise Error(
+            "kernel_ridge_predict_resident: addrs must contain 2 addresses (x_new, out), got "
+            + String(len(addrs))
+        )
+    if len(params) != 10:
+        raise Error(
+            "kernel_ridge_predict: params must contain 10 values (n, d, t,"
+            " kernel, degree, gamma, coef0, alpha, info, q), got "
+            + String(len(params))
+        )
+    var xnaddr = Int(_f32_ptr(Int(py=addrs[0])))
+    var op = _f32_ptr(Int(py=addrs[1]))
+    var n = Int(py=params[0])
+    var d = Int(py=params[1])
+    var t = Int(py=params[2])
+    var kp = KernelParams(
+        Int(py=params[3]),
+        Int(py=params[4]),
+        Float64(py=params[5]),
+        Float64(py=params[6]),
+    )
+    var q = Int(py=params[9])
+    var h = Int(py=handle)
+    with GILReleased(Python()):
+        var trace = IdentityTrace()
+        kernel_ridge_predict_resident(h, xnaddr, n, d, t, kp, q, op, trace)
+    return PythonObject(0)
+
+
+def nystroem_fit_transform_ptr_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """Lane migrate-classical-b2 (registered when NYS_IDN_FIT_PTR_IN and
+    KM_FAST_PTR_IN are on): `Nystroem.fit_transform(X)` with X uploaded
+    once. `addrs` is `nystroem_fit_binding`'s seven addresses then the
+    n x q transform output; `params` its eight values. Returns the sweeps."""
+    if len(addrs) != 8:
+        raise Error(
+            "nystroem_fit_transform: addrs must contain 8 addresses (x, components_out,"
+            " indices_out, normalization_out, eigenvalues_out,"
+            " eigenvectors_out, scalars_out, transform_out), got "
+            + String(len(addrs))
+        )
+    if len(params) != 8:
+        raise Error(
+            "nystroem_fit: params must contain 8 values (n, d, kernel, degree,"
+            " gamma, coef0, q, seed), got "
+            + String(len(params))
+        )
+    var xaddr = Int(_f32_ptr(Int(py=addrs[0])))
+    var cp = _f32_ptr(Int(py=addrs[1]))
+    var ip = _i32_ptr(Int(py=addrs[2]))
+    var np_ = _f32_ptr(Int(py=addrs[3]))
+    var evp = _f32_ptr(Int(py=addrs[4]))
+    var ecp = _f32_ptr(Int(py=addrs[5]))
+    var sp = _f64_ptr(Int(py=addrs[6]))
+    var op = _f32_ptr(Int(py=addrs[7]))
+    var n = Int(py=params[0])
+    var d = Int(py=params[1])
+    var kp = KernelParams(
+        Int(py=params[2]),
+        Int(py=params[3]),
+        Float64(py=params[4]),
+        Float64(py=params[5]),
+    )
+    var q = Int(py=params[6])
+    var seed = UInt64(Int(py=params[7]))
+    var sweeps = 0
+    with GILReleased(Python()):
+        sweeps = km_nystroem_fit_transform_ptr_run(xaddr, n, d, kp, q, seed, cp, ip, np_, evp, ecp, sp, op)
+        _ = xaddr  # keep the Python object alive through the native call above
+    return PythonObject(sweeps)
 
 
 # ===========================================================================
@@ -457,6 +571,7 @@ def nystroem_fit_ptr_binding(
     var sweeps = 0
     with GILReleased(Python()):
         sweeps = km_nystroem_fit_ptr_run(xaddr, n, d, kp, q, seed, cp, ip, np_, evp, ecp, sp)
+        _ = xaddr  # keep the Python object alive through the native call above
     return PythonObject(sweeps)
 
 
@@ -539,6 +654,7 @@ def nystroem_transform_binding(
         with GILReleased(Python()):
             var trace = IdentityTrace()
             nystroem_transform_ptr_into(model, xaddr, m, op, trace)
+            _ = model  # keep the Python object alive through the native call above
     else:
         var x = read_f32(xaddr, max(0, m * d))
         with GILReleased(Python()):
@@ -652,6 +768,7 @@ def rbf_sampler_transform_binding(
         with GILReleased(Python()):
             var trace = IdentityTrace()
             rbf_sampler_transform_ptr_into(model, xaddr, m, op, trace)
+            _ = model  # keep the Python object alive through the native call above
     else:
         var x = read_f32(xaddr, max(0, m * d))
         with GILReleased(Python()):
@@ -685,9 +802,14 @@ def build__mojolearn_kernel_methods() -> PythonObject:
         comptime if KRR_IDN_PTR_IN:
             m.def_function[kernel_ridge_fit_ptr_binding]("kernel_ridge_fit_ptr")
             m.def_function[kernel_ridge_predict_ptr_binding]("kernel_ridge_predict_ptr")
+            m.def_function[kernel_ridge_resident_prepare_binding]("kernel_ridge_resident_prepare")
+            m.def_function[kernel_ridge_resident_release_binding]("kernel_ridge_resident_release")
+            m.def_function[kernel_ridge_predict_resident_binding]("kernel_ridge_predict_resident")
         m.def_function[nystroem_fit_binding]("nystroem_fit")
         comptime if NYS_IDN_FIT_PTR_IN:
             m.def_function[nystroem_fit_ptr_binding]("nystroem_fit_ptr")
+            comptime if KM_FAST_PTR_IN:
+                m.def_function[nystroem_fit_transform_ptr_binding]("nystroem_fit_transform_ptr")
         m.def_function[nystroem_transform_binding]("nystroem_transform")
         m.def_function[rbf_sampler_fit_binding]("rbf_sampler_fit")
         m.def_function[rbf_sampler_transform_binding]("rbf_sampler_transform")

@@ -1615,12 +1615,11 @@ FAMILIES = (
         exports=(
             # Native C-entry registrations are part of the exported ABI too.
             "classical_attribute_call", "classical_attribute_descriptor", "classical_native_call",
-            "cross_vendor_call", "generator_draw", "mamba_native_call",
+            "cross_vendor_call", "generator_draw", "user_objects_native_call", "mamba_native_call",
             "native_codec_call", "native_process_call", "native_transport_call",
             "neural_prefill_call", "parallel_byte_call", "parallel_causal_call",
             "parallel_mlp_call", "parallel_neural_call", "pca_native_call",
-            "samba_config_call", "samba_native_call", "sequential_native_call",
-            "small_mlp_call", "standard_scaler_fit_native", "standard_scaler_native_call", "minmax_scaler_native_call", "maxabs_scaler_native_call", "robust_scaler_native_call", "arena_rows_native_call", "arena_prog_native_call", "standard_scaler_attribute_call",
+            "samba_config_call", "samba_native_call", "sequential_native_call", "small_mlp_call", "standard_scaler_fit_native", "standard_scaler_native_call", "minmax_scaler_native_call", "maxabs_scaler_native_call", "robust_scaler_native_call", "arena_rows_native_call", "arena_prog_native_call", "standard_scaler_attribute_call", "prep_stateless_native_call", "qn_native_call", "logistic_native_call", "decomp_native_call", "linalg_decomp_native_call", "als_native_call", "mcd_native_call", "pls_native_call", "dict_learning_native_call", "jl_native_call", "ipca_native_call", "tsvd_native_call", "prep_classify_native_call", "prep_encode_native_call", "x_linear_native_call", "str_labels_native_call", "xseq_native_call", "byte_lm_host_trainer_call", "xcnn_native_call", "tsa_native_call",
             "tokenizer_host_numeric_mode", "tokenizer_host_vendor",
             "tokenizer_host_column", "tokenizer_host_sabotage", "bpe_load",
             "bpe_n_vocab", "bpe_max_token_bytes", "bpe_encode", "bpe_encode_batch",
@@ -1636,6 +1635,9 @@ FAMILIES = (
             # generation coordinator's setup
             "optimizer_finalize", "optimizer_native", "optimizer_device_finalize", "vocab_fingerprint",
             "host_archive_finalize_call", "host_svr_attribute_call", "host_svc_attribute_call",
+            # lane migrate-neural-2: the Embedding layer's native lifetime,
+            # parallel forecasting's owner and the GPU byte-LM trainer step
+            "embedding_layer_lifetime", "parallel_forecast_call", "byte_lm_trainer_call",
         ),
         gate="pixi run check-tokenizer and python/mojolearn/tests/test_tokenizer_surface.py",
         wheel_note=(
@@ -2913,6 +2915,8 @@ FAMILIES = (
             "mamba2_forward", "mamba2_decode_step", "mamba2_backward",
             "mamba3_forward", "mamba3_forward_fresh", "mamba3_decode_step",
             "mamba3_backward",
+            # the carried-state forward on the owned snapshot (lane migrate-neural-2)
+            "mamba3_state_owned",
             # manifest sync (lane rehearsal-suite-green, 2026-10-08): registered in the binding source
             "mamba1_profile", "mamba3_owned_weights_enabled", "mamba3_prefill_session_create",
             "mamba3_prefill_session_reports_optional", "mamba3_prefill_session_info", "mamba3_prefill_session_close",

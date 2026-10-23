@@ -57,7 +57,9 @@ def _model_f32(value: PythonObject, name: String, context: PythonObject) raises 
         var result = generation_array(dims)
         var source = f32_ptr(Int(py=value._addr))
         var target = f32_ptr(Int(py=result._addr))
+        _ = result  # keep the Python object alive through the native call above
         causal_lm_gather_f32(source, target, Int(py=value.size), dims, strides)
+        _ = result  # keep the Python object alive through the native call above
         return result
     var view = py_call(bi.memoryview, value)
     var format = String(view.format)
@@ -92,11 +94,14 @@ def _model_pack(value: PythonObject, format: String, linalg: PythonObject, conte
     if format == "bfloat16":
         var bits = checkpoint_array(py_call(bi.bytes, rows * cols * 2), value.shape, "H", context["array_class"])
         _ = py_call(_native_function(linalg, "to_bf16"), bits._addr, value._addr, py_ints([rows * cols]))
+        _ = bits  # keep the Python object alive through the native call above
         py_setattr(packed, "bits", bits)
     else:
         var codes = generation_array([rows, cols], "b")
         var exponents = generation_array([rows], "i")
         _ = py_call(_native_function(linalg, "quantize_int8"), codes._addr, exponents._addr, value._addr, py_ints([rows, cols]))
+        _ = exponents  # keep the Python object alive through the native call above
+        _ = codes  # keep the Python object alive through the native call above
         py_setattr(packed, "codes", codes)
         py_setattr(packed, "exponents", exponents)
     return packed
@@ -117,6 +122,8 @@ def _model_unpack(value: PythonObject, linalg: PythonObject, context: PythonObje
         var bits = _model_native_buffer(value.bits, "H", context)
         _model_shape(bits, [rows, cols], "bfloat16 bits")
         _ = py_call(_native_function(linalg, "from_bf16"), out._addr, bits._addr, py_ints([rows * cols]))
+        _ = bits  # keep the Python object alive through the native call above
+        _ = out  # keep the Python object alive through the native call above
         _ = bits^  # read by address above
     else:
         var codes = _model_native_buffer(value.codes, "b", context)
@@ -124,6 +131,9 @@ def _model_unpack(value: PythonObject, linalg: PythonObject, context: PythonObje
         _model_shape(codes, [rows, cols], "int8 codes")
         _model_shape(exponents, [rows], "int8 exponents")
         _ = py_call(_native_function(linalg, "dequantize_int8"), out._addr, codes._addr, exponents._addr, py_ints([rows, cols]))
+        _ = exponents  # keep the Python object alive through the native call above
+        _ = codes  # keep the Python object alive through the native call above
+        _ = out  # keep the Python object alive through the native call above
         _ = codes^  # read by address above
         _ = exponents^
     return out
@@ -136,6 +146,9 @@ def _model_quantize15(value: PythonObject, linalg: PythonObject) raises -> Pytho
     var lo = generation_array([rows, cols], "b")
     var exponents = generation_array([rows], "i")
     _ = py_call(_native_function(linalg, "quantize_int15"), py_ints([Int(py=hi._addr), Int(py=lo._addr), Int(py=exponents._addr), Int(py=value._addr)]), py_ints([rows, cols]))
+    _ = exponents  # keep the Python object alive through the native call above
+    _ = lo  # keep the Python object alive through the native call above
+    _ = hi  # keep the Python object alive through the native call above
     var out = Python.import_module("builtins").list()
     _ = py_call(out.append, hi)
     _ = py_call(out.append, lo)
@@ -175,6 +188,22 @@ def _model_profile(requested: PythonObject, family: String, context: PythonObjec
     elif not covered:
         raise Error("NotImplementedError: numeric_profile=" + String(selected) + " does not compute the " + family + " family")
     return selected
+
+
+def _model_profile_named(requested: PythonObject, context: PythonObject) raises:
+    """The family-free half of `_model_profile` for a NAMED profile: an
+    unknown name or one unavailable for inference is refused before any
+    path is read."""
+    var bi = Python.import_module("builtins")
+    if py_type(requested) is not bi.str:
+        raise Error("TypeError: numeric_profile must be a profile name")
+    var selected = requested.strip()
+    if not py_contains(context["profiles"], selected):
+        var reason = py_get(context["rejected_profiles"], selected)
+        raise Error("numeric_profile=" + String(selected) + " is not offered: "
+                    + (String(reason) if reason is not None else String("not a registered numeric profile")))
+    if not Bool(py=context["profiles"][selected]["inference"]):
+        raise Error("NotImplementedError: numeric_profile=" + String(selected) + " is unavailable for inference")
 
 
 def _model_route(device: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -268,9 +297,19 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
         var norm = String(options["norm"])
         var nk = 0 if norm == "rmsnorm" else (1 if norm == "layernorm" else (2 if norm == "rmsnorm_offset" else -1))
         var mk = 0 if mlp == "swiglu" else (1 if mlp == "gelu" else (2 if mlp == "gelu_tanh" else (3 if mlp == "geglu" else (4 if mlp == "geglu_tanh" else -1))))
-        if nk < 0 or mk < 0:
-            raise Error("CausalLM: unsupported norm or mlp kind")
+        if nk < 0:
+            raise Error("CausalLM: unsupported norm=" + String(py_call(bi.repr, options["norm"]))
+                        + "; norm is 'rmsnorm', 'layernorm' or 'rmsnorm_offset'")
+        if mk < 0:
+            raise Error("CausalLM: unsupported mlp=" + String(py_call(bi.repr, options["mlp"]))
+                        + "; mlp is 'swiglu', 'gelu', 'gelu_tanh', 'geglu' or 'geglu_tanh'")
         gated = mk == 0 or mk == 3 or mk == 4
+        var has_gate = py_contains(w, "gate_proj.weight")
+        if gated and not has_gate:
+            raise Error("CausalLM: gate_proj.weight is missing; mlp=" + String(py_call(bi.repr, options["mlp"])) + " is gated")
+        if not gated and has_gate:
+            raise Error("CausalLM: gate_proj.weight is present but mlp=" + String(py_call(bi.repr, options["mlp"]))
+                        + " has no gate")
         var source = w["gate_proj.weight" if gated else "up_proj.weight"]
         if len(source.shape) != 2 or Int(py=source.shape[0]) < 1:
             raise Error("CausalLM: projection must have positive intermediate size")
@@ -285,7 +324,8 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
         if scaling is not None:
             var sk = String(py_get(scaling, "type", py_get(scaling, "rope_type")))
             if sk != "linear" and sk != "llama3":
-                raise Error("CausalLM: unsupported rope_scaling type")
+                raise Error("CausalLM: unsupported rope_scaling type " + String(py_call(bi.repr, PythonObject(sk)))
+                            + "; the types are 'linear' and 'llama3'")
             tail[1] = 1 if sk == "linear" else 2
             tail[2] = _model_bits(scaling["factor"], "rope_scaling factor")
             if sk == "llama3":
@@ -293,7 +333,8 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
                 tail[4] = _model_bits(scaling["high_freq_factor"], "high_freq_factor")
                 tail[5] = Int(py=scaling["original_max_position_embeddings"])
                 if Float64(py=scaling["high_freq_factor"]) <= Float64(py=scaling["low_freq_factor"]) or tail[5] < 1:
-                    raise Error("CausalLM: invalid llama3 rope_scaling bounds")
+                    raise Error("CausalLM: llama3 rope_scaling needs high_freq_factor > low_freq_factor "
+                                + "and a positive original_max_position_embeddings")
         var rd = hd if options["rope_dim"] is None else Int(py=options["rope_dim"])
         if rd < 1 or rd > hd or rd % 2 != 0:
             raise Error("CausalLM: rope_dim must be positive even and no larger than head_dim")
@@ -308,8 +349,12 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
         tail[14] = Int(Bool(py=options["mlp_bias"]))
         tail[15] = Int(Bool(py=options["qk_norm"]))
         tail[16] = 0 if options["attn_softcap"] is None else _model_bits(options["attn_softcap"], "attn_softcap")
-        if tail[7] < 1 or (tail[12] != 0 and nk != 1) or (tail[15] != 0 and nk == 1):
-            raise Error("CausalLM: invalid max_positions, norm_bias or qk_norm combination")
+        if tail[7] < 1:
+            raise Error("CausalLM: max_positions must be positive")
+        if tail[12] != 0 and nk != 1:
+            raise Error("CausalLM: norm_bias=True needs norm='layernorm'")
+        if tail[15] != 0 and nk == 1:
+            raise Error("CausalLM: qk_norm=True with norm='layernorm' is not supported (qk_norm is an RMSNorm)")
         var window = Int(py=options["window"])
         if window < 0:
             raise Error("CausalLM: sliding window must be nonnegative")
@@ -352,8 +397,10 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
             var name = context["optional_names"][i]
             py_setitem(flag_dict, name, PythonObject(flags[i] != 0))
             var present = py_contains(w, name)
-            if present != (flags[i] != 0):
-                raise Error("CausalLM: " + String(name) + " presence does not match its option")
+            if present and flags[i] == 0:
+                raise Error("CausalLM: " + String(name) + " is present but its option is off")
+            if not present and flags[i] != 0:
+                raise Error("CausalLM: " + String(name) + " is required by its option but missing")
             if present:
                 _model_shape(w[name], [widths[i]], String(name))
                 _ = py_call(optional.append, w[name])
@@ -586,8 +633,20 @@ def causal_model_read_weights_binding(checkpoint: PythonObject, plan: PythonObje
                     raise Error("UnsupportedModel: checkpoint tensor " + String(name) + " is too small for projection row slice")
                 var cols = Int(py=value.shape[1])
                 var sliced = generation_array([end - begin, cols])
+                # `whole` owns the fused tensor's storage through the memcpy:
+                # Mojo destroys a local at its last use, which for `value`
+                # was the `value._addr` read in the memcpy's arguments, so the
+                # array was freed before the copy read it (phi3's fused
+                # qkv_proj / gate_up_proj; the allocator's free-list words
+                # landed in the first rows of the q and gate slices and moved
+                # hf-causal-lm's `every` part from run to run once the
+                # balanced calls stopped leaking a reference to it).
+                var whole = value
                 if end > begin:
-                    memcpy(dest=f32_ptr(Int(py=sliced._addr)), src=f32_ptr(Int(py=value._addr)) + begin * cols, count=(end - begin) * cols)
+                    memcpy(dest=f32_ptr(Int(py=sliced._addr)), src=f32_ptr(Int(py=whole._addr)) + begin * cols, count=(end - begin) * cols)
+                    _ = whole  # keep the Python object alive through the native call above
+                    _ = sliced  # keep the Python object alive through the native call above
+                _ = whole^  # read by address above
                 value = sliced
             py_setitem(weights, key, _model_pack(value, String(format), bindings["linalg"], context) if packed else value)
         _ = py_call(layers.append, weights)
@@ -607,6 +666,8 @@ def causal_model_load_binding(cls: PythonObject, path_value: PythonObject, optio
     if format != "float32" and format != "bfloat16" and format != "int8":
         raise Error("CausalLM: weight_format must be one of float32, bfloat16 or int8; unsupported weight_format " + format)
     var route = _model_route(options[2], context)
+    if options[3] is not None:
+        _model_profile_named(options[3], context)
     var path = native_path(path_value)
     if not native_path_exists(path, True):
         raise Error("FileNotFoundError: CausalLM.load requires a checkpoint directory")

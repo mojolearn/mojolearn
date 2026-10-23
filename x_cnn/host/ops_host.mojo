@@ -1193,3 +1193,21 @@ def gcn_loops_host(src: IP, dst: IP, w: FP, nnz: Int, n: Int, fill: Float32, src
         if src[e] == dst[e]:
             w_out[k + Int(src[e])] = w[e]
     return k
+
+
+# lane migrate-neural-2: the graph layers' per-entry value moves (the host
+# twins of x_cnn/device.mojo perm_gather_device / vals_t_device). Copies only.
+
+def perm_gather_host(src: FP, idx: IP, out_buf: FP, n: Int):
+    """out[i] = src[idx[i]]."""
+    for i in range(n):
+        out_buf[i] = src[Int(idx[i])]
+
+
+def vals_t_host(vals_f: FP, order_f: IP, order_t: IP, out_buf: FP, nnz: Int):
+    """by_edge[order_f] = vals_f; out = by_edge[order_t]."""
+    var by_edge = List[Float32](length=max(nnz, 1), fill=Float32(0))
+    for i in range(nnz):
+        by_edge[Int(order_f[i])] = vals_f[i]
+    for j in range(nnz):
+        out_buf[j] = by_edge[Int(order_t[j])]

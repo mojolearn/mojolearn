@@ -4,11 +4,11 @@
 """REAL PRETRAINED MODELS THROUGH THE IMPORTER (2026-10-20, lane ag-real-models), a box tool.
 
 Each model in MODELS is a real, unmodified pretrained network: torchvision's resnet18, squeezenet1_1 and
-mobilenet_v3_small with their published weights (torch.export of the eval module, a fixed example
-input), two ONNX model-zoo files (downloaded once, the sha256 recorded) and HuggingFaceTB/SmolLM2-135M
-(torch.export of the causal LM returning logits). For each one the tool
+mobilenet_v3_small with their published weights (torch.onnx.export of the eval module to a file, a fixed
+example input), two ONNX model-zoo files (downloaded once, the sha256 recorded) and HuggingFaceTB/SmolLM2-135M
+(torch.onnx.export of the causal LM returning logits). For each one the tool
 
-  1. exports it (torch.export.export with a fixed example input) or downloads it (ONNX);
+  1. exports it to an ONNX file (torch.onnx.export with a fixed example input, opset 17) or downloads it;
   2. imports it: mojolearn.import_model(source, shapes=...);
   3. runs our Program on a seeded input: one untimed run (the digest), then one timed run, whole clock
      (the host -> device copy of the input, the program, the device -> host copy of the output);
@@ -138,7 +138,24 @@ def _example(spec, batch, seed, vocab=None):
     return rng.standard_normal(shape, dtype=np.float32)
 
 
-def source_torchvision(spec, batch, seed, info):
+def _export_path(cache, spec, batch):
+    d = Path(os.path.expanduser(cache)) / "torch_onnx"
+    d.mkdir(parents=True, exist_ok=True)
+    return d / ("%s_b%d.onnx" % (spec.get("ctor") or spec.get("repo", "model").replace("/", "_"), batch))
+
+
+def _torch_to_onnx(torch, model, x, path):
+    # the two-step torch import (mojolearn.models._catalog._torch_to_onnx, the same call): torch.onnx.export
+    # to a file at opset 17 with the TorchScript exporter, then mojolearn.import_model of the path
+    args = (torch.from_numpy(x),)
+    try:
+        torch.onnx.export(model, args, str(path), opset_version=17, dynamo=False)
+    except TypeError:  # a torch without the dynamo switch
+        torch.onnx.export(model, args, str(path), opset_version=17)
+    return str(path)
+
+
+def source_torchvision(spec, batch, seed, info, cache):
     import torch
     import torchvision
     _torch_flags(torch)
@@ -154,11 +171,11 @@ def source_torchvision(spec, batch, seed, info):
     x = _example(spec, batch, seed)
     t0 = time.perf_counter()
     with torch.no_grad():
-        ep = torch.export.export(model, (torch.from_numpy(x),))
+        path = _torch_to_onnx(torch, model, x, _export_path(cache, spec, batch))
     info["export_ms"] = (time.perf_counter() - t0) * 1e3
     info["torch_version"] = torch.__version__
     info["torchvision_version"] = torchvision.__version__
-    return ep, None, [x], ("torch", model)
+    return path, None, [x], ("torch", model)
 
 
 class _LogitsOnly:
@@ -177,7 +194,7 @@ class _LogitsOnly:
         return Logits(lm).eval()
 
 
-def source_hf_causal_lm(spec, batch, seed, info):
+def source_hf_causal_lm(spec, batch, seed, info, cache):
     import torch
     import transformers
     _torch_flags(torch)
@@ -192,13 +209,9 @@ def source_hf_causal_lm(spec, batch, seed, info):
     x = _example(spec, batch, seed, vocab=vocab)
     t0 = time.perf_counter()
     with torch.no_grad():
-        try:
-            ep = torch.export.export(model, (torch.from_numpy(x),))
-        except Exception as exc:  # noqa: BLE001  transformers models often need the non-strict tracer
-            info["export_strict_error"] = repr(exc)[:400]
-            ep = torch.export.export(model, (torch.from_numpy(x),), strict=False)
+        path = _torch_to_onnx(torch, model, x, _export_path(cache, spec, batch))
     info["export_ms"] = (time.perf_counter() - t0) * 1e3
-    return ep, None, [x], ("torch", model)
+    return path, None, [x], ("torch", model)
 
 
 def _download(url, dest):
@@ -532,9 +545,9 @@ def run_one(name, batch, seed, cache, out_dir, imagenet_val=None, *, installed=F
         src_info = {}
         doc["source"] = src_info
         if spec["kind"] == "torchvision":
-            source, shapes, arrays, ref = source_torchvision(spec, batch, seed, src_info)
+            source, shapes, arrays, ref = source_torchvision(spec, batch, seed, src_info, cache)
         elif spec["kind"] == "hf-causal-lm":
-            source, shapes, arrays, ref = source_hf_causal_lm(spec, batch, seed, src_info)
+            source, shapes, arrays, ref = source_hf_causal_lm(spec, batch, seed, src_info, cache)
         else:
             source, shapes, arrays, ref = source_onnx(spec, batch, seed, src_info, cache)
         doc["input_digest"] = _digest(*arrays)

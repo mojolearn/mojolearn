@@ -115,6 +115,12 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 #: the same object it is checking.
 _MODE_CODE = {"fast": 0, "identical": 1}
 
+# The compiled owner of `fit` and `predict` (bindings/tsa_arima_native.mojo,
+# through `tsa_native_call`), connected once at import.
+from . import _native_tsa_bridge  # noqa: E402
+_TSA, _TSA_CONTEXT = _native_tsa_bridge.connect()
+_TSA_CONTEXT["arima_methods"] = _METHODS
+
 
 def _series_major(y, name):
     """A C-contiguous float32 `(batch_size, n_obs)` array of `y`.
@@ -716,54 +722,9 @@ class ARIMA(NumericModeMixin):
             Check ``retcode_``: a series that ran to ``maxiter`` is reported there,
             not raised on.
         """
-        y_ndim = _input_ndim(y)
-        arr, batch_size, n_obs, copied = _series_major(y, "y")
-        p, d, q = self.order
-        P, D, Q, s = self.seasonal_order
-        if exog is None:
-            ex, n_exog = _no_exog(), 0
-        else:
-            ex, n_exog = _exog_array(exog, batch_size, n_obs, y_ndim, "exog")
-        N = p + q + P + Q + self.k_ + n_exog + 1
-
-        params = empty((batch_size * N,), "<f4")
-        x = empty((batch_size * N,), "<f4")
-        x0 = empty((batch_size * N,), "<f4")
-        stats = empty((2 * batch_size,), "<f4")
-        flags = empty((2 * batch_size,), "<i4")
-        # AIC then BIC, written by the fit on the device (lane cpu3-seq):
-        # -2 llf + penalty in binary64, `T` is n_samples AFTER differencing
-        # (their caller passes `n_obs - order.n_diff()`)
-        ics = empty((2 * batch_size,), "<f8")
-        pen_aic, pen_bic = self._ic_penalties(N, n_obs)
-        # EVERY ONE OF THOSE SIZES IS A FUNCTION OF (batch_size, n_obs,
-        # order) ALONE, which is why this side can allocate before it calls.
-        # There is no quantity in an ARIMA fit that is only known once the
-        # solve finishes, so nothing here is a worst-case buffer the way
-        # `SVR.fit`'s support-vector arrays are (DEVIATION 873).
-        written = self._extension().arima_fit(
-            addr_ro(arr, name="y"),
-            addr_ro(ex, name="exog"),
-            addr(params, name="params"),
-            addr(x, name="x"),
-            addr(x0, name="x0"),
-            addr(stats, name="stats"),
-            addr(flags, name="flags"),
-            # ORDER MATCHES bindings/_mojolearn_arima.mojo::arima_fit_binding.
-            # batch_size, n_obs, p, d, q, P, D, Q, s, k, n_exog, method,
-            # max_iterations, ic_addr, pen_aic, pen_bic
-            [batch_size, n_obs, p, d, q, P, D, Q, s, self.k_,
-             n_exog, _METHODS[self.method], self.maxiter,
-             addr(ics, name="ic"), pen_aic, pen_bic],
-        )
-        if int(written) != batch_size * N:
-            raise RuntimeError(
-                f"mojolearn ARIMA: the fit wrote {int(written)} parameters, "
-                f"batch_size * N is {batch_size * N}; this side and "
-                "arima/estimator.mojo disagree about ARIMAOrder.complexity()"
-            )
-        return self._adopt_fit(arr, copied, y_ndim, batch_size, n_obs, ex, n_exog,
-                               params, x, x0, stats, flags, ics)
+        # `_series_major`, `_exog_array`, the fit and `_adopt_fit` in one
+        # native call (bindings/tsa_arima_native.mojo)
+        return _TSA(self, "arima_fit", (y, exog), _TSA_CONTEXT)
 
     def _ic_penalties(self, N, n_obs):
         """AIC and BIC penalties, two scalars of the order (2N; log(T) N,
@@ -969,41 +930,7 @@ class ARIMA(NumericModeMixin):
             If the model is not fitted, ``start >= end``, or ``exog`` is missing,
             unexpected or of the wrong width.
         """
-        self._check_fitted("predict")
-        if end is None:
-            end = self.n_obs_
-        start = int(start)
-        end = int(end)
-        p, d, q = self.order
-        P, D, Q, s = self.seasonal_order
-        width = end - start
-        if width <= 0:
-            # Raised here only because the OUTPUT BUFFER has to be allocated
-            # before the call and a non-positive width has no allocation.
-            # `arima/estimator.mojo` refuses the same thing again with the
-            # reference's message, and reaches it from any other caller.
-            raise ValueError(
-                f"mojolearn ARIMA: need start < end, got start={start}, "
-                f"end={end}. `end` is EXCLUDED here, as it is in cuML; "
-                "statsmodels' end is the last index returned"
-            )
-        ex, fut = self._future_exog(exog, end)
-        out = empty((self.batch_size_ * width,), "<f4")
-        y = self._y
-        pr = self.params_
-        self._extension().arima_predict(
-            addr_ro(y, name="y"),
-            addr_ro(ex, name="exog"),
-            addr_ro(fut, name="exog (future values)"),
-            addr_ro(pr, name="params"),
-            addr(out, name="out"),
-            # ORDER MATCHES
-            # bindings/_mojolearn_arima.mojo::arima_predict_binding.
-            # batch_size, n_obs, start, end, p, d, q, P, D, Q, s, k, n_exog
-            [self.batch_size_, self.n_obs_, start, end, p, d, q, P, D, Q, s,
-             self.k_, self.n_exog_],
-        )
-        return out.reshape((self.batch_size_, width))
+        return _TSA(self, "arima_predict", (start, end, exog), _TSA_CONTEXT)
 
     # `(batch_size, steps)` out-of-sample forecasts, continuing each
     # series from its own last observation.
@@ -1161,6 +1088,10 @@ def _plain_order(value, normalized):
     """True when `value` already IS `normalized`: a tuple of Python ints."""
     return (type(value) is tuple and all(type(v) is int for v in value)  # glue: entries of the order tuple
             and value == normalized)
+
+
+# The class the AutoARIMA door builds its per-group models of.
+_TSA_CONTEXT["arima_class"] = ARIMA
 
 
 def _as_order(value, width, name):

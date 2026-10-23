@@ -39,23 +39,16 @@ def sequential_targets(model: PythonObject, source: PythonObject, n: Int, n_out:
         raise Error("y must hold one target row per input sample")
     var descriptor = sequential_descriptor(y, "y")
     if classification:
+        # the labels as they are and a classes buffer of their dtype: the
+        # fit entry sorts them and keeps the codes on the device
+        # (`model_fit_labels`); the class-count refusals run there
         var classes = sequential_array(Python.tuple(n), y.dtype, context)
-        var codes = sequential_array(Python.tuple(n), context["int32"], context)
-        var count = Int(py=py_call_typed(entries["model_labels"], descriptor, sequential_address(classes), sequential_address(codes)))
-        var selected = py_call(context["ndarray"], Python.tuple(count), dtype=y.dtype, buffer=classes)
-        py_setitem(fields, "classes_", selected)
-        if loss == "cross_entropy":
-            if count != n_out:
-                raise Error("the labels have " + String(count) + " classes but the model has " + String(n_out) + " outputs")
-            return Python.tuple(codes, sequential_descriptor(codes, "y"), 1)
-        if count != 2 or n_out != 1:
-            raise Error("bce_with_logits needs two classes and a model with one output")
-        return Python.tuple(codes, sequential_descriptor(codes, "y"), 2)
+        return Python.tuple(y, descriptor, 1 if loss == "cross_entropy" else 2, classes)
     py_setitem(fields, "_y_1d", nd == 1)
     var width = 1 if nd == 1 else Int(py=y.shape[1])
     if width != n_out:
         raise Error("y has " + String(width) + " outputs but the model has " + String(n_out))
-    return Python.tuple(y, descriptor, 0)
+    return Python.tuple(y, descriptor, 0, PythonObject(None))
 
 
 def sequential_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -108,6 +101,7 @@ def sequential_fit(model: PythonObject, args: PythonObject, context: PythonObjec
     var y = target_data[0]
     var yd = target_data[1]
     var target = Int(py=target_data[2])
+    var classes_full = target_data[3]
     var params = PythonObject(None)
     var moment = PythonObject(None)
     var variance = PythonObject(None)
@@ -138,6 +132,12 @@ def sequential_fit(model: PythonObject, args: PythonObject, context: PythonObjec
     var addresses = Python.list(xd, yd, sequential_address(params), sequential_address(curve),
         sequential_address(moment), sequential_address(variance), sequential_address(state),
         PythonObject(0) if previous is None else sequential_address(previous))
+    _ = curve  # keep the Python object alive through the native call above
+    _ = params  # keep the Python object alive through the native call above
+    _ = state  # keep the Python object alive through the native call above
+    _ = variance  # keep the Python object alive through the native call above
+    _ = moment  # keep the Python object alive through the native call above
+    _ = previous  # keep the Python object alive through the native call above
     var vx = PythonObject(None)
     var vy = PythonObject(None)
     var val_curve = PythonObject(None)
@@ -155,13 +155,45 @@ def sequential_fit(model: PythonObject, args: PythonObject, context: PythonObjec
             raise Error("validation targets must match the validation rows")
         if target != 0 and vnd != 1:
             raise Error("validation classification targets must be a vector")
-        var classes = PythonObject(None) if target == 0 else sequential_descriptor(fields["classes_"], "classes")
+        # the classes buffer as allocated (n slots); the fit entry cuts the
+        # descriptor to the classes the sort found
+        var classes = PythonObject(None) if target == 0 else sequential_descriptor(classes_full, "classes")
         val_curve = sequential_array(Python.tuple(epochs), context["float32"], context)
         val_info = sequential_array(Python.tuple(2), context["int64"], context)
         _ = py_call(addresses.extend, Python.tuple(vxd, sequential_descriptor(vy, "validation y"), classes,
                     sequential_address(val_curve), sequential_address(val_info)))
+        _ = curve  # keep the Python object alive through the native call above
+        _ = previous  # keep the Python object alive through the native call above
+        _ = state  # keep the Python object alive through the native call above
+        _ = variance  # keep the Python object alive through the native call above
+        _ = moment  # keep the Python object alive through the native call above
+        _ = params  # keep the Python object alive through the native call above
+        _ = val_info  # keep the Python object alive through the native call above
+        _ = val_curve  # keep the Python object alive through the native call above
         _ = py_call(ip.append, 1 if restore_best else 0)
-    var n_iter = Int(py=py_call_typed(entries["model_fit"], addresses, program, ip, fp))
+    var n_iter: Int
+    if target != 0:
+        var labels = Python.list(yd, sequential_address(classes_full), n_out, target)
+        _ = classes_full  # keep the Python object alive through the native call above
+        var done = py_call_typed(entries["model_fit_labels"], addresses, program, ip, fp, labels)
+        _ = curve  # keep the Python object alive through the native call above
+        _ = previous  # keep the Python object alive through the native call above
+        _ = state  # keep the Python object alive through the native call above
+        _ = variance  # keep the Python object alive through the native call above
+        _ = moment  # keep the Python object alive through the native call above
+        _ = params  # keep the Python object alive through the native call above
+        _ = classes_full  # keep the Python object alive through the native call above
+        var count = Int(py=done[0])
+        n_iter = Int(py=done[1])
+        py_setitem(fields, "classes_", py_call(context["ndarray"], Python.tuple(count), dtype=classes_full.dtype, buffer=classes_full))
+    else:
+        n_iter = Int(py=py_call_typed(entries["model_fit"], addresses, program, ip, fp))
+        _ = curve  # keep the Python object alive through the native call above
+        _ = previous  # keep the Python object alive through the native call above
+        _ = state  # keep the Python object alive through the native call above
+        _ = variance  # keep the Python object alive through the native call above
+        _ = moment  # keep the Python object alive through the native call above
+        _ = params  # keep the Python object alive through the native call above
     # Raw addresses never own data. Keep every source alive through the
     # synchronous native model call, including temporary sequence buffers.
     _ = x^
@@ -173,9 +205,12 @@ def sequential_fit(model: PythonObject, args: PythonObject, context: PythonObjec
     py_setitem(fields, "n_iter_", n_iter)
     if validation is not None:
         var info = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(val_info)))
+        _ = val_info  # keep the Python object alive through the native call above
         var ran = Int(info[0])
+        _ = val_info  # keep the Python object alive through the native call above
         py_setitem(fields, "epochs_run_", ran)
         py_setitem(fields, "best_epoch_", PythonObject(info[1]))
+        _ = val_info  # keep the Python object alive through the native call above
         py_setitem(fields, "validation_loss_curve_", sequential_curve(val_curve, ran))
         _ = val_info^
     py_setitem(fields, "loss_curve_", sequential_curve(curve, n_iter))
@@ -196,6 +231,15 @@ def sequential_fit(model: PythonObject, args: PythonObject, context: PythonObjec
 
 def sequential_forward(model: PythonObject, source: PythonObject, transform: Int,
                        width: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
+    # An overload, not a `classes = PythonObject(None)` default: a non-raising
+    # caller (the abi("C") door) compile-time evaluates a default, and a
+    # PythonObject cannot be built at compile time.
+    return sequential_forward(model, source, transform, width, entries, context, PythonObject(None))
+
+
+def sequential_forward(model: PythonObject, source: PythonObject, transform: Int,
+                       width: PythonObject, entries: PythonObject, context: PythonObject,
+                       classes: PythonObject) raises -> PythonObject:
     var fields = sequential_fields(model)
     if not py_contains(fields, "params_"):
         raise Error("call fit before predict")
@@ -212,9 +256,21 @@ def sequential_forward(model: PythonObject, source: PythonObject, transform: Int
     var xd = sequential_descriptor(x, "X", True)
     if not Bool(py=xd[4] == fields["n_features_in_"]):
         raise Error("X has a different feature count from the fitted model")
-    var output_width = fields["n_outputs_"] if width is None else width
-    var out = sequential_array(Python.tuple(xd[3], output_width), context["float32"], context)
     var params = fields["params_"]
+    var out: PythonObject
+    if classes is not None:
+        # the labels of a classifier, in classes_' dtype
+        out = sequential_array(Python.tuple(xd[3]), classes.dtype, context)
+        _ = py_call_typed(entries["model_predict_labels"],
+            Python.list(xd, sequential_address(params), sequential_address(classes), sequential_address(out)),
+            sequential_program(model, fields["n_features_in_"], sample), sequential_table(model),
+            Python.list(xd[3], 4096, transform, classes.shape[0], classes.dtype.itemsize))
+        _ = params  # keep the Python object alive through the native call above
+        _ = x^
+        _ = params^
+        return out
+    var output_width = fields["n_outputs_"] if width is None else width
+    out = sequential_array(Python.tuple(xd[3], output_width), context["float32"], context)
     _ = py_call_typed(entries["model_predict"], Python.list(xd, sequential_address(params), sequential_address(out)),
         sequential_program(model, fields["n_features_in_"], sample), sequential_table(model),
         Python.list(xd[3], 4096, transform))
@@ -237,14 +293,10 @@ def sequential_predict(model: PythonObject, source: PythonObject, probabilities:
             return sequential_forward(model, source, 3, PythonObject(2), entries, context)
         raise Error("predict_proba needs a model fitted with cross_entropy or bce_with_logits")
     if classifier:
-        var codes = sequential_forward(model, source, 4 if loss == "cross_entropy" else 5, PythonObject(1), entries, context)
-        var classes = fields["classes_"]
-        var labels = sequential_array(Python.tuple(codes.shape[0]), classes.dtype, context)
-        _ = py_call_typed(entries["model_gather_labels"], Python.list(sequential_address(codes), sequential_address(classes), sequential_address(labels)),
-            Python.list(codes.shape[0], classes.shape[0], classes.dtype.itemsize))
-        _ = codes^
-        _ = classes^
-        return labels
+        # one entry: the argmax (threshold) codes stay on the device and are
+        # gathered there into the labels (`model_predict_labels`)
+        return sequential_forward(model, source, 4 if loss == "cross_entropy" else 5, PythonObject(1), entries,
+                                  context, fields["classes_"])
     var result = sequential_forward(model, source, 0, PythonObject(None), entries, context)
     if Bool(py=py_get(fields, "_y_1d", False)):
         # A one-output model is already contiguous. The native ndarray

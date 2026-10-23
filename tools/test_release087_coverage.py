@@ -80,6 +80,8 @@ class CoverageTests(unittest.TestCase):
 
     def run_ordered(self, balanced=False, mutate=False):
         def ordered(parts):
+            # Mirror the native boundary: do not consume Python iterator hooks.
+            assert type(parts) in (list, tuple), "native shard container required"
             parts = list(parts)
             def add(a, b):
                 return [np.add(x, y, dtype=np.float32) for x, y in zip(a, b)]

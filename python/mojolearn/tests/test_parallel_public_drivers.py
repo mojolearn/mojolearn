@@ -61,7 +61,8 @@ def _data(rows=256, cols=8, seed=0):
     rng = np.random.default_rng(seed)
     X = np.ascontiguousarray(rng.standard_normal((rows, cols)).astype(np.float32))
     yc = (X[:, 0] + X[:, 1] > 0).astype(np.int64)
-    yr = np.ascontiguousarray((X[:, 0] - 0.5 * X[:, 2]).astype(np.float32))
+    # the regression target reads the last column when fewer than three exist
+    yr = np.ascontiguousarray((X[:, 0] - 0.5 * X[:, min(2, cols - 1)]).astype(np.float32))
     return X, yc, yr
 
 
