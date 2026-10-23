@@ -333,6 +333,7 @@ def _schema_whole(fields: PythonObject, item: PythonObject, name: String,
         var total = 0
         for i in range(len(nodes)):  # driver-loop: over the kernel's postfix nodes
             total += len(nodes[i][2])
+        return total
     if kind == "sum":
         var elements = _schema_list(_schema_value(fields, item[1], name), _schema_label(item[1]))
         var total = 0
