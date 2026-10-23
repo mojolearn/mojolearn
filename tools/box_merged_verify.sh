@@ -43,7 +43,7 @@ mb() { tag=$1; shift; /usr/bin/time -v env "$@" pixi run -q sh bindings/merged_b
 BOX_BUILDS="${BOX_BUILDS:-gpu-identical gpu-fast host}"
 for b in $BOX_BUILDS; do case "$b" in
   gpu-identical) mb gpu-identical $ARCHENV MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_PACKAGE_BYTE_LM=1 & ;;
-  gpu-fast) mb gpu-fast $ARCHENV MOJOLEARN_NUMERIC_MODE=fast & ;;
+  gpu-fast) mb gpu-fast $ARCHENV MOJOLEARN_NUMERIC_MODE=fast MOJOLEARN_PACKAGE_BYTE_LM=1 & ;;
   host) mb host MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_PACKAGE_BYTE_LM=1 & ;;
   *) st "unknown BOX_BUILDS entry $b" ;;
 esac; done
