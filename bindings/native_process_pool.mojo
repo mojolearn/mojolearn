@@ -224,15 +224,30 @@ def _process_reap(pid: Int) raises:
 
 
 def process_pool_close(pool: PythonObject) raises:
+    _process_pool_close(pool, False)
+
+
+def _process_pool_close(pool: PythonObject, abort: Bool) raises:
     var workers = pool["workers"]
     var bi = PROCESS_BOUNDARY.get_or_create_ptr()[].bi
     py_setitem(pool, "workers", bi.list())
     py_setitem(pool, "closed", True)
     var failure = String()
+    if abort:
+        # Cancel every owned child before serial reaping; do not spend one
+        # full grace interval per still-running peer or drain its reply.
+        for i in range(len(workers)):  # driver-loop: signal the authenticated owned worker set
+            try:
+                transport_terminate(Int(py=workers[i]["pid"]))
+            except:
+                pass  # Reap below distinguishes an already-exited child.
     for i in range(len(workers)):  # driver-loop: over owned worker sockets and process IDs
         var worker = workers[i]
-        if worker["socket"] is not None:
+        if worker["socket"] is not None and not abort:
             try:
+                # Cleanup must not inherit the unbounded training timeout.
+                # A nonreading worker can fill its socket before close starts.
+                transport_timeout(worker["socket"], 1.0)
                 process_send(worker["socket"], "close", -1, PythonObject(None))
             except:
                 # Failed workers can already have closed their socket. Their
@@ -304,7 +319,7 @@ def process_pool_start(pool: PythonObject) raises:
     except error:
         transport_close(server)
         try:
-            process_pool_close(pool)
+            _process_pool_close(pool, String(error).startswith("InterruptedError:"))
         except cleanup_error:
             raise Error("RuntimeError: native process startup failed: " + String(error) + "; cleanup also failed: " + String(cleanup_error))
         py_setitem(pool, "closed", False)
@@ -338,6 +353,8 @@ def process_pool_map(pool: PythonObject, requests: PythonObject) raises -> Pytho
                         raise Error("process: unexpected worker response")
                     _ = py_call(result.append, reply[1])
                 except error:
+                    if String(error).startswith("InterruptedError:"):
+                        raise error  # Cancel instead of draining unbounded peer replies.
                     if failure == "":
                         failure = String(error)
             if failure != "":
@@ -347,7 +364,7 @@ def process_pool_map(pool: PythonObject, requests: PythonObject) raises -> Pytho
             py_setitem(pool, "sequence", sequence)
     except error:
         try:
-            process_pool_close(pool)
+            _process_pool_close(pool, String(error).startswith("InterruptedError:"))
         except cleanup_error:
             raise Error("RuntimeError: native process request failed: " + String(error) + "; cleanup also failed: " + String(cleanup_error))
         py_setitem(pool, "closed", False)
@@ -377,7 +394,7 @@ def process_pool_call(pool: PythonObject, worker_index: Int, request: PythonObje
         py_setitem(pool, "sequence", sequence + 1)
     except error:
         try:
-            process_pool_close(pool)
+            _process_pool_close(pool, String(error).startswith("InterruptedError:"))
         except cleanup_error:
             raise Error("RuntimeError: native process request failed: " + String(error) + "; cleanup also failed: " + String(cleanup_error))
         py_setitem(pool, "closed", False)
@@ -463,6 +480,8 @@ def process_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectP
         var result = process_call(String(args[0]), args[1])
         return result.steal_data()
     except error:
+        if String(error).startswith("InterruptedError:"):
+            return raise_python_exception(error_without_class(error, "InterruptedError"), ExceptionType("PyExc_InterruptedError"))
         if String(error).startswith("NotImplementedError:"):
             return raise_python_exception(error_without_class(error, "NotImplementedError"), ExceptionType("PyExc_NotImplementedError"))
         if String(error).startswith("RuntimeError:"):

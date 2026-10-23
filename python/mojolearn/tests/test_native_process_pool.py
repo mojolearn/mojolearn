@@ -251,3 +251,75 @@ def test_worker_setup_environment_override_is_local_metadata(flag):
 def test_worker_setup_metadata_cannot_override_route_or_run_conversion(override):
     with pytest.raises(ValueError, match='environment'):
         call('environment', ((0,), (0,), override))
+
+
+def test_interrupted_wave_does_not_drain_hung_peers_and_reaps_children(tmp_path):
+    import subprocess
+    import textwrap
+    worker = tmp_path / 'native_transport_cancel_peer.py'
+    worker.write_text(textwrap.dedent('''\
+        # Independent protocol oracle, not a product worker implementation.
+        import json, os, socket, struct, sys, time
+        from pathlib import Path
+        sock = socket.create_connection(('127.0.0.1', int(sys.argv[1])))
+        raw = json.dumps(dict(kind='hello', token=sys.argv[2], pid=os.getpid(),
+                             vendor=os.environ['MOJOLEARN_VENDOR'], nbytes=0)).encode()
+        sock.sendall(struct.pack('>I', len(raw)) + raw)
+        def exact(count):
+            result = b''
+            while len(result) < count:
+                part = sock.recv(count - len(result))
+                if not part:
+                    raise SystemExit(0)
+                result += part
+            return result
+        header = json.loads(exact(struct.unpack('>I', exact(4))[0]))
+        exact(header['nbytes'])
+        Path(os.environ['MOJOLEARN_TEST_READY'], str(os.getpid())).write_text('request received')
+        # Even a failing regression is bounded and cannot leave immortal peers.
+        time.sleep(12)
+    '''))
+    ready = tmp_path / 'ready'
+    ready.mkdir()
+    program = textwrap.dedent('''\
+        import json, os, signal, sys, time
+        from pathlib import Path
+        from mojolearn._native_process import _native_process as call
+        call('initialize', (sys.executable, os.environ._data, 'cpu'))
+        pool = call('create', ((0, 1), False, 'native_transport_cancel_peer'))
+        seen = []
+        def handler(signum, frame):
+            seen.append(signum)  # A nonraising handler still cancels native wait.
+        signal.signal(signal.SIGALRM, handler)
+        started = time.monotonic()
+        signal.setitimer(signal.ITIMER_REAL, 3)
+        try:
+            call('map', (pool, ['hold-first', 'hold-second']))
+        except InterruptedError:
+            pass
+        else:
+            raise AssertionError('interrupted map returned success')
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            call('close', (pool,))
+        elapsed = time.monotonic() - started
+        assert seen == [signal.SIGALRM], seen
+        assert elapsed < 7, elapsed
+        pids = [int(path.name) for path in Path(os.environ['MOJOLEARN_TEST_READY']).iterdir()]
+        assert len(pids) == 2, pids  # Both requests were in flight, not just startup.
+        assert pool['workers'] == [], pool
+        for pid in pids:
+            try:
+                os.waitpid(pid, os.WNOHANG)
+            except ChildProcessError:
+                pass
+            else:
+                raise AssertionError('native close did not reap child ' + str(pid))
+        print(json.dumps({'reaped': len(pids), 'elapsed': elapsed}))
+    ''')
+    env = dict(os.environ, MOJOLEARN_VENDOR='cpu', MOJOLEARN_TEST_READY=str(ready))
+    env['PYTHONPATH'] = str(tmp_path) + os.pathsep + env.get('PYTHONPATH', '')
+    result = subprocess.run([sys.executable, '-c', program], env=env,
+                            capture_output=True, text=True, timeout=25)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert json.loads(result.stdout.strip().splitlines()[-1])['reaped'] == 2

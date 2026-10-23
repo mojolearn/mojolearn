@@ -413,6 +413,8 @@ def transport_call(operation: String, args: PythonObject) raises -> PythonObject
         return transport_receive(args[0], Int(py=args[1]))
     elif operation == "close":
         transport_close(args[0])
+    elif operation == "sleep":
+        transport_sleep(Float64(py=args[0]))
     elif operation == "spawn":
         var argv = List[String]()
         var environment = List[String]()
@@ -436,4 +438,6 @@ def transport_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         var result = transport_call(String(args[0]), args[1])
         return result.steal_data()
     except error:
+        if String(error).startswith("InterruptedError:"):
+            return raise_python_exception(error_without_class(error, "InterruptedError"), ExceptionType("PyExc_InterruptedError"))
         return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))

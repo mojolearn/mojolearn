@@ -337,3 +337,65 @@ with open(sys.argv[2], 'w') as output:
         assert json.loads(output.read_text()) == []
     finally:
         native('close', (server,))
+
+
+@pytest.mark.parametrize('operation', ['accept', 'receive', 'wait', 'sleep'])
+@pytest.mark.parametrize('handler_raises', [False, True])
+def test_interrupted_syscalls_return_without_swallowing_signal_handlers(operation, handler_raises):
+    import subprocess
+    import sys
+    import textwrap
+    program = textwrap.dedent('''\
+        import json, os, signal, sys, time
+        from mojolearn import _backend
+        native = _backend.load_host_module('_mojolearn_tokenizer_host').native_transport_call
+        native('initialize', ())
+        operation, handler_raises = sys.argv[1], sys.argv[2] == 'True'
+        seen, handles, pid = [], [], None
+        class SignalRaised(Exception):
+            pass
+        def handler(signum, frame):
+            seen.append(signum)
+            if handler_raises:
+                raise SignalRaised('application signal handler preserved')
+        signal.signal(signal.SIGALRM, handler)
+        if operation in ('accept', 'receive'):
+            server = native('listen', ('127.0.0.1', 0, 60.0))
+            handles.append(server)
+            args = (server, 60.0)
+            if operation == 'receive':
+                client = native('connect', ('127.0.0.1', native('port', (server,)), 60.0))
+                handles.append(client)
+                accepted = native('accept', (server, 60.0))
+                handles.append(accepted)
+                native('timeout', (accepted, -1.0))
+                args = (accepted, 0)
+        elif operation == 'wait':
+            pid = native('spawn', ('/bin/sleep', ['/bin/sleep', '60'], ['PATH=/usr/bin:/bin']))
+            args = (pid, False)
+        else:
+            args = (60.0,)
+        started = time.monotonic()
+        outcome = None
+        signal.setitimer(signal.ITIMER_REAL, 0.1)
+        try:
+            native(operation, args)
+        except (InterruptedError, SignalRaised) as error:
+            outcome = type(error).__name__
+        finally:
+            signal.setitimer(signal.ITIMER_REAL, 0)
+            elapsed = time.monotonic() - started
+            if pid is not None:
+                os.kill(pid, signal.SIGKILL)
+                os.waitpid(pid, 0)
+            for handle in reversed(handles):
+                native('close', (handle,))
+        assert elapsed < 3, elapsed
+        assert seen == [signal.SIGALRM], seen
+        assert outcome == ('SignalRaised' if handler_raises else 'InterruptedError'), outcome
+        print(json.dumps({'operation': operation, 'outcome': outcome, 'elapsed': elapsed}))
+    ''')
+    result = subprocess.run([sys.executable, '-c', program, operation, str(handler_raises)],
+                            capture_output=True, text=True, timeout=15)
+    assert result.returncode == 0, result.stdout + result.stderr
+    assert json.loads(result.stdout.strip().splitlines()[-1])['operation'] == operation

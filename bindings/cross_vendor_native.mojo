@@ -218,6 +218,8 @@ def cross_vendor_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyOb
     except error:
         if io_error.pending:
             return io_error^.restore()
+        if String(error).startswith("InterruptedError:"):
+            return raise_python_exception(error_without_class(error, "InterruptedError"), ExceptionType("PyExc_InterruptedError"))
         if String(error).startswith("CrossVendorMismatch:"):
             try:
                 ref cpy = Python().cpython()
@@ -865,6 +867,8 @@ def cross_vendor_worker_connect(owner: PythonObject) raises -> PythonObject:
             transport_timeout(socket, Float64(py=owner.timeout))
             return socket
         except error:
+            if String(error).startswith("InterruptedError:"):
+                raise error
             if transport_clock() > deadline:
                 raise error
             transport_sleep(2.0)
@@ -905,6 +909,8 @@ def cross_vendor_worker_run(owner: PythonObject, mut io_error: ByteCheckpointIOE
             break
         except error:
             transport_close(socket)
+            if String(error).startswith("InterruptedError:"):
+                raise error
             if transport_clock() > deadline:
                 raise error
             transport_sleep(5.0)

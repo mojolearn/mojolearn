@@ -21,6 +21,13 @@ def posix_errno() -> Int:
 
 
 def posix_failure(operation: String, number: Int) raises:
+    # CPython's low-level signal handler only marks pending application work.
+    # Retrying EINTR here could swallow Ctrl-C forever; PyErr_CheckSignals
+    # would call Python inside the product operation. Return native cancellation
+    # instead, so cleanup runs and the interpreter resumes its handler after
+    # the binding returns. Even non-raising handlers interrupt this operation.
+    if number == 4:
+        raise Error("InterruptedError: transport: " + operation + " interrupted by an OS signal")
     raise Error("transport: " + operation + " failed (errno " + String(number) + ")")
 
 
@@ -43,17 +50,12 @@ def posix_sleep(seconds: Float64) raises:
     ref cpy = Python().cpython()
     var release = cpy.lib.get_function[PosixBytes]("PyEval_SaveThread")
     var restore = cpy.lib.get_function[NoneType]("PyEval_RestoreThread")
-    while True:  # driver-loop: retry interrupted native sleep using its remaining interval
-        var thread = release()
-        var status = external_call["nanosleep", c_int](request.unsafe_ptr(), remaining.unsafe_ptr())
-        var number = posix_errno()
-        restore(thread)
-        if status == 0:
-            return
-        if number != 4:  # EINTR: continue the remaining native sleep.
-            posix_failure("nanosleep", number)
-        request[0] = remaining[0]
-        request[1] = remaining[1]
+    var thread = release()
+    var status = external_call["nanosleep", c_int](request.unsafe_ptr(), remaining.unsafe_ptr())
+    var number = posix_errno()
+    restore(thread)
+    if status != 0:
+        posix_failure("nanosleep", number)
 
 
 def posix_close(fd: Int):
@@ -79,7 +81,7 @@ def posix_ready(fd: Int, writing: Bool, deadline: Float64) raises:
     var words = Array[Int32, 2](Int32(fd), Int32(0))
     var shorts = MutPointer[Int16, MutUntrackedOrigin](unsafe_from_address=Int(words.unsafe_ptr()))
     shorts[2] = Int16(4 if writing else 1)  # POLLOUT / POLLIN
-    while True:  # driver-loop: EINTR does not restart the operation deadline
+    while True:  # driver-loop: bounded native readiness wait
         var milliseconds = -1
         if deadline >= 0:
             var remaining = deadline - posix_clock()
@@ -107,8 +109,7 @@ def posix_ready(fd: Int, writing: Bool, deadline: Float64) raises:
             return  # read/write/getsockopt reports EOF and other socket errors.
         if status == 0:
             raise Error("transport: operation timed out")
-        if number != 4:
-            posix_failure("poll", number)
+        posix_failure("poll", number)
 
 
 def posix_socket_prepare(fd: Int) raises:
@@ -151,10 +152,16 @@ def posix_resolve(host: String, port: Int, passive: Bool) raises -> Int:
     var restore = cpy.lib.get_function[NoneType]("PyEval_RestoreThread")
     var thread = release()
     var status = external_call["getaddrinfo", c_int](hostname, service_pointer, hints.unsafe_ptr(), result.unsafe_ptr())
+    var number = posix_errno()
     restore(thread)
     _ = host
     _ = service^
     if status != 0:
+        var system_error = -11  # EAI_SYSTEM
+        comptime if CompilationTarget.is_macos():
+            system_error = 11
+        if Int(status) == system_error:
+            posix_failure("getaddrinfo", number)
         raise Error("transport: address resolution failed (EAI " + String(status) + ")")
     return result[0]
 
@@ -197,7 +204,7 @@ def posix_open(host: String, port: Int, timeout: Float64, listening: Bool) raise
                             var pending = number == 115 or number == 114
                             comptime if CompilationTarget.is_macos():
                                 pending = number == 36 or number == 37
-                            if not pending and number != 4 and not posix_again(number):
+                            if number == 4 or (not pending and not posix_again(number)):
                                 posix_failure("connect", number)
                             posix_ready(fd, True, posix_deadline(timeout))
                             var error = Array[c_int, 1](c_int(0))
@@ -215,6 +222,8 @@ def posix_open(host: String, port: Int, timeout: Float64, listening: Bool) raise
                 except error:
                     failure = String(error)
                     posix_close(fd)
+                    if failure.startswith("InterruptedError:"):
+                        raise error
             else:
                 failure = "transport: socket failed (errno " + String(posix_errno()) + ")"
             current = info[5]
@@ -228,7 +237,11 @@ def posix_accept(fd: Int, timeout: Float64) raises -> Int:
     var deadline = posix_deadline(timeout)
     while True:  # driver-loop: accept readiness can race another OS event
         posix_ready(fd, False, deadline)
-        var child = Int(external_call["accept", c_int](c_int(fd), Optional[PosixBytes](None), Optional[PosixBytes](None)))
+        var child = -1
+        comptime if CompilationTarget.is_linux():
+            child = Int(external_call["accept4", c_int](c_int(fd), Optional[PosixBytes](None), Optional[PosixBytes](None), c_int(0x80800)))
+        else:
+            child = Int(external_call["accept", c_int](c_int(fd), Optional[PosixBytes](None), Optional[PosixBytes](None)))
         if child >= 0:
             try:
                 posix_socket_prepare(child)
@@ -237,7 +250,7 @@ def posix_accept(fd: Int, timeout: Float64) raises -> Int:
                 raise
             return child
         var number = posix_errno()
-        if number != 4 and not posix_again(number):
+        if not posix_again(number):
             posix_failure("accept", number)
 
 
@@ -260,7 +273,7 @@ def posix_transfer(fd: Int, pointer: PosixBytes, count: Int, timeout: Float64, w
             raise Error("transport: peer closed the connection")
         else:
             var number = posix_errno()
-            if number != 4 and not posix_again(number):
+            if not posix_again(number):
                 posix_failure("send" if writing else "receive", number)
 
 
@@ -300,15 +313,14 @@ def posix_wait(pid: Int, nohang: Bool) raises -> Int:
     ref cpy = Python().cpython()
     var release = cpy.lib.get_function[PosixBytes]("PyEval_SaveThread")
     var restore = cpy.lib.get_function[NoneType]("PyEval_RestoreThread")
-    while True:  # driver-loop: wait for the specified child only
-        var thread = release()
-        var found = external_call["waitpid", c_int](c_int(pid), status.unsafe_ptr(), c_int(1 if nohang else 0))
-        var number = posix_errno()
-        restore(thread)
-        if found >= 0:
-            return -1 if found == 0 else Int(status[0])
-        if number != 4:
-            posix_failure("waitpid", number)
+    var thread = release()
+    var found = external_call["waitpid", c_int](c_int(pid), status.unsafe_ptr(), c_int(1 if nohang else 0))
+    var number = posix_errno()
+    restore(thread)
+    if found >= 0:
+        return -1 if found == 0 else Int(status[0])
+    posix_failure("waitpid", number)
+    return -1  # posix_failure always raises
 
 
 def posix_terminate(pid: Int, signal: Int) raises:
