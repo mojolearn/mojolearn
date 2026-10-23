@@ -19,6 +19,12 @@ Nothing here runs when a public method is called.
 _ENTRY = None
 _CONTEXT = None
 
+# Only these schemas use forest_estimator's constructor metadata and the
+# trees_public_lifecycle_native envelope. Other registered tree owners retain
+# their own native constructor/public-operation connections.
+_PUBLIC_FOREST_KINDS = ("rf_classifier", "rf_regressor", "et_classifier", "et_regressor",
+                        "dt_classifier", "dt_regressor")
+
 #: The tree bindings the owner launches, by numeric mode.
 _TREE_BINDINGS = ("_mojolearn_rf", "_mojolearn_trees", "_mojolearn_x_trees", "_mojolearn_metrics",
                   "_mojolearn_svm", "_mojolearn_gbdt", "_mojolearn_estimators", "_mojolearn_x_neighbors")
@@ -170,6 +176,9 @@ def register(cls, kind, **tables):
     _, context = connect()
     if "trees_unavailable" in context:
         return
+    public_forest = kind in _PUBLIC_FOREST_KINDS
+    if public_forest and cls not in context["trees_constructors"]:
+        raise TypeError("native public forests require constructor metadata before registration")
     import inspect
     context["trees_classes"][cls] = kind
     # The constructor defaults, for an estimator the owner assembles itself
@@ -180,13 +189,15 @@ def register(cls, kind, **tables):
         if name != "self" and p.default is not inspect.Parameter.empty}
     for key, value in tables.items():  # glue: the class's fixed lookup tables, once at definition
         context.setdefault(key, value)
-    _connect_public_forest(cls, context)
+    if public_forest:
+        _connect_public_forest(cls, context)
 
 
 def _connect_public_forest(cls, context):
     # Connect the existing native fit/predict owner to the exact built-in
     # classes. Unwrap only the known mode/validation/output decorators: their
     # semantics now live in trees_public_lifecycle_native, not Python frames.
+    rows, getter, previous = context['trees_constructors'][cls]
     import inspect
     from types import BuiltinFunctionType, MethodType
     from .tokenizer import _binding
@@ -208,7 +219,6 @@ def _connect_public_forest(cls, context):
     context['classical_attribute_descriptor'] = descriptor
     # Constructor metadata was captured before the native attribute slot was
     # installed. Retain its final hook identities without runtime inspection.
-    rows, getter, previous = context['trees_constructors'][cls]
     ancestry = type.__dict__['__mro__'].__get__(cls)
     namespaces = tuple(type.__dict__['__dict__'].__get__(base) for base in ancestry)  # glue: final connected storage layout
     hooks = tuple((name, next((row[name] for row in namespaces if name in row), None))  # glue: import-time inherited hook lookup
