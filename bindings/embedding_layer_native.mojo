@@ -134,7 +134,7 @@ def _drop_table(fields: PythonObject, context: PythonObject):
         if tok is None:
             return
         _ = py_call(fields.pop, "_table_tok", PythonObject(None))
-        var entries = _entries(fields, context)
+        var entries = _entries(fields, context, PythonObject(None))
         if py_contains(entries, "embedding_table_release"):
             _ = py_call(entries["embedding_table_release"], tok)
     except:
