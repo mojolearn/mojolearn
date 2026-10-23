@@ -26,7 +26,7 @@ from bindings.msel_common import (
     msel_int, msel_op, msel_cmp, msel_materialize, msel_try_materialize, msel_flatten, msel_is_array, msel_addr,
     msel_p64, msel_pf64, msel_new, msel_new2, msel_f64_list, msel_f64_block, msel_i64_list, msel_i32_list,
     msel_slice_i64, msel_index_i64, msel_resident_new, msel_resident_take, msel_resident_release,
-    msel_resident_close, msel_get_scorer, msel_score, MselRng, MselGroups, msel_apply,
+    msel_resident_close, msel_get_scorer, msel_score, msel_admit, MselRng, MselGroups, msel_apply,
 )
 from bindings.msel_split import msel_truth, msel_cls, msel_sabotage
 from bindings.msel_cv import (
@@ -34,38 +34,40 @@ from bindings.msel_cv import (
     msel_cross_validate_run, msel_seconds, msel_fit,
 )
 
+from bindings.msel_estimator_native import msel_native_set_params, msel_estimator_plan
+from bindings.msel_search_state import msel_search_fields, msel_parameter_values
+
 
 # ---------------------------------------------------------------- parameter grids
 
 
-def msel_grid_dicts(param_grid_in: PythonObject) raises -> PythonObject:
-    """`ParameterGrid(param_grid).param_grid`: the constructor's checks and
-    its list of dicts."""
+def msel_grid_dicts(param_grid_in: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = msel_b()
     var param_grid = param_grid_in
-    if family_isinstance(param_grid, b.dict):
+    if py_type(param_grid) is b.dict:
         param_grid = py_call(b.list, Python.tuple(param_grid))
-    if not family_isinstance(param_grid, Python.tuple(b.list, b.tuple)):
-        raise Error("TypeError: Parameter grid should be a dict or a list, got: " + family_repr(param_grid))
+    if py_type(param_grid) is not b.list and py_type(param_grid) is not b.tuple:
+        raise Error("TypeError: Parameter grid requires a native dict or list of dicts; Python iterator hooks are not supported")
     var out = Python.list()
-    for i in range(len(param_grid)):  # driver-loop: over the candidate dicts
+    for i in range(len(param_grid)):  # driver-loop: admitted candidate dictionaries
         var g = param_grid[i]
-        if not family_isinstance(g, b.dict):
-            raise Error("TypeError: Parameter grid is not a dict (" + family_repr(g) + ")")
-        var items = py_call(b.list, family_call(g.items))
-        for j in range(len(items)):  # driver-loop: over a grid's parameters
-            var k = items[j][0]
-            var v = items[j][1]
-            if family_is_str(v) or not msel_truth(py_call(b.hasattr, v, PythonObject("__iter__"))):
-                raise Error("TypeError: Parameter grid for parameter " + family_repr(k) + " needs to be a list, got: "
-                            + family_repr(v))
-            if len(family_call(b.list, v)) == 0:
-                raise Error("Parameter grid for parameter " + family_repr(k) + " need to be a non-empty sequence.")
-        _ = py_call(out.append, family_call(b.dict, g))
+        if py_type(g) is not b.dict:
+            raise Error("TypeError: Parameter grid requires native dictionaries")
+        var keys = py_call(b.list, g.keys())
+        var stored = Python.dict()
+        for j in range(len(keys)):  # driver-loop: parameter names and native value containers
+            var key = keys[j]
+            if py_type(key) is not b.str:
+                raise Error("TypeError: parameter names must be exact strings")
+            var values = msel_parameter_values(g[key], context)
+            if len(values) == 0:
+                raise Error("Parameter grid for parameter " + String(py_call(b.repr, key)) + " need to be a non-empty sequence.")
+            py_setitem(stored, key, g[key])
+        _ = py_call(out.append, stored)
     return out
 
 
-def msel_grid_list(param_grid: PythonObject) raises -> PythonObject:
+def msel_grid_list(param_grid: PythonObject, context: PythonObject) raises -> PythonObject:
     """`list(ParameterGrid)` from its stored dicts: every combination of
     each dict's values, keys sorted, dicts in list order."""
     var b = msel_b()
@@ -79,14 +81,14 @@ def msel_grid_list(param_grid: PythonObject) raises -> PythonObject:
             continue
         var values = Python.list()
         for j in range(len(keys)):  # driver-loop: over a grid's parameters
-            _ = py_call(values.append, family_call(b.list, family_call(py_attr(g, "__getitem__"), keys[j])))
+            _ = py_call(values.append, msel_parameter_values(g[keys[j]], context))
         var combos = family_call(b.list, msel_apply(itertools.product, py_call(b.tuple, values)))
         for c in range(len(combos)):  # driver-loop: over candidates
             _ = py_call(out.append, family_call(b.dict, py_call(b.zip, keys, combos[c])))
     return out
 
 
-def msel_grid_len(param_grid: PythonObject) raises -> Int:
+def msel_grid_len(param_grid: PythonObject, context: PythonObject) raises -> Int:
     """`len(ParameterGrid)`."""
     var b = msel_b()
     var total = 0
@@ -94,38 +96,41 @@ def msel_grid_len(param_grid: PythonObject) raises -> Int:
         var size = 1
         var values = py_call(b.list, family_call(param_grid[i].values))
         for j in range(len(values)):  # driver-loop: over a grid's parameters
-            size *= len(family_call(b.list, values[j]))
+            size *= len(msel_parameter_values(values[j], context))
         total += size
     return total
 
 
-def msel_sampler_check(param_distributions_in: PythonObject) raises -> PythonObject:
-    """`ParameterSampler.__init__`'s checks; returns its distributions."""
+def msel_sampler_check(param_distributions_in: PythonObject, context: PythonObject) raises -> PythonObject:
+    # The public contract already excludes scipy.stats distributions. Refuse
+    # custom iterators/distributions without reading an rvs/__iter__ property.
     var b = msel_b()
-    var dists = param_distributions_in
-    if family_isinstance(dists, b.dict):
-        dists = py_call(b.list, Python.tuple(dists))
-    var seq = family_call(b.list, dists)
-    for i in range(len(seq)):  # driver-loop: over the candidate dicts
-        var items = py_call(b.list, family_call(seq[i].items))
-        for j in range(len(items)):  # driver-loop: over a grid's parameters
-            var k = items[j][0]
-            var v = items[j][1]
-            if msel_truth(py_call(b.hasattr, v, PythonObject("rvs"))):
-                raise Error("NotImplementedError: mojolearn ParameterSampler: " + family_repr(k) + " is a scipy.stats "
-                            + "distribution; its draws are numpy's, so only lists are sampled here "
-                            + "(x_metrics/split.mojo DEVIATION 6108)")
-            if family_is_str(v) or not msel_truth(py_call(b.hasattr, v, PythonObject("__iter__"))):
-                raise Error("TypeError: Parameter value for " + family_repr(k) + " is not a list or a distribution ("
-                            + family_repr(v) + ")")
-    return dists
+    var rows = Python.tuple(param_distributions_in) if py_type(param_distributions_in) is b.dict else param_distributions_in
+    if py_type(rows) is not b.list and py_type(rows) is not b.tuple:
+        raise Error("TypeError: parameter distributions require native dictionaries")
+    for k in range(len(rows)):  # driver-loop: distribution refusal reads class dictionaries, never rvs properties
+        if py_type(rows[k]) is not b.dict:
+            raise Error("TypeError: parameter distributions require native dictionaries")
+        var items = py_call(b.list, rows[k].items())
+        for j in range(len(items)):  # driver-loop: distribution value identities before protocol inspection
+            var cls = py_type(items[j][1])
+            if py_type(cls) is not b.type:
+                raise Error("TypeError: parameter distributions cannot invoke Python metaclass hooks")
+            var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
+            for a in range(len(mro)):  # driver-loop: native class dictionary metadata, no descriptor binding
+                var fields = py_call(b.type.__dict__["__dict__"].__get__, mro[a])
+                if py_contains(fields, "rvs"):
+                    raise Error("NotImplementedError: mojolearn ParameterSampler samples native parameter lists; scipy.stats and Python distribution callbacks are not supported")
+    return msel_grid_dicts(param_distributions_in, context)
 
 
 def msel_sampler_list(dists: PythonObject, n_iter_in: PythonObject, random_state: PythonObject,
                       context: PythonObject) raises -> PythonObject:
     """`list(ParameterSampler)`: a random permutation of the full grid,
     its first n_iter combinations."""
-    var grid = msel_grid_list(msel_grid_dicts(dists))
+    msel_admit(n_iter_in, context)
+    msel_admit(random_state, context)
+    var grid = msel_grid_list(msel_grid_dicts(dists, context), context)
     var n_iter = n_iter_in
     if msel_cmp("lt", PythonObject(len(grid)), n_iter):
         msel_warn("The total space of parameters " + String(len(grid)) + " is smaller than n_iter="
@@ -134,13 +139,18 @@ def msel_sampler_list(dists: PythonObject, n_iter_in: PythonObject, random_state
         n_iter = PythonObject(len(grid))
     var rng = MselRng(random_state, context)
     var perm = rng.permutation(len(grid), context)
-    var head = py_call(py_attr(perm, "__getitem__"), py_call(msel_b().slice, PythonObject(None), n_iter))
-    return py_call(msel_b().list, py_call(msel_b().map, py_call(msel_b().getattr, grid, PythonObject("__getitem__")), head))
+    var head = py_call(perm.__getitem__, py_call(msel_b().slice, PythonObject(None), n_iter))
+    var out = Python.list()
+    for k in range(len(head)):  # driver-loop: native permutation indices choose parameter dictionaries
+        _ = py_call(out.append, grid[Int(py=head[k])])
+    _ = perm  # the native RNG returns a plain list of integer indices
+    return out
 
 
-def msel_sampler_len(dists: PythonObject, n_iter: PythonObject) raises -> PythonObject:
+def msel_sampler_len(dists: PythonObject, n_iter: PythonObject, context: PythonObject) raises -> PythonObject:
     """`len(ParameterSampler)`."""
-    return family_call(msel_b().min, n_iter, PythonObject(msel_grid_len(msel_grid_dicts(dists))))
+    msel_admit(n_iter, context)
+    return family_call(msel_b().min, n_iter, PythonObject(msel_grid_len(msel_grid_dicts(dists, context), context)))
 
 
 # ---------------------------------------------------------------- score tables
@@ -234,56 +244,52 @@ def _i32_from_list(values: PythonObject, context: PythonObject) raises -> Python
 # ---------------------------------------------------------------- search
 
 
-def _set_params(est: PythonObject, params: PythonObject) raises:
-    """`est.set_params(**params)`, or one setattr per parameter."""
-    var b = msel_b()
-    if msel_truth(py_call(b.hasattr, est, PythonObject("set_params"))):
-        _ = family_call_kw(family_call(b.getattr, est, PythonObject("set_params")), params)
-    else:
-        var items = py_call(b.list, family_call(params.items))
-        for i in range(len(items)):  # driver-loop: over candidate parameters
-            _ = family_call(b.setattr, est, items[i][0], items[i][1])
+def _set_params(est: PythonObject, params: PythonObject, context: PythonObject) raises:
+    _ = msel_native_set_params(est, params, context)
 
 
 def msel_candidates(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`list(self._candidates())`: GridSearchCV's grid, RandomizedSearchCV's
-    sample, or a subclass's own `_candidates`."""
-    var b = msel_b()
+    var fields = msel_search_fields(model, context)
     var kind = py_type(model)
     if kind is msel_cls("GridSearchCV", context):
-        return msel_grid_list(msel_grid_dicts(family_call(b.getattr, model, PythonObject("param_grid"))))
+        return msel_grid_list(msel_grid_dicts(fields["param_grid"], context), context)
     if kind is msel_cls("RandomizedSearchCV", context):
-        var dists = msel_sampler_check(family_call(b.getattr, model, PythonObject("param_distributions")))
-        return msel_sampler_list(dists, family_call(b.getattr, model, PythonObject("n_iter")),
-                                 family_call(b.getattr, model, PythonObject("random_state")), context)
-    return family_call(b.list, family_call(family_call(b.getattr, model, PythonObject("_candidates"))))
+        var dists = msel_sampler_check(fields["param_distributions"], context)
+        msel_admit(fields["n_iter"], context)
+        msel_admit(fields["random_state"], context)
+        return msel_sampler_list(dists, fields["n_iter"], fields["random_state"], context)
+    raise Error("TypeError: Python candidate callbacks are not supported; use GridSearchCV or RandomizedSearchCV")
 
 
 def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_BaseSearch.fit(X, y, groups=...)`."""
     var b = msel_b()
+    var fields = msel_search_fields(model, context)
     var x_in = args[0]
     var y_in = args[1]
     var groups = args[2]
-    var estimator = family_call(b.getattr, model, PythonObject("estimator"))
-    var error_score = family_call(b.getattr, model, PythonObject("error_score"))
-    msel_require_serial(family_call(b.getattr, model, PythonObject("n_jobs")), error_score,
+    var estimator = fields["estimator"]
+    var error_score = fields["error_score"]
+    msel_require_serial(fields["n_jobs"], error_score,
                         String(py=py_type(model).__name__), context)
+    _ = msel_estimator_plan(estimator, context)
+    msel_admit(fields["n_jobs"], context)
+    msel_admit(error_score, context)
     var candidates = msel_candidates(model, context)
     if len(candidates) == 0:
         raise Error("No fits were performed. Was the CV iterator empty? Were there no candidates?")
-    var scoring_in = family_call(b.getattr, model, PythonObject("scoring"))
-    var refit = family_call(b.getattr, model, PythonObject("refit"))
+    var scoring_in = fields["scoring"]
+    var refit = fields["refit"]
     var multi = msel_scorers(scoring_in, context)
     var refit_false = refit is PythonObject(False)
-    if multi is not None and not refit_false and (
-            not family_is_str(refit) or not py_contains(multi, refit)) and not msel_truth(py_call(b.callable, refit)):
-        raise Error("For multi-metric scoring, the parameter refit must be set to a scorer key "
-                    + "or a callable to refit an estimator with the best parameter setting on the "
-                    + "whole data and make the best_* attributes available for that metric.")
+    if py_type(refit) is not b.bool and py_type(refit) is not b.str:
+        raise Error("TypeError: Python refit callbacks are not supported; use a native bool or scorer-name refit policy")
+    if multi is not None and not refit_false and (py_type(refit) is not b.str or not py_contains(multi, refit)):
+        raise Error("For multi-metric scoring, refit must be False or a scorer key.")
     var scoring = multi if multi is not None else scoring_in
-    var return_train = msel_truth(family_call(b.getattr, model, PythonObject("return_train_score")))
-    var got = msel_cv_folds(estimator, x_in, y_in, family_call(b.getattr, model, PythonObject("cv")), groups, True, context)
+    msel_admit(fields["return_train_score"], context)
+    var return_train = msel_truth(fields["return_train_score"])
+    var got = msel_cv_folds(estimator, x_in, y_in, fields["cv"], groups, True, context)
     var xf = got[0]
     var yf = got[1]
     var folds = got[2]
@@ -295,7 +301,7 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
     try:
         for c in range(len(candidates)):  # driver-loop: over candidates
             var est = msel_clone(estimator, False, context)
-            _set_params(est, candidates[c])
+            _set_params(est, candidates[c], context)
             var cvr = msel_cross_validate_run(est, yf, rows, scoring, return_train, False, False, error_score, context)
             if c == 0:
                 names = cvr.names.copy()
@@ -344,30 +350,23 @@ def msel_search_fit(model: PythonObject, args: PythonObject, context: PythonObje
         if k == key_index:
             best_means = _floats(means)
             best_ranks = ranks
-    py_setattr(model, "cv_results_", results)
-    py_setattr(model, "n_splits_", PythonObject(n_splits))
-    py_setattr(model, "multimetric_", PythonObject(multi is not None))
+    py_setitem(fields, "cv_results_", results)
+    py_setitem(fields, "n_splits_", PythonObject(n_splits))
+    py_setitem(fields, "multimetric_", PythonObject(multi is not None))
     var best_params = PythonObject(None)
     if key_index >= 0:
         var best_index = family_call(best_ranks.index, PythonObject(1))
-        py_setattr(model, "best_index_", best_index)
-        py_setattr(model, "best_score_", best_means[best_index])
+        py_setitem(fields, "best_index_", best_index)
+        py_setitem(fields, "best_score_", best_means[best_index])
         best_params = candidates[best_index]
-        py_setattr(model, "best_params_", best_params)
-    elif msel_truth(py_call(b.callable, refit)):
-        var best_index = family_call(b.int, family_call(refit, results))
-        py_setattr(model, "best_index_", best_index)
-        best_params = family_call(py_attr(candidates, "__getitem__"), best_index)
-        py_setattr(model, "best_params_", best_params)
+        py_setitem(fields, "best_params_", best_params)
     if not refit_false:
         var best = msel_clone(estimator, False, context)
-        if msel_truth(py_call(b.hasattr, best, PythonObject("set_params"))):
-            _ = family_call_kw(family_call(b.getattr, best, PythonObject("set_params")),
-                               family_call(b.getattr, model, PythonObject("best_params_")))
+        _set_params(best, fields["best_params_"], context)
         var xa = msel_materialize(x_in, "X", context)
-        msel_fit(best, xa, y_in)
-        py_setattr(model, "best_estimator_", best)
-        py_setattr(model, "scorer_", msel_get_scorer(scoring_in, context) if multi is None else multi)
+        msel_fit(best, xa, y_in, context)
+        py_setitem(fields, "best_estimator_", best)
+        py_setitem(fields, "scorer_", msel_get_scorer(scoring_in, context) if multi is None else multi)
     return model
 
 
@@ -382,6 +381,8 @@ def msel_validation_curve(args: PythonObject, context: PythonObject) raises -> P
     var scoring = args[7]
     var error_score = args[9]
     msel_require_serial(args[8], error_score, "validation_curve", context)
+    if py_type(args[3]) is not b.str:
+        raise Error("TypeError: param_name must be an exact string")
     var got = msel_cv_folds(estimator, args[1], args[2], args[6], args[5], True, context)
     var xf = got[0]
     var yf = got[1]
@@ -390,14 +391,14 @@ def msel_validation_curve(args: PythonObject, context: PythonObject) raises -> P
     var te = List[Float64]()
     var count = 0
     var k = 0
-    var values = family_call(b.list, args[4])
+    var values = msel_parameter_values(args[4], context)
     var rows = MselFoldRows(xf, yf, folds, msel_device_rows_ok(estimator, scoring, context), context)
     try:
         for v in range(len(values)):  # driver-loop: over parameter values
             var est = msel_clone(estimator, False, context)
             var params = Python.dict()
             py_setitem(params, args[3], values[v])
-            _ = family_call_kw(family_call(b.getattr, est, PythonObject("set_params")), params)
+            _set_params(est, params, context)
             var r = msel_cross_validate_run(est, yf, rows, scoring, True, False, False, error_score, context)
             if len(r.names) != 1 or r.names[0] != "score":
                 _ = family_call(py_attr(Python.dict(), "__getitem__"), PythonObject("train_score"))
@@ -422,6 +423,10 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
     n_jobs, shuffle, random_state, error_score, return_times)`."""
     var b = msel_b()
     var estimator = args[0]
+    msel_require_serial(args[7], args[10], "learning_curve", context)
+    msel_admit(args[8], context)
+    msel_admit(args[9], context)
+    msel_admit(args[11], context)
     var got = msel_cv_folds(estimator, args[1], args[2], args[5], args[3], False, context)
     var x = got[0]
     var y = got[1]
@@ -431,7 +436,7 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
     for f in range(nf):  # driver-loop: over folds
         n_max = min(n_max, Int(py=folds[f][0].size))
     var chosen = Python.list()
-    var requested = family_call(b.list, args[4])
+    var requested = msel_parameter_values(args[4], context)
     var math = Python.import_module("math")
     for i in range(len(requested)):  # driver-loop: over the requested train sizes
         var s = requested[i]
@@ -486,7 +491,7 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
                 var t0 = msel_seconds()
                 var xs = _take(res, x, sub, context)
                 var ys = _take(res, y, sub, context)
-                _ = family_call(family_call(b.getattr, est, PythonObject("fit")), xs, ys)
+                msel_fit(est, xs, ys, context)
                 var t1 = msel_seconds()
                 var sc = msel_get_scorer(scoring, context)
                 tr_s.append(Float64(py=msel_score(est, xs, ys, sc, context)))

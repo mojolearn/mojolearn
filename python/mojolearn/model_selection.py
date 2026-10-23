@@ -1512,41 +1512,7 @@ class _Scorer:
         return f'make_scorer({getattr(self._score_func, "__name__", self._score_func)})'
 
     def __call__(self, estimator, X, y, sample_weight=None, *, _memo=None):
-        # `_memo` (lane metrics-apple3): the predictions of THIS estimator
-        # on THIS X, by response method, shared by the scorers of one
-        # multimetric fold (scikit-learn's _MultimetricScorer caches the
-        # same way); a metric never writes into its inputs.
-        methods = self._response_method
-        if isinstance(methods, str):
-            methods = (methods,)
-        for m in methods:  # glue: response method names tried in order
-            fn = getattr(estimator, m, None)
-            if fn is not None:
-                break
-        else:
-            raise AttributeError(f'{type(estimator).__name__} has none of {methods}')
-        pred = None if _memo is None else _memo.get(m)
-        if pred is None:
-            pred = fn(X)
-            if _memo is not None:
-                _memo[m] = pred
-        if m == 'predict_proba' and getattr(pred, 'ndim', 1) == 2 and pred.shape[1] == 2 \
-                and self._name in _BINARY_PROBA:
-            col = None if _memo is None else _memo.get('predict_proba[:, 1]')
-            if col is None:
-                fast = _proba_column1(pred)
-                if fast is None:
-                    rows = pred.tolist() if hasattr(pred, 'tolist') else pred
-                    words = _user_objects.call('column_f32', rows, 1)
-                    fast = Array._owned(words, (len(words),), '<f4', 'C')
-                col = fast
-                if _memo is not None:
-                    _memo['predict_proba[:, 1]'] = col
-            pred = col
-        kw = dict(self._kwargs)
-        if sample_weight is not None:
-            kw['sample_weight'] = sample_weight
-        return self._sign * float(self._score_func(y, pred, **kw))
+        return _NATIVE(self, "family_msel_scorer_call", (estimator, X, y, sample_weight, _memo), _NATIVE_CONTEXT)
 
 
 _BINARY_PROBA = {'roc_auc', 'average_precision', 'neg_brier_score', 'neg_log_loss'}
@@ -1834,22 +1800,10 @@ class ParameterGrid:
     """
 
     def __init__(self, param_grid):
-        if isinstance(param_grid, dict):
-            param_grid = [param_grid]
-        if not isinstance(param_grid, (list, tuple)):
-            raise TypeError(f'Parameter grid should be a dict or a list, got: {param_grid!r}')
-        for g in param_grid:  # glue: parameter grid over the candidate dicts
-            if not isinstance(g, dict):
-                raise TypeError(f'Parameter grid is not a dict ({g!r})')
-            for k, v in g.items():  # glue: parameter grid over the candidate dicts
-                if isinstance(v, str) or not hasattr(v, '__iter__'):
-                    raise TypeError(f'Parameter grid for parameter {k!r} needs to be a list, got: {v!r}')
-                if len(list(v)) == 0:
-                    raise ValueError(f'Parameter grid for parameter {k!r} need to be a non-empty sequence.')
-        self.param_grid = [dict(g) for g in param_grid]  # glue: parameter grid over the candidate dicts
+        return _NATIVE(self, "family_msel_grid_init", (param_grid,), _NATIVE_CONTEXT)
 
     def __iter__(self):
-        return iter(_NATIVE(self, "family_msel_grid", (), _NATIVE_CONTEXT))
+        return _NATIVE(self, "family_msel_grid_iter", (), _NATIVE_CONTEXT)
 
     def __len__(self):
         return _NATIVE(self, "family_msel_grid_len", (), _NATIVE_CONTEXT)
@@ -1888,22 +1842,10 @@ class ParameterSampler:
     # draws are numpy's (x_metrics/split.mojo DEVIATION 6108).
 
     def __init__(self, param_distributions, n_iter, *, random_state=None):
-        if isinstance(param_distributions, dict):
-            param_distributions = [param_distributions]
-        for d in param_distributions:  # glue: parameter grid over the candidate dicts
-            for k, v in d.items():  # glue: parameter grid over the candidate dicts
-                if hasattr(v, 'rvs'):
-                    raise NotImplementedError(
-                        f'mojolearn ParameterSampler: {k!r} is a scipy.stats distribution; its draws are '
-                        "numpy's, so only lists are sampled here (x_metrics/split.mojo DEVIATION 6108)")
-                if isinstance(v, str) or not hasattr(v, '__iter__'):
-                    raise TypeError(f'Parameter value for {k!r} is not a list or a distribution ({v!r})')
-        self.param_distributions = param_distributions
-        self.n_iter = n_iter
-        self.random_state = random_state
+        return _NATIVE(self, "family_msel_sampler_init", (param_distributions, n_iter, random_state), _NATIVE_CONTEXT)
 
     def __iter__(self):
-        return iter(_NATIVE(self, "family_msel_sampler", (), _NATIVE_CONTEXT))
+        return _NATIVE(self, "family_msel_sampler_iter", (), _NATIVE_CONTEXT)
 
     def __len__(self):
         return _NATIVE(self, "family_msel_sampler_len", (), _NATIVE_CONTEXT)
@@ -1914,31 +1856,20 @@ class _BaseSearch:
 
     def __init__(self, estimator, *, scoring=None, n_jobs=None, refit=True, cv=None, verbose=0,
                  pre_dispatch='2*n_jobs', error_score=float('nan'), return_train_score=False):
-        self.estimator = estimator
-        self.scoring = scoring
-        self.n_jobs = n_jobs
-        self.refit = refit
-        self.cv = cv
-        self.verbose = verbose
-        self.pre_dispatch = pre_dispatch
-        self.error_score = error_score
-        self.return_train_score = return_train_score
+        return _NATIVE(self, "family_msel_search_init", (estimator, scoring, n_jobs, refit, cv, verbose,
+                       pre_dispatch, error_score, return_train_score), _NATIVE_CONTEXT)
 
     @property
     def _estimator_type(self):
-        return getattr(self.estimator, '_estimator_type', None)
+        return _NATIVE(self, "family_msel_search_estimator_type", (), _NATIVE_CONTEXT)
 
     def get_params(self, deep=False):
         """Return the search's constructor parameters as a dict."""
-        import inspect
-        names = [p for p in inspect.signature(type(self).__init__).parameters if p != 'self']  # glue: estimator parameters over the init names
-        return {k: getattr(self, k) for k in names}  # glue: estimator parameters over the init names
+        return _NATIVE(self, "family_msel_search_get_params", (deep,), _NATIVE_CONTEXT)
 
     def set_params(self, **params):
         """Set constructor parameters by name and return ``self``."""
-        for k, v in params.items():  # glue: estimator parameters over the init names
-            setattr(self, k, v)
-        return self
+        return _NATIVE(self, "family_msel_search_set_params", (params,), _NATIVE_CONTEXT)
 
     def fit(self, X, y=None, *, groups=None):
         """Cross-validate every candidate and, with ``refit``, fit the best one.
@@ -2079,10 +2010,8 @@ class GridSearchCV(_BaseSearch):
 
     def __init__(self, estimator, param_grid, *, scoring=None, n_jobs=None, refit=True, cv=None, verbose=0,
                  pre_dispatch='2*n_jobs', error_score=float('nan'), return_train_score=False):
-        super().__init__(estimator, scoring=scoring, n_jobs=n_jobs, refit=refit, cv=cv, verbose=verbose,
-                         pre_dispatch=pre_dispatch, error_score=error_score,
-                         return_train_score=return_train_score)
-        self.param_grid = param_grid
+        return _NATIVE(self, "family_msel_search_init", (estimator, param_grid, scoring, n_jobs, refit, cv,
+                       verbose, pre_dispatch, error_score, return_train_score), _NATIVE_CONTEXT)
 
     def _candidates(self):
         return ParameterGrid(self.param_grid)
@@ -2144,12 +2073,9 @@ class RandomizedSearchCV(_BaseSearch):
     def __init__(self, estimator, param_distributions, *, n_iter=10, scoring=None, n_jobs=None, refit=True,
                  cv=None, verbose=0, pre_dispatch='2*n_jobs', random_state=None, error_score=float('nan'),
                  return_train_score=False):
-        super().__init__(estimator, scoring=scoring, n_jobs=n_jobs, refit=refit, cv=cv, verbose=verbose,
-                         pre_dispatch=pre_dispatch, error_score=error_score,
-                         return_train_score=return_train_score)
-        self.param_distributions = param_distributions
-        self.n_iter = n_iter
-        self.random_state = random_state
+        return _NATIVE(self, "family_msel_search_init", (estimator, param_distributions, n_iter, scoring,
+                       n_jobs, refit, cv, verbose, pre_dispatch, random_state, error_score,
+                       return_train_score), _NATIVE_CONTEXT)
 
     def _candidates(self):
         return ParameterSampler(self.param_distributions, self.n_iter, random_state=self.random_state)

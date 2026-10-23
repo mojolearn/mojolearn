@@ -612,3 +612,9 @@ from ._native_trees_bridge import connect_cpu_prediction as _connect_cpu_tree_pr
 
 _connect_cpu_tree_prediction()
 del _connect_cpu_tree_prediction
+
+# Connect CV's fixed native estimator ABIs after every public class exists.
+from ._native_msel_dispatch import connect as _connect_native_cv
+import sys as _cv_sys
+_connect_native_cv(model_selection._NATIVE_CONTEXT, _cv_sys.modules[__name__])
+del _connect_native_cv, _cv_sys

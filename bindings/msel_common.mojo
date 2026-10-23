@@ -765,6 +765,9 @@ def msel_lazy(model: PythonObject, op: String, items: PythonObject, context: Pyt
 
 
 # ---------------------------------------------------------------- scorers
+from bindings.msel_estimator_native import msel_estimator_call
+from bindings.msel_scorer_native import msel_scorer_fields, msel_scorer_call
+from bindings.metrics_native_support import metric_float
 
 
 def _msel_attr(model: PythonObject, name: String) raises -> PythonObject:
@@ -772,17 +775,17 @@ def _msel_attr(model: PythonObject, name: String) raises -> PythonObject:
     return family_call(Python.import_module("builtins").getattr, model, PythonObject(name))
 
 def msel_get_scorer(scoring: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`get_scorer(scoring)`."""
     var b = Python.import_module("builtins")
-    if scoring is None or Bool(py=py_call(b.callable, scoring)):
+    if scoring is None:
         return scoring
-    if family_is_str(scoring):
+    if py_type(scoring) is b.str:
         var table = context["family_msel_scorers"]
         if not py_contains(table, scoring):
             raise Error(family_repr(scoring) + " is not a valid scoring value. Use "
                         + "sklearn.metrics.get_scorer_names() to get valid options.")
-        return table[scoring]
-    raise Error("scoring must be a str, a callable or None, got " + family_repr(scoring))
+        scoring = table[scoring]
+    _ = msel_scorer_fields(scoring, context)
+    return scoring
 
 
 def msel_score(estimator: PythonObject, x: PythonObject, y: PythonObject, scorer: PythonObject,
@@ -792,9 +795,9 @@ def msel_score(estimator: PythonObject, x: PythonObject, y: PythonObject, scorer
     var b = Python.import_module("builtins")
     var value: PythonObject
     if scorer is None:
-        value = family_call(_msel_attr(estimator, "score"), x, y)
+        value = msel_estimator_call(estimator, "score", Python.tuple(x, y), context)
     else:
-        value = family_call(scorer, estimator, x, y)
-    if not family_isinstance(value, context["family_msel_real"]):
+        value = msel_scorer_call(scorer, estimator, x, y, PythonObject(None), PythonObject(None), context)
+    if not msel_is_real(value, context):
         raise Error("TypeError: scoring must return a real scalar")
-    return family_call(b.float, value)
+    return PythonObject(metric_float(value, context))
