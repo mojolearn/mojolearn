@@ -69,7 +69,6 @@ caller divides by `scale` when it writes to global. Converting inside
 """
 
 from std.atomic import Atomic, Ordering
-from std.collections import InlineArray
 from std.gpu import thread_idx
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -136,18 +135,9 @@ struct PointHist8[origin: MutOrigin](PointHist2):
 
     #: `mostRecentBin[4]`, `mostRecentStat1[4]`, `mostRecentStat2[4]`
     #: (`:46-48`), held in QUANTIZED units so the deferred run sums exactly.
-    #: PLAIN ARRAYS, NOT SIMD VECTORS (lane sm120-tree-identity, 2026-10-23):
-    #: `add_point` rewrites lane `i` of each under its own data-dependent
-    #: guard (`bin != recent_bin[i]`) inside a `comptime for`, the shape the
-    #: sm_120 AOT compile corrupts (core/gram_splitk.mojo, GRAM_STRIDED_ARM:
-    #: a lane of a vector updated under a per-lane guard came back wrong on
-    #: an RTX 5090 and right everywhere else). On the 5090 the Ordered fits
-    #: built depth-3 trees where AMD and the L40S built depth 6 (identity
-    #: trace, gbdt-ordered). Same integers, same order: no bit moves where
-    #: the compile was right.
-    var recent_bin: InlineArray[Int32, 4]
-    var recent_stat1: InlineArray[Int32, 4]
-    var recent_stat2: InlineArray[Int32, 4]
+    var recent_bin: SIMD[DType.int32, 4]
+    var recent_stat1: SIMD[DType.int32, 4]
+    var recent_stat2: SIMD[DType.int32, 4]
 
     def __init__(
         out self,
@@ -173,9 +163,9 @@ struct PointHist8[origin: MutOrigin](PointHist2):
         self.base = buff
         self.buffer_offset = pw_hist2_slice_offset_8(tid)
         self.scale = scale
-        self.recent_bin = InlineArray[Int32, 4](fill=Int32(0))
-        self.recent_stat1 = InlineArray[Int32, 4](fill=Int32(0))
-        self.recent_stat2 = InlineArray[Int32, 4](fill=Int32(0))
+        self.recent_bin = SIMD[DType.int32, 4](0)
+        self.recent_stat1 = SIMD[DType.int32, 4](0)
+        self.recent_stat2 = SIMD[DType.int32, 4](0)
         barrier()
 
     @always_inline

@@ -64,7 +64,6 @@ land in -- the same on Apple, NVIDIA and AMD. There are no lane intrinsics in
 this file.
 """
 
-from std.collections import InlineArray
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.gpu.intrinsics import ldg
 from max.gpu.sync import barrier
@@ -392,16 +391,10 @@ def compute_histogram[
         var done = 0
 
         for _ in range(blocked_iters):
-            # PLAIN ARRAYS, NOT SIMD VECTORS (lane sm120-tree-identity,
-            # 2026-10-23): each slot `k` is written under its own guard
-            # (`done + k < own_iters`) inside a `comptime for`, the shape
-            # the sm_120 AOT compile corrupts (core/gram_splitk.mojo,
-            # GRAM_STRIDED_ARM; pointwise_hist2_one_byte_8bit.mojo). Same
-            # loads, same order, same points.
-            var local_ci = InlineArray[UInt32, n](fill=UInt32(0))
-            var local_w = InlineArray[Float32, n](fill=Float32(0))
-            var local_wt = InlineArray[Float32, n](fill=Float32(0))
-            var local_row = InlineArray[UInt32, n](fill=UInt32(0))
+            var local_ci = SIMD[DType.uint32, n](0)
+            var local_w = SIMD[DType.float32, n](0)
+            var local_wt = SIMD[DType.float32, n](0)
+            var local_row = SIMD[DType.uint32, n](0)
 
             comptime for k in range(n):
                 if done + k < own_iters:

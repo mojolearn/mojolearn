@@ -241,11 +241,8 @@ def forest_row_outputs_kernel[RF_INPUT: Bool, PACKED: Bool = False](
         for tree in range(trees):
             var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,x,tree,row,features)
             comptime for o in range(FOREST_ROW_OUTPUTS_CHUNK):
-                # # sm_120 AOT: no lane write under a per-lane guard (core/gram_splitk.mojo GRAM_STRIDED_ARM; lane sm120-tree-identity).
-                var t = totals[o]
                 if first + o < outputs:
-                    t = forest_add(t, leaves.unsafe_load(node*outputs+first+o))
-                totals[o] = t
+                    totals[o] = forest_add(totals[o], leaves.unsafe_load(node*outputs+first+o))
         comptime for o in range(FOREST_ROW_OUTPUTS_CHUNK):
             if first + o < outputs:
                 output.unsafe_store(row*outputs+first+o, ftz(identical_div(ftz(totals[o]),Float32(trees))))

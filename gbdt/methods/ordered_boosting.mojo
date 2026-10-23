@@ -2867,6 +2867,7 @@ def fit_ordered(
     var times = StageTimes()
     # the structure search's own per-level table rides the same clock only
     # when it is on; otherwise the searcher gets a disabled one
+    var no_trace = IdentityTrace.disabled()
     var est_times = StageTimes()
     var walker_times = StageTimes()
 
@@ -3272,8 +3273,8 @@ def fit_ordered(
         times.begin(ctx)
         var splits = fit_oblivious_tree_structure_traced(
             ctx, layout, n_rows, max_depth, cindex, sw^, sg^, sm_count,
-            scale, opts.score_function, pool, trace, times,
-            tag + ".structure", opts.l2_leaf_reg,
+            scale, opts.score_function, pool, no_trace, times,
+            String("tree"), opts.l2_leaf_reg,
             score_std_dev=score_std, seed=tree_seed, one_hot=one_hot,
             folds=folds, permutation=perms[learn_p], permutation_id=learn_p,
             fold_part_off=fast_part_off, obs_scratch=fast_obs,
@@ -3296,15 +3297,6 @@ def fit_ordered(
                 ctx, layout, splits, len(splits), cindex, n_rows, bins
             )
         var n_leaves = 1 << len(splits)
-        if trace.enabled:
-            # lane sm120-tree-identity: the tree (feature, bin) per level and
-            # every row's leaf, before any estimate reads them.
-            var split_words = List[Int32]()
-            for si in range(len(splits)):  # small-loop(splits: tree levels, at most 16): trace record of the structure
-                split_words.append(splits[si].feature_id)
-                split_words.append(splits[si].bin_idx)
-            trace.record_list_i32(tag + ".splits", split_words)
-            trace.record_device(ctx, tag + ".bins", bins, count=n_rows)
         if batch:
             # one device counting sort per permutation (`_PermPartition`),
             # one drain for all of them, their counts home
@@ -3328,15 +3320,6 @@ def fit_ordered(
                 for p in range(perm_count):  # small-loop(perm_count: permutations, a handful): settle orchestration per permutation
                     if p != skip_p:
                         parts[p].settle(n_leaves)
-            if trace.enabled:
-                # lane sm120-tree-identity: each permutation's per-leaf row
-                # counts, the estimation's partition (an empty leaf is a 0).
-                for p in range(perm_count):  # small-loop(perm_count: permutations, a handful): trace records per permutation
-                    if p != skip_p:
-                        trace.record_device(
-                            ctx, tag + ".perm." + String(p) + ".leaf_counts",
-                            parts[p].d_tot, count=n_leaves,
-                        )
         else:
             # the tree's bins on the host ONCE, for every task's partition
             # (`_partition_from_host_bins`)
