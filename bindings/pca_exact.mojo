@@ -36,7 +36,11 @@ def pca_copied(source: PythonObject, context: PythonObject) raises -> Bool:
         var view = sequential_input(source, context)
         var f32 = py_get(context, "float32")
         var is_f32 = (view.dtype is f32) if f32 is not None else (String(py=py_call(b.str, view.dtype)) == "<f4")
-        return not (is_f32 and Bool(py=view.flags.c_contiguous))
+        # an ndarray's flags object, or an Array's flags dict
+        var flags = view.flags
+        var contiguous = (Bool(py=flags["C_CONTIGUOUS"]) if py_type(flags) is b.dict
+                          else Bool(py=flags.c_contiguous))
+        return not (is_f32 and contiguous)
     if py_type(source) is b.memoryview or py_type(source) is context["array_type"] or py_type(source) is b.bytearray:
         var view = py_call(b.memoryview, source)
         return not (Int(py=view.itemsize) == 4 and String(view.format) == "f" and Bool(py=view.c_contiguous))
