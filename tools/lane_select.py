@@ -429,8 +429,9 @@ def reset_caches():
     _PYTHON_FILES = None
     _ENUMERATORS = None
     _LANE_SOURCES = None
-    global _LANE_SEED_CALLS
+    global _LANE_SEED_CALLS, _LANE_PRECISION_PATHS
     _LANE_SEED_CALLS = None
+    _LANE_PRECISION_PATHS = None
     _SOURCE_HASHED = None
     _CONSTANTS = None
     _EXTENDERS = None
@@ -870,6 +871,70 @@ _REGION_EDGES = {}
 _CACHES.append(_REGION_EDGES)
 
 
+@_by_path
+def _module_has_dynamic_members(rel):
+    tree = _parse(rel)
+    if tree is None:
+        return True
+    # A module can supply undeclared names or replace its own module object.
+    # Such files cannot be reduced to ordinary declared members safely.
+    return any((isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == "__getattr__")
+               or (isinstance(n, ast.Name) and n.id == "__getattr__")
+               or (isinstance(n, ast.Constant) and n.value == "__getattr__")
+               or (isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                   and n.func.id in ("globals", "locals", "vars", "eval", "exec"))
+               or (isinstance(n, ast.Attribute) and n.attr == "modules")
+               or (isinstance(n, ast.Attribute) and n.attr == "__class__" and isinstance(n.ctx, ast.Store))
+               for n in ast.walk(tree))
+
+
+def _module_region_members(local, nodes, wanted):
+    """Members a module object supplies, or None when the object escapes.
+
+    Importing a module to read ``bridge.connect`` does not execute all its
+    other functions. Keep its import-time statements and the named members;
+    passing/re-exporting the object or observing its namespace stays broad.
+    This is deliberately syntactic: no assumption about a connector's name
+    or behavior is needed to select the member that Python actually reads.
+    """
+    if wanted is not None and local in wanted:
+        return None
+    members = set()
+    for top in nodes:
+        if isinstance(top, (ast.Import, ast.ImportFrom)):
+            continue
+        parents = {child: parent for parent in ast.walk(top) for child in ast.iter_child_nodes(parent)}
+        for node in ast.walk(top):
+            if isinstance(node, ast.Constant) and node.value == local:
+                return None  # a reflected reference or an explicit re-export
+            if isinstance(node, ast.Name) and node.id == local:
+                parent = parents.get(node)
+                if (isinstance(node.ctx, ast.Load) and isinstance(parent, ast.Attribute)
+                        and parent.value is node and isinstance(parent.ctx, ast.Load)):
+                    if parent.attr in ("__dict__", "__getattribute__", "__getattr__"):
+                        return None
+                    members.add(parent.attr)
+                else:
+                    return None
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                if node.func.id in ("eval", "exec"):
+                    return None
+                if node.func.id not in ("globals", "locals", "vars"):
+                    continue
+                parent = parents.get(node)
+                key = None
+                if isinstance(parent, ast.Subscript) and isinstance(parent.slice, ast.Constant):
+                    key = parent.slice.value
+                elif isinstance(parent, ast.Attribute) and parent.attr == "get":
+                    consumer = parents.get(parent)
+                    if (isinstance(consumer, ast.Call) and consumer.func is parent and consumer.args
+                            and isinstance(consumer.args[0], ast.Constant)):
+                        key = consumer.args[0].value
+                if not isinstance(key, str) or key == local:
+                    return None
+    return members
+
+
 def _region_import_edges(rel, wanted):
     """`_import_edges` over the REGION of `rel` a lane runs (`_region_nodes`):
     the module-level imports always, a function-local import only when its
@@ -903,6 +968,11 @@ def _region_import_edges(rel, wanted):
         return out
     listing = set(_python_files())
     region = _region_nodes(rel, wanted)
+
+    def module_members(files, local):
+        if any(_module_has_dynamic_members(file) for file in files):
+            return None
+        return _module_region_members(local, region, wanted)
     # A NAME A MODULE-LEVEL IMPORT BINDS IS ASKED FOR ONLY WHEN THE REGION
     # USES IT (2026-10-15). The import statement runs, so the module is still
     # reached, but `_expansion_trees.py` imports RandomForestClassifier and the
@@ -930,7 +1000,9 @@ def _region_import_edges(rel, wanted):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 if alias.name.startswith("mojolearn."):
-                    merge(_module_paths(alias.name[len("mojolearn."):], listing), None)
+                    files = _module_paths(alias.name[len("mojolearn."):], listing)
+                    names = module_members(files, alias.asname) if alias.asname else None
+                    merge(files, names)
         elif isinstance(node, ast.ImportFrom):
             dotted = _import_dotted(rel, node)
             if dotted is None:
@@ -943,7 +1015,7 @@ def _region_import_edges(rel, wanted):
                     continue
                 sub = _module_paths(".".join(p for p in (dotted, alias.name) if p), listing)
                 if sub:
-                    merge(sub, None)             # a module imported whole
+                    merge(sub, module_members(sub, alias.asname or alias.name))
                     continue
                 if used is not None and id(node) in module_level \
                         and (alias.asname or alias.name) not in used:
@@ -979,6 +1051,12 @@ def _region_nodes(rel, wanted):
     defs = {id(n) for n in index.values()}
     nodes = [n for n in tree.body if id(n) not in defs]
     seen, stack = set(), [n for n in wanted if n in index]
+    # Top-level initializers execute even for an empty selected-name set.
+    # A registry may also retain a local callback and expose it as a member;
+    # its function body remains a dependency of the module's import region.
+    stack.extend(sub.id for top in nodes for sub in ast.walk(top)
+                 if isinstance(sub, ast.Name) and sub.id in index
+                 and not isinstance(index[sub.id], ast.ClassDef))
     while stack:
         name = stack.pop()
         if name in seen:
@@ -1014,13 +1092,338 @@ def _names_in_nodes(nodes):
     return out
 
 
-def _own_walk(seeds, stop, follow=frozenset()):
+_DEFERRED_FACTORY_CACHE = {}
+_NATIVE_REFERENCE_CACHE = {}
+_CACHES.extend((_DEFERRED_FACTORY_CACHE, _NATIVE_REFERENCE_CACHE))
+
+
+def _deferred_factory_calls(rel, nodes, wanted):
+    key = rel, tuple(id(node) for node in nodes), None if wanted is None else frozenset(wanted)
+    if key not in _DEFERRED_FACTORY_CACHE:
+        _DEFERRED_FACTORY_CACHE[key] = _deferred_factory_calls_uncached(rel, nodes, wanted)
+    return _DEFERRED_FACTORY_CACHE[key]
+
+
+def _deferred_factory_calls_uncached(rel, nodes, wanted):
+    """Factories whose module assignment result this region never consumes.
+
+    This is only a candidate set. `_native_references_only` must separately
+    prove the factory stores native pointers without executing or leaking
+    them to an unknown consumer. Unknown statements keep the old broad map.
+    """
+    if wanted is None:
+        wanted = set()
+    from import_metadata_effects import Source
+    source = Source(_parse, lambda *args: False)
+    needed = set(wanted)
+    assignments = []
+    opaque_namespace = False
+    for top in nodes:
+        parents = {child: parent for parent in ast.walk(top) for child in ast.iter_child_nodes(parent)}
+        if isinstance(top, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            needed.update(n.id for n in ast.walk(top) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load))
+            needed.update(n.value for n in ast.walk(top) if isinstance(n, ast.Constant)
+                          and isinstance(n.value, str) and n.value.isidentifier())
+        elif isinstance(top, ast.Assign):
+            assignments.append(top)
+            # A native pointer passed to any setup call could run there,
+            # even if that call's result is unused.
+            for call in (n for n in ast.walk(top.value) if isinstance(n, ast.Call)):
+                for arg in call.args + [kw.value for kw in call.keywords]:
+                    needed.update(n.id for n in ast.walk(arg) if isinstance(n, ast.Name))
+        elif not isinstance(top, (ast.Import, ast.ImportFrom)):
+            needed.update(n.id for n in ast.walk(top) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load))
+        for call in (n for n in ast.walk(top) if isinstance(n, ast.Call) and isinstance(n.func, ast.Name)):
+            parent = parents.get(call)
+            literal_lookup = (isinstance(parent, ast.Subscript) and isinstance(parent.slice, ast.Constant)
+                              and isinstance(parent.slice.value, str))
+            if isinstance(parent, ast.Attribute) and parent.attr == "get":
+                consumer = parents.get(parent)
+                literal_lookup = (isinstance(consumer, ast.Call) and consumer.func is parent and consumer.args
+                                  and isinstance(consumer.args[0], ast.Constant) and isinstance(consumer.args[0].value, str))
+            if (call.func.id in ("globals", "locals", "vars") and not literal_lookup
+                    or call.func.id in ("eval", "exec")) or (
+                    call.func.id == "getattr" and len(call.args) >= 2 and not isinstance(call.args[1], ast.Constant)):
+                opaque_namespace = True
+    if opaque_namespace:
+        needed.update(n.id for top in assignments for target in top.targets
+                      for n in ast.walk(target) if isinstance(n, ast.Name))
+    changed = True
+    while changed:
+        before = len(needed)
+        for top in assignments:
+            targets = {n.id for t in top.targets for n in ast.walk(t) if isinstance(n, ast.Name)}
+            if targets & needed:
+                needed.update(n.id for n in ast.walk(top.value) if isinstance(n, ast.Name))
+        changed = len(needed) != before
+    out, deferred_calls = set(), set()
+    for top in assignments:
+        targets = {n.id for t in top.targets for n in ast.walk(t) if isinstance(n, ast.Name)}
+        if targets & needed or not isinstance(top.value, ast.Call):
+            continue
+        target = source.target(rel, top.value.func)
+        if target and isinstance(target[1], ast.FunctionDef):
+            out.add((target[0], target[1].name))
+            deferred_calls.add(id(top.value))
+    live = set()
+    for top in nodes:
+        for call in (n for n in ast.walk(top) if isinstance(n, ast.Call) and id(n) not in deferred_calls):
+            target = source.target(rel, call.func)
+            if target and isinstance(target[1], ast.FunctionDef):
+                live.add((target[0], target[1].name))
+    return out, live
+
+
+def _native_references_only(rel, function, exports):
+    key = rel, id(function), frozenset(exports)
+    if key not in _NATIVE_REFERENCE_CACHE:
+        _NATIVE_REFERENCE_CACHE[key] = _native_references_only_uncached(rel, function, exports)
+    return _NATIVE_REFERENCE_CACHE[key]
+
+
+def _native_references_only_uncached(rel, function, exports):
+    """Prove this factory only retains its native export references.
+
+    A pointer call, an escape to an unknown consumer, a store on an unknown
+    object, or a global store refuses the proof. Helpers still keep their
+    own import/call edges. Names and comments never confer an exemption.
+    """
+    if (function.decorator_list or function.args.defaults or any(function.args.kw_defaults)
+            or function.args.vararg or function.args.kwarg
+            or any(isinstance(n, (ast.Global, ast.Nonlocal, ast.AnnAssign, ast.AugAssign,
+                                  ast.NamedExpr, ast.comprehension, ast.Match, ast.With,
+                                  ast.AsyncWith, ast.Lambda)) for n in ast.walk(function))):
+        return False
+    from import_metadata_effects import Source
+    source = Source(_parse, lambda *args: False)
+    tainted = set()
+    parameters = {p.arg for p in function.args.posonlyargs + function.args.args + function.args.kwonlyargs}
+    parameters.update(n.name for n in ast.walk(function) if isinstance(n, ast.ExceptHandler) and n.name)
+    tree = _parse(rel)
+    constants = [] if tree is None else [n for n in tree.body if isinstance(n, ast.Assign)]
+
+    def carries(node):
+        return any(isinstance(n, ast.Name) and n.id in tainted
+                   or isinstance(n, ast.Attribute) and n.attr in exports
+                   or isinstance(n, ast.Constant) and isinstance(n.value, str) and n.value in exports
+                   for n in ast.walk(node))
+
+    def fresh_dict(where, node, body, seen=frozenset()):
+        if isinstance(node, ast.Dict):
+            return True
+        if isinstance(node, ast.Name):
+            key = where, node.id, id(body)
+            if key in seen:
+                return False
+            assigned = [n.value for n in body if isinstance(n, ast.Assign)
+                        and any(isinstance(t, ast.Name) and t.id == node.id for t in n.targets)]
+            # Only an unconditionally assigned local can establish ownership.
+            # A helper returning a module registry merely proves dict shape.
+            if len(assigned) != 1:
+                return False
+            for stmt in body:
+                for part in ast.walk(stmt):
+                    if isinstance(part, ast.Call) and isinstance(part.func, ast.Name) and part.func.id in (
+                            "globals", "locals", "vars", "eval", "exec"):
+                        return False
+                    if isinstance(part, (ast.Global, ast.Nonlocal)) and node.id in part.names:
+                        return False
+                    if isinstance(part, ast.Call) and any(isinstance(n, ast.Name) and n.id == node.id
+                            for arg in part.args + [kw.value for kw in part.keywords] for n in ast.walk(arg)):
+                        return False
+                    if isinstance(part, ast.Assign) and any(isinstance(n, ast.Name) and n.id == node.id
+                            for n in ast.walk(part.value)):
+                        return False
+            return fresh_dict(where, assigned[0], body, seen | {key})
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name) and (body is function.body and node.func.id in parameters
+                    or any(isinstance(n, ast.ExceptHandler) and n.name == node.func.id
+                           for stmt in body for n in ast.walk(stmt))):
+                return False
+            target = source.target(where, node.func, body)
+            if target and isinstance(target[1], ast.FunctionDef):
+                fn = target[1]
+                key = target[0], fn.name, id(fn)
+                if (key in seen or fn.decorator_list or node.args or node.keywords
+                        or fn.args.posonlyargs or fn.args.args or fn.args.kwonlyargs
+                        or fn.args.vararg or fn.args.kwarg):
+                    return False
+                returns = [n for n in ast.walk(fn) if isinstance(n, ast.Return)]
+                return bool(returns) and all(fresh_dict(target[0], n.value, fn.body, seen | {key}) for n in returns)
+        return False
+
+    def plain_dict(node):
+        if isinstance(node, ast.Name):
+            assigned = [n.value for n in ast.walk(function) if isinstance(n, ast.Assign)
+                        and any(isinstance(t, ast.Name) and t.id == node.id for t in n.targets)]
+            loop_bound = any(isinstance(n, ast.For) and any(isinstance(t, ast.Name) and t.id == node.id
+                             for t in ast.walk(n.target)) for n in ast.walk(function))
+            if assigned and not loop_bound:
+                return all(fresh_dict(rel, value, function.body) for value in assigned)
+        return False
+
+    def stored_names(target):
+        if isinstance(target, ast.Subscript):
+            return {n.id for n in ast.walk(target.value) if isinstance(n, ast.Name)}
+        return {n.id for n in ast.walk(target) if isinstance(n, ast.Name)}
+
+    statements = list(ast.walk(function))
+    changed = True
+    while changed:
+        before = len(tainted)
+        for node in constants + statements:
+            if isinstance(node, ast.Assign) and carries(node.value):
+                for target in node.targets:
+                    tainted.update(stored_names(target))
+            elif isinstance(node, ast.For) and carries(node.iter):
+                tainted.update(n.id for n in ast.walk(node.target) if isinstance(n, ast.Name))
+            elif isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "update":
+                if any(carries(arg) for arg in node.args + [kw.value for kw in node.keywords]):
+                    tainted.update(n.id for n in ast.walk(node.func.value) if isinstance(n, ast.Name))
+        changed = len(tainted) != before
+    if not tainted:
+        return False
+    for node in statements:
+        if isinstance(node, ast.Call):
+            if isinstance(node.func, ast.Name) and node.func.id in parameters:
+                return False
+            builtin = (isinstance(node.func, ast.Name) and node.func.id not in parameters
+                       and source.lookup(rel, node.func.id, function.body) is None)
+            dictionary_method = (isinstance(node.func, ast.Attribute)
+                                 and node.func.attr in ("update", "get", "items", "keys", "values")
+                                 and plain_dict(node.func.value))
+            target = source.target(rel, node.func, function.body)
+            if not (dictionary_method or target and isinstance(target[1], ast.FunctionDef)
+                    or builtin and node.func.id in ("getattr", "isinstance", "type", "id", "str", "dict", "tuple", "list",
+                                                    "TypeError", "ValueError", "RuntimeError", "ImportError")):
+                return False
+            if carries(node.func):
+                # A dict method reads/copies entries; it never invokes them.
+                if not dictionary_method:
+                    return False
+            if any(carries(arg) for arg in node.args + [kw.value for kw in node.keywords]):
+                if builtin and node.func.id == "isinstance":
+                    if len(node.args) == 2 and source.target(rel, node.args[1], function.body) == ("types", "BuiltinFunctionType"):
+                        continue
+                    return False
+                if builtin and node.func.id == "type" and len(node.args) != 1:
+                    return False
+                if builtin and node.func.id in ("getattr", "type", "id",
+                                                "TypeError", "ValueError", "RuntimeError", "ImportError"):
+                    continue
+                if isinstance(node.func, ast.Attribute) and node.func.attr == "update" and plain_dict(node.func.value):
+                    continue
+                return False
+        elif isinstance(node, ast.Assign) and carries(node.value):
+            for target in node.targets:
+                if isinstance(target, ast.Attribute):
+                    return False
+                if isinstance(target, ast.Subscript) and not plain_dict(target.value):
+                    return False
+    return True
+
+
+def _executed_names(rel, nodes, wanted, deferred, exports):
+    """The usual name over-approximation, excluding proved deferred pointers."""
+    if wanted is None:
+        return _names_in_nodes(nodes)
+    skipped = {n.name for n in nodes if isinstance(n, ast.FunctionDef)
+               and (rel, n.name) in deferred and _native_references_only(rel, n, exports)}
+    needed = {n.id for top in nodes if not (isinstance(top, ast.FunctionDef) and top.name in skipped)
+              and not isinstance(top, ast.Assign)
+              for n in ast.walk(top) if isinstance(n, ast.Name) and isinstance(n.ctx, ast.Load)}
+    needed.update(wanted)
+    changed = True
+    while changed:
+        before = len(needed)
+        for top in nodes:
+            if isinstance(top, ast.Assign) and any(isinstance(n, ast.Name) and n.id in needed
+                    for target in top.targets for n in ast.walk(target)):
+                needed.update(n.id for n in ast.walk(top.value) if isinstance(n, ast.Name))
+        changed = len(needed) != before
+    out = set()
+    for top in nodes:
+        names = _names_in_nodes([top])
+        if isinstance(top, ast.FunctionDef) and top.name in skipped:
+            names -= exports
+        elif skipped and isinstance(top, ast.Assign):
+            targets = {n.id for target in top.targets for n in ast.walk(target) if isinstance(n, ast.Name)}
+            try:
+                ast.literal_eval(top.value)
+            except (ValueError, TypeError):
+                pass
+            else:
+                if not targets & needed:
+                    names -= exports
+        out.update(names)
+    return out
+
+
+def _public_seed_members(rel, names):
+    """Retain local classes/helpers used by a selected public root.
+
+    Named imports used only as metadata need not run class methods, but a
+    lane's actual public root may construct another local class, inherit its
+    methods or return it through a helper. Follow those local definitions as
+    part of the root; decorated roots and opaque namespace reads stay whole.
+    """
+    if names is None:
+        return None
+    tree = _parse(rel)
+    if tree is None:
+        return None
+    index = {n.name: n for n in tree.body
+             if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))}
+    for top in tree.body:
+        if isinstance(top, (ast.Assign, ast.AnnAssign)):
+            targets = top.targets if isinstance(top, ast.Assign) else [top.target]
+            for target in targets:
+                for part in ast.walk(target):
+                    if isinstance(part, ast.Name) and isinstance(part.ctx, ast.Store):
+                        if part.id in index:
+                            return None  # reassigned public identities stay whole
+                        index[part.id] = top
+    out, stack = set(names), list(names)
+    while stack:
+        name = stack.pop()
+        node = index.get(name)
+        if node is None:
+            continue
+        if getattr(node, "decorator_list", ()):
+            return None
+        parents = {child: parent for parent in ast.walk(node) for child in ast.iter_child_nodes(parent)}
+        for sub in ast.walk(node):
+            if isinstance(sub, ast.Call) and isinstance(sub.func, ast.Name):
+                if sub.func.id in ("eval", "exec"):
+                    return None
+                if sub.func.id in ("globals", "locals", "vars"):
+                    parent = parents.get(sub)
+                    key = parent.slice.value if isinstance(parent, ast.Subscript) and isinstance(parent.slice, ast.Constant) else None
+                    if isinstance(parent, ast.Attribute) and parent.attr == "get":
+                        consumer = parents.get(parent)
+                        if (isinstance(consumer, ast.Call) and consumer.func is parent and consumer.args
+                                and isinstance(consumer.args[0], ast.Constant)):
+                            key = consumer.args[0].value
+                    if not isinstance(key, str):
+                        return None
+                    if key in index and key not in out:
+                        out.add(key)
+                        stack.append(key)
+            if isinstance(sub, ast.Name) and sub.id in index and sub.id not in out:
+                out.add(sub.id)
+                stack.append(sub.id)
+    return out
+
+
+def _own_walk(seeds, stop, follow=frozenset(), seed_names=None):
     """file -> the names a lane reaches it for (None: whole file), walking
     the symbol-level import graph from `seeds` and entering, not following,
     the files in `stop`. A file that subclasses or patches a class the lane
     reaches runs whole (the backward edge of `_python_closure`,
-    `_extender_fires`)."""
-    wanted, stack = {}, [(s, None, None) for s in seeds]
+    `_extender_fires`). Optional `seed_names` preserves a named public root;
+    an absent/None root still means the whole module."""
+    wanted, stack = {}, [(s, None if seed_names is None else _public_seed_members(s, seed_names.get(s)), None)
+                         for s in seeds]
     edges = extenders()
     walked = {}                  # file -> the `wanted` its imports were last read for
     asked = {}                   # file -> {importer: the names it asks for, None whole}
@@ -1706,16 +2109,17 @@ def _mojo_import_targets(rel):
 
 
 _SYMBOL_STEPS = {}
+_CACHES.append(_SYMBOL_STEPS)
+_SYMBOL_NAMES = {}
+_CACHES.append(_SYMBOL_NAMES)
 
 
 def _mojo_named_imports(rel, idents):
     """The (file, name) nodes the identifiers `idents`, written in `rel`, are
-    imported as (`_mojo_import_targets`, and `_mojo_import_symbols` for the
-    package files the old scan named), plus every star-imported file whole."""
+    imported as, plus every star-imported file whole. Keep the ORIGINAL name
+    of an aliased import: adding its local alias as a second unresolved node
+    would close the same file over whole and undo the symbol-level walk."""
     out = []
-    for sym, files in _mojo_import_symbols(rel).items():
-        if sym in idents:
-            out.extend((f, sym) for f in files)
     targets, whole = _mojo_import_targets(rel)
     for local, nodes in targets.items():
         if local in idents:
@@ -1754,43 +2158,37 @@ def _mojo_symbol_step(rel, name):
     idents = set(_MOJO_IDENT_RE.findall("\n".join(bodies)))
     out = _mojo_named_imports(rel, idents)
     _SYMBOL_STEPS[key] = out
+    _SYMBOL_NAMES[key] = idents
     return out
 
 
-def _mojo_symbol_reach(pending):
+def _mojo_symbol_reach(pending, names=None):
     """(files reached by name, files to close over whole) for imported
     symbols `pending` [(file, name)], followed DEFINITION BY DEFINITION.
 
-    A THIN-SHELL BINDING MOVED THE MULTIPLEXER ONE HOP DOWN (2026-10-21). The
-    per-export scan in `lane_sources` reads the export's body in the binding
-    and, for every imported symbol it names, closed over the WHOLE file
-    defining it. When `bindings/_mojolearn_estimators_host.mojo` became a door
-    that calls one function of `core/estimators_host_impl.mojo` per export, that
-    impl file became what the binding used to be: one module importing the
-    PCA, DBSCAN, scaler, ridge and k-NN oracles at once. Every lane calling
-    any export of the binding then took every oracle, and
-    `preprocessing/host/scaler_oracle.mojo` selected 503 of 530 lanes, k-means
-    among them. So a symbol that names a top-level definition of the file the
-    binding imports it from (`_mojo_units`: a function with its overloads, a
-    struct or trait with all its methods, a `comptime` value) is read the way
-    the binding's own export is: its text and the file's residue, and the
-    same-file definitions it names. That file is reached; every file those
-    definitions import a name from is closed over WHOLE, exactly as the
-    binding's direct imports were before. ONE HOP, ON PURPOSE: it undoes what
-    the thin shell moved and nothing more, so every file below the impl
-    module keeps the file-level closure the Mojo conformance inversion
-    (`test_the_mojo_conformance_inversion_holds_over_the_whole_tree`) is
-    stated over. A symbol the file does not define (a package re-export, a
-    module) or a file `_mojo_units` cannot read with certainty is closed over
-    whole, the old answer."""
-    reached, whole = set(), set()
-    for node in set(pending):
+    Native doors can contain several layers of helpers; the old one-hop
+    limit made the next layer's unrelated imports dependencies of every
+    caller. Follow named definitions to a fixed point instead. Overloads,
+    all struct methods and module residue remain included by
+    `_mojo_symbol_step`. Unknown definitions, module objects, star imports
+    and unreadable syntax retain the whole-file fallback. `lane_sources`
+    additionally closes the trait/conformer edges for every file read by
+    name, including these deeper helpers."""
+    reached, whole, seen = set(), set(), set()
+    stack = list(pending)
+    while stack:
+        node = stack.pop()
+        if node in seen:
+            continue
+        seen.add(node)
         step = None if node[1] is None else _mojo_symbol_step(*node)
         if step is None:
             whole.add(node[0])
             continue
         reached.add(node[0])
-        whole |= {f for f, _ in step if f != node[0]}
+        if names is not None:
+            names.update(_SYMBOL_NAMES.get(node, ()))
+        stack.extend(step)
     return reached, whole
 
 
@@ -2855,6 +3253,61 @@ def host_routes(hs=None):
 
 _LANE_SOURCES = None
 _LANE_SEED_CALLS = None
+_LANE_PRECISION_PATHS = None
+
+
+@_by_path
+def _generic_dispatch_exports(src):
+    """Observable runtime string dispatch, for diagnostics only.
+
+    The selector does not prove a factory/context pointer's call arguments.
+    Recognize exported owners that read a string from their argument tuple
+    and select multiple operations. This reports a known analysis boundary;
+    it never drops a branch, export, file or lane.
+    """
+    found = {}
+    exports, delegated = _binding_exports(src), _delegated_exports(src)
+    for export in exports.keys() | delegated.keys():
+        if export in delegated:
+            targets = [delegated[export]]
+        else:
+            impl = exports[export]
+            defs = _mojo_defs_for(src)
+            targets = [(src, impl)] if defs is not None and impl in defs[0] else _mojo_named_imports(src, {impl})
+        for rel, name in targets:
+            defs = _mojo_defs_for(rel) if name is not None else None
+            if defs is None or name not in defs[0]:
+                continue
+            body = defs[0][name]
+            variables = re.findall(r'\bvar\s+(\w+)\s*=\s*String\(\s*(?:py\s*=\s*)?\w+\[\s*\d+\s*\]\s*\)', body)
+            for variable in variables:
+                comparisons = re.findall(r'\b' + re.escape(variable) + r'\s*(?:==|!=)\s*["\']([^"\']+)["\']', body)
+                prefixes = re.findall(r'\b' + re.escape(variable) + r'\.startswith\(\s*["\']([^"\']+)["\']', body)
+                if len(set(comparisons + prefixes)) > 1:
+                    found.setdefault(export, []).append((rel, name, variable))
+    return found
+
+
+def _native_dispatch_references(rel, nodes, used, dispatchers):
+    """Source evidence for unresolved dispatcher uses in one Python region."""
+    records = {}
+    for top in nodes:
+        parents = {child: parent for parent in ast.walk(top) for child in ast.iter_child_nodes(parent)}
+        for node in ast.walk(top):
+            export = (node.attr if isinstance(node, ast.Attribute) else node.value
+                      if isinstance(node, ast.Constant) and isinstance(node.value, str) else None)
+            if export not in used or export not in dispatchers:
+                continue
+            parent = parents.get(node)
+            role = "call" if isinstance(parent, ast.Call) and parent.func is node else "retained-reference"
+            for implementation, function, selector in dispatchers[export]:
+                key = (rel, node.lineno, export, implementation, function)
+                records[key] = dict(kind="unresolved-native-dispatch", source=rel, line=node.lineno,
+                                    scope=getattr(top, "name", "<module>"), export=export, use=role,
+                                    implementation=implementation, function=function, selector=selector,
+                                    reason="Factory/context call provenance and operation arguments are unresolved; "
+                                           "all reachable dispatcher branches remain dependencies.")
+    return records
 
 
 def lane_sources():
@@ -2876,8 +3329,9 @@ def lane_sources():
     family_of_binding = {f["binding"]: f["family"] for f in hs.FAMILIES}
     seed_cache = {}
     read_by_name = {}        # seed_cache key -> the files of it read definition by definition
+    native_names = {}        # seed_cache key -> names used by the reached native bodies
 
-    def binding_seeds(src, used, wide=True):
+    def binding_seeds(src, used, wide=True, mark=True):
         """The Mojo files ONE binding contributes to a lane whose door calls
         `used`.
 
@@ -2908,7 +3362,8 @@ def lane_sources():
         one lane, so such a binding contributes its SOURCE only, and a change
         to the binding file still selects every lane."""
         if wide is False:
-            narrowed_files.add(src)
+            if mark:
+                narrowed_files.add(src)
             return {src}
         exports = _binding_exports(src)
         delegated = _delegated_exports(src)
@@ -2928,11 +3383,13 @@ def lane_sources():
                 # each of them handed the k-means oracles to the scaler lanes.
                 seed_cache[key] = {src} if wide == "narrow" else _mojo_closure([src])
                 read_by_name[key] = {src} if wide == "narrow" else set()
+                native_names[key] = set() if wide == "narrow" else set().union(*[
+                    set(_MOJO_IDENT_RE.findall(_read(f))) for f in seed_cache[key] if f.endswith(".mojo")])
             else:
                 blocks = _mojo_blocks_for(src)
                 syms = _mojo_import_symbols(src)
                 params = _binding_export_params(src)
-                seeds, pending = set(), []
+                seeds, pending, named = set(), [], set()
                 for export in hit:
                     if export not in exports:
                         # REGISTERED BY A FUNCTION THE BINDING IMPORTS
@@ -2976,15 +3433,21 @@ def lane_sources():
                                     r"\b%s\b" % re.escape(other), body):
                                 stack.append(other)
                     body = "\n".join(bodies)
+                    named.update(_MOJO_IDENT_RE.findall(body))
                     pending.extend(_mojo_named_imports(src, set(_MOJO_IDENT_RE.findall(body))))
                 # An imported symbol is followed definition by definition
                 # into the file defining it (`_mojo_symbol_reach`), so a
                 # thin-shell binding's impl module does not hand every
                 # export's oracles to every lane.
-                reached, whole = _mojo_symbol_reach(pending)
-                seed_cache[key] = _mojo_closure(seeds | whole) | reached | {src}
-                read_by_name[key] = (reached | {src}) - _mojo_closure(seeds | whole)
-        if wide is not False:
+                reached, whole = _mojo_symbol_reach(pending, named)
+                closed = _mojo_closure(seeds | whole)
+                seed_cache[key] = closed | reached | {src}
+                read_by_name[key] = (reached | {src}) - closed
+                for f in closed:
+                    if f.endswith(".mojo"):
+                        named.update(_MOJO_IDENT_RE.findall(_read(f)))
+                native_names[key] = named
+        if mark and wide is not False:
             narrowed_files.update(read_by_name[key])
         return seed_cache[key]
 
@@ -2994,28 +3457,48 @@ def lane_sources():
     # PASS ONE: each lane's Python doors and the bindings they resolve. Held
     # first because the next pass needs to know which bindings EVERY lane
     # resolves, and that is a measurement over all the lanes, not a list.
-    reach, seeds_of = {}, {}
+    reach, seeds_of, seed_members = {}, {}, {}
     door_bindings = resolved_bindings
     class_routes = host_class_routes()
 
     for lane, fn in ib.LANES.items():
         names = _seed_names(fn, vars(ib))
-        seeds, matched = set(), set()
+        seeds, matched, members = set(), set(), {}
         for name in names:
             for rel in symbols.get(name, ()):
                 seeds.add(rel)
                 matched.add(name)
+                stem = os.path.basename(rel)[:-3]
+                if stem == "__init__" and os.path.dirname(rel) != PKG:
+                    stem = os.path.basename(os.path.dirname(rel))
+                if name in (stem, stem.lstrip("_")):
+                    members[rel] = None  # the lane reaches the module object
+                elif rel not in members or members[rel] is not None:
+                    members.setdefault(rel, set()).add(name)
         files = _python_closure(seeds, sinks)
         doors = files - set(sinks)
         bindings = door_bindings(doors)
         reach[lane] = (matched, files, doors, bindings)
         seeds_of[lane] = seeds
+        seed_members[lane] = members
     ubiquitous = set.intersection(*[b for _, _, _, b in reach.values()]) if reach else set()
     # THE PYTHON FILES EVERY LANE REACHES: the shared helpers (`_buffer.py`,
     # `_array.py`) and the host doors they import for their native helpers.
     ubiquitous_py = set.intersection(*[f for _, f, _, _ in reach.values()]) if reach else set()
 
-    own_cache = {}
+    connected_names = set().union(*[b for _, _, _, b in reach.values()]) if reach else set()
+    for binding in tuple(connected_names):
+        connected_names.update(routed.get(binding, ()))
+        if binding in adapted:
+            connected_names.add(f"_mojolearn_{adapted[binding]}_host")
+    native_exports = set().union(*[set(_binding_exports(os.path.join("bindings", b + ".mojo")))
+                                  for b in connected_names])
+    dispatchers = {}
+    for binding in sorted(connected_names):
+        for export, implementations in _generic_dispatch_exports(os.path.join("bindings", binding + ".mojo")).items():
+            dispatchers.setdefault(export, set()).update(implementations)
+
+    own_cache, own_limitations = {}, {}
 
     def _own(lane):
         """(the bindings this lane is declared for, the names its OWN doors
@@ -3037,20 +3520,32 @@ def lane_sources():
         declared for the forest host; `byte-lm` reaches it from its own door
         and is."""
         if lane not in own_cache:
-            walk = _own_walk(seeds_of[lane], sinks | ubiquitous_py, follow=seeds_of[lane] - sinks)
+            # A public class/function is the root, not every class sharing
+            # its source file. Module-object roots remain whole. Import-time
+            # initializers and opaque module consumers retain their edges.
+            walk = _own_walk(seeds_of[lane], sinks | ubiquitous_py,
+                             follow=seeds_of[lane] - sinks, seed_names=seed_members[lane])
             declared, whole, used = set(), set(), set()
+            regions = {rel: _region_nodes(rel, wanted) for rel, wanted in walk.items() if rel not in sinks}
+            deferred, live = set(), set()
+            for rel, nodes in regions.items():
+                candidates, consumed = _deferred_factory_calls(rel, nodes, walk[rel])
+                deferred.update(candidates)
+                live.update(consumed)
+            deferred -= live
+            limitations = {}
             for rel, wanted in walk.items():
                 if rel in sinks:
                     continue
-                nodes = _region_nodes(rel, wanted)
+                nodes = regions[rel]
                 found = _binding_names_in(rel, nodes)
                 for node in nodes:
                     if isinstance(node, ast.ClassDef):
                         found |= class_routes.get(node.name, set())
                 declared |= found
-                if wanted is None:
-                    # RESOLVED BY A DOOR THE LANE RUNS WHOLE (a seed, a module
-                    # imported whole, a subclass): the binding is this lane's
+                if wanted is None or rel in seeds_of[lane]:
+                    # RESOLVED BY A PUBLIC ROOT OR WHOLE DOOR (a seed, a
+                    # module imported whole, a subclass): the binding is this lane's
                     # own and "no export named" stays wide. Resolved only inside
                     # a few imported helpers (`_restore_mode` from
                     # linear_model.py loads the estimators binding to read a
@@ -3058,7 +3553,9 @@ def lane_sources():
                     # of it, and nothing named is the source alone: the kmeans
                     # lane took the whole GLM host tree through that helper.
                     whole |= found
-                used |= _names_in_nodes(nodes)
+                region_used = _executed_names(rel, nodes, wanted, deferred, native_exports)
+                used |= region_used
+                limitations.update(_native_dispatch_references(rel, nodes, region_used, dispatchers))
 
             def exists(b):
                 return os.path.exists(os.path.join(ROOT, "bindings", b + ".mojo"))
@@ -3069,13 +3566,14 @@ def lane_sources():
                     if b in adapted:
                         group.add(f"_mojolearn_{adapted[b]}_host")
             own_cache[lane] = (declared, used, whole)
+            own_limitations[lane] = limitations
         return own_cache[lane]
 
     def _whole(lane, binding):
         """Is `binding` resolved by a door this lane runs whole (see `_own`)."""
         return binding in _own(lane)[2]
 
-    seed_calls = {}
+    seed_calls, precision_paths = {}, {}
     for lane in reach:
         matched, files, doors, bindings = reach[lane]
         # THE NAMES THIS LANE'S OWN DOORS CALL (2026-09-23; this was every
@@ -3086,7 +3584,17 @@ def lane_sources():
         # callers of `qn_fit`. The own walk stops at the files every lane
         # reaches, so its names are what this lane itself asks of a binding:
         # `all_finite_f32` through `_buffer.py`, never `byte_lm_run`.
-        used = _own(lane)[1]
+        used = set(_own(lane)[1])
+        limitations = own_limitations[lane]
+        limitation_keys = sorted(limitations)
+        origins = {}
+        limitation_paths = precision_paths[lane] = {}
+        # Bitsets avoid duplicating each lane's thousands of source paths
+        # once per unresolved reference. This affects reporting only.
+        for index, key in enumerate(limitation_keys):
+            record, flag = limitations[key], 1 << index
+            origins[record["export"]] = origins.get(record["export"], 0) | flag
+            limitation_paths[record["source"]] = limitation_paths.get(record["source"], 0) | flag
         mojo = set()
         binding_use = {}
         # EVERY BINDING CONTRIBUTION, RECORDED (lane/lane-select-mojo,
@@ -3098,10 +3606,57 @@ def lane_sources():
         calls = seed_calls[lane] = []
         narrowed_files = set()     # files a contribution read per definition, not closed over
 
+        # Public operations now call native owners, which call numerical
+        # exports by the names in their ABI tables. Python-only name scanning
+        # missed, for example, UMAP's fit exports after fit moved to Mojo.
+        # Close the existing binding set over names in the native bodies it
+        # actually reaches. Unresolved bodies keep the same whole-file rule.
+        connected = set(bindings)
+        for binding in bindings:
+            connected.update(routed.get(binding, ()))
+            if binding in adapted:
+                connected.add(f"_mojolearn_{adapted[binding]}_host")
+        native_sources = [(os.path.join("bindings", b + ".mojo"),
+                           True if _whole(lane, b) else "narrow") for b in sorted(connected)]
+        exports_available = set().union(*[set(_binding_exports(src)) | set(_delegated_exports(src))
+                                         for src, _ in native_sources])
+        while True:
+            found, origins_grew = set(), False
+            for src, wide in native_sources:
+                binding_seeds(src, used, wide)
+                exports = set(_binding_exports(src)) | set(_delegated_exports(src))
+                key = (src, tuple(sorted(used & exports)), wide)
+                reached_exports = native_names[key] & exports_available
+                found.update(reached_exports)
+                # Reporting follows each export separately. Sharing a native
+                # library is not evidence that its unrelated entry executes.
+                # `mark=False` leaves the selection's conformance bookkeeping
+                # unchanged; these extra cache entries are diagnostics only.
+                for name in used & exports:
+                    tags = origins.get(name, 0)
+                    if not tags:
+                        continue
+                    binding_seeds(src, {name}, "narrow", mark=False)
+                    for reached_name in native_names[(src, (name,), "narrow")] & exports_available:
+                        previous = origins.get(reached_name, 0)
+                        if tags & ~previous:
+                            origins[reached_name] = previous | tags
+                            origins_grew = True
+            fresh = found - used
+            if not fresh and not origins_grew:
+                break
+            used.update(fresh)
+
         def recorded_seeds(src, wide=True):
             got = binding_seeds(src, used, wide)
             exports_of = _binding_exports(src)
             calls.append((src, wide, tuple(sorted(e for e in used if e in exports_of)), frozenset(got)))
+            for name in used & (exports_of.keys() | _delegated_exports(src).keys()):
+                tags = origins.get(name, 0)
+                if tags:
+                    evidence_files = binding_seeds(src, {name}, "narrow", mark=False)
+                    for file in evidence_files & got:
+                        limitation_paths[file] = limitation_paths.get(file, 0) | tags
             return got
         source_only_hosts = set()
         for binding in bindings:
@@ -3195,9 +3750,11 @@ def lane_sources():
         why[lane] = dict(symbols=sorted(matched), python=len(files), bindings=sorted(bindings),
                          declared=sorted(declared),
                          families=sorted(fams), mojo=len(mojo), exports=len(used),
-                         ubiquitous=sorted(ubiquitous), binding_use=binding_use)
-    global _LANE_SEED_CALLS
+                         ubiquitous=sorted(ubiquitous), binding_use=binding_use,
+                         precision_limitations=[limitations[key] for key in limitation_keys])
+    global _LANE_SEED_CALLS, _LANE_PRECISION_PATHS
     _LANE_SEED_CALLS = seed_calls
+    _LANE_PRECISION_PATHS = precision_paths
     _LANE_SOURCES = (sources, why)
     return _LANE_SOURCES
 
@@ -6891,6 +7448,27 @@ def refuse_unattributed(sel, out=print):
     return True
 
 
+def selection_precision_limitations(lanes, by_path, sources):
+    """Report unresolved native provenance on paths kept by this selection.
+
+    Reporting never supplies exclusions. A custom source map has no native
+    provenance record and is not retrospectively treated as the cached map.
+    """
+    if _LANE_SOURCES is None or sources is not _LANE_SOURCES[0] or _LANE_PRECISION_PATHS is None:
+        return []
+    records = []
+    for lane in sorted(lanes):
+        affected = _LANE_PRECISION_PATHS.get(lane, {})
+        for index, record in enumerate(_LANE_SOURCES[1][lane].get("precision_limitations", ())):
+            flag = 1 << index
+            paths = sorted(path for path, selected in by_path.items()
+                           if lane in selected and affected.get(path, 0) & flag)
+            if paths:
+                records.append(dict(record, lane=lane, paths=paths,
+                                    provenance="conservative export closure; possible path, not an execution trace"))
+    return records
+
+
 def select(paths, ref=None, sources=None, backend=None):
     """The lanes `paths` can affect.
 
@@ -6898,7 +7476,8 @@ def select(paths, ref=None, sources=None, backend=None):
     what it did), `by_path` (path -> exactly the lanes it selected),
     `every_rules` (path -> the RULE by which it selects every lane, e.g. the
     pinned toolchain or a harness function every column runs) and
-    `unattributed` (paths nothing can place).
+    `unattributed` (paths nothing can place), and `precision_limitations`
+    (unresolved native dispatch provenance that retains extra dependencies).
 
     NO FALLBACK (2026-09-22). An unattributed path used to widen the answer to
     every lane, which made "the lanes this change reaches" silently mean "all
@@ -7225,6 +7804,7 @@ def select(paths, ref=None, sources=None, backend=None):
     return dict(lanes=sorted(lanes, key=every.index), fallback=False, reasons=reasons,
                 unattributed=sorted(unattributed), inert=sorted(inert), total=len(every),
                 every_rules=every_rules, chains=chains,
+                precision_limitations=selection_precision_limitations(lanes, by_path, sources),
                 by_path={p: sorted(v, key=every.index) for p, v in by_path.items()})
 
 
@@ -7354,6 +7934,10 @@ def main(argv=None):
     if refuse_unattributed(sel):
         return 3
     print(f"# {len(sel['lanes'])} of {sel['total']} lanes selected")
+    limited = {row["lane"] for row in sel.get("precision_limitations", ())}
+    if limited:
+        print(f"# Precision limitation: {len(limited)} selected lane(s) retain unresolved native dispatch dependencies; "
+              "extra verification work, not a numerical failure (details: --why or --json)")
     if args.why:
         for lane in sel["lanes"]:
             ev = why[lane]
@@ -7362,6 +7946,10 @@ def main(argv=None):
                   f"python={ev['python']} mojo={ev['mojo']}")
             for chain in sel.get("chains", {}).get(lane, ()):
                 print(f"#     via {chain}")
+            for row in sel.get("precision_limitations", ()):
+                if row["lane"] == lane:
+                    print(f"#     unresolved {row['export']} at {row['source']}:{row['line']} -> "
+                          f"{row['implementation']}::{row['function']}; retained {','.join(row['paths'])}")
     if args.files:
         files = sorted(set().union(*[sources[n] for n in sel["lanes"]])) if sel["lanes"] else []
         for rel in files:
