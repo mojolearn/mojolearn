@@ -2067,7 +2067,7 @@ def host_archive_svm(cls: PythonObject, arrays: PythonObject, classifier: Bool, 
     var b = Python.import_module("builtins")
     var where = host_archive_where(path, context)
     var meta = host_archive_meta(arrays, "meta", 6 if classifier else 5, path, context)
-    var hyper = host_archive_meta(arrays, "hyper", 4 if classifier else 5, path, context)
+    var hyper = host_archive_held(arrays, "hyper", "<f8", 4 if classifier else 5, path, context)
     var gamma_setting = _archive_string(arrays, "gamma", context)
     var kernel = _archive_string(arrays, "kernel", context)
     var raw_kernel = String(kernel)
