@@ -2324,6 +2324,7 @@ def host_archive_public_forest(cls: PythonObject, arrays: PythonObject, fmt: Str
     # The 0.8.55 `ForestProtocol._restore_inference_metadata`.
     if fmt.endswith("-parallel-groves-1"):
         py_setitem(fields, "inference_engine", "parallel_groves")
+        py_setitem(fields, "inference_engine_", "parallel_groves")
         var mode = py_call(py_call(_archive_string(arrays, "numeric_mode", context).strip).lower)
         if String(py=mode) != "fast" and String(py=mode) != "identical":
             raise Error("numeric_mode must be fast, identical or None")
@@ -2331,6 +2332,7 @@ def host_archive_public_forest(cls: PythonObject, arrays: PythonObject, fmt: Str
         py_setitem(fields, "_fit_numeric_mode", mode)
     else:
         py_setitem(fields, "inference_engine", "sequential")
+        py_setitem(fields, "inference_engine_", "sequential")
     py_setitem(fields, "_offsets", _archive_exact(arrays, "offsets", "<i4", context))
     py_setitem(fields, "_colid", _archive_exact(arrays, "colid", "<i4", context))
     py_setitem(fields, "_quesval", _archive_exact(arrays, "quesval", "<f4", context))

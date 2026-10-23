@@ -346,6 +346,9 @@ class ExtraTreesClassifier(_ExtraTreesBase):
     classes_ : list
         Class labels in sorted order (numbers by value, strings by code
         point).
+    inference_engine_ : str
+        The inference engine `predict` runs: 'sequential' or
+        'parallel_groves' ('auto' resolved for the fitted numeric mode).
     n_features_in_ : int
         Number of features seen in `fit`.
 
@@ -551,6 +554,9 @@ class ExtraTreesRegressor(_ExtraTreesBase):
 
     Attributes
     ----------
+    inference_engine_ : str
+        The inference engine `predict` runs: 'sequential' or
+        'parallel_groves' ('auto' resolved for the fitted numeric mode).
     n_features_in_ : int
         Number of features seen in `fit`.
 

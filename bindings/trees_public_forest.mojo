@@ -1119,13 +1119,26 @@ def dt_random_fit(model: PythonObject, args: PythonObject, kind: String, context
 def forest_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
     """`fit` / `_fit_with_tree_start` of any connected forest class."""
     var kind = forest_kind(model, context)
+    var result: PythonObject
+    var splitter = py_get(py_fields(model), "splitter") if kind.startswith("dt_") else PythonObject(None)
     if _family(kind) == "et":
-        return et_fit(model, args, kind, context)
-    if kind.startswith("dt_"):
-        var splitter = py_get(py_fields(model), "splitter")
-        if splitter is not None and Bool(py=splitter == PythonObject("random")):
-            return dt_random_fit(model, args, kind, context)
-    return rf_fit(model, args, kind, context)
+        result = et_fit(model, args, kind, context)
+    elif splitter is not None and Bool(py=splitter == PythonObject("random")):
+        result = dt_random_fit(model, args, kind, context)
+    else:
+        result = rf_fit(model, args, kind, context)
+    _report_engine(model, context)
+    return result
+
+
+def _report_engine(model: PythonObject, context: PythonObject) raises:
+    """`inference_engine_`: the engine predict runs for the fitted model
+    ('sequential' or 'parallel_groves'; `auto` resolved for the fitted
+    numeric mode), set once at fit (predict leaves `__dict__` unchanged)."""
+    var fields = py_fields(model)
+    if not py_contains(fields, "_offsets"):
+        return
+    py_setitem(fields, "inference_engine_", PythonObject(_engine(fields, forest_effective_mode(fields, context))))
 
 
 # ---------------------------------------------------------------- predict

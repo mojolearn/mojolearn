@@ -556,6 +556,9 @@ class RandomForestClassifier(_RandomForestBase):
         point).
     n_classes_ : int
         Number of classes.
+    inference_engine_ : str
+        The inference engine `predict` runs: 'sequential' or
+        'parallel_groves' ('auto' resolved for the fitted numeric mode).
     n_features_in_ : int
         Number of features seen in `fit`.
     oob_score_ : float
@@ -772,6 +775,9 @@ class RandomForestRegressor(_RandomForestBase):
 
     Attributes
     ----------
+    inference_engine_ : str
+        The inference engine `predict` runs: 'sequential' or
+        'parallel_groves' ('auto' resolved for the fitted numeric mode).
     n_features_in_ : int
         Number of features seen in `fit`.
     oob_score_ : float
