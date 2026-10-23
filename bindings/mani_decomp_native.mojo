@@ -277,7 +277,7 @@ def _mani_lanczos_top(mut k: MKit, a: PythonObject, nc: Int) raises -> Tuple[Boo
             break
         if m >= cap:
             return (False, PythonObject(None), PythonObject(None))
-        m = min(n, 2 * m, _LANCZOS_MAX_M)
+        m = min(min(n, 2 * m), _LANCZOS_MAX_M)
     var yt = mk_take_cols(yv, top, ctx)
     var qm: PythonObject
     if mk_on_dev(qd):
