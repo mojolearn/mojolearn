@@ -1,8 +1,0 @@
-Traceback (most recent call last):
-  File "/Users/ec2-user/mojolearn-pass24/tools/strides_digest.py", line 6, in <module>
-    B, L, dm = (int(v) for v in sys.argv[1:4])
-    ^^^^^^^^
-  File "/Users/ec2-user/mojolearn-pass24/tools/strides_digest.py", line 6, in <genexpr>
-    B, L, dm = (int(v) for v in sys.argv[1:4])
-                ~~~^^^
-ValueError: invalid literal for int() with base 10: '8 512 768'
