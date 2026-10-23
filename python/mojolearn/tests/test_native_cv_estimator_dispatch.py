@@ -31,7 +31,9 @@ def test_public_cross_validation_calls_native_clones(cls):
     assert np.isfinite(np.asarray(result['test_score'])).all()
 
 
-def test_external_estimator_hooks_refuse_before_protocol_lookup():
+@pytest.mark.parametrize('module', ['application.models', 'mojolearn.external', 'mojolearn.linear_model'])
+@pytest.mark.parametrize('operation', ['cross_val_score', 'split_descriptor'])
+def test_external_estimator_hooks_refuse_before_protocol_lookup(module, operation):
     calls = []
 
     class External:
@@ -39,12 +41,17 @@ def test_external_estimator_hooks_refuse_before_protocol_lookup():
             calls.append(name)
             raise AssertionError('external estimator protocol ran')
 
+    External.__module__ = module
     x, y = samples()
-    audit = audit_native_call(ms.cross_val_score, External(), x, y, cv=3, n_jobs=1)
+    if operation == 'split_descriptor':
+        audit = audit_native_call(ms.split_descriptor, x, y, estimator=External(), cv=3)
+    else:
+        audit = audit_native_call(ms.cross_val_score, External(), x, y, cv=3, n_jobs=1)
     assert isinstance(audit.exception, TypeError), audit.report()
     assert calls == []
     report = audit.report()
-    assert not report['python_frames'] and not report['forbidden_native_calls'], report
+    assert not any(report[key] for key in ('python_frames', 'forbidden_native_calls', 'unresolved_native_calls',
+                                          'wrapper_work', 'unobserved_existing_threads')), report
 
 
 def test_replaced_native_estimator_method_refuses_without_callback(monkeypatch):

@@ -231,6 +231,11 @@ def _prep_scratch(value: PythonObject, sbase: Int, obase: Int, context: PythonOb
 
 
 def _prep_run(prog: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Classifier owners call this runner directly, bypassing arena_prog_c.
+    # Connect already-loaded native NumPy metadata in this runner's own
+    # context before a DeviceRows snapshot admits an ndarray-owned view.
+    # This never imports NumPy and is a no-op in a NumPy-free process.
+    classical_connect_numpy(context)
     var profile = String(getenv("MOJOLEARN_XPREP_PROFILE", "0")) == "1"
     var t_run = Int(perf_counter_ns()) if profile else 0
     var types = context["prog_types"]
@@ -456,6 +461,8 @@ def _metrics_download(fields: PythonObject, size: Int, context: PythonObject, mu
 
 
 def _metrics_run(prog: PythonObject, mode: PythonObject, context: PythonObject) raises -> PythonObject:
+    # Direct native callers need the same buffer admission as arena_prog_c.
+    classical_connect_numpy(context)
     var entries = _family_entries(mode, "x_metrics", context)
     var fields = py_fields(prog)
     var size = _int(fields["size"], context)

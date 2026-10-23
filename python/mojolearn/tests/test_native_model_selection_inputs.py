@@ -135,10 +135,12 @@ def test_list_subclass_and_object_scalar_hooks_are_refused():
     assert calls == []
 
 
-def test_splitter_subclass_refuses_overridden_property():
+@pytest.mark.parametrize('base', [ms.KFold, ms.TimeSeriesSplit, ms.ShuffleSplit,
+                                 ms.GroupShuffleSplit, ms.StratifiedShuffleSplit])
+def test_splitter_subclass_refuses_overridden_property(base):
     calls = []
 
-    class Custom(ms.KFold):
+    class Custom(base):
         @property
         def n_splits(self):
             calls.append('n_splits')
@@ -146,11 +148,13 @@ def test_splitter_subclass_refuses_overridden_property():
 
     splitter = object.__new__(Custom)
     clean(ms.check_cv, splitter, error=TypeError)
-    clean(ms.KFold.get_n_splits, splitter, error=TypeError)
+    clean(base.get_n_splits, splitter, error=TypeError)
     assert calls == []
 
 
-def test_splitter_metaclass_hash_is_never_called():
+@pytest.mark.parametrize('base', [ms.KFold, ms.TimeSeriesSplit, ms.ShuffleSplit,
+                                 ms.GroupShuffleSplit, ms.StratifiedShuffleSplit])
+def test_splitter_metaclass_hash_is_never_called(base):
     calls = []
 
     class Meta(type):
@@ -162,7 +166,7 @@ def test_splitter_metaclass_hash_is_never_called():
         pass
 
     clean(ms.check_cv, Custom(), error=TypeError)
-    clean(ms.KFold.get_n_splits, Custom(), error=TypeError)
+    clean(base.get_n_splits, Custom(), error=TypeError)
     assert calls == []
 
 
@@ -182,10 +186,43 @@ def test_splitter_field_property_mutation_is_refused_before_construction(monkeyp
 
 def test_explicit_native_range_folds_remain_supported():
     splitter = clean(ms.check_cv, [(range(9), range(9, 12))])
-    actual = list(splitter.split(np.arange(12, dtype='f4')))
+    assert clean(splitter.get_n_splits) == 1
+    actual = list(clean(splitter.split, np.arange(12, dtype='f4')))
     assert len(actual) == 1
     np.testing.assert_array_equal(np.asarray(actual[0][0]), np.arange(9))
     np.testing.assert_array_equal(np.asarray(actual[0][1]), np.arange(9, 12))
+
+
+@pytest.mark.parametrize('cls,kwargs,count', [
+    (ms.KFold, {'n_splits': 3}, 3),
+    (ms.TimeSeriesSplit, {'n_splits': 4}, 4),
+    (ms.ShuffleSplit, {'n_splits': 2}, 2),
+    (ms.GroupShuffleSplit, {'n_splits': 2, 'random_state': 13}, 2),
+    (ms.StratifiedShuffleSplit, {'n_splits': 2, 'test_size': .25, 'random_state': 13}, 2),
+    (ms.RepeatedKFold, {'n_splits': 3, 'n_repeats': 2, 'random_state': 13}, 6),
+    (ms.RepeatedStratifiedKFold, {'n_splits': 3, 'n_repeats': 2, 'random_state': 13}, 6),
+    (ms.LeaveOneOut, {}, 12),
+])
+def test_splitter_counts_and_native_fold_iteration_agree(cls, kwargs, count):
+    x = np.arange(48, dtype='f4').reshape(12, 4)
+    y = np.arange(12, dtype='i4') % 2
+    groups = np.repeat(np.arange(6), 2)
+    splitter = cls(**kwargs)
+    assert clean(splitter.get_n_splits, x, y, groups) == count
+    iterator = clean(splitter.split, x, y, groups)
+    assert iter(iterator) is iterator
+    folds = clean(list, iterator)
+    assert len(folds) == count
+    for train, test in folds:
+        train, test = np.asarray(train), np.asarray(test)
+        assert len(train) and len(test)
+        assert not set(train) & set(test)
+        assert np.all((train >= 0) & (train < len(x)))
+        assert np.all((test >= 0) & (test < len(x)))
+        if cls is ms.GroupShuffleSplit:
+            assert not set(groups[train]) & set(groups[test])
+        if cls is ms.StratifiedShuffleSplit:
+            assert set(y[train]) == set(y[test]) == {0, 1}
 
 
 def test_preconnected_helper_rejects_python_replacement(monkeypatch):

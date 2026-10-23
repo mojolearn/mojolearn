@@ -688,7 +688,7 @@ class _KFoldBase(_Splitter):
 
     def get_n_splits(self, X=None, y=None, groups=None):
         """Return the number of splits, ``n_splits``."""
-        return self.n_splits
+        return _NATIVE(self, "family_msel_n_splits", (X, y, groups), _NATIVE_CONTEXT)
 
 
 class KFold(_KFoldBase):
@@ -724,7 +724,7 @@ class KFold(_KFoldBase):
 
         Raises ``ValueError`` when ``n_splits`` exceeds the number of rows.
         """
-        yield from _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
 class StratifiedKFold(_KFoldBase):
@@ -764,7 +764,7 @@ class StratifiedKFold(_KFoldBase):
         has fewer than ``n_splits`` members, and warns when the smallest
         class does.
         """
-        yield from _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
 class GroupKFold(_KFoldBase):
@@ -801,7 +801,7 @@ class GroupKFold(_KFoldBase):
         ``groups`` is required. Raises ``ValueError`` when ``n_splits``
         exceeds the number of distinct groups.
         """
-        yield from _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
 class StratifiedGroupKFold(_KFoldBase):
@@ -839,7 +839,7 @@ class StratifiedGroupKFold(_KFoldBase):
         ``y`` and ``groups`` are required. Raises ``ValueError`` when
         ``n_splits`` is greater than the number of members of a class.
         """
-        yield from _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
 class TimeSeriesSplit(_Splitter):
@@ -877,7 +877,7 @@ class TimeSeriesSplit(_Splitter):
 
     def get_n_splits(self, X=None, y=None, groups=None):
         """Return the number of splits, ``n_splits``."""
-        return self.n_splits
+        return _NATIVE(self, "family_msel_n_splits", (X, y, groups), _NATIVE_CONTEXT)
 
     def split(self, X, y=None, groups=None):
         """Yield ``(train, test)`` int64 row-index arrays for each split.
@@ -885,7 +885,7 @@ class TimeSeriesSplit(_Splitter):
         Raises ``ValueError`` when there are too few rows for ``n_splits``,
         ``test_size`` and ``gap``.
         """
-        yield from _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
 class LeaveOneOut(_Splitter):
@@ -911,7 +911,7 @@ class LeaveOneOut(_Splitter):
 
         Raises ``ValueError`` when ``X`` has fewer than two rows.
         """
-        yield from _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
 class LeavePOut(_Splitter):
@@ -947,7 +947,7 @@ class LeavePOut(_Splitter):
 
         Raises ``ValueError`` when ``p`` is not less than the number of rows.
         """
-        yield from _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
 class LeaveOneGroupOut(_Splitter):
@@ -977,7 +977,7 @@ class LeaveOneGroupOut(_Splitter):
         Raises ``ValueError`` when ``groups`` has fewer than two distinct
         values.
         """
-        yield from _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
 class LeavePGroupsOut(_Splitter):
@@ -1016,7 +1016,7 @@ class LeavePGroupsOut(_Splitter):
         Raises ``ValueError`` when ``n_groups`` is not less than the number
         of distinct groups.
         """
-        yield from _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
 class _Repeated:
@@ -1043,7 +1043,7 @@ class _Repeated:
         seed derived from ``random_state``, so the whole sequence is fixed by
         ``random_state``.
         """
-        yield from _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
 class RepeatedKFold(_Repeated):
@@ -1146,7 +1146,7 @@ class ShuffleSplit(_Splitter):
 
     def get_n_splits(self, X=None, y=None, groups=None):
         """Return the number of splits, ``n_splits``."""
-        return self.n_splits
+        return _NATIVE(self, "family_msel_n_splits", (X, y, groups), _NATIVE_CONTEXT)
 
     def split(self, X, y=None, groups=None):
         """Yield ``(train, test)`` int64 row-index arrays for each split.
@@ -1154,7 +1154,7 @@ class ShuffleSplit(_Splitter):
         Raises ``ValueError`` for sizes out of range or summing to more than
         the number of rows.
         """
-        yield from _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
 class GroupShuffleSplit(ShuffleSplit):
@@ -1195,7 +1195,7 @@ class GroupShuffleSplit(ShuffleSplit):
 
         ``groups`` is required.
         """
-        yield from _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
 class StratifiedShuffleSplit(ShuffleSplit):
@@ -1242,7 +1242,7 @@ class StratifiedShuffleSplit(ShuffleSplit):
         member, or when the training or test set is smaller than the number
         of classes.
         """
-        yield from _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
 class PredefinedSplit(_Splitter):
@@ -1280,7 +1280,7 @@ class PredefinedSplit(_Splitter):
 
     def split(self, X=None, y=None, groups=None):
         """Yield ``(train, test)`` int64 row-index arrays for each fold."""
-        yield from _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
+        return _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
 def _index_copy(value):
@@ -1312,10 +1312,10 @@ class _IterableCV(_Splitter):
         self._pairs = [(_index_copy(tr), _index_copy(te)) for tr, te in cv]  # cpu-route: user cv iterable of (train, test) pairs, one per fold, each read once by _index_copy
 
     def get_n_splits(self, X=None, y=None, groups=None):
-        return len(self._pairs)
+        return _NATIVE(self, "family_msel_n_splits", (X, y, groups), _NATIVE_CONTEXT)
 
     def split(self, X=None, y=None, groups=None):
-        yield from self._pairs
+        return _NATIVE(self, "family_msel_split", (X, y, groups), _NATIVE_CONTEXT)
 
 
 def check_cv(cv=5, y=None, *, classifier=False, shuffle=False, random_state=None):
@@ -2307,7 +2307,8 @@ _native_family_bridge.tables(
         KFold=KFold, StratifiedKFold=StratifiedKFold, GroupKFold=GroupKFold,
         StratifiedGroupKFold=StratifiedGroupKFold, TimeSeriesSplit=TimeSeriesSplit, LeaveOneOut=LeaveOneOut,
         LeavePOut=LeavePOut, LeaveOneGroupOut=LeaveOneGroupOut, LeavePGroupsOut=LeavePGroupsOut,
-        _Repeated=_Repeated, ShuffleSplit=ShuffleSplit, GroupShuffleSplit=GroupShuffleSplit,
+        _Repeated=_Repeated, RepeatedKFold=RepeatedKFold, RepeatedStratifiedKFold=RepeatedStratifiedKFold,
+        ShuffleSplit=ShuffleSplit, GroupShuffleSplit=GroupShuffleSplit,
         StratifiedShuffleSplit=StratifiedShuffleSplit, PredefinedSplit=PredefinedSplit, _IterableCV=_IterableCV,
         ParameterGrid=ParameterGrid, ParameterSampler=ParameterSampler, GridSearchCV=GridSearchCV,
         RandomizedSearchCV=RandomizedSearchCV, Array=Array),
