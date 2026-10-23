@@ -1962,132 +1962,33 @@ def brier_score_loss(y_true, y_proba, *, sample_weight=None, pos_label=None, lab
     """scikit-learn 1.9 `brier_score_loss` (binary vector or multiclass
     matrix): the mean of `sum_c (onehot - p)^2`, halved by default for the
     binary case."""
-    codes, a, k, binary = _proba(y_true, y_proba, labels, pos_label, "brier_score_loss")
-    n = len(codes)
-    w = _weights(sample_weight, n, "brier_score_loss")
-    if scale_by_half == "auto":
-        scale_by_half = binary or k < 3
-    prog = _Prog()
-    S, flags = _put_proba(prog, a, n, k, binary)
-    Y = prog.put_i32(codes)
-    return float(_row_mean(S, k, Y, n, "brier", w, numeric_mode, prog=prog, half=bool(scale_by_half),
-                           after=(_proba_after(flags, "brier_score_loss"),)))
-
-
-def _d2_proba(y_true, y_proba, sample_weight, labels, pos_label, numeric_mode, caller, kind):
-    """d2_log_loss_score / d2_brier_score: the row metric's folds, the
-    (weighted) class sums and `1 - num / den` (`rank_epi` D2_LOG / D2_BRIER:
-    the class-frequency denominator in binary64) in one device program."""
-    codes, a, k, binary = _proba(y_true, y_proba, labels, pos_label, caller)
-    n = len(codes)
-    if n < 2:
-        _undefined_warning("D^2 score is not well-defined with less than two samples.")
-        return float("nan")
-    w = _weights(sample_weight, n, caller)
-    prog = _Prog()
-    S, flags = _put_proba(prog, a, n, k, binary)
-    Y = prog.put_i32(codes)
-    tot, sw, W = _row_fold(prog, S, k, Y, n, kind, w)
-    off, per = _group(prog, Y, n, k, weights=W)
-    PER, weighted = (off, 0) if w is None else (per, 1)
-    res = prog.alloc(2)
-    if kind == "logloss":
-        prog.stage("rank_epi", 1, _RANK_D2_LOG, tot, PER, weighted, k, res)
-    else:
-        prog.stage("rank_epi", 1, _RANK_D2_BRIER, tot, n, _NONE if sw is None else sw, PER, weighted, k, res)
-    _run(prog, numeric_mode)
-    _proba_check(prog, flags, caller)
-    return float(prog.words(res, 2, "d")[0])
+    return _NATIVE(None, "family_mexp_rank_brier",
+                   (y_true, y_proba, sample_weight, pos_label, labels, scale_by_half, numeric_mode),
+                   _NATIVE_CONTEXT)
 
 
 def d2_log_loss_score(y_true, y_proba=None, *, sample_weight=None, labels=None, numeric_mode=None):
     """scikit-learn 1.9 `d2_log_loss_score`: one minus the log loss over the
     log loss of the (weighted) class frequencies."""
-    return _d2_proba(y_true, y_proba, sample_weight, labels, None, numeric_mode, "d2_log_loss_score", "logloss")
+    return _NATIVE(None, "family_mexp_rank_d2_log_loss",
+                   (y_true, y_proba, sample_weight, labels, None, numeric_mode),
+                   _NATIVE_CONTEXT)
 
 
 def d2_brier_score(y_true, y_proba, *, sample_weight=None, pos_label=None, labels=None, numeric_mode=None):
     """scikit-learn 1.9 `d2_brier_score`: one minus the Brier score over the
     Brier score of the (weighted) class frequencies."""
-    return _d2_proba(y_true, y_proba, sample_weight, labels, pos_label, numeric_mode, "d2_brier_score", "brier")
+    return _NATIVE(None, "family_mexp_rank_d2_brier",
+                   (y_true, y_proba, sample_weight, labels, pos_label, numeric_mode),
+                   _NATIVE_CONTEXT)
 
 
 def hinge_loss(y_true, pred_decision, *, labels=None, sample_weight=None, numeric_mode=None):
     """scikit-learn 1.9 `hinge_loss`: binary (labels mapped to -1 / +1, the
     larger class positive) or Crammer-Singer multiclass margins."""
-    from ._metrics_impl import _label_map, _selected_labels
-    true, kind, present = _targets(y_true, "hinge_loss")
-    n = len(true)
-    uniq = present if labels is None else sorted(_selected_labels(labels, kind, present))  # glue: sorts the selected class labels
-    s = _scores(pred_decision, n, "hinge_loss", name="pred_decision")
-    w = _weights(sample_weight, n, "hinge_loss")
-    prog = _Prog()
-    if len(uniq) > 2:
-        if s.ndim != 2:
-            raise ValueError("The shape of pred_decision cannot be 1d array with a multiclass target.")
-        if s.shape[1] != len(uniq):
-            raise ValueError("Please include all labels in y_true or pass labels as third argument"
-                             if labels is None else
-                             "The shape of pred_decision is not consistent with the number of classes.")
-        index = {c: i for i, c in enumerate(uniq)}  # glue: class index table
-        codes = _label_map(true, lambda v: index[v])
-        S, Y = prog.put(s), prog.put_i32(codes)
-        return float(_row_mean(S, s.shape[1], Y, n, "hinge_mc", w, numeric_mode, prog=prog))
-    if s.ndim == 2:
-        if s.shape[1] != 1:
-            raise ValueError("pred_decision must be 1-D for a binary target")
-        s = s.reshape((n,))
-    pos = uniq[-1]
-    codes = _label_map(true, lambda v: int(v == pos and len(uniq) == 2))
-    S, Y = prog.put(s), prog.put_i32(codes)
-    return float(_row_mean(S, 1, Y, n, "hinge_bin", w, numeric_mode, prog=prog))
-
-
-def _relevance(y_true, y_score, caller, *, indicator):
-    from ._buffer import materialize_f32_lists
-    y = materialize_f32_lists(y_true, "y_true")[0]
-    if y.dtype != "<f4":
-        y = as_f32_c(y, ndim=y.ndim, name="y_true")[0]
-    if y.ndim != 2:
-        raise ValueError(f"mojolearn {caller}: y_true must be a 2-D (n_samples, n_labels) array")
-    y = as_f32_c(y, ndim=2, name="y_true")[0]
-    if not all_finite(y):
-        raise ValueError(f"mojolearn {caller}: y_true must be finite")
-    s = _scores(y_score, y.shape[0], caller, ndim=2)
-    if s.shape != y.shape:
-        raise ValueError("y_true and y_score have different shape")
-    # `indicator`: the 0/1 test of y_true runs in the caller's program
-    # (`_relevance_put`: flag_scan, x_metrics/tail.mojo)
-    return y, s
-
-
-def _relevance_put(prog, y, s, caller, indicator):
-    """(S, Y, after): y_score and y_true in the program and, for an
-    indicator y_true, the device 0/1 test and its check."""
-    S, Y = prog.put(s), prog.put(y)
-    if not indicator:
-        return S, Y, ()
-    flag = _scan_flag(prog, Y, y.size, _SCAN_INDICATOR)
-
-    def check(prog):
-        if _flag_set(prog, flag):
-            raise ValueError(f"{caller} requires a binary label indicator y_true")
-    return S, Y, (check,)
-
-
-def _dcg_table(prog, c, log_base):
-    """The c-word Float32 DCG discount table `1 / log_b(i + 2)` (binary64,
-    narrowed), formed by the device (`rank_epi` DCG_DISC) in the program."""
-    b = float(log_base)
-    if not b > 0.0:
-        raise ValueError("math domain error")
-    if b == 1.0:
-        raise ZeroDivisionError("float division by zero")
-    B = _f64_words(prog, b)
-    D = prog.scratch(c)
-    if c:
-        prog.stage("rank_epi", c, _RANK_DCG_DISC, c, B, D)
-    return D
+    return _NATIVE(None, "family_mexp_rank_hinge",
+                   (y_true, pred_decision, labels, sample_weight, numeric_mode),
+                   _NATIVE_CONTEXT)
 
 
 def dcg_score(y_true, y_score, *, k=None, log_base=2, sample_weight=None, ignore_ties=False,
@@ -2096,14 +1997,9 @@ def dcg_score(y_true, y_score, *, k=None, log_base=2, sample_weight=None, ignore
     ignore_ties=True ranks tied scores by DESCENDING column index (numpy's
     `argsort(...)[::-1]` there, whose tie order its unstable sort leaves
     unspecified; this one is fixed)."""
-    y, s = _relevance(y_true, y_score, "dcg_score", indicator=False)
-    n, c = y.shape
-    w = _weights(sample_weight, n, "dcg_score")
-    prog = _Prog()
-    S, Y, _ = _relevance_put(prog, y, s, "dcg_score", False)
-    Dt = _dcg_table(prog, c, log_base)
-    return float(_row_mean(S, c, Y, n, "dcg_ignore_ties" if ignore_ties else "dcg", w, numeric_mode,
-                           K=0 if k is None else int(k), Dt=Dt, prog=prog))
+    return _NATIVE(None, "family_mexp_rank_dcg",
+                   (y_true, y_score, k, log_base, sample_weight, ignore_ties, numeric_mode),
+                   _NATIVE_CONTEXT)
 
 
 # Engineering notes (moved from the docstring):
@@ -2119,58 +2015,24 @@ def ndcg_score(y_true, y_score, *, k=None, sample_weight=None, ignore_ties=False
     the row has no relevant item), averaged over rows, weighted when `sample_weight` is
     given. Computed on the GPU.
     """
-    y, s = _relevance(y_true, y_score, "ndcg_score", indicator=False)
-    n, c = y.shape
-    if c <= 1:
-        raise ValueError(f"Computing NDCG is only meaningful when there is more than 1 document. Got {c} instead.")
-    w = _weights(sample_weight, n, "ndcg_score")
-    K = 0 if k is None else int(k)
-    prog = _Prog()
-    S, Y, _ = _relevance_put(prog, y, s, "ndcg_score", False)
-    neg = _scan_flag(prog, Y, y.size, _SCAN_NEGATIVE)
-    Dt = _dcg_table(prog, c, 2)
-    gain = prog.scratch(n)
-    ideal = prog.scratch(n)
-    ratio = prog.scratch(n)
-    prog.stage("row_metric", n, S, c, Y, gain, _ROW["dcg_ignore_ties" if ignore_ties else "dcg"], K, Dt)
-    prog.stage("row_metric", n, Y, c, Y, ideal, _ROW["dcg"], K, Dt)
-    prog.stage("rank_epi", n, _RANK_NDCG_ROW, gain, ideal, n, ratio)
-    zero = prog.scratch(n)
-    prog.stage("pair_key", n, 0, 0, zero, 1, 2)
-    W = _NONE if w is None else prog.put(w)
-    tot = _group(prog, zero, n, 1, values=ratio, weights=W)[1]
-    sw = _group(prog, zero, n, 1, weights=W)[1] if w is not None else None
-    res = prog.alloc(2)
-    prog.stage("rank_epi", 1, _RANK_MEAN, tot, n, _NONE if sw is None else sw, 1, 0, res)
-    _run(prog, numeric_mode)
-    if _flag_set(prog, neg):
-        raise ValueError("ndcg_score should not be used on negative y_true values.")
-    return float(prog.words(res, 2, "d")[0])
-
-
-def _label_ranking(kind, y_true, y_score, sample_weight, numeric_mode, caller):
-    y, s = _relevance(y_true, y_score, caller, indicator=True)
-    n, c = y.shape
-    w = _weights(sample_weight, n, caller)
-    prog = _Prog()
-    S, Y, after = _relevance_put(prog, y, s, caller, True)
-    return float(_row_mean(S, c, Y, n, kind, w, numeric_mode, prog=prog, after=after))
+    return _NATIVE(None, "family_mexp_rank_ndcg",
+                   (y_true, y_score, k, sample_weight, ignore_ties, numeric_mode),
+                   _NATIVE_CONTEXT)
 
 
 def coverage_error(y_true, y_score, *, sample_weight=None, numeric_mode=None):
     """scikit-learn 1.9 `coverage_error` (multilabel indicator y_true)."""
-    return _label_ranking("coverage", y_true, y_score, sample_weight, numeric_mode, "coverage_error")
+    return _NATIVE(None, "family_mexp_rank_coverage", (y_true, y_score, sample_weight, numeric_mode), _NATIVE_CONTEXT)
 
 
 def label_ranking_average_precision_score(y_true, y_score, *, sample_weight=None, numeric_mode=None):
     """scikit-learn 1.9 `label_ranking_average_precision_score`."""
-    return _label_ranking("lrap", y_true, y_score, sample_weight, numeric_mode,
-                          "label_ranking_average_precision_score")
+    return _NATIVE(None, "family_mexp_rank_lrap", (y_true, y_score, sample_weight, numeric_mode), _NATIVE_CONTEXT)
 
 
 def label_ranking_loss(y_true, y_score, *, sample_weight=None, numeric_mode=None):
     """scikit-learn 1.9 `label_ranking_loss` (tied scores count as misordered)."""
-    return _label_ranking("rankloss", y_true, y_score, sample_weight, numeric_mode, "label_ranking_loss")
+    return _NATIVE(None, "family_mexp_rank_loss", (y_true, y_score, sample_weight, numeric_mode), _NATIVE_CONTEXT)
 
 
 # ---------------------------------------------------------------------------
