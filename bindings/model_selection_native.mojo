@@ -13,6 +13,10 @@ from bindings.native_buffer_owner import native_storage_allocate
 from bindings.family_common import family_repr, family_is_str, family_isinstance, family_call
 from bindings.msel_common import msel_get_scorer, msel_score
 from bindings.msel_cv import msel_cross_validate, msel_cross_val_score, msel_cross_val_predict, msel_split_descriptor
+from bindings.msel_search import (
+    msel_grid_list, msel_grid_len, msel_sampler_list, msel_sampler_len, msel_search_fit, msel_validation_curve,
+    msel_learning_curve, msel_permutation_test_score,
+)
 from bindings.msel_split import (
     msel_split, msel_n_splits, msel_loo_at, msel_lpo_at, msel_logo_at, msel_lpgo_at, msel_check_cv,
     msel_train_test_split, msel_truth,
@@ -88,4 +92,23 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
         return msel_cross_val_predict(args, context)
     if operation == "family_msel_split_descriptor":
         return msel_split_descriptor(args, context)
+    if operation == "family_msel_grid":
+        return msel_grid_list(py_call(b.getattr, model, PythonObject("param_grid")))
+    if operation == "family_msel_grid_len":
+        return PythonObject(msel_grid_len(py_call(b.getattr, model, PythonObject("param_grid"))))
+    if operation == "family_msel_grid_item":
+        return family_call(msel_grid_list(py_call(b.getattr, model, PythonObject("param_grid"))).__getitem__, args[0])
+    if operation == "family_msel_sampler":
+        return msel_sampler_list(_msel_attr(model, "param_distributions"), _msel_attr(model, "n_iter"),
+                                 _msel_attr(model, "random_state"), context)
+    if operation == "family_msel_sampler_len":
+        return msel_sampler_len(_msel_attr(model, "param_distributions"), _msel_attr(model, "n_iter"))
+    if operation == "family_msel_search_fit":
+        return msel_search_fit(model, args, context)
+    if operation == "family_msel_validation_curve":
+        return msel_validation_curve(args, context)
+    if operation == "family_msel_learning_curve":
+        return msel_learning_curve(args, context)
+    if operation == "family_msel_permutation_test_score":
+        return msel_permutation_test_score(args, context)
     raise Error("RuntimeError: unknown model_selection operation " + operation)

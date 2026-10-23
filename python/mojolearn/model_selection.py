@@ -2437,26 +2437,13 @@ class ParameterGrid:
         self.param_grid = [dict(g) for g in param_grid]  # glue: parameter grid over the candidate dicts
 
     def __iter__(self):
-        import itertools
-        for g in self.param_grid:  # glue: parameter grid over the candidate dicts
-            keys = sorted(g)  # glue: parameter grid over the candidate dicts
-            if not keys:
-                yield {}
-                continue
-            for combo in itertools.product(*[list(g[k]) for k in keys]):  # glue: parameter grid over the candidate dicts
-                yield dict(zip(keys, combo))
+        return iter(_NATIVE(self, "family_msel_grid", (), _NATIVE_CONTEXT))
 
     def __len__(self):
-        total = 0
-        for g in self.param_grid:  # glue: parameter grid over the candidate dicts
-            size = 1
-            for v in g.values():  # glue: parameter grid over the candidate dicts
-                size *= len(list(v))
-            total += size
-        return total
+        return _NATIVE(self, "family_msel_grid_len", (), _NATIVE_CONTEXT)
 
     def __getitem__(self, ind):
-        return list(self)[ind]
+        return _NATIVE(self, "family_msel_grid_item", (ind,), _NATIVE_CONTEXT)
 
 
 class ParameterSampler:
@@ -2504,19 +2491,10 @@ class ParameterSampler:
         self.random_state = random_state
 
     def __iter__(self):
-        grid = list(ParameterGrid(self.param_distributions))
-        n_iter = self.n_iter
-        if len(grid) < n_iter:
-            warnings.warn(f'The total space of parameters {len(grid)} is smaller than n_iter={n_iter}. '
-                          f'Running {len(grid)} iterations. For exhaustive searches, use GridSearchCV.',
-                          UserWarning, stacklevel=2)
-            n_iter = len(grid)
-        perm = _rng(self.random_state).permutation(len(grid))
-        for j in perm[:n_iter]:  # glue: parameter grid over the candidate dicts
-            yield grid[j]
+        return iter(_NATIVE(self, "family_msel_sampler", (), _NATIVE_CONTEXT))
 
     def __len__(self):
-        return min(self.n_iter, len(ParameterGrid(self.param_distributions)))
+        return _NATIVE(self, "family_msel_sampler_len", (), _NATIVE_CONTEXT)
 
 
 def _rank(values):
@@ -2587,81 +2565,7 @@ class _BaseSearch:
             metrics and ``refit`` is neither False, one of their names, nor a
             callable.
         """
-        _require_serial(self.n_jobs, self.error_score, type(self).__name__)
-        candidates = list(self._candidates())
-        if not candidates:
-            raise ValueError('No fits were performed. Was the CV iterator empty? Were there no candidates?')
-        multi = _scorers(self.scoring)
-        names = list(multi) if multi is not None else ['score']
-        if multi is not None and self.refit is not False and (
-                not isinstance(self.refit, str) or self.refit not in multi) and not callable(self.refit):
-            raise ValueError('For multi-metric scoring, the parameter refit must be set to a scorer key '
-                             'or a callable to refit an estimator with the best parameter setting on the '
-                             'whole data and make the best_* attributes available for that metric.')
-        scoring = multi if multi is not None else self.scoring
-        results = {'params': candidates}
-        per = {nm: [] for nm in names}  # glue: result lists over the scorer names
-        trains = {nm: [] for nm in names}  # glue: result lists over the scorer names
-        n_splits = None
-        # the folds are drawn ONCE for every candidate (scikit-learn's
-        # evaluate_candidates materializes cv.split once)
-        Xf, yf, folds = _cv_folds(_Pinned(self.estimator), X, y, self.cv, groups)
-        # X, y and the fold indices stay resident on the device for every
-        # candidate (lane cpu2-l4-modelsel)
-        with _FoldRows(Xf, yf, folds, device_rows=_device_rows_ok(self.estimator, scoring)) as rows:
-            for params in candidates:  # glue: one cross-validation per candidate
-                est = _clone(self.estimator)
-                if hasattr(est, 'set_params'):
-                    est.set_params(**params)
-                else:
-                    for k, v in params.items():  # glue: candidate parameters set by name
-                        setattr(est, k, v)
-                est = _Pinned(est)
-                cvr = _cross_validate_folds(est, Xf, yf, folds, scoring,
-                                            return_train_score=self.return_train_score,
-                                            error_score=self.error_score, rows=rows)
-                for nm in names:  # glue: result lists over the scorer names
-                    per[nm].append(cvr[f'test_{nm}'].tolist())
-                    if self.return_train_score:
-                        trains[nm].append(cvr[f'train_{nm}'].tolist())
-                n_splits = len(cvr['fit_time'])
-        for k in sorted({k for p in candidates for k in p}):  # glue: param columns over the candidate keys
-            results[f'param_{k}'] = [p.get(k) for p in candidates]  # glue: param columns over the candidate keys
-        for nm in names:  # glue: result lists over the scorer names
-            suffix = '' if multi is None else f'_{nm}'
-            for i in range(n_splits):  # glue: one score column per split index
-                results[f'split{i}_test_score{suffix}'] = Array.from_list([s[i] for s in per[nm]], '<f8')  # glue: one score column per split index
-            # glue: explicit scalar tail over the candidates x folds scores (Python floats, not data)
-            means = _row_means(per[nm])
-            stds = _row_stds(per[nm], means)
-            results[f'mean_test_score{suffix}'] = Array.from_list(means, '<f8')
-            results[f'std_test_score{suffix}'] = Array.from_list(stds, '<f8')
-            results[f'rank_test_score{suffix}'] = Array.from_list(_rank(means), '<i4')
-            if self.return_train_score:
-                tm = _row_means(trains[nm])
-                results[f'mean_train_score{suffix}'] = Array.from_list(tm, '<f8')
-        self.cv_results_ = results
-        self.n_splits_ = n_splits
-        self.multimetric_ = multi is not None
-        key = names[0] if multi is None else (self.refit if isinstance(self.refit, str) else None)
-        if key is not None:
-            suffix = '' if multi is None else f'_{key}'
-            ranks = results[f'rank_test_score{suffix}'].tolist()
-            self.best_index_ = ranks.index(1)
-            self.best_score_ = results[f'mean_test_score{suffix}'].tolist()[self.best_index_]
-            self.best_params_ = candidates[self.best_index_]
-        elif callable(self.refit):
-            self.best_index_ = int(self.refit(results))
-            self.best_params_ = candidates[self.best_index_]
-        if self.refit is not False:
-            best = _clone(self.estimator)
-            if hasattr(best, 'set_params'):
-                best.set_params(**self.best_params_)
-            Xa = _materialize(X, 'X')[0]
-            best.fit(Xa, y) if y is not None else best.fit(Xa)
-            self.best_estimator_ = best
-            self.scorer_ = get_scorer(self.scoring) if multi is None else multi
-        return self
+        return _NATIVE(self, "family_msel_search_fit", (X, y, groups), _NATIVE_CONTEXT)
 
     def _best(self):
         if not hasattr(self, 'best_estimator_'):
@@ -2912,21 +2816,9 @@ def validation_curve(estimator, X, y, *, param_name, param_range, groups=None, c
     >>> train, test = validation_curve(mojolearn.Ridge(), X, y, param_name='alpha',
     ...                                param_range=[0.1, 1.0, 10.0], cv=5)
     """
-    _require_serial(n_jobs, error_score, 'validation_curve')
-    # the folds are drawn ONCE for every parameter value, as scikit-learn does
-    Xf, yf, folds = _cv_folds(_Pinned(estimator), X, y, cv, groups)
-    tr, te = [], []
-    with _FoldRows(Xf, yf, folds, device_rows=_device_rows_ok(estimator, scoring)) as rows:
-        for v in param_range:  # glue: one cross-validation per parameter value
-            est = _clone(estimator)
-            est.set_params(**{param_name: v})
-            r = _cross_validate_folds(_Pinned(est), Xf, yf, folds, scoring, return_train_score=True,
-                                      error_score=error_score, rows=rows)
-            tr.append(r['train_score'].tolist())
-            te.append(r['test_score'].tolist())
-    k = len(tr[0])
-    return (Array.from_list([v for row in tr for v in row], '<f8').reshape((len(tr), k)),  # glue: score rows flattened into the result block
-            Array.from_list([v for row in te for v in row], '<f8').reshape((len(te), k)))  # glue: score rows flattened into the result block
+    return _NATIVE(None, "family_msel_validation_curve",
+                   (estimator, X, y, param_name, param_range, groups, cv, scoring, n_jobs, error_score),
+                   _NATIVE_CONTEXT)
 
 
 def learning_curve(estimator, X, y, *, groups=None, train_sizes=(0.1, 0.325, 0.55, 0.775, 1.0), cv=None,
@@ -2989,68 +2881,9 @@ def learning_curve(estimator, X, y, *, groups=None, train_sizes=(0.1, 0.325, 0.5
     >>> y = rng.random(1000, dtype=np.float32)
     >>> sizes, train, test = learning_curve(mojolearn.Ridge(), X, y, cv=5)
     """
-    import time
-    X, y, folds = _cv_folds(estimator, X, y, cv, groups)
-    n_max = min(len(tr) for tr, _ in folds)  # glue: smallest training fold size over the folds
-    sizes = []
-    for s in train_sizes:  # glue: train size arguments resolved and sorted
-        a = int(math.floor(s * n_max)) if isinstance(s, float) else int(s)
-        if not 0 < a <= n_max:
-            raise ValueError(f'train_sizes has been interpreted as absolute numbers of training samples and '
-                             f'must be within (0, {n_max}], but is within [{a}, {a}].')
-        sizes.append(a)
-    sizes = sorted(set(sizes))  # glue: train size arguments resolved and sorted
-    # scikit-learn permutes each fold's training rows ONCE (in fold order)
-    # and takes nested prefixes of that one order for every size
-    rng = _rng(random_state) if shuffle else None
-    orders = []
-    # the draws, in fold order, as Int64 rows from one device program,
-    # and each fold's training rows reordered by the core gather
-    perms = rng.permutation_rows([int(tr.size) for tr, _ in folds]) if rng is not None else None  # glue: one device permutation length per fold
-    for f, (train, _) in enumerate(folds):  # glue: one device permutation length per fold
-        tr = train if train.dtype == '<i8' and train._has_order('C') else train.astype('<i8')._as_c()
-        if perms is not None and tr.size:
-            perm = Array._owned(perms[f], (tr.size,), '<i8', 'C')
-            out = empty((tr.size,), '<i8')
-            _native('gather_i64')(_addr_ro(tr), tr.size, _addr_ro(perm), tr.size, _addr(out))
-            tr = out
-        orders.append(tr)
-    tr_s, te_s, ft, st = [], [], [], []
-    # X, y and the test folds resident on the device for every size; each
-    # size's training prefix is put once and freed after its fit and score
-    res = _Resident()
-
-    def take(values, idx):
-        return _take_rows(values, idx) if isinstance(values, list) else res.take(values, idx)
-    try:
-        for a in sizes:  # glue: one fit per size and fold
-            row_tr, row_te, row_ft, row_st = [], [], [], []
-            for (train, test), tr_idx in zip(folds, orders):  # glue: one fit per size and fold
-                sub = tr_idx[0:a]
-                est = _clone(estimator)
-                t0 = time.perf_counter()
-                Xs, ys = take(X, sub), take(y, sub)
-                est.fit(Xs, ys)
-                t1 = time.perf_counter()
-                sc = get_scorer(scoring)
-                row_tr.append(_score(est, Xs, ys, sc))
-                row_te.append(_score(est, take(X, test), take(y, test), sc))
-                res.release(sub)
-                row_ft.append(t1 - t0)
-                row_st.append(time.perf_counter() - t1)
-            tr_s.append(row_tr)
-            te_s.append(row_te)
-            ft.append(row_ft)
-            st.append(row_st)
-    finally:
-        res.close()
-    k = len(folds)
-    shape = (len(sizes), k)
-    pack = lambda m: Array.from_list([v for row in m for v in row], '<f8').reshape(shape)  # glue: score rows flattened into the result block
-    out = [Array.from_list(sizes, '<i8'), pack(tr_s), pack(te_s)]
-    if return_times:
-        out += [pack(ft), pack(st)]
-    return tuple(out)
+    return _NATIVE(None, "family_msel_learning_curve",
+                   (estimator, X, y, groups, train_sizes, cv, scoring, n_jobs, shuffle, random_state, error_score,
+                    return_times), _NATIVE_CONTEXT)
 
 
 def permutation_test_score(estimator, X, y, *, groups=None, cv=None, n_permutations=100, n_jobs=None,
@@ -3108,35 +2941,9 @@ def permutation_test_score(estimator, X, y, *, groups=None, cv=None, n_permutati
     >>> score, perm_scores, pvalue = permutation_test_score(
     ...     mojolearn.Ridge(), X, y, cv=5, n_permutations=20)
     """
-    fast = _NativePermutation.get(estimator, X, y, groups, cv)
-    if fast is not None:
-        return fast.run(estimator, groups, cv, n_permutations, random_state, get_scorer(scoring))
-    Xa = _materialize(X, 'X')[0]
-    yl = flatten_labels(y)
-    sc = get_scorer(scoring)
-
-    def mean_score(yv):
-        yarr = _materialize(Array.from_list(yv, '<f4' if isinstance(yv[0], float) else '<i4'), 'y')[0]
-        r = cross_validate(estimator, Xa, yarr, groups=groups, cv=cv, scoring=sc)
-        return _row_means([r['test_score'].tolist()])[0]
-    score = mean_score(yl)
-    rng = _rng(random_state)
-    perm_scores = []
-    for _ in range(n_permutations):  # cpu-route: definition route for label objects (str/mixed) the native permutation cannot hold [py-data-loop]
-        if groups is None:
-            perm = rng.permutation(len(yl))
-            yp = [yl[j] for j in perm]  # cpu-route: definition route for label objects (str/mixed) the native permutation cannot hold [py-data-loop]
-        else:
-            g = flatten_labels(groups)
-            yp = list(yl)
-            for gv in sorted(set(g)):  # cpu-route: definition route for label objects (str/mixed) the native permutation cannot hold [py-data-loop,py-reduce]
-                rows = [i for i, v in enumerate(g) if v == gv]  # cpu-route: definition route for label objects (str/mixed) the native permutation cannot hold [py-data-loop]
-                perm = rng.permutation(len(rows))
-                for i, j in zip(rows, perm):  # cpu-route: definition route for label objects (str/mixed) the native permutation cannot hold [py-data-loop]
-                    yp[i] = yl[rows[j]]
-        perm_scores.append(mean_score(yp))
-    pvalue = (sum(1 for s in perm_scores if s >= score) + 1.0) / (n_permutations + 1)  # cpu-route: definition route for label objects (str/mixed), one score per permutation [py-data-loop,py-reduce]
-    return score, Array.from_list(perm_scores, '<f8'), pvalue
+    return _NATIVE(None, "family_msel_permutation_test_score",
+                   (estimator, X, y, groups, cv, n_permutations, n_jobs, random_state, verbose, scoring, fit_params,
+                    params), _NATIVE_CONTEXT)
 
 
 class _NativePermutation:

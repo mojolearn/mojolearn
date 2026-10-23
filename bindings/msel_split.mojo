@@ -144,7 +144,7 @@ def msel_stratified_fold_rows(enc: PythonObject, counts: List[Int], alloc: Pytho
             if c == 0:
                 pb = o
             if o != pb + at:
-                raise Error("AssertionError: stratified_fold_rows: the class permutations are not contiguous")
+                raise Error("RuntimeError: stratified_fold_rows: the class permutations are not contiguous")
             at += counts[c]
     var cum = List[Int]()
     var table = msel_p64(alloc)

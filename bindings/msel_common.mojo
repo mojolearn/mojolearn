@@ -67,16 +67,27 @@ def msel_try(callable: PythonObject, args: PythonObject, classes: PythonObject,
     raise failure^
 
 
+def msel_apply(callable: PythonObject, args: PythonObject) raises -> PythonObject:
+    """`callable(*args)` for an argument tuple; its exception is restored at
+    the door unchanged."""
+    ref cpy = Python().cpython()
+    var result = cpy.PyObject_Call(callable._obj_ptr, args._obj_ptr, PyObjectPtr())
+    if not result:
+        var failure = stash_python_error()
+        raise failure^
+    return PythonObject(from_owned=result)
+
+
 def msel_missed(value: PythonObject, context: PythonObject) -> Bool:
     return value is context["family_msel_miss"]
 
 
 def _error_class(message: String) raises -> PythonObject:
-    """The Python class the door raises for an owner Error."""
+    """The Python class the door (bindings/classical_native.mojo) raises
+    for an owner Error: its mapped prefixes, else ValueError."""
     var b = msel_b()
-    var names: List[String] = ["TypeError", "AttributeError", "RuntimeError", "NotImplementedError", "OverflowError",
-                 "KeyError", "IndexError", "ZeroDivisionError", "ImportError", "ModuleNotFoundError",
-                 "AssertionError", "ValueError"]
+    var names: List[String] = ["TypeError", "OverflowError", "NotImplementedError", "ImportError", "IndexError",
+                               "AttributeError", "RuntimeError"]
     for i in range(len(names)):  # small-loop(error classes: the door's prefixes)
         if message.startswith(names[i] + ": "):
             return py_call(b.getattr, b, PythonObject(names[i]))
