@@ -6,8 +6,12 @@ This module follows scikit-learn's ``sklearn.model_selection``: the splitters
 ``train_test_split``, ``cross_val_score``, ``cross_validate``,
 ``cross_val_predict``, ``GridSearchCV``, ``RandomizedSearchCV``,
 ``validation_curve``, ``learning_curve``, ``permutation_test_score`` and the
-scorer helpers. scikit-learn is not required; scikit-learn pipelines,
-splitters and estimators that follow its protocol also work.
+scorer helpers. Use supported mojolearn estimators, mojolearn splitters or
+precomputed fold-index pairs, and scorers from ``get_scorer`` or
+``make_scorer``. Third-party estimators and Python callbacks are not accepted.
+scikit-learn is not required.
+
+In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
 
 Behavior to know:
 
@@ -17,8 +21,6 @@ Behavior to know:
 * Shuffled splits draw from mojolearn's own counter-based random generator,
   so a given ``random_state`` gives a reproducible split, but not the same
   rows scikit-learn would pick for that seed.
-* Fold rows are gathered on the device, and X and y stay resident there
-  across folds and candidates. All learning happens in the estimator.
 """
 import array
 import copy
@@ -360,13 +362,15 @@ def split_descriptor(X, y, *, estimator=None, cv=None, groups=None):
         ``cross_val_score``.
     y : array-like of shape (n_samples,)
         Targets, in the same order. A buffer array or a list of labels.
-    estimator : estimator, default None
-        The estimator given to ``cross_val_score``. Required when ``cv`` is
+    estimator : mojolearn estimator, default None
+        The supported estimator given to ``cross_val_score``. Required when ``cv`` is
         None or an integer, because the default folds are stratified for a
         classifier and plain ``KFold`` otherwise; omitting it then raises
         ``ValueError``.
-    cv : int, splitter or iterable of (train, test), default None
+    cv : int, mojolearn splitter, list, tuple or None, default None
         The ``cv`` given to ``cross_val_score`` (None means five folds).
+        Precomputed folds must be a list or tuple of ``(train, test)``
+        integer-index pairs.
     groups : array-like of shape (n_samples,), default None
         Group labels, when the splitter reads them.
 
@@ -418,26 +422,25 @@ def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
 
     Parameters
     ----------
-    estimator : estimator
-        An unfitted estimator with ``get_params``, ``fit`` and (when
-        ``scoring`` is None) ``score``. A scikit-learn pipeline works too; put
-        unfitted transforms inside it so they are fit on each training fold.
+    estimator : mojolearn estimator
+        An unfitted estimator supported by model selection, such as
+        ``Ridge``. With ``scoring=None``, it must support ``score``.
     X : array-like of shape (n_samples, n_features)
         Dense 2-D training data. Its dtype is kept; the estimator checks the
         dtypes it supports. Sparse input is not supported.
     y : array-like of shape (n_samples,)
         1-D targets matching X's rows.
-    cv : int, splitter or iterable of (train, test), default None
+    cv : int, mojolearn splitter, list, tuple or None, default None
         None means five folds. An integer gives that many unshuffled folds,
         stratified by class for a classifier with discrete labels, plain
-        contiguous folds otherwise. A splitter (any object with
-        ``split(X, y, groups)``) or an iterable of integer index pairs is
-        used as given.
-    scoring : str, callable or None, default None
+        contiguous folds otherwise. A mojolearn splitter or a precomputed
+        list or tuple of ``(train, test)`` integer-index pairs is used as
+        given. Custom splitter and iterator objects are not accepted.
+    scoring : str, scorer or None, default None
         None calls the fitted estimator's ``score``. A string is one of
-        ``get_scorer_names()``. A callable is called as
-        ``scoring(estimator, X_test, y_test)`` and must return a real
-        scalar. Loss scorers are negated (``'neg_mean_squared_error'``), so
+        ``get_scorer_names()``. A scorer must come from ``get_scorer`` or
+        ``make_scorer`` and return a real scalar. Loss scorers are negated
+        (``'neg_mean_squared_error'``), so
         higher is always better.
     groups : array-like of shape (n_samples,), default None
         Group labels for a splitter that reads them. Passing ``groups`` with
@@ -456,9 +459,9 @@ def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
     Notes
     -----
     Fit parameters, sample weights, ``eval_set``, precomputed kernels and
-    refitting are not supported. Set ``numeric_mode`` explicitly on every
-    pipeline step and custom metric when the results must be reproducible
-    across devices.
+    refitting are not supported. For estimators and metrics with a
+    ``numeric_mode`` parameter, select ``'identical'`` for cross-device
+    identity.
 
     Examples
     --------
@@ -1321,14 +1324,16 @@ def check_cv(cv=5, y=None, *, classifier=False, shuffle=False, random_state=None
     Follows scikit-learn's ``check_cv``. An integer (or None, meaning 5)
     becomes ``StratifiedKFold`` when ``classifier`` is true and ``y`` holds
     discrete labels (strings, or integer-valued finite numbers), and
-    ``KFold`` otherwise. An object with a ``split`` method is returned as is,
-    and an iterable of ``(train, test)`` index pairs is wrapped in a
-    splitter that yields those pairs.
+    ``KFold`` otherwise. A mojolearn splitter is returned as is, and a list
+    or tuple of ``(train, test)`` index pairs is wrapped in a splitter that
+    yields those pairs.
 
     Parameters
     ----------
-    cv : int, splitter, iterable or None, default 5
-        The cross-validation strategy.
+    cv : int, mojolearn splitter, list, tuple or None, default 5
+        The cross-validation strategy. Precomputed folds must be a list or
+        tuple of integer-index pairs; custom splitter and iterator objects
+        are not accepted.
     y : array-like of shape (n_samples,), default None
         Targets, read only to decide whether to stratify.
     classifier : bool, default False
@@ -1346,8 +1351,9 @@ def check_cv(cv=5, y=None, *, classifier=False, shuffle=False, random_state=None
     Raises
     ------
     ValueError
-        If ``cv`` is a string or another value that is not an integer,
-        splitter or iterable.
+        If the requested number of folds is invalid.
+    TypeError
+        If ``cv`` is not an integer, mojolearn splitter, list, tuple or None.
 
     Examples
     --------
@@ -1541,7 +1547,7 @@ def _proba_column1(pred):
 
 
 def make_scorer(score_func, *, response_method='predict', greater_is_better=True, **kwargs):
-    """Make a scorer from a metric function.
+    """Make a scorer from a supported mojolearn metric function.
 
     Follows scikit-learn's ``make_scorer``. The scorer is called as
     ``scorer(estimator, X, y)``: it gets predictions from the estimator's
@@ -1550,8 +1556,10 @@ def make_scorer(score_func, *, response_method='predict', greater_is_better=True
 
     Parameters
     ----------
-    score_func : callable
-        Metric with signature ``score_func(y_true, y_pred, **kwargs)``.
+    score_func : mojolearn metric function
+        A supported function from ``mojolearn.metrics`` with signature
+        ``score_func(y_true, y_pred, **kwargs)``. Custom metric functions
+        and callable objects are not accepted.
     response_method : str or tuple of str, default 'predict'
         Estimator method that produces the predictions. A tuple is tried in
         order and the first method the estimator has is used.
@@ -1563,6 +1571,7 @@ def make_scorer(score_func, *, response_method='predict', greater_is_better=True
     Returns
     -------
     scorer : callable
+        A scorer accepted by mojolearn's model-selection functions.
 
     Examples
     --------
@@ -1644,9 +1653,10 @@ def get_scorer(scoring):
 
     Parameters
     ----------
-    scoring : str, callable or None
-        A name from ``get_scorer_names()``, a callable (returned as is), or
-        None (returned as is, meaning the estimator's own ``score``).
+    scoring : str, scorer or None
+        A name from ``get_scorer_names()``, a scorer returned by
+        ``get_scorer`` or ``make_scorer`` (returned as is), or None
+        (returned as is, meaning the estimator's own ``score``).
 
     Returns
     -------
@@ -1655,7 +1665,9 @@ def get_scorer(scoring):
     Raises
     ------
     ValueError
-        If ``scoring`` is an unknown name or not a str, callable or None.
+        If ``scoring`` is an unknown name.
+    TypeError
+        If ``scoring`` is a custom callable or another unsupported object.
 
     Examples
     --------
@@ -1679,19 +1691,21 @@ def cross_validate(estimator, X, y=None, *, groups=None, scoring=None, cv=None, 
 
     Parameters
     ----------
-    estimator : estimator
-        An unfitted estimator with ``get_params`` and ``fit``.
+    estimator : mojolearn estimator
+        An unfitted estimator supported by model selection, such as ``Ridge``.
     X : array-like of shape (n_samples, n_features)
         Training data.
     y : array-like of shape (n_samples,), default None
         Targets; None for unsupervised estimators.
     groups : array-like of shape (n_samples,), default None
         Group labels for a splitter that reads them.
-    scoring : str, callable, list, tuple, set, dict or None, default None
-        None uses the estimator's ``score``. A name or callable gives one
-        score, stored as ``test_score``. A list, tuple or set of names, or a
-        dict of name to scorer, gives several, stored as ``test_<name>``.
-    cv : int, splitter, iterable or None, default None
+    scoring : str, scorer, list, tuple, set, dict or None, default None
+        None uses the estimator's ``score``. A name from ``get_scorer_names()``
+        or a scorer from ``get_scorer`` or ``make_scorer`` gives one score,
+        stored as ``test_score``. A list, tuple or set of names, or a dict
+        mapping names to scorer names or scorer objects, gives several, stored as
+        ``test_<name>``.
+    cv : int, mojolearn splitter, list, tuple or None, default None
         As in ``check_cv``: None means five folds, stratified for a
         classifier.
     n_jobs : int or None, default None
@@ -1741,15 +1755,16 @@ def cross_val_predict(estimator, X, y=None, *, groups=None, cv=None, n_jobs=None
 
     Parameters
     ----------
-    estimator : estimator
-        An unfitted estimator with ``get_params``, ``fit`` and ``method``.
+    estimator : mojolearn estimator
+        An unfitted estimator supported by model selection that provides
+        the requested prediction method.
     X : array-like of shape (n_samples, n_features)
         Training data.
     y : array-like of shape (n_samples,), default None
         Targets.
     groups : array-like of shape (n_samples,), default None
         Group labels for a splitter that reads them.
-    cv : int, splitter, iterable or None, default None
+    cv : int, mojolearn splitter, list, tuple or None, default None
         As in ``check_cv``: None means five folds, stratified for a
         classifier.
     n_jobs : int or None, default None
@@ -1788,9 +1803,10 @@ class ParameterGrid:
     Parameters
     ----------
     param_grid : dict or list of dicts
-        Maps each parameter name to a nonempty list of values. Raises
-        ``TypeError`` for a value that is not a list-like, and
-        ``ValueError`` for an empty one.
+        Maps each parameter name to a nonempty collection of candidate
+        values, such as a list, tuple or supported buffer array. Custom
+        iterator objects are not accepted. An empty collection raises
+        ``ValueError``.
 
     Examples
     --------
@@ -1824,8 +1840,9 @@ class ParameterSampler:
     Parameters
     ----------
     param_distributions : dict or list of dicts
-        Maps each parameter name to a list of values. scipy.stats
-        distributions are not supported and raise ``NotImplementedError``.
+        Maps each parameter name to a list of candidate values. Sampling
+        selects from those values; scipy.stats distributions and custom
+        distribution callbacks are not accepted.
     n_iter : int
         Number of combinations to sample.
     random_state : int or None, default None
@@ -1944,24 +1961,26 @@ class GridSearchCV(_BaseSearch):
     ``ParameterGrid(param_grid)`` is cross-validated on the same folds, one
     fit at a time. With ``refit``, the best combination is then fit on all
     of X and y, and ``predict``, ``predict_proba``, ``decision_function``,
-    ``transform`` and ``score`` call that fitted estimator.
+    ``transform`` and ``score`` call that fitted estimator when it supports
+    the requested operation.
 
     Parameters
     ----------
-    estimator : estimator
-        An unfitted estimator with ``get_params`` and ``fit``.
+    estimator : mojolearn estimator
+        An unfitted estimator supported by model selection, such as ``Ridge``.
     param_grid : dict or list of dicts
         Parameter names mapped to lists of values.
-    scoring : str, callable, list, tuple, set, dict or None, default None
+    scoring : str, scorer, list, tuple, set, dict or None, default None
         As in ``cross_validate``. None uses the estimator's ``score``.
     n_jobs : int or None, default None
         Only None or 1 is supported; other values raise
         ``NotImplementedError``.
-    refit : bool, str or callable, default True
-        Refit the best candidate on the whole data. With several metrics,
-        the name of the metric that picks the best candidate, or a callable
-        that takes ``cv_results_`` and returns the best index.
-    cv : int, splitter, iterable or None, default None
+    refit : bool or str, default True
+        True refits the best candidate on all the data after single-metric
+        scoring; False skips refitting. With several metrics, supply the
+        name of the metric that selects the best candidate, or False.
+        Custom refit callbacks are not accepted.
+    cv : int, mojolearn splitter, list, tuple or None, default None
         As in ``check_cv``: None means five folds, stratified for a
         classifier.
     verbose : int, default 0
@@ -1981,15 +2000,17 @@ class GridSearchCV(_BaseSearch):
         ``mean_test_score``, ``std_test_score`` and ``rank_test_score`` (1 is
         best); with several metrics each score key ends in ``_<metric>``.
     best_index_ : int
-        Index of the best candidate in ``cv_results_``.
+        Index of the best candidate in ``cv_results_``. With several metrics,
+        set only when ``refit`` names the selection metric.
     best_score_ : float
-        Mean cross-validated score of the best candidate (not set when
-        ``refit`` is a callable).
+        Mean cross-validated score of the best candidate. With several
+        metrics, set only when ``refit`` names the selection metric.
     best_params_ : dict
-        Parameters of the best candidate.
-    best_estimator_ : estimator
+        Parameters of the best candidate. With several metrics, set only
+        when ``refit`` names the selection metric.
+    best_estimator_ : mojolearn estimator
         The best candidate refit on the whole data (only with ``refit``).
-    scorer_ : callable or dict
+    scorer_ : scorer or dict
         The scorer(s) used (only with ``refit``).
     n_splits_ : int
         Number of cross-validation splits.
@@ -2023,25 +2044,26 @@ class RandomizedSearchCV(_BaseSearch):
     Follows scikit-learn's ``RandomizedSearchCV`` for lists of values:
     ``n_iter`` combinations are sampled without replacement by
     ``ParameterSampler`` and each is cross-validated on the same folds, one
-    fit at a time. scipy.stats distributions are not supported. Fitting,
+    fit at a time. Sampling uses the supplied candidate values; scipy.stats
+    distributions and custom distribution callbacks are not accepted. Fitting,
     refitting, the result attributes and the prediction methods are as in
     ``GridSearchCV``.
 
     Parameters
     ----------
-    estimator : estimator
-        An unfitted estimator with ``get_params`` and ``fit``.
+    estimator : mojolearn estimator
+        An unfitted estimator supported by model selection, such as ``Ridge``.
     param_distributions : dict or list of dicts
         Parameter names mapped to lists of values.
     n_iter : int, default 10
         Number of combinations to try.
-    scoring : str, callable, list, tuple, set, dict or None, default None
+    scoring : str, scorer, list, tuple, set, dict or None, default None
         As in ``cross_validate``.
     n_jobs : int or None, default None
         Only None or 1 is supported.
-    refit : bool, str or callable, default True
+    refit : bool or str, default True
         As in ``GridSearchCV``.
-    cv : int, splitter, iterable or None, default None
+    cv : int, mojolearn splitter, list, tuple or None, default None
         As in ``check_cv``.
     verbose : int, default 0
         Accepted for compatibility; nothing is printed.
@@ -2091,9 +2113,8 @@ def validation_curve(estimator, X, y, *, param_name, param_range, groups=None, c
 
     Parameters
     ----------
-    estimator : estimator
-        An unfitted estimator with ``get_params``, ``set_params`` and
-        ``fit``.
+    estimator : mojolearn estimator
+        An unfitted estimator supported by model selection, such as ``Ridge``.
     X : array-like of shape (n_samples, n_features)
         Training data.
     y : array-like of shape (n_samples,)
@@ -2104,9 +2125,9 @@ def validation_curve(estimator, X, y, *, param_name, param_range, groups=None, c
         Values of the parameter.
     groups : array-like of shape (n_samples,), default None
         Group labels for a splitter that reads them.
-    cv : int, splitter, iterable or None, default None
+    cv : int, mojolearn splitter, list, tuple or None, default None
         As in ``check_cv``.
-    scoring : str, callable or None, default None
+    scoring : str, scorer or None, default None
         As in ``cross_val_score``.
     n_jobs : int or None, default None
         Only None or 1 is supported.
@@ -2145,8 +2166,8 @@ def learning_curve(estimator, X, y, *, groups=None, train_sizes=(0.1, 0.325, 0.5
 
     Parameters
     ----------
-    estimator : estimator
-        An unfitted estimator with ``get_params`` and ``fit``.
+    estimator : mojolearn estimator
+        An unfitted estimator supported by model selection, such as ``Ridge``.
     X : array-like of shape (n_samples, n_features)
         Training data.
     y : array-like of shape (n_samples,)
@@ -2158,18 +2179,19 @@ def learning_curve(estimator, X, y, *, groups=None, train_sizes=(0.1, 0.325, 0.5
         ints are row counts. Each must resolve to between 1 and the smallest
         training fold's size, or ``ValueError`` is raised. Duplicates are
         dropped and the sizes sorted.
-    cv : int, splitter, iterable or None, default None
+    cv : int, mojolearn splitter, list, tuple or None, default None
         As in ``check_cv``.
-    scoring : str, callable or None, default None
+    scoring : str, scorer or None, default None
         As in ``cross_val_score``.
     n_jobs : int or None, default None
-        Accepted for compatibility; fits always run serially.
+        Only None or 1 is supported; fits run serially.
     shuffle : bool, default False
         Shuffle each fold's training rows once before taking the prefixes.
     random_state : int or None, default None
         Seed for the shuffle (mojolearn's counter-based generator).
     error_score : 'raise' or float, default nan
-        Accepted for compatibility; a fit error always propagates.
+        ``'raise'`` propagates a fit error; a number is recorded as the
+        training and test scores for that failed fit instead.
     return_times : bool, default False
         Also return fit and score times.
 
@@ -2210,15 +2232,15 @@ def permutation_test_score(estimator, X, y, *, groups=None, cv=None, n_permutati
 
     Parameters
     ----------
-    estimator : estimator
-        An unfitted estimator with ``get_params`` and ``fit``.
+    estimator : mojolearn estimator
+        An unfitted estimator supported by model selection, such as ``Ridge``.
     X : array-like of shape (n_samples, n_features)
         Training data.
     y : array-like of shape (n_samples,)
         Targets.
     groups : array-like of shape (n_samples,), default None
         Permute ``y`` only within each group; also passed to the splitter.
-    cv : int, splitter, iterable or None, default None
+    cv : int, mojolearn splitter, list, tuple or None, default None
         As in ``check_cv``.
     n_permutations : int, default 100
         Number of permutations.
@@ -2228,7 +2250,7 @@ def permutation_test_score(estimator, X, y, *, groups=None, cv=None, n_permutati
         Seed for the permutations.
     verbose : int, default 0
         Accepted for compatibility; nothing is printed.
-    scoring : str, callable or None, default None
+    scoring : str, scorer or None, default None
         As in ``cross_val_score``.
     fit_params, params : dict or None, default None
         Accepted for compatibility; not passed to ``fit``.
