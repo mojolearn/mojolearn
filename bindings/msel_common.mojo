@@ -561,6 +561,9 @@ struct MselRng(Movable):
                 memcpy(dest=msel_p64(rows), src=FAMILY_I64P(unsafe_from_address=base + 4 * outs[i]), count=sizes[i])
                 _ = rows  # keep the Python object alive through the native call above
             _ = py_call(result.append, rows)
+        # The copied offsets are raw addresses into arena. Retain its storage
+        # through every row allocation/copy, not just through _arena_base.
+        _ = arena
         _ = prog^
         return result
 

@@ -74,6 +74,9 @@ def _cluster_codes(labels_true: PythonObject, labels_pred: PythonObject,
     var k = Int(py=family_call(mc_base("prepare_targets", context), classical_address(both), PythonObject(2),
                                PythonObject(total), py_call(classes.buffer_info)[0], classical_address(codes),
                                PythonObject(0), PythonObject(0), PythonObject(0)))
+    # prepare_targets writes the class table even though this caller only
+    # returns its size. Its integer address does not retain the scratch owner.
+    _ = classes
     _ = both  # keep the Python object alive through the native call above
     _ = codes  # keep the Python object alive through the native call above
     if k < 0:
