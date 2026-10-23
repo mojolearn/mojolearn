@@ -14,6 +14,7 @@ from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
 from bindings.py_attr import py_attr
+from bindings.py_slice_native import py_slice
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.classical_arrays import classical_wrap_array
 from bindings.family_common import (
@@ -139,7 +140,7 @@ def msel_sampler_list(dists: PythonObject, n_iter_in: PythonObject, random_state
         n_iter = PythonObject(len(grid))
     var rng = MselRng(random_state, context)
     var perm = rng.permutation(len(grid), context)
-    var head = py_call(perm.__getitem__, py_call(msel_b().slice, PythonObject(None), n_iter))
+    var head = py_slice(perm, PythonObject(None), n_iter, PythonObject(None))
     var out = Python.list()
     for k in range(len(head)):  # driver-loop: native permutation indices choose parameter dictionaries
         _ = py_call(out.append, grid[Int(py=head[k])])

@@ -15,6 +15,7 @@ from std.time import perf_counter_ns
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
 from bindings.py_attr import py_attr
+from bindings.py_slice_native import py_slice, py_slice_from
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.metrics_native_support import metric_float
 from bindings.msel_json import msel_canonical
@@ -664,7 +665,7 @@ def _prediction_list(pred: PythonObject, context: PythonObject) raises -> Python
         var rank = Int(py=packed.ndim)
         if rank == 0:
             raise Error("TypeError: iteration over a 0-d Array")
-        width = py_call(packed.shape.__getitem__, py_call(b.slice, 1, PythonObject(None)))
+        width = py_slice_from(packed.shape, 1)
         values = py_call(packed._mv.tolist)
         for k in range(rank - 1):  # driver-loop: native rank metadata groups flat values into rows
             var axis = rank - 1 - k
@@ -674,7 +675,7 @@ def _prediction_list(pred: PythonObject, context: PythonObject) raises -> Python
                 count *= Int(py=packed.shape[a])
             var groups = Python.list()
             for r in range(count):  # driver-loop: native list slices preserve the Array.tolist nesting
-                var part = py_call(values.__getitem__, py_call(b.slice, r * step, (r + 1) * step))
+                var part = py_slice(values, r * step, (r + 1) * step)
                 _ = py_call(groups.append, part)
             values = groups
         _ = packed  # retain the native buffer while reading its scalar values
@@ -682,7 +683,7 @@ def _prediction_list(pred: PythonObject, context: PythonObject) raises -> Python
         # Exact ndarray.tolist is its C extension implementation. Admit
         # object-storage leaves before any label hash/comparison/conversion.
         values = py_call(pred.tolist)
-        width = py_call(pred.shape.__getitem__, py_call(b.slice, 1, PythonObject(None)))
+        width = py_slice_from(pred.shape, 1)
         msel_admit(values, context)
         if py_type(values) is not b.list:
             raise Error("TypeError: iteration over a 0-d array")

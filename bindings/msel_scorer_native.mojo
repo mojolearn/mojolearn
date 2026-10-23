@@ -98,8 +98,8 @@ def _scorer_column(predicted: PythonObject, context: PythonObject) raises -> Pyt
     var entry = context["family_msel_entries"]["msel_proba_column"]
     if py_type(entry) is not py_type(Python.import_module("builtins").len):
         raise Error("ImportError: native probability column entry is unavailable")
-    _ = family_call(entry, PythonObject(classical_address(array)), context["family_msel_codes"][array.dtype],
-                    PythonObject(rows), PythonObject(2), PythonObject(1), PythonObject(classical_address(result)))
+    _ = family_call(entry, classical_address(array), context["family_msel_codes"][array.dtype],
+                    PythonObject(rows), PythonObject(2), PythonObject(1), classical_address(result))
     _ = array  # keep the Python object alive through the native call above
     _ = result  # keep the Python object alive through the native call above
     return result
