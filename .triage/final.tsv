@@ -1,0 +1,330 @@
+archive/20261006/campaign/apple-opponent-quality-20261006	2026-10-06	47	39	a	docs/plans/host-route-fence-2026-10-09.md:21-29 (same code reached main via bd4c36dbe); unique-line presence 0.82	retire
+archive/20261006/campaign/full-classification-qn-recipes-20261006	2026-10-06	91	83	a	docs/plans/host-route-fence-2026-10-09.md:21-29 (same code reached main via bd4c36dbe); unique-line presence 0.83	retire
+archive/20261006/fix/apple-opponent-selector-20261006	2026-10-06	57	49	a	docs/plans/host-route-fence-2026-10-09.md:21-29 (same code reached main via bd4c36dbe); unique-line presence 0.82	retire
+archive/20261006/fix/lars-direct-20261006	2026-10-06	46	38	a	docs/plans/host-route-fence-2026-10-09.md:21-29 (same code reached main via bd4c36dbe); unique-line presence 0.82	retire
+archive/20261006/ideas/trees-identical-20261006	2026-10-06	1	1	a	92% of unique added code lines present on main	retire
+archive/20261006/integration/six-lane-ab-20261006	2026-10-06	41	34	a	docs/plans/host-route-fence-2026-10-09.md:21-29 (same code reached main via bd4c36dbe); unique-line presence 0.82	retire
+archive/20261006/integration/six-lane-comparison-scope-fix-20261006	2026-10-06	52	44	a	docs/plans/host-route-fence-2026-10-09.md:21-29 (same code reached main via bd4c36dbe); unique-line presence 0.82	retire
+archive/20261006/integration/six-lane-full-tsvd-20261006	2026-10-06	60	52	a	docs/plans/host-route-fence-2026-10-09.md:21-29 (same code reached main via bd4c36dbe); unique-line presence 0.82	retire
+archive/20261006/integration/six-lane-state-capture-20261006	2026-10-06	47	39	a	docs/plans/host-route-fence-2026-10-09.md:21-29 (same code reached main via bd4c36dbe); unique-line presence 0.82	retire
+archive/20261006/lane/apple-classification-admission	2026-10-06	70	62	a	docs/plans/host-route-fence-2026-10-09.md:21-29 (same code reached main via bd4c36dbe); unique-line presence 0.83	retire
+archive/20261006/lane/apple-full-classification-prep	2026-10-06	65	57	a	docs/plans/host-route-fence-2026-10-09.md:21-29 (same code reached main via bd4c36dbe); unique-line presence 0.83	retire
+archive/20261006/lane/apple-six-admission	2026-10-06	44	36	a	docs/plans/host-route-fence-2026-10-09.md:21-29 (same code reached main via bd4c36dbe); unique-line presence 0.81	retire
+archive/20261006/lane/full-recipe-glue	2026-10-06	49	41	a	docs/plans/host-route-fence-2026-10-09.md:21-29 (same code reached main via bd4c36dbe); unique-line presence 0.82	retire
+archive/20261006/lane/host-route-source-repair-20261006	2026-10-06	2	2	b	host-route-fence-2026-10-09.md class C/D: the GPU-import edges were cut on main in 64cc80087/34bd84cf8; x_cluster serial launch removed	retire
+archive/20261006/lane/idle-retention-60m-20261007	2026-10-07	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+archive/20261006/lane/mlp-full-registration	2026-10-06	95	87	a	docs/plans/host-route-fence-2026-10-09.md:21-29 (same code reached main via bd4c36dbe); unique-line presence 0.83	retire
+archive/20261006/lane/neural-identical-ideas-20261006	2026-10-06	1	1	b	idea catalog + untested A/B source; fence doc :32; ideas carried in NEURAL_AB_EXPERIMENT_INVENTORY_2026-10-06.md	retire
+archive/20261006/lane/public-linear-state-capture-20261006	2026-10-06	88	80	a	docs/plans/host-route-fence-2026-10-09.md:21-29 (same code reached main via bd4c36dbe); unique-line presence 0.83	retire
+archive/20261006/lane/targeted-benchmark-metadata-20261007	2026-10-07	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+archive/20261006/lane/targeted-cpu-build-20261007	2026-10-07	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+archive/20261006/lane/var-native-fittedvalues	2026-10-06	86	78	a	docs/plans/host-route-fence-2026-10-09.md:21-29 (same code reached main via bd4c36dbe); unique-line presence 0.83	retire
+archive/20261006/repair/amd-full-classification-registration	2026-10-06	92	84	a	docs/plans/host-route-fence-2026-10-09.md:21-29 (same code reached main via bd4c36dbe); unique-line presence 0.83	retire
+archive/20261006/repair/apple-fast-huber-fold-20261006	2026-10-06	79	71	a	docs/plans/host-route-fence-2026-10-09.md:21-29 (same code reached main via bd4c36dbe); unique-line presence 0.83	retire
+archive/20261006/repair/cnn-native-orchestration-20261006	2026-10-06	87	79	a	docs/plans/host-route-fence-2026-10-09.md:21-29 (same code reached main via bd4c36dbe); unique-line presence 0.83	retire
+archive/20261006/repair/prep-native-sparse-20261006	2026-10-06	85	77	a	docs/plans/host-route-fence-2026-10-09.md:21-29 (same code reached main via bd4c36dbe); unique-line presence 0.82	retire
+archive/worktree-cleanup-20260919-release-087-build	2026-09-16	8	6	b	0.8.6/0.8.7 release tooling (Sep 15-16); candidate-audit-2026-10-04.md "Release / docs / fix tooling (old releases): abandoned"; main ships 0.8.55 with a rebuilt release chain	retire
+archive/worktree-cleanup-20260919-release-087-macos	2026-09-16	8	6	b	0.8.6/0.8.7 release tooling (Sep 15-16); candidate-audit-2026-10-04.md "Release / docs / fix tooling (old releases): abandoned"; main ships 0.8.55 with a rebuilt release chain	retire
+board/m3-0834-readback	2026-10-02	1	1	b	one-line readback for the 0.8.34 M3 board; board superseded by later releases	retire
+finish/cross-vendor-native-only-20261020	2026-10-20	2	0	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire
+finish/distributed-20261020	2026-10-20	45	6	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire
+finish/generation-20261020	2026-10-20	83	1	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire
+finish/generation-graph-repair-20261020	2026-10-20	56	7	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire
+finish/graph-20261020	2026-10-20	38	13	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire
+finish/graph-hoist-20261020	2026-10-20	10	0	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire
+finish/graph-process-20261020	2026-10-20	1	0	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire
+finish/installed-native-audit-20261020	2026-10-20	7	0	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire
+finish/native-autograd-conv-smoke-20261020	2026-10-20	1	0	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire
+finish/native-classical-public-20261020	2026-10-20	4	0	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire
+finish/native-optimizer-smoke-20261020	2026-10-20	2	0	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire
+finish/native-svm-smoke-20261020	2026-10-20	1	1	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire
+finish/parallel-causal-20261020	2026-10-20	13	0	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire
+finish/parallel-neural-admission-20261020	2026-10-20	16	0	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire
+finish/pca-native-owner-20261020	2026-10-20	5	0	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire
+finish/samba-public-20261020	2026-10-20	16	0	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire
+fix/amd-merge-ordering	2026-09-16	3	3	b	mutex handoff probe (Sep 16); sibling rf-mutex-claim-acquire head says the fix landed on main as 36ec47446	retire
+fix/classical-mds-20260930	2026-09-30	3	3	b	board-runner bounds + ClassicalMDS top-k (Sep 30); tools/bench_board_resume.py and classical_mds_check.py were never adopted; board runner replaced by lq + six_lane_grid	retire
+fix/identity-collection-completeness	2026-09-20	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+fix/macos-smoke-identical-only	2026-09-15	22	5	b	0.8.6/0.8.7 release tooling (Sep 15-16); candidate-audit-2026-10-04.md "Release / docs / fix tooling (old releases): abandoned"; main ships 0.8.55 with a rebuilt release chain	retire
+fix/metal-parallel-causal-lm	2026-09-20	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+fix/parallel-model-save	2026-09-20	2	0	a	git cherry: all 2 commits patch-equal on main	retire
+fix/release-archive-tokenizer-generator	2026-09-15	21	5	b	0.8.6/0.8.7 release tooling (Sep 15-16); candidate-audit-2026-10-04.md "Release / docs / fix tooling (old releases): abandoned"; main ships 0.8.55 with a rebuilt release chain	retire
+fix/release-build-preflight-import	2026-09-15	2	1	b	0.8.6/0.8.7 release tooling (Sep 15-16); candidate-audit-2026-10-04.md "Release / docs / fix tooling (old releases): abandoned"; main ships 0.8.55 with a rebuilt release chain	retire
+fix/release-portable-math-transport	2026-09-20	2	0	a	git cherry: all 2 commits patch-equal on main	retire
+fix/release-post-record-allowlist	2026-09-15	58	40	b	0.8.6/0.8.7 release tooling (Sep 15-16); candidate-audit-2026-10-04.md "Release / docs / fix tooling (old releases): abandoned"; main ships 0.8.55 with a rebuilt release chain	retire
+fix/release-verifier-bindings	2026-09-15	3	1	b	0.8.6/0.8.7 release tooling (Sep 15-16); candidate-audit-2026-10-04.md "Release / docs / fix tooling (old releases): abandoned"; main ships 0.8.55 with a rebuilt release chain	retire
+lane/136-lane-record	2026-09-14	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+lane/ab-measure	2026-10-01	3	3	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/algos-ann	2026-09-27	1	1	b	WIP "UNVERIFIED" option parity; main has the index save/load (python/mojolearn/_expansion_ann.py:157,197) and the t-SNE sklearn params	retire
+lane/algos-ann-speed	2026-09-27	6	6	b	candidate-audit-2026-10-04.md:36 "abandoned / reference" (CAGRA chunked queries, t-SNE tiling; patches conflict)	retire
+lane/algos-trees	2026-09-28	1	1	b	progress-note only (docs/lanes/progress/*.md); superseded by later handoffs	retire
+lane/ann-apple-base	2026-09-28	1	1	a	candidate-audit-2026-10-04.md:21 "content-absorbed"	retire
+lane/apple-fast-af-all	2026-10-03	74	29	b	aggregation lane (16 lanes); members judged individually in EXPERIMENTS.md; OPTICS2 defines DROPPED (TOMBSTONES OPTICS2_ALL); the open BPE part lives on lane/apple-fast-bpe	retire
+lane/apple-fast-arima-k1-diagnostics	2026-10-04	5	5	b	EXPERIMENTS.md:925 rank-one/K1 temporal scan: numerical HOLD; oracle tools only, no runtime code	retire
+lane/apple-fast-arima-k1-oracle	2026-10-04	3	3	b	EXPERIMENTS.md:925 rank-one/K1 temporal scan: numerical HOLD; oracle tools only, no runtime code	retire
+lane/apple-fast-arima-k1-review	2026-10-04	4	4	b	EXPERIMENTS.md:925 rank-one/K1 temporal scan: numerical HOLD; oracle tools only, no runtime code	retire
+lane/apple-fast-arima-k3-df-gpu	2026-10-04	1	1	a	100% of unique added code lines present on main	retire
+lane/apple-fast-arima-k3-df-reference	2026-10-04	6	6	b	EXPERIMENTS.md:991 ARIMA_FAST_SCALAR_LL: M3 kernel quality HOLD across 13 groups; r2 is the cited sha; ARIMA_K3_DF_REFERENCE_PLAN.txt on main	keep r2 only (cited sha); retire the rest
+lane/apple-fast-arima-k3-tail-probe	2026-10-04	5	5	b	EXPERIMENTS.md:991 ARIMA_FAST_SCALAR_LL: M3 kernel quality HOLD across 13 groups; r2 is the cited sha; ARIMA_K3_DF_REFERENCE_PLAN.txt on main	keep r2 only (cited sha); retire the rest
+lane/apple-fast-arima-scalar-k3	2026-10-04	1	1	b	EXPERIMENTS.md:991 ARIMA_FAST_SCALAR_LL: M3 kernel quality HOLD across 13 groups; r2 is the cited sha; ARIMA_K3_DF_REFERENCE_PLAN.txt on main	keep r2 only (cited sha); retire the rest
+lane/apple-fast-arima-scalar-k3-quality	2026-10-04	2	2	b	EXPERIMENTS.md:991 ARIMA_FAST_SCALAR_LL: M3 kernel quality HOLD across 13 groups; r2 is the cited sha; ARIMA_K3_DF_REFERENCE_PLAN.txt on main	keep r2 only (cited sha); retire the rest
+lane/apple-fast-arima-scalar-k3-r1	2026-10-04	3	3	b	EXPERIMENTS.md:991 ARIMA_FAST_SCALAR_LL: M3 kernel quality HOLD across 13 groups; r2 is the cited sha; ARIMA_K3_DF_REFERENCE_PLAN.txt on main	keep r2 only (cited sha); retire the rest
+lane/apple-fast-arima-scalar-k3-r2	2026-10-04	4	4	b	EXPERIMENTS.md:991 ARIMA_FAST_SCALAR_LL: M3 kernel quality HOLD across 13 groups; r2 is the cited sha; ARIMA_K3_DF_REFERENCE_PLAN.txt on main	keep r2 only (cited sha); retire the rest
+lane/apple-fast-arima-scan-design	2026-10-04	1	1	b	EXPERIMENTS.md:925 rank-one/K1 temporal scan: numerical HOLD; oracle tools only, no runtime code	retire
+lane/apple-fast-arima-scan-oracle	2026-10-04	1	1	b	EXPERIMENTS.md:925 rank-one/K1 temporal scan: numerical HOLD; oracle tools only, no runtime code	retire
+lane/apple-fast-arima-scan-oracle-review	2026-10-04	2	2	b	EXPERIMENTS.md:925 rank-one/K1 temporal scan: numerical HOLD; oracle tools only, no runtime code	retire
+lane/apple-fast-batch	2026-10-03	177	88	b	aggregation lane; TOMBSTONES/EXPERIMENTS rows per define (DROPPED-noise 43, KEPT 7 ported); open BPE part lives on lane/apple-fast-bpe	retire
+lane/apple-fast-bpe	2026-10-03	9	9	c	EXPERIMENTS.md:34 Untried candidates: BPE_TRAIN_DEVICE/ENCODE_DEVICE/LIVEBUF/GROUP_FILTER/MERGE_BATCH/ALL "NOT on main", never measured	keep
+lane/apple-fast-bsplit-readiness	2026-10-04	1	1	a	EXPERIMENTS.md Untried candidates: SVGP_FAST_BSPLIT "on main opt-in"; readiness note only	retire
+lane/apple-fast-callpath-probe	2026-10-04	2	2	b	EXPERIMENTS.md:1036,1065 callpath r5 PASS bits/lifecycle, "not production", no timing admitted; r0-r4 superseded by r5	retire
+lane/apple-fast-callpath-probe-r1	2026-10-04	3	3	b	EXPERIMENTS.md:1036,1065 callpath r5 PASS bits/lifecycle, "not production", no timing admitted; r0-r4 superseded by r5	retire
+lane/apple-fast-callpath-probe-r2	2026-10-04	4	4	b	EXPERIMENTS.md:1036,1065 callpath r5 PASS bits/lifecycle, "not production", no timing admitted; r0-r4 superseded by r5	retire
+lane/apple-fast-callpath-probe-r3	2026-10-04	5	5	b	EXPERIMENTS.md:1036,1065 callpath r5 PASS bits/lifecycle, "not production", no timing admitted; r0-r4 superseded by r5	retire
+lane/apple-fast-callpath-probe-r4	2026-10-04	6	6	b	EXPERIMENTS.md:1036,1065 callpath r5 PASS bits/lifecycle, "not production", no timing admitted; r0-r4 superseded by r5	retire
+lane/apple-fast-callpath-probe-r5	2026-10-04	7	7	b	EXPERIMENTS.md:1065 r5 3491a4d4 PASS bits/lifecycle, "not production"; cited sha	keep (cited sha)
+lane/apple-fast-callpath-quality	2026-10-04	1	1	b	EXPERIMENTS.md:1036,1065 callpath r5 PASS bits/lifecycle, "not production", no timing admitted; r0-r4 superseded by r5	retire
+lane/apple-fast-callpath-reach-audit	2026-10-04	2	2	b	EXPERIMENTS.md:1036,1065 callpath r5 PASS bits/lifecycle, "not production", no timing admitted; r0-r4 superseded by r5	retire
+lane/apple-fast-catalog-gemm-all	2026-10-04	6	6	b	EXPERIMENTS.md:989 catalog G1/G5 standalone HOLD for unrestricted use; RESIDENT_GEMM_RESULTS_2026-10-04.md; probe bindings only	retire
+lane/apple-fast-catalog-gemm-probe	2026-10-04	3	3	b	EXPERIMENTS.md:989 catalog G1/G5 standalone HOLD for unrestricted use; RESIDENT_GEMM_RESULTS_2026-10-04.md; probe bindings only	retire
+lane/apple-fast-catalog-gemm-probe-r1	2026-10-04	4	4	b	EXPERIMENTS.md:989 catalog G1/G5 standalone HOLD for unrestricted use; RESIDENT_GEMM_RESULTS_2026-10-04.md; probe bindings only	retire
+lane/apple-fast-catalog-gemm-probe-r2	2026-10-04	5	5	b	EXPERIMENTS.md:989 catalog G1/G5 standalone HOLD for unrestricted use; RESIDENT_GEMM_RESULTS_2026-10-04.md; probe bindings only	retire
+lane/apple-fast-catalog-matrix-timing	2026-10-04	7	7	b	EXPERIMENTS.md:989 catalog G1/G5 standalone HOLD for unrestricted use; RESIDENT_GEMM_RESULTS_2026-10-04.md; probe bindings only	retire
+lane/apple-fast-catalog-matrix-timing-r1	2026-10-04	8	8	b	EXPERIMENTS.md:989 catalog G1/G5 standalone HOLD for unrestricted use; RESIDENT_GEMM_RESULTS_2026-10-04.md; probe bindings only	retire
+lane/apple-fast-catalog-resident-probe	2026-10-04	1	1	b	EXPERIMENTS.md:989 catalog G1/G5 standalone HOLD for unrestricted use; RESIDENT_GEMM_RESULTS_2026-10-04.md; probe bindings only	retire
+lane/apple-fast-chol-20261004	2026-10-04	4	4	b	docs/apple-fast/EXPERIMENTS.md:805 [DROPPED-slower1]	retire
+lane/apple-fast-classical-ideas-20261006	2026-10-06	3	3	a	98% of unique added code lines present on main	retire
+lane/apple-fast-dbscantaxi	2026-10-03	1	1	a/b	winners ported, rest documented: docs/TOMBSTONES.md:2394 [ported4 DROPPED-slower3 RECORD2 READY-AB2]	retire
+lane/apple-fast-decomp-linalg	2026-10-03	19	14	a/b	winners ported, rest documented: docs/TOMBSTONES.md:2012 [DROPPED-slower13 ported13 READY-AB8 SUPERSEDED5 DEFAULT3 DROPPED2]	retire
+lane/apple-fast-decomp-mma-k16	2026-10-04	2	2	b	docs/apple-fast/EXPERIMENTS.md:938 [PASS1 HOLD-speed1]	retire
+lane/apple-fast-decomp-sdk-control	2026-10-04	1	1	a/b	winners ported, rest documented: docs/apple-fast/EXPERIMENTS.md:444 [PARKED1 ported1]	retire
+lane/apple-fast-decomp-sparse	2026-10-03	31	19	a/b	winners ported, rest documented: docs/TOMBSTONES.md:1943 [ported3 DROPPED-semantics2 SUPERSEDED2 READY-AB1]	retire
+lane/apple-fast-dwcurrent	2026-10-04	3	3	b	EXPERIMENTS.md: GBDT_DW_BRIDGE_SCAN DROPPED-slower (+5.34%, gap26-dwcurrent-taxi)	retire
+lane/apple-fast-eigh-cache	2026-10-04	7	7	b	docs/TOMBSTONES.md:1949 [PASS2 rejected1]	retire
+lane/apple-fast-eigh-panel-df	2026-10-04	3	3	a/b	winners ported, rest documented: docs/apple-fast/EXPERIMENTS.md:1217 [ported1 HOLD1 DROPPED-slower1 READY-AB1]	retire
+lane/apple-fast-eigh-panels	2026-10-04	7	6	a	EIGH_FAST_TRIDIAG(_PANELS) on main (default with _OFF); 74% of unique lines present	retire
+lane/apple-fast-fa	2026-10-03	4	4	a/b	winners ported, rest documented: docs/TOMBSTONES.md:2057 [ported10 DROPPED-slower10 HOLD-quality8 READY-AB6]	retire
+lane/apple-fast-fastonly2	2026-10-03	1	1	a	98% of unique added code lines present on main	retire
+lane/apple-fast-gap-kapprox2	2026-10-03	15	12	a/b	winners ported, rest documented: docs/TOMBSTONES.md:1664 [merged5 DROPPED4 KEPT2]	retire
+lane/apple-fast-gap-linalg2	2026-10-03	4	1	a	EXPERIMENTS KEPT/DEFAULT, defines on main (e.g. KPCA lanczos_dev.mojo, fastprep2.mojo)	retire
+lane/apple-fast-gap-linalg2-kpca	2026-10-03	2	2	a	EXPERIMENTS KEPT/DEFAULT, defines on main (e.g. KPCA lanczos_dev.mojo, fastprep2.mojo)	retire
+lane/apple-fast-gap-linalg2-pca	2026-10-03	3	3	a	EXPERIMENTS KEPT/DEFAULT, defines on main (e.g. KPCA lanczos_dev.mojo, fastprep2.mojo)	retire
+lane/apple-fast-gap-linalg2-svd	2026-10-03	1	1	a/b	winners ported, rest documented: docs/apple-fast/EXPERIMENTS.md:1218 [PARKED2 ported1]	retire
+lane/apple-fast-gap-misc	2026-10-03	6	4	b	docs/TOMBSTONES.md:595 [DROPPED-noise6 MERGED1]	retire
+lane/apple-fast-gap-tsa	2026-10-03	1	1	a/b	winners ported, rest documented: docs/TOMBSTONES.md:2467 [DROPPED-noise10 KEPT5 DROPPED-slower2 merged1]	retire
+lane/apple-fast-general-speed	2026-10-04	5	4	a/b	winners ported, rest documented: docs/TOMBSTONES.md:1088 [merged5 DROPPED-quality3 KEPT1]	retire
+lane/apple-fast-graph	2026-10-02	3	3	a/b	winners ported, rest documented: docs/apple-fast/EXPERIMENTS.md:494 [ported3 KEPT1 DEFAULT1 READY-AB1]	retire
+lane/apple-fast-isotonic-knn	2026-10-03	11	7	a/b	winners ported, rest documented: docs/TOMBSTONES.md:1456 [DROPPED-slower4 merged4 DROPPED-noise2 loser2 HELD1 ported1]	retire
+lane/apple-fast-kapprox	2026-10-03	3	3	b	docs/TOMBSTONES.md:1556 [DROPPED-quality10 KEPT1]	retire
+lane/apple-fast-knn-lean-gpu	2026-10-04	1	1	a	EXPERIMENTS.md: XN_FAST_NAN_FIT_LEAN_GPU DEFAULT, on main	retire
+lane/apple-fast-knn-lean-gpu-harness-r1	2026-10-04	2	2	a	90% of unique added code lines present on main	retire
+lane/apple-fast-layoutfix	2026-10-03	2	2	b	NoCpuEntry ImportError fix; main _backend.py has its own NoCpuEntry handling (2 hits) after the backend rewrite	retire
+lane/apple-fast-linalg-20261004	2026-10-04	4	4	b	docs/apple-fast/EXPERIMENTS.md:739 [HOLD-speed2]	retire
+lane/apple-fast-linsvr	2026-10-03	7	7	a/b	winners ported, rest documented: docs/TOMBSTONES.md:1181 [DROPPED-noise8 merged8 DROPPED-slower4 KEEP2 KEPT1]	retire
+lane/apple-fast-lle	2026-10-02	12	7	b	docs/TOMBSTONES.md:1462 [DROPPED-slower2]	retire
+lane/apple-fast-lost-candidates	2026-10-04	1	1	b	audit doc; superseded by MANAGER_STATE_2026-10-04.md:7 "all lost candidates ported" and EXPERIMENTS.md Untried candidates (2026-10-05)	retire
+lane/apple-fast-lu-mma-dbuf	2026-10-04	2	2	b	docs/apple-fast/EXPERIMENTS.md:924 [PASS1 HOLD-speed1]	retire
+lane/apple-fast-lu-pivot-shuffle	2026-10-04	2	2	a	LU_FAST_PIVOT_SHUFFLE on main (rollback _OFF); EXPERIMENTS.md w2-lu-pivot-shuffle rows	retire
+lane/apple-fast-m2b1	2026-10-03	11	10	a/b	winners ported, rest documented: docs/TOMBSTONES.md:1457 [KEEP5 DROPPED-noise4 merged4 loser2 DROPPED-slower2 HELD1]	retire
+lane/apple-fast-manager-remote	2026-10-04	1	1	a	100% of unique added code lines present on main	retire
+lane/apple-fast-mcd-g1-quality	2026-10-04	1	1	a	93% of unique added code lines present on main	retire
+lane/apple-fast-mcd-ordered-cov	2026-10-04	1	1	a	MCD_ORDERED_COV on main (opt-in, NEUTRAL: EXPERIMENTS.md rab3-mcdord); superseded by -r3	retire
+lane/apple-fast-mcd-ordered-quality	2026-10-04	2	2	a	MCD_ORDERED_COV on main (opt-in, NEUTRAL: EXPERIMENTS.md rab3-mcdord); superseded by -r3	retire
+lane/apple-fast-mcd-ordered-quality-r1	2026-10-04	3	3	a	MCD_ORDERED_COV on main (opt-in, NEUTRAL: EXPERIMENTS.md rab3-mcdord); superseded by -r3	retire
+lane/apple-fast-mcd-ordered-quality-r2	2026-10-04	4	4	a	MCD_ORDERED_COV on main (opt-in, NEUTRAL: EXPERIMENTS.md rab3-mcdord); superseded by -r3	retire
+lane/apple-fast-mcd-ordered-quality-r3	2026-10-04	5	5	a	EXPERIMENTS.md:1216 ported (lane/apple-fast-rec-misc); RECORD NEUTRAL, stays off	retire
+lane/apple-fast-mcd-quality	2026-10-03	2	2	b	quality tool for MCD_DEVICE_CSTEPS, DROPPED-quality (TOMBSTONES, patch experiments/removed/MOJOLEARN_MCD_DEVICE_CSTEPS.patch)	retire
+lane/apple-fast-mcd-saved-oracle	2026-10-04	3	3	a	MCD_SKIP_PINVH KEEP and DEFLATE HOLD both on main (EXPERIMENTS.md w4-mcd rows); oracle tools only on branch	retire
+lane/apple-fast-mcd-saved-oracle-r1	2026-10-04	4	4	a	MCD_SKIP_PINVH KEEP and DEFLATE HOLD both on main (EXPERIMENTS.md w4-mcd rows); oracle tools only on branch	retire
+lane/apple-fast-old-linalg-audit	2026-10-04	1	1	b	doc note on invalid old QR/SVD comparisons; superseded by EXPERIMENTS reconciliation 2026-10-05	retire
+lane/apple-fast-opp	2026-10-03	7	5	b	opponents-only board tooling (tools/opp_only_board.py, never on main); opponents are scored once and stored (CLAUDE.md)	retire
+lane/apple-fast-optics2	2026-10-03	5	5	b	TOMBSTONES OPTICS2_ALL / OPTICS_STEP_BATCH DROPPED (54-84x slower), "never merged"	retire
+lane/apple-fast-opv	2026-10-03	8	7	a/b	winners ported, rest documented: docs/TOMBSTONES.md:2303 [merged4]	retire
+lane/apple-fast-pca-eig	2026-10-02	3	3	b	docs/TOMBSTONES.md:1979 [DROPPED-noise10]	retire
+lane/apple-fast-prep2	2026-10-03	2	1	a	EXPERIMENTS KEPT/DEFAULT, defines on main (e.g. KPCA lanczos_dev.mojo, fastprep2.mojo)	retire
+lane/apple-fast-prep3	2026-10-02	9	4	a/b	winners ported, rest documented: docs/TOMBSTONES.md:1723 [DROPPED-noise4 merged4 KEEP1]	retire
+lane/apple-fast-pt-queue	2026-10-04	1	1	a	97% of unique added code lines present on main	retire
+lane/apple-fast-rec-ab11	2026-10-04	5	4	b	ARD_EQ_ONEPASS DROPPED-quality (TOMBSTONES); LDA/SVM legacy defines on main	retire
+lane/apple-fast-remaining-audit-20261004	2026-10-04	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+lane/apple-fast-resample	2026-10-02	6	5	a/b	winners ported, rest documented: docs/TOMBSTONES.md:1777 [DROPPED-slower9 KEPT4 ported4 DROPPED-semantics2 DEFAULT2 READY-AB2]	retire
+lane/apple-fast-results	2026-10-04	166	166	b	M3 queue/results sync files (166 commits, docs/apple-fast/m3/*); results reconciled into EXPERIMENTS.md 2026-10-05	retire
+lane/apple-fast-robust	2026-10-02	8	6	a/b	winners ported, rest documented: docs/TOMBSTONES.md:2099 [DROPPED-quality3 DEFAULT2 ported2 READY-AB1 merged1]	retire
+lane/apple-fast-scoped-pca-caller	2026-10-04	2	2	b	GEMM_INLINE_OUTCOMES.md: scoped PCA-fit HOLD (quality report invalid); SCOPED_GEMM defines on main	retire
+lane/apple-fast-sgdoc-parallel	2026-10-03	7	7	b	docs/apple-fast/EXPERIMENTS.md:734 [HOLD2]	retire
+lane/apple-fast-shap	2026-10-02	5	4	a/b	winners ported, rest documented: docs/apple-fast/EXPERIMENTS.md:180 [SUPERSEDED3 ported3 KEEP2 KEPT2 DEFAULT2 READY-AB1]	retire
+lane/apple-fast-shared-downstream-g1	2026-10-04	4	4	b	GEMM_INLINE_OUTCOMES.md: shared G1/G5 narrow caller leads, inverse slower, "no broad default/board admission"; superseded by the -r2/-g5 tips	retire
+lane/apple-fast-shared-downstream-g1-r1	2026-10-04	5	5	b	GEMM_INLINE_OUTCOMES.md: shared G1/G5 narrow caller leads, inverse slower, "no broad default/board admission"; superseded by the -r2/-g5 tips	retire
+lane/apple-fast-shared-downstream-g1-r2	2026-10-04	6	6	b	GEMM_INLINE_OUTCOMES.md: "Shared G1/G5 code is preserved on historical candidate branches; it was not restored to main"	keep (record of the shared G1/G5 code)
+lane/apple-fast-shared-downstream-g5	2026-10-04	5	5	b	GEMM_INLINE_OUTCOMES.md: shared G1/G5 narrow caller leads, inverse slower, "no broad default/board admission"; superseded by the -r2/-g5 tips	retire
+lane/apple-fast-shared-downstream-g5-r1	2026-10-04	6	6	b	GEMM_INLINE_OUTCOMES.md: shared G1/G5 narrow caller leads, inverse slower, "no broad default/board admission"; superseded by the -r2/-g5 tips	retire
+lane/apple-fast-shared-downstream-g5-r2	2026-10-04	7	7	b	GEMM_INLINE_OUTCOMES.md: "Shared G1/G5 code is preserved on historical candidate branches; it was not restored to main"	keep (record of the shared G1/G5 code)
+lane/apple-fast-shared-downstream-quality	2026-10-04	3	3	b	GEMM_INLINE_OUTCOMES.md: shared G1/G5 narrow caller leads, inverse slower, "no broad default/board admission"; superseded by the -r2/-g5 tips	retire
+lane/apple-fast-shared-gemm-g1g5	2026-10-04	1	1	b	GEMM_INLINE_OUTCOMES.md: shared G1/G5 narrow caller leads, inverse slower, "no broad default/board admission"; superseded by the -r2/-g5 tips	retire
+lane/apple-fast-shared-gemm-g1g5-r1	2026-10-04	2	2	b	GEMM_INLINE_OUTCOMES.md: shared G1/G5 narrow caller leads, inverse slower, "no broad default/board admission"; superseded by the -r2/-g5 tips	retire
+lane/apple-fast-shared-scoped-timing	2026-10-04	7	7	b	GEMM_INLINE_OUTCOMES.md: shared G1/G5 narrow caller leads, inverse slower, "no broad default/board admission"; superseded by the -r2/-g5 tips	retire
+lane/apple-fast-shared-scoped-timing-g5	2026-10-04	8	8	b	GEMM_INLINE_OUTCOMES.md: "Shared G1/G5 code is preserved on historical candidate branches; it was not restored to main"	keep (record of the shared G1/G5 code)
+lane/apple-fast-sym-ctr	2026-10-03	7	2	a/b	winners ported, rest documented: docs/TOMBSTONES.md:804 [ported10 KEPT6 DEFAULT6 READY-AB5 DROPPED-noise2 DROPPED-speed2]	retire
+lane/apple-fast-sym-est	2026-10-03	4	1	a/b	winners ported, rest documented: docs/TOMBSTONES.md:967 [ported7 KEPT4 DEFAULT4 DROPPED-BUG3 DROPPED-inconclusive3 READY-AB3]	retire
+lane/apple-fast-sym-feat	2026-10-03	14	1	a	96% of unique added code lines present on main	retire
+lane/apple-fast-sym-hist	2026-10-03	3	0	a	git cherry: all 3 commits patch-equal on main	retire
+lane/apple-fast-sym-iter	2026-10-03	5	1	a/b	winners ported, rest documented: docs/TOMBSTONES.md:1016 [DROPPED-noise18 ported5 READY-AB2]	retire
+lane/apple-fast-sym-multi	2026-10-03	6	1	a	97% of unique added code lines present on main	retire
+lane/apple-fast-target-current	2026-10-04	5	4	a	EXPERIMENTS KEPT/DEFAULT, defines on main (e.g. KPCA lanczos_dev.mojo, fastprep2.mojo)	retire
+lane/apple-fast-target-scratch	2026-10-04	3	3	a	TARGET_SCRATCH on main; 83% of unique lines present; sibling target-current KEEP merged	retire
+lane/apple-fast-trees-io	2026-10-02	6	3	b	docs/TOMBSTONES.md:714 [DROPPED-noise4]	retire
+lane/apple-fast-trees-scan	2026-10-02	9	8	b	docs/TOMBSTONES.md:757 [DROPPED-noise3 DROPPED-semantics2]	retire
+lane/apple-fast-trees-symmetric	2026-10-02	6	4	b	docs/TOMBSTONES.md:811 [DROPPED-noise11 DROPPED-slower2]	retire
+lane/apple-fast-w2-shap	2026-10-04	3	3	b	docs/TOMBSTONES.md:1789 [PASS2 rejected1]	retire
+lane/apple-fast-w2-ts	2026-10-04	4	4	b	docs/apple-fast/EXPERIMENTS.md:891 [PASS1 HOLD1]	retire
+lane/apple-fast-w3-arima	2026-10-04	1	1	b	docs/apple-fast/EXPERIMENTS.md:906 [PASS1 HOLD1]	retire
+lane/apple-fast-w3-dw	2026-10-04	2	2	b	docs/TOMBSTONES.md:607 [PASS2]	retire
+lane/apple-fast-w3-prep	2026-10-04	4	4	b	docs/TOMBSTONES.md:1839 []	retire
+lane/apple-fast-w4-decomp	2026-10-04	6	6	a/b	winners ported, rest documented: docs/apple-fast/EXPERIMENTS.md:914 [PASS3 DEFAULT1 merged1]	retire
+lane/apple-fast-w4-decomp-harness-r1	2026-10-04	7	7	a/b	winners ported, rest documented: docs/apple-fast/EXPERIMENTS.md:1176 [ported3 HOLD-quality2 DEFAULT1]	retire
+lane/apple-fast-w4-eigh	2026-10-04	4	4	a	EIGH_FAST_TRIDIAG(_PANELS) on main (default with _OFF); 74% of unique lines present	retire
+lane/apple-fast-w4-linalg	2026-10-04	3	3	b	docs/apple-fast/EXPERIMENTS.md:916 [PASS1 HOLD-speed1]	retire
+lane/apple-fast-w4-mcd	2026-10-04	2	2	a	EXPERIMENTS KEPT/DEFAULT, defines on main (e.g. KPCA lanczos_dev.mojo, fastprep2.mojo)	retire
+lane/apple-fast-w4-shap	2026-10-04	3	3	a	93% of unique added code lines present on main	retire
+lane/apple-fast-w4-small	2026-10-04	6	6	a/b	winners ported, rest documented: docs/apple-fast/EXPERIMENTS.md:909 [PASS4 HOLD2 PARKED1 DEFAULT1 merged1]	retire
+lane/apple-fast-w4-tslu	2026-10-04	3	3	b	docs/TOMBSTONES.md:1973 [PASS2]	retire
+lane/apple-identical-steps	2026-09-26	2	2	a	candidate-audit-2026-10-04.md:21 "content-absorbed"	retire
+lane/apple-merged-check	2026-09-28	1	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/apple-merged-check2	2026-09-28	1	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/apple-merged-check3	2026-09-28	1	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/apple-merged-owed-check	2026-09-28	1	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/apple-verify-20261001	2026-09-30	1	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/apple2-merged-check	2026-09-28	1	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/apple2-merged-check2	2026-09-28	1	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/apple2-merged-check3	2026-09-28	1	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/apple2-merged-check4	2026-09-28	1	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/apple2-merged-check5	2026-09-28	1	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/apple3-merged-check	2026-09-28	2	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/bench-board-m3ultra	2026-09-29	37	30	b	Sep 29-30 board tooling; main board tools (tools/bench_board*.py) moved on; boards now via six_lane_grid + lq	retire
+lane/bf16-units	2026-09-28	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+lane/board-resume-20260930	2026-09-30	12	12	b	Sep 29-30 board tooling; main board tools (tools/bench_board*.py) moved on; boards now via six_lane_grid + lq	retire
+lane/catboost-parity-on-lm-attention-fallback	2026-09-19	7	5	a	89% of unique lines on main (ensemble.py, gbdt ordered boosting)	retire
+lane/categorical-feature-cpu	2026-09-19	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+lane/classical-pass-measure-20260930	2026-09-30	22	15	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/cluster-apple-prof	2026-09-28	7	3	b	one-off diagnostic/profiling probes (STAGE_PROF etc., absent on main)	retire
+lane/cluster-speed-base	2026-09-27	1	1	a	98% of unique added code lines present on main	retire
+lane/cpu-par-fallback	2026-09-28	1	1	b	WIP plain CPU fallback for par-* drivers; CPU routes are not a GPU fallback (CLAUDE.md GPU rules); cpu_path_audit.py on main	retire
+lane/cpu-training-e3	2026-09-14	5	0	a	git cherry: all 5 commits patch-equal on main	retire
+lane/cpu-training-gate-speed	2026-09-15	1	1	b	Sep 15 identity-gate tooling/records; identity now recorded by tools/record_identity_column.sh (REPEATS=1)	retire
+lane/data-runtime-million-cpu	2026-09-20	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+lane/distance-pairwise-cpu	2026-09-19	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+lane/ensemble-meta-cpu	2026-09-19	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+lane/expose-d-fixes	2026-09-14	6	0	a	git cherry: all 6 commits patch-equal on main	retire
+lane/forecast-timeseries-cpu	2026-09-19	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+lane/forest-train-speed	2026-09-17	1	1	b	candidate-audit-2026-10-04.md:37 "NOT YET BUILT", abandoned	retire
+lane/forest-training-cpu-20260919	2026-09-19	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+lane/fp-contract-off-exp	2026-09-25	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+lane/fp-contract-off-study	2026-09-25	2	1	b	study result only (bench/results/fp_contract_off_2026-09-26 README: contract=off moves 16 of 627 cells); the build-flag hook landed via lane/fp-contract-off-exp (patch-equal on main); the README is not on main	retire (or port the README)
+lane/gbdt-depthwise-fast	2026-09-20	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+lane/gbdt-rest	2026-09-16	4	4	b	candidate-audit-2026-10-04.md:19 "CPU/host-route work ... CPU routes (undo list) or superseded"	retire
+lane/gemm-p1-fold-bypass	2026-09-19	4	4	a	candidate-audit-2026-10-04.md:21 "content-absorbed"	retire
+lane/gram-prep-million-cpu	2026-09-20	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+lane/host-token-split-2	2026-10-01	3	2	b	candidate-audit-2026-10-04.md:19 "CPU/host-route work ... CPU routes (undo list) or superseded"	retire
+lane/host-token-split-2-measure	2026-09-30	2	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/host-token-split-measure	2026-09-30	2	1	a	100% of unique added code lines present on main	retire
+lane/hr2-kpca-seq	2026-10-02	3	3	a	candidate-audit-2026-10-04.md:29 owed GARCH item; SEQ_WARP_FIT team fit now on main (sequence/garch.mojo:66)	retire
+lane/identical-body-tiles-20261005	2026-10-05	2	1	a	branch only selects a profile in experiments/identical_speed/selection.json; the defines are on main; EXPERIMENTS.md:1445-1449 rows (OPEN, unmeasured; GROUP_TILES_BODY later DROPPED-noise in TOMBSTONES)	retire
+lane/identical-group-slack2-20261005	2026-10-05	2	1	a	branch only selects a profile in experiments/identical_speed/selection.json; the defines are on main; EXPERIMENTS.md:1445-1449 rows (OPEN, unmeasured; GROUP_TILES_BODY later DROPPED-noise in TOMBSTONES)	retire
+lane/identical-group-slack8-20261005	2026-10-05	2	1	a	branch only selects a profile in experiments/identical_speed/selection.json; the defines are on main; EXPERIMENTS.md:1445-1449 rows (OPEN, unmeasured; GROUP_TILES_BODY later DROPPED-noise in TOMBSTONES)	retire
+lane/identical-one-page-20261005	2026-10-05	2	1	a	branch only selects a profile in experiments/identical_speed/selection.json; the defines are on main; EXPERIMENTS.md:1445-1449 rows (OPEN, unmeasured; GROUP_TILES_BODY later DROPPED-noise in TOMBSTONES)	retire
+lane/identical-packed64-20261005	2026-10-05	2	1	a	branch only selects a profile in experiments/identical_speed/selection.json; the defines are on main; EXPERIMENTS.md:1445-1449 rows (OPEN, unmeasured; GROUP_TILES_BODY later DROPPED-noise in TOMBSTONES)	retire
+lane/identity-record-next	2026-09-15	3	3	b	Sep 15 identity-gate tooling/records; identity now recorded by tools/record_identity_column.sh (REPEATS=1)	retire
+lane/ivf-filter-fix-measure	2026-10-01	1	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/kernel-methods-cpu	2026-09-19	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+lane/kmeans-mojo-1-2	2026-09-26	7	7	b	candidate-audit-2026-10-04.md:44 Mojo 1.2 migration trial, "parked"; main has since moved toolchains	retire
+lane/lane-map-import-graph	2026-09-23	4	0	a	git cherry: all 4 commits patch-equal on main	retire
+lane/large-data-classical-cpu	2026-09-20	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+lane/large-metrics-shared-cpu	2026-09-20	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+lane/linear-apple-base	2026-09-28	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+lane/linfit-speed	2026-09-29	45	45	b	candidate-audit-2026-10-04.md:35 SGD_IN_FIT_KERNEL / X_LINEAR_GLM_TEAM absent, 19 of 20 patches conflict: "abandoned unless re-derived"	retire
+lane/lm-attention-fallback	2026-10-05	3	2	b	candidate-audit-2026-10-04.md: "Docs/tooling without Mojo", the old dirty default-checkout branch (deletes handoff docs, edits CITATION.cff)	retire
+lane/lm-head-v2-dweight-reuse	2026-09-20	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+lane/loss-metrics-objectives-cpu	2026-09-19	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+lane/lowbit-amd-tuned-lb	2026-09-29	1	1	b	one-off diagnostic/profiling probes (STAGE_PROF etc., absent on main)	retire
+lane/lowbit-apple-now	2026-09-29	1	1	b	one-off diagnostic/profiling probes (STAGE_PROF etc., absent on main)	retire
+lane/lowbit-apple-tuned	2026-09-29	21	20	d	Sep 29 low-bit (int15 Apple tuned GEMM, e2e probes, quality bench) not on main (gemm_int15_apple_tuned.mojo, bench/lowbit_quality absent); no verdict found in docs	keep until owner decides
+lane/lowbit-blocks	2026-09-29	1	1	b	progress-note only (docs/lanes/progress/*.md); superseded by later handoffs	retire
+lane/lowbit-e2e	2026-09-29	5	5	d	Sep 29 low-bit (int15 Apple tuned GEMM, e2e probes, quality bench) not on main (gemm_int15_apple_tuned.mojo, bench/lowbit_quality absent); no verdict found in docs	keep until owner decides
+lane/lowbit-quality	2026-09-29	25	25	d	Sep 29 low-bit (int15 Apple tuned GEMM, e2e probes, quality bench) not on main (gemm_int15_apple_tuned.mojo, bench/lowbit_quality absent); no verdict found in docs	keep until owner decides
+lane/m3-sweep	2026-09-28	2	2	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/mamba-opp	2026-09-29	6	5	b	Sep 29-30 board tooling; main board tools (tools/bench_board*.py) moved on; boards now via six_lane_grid + lq	retire
+lane/mamba3-amd-regs2h-measure	2026-10-01	2	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/mamba3-padding-perf	2026-09-19	2	0	a	git cherry: all 2 commits patch-equal on main	retire
+lane/mamba3-statepass	2026-09-09	23	23	d	Sep 9 Mamba3 state-pass (direct transfers, tiled QKS/YSTATE); defines absent, mamba/impl/mamba_ssm/ops/mamba3_siso.mojo gone from main (rewritten as autograd/kernels/mamba3.mojo); likely superseded, unverified	retire after owner check
+lane/manifold-spectral-cpu	2026-09-19	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+lane/merged	2026-10-02	40	0	a	git cherry: all 40 commits patch-equal on main	retire
+lane/mixture-anomaly-cpu	2026-09-19	2	0	a	git cherry: all 2 commits patch-equal on main	retire
+lane/model-load-shared-cpu	2026-09-19	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+lane/model-selection-cpu	2026-09-19	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+lane/mojo-1-2-trial	2026-09-26	2	2	b	candidate-audit-2026-10-04.md:44 Mojo 1.2 migration trial, "parked"; main has since moved toolchains	retire
+lane/neighbors-rest	2026-09-16	6	5	b	candidate-audit-2026-10-04.md:19 "CPU/host-route work ... CPU routes (undo list) or superseded"	retire
+lane/neural-apple-base	2026-09-28	1	1	a	93% of unique added code lines present on main	retire
+lane/neural-apple3-measure	2026-10-01	2	2	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/neural-apple4	2026-10-01	2	1	a	candidate-audit-2026-10-04.md:42 regs2h AMD S16 merged as PR #50	retire
+lane/neural-experiment-measure-20260930	2026-09-30	12	11	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/neural-pass102	2026-10-01	1	1	b	host-algorithm switches (X_LINEAR_HOST_ALGOS, SVGP_JITTER_TRIES) in Python glue; absent on main; host routes are debt (CLAUDE.md)	retire
+lane/neural-pass13	2026-10-02	3	2	b	candidate-audit-2026-10-04.md:19 "CPU/host-route work ... CPU routes (undo list) or superseded"	retire
+lane/neural-pass13-measure	2026-09-30	3	2	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/neural-pass144	2026-10-02	3	1	b	candidate-audit-2026-10-04.md:41 superseded (round-robin eigh on every column)	retire
+lane/neural-pass17-measure	2026-10-01	2	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/neural-pass19	2026-09-30	1	1	b	candidate-audit-2026-10-04.md:19 "CPU/host-route work ... CPU routes (undo list) or superseded"	retire
+lane/neural-pass26-measure	2026-10-01	5	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/neural-pass30-measure	2026-10-01	2	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/neural-pass31-measure	2026-10-01	2	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/neural-pass32-measure	2026-10-01	2	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/neural-pass34-measure	2026-10-01	2	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/neural-pass35-measure	2026-10-01	3	2	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/neural-pass36	2026-10-01	4	4	b	candidate-audit-2026-10-04.md:40 DROPPED: LU fused 46% slower; QR tiles lost on L40S	retire
+lane/neural-pass36-measure	2026-10-01	10	7	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/neural-pass37-measure	2026-10-01	2	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/neural-pass38-measure	2026-10-01	2	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/neural-pass39-measure	2026-10-01	1	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/neural-pass40-measure	2026-10-01	1	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/neural-pass41	2026-10-01	8	6	b	candidate-audit-2026-10-04.md:40 DROPPED: LU fused 46% slower; QR tiles lost on L40S	retire
+lane/neural-pass41-measure	2026-10-01	15	9	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/neural-pass42-measure	2026-10-01	1	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/neural-pass44-measure	2026-10-01	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+lane/neural-pass45-measure	2026-10-01	6	3	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/neural-pass46-measure	2026-10-01	4	2	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/neural-pass47-measure	2026-10-01	5	4	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/neural-pass48	2026-10-01	1	1	a	SCRATCH_POOL on main (core/scratch_pool, 8 files; TOMBSTONES/EXPERIMENTS rows)	retire
+lane/neural-pass48-measure	2026-10-01	2	2	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/neural-pass49-measure	2026-10-01	3	2	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/neural-pass49-on-61	2026-10-01	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+lane/neural-pass5	2026-10-01	3	2	a	S17 tail on main as the default (autograd/kernels/mamba3.mojo:28, MAMBA3_S17_TAIL_NAIVE reverts)	retire
+lane/neural-pass50-measure	2026-10-01	1	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/neural-pass53-on-56	2026-10-01	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+lane/neural-pass54	2026-10-01	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+lane/neural-pass54-measure	2026-10-01	3	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/neural-pass57	2026-10-01	1	1	a	MOJOLEARN_ATTN_DKDV_BJ16 on main, transformer/impl/llama/fused_attention.mojo:4482 cites PR #64	retire
+lane/neural-pass59	2026-10-01	1	1	a	100% of unique added code lines present on main	retire
+lane/neural-pass62-on-64	2026-10-01	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+lane/neural-pass67	2026-10-01	6	1	a	MOJOLEARN_ATTN_CACHE_WAIT on main, transformer/impl/llama/modeling_llama.mojo:3899-3903 cites lane/neural-pass67 087231ba3	retire
+lane/neural-pass76	2026-10-01	1	1	b	host-algorithm switches (X_LINEAR_HOST_ALGOS, SVGP_JITTER_TRIES) in Python glue; absent on main; host routes are debt (CLAUDE.md)	retire
+lane/neural-pass77	2026-10-01	2	2	b	candidate-audit-2026-10-04.md:19 "CPU/host-route work ... CPU routes (undo list) or superseded"	retire
+lane/neural-pass78	2026-10-01	5	4	b	candidate-audit-2026-10-04.md:19 "CPU/host-route work ... CPU routes (undo list) or superseded"	retire
+lane/neural-pass83	2026-10-01	3	3	b	candidate-audit-2026-10-04.md:19 "CPU/host-route work ... CPU routes (undo list) or superseded"	retire
+lane/neural-toggle-sweep-20260930	2026-09-30	18	14	b	Sep 30 toggle-sweep tooling; superseded by six_lane_grid + grid_controls	retire
+lane/neural-xlw	2026-10-02	10	1	b	merge lane of neural-pass132 (SGD minibatch partials); x_linear/moments_grid.mojo on main; SGD batch rule settled Oct 17 (auto batch kept)	retire
+lane/ordered-speed-diag2	2026-09-29	1	1	b	one-off diagnostic/profiling probes (STAGE_PROF etc., absent on main)	retire
+lane/ordered-speed-m2diag	2026-09-29	1	1	b	one-off diagnostic/profiling probes (STAGE_PROF etc., absent on main)	retire
+lane/ordered-speed-prespeed	2026-09-29	1	1	a	100% of unique added code lines present on main	retire
+lane/par-harness	2026-09-28	3	3	a	99% of unique added code lines present on main	retire
+lane/pass4-measure-20260930	2026-09-30	1	1	a	93% of unique added code lines present on main	retire
+lane/probabilistic-million-cpu	2026-09-20	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+lane/probability-calibration-cpu	2026-09-19	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+lane/python-310-311	2026-09-23	9	0	a	git cherry: all 9 commits patch-equal on main	retire
+lane/release-gpu-columns	2026-09-22	11	8	b	Sep 22-23 release/provider tooling never adopted (tools/release_gpu_columns.py, tools/vultr_leg.sh absent); boxes are RunPod/DO, columns via record_identity_column.sh	retire
+lane/release-reuse-bindings	2026-09-23	6	0	a	git cherry: all 6 commits patch-equal on main	retire
+lane/rf-mutex-claim-acquire	2026-09-16	5	5	a	head commit a22fa27be: "the fix landed on main as 36ec47446, in a better shape"	retire
+lane/rf-score-weighted-nondeterminism	2026-09-16	17	17	a	89% of unique lines on main; candidate-audit-2026-10-04.md:38 diagnostic probe, superseded by the RF lifetime fix	retire
+lane/s17-measure-20260930	2026-09-30	4	4	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/sabotage-no-host-routes	2026-10-02	1	1	b	candidate-audit-2026-10-04.md:16 hook sabotage test, "do not merge"	retire
+lane/stage-diag-20261001	2026-10-01	3	2	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire
+lane/tokenizer-text-cpu-20260919	2026-09-19	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+lane/tsa-classical-utils-cpu	2026-09-19	1	0	a	git cherry: all 1 commits patch-equal on main	retire
+lane/vultr-leg	2026-09-23	3	3	b	Sep 22-23 release/provider tooling never adopted (tools/release_gpu_columns.py, tools/vultr_leg.sh absent); boxes are RunPod/DO, columns via record_identity_column.sh	retire
+lane/wheel-smoke-do-fallback	2026-09-23	4	0	a	git cherry: all 4 commits patch-equal on main	retire

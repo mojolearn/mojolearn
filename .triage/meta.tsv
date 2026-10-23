@@ -1,0 +1,330 @@
+archive/20261006/campaign/apple-opponent-quality-20261006	2026-10-06	47	3810	819	514	287	113	Bind opponent queue to full input hashes and observed coverage
+archive/20261006/campaign/full-classification-qn-recipes-20261006	2026-10-06	91	3810	1120	545	279	121	Register uncapped LogReg and LinearSVC full classification races
+archive/20261006/fix/apple-opponent-selector-20261006	2026-10-06	57	3810	888	524	277	123	Repair explicit Apple CPU opponent selection within original budget
+archive/20261006/fix/lars-direct-20261006	2026-10-06	46	3811	818	514	288	112	Add isolated sklearn direct-X LARS quality repair recipe
+archive/20261006/ideas/trees-identical-20261006	2026-10-06	1	3844	142	74	89	53	Add default-off tree IDENTICAL source experiments and A/B inventories
+archive/20261006/integration/six-lane-ab-20261006	2026-10-06	41	3818	810	510	286	114	Record integration compile coverage, limitations, and measurement handoff [skip ci]
+archive/20261006/integration/six-lane-comparison-scope-fix-20261006	2026-10-06	52	3811	826	519	288	112	Preserve structured workload split declarations in receipt comparison [skip ci]
+archive/20261006/integration/six-lane-full-tsvd-20261006	2026-10-06	60	3811	894	523	275	125	Prepare explicit full TSVD inputs and reviewable variant recipes
+archive/20261006/integration/six-lane-state-capture-20261006	2026-10-06	47	3811	823	517	286	114	Capture typed public PCA and KMeans fitted state with explicit coverage [skip ci]
+archive/20261006/lane/apple-classification-admission	2026-10-06	70	3811	951	530	276	124	Register reviewed full classification A/B input variants
+archive/20261006/lane/apple-full-classification-prep	2026-10-06	65	3811	945	526	277	123	Guard classification preparation paths and source freeze
+archive/20261006/lane/apple-six-admission	2026-10-06	44	3811	816	513	287	113	Add read-only Apple FAST full-workload artifact audit
+archive/20261006/lane/full-recipe-glue	2026-10-06	49	3811	819	515	287	113	Scope shared-harness runtime controls to their explicit board lanes
+archive/20261006/lane/host-route-source-repair-20261006	2026-10-06	2	3809	35	34	0	35	Separate CPU task helpers and TreeSHAP registration from GPU imports
+archive/20261006/lane/idle-retention-60m-20261007	2026-10-07	1	3802	5	4	5	0	Support one-hour idle retention after captured campaign work
+archive/20261006/lane/mlp-full-registration	2026-10-06	95	3811	1126	548	279	121	Require actual MLP worker job artifact provenance for both arms
+archive/20261006/lane/neural-identical-ideas-20261006	2026-10-06	1	3845	57	48	0	57	Add NEURAL IDENTICAL idea catalog and untested opt-in A/B source
+archive/20261006/lane/public-linear-state-capture-20261006	2026-10-06	88	3812	1086	545	279	121	Capture reviewed public fitted attributes for three linear regressors
+archive/20261006/lane/targeted-benchmark-metadata-20261007	2026-10-07	1	3802	3	0	3	0	Refresh reviewed benchmark hashes for AMD provenance and board presentation
+archive/20261006/lane/targeted-cpu-build-20261007	2026-10-07	1	3805	2	2	1	1	Permit explicit NVIDIA native targets on guarded CPU builders
+archive/20261006/lane/var-native-fittedvalues	2026-10-06	86	3812	1089	549	279	121	Compute VAR fitted values in the native sequence executor
+archive/20261006/repair/amd-full-classification-registration	2026-10-06	92	3812	1120	545	280	120	Register full classification workload contracts for AMD HIP measurements
+archive/20261006/repair/apple-fast-huber-fold-20261006	2026-10-06	79	3812	997	540	276	124	Compensate the Apple FAST Huber candidate final fold
+archive/20261006/repair/cnn-native-orchestration-20261006	2026-10-06	87	3812	1091	549	279	121	Move CNN epoch and minibatch orchestration into typed Mojo trainers
+archive/20261006/repair/prep-native-sparse-20261006	2026-10-06	85	3812	1031	553	277	123	Move sparse preprocessing conversion into native Mojo source
+archive/worktree-cleanup-20260919-release-087-build	2026-09-16	8	14234	10	9	0	10	0.8.7 freeze: merge release/0.8.7's release machinery onto the main freeze cb9d38bf3
+archive/worktree-cleanup-20260919-release-087-macos	2026-09-16	8	14234	10	9	0	10	0.8.7 freeze: merge release/0.8.7's release machinery onto the main freeze cb9d38bf3
+board/m3-0834-readback	2026-10-02	1	8863	1	1	0	1	Board mode readback binding names (61bcf544b) on the 0.8.34 board commit for the M3 resume
+finish/cross-vendor-native-only-20261020	2026-10-20	2	487	14	12	8	6	Preserve native checkpoint filesystem exceptions across ABI cleanup
+finish/distributed-20261020	2026-10-20	45	685	54	51	20	34	Retain all Samba child cleanup errors without abandoning replay workers
+finish/generation-20261020	2026-10-20	83	683	89	87	43	46	Register native parallel causal execution owner
+finish/generation-graph-repair-20261020	2026-10-20	56	527	111	108	79	32	Wire inactive native linear public boundary and column-target warning owner
+finish/graph-20261020	2026-10-20	38	685	47	44	18	29	Resume conditional graph training from shared native optimizer checkpoints
+finish/graph-hoist-20261020	2026-10-20	10	527	27	25	13	14	Preserve full tensor shapes in existing higher derivatives
+finish/graph-process-20261020	2026-10-20	1	535	2	2	0	2	Pin native process workers to the parent vendor and verify hello admission
+finish/installed-native-audit-20261020	2026-10-20	7	438	13	8	12	1	Retain precise installed stage58 runtime qualification evidence
+finish/native-autograd-conv-smoke-20261020	2026-10-20	1	438	6	4	5	1	Check complete native convolution tape chains against exact analytic gradients
+finish/native-classical-public-20261020	2026-10-20	4	378	12	11	4	8	Resolve native attribute descriptor through active CPython library
+finish/native-optimizer-smoke-20261020	2026-10-20	2	450	7	5	3	4	Identify the native path-class metadata traversal for the runtime fence
+finish/native-svm-smoke-20261020	2026-10-20	1	440	6	4	3	3	Exercise native SVC and SVR fits with analytic prediction oracles
+finish/parallel-causal-20261020	2026-10-20	13	535	22	22	12	10	Preserve RNG empty-input admission and native kernel exception semantics
+finish/parallel-neural-admission-20261020	2026-10-20	16	456	38	32	29	9	Preserve Transformer softmax reduction contract in captured graphs
+finish/pca-native-owner-20261020	2026-10-20	5	378	9	8	6	3	Verify existing CPU wide-PCA refusal without dropping GPU numerical coverage
+finish/samba-public-20261020	2026-10-20	16	487	26	25	15	11	Map graph rewrites to full workload A/B inputs and unmeasured coverage
+fix/amd-merge-ordering	2026-09-16	3	14533	6	4	1	5	amd-merge-ordering: review doc additions (crash-preserved)
+fix/classical-mds-20260930	2026-09-30	3	8863	6	6	0	6	Support graceful runner yielding and check actual stalled MDS input
+fix/identity-collection-completeness	2026-09-20	1	12973	2	2	0	2	Reject missing declared fields in full-part reference columns
+fix/macos-smoke-identical-only	2026-09-15	22	14669	894	754	50	55	verify_wheel.sh: pass the identity check child env=dict(os.environ)
+fix/metal-parallel-causal-lm	2026-09-20	1	12976	2	2	0	2	Support one Metal owner for parallel causal language models
+fix/parallel-model-save	2026-09-20	2	12998	3	3	1	2	Exercise saved-model and batch capture for parallel CPU estimators
+fix/release-archive-tokenizer-generator	2026-09-15	21	14669	895	755	51	55	Native source rule: tokenizer/tools/ is native, in all three copies
+fix/release-build-preflight-import	2026-09-15	2	14669	6	3	0	6	Release build preflight: load _backend.py as a submodule of a stand-in package
+fix/release-portable-math-transport	2026-09-20	2	13088	5	4	1	4	Retain HDBSCAN row norms through CPU distance worker completion
+fix/release-post-record-allowlist	2026-09-15	58	14669	899	757	51	59	0.8.6 MEASURED: par-arima cannot be recorded on Hot Aisle at any price
+fix/release-verifier-bindings	2026-09-15	3	14669	8	5	0	8	Linux admission: BINDINGS names the six identical bindings added since 0.8.5, and check_ex
+lane/136-lane-record	2026-09-14	1	15275	14	1	10	4	WIP, handed to the harness owner: the 136-lane record at 4048e1b51 (Apple 1224 stable, H10
+lane/ab-measure	2026-10-01	3	8548	2	2	0	2	ab_job: merge origin/main into each branch arm before building
+lane/algos-ann	2026-09-27	1	11635	18	10	0	18	WIP ann option parity (UNVERIFIED): TSNE sklearn surface, seams 5816/5817, save/load for t
+lane/algos-ann-speed	2026-09-27	6	11188	18	11	0	18	WIP ann speed: t-SNE repulsion tiled through shared memory in the one visit order (ts_repu
+lane/algos-trees	2026-09-28	1	11091	1	0	0	1	trees progress: session F (M2 GBDT fixed: hist_2 Apple cap + need-weights 512 threads; NVI
+lane/ann-apple-base	2026-09-28	1	11068	1	1	1	0	stage timer Int fix (baseline profile branch)
+lane/apple-fast-af-all	2026-10-03	74	7301	126	73	27	98	af-all: move combined request lines to ab-af-all/ so the M3 watcher does not queue them tw
+lane/apple-fast-arima-k1-diagnostics	2026-10-04	5	6248	7	3	0	7	Add bounded K1 reference controls for model repairs and solve conditioning
+lane/apple-fast-arima-k1-oracle	2026-10-04	3	6248	5	2	0	5	Add full-covariance K1 reference oracle on unchanged ARIMA regression corpus
+lane/apple-fast-arima-k1-review	2026-10-04	4	6248	6	2	0	6	Document K1 oracle hold and separate model validity from scan conditioning
+lane/apple-fast-arima-k3-df-gpu	2026-10-04	1	6159	1	1	0	1	WIP checkpoint (orchestrator, 2026-10-04): uncommitted edits saved before credit pause
+lane/apple-fast-arima-k3-df-reference	2026-10-04	6	6246	10	7	3	7	Prepare compensated K3 likelihood and fixed-step gradient reference
+lane/apple-fast-arima-k3-tail-probe	2026-10-04	5	6246	8	6	1	7	Probe actual GPU ARIMA gradient tail instead of rounded-objective surrogate
+lane/apple-fast-arima-scalar-k3	2026-10-04	1	6246	7	5	0	7	Add opt-in parallel scalar ARIMA likelihood and actual-kernel quality probe
+lane/apple-fast-arima-scalar-k3-quality	2026-10-04	2	6246	8	6	0	8	Stage verified arima arms for kernel-only K3 quality
+lane/apple-fast-arima-scalar-k3-r1	2026-10-04	3	6246	8	6	0	8	Correct K3 kernel read-only input pointer contracts
+lane/apple-fast-arima-scalar-k3-r2	2026-10-04	4	6246	8	6	0	8	Use concrete immutable origins for K3 GPU kernel signatures
+lane/apple-fast-arima-scan-design	2026-10-04	1	6251	2	0	0	2	Design full-covariance parallel-time ARIMA scan and quality gates
+lane/apple-fast-arima-scan-oracle	2026-10-04	1	6248	2	1	0	2	Add M3 reference gates for exact rank-one ARIMA temporal scan
+lane/apple-fast-arima-scan-oracle-review	2026-10-04	2	6248	4	1	0	4	Record rank-one ARIMA scan numerical hold and next reference gates
+lane/apple-fast-batch	2026-10-03	177	7179	180	110	31	149	af_batch_build: split plan rows on \037 so empty define fields survive (IFS tab collapsed 
+lane/apple-fast-bpe	2026-10-03	9	7358	8	5	0	8	bpe: pool slot pointer getters take mut self (an imm self yields an immutable origin)
+lane/apple-fast-bsplit-readiness	2026-10-04	1	6164	3	2	0	3	Document SVGP BSPLIT readiness and harden quality fixture provenance
+lane/apple-fast-callpath-probe	2026-10-04	2	6246	12	10	1	11	Add compile-only portable Apple callpath probe binding and verified helper
+lane/apple-fast-callpath-probe-r1	2026-10-04	3	6246	13	11	1	12	Repair callpath package fixture entry and keep native main separate
+lane/apple-fast-callpath-probe-r2	2026-10-04	4	6246	13	11	1	12	Use supported List construction in Apple callpath fixture
+lane/apple-fast-callpath-probe-r3	2026-10-04	5	6246	13	11	1	12	fix(callpath): export and verify Python module initializer
+lane/apple-fast-callpath-probe-r4	2026-10-04	6	6246	14	12	1	13	fix(callpath): retain stable identity across context owner moves
+lane/apple-fast-callpath-probe-r5	2026-10-04	7	6246	14	12	1	13	fix(callpath): synchronize foreign context through owner
+lane/apple-fast-callpath-quality	2026-10-04	1	6246	8	7	1	7	Apple FAST: gate resident callpath proposals and add bit lifecycle fixture
+lane/apple-fast-callpath-reach-audit	2026-10-04	2	6174	1	0	0	1	Record small VAR board transfer spans and avoid redundant storage work
+lane/apple-fast-catalog-gemm-all	2026-10-04	6	6246	10	7	1	9	Exercise all ten catalog GEMM variants with independent quality receipts
+lane/apple-fast-catalog-gemm-probe	2026-10-04	3	6246	9	7	1	8	Guard zero-length probe inputs and use GPU empty-product control
+lane/apple-fast-catalog-gemm-probe-r1	2026-10-04	4	6246	9	7	1	8	Repair GEMM probe reserved identifier and fragment container spelling
+lane/apple-fast-catalog-gemm-probe-r2	2026-10-04	5	6246	9	7	1	8	Repair catalog GEMM output parameter keyword in kernel and entry
+lane/apple-fast-catalog-matrix-timing	2026-10-04	7	6246	12	8	1	11	Prepare matrix-only catalog geometry timing behind pinned quality evidence
+lane/apple-fast-catalog-matrix-timing-r1	2026-10-04	8	6246	12	8	1	11	Require M3 Ultra and annotate catalog timing output differences
+lane/apple-fast-catalog-resident-probe	2026-10-04	1	6226	10	8	1	9	Add one-shot resident GEMM contract probe with all ten catalog variants
+lane/apple-fast-chol-20261004	2026-10-04	4	6401	2	2	0	2	Record failed triangular Cholesky speed experiment beside toggle
+lane/apple-fast-classical-ideas-20261006	2026-10-06	3	3839	143	67	99	44	Document new and existing A/B experiment files and controls [skip ci]
+lane/apple-fast-dbscantaxi	2026-10-03	1	7244	3	2	1	2	dbscan FAST+Apple: dense-ball union-find route (-D MOJOLEARN_DBSCAN_FAST_DENSEBALL), taxi 
+lane/apple-fast-decomp-linalg	2026-10-03	19	7346	11	9	0	11	cholesky/checks/potrf.mojo: CHOL_TRSM_INV's docstring back under it (a second file-scope s
+lane/apple-fast-decomp-mma-k16	2026-10-04	2	6251	5	3	0	5	Reject nonfinite timing outputs and record MMA shape provenance
+lane/apple-fast-decomp-sdk-control	2026-10-04	1	6170	5	4	0	5	WIP: checkpoint opt-in SDK decomp buffer adapter for handoff
+lane/apple-fast-decomp-sparse	2026-10-03	31	7346	14	10	0	14	cholesky/checks/potrf.mojo: CHOL_TRSM_INV's docstring back under it (a second file-scope s
+lane/apple-fast-dwcurrent	2026-10-04	3	6397	6	4	0	6	Record depthwise bridge scan speed failure and measured quality drift
+lane/apple-fast-eigh-cache	2026-10-04	7	6382	6	4	0	6	Resume missing eigh candidate quality after recorded baseline failure
+lane/apple-fast-eigh-panel-df	2026-10-04	3	6232	5	3	1	4	Check all compiled source inputs before EIGH quality installation
+lane/apple-fast-eigh-panels	2026-10-04	7	6255	6	4	0	6	Report original eigh no-regression criterion separately from strict gate
+lane/apple-fast-fa	2026-10-03	4	7358	6	3	0	6	apple-fast-fa: compile status in fa.md (FAST ALL rc=0; the rest owed to the peer)
+lane/apple-fast-fastonly2	2026-10-03	1	6889	2	2	1	1	IVF FAST coarse k-means++ seeding on the device (MOJOLEARN_IVF_FAST_SEED_DEVICE, opt-in fo
+lane/apple-fast-gap-kapprox2	2026-10-03	15	6507	10	9	0	10	EXPERIMENTS: SCHI2_FAST_DEVRNG held (istella seed-spread quality worse)
+lane/apple-fast-gap-linalg2	2026-10-03	4	6621	7	6	0	7	EXPERIMENTS: gap-linalg2 LU_FAST_STEP1, CHOL_FAST_DEVIO, CHOL_FAST_NOSYNC
+lane/apple-fast-gap-linalg2-kpca	2026-10-03	2	6614	1	1	0	1	tools/kpca_quality_ab.sh: arm B defaults to -D MOJOLEARN_KPCA_FAST_LANCZOS_DEV
+lane/apple-fast-gap-linalg2-pca	2026-10-03	3	6618	6	5	0	6	tools/pca_quality_ab: quality-only A/B of a FAST PCA build switch (explained_variance_ rel
+lane/apple-fast-gap-linalg2-svd	2026-10-03	1	6556	2	2	0	2	PARKED, uncompiled: -D MOJOLEARN_SVD_FAST_AW (thin SVD U = A V S^-1 + Cholesky QR); target
+lane/apple-fast-gap-misc	2026-10-03	6	7211	9	8	0	9	fix: hm scope in the DEV_SCALE drain branch
+lane/apple-fast-gap-tsa	2026-10-03	1	7068	1	0	0	1	docs/apple-fast/ab/gap-tsa.txt: M3 A/B theta taxi-hourly, THETA_SPEC default vs + THETA_HO
+lane/apple-fast-general-speed	2026-10-04	5	5935	4	3	0	4	EXPERIMENTS: READY-AB rows for LDA tiers, SVM ws ramp, ARD one-pass
+lane/apple-fast-graph	2026-10-02	3	7671	4	2	0	4	docs/apple-fast/ab/graph: CC_FAST A/B request (connected-components taxi) and switch note 
+lane/apple-fast-isotonic-knn	2026-10-03	11	7346	6	4	0	6	x_neighbors iter_device: the fast_mma_knn import at module scope (the MMA route's launch d
+lane/apple-fast-kapprox	2026-10-03	3	7661	4	1	0	4	tools/hooks/host_routes_baseline.tsv: prune 2 stale rows (pre-push hook refusal)
+lane/apple-fast-knn-lean-gpu	2026-10-04	1	6255	6	5	0	6	Apple FAST: candidate pooled KNN counts with GPU total reduction
+lane/apple-fast-knn-lean-gpu-harness-r1	2026-10-04	2	6255	6	5	1	5	Repair KNN empty-input quality fixture without changing runtime source
+lane/apple-fast-layoutfix	2026-10-03	2	6755	7	7	0	7	tools/layoutfix_smoke.py: import + tiny fits for the NoCpuEntry layout fix
+lane/apple-fast-linalg-20261004	2026-10-04	4	6402	3	3	0	3	fix: extract FAST Jacobi eigenvalues with compensated Rayleigh quotients
+lane/apple-fast-linsvr	2026-10-03	7	7358	8	5	1	7	linsvr: DEVICE_CONVERGE + DUAL_CD request lines (4), A/B explanation, notes; compile owed:
+lane/apple-fast-lle	2026-10-02	12	7639	10	6	0	10	Merge origin/lane/apple-fast-nb into lane/apple-fast-lle
+lane/apple-fast-lost-candidates	2026-10-04	1	6105	1	0	0	1	docs(apple-fast): lost FAST candidates audit 2026-10-04
+lane/apple-fast-lu-mma-dbuf	2026-10-04	2	6248	5	3	0	5	Gate LU staging with exact hard-fixture quality and call-read measurements
+lane/apple-fast-lu-pivot-shuffle	2026-10-04	2	6242	6	4	0	6	Gate LU pivot shuffle with exact hard and cross-boundary tie fixtures
+lane/apple-fast-m2b1	2026-10-03	11	6623	16	14	2	14	Comments: defines that are opt-in on this branch (ISOTONIC_FAST_PAR/PAIRMERGE, NB_TEXT_CSR
+lane/apple-fast-manager-remote	2026-10-04	1	6140	1	1	0	1	Admit hash-verified K3 GPU quality probe to pinned queue
+lane/apple-fast-mcd-g1-quality	2026-10-04	1	6105	1	1	0	1	Add actual-caller MCD G1 Gram quality gate over a generic shape spread
+lane/apple-fast-mcd-ordered-cov	2026-10-04	1	6240	7	5	0	7	Prototype ordered compensated split-K MCD covariance with strict quality plan
+lane/apple-fast-mcd-ordered-quality	2026-10-04	2	6240	10	8	0	10	Add strict MCD ordered covariance oracle reach and repeatability harness
+lane/apple-fast-mcd-ordered-quality-r1	2026-10-04	3	6240	10	8	0	10	fix(mcd): repair ordered covariance parameter and buffer borrows
+lane/apple-fast-mcd-ordered-quality-r2	2026-10-04	4	6240	10	8	0	10	fix(mcd): select installed SDK mutable-origin pointer overload
+lane/apple-fast-mcd-ordered-quality-r3	2026-10-04	5	6240	10	8	0	10	fix(mcd): retain a valid typed gate for resident covariance
+lane/apple-fast-mcd-quality	2026-10-03	2	6497	2	2	0	2	mcd_quality_ab: report sign, eigen range and pseudo log det (raw covariance is singular on
+lane/apple-fast-mcd-saved-oracle	2026-10-04	3	6256	6	5	0	6	Apple FAST: analyze saved MCD accuracy with strict float64 oracle
+lane/apple-fast-mcd-saved-oracle-r1	2026-10-04	4	6256	6	5	0	6	Fix MCD oracle JSON scalars and inspect additional saved baseline
+lane/apple-fast-old-linalg-audit	2026-10-04	1	6363	2	1	0	2	Document invalid old QR SVD mixed-mode comparisons without replay
+lane/apple-fast-opp	2026-10-03	7	7445	3	3	0	3	torch arms on MPS: float32 inputs before .to(dev), float64 only after .cpu()
+lane/apple-fast-optics2	2026-10-03	5	7358	8	5	0	8	optics2: compile status (ALL rc=0; per-define, FAST off and IDENTICAL owed: peer)
+lane/apple-fast-opv	2026-10-03	8	6404	11	8	0	11	opv: quality-only check for OPTICS_FRONTIER_DEVICE / OPTICS_LIVEBUF (labels, ordering, rea
+lane/apple-fast-pca-eig	2026-10-02	3	8229	4	2	0	4	docs/apple-fast/ab: pca-eig queue lines and note
+lane/apple-fast-prep2	2026-10-03	2	7342	5	3	2	3	x_prep: MutAnyOrigin casts at the prep2_fast_stage and qselect_device calls (Metal FAST bu
+lane/apple-fast-prep3	2026-10-02	9	7632	15	11	2	13	Merge origin/lane/apple-fast-nb (9f2b71471, NB_TEXT_CSR pass 2) into lane/apple-fast-prep3
+lane/apple-fast-pt-queue	2026-10-04	1	6395	2	1	0	2	Gate verified PT score timings on paired fitted-value quality
+lane/apple-fast-rec-ab11	2026-10-04	5	5935	4	3	0	4	EXPERIMENTS: READY-AB rows for LDA tiers, SVM ws ramp, ARD one-pass
+lane/apple-fast-remaining-audit-20261004	2026-10-04	1	6162	1	0	1	0	Document disposition of unmatched Apple FAST candidate requests
+lane/apple-fast-resample	2026-10-02	6	7876	8	6	0	8	docs/apple-fast/ab/resample: light A/B lines (afc_ab_def, defines, taxi first)
+lane/apple-fast-results	2026-10-04	166	8230	4	0	0	4	m3 results sync 04:38Z
+lane/apple-fast-robust	2026-10-02	8	7658	6	4	0	6	docs/apple-fast/ab/robust: MCD device C-steps request lines (robust-mcd-taxi, robust-ee-ta
+lane/apple-fast-scoped-pca-caller	2026-10-04	2	6165	2	2	0	2	WIP checkpoint (orchestrator, 2026-10-04): uncommitted edits saved before credit pause
+lane/apple-fast-sgdoc-parallel	2026-10-03	7	6554	7	6	0	7	sgdoc_fast: stop on the zero primal's certificate too ( u ^2/2), M2 check: istella rows-sm
+lane/apple-fast-shap	2026-10-02	5	7671	7	5	0	7	docs/apple-fast/ab/shap: the three A/B request lines (tree-shap, kernel-shap, permutation-
+lane/apple-fast-shared-downstream-g1	2026-10-04	4	6239	22	18	1	21	test(gemm): pin G1 downstream pair build and safe installer
+lane/apple-fast-shared-downstream-g1-r1	2026-10-04	5	6239	23	19	1	22	fix(gemm): correct squared-distance oracle and reuse unchanged native arms
+lane/apple-fast-shared-downstream-g1-r2	2026-10-04	6	6239	25	21	1	24	test(gemm): preflight explicit native prerequisites before future fits
+lane/apple-fast-shared-downstream-g5	2026-10-04	5	6239	22	18	1	21	test(gemm): isolate G5 downstream manifest identity
+lane/apple-fast-shared-downstream-g5-r1	2026-10-04	6	6239	23	19	1	22	fix(gemm): correct squared-distance oracle and reuse unchanged native arms
+lane/apple-fast-shared-downstream-g5-r2	2026-10-04	7	6239	25	21	1	24	test(gemm): preflight explicit native prerequisites before future fits
+lane/apple-fast-shared-downstream-quality	2026-10-04	3	6239	19	16	1	18	test(gemm): observe static variants in real estimator bindings
+lane/apple-fast-shared-gemm-g1g5	2026-10-04	1	6239	12	10	1	11	Add opt-in shared G1/G5 GEMM dispatch with strict route quality probe
+lane/apple-fast-shared-gemm-g1g5-r1	2026-10-04	2	6239	12	10	1	11	Place shared GEMM compile assertions inside dispatcher
+lane/apple-fast-shared-scoped-timing	2026-10-04	7	6239	26	22	1	25	Add gated scoped GEMM caller quality and cold first-read timing
+lane/apple-fast-shared-scoped-timing-g5	2026-10-04	8	6239	26	22	1	25	Add gated scoped GEMM caller quality and cold first-read timing
+lane/apple-fast-sym-ctr	2026-10-03	7	7358	7	4	4	3	sym-ctr: record compile status (ALL rc=1 fixed; remaining compiles owed: peer)
+lane/apple-fast-sym-est	2026-10-03	4	7358	5	2	3	2	sym-est: record compile status (none run, compile owed: peer)
+lane/apple-fast-sym-feat	2026-10-03	14	7358	14	11	3	11	sym-feat: untracked origin on the pack table views (aliasing error in the QUANT/INDEX_PACK
+lane/apple-fast-sym-hist	2026-10-03	3	7358	9	6	3	6	apple-fast sym-hist: A/B request lines and the switch explanations
+lane/apple-fast-sym-iter	2026-10-03	5	7358	6	3	3	3	apple-fast sym-iter: record compile status (ALL rc=0; singles, off, IDENTICAL owed: peer)
+lane/apple-fast-sym-multi	2026-10-03	6	7358	8	5	3	5	sym-multi: the fused MultiClass evaluation does not reopen the caller's est.approx stage
+lane/apple-fast-target-current	2026-10-04	5	6381	6	4	1	5	Document target scratch current-main rebuild and gated M3 plan
+lane/apple-fast-target-scratch	2026-10-04	3	6400	4	3	0	4	refactor(prep): share existing lookup argument plumbing for target scratch
+lane/apple-fast-trees-io	2026-10-02	6	7568	9	7	0	9	iforest_run_binding: rename the local lent-query address to query_lent_addr (it redefined 
+lane/apple-fast-trees-scan	2026-10-02	9	7876	5	3	0	5	docs/apple-fast/ab/trees-scan: light form (2 pairs, deciding dataset first) and the settle
+lane/apple-fast-trees-symmetric	2026-10-02	6	7852	7	5	0	7	apple-fast trees-symmetric: the Newton leaf walk on the device behind -D MOJOLEARN_SYM_DEV
+lane/apple-fast-w2-shap	2026-10-04	3	6359	7	6	0	7	SHAP_FAST_PIPE: quality checker (byte-identical phi), quality-gated pair helper, ledger ro
+lane/apple-fast-w2-ts	2026-10-04	4	6342	12	11	0	12	EXPERIMENTS: ARIMA_FIT_GROUPS open candidate row
+lane/apple-fast-w3-arima	2026-10-04	1	6299	12	11	0	12	AutoARIMA: opt-in device slab for search groups and FAST fit (MOJOLEARN_ARIMA_SLAB)
+lane/apple-fast-w3-dw	2026-10-04	2	6299	5	4	0	5	w3-dw: quality-gated verified-arm helper and A/B note for MOJOLEARN_GBDT_DW_FLAT_GRID
+lane/apple-fast-w3-prep	2026-10-04	4	6295	6	6	0	6	tools: X_PREP_PINNED_OUT exact quality checker (oracles, held-output lifetime, release cou
+lane/apple-fast-w4-decomp	2026-10-04	6	6256	8	7	0	8	w4_decomp_pair: one x_decomp B arm carries both x_decomp defines
+lane/apple-fast-w4-decomp-harness-r1	2026-10-04	7	6256	8	7	0	8	Repair verified decomp timing staging and preserve PCA family
+lane/apple-fast-w4-eigh	2026-10-04	4	6256	4	4	0	4	fix: remove stray mis-indented keepalives in eigh refusal branch (M2 compile error)
+lane/apple-fast-w4-linalg	2026-10-04	3	6256	7	6	0	7	fix: drop backslash from TSLU docstring (invalid escape; M2 compile error)
+lane/apple-fast-w4-mcd	2026-10-04	2	6256	5	4	0	5	MCD w4: profile helper, compat A/B whitelist for SKIP_PINVH/DEFLATE, EXPERIMENTS rows
+lane/apple-fast-w4-shap	2026-10-04	3	6256	7	6	1	6	PSHAP_DELTA: bound the device index words for narrow X
+lane/apple-fast-w4-small	2026-10-04	6	6256	14	14	0	14	w4-small: reach flags (x_sequence_var_fused, x_prep_maxabs_pool) and the exact A/B quality
+lane/apple-fast-w4-tslu	2026-10-04	3	6256	7	6	0	7	fix: drop backslash from TSLU docstring (invalid escape; M2 compile error)
+lane/apple-identical-steps	2026-09-26	2	12147	0	0	0	0	Revert the WIP Apple IDENTICAL RF 40-column pass: same bits, slower
+lane/apple-merged-check	2026-09-28	1	10345	17	8	0	17	apple-merged check driver (tools/merged_check, verification only; never merged)
+lane/apple-merged-check2	2026-09-28	1	10343	17	8	0	17	apple-merged check driver (tools/merged_check, verification only; never merged)
+lane/apple-merged-check3	2026-09-28	1	10336	17	8	0	17	apple-merged check driver (tools/merged_check, verification only; never merged)
+lane/apple-merged-owed-check	2026-09-28	1	10333	17	8	0	17	apple-merged-owed check commit: e264ecfc4 + tools/merged_check driver
+lane/apple-verify-20261001	2026-09-30	1	8736	1	1	0	1	Apple verification job: the published 0.8.32 wheel on Metal, digests for Mamba-3, matmul, 
+lane/apple2-merged-check	2026-09-28	1	9861	3	3	0	3	apple2-merged check: HEAD plus the merged_check driver (never merged)
+lane/apple2-merged-check2	2026-09-28	1	9844	3	3	0	3	apple2-merged check2: final tips + jacobi2 fix, plus the merged_check driver (never merged
+lane/apple2-merged-check3	2026-09-28	1	9843	3	3	0	3	apple2-merged check3: bd6af0c4b plus the merged_check driver (never merged)
+lane/apple2-merged-check4	2026-09-28	1	9842	3	3	0	3	apple2-merged check4: a374c8c08 plus the merged_check driver (never merged)
+lane/apple2-merged-check5	2026-09-28	1	9791	3	3	0	3	apple2-merged check5: b3defa9bb plus the merged_check driver (never merged)
+lane/apple3-merged-check	2026-09-28	2	9647	5	4	0	5	Merge remote-tracking branch 'origin/lane/apple3-merged' into lane/apple3-merged-check
+lane/bench-board-m3ultra	2026-09-29	37	9275	20	19	0	20	bench board: the M2 Pro's dbscan races last, on 0.8.31 (int64 edge count), own output and 
+lane/bf16-units	2026-09-28	1	9413	1	1	0	1	dev_pod: take the sync fallback from lane/lowbit-flag
+lane/board-resume-20260930	2026-09-30	12	9275	4560	7	0	400	Save first successful latest-main M3 label propagation measurement after memory fix
+lane/catboost-parity-on-lm-attention-fallback	2026-09-19	7	13466	51	43	11	40	Task 3 quality check vs CatBoost 1.2.10 CPU on HIGGS; leg script lanes
+lane/categorical-feature-cpu	2026-09-19	1	13327	2	2	1	1	Avoid materializing numeric feature sets
+lane/classical-pass-measure-20260930	2026-09-30	22	8875	148	10	37	111	Merge branch 'lane/neural-toggle-sweep-20260930' into lane/classical-pass-measure-20260930
+lane/cluster-apple-prof	2026-09-28	7	10652	6	6	0	6	Merge branch 'lane/cluster-apple' into lane/cluster-apple-prof
+lane/cluster-speed-base	2026-09-27	1	11180	1	1	0	1	bench/x_cluster_speed.py on main's tree (the cluster lane's before-timing base)
+lane/cpu-par-fallback	2026-09-28	1	11150	6	6	0	6	WIP: one-device plain fallback for the par-* drivers on CPU; cpu_path_audit probe recipes
+lane/cpu-training-e3	2026-09-14	5	15259	24	19	7	17	CPU training for logistic (workstream E batch 2): glm/host/qn_oracle.mojo restates the L-B
+lane/cpu-training-gate-speed	2026-09-15	1	14968	3	2	0	3	WIP gate speed (message rewritten before push)
+lane/data-runtime-million-cpu	2026-09-20	1	13314	4	3	2	2	Avoid host entropy label copies
+lane/distance-pairwise-cpu	2026-09-19	1	13355	4	3	1	3	Parallelize exact host RBC query rows
+lane/ensemble-meta-cpu	2026-09-19	1	13332	3	3	0	3	Avoid HostGBDT input transposes
+lane/expose-d-fixes	2026-09-14	6	15240	51	48	2	49	RBFSampler refuses n_components < 1 by name before any buffer is made
+lane/forecast-timeseries-cpu	2026-09-19	1	13366	3	3	1	2	Avoid copying Holt-Winters history for host inference
+lane/forest-train-speed	2026-09-17	1	14076	3	2	0	3	ExtraTrees: the regression score pass at width 4 on NVIDIA (DEVIATION 3023), sabotage arm;
+lane/forest-training-cpu-20260919	2026-09-19	1	13357	1	1	0	1	Speed up host RandomForest quantile sorting
+lane/fp-contract-off-exp	2026-09-25	1	12290	24	24	0	24	MOJOLEARN_MOJO_BUILD_FLAGS: one experiment hook for mojo build options in every binding bu
+lane/fp-contract-off-study	2026-09-25	2	12226	25	24	0	25	fp contraction study: contract=off moves 16 of 627 cells and splits CPU from GPU on Poisso
+lane/gbdt-depthwise-fast	2026-09-20	1	13202	1	1	0	1	Keep FAST depthwise leaf partition on device
+lane/gbdt-rest	2026-09-16	4	14616	24	16	0	24	lane/gbdt-rest is dropped for this session, not just held: Metal is the scarce resource
+lane/gemm-p1-fold-bypass	2026-09-19	4	13387	0	0	0	0	Revert "Bypass production GEMM fold stacks for one leaf"
+lane/gram-prep-million-cpu	2026-09-20	1	13315	3	2	2	1	Parallelize exact host split-K Gram preparation
+lane/host-token-split-2	2026-10-01	3	8621	1	1	0	1	Merge origin/main into lane/host-token-split-2
+lane/host-token-split-2-measure	2026-09-30	2	8712	1	1	0	1	Merge remote-tracking branch 'origin/main' into lane/host-token-split-2-measure
+lane/host-token-split-measure	2026-09-30	2	8748	1	1	1	0	Merge remote-tracking branch 'origin/main' into lane/host-token-split-measure
+lane/hr2-kpca-seq	2026-10-02	3	8245	6	6	0	6	prophet: module doc names the warp per series
+lane/identical-body-tiles-20261005	2026-10-05	2	4695	2	1	0	2	Validate A/B harness on single-profile experiment branches
+lane/identical-group-slack2-20261005	2026-10-05	2	4695	2	1	0	2	Validate A/B harness on single-profile experiment branches
+lane/identical-group-slack8-20261005	2026-10-05	2	4695	2	1	0	2	Validate A/B harness on single-profile experiment branches
+lane/identical-one-page-20261005	2026-10-05	2	4695	2	1	0	2	Validate A/B harness on single-profile experiment branches
+lane/identical-packed64-20261005	2026-10-05	2	4695	2	1	0	2	Validate A/B harness on single-profile experiment branches
+lane/identity-record-next	2026-09-15	3	14972	15	0	0	15	[skip ci] The 178-lane identity record at df617c699, PARTIAL, stopped on Andrew's order th
+lane/ivf-filter-fix-measure	2026-10-01	1	8583	2	2	0	2	PR #48 measurement job
+lane/kernel-methods-cpu	2026-09-19	1	13366	2	2	0	2	Parallelize host GP covariance rows
+lane/kmeans-mojo-1-2	2026-09-26	7	12290	442	428	0	400	k-means under Mojo 1.2: Metal and CUDA 627/627 equal to 0.8.19 with the seed fix
+lane/lane-map-import-graph	2026-09-23	4	12577	7	6	1	6	Selector consumes the import-graph map; no manifest lane list places a file
+lane/large-data-classical-cpu	2026-09-20	1	13323	3	3	0	3	Speed large CPU accuracy scoring
+lane/large-metrics-shared-cpu	2026-09-20	1	13320	3	3	0	3	Speed large CPU confusion matrices
+lane/linear-apple-base	2026-09-28	1	11069	1	1	0	1	x_linear_speed: Lasso and ElasticNet are mojolearn.Lasso / mojolearn.ElasticNet (the board
+lane/linfit-speed	2026-09-29	45	8977	27	25	0	27	linfit-speed: m2pro OLS single-column repro job
+lane/lm-attention-fallback	2026-10-05	3	13192	9	5	0	1	docs: merge GPU performance experiment proposals into attention fallback
+lane/lm-head-v2-dweight-reuse	2026-09-20	1	13235	39	25	12	27	Merge remote-tracking branch 'origin/main' into lane/lm-head-v2-dweight-reuse
+lane/loss-metrics-objectives-cpu	2026-09-19	1	13368	3	2	1	2	Avoid unit-weight work in GBDT quantiles
+lane/lowbit-amd-tuned-lb	2026-09-29	1	9300	1	1	0	1	lowbit-amd-tuned (experiment branch for Lane D): the tuned file's two staged kernels state
+lane/lowbit-apple-now	2026-09-29	1	9374	1	1	0	1	lowbit-int15 Apple float-unit plan: four codes per staging load, alignment stated where th
+lane/lowbit-apple-tuned	2026-09-29	21	9349	57	9	0	57	lowbit-apple-tuned: progress, job 6 and where the lane stands
+lane/lowbit-blocks	2026-09-29	1	9314	1	0	0	1	lowbit-blocks: the hung MI325X run ended at the steward's 3-hour cap (exit 124)
+lane/lowbit-e2e	2026-09-29	5	9351	11	3	0	11	Record H100 public-call results and cross-vendor hash agreement
+lane/lowbit-quality	2026-09-29	25	9422	297	24	0	297	lowbit-quality: F1-pv32 records on both texts and at five seeds, landed nvc1 runs, verdict
+lane/m3-sweep	2026-09-28	2	11068	2	1	0	2	m3_sweep.md: the M3 + M2 every-lane sweep, method and order
+lane/mamba-opp	2026-09-29	6	9275	8	8	0	8	test_bench_board: the neural Not covered line now names the mamba-ssm arms
+lane/mamba3-amd-regs2h-measure	2026-10-01	2	8566	3	3	0	3	PR #50 measurement job (AMD)
+lane/mamba3-padding-perf	2026-09-19	2	13384	2	1	0	2	The owed NVIDIA kernel recordings are one command, not a research task
+lane/mamba3-statepass	2026-09-09	23	16478	188	29	3	185	Mamba3: archive final H100 evidence, admitted reference and handoff
+lane/manifold-spectral-cpu	2026-09-19	1	13368	2	2	1	1	Speed up spectral host Jacobi rotations
+lane/merged	2026-10-02	40	8062	238	222	42	187	merged: lane/neural-pass133 (9901c6a91)
+lane/mixture-anomaly-cpu	2026-09-19	2	13360	4	4	2	2	Parallelize IsolationForest host scoring rows
+lane/model-load-shared-cpu	2026-09-19	1	13330	4	4	0	4	Avoid repeated saved-model archive decoding
+lane/model-selection-cpu	2026-09-19	1	13360	2	2	0	2	Speed up host KFold metadata construction
+lane/mojo-1-2-trial	2026-09-26	2	12154	13	2	0	13	Mojo 1.2 nightly trial: results (30 k-means cells move, GPU vendors agree, CPU vs GPU brea
+lane/neighbors-rest	2026-09-16	6	14612	212	12	0	212	lane/neighbors-rest dropped 2026-09-16 with nothing recorded; owed evidence named, item 2'
+lane/neural-apple-base	2026-09-28	1	10667	1	1	0	1	neural-apple BEFORE arm: origin/lane/merged plus tools/apple_speed_neural/profile.sh only
+lane/neural-apple3-measure	2026-10-01	2	8620	3	3	0	3	PR #44 NVIDIA wrapper
+lane/neural-apple4	2026-10-01	2	8535	3	3	0	3	Merge origin/main into lane/neural-apple4
+lane/neural-experiment-measure-20260930	2026-09-30	12	8881	110	8	1	109	Preserve separate L40S neural stage ticks and compiled phase counters
+lane/neural-pass102	2026-10-01	1	8425	1	1	0	1	SVGP: deterministic jitter escalation (x10, 3 tries, gpytorch psd_safe_cholesky) when the 
+lane/neural-pass13	2026-10-02	3	8245	1	1	0	1	host GEMM: keep the right-operand pack closure named _pack (same thread split as main's ba
+lane/neural-pass13-measure	2026-09-30	3	8706	2	2	0	2	PR #19 measurement job
+lane/neural-pass144	2026-10-02	3	8379	9	9	0	9	linalg.eigh: the round-robin Jacobi above n = 88 on device and host (board n = 4096 ran pa
+lane/neural-pass17-measure	2026-10-01	2	8578	14	14	0	14	PR #23 merged with main: measurement jobs (AMD/NVIDIA cell A/B, M3)
+lane/neural-pass19	2026-09-30	1	8696	1	1	0	1	gemm_host_rows: the left pack fused into the row-split compute task (the right pack stays 
+lane/neural-pass26-measure	2026-10-01	5	8654	108	8	102	6	Merge remote-tracking branch 'origin/lane/neural-pass26' into lane/neural-pass26-measure
+lane/neural-pass30-measure	2026-10-01	2	8644	8	8	0	8	PR measurement jobs (dataset-aware cell A/B)
+lane/neural-pass31-measure	2026-10-01	2	8645	2	2	0	2	PR measurement jobs (dataset-aware cell A/B)
+lane/neural-pass32-measure	2026-10-01	2	8638	3	3	0	3	PR #37 measurement job
+lane/neural-pass34-measure	2026-10-01	2	8624	5	5	0	5	PR #38 measurement job
+lane/neural-pass35-measure	2026-10-01	3	8617	6	6	0	6	ivf nv wrapper
+lane/neural-pass36	2026-10-01	4	8626	1	1	0	1	lu timer: one span per panel's step loop plus the three trailing kernels (a sync per launc
+lane/neural-pass36-measure	2026-10-01	10	8581	5	5	0	5	PR #40 merged with main: M3 job
+lane/neural-pass37-measure	2026-10-01	2	8613	5	5	0	5	PR #41 measurement job
+lane/neural-pass38-measure	2026-10-01	2	8607	4	4	0	4	PR #43 measurement job (on main with #41)
+lane/neural-pass39-measure	2026-10-01	1	8618	1	1	0	1	PR #42 job
+lane/neural-pass40-measure	2026-10-01	1	8618	2	2	0	2	PR #45 measurement job
+lane/neural-pass41	2026-10-01	8	8610	1	1	0	1	x_decomp qr: the dot tiles become the opt-in arm (MOJOLEARN_XD_QR_DOT_TILE=1); the update 
+lane/neural-pass41-measure	2026-10-01	15	8585	3	3	0	3	PR #46 third head: restore = update tiles off
+lane/neural-pass42-measure	2026-10-01	1	8587	2	2	0	2	PR #47 measurement job
+lane/neural-pass44-measure	2026-10-01	1	8558	8	8	1	7	Merge origin/main into lane/neural-pass44-measure (union of train_loop imports)
+lane/neural-pass45-measure	2026-10-01	6	8556	21	5	15	6	pr52b: control = the old 128K default
+lane/neural-pass46-measure	2026-10-01	4	8546	4	4	1	3	nv_pr54: np54 tree
+lane/neural-pass47-measure	2026-10-01	5	8547	17	11	6	11	NVIDIA follow-up: attn phase timers, toggles, transformer-forward wheel regression check
+lane/neural-pass48	2026-10-01	1	8550	4	4	0	4	a process pool for the small scratch buffers a host read needs (core/scratch_pool.mojo): t
+lane/neural-pass48-measure	2026-10-01	2	8550	5	5	0	5	PR #56 measurement job
+lane/neural-pass49-measure	2026-10-01	3	8548	4	4	0	4	nv_pr57: run from the np47 tree on nvc1
+lane/neural-pass49-on-61	2026-10-01	1	8529	2	2	0	2	Measure-only: #57 (lane/neural-pass49) merged onto #67 (lane/neural-pass61); conflict = ke
+lane/neural-pass5	2026-10-01	3	8535	3	3	0	3	Merge origin/main into lane/neural-pass5
+lane/neural-pass50-measure	2026-10-01	1	8548	2	2	0	2	PR #58 measure job (TQ64/32/16 x2 + phase timers)
+lane/neural-pass53-on-56	2026-10-01	1	8540	1	1	0	1	Merge remote-tracking branch 'origin/lane/neural-pass53' into lane/neural-pass53-on-56
+lane/neural-pass54	2026-10-01	1	8553	1	1	0	1	identical GEMM: the tile step-down applies from MOJOLEARN_GEMM_TILE_MIN_K (NVIDIA default 
+lane/neural-pass54-measure	2026-10-01	3	8542	3	3	0	3	PR #62 measure job
+lane/neural-pass57	2026-10-01	1	8536	1	1	0	1	fused attention: the dkdv backward kernel's 32-key arm takes 16 keys per block under -D MO
+lane/neural-pass59	2026-10-01	1	8533	1	1	0	1	fused attention: the forward r2 and MFMA kernels' shared page is never smaller than the V 
+lane/neural-pass62-on-64	2026-10-01	1	8525	1	1	0	1	Measure-only: #68 (lane/neural-pass62) merged onto #69 (lane/neural-pass64)
+lane/neural-pass67	2026-10-01	6	8470	1	1	0	1	Merge remote-tracking branch 'origin/main' into lane/neural-pass67
+lane/neural-pass76	2026-10-01	1	8470	1	1	0	1	x_linear host route for LassoCV/ElasticNetCV, BayesianRidge, ARD and the ridge family
+lane/neural-pass77	2026-10-01	2	8470	2	2	0	2	MeanShift fit takes the CPU host binding on GPU installs
+lane/neural-pass78	2026-10-01	5	8468	3	3	0	3	random projection host transform reads X's own buffer
+lane/neural-pass83	2026-10-01	3	8466	2	2	0	2	x_linear: Lars/LassoLars take the host binding (MOJOLEARN_X_LINEAR_LARS_DEVICE=1 keeps the
+lane/neural-toggle-sweep-20260930	2026-09-30	18	8879	144	6	35	109	Revert the stage-reset default flip: skipping the zero-fills fails transformer_session_che
+lane/neural-xlw	2026-10-02	10	8298	22	19	3	19	Merge branch 'lane/neural-pass132' into lane/neural-xlw
+lane/ordered-speed-diag2	2026-09-29	1	9078	1	1	0	1	DIAGNOSTIC: pointwise split phases on the stage clock
+lane/ordered-speed-m2diag	2026-09-29	1	9089	1	1	0	1	DIAGNOSTIC: sub-byte histogram blocks at 256 on Apple (M2 Pro Plain identity break probe)
+lane/ordered-speed-prespeed	2026-09-29	1	8921	1	1	1	0	bench: ordered_profile.py on main (the pre-speed Ordered path at the snapped semantics, fo
+lane/par-harness	2026-09-28	3	9858	6	4	2	4	par-harness progress: job nvc1-0022 submitted
+lane/pass4-measure-20260930	2026-09-30	1	8781	1	1	0	1	PR #8 AMD job (the NVIDIA job retargeted to gfx942)
+lane/probabilistic-million-cpu	2026-09-20	1	13315	4	3	2	2	Avoid host mutual-info label copies
+lane/probability-calibration-cpu	2026-09-19	1	13323	2	2	0	2	Parallelize CPU probability validation
+lane/python-310-311	2026-09-23	9	12577	120	21	113	7	Record: the Python test suite on 3.10 and 3.11 against the 0.8.15 Linux wheel
+lane/release-gpu-columns	2026-09-22	11	12608	9	8	0	9	GPU column package: copy the sources and link the set's .libs; the box CPU column gets lib
+lane/release-reuse-bindings	2026-09-23	6	12546	9	8	1	8	RELEASE_CHECKLIST: bindings are rebuilt only when their identity moved
+lane/rf-mutex-claim-acquire	2026-09-16	5	14533	8	7	1	7	Close this branch: the fix landed on main as 36ec47446, in a better shape
+lane/rf-score-weighted-nondeterminism	2026-09-16	17	14576	26	24	20	6	rf-score-weighted: DEVIATION 106 amended in place, capability MEASURED, probe rewritten
+lane/s17-measure-20260930	2026-09-30	4	8779	4	4	0	4	s17 job: keep the installed _version.py in the overlay (main is frozen at 0.8.32, the over
+lane/sabotage-no-host-routes	2026-10-02	1	8366	1	1	0	1	SABOTAGE test: must fail no-host-routes (do not merge)
+lane/stage-diag-20261001	2026-10-01	3	8559	3	3	0	3	AMD neural toggle sweep job (peer request)
+lane/tokenizer-text-cpu-20260919	2026-09-19	1	13364	2	2	1	1	Avoid rebuilding BPE boundaries after each merge
+lane/tsa-classical-utils-cpu	2026-09-19	1	13326	2	2	0	2	Parallelize Holt-Winters host inference
+lane/vultr-leg	2026-09-23	3	12535	4	3	0	4	Handoff: Vultr 8x AMD bare metal as a fourth AMD provider
+lane/wheel-smoke-do-fallback	2026-09-23	4	12565	4	3	0	4	RELEASE_CHECKLIST: the AMD column's provider and its DigitalOcean fallback

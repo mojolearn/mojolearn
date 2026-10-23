@@ -1,0 +1,91 @@
+import csv, re
+D='/Users/andrewhendel/mojolearn-wt/triage-old-lanes/.triage/'
+rows={r[0]:r for r in csv.reader(open(D+'class.tsv'),delimiter='\t')}
+meta={r[0]:r for r in csv.reader(open(D+'meta.tsv'),delimiter='\t')}
+CA='candidate-audit-2026-10-04.md'
+EX='EXPERIMENTS.md'
+O={}
+def s(bs,v,e,r):
+    for b in bs.split(): O[b]=(v,e,r)
+# --- overrides ---
+s('archive/20261006/lane/host-route-source-repair-20261006','b','host-route-fence-2026-10-09.md class C/D: the GPU-import edges were cut on main in 64cc80087/34bd84cf8; x_cluster serial launch removed','retire')
+s('archive/20261006/lane/neural-identical-ideas-20261006','b','idea catalog + untested A/B source; fence doc :32; ideas carried in NEURAL_AB_EXPERIMENT_INVENTORY_2026-10-06.md','retire')
+s('archive/worktree-cleanup-20260919-release-087-build archive/worktree-cleanup-20260919-release-087-macos fix/macos-smoke-identical-only fix/release-archive-tokenizer-generator fix/release-post-record-allowlist fix/release-build-preflight-import fix/release-verifier-bindings','b',f'0.8.6/0.8.7 release tooling (Sep 15-16); {CA} "Release / docs / fix tooling (old releases): abandoned"; main ships 0.8.55 with a rebuilt release chain','retire')
+s('board/m3-0834-readback','b','one-line readback for the 0.8.34 M3 board; board superseded by later releases','retire')
+s('fix/amd-merge-ordering','b','mutex handoff probe (Sep 16); sibling rf-mutex-claim-acquire head says the fix landed on main as 36ec47446','retire')
+s('lane/rf-mutex-claim-acquire','a','head commit a22fa27be: "the fix landed on main as 36ec47446, in a better shape"','retire')
+s('lane/rf-score-weighted-nondeterminism','a',f'89% of unique lines on main; {CA}:38 diagnostic probe, superseded by the RF lifetime fix','retire')
+s('fix/classical-mds-20260930','b','board-runner bounds + ClassicalMDS top-k (Sep 30); tools/bench_board_resume.py and classical_mds_check.py were never adopted; board runner replaced by lq + six_lane_grid','retire')
+s('lane/algos-ann','b','WIP "UNVERIFIED" option parity; main has the index save/load (python/mojolearn/_expansion_ann.py:157,197) and the t-SNE sklearn params','retire')
+s('lane/algos-ann-speed','b',f'{CA}:36 "abandoned / reference" (CAGRA chunked queries, t-SNE tiling; patches conflict)','retire')
+s('lane/algos-trees lane/lowbit-blocks','b','progress-note only (docs/lanes/progress/*.md); superseded by later handoffs','retire')
+s('lane/ann-apple-base lane/apple-identical-steps lane/gemm-p1-fold-bypass','a',f'{CA}:21 "content-absorbed"','retire')
+s('lane/apple-fast-af-all','b','aggregation lane (16 lanes); members judged individually in EXPERIMENTS.md; OPTICS2 defines DROPPED (TOMBSTONES OPTICS2_ALL); the open BPE part lives on lane/apple-fast-bpe','retire')
+s('lane/apple-fast-batch','b','aggregation lane; TOMBSTONES/EXPERIMENTS rows per define (DROPPED-noise 43, KEPT 7 ported); open BPE part lives on lane/apple-fast-bpe','retire')
+s('lane/apple-fast-bpe','c',f'{EX}:34 Untried candidates: BPE_TRAIN_DEVICE/ENCODE_DEVICE/LIVEBUF/GROUP_FILTER/MERGE_BATCH/ALL "NOT on main", never measured','keep')
+s('lane/apple-fast-arima-k1-diagnostics lane/apple-fast-arima-k1-oracle lane/apple-fast-arima-k1-review lane/apple-fast-arima-scan-oracle lane/apple-fast-arima-scan-oracle-review lane/apple-fast-arima-scan-design','b',f'{EX}:925 rank-one/K1 temporal scan: numerical HOLD; oracle tools only, no runtime code','retire')
+s('lane/apple-fast-arima-scalar-k3 lane/apple-fast-arima-scalar-k3-quality lane/apple-fast-arima-scalar-k3-r1 lane/apple-fast-arima-scalar-k3-r2 lane/apple-fast-arima-k3-df-reference lane/apple-fast-arima-k3-tail-probe','b',f'{EX}:991 ARIMA_FAST_SCALAR_LL: M3 kernel quality HOLD across 13 groups; r2 is the cited sha; ARIMA_K3_DF_REFERENCE_PLAN.txt on main','keep r2 only (cited sha); retire the rest')
+s('lane/apple-fast-bsplit-readiness','a',f'{EX} Untried candidates: SVGP_FAST_BSPLIT "on main opt-in"; readiness note only','retire')
+s('lane/apple-fast-callpath-probe lane/apple-fast-callpath-probe-r1 lane/apple-fast-callpath-probe-r2 lane/apple-fast-callpath-probe-r3 lane/apple-fast-callpath-probe-r4 lane/apple-fast-callpath-quality lane/apple-fast-callpath-reach-audit','b',f'{EX}:1036,1065 callpath r5 PASS bits/lifecycle, "not production", no timing admitted; r0-r4 superseded by r5','retire')
+s('lane/apple-fast-callpath-probe-r5','b',f'{EX}:1065 r5 3491a4d4 PASS bits/lifecycle, "not production"; cited sha','keep (cited sha)')
+s('lane/apple-fast-catalog-gemm-all lane/apple-fast-catalog-gemm-probe lane/apple-fast-catalog-gemm-probe-r1 lane/apple-fast-catalog-gemm-probe-r2 lane/apple-fast-catalog-matrix-timing lane/apple-fast-catalog-matrix-timing-r1 lane/apple-fast-catalog-resident-probe','b',f'{EX}:989 catalog G1/G5 standalone HOLD for unrestricted use; RESIDENT_GEMM_RESULTS_2026-10-04.md; probe bindings only','retire')
+s('lane/apple-fast-shared-gemm-g1g5 lane/apple-fast-shared-gemm-g1g5-r1 lane/apple-fast-shared-downstream-quality lane/apple-fast-shared-downstream-g1 lane/apple-fast-shared-downstream-g1-r1 lane/apple-fast-shared-downstream-g5 lane/apple-fast-shared-downstream-g5-r1 lane/apple-fast-shared-scoped-timing','b','GEMM_INLINE_OUTCOMES.md: shared G1/G5 narrow caller leads, inverse slower, "no broad default/board admission"; superseded by the -r2/-g5 tips','retire')
+s('lane/apple-fast-shared-downstream-g1-r2 lane/apple-fast-shared-downstream-g5-r2 lane/apple-fast-shared-scoped-timing-g5','b','GEMM_INLINE_OUTCOMES.md: "Shared G1/G5 code is preserved on historical candidate branches; it was not restored to main"','keep (record of the shared G1/G5 code)')
+s('lane/apple-fast-scoped-pca-caller','b','GEMM_INLINE_OUTCOMES.md: scoped PCA-fit HOLD (quality report invalid); SCOPED_GEMM defines on main','retire')
+s('lane/apple-fast-dwcurrent','b',f'{EX}: GBDT_DW_BRIDGE_SCAN DROPPED-slower (+5.34%, gap26-dwcurrent-taxi)','retire')
+s('lane/apple-fast-eigh-panels lane/apple-fast-w4-eigh','a','EIGH_FAST_TRIDIAG(_PANELS) on main (default with _OFF); 74% of unique lines present','retire')
+s('lane/apple-fast-knn-lean-gpu','a',f'{EX}: XN_FAST_NAN_FIT_LEAN_GPU DEFAULT, on main','retire')
+s('lane/apple-fast-mcd-ordered-cov lane/apple-fast-mcd-ordered-quality lane/apple-fast-mcd-ordered-quality-r1 lane/apple-fast-mcd-ordered-quality-r2','a',f'MCD_ORDERED_COV on main (opt-in, NEUTRAL: {EX} rab3-mcdord); superseded by -r3','retire')
+s('lane/apple-fast-mcd-ordered-quality-r3','a',f'{EX}:1216 ported (lane/apple-fast-rec-misc); RECORD NEUTRAL, stays off','retire')
+s('lane/apple-fast-mcd-saved-oracle lane/apple-fast-mcd-saved-oracle-r1','a',f'MCD_SKIP_PINVH KEEP and DEFLATE HOLD both on main ({EX} w4-mcd rows); oracle tools only on branch','retire')
+s('lane/apple-fast-mcd-quality','b','quality tool for MCD_DEVICE_CSTEPS, DROPPED-quality (TOMBSTONES, patch experiments/removed/MOJOLEARN_MCD_DEVICE_CSTEPS.patch)','retire')
+s('lane/apple-fast-lu-pivot-shuffle','a',f'LU_FAST_PIVOT_SHUFFLE on main (rollback _OFF); {EX} w2-lu-pivot-shuffle rows','retire')
+s('lane/apple-fast-target-scratch','a','TARGET_SCRATCH on main; 83% of unique lines present; sibling target-current KEEP merged','retire')
+s('lane/apple-fast-rec-ab11','b','ARD_EQ_ONEPASS DROPPED-quality (TOMBSTONES); LDA/SVM legacy defines on main','retire')
+s('lane/apple-fast-optics2','b','TOMBSTONES OPTICS2_ALL / OPTICS_STEP_BATCH DROPPED (54-84x slower), "never merged"','retire')
+s('lane/apple-fast-layoutfix','b','NoCpuEntry ImportError fix; main _backend.py has its own NoCpuEntry handling (2 hits) after the backend rewrite','retire')
+s('lane/apple-fast-lost-candidates','b','audit doc; superseded by MANAGER_STATE_2026-10-04.md:7 "all lost candidates ported" and EXPERIMENTS.md Untried candidates (2026-10-05)','retire')
+s('lane/apple-fast-old-linalg-audit','b','doc note on invalid old QR/SVD comparisons; superseded by EXPERIMENTS reconciliation 2026-10-05','retire')
+s('lane/apple-fast-results','b','M3 queue/results sync files (166 commits, docs/apple-fast/m3/*); results reconciled into EXPERIMENTS.md 2026-10-05','retire')
+s('lane/apple-fast-opp','b','opponents-only board tooling (tools/opp_only_board.py, never on main); opponents are scored once and stored (CLAUDE.md)','retire')
+s('lane/bench-board-m3ultra lane/mamba-opp lane/board-resume-20260930','b','Sep 29-30 board tooling; main board tools (tools/bench_board*.py) moved on; boards now via six_lane_grid + lq','retire')
+s('lane/catboost-parity-on-lm-attention-fallback','a','89% of unique lines on main (ensemble.py, gbdt ordered boosting)','retire')
+s('lane/lm-attention-fallback','b',f'{CA}: "Docs/tooling without Mojo", the old dirty default-checkout branch (deletes handoff docs, edits CITATION.cff)','retire')
+s('lane/cluster-apple-prof lane/ordered-speed-diag2 lane/ordered-speed-m2diag lane/lowbit-apple-now lane/lowbit-amd-tuned-lb','b','one-off diagnostic/profiling probes (STAGE_PROF etc., absent on main)','retire')
+s('lane/cpu-par-fallback','b','WIP plain CPU fallback for par-* drivers; CPU routes are not a GPU fallback (CLAUDE.md GPU rules); cpu_path_audit.py on main','retire')
+s('lane/cpu-training-gate-speed lane/identity-record-next','b','Sep 15 identity-gate tooling/records; identity now recorded by tools/record_identity_column.sh (REPEATS=1)','retire')
+s('lane/forest-train-speed','b',f'{CA}:37 "NOT YET BUILT", abandoned','retire')
+s('lane/linfit-speed','b',f'{CA}:35 SGD_IN_FIT_KERNEL / X_LINEAR_GLM_TEAM absent, 19 of 20 patches conflict: "abandoned unless re-derived"','retire')
+s('lane/gbdt-rest lane/neighbors-rest lane/neural-pass13 lane/neural-pass19 lane/neural-pass77 lane/neural-pass78 lane/neural-pass83 lane/host-token-split-2','b',f'{CA}:19 "CPU/host-route work ... CPU routes (undo list) or superseded"','retire')
+s('lane/neural-pass76 lane/neural-pass102','b','host-algorithm switches (X_LINEAR_HOST_ALGOS, SVGP_JITTER_TRIES) in Python glue; absent on main; host routes are debt (CLAUDE.md)','retire')
+s('lane/neural-pass36 lane/neural-pass41','b',f'{CA}:40 DROPPED: LU fused 46% slower; QR tiles lost on L40S','retire')
+s('lane/neural-pass144','b',f'{CA}:41 superseded (round-robin eigh on every column)','retire')
+s('lane/neural-apple4','a',f'{CA}:42 regs2h AMD S16 merged as PR #50','retire')
+s('lane/neural-pass48','a','SCRATCH_POOL on main (core/scratch_pool, 8 files; TOMBSTONES/EXPERIMENTS rows)','retire')
+s('lane/neural-pass57','a','MOJOLEARN_ATTN_DKDV_BJ16 on main, transformer/impl/llama/fused_attention.mojo:4482 cites PR #64','retire')
+s('lane/neural-pass67','a','MOJOLEARN_ATTN_CACHE_WAIT on main, transformer/impl/llama/modeling_llama.mojo:3899-3903 cites lane/neural-pass67 087231ba3','retire')
+s('lane/neural-pass5','a','S17 tail on main as the default (autograd/kernels/mamba3.mojo:28, MAMBA3_S17_TAIL_NAIVE reverts)','retire')
+s('lane/hr2-kpca-seq','a',f'{CA}:29 owed GARCH item; SEQ_WARP_FIT team fit now on main (sequence/garch.mojo:66)','retire')
+s('lane/neural-xlw','b','merge lane of neural-pass132 (SGD minibatch partials); x_linear/moments_grid.mojo on main; SGD batch rule settled Oct 17 (auto batch kept)','retire')
+s('lane/neural-toggle-sweep-20260930','b','Sep 30 toggle-sweep tooling; superseded by six_lane_grid + grid_controls','retire')
+s('lane/release-gpu-columns lane/vultr-leg','b','Sep 22-23 release/provider tooling never adopted (tools/release_gpu_columns.py, tools/vultr_leg.sh absent); boxes are RunPod/DO, columns via record_identity_column.sh','retire')
+s('lane/sabotage-no-host-routes','b',f'{CA}:16 hook sabotage test, "do not merge"','retire')
+s('lane/kmeans-mojo-1-2 lane/mojo-1-2-trial','b',f'{CA}:44 Mojo 1.2 migration trial, "parked"; main has since moved toolchains','retire')
+s('lane/lowbit-apple-tuned lane/lowbit-e2e lane/lowbit-quality','d','Sep 29 low-bit (int15 Apple tuned GEMM, e2e probes, quality bench) not on main (gemm_int15_apple_tuned.mojo, bench/lowbit_quality absent); no verdict found in docs','keep until owner decides')
+s('lane/mamba3-statepass','d','Sep 9 Mamba3 state-pass (direct transfers, tiled QKS/YSTATE); defines absent, mamba/impl/mamba_ssm/ops/mamba3_siso.mojo gone from main (rewritten as autograd/kernels/mamba3.mojo); likely superseded, unverified','retire after owner check')
+s('lane/identical-body-tiles-20261005 lane/identical-group-slack2-20261005 lane/identical-group-slack8-20261005 lane/identical-one-page-20261005 lane/identical-packed64-20261005','a',f'branch only selects a profile in experiments/identical_speed/selection.json; the defines are on main; {EX}:1445-1449 rows (OPEN, unmeasured; GROUP_TILES_BODY later DROPPED-noise in TOMBSTONES)','retire')
+s('lane/apple-fast-gap-linalg2 lane/apple-fast-gap-linalg2-kpca lane/apple-fast-gap-linalg2-pca lane/apple-fast-prep2 lane/apple-fast-target-current lane/apple-fast-w4-mcd','a','EXPERIMENTS KEPT/DEFAULT, defines on main (e.g. KPCA lanczos_dev.mojo, fastprep2.mojo)','retire')
+# rule-b with mixed winners: winners ported, losers documented
+mixed='lane/apple-fast-dbscantaxi lane/apple-fast-decomp-linalg lane/apple-fast-decomp-sparse lane/apple-fast-fa lane/apple-fast-gap-kapprox2 lane/apple-fast-gap-tsa lane/apple-fast-general-speed lane/apple-fast-graph lane/apple-fast-isotonic-knn lane/apple-fast-linsvr lane/apple-fast-m2b1 lane/apple-fast-opv lane/apple-fast-prep3 lane/apple-fast-resample lane/apple-fast-robust lane/apple-fast-shap lane/apple-fast-sym-ctr lane/apple-fast-sym-est lane/apple-fast-sym-iter lane/apple-fast-w4-decomp lane/apple-fast-w4-decomp-harness-r1 lane/apple-fast-w4-small lane/apple-fast-eigh-panel-df lane/apple-fast-decomp-sdk-control lane/apple-fast-gap-linalg2-svd'
+for b in mixed.split():
+    r=rows[b]; O[b]=('a/b','winners ported, rest documented: '+r[5],'retire')
+s('lane/fp-contract-off-study','b','study result only (bench/results/fp_contract_off_2026-09-26 README: contract=off moves 16 of 627 cells); the build-flag hook landed via lane/fp-contract-off-exp (patch-equal on main); the README is not on main','retire (or port the README)')
+out=[]
+for b in sorted(rows):
+    r=rows[b]; v,e,rec=O.get(b,(r[4],r[5],r[6]))
+    out.append((b,r[1],r[2],r[3],v,e,rec))
+assert not [x for x in out if x[4]=='?'], [x[0] for x in out if x[4]=='?']
+import collections
+print(collections.Counter(x[4] for x in out))
+with open(D+'final.tsv','w') as f:
+    for x in out: f.write('\t'.join(x)+'\n')

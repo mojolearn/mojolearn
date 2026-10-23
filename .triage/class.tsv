@@ -1,0 +1,330 @@
+archive/20261006/campaign/apple-opponent-quality-20261006	2026-10-06	47	39	a	docs/plans/host-route-fence-2026-10-09.md:16-29 (same code reached main via bd4c36dbe); unique-line presence 0.82	retire	0.82	transformer/experiments/attention_summary_tree.mojo:311;mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:241;transf
+archive/20261006/campaign/full-classification-qn-recipes-20261006	2026-10-06	91	83	a	docs/plans/host-route-fence-2026-10-09.md:16-29 (same code reached main via bd4c36dbe); unique-line presence 0.83	retire	0.83	transformer/experiments/attention_summary_tree.mojo:311;mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:241;transf
+archive/20261006/fix/apple-opponent-selector-20261006	2026-10-06	57	49	a	docs/plans/host-route-fence-2026-10-09.md:16-29 (same code reached main via bd4c36dbe); unique-line presence 0.82	retire	0.82	transformer/experiments/attention_summary_tree.mojo:311;mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:241;transf
+archive/20261006/fix/lars-direct-20261006	2026-10-06	46	38	a	docs/plans/host-route-fence-2026-10-09.md:16-29 (same code reached main via bd4c36dbe); unique-line presence 0.82	retire	0.82	transformer/experiments/attention_summary_tree.mojo:311;mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:241;transf
+archive/20261006/ideas/trees-identical-20261006	2026-10-06	1	1	a	92% of unique added code lines present on main	retire	0.92	gbdt/targets/tree_t29_units.mojo:74;gbdt/targets/kernel/tree_t29_pair.mojo:42;gbdt/host/gbdt_oracle_pair.mojo:33;extratrees/impl/decisiontree/batched_
+archive/20261006/integration/six-lane-ab-20261006	2026-10-06	41	34	a	docs/plans/host-route-fence-2026-10-09.md:16-29 (same code reached main via bd4c36dbe); unique-line presence 0.82	retire	0.82	transformer/experiments/attention_summary_tree.mojo:311;mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:241;transf
+archive/20261006/integration/six-lane-comparison-scope-fix-20261006	2026-10-06	52	44	a	docs/plans/host-route-fence-2026-10-09.md:16-29 (same code reached main via bd4c36dbe); unique-line presence 0.82	retire	0.82	transformer/experiments/attention_summary_tree.mojo:311;mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:241;transf
+archive/20261006/integration/six-lane-full-tsvd-20261006	2026-10-06	60	52	a	docs/plans/host-route-fence-2026-10-09.md:16-29 (same code reached main via bd4c36dbe); unique-line presence 0.82	retire	0.82	transformer/experiments/attention_summary_tree.mojo:311;mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:241;transf
+archive/20261006/integration/six-lane-state-capture-20261006	2026-10-06	47	39	a	docs/plans/host-route-fence-2026-10-09.md:16-29 (same code reached main via bd4c36dbe); unique-line presence 0.82	retire	0.82	transformer/experiments/attention_summary_tree.mojo:311;mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:241;transf
+archive/20261006/lane/apple-classification-admission	2026-10-06	70	62	a	docs/plans/host-route-fence-2026-10-09.md:16-29 (same code reached main via bd4c36dbe); unique-line presence 0.83	retire	0.83	transformer/experiments/attention_summary_tree.mojo:311;mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:241;transf
+archive/20261006/lane/apple-full-classification-prep	2026-10-06	65	57	a	docs/plans/host-route-fence-2026-10-09.md:16-29 (same code reached main via bd4c36dbe); unique-line presence 0.83	retire	0.83	transformer/experiments/attention_summary_tree.mojo:311;mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:241;transf
+archive/20261006/lane/apple-six-admission	2026-10-06	44	36	a	docs/plans/host-route-fence-2026-10-09.md:16-29 (same code reached main via bd4c36dbe); unique-line presence 0.81	retire	0.81	transformer/experiments/attention_summary_tree.mojo:311;mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:241;transf
+archive/20261006/lane/full-recipe-glue	2026-10-06	49	41	a	docs/plans/host-route-fence-2026-10-09.md:16-29 (same code reached main via bd4c36dbe); unique-line presence 0.82	retire	0.82	transformer/experiments/attention_summary_tree.mojo:311;mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:241;transf
+archive/20261006/lane/host-route-source-repair-20261006	2026-10-06	2	2	?	docs/plans/host-route-fence-2026-10-09.md:34		0.59	x_cluster/device_ops.mojo:22;training/neural_ab_optimizer.mojo:19;xtrees/shap_cache_device_api.mojo:7;xtrees/shap_cache_host_api.mojo:7;core/host_stor
+archive/20261006/lane/idle-retention-60m-20261007	2026-10-07	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+archive/20261006/lane/mlp-full-registration	2026-10-06	95	87	a	docs/plans/host-route-fence-2026-10-09.md:16-29 (same code reached main via bd4c36dbe); unique-line presence 0.83	retire	0.83	transformer/experiments/attention_summary_tree.mojo:311;mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:241;transf
+archive/20261006/lane/neural-identical-ideas-20261006	2026-10-06	1	1	?	docs/plans/host-route-fence-2026-10-09.md:32		0.15	tools/neural_identical_compare.py:420;tools/neural_identical_ab.py:164;gemm/experiments/neural_profiles.mojo:92;mamba/impl/ops/neural_experiment_profi
+archive/20261006/lane/public-linear-state-capture-20261006	2026-10-06	88	80	a	docs/plans/host-route-fence-2026-10-09.md:16-29 (same code reached main via bd4c36dbe); unique-line presence 0.83	retire	0.83	transformer/experiments/attention_summary_tree.mojo:311;mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:241;transf
+archive/20261006/lane/targeted-benchmark-metadata-20261007	2026-10-07	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+archive/20261006/lane/targeted-cpu-build-20261007	2026-10-07	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+archive/20261006/lane/var-native-fittedvalues	2026-10-06	86	78	a	docs/plans/host-route-fence-2026-10-09.md:16-29 (same code reached main via bd4c36dbe); unique-line presence 0.83	retire	0.83	transformer/experiments/attention_summary_tree.mojo:311;mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:241;transf
+archive/20261006/repair/amd-full-classification-registration	2026-10-06	92	84	a	docs/plans/host-route-fence-2026-10-09.md:16-29 (same code reached main via bd4c36dbe); unique-line presence 0.83	retire	0.83	transformer/experiments/attention_summary_tree.mojo:311;mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:241;transf
+archive/20261006/repair/apple-fast-huber-fold-20261006	2026-10-06	79	71	a	docs/plans/host-route-fence-2026-10-09.md:16-29 (same code reached main via bd4c36dbe); unique-line presence 0.83	retire	0.83	transformer/experiments/attention_summary_tree.mojo:311;mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:241;transf
+archive/20261006/repair/cnn-native-orchestration-20261006	2026-10-06	87	79	a	docs/plans/host-route-fence-2026-10-09.md:16-29 (same code reached main via bd4c36dbe); unique-line presence 0.83	retire	0.83	transformer/experiments/attention_summary_tree.mojo:311;mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:241;transf
+archive/20261006/repair/prep-native-sparse-20261006	2026-10-06	85	77	a	docs/plans/host-route-fence-2026-10-09.md:16-29 (same code reached main via bd4c36dbe); unique-line presence 0.82	retire	0.82	transformer/experiments/attention_summary_tree.mojo:311;mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:241;transf
+archive/worktree-cleanup-20260919-release-087-build	2026-09-16	8	6	?			0.15	packaging/macos/repack_post_record.py:76;packaging/macos/test_repack_post_record.py:69;tools/release_wheel_content_audit.py:66;tools/test_release_whee
+archive/worktree-cleanup-20260919-release-087-macos	2026-09-16	8	6	?			0.15	packaging/macos/repack_post_record.py:76;packaging/macos/test_repack_post_record.py:69;tools/release_wheel_content_audit.py:66;tools/test_release_whee
+board/m3-0834-readback	2026-10-02	1	1	?			0.86	tools/bench_board_algos.py:1
+finish/cross-vendor-native-only-20261020	2026-10-20	2	0	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire	-1.00	
+finish/distributed-20261020	2026-10-20	45	6	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire	0.90	autograd/partition_pyapi.mojo:49;python/mojolearn/ops.py:31;python/mojolearn/_verify_distributed_program.py:14;autograd/partition_runtime.mojo:13;bind
+finish/generation-20261020	2026-10-20	83	1	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire	1.00	
+finish/generation-graph-repair-20261020	2026-10-20	56	7	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire	0.94	python/mojolearn/_x_sequence_model.py:20;bindings/sequential_admission.mojo:12;bindings/classical_arrays.mojo:12;bindings/classical_native.mojo:8;pyth
+finish/graph-20261020	2026-10-20	38	13	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire	0.87	autograd/program_control_grad.mojo:45;python/mojolearn/ops.py:36;autograd/program_save.mojo:31;autograd/program_pyapi.mojo:27;python/mojolearn/_verify
+finish/graph-hoist-20261020	2026-10-20	10	0	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire	-1.00	
+finish/graph-process-20261020	2026-10-20	1	0	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire	-1.00	
+finish/installed-native-audit-20261020	2026-10-20	7	0	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire	-1.00	
+finish/native-autograd-conv-smoke-20261020	2026-10-20	1	0	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire	-1.00	
+finish/native-classical-public-20261020	2026-10-20	4	0	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire	-1.00	
+finish/native-optimizer-smoke-20261020	2026-10-20	2	0	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire	-1.00	
+finish/native-svm-smoke-20261020	2026-10-20	1	1	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire	1.00	
+finish/parallel-causal-20261020	2026-10-20	13	0	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire	-1.00	
+finish/parallel-neural-admission-20261020	2026-10-20	16	0	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire	-1.00	
+finish/pca-native-owner-20261020	2026-10-20	5	0	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire	-1.00	
+finish/samba-public-20261020	2026-10-20	16	0	a	docs/plans/FINISH_LEFTOVERS_20261021.md table: (a)	retire	-1.00	
+fix/amd-merge-ordering	2026-09-16	3	3	?			0.60	core/device_mutex_check.mojo:24;core/device_mutex.mojo:22;tools/check_mutex_handoff_model.py:4;tools/device_mutex_leg.sh:1
+fix/classical-mds-20260930	2026-09-30	3	3	?			0.08	tools/classical_mds_check.py:66;tools/bench_board_resume.py:55;tools/test_bench_board_budget.py:44;tools/bench_board.py:25;python/mojolearn/_expansion
+fix/identity-collection-completeness	2026-09-20	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+fix/macos-smoke-identical-only	2026-09-15	22	5	?			0.41	packaging/macos/repack_post_record.py:76;packaging/macos/test_repack_post_record.py:69;tools/release_wheel_content_audit.py:66;tools/test_release_whee
+fix/metal-parallel-causal-lm	2026-09-20	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+fix/parallel-model-save	2026-09-20	2	0	a	git cherry: all 2 commits patch-equal on main	retire	-1.00	
+fix/release-archive-tokenizer-generator	2026-09-15	21	5	?			0.41	packaging/macos/repack_post_record.py:76;packaging/macos/test_repack_post_record.py:69;tools/release_wheel_content_audit.py:66;tools/test_release_whee
+fix/release-build-preflight-import	2026-09-15	2	1	?			-1.00	
+fix/release-portable-math-transport	2026-09-20	2	0	a	git cherry: all 2 commits patch-equal on main	retire	-1.00	
+fix/release-post-record-allowlist	2026-09-15	58	40	?			0.41	packaging/macos/repack_post_record.py:76;packaging/macos/test_repack_post_record.py:69;tools/release_wheel_content_audit.py:66;tools/test_release_whee
+fix/release-verifier-bindings	2026-09-15	3	1	?			-1.00	
+lane/136-lane-record	2026-09-14	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+lane/ab-measure	2026-10-01	3	3	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.02	tools/ab_job.sh:42;tools/nv_ab_pr59.sh:1
+lane/algos-ann	2026-09-27	1	1	?			0.18	python/mojolearn/_expansion_ann.py:68;x_ann/tsne_device.mojo:65;x_ann/tsne_core.mojo:46;x_ann/checks/tsne_oracle.mojo:41;x_ann/host/tsne_host.mojo:37
+lane/algos-ann-speed	2026-09-27	6	6	?	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:36 abandoned1		0.20	x_ann/ivf_scan_device.mojo:228;x_ann/knn_device.mojo:42;x_ann/tsne_core.mojo:31;x_ann/ivf_pq_device.mojo:29;x_ann/cagra_core.mojo:27
+lane/algos-trees	2026-09-28	1	1	?			-1.00	
+lane/ann-apple-base	2026-09-28	1	1	?	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:21		-1.00	
+lane/apple-fast-af-all	2026-10-03	74	29	?			0.63	tokenizer/fast/bpe_device.mojo:444;gbdt/methods/doc_parallel_boosting.mojo:194;glm/impl/qn/lsvr_dual.mojo:167;x_cluster/optics_fast.mojo:164;x_decomp/
+lane/apple-fast-arima-k1-diagnostics	2026-10-04	5	5	?			0.05	tools/arima_assoc_scan_oracle.py:265;tools/arima_gaussian_scan_oracle.py:115;tools/arima_k1_diagnostics.py:97
+lane/apple-fast-arima-k1-oracle	2026-10-04	3	3	?			0.05	tools/arima_assoc_scan_oracle.py:265;tools/arima_gaussian_scan_oracle.py:115
+lane/apple-fast-arima-k1-review	2026-10-04	4	4	?			0.05	tools/arima_assoc_scan_oracle.py:265;tools/arima_gaussian_scan_oracle.py:115
+lane/apple-fast-arima-k3-df-gpu	2026-10-04	1	1	a	100% of unique added code lines present on main	retire	1.00	
+lane/apple-fast-arima-k3-df-reference	2026-10-04	6	6	?	docs/apple-fast/ARIMA_K3_DF_REFERENCE_PLAN.txt:65		0.51	arima/impl/fast_scalar_ll.mojo:119;bindings/arima_scalar_probe.mojo:99;tools/arima_scalar_verified.py:76;bindings/_mojolearn_arima.mojo:10;arima/impl/
+lane/apple-fast-arima-k3-tail-probe	2026-10-04	5	5	?			0.38	arima/impl/fast_scalar_ll.mojo:119;bindings/arima_scalar_probe.mojo:99;tools/arima_scalar_verified.py:76;bindings/_mojolearn_arima.mojo:10;arima/impl/
+lane/apple-fast-arima-scalar-k3	2026-10-04	1	1	?			0.46	arima/impl/fast_scalar_ll.mojo:105;bindings/arima_scalar_probe.mojo:61;arima/impl/batched_kalman.mojo:9;bindings/_mojolearn_arima.mojo:8;tools/arima_s
+lane/apple-fast-arima-scalar-k3-quality	2026-10-04	2	2	?			0.40	arima/impl/fast_scalar_ll.mojo:105;tools/arima_scalar_verified.py:76;bindings/arima_scalar_probe.mojo:61;arima/impl/batched_kalman.mojo:9;bindings/_mo
+lane/apple-fast-arima-scalar-k3-r1	2026-10-04	3	3	?			0.39	arima/impl/fast_scalar_ll.mojo:109;tools/arima_scalar_verified.py:76;bindings/arima_scalar_probe.mojo:61;arima/impl/batched_kalman.mojo:9;bindings/_mo
+lane/apple-fast-arima-scalar-k3-r2	2026-10-04	4	4	b	docs/apple-fast/EXPERIMENTS.md:991 [HOLD2 PASS1]	retire	0.38	arima/impl/fast_scalar_ll.mojo:119;tools/arima_scalar_verified.py:76;bindings/arima_scalar_probe.mojo:61;arima/impl/batched_kalman.mojo:9;bindings/_mo
+lane/apple-fast-arima-scan-design	2026-10-04	1	1	?			-1.00	
+lane/apple-fast-arima-scan-oracle	2026-10-04	1	1	b	docs/apple-fast/EXPERIMENTS.md:925 [HOLD1]	retire	0.04	tools/arima_assoc_scan_oracle.py:265
+lane/apple-fast-arima-scan-oracle-review	2026-10-04	2	2	?			0.04	tools/arima_assoc_scan_oracle.py:265
+lane/apple-fast-batch	2026-10-03	177	88	b	docs/TOMBSTONES.md:804 [DROPPED-noise43 KEPT7 merged6 DEFAULT6 HOLD-quality4 DROPPED-slower4]	retire	0.49	tokenizer/fast/bpe_device.mojo:457;x_decomp/device.mojo:381;x_decomp/lle_sparse.mojo:365;x_linear/isotonic_fast.mojo:326;xtrees/shap_fast.mojo:247
+lane/apple-fast-bpe	2026-10-03	9	9	b	docs/apple-fast/EXPERIMENTS.md:34 []	retire	0.22	tokenizer/fast/bpe_device.mojo:458;bindings/_mojolearn_tokenizer_fast.mojo:88;python/mojolearn/tokenizer.py:43;bindings/build_tokenizer_fast.sh:18
+lane/apple-fast-bsplit-readiness	2026-10-04	1	1	?			0.32	tools/svgp_fast_quality.py:11;tools/svgp_fast_pair.py:2
+lane/apple-fast-callpath-probe	2026-10-04	2	2	?			0.20	bench/apple_callpath_quality.mojo:83;experiments/apple_callpath/resident_slot.mojo:63;experiments/apple_callpath/packed_readback.mojo:32;tools/callpat
+lane/apple-fast-callpath-probe-r1	2026-10-04	3	3	?			0.19	bench/apple_callpath_quality.mojo:85;experiments/apple_callpath/resident_slot.mojo:63;tools/callpath_probe_pair.py:33;experiments/apple_callpath/packe
+lane/apple-fast-callpath-probe-r2	2026-10-04	4	4	?			0.19	bench/apple_callpath_quality.mojo:97;experiments/apple_callpath/resident_slot.mojo:63;tools/callpath_probe_pair.py:33;experiments/apple_callpath/packe
+lane/apple-fast-callpath-probe-r3	2026-10-04	5	5	?			0.19	bench/apple_callpath_quality.mojo:97;experiments/apple_callpath/resident_slot.mojo:63;tools/callpath_probe_pair.py:33;experiments/apple_callpath/packe
+lane/apple-fast-callpath-probe-r4	2026-10-04	6	6	?			0.17	bench/apple_callpath_quality.mojo:125;experiments/apple_callpath/resident_slot.mojo:82;experiments/apple_callpath/packed_readback.mojo:43;tools/callpa
+lane/apple-fast-callpath-probe-r5	2026-10-04	7	7	?			0.17	bench/apple_callpath_quality.mojo:126;experiments/apple_callpath/resident_slot.mojo:82;experiments/apple_callpath/packed_readback.mojo:43;tools/callpa
+lane/apple-fast-callpath-quality	2026-10-04	1	1	?			0.15	bench/apple_callpath_quality.mojo:80;experiments/apple_callpath/resident_slot.mojo:63;experiments/apple_callpath/packed_readback.mojo:32;experiments/a
+lane/apple-fast-callpath-reach-audit	2026-10-04	2	2	?			-1.00	
+lane/apple-fast-catalog-gemm-all	2026-10-04	6	6	?			0.34	tools/catalog_gemm_quality.py:88;bindings/_mojolearn_gemm_probe.mojo:80;experiments/apple_fast/gemm/mma.mojo:64;bindings/build_gemm_probe.sh:14
+lane/apple-fast-catalog-gemm-probe	2026-10-04	3	3	?			0.37	tools/catalog_gemm_quality.py:66;experiments/apple_fast/gemm/mma.mojo:62;bindings/_mojolearn_gemm_probe.mojo:54;bindings/build_gemm_probe.sh:14
+lane/apple-fast-catalog-gemm-probe-r1	2026-10-04	4	4	?			0.38	tools/catalog_gemm_quality.py:66;experiments/apple_fast/gemm/mma.mojo:62;bindings/_mojolearn_gemm_probe.mojo:58;bindings/build_gemm_probe.sh:14
+lane/apple-fast-catalog-gemm-probe-r2	2026-10-04	5	5	?			0.38	tools/catalog_gemm_quality.py:66;experiments/apple_fast/gemm/mma.mojo:64;bindings/_mojolearn_gemm_probe.mojo:58;bindings/build_gemm_probe.sh:14
+lane/apple-fast-catalog-matrix-timing	2026-10-04	7	7	?			0.28	tools/catalog_gemm_matrix_timing.py:116;tools/catalog_gemm_quality.py:88;bindings/_mojolearn_gemm_probe.mojo:80;experiments/apple_fast/gemm/mma.mojo:6
+lane/apple-fast-catalog-matrix-timing-r1	2026-10-04	8	8	?			0.28	tools/catalog_gemm_matrix_timing.py:126;tools/catalog_gemm_quality.py:88;bindings/_mojolearn_gemm_probe.mojo:80;experiments/apple_fast/gemm/mma.mojo:6
+lane/apple-fast-catalog-resident-probe	2026-10-04	1	1	?			0.27	tools/catalog_resident_timing.py:105;tools/catalog_resident_quality.py:97;bindings/_mojolearn_resident_gemm_probe.mojo:84;experiments/apple_fast/gemm/
+lane/apple-fast-chol-20261004	2026-10-04	4	4	b	docs/apple-fast/EXPERIMENTS.md:805 [DROPPED-slower1]	retire	0.23	tools/apple_fast_chol_quality.py:38;cholesky/checks/potrf.mojo:18
+lane/apple-fast-classical-ideas-20261006	2026-10-06	3	3	a	98% of unique added code lines present on main	retire	0.98	x_decomp/fast_qr.mojo:8;x_decomp/fast_gemm.mojo:7;hdbscan/impl/detail/fast_apple.mojo:6;gbdt/methods/leaves_estimation/apple_fast_est.mojo:2;hdbscan/i
+lane/apple-fast-dbscantaxi	2026-10-03	1	1	b	docs/TOMBSTONES.md:2394 [ported4 DROPPED-slower3 RECORD2 READY-AB2]	retire	0.28	dbscan/impl/denseball.mojo:209;dbscan/impl/runner.mojo:14
+lane/apple-fast-decomp-linalg	2026-10-03	19	14	b	docs/TOMBSTONES.md:2012 [DROPPED-slower13 ported13 READY-AB8 SUPERSEDED5 DEFAULT3 DROPPED2]	retire	0.22	x_decomp/device.mojo:331;x_decomp/fast_chol.mojo:110;x_decomp/fast_qr.mojo:97;python/mojolearn/_linalg_impl.py:51;x_decomp/fast_gemm.mojo:50
+lane/apple-fast-decomp-mma-k16	2026-10-04	2	2	b	docs/apple-fast/EXPERIMENTS.md:938 [PASS1 HOLD-speed1]	retire	0.26	tools/decomp_mma_k16.py:77;tools/decomp_mma_k16_pair.py:35;x_decomp/device.mojo:9
+lane/apple-fast-decomp-sdk-control	2026-10-04	1	1	b	docs/apple-fast/EXPERIMENTS.md:444 [PARKED1 ported1]	retire	0.24	experiments/apple_fast/gemm/decomp_sdk.mojo:34;x_decomp/resident.mojo:17;x_decomp/device.mojo:13;x_decomp/kit_device.mojo:6
+lane/apple-fast-decomp-sparse	2026-10-03	31	19	b	docs/TOMBSTONES.md:1943 [ported3 DROPPED-semantics2 SUPERSEDED2 READY-AB1]	retire	0.26	x_decomp/device.mojo:381;python/mojolearn/_expansion_decomp.py:134;x_decomp/fast_chol.mojo:110;x_decomp/fast_qr.mojo:97;x_decomp/apple_fast.mojo:76
+lane/apple-fast-dwcurrent	2026-10-04	3	3	?			0.31	tools/aft_verified_dw.py:45;gbdt/methods/greedy_subsets_searcher/kernel/dw2_level.mojo:28;gbdt/methods/greedy_subsets_searcher/greedy_search_helper_de
+lane/apple-fast-eigh-cache	2026-10-04	7	7	b	docs/TOMBSTONES.md:1949 [PASS2 rejected1]	retire	0.25	tools/eigh_cache_verified.py:155;x_decomp/eigh_tangent.mojo:108;x_decomp/device.mojo:35;tools/apple_fast_eigh_quality.py:27
+lane/apple-fast-eigh-panel-df	2026-10-04	3	3	b	docs/apple-fast/EXPERIMENTS.md:1217 [ported1 HOLD1 DROPPED-slower1 READY-AB1]	retire	0.87	tools/eigh_w4_quality.py:13;tools/eigh_panel_df_pair.py:9;x_decomp/eigh_tridiag.mojo:6
+lane/apple-fast-eigh-panels	2026-10-04	7	6	?	docs/apple-fast/CLAUDE_HANDOFF_2026-10-04.txt:130		0.74	x_decomp/eigh_tridiag.mojo:170;tools/eigh_w4_pair.py:17;tools/eigh_w4_quality.py:14;x_decomp/device.mojo:5
+lane/apple-fast-fa	2026-10-03	4	4	b	docs/TOMBSTONES.md:2057 [ported10 DROPPED-slower10 HOLD-quality8 READY-AB6]	retire	0.66	x_decomp/fa_fast.mojo:164;python/mojolearn/_expansion_decomp.py:25;bindings/_mojolearn_x_decomp.mojo:3
+lane/apple-fast-fastonly2	2026-10-03	1	1	a	98% of unique added code lines present on main	retire	0.98	ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:3
+lane/apple-fast-gap-kapprox2	2026-10-03	15	12	b	docs/TOMBSTONES.md:1664 [merged5 DROPPED4 KEPT2]	retire	0.45	xtrees/agnostic_device.mojo:53;x_neighbors/kap2_items.mojo:30;tools/schi2_rng_quality.py:25;python/mojolearn/_expansion_neighbors.py:24;xtrees/agnosti
+lane/apple-fast-gap-linalg2	2026-10-03	4	1	b	docs/apple-fast/EXPERIMENTS.md:420 [KEPT3]	retire	-1.00	
+lane/apple-fast-gap-linalg2-kpca	2026-10-03	2	2	b	docs/apple-fast/EXPERIMENTS.md:721 [KEPT2]	retire	0.00	tools/kpca_quality_ab.sh:7
+lane/apple-fast-gap-linalg2-pca	2026-10-03	3	3	b	docs/apple-fast/EXPERIMENTS.md:424 [KEPT2]	retire	0.73	tools/pca_quality_ab.py:18;tools/pca_quality_ab.sh:8;decomposition/estimator.mojo:3;decomposition/impl/linalg/detail/pca.mojo:2;x_decomp/device.mojo:2
+lane/apple-fast-gap-linalg2-svd	2026-10-03	1	1	b	docs/apple-fast/EXPERIMENTS.md:1218 [PARKED2 ported1]	retire	0.18	x_decomp/svd_aw.mojo:80;x_decomp/tsqr_device.mojo:20
+lane/apple-fast-gap-misc	2026-10-03	6	4	b	docs/TOMBSTONES.md:595 [DROPPED-noise6 MERGED1]	retire	0.39	gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:32;gbdt/methods/greedy_subsets_searcher/kernel/hist_quantized_shared.mojo:15;
+lane/apple-fast-gap-tsa	2026-10-03	1	1	b	docs/TOMBSTONES.md:2467 [DROPPED-noise10 KEPT5 DROPPED-slower2 merged1]	retire	-1.00	
+lane/apple-fast-general-speed	2026-10-04	5	4	b	docs/TOMBSTONES.md:1088 [merged5 DROPPED-quality3 KEPT1]	retire	0.11	x_linear/bayes.mojo:111;svm/impl/workingset.mojo:23
+lane/apple-fast-graph	2026-10-02	3	3	b	docs/apple-fast/EXPERIMENTS.md:494 [ported3 KEPT1 DEFAULT1 READY-AB1]	retire	0.58	x_neighbors/iter_device.mojo:44;python/mojolearn/_expansion_neighbors.py:14
+lane/apple-fast-isotonic-knn	2026-10-03	11	7	b	docs/TOMBSTONES.md:1456 [DROPPED-slower4 merged4 DROPPED-noise2 loser2 HELD1 ported1]	retire	0.09	x_linear/isotonic_fast.mojo:361;x_neighbors/iter_device.mojo:111;python/mojolearn/_expansion_decomp.py:25;bindings/_mojolearn_x_linear.mojo:16
+lane/apple-fast-kapprox	2026-10-03	3	3	b	docs/TOMBSTONES.md:1556 [DROPPED-quality10 KEPT1]	retire	0.20	tools/kpca_quality_check.py:33
+lane/apple-fast-knn-lean-gpu	2026-10-04	1	1	?			0.89	tools/knn_lean_gpu_pair.py:11;x_neighbors/nan_cells_device.mojo:6;tools/knn_lean_gpu_quality.py:3;bindings/_mojolearn_x_neighbors.mojo:1;python/mojole
+lane/apple-fast-knn-lean-gpu-harness-r1	2026-10-04	2	2	a	90% of unique added code lines present on main	retire	0.90	tools/knn_lean_gpu_pair.py:11;x_neighbors/nan_cells_device.mojo:6;tools/knn_lean_gpu_quality.py:3;bindings/_mojolearn_x_neighbors.mojo:1;python/mojole
+lane/apple-fast-layoutfix	2026-10-03	2	2	?			0.04	python/mojolearn/_backend.py:19;tools/layoutfix_smoke.py:17;python/mojolearn/_iforest_impl.py:2;python/mojolearn/extratrees.py:2;python/mojolearn/line
+lane/apple-fast-linalg-20261004	2026-10-04	4	4	b	docs/apple-fast/EXPERIMENTS.md:739 [HOLD-speed2]	retire	0.36	x_decomp/eigh_tangent.mojo:77;x_decomp/device.mojo:29;tools/apple_fast_eigh_quality.py:27
+lane/apple-fast-linsvr	2026-10-03	7	7	b	docs/TOMBSTONES.md:1181 [DROPPED-noise8 merged8 DROPPED-slower4 KEEP2 KEPT1]	retire	0.77	glm/impl/qn/lsvr_dual.mojo:167;glm/impl/qn/glm_base.mojo:58;glm/impl/qn/qn_solvers.mojo:9;glm/impl/qn/qn_dconv.mojo:4;glm/impl/qn/qn_linesearch.mojo:2
+lane/apple-fast-lle	2026-10-02	12	7	b	docs/TOMBSTONES.md:1462 [DROPPED-slower2]	retire	0.08	x_decomp/lle_sparse.mojo:365;x_linear/isotonic_fast.mojo:321;x_neighbors/iter_device.mojo:107;python/mojolearn/_expansion_decomp.py:67;bindings/_mojol
+lane/apple-fast-lost-candidates	2026-10-04	1	1	?			-1.00	
+lane/apple-fast-lu-mma-dbuf	2026-10-04	2	2	b	docs/apple-fast/EXPERIMENTS.md:924 [PASS1 HOLD-speed1]	retire	0.29	tools/lu_mma_dbuf.py:50;tools/lu_mma_dbuf_pair.py:35;x_decomp/lu_fast_mma.mojo:22
+lane/apple-fast-lu-pivot-shuffle	2026-10-04	2	2	?			0.40	tools/lu_pivot_shuffle.py:67;tools/lu_pivot_shuffle_pair.py:36;x_decomp/lu_fast.mojo:4;bindings/_mojolearn_x_decomp.mojo:4
+lane/apple-fast-m2b1	2026-10-03	11	10	b	docs/TOMBSTONES.md:1457 [KEEP5 DROPPED-noise4 merged4 loser2 DROPPED-slower2 HELD1]	retire	0.70	x_linear/isotonic_fast.mojo:320;glm/impl/qn/glm_base.mojo:57;bindings/_mojolearn_x_linear.mojo:13;ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:11;x
+lane/apple-fast-manager-remote	2026-10-04	1	1	a	100% of unique added code lines present on main	retire	1.00	
+lane/apple-fast-mcd-g1-quality	2026-10-04	1	1	a	93% of unique added code lines present on main	retire	0.93	tools/mcd_g1_quality.py:13
+lane/apple-fast-mcd-ordered-cov	2026-10-04	1	1	?			0.77	x_decomp/mcd_bmma.mojo:13;x_decomp/resident.mojo:6;x_decomp/mcd_fast.mojo:5;bindings/_mojolearn_x_decomp.mojo:1
+lane/apple-fast-mcd-ordered-quality	2026-10-04	2	2	?			0.82	tools/mcd_ordered_oracle.py:28;x_decomp/mcd_bmma.mojo:19;x_decomp/resident.mojo:14;tools/mcd_ordered_quality.py:7;x_decomp/mcd_fast.mojo:5
+lane/apple-fast-mcd-ordered-quality-r1	2026-10-04	3	3	?			0.82	tools/mcd_ordered_oracle.py:28;x_decomp/mcd_bmma.mojo:19;x_decomp/resident.mojo:18;tools/mcd_ordered_quality.py:7;x_decomp/mcd_fast.mojo:5
+lane/apple-fast-mcd-ordered-quality-r2	2026-10-04	4	4	?			0.82	tools/mcd_ordered_oracle.py:28;x_decomp/mcd_bmma.mojo:19;x_decomp/resident.mojo:18;tools/mcd_ordered_quality.py:7;x_decomp/mcd_fast.mojo:5
+lane/apple-fast-mcd-ordered-quality-r3	2026-10-04	5	5	b	docs/apple-fast/EXPERIMENTS.md:1216 [ported1 HOLD1 READY-AB1]	retire	0.82	tools/mcd_ordered_oracle.py:28;x_decomp/mcd_bmma.mojo:19;x_decomp/resident.mojo:19;tools/mcd_ordered_quality.py:7;x_decomp/mcd_fast.mojo:5
+lane/apple-fast-mcd-quality	2026-10-03	2	2	?			0.12	tools/mcd_quality_ab.py:82;tools/mcd_quality_ab.sh:23
+lane/apple-fast-mcd-saved-oracle	2026-10-04	3	3	?			0.52	tools/mcd_saved_oracle.py:86;tools/mcd_profile.sh:22;x_decomp/mcd_fast.mojo:11;tools/mcd_compat_ab.sh:2;x_decomp/mcd_compat.mojo:1
+lane/apple-fast-mcd-saved-oracle-r1	2026-10-04	4	4	?			0.49	tools/mcd_saved_oracle.py:114;tools/mcd_profile.sh:22;x_decomp/mcd_fast.mojo:11;tools/mcd_compat_ab.sh:2;x_decomp/mcd_compat.mojo:1
+lane/apple-fast-old-linalg-audit	2026-10-04	1	1	?			0.00	python/mojolearn/_linalg_impl.py:4
+lane/apple-fast-opp	2026-10-03	7	5	?	docs/apple-fast/CLAUDE_HANDOFF_2026-10-04.txt:84		0.11	tools/opp_only_board.py:113;tools/bench_board_algos.py:11;bench/speed/forest_speed_arm.py:7
+lane/apple-fast-optics2	2026-10-03	5	5	?			0.13	x_cluster/optics_fast.mojo:164;x_cluster/device_ops.mojo:85;x_cluster/optics.mojo:44;x_cluster/ops.mojo:9;x_cluster/host/host_ops.mojo:2
+lane/apple-fast-opv	2026-10-03	8	7	b	docs/TOMBSTONES.md:2303 [merged4]	retire	0.16	x_cluster/optics_fast.mojo:164;x_cluster/device_ops.mojo:85;x_cluster/optics.mojo:44;tools/opv_quality.py:34;tools/opv_build_check.sh:15
+lane/apple-fast-pca-eig	2026-10-02	3	3	b	docs/TOMBSTONES.md:1979 [DROPPED-noise10]	retire	0.28	decomposition/impl/linalg/detail/pca.mojo:145;decomposition/estimator.mojo:15
+lane/apple-fast-prep2	2026-10-03	2	1	b	docs/apple-fast/EXPERIMENTS.md:25 [DEFAULT3]	retire	0.00	x_prep/fastprep2.mojo:2;x_prep/device.mojo:1
+lane/apple-fast-prep3	2026-10-02	9	4	b	docs/TOMBSTONES.md:1723 [DROPPED-noise4 merged4 KEEP1]	retire	0.47	x_prep/fastlabels.mojo:47;x_prep/prep3.mojo:17;x_prep/device.mojo:16;python/mojolearn/_expansion_prep.py:13;bindings/_mojolearn_x_prep.mojo:12
+lane/apple-fast-pt-queue	2026-10-04	1	1	a	97% of unique added code lines present on main	retire	0.97	tools/pt_score_verified.py:2
+lane/apple-fast-rec-ab11	2026-10-04	5	4	?			0.11	x_linear/bayes.mojo:111;svm/impl/workingset.mojo:23
+lane/apple-fast-remaining-audit-20261004	2026-10-04	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+lane/apple-fast-resample	2026-10-02	6	5	b	docs/TOMBSTONES.md:1777 [DROPPED-slower9 KEPT4 ported4 DROPPED-semantics2 DEFAULT2 READY-AB2]	retire	0.40	resample/fast_apple.mojo:107;resample/estimator.mojo:90;python/mojolearn/model_selection.py:50;python/mojolearn/resample.py:28;bindings/_mojolearn_res
+lane/apple-fast-results	2026-10-04	166	166	?	docs/apple-fast/NEXT_PASS.md:29		-1.00	
+lane/apple-fast-robust	2026-10-02	8	6	b	docs/TOMBSTONES.md:2099 [DROPPED-quality3 DEFAULT2 ported2 READY-AB1 merged1]	retire	0.89	x_decomp/mcd_fast.mojo:42;x_linear/huber_fast.mojo:38;x_linear/device.mojo:4;x_decomp/kit_device.mojo:2
+lane/apple-fast-scoped-pca-caller	2026-10-04	2	2	?			0.37	tools/scoped_pca_fit.py:139;tools/apple_fast_job_policy.py:2
+lane/apple-fast-sgdoc-parallel	2026-10-03	7	7	b	docs/apple-fast/EXPERIMENTS.md:734 [HOLD2]	retire	0.11	x_linear/sgdoc_fast.mojo:217;tools/sgdoc_check.py:34;tools/sgdoc_objective.py:22;tools/bench_board_algos.py:14;tools/sgdoc_m2_check.sh:11
+lane/apple-fast-shap	2026-10-02	5	4	b	docs/apple-fast/EXPERIMENTS.md:180 [SUPERSEDED3 ported3 KEEP2 KEPT2 DEFAULT2 READY-AB1]	retire	0.15	xtrees/shap_fast.mojo:247;xtrees/shap_tab.mojo:110;xtrees/shap_device.mojo:61;python/mojolearn/_expansion_trees.py:61;xtrees/api.mojo:48
+lane/apple-fast-shared-downstream-g1	2026-10-04	4	4	?			0.23	tools/shared_gemm_downstream_quality.py:158;tools/shared_gemm_quality.py:80;tools/shared_gemm_downstream_pair.py:77;bindings/_mojolearn_shared_gemm_pr
+lane/apple-fast-shared-downstream-g1-r1	2026-10-04	5	5	?			0.22	tools/shared_gemm_downstream_quality.py:170;tools/shared_gemm_downstream_pair.py:83;tools/shared_gemm_quality.py:80;bindings/_mojolearn_shared_gemm_pr
+lane/apple-fast-shared-downstream-g1-r2	2026-10-04	6	6	?			0.19	tools/shared_gemm_downstream_quality.py:185;tools/shared_gemm_downstream_pair.py:131;tools/shared_gemm_quality.py:80;tools/shared_gemm_preflight.py:68
+lane/apple-fast-shared-downstream-g5	2026-10-04	5	5	?			0.23	tools/shared_gemm_downstream_quality.py:158;tools/shared_gemm_quality.py:80;tools/shared_gemm_downstream_pair.py:77;bindings/_mojolearn_shared_gemm_pr
+lane/apple-fast-shared-downstream-g5-r1	2026-10-04	6	6	?			0.22	tools/shared_gemm_downstream_quality.py:170;tools/shared_gemm_downstream_pair.py:83;tools/shared_gemm_quality.py:80;bindings/_mojolearn_shared_gemm_pr
+lane/apple-fast-shared-downstream-g5-r2	2026-10-04	7	7	?			0.19	tools/shared_gemm_downstream_quality.py:185;tools/shared_gemm_downstream_pair.py:131;tools/shared_gemm_quality.py:80;tools/shared_gemm_preflight.py:68
+lane/apple-fast-shared-downstream-quality	2026-10-04	3	3	?			0.25	tools/shared_gemm_downstream_quality.py:157;tools/shared_gemm_quality.py:80;bindings/_mojolearn_shared_gemm_probe.mojo:61;experiments/apple_fast/gemm/
+lane/apple-fast-shared-gemm-g1g5	2026-10-04	1	1	?			0.34	tools/shared_gemm_quality.py:80;bindings/_mojolearn_shared_gemm_probe.mojo:61;experiments/apple_fast/gemm/mma.mojo:58;experiments/apple_fast/gemm/shar
+lane/apple-fast-shared-gemm-g1g5-r1	2026-10-04	2	2	?			0.34	tools/shared_gemm_quality.py:80;bindings/_mojolearn_shared_gemm_probe.mojo:61;experiments/apple_fast/gemm/mma.mojo:58;experiments/apple_fast/gemm/shar
+lane/apple-fast-shared-scoped-timing	2026-10-04	7	7	?			0.16	tools/shared_gemm_scoped.py:245;tools/shared_gemm_downstream_quality.py:185;tools/shared_gemm_downstream_pair.py:131;tools/shared_gemm_quality.py:80;t
+lane/apple-fast-shared-scoped-timing-g5	2026-10-04	8	8	?			0.16	tools/shared_gemm_scoped.py:245;tools/shared_gemm_downstream_quality.py:185;tools/shared_gemm_downstream_pair.py:131;tools/shared_gemm_quality.py:80;t
+lane/apple-fast-sym-ctr	2026-10-03	7	2	b	docs/TOMBSTONES.md:804 [ported10 KEPT6 DEFAULT6 READY-AB5 DROPPED-noise2 DROPPED-speed2]	retire	0.76	gbdt/methods/doc_parallel_boosting.mojo:55;gbdt/train.mojo:44
+lane/apple-fast-sym-est	2026-10-03	4	1	b	docs/TOMBSTONES.md:967 [ported7 KEPT4 DEFAULT4 DROPPED-BUG3 DROPPED-inconclusive3 READY-AB3]	retire	0.73	gbdt/methods/leaves_estimation/apple_fast_est.mojo:158;gbdt/methods/doc_parallel_boosting.mojo:21
+lane/apple-fast-sym-feat	2026-10-03	14	1	a	96% of unique added code lines present on main	retire	0.96	gbdt/train.mojo:12;bindings/_mojolearn_gbdt.mojo:1;gbdt/grid_creator/gls_borders_device.mojo:1
+lane/apple-fast-sym-hist	2026-10-03	3	0	a	git cherry: all 3 commits patch-equal on main	retire	-1.00	
+lane/apple-fast-sym-iter	2026-10-03	5	1	b	docs/TOMBSTONES.md:1016 [DROPPED-noise18 ported5 READY-AB2]	retire	0.60	gbdt/methods/sym_iter_fast.mojo:128;gbdt/methods/doc_parallel_boosting.mojo:118;gbdt/methods/oblivious_tree_doc_parallel_structure_searcher.mojo:12
+lane/apple-fast-sym-multi	2026-10-03	6	1	a	97% of unique added code lines present on main	retire	0.97	gbdt/targets/kernel/yeti_rank.mojo:7
+lane/apple-fast-target-current	2026-10-04	5	4	b	docs/apple-fast/EXPERIMENTS.md:738 [KEEP1 merged1]	retire	0.83	python/mojolearn/_expansion_prep.py:10;tools/target_scratch_quality.py:2;bindings/_mojolearn_x_prep.mojo:1
+lane/apple-fast-target-scratch	2026-10-04	3	3	?			0.83	python/mojolearn/_expansion_prep.py:10;tools/target_scratch_quality.py:2;bindings/_mojolearn_x_prep.mojo:1
+lane/apple-fast-trees-io	2026-10-02	6	3	b	docs/TOMBSTONES.md:714 [DROPPED-noise4]	retire	0.16	isolation_forest/impl/isolation_forest.mojo:97;isolation_forest/impl/isolation_tree_builder.mojo:73;tools/aft_if_score.py:24;tools/aft_if_score_ab.sh:
+lane/apple-fast-trees-scan	2026-10-02	9	8	b	docs/TOMBSTONES.md:757 [DROPPED-noise3 DROPPED-semantics2]	retire	0.35	ensemble/randomforest.mojo:34;gbdt/gpu_util/kernel/scan.mojo:31;gbdt/gpu_util/kernel/segmented_sort.mojo:30;gbdt/gpu_util/kernel/reorder_one_bit.mojo:
+lane/apple-fast-trees-symmetric	2026-10-02	6	4	b	docs/TOMBSTONES.md:811 [DROPPED-noise11 DROPPED-slower2]	retire	0.37	gbdt/methods/leaves_estimation/sym_device_walker.mojo:155;gbdt/methods/kernel/pointwise_scores.mojo:122;gbdt/methods/doc_parallel_boosting.mojo:90;gbd
+lane/apple-fast-w2-shap	2026-10-04	3	3	b	docs/TOMBSTONES.md:1789 [PASS2 rejected1]	retire	0.40	xtrees/agnostic_device.mojo:65;tools/shap_pipe_quality.py:41;python/mojolearn/_expansion_trees.py:37;xtrees/api.mojo:32;tools/shap_pipe_pair.py:21
+lane/apple-fast-w2-ts	2026-10-04	4	4	b	docs/apple-fast/EXPERIMENTS.md:891 [PASS1 HOLD1]	retire	0.25	arima/impl/fast_fit_groups.mojo:119;tools/arima_phase_diag.py:74;tools/var_overhead_diag.py:32;python/mojolearn/_x_sequence_autoarima.py:31;bindings/_
+lane/apple-fast-w3-arima	2026-10-04	1	1	b	docs/apple-fast/EXPERIMENTS.md:906 [PASS1 HOLD1]	retire	0.26	arima/impl/fast_slab.mojo:88;arima/impl/batched_kalman.mojo:25;tools/arima_fast_fit_quality.py:22;arima/impl/fast_order_state.mojo:19;tools/arima_slab
+lane/apple-fast-w3-dw	2026-10-04	2	2	b	docs/TOMBSTONES.md:607 [PASS2]	retire	0.38	gbdt/methods/greedy_subsets_searcher/kernel/dw3_flat.mojo:96;tools/aft_w3dw.py:92;gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.
+lane/apple-fast-w3-prep	2026-10-04	4	4	b	docs/TOMBSTONES.md:1839 []	retire	0.35	tools/xprep_pinned_quality.py:85;x_prep/host_out.mojo:61;python/mojolearn/_expansion_prep.py:46;x_prep/device.mojo:33;bindings/_mojolearn_x_prep.mojo:
+lane/apple-fast-w4-decomp	2026-10-04	6	6	b	docs/apple-fast/EXPERIMENTS.md:914 [PASS3 DEFAULT1 merged1]	retire	0.49	tools/w4_decomp_quality.py:151;tools/w4_decomp_pair.py:59;decomposition/estimator.mojo:15;x_decomp/w4_fast.mojo:12;python/mojolearn/_expansion_decomp.
+lane/apple-fast-w4-decomp-harness-r1	2026-10-04	7	7	b	docs/apple-fast/EXPERIMENTS.md:1176 [ported3 HOLD-quality2 DEFAULT1]	retire	0.48	tools/w4_decomp_quality.py:151;tools/w4_decomp_pair.py:74;decomposition/estimator.mojo:15;x_decomp/w4_fast.mojo:12;python/mojolearn/_expansion_decomp.
+lane/apple-fast-w4-eigh	2026-10-04	4	4	?			0.74	x_decomp/eigh_tridiag.mojo:162;tools/eigh_w4_pair.py:15;tools/eigh_w4_quality.py:10;x_decomp/device.mojo:4
+lane/apple-fast-w4-linalg	2026-10-04	3	3	b	docs/apple-fast/EXPERIMENTS.md:916 [PASS1 HOLD-speed1]	retire	0.50	x_decomp/lu_fast_tslu.mojo:187;x_decomp/lu_fast_mma.mojo:26;tools/lu_fast_tslu_quality.py:19;tools/lu_fast_tslu_pair.py:15;tools/chol_fast_nb512_pair.
+lane/apple-fast-w4-mcd	2026-10-04	2	2	b	docs/apple-fast/EXPERIMENTS.md:919 [ported2 PASS2 KEEP1 HOLD1]	retire	0.69	tools/mcd_profile.sh:22;x_decomp/mcd_fast.mojo:11;tools/mcd_compat_ab.sh:2;x_decomp/mcd_compat.mojo:1
+lane/apple-fast-w4-shap	2026-10-04	3	3	a	93% of unique added code lines present on main	retire	0.93	tools/pshap_delta_pair.py:10;xtrees/agnostic_device.mojo:9;xtrees/api.mojo:6;python/mojolearn/_expansion_trees.py:1;xtrees/agnostic.mojo:1
+lane/apple-fast-w4-small	2026-10-04	6	6	b	docs/apple-fast/EXPERIMENTS.md:909 [PASS4 HOLD2 PARKED1 DEFAULT1 merged1]	retire	0.43	sequence/var_fused.mojo:92;tools/w4_small_quality.py:76;resample/gather.mojo:33;tools/w4_small_pair.py:27;bindings/_mojolearn_resample.mojo:18
+lane/apple-fast-w4-tslu	2026-10-04	3	3	b	docs/TOMBSTONES.md:1973 [PASS2]	retire	0.50	x_decomp/lu_fast_tslu.mojo:187;x_decomp/lu_fast_mma.mojo:26;tools/lu_fast_tslu_quality.py:19;tools/lu_fast_tslu_pair.py:15;tools/chol_fast_nb512_pair.
+lane/apple-identical-steps	2026-09-26	2	2	?	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:21		0.40	ensemble/decisiontree/batched_levelalgo/builder.mojo:6
+lane/apple-merged-check	2026-09-28	1	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.63	tools/merged_check/recheck_job.sh:18;tools/merged_check/tests_job.sh:17;tools/merged_check/mac_job.sh:14;tools/merged_check/linear_job.sh:10;tools/mer
+lane/apple-merged-check2	2026-09-28	1	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.63	tools/merged_check/recheck_job.sh:18;tools/merged_check/tests_job.sh:17;tools/merged_check/mac_job.sh:15;tools/merged_check/linear_job.sh:10;tools/mer
+lane/apple-merged-check3	2026-09-28	1	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.63	tools/merged_check/recheck_job.sh:18;tools/merged_check/tests_job.sh:17;tools/merged_check/mac_job.sh:15;tools/merged_check/linear_job.sh:10;tools/mer
+lane/apple-merged-owed-check	2026-09-28	1	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.63	tools/merged_check/recheck_job.sh:18;tools/merged_check/tests_job.sh:17;tools/merged_check/mac_job.sh:15;tools/merged_check/linear_job.sh:10;tools/mer
+lane/apple-verify-20261001	2026-09-30	1	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.05	tools/apple_verify_job.sh:20
+lane/apple2-merged-check	2026-09-28	1	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.83	tools/merged_check/mac_job.sh:15;tools/merged_check/m2pro_job.sh:11
+lane/apple2-merged-check2	2026-09-28	1	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.83	tools/merged_check/mac_job.sh:15;tools/merged_check/m2pro_job.sh:11
+lane/apple2-merged-check3	2026-09-28	1	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.83	tools/merged_check/mac_job.sh:15;tools/merged_check/m2pro_job.sh:11
+lane/apple2-merged-check4	2026-09-28	1	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.83	tools/merged_check/mac_job.sh:15;tools/merged_check/m2pro_job.sh:11
+lane/apple2-merged-check5	2026-09-28	1	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.83	tools/merged_check/mac_job.sh:15;tools/merged_check/m2pro_job.sh:11
+lane/apple3-merged-check	2026-09-28	2	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.53	tools/merged_check/merged_check.py:82;tools/merged_check/light_job.sh:23;tools/merged_check/mac_job.sh:15;tools/merged_check/m2pro_job.sh:11
+lane/bench-board-m3ultra	2026-09-29	37	30	?			0.34	tools/bench_board.py:148;tools/bench_board_neural.py:117;tools/test_bench_board_mamba_ssm.py:68;tools/test_bench_board.py:67;tools/test_bench_board_ne
+lane/bf16-units	2026-09-28	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+lane/board-resume-20260930	2026-09-30	12	12	?			0.04	tools/bench_board_resume.py:38;tools/bench_board.py:6
+lane/catboost-parity-on-lm-attention-fallback	2026-09-19	7	5	?			0.89	python/mojolearn/ensemble.py:91;gbdt/train.mojo:44;gbdt/methods/ordered_boosting.mojo:29;bindings/_mojolearn_gbdt_host.mojo:24;gbdt/metrics/sample_qua
+lane/categorical-feature-cpu	2026-09-19	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+lane/classical-pass-measure-20260930	2026-09-30	22	15	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.47	tools/neural_experiment_measure.py:103;tools/neural_requested_profile.py:64;tools/neural_toggle_sweep.py:41;tools/summarize_requested_profile.py:16;to
+lane/cluster-apple-prof	2026-09-28	7	3	?			0.28	bench/dbscan_m4_probe.py:19;hdbscan/impl/cluster/detail/single_linkage.mojo:7;core/stage_prof.mojo:5;hdbscan/impl/runner.mojo:5;hierarchy/impl/sparse/
+lane/cluster-speed-base	2026-09-27	1	1	a	98% of unique added code lines present on main	retire	0.98	bench/x_cluster_speed.py:2
+lane/cpu-par-fallback	2026-09-28	1	1	?			0.21	tools/cpu_path_audit.py:130;python/mojolearn/host_surface.py:52;python/mojolearn/_parallel_pool.py:29;python/mojolearn/_parallel_worker.py:13;python/m
+lane/cpu-training-e3	2026-09-14	5	0	a	git cherry: all 5 commits patch-equal on main	retire	-1.00	
+lane/cpu-training-gate-speed	2026-09-15	1	1	?			0.08	tools/cpu_identity_gate_check.py:180;tools/identity_break.py:17
+lane/data-runtime-million-cpu	2026-09-20	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+lane/distance-pairwise-cpu	2026-09-19	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+lane/ensemble-meta-cpu	2026-09-19	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+lane/expose-d-fixes	2026-09-14	6	0	a	git cherry: all 6 commits patch-equal on main	retire	-1.00	
+lane/forecast-timeseries-cpu	2026-09-19	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+lane/forest-train-speed	2026-09-17	1	1	?	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:37 abandoned1		0.00	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:36;extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo:6
+lane/forest-training-cpu-20260919	2026-09-19	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+lane/fp-contract-off-exp	2026-09-25	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+lane/fp-contract-off-study	2026-09-25	2	1	?			-1.00	
+lane/gbdt-depthwise-fast	2026-09-20	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+lane/gbdt-rest	2026-09-16	4	4	?	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:19		0.27	gbdt/targets/kernel/query_softmax.mojo:203;gbdt/host/gbdt_oracle_query_softmax.mojo:92;python/mojolearn/tests/test_gbdt_query_softmax.py:65;python/moj
+lane/gemm-p1-fold-bypass	2026-09-19	4	4	?	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:21		0.18	tools/gemm_p1_hotaisle_body.sh:41;gemm/checks/gemm_identical.mojo:9
+lane/gram-prep-million-cpu	2026-09-20	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+lane/host-token-split-2	2026-10-01	3	2	?	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:19		0.11	training/byte_lm_host.mojo:47
+lane/host-token-split-2-measure	2026-09-30	2	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.10	training/byte_lm_host.mojo:26
+lane/host-token-split-measure	2026-09-30	2	1	a	100% of unique added code lines present on main	retire	1.00	
+lane/hr2-kpca-seq	2026-10-02	3	3	?	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:29		0.20	sequence/garch.mojo:63;sequence/prophet.mojo:61;sequence/exec_device.mojo:24;sequence/fold32.mojo:14;bindings/_mojolearn_x_sequence.mojo:5
+lane/identical-body-tiles-20261005	2026-10-05	2	1	b	docs/apple-fast/EXPERIMENTS.md:1448 []	retire	-1.00	
+lane/identical-group-slack2-20261005	2026-10-05	2	1	b	docs/apple-fast/EXPERIMENTS.md:1446 []	retire	-1.00	
+lane/identical-group-slack8-20261005	2026-10-05	2	1	b	docs/apple-fast/EXPERIMENTS.md:1447 []	retire	-1.00	
+lane/identical-one-page-20261005	2026-10-05	2	1	b	docs/apple-fast/EXPERIMENTS.md:1445 []	retire	-1.00	
+lane/identical-packed64-20261005	2026-10-05	2	1	b	docs/apple-fast/EXPERIMENTS.md:1449 []	retire	-1.00	
+lane/identity-record-next	2026-09-15	3	3	?			0.35	python/mojolearn/tests/test_cpu_training_misc.py:46;python/mojolearn/host_surface.py:38;python/mojolearn/_identity.py:11
+lane/ivf-filter-fix-measure	2026-10-01	1	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.13	tools/ivf48_ab.sh:19;tools/ivf48_nv.sh:1
+lane/kernel-methods-cpu	2026-09-19	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+lane/kmeans-mojo-1-2	2026-09-26	7	7	?	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:44		0.13	gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_base.mojo:41;arima/host/arima_oracle.mojo:34;trial/nvidia_body.sh:32;gbdt/methods/greedy_s
+lane/lane-map-import-graph	2026-09-23	4	0	a	git cherry: all 4 commits patch-equal on main	retire	-1.00	
+lane/large-data-classical-cpu	2026-09-20	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+lane/large-metrics-shared-cpu	2026-09-20	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+lane/linear-apple-base	2026-09-28	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+lane/linfit-speed	2026-09-29	45	45	?	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:35 abandoned1		0.12	x_linear/glm_wide.mojo:422;x_linear/sgd.mojo:236;x_linear/sgd_bounded.mojo:196;tools/linfit_speed.py:52;x_linear/device.mojo:28
+lane/lm-attention-fallback	2026-10-05	3	2	?	docs/identical/HANDOFF_CLAUDE_2026-10-04.md:9		-1.00	
+lane/lm-head-v2-dweight-reuse	2026-09-20	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+lane/loss-metrics-objectives-cpu	2026-09-19	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+lane/lowbit-amd-tuned-lb	2026-09-29	1	1	?			0.33	gemm/checks/gemm_int8_mma_tuned.mojo:8
+lane/lowbit-apple-now	2026-09-29	1	1	?			0.30	gemm/checks/gemm_int15_apple.mojo:33
+lane/lowbit-apple-tuned	2026-09-29	21	20	?			0.21	gemm/checks/gemm_int15_apple_tuned.mojo:811;bench/gemm_int15_apple_tuned_price_main.mojo:242;gemm/checks/gemm_int15_apple_tuned_dev.mojo:232;gemm/chec
+lane/lowbit-blocks	2026-09-29	1	1	?	experiments/removed/MOJOLEARN_IDN_ATTN_DEFER_REGIME.patch:465		-1.00	
+lane/lowbit-e2e	2026-09-29	5	5	?			0.14	tools/lowbit_e2e/model_probe.py:77;tools/lowbit_e2e/public_probe.py:69;tools/lowbit_e2e/job.sh:16
+lane/lowbit-quality	2026-09-29	25	25	?			0.15	bench/lowbit_quality/byte_lm_train.py:388;bench/lowbit_quality/infer_eval.py:318;bench/lowbit_quality/train_table.py:233;bench/lowbit_quality/quantize
+lane/m3-sweep	2026-09-28	2	2	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.18	tools/apple_sweep_run.py:55
+lane/mamba-opp	2026-09-29	6	5	?			0.51	tools/bench_board_neural.py:86;tools/test_bench_board_mamba_ssm.py:68;tools/bench_board.py:48;tools/test_bench_board.py:23;tools/bench_board_store.py:
+lane/mamba3-amd-regs2h-measure	2026-10-01	2	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.12	tools/pr50_amd.sh:15
+lane/mamba3-padding-perf	2026-09-19	2	0	a	git cherry: all 2 commits patch-equal on main	retire	-1.00	
+lane/mamba3-statepass	2026-09-09	23	23	?			0.76	bindings/_mojolearn_mamba.mojo:77;mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:32;mamba/checks/mamba3_fold_check.mojo:22;mamba/impl/mamba_ssm/ops/mamba3_
+lane/manifold-spectral-cpu	2026-09-19	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+lane/merged	2026-10-02	40	0	a	git cherry: all 40 commits patch-equal on main	retire	-1.00	
+lane/mixture-anomaly-cpu	2026-09-19	2	0	a	git cherry: all 2 commits patch-equal on main	retire	-1.00	
+lane/model-load-shared-cpu	2026-09-19	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+lane/model-selection-cpu	2026-09-19	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+lane/mojo-1-2-trial	2026-09-26	2	2	?			-1.00	
+lane/neighbors-rest	2026-09-16	6	5	?	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:19		0.15	neighbors/impl/distance/detail/distance_ops.mojo:247;python/mojolearn/tests/test_knn_extended_metrics.py:130;python/mojolearn/neighbors.py:93;python/m
+lane/neural-apple-base	2026-09-28	1	1	a	93% of unique added code lines present on main	retire	0.93	tools/apple_speed_neural/profile.sh:5
+lane/neural-apple3-measure	2026-10-01	2	2	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.10	tools/pr44_40_mac.sh:22;tools/pr44_gpu.sh:14;tools/pr44_nv.sh:1
+lane/neural-apple4	2026-10-01	2	1	?	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:42 merged1		0.23	mamba/host/gen/mamba3_backward.mojo:309;mamba/impl/modules/mamba3_backward.mojo:33;tools/neural_experiments.py:5
+lane/neural-experiment-measure-20260930	2026-09-30	12	11	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.11	tools/neural_experiment_measure.py:103;tools/neural_requested_profile.py:64;tools/summarize_requested_profile.py:16;tools/neural_experiment_measure.sh
+lane/neural-pass102	2026-10-01	1	1	?			0.00	python/mojolearn/_expansion_neighbors.py:19
+lane/neural-pass13	2026-10-02	3	2	?	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:19		0.14	gemm/host/gemm_host_rows.mojo:25
+lane/neural-pass13-measure	2026-09-30	3	2	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.14	gemm/host/gemm_host_rows.mojo:24;tools/pr19_job.sh:14
+lane/neural-pass144	2026-10-02	3	1	?	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:41 merged1		0.39	decomposition/checks/jacobi_eigh_device.mojo:37;x_decomp/jacobi_par.mojo:34;decomposition/linalg_public_device.mojo:30;x_decomp/device.mojo:20;decompo
+lane/neural-pass17-measure	2026-10-01	2	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.40	tools/pr23_mac.sh:13;tools/cell_ab_job2.sh:7;tools/pr23_nv.sh:1
+lane/neural-pass19	2026-09-30	1	1	?			0.13	gemm/host/gemm_host_rows.mojo:13
+lane/neural-pass26-measure	2026-10-01	5	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.18	tools/pr31_gpu.sh:8;tools/pr31_nv.sh:1
+lane/neural-pass30-measure	2026-10-01	2	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.59	tools/cell_ab_job2.sh:7;tools/pr35_36_nv.sh:2
+lane/neural-pass31-measure	2026-10-01	2	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.65	tools/cell_ab_job2.sh:7
+lane/neural-pass32-measure	2026-10-01	2	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.62	tools/cell_ab_job2.sh:7;tools/pr37_nv.sh:1
+lane/neural-pass34-measure	2026-10-01	2	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.47	tools/pr38_opt.sh:8;tools/cell_ab_job2.sh:7;tools/pr38_nv.sh:2
+lane/neural-pass35-measure	2026-10-01	3	2	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.14	tools/ivf_ab.sh:17;tools/ivf_nv.sh:1
+lane/neural-pass36	2026-10-01	4	4	?	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:40 DROPPED1		0.14	x_decomp/device.mojo:98
+lane/neural-pass36-measure	2026-10-01	10	7	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.20	x_decomp/device.mojo:98;tools/pr40c_mac.sh:12;tools/cell_ab_job2.sh:7;tools/pr40_nv.sh:1;tools/pr40b_nv.sh:1
+lane/neural-pass37-measure	2026-10-01	2	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.62	tools/cell_ab_job2.sh:7;tools/pr41_nv.sh:1
+lane/neural-pass38-measure	2026-10-01	2	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.62	tools/cell_ab_job2.sh:7;tools/pr43_nv.sh:1
+lane/neural-pass39-measure	2026-10-01	1	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.65	tools/cell_ab_job2.sh:7
+lane/neural-pass40-measure	2026-10-01	1	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.62	tools/cell_ab_job2.sh:7;tools/pr45_nv.sh:1
+lane/neural-pass41	2026-10-01	8	6	?			0.04	x_decomp/device.mojo:213
+lane/neural-pass41-measure	2026-10-01	15	9	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.09	x_decomp/device.mojo:213;tools/cell_ab_job2.sh:7;tools/pr46_nv.sh:3
+lane/neural-pass42-measure	2026-10-01	1	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.14	tools/ivf47_ab.sh:18;tools/ivf47_nv.sh:1
+lane/neural-pass44-measure	2026-10-01	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+lane/neural-pass45-measure	2026-10-01	6	3	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.12	tools/pr52b_amd.sh:16;tools/pr52_amd.sh:14
+lane/neural-pass46-measure	2026-10-01	4	2	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.09	tools/pr54_gpu_job.sh:18;tools/nv_pr54.sh:2
+lane/neural-pass47-measure	2026-10-01	5	4	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.05	tools/neural_pass_job.sh:48;tools/nv_extra.sh:20;tools/nv_pass_wrapper.sh:3
+lane/neural-pass48	2026-10-01	1	1	?	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:32		0.67	core/scratch_pool.mojo:21;transformer/impl/llama/fused_attention.mojo:6;core/device_scan.mojo:1;transformer/impl/llama/modeling_llama.mojo:1
+lane/neural-pass48-measure	2026-10-01	2	2	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.55	core/scratch_pool.mojo:21;tools/pr56_job.sh:21;transformer/impl/llama/fused_attention.mojo:6;core/device_scan.mojo:1;transformer/impl/llama/modeling_l
+lane/neural-pass49-measure	2026-10-01	3	2	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.09	tools/pr57_job.sh:19;tools/nv_pr57.sh:2
+lane/neural-pass49-on-61	2026-10-01	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+lane/neural-pass5	2026-10-01	3	2	?	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:34		0.25	mamba/host/gen/mamba3_backward.mojo:182;mamba/impl/modules/mamba3_backward.mojo:91;tools/neural_experiments.py:12
+lane/neural-pass50-measure	2026-10-01	1	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.08	tools/pr58_job.sh:21;tools/nv_pr58.sh:1
+lane/neural-pass53-on-56	2026-10-01	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+lane/neural-pass54	2026-10-01	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+lane/neural-pass54-measure	2026-10-01	3	1	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.08	tools/pr62_job.sh:21;tools/nv_pr62.sh:1
+lane/neural-pass57	2026-10-01	1	1	?	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:30		0.00	transformer/impl/llama/fused_attention.mojo:8
+lane/neural-pass59	2026-10-01	1	1	a	100% of unique added code lines present on main	retire	1.00	
+lane/neural-pass62-on-64	2026-10-01	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+lane/neural-pass67	2026-10-01	6	1	?	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:31		0.00	transformer/impl/llama/modeling_llama.mojo:8
+lane/neural-pass76	2026-10-01	1	1	?			0.00	python/mojolearn/_expansion_linear.py:20
+lane/neural-pass77	2026-10-01	2	2	?			0.17	x_cluster/host/host_ops.mojo:37;python/mojolearn/_expansion_cluster.py:13
+lane/neural-pass78	2026-10-01	5	4	?			0.10	x_decomp/host_simd.mojo:70;python/mojolearn/_expansion_decomp.py:22;x_decomp/host.mojo:6
+lane/neural-pass83	2026-10-01	3	3	?			0.12	x_linear/ops.mojo:29;python/mojolearn/_expansion_linear.py:8
+lane/neural-toggle-sweep-20260930	2026-09-30	18	14	?			0.21	tools/neural_experiment_measure.py:103;tools/neural_requested_profile.py:64;tools/neural_toggle_sweep.py:41;tools/summarize_requested_profile.py:16;bi
+lane/neural-xlw	2026-10-02	10	1	?			0.08	x_linear/device.mojo:30;x_linear/moments_grid.mojo:18
+lane/ordered-speed-diag2	2026-09-29	1	1	?			0.21	gbdt/methods/oblivious_tree_doc_parallel_structure_searcher.mojo:15
+lane/ordered-speed-m2diag	2026-09-29	1	1	?			0.00	checks/kernel_matrix.mojo:4
+lane/ordered-speed-prespeed	2026-09-29	1	1	a	100% of unique added code lines present on main	retire	1.00	
+lane/par-harness	2026-09-28	3	3	a	99% of unique added code lines present on main	retire	0.99	tools/test_algos_lane_check_par.py:5;tools/par_harness/job.sh:1
+lane/pass4-measure-20260930	2026-09-30	1	1	a	93% of unique added code lines present on main	retire	0.93	tools/pass4_amd_job.sh:3
+lane/probabilistic-million-cpu	2026-09-20	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+lane/probability-calibration-cpu	2026-09-19	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+lane/python-310-311	2026-09-23	9	0	a	git cherry: all 9 commits patch-equal on main	retire	-1.00	
+lane/release-gpu-columns	2026-09-22	11	8	?			0.63	tools/release_gpu_columns.py:165;tools/test_release_gpu_columns.py:142;tools/release.py:117;tools/release_gpu_column.sh:77;tools/gemm_remote_leg.sh:52
+lane/release-reuse-bindings	2026-09-23	6	0	a	git cherry: all 6 commits patch-equal on main	retire	-1.00	
+lane/rf-mutex-claim-acquire	2026-09-16	5	5	?			0.32	ensemble/decisiontree/batched_levelalgo/split.mojo:125;tools/rf_nondeterminism/rf_claimfix_ab_body.template.sh:90;neighbors/mutex_probe_main.mojo:58;n
+lane/rf-score-weighted-nondeterminism	2026-09-16	17	17	?	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:38		0.89	ensemble/checks/acquire_rmw_probe.mojo:64;ensemble/decisiontree/batched_levelalgo/split.mojo:63;ensemble/checks/atomic_matrix.mojo:30;ensemble/decisio
+lane/s17-measure-20260930	2026-09-30	4	4	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.35	mamba/host/gen/mamba3_backward.mojo:86;mamba/impl/modules/mamba3_backward.mojo:34;tools/s17_job.sh:12;tools/neural_experiments.py:5
+lane/sabotage-no-host-routes	2026-10-02	1	1	?	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:16		0.00	x_linear/device.mojo:1
+lane/stage-diag-20261001	2026-10-01	3	2	b	measurement/job harness (docs/identical/candidate-audit/candidate-audit-2026-10-04.md: "Measurement / diagnostic / tooling jobs ... do not merge"); lq replaced pr*_job scripts	retire	0.11	tools/amd_toggle_sweep.sh:20;tools/stage_diag_amd.sh:12;tools/stage_diag_mac.sh:8
+lane/tokenizer-text-cpu-20260919	2026-09-19	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+lane/tsa-classical-utils-cpu	2026-09-19	1	0	a	git cherry: all 1 commits patch-equal on main	retire	-1.00	
+lane/vultr-leg	2026-09-23	3	3	?			0.39	tools/vultr_leg.sh:548;tools/tests/test_vultr_leg_shim.py:246;tools/lm_run_driver.py:42
+lane/wheel-smoke-do-fallback	2026-09-23	4	0	a	git cherry: all 4 commits patch-equal on main	retire	-1.00	

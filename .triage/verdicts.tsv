@@ -1,0 +1,330 @@
+archive/20261006/campaign/apple-opponent-quality-20261006	1	docs/plans/host-route-fence-2026-10-09.md:29		docs/plans/host-route-fence-2026-10-09.md	| campaign/apple-opponent-quality-20261006, campaign/full-classification-qn-recipes-20261006, fix/apple-opponent-selector-20261006, fix/lars-direct-20261006, integration/six-lane-ab-20261006, integration/six-lane-compari
+archive/20261006/campaign/full-classification-qn-recipes-20261006	1	docs/plans/host-route-fence-2026-10-09.md:29		docs/plans/host-route-fence-2026-10-09.md	| campaign/apple-opponent-quality-20261006, campaign/full-classification-qn-recipes-20261006, fix/apple-opponent-selector-20261006, fix/lars-direct-20261006, integration/six-lane-ab-20261006, integration/six-lane-compari
+archive/20261006/fix/apple-opponent-selector-20261006	1	docs/plans/host-route-fence-2026-10-09.md:29		docs/plans/host-route-fence-2026-10-09.md	| campaign/apple-opponent-quality-20261006, campaign/full-classification-qn-recipes-20261006, fix/apple-opponent-selector-20261006, fix/lars-direct-20261006, integration/six-lane-ab-20261006, integration/six-lane-compari
+archive/20261006/fix/lars-direct-20261006	1	docs/plans/host-route-fence-2026-10-09.md:29		docs/plans/host-route-fence-2026-10-09.md	| campaign/apple-opponent-quality-20261006, campaign/full-classification-qn-recipes-20261006, fix/apple-opponent-selector-20261006, fix/lars-direct-20261006, integration/six-lane-ab-20261006, integration/six-lane-compari
+archive/20261006/ideas/trees-identical-20261006	1	docs/plans/host-route-fence-2026-10-09.md:31		docs/plans/host-route-fence-2026-10-09.md	| ideas/trees-identical-20261006 | 18 | 18 (5 mojo-host-loop + the 13 host-lanes/SHAP below) |
+archive/20261006/integration/six-lane-ab-20261006	1	docs/plans/host-route-fence-2026-10-09.md:29		docs/plans/host-route-fence-2026-10-09.md	| campaign/apple-opponent-quality-20261006, campaign/full-classification-qn-recipes-20261006, fix/apple-opponent-selector-20261006, fix/lars-direct-20261006, integration/six-lane-ab-20261006, integration/six-lane-compari
+archive/20261006/integration/six-lane-comparison-scope-fix-20261006	1	docs/plans/host-route-fence-2026-10-09.md:29		docs/plans/host-route-fence-2026-10-09.md	| campaign/apple-opponent-quality-20261006, campaign/full-classification-qn-recipes-20261006, fix/apple-opponent-selector-20261006, fix/lars-direct-20261006, integration/six-lane-ab-20261006, integration/six-lane-compari
+archive/20261006/integration/six-lane-full-tsvd-20261006	1	docs/plans/host-route-fence-2026-10-09.md:29		docs/plans/host-route-fence-2026-10-09.md	| campaign/apple-opponent-quality-20261006, campaign/full-classification-qn-recipes-20261006, fix/apple-opponent-selector-20261006, fix/lars-direct-20261006, integration/six-lane-ab-20261006, integration/six-lane-compari
+archive/20261006/integration/six-lane-state-capture-20261006	1	docs/plans/host-route-fence-2026-10-09.md:29		docs/plans/host-route-fence-2026-10-09.md	| campaign/apple-opponent-quality-20261006, campaign/full-classification-qn-recipes-20261006, fix/apple-opponent-selector-20261006, fix/lars-direct-20261006, integration/six-lane-ab-20261006, integration/six-lane-compari
+archive/20261006/lane/apple-classification-admission	1	docs/plans/host-route-fence-2026-10-09.md:29		docs/plans/host-route-fence-2026-10-09.md	| campaign/apple-opponent-quality-20261006, campaign/full-classification-qn-recipes-20261006, fix/apple-opponent-selector-20261006, fix/lars-direct-20261006, integration/six-lane-ab-20261006, integration/six-lane-compari
+archive/20261006/lane/apple-full-classification-prep	1	docs/plans/host-route-fence-2026-10-09.md:29		docs/plans/host-route-fence-2026-10-09.md	| campaign/apple-opponent-quality-20261006, campaign/full-classification-qn-recipes-20261006, fix/apple-opponent-selector-20261006, fix/lars-direct-20261006, integration/six-lane-ab-20261006, integration/six-lane-compari
+archive/20261006/lane/apple-six-admission	1	docs/plans/host-route-fence-2026-10-09.md:29		docs/plans/host-route-fence-2026-10-09.md	| campaign/apple-opponent-quality-20261006, campaign/full-classification-qn-recipes-20261006, fix/apple-opponent-selector-20261006, fix/lars-direct-20261006, integration/six-lane-ab-20261006, integration/six-lane-compari
+archive/20261006/lane/full-recipe-glue	1	docs/plans/host-route-fence-2026-10-09.md:29		docs/plans/host-route-fence-2026-10-09.md	| campaign/apple-opponent-quality-20261006, campaign/full-classification-qn-recipes-20261006, fix/apple-opponent-selector-20261006, fix/lars-direct-20261006, integration/six-lane-ab-20261006, integration/six-lane-compari
+archive/20261006/lane/host-route-source-repair-20261006	1	docs/plans/host-route-fence-2026-10-09.md:34		docs/plans/host-route-fence-2026-10-09.md	| lane/host-route-source-repair-20261006 | 0 | 0 |
+archive/20261006/lane/idle-retention-60m-20261007	1	docs/plans/host-route-fence-2026-10-09.md:33		docs/plans/host-route-fence-2026-10-09.md	| lane/idle-retention-60m-20261007, lane/targeted-benchmark-metadata-20261007, lane/targeted-cpu-build-20261007 | 15 | 0 (pass in --branch mode) |
+archive/20261006/lane/mlp-full-registration	1	docs/plans/host-route-fence-2026-10-09.md:29		docs/plans/host-route-fence-2026-10-09.md	| campaign/apple-opponent-quality-20261006, campaign/full-classification-qn-recipes-20261006, fix/apple-opponent-selector-20261006, fix/lars-direct-20261006, integration/six-lane-ab-20261006, integration/six-lane-compari
+archive/20261006/lane/neural-identical-ideas-20261006	1	docs/plans/host-route-fence-2026-10-09.md:32		docs/plans/host-route-fence-2026-10-09.md	| lane/neural-identical-ideas-20261006 | 1 | 1 (training/dev_tensors.mojo `for j in range(len(pool[].n))`, gone from main) |
+archive/20261006/lane/public-linear-state-capture-20261006	1	docs/plans/host-route-fence-2026-10-09.md:29		docs/plans/host-route-fence-2026-10-09.md	| campaign/apple-opponent-quality-20261006, campaign/full-classification-qn-recipes-20261006, fix/apple-opponent-selector-20261006, fix/lars-direct-20261006, integration/six-lane-ab-20261006, integration/six-lane-compari
+archive/20261006/lane/targeted-benchmark-metadata-20261007	1	docs/plans/host-route-fence-2026-10-09.md:33		docs/plans/host-route-fence-2026-10-09.md	| lane/idle-retention-60m-20261007, lane/targeted-benchmark-metadata-20261007, lane/targeted-cpu-build-20261007 | 15 | 0 (pass in --branch mode) |
+archive/20261006/lane/targeted-cpu-build-20261007	1	docs/plans/host-route-fence-2026-10-09.md:33		docs/plans/host-route-fence-2026-10-09.md	| lane/idle-retention-60m-20261007, lane/targeted-benchmark-metadata-20261007, lane/targeted-cpu-build-20261007 | 15 | 0 (pass in --branch mode) |
+archive/20261006/lane/var-native-fittedvalues	1	docs/plans/host-route-fence-2026-10-09.md:29		docs/plans/host-route-fence-2026-10-09.md	| campaign/apple-opponent-quality-20261006, campaign/full-classification-qn-recipes-20261006, fix/apple-opponent-selector-20261006, fix/lars-direct-20261006, integration/six-lane-ab-20261006, integration/six-lane-compari
+archive/20261006/repair/amd-full-classification-registration	1	docs/plans/host-route-fence-2026-10-09.md:29		docs/plans/host-route-fence-2026-10-09.md	| campaign/apple-opponent-quality-20261006, campaign/full-classification-qn-recipes-20261006, fix/apple-opponent-selector-20261006, fix/lars-direct-20261006, integration/six-lane-ab-20261006, integration/six-lane-compari
+archive/20261006/repair/apple-fast-huber-fold-20261006	1	docs/plans/host-route-fence-2026-10-09.md:29		docs/plans/host-route-fence-2026-10-09.md	| campaign/apple-opponent-quality-20261006, campaign/full-classification-qn-recipes-20261006, fix/apple-opponent-selector-20261006, fix/lars-direct-20261006, integration/six-lane-ab-20261006, integration/six-lane-compari
+archive/20261006/repair/cnn-native-orchestration-20261006	1	docs/plans/host-route-fence-2026-10-09.md:29		docs/plans/host-route-fence-2026-10-09.md	| campaign/apple-opponent-quality-20261006, campaign/full-classification-qn-recipes-20261006, fix/apple-opponent-selector-20261006, fix/lars-direct-20261006, integration/six-lane-ab-20261006, integration/six-lane-compari
+archive/20261006/repair/prep-native-sparse-20261006	1	docs/plans/host-route-fence-2026-10-09.md:30		docs/plans/host-route-fence-2026-10-09.md	| repair/prep-native-sparse-20261006 | 57 | 57 (the 49 + 8 in python/mojolearn/_sparse_input.py) |
+archive/worktree-cleanup-20260919-release-087-build	0				
+archive/worktree-cleanup-20260919-release-087-macos	0				
+board/m3-0834-readback	0				
+finish/cross-vendor-native-only-20261020	2	docs/plans/FINISH_LEFTOVERS_20261021.md:28		docs/plans/FINISH_LEFTOVERS_20261021.md	| cross-vendor-native-only-20261020 (`09649670a`) | 14 / 5 | 2 / 0 | (a) | patch-equal commits, merge da729f6ce |
+finish/distributed-20261020	12	docs/plans/CORE_COMPLETION_HANDOFF_20261020.md:18		docs/plans/CORE_COMPLETION_HANDOFF_20261020.md;docs/plans/FINISH_LEFTOVERS_20261021.md;docs/plans/GRAPH_OPTIMIZER_FULL_WORKLOAD_AB_2026-10-20.json;docs/plans/INSTALLED_PUBLIC_NATIVE_EVIDENCE_2026-10-20.json	 `finish-graph-20261020`, and `finish-distributed-20261020`.
+finish/generation-20261020	2	docs/plans/FINISH_LEFTOVERS_20261021.md:30		docs/plans/FINISH_LEFTOVERS_20261021.md	| generation-20261020 (`ef5e2117c`) | 89 / 33 | 82 / 1 | (a) | 6482a2465 content present in main tools/hooks (no_host_routes.py:71,747) + patch-equal |
+finish/generation-graph-repair-20261020	2	docs/plans/FINISH_LEFTOVERS_20261021.md:31		docs/plans/FINISH_LEFTOVERS_20261021.md	| generation-graph-repair-20261020 (`2c0c3839e`) | 111 / 18 | 49 / 7 | (a) | f872423a4 c8e5eaa58 01df751f6 9b214640d 5503de345 9b4fdce42; 24544a393 content present (classical_native.mojo:161) + patch-equal |
+finish/graph-20261020	9	docs/plans/AUTOGRAD_USABILITY.md:92		docs/plans/AUTOGRAD_USABILITY.md;docs/plans/CORE_COMPLETION_HANDOFF_20261020.md;docs/plans/CROSS_VENDOR_NATIVE_RUNTIME_20261020.md;docs/plans/FINISH_LEFTOVERS_20261021.md;docs/plans/GRAPH_OPTIMIZATION.md;docs/plans/GRAPH_OPTIMIZER_RUNNER_20261020.md	The `finish/graph-20261020` round adds native `Program.run_if` and bounded
+finish/graph-hoist-20261020	2	docs/plans/FINISH_LEFTOVERS_20261021.md:33		docs/plans/FINISH_LEFTOVERS_20261021.md	| graph-hoist-20261020 (`bf8e3e04c`) | 27 / 8 | 10 / 0 | (a) | patch-equal commits, merge da729f6ce |
+finish/graph-process-20261020	2	docs/plans/FINISH_LEFTOVERS_20261021.md:34		docs/plans/FINISH_LEFTOVERS_20261021.md	| graph-process-20261020 (`03b8a802d`) | 2 / 2 | 1 / 0 | (a) | patch-equal commits, merge da729f6ce |
+finish/installed-native-audit-20261020	2	docs/plans/FINISH_LEFTOVERS_20261021.md:35		docs/plans/FINISH_LEFTOVERS_20261021.md	| installed-native-audit-20261020 (`b3927aba2`) | 13 / 1 | 7 / 0 | (a) | patch-equal commits, merge da729f6ce |
+finish/native-autograd-conv-smoke-20261020	2	docs/plans/FINISH_LEFTOVERS_20261021.md:36		docs/plans/FINISH_LEFTOVERS_20261021.md	| native-autograd-conv-smoke-20261020 (`c4003c15e`) | 6 / 1 | 1 / 0 | (a) | patch-equal commits, merge da729f6ce |
+finish/native-classical-public-20261020	2	docs/plans/FINISH_LEFTOVERS_20261021.md:37		docs/plans/FINISH_LEFTOVERS_20261021.md	| native-classical-public-20261020 (`a94152138`) | 12 / 5 | 4 / 0 | (a) | patch-equal commits, merge da729f6ce |
+finish/native-optimizer-smoke-20261020	2	docs/plans/FINISH_LEFTOVERS_20261021.md:38		docs/plans/FINISH_LEFTOVERS_20261021.md	| native-optimizer-smoke-20261020 (`786b5a058`) | 7 / 3 | 2 / 0 | (a) | patch-equal commits, merge da729f6ce |
+finish/native-svm-smoke-20261020	2	docs/plans/FINISH_LEFTOVERS_20261021.md:39		docs/plans/FINISH_LEFTOVERS_20261021.md	| native-svm-smoke-20261020 (`94d6be425`) | 6 / 3 | 0 / 1 | (a) | 85dfb0db8 |
+finish/parallel-causal-20261020	2	docs/plans/FINISH_LEFTOVERS_20261021.md:40		docs/plans/FINISH_LEFTOVERS_20261021.md	| parallel-causal-20261020 (`2234c29ca`) | 22 / 5 | 13 / 0 | (a) | patch-equal commits, merge da729f6ce |
+finish/parallel-neural-admission-20261020	2	docs/plans/FINISH_LEFTOVERS_20261021.md:41		docs/plans/FINISH_LEFTOVERS_20261021.md	| parallel-neural-admission-20261020 (`7cea0dea1`) | 38 / 1 | 16 / 0 | (a) | patch-equal commits, merge da729f6ce |
+finish/pca-native-owner-20261020	2	docs/plans/FINISH_LEFTOVERS_20261021.md:42		docs/plans/FINISH_LEFTOVERS_20261021.md	| pca-native-owner-20261020 (`b781f9111`) | 9 / 1 | 5 / 0 | (a) | patch-equal commits, merge da729f6ce |
+finish/samba-public-20261020	2	docs/plans/FINISH_LEFTOVERS_20261021.md:43		docs/plans/FINISH_LEFTOVERS_20261021.md	| samba-public-20261020 (`e479dd506`) | 26 / 1 | 16 / 0 | (a) | patch-equal commits, merge da729f6ce |
+fix/amd-merge-ordering	0				
+fix/classical-mds-20260930	0				
+fix/identity-collection-completeness	0				
+fix/macos-smoke-identical-only	0				
+fix/metal-parallel-causal-lm	0				
+fix/parallel-model-save	0				
+fix/release-archive-tokenizer-generator	0				
+fix/release-build-preflight-import	0				
+fix/release-portable-math-transport	0				
+fix/release-post-record-allowlist	0				
+fix/release-verifier-bindings	0				
+lane/136-lane-record	0				
+lane/ab-measure	0				
+lane/algos-ann	0				
+lane/algos-ann-speed	1	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:36	abandoned1	docs/identical/candidate-audit/candidate-audit-2026-10-04.md	| `lane/algos-ann-speed` (Sep 27, WIP) | 6 | speed | CAGRA chunked queries, t-SNE repulsion tiling: absent, conflicts | abandoned / reference |
+lane/algos-trees	0				
+lane/ann-apple-base	1	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:21		docs/identical/candidate-audit/candidate-audit-2026-10-04.md	| Content-absorbed | 5 | ann-apple-base, apple-identical-steps, gemm-p1-fold-bypass, host-token-split-measure, ordered-speed-prespeed |
+lane/apple-fast-af-all	0				
+lane/apple-fast-arima-k1-diagnostics	0				
+lane/apple-fast-arima-k1-oracle	0				
+lane/apple-fast-arima-k1-review	0				
+lane/apple-fast-arima-k3-df-gpu	1	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:57		docs/identical/candidate-audit/candidate-audit-2026-10-04.md	| ~/mojolearn-wt/apple-fast-arima-k3-df-gpu | same | uncommitted `bindings/_mojolearn_arima.mojo` (Apple FAST) |
+lane/apple-fast-arima-k3-df-reference	1	docs/apple-fast/ARIMA_K3_DF_REFERENCE_PLAN.txt:65		docs/apple-fast/ARIMA_K3_DF_REFERENCE_PLAN.txt	CMD lane/apple-fast-arima-k3-df-reference arima-k3-df-reference-v1 OPENBLAS_NUM_THREADS=1 OMP_NUM_THREADS=1 ~/board-0834/cache/venv/bin/python tools/arima_k3_df_reference.py --baseline-report REPORT_PATH --output ~/mq/ou
+lane/apple-fast-arima-k3-tail-probe	0				
+lane/apple-fast-arima-scalar-k3	0				
+lane/apple-fast-arima-scalar-k3-quality	0				
+lane/apple-fast-arima-scalar-k3-r1	0				
+lane/apple-fast-arima-scalar-k3-r2	1	docs/apple-fast/EXPERIMENTS.md:991	HOLD2 PASS1	docs/apple-fast/EXPERIMENTS.md	| `MOJOLEARN_ARIMA_FAST_SCALAR_LL` | scalar Kalman likelihood, actual GPU kernels | lane/apple-fast-arima-scalar-k3-r2@6f09497abfe50dcda0b44ea7ee8c8e1540bd4aab | arima-k3-kernel-q-r2 | M2 A/B PASS; M3 kernel quality HOLD
+lane/apple-fast-arima-scan-design	0				
+lane/apple-fast-arima-scan-oracle	1	docs/apple-fast/EXPERIMENTS.md:925	HOLD1	docs/apple-fast/EXPERIMENTS.md	| Rank-one Gaussian associative scan reference | AutoARIMA design only | lane/apple-fast-arima-scan-oracle@45b61672db3075e106c27917d971da0641ecbe2b | arima-assoc-oracle-v1 | 68 f64 algebra fixtures pass; 47 f32 checks an
+lane/apple-fast-arima-scan-oracle-review	0				
+lane/apple-fast-batch	95	docs/TOMBSTONES.md:804	DROPPED-noise43 KEPT7 merged6 DEFAULT6 HOLD-quality4 DROPPED-slower4	docs/TOMBSTONES.md;docs/apple-fast/EXPERIMENTS.md;experiments/removed/MOJOLEARN_CHOL_FAST_BLOCKED.patch;experiments/removed/MOJOLEARN_IVF_REFINE_TEAM.patch;experiments/removed/MOJOLEARN_QR_FAST_DEV.patch	- EXPERIMENTS.md:181 (Trees (101)): `SYM_CTR_PERM_BATCH` on categorical / taxicat, lane/apple-fast-sym-ctr @ 39c3c9daf, A/B sym-ctr-perm-batch-taxicat, - ms, **DROPPED-noise**: reconciled 2026-10-05: sym-ctr-perm-batch-t
+lane/apple-fast-bpe	8	docs/apple-fast/EXPERIMENTS.md:34		docs/apple-fast/EXPERIMENTS.md	| `BPE_TRAIN_DEVICE`, `BPE_ENCODE_DEVICE`, `BPE_LIVEBUF`, `BPE_GROUP_FILTER`, `BPE_MERGE_BATCH`, `BPE_ALL` (7 rows) | bpe | lane/apple-fast-bpe @ 3355d37b3; NOT on main | merge main into the branch, M2 build per define; 
+lane/apple-fast-bsplit-readiness	0				
+lane/apple-fast-callpath-probe	0				
+lane/apple-fast-callpath-probe-r1	0				
+lane/apple-fast-callpath-probe-r2	0				
+lane/apple-fast-callpath-probe-r3	0				
+lane/apple-fast-callpath-probe-r4	0				
+lane/apple-fast-callpath-probe-r5	0				
+lane/apple-fast-callpath-quality	0				
+lane/apple-fast-callpath-reach-audit	0				
+lane/apple-fast-catalog-gemm-all	0				
+lane/apple-fast-catalog-gemm-probe	0				
+lane/apple-fast-catalog-gemm-probe-r1	0				
+lane/apple-fast-catalog-gemm-probe-r2	0				
+lane/apple-fast-catalog-matrix-timing	0				
+lane/apple-fast-catalog-matrix-timing-r1	0				
+lane/apple-fast-catalog-resident-probe	0				
+lane/apple-fast-chol-20261004	1	docs/apple-fast/EXPERIMENTS.md:805	DROPPED-slower1	docs/apple-fast/EXPERIMENTS.md	- `MOJOLEARN_CHOL_FAST_TRI_SYRK`, lane/apple-fast-chol-20261004 measured `ca5ea4b6e` (kernel `e724b7777`), `gap26-chol-fixed-synthetic`: A268.772791 -> B288.278250 ms (+7.3%), one run/arm. Digest `8818853dfae997da` and r
+lane/apple-fast-classical-ideas-20261006	0				
+lane/apple-fast-dbscantaxi	5	docs/TOMBSTONES.md:2394	ported4 DROPPED-slower3 RECORD2 READY-AB2	docs/TOMBSTONES.md;docs/apple-fast/BOARD_M3_FAST.md;docs/apple-fast/EXPERIMENTS.md;experiments/removed/MOJOLEARN_DBSCAN_FAST_DENSEBALL.patch	- EXPERIMENTS.md:488: `DBSCAN_FAST_DENSEBALL` | dbscan / taxi, istella | lane/apple-fast-dbscantaxi @ 1febff7df; ported lane/apple-fast-rec-misc | dbscantaxi-ab-x, dbscantaxi-ab-ist-x | n=0 on both arms (no times) | DROP
+lane/apple-fast-decomp-linalg	33	docs/TOMBSTONES.md:2012	DROPPED-slower13 ported13 READY-AB8 SUPERSEDED5 DEFAULT3 DROPPED2	docs/TOMBSTONES.md;docs/apple-fast/EXPERIMENTS.md;experiments/removed/MOJOLEARN_CHOL_FAST_BLOCKED.patch;experiments/removed/MOJOLEARN_DECOMP_FAST_GEMM_TILED.patch;experiments/removed/MOJOLEARN_QR_FAST_DEV.patch;experiments/removed/MOJOLEARN_SVD_FAST_CHOLQR.patch	- EXPERIMENTS.md:453: `QR_FAST_DEV`; qr / istella, taxi; lane/apple-fast-decomp-linalg @ 74d52352b -> lane/apple-fast-rec-decomp; dlin-qr-dev-istella; - (no result recorded; board FAST qr taxi 46.6); DROPPED-slower; reco
+lane/apple-fast-decomp-mma-k16	1	docs/apple-fast/EXPERIMENTS.md:938	PASS1 HOLD-speed1	docs/apple-fast/EXPERIMENTS.md	| `MOJOLEARN_DECOMP_FAST_MMA_K16` | standalone decomposition GEMM, non-split only | lane/apple-fast-decomp-mma-k16@d487c814fe59d35de111d392751af9e6ce06eb66 | w2-mma-k16-q-20261004; w2-mma-k16-t-20261004 | 12 oracle fixtu
+lane/apple-fast-decomp-sdk-control	1	docs/apple-fast/EXPERIMENTS.md:444	PARKED1 ported1	docs/apple-fast/EXPERIMENTS.md	| `DECOMP_SDK_NNNT` | pca / istella; decomp GEMM | lane/apple-fast-decomp-sdk-control @ 73bb9ac6e | - | - | PARKED | not ported (lane/apple-fast-rec-decomp, 2026-10-04): an uncompiled WIP checkpoint (SDK matmul adapter f
+lane/apple-fast-decomp-sparse	9	docs/TOMBSTONES.md:1943	ported3 DROPPED-semantics2 SUPERSEDED2 READY-AB1	docs/TOMBSTONES.md;docs/apple-fast/EXPERIMENTS.md;docs/apple-fast/ab/kapprox.md	- Recoverable on the lane: `lane/apple-fast-decomp-sparse @ 5fb1740cd`.
+lane/apple-fast-dwcurrent	0				
+lane/apple-fast-eigh-cache	3	docs/TOMBSTONES.md:1949	PASS2 rejected1	docs/TOMBSTONES.md;docs/apple-fast/EXPERIMENTS.md	- Recoverable on the lane: `lane/apple-fast-eigh-cache 14764dbb8`.
+lane/apple-fast-eigh-panel-df	1	docs/apple-fast/EXPERIMENTS.md:1217	ported1 HOLD1 DROPPED-slower1 READY-AB1	docs/apple-fast/EXPERIMENTS.md	| `MOJOLEARN_EIGH_FAST_PANEL_DF` | eigh / synthetic board 4096 and the eight quality cases | lane/apple-fast-eigh-panel-df @ 21eeacf90; ported lane/apple-fast-rec-misc | eigh-panel-df-q-v1: HOLD, strict no-regression fai
+lane/apple-fast-eigh-panels	2	docs/apple-fast/CLAUDE_HANDOFF_2026-10-04.txt:130		docs/apple-fast/CLAUDE_HANDOFF_2026-10-04.txt	 lane/apple-fast-eigh-panels @ e79a96e03
+lane/apple-fast-fa	31	docs/TOMBSTONES.md:2057	ported10 DROPPED-slower10 HOLD-quality8 READY-AB6	docs/TOMBSTONES.md;docs/apple-fast/EXPERIMENTS.md;experiments/removed/MOJOLEARN_FA_ALL.patch;experiments/removed/MOJOLEARN_FA_EIG_SMALL.patch;experiments/removed/MOJOLEARN_FA_LL_DEVICE.patch	- EXPERIMENTS.md:430: `FA_ALL` | factor-analysis / taxi; istella | lane/apple-fast-fa @ 3efbce2af | fa-all-taxi, fa-all-istella | - | HOLD-quality 2026-10-04 (see verdicts batch 3) | ported to lane/apple-fast-rec-fa-robu
+lane/apple-fast-fastonly2	1	docs/apple-fast/EXPERIMENTS.md:456	KEEP1	docs/apple-fast/EXPERIMENTS.md	| `ANN3_COARSE_SEED + IVF_FAST_SEED_DEVICE` | ivf-pq / istella | lane/apple-fast-fastonly2 @ eca3e33b6 (via lane/apple-fast-m2b1) | fastonly2-5-ivf-pq-istella-m3, fastonly2-3-ivf-pq-istella-m3 | no seed -> seed+device 5,
+lane/apple-fast-gap-kapprox2	8	docs/TOMBSTONES.md:1664	merged5 DROPPED4 KEPT2	docs/TOMBSTONES.md;docs/apple-fast/EXPERIMENTS.md	- Recoverable on the lane: `lane/apple-fast-gap-kapprox2 @ 22aaa623e`.
+lane/apple-fast-gap-linalg2	3	docs/apple-fast/EXPERIMENTS.md:420	KEPT3	docs/apple-fast/EXPERIMENTS.md	| `LU_FAST_STEP1` | lu-factor / synthetic; lu-solve / synthetic | lane/apple-fast-gap-linalg2 @ f3d66dd94 | gl2-lu-step1-synthetic, gl2-lusolve-step1-synthetic | lu-factor synthetic 1,369 -> 977; lu-solve 1,422 -> 971 | 
+lane/apple-fast-gap-linalg2-kpca	3	docs/apple-fast/EXPERIMENTS.md:721	KEPT2	docs/apple-fast/EXPERIMENTS.md	## Gap linalg2, kernel-pca + incremental-pca (lane/apple-fast-gap-linalg2-kpca, Oct 3)
+lane/apple-fast-gap-linalg2-pca	3	docs/apple-fast/EXPERIMENTS.md:424	KEPT2	docs/apple-fast/EXPERIMENTS.md;experiments/removed/MOJOLEARN_IDN_XD_KIT_GEMM.patch	| `DECOMP_FAST_GEMM_MMA` | randomized-svd / istella, taxi; nmf / istella | lane/apple-fast-gap-linalg2-pca @ 474241154 | gl2p-rsvd-gemmmma-istella, gl2p-rsvd-gemmmma-taxi, gl2p-nmf-gemmmma-istella | randomized-svd istell
+lane/apple-fast-gap-linalg2-svd	1	docs/apple-fast/EXPERIMENTS.md:1218	PARKED2 ported1	docs/apple-fast/EXPERIMENTS.md	| `MOJOLEARN_SVD_FAST_AW` | svd / istella, taxi | lane/apple-fast-gap-linalg2-svd @ 35f7b95c4 | never built or run; commit message "PARKED, uncompiled; target dropped" | PARKED | svd already wins (istella 0.72, taxi 0.98
+lane/apple-fast-gap-misc	11	docs/TOMBSTONES.md:595	DROPPED-noise6 MERGED1	docs/TOMBSTONES.md;docs/apple-fast/EXPERIMENTS.md;docs/apple-fast/notes/gap-misc.md	- Recoverable on the lane: `lane/apple-fast-gap-misc @ 5e2eec7a3`.
+lane/apple-fast-gap-tsa	53	docs/TOMBSTONES.md:2467	DROPPED-noise10 KEPT5 DROPPED-slower2 merged1	docs/TOMBSTONES.md;docs/apple-fast/EXPERIMENTS.md;docs/apple-fast/ab/gap-tsa.txt;docs/apple-fast/notes/gap-tsa.md;experiments/removed/MOJOLEARN_SEQ_FAST_THETA_HOIST.patch;experiments/removed/MOJOLEARN_SEQ_FAST_VAR_SPEC.patch	- EXPERIMENTS.md:547 (Time series (34)): `SEQ_FAST_THETA_HOIST` on theta / taxi-hourly, lane/apple-fast-gap-tsa @ e9da47064, A/B gaptsa-thetahoist-theta-taxi-hourly, theta taxi-hourly 218 -> 58 ms, **DROPPED-noise**: -73
+lane/apple-fast-general-speed	10	docs/TOMBSTONES.md:1088	merged5 DROPPED-quality3 KEPT1	docs/TOMBSTONES.md;docs/apple-fast/EXPERIMENTS.md;docs/apple-fast/MANAGER_STATE_2026-10-04.md	- Recoverable on the lane: `lane/apple-fast-general-speed @ d42318df5, 7ec8ec5ff`.
+lane/apple-fast-graph	9	docs/apple-fast/EXPERIMENTS.md:494	ported3 KEPT1 DEFAULT1 READY-AB1	docs/apple-fast/EXPERIMENTS.md;experiments/removed/MOJOLEARN_CC_FAST_OFF.patch	| `CC_FAST` | connected-components / taxi | lane/apple-fast-graph @ 1fa36a7ec; ported lane/apple-fast-rec-misc | graph-cc-fast-taxi | - (parse error, never ran) | KEPT/DEFAULT | reconciled 2026-10-05: rab3-ccfast 8.17 ->
+lane/apple-fast-isotonic-knn	12	docs/TOMBSTONES.md:1456	DROPPED-slower4 merged4 DROPPED-noise2 loser2 HELD1 ported1	docs/TOMBSTONES.md;docs/apple-fast/EXPERIMENTS.md;docs/apple-fast/ab/neighbors2.md	- Recoverable on the lane: `lane/apple-fast-isotonic-knn @ 7385fcfdd`.
+lane/apple-fast-kapprox	38	docs/TOMBSTONES.md:1556	DROPPED-quality10 KEPT1	docs/TOMBSTONES.md;docs/apple-fast/EXPERIMENTS.md;docs/apple-fast/ab/kapprox.md;docs/apple-fast/ab/kapprox.txt;experiments/removed/MOJOLEARN_KAPPROX_DEVICE.patch;experiments/removed/MOJOLEARN_SPARSE_RP_DEVICE.patch	- Verdict: DROPPED-quality. Code deleted 2026-10-03 by `9d5baaa9b` (x_neighbors: remove dropped KAPPROX_DEVICE chi2 sampler device ops (DROPPED-quality; recover lane/apple-fast-kapprox@10d5a7970)); recorded here 2026-10-
+lane/apple-fast-knn-lean-gpu	0				
+lane/apple-fast-knn-lean-gpu-harness-r1	0				
+lane/apple-fast-layoutfix	0				
+lane/apple-fast-linalg-20261004	2	docs/apple-fast/EXPERIMENTS.md:739	HOLD-speed2	docs/apple-fast/EXPERIMENTS.md	| EIGH_FAST_TANGENT | lane/apple-fast-linalg-20261004 | gap26-eigh-tangent (proposed) | Pending | residual/eigenvalue error/orthogonality required | HOLD-speed (reconciled 2026-10-05: gap26-eigh-rayleigh-run-ready 43796.
+lane/apple-fast-linsvr	24	docs/TOMBSTONES.md:1181	DROPPED-noise8 merged8 DROPPED-slower4 KEEP2 KEPT1	docs/TOMBSTONES.md;docs/apple-fast/EXPERIMENTS.md;docs/apple-fast/notes/linsvr.md;docs/apple-fast/notes/remaining-branch-audit-20261004.md;experiments/removed/MOJOLEARN_QN_TILED_MULTI_OFF.patch	- Recoverable on the lane: `lane/apple-fast-linsvr @ c649076a4`.
+lane/apple-fast-lle	3	docs/TOMBSTONES.md:1462	DROPPED-slower2	docs/TOMBSTONES.md;docs/apple-fast/EXPERIMENTS.md	- Recoverable on the lane: `lane/apple-fast-lle @ f2ea1ecb5`.
+lane/apple-fast-lost-candidates	0				
+lane/apple-fast-lu-mma-dbuf	1	docs/apple-fast/EXPERIMENTS.md:924	PASS1 HOLD-speed1	docs/apple-fast/EXPERIMENTS.md	| `MOJOLEARN_LU_FAST_MMA_DBUF` | lu-factor / lu-solve n8192 | lane/apple-fast-lu-mma-dbuf@5d4e5d5d5f61c93d49c03e7eb826130ca088dd9d | w2-lu-dbuf-q-20261004; w2-lu-dbuf-t-20261004 | quality PASS: exact LU/pivots/solutions 
+lane/apple-fast-lu-pivot-shuffle	0				
+lane/apple-fast-m2b1	12	docs/TOMBSTONES.md:1457	KEEP5 DROPPED-noise4 merged4 loser2 DROPPED-slower2 HELD1	docs/TOMBSTONES.md;docs/apple-fast/EXPERIMENTS.md	- EXPERIMENTS.md:296 (Neighbors (42)): `LLE_FAST_KNN` on -, lane/apple-fast-isotonic-knn @ 7385fcfdd, A/B ik-lle-knn-taxi; M3 re-check (lane/apple-fast-m2b1 batch), lle taxi 4,266 -> 4,289; M3 -0.1% ms, **DROPPED-noise**
+lane/apple-fast-manager-remote	1	docs/apple-fast/CLAUDE_HANDOFF_2026-10-04.txt:50		docs/apple-fast/CLAUDE_HANDOFF_2026-10-04.txt	 ~/apple-fast-manager-remote # older manager branch
+lane/apple-fast-mcd-g1-quality	0				
+lane/apple-fast-mcd-ordered-cov	0				
+lane/apple-fast-mcd-ordered-quality	0				
+lane/apple-fast-mcd-ordered-quality-r1	0				
+lane/apple-fast-mcd-ordered-quality-r2	0				
+lane/apple-fast-mcd-ordered-quality-r3	1	docs/apple-fast/EXPERIMENTS.md:1216	ported1 HOLD1 READY-AB1	docs/apple-fast/EXPERIMENTS.md	| `MOJOLEARN_MCD_ORDERED_COV` | min-cov-det, elliptic-envelope / istella, taxi | lane/apple-fast-mcd-ordered-quality-r3 @ f35a57bd4; ported lane/apple-fast-rec-misc | mcd-ordered-direct-q-r3: quality HOLD (strict per-key
+lane/apple-fast-mcd-quality	0				
+lane/apple-fast-mcd-saved-oracle	0				
+lane/apple-fast-mcd-saved-oracle-r1	0				
+lane/apple-fast-old-linalg-audit	0				
+lane/apple-fast-opp	1	docs/apple-fast/CLAUDE_HANDOFF_2026-10-04.txt:84		docs/apple-fast/CLAUDE_HANDOFF_2026-10-04.txt	 opp9-algos on lane/apple-fast-opp
+lane/apple-fast-optics2	0				
+lane/apple-fast-opv	6	docs/TOMBSTONES.md:2303	merged4	docs/TOMBSTONES.md;docs/apple-fast/EXPERIMENTS.md	- Recoverable on the lane: `lane/apple-fast-opv @ 9a844772e`.
+lane/apple-fast-pca-eig	14	docs/TOMBSTONES.md:1979	DROPPED-noise10	docs/TOMBSTONES.md;docs/apple-fast/EXPERIMENTS.md	- Recoverable on the lane: `lane/apple-fast-pca-eig @ 9819970b1`.
+lane/apple-fast-prep2	19	docs/apple-fast/EXPERIMENTS.md:25	DEFAULT3	docs/apple-fast/EXPERIMENTS.md;docs/apple-fast/ab/prep2.md;docs/apple-fast/ab/prep2.txt;docs/apple-fast/ab/ptimpute.md;docs/apple-fast/notes/ptimpute.md	| `X_PREP_FAST_II_CONV` (env) | prep2 | lane/apple-fast-prep2 @ 8762eb33f; on main, env read (x_prep/fastprep2.mojo) | the old env-form line errored in both arms; rerun as an env A/B on iterative-imputer taxi; quality: m
+lane/apple-fast-prep3	7	docs/TOMBSTONES.md:1723	DROPPED-noise4 merged4 KEEP1	docs/TOMBSTONES.md;docs/apple-fast/EXPERIMENTS.md	- Recoverable on the lane: `lane/apple-fast-prep3 @ ec65873e3`.
+lane/apple-fast-pt-queue	0				
+lane/apple-fast-rec-ab11	0				
+lane/apple-fast-remaining-audit-20261004	0				
+lane/apple-fast-resample	20	docs/TOMBSTONES.md:1777	DROPPED-slower9 KEPT4 ported4 DROPPED-semantics2 DEFAULT2 READY-AB2	docs/TOMBSTONES.md;docs/apple-fast/CANDIDATE_RECOVERY_2026-10-04.md;docs/apple-fast/EXPERIMENTS.md;docs/apple-fast/ab/resample-gpu-recovery.md;experiments/removed/MOJOLEARN_RESAMPLE_FAST_ONE_FOLD.patch;experiments/removed/MOJOLEARN_RESAMPLE_FAST_RANK_SORT.patch	- Recoverable on the lane: `lane/apple-fast-resample @ 50b96e795`.
+lane/apple-fast-results	4	docs/apple-fast/NEXT_PASS.md:29		docs/apple-fast/NEXT_PASS.md;docs/apple-fast/NEXT_PASS_TREES.md;docs/apple-fast/PEER_BRIEF.md	- **Read results** on `lane/apple-fast-results`: `docs/apple-fast/m3/results.txt`, `queue.txt`, `build-errors.txt`
+lane/apple-fast-robust	12	docs/TOMBSTONES.md:2099	DROPPED-quality3 DEFAULT2 ported2 READY-AB1 merged1	docs/TOMBSTONES.md;docs/apple-fast/EXPERIMENTS.md;experiments/removed/MOJOLEARN_MCD_DEVICE_CSTEPS.patch	- EXPERIMENTS.md:451: `MCD_DEVICE_CSTEPS` | min-cov-det / taxi; elliptic-envelope / taxi | lane/apple-fast-robust @ cfdb95e48 | M3 min-cov-det taxi; robust-ee-taxi-x (M2) | M3 mcd 79,925 -> 215; M2 ee 64,578 -> 267.5 | D
+lane/apple-fast-scoped-pca-caller	0				
+lane/apple-fast-sgdoc-parallel	2	docs/apple-fast/EXPERIMENTS.md:734	HOLD2	docs/apple-fast/EXPERIMENTS.md	| SGDOC_FAST_PAR, Istella | lane/apple-fast-sgdoc-parallel @ 61710a5c8 | sgdocp-istella | 75537.985 → 181.313 | J .10000456 → .1; flagged .04042 → 0 | HOLD: anomaly behavior unresolved; old-base comparator |
+lane/apple-fast-shap	6	docs/apple-fast/EXPERIMENTS.md:180	SUPERSEDED3 ported3 KEEP2 KEPT2 DEFAULT2 READY-AB1	docs/apple-fast/EXPERIMENTS.md	| `SHAP_KERNEL_DEV` | kernel-shap / istella | lane/apple-fast-shap @ 13343dd51 | shap-kernel-dev (parse fail) | - | SUPERSEDED (not ported, lane/apple-fast-rec-shap) | it moved the per-row host draws, mask gather, mask_e
+lane/apple-fast-shared-downstream-g1	0				
+lane/apple-fast-shared-downstream-g1-r1	0				
+lane/apple-fast-shared-downstream-g1-r2	0				
+lane/apple-fast-shared-downstream-g5	0				
+lane/apple-fast-shared-downstream-g5-r1	0				
+lane/apple-fast-shared-downstream-g5-r2	0				
+lane/apple-fast-shared-downstream-quality	0				
+lane/apple-fast-shared-gemm-g1g5	0				
+lane/apple-fast-shared-gemm-g1g5-r1	0				
+lane/apple-fast-shared-scoped-timing	0				
+lane/apple-fast-shared-scoped-timing-g5	0				
+lane/apple-fast-sym-ctr	21	docs/TOMBSTONES.md:804	ported10 KEPT6 DEFAULT6 READY-AB5 DROPPED-noise2 DROPPED-speed2	docs/TOMBSTONES.md;docs/apple-fast/EXPERIMENTS.md;docs/apple-fast/ab/sym-ctr.md;docs/apple-fast/ab/sym-ctr.txt;docs/apple-fast/notes/sym-ctr.md;experiments/removed/MOJOLEARN_SYM_CTR_PERM_BATCH.patch	- EXPERIMENTS.md:181 (Trees (101)): `SYM_CTR_PERM_BATCH` on categorical / taxicat, lane/apple-fast-sym-ctr @ 39c3c9daf, A/B sym-ctr-perm-batch-taxicat, - ms, **DROPPED-noise**: reconciled 2026-10-05: sym-ctr-perm-batch-t
+lane/apple-fast-sym-est	26	docs/TOMBSTONES.md:967	ported7 KEPT4 DEFAULT4 DROPPED-BUG3 DROPPED-inconclusive3 READY-AB3	docs/TOMBSTONES.md;docs/apple-fast/EXPERIMENTS.md;docs/apple-fast/ab/sym-est.md;docs/apple-fast/ab/sym-est.txt;docs/apple-fast/notes/sym-est.md;experiments/removed/MOJOLEARN_EST_REUSE_PART.patch	- EXPERIMENTS.md:156: `EST_REUSE_PART`; symmetric / istella; lane/apple-fast-sym-est @ c8518eb52; sym-est-rp-ist; -; DROPPED-BUG (auc .980 -> .930, logloss .186 -> 2.15); apple-fast LEDGER 2026-10-03/04, old base; ported
+lane/apple-fast-sym-feat	23	docs/apple-fast/EXPERIMENTS.md:163	READY-AB7 ported7	docs/apple-fast/EXPERIMENTS.md;docs/apple-fast/ab/sym-feat.md;docs/apple-fast/ab/sym-feat.txt;docs/apple-fast/notes/sym-feat.md	| `GBDT_BOOT_DEVICE` | symmetric / istella | lane/apple-fast-sym-feat @ bca0e3a48 | sym-feat-boot-istella | - | NEUTRAL | reconciled 2026-10-05: rab7-gbdtbootdevice istella 14724.09 -> 14693.21 (-0.2%), Verdicts batch 4;
+lane/apple-fast-sym-hist	51	docs/TOMBSTONES.md:1025	DROPPED-noise24 ported7 READY-AB3 DROPPED2	docs/TOMBSTONES.md;docs/apple-fast/EXPERIMENTS.md;docs/apple-fast/ab/sym-hist.md;docs/apple-fast/ab/sym-hist.txt;docs/apple-fast/notes/sym-hist.md;experiments/removed/MOJOLEARN_SYM_GATHER_FUSED.patch	- EXPERIMENTS.md:185: `SYM_GATHER_FUSED`; symmetric / istella, taxi; lane/apple-fast-sym-hist @ 3bb4db314; symhist-gather-fused-istella, symhist-gather-fused-taxi; -; DROPPED-noise; reconciled 2026-10-05: row `SYM_GATHER
+lane/apple-fast-sym-iter	47	docs/TOMBSTONES.md:1016	DROPPED-noise18 ported5 READY-AB2	docs/TOMBSTONES.md;docs/apple-fast/EXPERIMENTS.md;docs/apple-fast/ab/sym-iter.md;docs/apple-fast/ab/sym-iter.txt;docs/apple-fast/notes/sym-iter.md;experiments/removed/MOJOLEARN_SYM_CTR_PERM_BATCH.patch	- EXPERIMENTS.md:182: `SYM_DERIV_FUSED`; symmetric / istella, taxi; lane/apple-fast-sym-iter @ 4956a2234; sym-iter-fused-1000-taxi, sym-iter-fused-istella; -; DROPPED-noise; reconciled 2026-10-05: row `SYM_DERIV_FUSED` D
+lane/apple-fast-sym-multi	43	docs/TOMBSTONES.md:985	DROPPED-noise22 ported12 READY-AB3 KEPT2 DEFAULT2	docs/TOMBSTONES.md;docs/apple-fast/EXPERIMENTS.md;docs/apple-fast/ab/sym-multi.md;docs/apple-fast/ab/sym-multi.txt;docs/apple-fast/notes/sym-multi.md;experiments/removed/MOJOLEARN_MC_CLASS_BATCH_DERIV.patch	- EXPERIMENTS.md:165: `MC_CLASS_BATCH_DERIV`; multiclass / pairlogit / yetirank / istella, taxi; lane/apple-fast-sym-multi @ d2c832da0; symmulti-mc-deriv-istella, symmulti-mc-deriv-taxi; -; DROPPED-noise; apple-fast LEDG
+lane/apple-fast-target-current	1	docs/apple-fast/EXPERIMENTS.md:738	KEEP1 merged1	docs/apple-fast/EXPERIMENTS.md	| TARGET_SCRATCH (`_OFF` rollback) | lane/apple-fast-target-current @ 4d1ea20b2; promotion on main12fdd6697 | gap26-target-current-taxi / istella | taxi 270.947625 → 203.743667 (-24.8%); istella 250.423916 → 179.818916 (
+lane/apple-fast-target-scratch	0				
+lane/apple-fast-trees-io	6	docs/TOMBSTONES.md:714	DROPPED-noise4	docs/TOMBSTONES.md;docs/apple-fast/EXPERIMENTS.md	- Recoverable on the lane: `lane/apple-fast-trees-io @ df6a77c21`.
+lane/apple-fast-trees-scan	8	docs/TOMBSTONES.md:757	DROPPED-noise3 DROPPED-semantics2	docs/TOMBSTONES.md;docs/apple-fast/EXPERIMENTS.md;docs/apple-fast/ab/trees-depthwise.md	- Recoverable on the lane: `lane/apple-fast-trees-scan @ 43430ca0f`.
+lane/apple-fast-trees-symmetric	18	docs/TOMBSTONES.md:811	DROPPED-noise11 DROPPED-slower2	docs/TOMBSTONES.md;docs/apple-fast/EXPERIMENTS.md;docs/apple-fast/NEXT_PASS_TREES.md	- Recoverable on the lane: `lane/apple-fast-trees-symmetric @ ce517b4b3`.
+lane/apple-fast-w2-shap	3	docs/TOMBSTONES.md:1789	PASS2 rejected1	docs/TOMBSTONES.md;docs/apple-fast/EXPERIMENTS.md	- Recoverable on the lane: `lane/apple-fast-w2-shap abd933572`.
+lane/apple-fast-w2-ts	1	docs/apple-fast/EXPERIMENTS.md:891	PASS1 HOLD1	docs/apple-fast/EXPERIMENTS.md	| `MOJOLEARN_ARIMA_FIT_GROUPS` | autoarima | lane/apple-fast-w2-ts 596d0abbb | w2-ts-fitgroups-*-r2 | quality PASS bit-exact; synthetic 9225.3 -> 9268.2, taxi-hourly 13749.1 -> 13072.9 ms; diag: search 8.2 s of 13.7 s; 2
+lane/apple-fast-w3-arima	1	docs/apple-fast/EXPERIMENTS.md:906	PASS1 HOLD1	docs/apple-fast/EXPERIMENTS.md	| `MOJOLEARN_ARIMA_SLAB` | autoarima | lane/apple-fast-w3-arima 40fedfcea | w2-w3arima-slab-* | quality PASS bit-exact; synthetic 9219.3 -> 9096.6, taxi-hourly 13763.6 -> 13519.0 ms | HOLD (gain within noise) |
+lane/apple-fast-w3-dw	3	docs/TOMBSTONES.md:607	PASS2	docs/TOMBSTONES.md;docs/apple-fast/EXPERIMENTS.md	- Recoverable on the lane: `lane/apple-fast-w3-dw 1fb97706a`.
+lane/apple-fast-w3-prep	3	docs/TOMBSTONES.md:1839		docs/TOMBSTONES.md;docs/apple-fast/EXPERIMENTS.md	- Recoverable on the lane: `lane/apple-fast-w3-prep 92e4661e6`.
+lane/apple-fast-w4-decomp	1	docs/apple-fast/EXPERIMENTS.md:914	PASS3 DEFAULT1 merged1	docs/apple-fast/EXPERIMENTS.md	| `MOJOLEARN_KPCA_RESIDENT` (rollback `MOJOLEARN_KPCA_RESIDENT_OFF`) | kernel-pca / taxi, istella; RBF, auto top-k (n > 200, 1–9 components) | measured lane/apple-fast-w4-decomp @ 34b4f6c72b489c16f8333ef1416ac23fd143cd59
+lane/apple-fast-w4-decomp-harness-r1	3	docs/apple-fast/EXPERIMENTS.md:1176	ported3 HOLD-quality2 DEFAULT1	docs/apple-fast/EXPERIMENTS.md	| `MOJOLEARN_RSVD_FAST_DIRECT_IN` (rollback `MOJOLEARN_RSVD_FAST_DIRECT_IN_OFF`) | randomized-svd istella, taxi (x_decomp/w4_fast.mojo) | measured lane/apple-fast-w4-decomp-harness-r1 e9d72edb5; ported by hand to lane/ap
+lane/apple-fast-w4-eigh	0				
+lane/apple-fast-w4-linalg	1	docs/apple-fast/EXPERIMENTS.md:916	PASS1 HOLD-speed1	docs/apple-fast/EXPERIMENTS.md	| `MOJOLEARN_CHOL_FAST_NB512` | cholesky synthetic | lane/apple-fast-w4-linalg 19bb1c7a1 | w2-cholnb512-quality; w2-cholnb512-synthetic | quality PASS; 260.4 -> 265.7 ms | HOLD-speed: one sample per arm shows no benefit;
+lane/apple-fast-w4-mcd	2	docs/apple-fast/EXPERIMENTS.md:919	ported2 PASS2 KEEP1 HOLD1	docs/apple-fast/EXPERIMENTS.md	| `MOJOLEARN_MCD_SKIP_PINVH` (rollback `MOJOLEARN_MCD_SKIP_PINVH_OFF`) | min-cov-det / elliptic-envelope istella | lane/apple-fast-w4-mcd d0b30bfe9, ported to lane/apple-fast-recovery | w2-w4mcd-q/t-* (M3 afc_ab_def, ful
+lane/apple-fast-w4-shap	1	docs/apple-fast/EXPERIMENTS.md:999	PASS2 DEFAULT1	docs/apple-fast/EXPERIMENTS.md	| `MOJOLEARN_PSHAP_DELTA` / `_OFF` | permutation-shap / istella | measured lane/apple-fast-w4-shap@20bbdc37256bd00ef09fc97970f79f6967fa4f2a; default lane/apple-fast-pshap-delta-default | w2-pdelta-quality; w2-pdelta-psha
+lane/apple-fast-w4-small	4	docs/apple-fast/EXPERIMENTS.md:909	PASS4 HOLD2 PARKED1 DEFAULT1 merged1	docs/apple-fast/EXPERIMENTS.md	| `MOJOLEARN_SEQ_FAST_VAR_FUSED` | var | lane/apple-fast-w4-small 74d233862 | (none) | M2 compile error: kernel signature not accepted by enqueue_function (sequence/var_fused.mojo:255); also a one-block launch | PARKED: 
+lane/apple-fast-w4-tslu	3	docs/TOMBSTONES.md:1973	PASS2	docs/TOMBSTONES.md;docs/apple-fast/EXPERIMENTS.md	- Recoverable on the lane: `lane/apple-fast-w4-tslu 5867b9fbe`.
+lane/apple-identical-steps	1	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:21		docs/identical/candidate-audit/candidate-audit-2026-10-04.md	| Content-absorbed | 5 | ann-apple-base, apple-identical-steps, gemm-p1-fold-bypass, host-token-split-measure, ordered-speed-prespeed |
+lane/apple-merged-check	0				
+lane/apple-merged-check2	0				
+lane/apple-merged-check3	0				
+lane/apple-merged-owed-check	0				
+lane/apple-verify-20261001	0				
+lane/apple2-merged-check	0				
+lane/apple2-merged-check2	0				
+lane/apple2-merged-check3	0				
+lane/apple2-merged-check4	0				
+lane/apple2-merged-check5	0				
+lane/apple3-merged-check	0				
+lane/bench-board-m3ultra	0				
+lane/bf16-units	0				
+lane/board-resume-20260930	0				
+lane/catboost-parity-on-lm-attention-fallback	0				
+lane/categorical-feature-cpu	0				
+lane/classical-pass-measure-20260930	0				
+lane/cluster-apple-prof	0				
+lane/cluster-speed-base	0				
+lane/cpu-par-fallback	0				
+lane/cpu-training-e3	0				
+lane/cpu-training-gate-speed	0				
+lane/data-runtime-million-cpu	0				
+lane/distance-pairwise-cpu	0				
+lane/ensemble-meta-cpu	0				
+lane/expose-d-fixes	0				
+lane/forecast-timeseries-cpu	0				
+lane/forest-train-speed	1	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:37	abandoned1	docs/identical/candidate-audit/candidate-audit-2026-10-04.md	| `lane/forest-train-speed` (Sep 17) | 1 | speed | ExtraTrees regression score width 4 on NVIDIA, "NOT YET BUILT" | abandoned |
+lane/forest-training-cpu-20260919	0				
+lane/fp-contract-off-exp	0				
+lane/fp-contract-off-study	0				
+lane/gbdt-depthwise-fast	0				
+lane/gbdt-rest	1	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:19		docs/identical/candidate-audit/candidate-audit-2026-10-04.md	| CPU/host-route work | 13 | neural-pass13/19/77/78/83, host-token-split-2, neighbors-rest, gbdt-rest: CPU routes (undo list) or superseded |
+lane/gemm-p1-fold-bypass	1	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:21		docs/identical/candidate-audit/candidate-audit-2026-10-04.md	| Content-absorbed | 5 | ann-apple-base, apple-identical-steps, gemm-p1-fold-bypass, host-token-split-measure, ordered-speed-prespeed |
+lane/gram-prep-million-cpu	0				
+lane/host-token-split-2	1	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:19		docs/identical/candidate-audit/candidate-audit-2026-10-04.md	| CPU/host-route work | 13 | neural-pass13/19/77/78/83, host-token-split-2, neighbors-rest, gbdt-rest: CPU routes (undo list) or superseded |
+lane/host-token-split-2-measure	0				
+lane/host-token-split-measure	1	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:21		docs/identical/candidate-audit/candidate-audit-2026-10-04.md	| Content-absorbed | 5 | ann-apple-base, apple-identical-steps, gemm-p1-fold-bypass, host-token-split-measure, ordered-speed-prespeed |
+lane/hr2-kpca-seq	2	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:29		docs/identical/candidate-audit/candidate-audit-2026-10-04.md	| `lane/hr2-kpca-seq` (a67c406fd) | 3 | IDENTICAL speed + CPU-out | GARCH and Prophet fits on one warp per series, fold32 order on every column (`MOJOLEARN_SEQ_WARP_FIT=0` A/B). Not in integration (define absent). 1 patc
+lane/identical-body-tiles-20261005	1	docs/apple-fast/EXPERIMENTS.md:1448		docs/apple-fast/EXPERIMENTS.md	| `MOJOLEARN_IDN_GEMM_GROUP_TILES_BODY` | `lane/identical-body-tiles-20261005` | Count actual packed tiles when choosing groups (NVIDIA) | `body-tiles` | unmeasured | OPEN |
+lane/identical-group-slack2-20261005	1	docs/apple-fast/EXPERIMENTS.md:1446		docs/apple-fast/EXPERIMENTS.md	| `MOJOLEARN_IDN_GEMM_GROUP_SLACK_2` | `lane/identical-group-slack2-20261005` | Fewer partial planes and less fold traffic | `group-slack2` | unmeasured | OPEN |
+lane/identical-group-slack8-20261005	1	docs/apple-fast/EXPERIMENTS.md:1447		docs/apple-fast/EXPERIMENTS.md	| `MOJOLEARN_IDN_GEMM_GROUP_SLACK_8` | `lane/identical-group-slack8-20261005` | More independent groups for greater device occupancy | `group-slack8` | unmeasured | OPEN |
+lane/identical-one-page-20261005	1	docs/apple-fast/EXPERIMENTS.md:1445		docs/apple-fast/EXPERIMENTS.md	| `MOJOLEARN_GEMM_ONE_PAGE` | `lane/identical-one-page-20261005` | Less shared memory may improve occupancy; trades away prefetch overlap | `one-page` | unmeasured | OPEN |
+lane/identical-packed64-20261005	1	docs/apple-fast/EXPERIMENTS.md:1449		docs/apple-fast/EXPERIMENTS.md	| `MOJOLEARN_GEMM_KPACK_RPT4` | `lane/identical-packed64-20261005` | Lower register pressure with shorter packed tiles (NVIDIA) | `packed64` | unmeasured | OPEN |
+lane/identity-record-next	0				
+lane/ivf-filter-fix-measure	0				
+lane/kernel-methods-cpu	0				
+lane/kmeans-mojo-1-2	1	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:44		docs/identical/candidate-audit/candidate-audit-2026-10-04.md	| `lane/kmeans-mojo-1-2`, `trial/mojo-1-2-at-0819` | 7, 4 | toolchain | Mojo 1.2 migration (426 files) | parked |
+lane/lane-map-import-graph	0				
+lane/large-data-classical-cpu	0				
+lane/large-metrics-shared-cpu	0				
+lane/linear-apple-base	0				
+lane/linfit-speed	1	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:35	abandoned1	docs/identical/candidate-audit/candidate-audit-2026-10-04.md	| `lane/linfit-speed` (Sep 29) | 45 | speed | `SGD_IN_FIT_KERNEL`, `X_LINEAR_GLM_TEAM`: absent; 19 of 20 patches conflict | abandoned unless re-derived |
+lane/lm-attention-fallback	2	docs/identical/HANDOFF_CLAUDE_2026-10-04.md:9		docs/identical/HANDOFF_CLAUDE_2026-10-04.md;docs/identical/candidate-audit/candidate-audit-2026-10-04.md	The default project directory `/Users/andrewhendel/CascadeProjects/mojolearn` is a different, dirty `lane/lm-attention-fallback` checkout. Do not edit/reset it or switch its branch. Frozen remote build trees are intentio
+lane/lm-head-v2-dweight-reuse	0				
+lane/loss-metrics-objectives-cpu	0				
+lane/lowbit-amd-tuned-lb	0				
+lane/lowbit-apple-now	0				
+lane/lowbit-apple-tuned	0				
+lane/lowbit-blocks	2	experiments/removed/MOJOLEARN_IDN_ATTN_DEFER_REGIME.patch:465		experiments/removed/MOJOLEARN_IDN_ATTN_DEFER_REGIME.patch;experiments/removed/MOJOLEARN_IDN_TF_SESSION_LEAN.patch	 # lane/lowbit-blocks: this call runs under `fixed15_v1` exactly when its
+lane/lowbit-e2e	0				
+lane/lowbit-quality	0				
+lane/m3-sweep	0				
+lane/mamba-opp	0				
+lane/mamba3-amd-regs2h-measure	0				
+lane/mamba3-padding-perf	0				
+lane/mamba3-statepass	0				
+lane/manifold-spectral-cpu	0				
+lane/merged	299	docs/TOMBSTONES.md:26	merged287 KEPT34 KEEP25 PASS13 DROPPED-slower9 DROPPED-noise9	docs/BYTE_LM_CPU_INFERENCE.md;docs/MEASUREMENT_STORAGE.md;docs/MODULAR_ASKS.md;docs/NEXT_WHEEL_COVERAGE.md;docs/PAR_GMM_CANDIDATE_WORKFLOW.md;docs/RELEASE_CHECKLIST.md	Renamed or merged defines (code kept under a new name), promoted defines and DROP rows whose code is still on main are listed
+lane/mixture-anomaly-cpu	0				
+lane/model-load-shared-cpu	0				
+lane/model-selection-cpu	0				
+lane/mojo-1-2-trial	0				
+lane/neighbors-rest	1	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:19		docs/identical/candidate-audit/candidate-audit-2026-10-04.md	| CPU/host-route work | 13 | neural-pass13/19/77/78/83, host-token-split-2, neighbors-rest, gbdt-rest: CPU routes (undo list) or superseded |
+lane/neural-apple-base	0				
+lane/neural-apple3-measure	0				
+lane/neural-apple4	1	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:42	merged1	docs/identical/candidate-audit/candidate-audit-2026-10-04.md	| `lane/neural-apple4`, `claude/tender-franklin-*` | 1 | speed | regs2h AMD S16: merged as PR #50; these are duplicates | none |
+lane/neural-experiment-measure-20260930	0				
+lane/neural-pass102	0				
+lane/neural-pass13	1	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:19		docs/identical/candidate-audit/candidate-audit-2026-10-04.md	| CPU/host-route work | 13 | neural-pass13/19/77/78/83, host-token-split-2, neighbors-rest, gbdt-rest: CPU routes (undo list) or superseded |
+lane/neural-pass13-measure	0				
+lane/neural-pass144	2	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:41	merged1	docs/identical/candidate-audit/candidate-audit-2026-10-04.md;docs/plans/cpu-gpu-cleanup/COMMON_BRIEF.md	| `lane/neural-pass144`, local `lane/merged` (3) | 1, 3 | CPU-out | superseded: cgr-decomp round-robin eigh on every column; SGD host arm already removed | none |
+lane/neural-pass17-measure	0				
+lane/neural-pass19	0				
+lane/neural-pass26-measure	0				
+lane/neural-pass30-measure	0				
+lane/neural-pass31-measure	0				
+lane/neural-pass32-measure	0				
+lane/neural-pass34-measure	0				
+lane/neural-pass35-measure	0				
+lane/neural-pass36	1	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:40	DROPPED1	docs/identical/candidate-audit/candidate-audit-2026-10-04.md	| `lane/neural-pass36`, `-pass41` | 4, 6 | speed | DROPPED: #40 LU fused 46% slower; #46 QR tiles lost on L40S | none |
+lane/neural-pass36-measure	0				
+lane/neural-pass37-measure	0				
+lane/neural-pass38-measure	0				
+lane/neural-pass39-measure	0				
+lane/neural-pass40-measure	0				
+lane/neural-pass41	0				
+lane/neural-pass41-measure	0				
+lane/neural-pass42-measure	0				
+lane/neural-pass44-measure	0				
+lane/neural-pass45-measure	0				
+lane/neural-pass46-measure	0				
+lane/neural-pass47-measure	0				
+lane/neural-pass48	1	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:32		docs/identical/candidate-audit/candidate-audit-2026-10-04.md	| `lane/neural-pass48` | 1 | speed | `core/scratch_pool.mojo` process pool for host-read scratch (`SCRATCH_POOL`), absent, conflicts | lane R1 |
+lane/neural-pass48-measure	0				
+lane/neural-pass49-measure	0				
+lane/neural-pass49-on-61	0				
+lane/neural-pass5	1	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:34		docs/identical/candidate-audit/candidate-audit-2026-10-04.md	| `lane/neural-pass5` | 2 | speed | mamba3 backward S17 tail chain (`MAMBA3_S17_TAIL_ARM`), absent, conflicts | lane R1 (low) |
+lane/neural-pass50-measure	0				
+lane/neural-pass53-on-56	0				
+lane/neural-pass54	0				
+lane/neural-pass54-measure	0				
+lane/neural-pass57	1	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:30		docs/identical/candidate-audit/candidate-audit-2026-10-04.md	| `lane/neural-pass57` | 1 | speed (AMD/NV) | fused attention dkdv BJ16 for MI325X/L40S (`MOJOLEARN_ATTN_DKDV_BJ16`), never measured, absent | lane R1 |
+lane/neural-pass59	1	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:33		docs/identical/candidate-audit/candidate-audit-2026-10-04.md	| `lane/neural-pass59` | 1 | speed | fused attention forward r2/MFMA shared page; Oct 1 log: TQ16 slower on Apple; NV/AMD not measured | lane R1 (low) |
+lane/neural-pass62-on-64	0				
+lane/neural-pass67	1	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:31		docs/identical/candidate-audit/candidate-audit-2026-10-04.md	| `lane/neural-pass67` | 1 | speed | llama forward: per-layer hard wait after the KV update (`ATTN_CACHE_WAIT`), patch applies, absent | lane R1 |
+lane/neural-pass76	0				
+lane/neural-pass77	0				
+lane/neural-pass78	0				
+lane/neural-pass83	0				
+lane/neural-toggle-sweep-20260930	0				
+lane/neural-xlw	0				
+lane/ordered-speed-diag2	0				
+lane/ordered-speed-m2diag	0				
+lane/ordered-speed-prespeed	1	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:21		docs/identical/candidate-audit/candidate-audit-2026-10-04.md	| Content-absorbed | 5 | ann-apple-base, apple-identical-steps, gemm-p1-fold-bypass, host-token-split-measure, ordered-speed-prespeed |
+lane/par-harness	0				
+lane/pass4-measure-20260930	0				
+lane/probabilistic-million-cpu	0				
+lane/probability-calibration-cpu	0				
+lane/python-310-311	0				
+lane/release-gpu-columns	0				
+lane/release-reuse-bindings	0				
+lane/rf-mutex-claim-acquire	0				
+lane/rf-score-weighted-nondeterminism	1	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:38		docs/identical/candidate-audit/candidate-audit-2026-10-04.md	| `lane/rf-score-weighted-nondeterminism` (Sep 16) | 17 | correctness diag | RF weighted-score atomic probe; superseded by the RF lifetime fix 366a56a0a? unverified | review once |
+lane/s17-measure-20260930	0				
+lane/sabotage-no-host-routes	1	docs/identical/candidate-audit/candidate-audit-2026-10-04.md:16		docs/identical/candidate-audit/candidate-audit-2026-10-04.md	| Measurement / diagnostic / tooling jobs | 41 | `*-measure`, `stage-diag`, `grid/`, `snapshot/`, `trial/`, `sabotage-no-host-routes` (do not merge) |
+lane/stage-diag-20261001	0				
+lane/tokenizer-text-cpu-20260919	0				
+lane/tsa-classical-utils-cpu	0				
+lane/vultr-leg	0				
+lane/wheel-smoke-do-fallback	0				

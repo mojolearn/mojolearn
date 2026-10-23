@@ -1,0 +1,330 @@
+archive/20261006/campaign/apple-opponent-quality-20261006	41117	36771	27871	23586	mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:236;transformer/experiments/attention_summary_contract.mojo:196;mamba/host/gen/neural_mamba_scan.mojo:182
+archive/20261006/campaign/full-classification-qn-recipes-20261006	45398	40564	31026	26710	mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:236;transformer/experiments/attention_summary_contract.mojo:196;mamba/host/gen/neural_mamba_scan.mojo:182
+archive/20261006/fix/apple-opponent-selector-20261006	42564	38088	29009	24682	mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:236;transformer/experiments/attention_summary_contract.mojo:196;mamba/host/gen/neural_mamba_scan.mojo:182
+archive/20261006/fix/lars-direct-20261006	41019	36684	27773	23499	mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:236;transformer/experiments/attention_summary_contract.mojo:196;mamba/host/gen/neural_mamba_scan.mojo:182
+archive/20261006/ideas/trees-identical-20261006	4856	4551	4012	3707	gbdt/targets/tree_t29_units.mojo:74;gbdt/targets/kernel/tree_t29_pair.mojo:42;gbdt/host/gbdt_oracle_pair.mojo:33;extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:18
+archive/20261006/integration/six-lane-ab-20261006	40651	36288	27453	23157	mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:236;transformer/experiments/attention_summary_contract.mojo:196;mamba/host/gen/neural_mamba_scan.mojo:182
+archive/20261006/integration/six-lane-comparison-scope-fix-20261006	42052	37691	28620	24320	mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:236;transformer/experiments/attention_summary_contract.mojo:196;mamba/host/gen/neural_mamba_scan.mojo:182
+archive/20261006/integration/six-lane-full-tsvd-20261006	42937	38448	29256	24926	mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:236;transformer/experiments/attention_summary_contract.mojo:196;mamba/host/gen/neural_mamba_scan.mojo:182
+archive/20261006/integration/six-lane-state-capture-20261006	41907	37532	28478	24164	mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:236;transformer/experiments/attention_summary_contract.mojo:196;mamba/host/gen/neural_mamba_scan.mojo:182
+archive/20261006/lane/apple-classification-admission	43928	39361	30023	25690	mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:236;transformer/experiments/attention_summary_contract.mojo:196;mamba/host/gen/neural_mamba_scan.mojo:182
+archive/20261006/lane/apple-full-classification-prep	43369	38799	29539	25206	mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:236;transformer/experiments/attention_summary_contract.mojo:196;mamba/host/gen/neural_mamba_scan.mojo:182
+archive/20261006/lane/apple-six-admission	40850	36391	27647	23249	mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:236;transformer/experiments/attention_summary_contract.mojo:196;mamba/host/gen/neural_mamba_scan.mojo:182
+archive/20261006/lane/full-recipe-glue	41092	36748	27846	23563	mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:236;transformer/experiments/attention_summary_contract.mojo:196;mamba/host/gen/neural_mamba_scan.mojo:182
+archive/20261006/lane/host-route-source-repair-20261006	293	139	234	139	x_cluster/device_ops.mojo:22;training/neural_ab_optimizer.mojo:19;xtrees/shap_cache_device_api.mojo:7;xtrees/shap_cache_host_api.mojo:7
+archive/20261006/lane/idle-retention-60m-20261007	77	77	56	56	
+archive/20261006/lane/mlp-full-registration	45745	40843	31340	26956	mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:236;transformer/experiments/attention_summary_contract.mojo:196;mamba/host/gen/neural_mamba_scan.mojo:182
+archive/20261006/lane/neural-identical-ideas-20261006	2247	277	1815	272	tools/neural_identical_compare.py:420;tools/neural_identical_ab.py:164;gemm/experiments/neural_profiles.mojo:92;mamba/impl/ops/neural_experiment_profiles.mojo:83
+archive/20261006/lane/public-linear-state-capture-20261006	45354	40576	31078	26762	mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:236;transformer/experiments/attention_summary_contract.mojo:196;mamba/host/gen/neural_mamba_scan.mojo:182
+archive/20261006/lane/targeted-benchmark-metadata-20261007	0	0	0	0	
+archive/20261006/lane/targeted-cpu-build-20261007	56	56	56	56	
+archive/20261006/lane/var-native-fittedvalues	45244	40413	30978	26620	mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:236;transformer/experiments/attention_summary_contract.mojo:196;mamba/host/gen/neural_mamba_scan.mojo:182
+archive/20261006/repair/amd-full-classification-registration	45398	40566	31026	26712	mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:236;transformer/experiments/attention_summary_contract.mojo:196;mamba/host/gen/neural_mamba_scan.mojo:182
+archive/20261006/repair/apple-fast-huber-fold-20261006	44547	39820	30467	26107	mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:236;transformer/experiments/attention_summary_contract.mojo:196;mamba/host/gen/neural_mamba_scan.mojo:182
+archive/20261006/repair/cnn-native-orchestration-20261006	45627	40565	31313	26751	mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:236;transformer/experiments/attention_summary_contract.mojo:196;mamba/host/gen/neural_mamba_scan.mojo:182
+archive/20261006/repair/prep-native-sparse-20261006	45797	40437	31586	26661	mamba/host/gen/neural_scan_profile.mojo:262;mamba/impl/ops/neural_scan_profile.mojo:236;transformer/experiments/attention_summary_contract.mojo:196;mamba/host/gen/neural_mamba_scan.mojo:182
+archive/worktree-cleanup-20260919-release-087-build	903	81	540	80	packaging/macos/repack_post_record.py:76;packaging/macos/test_repack_post_record.py:69;tools/release_wheel_content_audit.py:65;tools/test_release_wheel_content_audit.py:59
+archive/worktree-cleanup-20260919-release-087-macos	903	81	540	80	packaging/macos/repack_post_record.py:76;packaging/macos/test_repack_post_record.py:69;tools/release_wheel_content_audit.py:65;tools/test_release_wheel_content_audit.py:59
+board/m3-0834-readback	7	6	7	6	tools/bench_board_algos.py:1
+finish/cross-vendor-native-only-20261020	1115	1080	1043	1008	bindings/cross_vendor_native.mojo:16;bindings/byte_checkpoint_native.mojo:15;bindings/byte_checkpoint_io.mojo:2;bindings/cross_vendor_admission.mojo:2
+finish/distributed-20261020	5680	5436	5591	5347	bindings/cross_vendor_native.mojo:62;autograd/partition_pyapi.mojo:49;bindings/parallel_byte_native.mojo:28;python/mojolearn/ops.py:20
+finish/generation-20261020	9270	8916	9187	8833	bindings/cross_vendor_native.mojo:62;bindings/_mojolearn_tokenizer_host.mojo:31;bindings/parallel_byte_native.mojo:28;bindings/causal_lm_public.mojo:17
+finish/generation-graph-repair-20261020	7063	7002	6976	6915	bindings/classical_archive_read.mojo:7;bindings/classical_native.mojo:6;bindings/classical_pandas.mojo:6;bindings/sequential_inputs.mojo:6
+finish/graph-20261020	3772	3563	3655	3452	autograd/program_control_grad.mojo:43;autograd/program_save.mojo:33;autograd/program_pyapi.mojo:25;autograd/gradient_diagnostics.mojo:20
+finish/graph-hoist-20261020	1070	1062	970	962	autograd/partition_pyapi.mojo:3;autograd/distributed_pyapi.mojo:2;autograd/higher.mojo:1;autograd/program_control.mojo:1
+finish/graph-process-20261020	66	66	66	66	
+finish/installed-native-audit-20261020	766	766	621	621	
+finish/native-autograd-conv-smoke-20261020	128	128	127	127	
+finish/native-classical-public-20261020	552	541	551	540	bindings/classical_attributes.mojo:4;python/mojolearn/_native_classical_bridge.py:4;bindings/classical_host_owner.mojo:1;python/mojolearn/tests/test_classical_host_native_owner.py:1
+finish/native-optimizer-smoke-20261020	141	141	140	140	
+finish/native-svm-smoke-20261020	124	124	123	123	
+finish/parallel-causal-20261020	1670	1646	1670	1646	bindings/generator_draw_native.mojo:7;bindings/causal_lm_public.mojo:6;bindings/parallel_causal_native.mojo:6;python/mojolearn/_training_impl.py:5
+finish/parallel-neural-admission-20261020	1903	1894	1659	1650	autograd/ops_api.mojo:4;tools/bench_graph_optimizer.py:4;bindings/parallel_neural_admission.mojo:1
+finish/pca-native-owner-20261020	980	973	904	897	bindings/pca_native.mojo:6;bindings/pca_exact.mojo:1
+finish/samba-public-20261020	1596	1578	1596	1578	bindings/samba_checkpoint_native.mojo:9;bindings/samba_inference_native.mojo:5;bindings/samba_config_native.mojo:2;bindings/samba_public_native.mojo:2
+fix/amd-merge-ordering	275	78	128	78	core/device_mutex_check.mojo:24;core/device_mutex.mojo:22;tools/check_mutex_handoff_model.py:4
+fix/classical-mds-20260930	217	16	217	16	tools/classical_mds_check.py:64;tools/bench_board_resume.py:50;tools/test_bench_board_budget.py:44;tools/bench_board.py:25
+fix/identity-collection-completeness	52	52	52	52	
+fix/macos-smoke-identical-only	2069	1309	1804	1168	python/mojolearn/tokenizer.py:98;packaging/macos/repack_post_record.py:76;packaging/macos/test_repack_post_record.py:69;tools/release_wheel_content_audit.py:65
+fix/metal-parallel-causal-lm	46	10	46	10	python/mojolearn/tests/test_parallel_causal_lm.py:27;python/mojolearn/models/parallel_causal_lm.py:9
+fix/parallel-model-save	76	76	76	76	
+fix/release-archive-tokenizer-generator	2061	1301	1796	1160	python/mojolearn/tokenizer.py:98;packaging/macos/repack_post_record.py:76;packaging/macos/test_repack_post_record.py:69;tools/release_wheel_content_audit.py:65
+fix/release-build-preflight-import	17	11	11	11	
+fix/release-portable-math-transport	73	55	56	55	python/mojolearn/tests/test_hdbscan_host_lifetime.py:1
+fix/release-post-record-allowlist	3022	1344	1836	1200	python/mojolearn/tokenizer.py:98;packaging/macos/repack_post_record.py:76;packaging/macos/test_repack_post_record.py:69;tools/release_wheel_content_audit.py:65
+fix/release-verifier-bindings	33	27	27	27	
+lane/136-lane-record	12	5	8	4	python/mojolearn/host_surface.py:4
+lane/ab-measure	35	1	35	1	tools/ab_job.sh:33;tools/nv_ab_pr59.sh:1
+lane/algos-ann	386	70	381	70	python/mojolearn/_expansion_ann.py:68;x_ann/tsne_device.mojo:65;x_ann/tsne_core.mojo:46;x_ann/checks/tsne_oracle.mojo:41
+lane/algos-ann-speed	503	99	503	99	x_ann/ivf_scan_device.mojo:203;x_ann/knn_device.mojo:42;x_ann/tsne_core.mojo:31;x_ann/ivf_pq_device.mojo:29
+lane/algos-trees	46	0	0	0	
+lane/ann-apple-base	0	0	0	0	
+lane/apple-fast-af-all	11821	8417	9521	6820	tokenizer/fast/bpe_device.mojo:444;gbdt/methods/doc_parallel_boosting.mojo:207;glm/impl/qn/lsvr_dual.mojo:167;x_decomp/fa_fast.mojo:159
+lane/apple-fast-arima-k1-diagnostics	801	33	501	24	tools/arima_assoc_scan_oracle.py:265;tools/arima_gaussian_scan_oracle.py:115;tools/arima_k1_diagnostics.py:97
+lane/apple-fast-arima-k1-oracle	574	23	399	19	tools/arima_assoc_scan_oracle.py:265;tools/arima_gaussian_scan_oracle.py:115
+lane/apple-fast-arima-k1-review	682	27	399	19	tools/arima_assoc_scan_oracle.py:265;tools/arima_gaussian_scan_oracle.py:115
+lane/apple-fast-arima-k3-df-gpu	4	4	4	4	
+lane/apple-fast-arima-k3-df-reference	746	384	626	326	arima/impl/fast_scalar_ll.mojo:108;bindings/arima_scalar_probe.mojo:99;tools/arima_scalar_verified.py:75;arima/impl/batched_kalman.mojo:9
+lane/apple-fast-arima-k3-tail-probe	553	191	491	191	arima/impl/fast_scalar_ll.mojo:108;bindings/arima_scalar_probe.mojo:99;tools/arima_scalar_verified.py:75;arima/impl/batched_kalman.mojo:9
+lane/apple-fast-arima-scalar-k3	416	165	355	165	arima/impl/fast_scalar_ll.mojo:105;bindings/arima_scalar_probe.mojo:61;arima/impl/batched_kalman.mojo:9;bindings/_mojolearn_arima.mojo:8
+lane/apple-fast-arima-scalar-k3-quality	501	174	440	174	arima/impl/fast_scalar_ll.mojo:105;tools/arima_scalar_verified.py:76;bindings/arima_scalar_probe.mojo:61;arima/impl/batched_kalman.mojo:9
+lane/apple-fast-arima-scalar-k3-r1	495	171	434	171	arima/impl/fast_scalar_ll.mojo:102;tools/arima_scalar_verified.py:76;bindings/arima_scalar_probe.mojo:61;arima/impl/batched_kalman.mojo:9
+lane/apple-fast-arima-scalar-k3-r2	501	171	440	171	arima/impl/fast_scalar_ll.mojo:108;tools/arima_scalar_verified.py:76;bindings/arima_scalar_probe.mojo:61;arima/impl/batched_kalman.mojo:9
+lane/apple-fast-arima-scan-design	141	5	0	0	
+lane/apple-fast-arima-scan-oracle	377	15	277	12	tools/arima_assoc_scan_oracle.py:265
+lane/apple-fast-arima-scan-oracle-review	451	16	277	12	tools/arima_assoc_scan_oracle.py:265
+lane/apple-fast-batch	16629	10402	13719	8531	tokenizer/fast/bpe_device.mojo:444;x_decomp/lle_sparse.mojo:365;x_linear/isotonic_fast.mojo:311;dbscan/impl/denseball.mojo:209
+lane/apple-fast-bpe	918	170	764	170	tokenizer/fast/bpe_device.mojo:445;bindings/_mojolearn_tokenizer_fast.mojo:88;python/mojolearn/tokenizer.py:43;bindings/build_tokenizer_fast.sh:18
+lane/apple-fast-bsplit-readiness	95	6	19	6	tools/svgp_fast_quality.py:11;tools/svgp_fast_pair.py:2
+lane/apple-fast-callpath-probe	454	68	338	67	bench/apple_callpath_quality.mojo:81;experiments/apple_callpath/resident_slot.mojo:63;experiments/apple_callpath/packed_readback.mojo:32;tools/callpath_probe_pair.py:31
+lane/apple-fast-callpath-probe-r1	461	69	344	68	bench/apple_callpath_quality.mojo:82;experiments/apple_callpath/resident_slot.mojo:63;experiments/apple_callpath/packed_readback.mojo:32;tools/callpath_probe_pair.py:32
+lane/apple-fast-callpath-probe-r2	471	69	353	68	bench/apple_callpath_quality.mojo:91;experiments/apple_callpath/resident_slot.mojo:63;experiments/apple_callpath/packed_readback.mojo:32;tools/callpath_probe_pair.py:32
+lane/apple-fast-callpath-probe-r3	476	69	357	68	bench/apple_callpath_quality.mojo:91;experiments/apple_callpath/resident_slot.mojo:63;experiments/apple_callpath/packed_readback.mojo:32;tools/callpath_probe_pair.py:32
+lane/apple-fast-callpath-probe-r4	517	66	394	65	bench/apple_callpath_quality.mojo:104;experiments/apple_callpath/resident_slot.mojo:68;experiments/apple_callpath/packed_readback.mojo:37;tools/callpath_probe_pair.py:32
+lane/apple-fast-callpath-probe-r5	519	66	395	65	bench/apple_callpath_quality.mojo:105;experiments/apple_callpath/resident_slot.mojo:68;experiments/apple_callpath/packed_readback.mojo:37;tools/callpath_probe_pair.py:32
+lane/apple-fast-callpath-quality	338	39	247	38	bench/apple_callpath_quality.mojo:80;experiments/apple_callpath/resident_slot.mojo:63;experiments/apple_callpath/packed_readback.mojo:32;experiments/apple_callpath/minmax_adapter.mojo:18
+lane/apple-fast-callpath-reach-audit	141	5	0	0	
+lane/apple-fast-catalog-gemm-all	423	120	334	120	tools/catalog_gemm_quality.py:77;bindings/_mojolearn_gemm_probe.mojo:66;experiments/apple_fast/gemm/mma.mojo:58;bindings/build_gemm_probe.sh:13
+lane/apple-fast-catalog-gemm-probe	357	114	304	114	tools/catalog_gemm_quality.py:65;experiments/apple_fast/gemm/mma.mojo:62;bindings/_mojolearn_gemm_probe.mojo:50;bindings/build_gemm_probe.sh:13
+lane/apple-fast-catalog-gemm-probe-r1	369	118	305	118	tools/catalog_gemm_quality.py:65;experiments/apple_fast/gemm/mma.mojo:59;bindings/_mojolearn_gemm_probe.mojo:50;bindings/build_gemm_probe.sh:13
+lane/apple-fast-catalog-gemm-probe-r2	381	119	305	119	tools/catalog_gemm_quality.py:65;experiments/apple_fast/gemm/mma.mojo:58;bindings/_mojolearn_gemm_probe.mojo:50;bindings/build_gemm_probe.sh:13
+lane/apple-fast-catalog-matrix-timing	601	137	467	137	tools/catalog_gemm_matrix_timing.py:116;tools/catalog_gemm_quality.py:77;bindings/_mojolearn_gemm_probe.mojo:66;experiments/apple_fast/gemm/mma.mojo:58
+lane/apple-fast-catalog-matrix-timing-r1	615	137	475	137	tools/catalog_gemm_matrix_timing.py:124;tools/catalog_gemm_quality.py:77;bindings/_mojolearn_gemm_probe.mojo:66;experiments/apple_fast/gemm/mma.mojo:58
+lane/apple-fast-catalog-resident-probe	549	129	486	129	tools/catalog_resident_timing.py:105;tools/catalog_resident_quality.py:97;bindings/_mojolearn_resident_gemm_probe.mojo:84;experiments/apple_fast/gemm/mma.mojo:58
+lane/apple-fast-chol-20261004	73	17	73	17	tools/apple_fast_chol_quality.py:38;cholesky/checks/potrf.mojo:18
+lane/apple-fast-classical-ideas-20261006	5183	5151	2055	2023	x_decomp/fast_qr.mojo:8;x_decomp/fast_gemm.mojo:7;hdbscan/impl/detail/fast_apple.mojo:6;gbdt/methods/leaves_estimation/apple_fast_est.mojo:2
+lane/apple-fast-dbscantaxi	346	123	311	88	dbscan/impl/denseball.mojo:209;dbscan/impl/runner.mojo:14
+lane/apple-fast-decomp-linalg	682	114	623	113	x_decomp/device.mojo:171;x_decomp/fast_chol.mojo:110;x_decomp/fast_qr.mojo:98;x_decomp/fast_gemm.mojo:47
+lane/apple-fast-decomp-mma-k16	203	42	163	42	tools/decomp_mma_k16.py:77;tools/decomp_mma_k16_pair.py:35;x_decomp/device.mojo:9
+lane/apple-fast-decomp-sdk-control	121	22	92	22	experiments/apple_fast/gemm/decomp_sdk.mojo:34;x_decomp/resident.mojo:17;x_decomp/device.mojo:13;x_decomp/kit_device.mojo:6
+lane/apple-fast-decomp-sparse	975	186	818	184	x_decomp/device.mojo:200;x_decomp/fast_chol.mojo:110;x_decomp/fast_qr.mojo:98;x_decomp/apple_fast.mojo:68
+lane/apple-fast-dwcurrent	210	42	134	42	tools/aft_verified_dw.py:45;gbdt/methods/greedy_subsets_searcher/kernel/dw2_level.mojo:28;gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:15;gbdt/methods/greedy_subsets_searcher/quantized_hist_launcher.mojo:4
+lane/apple-fast-eigh-cache	511	106	403	106	tools/eigh_cache_verified.py:142;x_decomp/eigh_tangent.mojo:100;x_decomp/device.mojo:28;tools/apple_fast_eigh_quality.py:27
+lane/apple-fast-eigh-panel-df	282	243	210	183	tools/eigh_w4_quality.py:13;tools/eigh_panel_df_pair.py:8;x_decomp/eigh_tridiag.mojo:6
+lane/apple-fast-eigh-panels	762	577	688	577	x_decomp/eigh_tridiag.mojo:79;tools/eigh_w4_pair.py:15;tools/eigh_w4_quality.py:13;x_decomp/device.mojo:4
+lane/apple-fast-fa	681	376	563	376	x_decomp/fa_fast.mojo:159;python/mojolearn/_expansion_decomp.py:25;bindings/_mojolearn_x_decomp.mojo:3
+lane/apple-fast-fastonly2	137	134	137	134	ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:3
+lane/apple-fast-gap-kapprox2	130	26	128	26	tools/schi2_rng_quality.py:25;x_neighbors/kap2_items.mojo:21;x_neighbors/gen.py:13;bindings/_mojolearn_x_neighbors.mojo:12
+lane/apple-fast-gap-linalg2	244	231	241	231	cholesky/checks/potrf.mojo:3;cholesky/estimator.mojo:3;x_decomp/lu_fast.mojo:2;bindings/_mojolearn_gp.mojo:1
+lane/apple-fast-gap-linalg2-kpca	7	0	7	0	tools/kpca_quality_ab.sh:7
+lane/apple-fast-gap-linalg2-pca	126	91	124	91	tools/pca_quality_ab.py:18;tools/pca_quality_ab.sh:8;decomposition/estimator.mojo:3;decomposition/impl/linalg/detail/pca.mojo:2
+lane/apple-fast-gap-linalg2-svd	122	22	122	22	x_decomp/svd_aw.mojo:80;x_decomp/tsqr_device.mojo:20
+lane/apple-fast-gap-misc	394	300	327	236	gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:32;gbdt/methods/greedy_subsets_searcher/kernel/hist_quantized_shared.mojo:15;gbdt/methods/doc_parallel_boosting.mojo:13;sequence/moe_mma.mojo:13
+lane/apple-fast-gap-tsa	1	0	0	0	
+lane/apple-fast-general-speed	195	56	188	54	x_linear/bayes.mojo:109;svm/impl/workingset.mojo:23;x_decomp/lda_fast.mojo:2
+lane/apple-fast-graph	165	81	138	80	x_neighbors/iter_device.mojo:44;python/mojolearn/_expansion_neighbors.py:14
+lane/apple-fast-isotonic-knn	545	50	520	48	x_linear/isotonic_fast.mojo:311;x_neighbors/iter_device.mojo:114;python/mojolearn/_expansion_decomp.py:38;bindings/_mojolearn_x_linear.mojo:9
+lane/apple-fast-kapprox	47	8	41	8	tools/kpca_quality_check.py:33
+lane/apple-fast-knn-lean-gpu	195	171	193	171	tools/knn_lean_gpu_pair.py:11;x_neighbors/nan_cells_device.mojo:6;tools/knn_lean_gpu_quality.py:3;bindings/_mojolearn_x_neighbors.mojo:1
+lane/apple-fast-knn-lean-gpu-harness-r1	217	199	215	199	tools/knn_lean_gpu_pair.py:8;x_neighbors/nan_cells_device.mojo:6;bindings/_mojolearn_x_neighbors.mojo:1;python/mojolearn/_expansion_neighbors.py:1
+lane/apple-fast-layoutfix	47	2	47	2	python/mojolearn/_backend.py:19;tools/layoutfix_smoke.py:17;python/mojolearn/_iforest_impl.py:2;python/mojolearn/extratrees.py:2
+lane/apple-fast-linalg-20261004	203	75	203	75	x_decomp/eigh_tangent.mojo:77;tools/apple_fast_eigh_quality.py:27;x_decomp/device.mojo:24
+lane/apple-fast-linsvr	1231	914	1054	817	glm/impl/qn/lsvr_dual.mojo:167;glm/impl/qn/glm_base.mojo:55;glm/impl/qn/qn_solvers.mojo:9;glm/impl/qn/qn_dconv.mojo:4
+lane/apple-fast-lle	1017	79	961	76	x_decomp/lle_sparse.mojo:365;x_linear/isotonic_fast.mojo:311;x_neighbors/iter_device.mojo:112;python/mojolearn/_expansion_decomp.py:81
+lane/apple-fast-lost-candidates	122	3	0	0	
+lane/apple-fast-lu-mma-dbuf	199	42	149	42	tools/lu_mma_dbuf.py:50;tools/lu_mma_dbuf_pair.py:35;x_decomp/lu_fast_mma.mojo:22
+lane/apple-fast-lu-pivot-shuffle	235	75	186	75	tools/lu_pivot_shuffle.py:67;tools/lu_pivot_shuffle_pair.py:36;bindings/_mojolearn_x_decomp.mojo:4;x_decomp/lu_fast.mojo:4
+lane/apple-fast-m2b1	1652	1215	1538	1119	x_linear/isotonic_fast.mojo:314;x_decomp/mcd_fast.mojo:42;glm/impl/qn/glm_base.mojo:22;bindings/_mojolearn_x_linear.mojo:10
+lane/apple-fast-manager-remote	5	5	5	5	
+lane/apple-fast-mcd-g1-quality	195	182	195	182	tools/mcd_g1_quality.py:13
+lane/apple-fast-mcd-ordered-cov	190	161	108	83	x_decomp/mcd_bmma.mojo:13;x_decomp/resident.mojo:6;x_decomp/mcd_fast.mojo:5;bindings/_mojolearn_x_decomp.mojo:1
+lane/apple-fast-mcd-ordered-quality	543	466	432	357	tools/mcd_ordered_oracle.py:28;x_decomp/mcd_bmma.mojo:19;x_decomp/resident.mojo:13;tools/mcd_ordered_quality.py:7
+lane/apple-fast-mcd-ordered-quality-r1	551	477	439	367	tools/mcd_ordered_oracle.py:28;x_decomp/mcd_bmma.mojo:16;x_decomp/resident.mojo:13;tools/mcd_ordered_quality.py:7
+lane/apple-fast-mcd-ordered-quality-r2	553	483	439	371	tools/mcd_ordered_oracle.py:28;x_decomp/mcd_bmma.mojo:16;x_decomp/resident.mojo:9;tools/mcd_ordered_quality.py:7
+lane/apple-fast-mcd-ordered-quality-r3	569	501	453	387	tools/mcd_ordered_oracle.py:28;x_decomp/mcd_bmma.mojo:16;tools/mcd_ordered_quality.py:7;x_decomp/resident.mojo:7
+lane/apple-fast-mcd-quality	115	15	115	15	tools/mcd_quality_ab.py:77;tools/mcd_quality_ab.sh:23
+lane/apple-fast-mcd-saved-oracle	257	133	255	133	tools/mcd_saved_oracle.py:86;tools/mcd_profile.sh:22;x_decomp/mcd_fast.mojo:11;tools/mcd_compat_ab.sh:2
+lane/apple-fast-mcd-saved-oracle-r1	294	143	292	143	tools/mcd_saved_oracle.py:113;tools/mcd_profile.sh:22;x_decomp/mcd_fast.mojo:11;tools/mcd_compat_ab.sh:2
+lane/apple-fast-old-linalg-audit	25	0	4	0	python/mojolearn/_linalg_impl.py:4
+lane/apple-fast-opp	142	15	142	15	tools/opp_only_board.py:109;tools/bench_board_algos.py:11;bench/speed/forest_speed_arm.py:7
+lane/apple-fast-optics2	431	44	313	41	x_cluster/optics_fast.mojo:145;x_cluster/device_ops.mojo:77;x_cluster/optics.mojo:39;x_cluster/ops.mojo:9
+lane/apple-fast-opv	518	66	400	63	x_cluster/optics_fast.mojo:145;x_cluster/device_ops.mojo:77;x_cluster/optics.mojo:41;tools/opv_quality.py:34
+lane/apple-fast-pca-eig	260	64	222	62	decomposition/impl/linalg/detail/pca.mojo:145;decomposition/estimator.mojo:15
+lane/apple-fast-prep2	476	455	391	370	x_prep/fastprep2.mojo:20;x_prep/device.mojo:1
+lane/apple-fast-prep3	865	696	798	657	x_prep/fastlabels.mojo:47;x_prep/prep3.mojo:17;x_prep/device.mojo:16;bindings/_mojolearn_x_prep.mojo:13
+lane/apple-fast-pt-queue	96	72	74	72	tools/pt_score_verified.py:2
+lane/apple-fast-rec-ab11	195	56	188	54	x_linear/bayes.mojo:109;svm/impl/workingset.mojo:23;x_decomp/lda_fast.mojo:2
+lane/apple-fast-remaining-audit-20261004	31	31	0	0	
+lane/apple-fast-resample	666	255	591	252	resample/estimator.mojo:114;resample/fast_apple.mojo:110;python/mojolearn/model_selection.py:52;bindings/_mojolearn_resample.mojo:31
+lane/apple-fast-results	2817	0	0	0	
+lane/apple-fast-robust	811	679	758	676	x_decomp/mcd_fast.mojo:42;x_linear/huber_fast.mojo:34;x_linear/device.mojo:4;x_decomp/kit_device.mojo:2
+lane/apple-fast-scoped-pca-caller	216	82	216	82	tools/scoped_pca_fit.py:132;tools/apple_fast_job_policy.py:2
+lane/apple-fast-sgdoc-parallel	336	39	333	39	x_linear/sgdoc_fast.mojo:203;tools/sgdoc_check.py:34;tools/sgdoc_objective.py:22;tools/bench_board_algos.py:14
+lane/apple-fast-shap	644	94	617	90	xtrees/shap_fast.mojo:247;xtrees/shap_tab.mojo:110;python/mojolearn/_expansion_trees.py:61;xtrees/shap_device.mojo:61
+lane/apple-fast-shared-downstream-g1	954	172	746	172	tools/shared_gemm_downstream_quality.py:158;tools/shared_gemm_quality.py:80;tools/shared_gemm_downstream_pair.py:77;bindings/_mojolearn_shared_gemm_probe.mojo:61
+lane/apple-fast-shared-downstream-g1-r1	1036	173	771	173	tools/shared_gemm_downstream_quality.py:160;tools/shared_gemm_quality.py:80;tools/shared_gemm_downstream_pair.py:79;bindings/_mojolearn_shared_gemm_probe.mojo:61
+lane/apple-fast-shared-downstream-g1-r2	1260	182	922	182	tools/shared_gemm_downstream_quality.py:170;tools/shared_gemm_downstream_pair.py:114;tools/shared_gemm_quality.py:80;tools/shared_gemm_preflight.py:68
+lane/apple-fast-shared-downstream-g5	954	172	746	172	tools/shared_gemm_downstream_quality.py:158;tools/shared_gemm_quality.py:80;tools/shared_gemm_downstream_pair.py:77;bindings/_mojolearn_shared_gemm_probe.mojo:61
+lane/apple-fast-shared-downstream-g5-r1	1036	173	771	173	tools/shared_gemm_downstream_quality.py:160;tools/shared_gemm_quality.py:80;tools/shared_gemm_downstream_pair.py:79;bindings/_mojolearn_shared_gemm_probe.mojo:61
+lane/apple-fast-shared-downstream-g5-r2	1260	182	922	182	tools/shared_gemm_downstream_quality.py:170;tools/shared_gemm_downstream_pair.py:114;tools/shared_gemm_quality.py:80;tools/shared_gemm_preflight.py:68
+lane/apple-fast-shared-downstream-quality	767	156	611	156	tools/shared_gemm_downstream_quality.py:157;tools/shared_gemm_quality.py:80;bindings/_mojolearn_shared_gemm_probe.mojo:61;experiments/apple_fast/gemm/mma.mojo:58
+lane/apple-fast-shared-gemm-g1g5	448	134	390	134	tools/shared_gemm_quality.py:80;bindings/_mojolearn_shared_gemm_probe.mojo:61;experiments/apple_fast/gemm/mma.mojo:58;experiments/apple_fast/gemm/shared_dispatch.mojo:38
+lane/apple-fast-shared-gemm-g1g5-r1	453	134	390	134	tools/shared_gemm_quality.py:80;bindings/_mojolearn_shared_gemm_probe.mojo:61;experiments/apple_fast/gemm/mma.mojo:58;experiments/apple_fast/gemm/shared_dispatch.mojo:38
+lane/apple-fast-shared-scoped-timing	1559	196	1182	196	tools/shared_gemm_scoped.py:245;tools/shared_gemm_downstream_quality.py:170;tools/shared_gemm_downstream_pair.py:114;tools/shared_gemm_quality.py:80
+lane/apple-fast-shared-scoped-timing-g5	1559	196	1182	196	tools/shared_gemm_scoped.py:245;tools/shared_gemm_downstream_quality.py:170;tools/shared_gemm_downstream_pair.py:114;tools/shared_gemm_quality.py:80
+lane/apple-fast-sym-ctr	1206	1090	1039	923	gbdt/methods/doc_parallel_boosting.mojo:55;gbdt/train.mojo:44;gbdt/ctrs/fast_prep.mojo:17
+lane/apple-fast-sym-est	771	592	663	484	gbdt/methods/leaves_estimation/apple_fast_est.mojo:158;gbdt/methods/doc_parallel_boosting.mojo:21
+lane/apple-fast-sym-feat	926	911	811	796	gbdt/gpu_util/kernel/bootstrap.mojo:11;gbdt/methods/doc_parallel_boosting.mojo:2;gbdt/gpu_data/kernel/binarize.mojo:1;gbdt/resident_model.mojo:1
+lane/apple-fast-sym-hist	470	308	342	180	gbdt/methods/pointwise_optimization_subsets.mojo:38;gbdt/methods/kernel/split_properties_helpers.mojo:35;gbdt/methods/kernel/pointwise_scores.mojo:34;gbdt/methods/kernel/sym_fast.mojo:31
+lane/apple-fast-sym-iter	777	520	640	383	gbdt/methods/sym_iter_fast.mojo:127;gbdt/methods/doc_parallel_boosting.mojo:118;gbdt/methods/oblivious_tree_doc_parallel_structure_searcher.mojo:12
+lane/apple-fast-sym-multi	910	646	757	493	gbdt/targets/kernel/multilogit.mojo:120;gbdt/methods/leaves_estimation/pointwise_oracle.mojo:78;gbdt/targets/kernel/pair_logit_group.mojo:53;gbdt/targets/kernel/yeti_rank.mojo:7
+lane/apple-fast-target-current	225	140	148	139	tools/target_scratch_pair.py:5;bindings/_mojolearn_x_prep.mojo:4
+lane/apple-fast-target-scratch	87	62	64	61	tools/target_scratch_quality.py:2;bindings/_mojolearn_x_prep.mojo:1
+lane/apple-fast-trees-io	348	56	289	55	isolation_forest/impl/isolation_forest.mojo:96;isolation_forest/impl/isolation_tree_builder.mojo:73;tools/aft_if_score.py:24;tools/aft_if_score_ab.sh:15
+lane/apple-fast-trees-scan	175	40	115	38	ensemble/randomforest.mojo:34;gbdt/gpu_util/kernel/segmented_sort.mojo:30;gbdt/gpu_util/kernel/reorder_one_bit.mojo:13
+lane/apple-fast-trees-symmetric	727	219	642	219	gbdt/methods/leaves_estimation/sym_device_walker.mojo:155;gbdt/methods/kernel/pointwise_scores.mojo:123;gbdt/methods/doc_parallel_boosting.mojo:87;gbdt/methods/leaves_estimation/doc_parallel_leaves_estimator.mojo:39
+lane/apple-fast-w2-shap	331	132	327	130	xtrees/agnostic_device.mojo:65;tools/shap_pipe_quality.py:41;python/mojolearn/_expansion_trees.py:37;xtrees/api.mojo:32
+lane/apple-fast-w2-ts	470	119	467	119	arima/impl/fast_fit_groups.mojo:119;tools/arima_phase_diag.py:74;tools/var_overhead_diag.py:32;python/mojolearn/_x_sequence_autoarima.py:31
+lane/apple-fast-w3-arima	267	70	262	68	arima/impl/fast_slab.mojo:88;arima/impl/batched_kalman.mojo:25;tools/arima_fast_fit_quality.py:22;arima/impl/fast_order_state.mojo:19
+lane/apple-fast-w3-dw	420	145	377	145	gbdt/methods/greedy_subsets_searcher/kernel/dw3_flat.mojo:96;tools/aft_w3dw.py:92;gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo:38;gbdt/methods/greedy_subsets_searcher/quantized_hist_launcher.mojo:6
+lane/apple-fast-w3-prep	404	160	404	160	tools/xprep_pinned_quality.py:85;x_prep/pinned_out.mojo:61;python/mojolearn/_expansion_prep.py:46;bindings/_mojolearn_x_prep.mojo:18
+lane/apple-fast-w4-decomp	477	235	473	235	tools/w4_decomp_quality.py:151;tools/w4_decomp_pair.py:56;decomposition/estimator.mojo:15;x_decomp/w4_fast.mojo:12
+lane/apple-fast-w4-decomp-harness-r1	490	236	485	236	tools/w4_decomp_quality.py:151;tools/w4_decomp_pair.py:67;decomposition/estimator.mojo:15;x_decomp/w4_fast.mojo:12
+lane/apple-fast-w4-eigh	657	541	657	541	x_decomp/eigh_tridiag.mojo:87;tools/eigh_w4_pair.py:15;tools/eigh_w4_quality.py:10;x_decomp/device.mojo:4
+lane/apple-fast-w4-linalg	525	261	523	261	x_decomp/lu_fast_tslu.mojo:184;x_decomp/lu_fast_mma.mojo:26;tools/lu_fast_tslu_quality.py:19;tools/lu_fast_tslu_pair.py:15
+lane/apple-fast-w4-mcd	117	79	115	79	tools/mcd_profile.sh:22;x_decomp/mcd_fast.mojo:11;tools/mcd_compat_ab.sh:2;x_decomp/mcd_compat.mojo:1
+lane/apple-fast-w4-shap	393	363	389	362	tools/pshap_delta_pair.py:10;xtrees/agnostic_device.mojo:9;xtrees/api.mojo:6;python/mojolearn/_expansion_trees.py:1
+lane/apple-fast-w4-small	532	228	532	228	sequence/var_fused.mojo:91;tools/w4_small_quality.py:76;resample/gather.mojo:33;tools/w4_small_pair.py:27
+lane/apple-fast-w4-tslu	525	261	523	261	x_decomp/lu_fast_tslu.mojo:184;x_decomp/lu_fast_mma.mojo:26;tools/lu_fast_tslu_quality.py:19;tools/lu_fast_tslu_pair.py:15
+lane/apple-identical-steps	0	0	0	0	
+lane/apple-merged-check	284	148	218	137	tools/merged_check/recheck_job.sh:18;tools/merged_check/tests_job.sh:17;tools/merged_check/mac_job.sh:14;tools/merged_check/linear_job.sh:10
+lane/apple-merged-check2	285	148	219	137	tools/merged_check/recheck_job.sh:18;tools/merged_check/tests_job.sh:17;tools/merged_check/mac_job.sh:15;tools/merged_check/linear_job.sh:10
+lane/apple-merged-check3	285	148	219	137	tools/merged_check/recheck_job.sh:18;tools/merged_check/tests_job.sh:17;tools/merged_check/mac_job.sh:15;tools/merged_check/linear_job.sh:10
+lane/apple-merged-owed-check	285	148	219	137	tools/merged_check/recheck_job.sh:18;tools/merged_check/tests_job.sh:17;tools/merged_check/mac_job.sh:15;tools/merged_check/linear_job.sh:10
+lane/apple-verify-20261001	21	1	21	1	tools/apple_verify_job.sh:20
+lane/apple2-merged-check	156	130	156	130	tools/merged_check/mac_job.sh:15;tools/merged_check/m2pro_job.sh:11
+lane/apple2-merged-check2	156	130	156	130	tools/merged_check/mac_job.sh:15;tools/merged_check/m2pro_job.sh:11
+lane/apple2-merged-check3	156	130	156	130	tools/merged_check/mac_job.sh:15;tools/merged_check/m2pro_job.sh:11
+lane/apple2-merged-check4	156	130	156	130	tools/merged_check/mac_job.sh:15;tools/merged_check/m2pro_job.sh:11
+lane/apple2-merged-check5	156	130	156	130	tools/merged_check/mac_job.sh:15;tools/merged_check/m2pro_job.sh:11
+lane/apple3-merged-check	279	148	279	148	tools/merged_check/merged_check.py:82;tools/merged_check/light_job.sh:23;tools/merged_check/mac_job.sh:15;tools/merged_check/m2pro_job.sh:11
+lane/bench-board-m3ultra	853	312	849	312	tools/bench_board_neural.py:117;tools/bench_board.py:116;tools/test_bench_board_mamba_ssm.py:68;tools/test_bench_board_neural_compile.py:66
+lane/bf16-units	36	35	36	35	tools/dev_pod.sh:1
+lane/board-resume-20260930	46	2	46	2	tools/bench_board_resume.py:38;tools/bench_board.py:6
+lane/catboost-parity-on-lm-attention-fallback	3371	3044	3180	2914	python/mojolearn/ensemble.py:130;gbdt/metrics/sample_quantile.mojo:24;gbdt/methods/ordered_boosting.mojo:23;gbdt/train.mojo:20
+lane/categorical-feature-cpu	9	7	9	7	python/mojolearn/ensemble.py:2
+lane/classical-pass-measure-20260930	420	194	420	194	tools/neural_experiment_measure.py:90;tools/neural_requested_profile.py:64;tools/neural_toggle_sweep.py:41;tools/summarize_requested_profile.py:16
+lane/cluster-apple-prof	58	16	58	16	bench/dbscan_m4_probe.py:19;hdbscan/impl/cluster/detail/single_linkage.mojo:7;core/stage_prof.mojo:5;hdbscan/impl/runner.mojo:5
+lane/cluster-speed-base	91	89	91	89	bench/x_cluster_speed.py:2
+lane/cpu-par-fallback	301	64	301	64	tools/cpu_path_audit.py:130;python/mojolearn/host_surface.py:52;python/mojolearn/_parallel_pool.py:29;python/mojolearn/_parallel_worker.py:13
+lane/cpu-training-e3	3102	2688	2896	2682	cluster/host/kmeans_oracle.mojo:57;glm/host/qn_oracle.mojo:41;bindings/_mojolearn_metrics_host.mojo:22;python/mojolearn/tests/test_cpu_training_e2.py:20
+lane/cpu-training-gate-speed	371	22	214	17	tools/cpu_identity_gate_check.py:180;tools/identity_break.py:17
+lane/data-runtime-million-cpu	58	58	38	38	
+lane/distance-pairwise-cpu	42	39	41	38	core/knn_host_predict.mojo:3
+lane/ensemble-meta-cpu	11	11	11	11	
+lane/expose-d-fixes	4117	3381	4100	3370	python/mojolearn/kernel_methods.py:85;python/mojolearn/resample.py:55;python/mojolearn/mixture.py:46;python/mojolearn/_ivf_impl.py:44
+lane/forecast-timeseries-cpu	80	78	80	78	holtwinters/host/hw_predict.mojo:2
+lane/forest-train-speed	56	0	42	0	extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:36;extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo:6
+lane/forest-training-cpu-20260919	5	5	5	5	
+lane/fp-contract-off-exp	30	6	30	6	bindings/build.sh:1;bindings/build_arima.sh:1;bindings/build_byte_lm.sh:1;bindings/build_embedding.sh:1
+lane/fp-contract-off-study	30	6	30	6	bindings/build.sh:1;bindings/build_arima.sh:1;bindings/build_byte_lm.sh:1;bindings/build_embedding.sh:1
+lane/gbdt-depthwise-fast	17	3	17	3	gbdt/methods/doc_parallel_boosting.mojo:14
+lane/gbdt-rest	1147	233	865	232	gbdt/targets/kernel/query_softmax.mojo:203;gbdt/host/gbdt_oracle_query_softmax.mojo:92;python/mojolearn/tests/test_gbdt_query_softmax.py:65;python/mojolearn/ensemble.py:55
+lane/gemm-p1-fold-bypass	0	0	0	0	
+lane/gram-prep-million-cpu	99	98	65	64	decomposition/host/pca_oracle.mojo:1
+lane/host-token-split-2	16	3	16	3	training/byte_lm_host.mojo:13
+lane/host-token-split-2-measure	29	3	29	3	training/byte_lm_host.mojo:26
+lane/host-token-split-measure	12	12	12	12	
+lane/hr2-kpca-seq	206	42	206	42	sequence/prophet.mojo:61;sequence/garch.mojo:58;sequence/exec_device.mojo:24;sequence/fold32.mojo:14
+lane/identical-body-tiles-20261005	6	5	6	5	tools/test_identical_speed_ab.py:1
+lane/identical-group-slack2-20261005	6	5	6	5	tools/test_identical_speed_ab.py:1
+lane/identical-group-slack8-20261005	6	5	6	5	tools/test_identical_speed_ab.py:1
+lane/identical-one-page-20261005	6	5	6	5	tools/test_identical_speed_ab.py:1
+lane/identical-packed64-20261005	6	5	6	5	tools/test_identical_speed_ab.py:1
+lane/identity-record-next	77	0	0	0	
+lane/ivf-filter-fix-measure	23	3	23	3	tools/ivf48_ab.sh:19;tools/ivf48_nv.sh:1
+lane/kernel-methods-cpu	55	39	55	39	gaussian_process/host/gpr_oracle.mojo:12;python/mojolearn/tests/test_cpu_training_gp.py:4
+lane/kmeans-mojo-1-2	1118	140	1075	139	gbdt/methods/greedy_subsets_searcher/kernel/hist_2_one_byte_base.mojo:41;arima/host/arima_oracle.mojo:34;trial/nvidia_body.sh:32;gbdt/methods/greedy_subsets_searcher/kernel/hist_one_byte.mojo:31
+lane/lane-map-import-graph	1002	985	989	972	tools/lane_select.py:11;tools/test_lane_select.py:3;tools/test_lane_select_harness.py:2;tools/lane_map_import_graph.py:1
+lane/large-data-classical-cpu	37	35	37	35	metrics/host/metrics_oracle.mojo:1;python/mojolearn/tests/test_cpu_training_e2.py:1
+lane/large-metrics-shared-cpu	83	76	83	76	bindings/_mojolearn_metrics_host.mojo:5;metrics/host/classification_oracle.mojo:1;python/mojolearn/tests/test_cpu_training_e2.py:1
+lane/linear-apple-base	2	2	2	2	
+lane/linfit-speed	827	116	827	116	x_linear/glm_wide.mojo:297;x_linear/sgd_bounded.mojo:196;x_linear/sgd.mojo:139;tools/linfit_speed.py:49
+lane/lm-attention-fallback	0	0	0	0	
+lane/lm-head-v2-dweight-reuse	1884	1613	1671	1418	python/mojolearn/tests/test_parallel_causal_lm.py:45;python/mojolearn/_verify_par.py:43;python/mojolearn/_mamba_impl.py:36;python/mojolearn/_transformer_impl.py:31
+lane/loss-metrics-objectives-cpu	57	50	56	49	gbdt/metrics/sample_quantile.mojo:7
+lane/lowbit-amd-tuned-lb	12	4	12	4	gemm/checks/gemm_int8_mma_tuned.mojo:8
+lane/lowbit-apple-now	47	14	47	14	gemm/checks/gemm_int15_apple.mojo:33
+lane/lowbit-apple-tuned	2203	493	2146	493	gemm/checks/gemm_int15_apple_tuned.mojo:631;bench/gemm_int15_apple_tuned_price_main.mojo:234;gemm/checks/gemm_int15_apple_tuned_dev.mojo:230;gemm/checks/gemm_int15_apple_tuned_check.mojo:221
+lane/lowbit-blocks	2	0	0	0	
+lane/lowbit-e2e	452	27	188	26	tools/lowbit_e2e/model_probe.py:77;tools/lowbit_e2e/public_probe.py:69;tools/lowbit_e2e/job.sh:16
+lane/lowbit-quality	2283	324	1959	319	bench/lowbit_quality/byte_lm_train.py:344;bench/lowbit_quality/infer_eval.py:299;bench/lowbit_quality/quantizer_check.py:199;bench/lowbit_quality/train_table.py:197
+lane/m3-sweep	98	12	67	12	tools/apple_sweep_run.py:55
+lane/mamba-opp	497	253	497	253	tools/bench_board_neural.py:86;tools/test_bench_board_mamba_ssm.py:68;tools/bench_board.py:48;tools/test_bench_board.py:23
+lane/mamba3-amd-regs2h-measure	36	21	36	21	tools/pr50_amd.sh:15
+lane/mamba3-padding-perf	22	2	9	2	mamba/checks/mamba3_oracle.mojo:7
+lane/mamba3-statepass	691	526	634	526	bindings/_mojolearn_mamba.mojo:46;mamba/checks/mamba3_fold_check.mojo:16;mamba/impl/mamba_ssm/ops/mamba3_siso.mojo:14;mamba/impl/mamba_ssm/ops/mamba3_fold.mojo:10
+lane/manifold-spectral-cpu	42	42	42	42	
+lane/merged	13165	11725	13146	11708	x_linear/device.mojo:200;x_decomp/device.mojo:82;python/mojolearn/_training_impl.py:66;x_decomp/kit_device.mojo:47
+lane/mixture-anomaly-cpu	89	87	89	87	isolation_forest/checks/if_oracle.mojo:1;mixture/host/gmm_host_oracle.mojo:1
+lane/model-load-shared-cpu	29	29	29	29	
+lane/model-selection-cpu	48	46	48	46	checks/model_selection_kfold_perf.py:1;python/mojolearn/model_selection.py:1
+lane/mojo-1-2-trial	0	0	0	0	
+lane/neighbors-rest	1096	131	887	131	neighbors/impl/distance/detail/distance_ops.mojo:247;python/mojolearn/tests/test_knn_extended_metrics.py:130;python/mojolearn/neighbors.py:93;python/mojolearn/tests/test_knn_self_query.py:66
+lane/neural-apple-base	71	66	71	66	tools/apple_speed_neural/profile.sh:5
+lane/neural-apple3-measure	41	4	41	4	tools/pr44_40_mac.sh:22;tools/pr44_gpu.sh:14;tools/pr44_nv.sh:1
+lane/neural-apple4	439	102	439	102	mamba/host/gen/mamba3_backward.mojo:304;mamba/impl/modules/mamba3_backward.mojo:28;tools/neural_experiments.py:5
+lane/neural-experiment-measure-20260930	200	23	200	23	tools/neural_experiment_measure.py:90;tools/neural_requested_profile.py:64;tools/summarize_requested_profile.py:16;training/byte_lm_logits.mojo:3
+lane/neural-pass102	19	0	19	0	python/mojolearn/_expansion_neighbors.py:19
+lane/neural-pass13	27	4	27	4	gemm/host/gemm_host_rows.mojo:23
+lane/neural-pass13-measure	44	6	44	6	gemm/host/gemm_host_rows.mojo:24;tools/pr19_job.sh:14
+lane/neural-pass144	392	217	392	217	x_decomp/jacobi_par.mojo:40;decomposition/checks/jacobi_eigh_device.mojo:37;decomposition/linalg_public_device.mojo:30;x_decomp/device.mojo:20
+lane/neural-pass17-measure	129	97	129	97	tools/pr23_mac.sh:13;tools/cell_ab_job2.sh:7;python/mojolearn/_linalg_impl.py:5;bindings/_mojolearn_x_decomp.mojo:2
+lane/neural-pass19	15	2	15	2	gemm/host/gemm_host_rows.mojo:13
+lane/neural-pass26-measure	162	126	162	126	bindings/_mojolearn_x_sequence.mojo:13;tools/pr29_job.sh:13;tools/pr31_gpu.sh:8;tools/pr29_nv.sh:1
+lane/neural-pass30-measure	261	107	261	107	x_neighbors/pr_sparse.mojo:88;x_neighbors/iter_device.mojo:29;x_neighbors/iter_host.mojo:18;python/mojolearn/_expansion_neighbors.py:8
+lane/neural-pass31-measure	42	19	42	19	xtrees/shap.mojo:16;tools/cell_ab_job2.sh:7
+lane/neural-pass32-measure	131	101	131	101	x_decomp/device.mojo:22;tools/cell_ab_job2.sh:7;tools/pr37_nv.sh:1
+lane/neural-pass34-measure	71	54	71	54	tools/pr38_opt.sh:8;tools/cell_ab_job2.sh:7;tools/pr38_nv.sh:2
+lane/neural-pass35-measure	157	125	157	125	tools/ivf_ab.sh:17;bindings/hostptr.mojo:12;ivf/impl/neighbors/ivf_flat/identical_ivf_scan.mojo:2;tools/ivf_nv.sh:1
+lane/neural-pass36	87	16	87	16	x_decomp/device.mojo:71
+lane/neural-pass36-measure	122	30	122	30	x_decomp/device.mojo:71;tools/pr40c_mac.sh:12;tools/cell_ab_job2.sh:7;tools/pr40_nv.sh:1
+lane/neural-pass37-measure	239	43	239	43	x_decomp/qr_host.mojo:176;x_decomp/host.mojo:8;tools/cell_ab_job2.sh:7;x_decomp/device.mojo:4
+lane/neural-pass38-measure	158	136	158	136	core/householder_qr.mojo:8;tools/cell_ab_job2.sh:7;x_decomp/qr_bounded.mojo:6;tools/pr43_nv.sh:1
+lane/neural-pass39-measure	20	13	20	13	tools/cell_ab_job2.sh:7
+lane/neural-pass40-measure	21	13	21	13	tools/cell_ab_job2.sh:7;tools/pr45_nv.sh:1
+lane/neural-pass41	173	9	173	9	x_decomp/device.mojo:164
+lane/neural-pass41-measure	194	22	194	22	x_decomp/device.mojo:164;tools/cell_ab_job2.sh:7;tools/pr46_nv.sh:1
+lane/neural-pass42-measure	22	3	22	3	tools/ivf47_ab.sh:18;tools/ivf47_nv.sh:1
+lane/neural-pass44-measure	198	197	198	197	bindings/_mojolearn_byte_lm.mojo:1
+lane/neural-pass45-measure	89	35	86	32	training/checks/train_loop.mojo:25;tools/pr52b_amd.sh:15;tools/pr52_amd.sh:14
+lane/neural-pass46-measure	158	139	158	139	tools/pr54_gpu_job.sh:18;tools/nv_pr54.sh:1
+lane/neural-pass47-measure	272	201	272	201	tools/neural_pass_job.sh:47;tools/nv_extra.sh:20;tools/nv_pass_wrapper.sh:3;bindings/_mojolearn_byte_lm.mojo:1
+lane/neural-pass48	87	58	87	58	core/scratch_pool.mojo:21;transformer/impl/llama/fused_attention.mojo:6;core/device_scan.mojo:1;transformer/impl/llama/modeling_llama.mojo:1
+lane/neural-pass48-measure	110	60	110	60	core/scratch_pool.mojo:21;tools/pr56_job.sh:21;transformer/impl/llama/fused_attention.mojo:6;core/device_scan.mojo:1
+lane/neural-pass49-measure	118	74	118	74	training/checks/train_loop.mojo:23;tools/pr57_job.sh:19;tools/nv_pr57.sh:1;training/byte_lm_logits.mojo:1
+lane/neural-pass49-on-61	96	72	96	72	training/checks/train_loop.mojo:23;training/byte_lm_logits.mojo:1
+lane/neural-pass5	310	83	310	83	mamba/host/gen/mamba3_backward.mojo:131;mamba/impl/modules/mamba3_backward.mojo:88;tools/neural_experiments.py:8
+lane/neural-pass50-measure	24	2	24	2	tools/pr58_job.sh:21;tools/nv_pr58.sh:1
+lane/neural-pass53-on-56	45	39	45	39	transformer/impl/llama/fused_attention.mojo:6
+lane/neural-pass54	21	19	21	19	gemm/checks/gemm_identical.mojo:2
+lane/neural-pass54-measure	45	21	45	21	tools/pr62_job.sh:21;gemm/checks/gemm_identical.mojo:2;tools/nv_pr62.sh:1
+lane/neural-pass57	8	0	8	0	transformer/impl/llama/fused_attention.mojo:8
+lane/neural-pass59	16	16	16	16	
+lane/neural-pass62-on-64	13	13	13	13	
+lane/neural-pass67	8	0	8	0	transformer/impl/llama/modeling_llama.mojo:8
+lane/neural-pass76	20	0	20	0	python/mojolearn/_expansion_linear.py:20
+lane/neural-pass77	60	10	60	10	x_cluster/host/host_ops.mojo:37;python/mojolearn/_expansion_cluster.py:13
+lane/neural-pass78	98	11	98	11	x_decomp/host_simd.mojo:59;python/mojolearn/_expansion_decomp.py:22;x_decomp/host.mojo:6
+lane/neural-pass83	42	5	42	5	x_linear/ops.mojo:29;python/mojolearn/_expansion_linear.py:8
+lane/neural-toggle-sweep-20260930	254	39	254	39	tools/neural_experiment_measure.py:90;tools/neural_requested_profile.py:64;tools/neural_toggle_sweep.py:41;tools/summarize_requested_profile.py:16
+lane/neural-xlw	2806	2148	2805	2147	x_linear/device.mojo:292;x_linear/logcv_grid.mojo:105;x_linear/huber_grid.mojo:73;x_linear/logcv.mojo:38
+lane/ordered-speed-diag2	19	4	19	4	gbdt/methods/oblivious_tree_doc_parallel_structure_searcher.mojo:15
+lane/ordered-speed-m2diag	4	0	4	0	checks/kernel_matrix.mojo:4
+lane/ordered-speed-prespeed	76	76	76	76	
+lane/par-harness	506	459	465	459	tools/test_algos_lane_check_par.py:5;tools/par_harness/job.sh:1
+lane/pass4-measure-20260930	43	40	43	40	tools/pass4_amd_job.sh:3
+lane/probabilistic-million-cpu	82	82	56	56	
+lane/probability-calibration-cpu	24	23	24	23	bindings/host_helpers.mojo:1
+lane/python-310-311	147	126	147	126	tools/attention_v2_oracle.py:18;python/mojolearn/_backend.py:1;python/mojolearn/_byte_lm_host.py:1;python/mojolearn/_forest_host.py:1
+lane/release-gpu-columns	733	53	668	53	tools/release_gpu_columns.py:165;tools/test_release_gpu_columns.py:141;tools/release.py:116;tools/release_gpu_column.sh:75
+lane/release-reuse-bindings	1268	1079	1243	1054	tools/release_reuse.py:61;tools/release.py:52;packaging/linux/pack_wheel.py:35;tools/tests/test_release_reuse.py:34
+lane/rf-mutex-claim-acquire	988	159	434	158	ensemble/decisiontree/batched_levelalgo/split.mojo:103;tools/rf_nondeterminism/rf_claimfix_ab_body.template.sh:71;neighbors/mutex_probe_main.mojo:50;neighbors/impl/detail/fused_l2_knn.mojo:28
+lane/rf-score-weighted-nondeterminism	1843	1526	1645	1526	ensemble/decisiontree/batched_levelalgo/split.mojo:63;ensemble/checks/atomic_matrix.mojo:30;ensemble/decisiontree/batched_levelalgo/builder.mojo:25;tools/rf_nondeterminism/rf_probe085_body.template.sh:1
+lane/s17-measure-20260930	211	74	211	74	mamba/host/gen/mamba3_backward.mojo:86;mamba/impl/modules/mamba3_backward.mojo:34;tools/s17_job.sh:12;tools/neural_experiments.py:5
+lane/sabotage-no-host-routes	1	0	1	0	x_linear/device.mojo:1
+lane/stage-diag-20261001	45	5	45	5	tools/amd_toggle_sweep.sh:20;tools/stage_diag_amd.sh:12;tools/stage_diag_mac.sh:8
+lane/tokenizer-text-cpu-20260919	44	40	44	40	bench/speed/tokenizer_bpe_batch.py:4
+lane/tsa-classical-utils-cpu	26	23	26	23	holtwinters/host/hw_predict.mojo:2;python/mojolearn/tests/test_holtwinters_inference.py:1
+lane/vultr-leg	1370	526	1362	526	tools/vultr_leg.sh:548;tools/tests/test_vultr_leg_shim.py:246;tools/lm_run_driver.py:42
+lane/wheel-smoke-do-fallback	526	490	518	484	tools/release_wheel_smoke.sh:21;tools/release.py:7;tools/test_release_wheel_smoke.py:6
