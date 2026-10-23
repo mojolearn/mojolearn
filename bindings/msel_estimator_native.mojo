@@ -54,7 +54,7 @@ def msel_estimator_plan(model: PythonObject, context: PythonObject) raises -> Py
 
 
 def msel_estimator_call(model: PythonObject, method: String, args: PythonObject,
-                        context: PythonObject) raises -> PythonObject:
+                        context: PythonObject, scorer_response: Bool = False) raises -> PythonObject:
     var b = Python.import_module("builtins")
     var plan = msel_estimator_plan(model, context)
     var entry = plan["entry"]
@@ -93,7 +93,12 @@ def msel_estimator_call(model: PythonObject, method: String, args: PythonObject,
                 _ = py_call(fields.pop, "_mojolearn_fitting", PythonObject(None))
         py_setitem(fields, "_mojolearn_fitted", PythonObject(True))
         return result
-    return family_call(entry, model, method_plan[0], envelope, plan["context"])
+    var operation = method_plan[0]
+    if scorer_response and method == "predict":
+        var internal_operation = py_get(plan, "scorer_predict_operation")
+        if internal_operation is not None:
+            operation = internal_operation
+    return family_call(entry, model, operation, envelope, plan["context"])
 
 
 def msel_clone_parameter(value: PythonObject, context: PythonObject) raises -> PythonObject:

@@ -25,13 +25,22 @@ def test_named_scorer_public_cv_is_native(name):
     assert np.isfinite(np.asarray(result)).all()
 
 
-def test_public_make_scorer_and_call_use_native_metric_options():
+@pytest.mark.parametrize('cls', [ml.LinearRegression, ml.Ridge])
+def test_public_make_scorer_and_call_use_native_metric_options(cls):
     x, y = data()
-    model = ml.Ridge().fit(x, y)
+    model = cls().fit(x, y)
     scorer = audit_native_call(ms.make_scorer, metrics.mean_absolute_error,
                                greater_is_better=False, multioutput='uniform_average').assert_native()
     got = audit_native_call(scorer.__call__, model, x, y).assert_native()
-    expected = -float(metrics.mean_absolute_error(y, model.predict(x)))
+    public_prediction = np.asarray(model.predict(x))
+    assert public_prediction.dtype == np.float64
+    # Test oracle: Ridge's public output widens its float32 kernel result;
+    # package-internal scoring consumes the original words, as before.
+    kernel_prediction = public_prediction.astype('f4')
+    np.testing.assert_array_equal(public_prediction, kernel_prediction.astype('f8'))
+    with pytest.raises(TypeError, match='float32'):
+        metrics.mean_absolute_error(y, public_prediction)
+    expected = -float(metrics.mean_absolute_error(y, kernel_prediction))
     assert np.float64(got).view('u8') == np.float64(expected).view('u8')
 
 
@@ -70,7 +79,11 @@ def test_expansion_only_metric_scorer_consumes_native_prediction():
                    numeric_mode='identical')
     scorer = audit_native_call(ms.make_scorer, metric, **options).assert_native()
     got = audit_native_call(scorer.__call__, model, x, y).assert_native()
-    expected = float(metric(y, model.predict(x), **options))
+    public_prediction = np.asarray(model.predict(x))
+    assert public_prediction.dtype == np.float64
+    kernel_prediction = public_prediction.astype('f4')
+    np.testing.assert_array_equal(public_prediction, kernel_prediction.astype('f8'))
+    expected = float(metric(y, kernel_prediction, **options))
     assert np.float64(got).view('u8') == np.float64(expected).view('u8')
 
 
@@ -107,6 +120,18 @@ def named_scorer_models():
     return {key: (ml.RandomForestRegressor(**options).fit(x, y)
                   if key == 'regression' else ml.RandomForestClassifier(**options).fit(x, y), x, y)
             for key, y in targets.items()}
+
+
+def test_binary_top_k_scorer_consumes_positive_class_probability(named_scorer_models):
+    model, x, y = named_scorer_models['binary']
+    scorer = ms.get_scorer('top_k_accuracy')
+    # Test setup chooses a nontrivial top-one result instead of the default
+    # top-two score, which is always one for two classes.
+    vars(scorer)['_kwargs']['k'] = 1
+    got = audit_native_call(scorer.__call__, model, x, y).assert_native()
+    probability = np.asarray(model.predict_proba(x))[:, 1].astype('f4')
+    expected = metrics.top_k_accuracy_score(y, probability, k=1)
+    assert np.float64(got).view('u8') == np.float64(expected).view('u8')
 
 
 @pytest.mark.parametrize('name', sorted(ms._NATIVE_CONTEXT['family_msel_scorers']))

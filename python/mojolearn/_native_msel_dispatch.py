@@ -56,6 +56,10 @@ def connect(context, package):
             'get_params': ('get_params', (const(False),)),
             'set_params': ('set_params', (arg(0),)),
         })
+        # The old Python scorer was an internal caller and consumed the
+        # float32 kernel output. A native scorer has no Python package frame;
+        # select that same output explicitly without changing public predict.
+        registry[cls]['scorer_predict_operation'] = 'predict_score'
     register(decomposition.PCA, decomposition._PCA_ENTRY, decomposition._PCA_CONTEXT,
              ('n_components', 'copy', 'whiten', 'svd_solver', 'tol', 'iterated_power', 'n_oversamples',
               'power_iteration_normalizer', 'random_state', 'numeric_mode'), 'initialize', {
@@ -93,6 +97,7 @@ def connect(context, package):
         for name, cls in host.get('classical_host_estimators', {}).items():  # glue: already-connected explicit CPU classes
             base = registry[getattr(linear_model, name)]
             register(cls, linear_model._native_classical, host, base['parameters'], base['init'], base['methods'])
+            registry[cls]['scorer_predict_operation'] = base['scorer_predict_operation']
     from ._native_msel_extra import connect as connect_extra
     connect_extra(context, register, registry)
     context.update(family_msel_estimators=registry,

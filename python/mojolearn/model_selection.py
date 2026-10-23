@@ -1521,7 +1521,7 @@ class _Scorer:
         return _NATIVE(self, "family_msel_scorer_call", (estimator, X, y, sample_weight, _memo), _NATIVE_CONTEXT)
 
 
-_BINARY_PROBA = {'roc_auc', 'average_precision', 'neg_brier_score', 'neg_log_loss'}
+_BINARY_PROBA = {'roc_auc', 'average_precision', 'neg_brier_score', 'neg_log_loss', 'top_k_accuracy'}
 
 
 def _proba_column1(pred):
