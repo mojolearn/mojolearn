@@ -1407,6 +1407,18 @@ except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as _mi
     _scaler_host_unavailable(HostMinMaxScaler, _MINMAX_CONTEXT, _minmax_error)
 
 
+# HostLogisticRegression fits and scores through LogisticRegression's native
+# owner with fixed CPU entries; its score predicts through the classical host
+# inference owner, as its predict does.
+from .linear_model import _LR_CONTEXT
+from ._native_logistic_bridge import connect_host as _connect_logistic_host
+try:
+    _logistic_host = _backend.load_host_module(_HOST_BASENAME)
+except (ImportError, AttributeError, TypeError, ValueError, RuntimeError) as _logistic_host_error:
+    _logistic_host = _logistic_host_error
+_connect_logistic_host(HostLogisticRegression, _LR_CONTEXT, _logistic_host, _native_classical, _CLASSICAL)
+
+
 # Import-time connection of complete explicit CPU prediction owners.
 def _connect_host_inference():
     from types import BuiltinFunctionType, MethodType, FunctionType, MemberDescriptorType, MethodDescriptorType, ModuleType
