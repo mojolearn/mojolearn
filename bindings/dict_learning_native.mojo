@@ -278,7 +278,7 @@ def _coding_inverse(mut kit: DecompKit, c: Int, d: Int, fields: PythonObject) ra
         var plus = kit.cols_of(c, 0, h)
         var minus = kit.cols_of(c, h, 2 * h)
         c = kit.ew(XD_SUB, plus, minus)
-    return kit.out(kit.mm(c, d))
+    return kit.publish(kit.mm(c, d))
 
 
 # ------------------------------------------------------------ the estimators
@@ -303,7 +303,7 @@ def dictionary_learning_fit(model: PythonObject, args: PythonObject, project: Bo
                                  Bool(py=fields["positive_dict"]), Bool(py=fields["positive_code"]),
                                  fields["transform_max_iter"])
         var d = fit[1]
-        py_setitem(fields, "components_", kit.out(d))
+        py_setitem(fields, "components_", kit.publish(d))
         py_setitem(fields, "error_", fit[2])
         py_setitem(fields, "n_iter_", PythonObject(fit[3]))
         py_setitem(fields, "n_features_in_", PythonObject(kit.ncols(x)))
@@ -312,7 +312,7 @@ def dictionary_learning_fit(model: PythonObject, args: PythonObject, project: Bo
         var code = fit[0]
         if Bool(py=fields["split_sign"]):
             code = _split_sign(kit, code)
-        return kit.out(code)
+        return kit.publish(code)
     finally:
         kit.close()
 
@@ -342,11 +342,11 @@ def minibatch_dictionary_fit(model: PythonObject, args: PythonObject, project: B
         var n_steps = fit[1]
         py_setitem(fields, "n_steps_", PythonObject(n_steps))
         py_setitem(fields, "n_iter_", PythonObject(-((-n_steps) // fit[2])))
-        py_setitem(fields, "components_", kit.out(fit[0]))
+        py_setitem(fields, "components_", kit.publish(fit[0]))
         py_setitem(fields, "n_features_in_", PythonObject(kit.ncols(x)))
         if not project:
             return model
-        return kit.out(_coding_encode(kit, x, fit[0], fields))
+        return kit.publish(_coding_encode(kit, x, fit[0], fields))
     finally:
         kit.close()
 
@@ -363,7 +363,7 @@ def coding_transform(model: PythonObject, args: PythonObject, inverse: Bool, con
             return _coding_inverse(kit, c, d, fields)
         var x = _matrix(kit, args[0], "X", context)
         var d = _matrix(kit, fields["components_"], "components_", context)
-        return kit.out(_coding_encode(kit, x, d, fields))
+        return kit.publish(_coding_encode(kit, x, d, fields))
     finally:
         kit.close()
 
@@ -401,7 +401,7 @@ def sparse_coder(model: PythonObject, operation: String, args: PythonObject, con
             var c = _matrix(kit, args[0], "code", context)
             return _coding_inverse(kit, c, d, fields)
         var x = _matrix(kit, args[0], "X", context)
-        return kit.out(_coding_encode(kit, x, d, fields))
+        return kit.publish(_coding_encode(kit, x, d, fields))
     finally:
         kit.close()
 
@@ -437,7 +437,7 @@ def sparse_pca_fit(model: PythonObject, args: PythonObject, project: Bool, conte
                                      False, False, PythonObject(1000))
             var code_t = kit.transpose(fit[0])
             comps = _normalize(kit, code_t)
-            py_setitem(fields, "components_", kit.out(comps))
+            py_setitem(fields, "components_", kit.publish(comps))
             py_setitem(fields, "n_components_", PythonObject(kit.nrows(comps)))
             py_setitem(fields, "error_", fit[2])
             py_setitem(fields, "n_iter_", PythonObject(fit[3]))
@@ -463,14 +463,14 @@ def sparse_pca_fit(model: PythonObject, args: PythonObject, project: Bool, conte
                                       -1, PythonObject(1000), PythonObject(False))
             var code_t = kit.transpose(code)
             comps = _normalize(kit, code_t)
-            py_setitem(fields, "components_", kit.out(comps))
+            py_setitem(fields, "components_", kit.publish(comps))
             py_setitem(fields, "n_components_", PythonObject(kit.nrows(comps)))
             py_setitem(fields, "n_iter_", PythonObject(-((-fit[1]) // fit[2])))
         py_setitem(fields, "mean_", kit.out_shape(mean, Python.tuple(cols)))
         py_setitem(fields, "n_features_in_", PythonObject(cols))
         if not project:
             return model
-        return kit.out(_spca_project(kit, x, mean, comps, fields["ridge_alpha"]))
+        return kit.publish(_spca_project(kit, x, mean, comps, fields["ridge_alpha"]))
     finally:
         kit.close()
 
@@ -486,8 +486,8 @@ def sparse_pca_transform(model: PythonObject, args: PythonObject, inverse: Bool,
         var comps = _matrix(kit, fields["components_"], "components_", context)
         if inverse:
             var product = kit.mm(x, comps)
-            return kit.out(kit.ew(XD_ADD, product, mean))
-        return kit.out(_spca_project(kit, x, mean, comps, fields["ridge_alpha"]))
+            return kit.publish(kit.ew(XD_ADD, product, mean))
+        return kit.publish(_spca_project(kit, x, mean, comps, fields["ridge_alpha"]))
     finally:
         kit.close()
 
@@ -500,7 +500,7 @@ def sparse_encode_call(args: PythonObject, context: PythonObject) raises -> Pyth
         var init = -1 if args[5] is None else _matrix(kit, args[5], "init", context)
         var x = _matrix(kit, args[0], "X", context)
         var d = _matrix(kit, args[1], "dictionary", context)
-        return kit.out(_sparse_encode(kit, x, d, args[2], args[4], args[3], init, args[6], args[7]))
+        return kit.publish(_sparse_encode(kit, x, d, args[2], args[4], args[3], init, args[6], args[7]))
     finally:
         kit.close()
 

@@ -191,7 +191,7 @@ struct DecompKit(Movable):
         self.allocations.clear()
 
     def has(self, name: String) raises -> Bool:
-        return py_get(self.entries, name) is not None
+        return py_get(self.entries, PythonObject(name)) is not None
 
     def opt_dev(self, name: String) raises -> Bool:
         # `_Kit._opt_dev`: an optional resident entry this binding exports.
@@ -298,9 +298,10 @@ struct DecompKit(Movable):
                 found = True
         return found
 
-    def out(mut self, a: Int) raises -> PythonObject:
+    def publish(mut self, a: Int) raises -> PythonObject:
         # `_M.out()`: a fresh (rows, cols) float32 Array of the matrix.
-        return self.out_shape(a, Python.tuple(self.matrices[a].rows, self.matrices[a].cols))
+        var shape = Python.tuple(self.matrices[a].rows, self.matrices[a].cols)
+        return self.out_shape(a, shape)
 
     def out_shape(mut self, a: Int, shape: PythonObject) raises -> PythonObject:
         var n = self.size(a)
@@ -369,8 +370,11 @@ struct DecompKit(Movable):
         var out = self.zeros(rows, cols)
         if rows * cols:
             var aa = self.address(a)
-            var ab = self.address(self.one_host if b < 0 else b)
-            var ac = self.address(self.one_host if c < 0 else c)
+            var one = self.one_host
+            var ib = one if b < 0 else b
+            var ic = one if c < 0 else c
+            var ab = self.address(ib)
+            var ac = self.address(ic)
             _ = py_call(self.entries["x_decomp_ew"], aa, ab, ac, self.address(out), params, PythonObject(scalar))
         return out
 
@@ -502,7 +506,8 @@ struct DecompKit(Movable):
         var d = self.matrices[a].device
         if vector:
             # The same words, a view (host and device alike).
-            return self.add(self.matrices[a].host, cols, rows, d)
+            var shared = self.matrices[a].host
+            return self.add(shared, cols, rows, d)
         if d >= 0 and n < XD_I32_MAX:
             var out = self.device_output(cols, rows)
             _ = py_call(self.entries["x_decomp_dev_move"], d, d, self.matrices[out].device,
@@ -510,13 +515,18 @@ struct DecompKit(Movable):
             return out
         var out = self.zeros(cols, rows)
         var aa = self.address(a)
-        _ = py_call(self.entries["x_decomp_move"], aa, self.address(self.one_host), self.address(out),
+        var one = self.one_host
+        var ai = self.address(one)
+        var ao = self.address(out)
+        _ = py_call(self.entries["x_decomp_move"], aa, ai, ao,
                     Python.list(XD_TRANSPOSE, n, rows, cols, 0, 0, 0, n, n, 1))
         return out
 
     def reshape(mut self, a: Int, rows: Int, cols: Int) -> Int:
         # `_M.reshape`: a view of the same words.
-        return self.add(self.matrices[a].host, rows, cols, self.matrices[a].device)
+        var shared = self.matrices[a].host
+        var handle = self.matrices[a].device
+        return self.add(shared, rows, cols, handle)
 
     def hstack(mut self, ms: List[Int]) raises -> Int:
         # `_Kit.hstack`: PLACE_COLS moves, copies only.
@@ -534,10 +544,14 @@ struct DecompKit(Movable):
                 var params = Python.list(XD_PLACE_COLS, count, self.matrices[m].cols, width, offset, 0, 0, count, rows * width, 1)
                 if resident:
                     var dm = self.device(m)
-                    _ = py_call(self.entries["x_decomp_dev_move"], dm, self.dev_one(), self.matrices[out].device, params)
+                    var one = self.dev_one()
+                    _ = py_call(self.entries["x_decomp_dev_move"], dm, one, self.matrices[out].device, params)
                 else:
                     var am = self.address(m)
-                    _ = py_call(self.entries["x_decomp_move"], am, self.address(self.one_host), self.address(out), params)
+                    var one = self.one_host
+                    var ai = self.address(one)
+                    var ao = self.address(out)
+                    _ = py_call(self.entries["x_decomp_move"], am, ai, ao, params)
             offset += self.matrices[m].cols
         return out
 
@@ -557,7 +571,8 @@ struct DecompKit(Movable):
                 var count = self.size(m)
                 if count:
                     var dm = self.device(m)
-                    _ = py_call(self.entries["x_decomp_dev_move"], dm, self.dev_one(), self.matrices[out].device,
+                    var one = self.dev_one()
+                    _ = py_call(self.entries["x_decomp_dev_move"], dm, one, self.matrices[out].device,
                                 Python.list(XD_PLACE_COLS, count, cols, cols, offset * cols, 0, 0, count, rows * cols, 1))
                 offset += self.matrices[m].rows
             return out
@@ -590,12 +605,15 @@ struct DecompKit(Movable):
         if self.use(d, v):
             var dv = self.device(v)
             var dd = self.device(d)
-            _ = py_call(self.entries["x_decomp_dev_move"], dv, self.dev_one(), dd, params)
+            var one = self.dev_one()
+            _ = py_call(self.entries["x_decomp_dev_move"], dv, one, dd, params)
             self.wrote_device(d)
             return d
         var av = self.address(v)
         var ad = self.address(d)
-        _ = py_call(self.entries["x_decomp_move"], av, self.address(self.one_host), ad, params)
+        var one = self.one_host
+        var ai = self.address(one)
+        _ = py_call(self.entries["x_decomp_move"], av, ai, ad, params)
         self.wrote_host(d)
         return d
 
@@ -603,10 +621,13 @@ struct DecompKit(Movable):
         # `_Kit.copy`: a device copy of a device matrix, else `_M.copy()`.
         var n = self.size(a)
         if n and self.matrices[a].device >= 0 and self.use(a):
-            var out = self.device_output(self.matrices[a].rows, self.matrices[a].cols)
+            var rows = self.matrices[a].rows
+            var cols = self.matrices[a].cols
+            var out = self.device_output(rows, cols)
             var da = self.device(a)
-            _ = py_call(self.entries["x_decomp_dev_move"], da, self.dev_one(), self.matrices[out].device,
-                        Python.list(XD_PLACE_COLS, n, self.matrices[a].cols, self.matrices[a].cols, 0, 0, 0, n, n, 1))
+            var one = self.dev_one()
+            _ = py_call(self.entries["x_decomp_dev_move"], da, one, self.matrices[out].device,
+                        Python.list(XD_PLACE_COLS, n, cols, cols, 0, 0, 0, n, n, 1))
             return out
         return self.copy_host(a)
 
