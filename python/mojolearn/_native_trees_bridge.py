@@ -47,8 +47,8 @@ def _entries(module):
         # A CPU-only install: the family's host binding serves the entries
         # the canonical binding name stands for.
         basename = _backend._HOST_MODULES.get(module.__name__.rsplit(".", 1)[-1])
-        if basename is not None and type(_backend.load_host_module(basename)) is ModuleType:
-            module = _backend.load_host_module(basename)
+        if basename is not None:
+            module = _backend.load_host_module(basename)  # cpu-route: a CPU-only install connects its host binding at import
     if type(module) is not ModuleType:
         # A missing tier or a refusing stub: touching it states the reason.
         try:
