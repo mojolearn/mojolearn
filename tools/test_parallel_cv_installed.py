@@ -30,7 +30,8 @@ def test_shipped_scorer_and_complete_receipt():
 
 
 @pytest.mark.parametrize('fault', ['missing-run', 'duplicate-run', 'missing-control', 'bad-profile',
-                                   'bad-input', 'bad-native', 'bad-replay', 'bad-scores', 'aliased', 'bad-cv-owner'])
+                                   'bad-input', 'bad-native', 'bad-replay', 'bad-scores', 'aliased', 'bad-cv-owner',
+                                   'missing-native-owner', 'malformed-native-owner', 'unexpected-native-owner'])
 def test_complete_receipt_rejects_missing_or_changed_evidence(fault):
     report = receipt()
     if fault == 'missing-run': report['runs'].pop()
@@ -39,6 +40,9 @@ def test_complete_receipt_rejects_missing_or_changed_evidence(fault):
     elif fault == 'bad-profile': report['source']['source_sha256'].pop('model_selection.py')
     elif fault == 'bad-input': report['inputs'].pop('X')
     elif fault == 'bad-cv-owner': report['bindings']['_native_cv']['sha256'] = '0' * 64
+    elif fault == 'missing-native-owner': report['bindings'].pop('_native_archive')
+    elif fault == 'malformed-native-owner': report['bindings']['_native_trees']['sha256'] = 'not-a-hash'
+    elif fault == 'unexpected-native-owner': report['bindings']['_native_unknown'] = {'sha256': 'e' * 64}
     elif fault == 'bad-native': report['bindings']['_mojolearn_gbdt']['sha256'] = '0' * 64
     elif fault == 'bad-replay': next(iter(report['runs'][0]['fold_records'].values()))['reload_predict'] = '0' * 64
     elif fault == 'bad-scores': report['runs'][0]['scores_hex'] = '0' * 80

@@ -19,6 +19,7 @@ def connect(context, resident_context):
     # optional helper retains its refusal until the operation needs it.
     from types import BuiltinFunctionType, GetSetDescriptorType
     from ._buffer import _native
+    from ._expansion_metrics import _binding as _metrics_binding
     from ._native_labels_bridge import label_context, _refusal
     entries = {}
     for name in _HELPERS:  # glue: fixed native model-selection exports
@@ -29,6 +30,15 @@ def connect(context, resident_context):
             entries[name] = entry
         except Exception as error:
             entries[name] = _refusal(error)
+    try:
+        # glue: first-seen stratification uses this existing metrics export;
+        # select its owner here, never through a Python loader during split.
+        entry = _metrics_binding(None).x_metrics_first_rows
+        if type(entry) is not BuiltinFunctionType:
+            raise TypeError('model selection requires the compiled x_metrics_first_rows entry')
+        entries['x_metrics_first_rows'] = entry
+    except Exception as error:
+        entries['x_metrics_first_rows'] = _refusal(error)
     context.update(label_context())
     context.update(family_msel_entries=entries, family_msel_resident_context=resident_context)
     layouts = {}

@@ -268,6 +268,31 @@ def test_learning_curve_takes_nested_prefixes_of_one_order():
     assert np.any(expected_test[0] != expected_test[-1])
 
 
+@pytest.mark.parametrize('folds,seed', [(3, 7), (4, 29)])
+def test_learning_curve_last_shuffle_gather_retains_all_permutation_owners(folds, seed):
+    import numpy as np
+    from mojolearn import Ridge, model_selection as ms
+    x, y = (np.asarray(value, dtype='f4') for value in _xy(96))
+    width = len(x) // folds
+    maximum = len(x) - width
+    wanted_sizes = [maximum // 4, maximum // 2, maximum]
+    sizes, actual_train, actual_test = _native_cv(ms.learning_curve, Ridge(alpha=1., numeric_mode='identical'),
+        x, y, cv=folds, train_sizes=[.25, .5, 1.], shuffle=True, random_state=seed)
+    np.testing.assert_array_equal(sizes, wanted_sizes)
+    expected_train, expected_test = np.empty((3, folds)), np.empty((3, folds))
+    for fold in range(folds):
+        held = list(range(fold * width, (fold + 1) * width))
+        train = [row for row in range(len(x)) if row not in held]
+        order = [train[position] for position in _learning_order(len(train), fold, seed)]
+        for row, size in enumerate(wanted_sizes):
+            prefix = order[:size]
+            fitted = Ridge(alpha=1., numeric_mode='identical').fit(x[prefix], y[prefix])
+            expected_train[row, fold] = fitted.score(x[prefix], y[prefix])
+            expected_test[row, fold] = fitted.score(x[held], y[held])
+    np.testing.assert_array_equal(actual_train, expected_train)
+    np.testing.assert_array_equal(actual_test, expected_test)
+
+
 @pytest.mark.parametrize('operation', ['search', 'validation', 'learning'])
 def test_python_fold_spy_is_refused_before_any_callback(operation):
     from mojolearn import model_selection as ms
