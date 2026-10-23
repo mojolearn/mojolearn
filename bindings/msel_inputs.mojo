@@ -4,6 +4,7 @@
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get
+from bindings.py_attr import py_attr
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_input
 from bindings.classical_pandas import (
@@ -64,10 +65,10 @@ def _pandas_axis_count(axis: PythonObject, context: PythonObject) raises -> Int:
         var codes = py_get(_pd_fields(axis), "_codes")
         if py_type(codes) is not b.list and py_type(codes) is not _pd_class("pandas.core.indexes.frozen", "FrozenList"):
             raise Error("TypeError: pandas MultiIndex requires native code-list storage")
-        var count = Int(py=py_call(b.list.__len__, codes))
+        var count = Int(py=py_call(py_attr(b.list, "__len__"), codes))
         var rows = 0
         for i in range(count):  # driver-loop: native code arrays must agree on their row dimension
-            var code = py_call(b.list.__getitem__, codes, i)
+            var code = py_call(py_attr(b.list, "__getitem__"), codes, i)
             if py_type(code) is not context["ndarray"] or Int(py=code.ndim) != 1:
                 raise Error("TypeError: pandas MultiIndex requires native one-dimensional codes")
             if i > 0 and Int(py=code.shape[0]) != rows:
@@ -189,7 +190,7 @@ def _pandas_materialize(value: PythonObject, context: PythonObject, rows_context
             for row in range(nrows):  # driver-loop: storage copy only, preserving every promoted element's bits
                 var src = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=source + (col * nrows + row) * item)
                 var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=out_address + (row * ncols + dest) * item)
-                memcpy(dst, src, item)
+                memcpy(dest=dst, src=src, count=item)
                 _ = block
                 _ = output
         _ = block^

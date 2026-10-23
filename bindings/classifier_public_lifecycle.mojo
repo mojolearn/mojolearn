@@ -4,6 +4,7 @@
 # expose the established ClassLabels object only after the operation completes.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
+from bindings.py_attr import py_attr
 from bindings.classical_pandas import _pd_class, _pd_fields, _pd_get
 from bindings.classical_labels import _flatten_labels
 
@@ -37,7 +38,7 @@ def classifier_label_list(value: PythonObject, context: PythonObject) raises -> 
         return value
     _ = _labels_class(context)
     # list.copy is the native list implementation, not an iterable protocol.
-    return py_call(py_type(Python.list()).copy, value)
+    return py_call(py_attr(py_type(Python.list()), "copy"), value)
 
 
 def _public_labels(values: PythonObject, context: PythonObject) raises -> PythonObject:

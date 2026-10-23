@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Exact native search/container storage. No Python attribute or subclass hooks.
 from std.python import Python, PythonObject
+from bindings.py_slice_native import py_slice, py_slice_from
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.msel_inputs import msel_input, msel_admit
 from bindings.arena_materialize_native import _array
@@ -66,14 +67,14 @@ def msel_parameter_values(value: PythonObject, context: PythonObject) raises -> 
             raise Error("TypeError: iteration over a 0-d Array")
         if rank == 1:
             return py_call(b.list, packed._mv)
-        var shape = py_call(packed.shape.__getitem__, py_call(b.slice, 1, PythonObject(None)))
+        var shape = py_slice_from(packed.shape, 1)
         var n = Int(py=packed.shape[0])
         var step = 1
         for k in range(len(shape)):  # driver-loop: native row view extents
             step *= Int(py=shape[k])
         var rows = Python.list()
         for k in range(n):  # driver-loop: parameter row views retain their original packed owner
-            var view = py_call(packed._mv.__getitem__, py_call(b.slice, k * step, (k + 1) * step))
+            var view = py_slice(packed._mv, k * step, (k + 1) * step)
             var row = _array(shape, String(packed.dtype), view, packed._store, packed._pin,
                              context["family_msel_resident_context"], packed)
             _ = py_call(rows.append, row)

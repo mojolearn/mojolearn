@@ -774,7 +774,7 @@ def _msel_attr(model: PythonObject, name: String) raises -> PythonObject:
     """`model.<name>` with its own AttributeError."""
     return family_call(Python.import_module("builtins").getattr, model, PythonObject(name))
 
-def msel_get_scorer(scoring: PythonObject, context: PythonObject) raises -> PythonObject:
+def msel_get_scorer(var scoring: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
     if scoring is None:
         return scoring
