@@ -212,7 +212,7 @@ def _i32_vector(source: PythonObject, name: String, context: PythonObject) raise
     var typestr = classical_dtype_str(view, context)
     var out = i32_array(n, context)
     var dest = I32P(unsafe_from_address=Int(py=classical_address(out)))
-    var raw = py_call(context["array_type"], "q" if typestr == "<i8" else "i")
+    var raw = py_call(context["array_type"], PythonObject(String("q") if typestr == "<i8" else String("i")))
     if typestr == "<i4" or typestr == "<i8":
         _ = py_call(raw.frombytes, classical_c_bytes(view, name, context))
     else:
@@ -236,15 +236,15 @@ struct CsrIn(Movable):
     var data: PythonObject
     var n: Int
     var d: Int
-    var source: PythonObject
+    var nnz: Int
 
-    def __init__(out self, indptr: PythonObject, indices: PythonObject, data: PythonObject, n: Int, d: Int, source: PythonObject):
+    def __init__(out self, indptr: PythonObject, indices: PythonObject, data: PythonObject, n: Int, d: Int, nnz: Int):
         self.indptr = indptr
         self.indices = indices
         self.data = data
         self.n = n
         self.d = d
-        self.source = source
+        self.nnz = nnz
 
 
 def csr_input(source: PythonObject, context: PythonObject) raises -> CsrIn:
@@ -252,13 +252,15 @@ def csr_input(source: PythonObject, context: PythonObject) raises -> CsrIn:
     var shape = csr.shape
     var n = Int(py=py_call(cls_builtins().int, shape[0]))
     var d = Int(py=py_call(cls_builtins().int, shape[1]))
-    var data = classical_host_f32(csr.data, 1, "data", context) if Int(py=csr.nnz) > 0 else f32_array(0, context)
-    return CsrIn(_i32_vector(csr.indptr, "indptr", context), _i32_vector(csr.indices, "indices", context), data, n, d, source)
+    var nnz = Int(py=py_call(cls_builtins().int, csr.nnz))
+    var data = classical_host_f32(csr.data, 1, "data", context) if nnz > 0 else f32_array(0, context)
+    return CsrIn(_i32_vector(csr.indptr, "indptr", context), _i32_vector(csr.indices, "indices", context), data, n, d, nnz)
 
 
 def csr_dense_x(mut pr: ClsProg, csr: CsrIn, mode: PythonObject, context: PythonObject) raises -> Int:
-    """`_csr_dense_x`: the X block the device builds from the CSR arrays, or
-    NONE - 1 (-2 is never an arena offset here; callers test `< -1`... see use)."""
+    """`_csr_dense_x`: the offset of the X block the device builds from the
+    CSR arrays, or -1 when the binding has no csr_dense (the caller densifies;
+    -1 is never an arena or scratch offset)."""
     if (idn_int(mode, context) & IDN_NB_CSR_DENSE) == 0:
         return -1
     if csr.n * csr.d > INT32_MAX:
@@ -562,11 +564,11 @@ def partial_codes(model: PythonObject, fields: PythonObject, y: PythonObject, cl
     if first and classes is None:
         raise Error("mojolearn: classes must be passed on the first call to partial_fit.")
     if classes is not None:
-        var cl = classical_encode_labels(classes, context).classes
-        if not first and Bool(py=py_call(b.list, cl) != py_call(b.list, fields["classes_"])):
-            raise Error("mojolearn: `classes=" + cls_str(cl) + "` is not the same as on last call to partial_fit, was: " + cls_str(fields["classes_"]))
+        var given = classical_encode_labels(classes, context).classes
+        if not first and Bool(py=py_call(b.list, given) != py_call(b.list, fields["classes_"])):
+            raise Error("mojolearn: `classes=" + cls_str(given) + "` is not the same as on last call to partial_fit, was: " + cls_str(fields["classes_"]))
         if first:
-            py_setitem(fields, "classes_", cl)
+            py_setitem(fields, "classes_", given)
     # `_partial_dev`: every class an exact int or float with an exact,
     # strictly ascending float32 word, and y a numeric label vector of n labels
     var cl = py_call(b.list, fields["classes_"])
