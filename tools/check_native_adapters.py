@@ -11,6 +11,8 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import os
+import subprocess
 import traceback
 
 
@@ -26,7 +28,7 @@ def main():
     report = {"complete": False, "scope": "adapter functionality on one machine", "checks": [], "failures": []}
     try:
         import torch
-        from torch.utils.cpp_extension import load
+        from torch.utils.cpp_extension import include_paths, library_paths
         root = Path(__file__).resolve().parents[1]
         report["torch"] = torch.__version__
         report["hip"] = torch.version.hip
@@ -47,9 +49,26 @@ def main():
             # Retain the actual source bytes compiled, including fault controls.
             cpp = out / "registration.cpp"
             cpp.write_text(source)
-            load(name="mojolearn_torch", sources=[str(cpp)],
-                 build_directory=str(out), is_python_module=False, verbose=True,
-                 extra_cflags=["-O2"], extra_ldflags=[f"-L{out}", "-lmojolearn_adapter", f"-Wl,-rpath,{out}"])
+            # Native dispatcher registration requires libtorch, not its Python
+            # binding library. cpp_extension.load also links libtorch_python;
+            # build this standalone module using the public Torch path/ABI API.
+            torch_libraries = library_paths()
+            command = [os.environ.get("CXX", "c++"), "-std=c++20", "-O2", "-fPIC", "-shared",
+                       f"-D_GLIBCXX_USE_CXX11_ABI={int(torch.compiled_with_cxx11_abi())}",
+                       str(cpp), "-o", str(out / "mojolearn_torch.so")]
+            command += [f"-I{path}" for path in include_paths()]
+            command += [f"-L{path}" for path in torch_libraries] + [f"-L{out}"]
+            command += ["-lmojolearn_adapter", "-ltorch", "-ltorch_cpu", "-lc10", "-Wl,-z,defs",
+                        f"-Wl,-rpath,{out}"] + [f"-Wl,-rpath,{path}" for path in torch_libraries]
+            (out / "torch-build-command.json").write_text(json.dumps(command, indent=2) + "\n")
+            subprocess.run(command, check=True)
+            symbols = subprocess.check_output(["nm", "-D", str(out / "mojolearn_torch.so")], text=True)
+            dependencies = subprocess.check_output(["readelf", "-d", str(out / "mojolearn_torch.so")], text=True)
+            (out / "torch-symbols.txt").write_text(symbols)
+            (out / "torch-dynamic.txt").write_text(dependencies)
+            assert "libtorch_python" not in dependencies and "libpython" not in dependencies
+            assert not any(line.split()[-1].startswith(("Py", "_Py")) for line in symbols.splitlines() if line.split())
+            torch.ops.load_library(str(out / "mojolearn_torch.so"))
             report["compiled"] = True
             if args.stage == "build":
                 (out / "build-results.json").write_text(json.dumps(report, indent=2) + "\n")
