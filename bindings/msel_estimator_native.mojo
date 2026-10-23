@@ -126,11 +126,15 @@ def msel_native_clone(model: PythonObject, context: PythonObject) raises -> Pyth
     var given: PythonObject
     if plan["forest"] is not None:
         given = forest_get_params(model, plan["context"])
+    elif plan["init"] is None:
+        given = py_call(plan["fields_get"], model, py_type(model))
     else:
         given = msel_estimator_call(model, "get_params", Python.tuple(), context)
     var parameters = Python.dict()
     var args = Python.list()
     for k in range(len(names)):  # driver-loop: fixed constructor parameters, no fitted state
+        if not py_contains(given, names[k]):
+            raise Error("TypeError: native constructor parameter is missing from estimator state")
         var value = msel_clone_parameter(given[names[k]], context)
         py_setitem(parameters, names[k], value)
         _ = py_call(args.append, value)
@@ -140,6 +144,10 @@ def msel_native_clone(model: PythonObject, context: PythonObject) raises -> Pyth
         _ = py_call(fields.update, parameters)
         py_setitem(fields, "_has_constructor_parameters", PythonObject(True))
         _ = forest_refresh(result, String(plan["forest"]), plan["context"])
+    elif plan["init"] is None:
+        # Exact fixed constructor schemas containing only field assignments.
+        var fields = py_call(plan["fields_get"], result, py_type(result))
+        _ = py_call(fields.update, parameters)
     else:
         var entry = plan["entry"]
         if entry is None or py_type(entry) is not py_type(b.len):

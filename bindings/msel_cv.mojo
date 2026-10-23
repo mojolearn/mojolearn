@@ -183,11 +183,7 @@ def msel_prepare_folds(estimator: PythonObject, x_in: PythonObject, y_in: Python
     var b = msel_b()
     if not family_is_str(error_score) or not msel_cmp("eq", error_score, PythonObject("raise")):
         raise Error("NotImplementedError: cross_val_score supports error_score='raise' only")
-    var scoring = scoring_in
-    if family_is_str(scoring):
-        scoring = msel_get_scorer(scoring, context)
-    if scoring is not None and not msel_truth(py_call(b.callable, scoring)):
-        raise Error("TypeError: scoring must be None, a scorer name or a callable")
+    var scoring = msel_get_scorer(scoring_in, context)
     var x = msel_materialize(x_in, "X", context)
     var y = msel_materialize_y(y_in, context)
     if Int(py=y.ndim) != 1:

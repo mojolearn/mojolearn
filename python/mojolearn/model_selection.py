@@ -1512,41 +1512,7 @@ class _Scorer:
         return f'make_scorer({getattr(self._score_func, "__name__", self._score_func)})'
 
     def __call__(self, estimator, X, y, sample_weight=None, *, _memo=None):
-        # `_memo` (lane metrics-apple3): the predictions of THIS estimator
-        # on THIS X, by response method, shared by the scorers of one
-        # multimetric fold (scikit-learn's _MultimetricScorer caches the
-        # same way); a metric never writes into its inputs.
-        methods = self._response_method
-        if isinstance(methods, str):
-            methods = (methods,)
-        for m in methods:  # glue: response method names tried in order
-            fn = getattr(estimator, m, None)
-            if fn is not None:
-                break
-        else:
-            raise AttributeError(f'{type(estimator).__name__} has none of {methods}')
-        pred = None if _memo is None else _memo.get(m)
-        if pred is None:
-            pred = fn(X)
-            if _memo is not None:
-                _memo[m] = pred
-        if m == 'predict_proba' and getattr(pred, 'ndim', 1) == 2 and pred.shape[1] == 2 \
-                and self._name in _BINARY_PROBA:
-            col = None if _memo is None else _memo.get('predict_proba[:, 1]')
-            if col is None:
-                fast = _proba_column1(pred)
-                if fast is None:
-                    rows = pred.tolist() if hasattr(pred, 'tolist') else pred
-                    words = _user_objects.call('column_f32', rows, 1)
-                    fast = Array._owned(words, (len(words),), '<f4', 'C')
-                col = fast
-                if _memo is not None:
-                    _memo['predict_proba[:, 1]'] = col
-            pred = col
-        kw = dict(self._kwargs)
-        if sample_weight is not None:
-            kw['sample_weight'] = sample_weight
-        return self._sign * float(self._score_func(y, pred, **kw))
+        return _NATIVE(self, "family_msel_scorer_call", (estimator, X, y, sample_weight, _memo), _NATIVE_CONTEXT)
 
 
 _BINARY_PROBA = {'roc_auc', 'average_precision', 'neg_brier_score', 'neg_log_loss'}

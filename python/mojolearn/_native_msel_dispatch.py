@@ -87,3 +87,6 @@ def connect(context, package):
                    family_msel_pending_estimators=tuple(value for value in vars(package).values()  # glue: distinguish known migration debt from external callbacks
                                                         if type(value) is type and value not in registry),
                    family_msel_backend_fields=vars(_backend))
+
+    from ._native_msel_scorers import connect as connect_scorers
+    connect_scorers(context, package.model_selection)

@@ -12,7 +12,9 @@ from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setat
 from bindings.py_attr import py_attr
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.family_common import family_repr, family_is_str, family_isinstance, family_call
-from bindings.msel_common import msel_get_scorer, msel_score
+from bindings.msel_common import msel_get_scorer, msel_score, msel_admit
+from bindings.msel_scorer_native import msel_metric_plan, msel_scorer_call
+from bindings.msel_estimator_native import msel_estimator_call
 from bindings.msel_cv import msel_cross_validate, msel_cross_val_score, msel_cross_val_predict, msel_split_descriptor
 from bindings.msel_search import (
     msel_grid_list, msel_grid_len, msel_sampler_list, msel_sampler_len, msel_search_fit, msel_validation_curve,
@@ -45,7 +47,13 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
         return msel_get_scorer(args[0], context)
     if operation == "family_msel_scorer_names":
         return py_call(b.sorted, context["family_msel_scorers"])
+    if operation == "family_msel_scorer_call":
+        return msel_scorer_call(model, args[0], args[1], args[2], args[3], args[4], context)
     if operation == "family_msel_make_scorer":
+        _ = msel_metric_plan(args[0], context)
+        msel_admit(args[1], context)
+        msel_admit(args[2], context)
+        msel_admit(args[3], context)
         # `_Scorer(score_func, sign, kwargs, response_method, None)`, its
         # slots filled directly.
         var scorer = native_storage_allocate(context["family_msel_scorer_class"])
@@ -57,7 +65,9 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
         return scorer
     if operation == "family_msel_delegate":
         var best = _msel_best(model)
-        return family_call(_msel_attr(best, String(args[0])), args[1])
+        if py_type(args[0]) is not b.str:
+            raise Error("TypeError: native delegated method must be an exact string")
+        return msel_estimator_call(best, String(args[0]), Python.tuple(args[1]), context)
     if operation == "family_msel_search_score":
         # The scorer is resolved first, as `score` resolved it before
         # reaching the best estimator.
