@@ -274,8 +274,29 @@ def arima_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     if written != total:
         raise Error("RuntimeError: " + _A + "the fit wrote " + String(written) + " parameters, batch_size * N is "
                     + String(total) + "; this side and arima/estimator.mojo disagree about ARIMAOrder.complexity()")
-    # `_adopt_fit`
-    py_setitem(fields, "input_copied_", series[3])
+    _adopt(model, fields, arr, Bool(py=series[3]), y_ndim, batch, n_obs, ex, n_exog, big_n, params, x, x0, stats,
+           flags, ics, context)
+    return model
+
+
+def _adopt(model: PythonObject, fields: PythonObject, arr: PythonObject, copied: Bool, y_ndim: Int, batch: Int,
+           n_obs: Int, ex: PythonObject, n_exog: Int, big_n: Int, params: PythonObject, x: PythonObject,
+           x0: PythonObject, stats: PythonObject, flags: PythonObject, ics_in: PythonObject,
+           context: PythonObject) raises:
+    """`ARIMA._adopt_fit`: the fitted state from the fit's output buffers;
+    without the fit's criteria (`ics_in` None: an AutoARIMA search block)
+    the plain fit's device kernel over the adopted log-likelihood row."""
+    var ics = ics_in
+    if ics is None:
+        ics = tsa_array("d", "<f8", Python.tuple(2 * batch), 2 * batch, 8, context)
+        var pens = _penalties(_order(fields), big_n, n_obs, context)
+        var entries = _arima_entries(model, fields, context)
+        var written = Int(py=py_call_typed(_entry(entries, "arima_ic_from_loglike"), classical_address(stats),
+                                           classical_address(ics), Python.list(batch, pens[0], pens[1])))
+        if written != batch:
+            raise Error("RuntimeError: " + _A + "the criterion kernel wrote " + String(written)
+                        + " series, batch_size is " + String(batch))
+    py_setitem(fields, "input_copied_", copied)
     py_setitem(fields, "batch_size_", batch)
     py_setitem(fields, "n_obs_", n_obs)
     py_setitem(fields, "_y", arr)
@@ -296,6 +317,51 @@ def arima_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     py_setitem(fields, "fx_", _copy_block(stats, batch, batch, "f", "<f4", 4, Python.tuple(batch), context))
     py_setitem(fields, "aic_", _copy_block(ics, 0, batch, "d", "<f8", 8, Python.tuple(batch), context))
     py_setitem(fields, "bic_", _copy_block(ics, batch, batch, "d", "<f8", 8, Python.tuple(batch), context))
+
+
+def _gather_block(src: PythonObject, offset: Int, width: Int, nrows: Int, local: PythonObject, dst_addr: Int,
+                  context: PythonObject) raises:
+    """`_gather_block`: dst rows = src[offset:].reshape(nrows, width)[local],
+    the base binding's byte gather of 4-byte rows."""
+    if len(local):
+        var item = Int(py=src.itemsize)
+        _ = py_call(context["base_gather_rows_bytes"], Int(py=classical_address(src)) + item * offset, dst_addr,
+                    classical_address(local), nrows, len(local), item * width)
+
+
+def arima_adopt(model: PythonObject, y: PythonObject, reuse: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_adopt_search_fit(m, y, *reuse)`: `m` fitted from the AutoARIMA
+    search's fit block for the group positions `local`."""
+    var fields = py_fields(model)
+    var search_fit = reuse[0]
+    var trial = Int(py=reuse[1])
+    var local = reuse[2]
+    var fit_f32 = search_fit[0]
+    var fit_i32 = search_fit[1]
+    var off = Int(py=search_fit[2][trial])
+    var nb = Int(py=search_fit[3])
+    var grouped_ll = search_fit[4]
+    var series = _series_major(y, context)
+    var arr = series[0]
+    var b = Int(py=series[1])
+    var n_obs = Int(py=series[2])
+    var big_n = Int(py=fields["complexity_"])
+    var params = tsa_array("f", "<f4", Python.tuple(b, big_n), b * big_n, 4, context)
+    var x = tsa_array("f", "<f4", Python.tuple(b, big_n), b * big_n, 4, context)
+    var x0 = tsa_array("f", "<f4", Python.tuple(b, big_n), b * big_n, 4, context)
+    var stats = tsa_array("f", "<f4", Python.tuple(2 * b), 2 * b, 4, context)
+    var flags = tsa_array("i", "<i4", Python.tuple(2 * b), 2 * b, 4, context)
+    _gather_block(fit_f32, off, big_n, nb, local, Int(py=classical_address(params)), context)
+    _gather_block(fit_f32, off + nb * big_n, big_n, nb, local, Int(py=classical_address(x)), context)
+    _gather_block(fit_f32, off + 2 * nb * big_n, big_n, nb, local, Int(py=classical_address(x0)), context)
+    var sa = Int(py=classical_address(stats))
+    var fa = Int(py=classical_address(flags))
+    _gather_block(grouped_ll, trial * nb, 1, nb, local, sa, context)
+    _gather_block(fit_f32, off + 3 * nb * big_n, 1, nb, local, sa + 4 * b, context)
+    _gather_block(fit_i32, 2 * nb * trial, 1, nb, local, fa, context)
+    _gather_block(fit_i32, 2 * nb * trial + nb, 1, nb, local, fa + 4 * b, context)
+    _adopt(model, fields, arr, Bool(py=series[3]), 2, b, n_obs, _no_exog(context), 0, big_n, params, x, x0, stats,
+           flags, PythonObject(None), context)
     return model
 
 

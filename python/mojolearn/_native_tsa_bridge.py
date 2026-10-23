@@ -71,4 +71,9 @@ def connect():
     if not isinstance(log, BuiltinFunctionType):
         raise TypeError("ARIMA requires the compiled pinned log entry")
     context["pm_log"] = log
+    for name in ("gather_rows_bytes", "scatter_rows_bytes"):  # glue: the base binding's byte row moves
+        fn = _native(name)
+        if not isinstance(fn, BuiltinFunctionType):
+            raise TypeError(f"AutoARIMA requires the compiled {name} entry")
+        context["base_" + name] = fn
     return entry, context

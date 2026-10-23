@@ -1090,6 +1090,10 @@ def _plain_order(value, normalized):
             and value == normalized)
 
 
+# The class the AutoARIMA door builds its per-group models of.
+_TSA_CONTEXT["arima_class"] = ARIMA
+
+
 def _as_order(value, width, name):
     """`(p, d, q)` or `(P, D, Q, s)` as a tuple of non-negative ints.
 

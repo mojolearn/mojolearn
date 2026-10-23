@@ -9,7 +9,7 @@ from ._mode import ParamsMixin
 np = require_numpy('_x_sequence_autoarima')
 
 from . import _portable_math as _pm
-from ._arima_impl import ARIMA
+from ._arima_impl import ARIMA, _TSA, _TSA_CONTEXT
 from ._tsa_impl import select_d
 from ._buffer import _native
 
@@ -491,21 +491,10 @@ class AutoARIMA(ParamsMixin):
         RuntimeError
             If :meth:`search` has not been called.
         """
-        if not self.models:
-            raise RuntimeError("AutoARIMA: call search() before fit()")
-        if h != 1e-8 or truncate or method != "ml":
-            raise NotImplementedError("AutoARIMA.fit: method 'ml' with the default h only")
-        reuse = getattr(self, "_reuse", None) or [None] * len(self.models)
-        for i, (order, sorder, k) in enumerate(self.models):  # glue: chosen order groups, at most the grid
-            m = ARIMA(order=order, seasonal_order=sorder, trend="c" if k else "n", maxiter=maxiter)
-            if reuse[i] is not None and int(maxiter) == self._search_maxiter:
-                # MOJOLEARN_ARIMA_FAST_SEARCH_REUSE: the search ran this order
-                # on these series with the fit's start, optimizer and maxiter,
-                # per series independently; adopt that optimum, no refit
-                self._fitted[i] = _adopt_search_fit(m, _take(self._endog, self._ids[i]), *reuse[i])
-            else:
-                self._fitted[i] = m.fit(_take(self._endog, self._ids[i]))
-        return self
+        # every chosen order group's ARIMA built and fitted (or adopted from
+        # the search's fit block) in one native call
+        # (bindings/tsa_autoarima_native.mojo)
+        return _TSA(self, "autoarima_fit", (h, maxiter, method, truncate), _TSA_CONTEXT)
 
     def _gather(self, fn, width):
         if any(m is None for m in self._fitted):  # glue: chosen order groups, at most the grid
@@ -532,10 +521,7 @@ class AutoARIMA(ParamsMixin):
         -------
         ndarray of shape (batch_size, end - start), float32
         """
-        if level is not None:
-            raise NotImplementedError("AutoARIMA.predict: prediction intervals (level) are not implemented")
-        end = self.n_obs if end is None else int(end)
-        return self._gather(lambda m: m.predict(start, end), end - int(start))
+        return _TSA(self, "autoarima_predict", (start, end, level), _TSA_CONTEXT)
 
     def forecast(self, nsteps, level=None):
         """Forecast ``nsteps`` past the end of every series.
