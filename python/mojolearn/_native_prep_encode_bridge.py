@@ -1,19 +1,21 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time connection of the native owner of the x_prep imputers,
 discretizer and encoders (SimpleImputer, KBinsDiscretizer, OrdinalEncoder,
-OneHotEncoder, TargetEncoder.transform, SplineTransformer) and its fixed ABI."""
+OneHotEncoder, TargetEncoder, SplineTransformer, SelectKBest) and its fixed ABI."""
 
 
-def connect(kinds, qselect):
+def connect(kinds, qselect, scores):
     # glue: compiled entries and plain metadata are retained during import;
     # `kinds` maps each public class to the kind the owner dispatches on,
-    # `qselect` is MOJOLEARN_X_PREP_FAST_QSELECT as read at import.
+    # `qselect` is MOJOLEARN_X_PREP_FAST_QSELECT as read at import, `scores`
+    # maps the built-in score functions SelectKBest runs natively to their names.
     import sys
     import mmap
     from types import BuiltinFunctionType
     from . import _backend
     from ._arena_io import DeviceRows, DeviceCache, _Scope, _LOCAL
     from ._native_classical_bridge import _state_context, _numpy_free_context
+    from ._native_labels_bridge import label_context
     from .tokenizer import _binding
 
     context = _state_context()
@@ -54,5 +56,6 @@ def connect(kinds, qselect):
                    scaler_bindings=connected, scaler_host_contexts={},
                    maxabs_rows_class=DeviceRows, maxabs_rows_dict=vars(DeviceRows)['__dict__'], maxabs_gather_rows=gather,
                    classical_getframe=sys._getframe, prep_encode_kinds=dict(kinds),
-                   prep_encode_qselect=bool(qselect))
+                   prep_encode_qselect=bool(qselect), prep_encode_scores=dict(scores))
+    context.update(label_context())
     return call, context

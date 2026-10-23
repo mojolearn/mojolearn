@@ -23,7 +23,10 @@ from bindings.classical_arrays import classical_address, classical_typed, classi
 from bindings.scaler_native import _stage, _ptr, _input
 from bindings.scaler_lifecycle_native import _entries
 from bindings.x_prep_native_owner import xprep_storage, xprep_take, xprep_values, xprep_run, xprep_r3
-from bindings.prep_stateless_native import _fam, _int_like, _repr, _name, _take_f
+from bindings.prep_stateless_native import _fam, _int_like, _repr, _name, _take_f, _select_transform
+from bindings.classical_labels import (
+    LabelsView, ClassicalLabels, labels_view, labels_vector, labels_address, labels_cast, labels_all_finite,
+    labels_f32, classical_encode_labels)
 
 alias F32P = MutPointer[Float32, MutUntrackedOrigin]
 alias I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -37,6 +40,46 @@ comptime OP_UNIQUE_COLS = 5
 comptime OP_MODE_COLS = 6
 comptime OP_LOOKUP = 7
 comptime OP_COUNT_NEG = 8
+comptime OP_I2F = 10
+comptime OP_CLASS_STATS = 16
+comptime OP_TE_GLOBAL = 20
+comptime OP_TE_ENC = 21
+comptime OP_LABEL_BINARIZE = 51
+comptime OP_F_CLASSIF = 63
+comptime OP_F_REGRESSION = 64
+comptime OP_CHI2 = 65
+comptime OP_TE_BUCKET = 108
+comptime OP_TE_GATHER = 114
+comptime OP_TE_HIST = 115
+comptime OP_TE_HSUM = 116
+comptime OP_TE_HSTART = 117
+comptime OP_TE_HSCATTER = 118
+comptime OP_CSB_PART = 129
+comptime OP_CSB_FOLD = 130
+comptime OP_CSB1_PART = 162
+comptime OP_FCB_PART = 166
+comptime OP_FCB_FIN = 167
+comptime OP_FRB_PART1 = 168
+comptime OP_FRB_MEAN = 169
+comptime OP_FRB_PART2 = 170
+comptime OP_FRB_FIN = 171
+comptime OP_CCOUNT = 200
+comptime OP_CSCAN = 201
+comptime OP_CSTART = 202
+comptime OP_CWRITE = 203
+comptime OP_KFOLD = 243
+comptime OP_STRAT_META = 244
+comptime OP_STRAT_FLAG = 245
+comptime OP_STRAT_FOLD = 246
+comptime OP_INTEGRAL = 247
+comptime OP_ISUM = 248
+comptime OP_KEY64 = 253
+comptime OP_TOPK = 254
+# x_prep_idn_fam bits 2 IDN_CLASS_ONEPASS and 4 IDN_SELECT_BLOCKED.
+comptime IDN_CLASS_ONEPASS = 2
+comptime IDN_SELECT_BLOCKED = 4
+# `_CLS_BLOCK_WORDS`: the most partial words a blocked class_stats keeps.
+comptime CLS_BLOCK_WORDS = 67108864
 comptime OP_ONEHOT = 9
 comptime OP_WHERE_NEG = 19
 comptime OP_TE_APPLY = 22
@@ -2115,6 +2158,602 @@ def _spline_transform(model: PythonObject, values: PythonObject, context: Python
     return _take2(ran, out, n, W, context)
 
 
+# ---------------------------------------------------------------- targets
+struct TargetInfo(Copyable, Movable):
+    """`_target_arrays` / `_target_kind`: the kind, the class list (None
+    for a continuous target), the target words (a float32 vector, or the
+    int32 class codes) and T (1, or the class count of a multiclass target)."""
+    var kind: String
+    var classes: PythonObject
+    var target: PythonObject
+    var T: Int
+    var size: Int
+
+    def __init__(out self, kind: String, classes: PythonObject, target: PythonObject, T: Int, size: Int):
+        self.kind = kind
+        self.classes = classes
+        self.target = target
+        self.T = T
+        self.size = size
+
+
+def _view_or_none(y: PythonObject, context: PythonObject) -> Optional[LabelsView]:
+    # `_materialize(y)`, or None where it refuses (str labels, objects).
+    try:
+        return labels_view(y, "y", context)
+    except:
+        return None
+
+
+def _numeric_dtype(typestr: String) -> Bool:
+    # `_numeric_target`'s dtypes.
+    return (typestr == "<f4" or typestr == "<f8" or typestr == "<i4" or typestr == "<i8" or typestr == "<u4"
+            or typestr == "<u1" or typestr == "<i2" or typestr == "<u2" or typestr == "<i1")
+
+
+def _is_vector(view: LabelsView) -> Bool:
+    var big = 0
+    for k in range(view.ndim()):  # driver-loop: over array rank metadata
+        big = max(big, view.shape[k])
+    return view.ndim() >= 1 and view.size() == big
+
+
+def _flat_copy(view: LabelsView, context: PythonObject) raises -> PythonObject:
+    # The flat Array of a contiguous label vector, its own dtype (`num`).
+    var n = view.size()
+    var out = labels_vector(n, view.typestr, context)
+    if n > 0:
+        memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=labels_address(out)),
+               src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=view.addr), count=n * view.item)
+    return out
+
+
+def _f32_target(view: LabelsView, context: PythonObject) raises -> PythonObject:
+    # `num.astype("<f4")`: the flat float32 target (cast_elements).
+    var n = view.size()
+    var out = labels_vector(n, "<f4", context)
+    if view.typestr == "<f4":
+        memcpy(dest=_ptr(out), src=F32P(unsafe_from_address=view.addr), count=n)
+    else:
+        labels_cast(view.addr, view.typestr, labels_address(out), "<f4", n, context)
+    return out
+
+
+def _all_integral(view: LabelsView, vector: Bool, context: PythonObject) raises -> Bool:
+    """`_all_integral`: every float32 / float64 value finite and an integer,
+    on the device (c2_integral by chunks, c2_isum, one word read back)."""
+    var kind = 0 if view.typestr == "<f4" else 4
+    var per = 1 if view.typestr == "<f4" else 2
+    var n = view.size()
+    # `vector`: `_target_arrays` tests y as it is; `_target_kind` its flat copy
+    if (view.typestr != "<f4" and view.typestr != "<f8") or n == 0 or (vector and not _is_vector(view)) or n * per > 1073741824:
+        raise Error("TypeError: mojolearn: the integral test takes a float32 or float64 vector")
+    var words = classical_typed(Python.tuple(n * per), "<f4", context["output_context"])
+    memcpy(dest=_ptr(words), src=F32P(unsafe_from_address=view.addr), count=n * per)
+    var ch = max(4096, (n + 4095) // 4096)
+    var nch = (n + ch - 1) // ch
+    var mode = _default_mode(context)
+    var entries = _entries(mode, context)
+    var p = EncProg()
+    var cnt = p.alloc(nch)
+    var tot = p.alloc(1)
+    var wo = p.put(words, n * per)
+    _stage(p.program, OP_INTEGRAL, nch, wo, kind, n, ch, cnt)
+    _stage(p.program, OP_ISUM, 1, cnt, nch, tot)
+    var ran = p.run(entries, context)
+    return _iword(ran, tot) == 0
+
+
+def _class_target(labels: ClassicalLabels, target_type: String) raises -> TargetInfo:
+    var K = len(labels.classes)
+    if target_type == "binary" or (target_type == "auto" and K <= 2):
+        return TargetInfo("binary", labels.classes, labels.codes, 1, labels.n)
+    return TargetInfo("multiclass", labels.classes, labels.codes, K, labels.n)
+
+
+def _target_info(y: PythonObject, target_type: String, context: PythonObject) raises -> TargetInfo:
+    """`_target_arrays`, else `_target_kind`: a numeric buffer vector's own
+    words (continuous: float32; else its class codes), then the label input
+    step's codes for anything else."""
+    var b = Python.import_module("builtins")
+    var cls = py_type(y)
+    var listed = cls is b.list or cls is b.tuple or cls is b.str or cls is b.bytes
+    var found = _view_or_none(y, context)
+    var has_view = Bool(found)
+    if not listed and has_view:
+        # `_target_arrays`
+        var view = found.value().copy()
+        var t = view.typestr
+        var kind = String(t[byte=1]) if t.byte_length() > 1 else String("")
+        if view.size() > 0 and _is_vector(view) and (kind == "f" or kind == "i" or kind == "u"):
+            var floating = kind == "f"
+            var ok = True
+            if floating:
+                ok = (t == "<f4" or t == "<f8") and labels_all_finite(view.addr, view.size(), t == "<f8", context)
+            if ok:
+                var cont = target_type == "continuous" or (target_type == "auto" and floating and not _all_integral(view, True, context))
+                if cont:
+                    return TargetInfo("continuous", PythonObject(None), _f32_target(view, context), 1, view.size())
+                return _class_target(classical_encode_labels(y, context), target_type)
+    # `_target_kind`
+    var numeric = has_view and _numeric_dtype(found.value().typestr)
+    var continuous = target_type == "continuous"
+    if not continuous and target_type == "auto" and numeric:
+        var view = found.value().copy()
+        if view.size() > 0 and (view.typestr == "<f4" or view.typestr == "<f8"):
+            continuous = not _all_integral(view, False, context)
+    if continuous:
+        if not numeric:
+            raise Error("mojolearn: a continuous TargetEncoder target must be numeric")
+        var view = found.value().copy()
+        return TargetInfo("continuous", PythonObject(None), _f32_target(view, context), 1, view.size())
+    if numeric and listed:
+        # a list's numbers as `_materialize` packed them (a bool leaf is the int 0 or 1)
+        return _class_target(classical_encode_labels(_flat_copy(found.value(), context), context), target_type)
+    return _class_target(classical_encode_labels(y, context), target_type)
+
+
+# ---------------------------------------------------------------- TargetEncoder fit
+def _target_check(fields: PythonObject, context: PythonObject) raises:
+    """TargetEncoder `_check`."""
+    var b = Python.import_module("builtins")
+    var categories = fields["categories"]
+    var auto = _is_str(categories) and String(categories) == "auto"
+    if not auto and not Bool(py=py_call(b.isinstance, categories, Python.tuple(b.list, b.tuple))):
+        raise Error("mojolearn: TargetEncoder categories must be 'auto' or a list of lists")
+    var tt = fields["target_type"]
+    var text = String(tt) if _is_str(tt) else String("")
+    if text != "auto" and text != "binary" and text != "continuous" and text != "multiclass":
+        raise Error("mojolearn: invalid target_type " + _repr(tt))
+    var smooth = fields["smooth"]
+    if not ((_is_str(smooth) and String(smooth) == "auto") or (_real_like(smooth, context) and _cmp("ge", smooth, PythonObject(0)))):
+        raise Error("mojolearn: invalid smooth " + _repr(smooth))
+    var cv = fields["cv"]
+    if _int_like(cv, context) and _cmp("lt", cv, PythonObject(2)):
+        raise Error("mojolearn: TargetEncoder cv must be an integer >= 2, a splitter or an iterable")
+
+
+def _class_rows_chunks(n: Int, per: Int) -> Tuple[Int, Int]:
+    # `_p2m_chunks(n, per)`.
+    var ch = max(SEL_CHUNKS, (n + SEL_CHUNKS - 1) // SEL_CHUNKS, (n * per + 16777215) // 16777216, 1)
+    return (ch, max(1, (n + ch - 1) // ch))
+
+
+def _put_codes(mut p: EncProg, codes: PythonObject) raises -> Int:
+    # `_Prog.put_codes`: int32 codes as words, then their floats (i2f).
+    var count = Int(py=codes.size)
+    var bits = p.put(codes, count)
+    var out = p.alloc(count)
+    _stage(p.program, OP_I2F, count, bits, out)
+    return out
+
+
+def _stage_folds(mut p: EncProg, n: Int, n_folds: Int, lo: Int, hi: Int, shuffle: Bool, codes: Int, n_classes: Int,
+                 context: PythonObject) raises -> Tuple[Int, Int]:
+    """`_stage_folds`: KFold (c2_kfold) without class codes, else
+    StratifiedKFold over them (p2m_ccount .. p2m_cwrite, c2_strat_meta,
+    c2_strat_flag, c2_strat_fold). Returns (folds, flag or -1)."""
+    var fo = p.alloc(max(n, 1))
+    if codes == NONE:
+        var seed = p.put_ints(_seed_words(lo, hi), context)
+        _stage(p.program, OP_KFOLD, n, seed, n, n_folds, 1 if shuffle else 0, fo)
+        return (fo, -1)
+    var K = n_classes
+    var chunks = _class_rows_chunks(n, K)
+    var ch = chunks[0]
+    var nch = chunks[1]
+    var cnt = p.alloc(nch * K)
+    var tot = p.alloc(K)
+    _stage(p.program, OP_CCOUNT, nch, codes, n, K, ch, cnt)
+    _stage(p.program, OP_CSCAN, K, cnt, nch, K, tot)
+    var start = p.alloc(K)
+    var ro = p.alloc(n)
+    _stage(p.program, OP_CSTART, 1, tot, K, start, NONE)
+    _stage(p.program, OP_CWRITE, nch, codes, n, K, ch, cnt, start, ro)
+    var meta = p.alloc(2 * K)
+    var flag = p.alloc(1)
+    _stage(p.program, OP_STRAT_META, K, start, tot, ro, K, meta)
+    _stage(p.program, OP_STRAT_FLAG, 1, tot, K, n_folds, flag)
+    var seed = p.put_ints(_seed_words(lo, hi), context)
+    _stage(p.program, OP_STRAT_FOLD, n, ro, start, tot, codes, meta, n_folds, seed, 1 if shuffle else 0, fo)
+    return (fo, flag)
+
+
+def _target_run(model: PythonObject, values: PythonObject, info: TargetInfo, folds: PythonObject, n_folds: Int,
+                lo: Int, hi: Int, shuffle: Bool, apply: Bool, context: PythonObject) raises -> PythonObject:
+    """TargetEncoder `_run`: the categories, then one program: the codes,
+    the target words, the folds (staged, or the given int32 folds, or none),
+    te_global, the bucketed te_enc and, with `apply`, te_apply over the
+    training rows. `folds` None with n_folds > 0: the staged integer folds."""
+    var fields = py_fields(model)
+    var n = Int(py=values[3])
+    var d = Int(py=values[4])
+    var T = info.T
+    if info.size * T != n * T:
+        raise Error("mojolearn: X and y have different numbers of rows")
+    var mode = _default_mode(context)
+    var entries = _entries(mode, context)
+    var auto = _is_str(fields["categories"]) and String(fields["categories"]) == "auto"
+    var inverse = PythonObject(None)
+    var cats = PythonObject(None)
+    if _c08_route(mode, entries, 1) and auto:
+        # C08 reuses only unsupervised category IDs
+        var got = _fit_categories_with_codes(values, entries, context)
+        cats = got[0]
+        inverse = got[1]
+    elif auto:
+        cats = _fit_categories(values, mode, entries, context)
+    else:
+        cats = _given_categories(fields["categories"], values, mode, entries, False, "TargetEncoder", context)
+    var sizes = _sizes(cats)
+    var cmax = 0
+    for j in range(len(sizes)):  # driver-loop: largest category count (per-column category arrays)
+        cmax = max(cmax, sizes[j])
+    var F = n_folds
+    var p = EncProg()
+    var scratch = _target_scratch(mode, entries)
+    var codes = 0
+    if inverse is None:
+        codes = _codes(p, values, cats, context, scratch)[0]
+    else:
+        codes = p.put_array2(inverse)
+    var yo = 0
+    var co = 0
+    if info.kind == "continuous":
+        yo = p.put(info.target, n)
+    elif T == 1:
+        yo = _put_codes(p, info.target)
+    else:
+        # the one-hot rows: word 1.0f (bits 0x3F800000) where row i's code is c
+        co = _put_codes(p, info.target)
+        yo = p.alloc(n * T)
+        _stage(p.program, OP_LABEL_BINARIZE, n * T, co, n, T, 0, 0, 0x3F800000, T, yo)
+    var fo = 0
+    var flag = -1
+    if folds is None and F > 0:
+        var codes_off = NONE if info.kind == "continuous" else (yo if T == 1 else co)
+        var staged = _stage_folds(p, n, F, lo, hi, shuffle, codes_off, len(info.classes) if info.classes is not None else 0, context)
+        fo = staged[0]
+        flag = staged[1]
+    elif folds is None:
+        # every row in no fold (`full((max(n, 1),), -1, "<i4")`: all-ones words)
+        var b = Python.import_module("builtins")
+        var m = max(n, 1)
+        var ones = py_call(py_call(b.bytes, Python.list(255)).__mul__, PythonObject(4 * m))
+        var store = py_call(context["array_type"], "i", ones)
+        fo = _put_codes(p, classical_wrap_array(store, Python.tuple(m), "<i4", "C", context))
+    else:
+        fo = _put_codes(p, folds)
+    var nco = p.put_floats(_to_floats(sizes), context)
+    var meta = p.alloc(2 * (F + 1) * T)
+    var smooth = fields["smooth"]
+    var smo = _scalar(p, Float64(-1.0) if (_is_str(smooth) and String(smooth) == "auto") else _float(smooth), context)
+    var enc = p.alloc((F + 1) * d * cmax * T)
+    _stage(p.program, OP_TE_GLOBAL, (F + 1) * T, yo, n, T, fo, meta)
+    if py_get(entries, "x_prep_host_column") is not None:
+        # the host binding groups te_enc its own way
+        _stage(p.program, OP_TE_ENC, (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc)
+    else:
+        # each category's rows, ascending: te_enc walks one bucket, not every row
+        var bstart = 0
+        var brows = 0
+        if scratch:
+            bstart = p.scratch(d * (cmax + 1))
+            brows = p.scratch(n * d)
+            # te_gather also visits unused bucket tails: keep their zero row indices
+            _stage(p.program, OP_CAT_ZERO, n * d, brows)
+        else:
+            bstart = p.alloc(d * (cmax + 1))
+            brows = p.alloc(n * d)
+        if String(getenv("MOJOLEARN_XPREP_TE_PBUCKET", "1")) != "0":
+            var ch = max(1, min(256, (n + 4095) // 4096))
+            var hh = p.scratch(d * ch * cmax)
+            var tot = p.scratch(d * cmax)
+            _stage(p.program, OP_TE_HIST, d * ch, codes, n, d, cmax, ch, hh)
+            _stage(p.program, OP_TE_HSUM, d * cmax, cmax, ch, hh, tot)
+            _stage(p.program, OP_TE_HSTART, d, cmax, bstart, tot)
+            _stage(p.program, OP_TE_HSCATTER, d * ch, codes, n, d, cmax, ch, hh, bstart, brows)
+        else:
+            _stage(p.program, OP_TE_BUCKET, d, codes, n, d, cmax, bstart, brows)
+        if String(getenv("MOJOLEARN_XPREP_TE_GATHER", "1")) != "0":
+            var gb = p.scratch(n * d * (1 + T))
+            _stage(p.program, OP_TE_GATHER, n * d, brows, n, d, yo, T, fo, gb)
+            _stage(p.program, OP_TE_ENC, (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc,
+                   bstart + 1, brows, gb + 1)
+        else:
+            _stage(p.program, OP_TE_ENC, (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc,
+                   bstart + 1, brows)
+    var out = NONE
+    if apply:
+        out = p.output(n * d * T, entries)
+        _stage(p.program, OP_TE_APPLY, n * d * T, codes, n, d, T, fo, enc, cmax, meta, F, out)
+    var ran = p.run(entries, context)
+    if flag >= 0 and _word(ran, flag) != 0:
+        raise Error("mojolearn: n_splits=" + String(F) + " cannot be greater than the number of members in "
+                    + "each class")
+    py_setitem(fields, "categories_", cats)
+    py_setitem(fields, "target_type_", PythonObject(info.kind))
+    py_setitem(fields, "numeric_mode_", mode)
+    py_setitem(fields, "n_features_in_", d)
+    py_setitem(fields, "classes_", info.classes)
+    py_setitem(fields, "_T", T)
+    py_setitem(fields, "_cmax", cmax)
+    var base = F * d * cmax * T
+    py_setitem(fields, "_enc", _take1(ran, enc + base, d * cmax * T, context))
+    py_setitem(fields, "_meta", _take1(ran, meta + 2 * F * T, 2 * T, context))
+    var encodings = Python.list()
+    for j in range(d):  # driver-loop: slices the per-column encodings outputs (feature count)
+        _ = py_call(encodings.append, _take1(ran, enc + base + (j * cmax) * T, sizes[j] * T, context))
+    py_setitem(fields, "encodings_", encodings)
+    if T == 1:
+        py_setitem(fields, "target_mean_", _take1(ran, meta + 2 * F * T, 1, context))
+    else:
+        var means = List[Float32]()
+        for t in range(T):  # driver-loop: over the target's classes
+            means.append(_word(ran, meta + 2 * F * T + 2 * t))
+        py_setitem(fields, "target_mean_", _f32_array(means, context))
+    if apply:
+        return _take2(ran, out, n, d * T, context)
+    return PythonObject(None)
+
+
+def _target_fit(model: PythonObject, values: PythonObject, y: PythonObject, context: PythonObject) raises:
+    # TargetEncoder.fit: `_run(arr, y, None, 0, False)`.
+    var fields = py_fields(model)
+    var tt = String(fields["target_type"])
+    var info = _target_info(y, tt, context)
+    _ = _target_run(model, values, info, PythonObject(None), 0, 0, 0, False, False, context)
+
+
+def _target_fit_transform(model: PythonObject, values: PythonObject, y: PythonObject, splits: PythonObject,
+                          context: PythonObject) raises -> PythonObject:
+    """TargetEncoder.fit_transform: `splits` (fold int32 Array, n_splits)
+    from a user cv splitter, or None: cv an integer, the folds staged on the
+    device in the fit's own program."""
+    var b = Python.import_module("builtins")
+    var fields = py_fields(model)
+    var n = Int(py=values[3])
+    var tt = String(fields["target_type"])
+    if splits is not None:
+        var info = _target_info(y, tt, context)
+        return _target_run(model, values, info, splits[0], Int(py=splits[1]), 0, 0, False, True, context)
+    var cv = 5 if fields["cv"] is None else Int(py=py_call_typed(b.int, fields["cv"]))
+    if n < cv:
+        raise Error("mojolearn: cv=" + String(cv) + " folds need at least " + String(cv) + " rows")
+    var seed = _seed64(fields["random_state"])
+    var shuffle = _truth(fields["shuffle"])
+    if tt == "binary" and xprep_r3("te_arrays"):
+        # `_target_binary_codes`: an explicit binary target's codes as they are
+        var labels = classical_encode_labels(y, context)
+        if labels.n != n:
+            raise Error("mojolearn: X and y have different numbers of rows")
+        var info = TargetInfo("binary", labels.classes, labels.codes, 1, labels.n)
+        return _target_run(model, values, info, PythonObject(None), cv, seed[0], seed[1], shuffle, True, context)
+    var info = _target_info(y, tt, context)
+    if info.size != n:
+        raise Error("mojolearn: X and y have different numbers of rows")
+    return _target_run(model, values, info, PythonObject(None), cv, seed[0], seed[1], shuffle, True, context)
+
+
+# ---------------------------------------------------------------- SelectKBest
+def _scores_classif(mut p: EncProg, values: PythonObject, y: PythonObject, chi: Bool, mode: PythonObject,
+                    entries: PythonObject, context: PythonObject) raises -> Tuple[Int, Int, Int]:
+    """`_scores_classif`'s stages (class_stats or its blocked order, then
+    chi2, or f_classif or its blocked fcb_* order). Returns (scores,
+    p-values, column statistics or -1)."""
+    var n = Int(py=values[3])
+    var d = Int(py=values[4])
+    var labels = classical_encode_labels(y, context)
+    if labels.n != n:
+        raise Error("mojolearn: X and y have different numbers of rows")
+    var K = len(labels.classes)
+    var xo = p.put_x(values)
+    var yo = _put_codes(p, labels.codes)
+    var cnt = p.alloc(K)
+    var mean = p.alloc(K * d)
+    var sums = p.alloc(K * d)
+    var sc = p.alloc(d)
+    var pv = p.alloc(d)
+    var st = p.alloc(6 * d)
+    var blocked = String(getenv("MOJOLEARN_XPREP_BLOCKED", "1").strip()) != "0"
+    var fam = _fam(mode, entries)
+    # `_cls`: the blocked order while its partial tables stay within 2**26 words
+    var nb = (n + ROW_BLOCK - 1) // ROW_BLOCK
+    if blocked and (fam & IDN_STATS_BLOCKED) != 0 and nb * K * d <= CLS_BLOCK_WORDS:
+        var ps = p.work(nb * K * d)
+        var pc = p.work(nb * K * d)
+        var cn = p.work(K * d)
+        if (fam & IDN_CLASS_ONEPASS) != 0:
+            _stage(p.program, OP_CSB1_PART, nb * d, xo, n, d, yo, K, ps, pc, nb, NONE, NONE, NONE)
+        else:
+            _stage(p.program, OP_CSB_PART, nb * K * d, xo, n, d, yo, K, ps, pc, nb, NONE)
+        _stage(p.program, OP_CSB_FOLD, K * d, ps, pc, nb, K, d, cn, cnt, mean, sums, NONE)
+    else:
+        _stage(p.program, OP_CLASS_STATS, K * d, xo, n, d, yo, K, cnt, mean, NONE, sums)
+    if chi:
+        _cs(p, mode, entries, xo, n, d, st, False)
+        _stage(p.program, OP_CHI2, d, sums, K, d, cnt, n, sc, pv)
+        return (sc, pv, st)
+    if blocked and (fam & IDN_SELECT_BLOCKED) != 0:
+        var ps = p.work(nb * d)
+        _stage(p.program, OP_FCB_PART, nb * d, xo, n, d, yo, mean, ps, nb)
+        _stage(p.program, OP_FCB_FIN, d, ps, n, d, nb, K, cnt, mean, sc, pv)
+    else:
+        _stage(p.program, OP_F_CLASSIF, d, xo, n, d, yo, K, cnt, mean, sc, pv)
+    return (sc, pv, -1)
+
+
+def _pearson(mut p: EncProg, values: PythonObject, y: PythonObject, mode: PythonObject, entries: PythonObject,
+             context: PythonObject) raises -> Tuple[Int, Int, Int]:
+    """`_pearson(X, y, center=True, force_finite=True)`'s stages
+    (f_regression, or the blocked frb_* order). Returns (scores, p-values,
+    correlations)."""
+    var n = Int(py=values[3])
+    var d = Int(py=values[4])
+    var target = labels_f32(y, 1, "C", "y", context)
+    if target.rows != n:
+        raise Error("mojolearn: X and y have different numbers of rows")
+    var yv = labels_vector(n, "<f4", context)
+    memcpy(dest=_ptr(yv), src=F32P(unsafe_from_address=target.addr), count=n)
+    var xo = p.put_x(values)
+    var yo = p.put(yv, n)
+    var sc = p.alloc(d)
+    var pv = p.alloc(d)
+    var co = p.alloc(d)
+    var blocked = String(getenv("MOJOLEARN_XPREP_BLOCKED", "1").strip()) != "0"
+    if blocked and (_fam(mode, entries) & IDN_SELECT_BLOCKED) != 0:
+        var nb = (n + ROW_BLOCK - 1) // ROW_BLOCK
+        var psx = p.work(nb * d)
+        var psy = p.work(nb)
+        var mx = p.work(d)
+        var my = p.work(1)
+        _stage(p.program, OP_FRB_PART1, nb * d, xo, n, d, yo, psx, psy, nb)
+        _stage(p.program, OP_FRB_MEAN, d, psx, psy, nb, d, n, mx, my)
+        var pxy = p.work(nb * d)
+        var pxx = p.work(nb * d)
+        var pyy = p.work(nb)
+        _stage(p.program, OP_FRB_PART2, nb * d, xo, n, d, yo, mx, my, pxy, pxx, pyy, nb)
+        _stage(p.program, OP_FRB_FIN, d, pxy, pxx, pyy, nb, d, n, 1, sc, pv, co, 1)
+    else:
+        _stage(p.program, OP_F_REGRESSION, d, xo, n, d, yo, 1, sc, pv, co, 1)
+    _ = target^
+    return (sc, pv, co)
+
+
+def _score_words(scores: PythonObject, d: Int, context: PythonObject) raises -> Tuple[PythonObject, Int]:
+    """`_key_words`: a float32 / int32 / int64 / float64 score vector's own
+    words and its c2_key64 kind; a user score function's other answer
+    converted once to float64."""
+    var b = Python.import_module("builtins")
+    var cls = py_type(scores)
+    if not (cls is b.list or cls is b.tuple or cls is b.str or cls is b.bytes):
+        var found = _view_or_none(scores, context)
+        if found:
+            var view = found.value().copy()
+            var t = view.typestr
+            var kind = -1
+            if t == "<f4":
+                kind = 0
+            elif t == "<i4":
+                kind = 1
+            elif t == "<i8":
+                kind = 3
+            elif t == "<f8":
+                kind = 4
+            if kind >= 0 and view.size() == d and _is_vector(view):
+                var per = 1 if kind <= 1 else 2
+                var words = classical_typed(Python.tuple(d * per), "<f4", context["output_context"])
+                memcpy(dest=_ptr(words), src=F32P(unsafe_from_address=view.addr), count=d * per)
+                return (words, kind)
+    var vals = py_call(b.list, py_call(scores.tolist)) if Bool(py=py_call(b.hasattr, scores, "tolist")) else py_call(b.list, scores)
+    if len(vals) != d:
+        raise Error("mojolearn: expected " + String(d) + " scores, got " + String(len(vals)))
+    var words = classical_typed(Python.tuple(2 * d), "<f4", context["output_context"])
+    var dest = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(words)))
+    for i in range(d):  # cpu-route: a user score function's answer, converted once (feature count)
+        dest[i] = _float(vals[i])
+    return (words, 4)
+
+
+def _topk_stages(mut p: EncProg, words: PythonObject, kind: Int, d: Int, k: Int) raises -> Int:
+    # c2_key64 (binary64 ordered keys, a NaN as -inf) and c2_topk (stable
+    # ascending rank, the later of tied columns wins). Returns the mask.
+    var key = p.work(2 * d)
+    var mask = p.alloc(d)
+    var wo = p.put(words, Int(py=words.size))
+    _stage(p.program, OP_KEY64, d, wo, kind, key)
+    _stage(p.program, OP_TOPK, d, key, d, k, mask)
+    return mask
+
+
+def _topk_from(p_ran: PythonObject, mask: Int, d: Int) raises -> PythonObject:
+    var out = Python.list()
+    for j in range(d):  # driver-loop: the device's mask as the fitted list (feature count)
+        _ = py_call(out.append, PythonObject(_word(p_ran, mask + j) != 0))
+    return out
+
+
+def _select_fit(model: PythonObject, x: PythonObject, values: PythonObject, y: PythonObject, context: PythonObject) raises:
+    """SelectKBest.fit: f_classif, chi2, f_regression and r_regression run
+    their programs here with the top-k stages in the same program (the
+    scores stay in the arena); any other score_func is the user's callable,
+    called once with the converted X and y as the Python fit called it."""
+    var b = Python.import_module("builtins")
+    var fields = py_fields(model)
+    var d = Int(py=values[4])
+    var mode = _default_mode(context)
+    var entries = _entries(mode, context)
+    var score_func = fields["score_func"]
+    var builtin = py_get(context["prep_encode_scores"], score_func)
+    var k_arg = fields["k"]
+    var keep_all = _is_str(k_arg) and String(k_arg) == "all"
+    var k = 0
+    var k_ok = True
+    if not keep_all:
+        k = Int(py=py_call_typed(b.int, k_arg))
+        k_ok = 0 <= k and k <= d
+    var output = context["output_context"]
+    var mask = PythonObject(None)
+    if builtin is not None:
+        var name = String(builtin)
+        var p = EncProg()
+        var offs = (0, 0, -1)
+        if name == "f_classif" or name == "chi2":
+            offs = _scores_classif(p, values, y, name == "chi2", mode, entries, context)
+        else:
+            offs = _pearson(p, values, y, mode, entries, context)
+        var score_at = offs[2] if name == "r_regression" else offs[0]
+        # the scores' float32 words, read by c2_key64 where the device wrote them
+        var mo = -1
+        if not keep_all and k_ok:
+            var key = p.work(2 * d)
+            mo = p.alloc(d)
+            _stage(p.program, OP_KEY64, d, score_at, 0, key)
+            _stage(p.program, OP_TOPK, d, key, d, k, mo)
+        var ran = p.run(entries, context)
+        if name == "chi2":
+            for j in range(d):  # driver-loop: over the per-column minima (feature metadata)
+                if _word(ran, offs[2] + 3 * d + j) < 0:
+                    raise Error("mojolearn: Input X must be non-negative.")
+        if name == "r_regression":
+            py_setitem(fields, "scores_", _take1(ran, offs[2], d, context))
+            py_setitem(fields, "pvalues_", PythonObject(None))
+        else:
+            py_setitem(fields, "scores_", _take1(ran, offs[0], d, context))
+            py_setitem(fields, "pvalues_", _take1(ran, offs[1], d, context))
+        if mo >= 0:
+            mask = _topk_from(ran, mo, d)
+    else:
+        var out = py_call_typed(score_func, x, y)
+        var scores = out
+        var pvals = PythonObject(None)
+        if Bool(py=py_call(b.isinstance, out, Python.tuple(b.tuple, b.list))):
+            # `scores, pvals = out`
+            if len(out) > 2:
+                raise Error("too many values to unpack (expected 2)")
+            if len(out) < 2:
+                raise Error("not enough values to unpack (expected 2, got " + String(len(out)) + ")")
+            scores = out[0]
+            pvals = out[1]
+        py_setitem(fields, "scores_", scores)
+        py_setitem(fields, "pvalues_", pvals)
+        if not keep_all and k_ok:
+            var p = EncProg()
+            var got = _score_words(scores, d, context)
+            var mo = _topk_stages(p, got[0], got[1], d, k)
+            var ran = p.run(entries, context)
+            mask = _topk_from(ran, mo, d)
+    if keep_all:
+        mask = Python.list()
+        for _ in range(d):  # driver-loop: the fitted support (feature count)
+            _ = py_call(mask.append, PythonObject(True))
+    elif not k_ok:
+        raise Error("mojolearn: k should be 0 <= k <= n_features = " + String(d) + "; got " + String(k))
+    py_setitem(fields, "_mask", mask)
+    py_setitem(fields, "numeric_mode_", mode)
+    py_setitem(fields, "n_features_in_", d)
+
+
 # ---------------------------------------------------------------- the door
 def _kind(model: PythonObject, context: PythonObject) raises -> String:
     # The admitted class this model is (or subclasses), by its MRO.
@@ -2239,7 +2878,26 @@ def prep_encode_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObj
         classical_connect_numpy(context)
         var kind = _kind(model, context)
         var result = PythonObject(None)
-        if operation == "fit" or operation == "fit_transform":
+        if (operation == "fit" or operation == "fit_transform") and kind == "target":
+            # TargetEncoder: fit(X, y); fit_transform(X, y, splits or None)
+            _target_check(py_fields(model), context)
+            var values = xprep_values(args[0], _entries(_default_mode(context), context), context)
+            if operation == "fit":
+                _target_fit(model, values, args[1], context)
+                result = model
+            else:
+                result = _target_fit_transform(model, values, args[1], args[2], context)
+            _ = values^
+        elif (operation == "fit" or operation == "fit_transform") and kind == "select_kbest":
+            # SelectKBest: fit(X, y); fit_transform(X, y) keeps the support's columns
+            var values = xprep_values(args[0], _entries(_default_mode(context), context), context)
+            var x = args[0] if Int(py=values[0]) == 1 else values[1]
+            _select_fit(model, x, values, args[1], context)
+            result = model
+            if operation == "fit_transform":
+                result = _select_transform(model, values, context)
+            _ = values^
+        elif operation == "fit" or operation == "fit_transform":
             var weights = PythonObject(None)
             if kind == "kbins":
                 weights = _fit_weights(model, args, operation)
