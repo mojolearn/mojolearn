@@ -554,7 +554,7 @@ def host_archive_density(cls: PythonObject, arrays: PythonObject, kde: Bool, pat
     py_setitem(fields, "n_samples_fit_", n)
     var bandwidth = classical_f64(parameter, 0)
     if not bandwidth > 0.0:
-        raise Error("KernelDensity bandwidth must be positive")
+        raise Error("mojolearn KernelDensity: bandwidth must be positive, got " + host_archive_float_repr(bandwidth))
     py_setitem(fields, "bandwidth", bandwidth)
     py_setitem(fields, "kernel", _archive_string(arrays, "kernel", context))
     py_setitem(fields, "algorithm", "auto")
@@ -939,6 +939,50 @@ def host_archive_ivf(cls: PythonObject, arrays: PythonObject, context: PythonObj
     py_setitem(fields, "n_rows_", n)
     py_setitem(fields, "n_lists_", lists)
     py_setitem(fields, "metric_code_", metric)
+    return model
+
+
+def host_archive_ann(cls: PythonObject, arrays: PythonObject, fmt: String, path: PythonObject,
+                     context: PythonObject) raises -> PythonObject:
+    """`_AnnSaved.load` of the x_ann indexes (IVFPQIndex, CagraIndex,
+    IVFSQIndex, IVFRaBitQIndex): the saved int constructor parameters and
+    fitted ints, the numeric mode and the index arrays at their saved
+    dtypes, with the Python loader's refusals. `host_archive_ann_layouts`
+    maps the format to (parameter names, fitted names, (attribute, member,
+    dtype) arrays, the other constructor defaults, the parameters saved as
+    -1 for None)."""
+    var b = Python.import_module("builtins")
+    var layout = context["host_archive_ann_layouts"][fmt]
+    var names = layout[0]
+    var fitted_names = layout[1]
+    var saved = layout[2]
+    var defaults = layout[3]
+    var none_below = layout[4]
+    var params = _archive_exact(arrays, "params", "<i8", context)
+    var fitted = _archive_exact(arrays, "fitted", "<i8", context)
+    if Int(py=params.size) != len(names) or Int(py=fitted.size) != len(fitted_names):
+        raise Error(host_archive_where(path, context) + " does not hold " + String(cls.__name__) + "'s parameters")
+    var model = host_archive_object(cls, arrays, context)
+    var fields = sequential_fields(model)
+    var words = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(params)))
+    for i in range(len(names)):  # driver-loop: over the class's saved constructor parameters
+        var value = Int(words[i])
+        if py_contains(none_below, names[i]) and value < 0:
+            py_setitem(fields, names[i], PythonObject(None))
+        else:
+            py_setitem(fields, names[i], PythonObject(value))
+    var keys = py_call(b.list, defaults)
+    for i in range(len(keys)):  # driver-loop: over the class's other constructor parameters
+        py_setitem(fields, keys[i], defaults[keys[i]])
+    host_archive_mode(arrays, fields, context)
+    var counts = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(fitted)))
+    for i in range(len(fitted_names)):  # driver-loop: over the class's saved fitted sizes
+        py_setitem(fields, fitted_names[i], PythonObject(Int(counts[i])))
+    for i in range(len(saved)):  # driver-loop: over the class's saved index arrays
+        var entry = saved[i]
+        py_setitem(fields, entry[0], _archive_exact(arrays, String(entry[1]), String(entry[2]), context))
+    _ = params^
+    _ = fitted^
     return model
 
 
@@ -2471,6 +2515,8 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         model = host_archive_holtwinters(cls, arrays, path, context)
     elif fmt == "mojolearn-ivf-flat-1":
         model = host_archive_ivf(cls, arrays, context)
+    elif py_contains(py_get(context, "host_archive_ann_layouts", Python.dict()), fmt):
+        model = host_archive_ann(cls, arrays, fmt, path, context)
     elif fmt == "mojolearn-hdbscan-2":
         model = host_archive_hdbscan(cls, arrays, path, context)
     elif fmt == "mojolearn-radius-1":
@@ -2478,8 +2524,12 @@ def host_archive_build(path: PythonObject, context: PythonObject,
     elif fmt == "mojolearn-knn-1":
         model = host_archive_neighbors(cls, arrays, 0 if String(estimator) == "NearestNeighbors" else (1 if String(estimator) == "KNeighborsClassifier" else 2), context)
         # Native equivalent of the original loader's _mojolearn_after_fit:
-        # a newly restored CPU neighbor model owns an empty query holder.
-        py_setitem(sequential_fields(model), "_resident_holder", Python.dict())
+        # a newly restored CPU neighbor model owns an empty query holder. A
+        # public class's own `load` also set `used_query_tile_ = None`.
+        var holder = Python.dict()
+        if public_owner is not None:
+            py_setitem(holder, "used_query_tile_", PythonObject(None))
+        py_setitem(sequential_fields(model), "_resident_holder", holder)
     elif fmt == "mojolearn-iforest-1":
         model = host_archive_iforest(cls, arrays, context)
     elif fmt == "mojolearn-spectral-1":

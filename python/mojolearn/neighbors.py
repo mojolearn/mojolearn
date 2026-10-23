@@ -16,16 +16,13 @@ cover. Every search is exact, never approximate.
 
 from . import _portable_math as math
 
-from . import _mojolearn, _native_archive_bridge, _serialize
+from . import _mojolearn, _native_archive_bridge
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_f32_dense_c, as_i64_c, empty
 from ._labels import decode_labels, encode_labels, sorted_classes
 from ._mode import NumericModeMixin
 from ._mode import ClassifierScoreMixin, RegressorScoreMixin
-from .linear_model import (
-    _check_saved_by, _dtype_name, _is_integer_labels, _restore_mode,
-    _saved_mode, _shape_of,
-)
+from .linear_model import _dtype_name, _is_integer_labels, _shape_of
 
 #: the x_neighbors binding, which holds the p2m_* ops the data loops below
 #: run through (lane apple-fast-py2mojo-neighbors)
@@ -35,8 +32,8 @@ _DEFAULT_QUERY_TILE = 0  # Ask the compiled planner for its measured default.
 
 #: The model file format (the knn host inference lane, 2026-09-14). `save`
 #: writes exactly what `kneighbors` / `predict` read, raw bytes and exact
-#: dtypes, through `_serialize.write_npz`, so equal models give equal file
-#: hashes on every machine; `load` refuses a cast (`_serialize.exact`). The
+#: dtypes, natively (bindings/archive_schema_native.mojo), so equal models give
+#: equal file hashes on every machine; `load` refuses a cast. The
 #: index is the fitted `<f4` `(n_samples_fit_, n_features_in_)` block, the
 #: classifier's labels the `<i4` `(n_outputs, n_samples_fit_)` column block
 #: the binding takes (policy 6), the regressor's the same in `<f4`; `p`
@@ -44,7 +41,6 @@ _DEFAULT_QUERY_TILE = 0  # Ask the compiled planner for its measured default.
 #: as text. `mojolearn.host_model(path)` predicts from the file on a CPU
 #: with no GPU through `bindings/_mojolearn_core_host.mojo`.
 _KNN_FORMAT = "mojolearn-knn-1"
-_KNN_META_FIELDS = 6  # n_features_in_, n_samples_fit_, n_neighbors, query_tile, outputs_2d, n_outputs
 #: RadiusNeighbors' model file (the neighbors and density inference lane,
 #: 2026-09-15): the `<f4` index as fitted, `radius`, `p` as `<f8`, `metric`
 #: and `algorithm` as text, `meta` `<i8` [n_features_in_, n_samples_fit_].
@@ -56,96 +52,11 @@ _RADIUS_FORMAT = "mojolearn-radius-1"
 # The compiled saved-model owner, connected once at import: RadiusNeighbors'
 # `save` and `load` are one native call each (bindings/archive_schema_native.mojo
 # writes the schema registered below the class; host_archive_native.mojo
-# builds the loaded model with `load`'s refusals). The k-NN classes keep
-# their Python save/load: `NearestNeighbors.__del__` releases the device
-# index, and a class with a Python finalizer is not built natively.
+# builds the loaded model with `load`'s refusals). The k-NN classes are
+# connected the same way: their device index is released by the native
+# finalizer (`_native_archive_bridge.lifetime`), not a Python `__del__`.
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 
-
-def _knn_arrays(est):
-    """The members every k-NN `save` writes; the subclasses add theirs."""
-    if est._index is None:
-        raise RuntimeError("this estimator is not fitted yet")
-    weights = getattr(est, "weights", "uniform")
-    weights = "uniform" if weights is None else weights
-    if not isinstance(weights, str):
-        # `fit` refuses a callable by name before the index is held, so
-        # this is unreachable on a fitted estimator; a file never carries
-        # a function.
-        raise ValueError(
-            f"mojolearn {type(est).__name__}: weights={weights!r} cannot be saved"
-        )
-    y_cols = getattr(est, "_y_cols", None)
-    n_out = 1 if y_cols is None else int(y_cols.shape[0])
-    return {
-        "format": _KNN_FORMAT,
-        "estimator": type(est).__name__,
-        "numeric_mode": _saved_mode(est),
-        "metric": str(est.metric),
-        "algorithm": str(est.algorithm),
-        "weights": weights,
-        "p": Array.from_list([float(est.p)], "<f8"),
-        "index": est._index,
-        "meta": Array.from_list(
-            [int(est.n_features_in_), int(est.n_samples_fit_),
-             int(est.n_neighbors), int(est.query_tile),
-             1 if getattr(est, "outputs_2d_", False) else 0, n_out],
-            "<i8",
-        ),
-    }
-
-
-def _load_knn(cls, path):
-    """The index and the parameters every k-NN `load` reads. Returns the
-    estimator (fitted as far as `NearestNeighbors.fit` fits it), the
-    decoded members, and `(outputs_2d, n_outputs)` for the subclasses."""
-    arrays = _serialize.read_npz(path, _KNN_FORMAT)
-    _check_saved_by(arrays, path, cls)
-    meta = _serialize.exact(arrays, "meta", "<i8")
-    if meta.size != _KNN_META_FIELDS:
-        raise ValueError(
-            f"mojolearn: {path!r} meta holds {meta.size} fields, "
-            f"{_KNN_META_FIELDS} are needed"
-        )
-    nf, ns, k, qt, o2d, n_out = (int(meta[i]) for i in range(_KNN_META_FIELDS))  # glue: six saved metadata fields
-    p = _serialize.exact(arrays, "p", "<f8")
-    if p.size != 1:
-        raise ValueError(f"mojolearn: {path!r} p holds {p.size} values, 1 is needed")
-    kwargs = dict(
-        n_neighbors=k, query_tile=qt,
-        metric=_serialize.scalar_str(arrays, "metric"),
-        algorithm=_serialize.scalar_str(arrays, "algorithm"),
-        p=float(p[0]),
-    )
-    if cls._HAS_WEIGHTS:
-        kwargs["weights"] = _serialize.scalar_str(arrays, "weights")
-    obj = cls(**kwargs)
-    _restore_mode(obj, arrays)
-    # The refusals `fit` raises, raised here too, so a file naming a
-    # metric or an algorithm this class refuses is refused by name at load.
-    obj._check_refusals()
-    index = _serialize.exact(arrays, "index", "<f4")
-    if index.ndim != 2 or index.shape[0] != ns or index.shape[1] != nf:
-        raise ValueError(
-            f"mojolearn: {path!r} index has shape {tuple(index.shape)}, meta says ({ns}, {nf})"
-        )
-    if ns < 1 or nf < 1:
-        raise ValueError(f"mojolearn: {path!r} holds an empty index")
-    obj._index = index
-    obj.n_samples_fit_ = ns
-    obj.n_features_in_ = nf
-    obj.used_query_tile_ = None
-    return obj, arrays, (bool(o2d), n_out)
-
-
-def _load_y_cols(arrays, path, dtype, ns, n_out):
-    y_cols = _serialize.exact(arrays, "y_cols", dtype)
-    if y_cols.ndim != 2 or y_cols.shape[0] != n_out or y_cols.shape[1] != ns:
-        raise ValueError(
-            f"mojolearn: {path!r} y_cols has shape {tuple(y_cols.shape)}, "
-            f"meta says ({n_out}, {ns})"
-        )
-    return y_cols
 
 #: cuVS `DistanceType` values (`cuvs/distance/distance.h:22-69`), mirrored
 #: from `neighbors/impl/distance/detail/distance_ops.mojo`. The value gaps
@@ -621,7 +532,7 @@ class NearestNeighbors(NumericModeMixin):
         RuntimeError
             If the model is not fitted.
         """
-        return _serialize.write_npz(path, _knn_arrays(self))
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -641,8 +552,7 @@ class NearestNeighbors(NumericModeMixin):
         NearestNeighbors
             A fitted model, ready for `kneighbors`.
         """
-        obj, _, _ = _load_knn(cls, path)
-        return obj
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
     #: Subclasses override; the base class never weights.
     _weights_value = _WEIGHTS_UNIFORM
@@ -742,7 +652,10 @@ class NearestNeighbors(NumericModeMixin):
         if cached is not None:
             self._release_resident_index()
         handle = int(prepare(key[0], [int(idx.shape[0]), int(idx.shape[1])]))
-        self._resident = (key, handle)
+        # The minting binding travels with the handle: the release (here, and
+        # the native finalizer when the instance is dropped) is its own
+        # `knn_index_release`.
+        self._resident = (key, handle, binding)
         return handle
 
     @staticmethod
@@ -764,15 +677,13 @@ class NearestNeighbors(NumericModeMixin):
             return
         self._resident = None
         try:
-            self._bind("_mojolearn").knn_index_release(cached[1])
+            cached[2].knn_index_release(cached[1])
         except Exception:  # noqa: BLE001
             pass
 
-    def __del__(self):
-        try:
-            self._release_resident_index()
-        except Exception:  # noqa: BLE001
-            pass
+    # No Python `__del__`: dropping an instance releases its device index
+    # through the native finalizer connected below the class
+    # (`_native_archive_bridge.lifetime`, bindings/host_archive_lifetime.mojo).
 
     def __getstate__(self):
         """A pickle or a deepcopy carries no device handle: the integer is
@@ -1137,20 +1048,7 @@ class KNeighborsClassifier(ClassifierScoreMixin, NearestNeighbors):
         RuntimeError
             If the model is not fitted.
         """
-        if self._y_cols is None:
-            raise RuntimeError("this estimator is not fitted yet")
-        if getattr(self, "_label_names", None) is not None:
-            raise ValueError("mojolearn: save stores integer class labels; this model "
-                             "was fit on str labels")
-        arrays = _knn_arrays(self)
-        arrays["y_cols"] = self._y_cols
-        arrays["classes"] = Array.from_list(
-            [int(c) for cl in self._classes_list for c in cl], "<i8"  # glue: saved classes per output column
-        )
-        arrays["class_counts"] = Array.from_list(
-            [len(cl) for cl in self._classes_list], "<i8"  # glue: saved classes per output column
-        )
-        return _serialize.write_npz(path, arrays)
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -1170,26 +1068,7 @@ class KNeighborsClassifier(ClassifierScoreMixin, NearestNeighbors):
         KNeighborsClassifier
             A fitted model, ready for `predict`.
         """
-        obj, arrays, (o2d, n_out) = _load_knn(cls, path)
-        y_cols = _load_y_cols(arrays, path, "<i4", obj.n_samples_fit_, n_out)
-        classes = _serialize.exact(arrays, "classes", "<i8").tolist()
-        counts = _serialize.exact(arrays, "class_counts", "<i8").tolist()
-        if len(counts) != n_out or sum(counts) != len(classes):  # glue: class count check over the outputs
-            raise ValueError(f"mojolearn: {path!r} classes and class_counts disagree with n_outputs")
-        rebuilt = [encode_labels(y_cols[i])[0] for i in range(n_out)]  # glue: one native encoding per output column
-        off = 0
-        for i, count in enumerate(counts):  # glue: saved class check per output
-            saved = [int(c) for c in classes[off:off + count]]  # glue: saved class check per output
-            off += count
-            if saved != rebuilt[i]:
-                raise ValueError(
-                    f"mojolearn: {path!r} classes for output {i} are not the sorted "
-                    "unique labels of its y_cols column"
-                )
-        obj._y_cols = y_cols
-        obj._classes_list = rebuilt
-        obj.outputs_2d_ = o2d
-        return obj
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
     def fit(self, X, y):
         """Store the training points and their labels.
@@ -1550,11 +1429,7 @@ class KNeighborsRegressor(RegressorScoreMixin, NearestNeighbors):
         RuntimeError
             If the model is not fitted.
         """
-        if self._y_cols is None:
-            raise RuntimeError("this estimator is not fitted yet")
-        arrays = _knn_arrays(self)
-        arrays["y_cols"] = self._y_cols
-        return _serialize.write_npz(path, arrays)
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     @classmethod
     def load(cls, path):
@@ -1570,10 +1445,7 @@ class KNeighborsRegressor(RegressorScoreMixin, NearestNeighbors):
         KNeighborsRegressor
             A fitted model, ready for `predict`.
         """
-        obj, arrays, (o2d, n_out) = _load_knn(cls, path)
-        obj._y_cols = _load_y_cols(arrays, path, "<f4", obj.n_samples_fit_, n_out)
-        obj.outputs_2d_ = o2d
-        return obj
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
     def fit(self, X, y):
         """Store the training points and their targets.
@@ -2038,6 +1910,46 @@ _native_archive_bridge.register(
     host_archive_rbc_metrics=dict(_RBC_METRIC_TABLE),
     host_archive_unsupported_metrics=tuple(_UNSUPPORTED_METRICS),
 )
+
+
+def _knn_schema(*extra, require=()):
+    """The k-NN save schema (the 0.8.55 `_knn_arrays` members, in order):
+    the refusals of the class's `save`, the head, the names, `p`, the index
+    and `meta` [n_features_in_, n_samples_fit_, n_neighbors, query_tile,
+    outputs_2d, n_outputs], then the class's own members."""
+    return (
+        *require,
+        ("need_set", "_index", "RuntimeError", "this estimator is not fitted yet"),
+        *_native_archive_bridge.head(_KNN_FORMAT),
+        ("str", "metric", "metric"),
+        ("str", "algorithm", "algorithm"),
+        ("when_none", "weights", (("format", "weights", "uniform"),)),
+        ("when_set", "weights", (("str", "weights", "weights"),)),
+        ("f8", "p", (("float", "p"),)),
+        ("array", "index", "_index"),
+        ("i8", "meta", (("int", "n_features_in_"), ("int", "n_samples_fit_"), ("int", "n_neighbors"),
+                        ("int", "query_tile"), ("bool_or", "outputs_2d_", False),
+                        ("none_or", "_y_cols", 1, ("dim", "_y_cols", 0)) if extra else ("const", 1))),
+        *extra,
+    )
+
+
+_native_archive_bridge.register(NearestNeighbors, _KNN_FORMAT, _knn_schema())
+_native_archive_bridge.register(KNeighborsClassifier, _KNN_FORMAT, _knn_schema(
+    ("array", "y_cols", "_y_cols"),
+    ("flatten", "classes", "class_counts", "<i8", "_classes_list"),
+    require=(("need_set", "_y_cols", "RuntimeError", "this estimator is not fitted yet"),
+             ("refuse_set", "_label_names", "ValueError",
+              "mojolearn: save stores integer class labels; this model was fit on str labels")),
+))
+_native_archive_bridge.register(KNeighborsRegressor, _KNN_FORMAT, _knn_schema(
+    ("array", "y_cols", "_y_cols"),
+    require=(("need_set", "_y_cols", "RuntimeError", "this estimator is not fitted yet"),),
+))
+# The device index is released by the native finalizer, through the
+# minting binding's `knn_index_release`; the handle lives in the holder
+# dictionary `_resident_holder["index"]`.
+_native_archive_bridge.lifetime(NearestNeighbors, "knn_index_release", "_resident_holder")
 
 
 # scikit-learn keeps more estimators in this module than it defines; they resolve from

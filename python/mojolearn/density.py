@@ -2,11 +2,11 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Density-based clustering on the GPU. Reference: cuML's DBSCAN."""
 
-from . import _mojolearn_estimators, _native_archive_bridge, _serialize
+from . import _mojolearn_estimators, _native_archive_bridge
 from ._sample_weight import check_sample_weight
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, empty, frombytes, full, zeros
 from ._mode import NumericModeMixin, available_if
-from .linear_model import _check_saved_by, _restore_mode, _shape_of
+from .linear_model import _shape_of
 
 #: `KernelDensity.save`'s format tag (the kde svc host lane, 2026-09-14).
 _KDE_FORMAT = "mojolearn-kde-1"
@@ -735,7 +735,10 @@ class KernelDensity(NumericModeMixin):
              1 if w is not None else 0],
             self.kernel, self.metric,
         ))
-        self._resident = (key, handle)
+        # The minting binding travels with the handle: the release (here, and
+        # the native finalizer when the instance is dropped) is its own
+        # `kde_fit_release`.
+        self._resident = (key, handle, binding)
         return handle
 
     def _release_resident_fit(self):
@@ -747,15 +750,13 @@ class KernelDensity(NumericModeMixin):
             return
         self._resident = None
         try:
-            self._bind("_mojolearn_estimators").kde_fit_release(cached[1])
+            cached[2].kde_fit_release(cached[1])
         except Exception:  # noqa: BLE001
             pass
 
-    def __del__(self):
-        try:
-            self._release_resident_fit()
-        except Exception:  # noqa: BLE001
-            pass
+    # No Python `__del__`: dropping an instance releases its device fit
+    # through the native finalizer connected below the class
+    # (`_native_archive_bridge.lifetime`, bindings/host_archive_lifetime.mojo).
 
     def __getstate__(self):
         """A pickle or a deepcopy carries no device handle (the integer is
@@ -945,45 +946,12 @@ class KernelDensity(NumericModeMixin):
         -------
         KernelDensity
         """
-        arrays = _serialize.read_npz(path, _KDE_FORMAT)
-        _check_saved_by(arrays, path, cls)
-        meta = _serialize.exact(arrays, "meta", "<i8")
-        if meta.size != 3:
-            raise ValueError(f"mojolearn: {path!r} meta holds {meta.size} fields, 3 are needed")
-        bandwidth = _serialize.exact(arrays, "bandwidth", "<f8")
-        if bandwidth.size != 1:
-            raise ValueError(f"mojolearn: {path!r} bandwidth must hold one value")
-        obj = cls(
-            bandwidth=float(bandwidth[0]),
-            kernel=_serialize.scalar_str(arrays, "kernel"),
-            metric=_serialize.scalar_str(arrays, "metric"),
-        )
-        obj._validate_params()
-        _restore_mode(obj, arrays)
-        nf, n_fit, has_weights = int(meta[0]), int(meta[1]), int(meta[2])
-        x = _serialize.exact(arrays, "x", "<f4")
-        if x.ndim != 2 or tuple(x.shape) != (n_fit, nf):
-            raise ValueError(
-                f"mojolearn: {path!r} x shape {tuple(x.shape)} is not ({n_fit}, {nf})"
-            )
-        obj._x = x
-        if has_weights:
-            w = _serialize.exact(arrays, "weights", "<f4")
-            if w.ndim != 1 or w.size != n_fit:
-                raise ValueError(f"mojolearn: {path!r} weights do not match n_samples_fit_")
-            obj._w = w
-        elif "weights" in arrays:
-            raise ValueError(f"mojolearn: {path!r} carries weights its meta says it lacks")
-        else:
-            obj._w = None
-        obj.n_features_in_ = nf
-        obj.n_samples_fit_ = n_fit
-        return obj
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
 
-# KernelDensity.load stays in Python: the class defines `__del__` (it
-# releases a resident device fit), which the native archive builder cannot
-# allocate, and its load runs `_validate_params`.
+# `save` and `load` are one native call each: the schema below, and
+# bindings/host_archive_native.mojo `host_archive_density` with the load's
+# refusals. The resident device fit is released by the native finalizer.
 _native_archive_bridge.register(KernelDensity, _KDE_FORMAT, (
     _native_archive_bridge.fitted("_x"),
     *_native_archive_bridge.head(_KDE_FORMAT),
@@ -994,3 +962,4 @@ _native_archive_bridge.register(KernelDensity, _KDE_FORMAT, (
     ("i8", "meta", (("int", "n_features_in_"), ("int", "n_samples_fit_"), ("setflag", "_w"))),
     ("when_set", "_w", (("array", "weights", "_w"),)),
 ))
+_native_archive_bridge.lifetime(KernelDensity, "kde_fit_release")
