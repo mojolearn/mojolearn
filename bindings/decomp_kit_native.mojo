@@ -7,11 +7,12 @@
 # a CPU-only host binding takes the host-address entries). So the bits are
 # the ones the Python kit produced.
 #
-# One difference is data movement only: a host matrix uploaded to the
-# device keeps its host buffer (the Python `_M` dropped it and downloaded the
-# same words again when Python next read it). The words are equal, so no
-# value changes; an operation that writes a matrix in place drops the copy
-# that went stale (`_wrote_device` / `_wrote_host`).
+# One difference is data movement only: a matrix keeps both its host and its
+# device words once it has both (the Python `_M` dropped one and moved the
+# same words again when it next needed them). The words are equal, so no
+# value changes; every route `_Kit` chose by residency reads `on_device`,
+# which follows the Python `_M` exactly; an operation that writes a matrix
+# in place drops the copy that went stale (`wrote_device` / `wrote_host`).
 from std.python import Python, PythonObject
 from std.memory import memcpy
 from bindings.py_balanced import py_call, py_get, py_type, py_contains
@@ -32,6 +33,10 @@ comptime XD_SQRT = 7
 comptime XD_SQ = 8
 comptime XD_SCALE = 14
 comptime XD_SOFT = 17
+comptime XD_LOGS = 10
+comptime XD_ABS = 13
+comptime XD_ADDS = 22
+comptime XD_LE = 34
 comptime XD_RECIP = 16
 comptime XD_MINS = 19
 comptime XD_SELECT = 35
@@ -179,12 +184,16 @@ struct DecompMatrix(Copyable, Movable):
     var device: Int          # an x_decomp device buffer id, or -1
     var rows: Int
     var cols: Int
+    # Whether the Python `_M` would be on the device (its `_d` set): every
+    # route `_Kit` chose by residency reads this, never the buffers kept.
+    var on_device: Bool
 
-    def __init__(out self, host: PythonObject, device: Int, rows: Int, cols: Int):
+    def __init__(out self, host: PythonObject, device: Int, rows: Int, cols: Int, on_device: Bool):
         self.host = host
         self.device = device
         self.rows = rows
         self.cols = cols
+        self.on_device = on_device
 
 
 struct DecompKit(Movable):
@@ -223,7 +232,7 @@ struct DecompKit(Movable):
     # ---- matrices
     def add(mut self, host: PythonObject, rows: Int, cols: Int, device: Int = -1) -> Int:
         var result = len(self.matrices)
-        self.matrices.append(DecompMatrix(host, device, rows, cols))
+        self.matrices.append(DecompMatrix(host, device, rows, cols, device >= 0))
         return result
 
     def size(self, a: Int) -> Int:
@@ -264,7 +273,10 @@ struct DecompKit(Movable):
         return self.add(PythonObject(None), rows, cols, handle)
 
     def host(mut self, a: Int) raises -> PythonObject:
-        # `_M.s`: a device-only matrix comes down once.
+        # `_M.s`: a device-only matrix comes down once; as in `_M.s`, the
+        # matrix then counts as a host matrix (its device words stay valid
+        # and are reused by a later upload, the same words).
+        self.matrices[a].on_device = False
         if self.matrices[a].host is None:
             var n = self.size(a)
             var result = classical_array(max(n, 1), 0, self.context)
@@ -288,6 +300,7 @@ struct DecompKit(Movable):
                 _ = py_call(self.entries["x_decomp_dev_upload"], handle, classical_address(owner), n)
             self.matrices[a].device = handle
             _ = owner^
+        self.matrices[a].on_device = True
         return self.matrices[a].device
 
     def dev_one(mut self) raises -> Int:
@@ -306,6 +319,7 @@ struct DecompKit(Movable):
     def wrote_host(mut self, a: Int):
         # The host copy was written in place: the device words are stale.
         self.matrices[a].device = -1
+        self.matrices[a].on_device = False
 
     def use(self, a: Int, b: Int = -1, c: Int = -1) -> Bool:
         # `_Kit._use` with `_RES_MIN` 1: a GPU binding, and an operand on the
@@ -341,6 +355,7 @@ struct DecompKit(Movable):
         var rows = self.matrices[a].rows
         var cols = self.matrices[a].cols
         var n = rows * cols
+        self.matrices[a].on_device = False
         if self.matrices[a].host is None:
             var result = classical_array(max(n, 1), 0, self.context)
             if n:
@@ -465,17 +480,17 @@ struct DecompKit(Movable):
             _ = py_call(self.entries["x_decomp_move"], aa, ai, self.address(out), params)
         return out
 
-    def take_rows(mut self, a: Int, idx: Int) raises -> Int:
-        # `_Kit.take_rows(A, idx)`.
+    def take_rows(mut self, a: Int, idx: Int, radd: Int = 0) raises -> Int:
+        # `_Kit.take_rows(A, idx, radd=radd)`: rows idx[t] + radd of A.
         var m = self.size(idx)
         var cols = self.matrices[a].cols
         var count = m * cols
-        var params = Python.list(XD_TAKE_ROWS, count, cols, 0, 0, 1, 0, self.size(a), count, m)
+        var params = Python.list(XD_TAKE_ROWS, count, cols, radd, 0, 1, 0, self.size(a), count, m)
         return self._move(a, idx, m, cols, params, count > 0 and self.use(a, idx))
 
     def _moves_on_device(self, a: Int, count: Int) -> Bool:
         # `_res_moves`: a device matrix's move runs on the device.
-        return (self.matrices[a].device >= 0 and count > 0 and self.matrices[a].rows < XD_F32_INDEX_MAX
+        return (self.matrices[a].on_device and count > 0 and self.matrices[a].rows < XD_F32_INDEX_MAX
                 and self.matrices[a].cols < XD_F32_INDEX_MAX)
 
     def rows_of(mut self, a: Int, start: Int, stop: Int) raises -> Int:
@@ -524,14 +539,20 @@ struct DecompKit(Movable):
         var cols = self.matrices[a].cols
         var n = rows * cols
         var vector = rows == 1 or cols == 1
-        if self.matrices[a].device < 0 and n and not vector and n < XD_I32_MAX and self.resident:
+        if not self.matrices[a].on_device and n and not vector and n < XD_I32_MAX and self.resident:
             _ = self.device(a)
         var d = self.matrices[a].device
         if vector:
-            # The same words, a view (host and device alike).
-            var shared = self.matrices[a].host
-            return self.add(shared, cols, rows, d)
-        if d >= 0 and n < XD_I32_MAX:
+            # The same words, a view: of the device words for a device
+            # matrix, else of the host store.
+            if self.matrices[a].on_device:
+                var shared = self.matrices[a].host
+                return self.add(shared, cols, rows, d)
+            var store = self.host(a)
+            var view = self.add(store, cols, rows, d)
+            self.matrices[view].on_device = False
+            return view
+        if self.matrices[a].on_device and n < XD_I32_MAX:
             var out = self.device_output(cols, rows)
             _ = py_call(self.entries["x_decomp_dev_move"], d, d, self.matrices[out].device,
                         Python.list(XD_TRANSPOSE, n, rows, cols, 0, 0, 0, n, n, 1))
@@ -545,11 +566,16 @@ struct DecompKit(Movable):
                     Python.list(XD_TRANSPOSE, n, rows, cols, 0, 0, 0, n, n, 1))
         return out
 
-    def reshape(mut self, a: Int, rows: Int, cols: Int) -> Int:
-        # `_M.reshape`: a view of the same words.
-        var shared = self.matrices[a].host
-        var handle = self.matrices[a].device
-        return self.add(shared, rows, cols, handle)
+    def reshape(mut self, a: Int, rows: Int, cols: Int) raises -> Int:
+        # `_M.reshape`: a view of the same words (of the host store for a host matrix).
+        if self.matrices[a].on_device:
+            var shared = self.matrices[a].host
+            var handle = self.matrices[a].device
+            return self.add(shared, rows, cols, handle)
+        var store = self.host(a)
+        var view = self.add(store, rows, cols, self.matrices[a].device)
+        self.matrices[view].on_device = False
+        return view
 
     def hstack(mut self, ms: List[Int]) raises -> Int:
         # `_Kit.hstack`: PLACE_COLS moves, copies only.
@@ -643,7 +669,7 @@ struct DecompKit(Movable):
     def copy(mut self, a: Int) raises -> Int:
         # `_Kit.copy`: a device copy of a device matrix, else `_M.copy()`.
         var n = self.size(a)
-        if n and self.matrices[a].device >= 0 and self.use(a):
+        if n and self.matrices[a].on_device and self.use(a):
             var rows = self.matrices[a].rows
             var cols = self.matrices[a].cols
             var out = self.device_output(rows, cols)
@@ -667,7 +693,7 @@ struct DecompKit(Movable):
         # `_Kit.word`: one value down.
         var index = a
         var at = i
-        if self.matrices[a].device >= 0 and self.matrices[a].host is None and self.size(a) > 1:
+        if self.matrices[a].on_device and self.size(a) > 1:
             index = self.strided(a, 1, 1, i)
             at = 0
         var owner = self.host(index)
@@ -875,3 +901,109 @@ struct DecompKit(Movable):
         _ = py_call(self.entries["x_decomp_omp_rows"], ag, aq, self.address(w), self.address(na),
                     Python.list(rows, cols, nnz))
         return w
+
+    # ---- reductions, selections and factor companions (MinCovDet)
+    def reduce(mut self, a: Int, op: Int) raises -> Int:
+        # `_Kit.reduce`: max |A| (0), max A (1) or min A (2) as 1 x 1.
+        var n = self.size(a)
+        if not n:
+            raise Error("x_decomp: reduce of an empty matrix")
+        if self.use(a):
+            var out = self.device_output(1, 1)
+            var da = self.device(a)
+            _ = py_call(self.entries["x_decomp_dev_reduce"], da, self.matrices[out].device, Python.list(n, op))
+            return out
+        var out = self.zeros(1, 1)
+        var aa = self.address(a)
+        _ = py_call(self.entries["x_decomp_reduce"], aa, self.address(out), Python.list(n, op))
+        return out
+
+    def total_word(mut self, a: Int) raises -> Float64:
+        # `k.total(A).s[0]`: the sum of every entry, rows ascending, one word down.
+        var rows = self.rowsum(a)
+        var total = self.colsum(rows)
+        return self.word(total)
+
+    def eigh(mut self, a: Int) raises -> Tuple[Int, Int]:
+        # `_Kit.eigh(A)` (uplo 0): ascending values (1 x n), vectors in columns.
+        var n = self.matrices[a].rows
+        var w = self.zeros(1, n)
+        var v = self.zeros(n, n)
+        var params = Python.list(n, 0)
+        if n >= 1 and self.matrices[a].cols == n and self.matrices[a].on_device and self.opt_dev("x_decomp_dev_eigh"):
+            var da = self.matrices[a].device
+            _ = py_call(self.entries["x_decomp_dev_eigh"], da, self.address(w), self.address(v), params)
+            return (w, v)
+        var aa = self.address(a)
+        _ = py_call(self.entries["x_decomp_eigh"], aa, self.address(w), self.address(v), params)
+        return (w, v)
+
+    def refuse_nan(mut self, a: Int) raises:
+        # `_Kit._refuse_nan`: a device operand's max is NaN when any value is.
+        var maximum = self.reduce(a, 1)
+        var v = self.word(maximum)
+        if v != v:
+            raise Error("x_decomp: a NaN has no order (refused)")
+
+    def argmin_all(mut self, a: Int) raises -> Int:
+        # `_Kit.argmin_all`: every position (exact floats, c x 1) of the minimum.
+        var n = self.size(a)
+        if n and self.use(a):
+            if n >= XD_F32_INDEX_MAX:
+                raise Error("x_decomp: argmin_all exceeds the float32 index bound")
+            var out = self.device_output(n, 1)
+            var count = self.device_output(1, 1)
+            var da = self.device(a)
+            _ = py_call(self.entries["x_decomp_dev_argmin_all"], da, self.matrices[out].device,
+                        self.matrices[count].device, Python.list(n))
+            var c = Int(self.word(count))
+            return self.rows_of(out, 0, c) if c else self.zeros(0, 1)
+        var buffer = self.zeros(max(n, 1), 1)
+        var c = 0
+        if n:
+            var aa = self.address(a)
+            c = Int(py=py_call(self.entries["x_decomp_argmin_all"], aa, n, self.address(buffer)))
+        return self.rows_of(buffer, 0, c)
+
+    def select_smallest(mut self, a: Int, h: Int) raises -> Tuple[Int, Int, PythonObject]:
+        # `_Kit.select_smallest`: (the h smallest positions ascending, h x 1;
+        # the membership as an n x 1 0/1 device matrix, or -1 and the host
+        # int32 membership store).
+        var n = self.size(a)
+        if n and self.use(a):
+            if n >= XD_F32_INDEX_MAX or h < 0 or h > n:
+                raise Error("x_decomp: select_smallest out of range")
+            self.refuse_nan(a)
+            var sel = self.device_output(h, 1)
+            var mask = self.device_output(n, 1)
+            var da = self.device(a)
+            _ = py_call(self.entries["x_decomp_dev_select_smallest"], da, self.matrices[sel].device,
+                        self.matrices[mask].device, Python.list(n, h))
+            return (sel, mask, PythonObject(None))
+        var sel = self.zeros(h, 1)
+        var store = py_call(self.context["array_type"], PythonObject("i"), py_call(self.context["native_bytes_type"], 4 * max(n, 1)))
+        if n:
+            var aa = self.address(a)
+            _ = py_call(self.entries["x_decomp_select_smallest"], aa, Python.list(n, h), self.address(sel),
+                        py_call(store.buffer_info)[0])
+        return (sel, -1, store)
+
+    def lu_aux(mut self, lu: Int, piv: PythonObject) raises -> Tuple[Int, Int]:
+        # `_Kit.lu_aux(lu, piv)` (clamp False): (stats 1 x 4 = [max |u_ii|,
+        # zero pivots, negative pivots, swaps], the diagonal 1 x n), host.
+        var n = self.matrices[lu].rows
+        var pm = self.zeros(n, 1)
+        var im = self.zeros(n, 1)
+        var diag = self.zeros(1, n)
+        var st = self.zeros(1, 4)
+        var pa = py_call(piv.buffer_info)[0]
+        var params = Python.list(n, 0)
+        if n >= 1 and self.matrices[lu].on_device and self.opt_dev("x_decomp_dev_lu"):
+            var dl = self.matrices[lu].device
+            _ = py_call(self.entries["x_decomp_dev_lu_aux"], dl, pa, self.address(pm), self.address(im),
+                        self.address(diag), self.address(st), params)
+            return (st, diag)
+        var al = self.address(lu)
+        _ = py_call(self.entries["x_decomp_lu_aux"], al, pa, self.address(pm), self.address(im),
+                    self.address(diag), self.address(st), params)
+        return (st, diag)
