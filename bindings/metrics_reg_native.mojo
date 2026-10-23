@@ -343,7 +343,16 @@ def _reg_weights(source: PythonObject, n: Int, caller: String, context: PythonOb
     nonnegative, a positive total; None stays None."""
     if source is None:
         return PythonObject(None)
-    var view = classical_view(source, context, "sample_weight")
+    var view: PythonObject
+    try:
+        view = classical_view(source, context, "sample_weight")
+    except error:
+        # an empty or ragged list is refused by the sequence reader; the
+        # refusal names the argument, as `_sample_weight_f32` did
+        var text = String(error)
+        if text.startswith("TypeError: "):
+            raise error^
+        raise Error("mojolearn " + caller + ": sample_weight: " + text)
     var nd = Int(py=view.ndim)
     if nd != 1:
         raise Error("mojolearn " + caller + ": sample_weight must be 1-D, got shape " + family_shape_repr(view))
