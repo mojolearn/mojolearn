@@ -19,6 +19,15 @@ int64_t mojolearn_adapter_operation(
     int64_t device, int64_t code, int64_t inputs, int64_t input_count,
     int64_t output, int64_t integer_args, int64_t integer_count,
     int64_t scalar_args, int64_t scalar_count, int64_t error, int64_t error_capacity);
+// Additive ABI v1 entry: tensor descriptors name HOST buffers, but device must
+// be 0 and every numerical operation runs through DeviceExec on that GPU.
+// Inputs are uploaded and the result downloaded with native byte copies.
+// Callers keep host buffers alive until return; copies and GPU work are drained.
+// CPU device -1 is refused, so this entry cannot silently run math on the CPU.
+int64_t mojolearn_adapter_operation_host_buffers(
+    int64_t device, int64_t code, int64_t inputs, int64_t input_count,
+    int64_t output, int64_t integer_args, int64_t integer_count,
+    int64_t scalar_args, int64_t scalar_count, int64_t error, int64_t error_capacity);
 #ifdef __cplusplus
 }
 #endif

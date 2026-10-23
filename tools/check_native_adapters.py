@@ -12,6 +12,7 @@ import hashlib
 import json
 from pathlib import Path
 import os
+import platform
 import subprocess
 import traceback
 
@@ -22,10 +23,13 @@ def main():
     p.add_argument("--device", default="cuda:0")
     p.add_argument("--fault", choices=["none", "wrong-operation", "stall"], default="none")
     p.add_argument("--stage", choices=["both", "build", "test"], default="both")
+    p.add_argument("--host-staging", action="store_true",
+                   help="test artifact only: force the MPS transport path on a CUDA/HIP GPU")
     args = p.parse_args()
     out = args.out.resolve()
     out.mkdir(parents=True, exist_ok=True)
-    report = {"complete": False, "scope": "adapter functionality on one machine", "checks": [], "failures": []}
+    report = {"complete": False, "scope": "adapter functionality on one machine", "checks": [], "failures": [],
+              "not_applicable": [], "test_host_staging": args.host_staging}
     try:
         import torch
         from torch.utils.cpp_extension import include_paths, library_paths
@@ -43,7 +47,7 @@ def main():
                 source = source.replace(original, "device.is_cpu() ? -1 : 0, code == 2 ? 3 : code,")
             elif args.fault == "stall":
                 source = "#include <chrono>\n#include <thread>\n#include <cstdio>\n" + source
-                original = "const auto status = mojolearn_adapter_operation("
+                original = "const auto status = entry("
                 assert source.count(original) == 1
                 source = source.replace(original,
                     'std::fputs("ADAPTER_FAULT_STALL_ENTERED\\n", stderr); std::fflush(stderr);\n'
@@ -51,6 +55,7 @@ def main():
             # Retain the actual source bytes compiled, including fault controls.
             cpp = out / "registration.cpp"
             cpp.write_text(source)
+            (out / "abi.h").write_bytes((root / "adapters/native/abi.h").read_bytes())
             # Native dispatcher registration requires libtorch, not its Python
             # binding library. cpp_extension.load also links libtorch_python;
             # build this standalone module using the public Torch path/ABI API.
@@ -58,18 +63,23 @@ def main():
             command = [os.environ.get("CXX", "c++"), "-std=c++20", "-O2", "-fPIC", "-shared",
                        f"-D_GLIBCXX_USE_CXX11_ABI={int(torch.compiled_with_cxx11_abi())}",
                        str(cpp), "-o", str(out / "mojolearn_torch.so")]
+            if args.host_staging:
+                command += ["-DMOJOLEARN_ADAPTER_TEST_HOST_STAGING=1"]
             command += [f"-I{path}" for path in include_paths()]
             command += [f"-L{path}" for path in torch_libraries] + [f"-L{out}"]
-            command += ["-lmojolearn_adapter", "-ltorch", "-ltorch_cpu", "-lc10", "-Wl,-z,defs",
+            link_check = "-Wl,-undefined,error" if platform.system() == "Darwin" else "-Wl,-z,defs"
+            command += ["-lmojolearn_adapter", "-ltorch", "-ltorch_cpu", "-lc10", link_check,
                         f"-Wl,-rpath,{out}"] + [f"-Wl,-rpath,{path}" for path in torch_libraries]
             (out / "torch-build-command.json").write_text(json.dumps(command, indent=2) + "\n")
             subprocess.run(command, check=True)
-            symbols = subprocess.check_output(["nm", "-D", str(out / "mojolearn_torch.so")], text=True)
-            dependencies = subprocess.check_output(["readelf", "-d", str(out / "mojolearn_torch.so")], text=True)
+            symbol_command = ["nm", "-g"] if platform.system() == "Darwin" else ["nm", "-D"]
+            dependency_command = ["otool", "-L"] if platform.system() == "Darwin" else ["readelf", "-d"]
+            symbols = subprocess.check_output(symbol_command + [str(out / "mojolearn_torch.so")], text=True)
+            dependencies = subprocess.check_output(dependency_command + [str(out / "mojolearn_torch.so")], text=True)
             (out / "torch-symbols.txt").write_text(symbols)
             (out / "torch-dynamic.txt").write_text(dependencies)
             assert "libtorch_python" not in dependencies and "libpython" not in dependencies
-            assert not any(line.split()[-1].startswith(("Py", "_Py")) for line in symbols.splitlines() if line.split())
+            assert not any(line.split()[-1].lstrip("_").startswith("Py") for line in symbols.splitlines() if line.split())
             torch.ops.load_library(str(out / "mojolearn_torch.so"))
             report["compiled"] = True
             if args.stage == "build":
@@ -77,12 +87,22 @@ def main():
                 print(json.dumps({"compiled": True, "fault": args.fault}))
                 return 0
         else:
+            build_command = json.loads((out / "torch-build-command.json").read_text())
+            assert ("-DMOJOLEARN_ADAPTER_TEST_HOST_STAGING=1" in build_command) == args.host_staging
             torch.ops.load_library(str(out / "mojolearn_torch.so"))
         operation = torch.ops.mojolearn.operation
         device = torch.device(args.device)
         if device.type == "cuda":
             assert torch.cuda.is_available(), "GPU qualification cannot fall back to CPU"
             report["hardware"] = torch.cuda.get_device_name(device)
+        elif device.type == "mps":
+            assert torch.backends.mps.is_available(), "MPS qualification cannot fall back to CPU"
+            assert os.environ.get("PYTORCH_ENABLE_MPS_FALLBACK", "0") == "0", "disable MPS CPU fallback for qualification"
+            assert not args.host_staging, "MPS already uses staging; do not qualify a forced-route artifact"
+            report["hardware"] = subprocess.check_output(["system_profiler", "SPDisplaysDataType"], text=True)
+        if args.host_staging:
+            assert device.type == "cuda", "forced staging checks require a real CUDA/HIP GPU"
+        report["transport"] = "host_buffers_gpu_math" if device.type == "mps" or args.host_staging else "native_device_buffers"
 
         def checked(name, fn):
             try:
@@ -95,7 +115,9 @@ def main():
             assert actual.device == expected.device
             assert actual.dtype == expected.dtype
             assert tuple(actual.shape) == tuple(expected.shape)
-            assert torch.equal(actual.view(torch.int32), expected.view(torch.int32)), "output words differ"
+            # Test oracle/inspection only: compare raw words after byte copies.
+            assert torch.equal(actual.cpu().contiguous().view(torch.int32),
+                               expected.cpu().contiguous().view(torch.int32)), "output words differ"
 
         x = torch.tensor([[1., -2., 0.5], [-0.25, 2., -1.]], device=device)
         y = torch.tensor([[0.5, 1., 2.], [1., 0.5, -0.25]], device=device)
@@ -142,7 +164,25 @@ def main():
                 result = operation([produced, y], 2, [2, 3])
             torch.cuda.current_stream(device).wait_stream(stream)
             equal(result, x * 2 + y)
-        checked("producer_on_nondefault_stream", alternate_stream)
+        if device.type == "cuda":
+            checked("producer_on_nondefault_stream", alternate_stream)
+        else:
+            report["not_applicable"].append("producer_on_nondefault_stream: CUDA/HIP-specific API")
+
+        def producer_consumer():
+            produced = x * 2
+            result = operation([produced, y], 2, [2, 3])
+            equal(result * 2, (x * 2 + y) * 2)
+        checked("queued_producer_and_consumer", producer_consumer)
+
+        def offset_storage():
+            base = torch.arange(30, dtype=torch.float32, device=device).reshape(10, 3)
+            part = base[3:5]
+            assert part.is_contiguous() and part.storage_offset() != 0
+            before = base.clone()
+            equal(operation([part], 31, [2, 3]), part)
+            equal(base, before)
+        checked("nonzero_storage_offset", offset_storage)
 
         def refuse(name, fn, message):
             def call():
@@ -156,7 +196,7 @@ def main():
 
         refuse("shape_mismatch", lambda: operation([x], 31, [3, 2]), "output shape")
         refuse("strided_input", lambda: operation([x.t()], 31, [3, 2]), "contiguous")
-        refuse("unsupported_dtype", lambda: operation([x.double()], 31, [2, 3]), "float32 or int32")
+        refuse("unsupported_dtype", lambda: operation([x.half()], 31, [2, 3]), "float32 or int32")
         refuse("unsupported_backward", lambda: operation([x.clone().requires_grad_()], 6, [2, 3]), "no registered backward")
         refuse("pointer_index_form", lambda: operation([x], 32, [2, 3], [0]*8), "tensor indices")
         refuse("unknown_operation", lambda: operation([x], 47, [2, 3]), "unknown operation")
@@ -168,6 +208,11 @@ def main():
         bad_ids = torch.tensor([99], dtype=torch.int32, device=device)
         refuse("out_of_bounds_indices", lambda: operation([x, bad_ids], 32, [1, 3], [-1]), "embedding")
         refuse("session_only_gather", lambda: operation([x, ids], 22, [2, 3], [0, 2]), "permutation provenance")
+        if device.type != "cpu":
+            refuse("mixed_devices", lambda: operation([x, y.cpu()], 2, [2, 3]), "share the output device")
+        if device.type == "mps":
+            checked("mps_implicit_index_no_inputs", lambda: equal(
+                operation([], 30, [2, 3], [2, 3], [.5], device=torch.device("mps")), torch.full_like(x, .5)))
 
         def repeated():
             for _ in range(20):
@@ -212,10 +257,10 @@ def main():
 
         def negative_control():
             actual = operation([x, y], 2, [2, 3])
-            changed = actual.clone()
+            changed = actual.cpu().clone()
             changed.view(torch.int32).flatten()[0] ^= 1
             try:
-                equal(changed, actual)
+                equal(changed.to(device), actual)
             except AssertionError:
                 return
             raise AssertionError("word comparator failed to detect injected output corruption")

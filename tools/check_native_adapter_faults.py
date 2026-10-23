@@ -42,6 +42,7 @@ def main():
     parser.add_argument("--qualified-out", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
     parser.add_argument("--device", default="cuda:0")
+    parser.add_argument("--host-staging", action="store_true")
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     check = Path(__file__).with_name("check_native_adapters.py").resolve()
@@ -50,12 +51,15 @@ def main():
     original = {"native": digest(native), "extension": digest(extension)}
     baseline = json.loads((args.qualified_out / "adapter-results.json").read_text())
     assert baseline["complete"] and baseline.get("fault", "none") == "none"
+    assert baseline.get("test_host_staging", False) == args.host_staging
     report = {"complete": False, "original": original, "controls": [], "failures": []}
     for fault in ("wrong-operation", "stall"):
         directory = args.out / fault
         directory.mkdir()
         shutil.copy2(native, directory / native.name)
         command = [sys.executable, str(check), "--out", str(directory), "--device", args.device, "--fault", fault]
+        if args.host_staging:
+            command += ["--host-staging"]
         build = run(command + ["--stage", "build"], directory / "build.log", 300)
         if build["exit_code"] or build["timed_out"]:
             report["failures"].append({"fault": fault, "stage": "build", "result": build})
@@ -74,8 +78,11 @@ def main():
             report["failures"].append({"fault": fault, "stage": "detection"})
     # Reuse the original accepted binaries; a restored run must pass after
     # both fault subprocesses have ended, including the deliberately stalled one.
-    restored = run([sys.executable, str(check), "--out", str(args.qualified_out), "--device", args.device,
-                    "--stage", "test"], args.out / "restored.log", 120)
+    restored_command = [sys.executable, str(check), "--out", str(args.qualified_out), "--device", args.device,
+                        "--stage", "test"]
+    if args.host_staging:
+        restored_command += ["--host-staging"]
+    restored = run(restored_command, args.out / "restored.log", 300)
     report["restored"] = restored
     report["original_unchanged"] = original == {"native": digest(native), "extension": digest(extension)}
     if restored["exit_code"] or restored["timed_out"] or not report["original_unchanged"]:

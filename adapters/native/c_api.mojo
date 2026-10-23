@@ -16,12 +16,12 @@ def mojolearn_adapter_abi() abi("C") -> Int:
     return 1
 
 
-@export
-def mojolearn_adapter_operation(
+def _operation(
     device: Int, code: Int, descriptors: Int, count: Int, output: Int,
     int_args: Int, n_ints: Int, float_args: Int, n_floats: Int,
     error_buffer: Int, error_capacity: Int,
-) abi("C") -> Int:
+    host_buffers: Bool,
+) -> Int:
     var error = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=error_buffer)
     if error_buffer != 0 and error_capacity > 0:
         error[0] = 0
@@ -33,10 +33,12 @@ def mojolearn_adapter_operation(
         var ints = IP(unsafe_from_address=int_args)
         var floats = FP(unsafe_from_address=float_args)
         if device == -1:
+            if host_buffers:
+                raise Error("adapter: host-buffer GPU entry requires visible GPU zero")
             run_operation(HostExec(), code, inputs, count, out, ints, n_ints, floats, n_floats)
         elif device == 0:
             var ctx = DeviceContext()
-            run_operation(DeviceExec(ctx), code, inputs, count, out, ints, n_ints, floats, n_floats)
+            run_operation(DeviceExec(ctx), code, inputs, count, out, ints, n_ints, floats, n_floats, host_buffers)
         else:
             raise Error("adapter currently supports the CPU or visible GPU zero")
         return 0
@@ -49,3 +51,25 @@ def mojolearn_adapter_operation(
                 error[j] = bytes[j]
             error[n] = 0
         return 1
+
+
+@export
+def mojolearn_adapter_operation(
+    device: Int, code: Int, descriptors: Int, count: Int, output: Int,
+    int_args: Int, n_ints: Int, float_args: Int, n_floats: Int,
+    error_buffer: Int, error_capacity: Int,
+) abi("C") -> Int:
+    return _operation(device, code, descriptors, count, output, int_args,
+                      n_ints, float_args, n_floats, error_buffer, error_capacity, False)
+
+
+@export
+def mojolearn_adapter_operation_host_buffers(
+    device: Int, code: Int, descriptors: Int, count: Int, output: Int,
+    int_args: Int, n_ints: Int, float_args: Int, n_floats: Int,
+    error_buffer: Int, error_capacity: Int,
+) abi("C") -> Int:
+    # Additive ABI v1 entry. Host buffers cross the boundary, but all numerical
+    # operations execute on GPU 0. Never select HostExec as a fallback here.
+    return _operation(device, code, descriptors, count, output, int_args,
+                      n_ints, float_args, n_floats, error_buffer, error_capacity, True)
