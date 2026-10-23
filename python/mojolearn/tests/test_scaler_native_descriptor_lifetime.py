@@ -30,7 +30,8 @@ def test_range_descriptors_and_program_survive_native_call_envelope(operation, m
         vars(model).update(center_=None, scale_=np.ones(5, dtype='f4'),
                            numeric_mode_=_backend._DEFAULT_MODE, n_features_in_=5,
                            _mojolearn_fitted=True)
-    with pytest.raises(ValueError, match='descriptor test stopped'):
+    # the native door keeps a builtin exception's class (py_call_typed)
+    with pytest.raises(RuntimeError, match='descriptor test stopped'):
         getattr(model, operation)(np.arange(95, dtype='f4').reshape(19,5))
     if operation == 'fit':
         assert captured == [([273,0,0,5], [0,95,-1,220,223,-1],
