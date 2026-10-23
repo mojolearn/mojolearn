@@ -9,7 +9,17 @@
 # nystroem_transform with the argument lists
 # `bindings/_mojolearn_kernel_methods.mojo` documents, and stores the fit.
 # The same kernels on the same inputs: the bits do not move.
+#
+# Lane migrate-classical-b2: KernelRidge.predict reads X_fit_ and dual_coef_
+# from a device copy minted at the first predict after a fit
+# (`kernel_ridge_resident_prepare`, kernel_methods/krr_resident.mojo)
+# instead of uploading both per call; Nystroem.fit_transform uploads X once
+# (`nystroem_fit_transform_ptr`); RBFSampler.fit / fit_transform are one
+# native call, gamma='scale' rounded from the binding's exact limbs in exact
+# integer math (core/scale_gamma_exact.mojo). A binding without a door
+# takes the entries it has, as before.
 from std.python import Python, PythonObject
+from core.scale_gamma_exact import scale_gamma_from_limbs, SGX_BAD
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
@@ -168,6 +178,10 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     py_setitem(fields, "info_", family_call(b.int, info))
     py_setitem(fields, "_kernel_params", Python.tuple(PythonObject(kernel), PythonObject(degree), gamma, coef0, alpha))
     _ = x^
+    # The last fit's resident arrays are released; the next predict uploads
+    # the new ones once (`_km_resident_krr`).
+    _km_release(model, "kernel_ridge_resident_release")
+    py_setitem(fields, _HOLDER, Python.dict())
 
 
 def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -184,23 +198,35 @@ def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject)
     var fitted = family_field(fields, "n_features_in_")
     if d != Int(py=fitted):
         raise Error("mojolearn " + where + ": X has " + String(d) + " features, the fit had " + String(Int(py=fitted)))
-    var x_fit = family_as_f32(family_field(fields, "X_fit_"), 2, "X_fit_", context)
+    var x_fit_obj = family_field(fields, "X_fit_")
+    var x_fit = family_as_f32(x_fit_obj, 2, "X_fit_", context)
     var n = Int(py=x_fit.shape[0])
     var t = Int(py=family_field(fields, "n_targets_"))
     var kp = family_field(fields, "_kernel_params")
     var kernel = Int(py=kp[0])
     _km_chi2_input(xq, kernel, where)
-    var dual = family_as_f32(family_field(fields, "dual_coef_"), -1, "dual_coef_", context)
+    var dual_obj = family_field(fields, "dual_coef_")
+    var dual = family_as_f32(dual_obj, -1, "dual_coef_", context)
     var squeeze = Bool(py=py_call(b.bool, family_field(fields, "_squeeze")))
     var out = family_array(Python.tuple(q) if squeeze else Python.tuple(q, t), "<f4", context)
     var binding = _km_extension(model, args[0], where, context)
+    var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(t), kp[0], kp[1], kp[2], kp[3], kp[4],
+                             family_field(fields, "info_"), PythonObject(q))
+    var handle = _km_resident_krr(model, binding, x_fit_obj, dual_obj, x_fit, dual, n, d, t, context)
+    if handle is not None:
+        # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::kernel_ridge_predict_resident_binding:
+        # handle; x_new, out; the predict's ten params.
+        _ = family_call(family_entry(binding, "kernel_ridge_predict_resident", context), handle,
+                        Python.list(classical_address(xq), classical_address(out)), params)
+        _ = x_fit^
+        _ = dual^
+        _ = xq^
+        return out
     var predict = _km_pointer_entry(binding, "kernel_ridge_predict_ptr", "kernel_ridge_predict", context)
     # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::kernel_ridge_predict_binding:
     # x_fit, dual, x_new, out; n, d, t, kernel, degree, gamma, coef0, alpha, info, q.
     var addresses = Python.list(classical_address(x_fit), classical_address(dual), classical_address(xq),
                                 classical_address(out))
-    var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(t), kp[0], kp[1], kp[2], kp[3], kp[4],
-                             family_field(fields, "info_"), PythonObject(q))
     _ = family_call(predict, addresses, params)
     _ = x_fit^
     _ = dual^
@@ -208,8 +234,12 @@ def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject)
     return out
 
 
-def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
-    """`Nystroem.fit(X)`: the basis rows and the normalization."""
+def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject,
+             transform: Bool = False) raises -> PythonObject:
+    """`Nystroem.fit(X)`: the basis rows and the normalization. With
+    `transform` (`fit_transform`), returns the transform of X: one
+    `nystroem_fit_transform_ptr` call (X uploaded once) where the binding
+    registers it, else None (the caller transforms)."""
     classical_connect_numpy(context)
     var where = String("Nystroem")
     var b = Python.import_module("builtins")
@@ -244,7 +274,13 @@ def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var eigenvectors = family_array(Python.tuple(q, q), "<f4", context)
     var scalars = family_array(Python.tuple(1), "<f8", context)
     var binding = _km_extension(model, args[0], where, context)
-    var fit = _km_pointer_entry(binding, "nystroem_fit_ptr", "nystroem_fit", context)
+    var joint = PythonObject(None)
+    if transform:
+        joint = _km_door(binding, "nystroem_fit_transform_ptr", context)
+    var out = PythonObject(None)
+    var fit = joint
+    if joint is None:
+        fit = _km_pointer_entry(binding, "nystroem_fit_ptr", "nystroem_fit", context)
     # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::nystroem_fit_binding:
     # x, components_out, indices_out, normalization_out, eigenvalues_out,
     # eigenvectors_out, scalars_out; n, d, kernel, degree, gamma, coef0, q, seed.
@@ -253,6 +289,11 @@ def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
                                 classical_address(eigenvectors), classical_address(scalars))
     var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(kernel), PythonObject(degree),
                              gamma, coef0, PythonObject(q), seed)
+    if joint is not None:
+        # ORDER MATCHES nystroem_fit_transform_ptr_binding: the seven fit
+        # addresses, then the n x q transform.
+        out = family_array(Python.tuple(n, q), "<f4", context)
+        _ = py_call(addresses.append, classical_address(out))
     var sweeps = family_call(fit, addresses, params)
     _ = x^
     py_setitem(fields, "n_features_in_", PythonObject(d))
@@ -263,6 +304,7 @@ def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     py_setitem(fields, "eigenvectors_", eigenvectors)
     py_setitem(fields, "sweeps_", family_call(b.int, sweeps))
     py_setitem(fields, "_kernel_params", Python.tuple(PythonObject(kernel), PythonObject(degree), gamma, coef0, seed))
+    return out
 
 
 def _nys_transform(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -339,6 +381,163 @@ def _rbf_transform(model: PythonObject, args: PythonObject, context: PythonObjec
     return out
 
 
+comptime _HOLDER = "_resident_holder"
+comptime _PY2MOJO_SCALE_GAMMA = 1
+
+
+def _km_door(binding: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
+    """The binding's compiled entry `name`, or None where it registers none
+    (`_km_pointer_entry`'s lookup)."""
+    var entry = py_call(Python.import_module("builtins").getattr, binding, PythonObject(name), PythonObject(None))
+    if entry is None or not Bool(py=py_call(Python.import_module("builtins").bool, entry)):
+        return PythonObject(None)
+    if py_type(entry) is not context["family_builtin_type"]:
+        raise Error("TypeError: mojolearn: " + name + " must be a compiled entry")
+    return entry
+
+
+def _km_release(model: PythonObject, release: String) raises:
+    """Drop the resident handle, if held, through the minting binding's
+    `release` entry. Quiet on a binding that cannot be reached any more and
+    on a handle already released (a copied instance)."""
+    var b = Python.import_module("builtins")
+    var holder = py_get(py_fields(model), PythonObject(_HOLDER), PythonObject(None))
+    if holder is None or py_type(holder) is not b.dict:
+        return
+    var held = py_get(holder, PythonObject("index"), PythonObject(None))
+    if held is None:
+        return
+    py_setitem(holder, "index", PythonObject(None))
+    try:
+        _ = py_call(py_call(b.getattr, held[2], PythonObject(release)), held[1])
+    except:
+        pass
+
+
+def _km_resident_krr(model: PythonObject, binding: PythonObject, x_fit_obj: PythonObject, dual_obj: PythonObject,
+                     x_fit: PythonObject, dual: PythonObject, n: Int, d: Int, t: Int,
+                     context: PythonObject) raises -> PythonObject:
+    """The handle of the device copy of the fit's X and dual, uploaded at
+    the first predict after a fit and reused while `X_fit_` and
+    `dual_coef_` are the same objects (the held key keeps references to
+    them) and the binding is the minting one; None where the binding has no
+    resident door. Only the holder dictionary changes."""
+    var prepare = _km_door(binding, "kernel_ridge_resident_prepare", context)
+    if prepare is None:
+        return PythonObject(None)
+    var b = Python.import_module("builtins")
+    var fields = py_fields(model)
+    var holder = py_get(fields, PythonObject(_HOLDER), PythonObject(None))
+    if holder is None or py_type(holder) is not b.dict:
+        holder = Python.dict()
+        py_setitem(fields, _HOLDER, holder)
+    var held = py_get(holder, PythonObject("index"), PythonObject(None))
+    if held is not None:
+        var key = held[0]
+        if (key[0] is x_fit_obj and key[1] is dual_obj and held[2] is binding and Int(py=key[2]) == n
+                and Int(py=key[3]) == d and Int(py=key[4]) == t):
+            return held[1]
+        _km_release(model, "kernel_ridge_resident_release")
+    var handle = family_call(prepare, Python.list(classical_address(x_fit), classical_address(dual)),
+                             Python.list(PythonObject(n), PythonObject(d), PythonObject(t)))
+    py_setitem(holder, "index", Python.tuple(
+        Python.tuple(x_fit_obj, dual_obj, PythonObject(n), PythonObject(d), PythonObject(t)), handle, binding))
+    return handle
+
+
+def _km_scale_gamma(binding: PythonObject, x: PythonObject, d: Int, context: PythonObject) raises -> PythonObject:
+    """`_scale_gamma.scale_gamma_x`: the binding's exact limbs of the float32
+    cells, the one rounding in exact integer math."""
+    var b = Python.import_module("builtins")
+    var flags_entry = py_call(b.getattr, binding, PythonObject("py2mojo_linear_flags"), PythonObject(None))
+    var flags = 0
+    if flags_entry is not None:
+        flags = Int(py=family_call(b.int, family_call(flags_entry)))
+    if (flags & _PY2MOJO_SCALE_GAMMA) == 0:
+        raise Error("RuntimeError: mojolearn: this binding has no scale_gamma_limbs (an older binary or a "
+                    + "-D MOJOLEARN_PY2MOJO_linear_OFF build); rebuild it")
+    var n = Int(py=x.size)
+    if n == 0:
+        raise Error("gamma='scale' needs at least one cell of X")
+    var words = family_array(Python.tuple(SGX_BAD + 1), "<i8", context)
+    _ = family_call(family_call(b.getattr, binding, PythonObject("scale_gamma_limbs")), classical_address(x),
+                    PythonObject(n), classical_address(words))
+    var wp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(words)))
+    var limbs = List[Int64]()
+    for i in range(SGX_BAD + 1):  # small-loop(limbs: the 28 fixed words of the binding)
+        limbs.append(wp[i])
+    _ = words^
+    return PythonObject(scale_gamma_from_limbs(limbs, n, d))
+
+
+def _rbf_fit(model: PythonObject, args: PythonObject, transform: Bool, context: PythonObject) raises -> PythonObject:
+    """`RBFSampler.fit(X)` (returns the model) or, with `transform`,
+    `fit_transform(X)`: one `rbf_sampler_fit_transform_resident` call where
+    the binding registers it, else the fit and then the transform."""
+    classical_connect_numpy(context)
+    var where = String("RBFSampler")
+    var b = Python.import_module("builtins")
+    var fields = py_fields(model)
+    var x = family_as_f32_dense(args[1], 2, "X", context)
+    var m = Int(py=x.shape[0])
+    var d = Int(py=x.shape[1])
+    var binding = args[0]
+    # `_fit_params`: gamma, then n_components, then the seed.
+    var gamma_param = family_field(fields, "gamma")
+    var gamma: PythonObject
+    if family_is_str(gamma_param) and String(gamma_param) == "scale":
+        gamma = _km_scale_gamma(_km_extension(model, binding, where, context), x, d, context)
+    else:
+        gamma = _km_real(gamma_param, "gamma", where)
+    var components_param = family_field(fields, "n_components")
+    if not family_is_int(components_param):
+        raise Error("TypeError: mojolearn " + where + ": n_components must be an int")
+    var q = Int(py=family_call(b.int, components_param))
+    if q < 1:
+        # BY NAME, BEFORE ANY BUFFER (the MI300X n_components=0 run, 2026-09-14).
+        raise Error("mojolearn " + where + ": n_components must be positive, got " + String(q))
+    var seed = family_call(b.int, family_field(fields, "random_state"))
+    var weights = family_array(Python.tuple(d, q), "<f4", context)
+    var offset = family_array(Python.tuple(q), "<f4", context)
+    var scalars = family_array(Python.tuple(2), "<f8", context)
+    var extension = _km_extension(model, binding, where, context)
+    var out = PythonObject(None)
+    var joint = PythonObject(None)
+    if transform:
+        joint = py_call(b.getattr, extension, PythonObject("rbf_sampler_fit_transform_resident"), PythonObject(None))
+    if joint is not None:
+        # lane apple-fast-w2-kfeat MOJOLEARN_KM_FAST_RBF_RESIDENT
+        # (kernel_methods/rbf_resident.mojo): the draws, the upload, the
+        # projection and every download in one binding call and one wait.
+        out = family_array(Python.tuple(m, q), "<f4", context)
+        # ORDER MATCHES kernel_methods/rbf_resident.mojo::rbf_sampler_fit_transform_binding.
+        _ = family_call(joint, Python.list(classical_address(weights), classical_address(offset),
+                                           classical_address(scalars), classical_address(x), classical_address(out)),
+                        Python.list(PythonObject(d), PythonObject(q), gamma, seed, PythonObject(m)))
+    else:
+        # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::rbf_sampler_fit_binding:
+        # weights_out, offset_out, scalars_out; d, q, gamma, seed.
+        _ = family_call(family_entry(extension, "rbf_sampler_fit", context),
+                        Python.list(classical_address(weights), classical_address(offset), classical_address(scalars)),
+                        Python.list(PythonObject(d), PythonObject(q), gamma, seed))
+    var sp = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(scalars)))
+    py_setitem(fields, "n_features_in_", PythonObject(d))
+    py_setitem(fields, "random_weights_", weights)
+    py_setitem(fields, "random_offset_", offset)
+    py_setitem(fields, "sigma_", PythonObject(sp[0]))
+    py_setitem(fields, "scale_", PythonObject(sp[1]))
+    py_setitem(fields, "_params", Python.tuple(gamma, seed))
+    _ = scalars^
+    if not transform:
+        _ = x^
+        return model
+    if out is None:
+        _ = x^
+        return _rbf_transform(model, args, context)
+    _ = x^
+    return out
+
+
 def kernel_methods_operation(model: PythonObject, operation: String, args: PythonObject,
                              context: PythonObject) raises -> PythonObject:
     """The kernel methods' public operations: args[0] is the resolved binding."""
@@ -348,13 +547,30 @@ def kernel_methods_operation(model: PythonObject, operation: String, args: Pytho
     if operation == "family_km_krr_predict":
         return _krr_predict(model, args, context)
     if operation == "family_km_nys_fit":
-        _nys_fit(model, args, context)
+        _ = _nys_fit(model, args, context)
         return model
     if operation == "family_km_nys_transform":
         return _nys_transform(model, args, context)
     if operation == "family_km_rbf_transform":
         return _rbf_transform(model, args, context)
     if operation == "family_km_nys_fit_transform":
-        _nys_fit(model, args, context)
+        var joint = _nys_fit(model, args, context, True)
+        if joint is not None:
+            return joint
         return _nys_transform(model, args, context)
+    if operation == "family_km_rbf_fit":
+        return _rbf_fit(model, args, False, context)
+    if operation == "family_km_rbf_fit_transform":
+        return _rbf_fit(model, args, True, context)
+    if operation == "family_km_getstate":
+        # A pickle or a deepcopy carries no device handle (meaningful only
+        # in the minting process); the copy uploads its own at first use.
+        var state = py_call(Python.import_module("builtins").dict, py_fields(model))
+        _ = py_call(state.pop, PythonObject(_HOLDER), PythonObject(None))
+        return state
+    if operation == "family_km_setstate":
+        var fields = py_fields(model)
+        _ = py_call(fields.update, args[0])
+        py_setitem(fields, _HOLDER, Python.dict())
+        return PythonObject(None)
     raise Error("RuntimeError: unknown kernel methods operation " + operation)

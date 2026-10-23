@@ -37,9 +37,6 @@ transforms from a saved model on a CPU without a GPU.
 # No speed claim: the lane has no published number and this door adds none.
 
 from . import _backend, _native_archive_bridge, _native_family_bridge
-from ._scale_gamma import scale_gamma, scale_gamma_x
-from ._buffer import addr, addr_ro, as_f32_dense_c, empty
-from ._lazy_out import _mapped_out
 from ._mode import NumericModeMixin
 from ._mode import RegressorScoreMixin
 
@@ -255,6 +252,17 @@ class KernelRidge(RegressorScoreMixin, _KernelMethodBase):
             Predictions, 1-D when the fitted `y` was 1-D.
         """
         return _NATIVE(self, "family_km_krr_predict", (self._bind(), X), _NATIVE_CONTEXT)
+
+    # The fitted X and dual live on the device after the first predict,
+    # under `_resident_holder` (bindings/kernel_methods_native.mojo). A
+    # pickle or a deepcopy carries no device handle; the copy uploads its
+    # own at its first predict. Dropping an instance releases the handle
+    # through the native finalizer connected below the classes.
+    def __getstate__(self):
+        return _NATIVE(self, "family_km_getstate", (), _NATIVE_CONTEXT)
+
+    def __setstate__(self, state):
+        _NATIVE(self, "family_km_setstate", (state,), _NATIVE_CONTEXT)
 
     # Maintainer note, file layout: `X_fit_` and `dual_coef_` (flat,
     # `n * n_targets`) as fitted, `hyper` `<f8` [gamma, coef0, alpha] as the fit
@@ -537,51 +545,7 @@ class RBFSampler(_KernelMethodBase):
         self : RBFSampler
             The fitted transformer.
         """
-        x, _ = as_f32_dense_c(X, ndim=2, name="X")
-        _, d = x.shape
-        gamma, q, seed = self._fit_params(x, d)
-        weights = empty((d * q,), "<f4")
-        offset = empty((q,), "<f4")
-        scalars = empty((2,), "<f8")
-        self._extension().rbf_sampler_fit(
-            # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::rbf_sampler_fit_binding.
-            # weights_out, offset_out, scalars_out
-            [addr(weights, name="random_weights_"), addr(offset, name="random_offset_"), addr(scalars, name="scalars")],
-            # d, q, gamma, seed
-            [d, q, gamma, seed],
-        )
-        self._set_fitted(d, q, gamma, seed, weights, offset, scalars)
-        return self
-
-    def _set_fitted(self, d, q, gamma, seed, weights, offset, scalars):
-        self.n_features_in_ = d
-        self.random_weights_ = weights.reshape((d, q))
-        self.random_offset_ = offset
-        self.sigma_ = float(scalars[0])
-        self.scale_ = float(scalars[1])
-        self._params = (gamma, seed)
-
-    def _fit_params(self, x, d):
-        """(gamma, n_components, seed) as `fit` resolves and refuses them."""
-        if isinstance(self.gamma, str) and self.gamma == "scale":
-            # scikit-learn's 1 / (n_features * X.var()), 1.0 at zero
-            # variance: the EXACT variance of the float32 cells, the
-            # reciprocal rounded once (`_scale_gamma.scale_gamma`), so every
-            # host draws from the same gamma bits.
-            gamma = scale_gamma_x(self._extension(), x, d)
-        else:
-            gamma = _real(self.gamma, "gamma", self._WHERE)
-        if isinstance(self.n_components, bool) or not isinstance(self.n_components, int):
-            raise TypeError(f"mojolearn {self._WHERE}: n_components must be an int")
-        q = int(self.n_components)
-        if q < 1:
-            # BY NAME, BEFORE ANY BUFFER. The first MI300X run of this surface
-            # (2026-09-14) saw n_components=0 refused as "null float32 buffer
-            # address": the zero-length weights buffer reached the binding's
-            # address check before anything had said which argument was wrong.
-            raise ValueError(f"mojolearn {self._WHERE}: n_components must be positive, got {q}")
-        seed = int(self.random_state)
-        return gamma, q, seed
+        return _NATIVE(self, "family_km_rbf_fit", (self._bind(), X), _NATIVE_CONTEXT)
 
     def transform(self, X):
         """Map `X` to the random Fourier feature space.
@@ -613,29 +577,7 @@ class RBFSampler(_KernelMethodBase):
         Array of shape (n_samples, n_components), float32
             The transformed training data.
         """
-        ext = self._extension()
-        resident = getattr(ext, "rbf_sampler_fit_transform_resident", None)
-        if resident is None:
-            return self.fit(X).transform(X)
-        # lane apple-fast-w2-kfeat MOJOLEARN_KM_FAST_RBF_RESIDENT
-        # (kernel_methods/rbf_resident.mojo): the draws, the upload, the
-        # projection and every download in one binding call and one wait;
-        # main's words. The output is mapped memory (no zero pass).
-        x, _ = as_f32_dense_c(X, ndim=2, name="X")
-        m, d = x.shape
-        gamma, q, seed = self._fit_params(x, d)
-        weights = empty((d * q,), "<f4")
-        offset = empty((q,), "<f4")
-        scalars = empty((2,), "<f8")
-        out = _mapped_out((m * q,))
-        resident(
-            # ORDER MATCHES kernel_methods/rbf_resident.mojo::rbf_sampler_fit_transform_binding.
-            [addr(weights, name="random_weights_"), addr(offset, name="random_offset_"), addr(scalars, name="scalars"),
-             addr_ro(x, name="X"), addr(out, name="transform")],
-            [d, q, gamma, seed, m],
-        )
-        self._set_fitted(d, q, gamma, seed, weights, offset, scalars)
-        return out.reshape((m, q))
+        return _NATIVE(self, "family_km_rbf_fit_transform", (self._bind(), X), _NATIVE_CONTEXT)
 
     # Maintainer note, file layout: the weights and offsets as drawn, `hyper`
     # `<f8` [gamma, sigma_, scale_], `meta` `<i8` [n_features, n_components,
@@ -714,6 +656,12 @@ _bridge.register(RBFSampler, _RBF_SAMPLER_FORMAT, (
     *_bridge.head(_RBF_SAMPLER_FORMAT),
 ))
 del _bridge
+
+
+# Dropping a fitted KernelRidge releases its resident X and dual through the
+# minting binding's `kernel_ridge_resident_release` (bindings/
+# host_archive_lifetime.mojo "entry" plans), held in `_resident_holder["index"]`.
+_native_archive_bridge.lifetime(KernelRidge, "kernel_ridge_resident_release", "_resident_holder")
 
 
 __all__ = ["KernelRidge", "Nystroem", "RBFSampler"]
