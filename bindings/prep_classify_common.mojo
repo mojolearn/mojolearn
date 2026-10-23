@@ -15,6 +15,7 @@ from bindings.classical_validate import classical_view
 from bindings.x_prep_native_inputs import _rows_fields, _values
 from bindings.classical_labels import ClassicalLabels, classical_encode_labels
 from bindings.prep_classify_prog import ClsProg, NONE, INT32_MAX, off_add, f32_array, i32_array
+from bindings.sequential_admission import _one_of
 
 comptime I32P = MutPointer[Int32, MutUntrackedOrigin]
 comptime I64P = MutPointer[Int64, MutUntrackedOrigin]
@@ -326,7 +327,11 @@ def prior_sum(vals: List[Float64]) -> Float64:
 
 
 def is_real(value: PythonObject, context: PythonObject) raises -> Bool:
-    return Bool(py=py_call(cls_builtins().isinstance, value, context["real_type"]))
+    var cls = py_type(value)
+    if cls is py_type(PythonObject(0)) or cls is py_type(PythonObject(0.0)) or cls is py_type(PythonObject(True)):
+        return True
+    return (_one_of(cls, context["scalar_types"])
+            and not _one_of(cls, py_get(context, "bool_types", Python.tuple(py_type(PythonObject(True))))))
 
 
 def cls_float(value: PythonObject) raises -> Float64:
