@@ -35,6 +35,7 @@ def connect(context, register, registry):
     cls.__getattribute__ = descriptor
     layout = _layout(cls, descriptor)
     prep._CLS_CONTEXT.update(classifier_labels_class=ClassLabels, classifier_labels_namespace=dict(vars(ClassLabels)),
+                             classifier_labels_mro=type.__dict__["__mro__"].__get__(ClassLabels),
                              classical_public_layouts={cls: layout}, classical_public_installed=True,
                              classical_attribute_descriptor=descriptor)
     register(cls, prep._CLS_CALL, prep._CLS_CONTEXT, parameters, 'initialize', methods)
@@ -61,3 +62,6 @@ def connect(context, register, registry):
         'get_params': ('get_params', (('constant', False),)),
         'set_params': ('set_params', (('arg', 0),)),
     })
+
+    from ._native_msel_more import connect as connect_more
+    connect_more(context, register, registry)

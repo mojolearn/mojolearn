@@ -157,3 +157,30 @@ def test_native_lda_public_target_checks_and_dataframe_names():
     np.testing.assert_array_equal(model.feature_names_in_, np.array(frame.columns, dtype=object))
     clean(model.fit, x, y)
     assert not hasattr(model, 'feature_names_in_')
+
+
+def test_native_label_output_refuses_changed_ancestry_before_copy_or_allocation():
+    from mojolearn._labels import ClassLabels
+    x, y = data()
+    fitted = clean(LinearDiscriminantAnalysis)
+    clean(fitted.fit, x, y)
+    fresh = clean(LinearDiscriminantAnalysis)
+    calls = []
+
+    class HookedList(list):
+        __slots__ = ()
+
+        def __del__(self):
+            calls.append('finalizer')
+
+    bases = ClassLabels.__bases__
+    namespace = dict(vars(ClassLabels))
+    ClassLabels.__bases__ = (HookedList,)
+    try:
+        assert dict(vars(ClassLabels)) == namespace
+        clean(fitted.predict, x, error=TypeError)
+        clean(fresh.fit, x, y, error=TypeError)
+        assert calls == []
+    finally:
+        # Restore before pre-existing class-label objects can be released.
+        ClassLabels.__bases__ = bases

@@ -8,19 +8,18 @@ from bindings.classical_pandas import _pd_class, _pd_fields, _pd_get
 from bindings.classical_labels import _flatten_labels
 
 
-def classifier_label_list(value: PythonObject, context: PythonObject) raises -> PythonObject:
-    var cls = py_get(context, "classifier_labels_class")
-    if cls is None or py_type(value) is not cls:
-        return value
-    # list.copy is the native list implementation, not an iterable protocol.
-    return py_call(py_type(Python.list()).copy, value)
-
-
-def _public_labels(values: PythonObject, context: PythonObject) raises -> PythonObject:
+def _labels_class(context: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
-    if py_type(values) is not b.list:
-        return values
     var cls = context["classifier_labels_class"]
+    if py_type(cls) is not b.type:
+        raise Error("TypeError: native class-label output requires connected class metadata")
+    var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
+    var ancestry = context["classifier_labels_mro"]
+    if len(mro) != len(ancestry):
+        raise Error("TypeError: native class-label output ancestry changed")
+    for i in range(len(mro)):  # driver-loop: retained ancestry before allocation or releasing old labels
+        if mro[i] is not ancestry[i]:
+            raise Error("TypeError: native class-label output ancestry changed")
     var fields = py_call(b.type.__dict__["__dict__"].__get__, cls)
     var connected = context["classifier_labels_namespace"]
     var names = py_call(b.list, fields)
@@ -29,6 +28,23 @@ def _public_labels(values: PythonObject, context: PythonObject) raises -> Python
     for i in range(len(names)):  # driver-loop: immutable connected output class metadata
         if py_type(names[i]) is not b.str or not py_contains(connected, names[i]) or fields[names[i]] is not connected[names[i]]:
             raise Error("TypeError: native class-label output cannot invoke modified Python hooks")
+    return cls
+
+
+def classifier_label_list(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    var cls = py_get(context, "classifier_labels_class")
+    if cls is None or py_type(value) is not cls:
+        return value
+    _ = _labels_class(context)
+    # list.copy is the native list implementation, not an iterable protocol.
+    return py_call(py_type(Python.list()).copy, value)
+
+
+def _public_labels(values: PythonObject, context: PythonObject) raises -> PythonObject:
+    var b = Python.import_module("builtins")
+    if py_type(values) is not b.list:
+        return values
+    var cls = _labels_class(context)
     var result = py_call(b.list.__new__, cls)
     _ = py_call(b.list.extend, result, values)
     return result
