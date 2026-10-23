@@ -24,7 +24,8 @@ def connect(kinds):
             entries = {}
             for name in ("x_prep_run", "x_prep_numeric_mode", "x_prep_idn_fam",  # glue: fixed native exports connected during import
                          "x_prep_run_out", "x_prep_run_scratch", "x_prep_run_ranges",
-                         "x_prep_dev_put", "x_prep_dev_free", "x_prep_dev_live", "x_prep_dev_take_rows"):
+                         "x_prep_dev_put", "x_prep_dev_free", "x_prep_dev_live", "x_prep_dev_take_rows",
+                         "x_prep_host_column", "x_prep_ptimpute_flags"):
                 try:
                     entry = getattr(module, name)
                 except (AttributeError, ImportError):

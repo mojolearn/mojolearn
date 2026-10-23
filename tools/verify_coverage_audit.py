@@ -1497,8 +1497,8 @@ ANNOTATIONS_BY_SRC[("robust_scaler_native_call", "bindings/_mojolearn_tokenizer_
 ANNOTATIONS_BY_SRC[("prep_stateless_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
     "owed", ["x-prep-binarizer", "x-prep-normalizer", "x-prep-polynomial-features",
              "x-prep-variance-threshold", "x-prep-select-kbest", "x-prep-rfe",
-             "x-prep-quantile-transformer", "x-prep-inverse-transforms"],
-    "Public Binarizer, Normalizer, PolynomialFeatures, VarianceThreshold and QuantileTransformer "
+             "x-prep-quantile-transformer", "x-prep-power-transformer", "x-prep-inverse-transforms"],
+    "Public Binarizer, Normalizer, PolynomialFeatures, VarianceThreshold, QuantileTransformer and PowerTransformer "
     "fit/transform/fit_transform/inverse_transform "
     "and the selectors' transform call prep_stateless_c, which builds the existing binarize/normalize/"
     "poly/p2m_transpose, col_stats/var_ptp/c2_key64/c2_gt and gather_cols x_prep programs natively. New source only: runtime execution and identity admission remain pending.")

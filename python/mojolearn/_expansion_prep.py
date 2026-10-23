@@ -130,9 +130,6 @@ _OPS = dict(
 )
 _PARAMS = 14
 _NONE = -1
-#: x_prep/transform.mojo PT_EVALS (PT_ITERS + 2) and PT_STATE
-_PT_EVALS = 50
-_PT_STATE = 10
 
 
 def _native_helper(key):
@@ -4302,36 +4299,6 @@ class QuantileTransformer(_PrepBase):
         return _STATELESS_CALL(self, "inverse_transform", (X,), _STATELESS_CONTEXT)
 
 
-def _pt_spec_depth(n, d):
-    """The device search's speculation depth (lane prep-apple2): each round
-    evaluates the 2^S - 1 candidate points of the next S golden steps side by
-    side. MOJOLEARN_XPREP_PT_SPEC = S (default 3; 0: one evaluation per
-    fold, the staged search). The rule is a size range, not a shape: S is
-    lowered until the (2^S - 1) candidates' transforms (n*d words each) fit
-    in 2^28 words, so every (n, d) gets the deepest speculation its buffer
-    allows. The default 3 was measured on one row (m4pro-b, 1M x 11: staged
-    4.55 s, S=2 3.31, S=3 2.95, S=4 3.09) and needs neighbor-shape
-    validation (n*d around 2^28 / 7 and 2^28 / 3, d = 8..256). Every S gives the same lambdas. IDENTICAL only: FAST keeps the
-    staged search, whose folds FAST runs as threadgroup trees
-    (x_prep/fastred.mojo), already short."""
-    try:
-        s = int(os.environ.get("MOJOLEARN_XPREP_PT_SPEC", "3"))
-    except ValueError:
-        s = 3
-    s = max(0, min(s, 6))
-    while s > 1 and (2 ** s - 1) * n * d > 2 ** 28:
-        s -= 1
-    # the first round always evaluates the search's two opening points
-    # (PowerTransformer.fit: m = 2 at k0 = 0), so the candidates' buffer holds
-    # at least two transforms; when even two exceed the cap, the staged search
-    # (lane gap-board-refusals: Istella 1,000,000 x 220 reached S = 1 with a
-    # one-candidate buffer and the opening round wrote past it, an illegal
-    # address on the L40S and the MI300X, 0.8.34 board)
-    if s == 1 and 2 * n * d > 2 ** 28:
-        s = 0
-    return s
-
-
 # Each column's lambda maximizes sklearn's log-likelihood by a fixed-step
 # golden-section search over [-8, 8] (sklearn: scipy's Brent from the bracket
 # (-2, 2)), float32. inverse_transform is x * scale + mean, then scipy's
@@ -4383,137 +4350,23 @@ class PowerTransformer(_PrepBase):
         self.copy = copy
 
     def fit(self, X, y=None):
-        if self.method not in ("yeo-johnson", "box-cox"):
-            raise ValueError(f"mojolearn: invalid method {self.method!r}")
-        arr = _x2d(X)
-        n, d = arr.shape
-        method = 1 if self.method == "box-cox" else 0
-        mode = _mode()
-        pr = _Prog()
-        xo = pr.put(arr)
-        st, lam = pr.alloc(6 * d), pr.alloc(d)
-        host = _optional_prep_entry(_prep_binding(mode), "x_prep_host_column") is not None
-        # PT_SCORE_STABLE (bit 32, FAST+Apple default, rollback MOJOLEARN_PT_SCORE_STABLE_OFF): the device's centered coordinates; never on the host binding
-        centered = bool(_ptimpute_flags(mode) & 32) and not host
-        anchor, anchor_kind = (pr.alloc(d), pr.alloc(d)) if centered else (_NONE, _NONE)
-        _cs(pr, mode, xo, n, d, st)
-        # lane fam-prep-metrics, IDN_PT_BLOCKED (IDENTICAL, `_idn_fam` bit 8): every fold of the
-        # search by row blocks (x_prep/pt_blocked.mojo). The host column then stages the SAME
-        # program as the device (its pt_fit folds in row order), so both take the blocked order.
-        fam_pt = _blocked() and bool(_idn_fam(mode) & _IDN_PT_BLOCKED)
-        nb = (n + _XB - 1) // _XB
-        if not fam_pt and host:
-            # the host binding: its own pt_fit (x_prep/host/power.mojo), the same words
-            pr.stage("pt_fit", d, xo, n, d, method, st, lam)
-        else:
-            # the device: pt_fit_unit's golden-section search as stages (x_prep/transform.mojo),
-            # each element's logarithm once, the transform of every element at once per
-            # evaluation, then the column folds
-            # lane af-ptimpute (FAST + Apple builds with the defines, `_ptimpute_flags`): the
-            # device folds each evaluation as a row-tiled grid with the transform in registers
-            # (x_prep/fastpt.mojo), so the T and LG blocks are never read or written: they shrink
-            # to a word and `pt_log` is not staged. PT_COLBATCH (bit 1) runs that fold over the
-            # staged search.
-            flags = _ptimpute_flags(mode)
-            tiled = bool(flags & 1)
-            spec = _pt_spec_depth(n, d) if mode == "identical" else 0
-            if spec:
-                # the search speculated `spec` evaluations deep (transform.mojo pt_spts ..
-                # pt_sres): the same points, values and decisions, fewer dependent folds
-                mmax = max(2 ** spec - 1, 2)   # the opening round's two points (see _pt_spec_depth)
-                # the candidates' transforms: contiguous per candidate (0) or one row's side by side (1)
-                il = 0 if tiled else (1 if os.environ.get("MOJOLEARN_XPREP_PT_INTERLEAVE", "0") == "1" else 0)
-                state, leval = pr.alloc(_PT_STATE * d), pr.alloc(d)
-                spl, vals = pr.alloc(d * mmax), pr.alloc(d * mmax)
-                if tiled:
-                    lg, tv = pr.scratch(1), pr.scratch(1)
-                else:
-                    lg, tv = pr.scratch(n * d), pr.scratch(n * d * mmax)
-                pr.stage("pt_init", d, method, st, d, lam, state, leval, anchor, anchor_kind, int(self.standardize))
-                if not tiled:
-                    pr.stage("pt_log", n * d, xo, n, d, method, lg)
-                if fam_pt:
-                    bps, bpc, bss = pr.work(nb * d * mmax), pr.work(nb * d * mmax), pr.work(nb * d * mmax)
-                    bpj, bmean, bcnt = pr.work(nb * d), pr.work(d * mmax), pr.work(d * mmax)
-                k0 = 0
-                while k0 <= _PT_EVALS - 2:
-                    steps = 2 if k0 == 0 else min(spec, _PT_EVALS - 1 - k0)
-                    m = 2 if k0 == 0 else 2 ** steps - 1
-                    pr.stage("pt_spts", d, state, leval, spl, m, k0)
-                    pr.stage("pt_smap", m * n * d, xo, n, d, method, spl, m, tv, lg, il)
-                    if fam_pt:
-                        first = 1 if k0 == 0 else 0
-                        pr.stage("ptb_part1", nb * d * m, xo, n, d, method, tv, m, state, bps, bpc, bpj, nb, first, il)
-                        pr.stage("ptb_mean", d * m, bps, bpc, bpj, nb, d, m, state, bmean, bcnt, first)
-                        pr.stage("ptb_part2", nb * d * m, tv, n, d, m, state, bmean, bcnt, bss, nb, il)
-                        pr.stage("ptb_fin", d * m, bss, nb, d, m, state, spl, vals, bcnt)
-                    else:
-                        pr.stage("pt_sfold", d * m, xo, n, d, method, tv, m, state, spl, vals, 1 if k0 == 0 else 0, il)
-                    pr.stage("pt_sres", d, state, leval, m, vals, k0, steps, lam)
-                    k0 += steps
-            else:
-                state, leval = pr.alloc(_PT_STATE * d), pr.alloc(d)
-                tv, lg = (pr.alloc(1), pr.alloc(1)) if tiled else (pr.alloc(n * d), pr.alloc(n * d))
-                pr.stage("pt_init", d, method, st, d, lam, state, leval, anchor, anchor_kind, int(self.standardize))
-                if not tiled:
-                    pr.stage("pt_log", n * d, xo, n, d, method, lg)
-                if fam_pt:
-                    bps, bpc, bss = pr.work(nb * d), pr.work(nb * d), pr.work(nb * d)
-                    bpj, bmean, bcnt = pr.work(nb * d), pr.work(d), pr.work(d)
-                for k in range(_PT_EVALS):  # glue: stages the fixed optimizer evaluations on the device (_PT_EVALS-sized: constant evaluation count)
-                    # tiled: the device skips pt_map and fuses it into pt_fold (LG1 = 0 either way)
-                    pr.stage("pt_map", n * d, xo, n, d, method, leval, tv, 0 if tiled else lg + 1)
-                    if fam_pt:
-                        # one candidate a column (M = 1, contiguous): the blocked fold, then pt_finish's step
-                        first = 1 if k == 0 else 0
-                        pr.stage("ptb_part1", nb * d, xo, n, d, method, tv, 1, state, bps, bpc, bpj, nb, first, 0)
-                        pr.stage("ptb_mean", d, bps, bpc, bpj, nb, d, 1, state, bmean, bcnt, first)
-                        pr.stage("ptb_part2", nb * d, tv, n, d, 1, state, bmean, bcnt, bss, nb, 0)
-                        pr.stage("ptb_step", d, xo, n, d, method, tv, k, state, leval, lam, bss, nb, bcnt)
-                    else:
-                        pr.stage("pt_fold", d, xo, n, d, method, tv, k, state, leval, lam)
-        mean, scale = pr.alloc(d), pr.alloc(d)
-        if self.standardize:
-            # TOMBSTONE: MOJOLEARN_PT_FUSED_TRANSFORM (DROP quality) deleted 2026-10-09 on lane/owed-deletions-D2: flag
-            # bit 4 shrank tx to a word; code recoverable at b639a2bd2. Restore: git apply experiments/removed/MOJOLEARN_PT_FUSED_TRANSFORM.patch
-            tx, st2 = pr.alloc(n * d), pr.alloc(6 * d)
-            pr.stage("pt_apply", n * d, xo, n, d, lam, method, _NONE, _NONE, tx, anchor, anchor_kind)
-            _cs(pr, mode, tx, n, d, st2)
-            pr.stage("std_params", d, st2, d, mean, scale)
-        pr.run(mode)
-        if method == 1 and any(v <= 0 for v in pr.values(st + 3 * d, d)):  # glue: raises on a non-positive per-column minimum (d-sized: feature count)
-            raise ValueError("mojolearn: The Box-Cox transformation can only be applied to strictly positive data")
-        self.lambdas_ = pr.get(lam, d)
-        self._pt_anchor = pr.get(anchor, d) if centered and self.standardize else None
-        self._pt_anchor_kind = pr.get(anchor_kind, d) if centered and self.standardize else None
-        self._mean = pr.get(mean, d) if self.standardize else None
-        self._scale = pr.get(scale, d) if self.standardize else None
-        self._method = method
-        self.numeric_mode_, self.n_features_in_ = mode, d
-        return self
+        return _STATELESS_CALL(self, "fit", (X, y), _STATELESS_CONTEXT)
 
-    def _apply(self, X, op):
-        self._check_fitted()
-        arr = _x2d(X)
-        self._check_width(arr)
-        n, d = arr.shape
-        pr = _Prog()
-        xo, lo = pr.put(arr), pr.put(self.lambdas_)
-        mo = pr.put(self._mean) if self.standardize else _NONE
-        so = pr.put(self._scale) if self.standardize else _NONE
-        out = pr.output(n * d)
-        anchor = getattr(self, "_pt_anchor", None)
-        ao = pr.put(anchor) if anchor is not None else _NONE
-        ko = pr.put(self._pt_anchor_kind) if anchor is not None else _NONE
-        pr.stage(op, n * d, xo, n, d, lo, self._method, mo, so, out, ao, ko)
-        pr.run(self.numeric_mode_)
-        return pr.get(out, (n, d))
+    def fit_transform(self, X, y=None, **fit_params):
+        """Fit to ``X``, then transform ``X``.
+
+        Returns
+        -------
+        array
+            The transformed data.
+        """
+        return _STATELESS_CALL(self, "fit_transform", (X, y), _STATELESS_CONTEXT)
 
     def transform(self, X):
-        return self._apply(X, "pt_apply")
+        return _STATELESS_CALL(self, "transform", (X,), _STATELESS_CONTEXT)
 
     def inverse_transform(self, X):
-        return self._apply(X, "pt_inverse")
+        return _STATELESS_CALL(self, "inverse_transform", (X,), _STATELESS_CONTEXT)
 
 
 # Row norms sum the columns in ascending order.
@@ -7411,4 +7264,5 @@ _PROG_CALL, _PROG_CONTEXT = _connect_arena_prog(
 from ._native_prep_stateless_bridge import connect as _connect_stateless
 _STATELESS_CALL, _STATELESS_CONTEXT = _connect_stateless(
     {Binarizer: "binarizer", Normalizer: "normalizer", PolynomialFeatures: "polynomial",
-     VarianceThreshold: "variance_threshold", _SelectorMixin: "selector", QuantileTransformer: "quantile"})
+     VarianceThreshold: "variance_threshold", _SelectorMixin: "selector", QuantileTransformer: "quantile",
+     PowerTransformer: "power"})

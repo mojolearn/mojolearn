@@ -46,6 +46,28 @@ comptime OP_QT_INVERSE = 74
 comptime OP_RGATHER = 204
 comptime OP_PERM_ROWS = 233
 comptime OP_GRID = 263
+comptime OP_PT_FIT = 44
+comptime OP_PT_APPLY = 45
+comptime OP_STD_PARAMS = 46
+comptime OP_PT_INVERSE = 75
+comptime OP_PT_INIT = 104
+comptime OP_PT_MAP = 105
+comptime OP_PT_FOLD = 106
+comptime OP_PT_LOG = 109
+comptime OP_PT_SPTS = 110
+comptime OP_PT_SMAP = 111
+comptime OP_PT_SFOLD = 112
+comptime OP_PT_SRES = 113
+comptime OP_PTB_PART1 = 172
+comptime OP_PTB_MEAN = 173
+comptime OP_PTB_PART2 = 174
+comptime OP_PTB_FIN = 175
+comptime OP_PTB_STEP = 176
+# PowerTransformer's fixed golden-section evaluations and per-column state words.
+comptime PT_EVALS = 50
+comptime PT_STATE = 10
+# x_prep_idn_fam bit 8: IDN_PT_BLOCKED.
+comptime IDN_PT_BLOCKED = 8
 # Row blocks of the blocked column statistics (_expansion_prep._XB).
 comptime ROW_BLOCK = 2048
 # x_prep_idn_fam bit 1: IDN_STATS_BLOCKED.
@@ -295,6 +317,12 @@ struct PrepLayout(Movable):
         var offset = self.host
         self.host += max(words, 0)
         return offset
+
+    def scratch_words(mut self, words: Int) -> Int:
+        # `_Prog.scratch`: device-only words, whatever the `work` switch.
+        var offset = self.scratch
+        self.scratch += max(words, 0)
+        return -(offset + 2)
 
     def work_words(mut self, words: Int) -> Int:
         # A stage word -(k + 2) marks scratch word k (-1 is the stages' "none").
@@ -555,6 +583,248 @@ def _quantile_apply(model: PythonObject, values: PythonObject, inverse: Bool, co
     return result
 
 
+def _fam(mode: PythonObject, entries: PythonObject) raises -> Int:
+    # `_idn_fam`: the IDENTICAL binding's family switches, 0 on another tier.
+    if String(mode) != "identical":
+        return 0
+    var entry = py_get(entries, "x_prep_idn_fam")
+    return Int(py=py_call_typed(entry)) if entry is not None else 0
+
+
+def _pt_flags(mode: PythonObject, entries: PythonObject) raises -> Int:
+    # `_ptimpute_flags`: the FAST binding's x_prep_ptimpute_flags, else 0.
+    if String(mode) != "fast":
+        return 0
+    var entry = py_get(entries, "x_prep_ptimpute_flags")
+    return Int(py=py_call_typed(entry)) if entry is not None else 0
+
+
+def _pt_spec_depth(n: Int, d: Int) -> Int:
+    """`_expansion_prep._pt_spec_depth`: MOJOLEARN_XPREP_PT_SPEC (default 3,
+    clamped to [0, 6]), lowered until the candidates' transforms fit in 2^28
+    words (a size range, not a shape); 0 when even two do not."""
+    var s = 3
+    try:
+        s = Int(String(getenv("MOJOLEARN_XPREP_PT_SPEC", "3")).strip())
+    except:
+        s = 3
+    s = max(0, min(s, 6))
+    while s > 1 and ((1 << s) - 1) * n * d > 268435456:  # driver-loop: over speculation depths
+        s -= 1
+    if s == 1 and 2 * n * d > 268435456:
+        s = 0
+    return s
+
+
+def _power_fit(model: PythonObject, values: PythonObject, context: PythonObject) raises:
+    """PowerTransformer.fit: the host column's pt_fit, or the device's
+    golden-section search as stages (staged, or speculated `spec` deep, with
+    the blocked folds under IDN_PT_BLOCKED), then the standardization
+    statistics: the stages, operands and order of the Python program."""
+    var b = Python.import_module("builtins")
+    var fields = py_fields(model)
+    var method_name = fields["method"]
+    if py_type(method_name) is not b.str or (String(method_name) != "yeo-johnson" and String(method_name) != "box-cox"):
+        raise Error("mojolearn: invalid method " + _repr(method_name))
+    var n = Int(py=values[3])
+    var d = Int(py=values[4])
+    var method = 1 if String(method_name) == "box-cox" else 0
+    var standardize = Bool(py=fields["standardize"])
+    var mode = context["backend_fields"]["_DEFAULT_MODE"]
+    var entries = _entries(mode, context)
+    var layout = PrepLayout(n * d)
+    var program = List[Int32]()
+    var xo = 0
+    var st = layout.alloc(6 * d)
+    var lam = layout.alloc(d)
+    var host = py_get(entries, "x_prep_host_column") is not None
+    var flags = _pt_flags(mode, entries)
+    # PT_SCORE_STABLE (bit 32): the device's centered coordinates; never on the host binding
+    var centered = (flags & 32) != 0 and not host
+    var anchor = layout.alloc(d) if centered else -1
+    var anchor_kind = layout.alloc(d) if centered else -1
+    _col_stats(program, layout, mode, entries, xo, n, d, st)
+    var blocked = String(getenv("MOJOLEARN_XPREP_BLOCKED", "1").strip()) != "0"
+    var fam_pt = blocked and (_fam(mode, entries) & IDN_PT_BLOCKED) != 0
+    var nb = (n + ROW_BLOCK - 1) // ROW_BLOCK
+    var unit = 1 if standardize else 0
+    if not fam_pt and host:
+        _stage(program, OP_PT_FIT, d, xo, n, d, method, st, lam)
+    else:
+        var tiled = (flags & 1) != 0
+        var spec = _pt_spec_depth(n, d) if String(mode) == "identical" else 0
+        if spec:
+            var mmax = max((1 << spec) - 1, 2)
+            var il = 0
+            if not tiled and String(getenv("MOJOLEARN_XPREP_PT_INTERLEAVE", "0")) == "1":
+                il = 1
+            var state = layout.alloc(PT_STATE * d)
+            var leval = layout.alloc(d)
+            var spl = layout.alloc(d * mmax)
+            var vals = layout.alloc(d * mmax)
+            var lg = layout.scratch_words(1 if tiled else n * d)
+            var tv = layout.scratch_words(1 if tiled else n * d * mmax)
+            _stage(program, OP_PT_INIT, d, method, st, d, lam, state, leval, anchor, anchor_kind, unit)
+            if not tiled:
+                _stage(program, OP_PT_LOG, n * d, xo, n, d, method, lg)
+            var bps = 0
+            var bpc = 0
+            var bss = 0
+            var bpj = 0
+            var bmean = 0
+            var bcnt = 0
+            if fam_pt:
+                bps = layout.work_words(nb * d * mmax)
+                bpc = layout.work_words(nb * d * mmax)
+                bss = layout.work_words(nb * d * mmax)
+                bpj = layout.work_words(nb * d)
+                bmean = layout.work_words(d * mmax)
+                bcnt = layout.work_words(d * mmax)
+            var k0 = 0
+            while k0 <= PT_EVALS - 2:  # driver-loop: over the fixed golden-section evaluations
+                var steps = 2 if k0 == 0 else min(spec, PT_EVALS - 1 - k0)
+                var m = 2 if k0 == 0 else (1 << steps) - 1
+                _stage(program, OP_PT_SPTS, d, state, leval, spl, m, k0)
+                _stage(program, OP_PT_SMAP, m * n * d, xo, n, d, method, spl, m, tv, lg, il)
+                if fam_pt:
+                    var first = 1 if k0 == 0 else 0
+                    _stage(program, OP_PTB_PART1, nb * d * m, xo, n, d, method, tv, m, state, bps, bpc, bpj, nb, first, il)
+                    _stage(program, OP_PTB_MEAN, d * m, bps, bpc, bpj, nb, d, m, state, bmean, bcnt, first)
+                    _stage(program, OP_PTB_PART2, nb * d * m, tv, n, d, m, state, bmean, bcnt, bss, nb, il)
+                    _stage(program, OP_PTB_FIN, d * m, bss, nb, d, m, state, spl, vals, bcnt)
+                else:
+                    _stage(program, OP_PT_SFOLD, d * m, xo, n, d, method, tv, m, state, spl, vals, 1 if k0 == 0 else 0, il)
+                _stage(program, OP_PT_SRES, d, state, leval, m, vals, k0, steps, lam)
+                k0 += steps
+        else:
+            var state = layout.alloc(PT_STATE * d)
+            var leval = layout.alloc(d)
+            var tv = layout.alloc(1 if tiled else n * d)
+            var lg = layout.alloc(1 if tiled else n * d)
+            _stage(program, OP_PT_INIT, d, method, st, d, lam, state, leval, anchor, anchor_kind, unit)
+            if not tiled:
+                _stage(program, OP_PT_LOG, n * d, xo, n, d, method, lg)
+            var bps = 0
+            var bpc = 0
+            var bss = 0
+            var bpj = 0
+            var bmean = 0
+            var bcnt = 0
+            if fam_pt:
+                bps = layout.work_words(nb * d)
+                bpc = layout.work_words(nb * d)
+                bss = layout.work_words(nb * d)
+                bpj = layout.work_words(nb * d)
+                bmean = layout.work_words(d)
+                bcnt = layout.work_words(d)
+            for k in range(PT_EVALS):  # driver-loop: over the fixed golden-section evaluations
+                # tiled: the device fuses pt_map into pt_fold (LG1 = 0 either way)
+                _stage(program, OP_PT_MAP, n * d, xo, n, d, method, leval, tv, 0 if tiled else lg + 1)
+                if fam_pt:
+                    var first = 1 if k == 0 else 0
+                    _stage(program, OP_PTB_PART1, nb * d, xo, n, d, method, tv, 1, state, bps, bpc, bpj, nb, first, 0)
+                    _stage(program, OP_PTB_MEAN, d, bps, bpc, bpj, nb, d, 1, state, bmean, bcnt, first)
+                    _stage(program, OP_PTB_PART2, nb * d, tv, n, d, 1, state, bmean, bcnt, bss, nb, 0)
+                    _stage(program, OP_PTB_STEP, d, xo, n, d, method, tv, k, state, leval, lam, bss, nb, bcnt)
+                else:
+                    _stage(program, OP_PT_FOLD, d, xo, n, d, method, tv, k, state, leval, lam)
+    var mean = layout.alloc(d)
+    var scale = layout.alloc(d)
+    if standardize:
+        var tx = layout.alloc(n * d)
+        var st2 = layout.alloc(6 * d)
+        _stage(program, OP_PT_APPLY, n * d, xo, n, d, lam, method, -1, -1, tx, anchor, anchor_kind)
+        _col_stats(program, layout, mode, entries, tx, n, d, st2)
+        _stage(program, OP_STD_PARAMS, d, st2, d, mean, scale)
+    var arena = _run_layout(program^, layout, Python.list(Python.tuple(0, values)), entries, context)
+    var base = F32P(unsafe_from_address=Int(py=arena[1]))
+    if method == 1:
+        for j in range(d):  # driver-loop: over the per-column minima (feature metadata)
+            if base[st + 3 * d + j] <= 0:
+                raise Error("mojolearn: The Box-Cox transformation can only be applied to strictly positive data")
+    var output = context["output_context"]
+    py_setitem(fields, "lambdas_", xprep_take(arena[0], lam, d, 0, output))
+    var keep_anchor = centered and standardize
+    py_setitem(fields, "_pt_anchor", xprep_take(arena[0], anchor, d, 0, output) if keep_anchor else PythonObject(None))
+    py_setitem(fields, "_pt_anchor_kind", xprep_take(arena[0], anchor_kind, d, 0, output) if keep_anchor else PythonObject(None))
+    py_setitem(fields, "_mean", xprep_take(arena[0], mean, d, 0, output) if standardize else PythonObject(None))
+    py_setitem(fields, "_scale", xprep_take(arena[0], scale, d, 0, output) if standardize else PythonObject(None))
+    py_setitem(fields, "_method", method)
+    py_setitem(fields, "numeric_mode_", mode)
+    py_setitem(fields, "n_features_in_", d)
+    _ = arena^
+
+
+def _power_apply(model: PythonObject, values: PythonObject, inverse: Bool, context: PythonObject) raises -> PythonObject:
+    """PowerTransformer.transform / inverse_transform: one pt_apply or
+    pt_inverse stage over the fitted lambdas (and standardization)."""
+    var fields = py_fields(model)
+    if not py_contains(fields, "n_features_in_"):
+        raise Error("RuntimeError: mojolearn: this " + _name(model) + " instance is not fitted yet")
+    var n = Int(py=values[3])
+    var d = Int(py=values[4])
+    var fitted = fields["n_features_in_"]
+    if py_type(fitted) is not Python.import_module("builtins").int or Int(py=fitted) != d:
+        raise Error("mojolearn: X has " + String(d) + " features, " + _name(model) + " was fitted with " + String(py_call(Python.import_module("builtins").str, fitted)))
+    var entries = _entries(fields["numeric_mode_"], context)
+    var standardize = Bool(py=fields["standardize"])
+    var words = n * d
+    var inputs = Python.list(Python.tuple(0, values))
+    var host = words
+    var lambdas = _input(fields["lambdas_"], 1, False, context)
+    var lo = host
+    host += d
+    _ = py_call(inputs.append, Python.tuple(lo, Python.tuple(0, lambdas, PythonObject(None), d, 1)))
+    var mo = -1
+    var so = -1
+    var mean = PythonObject(None)
+    var scale = PythonObject(None)
+    if standardize:
+        mean = _input(fields["_mean"], 1, False, context)
+        scale = _input(fields["_scale"], 1, False, context)
+        mo = host
+        host += d
+        so = host
+        host += d
+        _ = py_call(inputs.append, Python.tuple(mo, Python.tuple(0, mean, PythonObject(None), d, 1)))
+        _ = py_call(inputs.append, Python.tuple(so, Python.tuple(0, scale, PythonObject(None), d, 1)))
+    var dev_out = words >= OUT_MIN_WORDS and py_get(entries, "x_prep_run_out") is not None and String(getenv("MOJOLEARN_XPREP_OUT", "1")) != "0"
+    var out = host
+    if not dev_out:
+        host += words
+    var anchor = py_get(fields, "_pt_anchor")
+    var ao = -1
+    var ko = -1
+    var anchor_values = PythonObject(None)
+    var kind_values = PythonObject(None)
+    if anchor is not None:
+        anchor_values = _input(anchor, 1, False, context)
+        kind_values = _input(fields["_pt_anchor_kind"], 1, False, context)
+        ao = host
+        host += d
+        ko = host
+        host += d
+        _ = py_call(inputs.append, Python.tuple(ao, Python.tuple(0, anchor_values, PythonObject(None), d, 1)))
+        _ = py_call(inputs.append, Python.tuple(ko, Python.tuple(0, kind_values, PythonObject(None), d, 1)))
+    if host + (words if dev_out else 0) > 2147483647:
+        raise Error("ValueError: x_prep: the program exceeds the native Int32 indexing bound")
+    if dev_out:
+        out = host
+    var program = List[Int32]()
+    _stage(program, OP_PT_INVERSE if inverse else OP_PT_APPLY, words, 0, n, d, lo, Int(py=fields["_method"]), mo, so, out, ao, ko)
+    var arena = xprep_storage(host, context)
+    var output_store = xprep_storage(words, context) if dev_out else PythonObject(None)
+    xprep_run(arena, host, 0, output_store, words if dev_out else 0, program^, inputs, entries, context, words if dev_out else 0)
+    var result = xprep_take(output_store[0] if dev_out else arena[0], 0 if dev_out else out, n, d, context["output_context"])
+    _ = lambdas^
+    _ = mean^
+    _ = scale^
+    _ = anchor_values^
+    _ = kind_values^
+    _ = arena^
+    return result
+
+
 def prep_stateless_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var call = PythonObject(from_borrowed=args_ptr)
@@ -565,12 +835,12 @@ def prep_stateless_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> Py
         classical_connect_numpy(context)
         var kind = _kind(model, context)
         var result = PythonObject(None)
-        if operation == "inverse_transform" and kind == "quantile":
+        if operation == "inverse_transform" and (kind == "quantile" or kind == "power"):
             var fields = py_fields(model)
             if not py_contains(fields, "n_features_in_"):
                 raise Error("RuntimeError: mojolearn: this " + _name(model) + " instance is not fitted yet")
             var values = xprep_values(args[0], _entries(fields["numeric_mode_"], context), context)
-            result = _quantile_apply(model, values, True, context)
+            result = _quantile_apply(model, values, True, context) if kind == "quantile" else _power_apply(model, values, True, context)
             _ = values^
         elif operation == "fit" or operation == "fit_transform" or operation == "transform":
             var mode = context["backend_fields"]["_DEFAULT_MODE"]
@@ -583,6 +853,8 @@ def prep_stateless_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> Py
             var selector = kind == "variance_threshold" or kind == "selector"
             if operation == "transform" and kind == "quantile":
                 result = _quantile_apply(model, values, False, context)
+            elif operation == "transform" and kind == "power":
+                result = _power_apply(model, values, False, context)
             elif operation == "transform":
                 result = _select_transform(model, values, context) if selector else _transform(model, kind, values, context)
             elif kind == "selector":
@@ -592,6 +864,8 @@ def prep_stateless_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> Py
                     _variance_fit(model, values, context)
                 elif kind == "quantile":
                     _quantile_fit(model, values, context)
+                elif kind == "power":
+                    _power_fit(model, values, context)
                 else:
                     _fit(model, kind, values, context)
                 result = model
@@ -599,6 +873,8 @@ def prep_stateless_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> Py
                     # The X converted for the fit is the transform's input.
                     if kind == "quantile":
                         result = _quantile_apply(model, values, False, context)
+                    elif kind == "power":
+                        result = _power_apply(model, values, False, context)
                     else:
                         result = _select_transform(model, values, context) if selector else _transform(model, kind, values, context)
             _ = values^
