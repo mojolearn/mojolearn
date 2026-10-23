@@ -690,6 +690,12 @@ def _lle_smallest(mut k: MKit, f: PythonObject, nc: Int, max_iter: Int,
                                        PythonObject(0xFFFFFFFF)))
     var tols = Python.list(PythonObject(floor), PythonObject(_LLE_SUBSPACE_TOL), PythonObject(_LLE_STALL_TOL))
     var status = family_call(k.fn("x_decomp_lle_iterate"), pf, pl, pp, pi, pz, outs, params, tols)
+    # The iteration receives integer addresses, not their matrix owners.
+    # Retain the LU factor and both permutation buffers until its host reads
+    # / device uploads finish; mk_addr was otherwise their last use.
+    _ = lu^
+    _ = pm^
+    _ = im^
     _ = sm  # keep the Python object alive through the native call above
     _ = ym  # keep the Python object alive through the native call above
     _ = xm  # keep the Python object alive through the native call above
