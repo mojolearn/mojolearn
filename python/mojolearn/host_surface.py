@@ -1636,6 +1636,9 @@ FAMILIES = (
             # generation coordinator's setup
             "optimizer_finalize", "optimizer_native", "optimizer_device_finalize", "vocab_fingerprint",
             "host_archive_finalize_call", "host_svr_attribute_call", "host_svc_attribute_call",
+            # lane migrate-neural-2: the Embedding layer's native lifetime,
+            # parallel forecasting's owner and the GPU byte-LM trainer step
+            "embedding_layer_lifetime", "parallel_forecast_call", "byte_lm_trainer_call",
         ),
         gate="pixi run check-tokenizer and python/mojolearn/tests/test_tokenizer_surface.py",
         wheel_note=(
