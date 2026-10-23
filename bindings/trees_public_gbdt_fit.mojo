@@ -352,26 +352,19 @@ def _codes(addr: Int, n: Int, context: PythonObject) raises -> PythonObject:
         k = Int(py=py_call_typed(trees_helper(context, "prepare_targets"), PythonObject(addr), PythonObject(0),
                                 PythonObject(n), PythonObject(trees_address(classes)), PythonObject(trees_address(codes)),
                                 PythonObject(0), PythonObject(0), PythonObject(0)))
-        _ = codes  # keep the Python object alive through the native call above
-        _ = classes  # keep the Python object alive through the native call above
     except error:
         if "NaN" in String(error):
             return PythonObject(None)
         raise error^
     var p = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=trees_address(classes))
-    _ = classes  # keep the Python object alive through the native call above
     var lo = p[0]
-    _ = classes  # keep the Python object alive through the native call above
     var hi = p[k - 1]
-    _ = classes  # keep the Python object alive through the native call above
     if lo < 0 or not isfinite(hi):
         return PythonObject(None)
     var integral = Int(py=py_call_typed(trees_helper(context, "reduce_stat"), PythonObject(trees_address(classes)),
                                        PythonObject(1), PythonObject(k), PythonObject(4)))
-    _ = classes  # keep the Python object alive through the native call above
     if integral == 0:
         return PythonObject(None)
-    _ = classes  # keep the Python object alive through the native calls above
     # Sorted distinct nonnegative integers are 0..k-1 exactly when the
     # largest is k - 1.
     return Python.tuple(PythonObject(k), PythonObject(Int(hi) == k - 1), PythonObject(Int(hi)))
@@ -581,8 +574,6 @@ def _has_nan(x: TreesMatrix, context: PythonObject) raises -> Bool:
         _ = py_call_typed(trees_helper(context, "prepare_targets"), PythonObject(x.addr), PythonObject(0), PythonObject(n),
                           PythonObject(trees_address(classes)), PythonObject(trees_address(codes)),
                           PythonObject(0), PythonObject(0), PythonObject(0))
-        _ = codes  # keep the Python object alive through the native call above
-        _ = classes  # keep the Python object alive through the native call above
     except error:
         if "NaN" in String(error):
             return True
@@ -830,7 +821,6 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var call = Python.list(PythonObject(x.addr), PythonObject(ya.addr), PythonObject(w_addr),
                            PythonObject(trees_address(flags_holder)), PythonObject(ex_addr), PythonObject(ey_addr),
                            params, strs)
-    _ = flags_holder  # keep the Python object alive through the native call above
     var out = trees_call(entry, call)
     _ = weights^
     _ = held^
@@ -1321,7 +1311,6 @@ def adapter_classifier_fit(model: PythonObject, args: PythonObject, context: Pyt
             raise Error("eval_set contains labels outside the training vocabulary")
         var table = trees_vector(len(eval_kind[1]), "<i4", context)
         var tp = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=trees_address(table))
-        _ = table  # keep the Python object alive through the native call above
         for i in range(len(eval_kind[1])):  # driver-loop: over the eval set's distinct labels
             var at = -1
             for j in range(len(classes)):  # small-loop(classes): the two training classes
@@ -1330,17 +1319,13 @@ def adapter_classifier_fit(model: PythonObject, args: PythonObject, context: Pyt
             if at < 0:
                 raise Error("eval_set contains labels outside the training vocabulary")
             tp[i] = Int32(at)
-            _ = table  # keep the Python object alive through the native call above
         var mapped = trees_vector(eval_labels.n, "<i4", context)
         _ = py_call_typed(trees_helper(context, "gather_i32"), PythonObject(trees_address(table)),
                           PythonObject(len(eval_kind[1])), PythonObject(trees_address(eval_labels.codes)),
                           PythonObject(eval_labels.n), PythonObject(trees_address(mapped)))
-        _ = table  # keep the Python object alive through the native call above
-        _ = mapped  # keep the Python object alive through the native call above
         var eval_y = trees_vector(eval_labels.n, "<f4", context)
         _ = py_call_typed(trees_helper(context, "cast_elements"), PythonObject(trees_address(mapped)), PythonObject(2),
                           PythonObject(trees_address(eval_y)), PythonObject(0), PythonObject(eval_labels.n))
-        _ = mapped  # keep the Python object alive through the native call above
         eval_set = Python.tuple(pair[0], eval_y)
     _ = _fit_native(model, args[0], encoded, args[2], eval_set, context)
     py_setitem(fields, "classes_", classes)

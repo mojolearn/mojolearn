@@ -111,19 +111,15 @@ def kpca_fit(model: PythonObject, source: PythonObject, context: PythonObject) r
                 Python.list(_f32_scalar(gamma), _f32_scalar(decomp_float(fields["coef0"]))))
         var colsum = decomp_f32(Python.tuple(n), context)
         _op(near, "colsum", Python.list(classical_address(k), classical_address(colsum)), Python.list(n, n), Python.list())
-        _ = colsum  # keep the Python object alive through the native call above
         _op(near, "scale_div", Python.list(classical_address(colsum), classical_address(cols)), Python.list(n),
             Python.list(Float64(n)))
-        _ = colsum  # keep the Python object alive through the native call above
         # K_fit_all_: the colsum of cols seen as 1 x n, scaled (the shell's shapes)
         var colsum2 = decomp_f32(Python.tuple(n), context)
         _op(near, "colsum", Python.list(classical_address(cols), classical_address(colsum2)), Python.list(1, n),
             Python.list())
-        _ = colsum2  # keep the Python object alive through the native call above
         all_ = decomp_f32(Python.tuple(n), context)
         _op(near, "scale_div", Python.list(classical_address(colsum2), classical_address(all_)), Python.list(n),
             Python.list(Float64(n)))
-        _ = colsum2  # keep the Python object alive through the native call above
         kc = decomp_f32(Python.tuple(n, n), context)
         _op(near, "kpca_center", Python.list(classical_address(k), classical_address(cols), classical_address(cols),
                                             classical_address(all_), classical_address(kc)), Python.list(n, n),
@@ -223,22 +219,16 @@ def kpca_transform(model: PythonObject, source: PythonObject, context: PythonObj
                 Python.list(_f32_scalar(gamma), _f32_scalar(coef0)))
         var rows = decomp_f32(Python.tuple(nq), context)
         _op(near, "rowsum", Python.list(classical_address(k), classical_address(rows)), Python.list(nq, nf), Python.list())
-        _ = rows  # keep the Python object alive through the native call above
         var pred = decomp_f32(Python.tuple(nq), context)
         _op(near, "scale_div", Python.list(classical_address(rows), classical_address(pred)), Python.list(nq),
             Python.list(Float64(nf)))
-        _ = pred  # keep the Python object alive through the native call above
-        _ = rows  # keep the Python object alive through the native call above
         var kc = decomp_f32(Python.tuple(nq, nf), context)
         _op(near, "kpca_center", Python.list(classical_address(k), classical_address(fit_cols),
                                             classical_address(pred), classical_address(fit_all), classical_address(kc)),
             Python.list(nq, nf), Python.list())
-        _ = kc  # keep the Python object alive through the native call above
-        _ = pred  # keep the Python object alive through the native call above
         out = decomp_f32(Python.tuple(nq, c), context)
         _op(near, "matmul", Python.list(classical_address(kc), classical_address(alphas), classical_address(out)),
             Python.list(nq, nf, c), Python.list())
-        _ = kc  # keep the Python object alive through the native call above
         _ = k^
     _ = q^
     _ = fit_x^

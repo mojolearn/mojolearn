@@ -332,15 +332,11 @@ def _scores(mut pr: ClsProg, model: PythonObject, fields: PythonObject, kind: St
         var flag = i32_array(1, context)
         _ = py_call_typed(jll_csr, classical_address(csr.indptr), classical_address(csr.indices), classical_address(csr.data),
                           classical_address(flp), bias, dims, classical_address(jll_h), classical_address(flag))
-        _ = flag  # keep the Python object alive through the native call above
-        _ = flp  # keep the Python object alive through the native call above
         if Int(I32P(unsafe_from_address=Int(py=classical_address(flag)))[0]) != 0:
             return _base_scores(pr, model, fields, kind, X, want, csr, True, context)
-        _ = flag  # keep the Python object alive through the native calls above
     else:
         _ = py_call_typed(jll_csr, classical_address(csr.indptr), classical_address(csr.indices), classical_address(csr.data),
                           classical_address(flp), bias, dims, classical_address(jll_h))
-        _ = flp  # keep the Python object alive through the native call above
     _ = bias_keep^
     var z = pr.alloc(n * K)
     var jll = pr.alloc(n * K)
@@ -634,22 +630,16 @@ def _fit_counts_csr(mut pr: ClsProg, model: PythonObject, fields: PythonObject, 
     _ = py_call_typed(fit_csr, classical_address(csr.indptr), classical_address(csr.indices), classical_address(csr.data),
                       classical_address(codes), Python.list(n, d, K, csr.nnz),
                       classical_address(fc), classical_address(cnt), classical_address(flag))
-    _ = codes  # keep the Python object alive through the native call above
-    _ = flag  # keep the Python object alive through the native call above
     var level = Int(I32P(unsafe_from_address=Int(py=classical_address(flag)))[0])
-    _ = flag  # keep the Python object alive through the native call above
     if String(mode) == "identical":
         # x_prep/fastnb_csr.mojo: 2 a negative value; 1 a value the CSR route
         # does not take (the caller runs the dense program)
         if level == 1:
             done = False
             return Counts(mode, n, d, K, 0, 0, 0, 0)
-        _ = flag  # keep the Python object alive through the native calls above
         level = 1 if level == 2 else 0
-        _ = flag  # keep the Python object alive through the native call above
     if level != 0:
         raise Error("mojolearn: Negative values in data passed to " + cls_name(model) + " (input X)")
-    _ = flag  # keep the Python object alive through the native calls above
     var st = pr.alloc(6 * d)
     var z = pr.alloc(K * d)
     var cnt_o = pr.alloc(K)

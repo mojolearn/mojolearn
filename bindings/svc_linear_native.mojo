@@ -100,13 +100,11 @@ def _class_weight_rows(class_weight: PythonObject, classes: PythonObject, codes:
         if k > 0 and Int(py=family_call(svc_base("class_ratio_f64", context), classical_address(wide), PythonObject(k),
                                          PythonObject(n), PythonObject(0), classical_address(w64))) != 0:
             svc_zero_division(False)
-        _ = w64  # keep the Python object alive through the native calls above
         _ = wide^
         _ = counts^
         values = Python.list()
         for i in range(k):  # driver-loop: over the classes
             _ = py_call(values.append, PythonObject(FAMILY_F64P(unsafe_from_address=Int(py=classical_address(w64)))[i]))
-            _ = w64  # keep the Python object alive through the native call above
     else:
         var unknown = family_call(family_call(b.set, class_weight).difference, classes)
         if len(unknown) > 0:
@@ -201,14 +199,9 @@ def _qn_fit_one_target(fields: PythonObject, binding: PythonObject, x: PythonObj
         _ = py_call(params.append, classical_address(sw))
     var n_iter = family_call(family_entry(binding, "qn_fit", context), classical_address(x), classical_address(y_enc),
                              classical_address(w), classical_address(info), params)
-    _ = info  # keep the Python object alive through the native call above
     var fx = Float64(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(info)))[0])
-    _ = info  # keep the Python object alive through the native call above
     var rc = Int(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(info)))[1])
-    _ = info  # keep the Python object alive through the native call above
-    var _keep_ret_info = Python.tuple(w, PythonObject(svc_int(n_iter)), PythonObject(fx), PythonObject(rc))
-    _ = info  # keep the Python object alive through the native call above
-    return _keep_ret_info^
+    return Python.tuple(w, PythonObject(svc_int(n_iter)), PythonObject(fx), PythonObject(rc))
 
 
 # ---------------------------------------------------------------- LinearSVR

@@ -356,7 +356,6 @@ def logistic_predict(model: PythonObject, source: PythonObject, context: PythonO
         _ = py_call_typed(native, classical_address(x), classical_address(w),
                           PythonObject(labels_address(codes)),
                           Python.list(rows, cols, 1 if Bool(py=fields["fit_intercept"]) else 0))
-        _ = w  # keep the Python object alive through the native call above
         _ = x^
         return classical_decode_labels(fields["classes_"], codes, context)
     var entries = _entries(model, fields, context)

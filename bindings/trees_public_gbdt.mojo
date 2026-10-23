@@ -263,17 +263,13 @@ def gbdt_predict_proba(model: PythonObject, X: PythonObject, context: PythonObje
     var n = Int(py=raw32.shape[0])
     var raw = trees_vector(Int(py=raw32.size), "<f8", context)
     trees_cast(trees_address(raw32), "<f4", trees_address(raw), "<f8", Int(py=raw32.size), context)
-    _ = raw  # keep the Python object alive through the native call above
     var pair = trees_entry(table, "gbdt_sigmoid_pair")
     if pair is None:
         raise Error("RuntimeError: mojolearn: this gbdt binding predates gbdt_sigmoid_pair; rebuild it")
     var out = trees_empty(Python.tuple(n, 2), "<f8", context)
     var wrote = _int(py_call_typed(pair, PythonObject(trees_address(raw)), PythonObject(trees_address(out)), PythonObject(n)))
-    _ = raw  # keep the Python object alive through the native call above
     if wrote != n:
         raise Error("RuntimeError: mojolearn: gbdt_sigmoid_pair wrote " + String(wrote) + " of " + String(n) + " rows")
-        _ = raw  # keep the Python object alive through the native call above
-    _ = raw  # keep the Python object alive through the native calls above
     return out
 
 
@@ -578,7 +574,6 @@ def ordered_rmse_fit(model: PythonObject, args: PythonObject, context: PythonObj
         raise Error(bijection)
     var order = trees_vector(n, "<u4", context)
     trees_cast(trees_address(order64), "<i8", trees_address(order), "<u4", n, context)
-    _ = order  # keep the Python object alive through the native call above
     var w_addr = y.addr
     var n_weights = 0
     var weights: Optional[TreesMatrix] = None
@@ -599,7 +594,6 @@ def ordered_rmse_fit(model: PythonObject, args: PythonObject, context: PythonObj
                              py_call_typed(b.float, _field(fields, model, "l2_leaf_reg")))
     var text = py_call_typed(entry, PythonObject(x.addr), PythonObject(y.addr), PythonObject(w_addr),
                              PythonObject(trees_address(order)), params)
-    _ = order  # keep the Python object alive through the native call above
     _ = weights^
     py_setitem(fields, "model_", text)
     _fitted_text(fields, model, x.cols, PythonObject(None))
@@ -653,14 +647,10 @@ def feature_freq_fit(model: PythonObject, args: PythonObject, context: PythonObj
         if dense:
             var codes = trees_vector(n, "<i8", context)
             trees_cast(col, "<f4", trees_address(codes), "<i8", n, context)
-            _ = codes  # keep the Python object alive through the native call above
             var counts = trees_vector(k, "<i8", context)
             _ = py_call_typed(trees_helper(context, "bincount_i64"), PythonObject(trees_address(codes)), PythonObject(3),
                               PythonObject(n), PythonObject(k), PythonObject(trees_address(counts)), PythonObject(0))
-            _ = codes  # keep the Python object alive through the native call above
-            _ = counts  # keep the Python object alive through the native call above
             dense = Bool(py=_reduce(trees_address(counts), 3, k, 0, context) > PythonObject(0))
-            _ = counts  # keep the Python object alive through the native call above
         if not dense:
             raise Error("mojolearn: every experimental FeatureFreq source must "
                         + "be densely coded 0..k-1; column " + String(f) + " has codes up to " + String(Int(hi))
@@ -685,10 +675,8 @@ def feature_freq_fit(model: PythonObject, args: PythonObject, context: PythonObj
     var k = len(sources)
     var source_array = trees_vector(k, "<u4", context)
     var sp = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=trees_address(source_array))
-    _ = source_array  # keep the Python object alive through the native call above
     for i in range(k):  # driver-loop: over the named source columns
         sp[i] = UInt32(_int(sources[i]))
-        _ = source_array  # keep the Python object alive through the native call above
     var table = gbdt_table(fields, context)
     var entry = trees_need(table, "gbdt_fit_two_level_feature_freq",
                            "mojolearn: this gbdt binding has no gbdt_fit_two_level_feature_freq", "AttributeError")
@@ -698,7 +686,6 @@ def feature_freq_fit(model: PythonObject, args: PythonObject, context: PythonObj
                              py_call_typed(b.int, _field(fields, model, "random_state")))
     var text = py_call_typed(entry, PythonObject(x.addr), PythonObject(y.addr), PythonObject(w_addr),
                              PythonObject(trees_address(source_array)), params)
-    _ = source_array  # keep the Python object alive through the native call above
     _ = weights^
     py_setitem(fields, "model_", text)
     _fitted_text(fields, model, d, PythonObject(0))

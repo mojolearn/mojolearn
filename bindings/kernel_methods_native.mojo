@@ -162,7 +162,6 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     # x, y, dual_out, scalars_out[, sw]; n, d, t, kernel, degree, gamma, coef0, alpha.
     var addresses = Python.list(classical_address(x), classical_address(y), classical_address(dual),
                                 classical_address(scalars))
-    _ = scalars  # keep the Python object alive through the native call above
     if weights is not None:
         _ = py_call(addresses.append, classical_address(weights))
     var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(t), PythonObject(kernel),
@@ -289,7 +288,6 @@ def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var addresses = Python.list(classical_address(x), classical_address(components), classical_address(indices),
                                 classical_address(normalization), classical_address(eigenvalues),
                                 classical_address(eigenvectors), classical_address(scalars))
-    _ = scalars  # keep the Python object alive through the native call above
     var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(kernel), PythonObject(degree),
                              gamma, coef0, PythonObject(q), seed)
     if joint is not None:

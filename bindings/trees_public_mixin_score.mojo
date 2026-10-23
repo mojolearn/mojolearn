@@ -97,15 +97,12 @@ def _vocabulary_codes(target: ScoreLabels, classes: PythonObject, context: Pytho
         var k = len(target.classes)
         var table = trees_vector(k, "<i4", context)
         var p = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=trees_address(table))
-        _ = table  # keep the Python object alive through the native call above
         for i in range(k):  # driver-loop: over the distinct target classes
             p[i] = Int32(Int(py=py_call(vocabulary.get, target.classes[i], PythonObject(-1))))
-            _ = table  # keep the Python object alive through the native call above
         var out = trees_vector(target.n, "<i4", context)
         _ = py_call_typed(trees_helper(context, "gather_i32"), PythonObject(trees_address(table)), PythonObject(k),
                           PythonObject(trees_address(target.codes)), PythonObject(target.n),
                           PythonObject(trees_address(out)))
-        _ = table  # keep the Python object alive through the native call above
         return out
     var n = len(target.values)
     var out = trees_vector(n, "<i4", context)
@@ -143,12 +140,10 @@ def gbdt_adapter_score(model: PythonObject, args: PythonObject, context: PythonO
             var w = trees_sample_weight_f32(sample_weight, n, "accuracy_score", context)
             result = py_call_typed(metrics["accuracy_score_weighted"], PythonObject(trees_address(encoded)),
                                    PythonObject(trees_address(yp)), PythonObject(w.addr), Python.list(PythonObject(n)))
-            _ = yp  # keep the Python object alive through the native call above
             _ = w^
         else:
             result = py_call_typed(metrics["accuracy_score"], PythonObject(trees_address(encoded)),
                                    PythonObject(trees_address(yp)), Python.list(PythonObject(n)))
-            _ = yp  # keep the Python object alive through the native call above
         return py_call(trees_builtins().float, result)
     # `as_f32_c(y, ndim=None)` then `_regression_target`.
     var target = trees_f32(y, -1, "C", "y", context)

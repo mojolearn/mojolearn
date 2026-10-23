@@ -441,14 +441,10 @@ def _roc_auc(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var result = family_array(Python.tuple(1), "<f4", context)
     _ = family_call(mc_entry(args[0], "roc_auc_score"), classical_address(encoded), classical_address(scores),
                     classical_address(result), Python.list(PythonObject(true.n)))
-    _ = result  # keep the Python object alive through the native call above
     var value = Float64(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(result)))[0])
-    _ = result  # keep the Python object alive through the native call above
     _ = encoded^
     _ = scores^
-    var _keep_ret_result = PythonObject(value)
-    _ = result  # keep the Python object alive through the native call above
-    return _keep_ret_result^
+    return PythonObject(value)
 
 
 # ---------------------------------------------------- precision_recall_curve

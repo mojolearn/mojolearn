@@ -604,15 +604,11 @@ def _platt(fields: PythonObject, binding: PythonObject, x: PythonObject, codes: 
                                 classical_address(perm), classical_address(lab_a), classical_address(dec),
                                 Python.list(PythonObject(_GLUE_FOLD_FINISH), PythonObject(n), classical_address(consts),
                                             classical_address(labels), PythonObject(0)))
-                _ = dec  # keep the Python object alive through the native call above
-                _ = labels  # keep the Python object alive through the native call above
             var ab_out = family_array(Python.tuple(PythonObject(2)), "<f8", context)
             _ = family_call(_entry(binding, "svc_platt_train", context),
                             classical_address(dec) if n > 0 else PythonObject(0),
                             classical_address(labels) if n > 0 else PythonObject(0),
                             classical_address(ab_out), PythonObject(n))
-            _ = dec  # keep the Python object alive through the native call above
-            _ = labels  # keep the Python object alive through the native call above
             var av = svc_read_f64(ab_out, 0)
             var bv = svc_read_f64(ab_out, 1)
             _ = py_call(ab.append, Python.tuple(PythonObject(av), PythonObject(bv)))
@@ -1065,7 +1061,6 @@ def _svr_predict(fields: PythonObject, binding: PythonObject, source: PythonObje
                     classical_address(dual) if n_support > 0 else PythonObject(0),
                     classical_address(sv) if n_support > 0 else PythonObject(0),
                     classical_address(out), params)
-    _ = sv  # keep the Python object alive through the native call above
     _ = query^
     _ = held^
     _ = q^

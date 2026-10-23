@@ -372,14 +372,11 @@ def _codes(labels: ScoreLabels, order: PythonObject, context: PythonObject) rais
         var k = len(labels.classes)
         var table = trees_vector(k, "<i4", context)
         var t = _I32P(unsafe_from_address=trees_address(table))
-        _ = table  # keep the Python object alive through the native call above
         for i in range(k):  # driver-loop: over the distinct class labels
             t[i] = Int32(Int(py=py_get(index, labels.classes[i], PythonObject(-1))))
-            _ = table  # keep the Python object alive through the native call above
         _ = py_call_typed(trees_helper(context, "gather_i32"), PythonObject(trees_address(table)), PythonObject(k),
                           PythonObject(trees_address(labels.codes)), PythonObject(labels.n),
                           PythonObject(trees_address(out)))
-        _ = table  # keep the Python object alive through the native call above
         return out
     var p = _I32P(unsafe_from_address=trees_address(out))
     for i in range(labels.n):  # cpu-route: Python object labels mapped per row, the explicit label input step

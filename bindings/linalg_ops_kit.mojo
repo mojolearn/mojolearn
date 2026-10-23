@@ -276,9 +276,7 @@ struct LinKit(Movable):
         """`_Kit.total(A).s[0]`: rows ascending, then the row sums ascending."""
         var rows = self._sum(a, False)
         var t = self._sum(rows, True)
-        var _keep_ret_t = self.ptr(t)[0]
-        _ = t  # keep the Python object alive through the native call above
-        return _keep_ret_t^
+        return self.ptr(t)[0]
 
     def move(mut self, a: Int, idx: Int, rows: Int, cols: Int, params: PythonObject, resident: Bool) raises -> Int:
         if rows * cols and resident:
@@ -344,7 +342,6 @@ struct LinKit(Movable):
         var out = self.zeros(cols, rows)
         if count:
             _ = family_call(self.entry("x_decomp_move"), self.address(a), self.address(one), self.address(out), params)
-            _ = one  # keep the Python object alive through the native call above
         return out
 
     def strided(mut self, a: Int, count: Int, stride: Int, offset: Int = 0) raises -> Int:
@@ -360,9 +357,7 @@ struct LinKit(Movable):
         var index = a
         if self.on_device(a) and self.n(a) > 1:
             index = self.strided(a, 1, 1)
-        var _keep_ret_index = self.ptr(index)[0]
-        _ = index  # keep the Python object alive through the native call above
-        return _keep_ret_index^
+        return self.ptr(index)[0]
 
     def order(mut self, a: Int) raises -> Int:
         """`_Kit.order(A)`: the stable ascending order (ties to the lower

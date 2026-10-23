@@ -399,9 +399,6 @@ def sequence_moe_forward(owner: PythonObject, values: PythonObject, context: Pyt
         var dn = _f32(fields["down_proj"], "down_proj", context)
         _ = py_call_typed(entries["moe_forward"], Python.list(xa, classical_address(r), classical_address(gu), classical_address(dn),
                           classical_address(y), classical_address(logits), classical_address(sel), classical_address(w)), ip)
-        _ = dn  # keep the Python object alive through the native call above
-        _ = gu  # keep the Python object alive through the native call above
-        _ = r  # keep the Python object alive through the native call above
     _ = a^
     py_setitem(fields, "_routing", Python.list(logits, sel, w, PythonObject(None)))
     return _reshape(y, shape)

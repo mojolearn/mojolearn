@@ -210,17 +210,12 @@ def _run(model: PythonObject, fields: PythonObject, x: TreesMatrix, train: Pytho
                                     PythonObject(0 if values is None else trees_address(values)),
                                     PythonObject(0 if labels is None else trees_address(labels)),
                                     PythonObject(trees_address(info)), params))
-    _ = info  # keep the Python object alive through the native call above
     var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=trees_address(info))
-    _ = info  # keep the Python object alive through the native call above
     # `array.array("f", [float(info[0])])[0]`: the float32 offset as a float.
     py_setitem(fields, "offset_", PythonObject(Float64(Float32(words[0]))))
-    _ = info  # keep the Python object alive through the native call above
     py_setitem(fields, "max_samples_", PythonObject(Int(words[1])))
-    _ = info  # keep the Python object alive through the native call above
     if resident:
         var token = Int(words[3])
-        _ = info  # keep the Python object alive through the native call above
         if not Bool(py=PythonObject(token) == current):
             _release(fields)
             var release = py_get(svm, "iforest_resident_release")

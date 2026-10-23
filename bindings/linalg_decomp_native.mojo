@@ -302,19 +302,15 @@ def solve_call(args: PythonObject, context: PythonObject) raises -> PythonObject
             var rc = decomp_int(py_call(kit.entries["x_decomp_dev_lu_factor"], classical_address(array), lu_array._addr,
                                         piv_array._addr, info._addr, kit.matrices[da].device,
                                         kit.matrices[dlu].device, kit.matrices[dp].device, Python.list(n)))
-            _ = info  # keep the Python object alive through the native call above
             if rc < 0:
                 raise Error("a: input must be finite; NaN/inf are unsupported")
             var singular = Int(DecompF32(unsafe_from_address=Int(py=info._addr))[0])
-            _ = info  # keep the Python object alive through the native call above
             if singular != 0:
                 _singular_warning(singular, 3)
-                _ = info  # keep the Python object alive through the native call above
             else:
                 handles.append(kit.matrices[da].device)
                 handles.append(kit.matrices[dlu].device)
                 handles.append(kit.matrices[dp].device)
-            _ = info  # keep the Python object alive through the native calls above
         else:
             var a = _matrix(kit, a_source, "a", context)
             var n = kit.nrows(a)

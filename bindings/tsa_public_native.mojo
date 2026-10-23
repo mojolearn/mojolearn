@@ -94,12 +94,10 @@ def tsa_kpss(args: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = py_call_typed(_entries(context)["kpss_test"], classical_address(flat), classical_address(flags), classical_address(stat),
                       Python.list(batch, n_obs, py_call_typed(b.int, args[1]), py_call_typed(b.int, args[2]),
                                   py_call_typed(b.int, args[3]), py_call_typed(b.float, args[4])))
-    _ = flags  # keep the Python object alive through the native call above
     # the binding writes 1 (stationary) or 0
     var stationary = _array("B", "<u1", batch, 1, context)
     tsa_flags_u8(_I32P(unsafe_from_address=Int(py=classical_address(flags))),
                  _U8P(unsafe_from_address=Int(py=classical_address(stationary))), batch)
-    _ = flags  # keep the Python object alive through the native call above
     _ = flat^
     if Bool(py=py_call(b.bool, args[5])):
         return Python.tuple(stationary, stat)

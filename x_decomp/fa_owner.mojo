@@ -160,9 +160,7 @@ def fa_fit_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
                 var pw = kit.ptr(wa)
                 var pp = kit.ptr(pa)
                 var src = kit.ptr(p0)
-                _ = p0  # keep the Python object alive through the native call above
                 it = X.fa_em(kit.mats[gram].dev, src, pw, pp, ll_out, d, nc, n, max_iter, tol)
-                _ = p0  # keep the Python object alive through the native call above
                 w = wa
                 psi = pa
             else:
