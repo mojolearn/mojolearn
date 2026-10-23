@@ -7,7 +7,13 @@ import pytest
 
 from mojolearn import _serialize
 from mojolearn._array import Array
-from mojolearn._forest_protocol import _export_fit_result
+
+# The forest fit export (handle, five caller buffers, release) and the
+# MOJOLEARN_FOREST_EXPORT selection moved into the native owner
+# (bindings/trees_public_forest.mojo `forest_export` / `_launch`); the
+# Python helpers these fake-binding tests drove are deleted. The public fits
+# exercise the native export.
+pytest.skip("forest export protocol is native (bindings/trees_public_forest.mojo)", allow_module_level=True)
 
 
 @pytest.fixture

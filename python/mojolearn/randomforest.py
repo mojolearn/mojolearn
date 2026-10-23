@@ -70,12 +70,9 @@ from . import _portable_math as math
 import numbers
 
 from . import _mojolearn_rf, _native_archive_bridge, _native_trees_bridge
-from ._buffer import addr_ro, all_finite, as_f32_c, as_f32_colmajor, as_f32_forest_layout
 from ._labels import argmax_rows, decode_labels, is_bool
 from ._mode import NumericModeMixin
-from ._class_weights import _class_weight_rows  # noqa: F401  re-exported: _expansion_trees imports it from here
-from ._forest_protocol import (ForestProtocol, forest_estimator, _forest_fit_arrays,
-                               _export_fit_result)
+from ._forest_protocol import ForestProtocol, forest_estimator
 
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-randomforest-1"
@@ -421,86 +418,6 @@ class _RandomForestBase(ForestProtocol, NumericModeMixin):
             max_batch_size=int(max_batch_size),
             oob_score=bool(oob_score),
         )
-
-    def _fit_params(self, n_rows, n_features, n_classes):
-        """The 16-slot params list, in _mojolearn_rf.mojo's exact order:
-        n_rows, n_cols, n_classes, n_trees, max_depth, max_leaves,
-        max_features_fraction, max_n_bins, min_samples_leaf,
-        min_samples_split, min_impurity_decrease, bootstrap, max_samples,
-        seed, n_streams, max_batch_size; then, only when it is not 0, the
-        optional 17th, min_weight_fraction_leaf (a 16-slot call keeps every
-        other fit entry's contract)."""
-        cfg = self._cfg
-        params = [
-            int(n_rows),
-            int(n_features),
-            int(n_classes),
-            cfg["n_estimators"],
-            cfg["max_depth"],
-            cfg["max_leaves"],
-            _max_features_fraction(cfg["max_features"], n_features),
-            cfg["n_bins"],
-            cfg["min_samples_leaf"],
-            cfg["min_samples_split"],
-            cfg["min_impurity_decrease"],
-            1 if cfg["bootstrap"] else 0,
-            cfg["max_samples"],
-            cfg["random_state"],
-            cfg["n_streams"],
-            cfg["max_batch_size"],
-        ]
-        mwf = cfg.get("min_weight_fraction_leaf", 0.0)
-        if mwf:
-            params.append(mwf)
-        return params
-
-    def _fit_arrays(self, X, y_arr, n_classes, fit_fn, rowmajor_fit_fn=None):
-        # Column-major is the builder's layout (cuML's `data` is
-        # column-major); `as_f32_colmajor` is that copy, named in the
-        # module docstring, and zero for a float32 F-order input
-        # (DEVIATION 2341). Its 2-D refusal reads "mojolearn: X must be
-        # 2-D, got ...", the wording `_arrays.py` used.
-        # DEVIATION 2637: a C-order float32 X is lent row-major to the
-        # `*_rowmajor` entry, which transposes it into its pinned stage
-        # across the host pool (same staged bytes, one pass fewer).
-        if rowmajor_fit_fn is not None:
-            Xf, row_major = as_f32_forest_layout(X, name="X")
-            if row_major:
-                fit_fn = rowmajor_fit_fn
-        else:
-            Xf, _ = as_f32_colmajor(X, name="X")
-        n_rows, n_features = Xf.shape
-        if len(y_arr) != n_rows:
-            raise ValueError(f"y has {len(y_arr)} rows, X has {n_rows}")
-        # The builder has no missing-value arm: a NaN or inf in X was
-        # quantized and split on silently (pip smoke 2026-09-22). Refused
-        # here, as cuML documents and scikit-learn's pre-1.4 forests did.
-        # FAST on Apple (lane apple-fast-rfet-scan): the binding refuses a
-        # non-finite cell through a device scan of the uploaded X
-        # (ensemble/device_finite.mojo), so this one-thread host scan of
-        # every cell is not repeated; its refusal is raised as the same
-        # ValueError below.
-        scan = getattr(self._bind("_mojolearn_rf"), "rf_device_finite_scan", None)
-        device_scan = scan is not None and int(scan()) == 1
-        if not device_scan and not all_finite(Xf):
-            raise ValueError(_NONFINITE_REFUSAL)
-        params = self._fit_params(n_rows, n_features, n_classes)
-        try:
-            out = fit_fn(
-                addr_ro(Xf, name="X"), addr_ro(y_arr, name="y"), params,
-                self._cfg["criterion"],
-            )
-        except Exception as exc:
-            if device_scan and _NONFINITE_REFUSAL in str(exc):
-                raise ValueError(_NONFINITE_REFUSAL) from None
-            raise
-        del Xf  # the borrow ends with the call
-        (self._offsets, self._colid, self._quesval, self._left_child,
-         self._leaves, meta) = _forest_fit_arrays(out)
-        self.n_features_in_ = int(n_features)
-        self._n_trees = int(meta[0])
-        self._num_outputs = int(meta[1])
-        return self
 
     def save(self, path):
         """Write the fitted forest to `path` as an npz file.
@@ -935,62 +852,6 @@ class RandomForestRegressor(_RandomForestBase):
         self
         """
         return _TREES(self, "trees_forest_fit", (X, y, sample_weight, feature_importances, None), _TREES_CONTEXT)
-
-    def _fit_in_session(self, session, y, rows=None):
-        """`fit(X, y)` for the X a `ForestDataSession` holds (trees-apple3):
-        the squared-error member fit of a boosted ensemble. Same params,
-        same entry underneath, minus the per-member staging of X (whose
-        finite scan the session ran once). With `rows` (int32 row ids,
-        repeats allowed) the fit is `fit(X[rows], y)`, the rows gathered on
-        the device."""
-        self._refresh_config()
-        self._capture_fit_mode()
-        y32, _ = as_f32_c(y, ndim=1, name="y")
-        code = self._cfg["criterion"]
-        if code != _REG_CRITERIA["squared_error"]:
-            raise ValueError("a forest data session fits squared_error members")
-        n_rows, n_features = session.shape
-        if rows is not None:
-            n_rows = len(rows)
-        if len(y32) != n_rows:
-            raise ValueError(f"y has {len(y32)} rows, X has {n_rows}")
-        params = self._fit_params(n_rows, n_features, 0)
-        out = (session.fit_regressor(y32, params, code) if rows is None
-               else session.fit_regressor_rows(rows, y32, params, code))
-        (self._offsets, self._colid, self._quesval, self._left_child,
-         self._leaves, meta) = _forest_fit_arrays(out)
-        self.n_features_in_ = int(n_features)
-        self._n_trees = int(meta[0])
-        self._num_outputs = int(meta[1])
-        return self
-
-    def _fit_in_dart(self, handle, cls, n_rows, n_features, rows=None, cols=None):
-        """The squared-error member fit of a DART round on the DART
-        session's device buffers (cpu4-forest): X and class `cls`'s fit
-        target stay where `x_trees_dart_step` left them; `rows` (int32 bag
-        rows) and `cols` (int32 sampled columns) select them on the device.
-        Same params and model export as `fit(X[rows][:, cols], target)`."""
-        self._refresh_config()
-        self._capture_fit_mode()
-        code = self._cfg["criterion"]
-        if code != _REG_CRITERIA["squared_error"]:
-            raise ValueError("a DART member fits squared_error")
-        binding = self._bind("_mojolearn_rf")
-        entry = getattr(binding, "rf_regressor_fit_dart_export", None)
-        if not callable(entry):
-            raise RuntimeError("rebuild the forest binding for DART member fits on the device")
-        m = int(n_rows) if rows is None else len(rows)
-        dc = int(n_features) if cols is None else len(cols)
-        params = self._fit_params(m, dc, 0)
-        out = _export_fit_result(binding, entry(
-            int(handle), int(cls), 0 if rows is None else addr_ro(rows, name="rows"),
-            0 if cols is None else addr_ro(cols, name="cols"), params, code))
-        (self._offsets, self._colid, self._quesval, self._left_child,
-         self._leaves, meta) = _forest_fit_arrays(out)
-        self.n_features_in_ = int(dc)
-        self._n_trees = int(meta[0])
-        self._num_outputs = int(meta[1])
-        return self
 
     def _fit_with_tree_start(self, X, y, tree_start=None, *, feature_importances=False,
                              sample_weight=None):

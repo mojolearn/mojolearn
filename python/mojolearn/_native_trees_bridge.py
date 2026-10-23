@@ -26,7 +26,7 @@ _TREE_BINDINGS = ("_mojolearn_rf", "_mojolearn_trees", "_mojolearn_x_trees", "_m
 _BASE_HELPERS = ("cast_f64_to_f32", "cast_colmajor_f64_to_f32", "transpose_f32", "all_finite_f32",
                  "all_finite_f64", "prepare_targets", "bincount_i64", "class_ratio_f64",
                  "gather_rows_bytes", "argmax_rows_f32", "argmax_rows_f64", "gather_i64", "gather_f64",
-                 "unique_inverse", "reduce_stat", "cast_elements", "gather_i32")
+                 "unique_inverse", "reduce_stat", "cast_elements", "gather_i32", "fsum_f64")
 
 
 def _unavailable(error):
@@ -126,6 +126,7 @@ def connect():
     _backend.default_mode()  # glue: settle the process default the native mode falls back to
     context.update(
         trees_bindings=_bindings(), trees_helpers=_helpers(), trees_classes={}, trees_defaults={},
+        trees_boost_classes={},
         trees_missing=object(), trees_namespace=types.SimpleNamespace,
         trees_real_type=numbers.Real, trees_integral_type=numbers.Integral,
     )
@@ -148,5 +149,18 @@ def register(cls, kind, **tables):
     context["trees_defaults"][cls] = {
         name: p.default for name, p in signature.parameters.items()  # glue: the constructor's parameters, once at definition
         if name != "self" and p.default is not inspect.Parameter.empty}
+    for key, value in tables.items():  # glue: the class's fixed lookup tables, once at definition
+        context.setdefault(key, value)
+
+
+def register_boost(cls, kind, **tables):
+    """Connect one bagged or boosted tree ensemble class at its definition:
+    `kind` names its schema in bindings/trees_public_boost.mojo
+    ("bagging_classifier", "ada_regressor", "dart_classifier", "rte", ...);
+    `tables` are its fixed lookup tables and the member classes it builds."""
+    _, context = connect()
+    if "trees_unavailable" in context:
+        return
+    context["trees_boost_classes"][cls] = kind
     for key, value in tables.items():  # glue: the class's fixed lookup tables, once at definition
         context.setdefault(key, value)
