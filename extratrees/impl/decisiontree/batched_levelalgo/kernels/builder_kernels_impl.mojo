@@ -269,6 +269,7 @@ def draw_threshold_raw(key: SplitKey, extent: FeatureRange) -> Float32:
 # ============================================================================
 
 from std.atomic import Atomic, Ordering
+from std.collections import InlineArray
 from std.gpu.primitives.warp import shuffle_xor
 from std.memory import bitcast
 from std.gpu import WARP_SIZE, block_dim, block_idx, grid_dim, thread_idx
@@ -779,18 +780,22 @@ def node_feature_range_tiled_kernel[
     var nf = k - f0
     if nf > FT:
         nf = FT
-    var cols = SIMD[DType.int32, FT](0)
+    # PLAIN ARRAYS, NOT SIMD VECTORS (lane sm120-tree-identity, 2026-10-23):
+    # every per-feature slot below is written under its own guard inside a
+    # `comptime for`, the shape the sm_120 AOT compile corrupts
+    # (core/gram_splitk.mojo, GRAM_STRIDED_ARM). Same values, same order.
+    var cols = InlineArray[Int32, FT](fill=Int32(0))
     comptime for j in range(FT):
         if j < nf:
             cols[j] = colids[unsafe_offset = nid * k + f0 + j]
-    var lmin = SIMD[DType.float32, FT](inf[DType.float32]())
-    var lmax = SIMD[DType.float32, FT](-inf[DType.float32]())
-    var lmiss = SIMD[DType.int32, FT](0)
+    var lmin = InlineArray[Float32, FT](fill=inf[DType.float32]())
+    var lmax = InlineArray[Float32, FT](fill=-inf[DType.float32]())
+    var lmiss = InlineArray[Int32, FT](fill=Int32(0))
     var end = range_start + range_len
     var stride = TPB * num_blocks
     var i = range_start + Int(thread_idx.x) + offset_blockid * TPB
     while i < end:
-        var bases = SIMD[DType.int64, AFT_ET_RANGE_ROW_TILE](0)
+        var bases = InlineArray[Int64, AFT_ET_RANGE_ROW_TILE](fill=Int64(0))
         comptime for r in range(AFT_ET_RANGE_ROW_TILE):
             if i + r * stride < end:
                 bases[r] = Int64(Int(row_ids[unsafe_offset=i + r * stride]) * n)
@@ -2223,9 +2228,13 @@ def node_feature_score_reg_tiled_kernel[
     var nf = k - f0
     if nf > FT:
         nf = FT
-    var cols = SIMD[DType.int32, FT](0)
-    var thr = SIMD[DType.float32, FT](0)
-    var active = SIMD[DType.int32, FT](0)
+    # PLAIN ARRAYS, NOT SIMD VECTORS (lane sm120-tree-identity, 2026-10-23):
+    # every per-feature slot below is written under its own guard inside a
+    # `comptime for`, the shape the sm_120 AOT compile corrupts
+    # (core/gram_splitk.mojo, GRAM_STRIDED_ARM). Same values, same order.
+    var cols = InlineArray[Int32, FT](fill=Int32(0))
+    var thr = InlineArray[Float32, FT](fill=Float32(0))
+    var active = InlineArray[Int32, FT](fill=Int32(0))
     var tree = tree_ids[unsafe_offset=nid].cast[DType.uint32]()
     comptime for j in range(FT):
         if j < nf:
@@ -2264,8 +2273,8 @@ def node_feature_score_reg_tiled_kernel[
         comptime for j in range(FT):
             if j < nf and active[j] != 0:
                 thr[j] = s_code[j]
-    var n_left = SIMD[DType.int32, FT](0)
-    var acc_left = SIMD[DType.int32, FT](0)
+    var n_left = InlineArray[Int32, FT](fill=Int32(0))
+    var acc_left = InlineArray[Int32, FT](fill=Int32(0))
     var n_seen = Int32(0)
     var acc_total = Int32(0)
     var end = range_start + range_len
