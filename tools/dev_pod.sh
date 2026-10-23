@@ -93,6 +93,10 @@ MAX_LEASE_MIN="${MOJOLEARN_DEVPOD_MAX_LEASE_MIN:-240}"
 # GPUs per NVIDIA pod: 1, except the shared pods tools/nvidia_central.sh brings up (4x/2x).
 NV_GPU_COUNT="${MOJOLEARN_DEVPOD_GPU_COUNT:-1}"
 [[ "$NV_GPU_COUNT" =~ ^[1-8]$ ]] || { echo "dev_pod: MOJOLEARN_DEVPOD_GPU_COUNT must be 1..8" >&2; exit 2; }
+# NVIDIA defaults to the live catalog's CUDA versions >=13.0, required by
+# pinned MAX. allowedCudaVersions is an exact set, not a minimum. An explicit
+# MOJOLEARN_DEVPOD_ALLOWED_CUDA_VERSIONS=13.0,13.2 overrides discovery, but
+# empty/malformed values or ANY version below 13.0 refuse before a create.
 NV_IMAGE="${MOJOLEARN_DEVPOD_IMAGE:-runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04}"
 AMD_GPUS="${MOJOLEARN_DEVPOD_AMD_GPUS:-AMD Instinct MI300X OAM}"
 AMD_IMAGE="${MOJOLEARN_DEVPOD_AMD_IMAGE:-rocm/dev-ubuntu-22.04:6.4.1-complete}"
@@ -305,36 +309,19 @@ echo HEAD=\$(git rev-parse HEAD)" < /dev/null 2>&1) || { printf '%s\n' "$_out" >
 runpod_create() {  # <retry minutes> <gpus> <image> <amd 0|1>
     POD_NAME="mojolearn-dev-$KEY-$(date -u +%m%d%H%M)"
     rp_call GET "$RP/pods"; case "$RP_CODE" in 2*) ;; *) die "pod listing HTTP $RP_CODE" ;; esac
-    python3 - "$TMPD/create.json" "$POD_NAME" "$3" "$2" "$DISK_GB" "$4" "$ROOT/tools/runpod_ssh_bootstrap.sh" "$( [ "$4" = 1 ] && echo 1 || echo "$NV_GPU_COUNT")" <<'PY'
-import json, os, sys
-from pathlib import Path
-out, name, image, gpus, disk, amd, bootstrap, count = sys.argv[1:]
-req = {"name": name, "imageName": image, "gpuTypeIds": [g.strip() for g in gpus.split(",") if g.strip()], "gpuCount": int(count),
-       "cloudType": "SECURE", "containerDiskInGb": int(disk), "volumeInGb": 0,
-       "ports": ["22/tcp"], "supportPublicIp": True, "interruptible": False}
-# Optional placement filters; defaults preserve existing lane behavior.
-cloud = os.environ.get("MOJOLEARN_DEVPOD_CLOUD_TYPE", "SECURE")
-if cloud not in ("SECURE", "COMMUNITY"):
-    raise SystemExit("MOJOLEARN_DEVPOD_CLOUD_TYPE must be SECURE or COMMUNITY")
-req["cloudType"] = cloud
-if os.environ.get("MOJOLEARN_DEVPOD_MIN_VCPU"):
-    minimum = int(os.environ["MOJOLEARN_DEVPOD_MIN_VCPU"])
-    if minimum < 1:
-        raise SystemExit("MOJOLEARN_DEVPOD_MIN_VCPU must be positive")
-    req["minVCPUPerGPU"] = minimum
-if amd != "1":
-    # THE PINNED MAX NEEDS AN NVIDIA DRIVER >= 580 (CUDA 13.0). On an older
-    # host a GPU binding built without a named arch fails in the pass manager
-    # and a loaded one refuses the driver (lane/algos-ann's H100 pod, 570.211,
-    # 2026-09-27); RunPod filters hosts before provisioning on this field
-    # (tools/kmeans_host_recording_nvidia_leg.sh, gemm_remote_leg.sh).
-    req["allowedCudaVersions"] = ["13.0"]
-if amd == "1" and image.startswith("rocm/"):
-    # plain ROCm images have no ssh; the repo's bootstrap, as release_wheel_smoke.sh --vendor hip
-    req["dockerEntrypoint"] = ["/bin/bash", "-lc"]
-    req["dockerStartCmd"] = [Path(bootstrap).read_text()]
-json.dump(req, open(out, "w"), indent=2)
-PY
+    _devpod_cuda_catalog=""
+    if [ "$4" != 1 ] && [ "${MOJOLEARN_DEVPOD_ALLOWED_CUDA_VERSIONS+x}" != x ]; then
+        # Read-only discovery, once per active create invocation. A failure
+        # never falls back to an unconstrained or older-driver rental.
+        rp_call GET "https://api.runpod.io/v2/catalog/gpus?include=AVAILABILITY&product=POD&minCudaVersion=13.0"
+        cp "$TMPD/rp.body" "$D/cuda-catalog.json" || die "cannot retain CUDA catalog"
+        case "$RP_CODE" in 2*) ;; *) die "CUDA catalog HTTP $RP_CODE; no create attempted" ;; esac
+        _devpod_cuda_catalog="$D/cuda-catalog.json"
+    fi
+    python3 "$ROOT/tools/runpod_gpu_request.py" "$TMPD/create.json" "$POD_NAME" "$3" "$2" "$DISK_GB" "$4" \
+        "$ROOT/tools/runpod_ssh_bootstrap.sh" "$( [ "$4" = 1 ] && echo 1 || echo "$NV_GPU_COUNT")" "$_devpod_cuda_catalog" \
+        || die "CUDA/placement request validation failed; no create attempted"
+    cp "$TMPD/create.json" "$D/create_request.json" || die "cannot retain validated create request"
     # OUT OF STOCK IS RETRIED, NOTHING ELSE IS (2026-09-27). Each attempt arms its own
     # dead-man before the create and disarms it when nothing was created; a
     # create that fails for any reason but stock dies at once. Every attempt is
