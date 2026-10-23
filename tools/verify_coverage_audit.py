@@ -52,6 +52,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(ROOT, "tools"))
 
 from mojo_registrations import registered_functions
+from verify_reference_evidence import reference_label, reference_snapshot, unknown_references
 SAB_RE = re.compile(r"MOJOLEARN_[A-Z0-9_]*SABOTAGE[A-Z0-9_]*")
 IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
 
@@ -762,8 +763,8 @@ def recorded_lanes():
 
 # ------------------------------------------------------------------ triage
 
-#: The lanes this audit added (tools/identity_lanes/coverage.py). They read
-#: OWED until a release record admits them.
+#: Historical lane descriptions, not a reference/admission inventory. Current
+#: reference status comes only from the retained table snapshot below.
 NEW_LANES = frozenset({"gp-lml-theta", "cross-vendor-fold", "sequence-moe-backward",
                        "sequence-export-roundtrip", "sequence-onnx-import",
                        "transformer-decode-load-state", "safetensors-widen-f16",
@@ -1668,8 +1669,6 @@ def triage(row):
         status, lanes, why = ANNOTATIONS[row["entry"]]
         return status, sorted(set(lanes) | set(row["lanes_precise"])), why
     if row["lanes_precise"]:
-        if set(row["lanes_precise"]) <= NEW_LANES:
-            return "covered (new lane)", row["lanes_precise"], "new lane, OWED until recorded"
         return "covered", row["lanes_precise"], ""
     if not row["py_files"]:
         return "n/a", [], "no Python caller in the package (manifest, tests or Mojo-internal dispatch only)"
@@ -1735,8 +1734,39 @@ def _short(lanes, n=3):
     return ", ".join(f"`{l}`" for l in lanes[:n]) + (f" +{len(lanes) - n}" if len(lanes) > n else "")
 
 
+def audit_lanes(audit):
+    """Include the complete lane inventory and explicit source annotations."""
+    lanes = set(audit.get("lane_inventory", ()))
+    for row in audit["native"]:
+        lanes.update(triage(row)[1])
+    for row in audit["python"]:
+        lanes.update(row["lanes"])
+        annotation = PY_ANNOTATIONS.get((row["public"], row["op"]))
+        if annotation:
+            lanes.update(annotation[1])
+    return sorted(lanes)
+
+
+def audit_references(audit):
+    # Re-rendering an old audit must not substitute today's table evidence for
+    # the source/report it retained. The legacy `recorded` list has no scope.
+    lanes = audit_lanes(audit)
+    snapshot = audit.get("reference_evidence")
+    if not snapshot:
+        return unknown_references(lanes, "audit has no retained reference evidence snapshot")
+    # A row added after the snapshot still lacks evidence, even when neighboring
+    # rows have retained parts. Do not omit it from the summary denominator.
+    missing = set(lanes) - snapshot["lanes"].keys()
+    if missing:
+        return {**snapshot, "lanes": {
+            **snapshot["lanes"],
+            **unknown_references(missing, "lane absent from retained reference snapshot")["lanes"]}}
+    return snapshot
+
+
 def render_markdown(audit, path):
     nat, py = audit["native"], audit["python"]
+    references = audit_references(audit)
     tri = [(r, triage(r), sabotage_of(r)) for r in nat]
     count = defaultdict(int)
     for _, (st, _, _), _ in tri:
@@ -1789,7 +1819,7 @@ def render_markdown(audit, path):
         if key in PY_ANNOTATIONS:
             st, lanes, why = PY_ANNOTATIONS[key]
         elif r["lanes"]:
-            st = "covered (new lane)" if set(r["lanes"]) <= NEW_LANES else "covered"
+            st = "covered"
             lanes, why = r["lanes"], ""
         else:
             st, lanes, why = "GAP", [], "no lane reaches it"
@@ -1798,18 +1828,37 @@ def render_markdown(audit, path):
     w(f"Public Python methods whose call path changed: {len(py)} "
       + ", ".join(f"{k} {v}" for k, v in sorted(pst.items())) + ".")
     w("")
-    w("A lane that reaches an entry `covered` is recorded unless it is one of the new lanes below, which "
-      "read OWED until a release record admits them.")
+    w("`covered` describes static reach only. It does not mean that a lane was run, recorded or admitted. "
+      "Fault arms marked `armed` likewise describe source reach, not successful fault detection.")
     w("")
-    w("## New lanes (tools/identity_lanes/coverage.py)")
+    w("## Retained reference evidence")
     w("")
-    w("Each ran 9 of 9 fixtures STABLE at `--repeats 2` on the Mac (Metal) build of integ/20261021; "
-      "parts are Mojo FNV-1a64 digests (`verify_digest`). Declared in their family's training lanes with "
-      "the pending reason `no reference`. The lanes lane verify-coverage-owed added ran with that lane's "
-      "Python package over the same build.")
+    w("RETAINED means that numeric reference parts have linked record metadata in the captured reference "
+      "table. It does not establish complete fixtures, all vendor columns, installed-package execution, "
+      "source applicability or admission of this candidate. The JSON preserves the actual parts, columns "
+      "and source records. Intentionally partial records remain partial. OWED means no numeric reference "
+      "is retained; UNKNOWN means the evidence is unavailable or inconsistent. Candidate admission: "
+      "**not assessed**.")
     w("")
-    for lane in sorted(NEW_LANES):
-        w(f"- `{lane}`: {NEW_LANE_PURPOSE[lane]}")
+    if references.get("table_sha256"):
+        w(f"Reference table SHA-256: `{references['table_sha256']}`.")
+        w("")
+    w("| reference evidence | lanes |")
+    w("|---|---|")
+    for status in ("RETAINED", "OWED", "UNKNOWN"):
+        selected = sorted(lane for lane, item in references["lanes"].items()
+                          if item["status"] == status)
+        w(f"| {status} | {len(selected)} |")
+    w("")
+    for status in ("OWED", "UNKNOWN"):
+        selected = sorted(lane for lane, item in references["lanes"].items()
+                          if item["status"] == status)
+        if selected:
+            w(f"{status} lanes:")
+            w("")
+            for lane in selected:
+                w(f"- `{lane}`: {references['lanes'][lane]['reason']}")
+            w("")
     w("")
     proven = _proven_arms()
     w("## Fault-injection arms added (tools/identity_lanes/coverage_sabotage.tsv)")
@@ -1821,7 +1870,8 @@ def render_markdown(audit, path):
       "fault detection in every named lane, and restoration to clean output. Refusals require an exact "
       "fault-specific review; missing bindings and other infrastructure failures do not count. "
       + ("Retained execution scope is listed under Arms proven below; a declared arm is not proof it ran." if proven else
-         "RUN OWED: no arm has been built or run yet (lanes never compile); `apply-check` passes on this commit."))
+         "RUN OWED: no execution evidence is available in the retained arms table. This static audit does not "
+         "run apply-check or fault qualification."))
     w("")
     try:
         import coverage_sabotage
@@ -1838,6 +1888,9 @@ def render_markdown(audit, path):
     w("")
     if proven:
         w("## Arms proven (tools/identity_lanes/coverage_sabotage_proven.tsv)")
+        w("")
+        w("The following is retained historical evidence. This static report does not establish its "
+          "applicability to the candidate's source, binding ownership or physical library layout.")
         w("")
         w("Run one at a time on the Mac (lane run-sabotage-arms, 2026-10-21) over the merged Metal (identical) "
           "and host builds of 51bf10f4f, whose kernel sources equal 79982adaa's. Per arm: the patch applied, the "
@@ -1909,10 +1962,11 @@ def render_markdown(audit, path):
     w("")
     w("## Public Python methods")
     w("")
-    w("| method | where | lanes | status |")
-    w("|---|---|---|---|")
+    w("| method | where | lanes | static reach | reference evidence |")
+    w("|---|---|---|---|---|")
     for r, st, lanes, why in prow:
-        w(f"| `{r['public']}.{r['op']}` | `{r['where']}` | {_short(lanes)} | {st}{': ' + why if why else ''} |")
+        w(f"| `{r['public']}.{r['op']}` | `{r['where']}` | {_short(lanes)} | {st}{': ' + why if why else ''} "
+          f"| {reference_label(lanes, references)} |")
     w("")
     w("## Native entries")
     w("")
@@ -1927,13 +1981,14 @@ def render_markdown(audit, path):
         w("")
         w(f"### `{src}`")
         w("")
-        w("| entry | change | lanes | sabotage | status |")
-        w("|---|---|---|---|---|")
+        w("| entry | change | lanes | sabotage | static reach | reference evidence |")
+        w("|---|---|---|---|---|---|")
         for r, (st, lanes, why), (ss, txt) in sorted(by_src[src], key=lambda x: x[0]["entry"]):
             if st.startswith("n/a") and ss != "armed":
                 ss, txt = "n/a", "no lane can run it (see status)"
             change = "new" if r["new_anywhere"] else ("moved here" if r["new"] else "/".join(r["kinds"]))
-            w(f"| `{r['entry']}` | {change} | {_short(lanes)} | {ss}: {txt} | {st}{': ' + why if why else ''} |")
+            w(f"| `{r['entry']}` | {change} | {_short(lanes)} | {ss}: {txt} | {st}{': ' + why if why else ''} "
+              f"| {reference_label(lanes, references)} |")
     with open(path, "w") as fh:
         fh.write("\n".join(lines) + "\n")
     return count, sab, pst
@@ -1954,8 +2009,13 @@ def main(argv=None):
         reach = lane_reach(ls, walker, NameClosure(walker))
         native = native_rows(ls, args.base, reach)
         py = python_rows(ls, walker, reach, args.base)
-        audit = dict(base=args.base, head=git("rev-parse", "--short", "HEAD").strip(),
-                     recorded=sorted(recorded_lanes()), native=native, python=py)
+        audit = dict(base=args.base, head=git("rev-parse", "HEAD").strip(),
+                     lane_inventory=sorted(reach), native=native, python=py)
+        audit["reference_evidence"] = reference_snapshot(
+            os.path.join(ROOT, "python/mojolearn/verify_reference/table.json"), audit_lanes(audit))
+        # Compatibility field: scoped retained metadata, never full admission.
+        audit["recorded"] = sorted(lane for lane, item in audit["reference_evidence"]["lanes"].items()
+                                   if item["status"] == "RETAINED")
     if args.json:
         os.makedirs(os.path.dirname(os.path.abspath(args.json)), exist_ok=True)
         with open(args.json, "w") as fh:
@@ -1965,7 +2025,7 @@ def main(argv=None):
         print("native status: " + ", ".join(f"{k} {v}" for k, v in sorted(count.items())))
         print("sabotage: " + ", ".join(f"{k} {v}" for k, v in sorted(sab.items())))
         print("python: " + ", ".join(f"{k} {v}" for k, v in sorted(pst.items())))
-    rec = set(audit["recorded"])
+    references = audit_references(audit)
     nat = audit["native"]
     print(f"native: {len(nat)} new/changed registrations; "
           f"{sum(1 for r in nat if r['lanes_precise'])} precise lane(s), "
@@ -1973,7 +2033,9 @@ def main(argv=None):
           f"{sum(1 for r in nat if not r['lanes_precise'] and not r['lanes_wide'])} none; "
           f"{sum(1 for r in nat if r['sabotage_defines'] or r['sabotage_patches'])} with a sabotage arm")
     print(f"python: {len(audit['python'])} changed public methods; "
-          f"{sum(1 for r in audit['python'] if r['lanes'])} with a lane; recorded lanes {len(rec)}")
+          f"{sum(1 for r in audit['python'] if r['lanes'])} with a lane")
+    print("reference evidence: " + reference_label(audit_lanes(audit), references))
+    print("Static audit completed; execution and candidate admission not assessed.")
     return 0
 
 
