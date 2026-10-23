@@ -2414,7 +2414,7 @@ def host_archive_public_gbdt(cls: PythonObject, arrays: PythonObject, path: Pyth
     var tables = py_get(context, "host_archive_gbdt_bindings")
     if tables is None:
         raise Error("ImportError: mojolearn: the GBDT binding is not connected to the archive owner")
-    var table = py_get(tables, String(py_call(py_call(mode.strip).lower)))
+    var table = py_get(tables, PythonObject(String(py_call(py_call(mode.strip).lower))))
     if table is None:
         raise Error("numeric_mode must be fast, identical or None")
     if py_type(table) is b.str:
