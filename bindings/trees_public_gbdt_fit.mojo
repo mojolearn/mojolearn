@@ -1127,7 +1127,7 @@ def gbdt_initialize(model: PythonObject, args: PythonObject, context: PythonObje
         Python.tuple("max_leaves", PythonObject(None) if max_leaves is None else py_call_typed(b.int, max_leaves)),
         Python.tuple("min_data_in_leaf", PythonObject(min_data_int)),
         Python.tuple("min_split_gain", gain), Python.tuple("min_child_hessian", hessian),
-        Python.tuple("feature_fraction", PythonObject(fraction)), Python.tuple("feature_border_type", border),
+        Python.tuple("feature_fraction", kw["feature_fraction"]), Python.tuple("feature_border_type", border),
         Python.tuple("boosting_type", boosting), Python.tuple("fold_len_multiplier", py_call_typed(b.float, fold_len)),
         Python.tuple("fold_permutation_block", PythonObject(None) if block is None else py_call_typed(b.int, block)),
         Python.tuple("model_", PythonObject(None)), Python.tuple("loss_curve_", PythonObject(None)),
