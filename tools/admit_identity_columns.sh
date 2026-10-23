@@ -1,5 +1,5 @@
 #!/bin/bash
-# admit_identity_columns.sh [--build-host] [--check-only] <records dir...>
+# admit_identity_columns.sh [--build-host] [--check-only] [--lanes a,b] <records dir...>
 # admit_identity_columns.sh [--build-host] --models <models dir>
 #
 # THE LOCAL HALF of a reference-table regeneration (docs/VERIFY.md
@@ -16,8 +16,9 @@
 #   2. copies them, with their provenance, to
 #      bench/results/identity_break/<UTC date>-<REF_TAG>/<vendor label>/
 #   3. regenerates python/mojolearn/verify_reference/table.json from every
-#      committed column (`verify --all --emit-reference`; newest commit wins per
-#      cell part and device class, older classes kept as superseded)
+#      committed column for the selected lanes (`verify --all --emit-reference`
+#      with `--reference-table` and `--lanes`; newest commit wins per cell part
+#      and device class, older classes kept as superseded)
 #      INCREMENTAL RE-RECORD (Andrew 2026-10-10): re-record only what changed;
 #      every other row is kept. Records of only the changed lanes
 #      (record_identity_column.sh ONLY_CHANGED=table) are admitted here like a
@@ -25,8 +26,9 @@
 #      other lane keeps the rows its older committed columns already give it.
 #      Andrew 2026-10-10: identity runs ONCE; a mismatch is a bug to fix, never
 #      a reason to rerun. One sample per part is admissible (min_repeats=1);
-#      the second witness is the other GPU vendor (NVIDIA == AMD). This admit
-#      IS the release's identity check: no later release step re-runs it.
+#      incoming files may be partial vendor updates; selected numerical parts
+#      must retain agreeing Apple, NVIDIA and AMD witnesses in the final table.
+#      Admission reuses identity evidence; it does not re-run the GPU checks.
 #   4. tools/identity_columns.py report: routine-profile reference parts taken
 #      from the new commit vs. still resting on an older one
 #   5. `verify --self-test --cpu-threads 3` and `verify --coverage` against the
@@ -35,6 +37,11 @@
 #      table's `ptx_divergent` must be empty, i.e. every PTX digest equals the
 #      NVIDIA == AMD reference; a differing part fails the admission (PTX rc=1)
 #   --check-only does 1, then 3-5 on a scratch table; nothing in the tree changes.
+#   --lanes selects complete lanes; default is every lane in incoming records.
+#   Unselected table rows and original records stay intact. Selected numerical
+#   parts must have agreeing Apple, NVIDIA and AMD columns (retained agreeing
+#   columns count). Missing/conflicted parts are refused before table mutation.
+#   The final table is installed only after candidate checks pass.
 #
 # Models mode (the <outdir>/models of `record_identity_column.sh <gpu> <outdir>
 # --models`, run on a GPU box AFTER the new table is committed and pushed):
@@ -43,8 +50,9 @@
 #   (ALLOW_MODEL_DROP=1 overrides) or names a hash the table does not carry,
 #   then reruns the self-test and coverage.
 #
-# Needs the host bindings `estimators` and `x_decomp` (ols and its TSQR) and
-# the portable math library in this checkout; --build-host builds exactly those (through
+# Needs the host bindings `estimators` and `x_decomp` (ols and its TSQR), served
+# by either their own files or the merged index, and the portable math library
+# in this checkout; --build-host builds only missing bindings (through
 # ~/mojolearn-evidence/compile_slot.sh when present, -j 1).
 #
 # Environment: PYTHON (default `pixi run -e default python`, else python3),
@@ -57,19 +65,20 @@ die() { echo "admit_identity_columns: $*" >&2; exit 2; }
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT" || die "cannot enter $ROOT"
 
-BUILD_HOST=0; CHECK_ONLY=0; MODELS=""
+BUILD_HOST=0; CHECK_ONLY=0; MODELS=""; LANES=""
 dirs=()
 while [ $# -gt 0 ]; do
     case $1 in
         --build-host) BUILD_HOST=1 ;;
         --check-only) CHECK_ONLY=1 ;;
+        --lanes) shift; LANES=${1:-}; [ -n "$LANES" ] || die "--lanes needs a comma-separated list" ;;
         --models) shift; MODELS=${1:-}; [ -n "$MODELS" ] || die "--models needs a directory" ;;
         -*) die "unknown option $1" ;;
         *) d=$(cd "$1" 2>/dev/null && pwd) || die "no such directory $1"; dirs+=("$d") ;;
     esac
     shift
 done
-[ -n "$MODELS" ] || [ ${#dirs[@]} -gt 0 ] || die "usage: admit_identity_columns.sh [--build-host] [--check-only] <records dir...> | --models <dir>"
+[ -n "$MODELS" ] || [ ${#dirs[@]} -gt 0 ] || die "usage: admit_identity_columns.sh [--build-host] [--check-only] [--lanes a,b] <records dir...> | --models <dir>"
 
 if [ -n "${PYTHON:-}" ]; then
     read -r -a PY <<< "$PYTHON"
@@ -90,9 +99,16 @@ else MATH=python/mojolearn/.libs/libMojolearnMath.so; fi
 # ols on the host column: LinearRegression (estimators) + its TSQR (x_decomp)
 HOST_FAMILIES=(estimators x_decomp)
 missing=()
-for fam in "${HOST_FAMILIES[@]}"; do
-    [ -f "python/mojolearn/host/_mojolearn_${fam}_host.so" ] || missing+=("$fam")
-done
+# Use the runtime's path-selection rules without bootstrapping the package.
+# This accepts compact release and nested development files only when the
+# actual indexed artifact exists, and preserves per-binding precedence.
+"${PY[@]}" tools/identity_host_preflight.py --package python/mojolearn \
+    --report "$EVID/host-bindings.json" "${HOST_FAMILIES[@]}" \
+    > "$EVID/host-missing.txt" 2> "$EVID/host-preflight.log" \
+    || die "host binding preflight failed; see $EVID/host-preflight.log"
+while IFS= read -r fam; do
+    [ -z "$fam" ] || missing+=("$fam")
+done < "$EVID/host-missing.txt"
 if [ ${#missing[@]} -gt 0 ] || [ ! -f "$MATH" ]; then
     if [ $BUILD_HOST = 1 ]; then
         SLOT=(); [ -x "$HOME/mojolearn-evidence/compile_slot.sh" ] && SLOT=(bash "$HOME/mojolearn-evidence/compile_slot.sh")
@@ -142,6 +158,7 @@ checks() {  # $1 = table; self-test then coverage; sets ST_RC, COV_RC
 
 # =========================================================== models mode
 if [ -n "$MODELS" ]; then
+    [ -z "$LANES" ] || die "--lanes is only supported for column admission"
     [ -f "$MODELS/models.json" ] || die "$MODELS/models.json missing"
     "${PY[@]}" - "$MODELS" "$MODELDIR" "$TABLE" "${ALLOW_MODEL_DROP:-0}" <<'EOF' || die "models refused"
 import json, sys, os, hashlib
@@ -214,13 +231,26 @@ fi
 C=$(for c in $commits; do echo "$(git log -1 --format=%ct $c) $c"; done | sort -n | tail -n 1 | cut -d' ' -f2)
 git cat-file -e "$C^{commit}" 2>/dev/null || die "commit $C is not in this repository (git fetch origin first)"
 
+# Freeze the base before building a candidate. Neither reporting nor coverage
+# exits nonzero for conflicting references; validate the table explicitly.
+# Scope to the incoming lanes by default, or an explicit complete-lane subset.
+# Original records are always preserved whole, including held/conflicting lanes.
+LANES=$("${PY[@]}" tools/identity_admission_guard.py lanes --lanes "$LANES" "${files[@]}") \
+    || die "invalid admission scope"
+tmp=$(mktemp -d "$EVID/admission.XXXXXX")
+cp "$TABLE" "$tmp/base.json" || die "cannot retain base table"
+record_args=(--records "$ROOT/bench/results/identity_break")
+for f in "${files[@]}"; do record_args+=(--records "$f"); done
+candidate() {
+    cli --all --emit-reference "$tmp/table.json" --reference-table "$tmp/base.json" \
+        --lanes "$LANES" "$@" > "$tmp/emit.log" 2>&1 \
+        || die "emit-reference refused; table unchanged; see $tmp/emit.log"
+    "${PY[@]}" tools/identity_admission_guard.py check --base "$tmp/base.json" \
+        --candidate "$tmp/table.json" --lanes "$LANES" > "$tmp/agreement.json" \
+        || die "GPU reference agreement refused; table unchanged; see $tmp/agreement.json"
+}
+candidate "${record_args[@]}"
 if [ $CHECK_ONLY = 1 ]; then
-    tmp=$(mktemp -d "$EVID/check-only.XXXXXX")
-    mkdir -p "$tmp/records"; cp "${files[@]}" "$tmp/records/"
-    cli --all --emit-reference "$tmp/table.json" \
-        --records "$ROOT/bench/results/identity_break" --records "$tmp/records" > "$tmp/emit.log" 2>&1 \
-        || die "emit-reference failed; see $tmp/emit.log"
-    tail -n 1 "$tmp/emit.log" | cut -c1-400
     "${PY[@]}" tools/identity_columns.py report --table "$tmp/table.json" --commit "$C" --out "$tmp/report.json"
     checks "$tmp/table.json"
     echo "CHECK-ONLY done; scratch table $tmp/table.json (tree unchanged)"
@@ -236,7 +266,8 @@ mkdir -p "$DEST"
     echo "Written by \`tools/record_identity_column.sh\` (identity_break.py --json, identical tier,"
     echo "default fixture, one device, every part, every fixture, --repeats 1) and admitted by"
     echo "\`tools/admit_identity_columns.sh\`, which regenerated"
-    echo "\`python/mojolearn/verify_reference/table.json\` from every committed column."
+    echo "\`python/mojolearn/verify_reference/table.json\` for these lanes, preserving every other row:"
+    echo "\`$LANES\`. Original source records are retained whole."
     echo "Source commit: \`$C\`."
     echo
     echo "| record | class / vendor / cells | sha256 |"
@@ -253,19 +284,27 @@ for f in "${files[@]}"; do
     echo "| \`$label/$base\` | $line | \`$(shasum -a 256 "$f" | cut -c1-16)\` |" >> "$DEST/README.md"
 done
 
-cli --all --emit-reference "$TABLE" > "$EVID/emit.log" 2>&1 || die "emit-reference failed; see $EVID/emit.log"
-tail -n 1 "$EVID/emit.log" > "$DEST/admission-summary.json"
+# Rebuild with final committed record paths, then revalidate before publishing.
+# A failure can leave original raw records retained, but never a changed table.
+candidate --records "$ROOT/bench/results/identity_break"
+tail -n 1 "$tmp/emit.log" > "$DEST/admission-summary.json"
+cp "$tmp/agreement.json" "$DEST/agreement-summary.json"
 cut -c1-400 "$DEST/admission-summary.json"
-grep -F "$DEST" "$EVID/emit.log" | grep -c '^use ' | sed 's/^/new records used by the builder: /'
-"${PY[@]}" tools/identity_columns.py report --table "$TABLE" --commit "$C" --out "$DEST/reference-report.json"
+"${PY[@]}" tools/identity_columns.py report --table "$tmp/table.json" --commit "$C" --out "$DEST/reference-report.json"
 {
     echo
-    echo "Builder summary: \`admission-summary.json\`. Routine-profile reference parts from this"
+    echo "Builder summary: \`admission-summary.json\`; selected GPU agreement: \`agreement-summary.json\`."
+    echo "Routine-profile reference parts from this"
     echo "commit vs. still older: \`reference-report.json\` (tools/identity_columns.py report)."
 } >> "$DEST/README.md"
-checks "$TABLE"
+checks "$tmp/table.json"
+[ $ST_RC = 0 ] && [ $COV_RC = 0 ] && [ $PTX_RC = 0 ] \
+    || die "candidate checks failed; reference table unchanged"
+"${PY[@]}" tools/identity_admission_guard.py publish --base "$tmp/base.json" \
+    --candidate "$tmp/table.json" --lanes "$LANES" --destination "$TABLE" \
+    > "$tmp/publication.json" || die "table publication refused; see $tmp/publication.json"
 echo "NEXT (after SELFTEST rc=0):"
 echo "  git add $DEST $TABLE && git commit -m 'verify_reference: table regenerated from ${C:0:9} columns' && git push"
-echo "  then on one GPU box: tools/record_identity_column.sh <gpu-label> <outdir> --models  (this pushed head)"
-echo "  then here: tools/admit_identity_columns.sh --models <outdir>/models"
+echo "  Re-record portable model files only if their admitted model/batch hashes changed."
+echo "  Preserve every unaffected model in the replacement manifest; --models replaces the whole bundle."
 [ $ST_RC = 0 ] && [ $COV_RC = 0 ] && [ $PTX_RC = 0 ]

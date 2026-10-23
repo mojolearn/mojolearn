@@ -721,9 +721,10 @@ def pypi_wheel_record(manifest):
     (what box_key and the race data hash read) plus the whole manifest under `pypi`."""
     # the package's distribution: mojolearn-core on Linux (0.8.56+), mojolearn on Apple and before
     core = next((f for f in manifest.get("files") or [] if f.get("distribution") in ("mojolearn-core", "mojolearn")), {})
+    source = 'candidate' if manifest.get('schema') == 'mojolearn-candidate-wheel-manifest/1' else 'pypi'
     return {"file": core.get("file"), "sha256": core.get("sha256"), "bytes": core.get("bytes"),
-            "source": "pypi", "index_url": manifest.get("index_url"),
-            "requested": manifest.get("requested"), "pypi": manifest}
+            "source": source, "index_url": manifest.get("index_url"),
+            "requested": manifest.get("requested"), source: manifest}
 
 
 def pypi_wheel_guard(args, python, vendor):
@@ -1576,11 +1577,26 @@ def setup_python(args, vendor, out, log):
                 raise SystemExit("bench_board: venv creation failed (rc %d); see %s" % (rc, log))
     wheel = None
     if args.skip_install:
+        if getattr(args, 'candidate_wheel', None):
+            raise SystemExit('candidate artifact setup requires installing the explicit local wheels')
         return python, wheel
     pip = [python, "-m", "pip", "install", "--no-input", "--disable-pip-version-check"]
     wheels = os.path.join(cache_dir(args, out), "wheels")
     os.makedirs(wheels, exist_ok=True)
-    if vendor in ("nvidia", "amd") and not args.mojolearn_wheel:
+    if getattr(args, 'candidate_wheel', None):
+        if not args.mojolearn_version or not args.candidate_source_commit or args.mojolearn_wheel:
+            raise SystemExit('candidate wheels require version/source commit and cannot mix with mojolearn-wheel')
+        manifest_path = os.path.abspath(args.wheel_manifest or os.path.join(out, 'wheel-manifest.json'))
+        cmd = [sys.executable, os.path.join(HERE, 'candidate_wheel_install.py'),
+               '--version', args.mojolearn_version, '--vendor', vendor, '--python', python,
+               '--source-commit', args.candidate_source_commit, '--manifest', manifest_path, '--log', log+'.candidate']
+        for path in args.candidate_wheel:
+            cmd += ['--wheel', os.path.abspath(path)]
+        if run_logged(cmd, None, log, 7200):
+            raise SystemExit('candidate wheel installation/provenance failed; see '+log)
+        args.wheel_manifest = manifest_path
+        wheel = pypi_wheel_record(PYPI.load_manifest(manifest_path))
+    elif vendor in ("nvidia", "amd") and not args.mojolearn_wheel:
         # PyPI provenance (Andrew 2026-10-14): ours on a GPU box is the PyPI release, core plus the
         # vendor plugin, downloaded from pypi.org/simple, hashed, checked against PyPI's JSON digests
         # and installed from exactly those files (tools/pypi_wheel_install.py). Every cell's
@@ -4541,6 +4557,8 @@ def build_parser():
     p.add_argument("--evidence-local-only", action="store_true",
                    help="retain evidence locally for an offline smoke; full measurements require verified R2 retention")
     p.add_argument("--mojolearn-version", default=None, help="pip install mojolearn==<V>")
+    p.add_argument('--candidate-wheel', action='append', help='explicit unpublished core/vendor artifact; repeat for each required wheel')
+    p.add_argument('--candidate-source-commit', help='full frozen source SHA required with candidate wheels')
     p.add_argument("--mojolearn-wheel", default=None,
                    help="install this wheel file instead of downloading one (sha256 recorded)")
     p.add_argument("--wheel-manifest", default=None,

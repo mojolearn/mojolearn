@@ -115,6 +115,8 @@ fi
 # (an unset switch keeps every binding cache key as it was).
 FWD_LAYOUT=""
 [ -z "${MOJOLEARN_MERGED_BINDINGS+set}" ] || FWD_LAYOUT="export MOJOLEARN_MERGED_BINDINGS=$MOJOLEARN_MERGED_BINDINGS"
+RELEASE_MODES=$(python3 "$ROOT/tools/release_modes.py") || die "invalid release modes"
+export MOJOLEARN_RELEASE_MODES="$RELEASE_MODES"
 SHORT=$(printf '%s' "$COMMIT" | cut -c1-9)
 [ -n "$OUT" ] || OUT="${MOJOLEARN_EVIDENCE_ROOT:-$HOME/mojolearn-evidence}/releases/$COMMIT/linux-cpu-box/$(date -u +%Y-%m-%d_%H%M%S)"
 [ ! -e "$OUT" ] || die "$OUT exists"
@@ -128,7 +130,7 @@ git -C "$ROOT" worktree add --detach "$WT" "$COMMIT" > /dev/null 2>&1 || die "ca
 [ "$(git -C "$WT" rev-parse HEAD)" = "$COMMIT" ] || die "worktree HEAD is not $COMMIT"
 
 # ------------------------------------------------------------ the route overlay
-OVERLAY="tools/release061_remote_build.sh tools/cpu_build_guard.py tools/release_linux_cpu_box.sh tools/bincache.py"
+OVERLAY="tools/release061_remote_build.sh tools/cpu_build_guard.py tools/release_linux_cpu_box.sh tools/bincache.py tools/release_modes.py"
 ( cd "$ROOT" && tar czf "$TMPF/overlay.tgz" $OVERLAY ) || die "overlay tarball"
 # None of these may be in the build's source inventory (linux_surface_qualification.sh's walk).
 for f in $OVERLAY; do
@@ -140,6 +142,7 @@ cat > "$TMPF/cmd.sh" <<EOF
 set -u
 cd /root/mojolearn
 $FWD_LAYOUT
+export MOJOLEARN_RELEASE_MODES='$RELEASE_MODES'
 echo '$B64' | base64 -d > /root/route-overlay.tgz
 mkdir -p "\$LEG_OUT/release"
 { echo "overlay_sha256=\$(sha256sum /root/route-overlay.tgz | cut -c1-64)"

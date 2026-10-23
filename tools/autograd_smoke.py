@@ -91,6 +91,10 @@ BINDING_VENDOR = {"metal": "metal", "nvidia": "cuda", "amd": "hip"}
 TIMEOUT_S = 5
 #: the vendor column define a GPU check is built with (bindings/build_byte_lm.sh's rule)
 COLUMN_DEFINE = {"metal": [], "nvidia": ["-D", "MOJOLEARN_COLUMN_NVIDIA"], "amd": ["-D", "MOJOLEARN_COLUMN_AMD"]}
+# The Linux gate executables move from CPU build boxes to different GPU
+# hosts. Match the wheels' portable host ISA instead of inheriting the build
+# machine's AVX-512/other features. Metal keeps its existing build command.
+HOST_TARGET_CPU = {"nvidia": "x86-64-v3", "amd": "x86-64-v3"}
 ENTRIES = (
     {"name": "autograd-gradients", "source": "autograd/checks/gpu.mojo",
      "what": "the autograd gradient suite on the vendor's GPU, one PASS line and digest per case"},
@@ -534,6 +538,8 @@ def build_commands(vendor, mojo, bin_dir, target=None):
         if "source" not in e:
             continue
         cmd = [mojo, "build", "-j", "1", "-D", "MOJOLEARN_NUMERIC_IDENTICAL=1"] + COLUMN_DEFINE[vendor]
+        if vendor in HOST_TARGET_CPU:
+            cmd += ["--target-cpu", HOST_TARGET_CPU[vendor]]
         if target:
             cmd += ["--target-accelerator", target]
         cmd += ["-I", str(ROOT), str(ROOT / e["source"]), "-o", str(binary(bin_dir, e, vendor))]

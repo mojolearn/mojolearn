@@ -484,7 +484,27 @@ retain_results() {
     [ "${RESULTS_RETAINED:-0}" = 1 ] && return 0
     [ -n "${SSH_TARGET:-}" ] || return 0  # no work was staged before SSH
     mkdir -p "$OUT/remote"
-    bssh 'if [ -d /root/leg_out ]; then cp /root/leg_box.log /root/leg_out/ 2>/dev/null || true; fi; mkdir -p /root/leg_out; { date -u; uname -a; cat /sys/fs/cgroup/cpu.max /sys/fs/cgroup/memory.max 2>/dev/null; } > /root/leg_out/retention-hardware.txt; tar chzf /root/results-cpu-leg-retained.tgz -C /root leg_out && sha256sum /root/results-cpu-leg-retained.tgz' > "$OUT/retention-remote.sha256" 2> "$OUT/retention.log" || return 1
+    # Resolve only the result-root link. Following every nested link would
+    # archive shared compiler caches through a fault-arm checkout's .pixi.
+    # Actual files, including large native binaries, remain unfiltered.
+    bssh 'if [ -d /root/leg_out ]; then cp /root/leg_box.log /root/leg_out/ 2>/dev/null || true; fi; mkdir -p /root/leg_out; { date -u; uname -a; cat /sys/fs/cgroup/cpu.max /sys/fs/cgroup/memory.max 2>/dev/null; } > /root/leg_out/retention-hardware.txt; python3 - /root/leg_out /root/results-cpu-leg-retained.tgz' > "$OUT/retention-remote.sha256" 2> "$OUT/retention.log" <<'RETENTION_PY' || return 1
+import hashlib
+from pathlib import Path
+import sys
+import tarfile
+
+result_root = Path(sys.argv[1]).resolve(strict=True)
+archive_path = Path(sys.argv[2])
+if not result_root.is_dir():
+    raise NotADirectoryError(result_root)
+with tarfile.open(archive_path, "w:gz", compresslevel=6, dereference=False) as archive:
+    archive.add(result_root, arcname="leg_out")
+digest = hashlib.sha256()
+with archive_path.open("rb") as stream:
+    for block in iter(lambda: stream.read(1024 * 1024), b""):
+        digest.update(block)
+print(digest.hexdigest(), archive_path)
+RETENTION_PY
     bssh 'cat /root/results-cpu-leg-retained.tgz' > "$OUT/results-complete.tgz" 2>> "$OUT/retention.log" || return 1
     local expected actual
     expected=$(awk 'NR==1 {print $1}' "$OUT/retention-remote.sha256")
