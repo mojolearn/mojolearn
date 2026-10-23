@@ -4,7 +4,7 @@
 # walking containers, so subclass properties/iterators cannot run first.
 from std.python import Python, PythonObject
 from bindings.native_torch_admission import native_torch_exact, native_torch_admit
-from bindings.py_balanced import py_call, py_type, py_fields, py_contains
+from bindings.py_balanced import py_call, py_type, py_fields, py_contains, py_get
 
 
 def _one_of(cls: PythonObject, types: PythonObject) raises -> Bool:
@@ -12,6 +12,25 @@ def _one_of(cls: PythonObject, types: PythonObject) raises -> Bool:
         if cls is types[k]:
             return True
     return False
+
+
+def _ctypes_array_owner(owner_type: PythonObject, context: PythonObject) raises -> Bool:
+    """A class made directly from the connected `ctypes.Array` that defines
+    no Python buffer hook of its own: its buffer export is ctypes' C
+    implementation. The library's uninitialized native output store
+    (`_buffer._output_store`, a per-(code, length) ctypes array class) is
+    one: Arrays from `astype`, the label encoders and the float64 to float32
+    converters own one, and an estimator that kept such an Array as a fitted
+    field could not be saved (ARIMA `llf_`, AMD verify of 7c6e0dade)."""
+    var base = py_get(context, "ctypes_array_base")
+    if base is None:
+        return False
+    var b = Python.import_module("builtins")
+    var bases = py_call(b.type.__dict__["__bases__"].__get__, owner_type)
+    if len(bases) != 1 or bases[0] is not base:
+        return False
+    var own = py_call(b.type.__dict__["__dict__"].__get__, owner_type)
+    return not py_contains(own, "__buffer__") and not py_contains(own, "__release_buffer__")
 
 
 def sequential_integer(value: PythonObject, context: PythonObject) raises -> Bool:
@@ -47,7 +66,8 @@ def sequential_admit_value(value: PythonObject, context: PythonObject, depth: In
         # A custom Python exporter may carry release callbacks. The standard
         # buffer types connected at import expose their buffers in native C.
         var owner = value.obj
-        if not _one_of(py_type(owner), context["buffer_owner_types"]):
+        var owner_type = py_type(owner)
+        if not _one_of(owner_type, context["buffer_owner_types"]) and not _ctypes_array_owner(owner_type, context):
             raise Error("TypeError: Sequential requires a memoryview over a native buffer owner")
         return
     if _one_of(cls, context["native_value_types"]) or _one_of(cls, context["scalar_types"]):

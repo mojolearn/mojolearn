@@ -283,6 +283,37 @@ def test_save_load_round_trip_over_every_input_kind_the_verify_lanes_pass():
                     assert Path(again).read_bytes() == Path(path).read_bytes(), f"re-save differs ({where})"
 
 
+def test_save_accepts_a_fitted_array_in_the_native_output_store():
+    """`Array.astype` (and the label encoders and float64 to float32
+    converters) return Arrays over `_buffer._output_store`, a ctypes array
+    class; the 0.8.55 ARIMA kept `llf_ = stats[:batch].astype("<f8")`, and
+    `save` refused it ("Sequential requires a memoryview over a native buffer
+    owner", AMD verify of 7c6e0dade). A fitted field held in that store saves
+    and loads to the same bytes."""
+    if not _can_fit():
+        print("SKIP: nothing in this process fits ARIMA (no GPU set, no arima host binding)")
+        return
+    import ctypes
+    import tempfile
+
+    import numpy as np
+
+    rng = np.random.default_rng(11)
+    series = np.ascontiguousarray(rng.standard_normal((4, 96)).astype(np.float32))
+    m = mojolearn.ARIMA(order=(1, 0, 0)).fit(series)
+    held = m.llf_.astype("<f8")
+    assert isinstance(held._store, ctypes.Array), (
+        f"astype no longer returns the native output store ({type(held._store).__name__}); "
+        "this test must hold a field in that store some other way")
+    m.llf_ = held
+    with tempfile.TemporaryDirectory(prefix="arima_output_store_") as tmp:
+        path = str(Path(tmp) / "m.npz")
+        m.save(path)
+        back = mojolearn.ARIMA.load(path)
+        assert np.asarray(back.llf_).tobytes() == np.asarray(held).tobytes()
+        assert np.asarray(back.forecast(5)).tobytes() == np.asarray(m.forecast(5)).tobytes()
+
+
 if __name__ == "__main__":
     for name in [n for n in sorted(globals()) if n.startswith("test_")]:
         globals()[name]()
