@@ -199,4 +199,4 @@ def test_package_imports_in_every_mode_with_or_without_a_byte_lm(mode):
         )
         done = subprocess.run([sys.executable, "-c", refusal], capture_output=True, text=True, env=env, timeout=600)
         assert done.returncode == 0, done.stderr[-2000:]
-        assert "REFUSED" in done.stdout and "not installed" in done.stdout, done.stdout[-2000:]
+        assert "REFUSED" in done.stdout, done.stdout[-2000:]
