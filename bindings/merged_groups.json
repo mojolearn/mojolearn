@@ -147,7 +147,8 @@
      "_mojolearn_x_ann_host",
      "_mojolearn_x_metrics_host",
      "_mojolearn_runtime_model_selection_host",
-     "_mojolearn_runtime_manifold_host"
+     "_mojolearn_runtime_manifold_host",
+     "_mojolearn_runtime_sequential_host"
     ]
    },
    "optional": {}

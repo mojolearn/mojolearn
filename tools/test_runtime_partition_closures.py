@@ -85,3 +85,33 @@ def test_manifold_owner_has_no_tokenizer_type_registration_or_archive_dependency
     release = json.loads((ROOT/'bindings/merged_groups.json').read_text())['dirs']['host']['groups']
     assert set(release) == {'_mojolearn_native_host'}
     assert release['_mojolearn_native_host'].count('_mojolearn_runtime_manifold_host') == 1
+
+
+def test_sequential_implementation_edits_do_not_invalidate_tokenizer():
+    groups = json.loads((ROOT/'bindings/development_groups.json').read_text())['groups']
+    graph = SourceGraph(ROOT)
+    paths = ('bindings/sequential_execution.mojo', 'bindings/sequential_checkpoint.mojo')
+    owners = {path: set() for path in paths}
+    for mode, partitions in groups.items():
+        for name, members in partitions.items():
+            closure = graph.closure(members)
+            assert closure['scope'] == 'closure', closure['unresolved']
+            for path in paths:
+                if path in closure['files']:
+                    owners[path].add((mode, name))
+    assert all(found == {('host', 'runtime_sequential')} for found in owners.values()), owners
+
+
+def test_sequential_keeps_all_seven_registered_types_in_their_original_owner():
+    graph = SourceGraph(ROOT)
+    owner = graph.closure(['_mojolearn_runtime_sequential_host'])
+    tokenizer = graph.closure(['_mojolearn_tokenizer_host'])
+    assert owner['scope'] == tokenizer['scope'] == 'closure'
+    assert 'bindings/sequential_execution.mojo' in owner['files']
+    assert 'bindings/sequential_execution.mojo' not in tokenizer['files']
+    assert all('.add_type' not in (ROOT/path).read_text() for path in owner['files'])
+    source = (ROOT/'bindings/_mojolearn_tokenizer_host.mojo').read_text()
+    assert source.count('module.add_type[') == 7
+    release = json.loads((ROOT/'bindings/merged_groups.json').read_text())['dirs']['host']['groups']
+    assert set(release) == {'_mojolearn_native_host'}
+    assert release['_mojolearn_native_host'].count('_mojolearn_runtime_sequential_host') == 1
