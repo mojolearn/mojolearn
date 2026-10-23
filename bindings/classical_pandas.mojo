@@ -13,6 +13,21 @@ from bindings.sequential_admission import _one_of, sequential_admit_value
 from bindings.py_balanced import py_call, py_type, py_get, py_fields
 
 
+def _pd_native_metaclass(cls: PythonObject) raises -> Bool:
+    var b = Python.import_module("builtins")
+    if py_type(cls) is b.type:
+        return True
+    # pandas' ordinary DatetimeIndex/TimedeltaIndex classes use ABCMeta.
+    # Accept its exact loaded identity for native metadata reads only;
+    # never invoke abstract checks, metaclass hooks or class constructors.
+    var sys = Python.import_module("sys")
+    var module = py_get(sys.modules, "abc")
+    if module is None or py_type(module) is not py_type(sys):
+        return False
+    var meta = py_get(py_fields(module), "ABCMeta")
+    return py_type(meta) is b.type and py_type(cls) is meta
+
+
 def _pd_class(module_name: String, name: String) raises -> PythonObject:
     var b = Python.import_module("builtins")
     var sys = Python.import_module("sys")
@@ -20,7 +35,7 @@ def _pd_class(module_name: String, name: String) raises -> PythonObject:
     if module is None or py_type(module) is not py_type(sys):
         return PythonObject(None)
     var cls = py_get(py_fields(module), name)
-    return cls if py_type(cls) is b.type else PythonObject(None)
+    return cls if _pd_native_metaclass(cls) else PythonObject(None)
 
 
 def native_pandas_exact(value: PythonObject) raises -> Bool:
@@ -46,7 +61,7 @@ def _pd_type_fields(cls: PythonObject) raises -> PythonObject:
 def _pd_fields(value: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
     var cls = py_type(value)
-    if py_type(cls) is not b.type:
+    if not _pd_native_metaclass(cls):
         raise Error("TypeError: pandas storage requires ordinary native class metadata")
     var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)
     for k in range(len(mro)):  # driver-loop: over the admitted class's native dictionary descriptors
