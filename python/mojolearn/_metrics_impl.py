@@ -57,16 +57,14 @@ Examples
 # `metrics/checks/regression_metrics_check.mojo` and `silhouette_check.mojo`.
 # cuML defaults come from the pinned v26.08.00 checkout.
 
-from . import _portable_math as math
 import numbers
-from ._buffer import _materialize, _native, materialize_f32_lists
-from ._labels import is_bool, flatten_labels, flat_view
+from ._buffer import _materialize, _native
+from ._labels import is_bool, flatten_labels
 from ._arrays import _addr, _addr_ro
 
 from . import _backend
 from ._array import Array
-from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_i64_c, empty
-from ._labels import encode_labels, sorted_classes
+from ._buffer import all_finite, as_f32_c, as_i64_c, empty
 from .linear_model import (
     _buffer_format, _dtype_name, _flatten, _is_integer_labels, _shape_of,
 )
@@ -1288,23 +1286,6 @@ def log_loss(y_true, y_pred, *, normalize=True, sample_weight=None, labels=None,
                    _NATIVE_CONTEXT)
 
 
-def _binary_ranking_inputs(y_true, y_score, sample_weight):
-    if sample_weight is not None:
-        raise NotImplementedError("binary ranking metrics do not yet support sample_weight")
-    true, kind = _classification_encoded(y_true, "y_true")
-    classes = sorted(_label_set(true))  # glue: sorts the distinct class labels
-    if len(classes) > 2:
-        raise ValueError("binary ranking metrics support at most two observed classes")
-    scores = materialize_f32_lists(y_score, "input")[0]
-    if scores.dtype != "<f4":
-        raise TypeError("binary ranking scores must have dtype float32")
-    if scores.ndim != 1 or len(scores) != len(true):
-        raise ValueError("binary ranking scores must be one-dimensional with the same length as y_true")
-    if not all_finite(scores):
-        raise ValueError("binary ranking scores must be finite")
-    if len(true) > 2147483647:
-        raise ValueError("binary ranking metrics exceed the native Int32 indexing bound")
-    return true, kind, classes, as_f32_c(scores, ndim=scores.ndim, name="scores")[0]
 
 
 # Maintainer notes: the binary unweighted full-AUC call keeps its own kernel
@@ -1356,24 +1337,8 @@ def roc_auc_score(y_true, y_score, *, average="macro", sample_weight=None,
     >>> s = np.array([0.1, 0.4, 0.35, 0.8], dtype=np.float32)
     >>> auc = metrics.roc_auc_score(y, s)
     """
-    if (average != "macro" or multi_class != "raise" or labels is not None or sample_weight is not None
-            or not (max_fpr is None or (not is_bool(max_fpr) and isinstance(max_fpr, numbers.Real)
-                                        and max_fpr == 1))
-            or len(_shape_of(y_score)) == 2):
-        # lane/metrics: sample_weight, partial AUC (max_fpr), multiclass
-        # one-vs-rest / one-vs-one, labels and averages, from the x_metrics
-        # device curve; the binary unweighted full-AUC call keeps its kernel.
-        from ._expansion_metrics import roc_auc_options
-        return roc_auc_options(y_true, y_score, average, sample_weight, max_fpr, multi_class, labels,
-                               numeric_mode)
-    true, _, classes, scores = _binary_ranking_inputs(y_true, y_score, sample_weight)
-    if len(classes) != 2:
-        raise ValueError("roc_auc_score requires both positive and negative classes")
-    encoded = _label_map(true, lambda v: int(v == classes[1]))
-    result = empty(1, '<f4')
-    _get_binding(numeric_mode).roc_auc_score(
-        _addr_ro(encoded), _addr_ro(scores), _addr(result), [len(true)])
-    return float(result[0])
+    return _NATIVE(None, "family_mcls_roc_auc", (_get_binding(numeric_mode), y_true, y_score, average, sample_weight,
+                                                  max_fpr, multi_class, labels, numeric_mode), _NATIVE_CONTEXT)
 
 
 # Maintainer notes: the default call keeps its own kernel and Float32 outputs
@@ -1428,39 +1393,8 @@ def precision_recall_curve(y_true, y_score, *, pos_label=None, sample_weight=Non
     >>> s = np.array([0.1, 0.4, 0.35, 0.8], dtype=np.float32)
     >>> precision, recall, thresholds = metrics.precision_recall_curve(y, s)
     """
-    if not is_bool(drop_intermediate):
-        raise ValueError("drop_intermediate must be a bool")
-    if drop_intermediate or sample_weight is not None:
-        # lane/metrics: Float64 curves from the x_metrics device sort and
-        # counts; the default call keeps its kernel and Float32 outputs.
-        from ._expansion_metrics import precision_recall_curve_options
-        return precision_recall_curve_options(y_true, y_score, pos_label, sample_weight,
-                                              drop_intermediate, numeric_mode)
-    true, kind, classes, scores = _binary_ranking_inputs(y_true, y_score, sample_weight)
-    if pos_label is None:
-        if kind != "integer" or classes not in ([0], [1], [-1], [0, 1], [-1, 1]):
-            raise ValueError("pos_label must be specified for labels outside {0,1} or {-1,1}")
-        positive = 1
-    else:
-        values, positive_kind = _classification_labels([pos_label], "pos_label")
-        if kind != positive_kind:
-            raise ValueError("pos_label must use the same type as y_true")
-        positive = values[0]
-    encoded = _label_map(true, lambda v: int(v == positive))
-    n = len(true)
-    precision = empty(n + 1, '<f4')
-    recall = empty(n + 1, '<f4')
-    thresholds = empty(n, '<f4')
-    size = int(_get_binding(numeric_mode).precision_recall_curve(
-        _addr_ro(encoded), _addr_ro(scores), _addr(precision), _addr(recall),
-        _addr(thresholds), [n]))
-    if not 1 <= size <= n:
-        raise RuntimeError("precision_recall_curve returned an invalid threshold count")
-    if positive not in classes:
-        import warnings
-        warnings.warn("No positive class found in y_true; recall is set to one "
-                      "for all thresholds.", UserWarning, stacklevel=2)
-    return precision[:size + 1].copy(), recall[:size + 1].copy(), thresholds[:size].copy()
+    return _NATIVE(None, "family_mcls_pr_curve", (_get_binding(numeric_mode), y_true, y_score, pos_label, sample_weight,
+                                                   drop_intermediate, numeric_mode), _NATIVE_CONTEXT)
 
 
 def _selected_labels(labels, kind, observed):
