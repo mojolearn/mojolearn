@@ -150,3 +150,19 @@ def test_forest_and_adaboost_keep_encoded_labels_through_fit():
                 else:
                     np.testing.assert_array_equal(current, first)
     """)
+
+
+def test_silhouette_class_scratch_survives_native_encoding():
+    _debug_process("""
+        import numpy as np
+        from mojolearn import metrics
+
+        x = np.array([[0], [1], [10], [11]], dtype=np.float32)
+        labels = np.array([-3, -3, 100000, 100000], dtype=np.int32)
+        # Within-cluster distance is 1; other-cluster means are 10.5 and 9.5.
+        expected = np.array([1-1/10.5, 1-1/9.5, 1-1/9.5, 1-1/10.5])
+        for _ in range(12):
+            np.testing.assert_allclose(metrics.silhouette_samples(x, labels), expected, atol=1e-6, rtol=1e-6)
+            np.testing.assert_allclose(metrics.silhouette_score(x, labels), expected.mean(), atol=1e-6, rtol=1e-6)
+        np.testing.assert_array_equal(labels, [-3, -3, 100000, 100000])
+    """)
