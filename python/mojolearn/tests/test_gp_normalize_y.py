@@ -77,3 +77,59 @@ def test_constant_target_scales_by_one():
     assert m._y_train_std == 1.0 and m._y_train_mean == 7.0
     mean = np.asarray(m.predict(q))
     assert np.all(np.isfinite(mean))
+
+
+@pytest.mark.parametrize("kernel_name", ["rbf", "matern12", "matern52_ard", "normalized"])
+def test_regressor_save_load_round_trip_carries_the_length_scale_count(tmp_path, kernel_name):
+    """`save` writes the kernel's length-scale count (`kernel_ls`, ints[3])
+    and `load` checks it against the saved node lengths. Every GP save was
+    refused with "unknown saved item kind kernel_ls" (AMD verify of
+    7c6e0dade) until the item returned its total. A fit on the default
+    device route saves, loads, predicts the same bytes, and re-saves."""
+    import mojolearn
+
+    x, y, q = _data()
+    kernels = {
+        "rbf": lambda: ConstantKernel(1.0) * RBF(1.0) + WhiteKernel(0.1),
+        "matern12": lambda: ConstantKernel(1.0) * mojolearn.Matern(1.0, nu=0.5) + WhiteKernel(0.1),
+        "matern52_ard": lambda: ConstantKernel(1.0) * mojolearn.Matern([1.0, 1.0, 1.0], nu=2.5) + WhiteKernel(0.1),
+        "normalized": lambda: ConstantKernel(1.0) * RBF([1.0, 2.0, 0.5]) + WhiteKernel(0.1),
+    }
+    try:
+        m = GaussianProcessRegressor(kernel=kernels[kernel_name](),
+                                     normalize_y=kernel_name == "normalized").fit(x, y)
+    except (ImportError, NotImplementedError) as exc:
+        pytest.skip(f"no GP binding that fits on this install: {exc}")
+    path = tmp_path / "gp.npz"
+    m.save(str(path))
+    back = GaussianProcessRegressor.load(str(path))
+    mean, std = m.predict(q, return_std=True)
+    mean2, std2 = back.predict(q, return_std=True)
+    assert np.asarray(mean2).tobytes() == np.asarray(mean).tobytes()
+    assert np.asarray(std2).tobytes() == np.asarray(std).tobytes()
+    again = tmp_path / "again.npz"
+    back.save(str(again))
+    assert again.read_bytes() == path.read_bytes()
+
+
+def test_classifier_save_load_round_trip_carries_the_length_scale_count(tmp_path):
+    """The classifier's `meta[4]` is the same `kernel_ls` count (lanes gpc,
+    gpc-multiclass): a multiclass fit with an ARD kernel saves, loads,
+    predicts the same bytes, and re-saves."""
+    import mojolearn
+
+    x, _, q = _data()
+    labels = (np.argsort(np.argsort(x[:, 0] + x[:, 1])) * 3 // len(x)).astype(np.int64)
+    kernel = ConstantKernel(2.0) * mojolearn.Matern([1.0, 1.5, 0.5], nu=1.5)
+    try:
+        m = mojolearn.GaussianProcessClassifier(kernel=kernel).fit(x, labels)
+    except (ImportError, NotImplementedError) as exc:
+        pytest.skip(f"no GPC binding that fits on this install: {exc}")
+    path = tmp_path / "gpc.npz"
+    m.save(str(path))
+    back = mojolearn.GaussianProcessClassifier.load(str(path))
+    assert np.asarray(back.predict(q)).tobytes() == np.asarray(m.predict(q)).tobytes()
+    assert np.asarray(back.predict_proba(q)).tobytes() == np.asarray(m.predict_proba(q)).tobytes()
+    again = tmp_path / "again.npz"
+    back.save(str(again))
+    assert again.read_bytes() == path.read_bytes()
