@@ -237,6 +237,47 @@ def test_stats_retains_counter_aliases_without_reading_or_releasing_owners():
         assert calls == []
     assert calls == []
 
+
+@pytest.mark.parametrize('scalar_name', ['str_', 'bytes_'])
+@pytest.mark.parametrize('nested', [False, True])
+def test_stats_preserves_numpy_string_prefix_identity(scalar_name, nested):
+    # Restored from runtime-cache-readonly: splitting get/stats must not
+    # discard its ordinary NumPy string-key contract. Input construction is
+    # test setup; the public statistics call retains the exact key object.
+    np = pytest.importorskip('numpy')
+    scalar = getattr(np, scalar_name)('x')
+    prefix = ('scope', scalar) if nested else scalar
+    with arena.resident():
+        cache = _cache()
+        cache.uploads, cache.hits = 11, 13
+        arena._LOCAL.scope.caches[(1, prefix)] = (cache, object())
+        result = audit_native_call(arena.resident.stats).assert_native()
+        assert result == {prefix: (11, 13)}
+        assert next(iter(result)) is prefix
+
+
+@pytest.mark.parametrize('scalar_name', ['str_', 'bytes_'])
+def test_stats_refuses_numpy_string_subclass_hooks(scalar_name):
+    np = pytest.importorskip('numpy')
+    calls = []
+
+    class Prefix(getattr(np, scalar_name)):
+        def __hash__(self):
+            calls.append('hash')
+            return 17
+
+        def __eq__(self, other):
+            calls.append('eq')
+            return False
+
+    prefix = Prefix('x')
+    with arena.resident():
+        cache = _cache()
+        arena._LOCAL.scope.caches[(1, prefix)] = (cache, object())
+        calls.clear()
+        _refused(audit_native_call(arena.resident.stats), calls)
+
+
 @pytest.mark.parametrize('kind', ['prefix', 'scope_property', 'counter_property', 'local_key'])
 def test_stats_refuses_application_metadata_hooks(kind, monkeypatch):
     calls = []
