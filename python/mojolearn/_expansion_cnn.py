@@ -666,45 +666,6 @@ class Conv2d(_Layer):
         if x.shape[1] != self.in_channels:
             raise ValueError(f"mojolearn: input has {x.shape[1]} channels, the layer {self.in_channels}")
 
-    def _forward_t(self, x):
-        """`forward` of a `DeviceTensor`: x and the output stay resident."""
-        np = _np()
-        b = self._binding()
-        self._check_x(x)
-        if not self._res_ok(b, x):
-            return DeviceTensor._wrap(b, Conv2d.forward(self, x.numpy()))
-        out = _out_new(b, self._out_shape(x.shape))   # the conv stores every word
-        xp = self._pad_t(b, x)
-        prm = self._params(xp.shape)
-        if self.groups == 1:
-            self._res_w(b)   # G3: pins on first use (a no-op with the switch off)
-            pw = _pinned(self, b, "weight_", self.weight_.size)
-            pb = _pinned(self, b, "bias_", self.bias_.size)
-            if pw is not None and pb is not None:
-                # lane fam2-neural: the pinned weights are read where they live
-                b.x_cnn_conv2d_forward_m([xp.h, pw, pb, out.h], 0b1111, prm)
-            else:
-                w = np.ascontiguousarray(self.weight_, np.float32)
-                bias = np.ascontiguousarray(self.bias_, np.float32)
-                b.x_cnn_conv2d_forward_m([xp.h, w.ctypes.data, bias.ctypes.data, out.h], 0b1001, prm)
-        else:
-            # lane fam-neural (IDN_GROUP_M): each group's channels sliced,
-            # convolved and placed on the device (the host path slices with
-            # NumPy and crosses the bus twice per group); the same conv
-            # entry on the same words per group
-            dev = _dev_of(self, b)
-            og = self.out_channels // self.groups
-            xg = dev.get("xg", xp.size // self.groups)
-            yg = dev.get("yg", out.size // self.groups)
-            for g in range(self.groups):  # glue: one entry per group
-                wg = np.ascontiguousarray(self.weight_[g * og:(g + 1) * og], np.float32)
-                bg = np.ascontiguousarray(self.bias_[g * og:(g + 1) * og], np.float32)
-                b.x_cnn_chan_copy_m([xp.h, xg], 0b11, self._group_prm(xp.shape, self.in_channels, g) + [0])
-                b.x_cnn_conv2d_forward_m([xg, wg.ctypes.data, bg.ctypes.data, yg], 0b1001, prm)
-                b.x_cnn_chan_copy_m([yg, out.h], 0b11, self._group_prm(out.shape, self.out_channels, g) + [1])
-        self._x, self._xp = x, xp
-        return out
-
     def _backward_t(self, grad_out, x):
         """`backward` with a `DeviceTensor` grad_out or input."""
         np = _np()
@@ -767,36 +728,7 @@ class Conv2d(_Layer):
         return dx
 
     def forward(self, x):
-        np = _np()
-        if _is_t(x):
-            return self._forward_t(x)
-        x = _f32(x, "x")
-        if x.ndim != 4:
-            raise ValueError("mojolearn: Conv2d.forward takes (N, C, H, W)")
-        if x.shape[1] != self.in_channels:
-            raise ValueError(f"mojolearn: input has {x.shape[1]} channels, the layer {self.in_channels}")
-        b = self._binding()
-        if self._group_dev(b):
-            out = self._forward_t(DeviceTensor._wrap(b, x)).numpy()
-            self._x, self._xp = x, None
-            return out
-        xp = x
-        if self._explicit:
-            xp = np.empty(self._padded_shape(x.shape), np.float32)
-            b.x_cnn_pad2d_forward(x.ctypes.data, xp.ctypes.data, self._pad_params(x.shape))
-        prm = self._params(xp.shape)
-        out = np.empty(self._out_shape(x.shape), np.float32)
-        cg, og = self.in_channels // self.groups, self.out_channels // self.groups
-        for g in range(self.groups):  # glue: one conv launch per channel group (groups-sized: convolution groups)
-            xg = self._group(xp, g, cg)
-            wg = np.ascontiguousarray(self.weight_[g * og:(g + 1) * og])
-            bg = np.ascontiguousarray(self.bias_[g * og:(g + 1) * og])
-            yg = out if self.groups == 1 else np.empty((x.shape[0], og) + out.shape[2:], np.float32)
-            b.x_cnn_conv2d_forward(xg.ctypes.data, wg.ctypes.data, bg.ctypes.data, yg.ctypes.data, prm)
-            if self.groups > 1:
-                out[:, g * og:(g + 1) * og] = yg
-        self._x, self._xp = x, xp
-        return out
+        return _XCNN(self, "conv_forward", (x,), _XCNN_CONTEXT)
 
     def _bind_input(self, x):
         """`forward`'s input checks and explicit pad, without the conv."""
@@ -877,8 +809,7 @@ class Conv2d(_Layer):
         return X
 
     def transform(self, X):
-        out = self.forward(self._rows(X))
-        return out.reshape(out.shape[0], -1)
+        return _XCNN(self, "conv_transform", (X,), _XCNN_CONTEXT)
 
     def fit(self, X, y=None):
         """Layers carry their weights from construction; fit only records the input shape."""
@@ -913,15 +844,7 @@ class Conv1d(Conv2d):
         return super().set_weights(w.reshape(self.out_channels, self.in_channels // self.groups, 1, -1), bias)
 
     def forward(self, x):
-        if _is_t(x):
-            if x.ndim != 3:
-                raise ValueError("mojolearn: Conv1d.forward takes (N, C, L)")
-            return _t3(super().forward(_t4(x)))
-        x = _f32(x, "x")
-        if x.ndim != 3:
-            raise ValueError("mojolearn: Conv1d.forward takes (N, C, L)")
-        out = super().forward(x[:, :, None, :])
-        return out[:, :, 0, :]
+        return _XCNN(self, "conv_forward", (x,), _XCNN_CONTEXT)
 
     def backward(self, grad_out, x=None):
         if _is_t(grad_out) or _is_t(x):
@@ -1750,32 +1673,6 @@ class BatchNorm2d(_Layer):
     def _res_bn(self, b):
         return self.track_running_stats and _resident(b)
 
-    def _forward_res(self, b, xh, yh, n, c, hw, dev_y):
-        """G3: `_forward_dev` with running and aux resident (no download)."""
-        np = _np()
-        d = self.__dict__
-        dev = _dev_of(self, b)
-        aux, _, batch_stats = self._prep(n, c, hw, need_running=False)
-        k = 1 - d.get("_aux_k", 1)
-        name = "aux%d" % k
-        pend = d.get("_g_dev")
-        cur = dev.h.get(name)
-        if pend is not None and cur is not None and pend[1] == cur[0]:
-            self._grads_host()   # unread gradients in the array this forward reuses
-        ah = dev.upload(name, aux)
-        if d.get("_run_dev") is not dev or "running" not in dev.h:
-            r = np.concatenate([self.running_mean_, self.running_var_]).astype(np.float32)  # glue: packs running statistics for the binding (running_mean_-sized: BatchNorm channels)
-            dev.upload("running", r)
-            d["_run_dev"] = dev
-        rh = dev.h["running"][0]
-        b.x_cnn_batchnorm_forward_m([xh, yh, rh, ah], 0b1111 if dev_y else 0b1101,
-                                    [n, c, hw, 1 if batch_stats else 0])
-        if self.training:
-            d["_run_stale"] = True
-        d["_aux_k"] = k
-        self._aux, self._aux_dev, self._mode, self._x3shape = aux, (dev, ah), batch_stats, (n, c, hw)
-        return aux
-
     def _backward_res(self, b, xh, gh, dxh, dev_dx, dev_g):
         """G3: the backward into the forward's resident aux; dgamma / dbeta
         stay there until read. False when that forward was not resident."""
@@ -1788,60 +1685,6 @@ class BatchNorm2d(_Layer):
                                      [n, c, hw, 1 if self._mode else 0])
         self.__dict__["_g_dev"] = ad
         return True
-
-    def _nchw(self, x):
-        x = _f32(x, "x")
-        shape = x.shape
-        if x.ndim == 2:
-            x = x[:, :, None]
-        n, c = x.shape[:2]
-        if c != self.num_features:
-            raise ValueError(f"mojolearn: input has {c} channels, the layer {self.num_features}")
-        return np_reshape(x, (n, c, -1)), shape
-
-    def _prep(self, n, c, hw, need_running=True):
-        """The host words of one forward: (aux, running, batch_stats); the
-        batch counter moves here, as it did in `forward`. `need_running`
-        False (G3: the running statistics are resident) gives running None."""
-        np = _np()
-        C = self.num_features
-        # PyTorch: batch statistics in training mode, and in eval mode too when
-        # nothing is tracked; momentum=None is the cumulative average 1/batches.
-        batch_stats = self.training or not self.track_running_stats
-        factor = 0.0
-        if self.training and self.track_running_stats:
-            self.num_batches_tracked_ += 1
-            factor = 1.0 / self.num_batches_tracked_ if self.momentum is None else self.momentum
-        aux = np.zeros(2 + 7 * C, np.float32)
-        aux[0], aux[1] = np.float32(self.eps), np.float32(factor)
-        aux[2 + 5 * C:2 + 6 * C] = self.weight_
-        aux[2 + 6 * C:2 + 7 * C] = self.bias_
-        if not need_running:
-            running = None
-        elif self.track_running_stats:
-            running = np.concatenate([self.running_mean_, self.running_var_]).astype(np.float32)  # glue: packs fitted running statistics for the binding (running_mean_-sized: BatchNorm channels)
-        else:
-            running = np.concatenate([np.zeros(C, np.float32), np.ones(C, np.float32)])  # glue: packs initial running statistics for the binding (C-sized: BatchNorm channels)
-        return aux, running, batch_stats
-
-    def _finish(self, running):
-        C = self.num_features
-        if self.training and self.track_running_stats:
-            self.running_mean_, self.running_var_ = running[:C].copy(), running[C:].copy()
-
-    def _forward_dev(self, b, xh, yh, n, c, hw, dev_y=True):
-        """The forward of resident x (`xh`) into resident y (`yh`, or a host
-        array's address with `dev_y` False); the backward reads `xh` (lane
-        gap-neural-overhead2)."""
-        if self._res_bn(b):
-            return self._forward_res(b, xh, yh, n, c, hw, dev_y)
-        self._aux_dev = None
-        aux, running, batch_stats = self._prep(n, c, hw)
-        b.x_cnn_batchnorm_forward_m([xh, yh, running.ctypes.data, aux.ctypes.data], 0b0011 if dev_y else 0b0001,
-                                    [n, c, hw, 1 if batch_stats else 0])
-        self._finish(running)
-        self._aux, self._mode, self._x3shape = aux, batch_stats, (n, c, hw)
-        return aux
 
     def _backward_dev(self, b, xh, gh, dxh, dev_dx=True):
         """The backward from resident g (`gh`) into resident dx (`dxh`, or a
@@ -1864,46 +1707,7 @@ class BatchNorm2d(_Layer):
     # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_BN_FUSE.patch; record in docs/TOMBSTONES.md.
 
     def forward(self, x):
-        np = _np()
-        if _is_t(x):
-            # lane fam-neural (IDN_LAYER_DEV_IO): a resident x is read where
-            # it lives and y is a resident tensor (the entry BasicBlock
-            # already runs this way); the backward reads x in place
-            b = self._binding()
-            if _on_dev(b, x) and _idn(b, _F_LAYER_IO) and x.ndim >= 2 and x.size > 0:
-                shape = x.shape
-                n, c = shape[:2]
-                if c != self.num_features:
-                    raise ValueError(f"mojolearn: input has {c} channels, the layer {self.num_features}")
-                hw = x.size // (n * c)
-                y = DeviceTensor._new_out(b, shape)   # bn_apply stores every word
-                self._forward_dev(b, x.h, y.h, n, c, hw, dev_y=True)
-                self._xdev, self._x, self._shape, self._xdev_dev = x.h, None, shape, _dev_of(self, b)
-                self._xt = x  # keeps the resident words alive for the backward
-                return y
-        self._xt = None
-        x3, shape = self._nchw(x)
-        n, c, hw = x3.shape
-        b = self._binding()
-        y = np.empty_like(x3)
-        if _mixed(b):
-            # lane gap-neural-overhead2: x is uploaded once and stays on the
-            # device for the backward, which read it from the host again;
-            # the backward is the gradient at the forward's input (the
-            # tensor PyTorch saves)
-            dev = _dev_of(self, b)
-            xh = dev.upload("x", x3)
-            self._forward_dev(b, xh, y.ctypes.data, n, c, hw, dev_y=False)
-            self._xdev, self._x, self._shape, self._xdev_dev = xh, None, shape, dev
-            return y.reshape(shape) if len(shape) != 2 else y[:, :, 0]
-        aux, running, batch_stats = self._prep(n, c, hw)
-        b.x_cnn_batchnorm_forward(x3.ctypes.data, y.ctypes.data, running.ctypes.data, aux.ctypes.data,
-                                  [n, c, hw, 1 if batch_stats else 0])
-        self._finish(running)
-        self._aux_dev = None
-        self._x, self._aux, self._shape, self._mode = x3, aux, shape, batch_stats
-        self._x3shape, self._xdev = x3.shape, None
-        return y.reshape(shape) if len(shape) != 2 else y[:, :, 0]
+        return _XCNN(self, "bn_forward", (x,), _XCNN_CONTEXT)
 
     def backward(self, grad_out):
         np = _np()
@@ -1949,16 +1753,11 @@ class BatchNorm2d(_Layer):
         return X
 
     def transform(self, X):
-        out = self.forward(self._rows(X))
-        return out.reshape(out.shape[0], -1)
+        return _XCNN(self, "bn_transform", (X,), _XCNN_CONTEXT)
 
     def fit(self, X, y=None):
         """One training-mode pass over X (updates the running statistics)."""
-        was = self.training
-        self.training = True
-        self.forward(self._rows(X))
-        self.training = was
-        return self
+        return _XCNN(self, "bn_fit", (X,), _XCNN_CONTEXT)
 
 
 class BatchNorm1d(BatchNorm2d):
@@ -2212,76 +2011,6 @@ class BasicBlock(_Layer):
     # counters, running statistics and gradients; their own host-array
     # state (`_x`) is not filled by the block.
 
-    def _chain_ok(self, b):
-        convs = [self.conv1, self.conv2] + ([self.downsample[0]] if self.downsample else [])
-        return _mixed(b) and all(c.groups == 1 and not c._explicit for c in convs)  # glue: checks the block conv layer flags
-
-    def _conv_dev(self, b, conv, xh, xshape, name, dev):
-        oshape = conv._out_shape(xshape)
-        yh = dev.get(name, int(_np().prod(oshape)))  # glue: product of the output shape entries
-        pw, pb = conv._res_w(b)   # G3: the auto-pinned weights (None with the switch off)
-        if pw is not None and pb is not None:
-            b.x_cnn_conv2d_forward_m([xh, pw, pb, yh], 0b1111, conv._params(xshape))
-            return yh, oshape
-        w = _np().ascontiguousarray(conv.weight_)
-        bias = _np().ascontiguousarray(conv.bias_)
-        b.x_cnn_conv2d_forward_m([xh, w.ctypes.data, bias.ctypes.data, yh], 0b1001, conv._params(xshape))
-        return yh, oshape
-
-    def _bn_dev(self, b, bn, xh, shape, name, dev):
-        n, c = shape[:2]
-        hw = int(_np().prod(shape[2:]))  # glue: product of the spatial shape entries
-        if c != bn.num_features:
-            raise ValueError(f"mojolearn: input has {c} channels, the layer {bn.num_features}")
-        yh = dev.get(name, n * c * hw)
-        bn._forward_dev(b, xh, yh, n, c, hw)
-        bn._xdev, bn._x, bn._shape, bn._xdev_dev = xh, None, tuple(shape), dev
-        return yh
-
-    # TOMBSTONE: MOJOLEARN_IDN_CNN_BN_FUSE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
-    # Tried: BasicBlock._bn_dev_fused.
-    # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_BN_FUSE.patch; record in docs/TOMBSTONES.md.
-
-    def _forward_chain(self, b, x):
-        np = _np()
-        dev = _dev_of(self, b)
-        if x.ndim != 4:
-            raise ValueError("mojolearn: Conv2d.forward takes (N, C, H, W)")
-        if x.shape[1] != self.conv1.in_channels:
-            raise ValueError(f"mojolearn: input has {x.shape[1]} channels, the layer {self.conv1.in_channels}")
-        # lane idn-cnn-resident: a `DeviceTensor` x is read where it lives
-        xt = _is_t(x)
-        xh = x.h if xt else dev.upload("x", x)
-        # TOMBSTONE: MOJOLEARN_IDN_CNN_BN_FUSE (DROPPED-noise) deleted 2026-10-10 by lane/postmerge-act-6; code recoverable at 9f83ea479.
-        # Tried: the fused bn1 -> relu1 and bn2 -> add -> relu2 chain (flag bit _F_BN_FUSE).
-        # Restore: git apply experiments/removed/MOJOLEARN_IDN_CNN_BN_FUSE.patch; record in docs/TOMBSTONES.md.
-        c1, s1 = self._conv_dev(b, self.conv1, xh, x.shape, "c1", dev)
-        n1 = int(np.prod(s1))  # glue: product of the output shape entries
-        r1 = dev.get("r1", n1)
-        b1 = self._bn_dev(b, self.bn1, c1, s1, "b1", dev)
-        b.x_cnn_map2_m([b1, b1, r1], 0b111, [0, n1])
-        c2, s2 = self._conv_dev(b, self.conv2, r1, s1, "c2", dev)
-        n2 = int(np.prod(s2))  # glue: product of the output shape entries
-        b2 = self._bn_dev(b, self.bn2, c2, s2, "b2", dev)
-        idh = xh
-        if self.downsample:
-            d1, sd = self._conv_dev(b, self.downsample[0], xh, x.shape, "d1", dev)
-            idh = self._bn_dev(b, self.downsample[1], d1, sd, "d2", dev)
-        elif x.size != n2:
-            raise ValueError("mojolearn: the identity's shape is not the block's output shape")
-        sh = dev.get("s", n2)
-        b.x_cnn_map2_m([b2, idh, sh], 0b111, [2, n2])
-        if xt:
-            y = _out_new(b, s2)   # the ReLU stores every word
-            b.x_cnn_map2_m([sh, sh, y.h], 0b111, [0, n2])
-        else:
-            y = np.empty(s2, np.float32)
-            b.x_cnn_map2_m([sh, sh, y.ctypes.data], 0b011, [0, n2])
-        self._chain = dict(x=tuple(x.shape), xt=x if xt else None, s1=s1, s2=s2, xh=xh, c1=c1, b1=b1, r1=r1, c2=c2, s=sh,
-                           d1=self.downsample and d1, sd=self.downsample and sd)
-        self.conv1._x = self.conv1._xp = x
-        return y
-
     def _conv_back_dev(self, b, conv, xh, xshape, gh, oshape, name, dev):
         """conv's backward from resident g into resident dx `name`; sets its
         weight gradients (the same words `Conv2d.backward` sets)."""
@@ -2334,21 +2063,7 @@ class BasicBlock(_Layer):
         return dx
 
     def forward(self, x):
-        b = self._binding()
-        if _is_t(x):
-            if self._chain_ok(b) and _on_dev(b, x):
-                return self._forward_chain(b, x)
-            return DeviceTensor._wrap(b, self.forward(x.numpy()))
-        x = _f32(x, "x")
-        if self._chain_ok(b):
-            return self._forward_chain(b, x)
-        self._chain = None
-        out = self.relu1.forward(self.bn1.forward(self.conv1.forward(x)))
-        out = self.bn2.forward(self.conv2.forward(out))
-        identity = x
-        if self.downsample:
-            identity = self.downsample[1].forward(self.downsample[0].forward(x))
-        return self.relu2.forward(_add(self._binding(), out, identity))
+        return _XCNN(self, "block_forward", (x,), _XCNN_CONTEXT)
 
     def backward(self, grad_out):
         b = self._binding()
@@ -2373,8 +2088,7 @@ class BasicBlock(_Layer):
         return out
 
     def transform(self, X):
-        out = self.forward(BatchNorm2d._rows(self, X))
-        return out.reshape(out.shape[0], -1)
+        return _XCNN(self, "block_transform", (X,), _XCNN_CONTEXT)
 
     def fit(self, X, y=None):
         return self
@@ -2940,5 +2654,6 @@ class SAGEConv(_Layer):
 
 _native_xcnn_bridge.register(
     xcnn_tensor_class=DeviceTensor, xcnn_dev_class=_Dev, xcnn_maxpool_class=MaxPool2d,
-    xcnn_avgpool_class=AvgPool2d, xcnn_pool1d_class=_Pool1dMixin, xcnn_device_io_off=_DEVICE_IO_OFF,
+    xcnn_avgpool_class=AvgPool2d, xcnn_pool1d_class=_Pool1dMixin, xcnn_conv1d_class=Conv1d,
+    xcnn_device_io_off=_DEVICE_IO_OFF,
 )

@@ -11,6 +11,7 @@ layer methods are one call each into `xcnn_native_call`, which runs the same
 compiled entries with the same argument words and residency bits as the
 Python bodies it replaces.
 """
+from std.memory import memcpy
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains
 from bindings.py_typed_call import py_call_typed
@@ -212,7 +213,7 @@ def xcnn_wrap(entries: PythonObject, array: PythonObject, context: PythonObject)
     return t
 
 
-def _module_entries(module: PythonObject, context: PythonObject) raises -> PythonObject:
+def xcnn_module_entries(module: PythonObject, context: PythonObject) raises -> PythonObject:
     """The connected entries whose module is `module`."""
     var b = xcnn_builtins()
     var table = context["xcnn_bindings"]
@@ -233,7 +234,7 @@ def xcnn_host_of(value: PythonObject, context: PythonObject) raises -> PythonObj
     var out = xcnn_host_f32(shape, context)
     var size = xcnn_size(shape)
     if size:
-        var entries = _module_entries(value.b, context)
+        var entries = xcnn_module_entries(value.b, context)
         _ = py_call_typed(entries["symbols"]["x_cnn_res_download"], value.h, sequential_address(out), PythonObject(size))
     return out
 
@@ -286,7 +287,7 @@ def xcnn_dev(layer: PythonObject, entries: PythonObject, context: PythonObject) 
         # `_Dev.free()`: every handle of the old binding released, the table emptied
         var old = py_fields(dev)
         var table = old["h"]
-        var owner = _module_entries(old["b"], context)
+        var owner = xcnn_module_entries(old["b"], context)
         var handles = py_call(b.list, py_call(py_call(b.getattr, table, "values")))
         py_setitem(old, "h", Python.dict())
         for i in range(len(handles)):  # driver-loop: over the layer's resident array table
@@ -317,3 +318,55 @@ def xcnn_dev_get(layer: PythonObject, entries: PythonObject, name: String, count
     var handle = PythonObject(Int(py=h))
     py_setitem(table, PythonObject(name), Python.tuple(handle, n))
     return handle
+
+
+def xcnn_dev_upload(layer: PythonObject, entries: PythonObject, name: String, array: PythonObject,
+                    context: PythonObject) raises -> PythonObject:
+    """`_Dev.upload(name, a)`: resident array `name` holding the 4-byte words
+    of host array `a`."""
+    var size = Int(py=array.size)
+    var h = xcnn_dev_get(layer, entries, name, size, context)
+    _ = py_call_typed(entries["symbols"]["x_cnn_res_upload"], h, sequential_address(array), PythonObject(size))
+    return h
+
+
+def xcnn_dev_has(dev: PythonObject, name: String) raises -> Bool:
+    """`name in dev.h`."""
+    return py_contains(py_fields(dev)["h"], PythonObject(name))
+
+
+def xcnn_dev_handle(dev: PythonObject, name: String) raises -> PythonObject:
+    """`dev.h[name][0]`."""
+    return py_fields(dev)["h"][PythonObject(name)][0]
+
+
+def xcnn_download(dev: PythonObject, h: PythonObject, count: Int, context: PythonObject) raises -> PythonObject:
+    """`dev.download(h, np.empty(count, np.float32))`."""
+    var out = xcnn_host_f32([count], context)
+    if count:
+        var owner = xcnn_module_entries(py_fields(dev)["b"], context)
+        _ = py_call_typed(owner["symbols"]["x_cnn_res_download"], h, sequential_address(out), PythonObject(count))
+    return out
+
+
+def xcnn_slice_f32(source: PythonObject, offset: Int, count: Int, context: PythonObject) raises -> PythonObject:
+    """`a[offset:offset + count].copy()` of a C-ordered float32 array."""
+    var out = xcnn_host_f32([count], context)
+    if count:
+        memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(out))),
+               src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(source))) + offset,
+               count=count)
+    return out
+
+
+def xcnn_put_f32(dest: PythonObject, offset: Int, source: PythonObject, count: Int, name: String,
+                 context: PythonObject) raises:
+    """`dest[offset:offset + count] = source` (float32 words; `source` cast
+    as NumPy assignment casts it), refused unless it holds `count` values."""
+    var a = xseq_f32(sequential_input(source, context), name, False, context)
+    if Int(py=a.size) != count:
+        raise Error("ValueError: could not broadcast " + name + " into shape (" + String(count) + ",)")
+    if count:
+        memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(dest))) + offset,
+               src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(a))),
+               count=count)

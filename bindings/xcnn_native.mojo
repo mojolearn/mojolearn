@@ -9,6 +9,8 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
 from bindings.xcnn_common import xcnn_numpy
 from bindings.xcnn_pool_native import xcnn_pool_layers
+from bindings.xcnn_bn_native import xcnn_bn_layers
+from bindings.xcnn_conv_native import xcnn_conv_layers
 
 
 def xcnn_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
@@ -16,7 +18,12 @@ def xcnn_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
         var call = PythonObject(from_borrowed=args_ptr)
         var context = call[3]
         xcnn_numpy(context)
-        return xcnn_pool_layers(call[0], String(py=call[1]), call[2], context).steal_data()
+        var operation = String(py=call[1])
+        if operation.startswith("conv_forward") or operation.startswith("conv_transform") or operation.startswith("block_"):
+            return xcnn_conv_layers(call[0], operation, call[2], context).steal_data()
+        if operation.startswith("bn_"):
+            return xcnn_bn_layers(call[0], operation, call[2], context).steal_data()
+        return xcnn_pool_layers(call[0], operation, call[2], context).steal_data()
     except error:
         var text = String(error)
         if text.startswith("TypeError:"):
