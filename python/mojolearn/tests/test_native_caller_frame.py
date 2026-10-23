@@ -106,3 +106,75 @@ def test_public_outputs_inspect_callers_without_python_audit_callbacks(family):
     result = subprocess.run([sys.executable, "-c", script, family], env=env,
                             capture_output=True, text=True, timeout=180)
     assert result.returncode == 0, result.stdout + "\n" + result.stderr
+
+
+@pytest.mark.parametrize("name", ["ElasticNet", "Lasso", "KMeans"])
+def test_host_feature_warning_preserves_attribution_without_frame_callbacks(tmp_path, name):
+    from mojolearn.tests.test_host_archive_native import _archive
+    archive = _archive(tmp_path, name)
+    script = textwrap.dedent('''\
+        import json, sys, warnings
+        import numpy as np
+        from mojolearn import _classical_host as host
+        model = getattr(host, 'Host' + sys.argv[1]).load(sys.argv[2])
+        x = np.arange(6 * model.n_features_in_, dtype='f4').reshape(6, -1) / 4 - 1
+        expected = np.asarray(model.predict(x)).copy()
+        model.feature_names_in_ = np.asarray([str(i) for i in range(model.n_features_in_)], dtype=object)
+        active, events, retained = [False], [], []
+        def hook(event, args):
+            if active[0] and (event == 'sys._getframe' or
+                    (event == 'object.__getattr__' and len(args) > 1 and args[1] in ('f_code', 'f_back', 'f_globals'))):
+                events.append(event)
+                raise AssertionError('warning attribution called a Python audit hook')
+        def forbidden(*args):
+            retained.append(args)
+            raise AssertionError('retained frame callback called')
+        host._CLASSICAL['host_inference_context']['classical_getframe'] = forbidden
+        namespace = {'__name__': 'application.warning_probe'}
+        exec(compile('def invoke(model, values):\\n    return model.predict(values)\\n',
+                     'native_feature_warning_caller.py', 'exec'), namespace)
+        invoke = namespace['invoke']
+        sys.addaudithook(hook)
+        active[0] = True
+        try:
+            sys._getframe()
+        except AssertionError:
+            pass
+        finally:
+            active[0] = False
+        assert events == ['sys._getframe'], events
+        events.clear()
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.simplefilter('always', UserWarning)
+            active[0] = True
+            try:
+                actual = invoke(model, x)
+            finally:
+                active[0] = False
+        assert len(caught) == 1, caught
+        assert caught[0].category is UserWarning
+        assert caught[0].filename == 'native_feature_warning_caller.py', caught[0].filename
+        assert caught[0].lineno == 2, caught[0].lineno
+        assert 'was fitted with feature names' in str(caught[0].message)
+        np.testing.assert_array_equal(np.asarray(actual), expected)
+        with warnings.catch_warnings():
+            warnings.simplefilter('error', UserWarning)
+            active[0] = True
+            try:
+                invoke(model, x)
+            except UserWarning as error:
+                assert 'was fitted with feature names' in str(error)
+            else:
+                raise AssertionError('warning error filter did not stop prediction')
+            finally:
+                active[0] = False
+        assert events == [] and retained == [], (events, retained)
+        print(json.dumps({'family': sys.argv[1], 'audit_events': events, 'retained_calls': retained,
+                          'warning_line': caught[0].lineno}))
+    ''')
+    env = dict(os.environ)
+    package_root = str(Path(__file__).resolve().parents[2])
+    env['PYTHONPATH'] = package_root + (os.pathsep + env['PYTHONPATH'] if env.get('PYTHONPATH') else '')
+    result = subprocess.run([sys.executable, '-c', script, name, str(archive)], env=env,
+                            capture_output=True, text=True, timeout=180)
+    assert result.returncode == 0, result.stdout + '\n' + result.stderr
