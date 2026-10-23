@@ -22,7 +22,7 @@ def connect(basename, module):
             # loading its new owner, which would register the same type twice.
             raise ImportError("the tokenizer native ownership ABI is outdated; rebuild the complete host layout")
         owner_name = spec["binding"]
-        if not os.path.isfile(_backend.host_module_path(owner_name)):
+        if not os.path.isfile(_backend.host_module_path(owner_name)):  # cpu-route: import-time existence check for the native alias owner
             # The legacy module's native refusal entries keep metadata import
             # available. Connected entries are fixed for this process; adding
             # a previously missing binary requires a fresh process.
