@@ -20,10 +20,8 @@ from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_get, py_type, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.classical_arrays import classical_address, classical_typed, classical_host_f32, classical_kind, classical_is_f32
-from bindings.classical_validate import classical_view, _cast_x, RESHAPE_HINT
-from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
-from bindings.pca_exact import pca_copied
+from bindings.classical_arrays import classical_address, classical_typed, classical_host_f32
+from bindings.decomp_inputs import decomp_input, decomp_copied
 
 #: x_decomp/tsqr_core.mojo TS_MAX_N (`_linalg_impl._TS_MAX_N`): the widest X the TSQR takes
 comptime _TS_MAX_N = 512
@@ -104,41 +102,6 @@ def _decomp(mode: String, context: PythonObject) raises -> PythonObject:
     """The connected _mojolearn_x_decomp entries of `mode` (a dict), or the
     connection's refusal (a str)."""
     return context["tsvd_decomp"][PythonObject(mode)]
-
-
-def _input(source: PythonObject, context: PythonObject) raises -> PythonObject:
-    """X as C-order float32 (the caller's buffer when it already is one),
-    with scikit-learn's input refusals; an exact SciPy sparse container is
-    densified from its storage, as `_dense` densified it."""
-    var format = host_sparse_format(source)
-    if format.byte_length() > 0:
-        var dense = host_sparse_dense(source, format, context)
-        return classical_host_f32(dense, 2, "X", context)
-    var view = classical_view(source, context, "X")
-    var kind = classical_kind(view, context)
-    if kind == "c":
-        raise Error("Complex data not supported: TruncatedSVD got a complex X.")
-    if kind == "b" or kind == "i" or kind == "u" or kind == "f":
-        var nd = Int(py=view.ndim)
-        var shape = _repr(view.shape)
-        if nd < 2:
-            raise Error("Expected 2D array, got " + ("scalar" if nd == 0 else "1D") + " array instead (shape=" + shape + "). " + RESHAPE_HINT)
-        if nd == 2 and Int(py=view.shape[0]) == 0:
-            raise Error("Found array with 0 sample(s) (shape=" + shape + ") while a minimum of 1 is required by TruncatedSVD.")
-        if nd == 2 and Int(py=view.shape[1]) == 0:
-            raise Error("Found array with 0 feature(s) (shape=" + shape + ") while a minimum of 1 is required by TruncatedSVD.")
-    var x = _cast_x(view, "TruncatedSVD", context)
-    _ = view^
-    return x
-
-
-def _copied(source: PythonObject, context: PythonObject) raises -> Bool:
-    """`input_copied_`: whether X had to be copied to C-order float32 (a
-    densified sparse X counts as the dense array its storage holds)."""
-    var format = host_sparse_format(source)
-    if format.byte_length() > 0:
-        return not classical_is_f32(host_sparse_dense(source, format, context), context)
-    return pca_copied(source, context)
 
 
 def _too_small(rows: Int, cols: Int) -> String:
@@ -287,8 +250,8 @@ def tsvd_fit(model: PythonObject, source: PythonObject, context: PythonObject) r
     if _host_only(model):
         raise Error("ImportError: mojolearn: no CPU implementation of the TruncatedSVD fit on the host class; "
                     + "the host TruncatedSVD transforms a saved model only")
-    var x = _input(source, context)
-    py_setitem(fields, "input_copied_", PythonObject(_copied(source, context)))
+    var x = decomp_input(source, "TruncatedSVD", context)
+    py_setitem(fields, "input_copied_", PythonObject(decomp_copied(source, context)))
     var rows = Int(py=x.shape[0])
     var cols = Int(py=x.shape[1])
     if rows < 2 or cols < 2:
@@ -325,7 +288,7 @@ def tsvd_transform(model: PythonObject, source: PythonObject, context: PythonObj
     var fields = py_fields(model)
     if not py_contains(fields, "components_"):
         raise Error("mojolearn TruncatedSVD: call fit before transform")
-    var x = _input(source, context)
+    var x = decomp_input(source, "TruncatedSVD", context)
     var out = _project(model, fields, x, context)
     _ = x^
     return out
@@ -335,7 +298,7 @@ def tsvd_inverse_transform(model: PythonObject, source: PythonObject, context: P
     """X @ components_ (`inverse_transform` without the mean: its pointer is
     the components, a valid float32 address the entry does not read)."""
     var fields = py_fields(model)
-    var z = _input(source, context)
+    var z = decomp_input(source, "TruncatedSVD", context)
     var rows = Int(py=z.shape[0])
     var nc = _int(_attr(model, fields, "n_components_"))
     if Int(py=z.shape[1]) != nc:
