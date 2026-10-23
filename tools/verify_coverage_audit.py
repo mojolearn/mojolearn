@@ -1542,6 +1542,36 @@ ANNOTATIONS_BY_SRC[("jl_native_call", "bindings/_mojolearn_tokenizer_host.mojo")
     'Public johnson_lindenstrauss_min_dim calls jl_c, which checks eps and n_samples and computes the bound natively.' + " New source only: runtime execution and identity admission remain pending.")
 
 
+# A new native owner door; these lanes consume its public outputs.
+ANNOTATIONS_BY_SRC[("dict_learning_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", [],
+    'Public DictionaryLearning, MiniBatchDictionaryLearning, SparseCoder, SparsePCA, MiniBatchSparsePCA fit/fit_transform/transform/inverse_transform and sparse_encode call dict_learning_c, which runs the existing x_decomp entries through the native decomposition kit.' + " New source only: runtime execution and identity admission remain pending.")
+
+
+# A new native owner door; these lanes consume its public outputs.
+ANNOTATIONS_BY_SRC[("pls_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", [],
+    'Public PLSRegression, PLSCanonical and CCA fit/fit_transform/transform/inverse_transform/predict call pls_c, which runs the existing x_decomp entries through the native decomposition kit.' + " New source only: runtime execution and identity admission remain pending.")
+
+
+# A new native owner door; these lanes consume its public outputs.
+ANNOTATIONS_BY_SRC[("mcd_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", [],
+    'Public MinCovDet and EllipticEnvelope fit/score/mahalanobis/get_precision/score_samples/decision_function/predict/fit_predict call mcd_c, which runs the existing x_decomp entries through the native decomposition kit.' + " New source only: runtime execution and identity admission remain pending.")
+
+
+# A new native owner door; these lanes consume its public outputs.
+ANNOTATIONS_BY_SRC[("als_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", [],
+    'Public AlternatingLeastSquares fit/recommend/similar_items call als_c, which runs the existing x_decomp entries through the native decomposition kit.' + " New source only: runtime execution and identity admission remain pending.")
+
+
+# A new native owner door; these lanes consume its public outputs.
+ANNOTATIONS_BY_SRC[("linalg_decomp_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", [],
+    'Public randomized_svd, solve and lstsq call linalg_decomp_c, which runs the existing x_decomp entries through the native decomposition kit.' + " New source only: runtime execution and identity admission remain pending.")
+
+
 # LogisticRegression's native owner is new; these lanes consume its public outputs.
 ANNOTATIONS_BY_SRC[("logistic_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
     "owed", [],
