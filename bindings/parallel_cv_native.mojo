@@ -107,6 +107,36 @@ def _fold(request: PythonObject, inventory: PythonObject, context: PythonObject)
     return Python.tuple(request[1], score, captured)
 
 
+def _worker_request(socket: PythonObject, envelope: PythonObject, mut inventory: PythonObject,
+                    metadata: PythonObject, context: PythonObject) raises:
+    # One authenticated request owns its result/error response, but never the
+    # socket lifetime. A broken envelope or error-response send still raises
+    # to the worker's unconditional close. The inventory cache belongs to the
+    # worker and is updated in place, including before a result-send failure.
+    # The pinned parser rejects this handler as the final nested statement of
+    # the worker's try/finally (https://github.com/modular/modular/issues/6718).
+    var sequence = Int(py=py_get(envelope[0], "sequence", -1))
+    try:
+        var request = envelope[1]
+        var b = Python.import_module("builtins")
+        if py_type(request) is not b.tuple or len(request) < 1 or py_type(request[0]) is not b.str:
+            raise Error("ValueError: malformed native CV worker request")
+        var result = PythonObject(None)
+        if String(request[0]) == "identity" and len(request) == 1:
+            if inventory is None:
+                inventory = native_worker_inventory(String(metadata["vendor"]), metadata["environ"])
+            result = inventory
+        elif String(request[0]) == "fold":
+            if inventory is None:
+                raise Error("RuntimeError: CV worker identity must be admitted before fitting")
+            result = _fold(request, inventory, context)
+        else:
+            raise Error("ValueError: unknown native CV worker request")
+        process_send(socket, "result", sequence, result)
+    except error:
+        process_send(socket, "error", sequence, PythonObject(_worker_error(error, context)))
+
+
 def msel_parallel_worker(argv: PythonObject, context: PythonObject) raises:
     classical_connect_numpy(context)
     var metadata = context["family_msel_parallel"]
@@ -117,26 +147,7 @@ def msel_parallel_worker(argv: PythonObject, context: PythonObject) raises:
             var envelope = process_worker_next(socket)
             if envelope is None:
                 break
-            var sequence = Int(py=py_get(envelope[0], "sequence", -1))
-            try:
-                var request = envelope[1]
-                var b = Python.import_module("builtins")
-                if py_type(request) is not b.tuple or len(request) < 1 or py_type(request[0]) is not b.str:
-                    raise Error("ValueError: malformed native CV worker request")
-                var result = PythonObject(None)
-                if String(request[0]) == "identity" and len(request) == 1:
-                    if inventory is None:
-                        inventory = native_worker_inventory(String(metadata["vendor"]), metadata["environ"])
-                    result = inventory
-                elif String(request[0]) == "fold":
-                    if inventory is None:
-                        raise Error("RuntimeError: CV worker identity must be admitted before fitting")
-                    result = _fold(request, inventory, context)
-                else:
-                    raise Error("ValueError: unknown native CV worker request")
-                process_send(socket, "result", sequence, result)
-            except error:
-                process_send(socket, "error", sequence, PythonObject(_worker_error(error, context)))
+            _worker_request(socket, envelope, inventory, metadata, context)
     finally:
         transport_close(socket)
 

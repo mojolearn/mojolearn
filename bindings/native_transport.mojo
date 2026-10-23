@@ -88,6 +88,7 @@ def _transport_destroy(capsule: PyObjectPtr) abi("C") -> NoneType:
             cpy.lib.get_function[NoneType]("PyErr_Clear")()
     except:
         pass
+    return None
 
 
 def _transport_own(fd: Int, timeout: Float64) raises -> PythonObject:
