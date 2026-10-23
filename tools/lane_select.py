@@ -870,6 +870,70 @@ _REGION_EDGES = {}
 _CACHES.append(_REGION_EDGES)
 
 
+@_by_path
+def _module_has_dynamic_members(rel):
+    tree = _parse(rel)
+    if tree is None:
+        return True
+    # A module can supply undeclared names or replace its own module object.
+    # Such files cannot be reduced to ordinary declared members safely.
+    return any((isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) and n.name == "__getattr__")
+               or (isinstance(n, ast.Name) and n.id == "__getattr__")
+               or (isinstance(n, ast.Constant) and n.value == "__getattr__")
+               or (isinstance(n, ast.Call) and isinstance(n.func, ast.Name)
+                   and n.func.id in ("globals", "locals", "vars", "eval", "exec"))
+               or (isinstance(n, ast.Attribute) and n.attr == "modules")
+               or (isinstance(n, ast.Attribute) and n.attr == "__class__" and isinstance(n.ctx, ast.Store))
+               for n in ast.walk(tree))
+
+
+def _module_region_members(local, nodes, wanted):
+    """Members a module object supplies, or None when the object escapes.
+
+    Importing a module to read ``bridge.connect`` does not execute all its
+    other functions. Keep its import-time statements and the named members;
+    passing/re-exporting the object or observing its namespace stays broad.
+    This is deliberately syntactic: no assumption about a connector's name
+    or behavior is needed to select the member that Python actually reads.
+    """
+    if wanted is not None and local in wanted:
+        return None
+    members = set()
+    for top in nodes:
+        if isinstance(top, (ast.Import, ast.ImportFrom)):
+            continue
+        parents = {child: parent for parent in ast.walk(top) for child in ast.iter_child_nodes(parent)}
+        for node in ast.walk(top):
+            if isinstance(node, ast.Constant) and node.value == local:
+                return None  # a reflected reference or an explicit re-export
+            if isinstance(node, ast.Name) and node.id == local:
+                parent = parents.get(node)
+                if (isinstance(node.ctx, ast.Load) and isinstance(parent, ast.Attribute)
+                        and parent.value is node and isinstance(parent.ctx, ast.Load)):
+                    if parent.attr in ("__dict__", "__getattribute__", "__getattr__"):
+                        return None
+                    members.add(parent.attr)
+                else:
+                    return None
+            if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                if node.func.id in ("eval", "exec"):
+                    return None
+                if node.func.id not in ("globals", "locals", "vars"):
+                    continue
+                parent = parents.get(node)
+                key = None
+                if isinstance(parent, ast.Subscript) and isinstance(parent.slice, ast.Constant):
+                    key = parent.slice.value
+                elif isinstance(parent, ast.Attribute) and parent.attr == "get":
+                    consumer = parents.get(parent)
+                    if (isinstance(consumer, ast.Call) and consumer.func is parent and consumer.args
+                            and isinstance(consumer.args[0], ast.Constant)):
+                        key = consumer.args[0].value
+                if not isinstance(key, str) or key == local:
+                    return None
+    return members
+
+
 def _region_import_edges(rel, wanted):
     """`_import_edges` over the REGION of `rel` a lane runs (`_region_nodes`):
     the module-level imports always, a function-local import only when its
@@ -903,6 +967,11 @@ def _region_import_edges(rel, wanted):
         return out
     listing = set(_python_files())
     region = _region_nodes(rel, wanted)
+
+    def module_members(files, local):
+        if any(_module_has_dynamic_members(file) for file in files):
+            return None
+        return _module_region_members(local, region, wanted)
     # A NAME A MODULE-LEVEL IMPORT BINDS IS ASKED FOR ONLY WHEN THE REGION
     # USES IT (2026-10-15). The import statement runs, so the module is still
     # reached, but `_expansion_trees.py` imports RandomForestClassifier and the
@@ -930,7 +999,9 @@ def _region_import_edges(rel, wanted):
         if isinstance(node, ast.Import):
             for alias in node.names:
                 if alias.name.startswith("mojolearn."):
-                    merge(_module_paths(alias.name[len("mojolearn."):], listing), None)
+                    files = _module_paths(alias.name[len("mojolearn."):], listing)
+                    names = module_members(files, alias.asname) if alias.asname else None
+                    merge(files, names)
         elif isinstance(node, ast.ImportFrom):
             dotted = _import_dotted(rel, node)
             if dotted is None:
@@ -943,7 +1014,7 @@ def _region_import_edges(rel, wanted):
                     continue
                 sub = _module_paths(".".join(p for p in (dotted, alias.name) if p), listing)
                 if sub:
-                    merge(sub, None)             # a module imported whole
+                    merge(sub, module_members(sub, alias.asname or alias.name))
                     continue
                 if used is not None and id(node) in module_level \
                         and (alias.asname or alias.name) not in used:
@@ -979,6 +1050,12 @@ def _region_nodes(rel, wanted):
     defs = {id(n) for n in index.values()}
     nodes = [n for n in tree.body if id(n) not in defs]
     seen, stack = set(), [n for n in wanted if n in index]
+    # Top-level initializers execute even for an empty selected-name set.
+    # A registry may also retain a local callback and expose it as a member;
+    # its function body remains a dependency of the module's import region.
+    stack.extend(sub.id for top in nodes for sub in ast.walk(top)
+                 if isinstance(sub, ast.Name) and sub.id in index
+                 and not isinstance(index[sub.id], ast.ClassDef))
     while stack:
         name = stack.pop()
         if name in seen:

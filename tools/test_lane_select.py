@@ -2098,6 +2098,49 @@ def test_native_alias_reach_does_not_add_an_unresolvable_local_name():
             cache[path] = previous
 
 
+def test_module_member_reach_keeps_opaque_consumers_and_reflection_broad():
+    def members(source):
+        return lane_select._module_region_members("bridge", ast.parse(source).body, {"run"})
+
+    assert members("from . import bridge\ndef run(): return bridge.connect()") == {"connect"}
+    assert members("from . import bridge\ndef run(): return bridge.connect, bridge.table") == {"connect", "table"}
+    assert members("from . import bridge\ndef run(): return consume(bridge)") is None
+    assert members("from . import bridge\ndef run(): return getattr(bridge, name)()") is None
+    assert members("from . import bridge\ndef run(): return bridge.__dict__[name]()") is None
+    assert members("from . import bridge\ndef run(): return globals()[name].connect()") is None
+    assert members("from . import bridge\ndef run(): return globals().get('bridge')") is None
+    assert members("from . import bridge\ndef run():\n    globals().get('_OTHER')\n    return bridge.connect()") == {"connect"}
+    assert members("from . import bridge\ndef run():\n    bridge = other\n    return bridge.connect()") is None
+
+
+def test_named_module_region_retains_initializers_and_registry_callbacks():
+    source = ast.parse('''
+def initializer():
+    native_setup()
+def callback():
+    numerical_kernel()
+def unused():
+    unrelated_kernel()
+initialized = initializer()
+callbacks = {"fit": callback}
+''')
+    path = "<module member initializers>.py"
+    original = lane_select._parse
+    saved = dict(lane_select._REGIONS)
+    try:
+        lane_select._parse = lambda rel: source if rel == path else original(rel)
+        lane_select._REGIONS.clear()
+        nodes = lane_select._region_nodes(path, {"callbacks"})
+        functions = {node.name for node in nodes if isinstance(node, ast.FunctionDef)}
+        assert functions == {"initializer", "callback"}, functions
+        assert {"native_setup", "numerical_kernel"} <= {
+            node.id for top in nodes for node in ast.walk(top) if isinstance(node, ast.Name)}
+    finally:
+        lane_select._parse = original
+        lane_select._REGIONS.clear()
+        lane_select._REGIONS.update(saved)
+
+
 def test_unused_native_factory_result_is_not_a_call_but_consumed_result_is():
     path = "<native factory use>.py"
     code = '''
