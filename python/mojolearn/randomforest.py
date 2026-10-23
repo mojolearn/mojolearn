@@ -641,13 +641,13 @@ class RandomForestClassifier(_RandomForestBase):
         -------
         self
         """
-        return _TREES(self, "trees_forest_fit", (X, y, sample_weight, feature_importances, None), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_forest_fit", (X, y, sample_weight, feature_importances, None), _TREES_CONTEXT)
 
     def _fit_with_tree_start(self, X, y, tree_start=None, *, feature_importances=False,
                              sample_weight=None):
         """`fit` of the trees from global tree ID `tree_start` on (a shard of
         a multi-device forest)."""
-        return _TREES(self, "trees_forest_fit", (X, y, sample_weight, feature_importances, tree_start),
+        return _TREES(self, "trees_public_forest_fit", (X, y, sample_weight, feature_importances, tree_start),
                       _TREES_CONTEXT)
 
     def predict_proba(self, X):
@@ -658,7 +658,7 @@ class RandomForestClassifier(_RandomForestBase):
         Array of shape (n_samples, n_classes), float32
             Columns in `classes_` order.
         """
-        return _TREES(self, "trees_forest_predict_proba", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_forest_proba", (X,), _TREES_CONTEXT)
 
     def _predict_with_proba(self, X):
         """Return both classifier views after one forest traversal.
@@ -682,7 +682,7 @@ class RandomForestClassifier(_RandomForestBase):
             An int64 or float64 `Array` for numeric labels, a Python list for
             string labels.
         """
-        return _TREES(self, "trees_forest_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_forest_predict", (X,), _TREES_CONTEXT)
 
 
 # Maintainer notes (moved from the docstring): the regression criteria are
@@ -857,13 +857,13 @@ class RandomForestRegressor(_RandomForestBase):
         -------
         self
         """
-        return _TREES(self, "trees_forest_fit", (X, y, sample_weight, feature_importances, None), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_forest_fit", (X, y, sample_weight, feature_importances, None), _TREES_CONTEXT)
 
     def _fit_with_tree_start(self, X, y, tree_start=None, *, feature_importances=False,
                              sample_weight=None):
         """`fit` of the trees from global tree ID `tree_start` on (a shard of
         a multi-device forest)."""
-        return _TREES(self, "trees_forest_fit", (X, y, sample_weight, feature_importances, tree_start),
+        return _TREES(self, "trees_public_forest_fit", (X, y, sample_weight, feature_importances, tree_start),
                       _TREES_CONTEXT)
 
     def predict(self, X):
@@ -873,7 +873,7 @@ class RandomForestRegressor(_RandomForestBase):
         -------
         Array of shape (n_samples,), float32
         """
-        return _TREES(self, "trees_forest_predict", (X,), _TREES_CONTEXT)
+        return _TREES(self, "trees_public_forest_predict", (X,), _TREES_CONTEXT)
 
 
 # The forests' native owner (bindings/trees_public_forest.mojo) reads these
