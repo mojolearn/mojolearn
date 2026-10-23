@@ -102,7 +102,7 @@ def test_sequential_implementation_edits_do_not_invalidate_tokenizer():
     assert all(found == {('host', 'runtime_sequential')} for found in owners.values()), owners
 
 
-def test_sequential_keeps_all_seven_registered_types_in_their_original_owner():
+def test_sequential_adds_no_registered_type_and_existing_types_each_keep_one_owner():
     graph = SourceGraph(ROOT)
     owner = graph.closure(['_mojolearn_runtime_sequential_host'])
     tokenizer = graph.closure(['_mojolearn_tokenizer_host'])
@@ -111,7 +111,52 @@ def test_sequential_keeps_all_seven_registered_types_in_their_original_owner():
     assert 'bindings/sequential_execution.mojo' not in tokenizer['files']
     assert all('.add_type' not in (ROOT/path).read_text() for path in owner['files'])
     source = (ROOT/'bindings/_mojolearn_tokenizer_host.mojo').read_text()
-    assert source.count('module.add_type[') == 7
+    assert source.count('module.add_type[') == 6
+    classical = (ROOT/'bindings/_mojolearn_runtime_classical_host.mojo').read_text()
+    assert classical.count('module.add_type[') == 1
+    assert 'module.add_type[TreesResident]("_TreesResident")' in classical
+    assert 'module.add_type[TreesResident]' not in source
     release = json.loads((ROOT/'bindings/merged_groups.json').read_text())['dirs']['host']['groups']
     assert set(release) == {'_mojolearn_native_host'}
     assert release['_mojolearn_native_host'].count('_mojolearn_runtime_sequential_host') == 1
+
+
+def test_classical_resident_allocation_and_lifetime_are_owned_by_one_development_unit():
+    groups = json.loads((ROOT/'bindings/development_groups.json').read_text())['groups']
+    graph = SourceGraph(ROOT)
+    paths = ('bindings/trees_lifetime.mojo', 'bindings/trees_public_forest.mojo',
+             'bindings/host_svr_native.mojo', 'bindings/host_svc_native.mojo',
+             'bindings/classical_native.mojo', 'bindings/host_archive_native.mojo')
+    owners = {path: set() for path in paths}
+    for mode, partitions in groups.items():
+        for name, members in partitions.items():
+            closure = graph.closure(members)
+            assert closure['scope'] == 'closure', closure['unresolved']
+            for path in paths:
+                if path in closure['files']:
+                    owners[path].add((mode, name))
+    assert all(found == {('host', 'runtime_classical')} for found in owners.values()), owners
+
+
+def test_classical_legacy_exports_are_declared_native_aliases_with_one_type_registration():
+    import ast
+    import re
+    manifest = ast.parse((ROOT/'python/mojolearn/host_surface.py').read_text())
+    aliases = next(ast.literal_eval(node.value) for node in manifest.body
+                   if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name)
+                       and t.id == 'HOST_IMPORT_ALIASES' for t in node.targets))
+    spec, = aliases['_mojolearn_tokenizer_host']
+    assert spec['binding'] == '_mojolearn_runtime_classical_host'
+    assert spec['types'] == ('_TreesResident',)
+    assert len(spec['functions']) == 29
+    legacy = (ROOT/'bindings/_mojolearn_tokenizer_host.mojo').read_text()
+    owner = (ROOT/'bindings/_mojolearn_runtime_classical_host.mojo').read_text()
+    names = lambda text: set(re.findall(r'module\.def_py_c_function\([^,]+, "([^"]+)"\)', text))
+    assert set(spec['functions']) <= names(legacy)
+    assert set(spec['functions']) == names(owner)
+    registrations = [str(path.relative_to(ROOT)) for path in (ROOT/'bindings').glob('*.mojo')
+                     if 'module.add_type[TreesResident]' in path.read_text()]
+    assert registrations == ['bindings/_mojolearn_runtime_classical_host.mojo']
+    release = json.loads((ROOT/'bindings/merged_groups.json').read_text())['dirs']['host']['groups']
+    assert set(release) == {'_mojolearn_native_host'}
+    assert release['_mojolearn_native_host'].count(spec['binding']) == 1

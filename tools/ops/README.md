@@ -6,8 +6,8 @@ Live copies: ~/mojolearn-evidence/lq/lq, ~/mojolearn-evidence/compile_slot.sh, a
 
 Internal engineering path: `tools/development_build.py` builds independent
 logical binding owners from `bindings/development_groups.json`: 33 configured
-`identical` units (including optional byte-LM) and 45 host units. Each existing
-logical binding keeps its native types and state; model selection, manifold and Sequential
+`identical` units (including optional byte-LM) and 46 host units. Each native type
+keeps one owner; classical, model selection, manifold and Sequential
 orchestration have independent runtime entries. Target/platform
 selection can omit an optional unit.
 Release scripts keep `bindings/merged_groups.json` and its compact merged files.
@@ -15,12 +15,21 @@ The development layout's native compilation, public runtime behavior and
 Apple/NVIDIA/AMD identity still require qualification. Controller tests do not
 establish numerical equivalence or a compile-time speedup.
 
-The compact release host group includes all three runtime builders as logical
-modules, so release imports use the same native entries. Model-selection, manifold and
+The compact release host group includes all four runtime builders as logical
+modules, so release imports use the same native entries. Classical, model-selection, manifold and
 Sequential implementation edits invalidate their own development units; shared array/admission/error
 helpers still invalidate every owner that imports them. Cold development builds
 duplicate common code across units, so their time, peak memory and total binary
 size must be measured separately from the compact release build.
+
+The classical owner registers `TreesResident` once and contains its allocation,
+use and destruction. Import setup aliases its original native entries and type
+onto the legacy tokenizer module; no Python operation router is installed.
+Tokenizers built before this ownership split are refused before the second type
+owner loads. Use a complete matching host layout and a fresh process. If the new
+owner is absent, legacy operation names retain native missing-owner refusals;
+the small stateless attribute-descriptor helper remains available for metadata
+and optimizer import setup. Adding a missing binary requires a fresh process.
 
 Run from an isolated development worktree. Install its pinned default Pixi
 environment first. Planning performs no compilation or activation:

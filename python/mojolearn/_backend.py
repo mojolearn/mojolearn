@@ -1686,6 +1686,9 @@ def _host_prefix(basename):
     return basename[len("_mojolearn_"):]
 
 
+_HOST_IMPORT_ALIAS_MODULES = set()
+
+
 def load_host_module(basename):
     """Load (once per process, under `mojolearn._host.<basename>`, the same
     name `_byte_lm_host.py` and `_forest_host.py` use so one file is never
@@ -1743,6 +1746,10 @@ def load_host_module(basename):
             f"mojolearn: {path} is a SABOTAGE build and computes wrong answers "
             f"on purpose; it is refused outside the gate ({_HOST_ALLOW_SABOTAGE}=1)"
         )
+    if basename in host_surface.HOST_IMPORT_ALIASES and module not in _HOST_IMPORT_ALIAS_MODULES:
+        from ._host_import_aliases import connect
+        connect(basename, module)
+        _HOST_IMPORT_ALIAS_MODULES.add(module)
     return module
 
 
