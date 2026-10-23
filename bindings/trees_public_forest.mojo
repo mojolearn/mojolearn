@@ -33,6 +33,7 @@ from bindings.trees_public_inputs import (
     trees_view, trees_call,
 )
 from bindings.trees_lifetime import trees_resident_new
+from bindings.metrics_native_support import metric_is_integral
 from checks.numerics import portable_log2_64
 
 comptime _INT32_MAX = 2147483647
@@ -61,7 +62,7 @@ def _is_bool(value: PythonObject) raises -> Bool:
 
 
 def _is_integral(value: PythonObject, context: PythonObject) raises -> Bool:
-    return Bool(py=py_call(trees_builtins().isinstance, value, context["trees_integral_type"]))
+    return metric_is_integral(value, context)
 
 
 def _int(value: PythonObject) raises -> PythonObject:

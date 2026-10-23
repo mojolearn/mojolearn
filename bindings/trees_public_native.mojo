@@ -8,6 +8,8 @@ from bindings.classical_pandas import classical_admit_value
 from bindings.msel_fixed_owner import fixed_owner_context, fixed_owner_fields, fixed_owner_set_params
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.trees_public_forest import forest_fit, forest_predict, forest_predict_proba, forest_get_params, forest_refresh
+from bindings.trees_constructor_native import forest_construct
+from bindings.trees_public_lifecycle_native import forest_public_operation
 from bindings.trees_public_score import forest_score
 from bindings.trees_public_iforest import iforest_operation
 from bindings.trees_public_boost import boost_operation
@@ -30,6 +32,10 @@ def trees_public_operation(model: PythonObject, operation: String, args: PythonO
     # Connect a loaded NumPy's native types (ndarray inputs, pandas
     # storage); outputs stay mojolearn Arrays.
     classical_connect_numpy(context)
+    if operation == "trees_forest_construct":
+        return forest_construct(model, args, context)
+    if operation.startswith("trees_public_forest_"):
+        return forest_public_operation(model, operation, args, context)
     if py_get(context, "cv_fixed_owner") is not None:
         context = fixed_owner_context(context)
         _ = fixed_owner_fields(model, context)

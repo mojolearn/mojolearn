@@ -124,13 +124,18 @@ def connect():
         return _ENTRY, _CONTEXT
     import numbers
     import types
+    from ._labels import ClassLabels
     from . import _backend
     _backend.default_mode()  # glue: settle the process default the native mode falls back to
     context.update(
         trees_bindings=_bindings(), trees_helpers=_helpers(), trees_classes={}, trees_defaults={},
         trees_boost_classes={}, trees_meta_classes={},
+        trees_constructors={},
         trees_missing=object(), trees_namespace=types.SimpleNamespace,
         trees_real_type=numbers.Real, trees_integral_type=numbers.Integral,
+        classifier_labels_class=ClassLabels,
+        classifier_labels_namespace=dict(vars(ClassLabels)),
+        classifier_labels_mro=type.__dict__["__mro__"].__get__(ClassLabels),
     )
     _ENTRY, _CONTEXT = entry, context
     return _ENTRY, _CONTEXT
@@ -175,6 +180,40 @@ def register(cls, kind, **tables):
         if name != "self" and p.default is not inspect.Parameter.empty}
     for key, value in tables.items():  # glue: the class's fixed lookup tables, once at definition
         context.setdefault(key, value)
+    _connect_public_forest(cls, context)
+
+
+def _connect_public_forest(cls, context):
+    # Connect the existing native fit/predict owner to the exact built-in
+    # classes. Unwrap only the known mode/validation/output decorators: their
+    # semantics now live in trees_public_lifecycle_native, not Python frames.
+    import inspect
+    from types import BuiltinFunctionType, MethodType
+    from .tokenizer import _binding
+    from ._native_classical_bridge import _layout
+    for name in ('fit', '_fit_with_tree_start', 'predict', 'predict_proba', 'score'):  # glue: fixed public tree doors
+        method = getattr(cls, name, None)
+        if inspect.isfunction(method):
+            setattr(cls, name, inspect.unwrap(method))
+    module = _binding()._module
+    attribute = module.standard_scaler_attribute_call
+    factory = module.classical_attribute_descriptor
+    if type(attribute) is not BuiltinFunctionType or type(factory) is not BuiltinFunctionType:
+        raise TypeError('native forests require compiled attribute entries')
+    descriptor = factory(MethodType(attribute, context))
+    cls.__getattribute__ = descriptor
+    cls._mojolearn_native_public = True
+    context.setdefault('classical_public_layouts', {})[cls] = _layout(cls, descriptor)
+    context['classical_public_installed'] = True
+    context['classical_attribute_descriptor'] = descriptor
+    # Constructor metadata was captured before the native attribute slot was
+    # installed. Retain its final hook identities without runtime inspection.
+    rows, getter, previous = context['trees_constructors'][cls]
+    ancestry = type.__dict__['__mro__'].__get__(cls)
+    namespaces = tuple(type.__dict__['__dict__'].__get__(base) for base in ancestry)  # glue: final connected storage layout
+    hooks = tuple((name, next((row[name] for row in namespaces if name in row), None))
+                  for name, _ in previous)  # glue: fixed final constructor hook identities
+    context['trees_constructors'][cls] = (rows, getter, hooks)
 
 
 def register_boost(cls, kind, **tables):
