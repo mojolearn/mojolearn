@@ -17,6 +17,11 @@ first imported, after the package, so both may rely on every module existing:
 from . import _backend
 from ._labels import unique_inverse
 from . import _portable_math as _pm
+from . import _native_xcnn_bridge
+
+# Package-import connection: the migrated layer methods are ONE call each
+# into the compiled owner (bindings/xcnn_native.mojo).
+_XCNN, _XCNN_CONTEXT = _native_xcnn_bridge.connect()
 
 __all__ = ["Conv2d", "Conv1d", "MaxPool2d", "AvgPool2d", "MaxPool1d", "AvgPool1d", "CNNClassifier", "BatchNorm2d", "BatchNorm1d",
            "Dropout2d", "AdaptiveAvgPool2d", "AdaptiveMaxPool2d", "BasicBlock",
@@ -877,9 +882,7 @@ class Conv2d(_Layer):
 
     def fit(self, X, y=None):
         """Layers carry their weights from construction; fit only records the input shape."""
-        X = self._rows(X)
-        self.n_features_in_ = int(_np().prod(X.shape[1:]))  # glue: product of the input shape entries
-        return self
+        return _XCNN(self, "conv_fit", (X,), _XCNN_CONTEXT)
 
 
 def _t4(t):
@@ -971,8 +974,7 @@ class _Pool2d(_Layer):
         return Conv2d._rows(self, X)
 
     def transform(self, X):
-        out = self.forward(self._rows(X))
-        return out.reshape(out.shape[0], -1)
+        return _XCNN(self, "pool_transform", (X,), _XCNN_CONTEXT)
 
     def fit(self, X, y=None):
         return self
@@ -1004,38 +1006,7 @@ class MaxPool2d(_Pool2d):
         self.__dict__["_idx_dev"] = None
 
     def forward(self, x):
-        np = _np()
-        if _is_t(x):
-            # lane idn-cnn-resident: x, the output and the winners resident
-            b = self._binding()
-            if x.ndim != 4:
-                raise ValueError("mojolearn: MaxPool2d.forward takes (N, C, H, W)")
-            if not _on_dev(b, x):
-                return DeviceTensor._wrap(b, MaxPool2d.forward(self, x.numpy()))
-            shape = self._out_shape(x.shape)
-            out = _out_new(b, shape)   # the pool stores every word
-            h = _dev_of(self, b).get("idx", _size(shape))
-            b.x_cnn_maxpool2d_forward_m([x.h, out.h, h], 0b111, self._params(x.shape))
-            self._xshape = x.shape
-            self.__dict__.update(_idx_host=None, _idx_dev=h, _idx_shape=shape)
-            return out
-        x = _f32(x, "x")
-        if x.ndim != 4:
-            raise ValueError("mojolearn: MaxPool2d.forward takes (N, C, H, W)")
-        shape = self._out_shape(x.shape)
-        out = np.empty(shape, np.float32)
-        b = self._binding()
-        if _mixed(b):
-            dev = _dev_of(self, b)
-            h = dev.get("idx", int(np.prod(shape)))  # glue: product of the output shape entries
-            b.x_cnn_maxpool2d_forward_m([x.ctypes.data, out.ctypes.data, h], 0b100, self._params(x.shape))
-            self._xshape = x.shape
-            self.__dict__.update(_idx_host=None, _idx_dev=h, _idx_shape=shape)
-            return out
-        idx = np.empty(shape, np.int32)
-        b.x_cnn_maxpool2d_forward(x.ctypes.data, out.ctypes.data, idx.ctypes.data, self._params(x.shape))
-        self._xshape, self.indices_ = x.shape, idx
-        return out
+        return _XCNN(self, "pool_forward", (x,), _XCNN_CONTEXT)
 
     def backward(self, grad_out):
         np = _np()
@@ -1075,25 +1046,7 @@ class AvgPool2d(_Pool2d):
         self.divisor_override = None if divisor_override is None else int(divisor_override)
 
     def forward(self, x):
-        np = _np()
-        if _is_t(x):
-            # lane idn-cnn-resident: x and the output resident
-            b = self._binding()
-            if x.ndim != 4:
-                raise ValueError("mojolearn: AvgPool2d.forward takes (N, C, H, W)")
-            if not _on_dev(b, x):
-                return DeviceTensor._wrap(b, AvgPool2d.forward(self, x.numpy()))
-            out = _out_new(b, self._out_shape(x.shape))   # the pool stores every word
-            b.x_cnn_avgpool2d_forward_m([x.h, out.h], 0b11, self._params(x.shape))
-            self._xshape = x.shape
-            return out
-        x = _f32(x, "x")
-        if x.ndim != 4:
-            raise ValueError("mojolearn: AvgPool2d.forward takes (N, C, H, W)")
-        out = np.empty(self._out_shape(x.shape), np.float32)
-        self._binding().x_cnn_avgpool2d_forward(x.ctypes.data, out.ctypes.data, self._params(x.shape))
-        self._xshape = x.shape
-        return out
+        return _XCNN(self, "pool_forward", (x,), _XCNN_CONTEXT)
 
     def backward(self, grad_out):
         np = _np()
@@ -1119,14 +1072,7 @@ def _one(v):
 
 class _Pool1dMixin:
     def forward(self, x):
-        if _is_t(x):
-            if x.ndim != 3:
-                raise ValueError(f"mojolearn: {type(self).__name__}.forward takes (N, C, L)")
-            return _t3(super().forward(_t4(x)))
-        x = _f32(x, "x")
-        if x.ndim != 3:
-            raise ValueError(f"mojolearn: {type(self).__name__}.forward takes (N, C, L)")
-        return super().forward(x[:, :, None, :])[:, :, 0, :]
+        return _XCNN(self, "pool_forward", (x,), _XCNN_CONTEXT)
 
     def backward(self, grad_out):
         if _is_t(grad_out):
@@ -2068,62 +2014,8 @@ class Dropout2d(_Layer):
         self.__dict__["_mask_host"] = v
         self.__dict__["_mask_dev"] = None
 
-    def _forward_t(self, b, x):
-        """lane fam-neural (IDN_LAYER_DEV_IO): x, y and the mask resident
-        (`x_cnn_dropout2d_m`, the host entry's launches); eval mode is the
-        same resident words."""
-        if not self.training:
-            self.mask_ = None
-            return x.reshape(x.shape)
-        if x.ndim not in (3, 4):
-            raise ValueError("mojolearn: Dropout2d.forward takes (N, C, H, W) or (C, H, W)")
-        s4 = ((1,) + x.shape) if x.ndim == 3 else x.shape
-        n, c = s4[:2]
-        hw = s4[2] * s4[3]
-        thresh = min(int(round(self.p * 2 ** 32)), 2 ** 32)
-        seed_lo = self.random_state & 0x7FFFFFFF
-        seed_hi = ((self.random_state >> 31) * 1000003 + self.calls_) & 0x7FFFFFFF
-        self.calls_ += 1
-        prm = [n, c, hw, seed_lo, seed_hi, thresh >> 16, thresh & 0xFFFF]
-        y = DeviceTensor._new_out(b, x.shape)   # every path stores each mask and y word
-        h = _dev_of(self, b).get("mask", x.size)
-        b.x_cnn_dropout2d_m([x.h, y.h, h], 0b111, prm, self.p)
-        self.__dict__.update(_mask_host=None, _mask_dev=h, _mask_shape=x.shape)
-        return y
-
     def forward(self, x):
-        np = _np()
-        if _is_t(x):
-            bt = self._binding()
-            if _on_dev(bt, x) and _idn(bt, _F_LAYER_IO) and x.size > 0:
-                return self._forward_t(bt, x)
-        x = _f32(x, "x")
-        if not self.training:
-            self.mask_ = None
-            return x.copy()
-        if x.ndim not in (3, 4):
-            raise ValueError("mojolearn: Dropout2d.forward takes (N, C, H, W) or (C, H, W)")
-        x4 = x[None] if x.ndim == 3 else x
-        n, c = x4.shape[:2]
-        hw = int(np.prod(x4.shape[2:]))  # glue: product of the spatial shape entries
-        thresh = min(int(round(self.p * 2 ** 32)), 2 ** 32)
-        seed_lo = self.random_state & 0x7FFFFFFF
-        seed_hi = ((self.random_state >> 31) * 1000003 + self.calls_) & 0x7FFFFFFF
-        self.calls_ += 1
-        y = np.empty_like(x4)
-        x4 = np.ascontiguousarray(x4)
-        prm = [n, c, hw, seed_lo, seed_hi, thresh >> 16, thresh & 0xFFFF]
-        b = self._binding()
-        if _mixed(b):
-            dev = _dev_of(self, b)
-            h = dev.get("mask", x4.size)
-            b.x_cnn_dropout2d_m([x4.ctypes.data, y.ctypes.data, h], 0b100, prm, self.p)
-            self.__dict__.update(_mask_host=None, _mask_dev=h, _mask_shape=x.shape)
-            return y.reshape(x.shape)
-        mask = np.empty_like(x4)
-        b.x_cnn_dropout2d(x4.ctypes.data, y.ctypes.data, mask.ctypes.data, prm, self.p)
-        self.mask_ = mask.reshape(x.shape)
-        return y.reshape(x.shape)
+        return _XCNN(self, "dropout_forward", (x,), _XCNN_CONTEXT)
 
     def backward(self, grad_out):
         np = _np()
@@ -2156,8 +2048,7 @@ class Dropout2d(_Layer):
         return dx
 
     def transform(self, X):
-        out = self.forward(BatchNorm2d._rows(self, X))
-        return out.reshape(out.shape[0], -1)
+        return _XCNN(self, "dropout_transform", (X,), _XCNN_CONTEXT)
 
     def fit(self, X, y=None):
         return self
@@ -2190,25 +2081,6 @@ class _AdaptivePool(_Layer):
         except Exception:  # noqa: BLE001  (no binding: the host arrays)
             return False
 
-    def _pool_for(self, b, k):
-        """The MaxPool2d / AvgPool2d of kernel = stride = `k` (cached under G3)."""
-        cls = MaxPool2d if self._max else AvgPool2d
-        hit = self.__dict__.get("_pool_cache")
-        if _resident(b) and hit is not None and hit[0] == k and type(hit[1]) is cls:
-            return hit[1]
-        lay = cls(k, stride=k, numeric_mode=self.numeric_mode)
-        self.__dict__["_pool_cache"] = (k, lay)
-        return lay
-
-    # lane fam-neural (2026-10-04, IDN_ADAPT_M): on a binding with the switch
-    # on, the adaptive kernel runs through `x_cnn_adaptive_pool_m`: host
-    # arrays are copied once each way (the host entry staged every array
-    # through a List), a `DeviceTensor` in gives a resident tensor out, the
-    # max winners stay on the device for the backward, and `indices_`
-    # downloads them only when read (a dividing size delegates to
-    # MaxPool2d/AvgPool2d, whose winners were downloaded on every forward
-    # here). The same element functions on the same words: no bit moves.
-
     @property
     def indices_(self):
         d = self.__dict__
@@ -2229,45 +2101,7 @@ class _AdaptivePool(_Layer):
         self.__dict__["_idx_dev"] = None
 
     def forward(self, x):
-        np = _np()
-        b = self._binding()
-        m = _idn(b, _F_ADAPT)
-        xt = _is_t(x)
-        if xt and not m:
-            x, xt = _f32(x, "x"), False
-        elif xt and not _on_dev(b, x):
-            return DeviceTensor._wrap(b, self.forward(x.numpy()))
-        elif not xt:
-            x = _f32(x, "x")
-        if x.ndim != 4:
-            raise ValueError(f"mojolearn: {type(self).__name__}.forward takes (N, C, H, W)")
-        self._xshape = tuple(x.shape)
-        d = self.__dict__
-        d["_idx_host"] = d["_idx_dev"] = None
-        if self._divides(x.shape):
-            k = (x.shape[2] // self.output_size[0], x.shape[3] // self.output_size[1])
-            self._layer = self._pool_for(b, k)
-            out = self._layer.forward(x)
-            if self._max and not m:
-                d["_idx_host"] = self._layer.indices_
-            return out
-        self._layer = None
-        n, c = x.shape[:2]
-        oshape = (n, c) + self.output_size
-        prm = [*x.shape, *self.output_size, 2 if self._max else 0]
-        if m:
-            out = _out_new(b, oshape) if xt else np.empty(oshape, np.float32)
-            h = _dev_of(self, b).get("idx", _size(oshape)) if self._max else 0
-            b.x_cnn_adaptive_pool_m([x.h if xt else x.ctypes.data, out.h if xt else out.ctypes.data, h],
-                                    (0b011 if xt else 0) | (0b100 if self._max else 0), prm)
-            if self._max:
-                d.update(_idx_dev=h, _idx_shape=oshape)
-            return out
-        out = np.empty(oshape, np.float32)
-        idx = np.zeros(oshape, np.int32)
-        b.x_cnn_adaptive_pool(x.ctypes.data, out.ctypes.data, idx.ctypes.data, prm)
-        d["_idx_host"] = idx if self._max else None
-        return out
+        return _XCNN(self, "adaptive_forward", (x,), _XCNN_CONTEXT)
 
     def backward(self, grad_out):
         np = _np()
@@ -2301,8 +2135,7 @@ class _AdaptivePool(_Layer):
         return dx
 
     def transform(self, X):
-        out = self.forward(BatchNorm2d._rows(self, X))
-        return out.reshape(out.shape[0], -1)
+        return _XCNN(self, "adaptive_transform", (X,), _XCNN_CONTEXT)
 
     def fit(self, X, y=None):
         return self
@@ -3103,3 +2936,9 @@ class SAGEConv(_Layer):
             self.grad_weight_r_ = _gemm(b, G, self._x, self.out_channels, self.in_channels, n, 2)
             dx = _add(b, _gemm(b, G, self.weight_r_, n, self.in_channels, self.out_channels, 0), dx)
         return dx
+
+
+_native_xcnn_bridge.register(
+    xcnn_tensor_class=DeviceTensor, xcnn_dev_class=_Dev, xcnn_maxpool_class=MaxPool2d,
+    xcnn_avgpool_class=AvgPool2d, xcnn_pool1d_class=_Pool1dMixin, xcnn_device_io_off=_DEVICE_IO_OFF,
+)
