@@ -50,7 +50,10 @@ def test_public_outputs_inspect_callers_without_python_audit_callbacks(family):
             callers.append((namespace['invoke'], namespace['attribute'], outside))
         active, callbacks, retained_calls = [False], [], []
         def forbidden_frame(event, args):
-            if active[0] and event in ('sys._getframe', 'sys._getframemodulename'):
+            frame_event = event in ('sys._getframe', 'sys._getframemodulename')
+            frame_event = frame_event or (event == 'object.__getattr__' and len(args) > 1
+                                          and args[1] in ('f_globals', 'f_back', 'f_code'))
+            if active[0] and frame_event:
                 callbacks.append(event)
                 raise RuntimeError('product frame lookup invoked a Python audit hook')
         def poisoned_retained_pointer(*args):
