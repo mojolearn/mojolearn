@@ -72,7 +72,7 @@ def _target(mut kit: DecompKit, source: PythonObject, context: PythonObject) rai
     var b = Python.import_module("builtins")
     var y = _array_like(source, context)
     if y is None:
-        return (-1, False)
+        return (Int(-1), False)
     var shape = py_call(b.getattr, y, PythonObject("shape"), PythonObject(None))
     var vec: Bool
     if shape is not None:

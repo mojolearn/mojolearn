@@ -1006,7 +1006,7 @@ struct DecompKit(Movable):
             var aa = self.address(a)
             _ = py_call(self.entries["x_decomp_select_smallest"], aa, Python.list(n, h), self.address(sel),
                         py_call(store.buffer_info)[0])
-        return (sel, -1, store)
+        return (sel, Int(-1), store)
 
     def lu_aux(mut self, lu: Int, piv: PythonObject) raises -> Tuple[Int, Int]:
         # `_Kit.lu_aux(lu, piv)` (clamp False): (stats 1 x 4 = [max |u_ii|,

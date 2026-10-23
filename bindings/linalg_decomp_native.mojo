@@ -335,7 +335,7 @@ def solve_call(args: PythonObject, context: PythonObject) raises -> PythonObject
                 return solved
         var l = _matrix(kit, lu_array, "lu", context)
         var n = kit.nrows(l)
-        var piv = classical_host_i32(piv_array, context)
+        var piv = _pivots(piv_array, context)
         if Int(py=piv.size) != n or not decomp_piv_valid(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(piv))), n):
             raise Error("piv must hold one row index in [0, n) per row")
         var vec = _is_vector(b)
@@ -362,7 +362,7 @@ def _matrix(mut kit: DecompKit, source: PythonObject, name: String, context: Pyt
     return kit.input(array, Int(py=array.shape[0]), Int(py=array.shape[1]))
 
 
-def classical_host_i32(source: PythonObject, context: PythonObject) raises -> PythonObject:
+def _pivots(source: PythonObject, context: PythonObject) raises -> PythonObject:
     # `as_i32_c(piv, ndim=1)` of the pivots this call made (an int32 Array).
     if Int(py=source.ndim) != 1 or String(py=source.dtype) != "<i4":
         raise Error("TypeError: piv must be a 1-D int32 array")

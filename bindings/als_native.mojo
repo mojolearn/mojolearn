@@ -43,7 +43,8 @@ def als_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
         var n = kit.nrows(r)
         var m = kit.ncols(r)
         var alpha = fields["alpha"]
-        var c = r if Bool(py=alpha == PythonObject(1.0)) else kit.ew(XD_SCALE, r, scalar=decomp_float(alpha))
+        var unit = Bool(py=py_call(Python.import_module("operator").eq, alpha, PythonObject(1.0)))
+        var c = r if unit else kit.ew(XD_SCALE, r, scalar=decomp_float(alpha))
         var seed = decomp_seed_word(decomp_seed(fields["random_state"]))
         var f = decomp_int(fields["factors"])
         var user_draws = kit.rand(n, f, seed, 80, 0)

@@ -15,7 +15,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from std.math import ceil, floor
+from std.math import ceil, floor, inf
 from std.memory import bitcast
 from bindings.optimizer_public_words import PYTHON_ERROR_PENDING, optimizer_python_error
 from bindings.native_error_class import error_without_class
@@ -141,12 +141,12 @@ def _slogdet(mut kit: DecompKit, a: Int) raises -> Tuple[Float64, Float64]:
     var factor = kit.lu(a)
     var aux = kit.lu_aux(factor[0], factor[1])
     if kit.word(aux[0], 1) > 0:
-        return (Float64(0.0), -Float64.MAX * 2.0)
+        return (Float64(0.0), -inf[DType.float64]())
     var negative = Int(kit.word(aux[0], 2)) + Int(kit.word(aux[0], 3))
     var absolute = kit.ew(XD_ABS, aux[1])
     var logs = kit.ew(XD_LOGS, absolute, scalar=MCD_TINY)
     var ld = kit.total_word(logs)
-    return (Float64(-1.0) if negative % 2 else Float64(1.0), ld)
+    return (Float64(-1.0) if negative % 2 != 0 else Float64(1.0), ld)
 
 
 def _mask_store(mut kit: DecompKit, mask: Int, n: Int, context: PythonObject) raises -> PythonObject:
@@ -356,7 +356,8 @@ def mcd_operation(model: PythonObject, operation: String, args: PythonObject, co
     if operation == "fit" or operation == "fit_predict":
         if envelope:
             var c = fields["contamination"]
-            if not (Bool(py=PythonObject(0) < c) and Bool(py=c <= PythonObject(0.5))):
+            var op = Python.import_module("operator")
+            if not (Bool(py=py_call(op.lt, PythonObject(0), c)) and Bool(py=py_call(op.le, c, PythonObject(0.5)))):
                 raise Error("contamination must be in (0, 0.5]")
         var mode = decomp_mode(fields["numeric_mode"], context)
         py_setitem(fields, "numeric_mode_", mode)
