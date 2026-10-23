@@ -101,6 +101,45 @@ def _expression(text):
     try:
         return ast.parse(text, mode='eval').body
     except (SyntaxError, ValueError):
+        pass
+    # These Mojo spellings preserve which functions an expression references.
+    # They do not grant a new value fact: a byte slice stays an unknown slice,
+    # and ownership transfer invalidates tracked values after the expression.
+    try:
+        tokens = [t for t in tokenize.generate_tokens(io.StringIO(text).readline)
+                  if t.type not in (tokenize.NL, tokenize.COMMENT)]
+        normalized, moved, index = [], False, 0
+        while index < len(tokens):
+            token = tokens[index]
+            if (token.string == '^' and index and index + 1 < len(tokens)
+                    and (tokens[index - 1].type in (tokenize.NAME, tokenize.NUMBER, tokenize.STRING)
+                         or tokens[index - 1].string in (')', ']'))
+                    and (tokens[index + 1].type in (tokenize.NEWLINE, tokenize.ENDMARKER)
+                         or tokens[index + 1].string in (')', ']', ','))):
+                moved = True
+                index += 1
+                continue
+            if token.string == '[' and [t.string for t in tokens[index + 1:index + 3]] == ['byte', '=']:
+                depth, has_slice = 0, False
+                for following in tokens[index + 3:]:
+                    if following.string in ('(', '[', '{'):
+                        depth += 1
+                    elif following.string in (')', ']', '}'):
+                        if following.string == ']' and depth == 0:
+                            break
+                        depth -= 1
+                    elif following.string == ':' and depth == 0:
+                        has_slice = True
+                if has_slice:
+                    normalized.append((token.type, token.string))
+                    index += 3
+                    continue
+            normalized.append((token.type, token.string))
+            index += 1
+        node = ast.parse(tokenize.untokenize(normalized), mode='eval').body
+        node._mojo_move = moved
+        return node
+    except (SyntaxError, ValueError, tokenize.TokenError, IndentationError):
         return None
 
 
@@ -316,6 +355,9 @@ def specialize_function(text: str, *, parameters: Mapping[str, Strings] | None =
                 name = _call_name(call.func)
                 if name:
                     argument_state = current.copy()
+                    if getattr(node, '_mojo_move', False):
+                        argument_state.strings.clear()
+                        argument_state.packed.clear()
                     # An earlier argument can mutate a value read by a later
                     # argument. Do not forward its pre-call value downstream.
                     for nested in (n for n in ast.walk(call) if isinstance(n, ast.Call) and n is not call):
@@ -334,6 +376,9 @@ def specialize_function(text: str, *, parameters: Mapping[str, Strings] | None =
             for name in invalidate:
                 current.strings.pop(name, None)
                 current.packed.pop(name, None)
+            if getattr(node, '_mojo_move', False):
+                current.strings.clear()
+                current.packed.clear()
 
         def statement(row, current):
             code = row.code

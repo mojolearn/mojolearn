@@ -132,3 +132,22 @@ def test_ref_alias_loop_and_import_constructor_bindings_refuse_specialization():
 def test_parameter_names_preserve_positional_order_and_reject_generic_header():
     assert parameter_names('def route(model: PythonObject, operation: String, mut args: Args):\n    return run()\n') == ('model', 'operation', 'args')
     assert parameter_names('def route[T: Type](operation: String):\n    return run()\n') is None
+
+
+def test_native_moves_and_byte_slices_keep_exception_calls_without_value_facts():
+    source = '''def route(operation: String, error: Error, message: String):
+    try:
+        if operation == "metric":
+            return metrics(operation)
+        return other(operation)
+    except:
+        report(error^)
+        return failure(String(message[byte=3:]))
+'''
+    result = specialize_function(source, parameters={'operation': frozenset({'metric'})},
+                                 constructors=frozenset({'String'}))
+    assert result.supported
+    assert 'other(operation)' not in result.text
+    assert 'report(error^)' in result.text
+    failure = next(call for call in result.calls if call.name == 'failure')
+    assert failure.arguments == (None,)
