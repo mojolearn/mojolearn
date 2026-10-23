@@ -1,3 +1,4 @@
+diff --git a/x_decomp/api.mojo b/x_decomp/api.mojo
 --- a/x_decomp/api.mojo
 +++ b/x_decomp/api.mojo
 @@ -36,6 +36,17 @@
@@ -44,8 +45,8 @@
 +        pd[a] = _cov_flip(pd[a])
  
  
- def scatter_run(pd: F32Ptr, pi: I32Ptr, n: Int, ps: F32Ptr) raises:
-@@ -475,6 +488,9 @@
+ def move_run(
+@@ -461,6 +474,9 @@
      if op == 0 and count > 0 and (count - 1) // max(a1, 1) * ist + ioff >= nidx:
          raise Error("x_decomp: take_rows reads past its index list")
      move_host(op, ps, pi, pd, count, a1, a2, a3, ist, ioff, nsrc, ndst)
@@ -55,7 +56,7 @@
  
  
  def dsum_sq_run(xa: Int, n: Int) raises -> Float64:
-@@ -491,19 +507,33 @@
+@@ -477,19 +493,33 @@
      """`order_f_py`'s typed entry; the buffers are read only when n > 0."""
      if n > 0:
          order_f(_fp(xa), n, _fp(da))
@@ -89,8 +90,8 @@
 +    return c
  
  
- def sign_labels_run(xa: Int, n: Int, da: Int) raises:
-@@ -540,4 +570,10 @@
+ def accuracy_run(ya: Int, pa: Int, wa: Int, n: Int) raises -> Tuple[Float64, Float64]:
+@@ -520,4 +550,10 @@
      var has = ska != 0
      var px = _fp(xa)
      var ps = _fp(ska) if has else px

@@ -12,6 +12,7 @@ import numpy as np
 import pytest
 
 import mojolearn as ml
+from mojolearn.exceptions import NotFittedError
 
 
 def _xy(n=40, d=4, k=3, seed=0):
@@ -42,7 +43,7 @@ def test_label_binarizer_fit_refuses_bad_labels_and_sparse():
 
 
 def test_label_binarizer_transform_refuses_unfitted():
-    with pytest.raises(RuntimeError):
+    with pytest.raises(NotFittedError):
         ml.LabelBinarizer().transform(np.array([0, 1]))
 
 
@@ -55,7 +56,7 @@ def test_label_binarizer_inverse_transform_refuses_wrong_width():
     m = ml.LabelBinarizer().fit(np.array([0, 1, 2, 2]))
     with pytest.raises(ValueError):
         m.inverse_transform(np.eye(4, 2, dtype=np.float32))
-    with pytest.raises(RuntimeError):
+    with pytest.raises(NotFittedError):
         ml.LabelBinarizer().inverse_transform(np.eye(3, dtype=np.float32))
 
 
@@ -70,7 +71,7 @@ def test_label_encoder_transform_refuses_unseen_and_unfitted():
     m = ml.LabelEncoder().fit(np.array([3, 5, 7]))
     with pytest.raises(ValueError):
         m.transform(np.array([3, 4]))
-    with pytest.raises(RuntimeError):
+    with pytest.raises(NotFittedError):
         ml.LabelEncoder().transform(np.array([3]))
 
 
@@ -87,7 +88,7 @@ def test_multilabel_binarizer_refusals():
         ml.MultiLabelBinarizer(sparse_output=True).fit(rows)
     with pytest.raises(NotImplementedError):
         ml.MultiLabelBinarizer(sparse_output=True).fit_transform(rows)
-    with pytest.raises(RuntimeError):
+    with pytest.raises(NotFittedError):
         ml.MultiLabelBinarizer().transform(rows)
 
 
@@ -107,7 +108,7 @@ def test_lda_fit_and_fit_transform_refuse_bad_options():
 
 def test_lda_decision_function_and_transform_refusals():
     X, y = _xy()
-    with pytest.raises(RuntimeError):
+    with pytest.raises(NotFittedError):
         ml.LinearDiscriminantAnalysis().decision_function(X)
     m = ml.LinearDiscriminantAnalysis().fit(X, y)
     with pytest.raises(ValueError):
@@ -137,7 +138,7 @@ def test_qda_refusals_and_score():
         ml.QuadraticDiscriminantAnalysis(solver="nope").fit(X, y)
     with pytest.raises(ValueError):
         ml.QuadraticDiscriminantAnalysis().fit(X, np.zeros(len(X), np.int64))
-    with pytest.raises(RuntimeError):
+    with pytest.raises(NotFittedError):
         ml.QuadraticDiscriminantAnalysis().decision_function(X)
     m = ml.QuadraticDiscriminantAnalysis().fit(X, y)
     with pytest.raises(ValueError):
@@ -184,7 +185,7 @@ def test_ordinal_encoder_refusals():
         m.transform(np.array([[9.0, 0.0]], np.float32))
     with pytest.raises(ValueError):
         m.inverse_transform(np.zeros((2, 3), np.float32))
-    with pytest.raises(RuntimeError):
+    with pytest.raises(NotFittedError):
         ml.OrdinalEncoder().transform(C)
 
 
@@ -199,7 +200,7 @@ def test_one_hot_encoder_refusals():
         m.transform(C[:, :1])
     with pytest.raises(ValueError):
         m.inverse_transform(np.zeros((2, 2), np.float32))
-    with pytest.raises(RuntimeError):
+    with pytest.raises(NotFittedError):
         ml.OneHotEncoder().transform(C)
 
 
@@ -226,7 +227,7 @@ def test_simple_imputer_refusals():
     m = ml.SimpleImputer().fit(X)
     with pytest.raises(ValueError):
         m.transform(X[:, :2])
-    with pytest.raises(RuntimeError):
+    with pytest.raises(NotFittedError):
         ml.SimpleImputer().transform(X)
 
 
@@ -238,13 +239,13 @@ def test_normalizer_and_polynomial_transform_refusals():
         ml.Normalizer(norm="l3").fit(X)
     with pytest.raises(ValueError):
         ml.Normalizer().fit(X).transform(X[:, :2])
-    with pytest.raises(RuntimeError):
+    with pytest.raises(NotFittedError):
         ml.Normalizer().transform(X)
     with pytest.raises(ValueError):
         ml.PolynomialFeatures(order="Z").fit(X)
     with pytest.raises(ValueError):
         ml.PolynomialFeatures().fit(X).transform(X[:, :2])
-    with pytest.raises(RuntimeError):
+    with pytest.raises(NotFittedError):
         ml.PolynomialFeatures().transform(X)
 
 

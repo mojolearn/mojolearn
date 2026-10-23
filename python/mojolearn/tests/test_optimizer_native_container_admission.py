@@ -76,10 +76,11 @@ def test_tensor_preparation_never_admits_replaced_list_type(monkeypatch, operati
         patch.setattr(builtins, "list", cls)
         audit = audit_native_call(method, *args, **kwargs)
     if operation == "accumulate":
-        # Retained b638 public refusal: the nested accumulation binding
-        # currently normalizes this exact admission error to Exception.
-        # Preserve its full message; a missing context key cannot qualify.
-        assert_native_refusal(audit, calls, Exception,
+        # Retained b638 public refusal. Since lane fix-p1 (py_typed_call)
+        # the nested accumulation binding keeps the callee's TypeError class
+        # instead of normalizing it to Exception. Preserve its full message;
+        # a missing context key cannot qualify.
+        assert_native_refusal(audit, calls, TypeError,
                               "optimizer requires native buffers and lists/tuples; Python protocols and callbacks cannot execute")
     else:
         assert_native_refusal(audit, calls)

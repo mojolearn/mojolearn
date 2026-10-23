@@ -1620,7 +1620,7 @@ FAMILIES = (
             "neural_prefill_call", "parallel_byte_call", "parallel_causal_call",
             "parallel_mlp_call", "parallel_neural_call", "pca_native_call",
             "samba_config_call", "samba_native_call", "sequential_native_call", "xseq_native_call", "byte_lm_host_trainer_call", "xcnn_native_call", "tsa_native_call",
-            "small_mlp_call", "standard_scaler_fit_native", "standard_scaler_native_call", "minmax_scaler_native_call", "maxabs_scaler_native_call", "robust_scaler_native_call", "arena_prog_native_call", "standard_scaler_attribute_call",
+            "small_mlp_call", "standard_scaler_fit_native", "standard_scaler_native_call", "minmax_scaler_native_call", "maxabs_scaler_native_call", "robust_scaler_native_call", "arena_rows_native_call", "arena_prog_native_call", "standard_scaler_attribute_call",
             "tokenizer_host_numeric_mode", "tokenizer_host_vendor",
             "tokenizer_host_column", "tokenizer_host_sabotage", "bpe_load",
             "bpe_n_vocab", "bpe_max_token_bytes", "bpe_encode", "bpe_encode_batch",
@@ -3515,8 +3515,10 @@ PUBLIC_PENDING_LANES = {
     "native-schedule-series": "no reference",
     "optim-owner-lifecycle": "no reference",
     "optim-io-capability": "no reference",
-    "optim-resident-io": "no reference",
-    "sequence-device-release": "no reference",
+    # GPU only (identity_break.GPU_ONLY_LANES): the CPU bindings hold no
+    # resident buffers, so no CPU column can state these two.
+    "optim-resident-io": "no cpu route",
+    "sequence-device-release": "no cpu route",
     # THIRTEEN LANES LEFT THIS TABLE ON 2026-09-20, on a watched run and not
     # on an argument (lane/verifier-full-exposure). The promotion rule in
     # `public_reference_lanes()` is "a covered lane, in a release record's
@@ -3818,7 +3820,9 @@ PUBLIC_PENDING_LANES = {
     "saved-model-host-infer-trees": "no reference",
     "hf-causal-lm-text": "no reference",
     "hf-model-surface": "no reference",
-    "training-device-cross-entropy": "no reference",
+    # GPU only (tools/identity_lanes/coverage.py GPU_ONLY_LANES): the CPU
+    # training binding has no device array pool.
+    "training-device-cross-entropy": "no cpu route",
     "classical-float16-sequences": "no reference",
     }
 # lane/lowbit-int15 (2026-09-29) held gemm-int15 here until a release record

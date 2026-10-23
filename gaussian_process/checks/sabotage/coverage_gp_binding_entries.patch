@@ -1,6 +1,7 @@
+diff --git a/gaussian_process/gp_binding_entries.mojo b/gaussian_process/gp_binding_entries.mojo
 --- a/gaussian_process/gp_binding_entries.mojo
 +++ b/gaussian_process/gp_binding_entries.mojo
-@@ -455,8 +455,11 @@
+@@ -454,7 +454,10 @@
  def gp_theta_params_values(values: List[Float64]) -> List[Float64]:
      """`gp_theta_param` of each value, widened to float64, in order."""
      var out = List[Float64]()
@@ -11,5 +12,4 @@
 +        var sb = bitcast[DType.uint32](gp_theta_param(values[i]))
 +        out.append(Float64(bitcast[DType.float32](UInt32(0x00800000)) if (sb & UInt32(0x7FFFFFFF)) < UInt32(0x00800000) else bitcast[DType.float32](sb + UInt32(1))))
      return out^
- 
  

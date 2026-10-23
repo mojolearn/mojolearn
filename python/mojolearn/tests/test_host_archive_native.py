@@ -250,17 +250,14 @@ def test_host_load_refuses_path_protocol_without_invoking_it():
 
 def test_host_load_refuses_dictionary_descriptor_before_instantiation(tmp_path):
     calls = []
-
-    class CustomHost(host.HostPCA):
-        @property
-        def __dict__(self):
-            calls.append("dictionary")
-            return {}
-
-    audit = audit_native_call(CustomHost.load, _archive(tmp_path, "PCA"))
-    assert isinstance(audit.exception, TypeError), audit.report()
-    report = audit.report()
-    assert not any(report[key] for key in ("python_frames", "forbidden_native_calls", "wrapper_work", "unobserved_existing_threads")), report
+    # The native host registration refuses the class itself (at subclass
+    # creation), before any load or instantiation can read the descriptor.
+    with pytest.raises(TypeError, match="native instance dictionary"):
+        class CustomHost(host.HostPCA):
+            @property
+            def __dict__(self):
+                calls.append("dictionary")
+                return {}
     assert calls == []
 
 
