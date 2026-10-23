@@ -2182,6 +2182,7 @@ def host_archive_svm_ovo(fields: PythonObject, arrays: PythonObject, features: I
             _ = vectors  # keep the Python object alive through the native call above
             py_setitem(pair, "support", ps)
             _ = support  # keep the Python object alive through the native call above
+            _ = raw_support  # keep the Python object alive through the native call above
             py_setitem(pair, "b", bias_value)
             py_setitem(pair, "n_iter", iterations)
             _ = py_call(pairs.append, pair)

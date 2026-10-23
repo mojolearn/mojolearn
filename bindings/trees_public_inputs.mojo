@@ -407,7 +407,9 @@ def trees_f32_view(var view: TreesView, order: String, context: PythonObject) ra
     var want_f = order == "F"
     var has_order = view.both_orders() or (view.f_order() if want_f else view.c_order())
     if view.typestr == "<f4" and has_order:
-        return TreesMatrix(view.keep, view.addr, rows, cols, not want_f)
+        var _keep_ret_view = TreesMatrix(view.keep, view.addr, rows, cols, not want_f)
+        _ = view  # keep the Python object alive through the native call above
+        return _keep_ret_view^
     var shape = Python.tuple(rows, cols) if two else Python.tuple(rows)
     var out = trees_empty(shape, "<f4", context, "F" if want_f and two else "C")
     var dst = trees_address(out)
@@ -425,21 +427,25 @@ def trees_f32_view(var view: TreesView, order: String, context: PythonObject) ra
                 c = rows
             var fn_obj = trees_helper(context, "cast_colmajor_f64_to_f32" if view.typestr == "<f8" else "transpose_f32")
             _ = py_call_typed(fn_obj, PythonObject(view.addr), PythonObject(dst), PythonObject(r), PythonObject(c))
+            _ = view  # keep the Python object alive through the native call above
             return TreesMatrix(out, dst, rows, cols, not want_f)
         if view.typestr == "<f8":
             # The flat cast keeps the source's storage order, which is the
             # requested one here (or the two coincide).
             _ = py_call_typed(trees_helper(context, "cast_f64_to_f32"), PythonObject(view.addr), PythonObject(dst),
                               PythonObject(view.size()))
+            _ = view  # keep the Python object alive through the native call above
             return TreesMatrix(out, dst, rows, cols, not want_f)
     # `astype('<f4')` keeps the source's storage order; `_as_order` then
     # transposes when the requested order differs (the float32 transpose).
     if not two or view.both_orders() or contiguous_f == want_f:
         trees_cast(view.addr, view.typestr, dst, "<f4", view.size(), context)
+        _ = view  # keep the Python object alive through the native call above
         return TreesMatrix(out, dst, rows, cols, not want_f)
     var staged = trees_vector(view.size(), "<f4", context)
     trees_cast(view.addr, view.typestr, trees_address(staged), "<f4", view.size(), context)
     _ = staged  # keep the Python object alive through the native call above
+    _ = view  # keep the Python object alive through the native call above
     var r = cols if contiguous_f else rows
     var c = rows if contiguous_f else cols
     _ = py_call_typed(trees_helper(context, "transpose_f32"), PythonObject(trees_address(staged)), PythonObject(dst),

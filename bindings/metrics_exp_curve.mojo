@@ -387,6 +387,8 @@ def _average_precision(args: PythonObject, context: PythonObject) raises -> Pyth
         if average is None:
             var _keep_ret_sc = arena.words(sc, 2 * k, Python.tuple(PythonObject(k)), "<f8", context)
             _ = sc  # keep the Python object alive through the native call above
+            var _keep_ret_sc = _keep_ret_sc^
+            _ = sc  # keep the Python object alive through the native call above
             return _keep_ret_sc^
         return PythonObject(arena.f64(res))
     # a class whose AP needs the curve rule takes the fold's own rule
