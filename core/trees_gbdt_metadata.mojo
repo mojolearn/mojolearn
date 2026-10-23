@@ -17,8 +17,8 @@ struct GBDTTreeMetadata(Movable):
 
 def _is_space(byte: UInt8) -> Bool:
     # str.split(): ASCII whitespace (the model text is ASCII).
-    return byte == 32 or byte == 9 or byte == 10 or byte == 11 or byte == 12 or byte == 13 \
-        or byte == 28 or byte == 29 or byte == 30 or byte == 31
+    return (byte == 32 or byte == 9 or byte == 10 or byte == 11 or byte == 12 or byte == 13
+        or byte == 28 or byte == 29 or byte == 30 or byte == 31)
 
 
 def _fields(line: String) -> List[String]:

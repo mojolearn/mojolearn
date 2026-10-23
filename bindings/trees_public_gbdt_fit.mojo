@@ -133,8 +133,8 @@ def _resolved_learning_rate(fields: PythonObject, model: PythonObject, n_rows: I
         return _float(lr)
     if not _eq(_field(fields, model, "grow_policy"), "SymmetricTree"):
         return _float(t["legacy_learning_rate"])
-    if _field(fields, model, "l2_leaf_reg") is not None or _field(fields, model, "leaf_estimation_method") is not None \
-            or _field(fields, model, "leaf_estimation_iterations") is not None:
+    if (_field(fields, model, "l2_leaf_reg") is not None or _field(fields, model, "leaf_estimation_method") is not None
+            or _field(fields, model, "leaf_estimation_iterations") is not None):
         return _float(t["catboost_learning_rate"])
     var use_best_obj = _field(fields, model, "use_best_model")
     var use_best = (n_eval_rows > 0 and not eval_constant) if use_best_obj is None else _truthy(use_best_obj)
@@ -156,10 +156,10 @@ def _resolved_boosting_type(fields: PythonObject, model: PythonObject, n_rows: I
     var loss = _field(fields, model, "loss")
     var fraction = py_get(fields, "feature_fraction", PythonObject(1.0))
     var score = _field(fields, model, "score_function")
-    if not _eq(_field(fields, model, "grow_policy"), "SymmetricTree") or _in(loss, t["multi_output_losses"]) \
-            or _in(loss, t["multi_regression_losses"]) \
-            or not (_eq(score, "Cosine") or _eq(score, "NewtonCosine")) \
-            or _truthy(_field(fields, model, "use_pointwise_searcher")) or Bool(py=fraction < PythonObject(1.0)):
+    if (not _eq(_field(fields, model, "grow_policy"), "SymmetricTree") or _in(loss, t["multi_output_losses"])
+            or _in(loss, t["multi_regression_losses"])
+            or not (_eq(score, "Cosine") or _eq(score, "NewtonCosine"))
+            or _truthy(_field(fields, model, "use_pointwise_searcher")) or Bool(py=fraction < PythonObject(1.0))):
         return "Plain"
     if n_rows >= Int(py=t["ordered_max_rows"]) or Int(py=py_call_typed(_b().int, _field(fields, model, "n_estimators"))) < Int(py=t["ordered_min_iterations"]):
         return "Plain"
@@ -267,8 +267,8 @@ def _params(fields: PythonObject, model: PythonObject, n_rows: Int, n_features: 
     var method = _field(fields, model, "leaf_estimation_method")
     var method_code = PythonObject(-1) if method is None else t["leaf_estimation_names"][method]
     var iters = _field(fields, model, "leaf_estimation_iterations")
-    if iters is None and _eq(_field(fields, model, "grow_policy"), "SymmetricTree") \
-            and Int(py=py_call_typed(b.int, _field(fields, model, "n_estimators"))) < 200 and n_features < 20:
+    if (iters is None and _eq(_field(fields, model, "grow_policy"), "SymmetricTree")
+            and Int(py=py_call_typed(b.int, _field(fields, model, "n_estimators"))) < 200 and n_features < 20):
         iters = PythonObject(1)
     var rate = _resolved_learning_rate(fields, model, n_rows, n_eval_rows, eval_constant, context)
     var tail = Python.list()
@@ -604,8 +604,9 @@ def _bias_of(text: String) raises -> Float64:
     var next = rest.find("/")
     var hex = rest if next < 0 else String(rest[byte=0:next])
     var bits = UInt64(0)
-    for cp in hex.codepoints():  # small-loop(hex): at most sixteen hex digits of one word
-        var c = Int(cp)
+    var digits = hex.as_bytes()
+    for i in range(len(digits)):  # small-loop(hex): at most sixteen hex digits of one word
+        var c = Int(digits[i])
         var d = -1
         if c >= 48 and c <= 57:
             d = c - 48

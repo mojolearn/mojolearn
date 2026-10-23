@@ -372,8 +372,8 @@ def _adapter_binary(model: PythonObject, X: PythonObject, probabilities: Bool, c
             raise Error("AttributeError: '" + String(py_type(model).__name__) + "' object has no attribute '_learner_'")
         return gbdt_predict_classes(learner, X, context)
     var margins = adapter_decision_function(model, X, context)
-    if Int(py=margins.ndim) != 1 or String(margins.dtype) != "<f4" \
-            or not trees_all_finite(trees_address(margins), Int(py=margins.size), False, context):
+    if (Int(py=margins.ndim) != 1 or String(margins.dtype) != "<f4"
+            or not trees_all_finite(trees_address(margins), Int(py=margins.size), False, context)):
         raise Error("Classifier margins must be finite scalar Float32 values")
     var n = Int(py=margins.size)
     var table = trees_table(context, String(mode) if mode is not None else gbdt_mode(fields, context), "_mojolearn_gbdt")
