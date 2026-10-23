@@ -99,7 +99,7 @@ def native_worker_inventory(vendor: String, environ: PythonObject) raises -> Pyt
     var cuda = vendor == "cuda"
     var init_name = String("cuInit") if cuda else String("hipInit")
     _inventory_status(driver.get_function[c_int](init_name)(c_uint(0)), init_name)
-    var count = Array[c_int, 1](c_int(0))
+    var count = Array[c_int, 1](fill=c_int(0))
     var count_name = String("cuDeviceGetCount") if cuda else String("hipGetDeviceCount")
     _inventory_status(driver.get_function[c_int](count_name)(count.unsafe_ptr()), count_name)
     if count[0] < 1:
@@ -109,7 +109,7 @@ def native_worker_inventory(vendor: String, environ: PythonObject) raises -> Pyt
         uuid_name = String("cuDeviceGetUuid_v2") if driver.check_symbol("cuDeviceGetUuid_v2") else String("cuDeviceGetUuid")
     var devices = bi.list()
     for ordinal in range(Int(count[0])):  # driver-loop: one record per visible driver ordinal
-        var device = Array[c_int, 1](c_int(ordinal))
+        var device = Array[c_int, 1](fill=c_int(ordinal))
         if cuda:
             _inventory_status(driver.get_function[c_int]("cuDeviceGet")(device.unsafe_ptr(), c_int(ordinal)), "cuDeviceGet")
         var uuid = Array[UInt8, 16](uninitialized=True)

@@ -178,7 +178,7 @@ def transport_connect(host: String, port: Int, timeout: Float64) raises -> Pytho
 def transport_address(socket: PythonObject, peer: Bool = False) raises -> PythonObject:
     var state = _transport_state(socket)
     var storage = Array[Int64, 16](uninitialized=True)  # sockaddr_storage: 128 bytes, aligned
-    var length = Array[c_uint, 1](c_uint(128))
+    var length = Array[c_uint, 1](fill=c_uint(128))
     var status = c_int(0)
     if peer:
         status = external_call["getpeername", c_int](c_int(state[0]), storage.unsafe_ptr(), length.unsafe_ptr())
@@ -374,7 +374,9 @@ def transport_spawn(executable: String, argv: List[String], environment: List[St
     var records = List[String]()
     for i in range(len(keys)):  # driver-loop: exact builtin string environment records
         records.append(String(keys[i]) + "=" + String(env[keys[i]]))
-    return posix_spawn(executable, argv, records)
+    # posix_spawn retains mutable String owners through the C call. Snapshot
+    # the borrowed argument list and transfer the locally assembled environment.
+    return posix_spawn(executable, argv.copy(), records^)
 
 
 def transport_wait(pid: Int, nohang: Bool = False) raises -> Int:

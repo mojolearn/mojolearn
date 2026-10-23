@@ -32,7 +32,7 @@ def posix_failure(operation: String, number: Int) raises:
 
 
 def posix_clock() raises -> Float64:
-    var stamp = Array[Int64, 2](0, 0)
+    var stamp = Array[Int64, 2](fill=Int64(0))
     var clock_id = 1  # CLOCK_MONOTONIC
     comptime if CompilationTarget.is_macos():
         clock_id = 6
@@ -45,8 +45,10 @@ def posix_sleep(seconds: Float64) raises:
     if seconds < 0 or not isfinite(seconds) or seconds >= 9223372036854775808.0:
         raise Error("transport: invalid sleep interval")
     var whole = Int64(seconds)
-    var request = Array[Int64, 2](whole, Int64((seconds - Float64(whole)) * 1e9))
-    var remaining = Array[Int64, 2](0, 0)
+    var request = Array[Int64, 2](fill=Int64(0))
+    request[0] = whole
+    request[1] = Int64((seconds - Float64(whole)) * 1e9)
+    var remaining = Array[Int64, 2](fill=Int64(0))
     ref cpy = Python().cpython()
     var release = cpy.lib.get_function[PosixBytes]("PyEval_SaveThread")
     var restore = cpy.lib.get_function[NoneType]("PyEval_RestoreThread")
@@ -78,7 +80,8 @@ def posix_deadline(timeout: Float64) raises -> Float64:
 
 def posix_ready(fd: Int, writing: Bool, deadline: Float64) raises:
     # pollfd is {int fd; short events; short revents} on both public ABIs.
-    var words = Array[Int32, 2](Int32(fd), Int32(0))
+    var words = Array[Int32, 2](fill=Int32(0))
+    words[0] = Int32(fd)
     var shorts = MutPointer[Int16, MutUntrackedOrigin](unsafe_from_address=Int(words.unsafe_ptr()))
     shorts[2] = Int16(4 if writing else 1)  # POLLOUT / POLLIN
     while True:  # driver-loop: bounded native readiness wait
@@ -122,12 +125,12 @@ def posix_socket_prepare(fd: Int) raises:
     comptime if CompilationTarget.is_macos():
         nonblock = 4
     flags = external_call["fcntl", c_int, num_fixed_args=2](c_int(fd), c_int(3))
-    if flags < 0 or external_call["fcntl", c_int, num_fixed_args=2](c_int(fd), c_int(4), c_int(flags | nonblock)) < 0:
+    if flags < 0 or external_call["fcntl", c_int, num_fixed_args=2](c_int(fd), c_int(4), flags | c_int(nonblock)) < 0:
         posix_failure("O_NONBLOCK", posix_errno())
     comptime if CompilationTarget.is_macos():
         # Darwin lacks MSG_NOSIGNAL. Set the socket's supported equivalent;
         # do not mutate the application's process-wide signal disposition.
-        var enabled = Array[c_int, 1](c_int(1))
+        var enabled = Array[c_int, 1](fill=c_int(1))
         if external_call["setsockopt", c_int](c_int(fd), c_int(65535), c_int(0x1022), enabled.unsafe_ptr(), c_uint(4)) != 0:
             posix_failure("SO_NOSIGPIPE", posix_errno())
 
@@ -137,7 +140,7 @@ def posix_resolve(var host: String, port: Int, passive: Bool) raises -> Int:
         raise Error("transport: hostname contains NUL")
     # Public LP64 addrinfo: four int fields, socklen_t, alignment padding,
     # three pointers. ai_addr/ai_canonname order differs on Darwin.
-    var hints = Array[Int, 6](0, 0, 0, 0, 0, 0)
+    var hints = Array[Int, 6](fill=0)
     var fields = MutPointer[c_int, MutUntrackedOrigin](unsafe_from_address=Int(hints.unsafe_ptr()))
     fields[0] = c_int(1 if passive else 0)  # AI_PASSIVE on Linux and Darwin.
     fields[2] = 1  # SOCK_STREAM
@@ -145,7 +148,7 @@ def posix_resolve(var host: String, port: Int, passive: Bool) raises -> Int:
     var hostname = Optional[PosixBytes](None)
     if host != "":
         hostname = PosixBytes(unsafe_from_address=Int(host.as_c_string_slice().unsafe_ptr()))
-    var result = Array[Int, 1](0)
+    var result = Array[Int, 1](fill=0)
     var service_pointer = service.as_c_string_slice().unsafe_ptr()
     ref cpy = Python().cpython()
     var release = cpy.lib.get_function[PosixBytes]("PyEval_SaveThread")
@@ -185,7 +188,7 @@ def posix_open(host: String, port: Int, timeout: Float64, listening: Bool) raise
                 try:
                     posix_socket_prepare(fd)
                     if listening:
-                        var enabled = Array[c_int, 1](c_int(1))
+                        var enabled = Array[c_int, 1](fill=c_int(1))
                         var level = 1
                         var option = 2
                         comptime if CompilationTarget.is_macos():
@@ -207,8 +210,8 @@ def posix_open(host: String, port: Int, timeout: Float64, listening: Bool) raise
                             if number == 4 or (not pending and not posix_again(number)):
                                 posix_failure("connect", number)
                             posix_ready(fd, True, posix_deadline(timeout))
-                            var error = Array[c_int, 1](c_int(0))
-                            var size = Array[c_uint, 1](c_uint(4))
+                            var error = Array[c_int, 1](fill=c_int(0))
+                            var size = Array[c_uint, 1](fill=c_uint(4))
                             var level = 1
                             var option = 4
                             comptime if CompilationTarget.is_macos():
@@ -292,7 +295,7 @@ def posix_spawn(var executable: String, var argv: List[String], var environment:
         if environment[i].find("\0") >= 0:
             raise Error("transport: environment entry contains NUL")
         variables[i] = Int(environment[i].as_c_string_slice().unsafe_ptr())
-    var pid = Array[c_int, 1](c_int(0))
+    var pid = Array[c_int, 1](fill=c_int(0))
     var executable_pointer = executable.as_c_string_slice().unsafe_ptr()
     ref cpy = Python().cpython()
     var release = cpy.lib.get_function[PosixBytes]("PyEval_SaveThread")
@@ -311,7 +314,7 @@ def posix_spawn(var executable: String, var argv: List[String], var environment:
 
 
 def posix_wait(pid: Int, nohang: Bool) raises -> Int:
-    var status = Array[c_int, 1](c_int(0))
+    var status = Array[c_int, 1](fill=c_int(0))
     ref cpy = Python().cpython()
     var release = cpy.lib.get_function[PosixBytes]("PyEval_SaveThread")
     var restore = cpy.lib.get_function[NoneType]("PyEval_RestoreThread")
