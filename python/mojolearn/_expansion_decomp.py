@@ -2617,25 +2617,6 @@ class FastICA(_Base):
         self.fun_args, self.max_iter, self.tol, self.w_init = fun_args, max_iter, tol, w_init
         self.whiten_solver, self.random_state, self.numeric_mode = whiten_solver, random_state, numeric_mode
 
-    def _solve(self, k, X1, Winit):
-        """`_par` (with `_sym_decorrelation`) or `_def` in ONE binding call
-        (lane py-runtime-b: x_decomp/ica.mojo on the host column,
-        x_decomp/ica_dev.mojo on resident device matrices): the same cells,
-        broadcast modes and float32 scalars as the Python loops it replaces,
-        their float64 limits and norms in the same order. Returns (W, it)."""
-        alpha = 1.0
-        if self.fun == "logcosh":
-            alpha = (self.fun_args or {}).get("alpha", 1.0)
-            if not 1 <= alpha <= 2:
-                raise ValueError("alpha must be in [1,2]")
-        elif self.fun not in ("exp", "cube"):
-            raise ValueError("fun must be 'logcosh', 'exp' or 'cube' (a callable is not carried)")
-        fun = {"logcosh": 0, "exp": 1, "cube": 2}[self.fun]
-        W = Winit.copy()
-        p = [W.r, X1.r, X1.c, 0 if self.algorithm == "parallel" else 1, fun, int(self.max_iter)]
-        it = int(k.b.x_decomp_ica_solve(X1.addr, W.addr, p, [float(alpha), float(self.tol)]))
-        return W, it
-
     def fit_transform(self, X, y=None):
         """Fit the model and return the estimated sources.
 
@@ -2648,7 +2629,7 @@ class FastICA(_Base):
         -------
         ndarray of shape (n_samples, n_components), float32
         """
-        return self._fit(X, True).out()
+        return _DECOMP_CALL(self, "fit_transform", (X,), _DECOMP_CONTEXT)
 
     def fit(self, X, y=None):
         """Fit the model.
@@ -2662,73 +2643,7 @@ class FastICA(_Base):
         -------
         self
         """
-        self._fit(X, False)
-        return self
-
-    def _fit(self, X, sources):
-        self.numeric_mode_ = _mode(self.numeric_mode)
-        k = self._kit()
-        M = _M.from_input(X)
-        n, d = M.r, M.c
-        _min_samples(n, d, "FastICA")
-        if self.algorithm not in ("parallel", "deflation"):
-            raise ValueError("algorithm must be 'parallel' or 'deflation'")
-        whiten = self.whiten
-        if whiten not in (False, "unit-variance", "arbitrary-variance"):
-            raise ValueError(f"whiten={whiten!r} is not supported")
-        nc = self.n_components
-        if not whiten and nc is not None:
-            nc = None
-        if nc is None:
-            nc = min(n, d)
-        if nc > min(n, d):
-            nc = min(n, d)
-        if whiten:
-            mean = k.colmean(M)
-            Xc = k.ew("sub", M, mean)
-            ev, u = k.eigh(k.mm(Xc, Xc, ta=True))
-            order = list(range(d - 1, -1, -1))
-            ev = k.ew("maxs", ev.take_cols(order), s=_F32_EPS * 10)
-            sv = k.ew("sqrt", ev)
-            u = u.take_cols(order)
-            u = k.ew("mul", u, k.neg_signs(u.rows(0, 1)))   # row 0's signs, on the device
-            K = k.ew("div", u, sv).T.rows(0, nc)
-            X1 = k.ew("scale", k.mm(K, Xc, tb=True), s=math.sqrt(n))
-        else:
-            Xc = M
-            X1 = M.T
-        if self.w_init is None:
-            Winit = k.rand(nc, nc, _seed_of(self.random_state), 20, 1)
-        else:
-            Winit = _M.from_input(self.w_init, "w_init")
-            if (Winit.r, Winit.c) != (nc, nc):
-                raise ValueError(f"w_init has invalid shape -- should be {(nc, nc)}")
-        W, it = self._solve(k, X1, Winit)
-        self.n_iter_ = it
-        S = None
-        if whiten:
-            WK = k.mm(W, K)
-            S = k.mm(Xc, WK, tb=True)
-            if whiten == "unit-variance":
-                smean = k.colmean(S)
-                std = k.ew("sqrt", k.ew("scale", k.colsum(k.ew("sqdiff", S, smean)), s=1.0 / n))
-                S = k.ew("div", S, std)
-                W = k.ew("div", W, std.T)
-            comp = k.mm(W, K)
-            self.whitening_m_ = K
-            self.whitening_ = K.out()
-            self.mean_m_ = mean
-            self.mean_ = mean.out((d,))
-        else:
-            S = k.mm(M, W, tb=True)
-            comp = W
-        self.components_m_ = comp
-        self.components_ = comp.out()
-        self.mixing_m_ = _pinv_rows(k, comp)
-        self.mixing_ = self.mixing_m_.out()
-        self._whiten = whiten
-        self.n_features_in_ = d
-        return S
+        return _DECOMP_CALL(self, "fit", (X,), _DECOMP_CONTEXT)
 
     def transform(self, X, copy=True):
         """Recover the sources from X.
@@ -2743,12 +2658,7 @@ class FastICA(_Base):
         -------
         ndarray of shape (n_samples, n_components), float32
         """
-        self._check()
-        k = self._kit()
-        M = _M.from_input(X)
-        if self._whiten:
-            M = k.ew("sub", M, self.mean_m_)
-        return k.mm(M, self.components_m_, tb=True).out()
+        return _DECOMP_CALL(self, "transform", (X,), _DECOMP_CONTEXT)
 
     def inverse_transform(self, X, copy=True):
         """Map sources back to the feature space with ``mixing_``.
@@ -2763,12 +2673,7 @@ class FastICA(_Base):
         -------
         ndarray of shape (n_samples, n_features), float32
         """
-        self._check()
-        k = self._kit()
-        Y = k.mm(_M.from_input(X), self.mixing_m_, tb=True)
-        if self._whiten:
-            Y = k.ew("add", Y, self.mean_m_)
-        return Y.out()
+        return _DECOMP_CALL(self, "inverse_transform", (X,), _DECOMP_CONTEXT)
 
 
 # ================================================================ FactorAnalysis
@@ -7380,3 +7285,7 @@ _IPCA_CALL, _IPCA_CONTEXT = _native_ipca_bridge.connect_public(IncrementalPCA)
 # The compiled johnson_lindenstrauss_min_dim owner.
 from . import _native_jl_bridge  # noqa: E402
 _JL_CALL, _JL_CONTEXT = _native_jl_bridge.connect_public()
+# The compiled owner of the decomposition estimators whose public operations
+# are one native call each (bindings/decomp_native.mojo): FastICA, ...
+from . import _native_decomp_bridge  # noqa: E402
+_DECOMP_CALL, _DECOMP_CONTEXT = _native_decomp_bridge.connect_public({"FastICA": FastICA})
