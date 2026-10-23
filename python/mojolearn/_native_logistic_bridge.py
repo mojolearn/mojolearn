@@ -117,7 +117,7 @@ def connect_public(cls, context, install=True):
                  classical_attribute_descriptor=descriptor,
                  classical_public_layouts={cls: _layout(cls, descriptor)},
                  classifier_labels_class=ClassLabels, classifier_labels_namespace=dict(vars(ClassLabels)),
-                 lr_parameters=_PARAMETERS, lr_sorted_parameters=tuple(sorted(_PARAMETERS)),
+                 lr_parameters=_PARAMETERS, lr_sorted_parameters=tuple(sorted(_PARAMETERS)),  # glue: fixed import-time parameter metadata
                  lr_consumed_fields=('_w', 'classes_', 'n_features_in_', '_l1_ratio', 'lbfgs_memory',
                                      'penalty_normalized', '_mojolearn_fitted', '_mojolearn_fitting'))
     return owner
