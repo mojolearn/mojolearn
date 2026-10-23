@@ -99,6 +99,10 @@ def connect(training):
     context["device_finalizer_types"] = (dict, int, BuiltinFunctionType, str, list)
     context["device_fields_getter"] = vars(training.TrainDeviceArray)["__dict__"].__get__
     training.TrainDeviceArray.__del__ = descriptor(MethodType(finalizer, context))
+    optimizer_finalizer = module.optimizer_finalize_descriptor
+    if not isinstance(optimizer_finalizer, BuiltinFunctionType):
+        raise TypeError("optimizer ownership requires a compiled finalizer descriptor")
+    training._Optimizer.__del__ = descriptor(MethodType(optimizer_finalizer, context))
     context["device_finalizer_descriptor"] = vars(training.TrainDeviceArray)["__del__"]
     names += ("__del__",)
     context["guards"] = tuple((cls, cls.__mro__, vars(cls), tuple((name, vars(cls).get(name)) for name in names))  # glue: retain finalizer and layout identities after native descriptor connection

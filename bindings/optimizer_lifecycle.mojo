@@ -4,6 +4,12 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_get, py_setitem, py_type
 
 
+def optimizer_finalize_descriptor_binding(context: PythonObject, owner: PythonObject) raises -> PythonObject:
+    # A native instance-method descriptor binds the owner without a Python
+    # __del__ frame when a native operation releases a temporary optimizer.
+    return optimizer_finalize_binding(owner)
+
+
 def optimizer_finalize_binding(owner: PythonObject) raises -> PythonObject:
     var bi: PythonObject
     try:

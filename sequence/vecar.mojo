@@ -82,11 +82,17 @@ def op_cholsolve(t: Int, a: Args):
     var m = a.i0
     var K = a.i1
     for j in range(m):
-        var d = ld(a.p0, j * m + j)
+        var diagonal = ld(a.p0, j * m + j)
+        var d = diagonal
         for k in range(j):
             var l = ld(a.p0, j * m + k)
             d = sub(d, mul(l, l))
-        if not (d > Float32(0.0)):
+        # A dependent column can leave a small positive residual after the
+        # rounded sqrt/divide/multiply steps. Judge numerical rank relative
+        # to its original Gram diagonal and the m-term float32 error budget;
+        # a strict zero test admitted duplicate columns in identical mode.
+        var rank_tol = mul(abs(diagonal), mul(Float32(m), Float32(1.1920928955078125e-7)))
+        if not (d > rank_tol):
             st(a.p2, 0, Float32(1 + j))
             return
         var ljj = ftz(identical_sqrt(d))

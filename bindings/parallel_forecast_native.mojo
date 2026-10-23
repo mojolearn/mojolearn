@@ -109,9 +109,12 @@ def _rows(source: PythonObject, lo: Int, hi: Int, width: Int, context: PythonObj
     var out = tsa_array("f", "<f4", Python.tuple(hi - lo, width), (hi - lo) * width, 4, context)
     if (hi - lo) * width > 0:
         memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out))),
-               src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(source)) + lo * width),
+               # The source address is in bytes; advance the typed pointer in
+               # Float32 elements so every shard starts at its own series.
+               src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(source))) + lo * width,
                count=(hi - lo) * width)
         _ = out  # keep the Python object alive through the native call above
+        _ = source
     return out
 
 

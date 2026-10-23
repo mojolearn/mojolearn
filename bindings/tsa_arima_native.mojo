@@ -122,7 +122,9 @@ def _copied(value: PythonObject, context: PythonObject) raises -> Bool:
     var f32 = typed == "<f4" or typed == "float32"
     var c_order = True
     if Bool(py=py_call(_b().hasattr, value, "flags")):
-        c_order = Bool(py=value.flags.c_contiguous)
+        var flags = value.flags
+        c_order = (Bool(py=flags["C_CONTIGUOUS"]) if py_type(flags) is _b().dict
+                   else Bool(py=flags.c_contiguous))
     elif Bool(py=py_call(_b().hasattr, value, "order")):
         c_order = String(py=value.order) == "C" or Int(py=value.ndim) < 2
     return not (f32 and c_order)

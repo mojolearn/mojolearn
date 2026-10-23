@@ -33,7 +33,9 @@ def pca_copied(source: PythonObject, context: PythonObject) raises -> Bool:
     # NumPy's keys are in the context only once NumPy is loaded
     var ndarray = py_get(context, "ndarray")
     if (ndarray is not None and py_type(source) is ndarray) or py_type(source) is context["array_class"]:
-        var view = sequential_input(source, context)
+        # An Array already exposes its native metadata. sequential_input is
+        # the ndarray adapter and requires NumPy's connected types.
+        var view = source if ndarray is None else sequential_input(source, context)
         var f32 = py_get(context, "float32")
         var is_f32 = (view.dtype is f32) if f32 is not None else (String(py=py_call(b.str, view.dtype)) == "<f4")
         # an ndarray's flags object, or an Array's flags dict

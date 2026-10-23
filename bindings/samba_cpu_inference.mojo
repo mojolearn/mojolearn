@@ -25,7 +25,7 @@ def samba_inference_construct(model: PythonObject, config: PythonObject, weights
     for i in range(len(registry)):  # driver-loop: over admitted model registry metadata
         _ = py_call(names.add, registry[i]["name"])
     if Bool(py=py_call(bi.set, weights) != names):
-        raise Error("SambaInference: weight dict has missing or unknown registry names")
+        raise Error("SambaInference: weight dict mismatch: missing or unknown registry names")
     var arrays = bi.dict()
     var format = "float32"
     for i in range(len(registry)):  # driver-loop: over copied CPU inference parameter owners

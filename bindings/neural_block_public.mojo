@@ -152,6 +152,10 @@ def _neural_plain(owner: PythonObject, x: PythonObject, supplied_state: PythonOb
     var l = Int(py=x.shape[1])
     var d = Int(py=x.shape[2])
     var transformer = String(owner.kind) == "transformer"
+    # Admission refusal must not poison a valid state owned by a decode
+    # session. Only a failure after entering execution can invalidate it.
+    if supplied_state is not None and py_call(bi.getattr, supplied_state, "_resident_session", PythonObject(None)) is not None:
+        raise Error("neural block: state is owned by a resident decode session")
     var e = owner._native_entries
     var reuse = transformer and py_contains(e, "forward_session") and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1"
     var lock = py_get(fields, "_runtime_lock") if transformer else PythonObject(None)

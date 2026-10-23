@@ -13,7 +13,7 @@ from bindings.classical_arrays import classical_address, classical_word
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
     family_repr, family_str, family_is_str, family_is_int, family_type_name, family_call,
-    family_entry, family_array, family_as_f32, family_field, family_view, family_cast_view, family_shape_repr,
+    family_entry, family_array, family_f32, family_field, family_view, family_cast_view, family_shape_repr,
 )
 
 comptime _TSNE_EXPLORATION_MAX_ITER = 250
@@ -75,7 +75,9 @@ def _tsne_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     var binding = args[0]
     var estimators = args[1]
     var fields = py_fields(model)
-    var x = family_as_f32(args[2], 2, "X", context)
+    # Reject nonfinite coordinates before PCA initialization reaches its
+    # eigensolver; preserve TSNE's public input refusal for every init mode.
+    var x = family_f32(args[2], 2, "X", context)
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
     if n < 2:

@@ -104,7 +104,7 @@ from bindings.parallel_neural_native import parallel_neural_c
 from bindings.parallel_forecast_native import parallel_forecast_c
 from bindings.parallel_causal_native import parallel_causal_c, RemoteStateLifetime
 from bindings.trees_lifetime import TreesResident
-from bindings.optimizer_lifecycle import optimizer_finalize_binding
+from bindings.optimizer_lifecycle import optimizer_finalize_binding, optimizer_finalize_descriptor_binding
 from bindings.optimizer_native_router import optimizer_native_c
 from bindings.embedding_layer_native import embedding_layer_lifetime_c
 from bindings.optimizer_device_native import device_finalize_c
@@ -1337,6 +1337,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(parallel_forecast_c, "parallel_forecast_call")
         module.def_py_c_function(parallel_causal_c, "parallel_causal_call")
         module.def_function[optimizer_finalize_binding]("optimizer_finalize")
+        module.def_function[optimizer_finalize_descriptor_binding]("optimizer_finalize_descriptor")
         module.def_py_c_function(optimizer_native_c, "optimizer_native")
         module.def_py_c_function(embedding_layer_lifetime_c, "embedding_layer_lifetime")
         module.def_py_c_function(device_finalize_c, "optimizer_device_finalize")

@@ -493,9 +493,6 @@ class _Optimizer(NumericModeMixin):
         info words. Returns what `step` returns."""
         return _OPT_NATIVE("step", self, (grads, max_norm, _OP_STEP_DEVICE, None), None, _OPT_CONTEXT)
 
-    def __del__(self):
-        return _optimizer_finalize_native(self)
-
     def get_params(self, deep=True):
         """Return constructor parameters for inspection or cloning."""
         return _OPT_NATIVE("get_params", self, (deep,), None, _OPT_CONTEXT)

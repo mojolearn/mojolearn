@@ -4,6 +4,7 @@
 estimator; parity with statsmodels itself (within 1e-5 on params, sigma_u and
 forecasts) was checked on the lane's pod."""
 import numpy as np
+import pytest
 
 import mojolearn as ml
 
@@ -37,8 +38,9 @@ def test_var_matches_least_squares():
         assert r.forecast(y, 4).shape == (4, 2)
 
 
-def test_rank_deficient_design_is_refused():
-    y = _y()
+@pytest.mark.parametrize("rows,scale", [(96, 1.0), (300, 1.0), (300, 1e-4)])
+def test_rank_deficient_design_is_refused(rows, scale):
+    y = _y(n=rows) * np.float32(scale)
     y[:, 1] = y[:, 0]
     try:
         ml.VAR(y).fit(maxlags=1)
