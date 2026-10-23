@@ -463,7 +463,7 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
         batch = xseq_int(clipped)
     py_setitem(fields, "n_outputs_", o)
     py_setitem(fields, "n_layers_", len(sizes))
-    py_setitem(fields, "out_activation_", _mlp_out_name(out_act))
+    py_setitem(fields, "out_activation_", PythonObject(_mlp_out_name(out_act)))
     py_setitem(fields, "n_features_in_", d)
     var max_iter = xseq_int(fields["max_iter"])
     var curve = xseq_zeros(Python.tuple(max_iter), context)
