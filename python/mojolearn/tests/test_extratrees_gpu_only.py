@@ -32,13 +32,14 @@ def test_direct_device_mutation_refused_before_input_or_binding(cls):
 
 
 @pytest.mark.parametrize('cls', [ExtraTreesClassifier, ExtraTreesRegressor])
-def test_gpu_parameter_remains_cloneable_and_abi_stable(cls):
-    from mojolearn.extratrees import _fit_params
+def test_gpu_parameter_remains_cloneable_and_fits(cls):
+    import numpy as np
     model = cls(device='gpu')
     replica = cls(**model.get_params())
     assert replica.device == 'gpu'
-    # The native configuration is derived by the fit-time checks.
-    replica._validate_params()
-    params = _fit_params(2, 1, 2, replica._cfg, replica.device,
-                         replica._criterion_code)
-    assert params[20] == 1
+    rng = np.random.default_rng(0)
+    X = rng.random((40, 4), dtype=np.float32)
+    y = (X[:, 0] > 0.5).astype(np.int32)
+    replica.set_params(n_estimators=2, max_depth=2, random_state=0)
+    assert replica.fit(X, y) is replica
+    assert replica.device == 'gpu'
