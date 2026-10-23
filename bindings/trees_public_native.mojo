@@ -4,7 +4,7 @@
 # public method of a connected tree class is one call here.
 from std.python import Python, PythonObject
 from bindings.classical_attributes import classical_connect_numpy
-from bindings.trees_public_forest import forest_fit, forest_predict, forest_predict_proba
+from bindings.trees_public_forest import forest_fit, forest_predict, forest_predict_proba, forest_get_params, forest_refresh
 from bindings.trees_public_score import forest_score
 from bindings.trees_public_iforest import iforest_operation
 from bindings.trees_public_boost import boost_operation
@@ -27,6 +27,11 @@ def trees_public_operation(model: PythonObject, operation: String, args: PythonO
     # Connect a loaded NumPy's native types (ndarray inputs, pandas
     # storage); outputs stay mojolearn Arrays.
     classical_connect_numpy(context)
+    if operation == "trees_forest_get_params":
+        return forest_get_params(model, context)
+    if operation == "trees_forest_initialize":
+        _ = forest_refresh(model, String(args[0]), context)
+        return PythonObject(None)
     if operation == "trees_forest_fit":
         return forest_fit(model, args, context)
     if operation == "trees_forest_predict":

@@ -186,7 +186,7 @@ def msel_prepare_folds(estimator: PythonObject, x_in: PythonObject, y_in: Python
     var scoring = msel_get_scorer(scoring_in, context)
     var x = msel_materialize(x_in, "X", context)
     var y = msel_materialize_y(y_in, context)
-    if Int(py=y.ndim) != 1:
+    if msel_is_array(y, context) and Int(py=y.ndim) != 1:
         raise Error("y must be 1-D and match X rows")
     if Int(py=x.ndim) != 2 or Int(py=x.shape[0]) == 0 or Int(py=x.shape[1]) == 0:
         raise Error("X must be a nonempty dense 2-D buffer array")
@@ -195,7 +195,7 @@ def msel_prepare_folds(estimator: PythonObject, x_in: PythonObject, y_in: Python
         raise Error("y must be a 1-D buffer array matching X rows")
     if groups is not None:
         var group_values = msel_materialize_y(groups, context)
-        if Int(py=group_values.ndim) != 1 or msel_n_samples(group_values, context) != n:
+        if (msel_is_array(group_values, context) and Int(py=group_values.ndim) != 1) or msel_n_samples(group_values, context) != n:
             raise Error("groups must be 1-D and match X rows")
     if msel_fast_on(MSEL_CV_TRUST_FOLDS_BIT, context) and msel_native_default_cv(cv, groups, context):
         var trusted = msel_default_folds(y, PythonObject(5) if cv is None else cv, msel_classifier(estimator, False, context), context)
@@ -219,21 +219,11 @@ def msel_has_c(array: PythonObject) raises -> Bool:
 
 
 def msel_device_rows_ok(estimator: PythonObject, scoring_in: PythonObject, context: PythonObject) raises -> Bool:
-    """`_device_rows_ok`: the estimator's class opts in and every scorer
-    only calls the estimator's own methods."""
-    var b = msel_b()
     if not Bool(py=msel_estimator_plan(estimator, context)["device_rows"]):
         return False
-    var scoring = scoring_in
-    if family_isinstance(scoring, b.dict):
-        scoring = py_call(b.list, py_call(scoring.values))
-    if not family_isinstance(scoring, Python.tuple(b.list, b.tuple, b.set)):
-        scoring = py_call(b.list, Python.tuple(scoring))
-    var items = py_call(b.list, scoring)
-    var kinds = Python.tuple(b.str, context["family_msel_scorer_class"])
-    for i in range(len(items)):  # driver-loop: over the scorers (a handful)
-        if not (items[i] is None or family_isinstance(items[i], kinds)):
-            return False
+    var multi = msel_scorers(scoring_in, context)
+    if multi is None:
+        _ = msel_get_scorer(scoring_in, context)
     return True
 
 
@@ -326,18 +316,26 @@ struct MselFoldRows(Movable):
 
 
 def msel_scorers(scoring: PythonObject, context: PythonObject) raises -> PythonObject:
-    """`_scorers(scoring)`: {name: scorer} for multimetric scoring, else None."""
     var b = msel_b()
-    if family_isinstance(scoring, Python.tuple(b.list, b.tuple, b.set)):
+    var kind = py_type(scoring)
+    if kind is b.list or kind is b.tuple or kind is b.set:
         var out = Python.dict()
         var items = py_call(b.list, scoring)
-        for i in range(len(items)):  # driver-loop: over scorer names
+        for i in range(len(items)):  # driver-loop: scorer names, never caller protocols
+            if py_type(items[i]) is not b.str:
+                raise Error("TypeError: multiple scoring names must be exact strings")
             py_setitem(out, items[i], msel_get_scorer(items[i], context))
         return out
-    if family_isinstance(scoring, b.dict):
+    var mappings = context["mapping_types"]
+    var mapping = False
+    for i in range(len(mappings)):  # driver-loop: fixed native dict/OrderedDict/defaultdict types
+        mapping = mapping or kind is mappings[i]
+    if mapping:
         var out = Python.dict()
         var items = py_call(b.list, py_call(scoring.items))
-        for i in range(len(items)):  # driver-loop: over scorer names
+        for i in range(len(items)):  # driver-loop: named native scorer records
+            if py_type(items[i][0]) is not b.str:
+                raise Error("TypeError: multiple scoring keys must be exact strings")
             py_setitem(out, items[i][0], msel_get_scorer(items[i][1], context))
         return out
     return PythonObject(None)
@@ -687,7 +685,7 @@ def _place(preds: PythonObject, tests: PythonObject, n: Int, res: PythonObject, 
                     if Int(py=t.size) > 0:
                         var src = preds[f]
                         if not msel_has_c(src):
-                            src = family_call(src._as_c)
+                            src = msel_materialize(src, "predictions", context)
                         var sid = msel_resident_op(res, "msel_resident_entry", Python.tuple(t, PythonObject("<i8")), context)[2]
                         _ = family_call(scatter, PythonObject(block), PythonObject(n), codes[PythonObject(dtype)],
                                         PythonObject(msel_addr(src)), codes[src.dtype], t.size, PythonObject(cols), sid)

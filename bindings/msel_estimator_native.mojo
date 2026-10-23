@@ -3,11 +3,13 @@
 # at package import; CV never calls a constructor, method or clone callback.
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
-from bindings.native_buffer_owner import native_storage_allocate
+from bindings.native_buffer_owner import native_storage_allocate, native_buffer_view
+from bindings.native_numpy_metadata import native_numpy_type
+from bindings.classical_arrays import classical_wrap_array, _store_code
+from bindings.msel_inputs import msel_input
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import family_call
 from bindings.sequential_admission import sequential_admit_value
-from bindings.trees_public_forest import forest_get_params, forest_refresh
 
 
 def msel_estimator_plan(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -110,11 +112,38 @@ def msel_clone_parameter(value: PythonObject, context: PythonObject) raises -> P
     for k in range(len(scalars)):  # driver-loop: connected immutable NumPy scalar classes
         if kind is scalars[k]:
             return value
+    if kind is context["array_class"]:
+        sequential_admit_value(value, context)
+        var packed = msel_input(value, "constructor parameter", context)
+        var store = py_call(context["array_type"], _store_code(String(packed.dtype)))
+        _ = py_call(store.frombytes, py_call(packed._mv.tobytes))
+        _ = packed  # keep the native buffer owner alive through the copy
+        return classical_wrap_array(store, packed.shape, String(packed.dtype), "C", context)
+    if kind is py_get(context, "ndarray"):
+        sequential_admit_value(value, context)
+        # Numeric primitive dtype bytes own no Python object references.
+        # Copy the admitted native buffer, then wrap independent storage;
+        # neither ndarray.copy nor deepcopy/NumPy Python hooks are called.
+        if Bool(py=value.dtype.hasobject):
+            raise Error("TypeError: native constructor buffers cannot contain Python object references")
+        var view = native_buffer_view(value)
+        var order = PythonObject("F" if Bool(py=view.f_contiguous) and not Bool(py=view.c_contiguous) else "C")
+        var store = py_call(b.bytearray, py_call(view.tobytes, order))
+        var cls = native_numpy_type("ndarray", context)
+        return py_call(cls, view.shape, dtype=value.dtype, buffer=store, order=order)
+    if kind is context["array_type"]:
+        var result = py_call(context["array_type"], value.typecode)
+        var view = native_buffer_view(value)
+        _ = py_call(result.frombytes, py_call(view.tobytes))
+        _ = view  # keep the acquired native buffer alive through the copy
+        return result
+    if kind is b.bytearray:
+        return py_call(b.bytearray, value)
     if py_type(kind) is b.type and py_contains(context["family_msel_estimators"], kind):
         return msel_native_clone(value, context)
     # Never invoke deepcopy/__reduce__/buffer protocols of an arbitrary
-    # object. Mutable constructor-buffer and additional native schema
-    # migration remain explicit debt rather than sharing fitted state.
+    # object. Additional native buffer/schema migration remains explicit
+    # debt rather than sharing mutable constructor or fitted state.
     sequential_admit_value(value, context)
     raise Error("RuntimeError: native cloning of this constructor parameter remains pending migration")
 
@@ -125,7 +154,7 @@ def msel_native_clone(model: PythonObject, context: PythonObject) raises -> Pyth
     var names = plan["parameters"]
     var given: PythonObject
     if plan["forest"] is not None:
-        given = forest_get_params(model, plan["context"])
+        given = family_call(plan["entry"], model, "trees_forest_get_params", Python.tuple(), plan["context"])
     elif plan["init"] is None:
         given = py_call(plan["fields_get"], model, py_type(model))
     else:
@@ -143,7 +172,7 @@ def msel_native_clone(model: PythonObject, context: PythonObject) raises -> Pyth
         var fields = py_call(plan["fields_get"], result, py_type(result))
         _ = py_call(fields.update, parameters)
         py_setitem(fields, "_has_constructor_parameters", PythonObject(True))
-        _ = forest_refresh(result, String(plan["forest"]), plan["context"])
+        _ = family_call(plan["entry"], result, "trees_forest_initialize", Python.tuple(plan["forest"]), plan["context"])
     elif plan["init"] is None:
         # Exact fixed constructor schemas containing only field assignments.
         var fields = py_call(plan["fields_get"], result, py_type(result))
