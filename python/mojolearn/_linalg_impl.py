@@ -614,16 +614,7 @@ def to_bf16(x):
     Subnormals are flushed, then each value is rounded to nearest even. Returns a
     uint16 `mojolearn.Array` of the same shape, the input format of `matmul_bf16`.
     """
-    a, _ = as_f32_c(x, ndim=None, name="x")
-    pb = probe(a)
-    if not is_native_f32(pb.format):
-        raise TypeError("mojolearn.linalg.to_bf16: x must be float32")
-    n = nelems(pb.shape)
-    if n == 0:
-        raise ValueError("mojolearn.linalg.to_bf16: x has no elements")
-    out = empty(pb.shape, "<u2")
-    _lowbit_binding().to_bf16(addr(out, name="out"), addr_ro(a, name="x"), [int(n)])
-    return out
+    return _NATIVE(None, "family_lin_to_bf16", (_load(), x), _NATIVE_CONTEXT)
 
 
 def from_bf16(bits):
@@ -1550,3 +1541,11 @@ def svd(a, full_matrices=True, compute_uv=True, hermitian=False):
         return SVDResult(U.out(), S.out((cols,)), Vt.out())
     U2, S, Vt2 = _svd_tall(k, A.T, bool(full_matrices))
     return SVDResult(Vt2.T.out(), S.out((rows,)), U2.T.out())
+
+
+# The compiled owner of this module's public functions
+# (bindings/linalg_ops_native.mojo), connected once at import: each public
+# function is one native call, handed the linalg binding `_load()` resolved.
+from . import _native_family_bridge  # noqa: E402
+_NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
+_native_family_bridge.tables(family_lin_state=globals())
