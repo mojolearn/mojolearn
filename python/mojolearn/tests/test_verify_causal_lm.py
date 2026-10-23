@@ -48,8 +48,13 @@ def test_incomplete_records_refused(fault):
     with pytest.raises(ValueError): compare(a,b)
 
 
-def test_reset_refuses_foreign_state_before_native_work():
-    model=object.__new__(CausalLM)
+def test_reset_refuses_foreign_state_before_native_work(tmp_path):
+    # A loaded model: reset_state is the native runtime's (model._runtime),
+    # which an uninitialized object.__new__ instance does not have.
+    from mojolearn import _causal_lm_fixtures as fixtures
+    cfg,tensors=fixtures.family_fixture(*ARCHITECTURES[0])
+    fixtures._write_checkpoint(tmp_path,cfg,tensors)
+    model=CausalLM.load(tmp_path,device='cpu')
     with pytest.raises(ValueError, match='another model'):
         model.reset_state(CausalLMState(1,8,[],owner=object()))
 
