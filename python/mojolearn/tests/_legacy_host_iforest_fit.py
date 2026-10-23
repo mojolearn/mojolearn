@@ -176,7 +176,10 @@ def fit(model, X, y=None):
         assert not any(entry is not None and int(entry()) == 1 for entry in scans), "reference requires the explicit CPU numerical entry"
         if not all_finite(x):
             raise ValueError("mojolearn IsolationForest: X contains NaN or infinity")
-        model._release_resident()
+        # The removed IsolationForest._release_resident: drop the token and
+        # its lifetime.
+        vars(model).pop("_if_token", None)
+        vars(model).pop("_if_lifetime", None)
         model._x = x
         model.n_features_in_ = x.shape[1]
         iforest(model, x[:1], 0, public=False)

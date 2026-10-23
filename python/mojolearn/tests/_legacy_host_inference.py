@@ -355,7 +355,8 @@ def iforest(model, X, want, public=True):
     if "_seed" not in vars(model):
         # The unchanged Python validator is a test-only reference for the
         # candidate's new native resolution of a manually assembled model.
-        model._validate_params()
+        from mojolearn.tests._legacy_host_iforest_fit import parameters
+        parameters(model)
     params = [train.shape[0], train.shape[1], x.shape[0], model._n_estimators,
               model._max_samples_mode, model._max_samples_int, model._max_samples_frac,
               model._max_depth, model._max_features_mode, model._max_features_int,
