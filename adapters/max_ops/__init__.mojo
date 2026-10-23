@@ -52,11 +52,11 @@ def execute_operation[
         raise Error("adapter: unsupported target")
     var error = List[UInt8](length=2048, fill=0)
     var ints = List[Int]()
-    if len(options) > 0:
+    if options.byte_length() > 0:
         for field in String(options).split(","):
             ints.append(Int(field))
     var floats = List[Float32]()
-    if len(scalars) > 0:
+    if scalars.byte_length() > 0:
         for field in String(scalars).split(","):
             floats.append(Float32(Float64(field)))
     var status = lib.get_function[Int]("mojolearn_adapter_operation")(
