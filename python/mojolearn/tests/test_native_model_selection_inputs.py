@@ -287,7 +287,7 @@ def test_numpy_free_import_and_standard_buffers():
     assert completed.returncode == 0, completed.stdout + completed.stderr
 
 
-@pytest.mark.parametrize('index_kind', ['range', 'integer', 'string', 'datetime', 'multi'])
+@pytest.mark.parametrize('index_kind', ['range', 'integer', 'string', 'datetime', 'datetime_tz', 'timedelta', 'multi'])
 def test_zero_column_dataframe_uses_native_axis_metadata(index_kind, monkeypatch):
     pd = pytest.importorskip('pandas')
     index = pd.RangeIndex(12)
@@ -297,6 +297,10 @@ def test_zero_column_dataframe_uses_native_axis_metadata(index_kind, monkeypatch
         index = pd.Index(np.array(['row' + str(i) for i in range(12)], dtype=object), dtype=object)
     elif index_kind == 'datetime':
         index = pd.date_range('2020-01-01', periods=12)
+    elif index_kind == 'datetime_tz':
+        index = pd.date_range('2020-01-01', periods=12, tz='America/New_York')
+    elif index_kind == 'timedelta':
+        index = pd.timedelta_range(start='1 day', periods=12)
     elif index_kind == 'multi':
         index = pd.MultiIndex.from_product([['a', 'b', 'c'], range(4)])
     source = pd.DataFrame(index=index)
