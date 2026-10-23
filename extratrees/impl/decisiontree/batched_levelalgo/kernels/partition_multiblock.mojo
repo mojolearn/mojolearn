@@ -57,6 +57,7 @@ verified against leaves nothing to verify against tomorrow.
 ==========================================================================
 """
 
+from std.atomic import Atomic
 from std.gpu import block_idx, thread_idx
 from max.gpu.primitives.block import prefix_sum
 from max.gpu.primitives.block import sum as block_sum
@@ -240,6 +241,7 @@ def partition_scan_kernel[
     min_impurity_decrease: Float32,
     min_samples_leaf: Int32,
     sabotage_in: Int32,
+    mismatch: MutPointer[Int32, MutAnyOrigin],
 ):
     """Pass 2: exclusive scan of `blk_left` WITHIN each node.
 
@@ -279,6 +281,27 @@ def partition_scan_kernel[
             blk_off[unsafe_offset = base + i] = running + scanned[0]
         running += scanned[1]
         chunk += TPB
+
+    # THE PARTITION'S OWN LEFT COUNT IS THE SPLIT'S (lane sm120-tree-identity,
+    # 2026-10-23). The scatter places a right-going row at
+    # `range_start + n_left + (right rows before it)`, so a split `n_left`
+    # that differs from the rows this partition actually sends left leaves
+    # slots of the alternate buffer unwritten (or written twice), and the
+    # writeback copies those words into `row_ids` (RTX 5090: compute-sanitizer
+    # initcheck, 40 uninitialized reads in `partition_writeback_kernel`, then
+    # run-to-run digests and CUDA_ERROR_ILLEGAL_ADDRESS). `running` is that
+    # count; it replaces the split's before the scatter, the writeback and the
+    # push read it, so the node's rows stay a permutation whatever the search
+    # counted. A disagreement is still a bug: it is counted into `mismatch`
+    # (the level loop's header, `ETL_H_PART_MISMATCH`) and the host refuses
+    # the fit at its next drain.
+    if tid == 0:
+        var sp = splits[unsafe_offset=n]
+        if sp.n_left != running:
+            _ = Atomic.fetch_add(mismatch, Int32(1))
+            splits[unsafe_offset=n] = Split(
+                sp.quesval, sp.colid, sp.best_metric_val, running
+            )
 
 
 def partition_scatter_kernel[

@@ -251,7 +251,10 @@ def test_iforest_subclass_native_attributes_finalizer_and_outputs(tmp_path):
     for method in METHODS:
         audit_native_call(getattr, model, method).assert_native()
         _check(model, _input(2, "float32"), method)
-    audit_native_call(cls.__del__, model).assert_native()
+    # the resident forest's release is a native lifetime object since lane
+    # migrate-trees-2 (bindings/trees_public_iforest.mojo `_if_lifetime`):
+    # no Python finalizer is defined anywhere in the class's MRO
+    assert not any("__del__" in vars(base) for base in cls.__mro__)
 
 
 def test_iforest_inherited_application_guards_remain_intact():

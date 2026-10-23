@@ -152,6 +152,10 @@ def _neural_plain(owner: PythonObject, x: PythonObject, supplied_state: PythonOb
     var l = Int(py=x.shape[1])
     var d = Int(py=x.shape[2])
     var transformer = String(owner.kind) == "transformer"
+    # Admission refusal must not poison a valid state owned by a decode
+    # session. Only a failure after entering execution can invalidate it.
+    if supplied_state is not None and py_call(bi.getattr, supplied_state, "_resident_session", PythonObject(None)) is not None:
+        raise Error("neural block: state is owned by a resident decode session")
     var e = owner._native_entries
     var reuse = transformer and py_contains(e, "forward_session") and String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) != "1"
     var lock = py_get(fields, "_runtime_lock") if transformer else PythonObject(None)
@@ -323,7 +327,12 @@ def neural_block_backward_binding(block: PythonObject, input: PythonObject, grad
     var kind = String(fields["_native_kind"])
     var transformer = kind == "transformer"
     if transformer and (fields["_int15"] is not None or Bool(py=fields["_extended"])):
-        raise Error("NotImplementedError: TransformerBlock.backward requires default float32 block options; numeric_profile=" + String(fields["numeric_profile"]))
+        var named = String("")
+        for key in ["norm", "mlp", "qkv_bias", "o_bias", "norm_bias", "mlp_bias", "qk_norm", "rope_scaling"]:  # driver-loop: over the named block options
+            if py_contains(fields, key):
+                named += ", " + key + "=" + String(py_call(bi.repr, fields[key]))
+        raise Error("NotImplementedError: TransformerBlock.backward requires default float32 block options (the default block options only); numeric_profile="
+                    + String(fields["numeric_profile"]) + named)
     var entries = neural_training_entries(fields, context)
     var name = ("transformer" if transformer else kind) + "_backward"
     if not Bool(py=py_call(bi.hasattr, entries, name)):

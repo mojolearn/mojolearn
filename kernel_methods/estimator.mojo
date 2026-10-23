@@ -1029,6 +1029,32 @@ def kernel_ridge_predict_ptr_into[out_origin: MutOrigin, //](
     var dq = _upload_checked(ctx, xnew_addr, n_query, d, "predict X")
     var dfit = _upload_ptr(ctx, xfit_addr, n * d)
     var ddual = _upload_ptr(ctx, dual_addr, n * t)
+    kernel_ridge_predict_dev(ctx, dq, dfit, ddual, n, d, t, kp, n_query, output, trace)
+    _ = dq^
+    _ = dfit^
+    _ = ddual^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+
+
+def kernel_ridge_predict_dev[out_origin: MutOrigin, //](
+    ctx: DeviceContext,
+    mut dq: DeviceBuffer[DType.float32],
+    mut dfit: DeviceBuffer[DType.float32],
+    mut ddual: DeviceBuffer[DType.float32],
+    n: Int,
+    d: Int,
+    t: Int,
+    kp: KernelParams,
+    n_query: Int,
+    output: MutPointer[Float32, out_origin],
+    mut trace: IdentityTrace,
+) raises:
+    """`kernel_ridge_predict_ptr_into` from the query, the fit's X and the
+    dual already on the device (lane migrate-classical-b2): the cross
+    kernel, the GEMM and the read-back, the same launches in the same
+    order. `kernel_methods/krr_resident.mojo` passes the resident fitted
+    arrays."""
     var dk = ctx.enqueue_create_buffer[DType.float32](n_query * n)
     var na = ctx.enqueue_create_buffer[DType.float32](n_query)
     var nb = ctx.enqueue_create_buffer[DType.float32](n)
@@ -1052,17 +1078,12 @@ def kernel_ridge_predict_ptr_into[out_origin: MutOrigin, //](
     identical_gemm_into(ctx, dpred, dk, ddual, gws, n_query, t, n, OP_NN)
     trace.record_device(ctx, "krr.predictions", dpred, n_query * t)
     _download_into(ctx, dpred, output, n_query * t)
-    _ = dq^
-    _ = dfit^
-    _ = ddual^
     _ = dk^
     _ = na^
     _ = nb^
     _ = kws^
     _ = dpred^
     _ = gws^
-    # DEVIATION 1946: the context dies LAST, after every value built on it.
-    _ = ctx^
 
 
 def kernel_ridge_primal_weights(
@@ -1989,6 +2010,53 @@ def nystroem_fit_ptr(
         raise Error("nystroem_fit: null X address")
     var ctx = _family_ctx()
     var dx = _upload_checked(ctx, xaddr, n_samples, n_features, "nystroem X")
+    var model = _nystroem_fit_dev(ctx, dx, n_samples, n_features, kp, n_components, seed, trace)
+    _ = dx^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+    return model^
+
+
+def nystroem_fit_transform_ptr[out_origin: MutOrigin, //](
+    xaddr: Int,
+    n_samples: Int,
+    n_features: Int,
+    kp: KernelParams,
+    n_components: Int,
+    seed: UInt64,
+    output: MutPointer[Float32, out_origin],
+    mut trace: IdentityTrace,
+) raises -> NystroemModel:
+    """`Nystroem.fit_transform(X)` with X uploaded ONCE (lane
+    migrate-classical-b2): `nystroem_fit_ptr`'s fit on the checked device
+    copy of X, then `_nystroem_transform_dev` of that same device copy
+    against the fitted model, the body `nystroem_transform_ptr_into` runs
+    after its own upload of the same bytes. The same launches in the same
+    order: no bit moves. `output` is n_samples x n_components."""
+    if xaddr == 0:
+        raise Error("nystroem_fit: null X address")
+    var ctx = _family_ctx()
+    var dx = _upload_checked(ctx, xaddr, n_samples, n_features, "nystroem X")
+    var model = _nystroem_fit_dev(ctx, dx, n_samples, n_features, kp, n_components, seed, trace)
+    var t0 = Int(perf_counter_ns())
+    _nystroem_transform_dev(ctx, dx, model, n_samples, output, trace, KM_EPILOGUE_TPB, KMSAB_NONE, t0)
+    _ = dx^
+    # DEVIATION 1946: the context dies LAST, after every value built on it.
+    _ = ctx^
+    return model^
+
+
+def _nystroem_fit_dev(
+    ctx: DeviceContext,
+    mut dx: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_features: Int,
+    kp: KernelParams,
+    n_components: Int,
+    seed: UInt64,
+    mut trace: IdentityTrace,
+) raises -> NystroemModel:
+    """`nystroem_fit_ptr` from the checked device copy of X on."""
     km_validate_kernel_params(kp, "nystroem")
     var q = n_components
     var dbasis = ctx.enqueue_create_buffer[DType.int32](max(q, 1))
@@ -2011,14 +2079,11 @@ def nystroem_fit_ptr(
         block_dim=(KM_RF_TPB, 1, 1),
     )
     var comp = _download(ctx, ca, q * n_features)
-    _ = dx^
     _ = dbasis^
     var model = _nystroem_fit_core(
         ctx, ca, comp^, basis^, n_features, kp, q, seed, trace, KM_EPILOGUE_TPB, KM_TPB, KMSAB_NONE
     )
     _ = ca^
-    # DEVIATION 1946: the context dies LAST, after every value built on it.
-    _ = ctx^
     return model^
 
 

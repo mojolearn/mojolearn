@@ -127,6 +127,24 @@
 #                                      dtype vector (4-byte dtypes)
 # One more item: ("sum", field, key), the int sum of element[key] over the
 # list field.
+#   ("flatten", member, counts, dtype, field)
+#                                      int() of every label of every element of
+#                                      the list field (an Array or a list), as one
+#                                      dtype vector, and each element's count as an
+#                                      <i8 vector under `counts`
+#   ("need_either", field, marker, exc, msg)
+#                                      raise exc(msg) unless the instance holds
+#                                      field or marker
+#   ("device_array", member, field, marker, entry, items, dtype, exc, msg)
+#                                      the field's array as stored; when only the
+#                                      marker is held (a resident fit left the
+#                                      array on the device), a new C-order dtype
+#                                      array of the shape the items give, written
+#                                      by the compiled `entry(handle, address,
+#                                      count)` of the binding in the resident
+#                                      tuple `_resident = (key, handle, binding)`;
+#                                      exc(msg) when that tuple is gone. The
+#                                      instance is not changed.
 # name, or a tuple path: a name, then dictionary keys and sequence indices.
 # ("noneflag", field) is 1 when field is None, ("setflag", field) 1 when it
 # is not. Messages may name the class as {cls}.
@@ -137,6 +155,7 @@ from bindings.classical_pandas import classical_admit_value
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_archive import classical_archive_write, _archive_array
 from bindings.classical_archive_read import _archive_builtin_repr
+from bindings.trees_public_iforest import iforest_validate
 
 
 def archive_schema_lookup(cls: PythonObject, table: PythonObject) raises -> PythonObject:
@@ -349,8 +368,10 @@ def _schema_vector(fields: PythonObject, dtype: String, items: PythonObject, nam
     var count = len(items)
     var vector = _schema_zeros(dtype, count, context)
     var address = Int(py=classical_address(vector))
+    _ = vector  # keep the Python object alive through the native call above
     for i in range(count):  # driver-loop: over the fixed elements of one saved metadata vector
         _schema_put(address, i, dtype, fields, items[i], name, context)
+        _ = vector  # keep the Python object alive through the native call above
     return vector
 
 
@@ -395,11 +416,13 @@ def _schema_rows(fields: PythonObject, dtype: String, path: PythonObject, items:
     var width = len(items)
     var vector = _schema_zeros(dtype, len(elements) * width, context)
     var address = Int(py=classical_address(vector))
+    _ = vector  # keep the Python object alive through the native call above
     for e in range(len(elements)):  # driver-loop: over the fitted sub-models of one list field
         var row = Python.dict()
         py_setitem(row, "_", elements[e])
         for k in range(width):  # driver-loop: over the fixed items of one saved row
             _schema_put(address, e * width + k, dtype, row, items[k], name, context)
+            _ = vector  # keep the Python object alive through the native call above
     return vector
 
 
@@ -778,6 +801,56 @@ def _schema_each(fields: PythonObject, step: PythonObject, name: String,
     return _schema_label_store(packed, _store_code(dtype), dtype, context)
 
 
+def _schema_flatten(fields: PythonObject, step: PythonObject, values: PythonObject, name: String,
+                    context: PythonObject) raises:
+    """A "flatten" step: `[int(c) for cl in field for c in cl]` and
+    `[len(cl) for cl in field]`."""
+    var b = Python.import_module("builtins")
+    var dtype = String(step[3])
+    var elements = _schema_list(_schema_value(fields, step[4], name), _schema_label(step[4]))
+    var packed = Python.list()
+    var counts = Python.list()
+    for e in range(len(elements)):  # driver-loop: over a fitted model's per-output class lists
+        var element = elements[e]
+        var labels = element
+        if py_type(element) is not b.list and py_type(element) is not b.tuple:
+            var parts = _schema_bytes(element, context)
+            var store = py_call(context["array_type"], _store_code(parts[0]))
+            _ = py_call(store.frombytes, parts[1])
+            labels = py_call(b.list, store)
+        for i in range(len(labels)):  # driver-loop: over one output's class labels
+            _ = py_call(packed.append, py_call(b.float if dtype == "<f8" else b.int, labels[i]))
+        _ = py_call(counts.append, PythonObject(len(labels)))
+    py_setitem(values, step[1], _schema_packed(packed, dtype, context))
+    py_setitem(values, step[2], _schema_packed(counts, "<i8", context))
+
+
+def _schema_device_array(fields: PythonObject, step: PythonObject, name: String,
+                         context: PythonObject) raises -> PythonObject:
+    """A "device_array" step's array (see the step table above)."""
+    var b = Python.import_module("builtins")
+    if _schema_has(fields, step[2]):
+        return _schema_value(fields, step[2], name)
+    var held = py_get(fields, "_resident")
+    if held is None or py_type(held) is not b.tuple or len(held) != 3:
+        _schema_fail(step[7], step[8], name)
+    var dims = Python.list()
+    var count = 1
+    for i in range(len(step[5])):  # driver-loop: over the fixed dimension items of one saved shape
+        var dim = _schema_whole(fields, step[5][i], name, context)
+        _ = py_call(dims.append, dim)
+        count *= dim
+    var dtype = String(step[6])
+    var store = py_call(context["array_type"], _store_code(dtype))
+    var width = Int(py=store.itemsize)
+    _ = py_call(store.frombytes, py_call(context["archive_bytes_type"], count * width))
+    var export = py_call(b.getattr, held[2], step[4], PythonObject(None))
+    if export is None or py_type(export) is not py_type(b.len):
+        raise Error("TypeError: mojolearn " + name + ": the resident index has no compiled " + String(step[4]))
+    _ = py_call(export, held[1], py_call(store.buffer_info)[0], count)
+    return classical_wrap_array(store, py_call(b.tuple, dims), dtype, "C", context)
+
+
 def _schema_run(model: PythonObject, fields: PythonObject, steps: PythonObject, values: PythonObject,
                 name: String, context: PythonObject) raises:
     var b = Python.import_module("builtins")
@@ -822,6 +895,13 @@ def _schema_run(model: PythonObject, fields: PythonObject, steps: PythonObject, 
                 var text = String(step[5]).replace("{want}", _archive_builtin_repr(wanted))
                 text = text.replace("{dtype}", parts[0]).replace("{shape}", _archive_builtin_repr(got))
                 _schema_fail(step[4], PythonObject(text), name)
+        elif kind == "iforest_knobs":
+            # IsolationForest.save on an instance assembled without fit or
+            # load: `_validate_params()` resolves the knobs first.
+            # The class's tables (numbers.Integral, a missing-field
+            # sentinel) are connected with its schema in the archive context.
+            if not _schema_has(fields, PythonObject("_seed")):
+                iforest_validate(model, fields, context["host_archive_context"])
         elif kind == "format":
             py_setitem(values, step[1], step[2])
         elif kind == "estimator":
@@ -900,6 +980,13 @@ def _schema_run(model: PythonObject, fields: PythonObject, steps: PythonObject, 
                 _schema_run(model, fields, step[2], values, name, context)
         elif kind == "rows":
             py_setitem(values, step[1], _schema_rows(fields, String(step[2]), step[3], step[4], name, context))
+        elif kind == "flatten":
+            _schema_flatten(fields, step, values, name, context)
+        elif kind == "need_either":
+            if not _schema_has(fields, step[1]) and not _schema_has(fields, step[2]):
+                _schema_fail(step[3], step[4], name)
+        elif kind == "device_array":
+            py_setitem(values, step[1], _schema_device_array(fields, step, name, context))
         elif kind == "concat":
             py_setitem(values, step[1], _schema_concat(fields, String(step[2]), step[3], step[4], name, context))
         else:

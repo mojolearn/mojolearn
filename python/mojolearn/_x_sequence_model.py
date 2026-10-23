@@ -648,6 +648,7 @@ def _connect_sequential_bindings():
     from types import BuiltinFunctionType, ModuleType
     from collections import OrderedDict, defaultdict
     from pathlib import PosixPath, PurePosixPath
+    import ctypes
     import mmap
     import sys
     from array import array
@@ -659,7 +660,7 @@ def _connect_sequential_bindings():
         try:
             module = _backend.binding("_mojolearn_x_sequence", mode)
             symbols = {}
-            for name in ("x_sequence_vendor", "x_sequence_numeric_mode", "model_n_params", "model_fit", "model_predict", "model_labels", "model_gather_labels", "model_import_params", "model_save_checkpoint", "model_load_checkpoint", "model_checkpoint_info", "verify_digest", "verify_file_sha256", "verify_model_info", "verify_fill"):  # glue: resolve existing compiled ABI symbols at import
+            for name in ("x_sequence_vendor", "x_sequence_numeric_mode", "model_n_params", "model_fit", "model_predict", "model_labels", "model_gather_labels", "model_predict_labels", "model_fit_labels", "model_import_params", "model_save_checkpoint", "model_load_checkpoint", "model_checkpoint_info", "verify_digest", "verify_file_sha256", "verify_model_info", "verify_fill"):  # glue: resolve existing compiled ABI symbols at import
                 entry = getattr(module, name)
                 if not isinstance(entry, BuiltinFunctionType):
                     raise TypeError(f"Sequential requires a compiled {name}")
@@ -679,7 +680,7 @@ def _connect_sequential_bindings():
         "native_bytes_type": bytes, "native_bytearray_type": bytearray,
         "defaultdict_class": defaultdict, "native_default_factories": (list, tuple, dict, OrderedDict, defaultdict, bool, int, float, str, bytes, bytearray),
         "native_value_types": (type(None), str, bytes, bytearray, bool, int, float, range, np.ndarray, Array, array, PosixPath, PurePosixPath, type(iter([])), type(iter(())), type(iter(range(0))), type(reversed([]))),
-        "buffer_owner_types": (type(None), bytes, bytearray, array, np.ndarray, mmap.mmap), "array_fields": array_fields,
+        "buffer_owner_types": (type(None), bytes, bytearray, array, np.ndarray, mmap.mmap), "ctypes_array_base": ctypes.Array, "array_fields": array_fields,
         "model_fields": ("numeric_mode", "input_shape", "_layers", "_options", "params_", "n_features_in_", "n_outputs_", "_sample_shape", "n_iter_", "loss_curve_", "_fit_state", "_imported", "_fit_loss", "_target", "_fit_batch", "_fit_shuffle", "_y_1d", "classes_", "_opt_m", "_opt_v", "_curve", "validation_loss_curve_", "epochs_run_", "best_epoch_"),
         "numeric_dtypes": numeric_dtypes, "buffer_codes": buffer_codes, "scalar_type": np.generic,
         "version": __version__, "uname": os.uname, "class_dtypes": class_dtypes,

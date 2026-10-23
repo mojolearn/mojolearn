@@ -63,7 +63,7 @@ autograd/import_reader.mojo:OnnxInfo.__init__	a container constructor
 autograd/import_reader.mojo:_w_tensor	structure words only (name, dtype, dims, byte range)
 autograd/import_reader.mojo:_w_value	structure words only (name, dtype, dims)
 autograd/import_reader.mojo:onnx_close	lifecycle close
-autograd/import_reader.mojo:onnx_read	moves the initializers into the reader's own bytes, unchanged; the values are faulted where they are copied out (onnx_copy_blob)
+autograd/import_reader.mojo:onnx_read	the values are faulted in place in the bytes the reader keeps under the handle (the lowering reads them there)
 autograd/import_resolve.mojo:*	outputs only resolved shapes, dtypes, folded shape integers and problem codes
 svm/host/svc_proba.mojo:host_check_pairs	checks the pair codes and writes nothing
 tokenizer/impl/tokenizer_host_shell_impl.mojo:SPELLED_OK	a refusal-code constant

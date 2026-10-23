@@ -219,7 +219,7 @@ def _float(cfg, mt, field, default):
 
 
 def _moe_check(cfg, mt):
-    for field in ("num_local_experts", "num_experts", "num_experts_per_tok", "n_routed_experts"):  # cpu-route: reads the model config file fields (file input)
+    for field in ("num_local_experts", "num_experts", "num_experts_per_tok", "n_routed_experts"):  # glue: a fixed handful of named config fields
         v = cfg.get(field)
         if v not in (None, 0, 1):
             _refuse(mt, field, v, "mixture of experts: the block has one dense SwiGLU MLP")
@@ -339,7 +339,7 @@ def _plan_gemma(cfg, mt):
 
 
 def _plan_gemma2(cfg, mt):
-    for field in ("attn_logit_softcapping", "final_logit_softcapping", "query_pre_attn_scalar"):  # cpu-route: reads the model config file fields (file input)
+    for field in ("attn_logit_softcapping", "final_logit_softcapping", "query_pre_attn_scalar"):  # glue: a fixed handful of named config fields
         if cfg.get(field) is not None:
             _refuse(mt, field, cfg.get(field),
                     "Gemma 2's logit softcapping, query scaling, pre/post feed-forward norms and "
@@ -400,14 +400,14 @@ def _plan_byte_lm(cfg, mt):
     """A byte-LM `config.json`: its fields renamed to the Llama ones, the
     common transformer checks, then the byte-LM tensor names and no final
     norm."""
-    for field, want in _BYTE_LM_FIXED.items():  # cpu-route: reads the model config file fields (file input)
+    for field, want in _BYTE_LM_FIXED.items():  # glue: a fixed handful of named config fields
         if field in cfg and cfg.get(field) != want:
             _refuse(mt, field, cfg.get(field), f"the byte-LM stack spells {field}={want!r} only")
     rename = {"hidden_size": "d_model", "num_attention_heads": "n_heads", "num_key_value_heads": "n_kv",
               "head_dim": "head_dim", "intermediate_size": "intermediate", "num_hidden_layers": "n_layers",
               "vocab_size": "vocab_size", "rms_norm_eps": "rms_norm_eps", "rope_theta": "rope_theta",
               "max_position_embeddings": "max_position_embeddings"}
-    hf = {k: cfg.get(v) for k, v in rename.items() if cfg.get(v) is not None}  # cpu-route: reads the model config file fields (file input)
+    hf = {k: cfg.get(v) for k, v in rename.items() if cfg.get(v) is not None}  # glue: a fixed handful of named config fields
     hf["tie_word_embeddings"] = False
     p = _transformer_common(HFConfig(hf, cfg.path), mt)
     p.update(layer_map=list(_BYTE_LM_LAYER), embed_name="embed", norm_name=None, head_name="lm_head")
@@ -419,7 +419,7 @@ def _plan_mamba(cfg, mt):
     n_layers = _int(cfg, mt, "num_hidden_layers")
     vocab = _int(cfg, mt, "vocab_size")
     fixed = {"state_size": 16, "conv_kernel": 4, "expand": 2, "use_bias": False, "use_conv_bias": True}
-    for field, want in fixed.items():  # cpu-route: checks the model config file fields (file input)
+    for field, want in fixed.items():  # glue: a fixed handful of named config fields
         got = cfg.get(field, want)
         if got != want:
             _refuse(mt, field, got, f"Mamba1Block fixes it at {want!r} (mamba/IDENTICAL_MAMBA_CONTRACT.md section 3)")
@@ -446,7 +446,7 @@ def _plan_mamba2(cfg, mt):
     vocab = _int(cfg, mt, "vocab_size")
     fixed = {"state_size": 128, "head_dim": 64, "expand": 2, "n_groups": 1, "chunk_size": 256,
              "conv_kernel": 4, "use_bias": False, "use_conv_bias": True, "rms_norm": True}
-    for field, want in fixed.items():  # cpu-route: checks the model config file fields (file input)
+    for field, want in fixed.items():  # glue: a fixed handful of named config fields
         got = cfg.get(field, want)
         if got != want:
             _refuse(mt, field, got, f"Mamba2Block fixes it at {want!r} (mamba/IDENTICAL_MAMBA2_CONTRACT.md section 3)")

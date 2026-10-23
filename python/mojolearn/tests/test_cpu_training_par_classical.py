@@ -103,7 +103,8 @@ def test_cpu_operations_are_the_python_sharded_drivers():
     assert 'operation = "samba_gradient"' in coordinator
     assert 'process_pool_create(devices, False, child_module)' in coordinator
     assert 'process_pool_create(pool["devices"], True, child_module)' in coordinator
-    assert 'process_pool_map(owner._pool, requests)' in coordinator
+    # the requests carry a resident-model cache header since A7 (6c1b338ed)
+    assert 'process_pool_map(owner._pool, _neural_requests(owner, _cache_header(' in coordinator
     assert '"samba_update" if samba else "mlp_update"' in coordinator
     assert 'var grads = neural_ordered_sum(args)' in coordinator
     # The legacy shared worker retains these private operations for its other
@@ -137,11 +138,13 @@ def test_cpu_operations_are_the_python_sharded_drivers():
     # order: both are the driver's Python, and the worker runs the bare
     # `state.predict` with no capability call and no device-count env var, so
     # no binding restates the partition at any device count.
+    # Since lane migrate-neural-2 the four drivers are one native call each
+    # (`parallel_forecast_call`, bindings/parallel_forecast_native.mojo, on
+    # the native process pool); the Python split and merge are gone and the
+    # shared worker keeps `forecast_predict` for its other callers.
     forecasting = _read("python/mojolearn/parallel_forecasting.py")
-    assert "pool = DevicePool(devices)" in forecasting and "cooperative=True" not in forecasting
-    assert forecasting.count("requests.append(('forecast_predict', part, ('predict', (start, end))))") == 2
-    assert forecasting.count("for (lo, hi), value in zip(ranges, parts):") == 2
-    assert "MOJOLEARN_" not in forecasting
+    assert "_binding()._module.parallel_forecast_call" in forecasting
+    assert "DevicePool" not in forecasting and "MOJOLEARN_" not in forecasting
     assert "    if operation == 'forecast_predict':\n        method, positional = args\n" in worker
     assert "        return state.predict(*positional)\n" in worker
     wanted.add("forecast_predict")
@@ -189,10 +192,11 @@ def test_cpu_operations_are_the_python_sharded_drivers():
     assert 'return _native_parallel_causal("route", (layer_devices,))' in causal
     assert 'return _native_parallel_causal("init", (self, plan, weights, layer_devices, kwargs), _CAUSAL_CONTEXT)' in causal
     owner = _read("bindings/parallel_causal_native.mojo")
-    assert "owner._pool = process_pool_create(bi.tuple(unique), False, child_module)" in owner
+    # balanced attribute store (py_balanced) since 2026-10-21
+    assert "py_setattr(owner, \"_pool\", process_pool_create(py_call(bi.tuple, unique), False, child_module))" in owner
     assert owner.count("process_pool_create(") == 1  # the one pool, never a cooperative one
     assert '_ = _parallel_causal_rpc(owner, unique[i], "configure", Python.list(metadata, wire_plan))' in owner
-    assert 'owner._blocks.append(_parallel_causal_block(owner, i, weights["layers"][i]))' in owner
+    assert 'py_call(owner._blocks.append, _parallel_causal_block(owner, i, weights["layers"][i]))' in owner
     assert 'var metadata = _parallel_causal_rpc(owner, owner.layer_devices[index], "block", Python.list(index, weights))' in owner
     assert 'raise Error("ParallelCausalLM: worker was not told its route")' in owner
     assert 'raise Error("ParallelCausalLM: worker route differs from its connected backend")' in owner

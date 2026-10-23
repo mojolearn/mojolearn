@@ -7,7 +7,11 @@ from ._optional_numpy import require_numpy
 from ._mode import ParamsMixin
 np = require_numpy('_x_sequence_croston')
 
-from . import _backend
+from . import _native_xseq_bridge
+
+# Package-import connection: fit and predict are ONE call each into the
+# compiled owner (bindings/xseq_forecast_native.mojo).
+_XSEQ, _XSEQ_CONTEXT = _native_xseq_bridge.connect()
 
 
 class _Croston(ParamsMixin):
@@ -42,21 +46,7 @@ class _Croston(ParamsMixin):
         ValueError
             If a series has no observations.
         """
-        if X is not None:
-            raise NotImplementedError("Croston: exogenous regressors are not supported (nor in the reference)")
-        y = np.asarray(y)
-        if y.dtype == np.float64:
-            raise TypeError("Croston: float64 is refused; pass float32")
-        self._one = y.ndim == 1
-        self._y = np.ascontiguousarray(y, dtype=np.float32).reshape(1, -1) if self._one else \
-            np.ascontiguousarray(y, dtype=np.float32)
-        if self._y.ndim != 2 or self._y.shape[1] < 1:
-            raise ValueError("Croston: y must hold at least one observation per series")
-        B, n = self._y.shape
-        self.mean_ = np.zeros(B, dtype=np.float32)
-        _backend.binding("_mojolearn_x_sequence", self.numeric_mode).croston(
-            [self._y.ctypes.data, self.mean_.ctypes.data], [B, n, self._VARIANT])
-        return self
+        return _XSEQ(self, "croston_fit", (y, X), _XSEQ_CONTEXT)
 
     def predict(self, h, X=None, level=None):
         """Forecast h steps ahead.
@@ -80,18 +70,7 @@ class _Croston(ParamsMixin):
             ``{"mean": forecasts}``, shaped ``(h,)`` for a single series or
             ``(batch_size, h)`` for a batch.
         """
-        if level is not None:
-            raise NotImplementedError("Croston: prediction intervals are not implemented")
-        h = int(h)
-        if h < 0:
-            raise ValueError("Croston: h must be >= 0")
-        B = self.mean_.shape[0]
-        f = np.empty((B, h), dtype=np.float32)
-        # every row its series' mean, in Mojo (`croston_forecast`)
-        if h:
-            _backend.binding("_mojolearn_x_sequence", self.numeric_mode).croston_forecast(
-                [self.mean_.ctypes.data, f.ctypes.data], [B, h])
-        return {"mean": f[0] if self._one else f}
+        return _XSEQ(self, "croston_predict", (h, X, level), _XSEQ_CONTEXT)
 
     def forecast(self, y, h, X=None, X_future=None, level=None, fitted=False):
         """Fit ``y`` and forecast ``h`` steps in one call.

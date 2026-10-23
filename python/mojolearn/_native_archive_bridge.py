@@ -93,3 +93,30 @@ def head(fmt, prefix="mojolearn: "):
     """The three members every schema starts with: the format tag, the
     class name and the numeric mode a predict would use now."""
     return (("format", "format", fmt), ("estimator", "estimator"), ("mode", "numeric_mode", prefix))
+
+
+def lifetime(cls, release, holder=None):
+    """Give a device class the native finalizer in place of a Python
+    `__del__`, at its definition: dropping an instance releases its resident
+    handle through `release`, the compiled entry of the binding that minted
+    it (the resident tuple is `(key, handle, binding)`, under `_resident`, or
+    under `holder`'s "index"). Native archive loading then builds the class.
+    """
+    from types import BuiltinFunctionType, MethodType
+    _, context = connect()
+    if "archive_unavailable" in context:
+        return
+    archive = context["host_archive_context"]
+    descriptor = archive.get("host_archive_finalizer_descriptor")
+    if descriptor is None:
+        from .tokenizer import _binding
+        module = _binding()._module
+        finalize = getattr(module, "host_archive_finalize_call", None)
+        if not isinstance(finalize, BuiltinFunctionType):
+            raise TypeError("device handle release requires the compiled host_archive_finalize_call entry")
+        descriptor = module.classical_attribute_descriptor(MethodType(finalize, archive))
+        archive["host_archive_finalizer_descriptor"] = descriptor
+    fields_descriptor = next(base.__dict__["__dict__"] for base in cls.__mro__  # glue: fixed native instance layout
+                             if "__dict__" in base.__dict__)
+    archive["host_archive_lifetime_layouts"][cls] = (None, fields_descriptor, "entry", holder, release)
+    cls.__del__ = descriptor

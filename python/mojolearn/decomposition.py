@@ -2,9 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """GPU dimensionality reduction."""
 
-from . import _backend, _mojolearn_estimators, _native_archive_bridge, _serialize
+from . import _backend, _mojolearn_estimators, _native_archive_bridge, _native_pca_bridge, _native_tsvd_bridge, _serialize
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, empty
 from ._mode import NumericModeMixin
 
 #: The model file formats (the classical host inference lane, 2026-09-13).
@@ -49,38 +48,6 @@ def _check_saved_by(arrays, path, cls):
         )
 
 
-def _as_array_view(value):
-    """`value` as an `Array` WITHOUT copying: itself when it already is
-    one, a zero-copy `Array.from_buffer` view over any other buffer-protocol
-    object (a NumPy array a caller assigned to a model attribute), None
-    when it is neither. DEVIATION 2368."""
-    if isinstance(value, Array):
-        return value
-    try:
-        return Array.from_buffer(value)
-    except (TypeError, ValueError):
-        return None
-
-
-def _dense(X):
-    """A scipy.sparse input (duck-typed: toarray, nnz, format; nothing is
-    imported) densified exactly, as scikit-learn's PCA (arpack /
-    covariance_eigh) and TruncatedSVD accept it (lane/algos-decomp,
-    2026-09-27); anything else unchanged."""
-    if hasattr(X, "toarray") and hasattr(X, "nnz") and hasattr(X, "format"):
-        return X.toarray()
-    return X
-
-
-def _component_count(n_components, shape):
-    value = min(shape) if n_components is None else int(n_components)  # glue: smaller of two shape dims
-    if value < 1 or value > shape[1]:
-        raise ValueError(
-            f"mojolearn n_components must be in [1, {shape[1]}], got {value}"
-        )
-    return value
-
-
 # Maintainer notes (moved from the docstring).
 # Two arms as of 2026-09-01. The covariance arm is cuML's pcaFit route
 # (covariance, then an eigensolver) with cuML's JACOBI eigensolver
@@ -116,15 +83,6 @@ def _component_count(n_components, shape):
 # division (cuML's threshold), keeping the sample-count scale. The whitened
 # pair is an additive binding export: an older extension needs a rebuild.
 # Options measured row by row by tools/e2u_matrix_fit.py.
-def _too_small(shape, who):
-    """scikit-learn's check_array wording for a block below the 2 x 2 the
-    PCA/TruncatedSVD kernels need (its min-samples / min-features refusals)."""
-    n, d = shape
-    if n < 2:
-        return f"Found array with {n} sample(s) (shape=({n}, {d})) while a minimum of 2 is required by {who}."
-    return f"Found array with {d} feature(s) (shape=({n}, {d})) while a minimum of 2 is required by {who}."
-
-
 class PCA(NumericModeMixin):
     """Principal component analysis.
 
@@ -234,8 +192,16 @@ class PCA(NumericModeMixin):
     #: would be a silent substitution (decomposition/NOT_IMPLEMENTED.tsv).
     _SOLVERS = _COV_SOLVERS + _DENSE_SOLVERS + _RANDOM_SOLVERS
 
+    #: Every public operation below is one call into the compiled PCA owner
+    #: (bindings/pca_native.mojo), connected once at import. It validates the
+    #: arguments and inputs, chooses the solver and numeric-mode binding, runs
+    #: the one compiled fit (projecting inside it for fit_transform) and
+    #: stores the fitted attributes; NumericModeMixin leaves these unwrapped.
+    _mojolearn_native_public = True
+
     def __init__(self, n_components=None, *, copy=True, whiten=False, svd_solver="auto", tol=0.0,
-                 iterated_power="auto", n_oversamples=10, power_iteration_normalizer="auto", random_state=None):
+                 iterated_power="auto", n_oversamples=10, power_iteration_normalizer="auto", random_state=None,
+                 numeric_mode=None):
         self.n_components = n_components
         self.copy = copy
         # scikit-learn's tol is ARPACK's convergence tolerance, which only
@@ -248,86 +214,7 @@ class PCA(NumericModeMixin):
         self.n_oversamples = n_oversamples
         self.power_iteration_normalizer = power_iteration_normalizer
         self.random_state = random_state
-
-    def _whiten_binding(self):
-        """The binding, checked for the whitened pair.
-
-        `pca_whiten_transform` / `pca_whiten_inverse_transform` are ADDITIVE
-        exports beside the unwhitened ones, so an older `_mojolearn_estimators`
-        that predates them is a build that simply does not carry the pair.
-        That is a build state, not a user error, and it says so rather than
-        failing with an arity message from the extension.
-        """
-        binding = self._bind("_mojolearn_estimators")
-        if not all(callable(getattr(binding, name, None)) for name in  # glue: checks two binding entry names
-                   ("pca_whiten_transform", "pca_whiten_inverse_transform")):
-            raise NotImplementedError(
-                "mojolearn PCA: whiten=True needs the whitened transform pair "
-                "and this build of _mojolearn_estimators does not export it. "
-                "The kernel, the host surfaces and the gates are present "
-                "(decomposition/impl/linalg/detail/pca.mojo::whiten_components, "
-                "decomposition/estimator.mojo::pca_whiten_transform_host and "
-                "pca_whiten_inverse_transform_host, "
-                "decomposition/checks/pca_check.mojo::check_whiten_*); what is "
-                "needed is a rebuild of this additive ABI via "
-                "bindings/build_estimators.sh"
-            )
-        return binding
-
-    def _validate_whiten_state(self):
-        """DEVIATION 2368: the four model arrays are inspected through the
-        buffer protocol, so the `Array` fit stores and any other float32
-        C-contiguous buffer a caller assigned (the surface tests assign
-        NumPy arrays) both pass; anything else is refused by name. Only
-        dtypes, shapes and layouts are read here: the whitened transforms
-        refuse non-finite values and negative singular values themselves,
-        on the device, in the same call that transforms."""
-        for name, shape in (("components_", (self.n_components_, self.n_features_in_)),  # glue: loops over saved attribute names
-                            ("mean_", (self.n_features_in_,)),
-                            ("singular_values_", (self.n_components_,)),
-                            ("explained_variance_", (self.n_components_,))):
-            a = _as_array_view(getattr(self, name, None))
-            if a is None or a.dtype != "<f4" or tuple(a.shape) != shape or not a.flags["C_CONTIGUOUS"]:
-                raise ValueError(f"mojolearn PCA whitening requires finite C-order float32 {name} with shape {shape}")
-        if self.n_samples_ < 2:
-            raise ValueError("mojolearn PCA whitening requires fit rows >=2 and nonnegative singular values/variance")
-
-    @staticmethod
-    def _native(entry, *args):
-        """One native call. Its refusals of the data or the fitted state
-        (non-finite values, negative singular values, a numerically zero
-        matrix) are plain exceptions; they reach the caller as ValueError."""
-        try:
-            return entry(*args)
-        except Exception as err:
-            if type(err) is Exception:
-                raise ValueError(f"mojolearn PCA: {err}") from err
-            raise
-
-    def _dense_binding(self):
-        """The binding, checked for the dense arm.
-
-        `pca_fit_full` is an ADDITIVE export beside `pca_fit`, so an older
-        `_mojolearn_estimators` that predates it is a build that simply does
-        not carry the arm. That is a build state, not a user error, and it
-        says so rather than failing with an attribute error. Same shape and
-        same reason as `_whiten_binding`.
-        """
-        binding = self._bind("_mojolearn_estimators")
-        if not hasattr(binding, "pca_fit_full"):
-            raise NotImplementedError(
-                "mojolearn PCA: svd_solver='full' needs the dense arm and "
-                "this build of _mojolearn_estimators does not export it. The "
-                "kernels, the host surface and the gates are present "
-                "(core/householder_qr.mojo, "
-                "decomposition/impl/linalg/detail/svd_full.mojo, "
-                "decomposition/estimator.mojo::pca_fit_full_host, "
-                "decomposition/checks/svd_full_check.mojo). The additive "
-                "export is in bindings/_mojolearn_estimators.mojo; this "
-                "installed extension needs a rebuild via "
-                "bindings/build_estimators.sh"
-            )
-        return binding
+        self.numeric_mode = numeric_mode
 
     def fit(self, X, y=None):
         """Fit the model to ``X``.
@@ -335,8 +222,7 @@ class PCA(NumericModeMixin):
         Parameters
         ----------
         X : array-like of shape (n_samples, n_features)
-            Training data; at least 2 rows. Must be finite
-            when ``whiten=True``.
+            Training data; at least 2 rows. Must be finite.
         y : ignored
 
         Returns
@@ -353,170 +239,7 @@ class PCA(NumericModeMixin):
             ``svd_solver="full"`` on a wide matrix outside ``"identical"``
             mode.
         """
-        self._fit(X, False)
-        return self
-
-    def _fit(self, X, project):
-        """The fit, and with `project` X's projection onto the kept
-        components (`fit_transform`), as ONE native call: the exact solvers
-        through `pca_fit_owned` (decomposition/impl/pca_owner.mojo), the
-        randomized one through `pca_fit_randomized`. Python checks the
-        arguments, allocates the outputs at the fitted component count and
-        keeps the prefix the call reports. Returns the projection or None."""
-        if self.svd_solver not in self._SOLVERS:
-            raise NotImplementedError(
-                f"mojolearn PCA: svd_solver={self.svd_solver!r} is not "
-                f"implemented; this class runs {self._SOLVERS}. 'arpack' is "
-                "scikit-learn's implicitly restarted Lanczos, a third "
-                "algorithm; accepting the name and running an exact arm "
-                "would be a silent substitution, which is why this raises "
-                "(decomposition/NOT_IMPLEMENTED.tsv)"
-            )
-        if float(self.tol) != 0.0:
-            raise NotImplementedError(
-                "mojolearn PCA: tol is ARPACK's convergence tolerance and "
-                "svd_solver='arpack' is not implemented; leave tol=0.0"
-            )
-        if self.whiten:
-            self._whiten_binding()
-        if self.svd_solver in self._RANDOM_SOLVERS:
-            return self._fit_randomized(X, project)
-        x, copied = as_f32_c(_dense(X), ndim=2, name="X")
-        # One feature is a fit scikit-learn makes (check_fit2d_1feature): the
-        # covariance arm takes the 1 x 1 covariance without a rotation
-        # (decomposition/impl/linalg/detail/pca.mojo `_eig_and_truncate_one`).
-        # 'full' sends it there too: at one column the R-SVD and the
-        # covariance eigenvalue are the same number, the column's variance,
-        # and the R-SVD kernels keep their two-column floor.
-        dense = self.svd_solver in self._DENSE_SOLVERS and x.shape[1] >= 2
-        if dense:
-            binding = self._dense_binding()
-        else:
-            binding = self._bind("_mojolearn_estimators")
-        if x.shape[0] < 2:
-            raise ValueError(_too_small(x.shape, "PCA"))
-        if dense and x.shape[0] < x.shape[1] and self.numeric_mode_used() != "identical":
-            # DEVIATION 593, raised HERE as well as in the Mojo validator so
-            # legacy modes retain their previous refusal. IDENTICAL uses
-            # the transposed QR route and validates k against min(shape).
-            raise NotImplementedError(
-                f"mojolearn PCA: svd_solver='full' needs at least as many "
-                f"samples as features and got {x.shape[0]} x {x.shape[1]}. "
-                "The dense route is an R-SVD, which needs a tall matrix; the "
-                "portable route for a wide one is an LQ factorization of the "
-                "transpose and it is not written "
-                "(decomposition/NOT_IMPLEMENTED.tsv, DEVIATION 593). "
-                "svd_solver='covariance_eigh' handles this shape. Silently "
-                "substituting it here would be the substitution this class "
-                "refuses to make for the solver name itself"
-            )
-        # How the kept count is chosen after the fit, in the native call
-        # (decomposition/impl/pca_owner.mojo): 0 every fitted component,
-        # 1 scikit-learn's variance fraction (the fewest components whose
-        # cumulative explained variance ratio EXCEEDS it), 2 Minka's MLE
-        # (scikit-learn's `_infer_dimension`) over the full spectrum.
-        keep_mode, frac = 0, 0.0
-        if isinstance(self.n_components, str) and self.n_components == "mle":
-            if x.shape[0] < x.shape[1]:
-                raise ValueError("n_components='mle' is only supported if n_samples >= n_features")
-            keep_mode, nc = 2, min(x.shape)  # glue: smaller of two shape dims
-        elif isinstance(self.n_components, float) and not isinstance(self.n_components, bool):
-            if not 0.0 < self.n_components < 1.0:
-                raise ValueError("mojolearn PCA: a float n_components must be in (0, 1)")
-            keep_mode, frac, nc = 1, float(self.n_components), min(x.shape)  # glue: smaller of two shape dims
-        else:
-            nc = _component_count(self.n_components, x.shape)
-        if dense and nc > min(x.shape):  # glue: smaller of two shape dims
-            raise ValueError("full SVD n_components cannot exceed min(n_samples, n_features)")
-        fit_owned = getattr(binding, "pca_fit_owned", None)
-        if fit_owned is None:
-            raise NotImplementedError(
-                "mojolearn PCA: this build of _mojolearn_estimators does not "
-                "export pca_fit_owned; rebuild it with bindings/build_estimators.sh"
-            )
-        n, d = x.shape
-        components = empty((nc, d), "<f4")
-        mean = empty((d,), "<f4")
-        variance = empty((nc,), "<f4")
-        ratio = empty((nc,), "<f4")
-        singular = empty((nc,), "<f4")
-        z = empty((n, nc), "<f4") if project else None
-        # ONE native call: the fit, the rank choice, the dropped tail's noise
-        # variance and (fit_transform) the projection. The kept components
-        # are the prefix of the outputs.
-        # Its refusals keep the binding's exception class (the CPU wide
-        # full-SVD refusal is a plain Exception, as before).
-        keep, noise = fit_owned(
-            addr_ro(x, name="x"), addr(components, name="components_"), addr(mean, name="mean_"),
-            addr(variance, name="explained_variance_"), addr(ratio, name="explained_variance_ratio_"),
-            addr(singular, name="singular_values_"), addr(z, name="out") if project else 0,
-            [n, d, nc, int(dense), keep_mode, int(bool(self.whiten)), frac],
-        )
-        if keep != nc:
-            components, variance = components[:keep], variance[:keep]
-            ratio, singular = ratio[:keep], singular[:keep]
-            if project:
-                z = z.reshape((n * nc,))[:n * keep].reshape((n, keep))
-        self._keep_fit(copied, components, mean, variance, ratio, singular, noise, keep, d, n)
-        return z
-
-    def _keep_fit(self, copied, components, mean, variance, ratio, singular, noise, keep, d, n):
-        self.input_copied_ = copied
-        self.components_ = components
-        self.mean_ = mean
-        self.explained_variance_ = variance
-        self.explained_variance_ratio_ = ratio
-        self.singular_values_ = singular
-        self.noise_variance_ = noise
-        self.n_components_ = keep
-        self.n_features_in_ = d
-        self.n_samples_ = n
-
-    def _fit_randomized(self, X, project):
-        """svd_solver='randomized' (scikit-learn `_pca.py::_fit_truncated`):
-        the centered data through `mojolearn.randomized_svd`, then
-        svd_flip on Vt; explained variance S^2 / (n - 1), the ratio against
-        the total sample variance, the noise variance the mean of what is
-        left. random_state None means seed 0 (the Philox stream). One
-        native call (x_decomp/pca_randomized.mojo through `pca_fit_randomized`)."""
-        x, copied = as_f32_c(_dense(X), ndim=2, name="X")
-        if x.shape[0] < 2 or x.shape[1] < 2:
-            raise ValueError(_too_small(x.shape, "PCA"))
-        nc = _component_count(self.n_components, x.shape)
-        if nc >= min(x.shape):  # glue: smaller of two shape dims
-            raise ValueError("svd_solver='randomized' needs n_components < min(n_samples, n_features)")
-        if self.power_iteration_normalizer not in ("auto", "QR", "LU", "none"):
-            raise ValueError("power_iteration_normalizer must be 'auto', 'QR', 'LU' or 'none'")
-        seed = 0 if self.random_state is None else self.random_state
-        if isinstance(seed, bool) or not isinstance(seed, int):
-            raise TypeError("random_state must be None or an int (the counter-based RNG takes an integer seed)")
-        oversamples = int(self.n_oversamples)
-        if oversamples < 0:
-            raise ValueError("n_oversamples must be nonnegative")
-        auto = isinstance(self.iterated_power, str) and self.iterated_power == "auto"
-        iterations = 0 if auto else int(self.iterated_power)
-        fit = getattr(self._bind("_mojolearn_estimators"), "pca_fit_randomized", None)
-        if fit is None:
-            raise NotImplementedError(
-                "mojolearn PCA: this build of _mojolearn_estimators does not "
-                "export pca_fit_randomized; rebuild it with bindings/build_estimators.sh"
-            )
-        n, d = x.shape
-        components = empty((nc, d), "<f4")
-        mean = empty((d,), "<f4")
-        variance = empty((nc,), "<f4")
-        ratio = empty((nc,), "<f4")
-        singular = empty((nc,), "<f4")
-        z = empty((n, nc), "<f4") if project else None
-        noise = self._native(
-            fit, addr_ro(x, name="x"), addr(components, name="components_"), addr(mean, name="mean_"),
-            addr(variance, name="explained_variance_"), addr(ratio, name="explained_variance_ratio_"),
-            addr(singular, name="singular_values_"), addr(z, name="out") if project else 0,
-            [n, d, nc, oversamples, iterations, int(auto), int(bool(self.whiten)),
-             seed & 0xFFFFFFFF],  # glue: the Philox seed is taken mod 2^32
-        )
-        self._keep_fit(copied, components, mean, variance, ratio, singular, noise, nc, d, n)
-        return z
+        return _PCA_ENTRY(self, "fit", (X, y), _PCA_CONTEXT)
 
     def transform(self, X):
         """Project ``X`` onto the principal components.
@@ -528,39 +251,17 @@ class PCA(NumericModeMixin):
 
         Returns
         -------
-        Z : Array of shape (n_samples, ``n_components_``), float32
+        Z : ndarray of shape (n_samples, ``n_components_``), float32
             The projected (and, with ``whiten=True``, whitened) data.
 
         Raises
         ------
+        NotFittedError
+            If the model is not fitted.
         ValueError
-            If the model is not fitted or the feature count differs.
+            If the feature count differs.
         """
-        if not hasattr(self, "components_"):
-            raise ValueError("mojolearn PCA: call fit before transform")
-        x, _ = as_f32_c(_dense(X), ndim=2, name="X")
-        if x.shape[1] != self.n_features_in_:
-            raise ValueError("mojolearn PCA feature count differs from fit")
-        out = empty((x.shape[0], self.n_components_), "<f4")
-        if self.whiten:
-            self._validate_whiten_state()
-            # `n_samples_` and NOT `x.shape[0]`. DEVIATION 580: cuML's dense
-            # path scales by the row count of THIS CALL (pca.pyx:770), so
-            # their `transform(X[:100])` disagrees with `transform(X)[:100]`.
-            # Their own sparse path uses the fit's count and so does
-            # scikit-learn, and so does this.
-            self._native(
-                self._whiten_binding().pca_whiten_transform,
-                addr_ro(x, name="x"), addr_ro(self.mean_, name="mean_"), addr_ro(self.components_, name="components_"),
-                addr_ro(self.singular_values_, name="singular_values_"), addr(out, name="out"),
-                [x.shape[0], x.shape[1], self.n_components_, self.n_samples_],
-            )
-            return out
-        self._bind("_mojolearn_estimators").pca_transform(
-            addr_ro(x, name="x"), addr_ro(self.mean_, name="mean_"), addr_ro(self.components_, name="components_"),
-            addr(out, name="out"), [x.shape[0], x.shape[1], self.n_components_],
-        )
-        return out
+        return _PCA_ENTRY(self, "transform", (X,), _PCA_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit to ``X`` and return its projection.
@@ -573,10 +274,10 @@ class PCA(NumericModeMixin):
 
         Returns
         -------
-        Z : Array of shape (n_samples, ``n_components_``), float32
+        Z : ndarray of shape (n_samples, ``n_components_``), float32
             The projected data.
         """
-        return self._fit(X, True)
+        return _PCA_ENTRY(self, "fit_transform", (X, y), _PCA_CONTEXT)
 
     def inverse_transform(self, X):
         """Map projected data back to the original feature space.
@@ -588,36 +289,17 @@ class PCA(NumericModeMixin):
 
         Returns
         -------
-        X_original : Array of shape (n_samples, n_features), float32
+        X_original : ndarray of shape (n_samples, n_features), float32
             The reconstruction (undoing whitening when ``whiten=True``).
 
         Raises
         ------
+        NotFittedError
+            If the model is not fitted.
         ValueError
             If the component count differs from the fit.
         """
-        if self.whiten and not hasattr(self, "components_"):
-            raise ValueError("mojolearn PCA: call fit before inverse_transform")
-        z, _ = as_f32_c(_dense(X), ndim=2, name="X")
-        if z.shape[1] != self.n_components_:
-            raise ValueError("mojolearn PCA component count differs from fit")
-        out = empty((z.shape[0], self.n_features_in_), "<f4")
-        if self.whiten:
-            self._validate_whiten_state()
-            self._native(
-                self._whiten_binding().pca_whiten_inverse_transform,
-                addr_ro(z, name="z"), addr_ro(self.components_, name="components_"),
-                addr_ro(self.singular_values_, name="singular_values_"), addr_ro(self.mean_, name="mean_"),
-                addr(out, name="out"),
-                [z.shape[0], self.n_features_in_, self.n_components_,
-                 self.n_samples_],
-            )
-            return out
-        self._bind("_mojolearn_estimators").inverse_transform(
-            addr_ro(z, name="z"), addr_ro(self.components_, name="components_"), addr_ro(self.mean_, name="mean_"),
-            addr(out, name="out"), [z.shape[0], self.n_features_in_, self.n_components_, 1],
-        )
-        return out
+        return _PCA_ENTRY(self, "inverse_transform", (X,), _PCA_CONTEXT)
 
     # Saved layout (classical host inference lane, 2026-09-13): components_,
     # mean_, singular_values_, explained_variance_, explained_variance_ratio_
@@ -766,92 +448,7 @@ class TruncatedSVD(NumericModeMixin):
         NotImplementedError
             For an unsupported ``algorithm`` or a nonzero ``tol``.
         """
-        if float(self.tol) != 0.0:
-            raise NotImplementedError(
-                "mojolearn TruncatedSVD: tol is ARPACK's convergence tolerance "
-                "and algorithm='arpack' is not implemented; leave tol=0.0"
-            )
-        if self.algorithm == "randomized":
-            # scikit-learn `_truncated_svd.py` algorithm='randomized' through
-            # `mojolearn.randomized_svd` (lane/algos-decomp, 2026-09-27)
-            from ._expansion_decomp import _randomized_decompose
-            x, self.input_copied_ = as_f32_c(_dense(X), ndim=2, name="X")
-            if x.shape[0] < 2 or x.shape[1] < 2:
-                raise ValueError(_too_small(x.shape, "TruncatedSVD"))
-            nc = _component_count(self.n_components, x.shape)
-            got = _randomized_decompose(
-                x, nc, center=False, n_oversamples=self.n_oversamples, n_iter=self.n_iter,
-                power_iteration_normalizer=self.power_iteration_normalizer, random_state=self.random_state,
-                numeric_mode=self.numeric_mode_used(),
-                binding=_backend.binding("_mojolearn_x_decomp", self.numeric_mode_used()))
-            self.components_ = got["components"]
-            self.singular_values_ = got["singular_values"]
-            self.explained_variance_ = got["explained_variance"]
-            self.explained_variance_ratio_ = got["explained_variance_ratio"]
-            self.n_components_ = nc
-            self.n_features_in_ = x.shape[1]
-            return self
-        if self.algorithm not in self._ALGORITHMS:
-            raise NotImplementedError(
-                f"mojolearn TruncatedSVD: algorithm={self.algorithm!r} is not "
-                f"implemented; this class runs {self._ALGORITHMS}. 'arpack' is "
-                "scipy's svds (implicitly restarted Lanczos), a different "
-                "algorithm; accepting the name and running the Gram arm would "
-                "be a silent substitution, which is why this raises "
-                "(decomposition/NOT_IMPLEMENTED.tsv)"
-            )
-        x, self.input_copied_ = as_f32_c(_dense(X), ndim=2, name="X")
-        if x.shape[0] < 2 or x.shape[1] < 2:
-            raise ValueError(_too_small(x.shape, "TruncatedSVD"))
-        nc = _component_count(self.n_components, x.shape)
-        # lane/apple-fast-q-linalg TSVD_QFIX (FAST default; -D
-        # MOJOLEARN_TSVD_QOLD restores the Gram): the TSQR R's right singular
-        # vectors on a tall x (`_linalg_impl._tsvd_tsqr_components`)
-        from ._linalg_impl import _tsvd_tsqr_components
-        got = _tsvd_tsqr_components(x, nc, self.numeric_mode_used())
-        # scikit-learn's explained_variance_ / _ratio_ (np.var of X V^T per
-        # column, ddof 0, against the summed column variances of X), in this
-        # class's own binding (`tsvd_explained`, decomposition/estimator.mojo
-        # and its host twin).
-        self.explained_variance_ = empty((nc,), "<f4")
-        self.explained_variance_ratio_ = empty((nc,), "<f4")
-        binding = self._bind("_mojolearn_estimators")
-        # lane fg-pca T1 (2026-10-09): the Gram route's fit and explained
-        # variance in ONE binding call, so the device binding uploads X once
-        # (`tsvd_fit_explained`, -D MOJOLEARN_IDN_TSVD_ONE_UPLOAD_OFF runs the
-        # two calls inside it); a binding built before T1 takes the pair.
-        fit_explained = getattr(binding, "tsvd_fit_explained", None)
-        if got is None and fit_explained is not None:
-            self.components_ = empty((nc, x.shape[1]), "<f4")
-            self.singular_values_ = empty((nc,), "<f4")
-            fit_explained(
-                addr_ro(x, name="x"), addr(self.components_, name="components_"),
-                addr(self.singular_values_, name="singular_values_"),
-                addr(self.explained_variance_, name="explained_variance_"),
-                addr(self.explained_variance_ratio_, name="explained_variance_ratio_"),
-                [x.shape[0], x.shape[1], nc],
-            )
-            self.n_components_ = nc
-            self.n_features_in_ = x.shape[1]
-            return self
-        if got is not None:
-            self.components_, self.singular_values_ = got
-        else:
-            self.components_ = empty((nc, x.shape[1]), "<f4")
-            self.singular_values_ = empty((nc,), "<f4")
-            binding.tsvd_fit(
-                addr_ro(x, name="x"), addr(self.components_, name="components_"), addr(self.singular_values_, name="singular_values_"),
-                [x.shape[0], x.shape[1], nc],
-            )
-        binding.tsvd_explained(
-            addr_ro(x, name="x"), addr_ro(self.components_, name="components_"),
-            addr(self.explained_variance_, name="explained_variance_"),
-            addr(self.explained_variance_ratio_, name="explained_variance_ratio_"),
-            [x.shape[0], x.shape[1], nc],
-        )
-        self.n_components_ = nc
-        self.n_features_in_ = x.shape[1]
-        return self
+        return _TSVD_ENTRY(self, "fit", (X, y), _TSVD_CONTEXT)
 
     def transform(self, X):
         """Project ``X`` onto the components.
@@ -871,17 +468,7 @@ class TruncatedSVD(NumericModeMixin):
         ValueError
             If the model is not fitted or the feature count differs.
         """
-        if not hasattr(self, "components_"):
-            raise ValueError("mojolearn TruncatedSVD: call fit before transform")
-        x, _ = as_f32_c(_dense(X), ndim=2, name="X")
-        if x.shape[1] != self.n_features_in_:
-            raise ValueError("mojolearn TruncatedSVD feature count differs from fit")
-        out = empty((x.shape[0], self.n_components_), "<f4")
-        self._bind("_mojolearn_estimators").tsvd_transform(
-            addr_ro(x, name="x"), addr_ro(self.components_, name="components_"), addr(out, name="out"),
-            [x.shape[0], x.shape[1], self.n_components_],
-        )
-        return out
+        return _TSVD_ENTRY(self, "transform", (X,), _TSVD_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit to ``X`` and return its projection.
@@ -897,7 +484,7 @@ class TruncatedSVD(NumericModeMixin):
         Z : Array of shape (n_samples, n_components), float32
             The reduced data.
         """
-        return self.fit(X, y=y).transform(X)
+        return _TSVD_ENTRY(self, "fit_transform", (X, y), _TSVD_CONTEXT)
 
     def inverse_transform(self, X):
         """Map reduced data back to the original feature space.
@@ -917,17 +504,7 @@ class TruncatedSVD(NumericModeMixin):
         ValueError
             If the component count differs from the fit.
         """
-        z, _ = as_f32_c(_dense(X), ndim=2, name="X")
-        if z.shape[1] != self.n_components_:
-            raise ValueError("mojolearn TruncatedSVD component count differs from fit")
-        out = empty((z.shape[0], self.n_features_in_), "<f4")
-        # The mean pointer is unused when add_mean is false; components is a
-        # valid non-null float32 address for the boundary contract.
-        self._bind("_mojolearn_estimators").inverse_transform(
-            addr_ro(z, name="z"), addr_ro(self.components_, name="components_"), addr_ro(self.components_, name="components_"),
-            addr(out, name="out"), [z.shape[0], self.n_features_in_, self.n_components_, 0],
-        )
-        return out
+        return _TSVD_ENTRY(self, "inverse_transform", (X,), _TSVD_CONTEXT)
 
     # Saved layout (classical host inference lane, 2026-09-13): components_ and
     # singular_values_ as fitted (float32), meta <i8 [n_components_,
@@ -1003,3 +580,14 @@ _native_archive_bridge.register(TruncatedSVD, _TSVD_FORMAT, (
 # takes the same names as scikit-learn's module.
 from ._sklearn_modules import LAYOUT as _SKLEARN_LAYOUT, lazy_exports as _lazy_exports  # noqa: E402
 __getattr__ = _lazy_exports("decomposition")
+
+
+# The compiled PCA owner, connected once at import: every public PCA
+# operation (fit, fit_transform, transform, inverse_transform) is one call
+# into it (bindings/pca_native.mojo).
+_PCA_ENTRY, _PCA_CONTEXT = _native_pca_bridge.connect_public(PCA)
+
+# The compiled TruncatedSVD owner, connected once at import: fit,
+# fit_transform, transform and inverse_transform are one call each into it
+# (bindings/tsvd_native.mojo).
+_TSVD_ENTRY, _TSVD_CONTEXT = _native_tsvd_bridge.connect_public(TruncatedSVD)

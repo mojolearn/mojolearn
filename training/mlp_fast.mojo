@@ -704,6 +704,19 @@ def mlp_resident_upload_host(
         _rs_upload(ctx, s[].arena[h], w1_ptr, b1_ptr, w2_ptr, b2_ptr, m_ptr, v_ptr)
 
 
+def mlp_resident_registry(h: Int) raises -> DeviceBuffer[DType.float32]:
+    """Session `h`'s arena (a shared reference): the flat registry
+    [w1, b1, w2, b2] at RS_OFF_P, its gradient at RS_OFF_G and the AdamW
+    moments at RS_OFF_M / RS_OFF_V, FT_TOTAL floats each (lane
+    migrate-neural-2: `apply_gradients` steps the session where it is)."""
+    comptime if not MLP_RESIDENT:
+        raise Error("mlp_resident_registry: compiled without MOJOLEARN_AFN_MLP_RESIDENT")
+    else:
+        _rs_check(h)
+        var s = _MLP_SESSIONS.get_or_create_ptr()
+        return s[].arena[h]
+
+
 def mlp_resident_download_host(
     ctx: DeviceContext,
     h: Int,

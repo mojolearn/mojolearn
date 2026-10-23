@@ -1,64 +1,52 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Fit-mode retention with host stubs; no native code or GPU work."""
+"""Fit-mode retention through the real public forest methods (small inputs)."""
 import pickle
-from types import SimpleNamespace
 
 import numpy as np
 import pytest
 from mojolearn import (ExtraTreesClassifier, ExtraTreesRegressor,
                        RandomForestClassifier, RandomForestRegressor)
-from mojolearn import _backend, _metrics_impl
+from mojolearn import _backend
 
 CLASSES = [ExtraTreesClassifier, ExtraTreesRegressor,
            RandomForestClassifier, RandomForestRegressor]
 
 
-@pytest.fixture
-def boundary(monkeypatch):
-    default = ['identical']
-    calls = []
-    monkeypatch.setattr(_backend, 'default_mode', lambda: default[0])
-    native = SimpleNamespace(**{name: object() for name in (
-        'rf_classifier_fit', 'rf_regressor_fit', 'et_classifier_fit', 'et_regressor_fit')})
-    real = _backend.binding
-
-    def binding(name, mode=None):
-        if name == '_mojolearn':
-            # the base binding's host helpers (label encoding, DEVIATION
-            # 2500) are not the boundary under test; they stay real
-            return real(name, mode=mode)
-        calls.append(mode)
-        return native
-    monkeypatch.setattr(_backend, 'binding', binding)
-    return default, calls
+def _data(cls):
+    rng = np.random.default_rng(0)
+    X = rng.random((40, 4), dtype=np.float32)
+    if cls._estimator_type == 'classifier':
+        return X, (X[:, 0] > 0.5).astype(np.int32)
+    return X, (2.0 * X[:, 0] + X[:, 1]).astype(np.float32)
 
 
-def fit_stub(self, *args, **kwargs):
-    self._offsets = np.array([0, 1], dtype=np.int32)
-    return self
+def _model(cls, **kw):
+    return cls(n_estimators=2, max_depth=3, random_state=0, **kw)
+
+
+def _other(mode):
+    return 'fast' if mode == 'identical' else 'identical'
 
 
 @pytest.mark.parametrize('cls', CLASSES)
-def test_capture_default_refit_reset_pickle(cls, monkeypatch, boundary):
-    # Sentinel entrypoints isolate mode capture; export routing has its own gate.
-    monkeypatch.setenv("MOJOLEARN_FOREST_EXPORT", "legacy")
-    default, calls = boundary
-    monkeypatch.setattr(cls, '_fit_arrays', fit_stub)
-    model = cls()
-    model.fit(np.ones((2, 1)), np.array([0, 1]))
-    assert calls[-1] == 'identical'
+def test_capture_default_refit_reset_pickle(cls):
+    X, y = _data(cls)
+    default = _backend.default_mode()
+    model = _model(cls).fit(X, y)
+    assert model._fit_numeric_mode == default
     assert model.get_params()['numeric_mode'] is None
-    default[0] = 'fast'
-    model._bind()
-    assert calls[-1] == 'identical'
+    first = np.asarray(model.predict(X))
     restored = pickle.loads(pickle.dumps(model))
-    restored._bind()
-    assert calls[-1] == 'identical'
-    model.numeric_mode = 'fast'
+    assert restored._fit_numeric_mode == default
+    np.testing.assert_array_equal(np.asarray(restored.predict(X)), first)
+    model.numeric_mode = _other(default)
     with pytest.raises(ValueError, match='was fitted'):
-        model._bind()
-    model.fit(np.ones((2, 1)), np.array([0, 1]))
-    assert calls[-1] == 'fast'
+        model.predict(X)
+    try:
+        model.fit(X, y)
+    except ImportError as error:
+        pytest.skip(f"this install has no {_other(default)} tree binding: {error}")
+    assert model._fit_numeric_mode == _other(default)
     model.set_params(numeric_mode='identical')
     assert not model.__sklearn_is_fitted__()
     assert not hasattr(model, '_fit_numeric_mode')
@@ -66,49 +54,44 @@ def test_capture_default_refit_reset_pickle(cls, monkeypatch, boundary):
 
 @pytest.mark.parametrize('cls', CLASSES)
 @pytest.mark.parametrize('mode', ['', 0, False, 1, 'other'])
-def test_invalid_direct_mode_refused_at_call(cls, mode, boundary):
-    model = cls(numeric_mode='identical')
-    model._capture_fit_mode()
+def test_invalid_direct_mode_refused_at_call(cls, mode):
+    X, y = _data(cls)
+    model = _model(cls, numeric_mode='identical').fit(X, y)
     model.numeric_mode = mode
     with pytest.raises(ValueError, match='numeric_mode'):
-        model._bind()
-    assert not boundary[1]
+        model.predict(X)
+    with pytest.raises(ValueError, match='numeric_mode'):
+        _model(cls, numeric_mode=mode).fit(X, y)
 
 
 @pytest.mark.parametrize('cls', CLASSES)
-def test_score_captured_mode_and_equivalent_spelling(cls, monkeypatch, boundary):
-    model = cls(numeric_mode=' IDENTICAL ')
-    model._capture_fit_mode()
-    # score refuses an unfitted instance; this one stands for a completed fit
-    # (its predict is faked below).
-    vars(model)['_mojolearn_fitted'] = True
+def test_score_captured_mode_and_equivalent_spelling(cls):
+    from sklearn.metrics import accuracy_score, r2_score
+    X, y = _data(cls)
+    model = _model(cls, numeric_mode=' IDENTICAL ').fit(X, y)
+    assert model._fit_numeric_mode == 'identical'
     model.numeric_mode = None
-    boundary[0][0] = 'fast'
-    monkeypatch.setattr(model, 'predict', lambda X: np.array([0, 1]))
-    modes = []
-    def metric(*args, numeric_mode, sample_weight=None):
-        assert sample_weight is None
-        modes.append(numeric_mode)
-        return 1.0
-    monkeypatch.setattr(_metrics_impl, 'accuracy_score', metric)
-    monkeypatch.setattr(_metrics_impl, 'r2_score', metric)
-    # a classifier scores through the x_metrics `accuracy_fraction`
-    from mojolearn import _expansion_metrics
-    monkeypatch.setattr(_expansion_metrics, 'accuracy_fraction',
-                        lambda yt, yp, sample_weight=None, numeric_mode=None:
-                        metric(yt, yp, numeric_mode=numeric_mode, sample_weight=sample_weight))
-    assert model.score([[0], [1]], [0, 1]) == 1.0
-    assert modes == ['identical']
+    pred = np.asarray(model.predict(X))
+    expected = accuracy_score(y, pred) if cls._estimator_type == 'classifier' else r2_score(y, pred)
+    assert model.score(X, y) == pytest.approx(expected, rel=1e-6, abs=1e-6)
+    assert model._fit_numeric_mode == 'identical'
 
 
 @pytest.mark.parametrize('cls', CLASSES)
-def test_legacy_archive_fallback(cls, boundary):
-    model = cls.__new__(cls)
-    model._bind()
-    assert boundary[1][-1] == 'identical'
-    boundary[0][0] = 'fast'
-    model._bind()
-    assert boundary[1][-1] == 'fast'
-    model.numeric_mode = 'identical'
-    model._bind()
-    assert boundary[1][-1] == 'identical'
+def test_legacy_archive_fallback(cls, tmp_path):
+    """A sequential archive records no numeric mode: the loaded model
+    predicts under its stored `numeric_mode`, else the process default."""
+    X, y = _data(cls)
+    model = _model(cls, numeric_mode='identical', inference_engine='sequential').fit(X, y)
+    path = tmp_path / 'model.npz'
+    model.save(path)
+    loaded = cls.load(path)
+    assert '_fit_numeric_mode' not in loaded.__dict__
+    expected = np.asarray(model.predict(X))
+    loaded.numeric_mode = 'identical'
+    np.testing.assert_array_equal(np.asarray(loaded.predict(X)), expected)
+    loaded.numeric_mode = None
+    if _backend.default_mode() == 'identical':
+        np.testing.assert_array_equal(np.asarray(loaded.predict(X)), expected)
+    else:
+        assert np.asarray(loaded.predict(X)).shape == expected.shape

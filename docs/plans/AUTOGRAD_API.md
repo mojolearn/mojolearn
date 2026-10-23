@@ -485,7 +485,8 @@ only.
 ### Imported models (docs/plans/MODEL_IMPORT.md)
 
 `mojolearn.import_model(source, *, shapes=None, numeric_mode=None)` turns an
-ONNX file (opset 13 or later) or a `torch.export.ExportedProgram` into the
+ONNX file (opset 13 or later; a torch model is exported with `torch.onnx.export` first, the
+torch.export reader was removed 2026-10-22) into the
 captured inference `Program` of `Session.capture` (straight line, fixed
 shapes): the source graph is read into one intermediate graph in ONNX's
 vocabulary, every node is lowered onto the session ops above or refused by

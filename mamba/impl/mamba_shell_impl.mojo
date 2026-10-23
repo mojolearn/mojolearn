@@ -895,6 +895,68 @@ def _mamba3_run[discard_state: Bool = False](
     m3_phase_tick(ctx, phase_tick, String("surface.weight_lists_and_context"))
     var dw = _m3_load_weights[False](ctx, a, dims)
     m3_phase_tick(ctx, phase_tick, String("surface.weight_upload"))
+    var out_len = _mamba3_run_on[discard_state](ctx, dw, a, b, l, dm, q0, pend, phase_tick)
+    _ = dw^
+    _ = ctx^
+    comptime if is_defined["MOJOLEARN_MAMBA3_PHASE_TIMERS"]():
+        print("M3_PHASE", "surface.context_destruction", Float64(Int(perf_counter_ns()) - phase_tick) / 1e6)
+    return out_len
+
+
+def _mamba3_check_state_words(q0: Int, pend: Int) raises:
+    if q0 < 0 or q0 > M3_CHUNK_SIZE:
+        raise Error(
+            String("mamba3: buf_len must be in [0, ")
+            + String(M3_CHUNK_SIZE)
+            + "] (INCLUSIVE -- the buffer never empties, DEVIATION"
+            " 832(i): r in [1, Q] after every call, 0 only before the"
+            " first token), got "
+            + String(q0)
+            + "; the two sides of this boundary disagree about the state"
+        )
+    if pend != 0 and pend != 1:
+        raise Error(
+            "mamba3: pending must be 0 or 1, got "
+            + String(pend)
+            + "; the two sides of this boundary disagree about the state"
+        )
+
+
+def _mamba3_run_owned(mut s: Mamba3PrefillSession, a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int) raises -> Int:
+    """`_mamba3_run` (the carried-state forward or decode step) reading the
+    session's installed owned weights where they live on the device
+    (lane migrate-neural-2: the state and decode calls uploaded the host
+    weights again although the snapshot was resident). `a` is the 25-slot
+    list; its nine weight slots are not read. The same block on the same
+    weight bytes, so the same bits."""
+    var dims = Mamba3Dims.of(dm)
+    _mamba3_check_state_words(q0, pend)
+    comptime if not NN40_OWNED_WEIGHTS:
+        raise Error("mamba3 owned weights: NN40 arm is disabled")
+    if not s.owned_weights or not s.w or s.dm != dm:
+        raise Error("mamba3 owned weights: install a matching snapshot first")
+    if not s.ctx:
+        s.ctx = neural_ctx[_NEURAL_CTX]()
+    var phase_tick = 0
+    comptime if is_defined["MOJOLEARN_MAMBA3_PHASE_TIMERS"]():
+        phase_tick = Int(perf_counter_ns())
+    ref ctx = s.ctx.value()
+    return _mamba3_run_on[False](ctx, s.w.value(), a, b, l, dm, q0, pend, phase_tick)
+
+
+def _mamba3_run_on[discard_state: Bool = False](
+    ctx: DeviceContext, mut dw: Mamba3DeviceWeights, a: List[Int], b: Int, l: Int, dm: Int, q0: Int, pend: Int,
+    var phase_tick: Int,
+) raises -> Int:
+    """`_mamba3_run` after its weights are on the device: the state upload,
+    the block, the downloads and the one wait."""
+    var dims = Mamba3Dims.of(dm)
+    var nh = dims.nheads
+    var theta_n = b * nh * M3_NUM_ROPE_ANGLES
+    var h_n = b * nh * M3_HEADDIM * M3_D_STATE
+    var qrow_n = b * M3_CHUNK_SIZE * nh
+    var k_n = b * nh * M3_D_STATE
+    var v_n = b * nh * M3_HEADDIM
     # The caller's ten-piece state over the fresh zeros (DEVIATION 794).
     var dstate = Mamba3DeviceState(ctx, b, dims)
     comptime if not discard_state:
@@ -957,14 +1019,10 @@ def _mamba3_run[discard_state: Bool = False](
     ctx.synchronize()
     m3_phase_tick(ctx, phase_tick, String("surface.downloads"))
     var out_len = dstate.buf_len
-    _ = dw^
     _ = dstate^
     _ = dstages^
     _ = dx^
     m3_phase_tick(ctx, phase_tick, String("surface.buffer_destruction"))
-    _ = ctx^
-    comptime if is_defined["MOJOLEARN_MAMBA3_PHASE_TIMERS"]():
-        print("M3_PHASE", "surface.context_destruction", Float64(Int(perf_counter_ns()) - phase_tick) / 1e6)
     return out_len
 
 

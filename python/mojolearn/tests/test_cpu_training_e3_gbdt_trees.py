@@ -130,9 +130,12 @@ def test_binding_dispatches_and_refuses_by_name():
                  "under Lossguide (only NewtonL2 and NewtonCosine)", "(only Cosine)"):
         assert what in src, f"no by-name refusal for {what}"
     assert f'"{REFUSAL}"' in src
-    assert 'kind == String("ntree")' in src and 'kind == String("node")' in src
-    assert "n_trees, 1, non_symmetric," in src, "the predict walk takes the model's shape"
-    assert "_ = node_left^" in src and "_ = node_right^" in src, "keep-alives past the walk"
+    # the model-text parser and the predict walk live in the host entries the
+    # binding imports (gbdt/host/gbdt_host_entries_impl.mojo)
+    impl = _read("gbdt/host/gbdt_host_entries_impl.mojo")
+    assert 'kind == String("ntree")' in impl and 'kind == String("node")' in impl
+    assert "n_trees, 1, non_symmetric," in impl, "the predict walk takes the model's shape"
+    assert "_ = node_left^" in impl and "_ = node_right^" in impl, "keep-alives past the walk"
 
 
 def test_sabotage_reaches_both_policies():

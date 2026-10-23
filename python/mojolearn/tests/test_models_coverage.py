@@ -108,7 +108,7 @@ def test_parallel_causal_lm_parameters_refused_after_close(tmp_path):
         assert params and all(np.asarray(v).size for v in params.values())
     finally:
         pc.checked(split.close)
-    pc.refused(split.parameters, ValueError, "ParallelCausalLM is closed")
+    pc.refused(split.parameters, RuntimeError, "ParallelCausalLM is closed")
 
 
 def test_program_fit_huber_delta_matches_numpy_and_refuses_bad_delta():

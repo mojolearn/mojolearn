@@ -206,6 +206,29 @@ def _check_label_kinds(labels):
         )
 
 
+_STR_LABELS = []
+
+
+def str_labels(operation, *args):
+    """The native str-label encoder (bindings/str_labels_native.mojo): ONE
+    call over a flat list of label objects. ("encode", labels) gives
+    `(classes, int32 codes Array)`; ("lookup", classes, values, as_float)
+    gives `(codes Array, first missing labels, missing count)`. None when a
+    label is not a str: numbers and mixed lists take `sorted_classes`, whose
+    ORDER RULE refusals they keep."""
+    if not _STR_LABELS:
+        from .tokenizer import _binding
+        _STR_LABELS.append(_binding()._module.str_labels_native_call)
+    got = _STR_LABELS[0](operation, *args)
+    if got is None:
+        return None
+    if operation == "encode":
+        classes, store = got
+        return classes, Array._owned(store, (len(store),), "<i4", "C")
+    store, missing, count = got
+    return Array._owned(store, (len(store),), "<f4" if args[2] else "<i4", "C"), missing, count
+
+
 def sorted_classes(labels):
     """`(classes, codes)`: the class list under the ORDER RULE above, and
     one dense code per label, `classes[codes[i]] == labels[i]` under
@@ -306,7 +329,10 @@ def encode_labels(y):
     fast = _encode_label_list_native(flat)
     if fast is not None:
         return fast
-    classes, codes = sorted_classes(flat)  # cpu-route: str or object labels, the explicit label input step
+    native = str_labels("encode", flat) if type(flat) is list else None
+    if native is not None:
+        return native
+    classes, codes = sorted_classes(flat)  # cpu-route: mixed or non-str object labels, the explicit label input step
     return classes, Array.from_list(codes, "<i4")
 
 
@@ -630,7 +656,11 @@ def unique_inverse(y):
     if arr is None or arr.dtype.lstrip("<>|=")[:1] not in ("f", "i", "u", "b"):
         # str or object labels: no device sort orders text, so these take
         # the ORDER RULE's own encoding (the label input step)
-        classes, codes = sorted_classes(flatten_labels(y))  # cpu-route: str or object labels, the explicit label input step
+        flat = flatten_labels(y)
+        native = str_labels("encode", flat) if type(flat) is list else None
+        if native is not None:
+            return native
+        classes, codes = sorted_classes(flat)  # cpu-route: mixed or non-str object labels, the explicit label input step
         return classes, Array.from_list(codes, "<i4")
     if arr.size == 0:
         raise ValueError("mojolearn: y is empty")

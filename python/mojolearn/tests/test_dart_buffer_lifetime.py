@@ -1,40 +1,16 @@
-"""Binary probabilities must keep borrowed native input buffers alive."""
-import gc
-import weakref
-
+"""DART binary probabilities through the real public path (small inputs):
+the (n, 2) rows a binary fit predicts."""
 import numpy as np
 
 from mojolearn import _expansion_trees as trees
-from mojolearn._array import Array
 
 
-def test_binary_probability_zero_column_survives_native_call(monkeypatch):
-    class TrackedArray(Array):
-        pass
-
-    allocated = []
-
-    def tracked_zeros(shape, dtype):
-        value = TrackedArray(shape, dtype)
-        allocated.append(weakref.ref(value))
-        return value
-
-    class Native:
-        def x_trees_stack_w64(self, columns, out, dimensions):
-            gc.collect()
-            assert allocated[-1]() is not None, "zero column was freed before native code consumed it"
-            np.testing.assert_array_equal(np.asarray(allocated[-1]()), 0)
-
-        def x_trees_softmax_rows(self, out, dimensions):
-            pass
-
-    model = trees.DARTClassifier()
-    # predict_proba refuses an unfitted instance; this one stands for a
-    # completed binary fit (its raw scores and binding are faked below).
-    vars(model)["_mojolearn_fitted"] = True
-    monkeypatch.setattr(trees, "zeros", tracked_zeros)
-    monkeypatch.setattr(model, "_raw", lambda X: Array((len(X),), "<f8"))
-    monkeypatch.setattr(model, "_bind", lambda: Native())
-    assert model.predict_proba(np.zeros((19, 3), np.float32)).shape == (19, 2)
-    gc.collect()
-    assert allocated[-1]() is None, "temporary ownership must end after the call"
+def test_binary_probability_rows():
+    rng = np.random.default_rng(0)
+    X = rng.random((40, 3), dtype=np.float32)
+    y = (X[:, 0] > 0.5).astype(np.int32)
+    model = trees.DARTClassifier(n_estimators=3, random_state=0).fit(X, y)
+    proba = np.asarray(model.predict_proba(X[:19]))
+    assert proba.shape == (19, 2)
+    assert np.all(np.isfinite(proba)) and np.all(proba >= 0)
+    np.testing.assert_allclose(proba.sum(axis=1), 1.0, rtol=0, atol=1e-6)

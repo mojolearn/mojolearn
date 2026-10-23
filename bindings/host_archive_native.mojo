@@ -5,7 +5,8 @@
 from std.python import Python, PythonObject
 from std.memory import bitcast
 from std.math import isfinite
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_contains, py_setattr
+from bindings.trees_public_iforest import iforest_validate
 from bindings.sequential_description import sequential_fields
 from bindings.classical_archive_read import classical_archive_read, classical_archive_build, _archive_exact as _raw_archive_exact, _archive_string, _archive_read_repr, _archive_builtin_repr
 from bindings.classical_arrays import classical_i64, classical_f64, classical_wrap_array, classical_array, classical_address, _store_code
@@ -41,6 +42,8 @@ def _archive_exact(arrays: PythonObject, name: String, dtype: String, context: P
     var result = host_archive_typed(value.shape, dtype, context)
     host_archive_reorder_bytes(Int(py=classical_address(value)), dimensions, strides,
         Int(py=value.size), Int(py=value._mv.itemsize), Int(py=classical_address(result)))
+    _ = value  # keep the Python object alive through the native call above
+    _ = result  # keep the Python object alive through the native call above
     return result
 
 
@@ -72,7 +75,8 @@ def host_archive_check_layout(cls: PythonObject, context: PythonObject) raises:
     for i in range(len(mro)):  # driver-loop: connected class ancestry metadata
         var fields = py_call(b.type.__dict__["__dict__"].__get__, mro[i])
         if not found_finalizer and py_contains(fields, "__del__"):
-            if fields["__del__"] is not py_get(context, "host_archive_finalizer_descriptor"):
+            if (fields["__del__"] is not py_get(context, "host_archive_finalizer_descriptor")
+                    and fields["__del__"] is not py_get(context, "host_archive_peer_finalizer_descriptor")):
                 raise Error("TypeError: Python finalizer hooks are not accepted by native archive loading")
             found_finalizer = True
         if not found_dictionary and py_contains(fields, "__dict__"):
@@ -396,6 +400,8 @@ def host_archive_embedding(cls: PythonObject, arrays: PythonObject, context: Pyt
     var weight = classical_array(v, d, context)
     host_archive_copy_f32(Int(py=classical_address(saved)), Int(py=saved.strides[0]),
                           Int(py=saved.strides[1]), v, d, Int(py=classical_address(weight)))
+    _ = saved  # keep the Python object alive through the native call above
+    _ = weight  # keep the Python object alive through the native call above
     _ = saved^
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
@@ -554,7 +560,7 @@ def host_archive_density(cls: PythonObject, arrays: PythonObject, kde: Bool, pat
     py_setitem(fields, "n_samples_fit_", n)
     var bandwidth = classical_f64(parameter, 0)
     if not bandwidth > 0.0:
-        raise Error("KernelDensity bandwidth must be positive")
+        raise Error("mojolearn KernelDensity: bandwidth must be positive, got " + host_archive_float_repr(bandwidth))
     py_setitem(fields, "bandwidth", bandwidth)
     py_setitem(fields, "kernel", _archive_string(arrays, "kernel", context))
     py_setitem(fields, "algorithm", "auto")
@@ -726,9 +732,13 @@ def host_archive_logistic(cls: PythonObject, arrays: PythonObject, path: PythonO
     var coef = host_archive_typed(Python.tuple(targets, nf), "<f4", context)
     var bias = classical_array(targets, 0, context)
     host_archive_copy_f32(Int(py=classical_address(w)), 4, targets * 4, targets, nf, Int(py=classical_address(coef)))
+    _ = coef  # keep the Python object alive through the native call above
+    _ = w  # keep the Python object alive through the native call above
     if intercept:
         host_archive_copy_f32(Int(py=classical_address(w)) + targets * nf * 4, 4, 4,
                               targets, 1, Int(py=classical_address(bias)))
+        _ = w  # keep the Python object alive through the native call above
+        _ = bias  # keep the Python object alive through the native call above
     py_setitem(fields, "classes_", classes)
     py_setitem(fields, "_w", w)
     py_setitem(fields, "coef_", coef)
@@ -904,6 +914,8 @@ def host_archive_holtwinters(cls: PythonObject, arrays: PythonObject, path: Pyth
         var copy = host_archive_typed(Python.tuple(rows, batch), "<f4", context)
         host_archive_copy_f32(Int(py=classical_address(comps)) + i * cl * 4, batch * 4, 4,
                               rows, batch, Int(py=classical_address(copy)))
+        _ = comps  # keep the Python object alive through the native call above
+        _ = copy  # keep the Python object alive through the native call above
         py_setitem(time_major, names[i], copy)
     py_setitem(fields, "_time_major", time_major)
     var keys = Python.tuple("sse_", "alpha_", "beta_", "gamma_", "n_iter_", "criterion_")
@@ -939,6 +951,54 @@ def host_archive_ivf(cls: PythonObject, arrays: PythonObject, context: PythonObj
     py_setitem(fields, "n_rows_", n)
     py_setitem(fields, "n_lists_", lists)
     py_setitem(fields, "metric_code_", metric)
+    return model
+
+
+def host_archive_ann(cls: PythonObject, arrays: PythonObject, fmt: String, path: PythonObject,
+                     context: PythonObject) raises -> PythonObject:
+    """`_AnnSaved.load` of the x_ann indexes (IVFPQIndex, CagraIndex,
+    IVFSQIndex, IVFRaBitQIndex): the saved int constructor parameters and
+    fitted ints, the numeric mode and the index arrays at their saved
+    dtypes, with the Python loader's refusals. `host_archive_ann_layouts`
+    maps the format to (parameter names, fitted names, (attribute, member,
+    dtype) arrays, the other constructor defaults, the parameters saved as
+    -1 for None)."""
+    var b = Python.import_module("builtins")
+    var layout = context["host_archive_ann_layouts"][fmt]
+    var names = layout[0]
+    var fitted_names = layout[1]
+    var saved = layout[2]
+    var defaults = layout[3]
+    var none_below = layout[4]
+    var params = _archive_exact(arrays, "params", "<i8", context)
+    var fitted = _archive_exact(arrays, "fitted", "<i8", context)
+    if Int(py=params.size) != len(names) or Int(py=fitted.size) != len(fitted_names):
+        raise Error(host_archive_where(path, context) + " does not hold " + String(cls.__name__) + "'s parameters")
+    var model = host_archive_object(cls, arrays, context)
+    var fields = sequential_fields(model)
+    var words = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(params)))
+    _ = params  # keep the Python object alive through the native call above
+    for i in range(len(names)):  # driver-loop: over the class's saved constructor parameters
+        var value = Int(words[i])
+        _ = params  # keep the Python object alive through the native call above
+        if py_contains(none_below, names[i]) and value < 0:
+            py_setitem(fields, names[i], PythonObject(None))
+        else:
+            py_setitem(fields, names[i], PythonObject(value))
+    var keys = py_call(b.list, defaults)
+    for i in range(len(keys)):  # driver-loop: over the class's other constructor parameters
+        py_setitem(fields, keys[i], defaults[keys[i]])
+    host_archive_mode(arrays, fields, context)
+    var counts = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(fitted)))
+    _ = fitted  # keep the Python object alive through the native call above
+    for i in range(len(fitted_names)):  # driver-loop: over the class's saved fitted sizes
+        py_setitem(fields, fitted_names[i], PythonObject(Int(counts[i])))
+        _ = fitted  # keep the Python object alive through the native call above
+    for i in range(len(saved)):  # driver-loop: over the class's saved index arrays
+        var entry = saved[i]
+        py_setitem(fields, entry[0], _archive_exact(arrays, String(entry[1]), String(entry[2]), context))
+    _ = params^
+    _ = fitted^
     return model
 
 
@@ -1028,6 +1088,12 @@ def host_archive_float_repr(value: Float64) raises -> String:
 
 def host_archive_rbc_metric(cls_name: String, metric: PythonObject, p: Float64,
                             context: PythonObject) raises -> PythonObject:
+    """`host_archive_rbc_metric_object` of a saved float p."""
+    return host_archive_rbc_metric_object(cls_name, metric, PythonObject(p), context)
+
+
+def host_archive_rbc_metric_object(cls_name: String, metric: PythonObject, p: PythonObject,
+                                   context: PythonObject) raises -> PythonObject:
     """`neighbors._resolve_rbc_metric(cls_name, metric, p)` for a saved
     metric name: `(metric_value, metric_arg)`, or the same refusal, by name
     and in the same order."""
@@ -1077,22 +1143,30 @@ def host_archive_rbc_metric(cls_name: String, metric: PythonObject, p: Float64,
             + "ball cover admits: " + String(admitted))
     var value = Int(py=table[key])
     var arg = Float64(2.0)
+    var shown_p = _archive_builtin_repr(p)
     if value != 9:
-        # `_refuse_inert_p`: only metric='minkowski'/'lp' reads p.
-        if p != 2.0:
+        # `_refuse_inert_p`: only metric='minkowski'/'lp' reads p; a bool,
+        # or a p float() refuses, is not the default.
+        var is_default = False
+        if py_type(p) is not b.bool:
+            try:
+                is_default = Float64(py=py_call(b.float, p)) == 2.0
+            except:
+                is_default = False
+        if not is_default:
             raise Error(head + "p is read only by metric='minkowski' "
-                + "(or 'lp'); metric=" + shown + " never reads it, so p=" + host_archive_float_repr(p) + " would "
+                + "(or 'lp'); metric=" + shown + " never reads it, so p=" + shown_p + " would "
                 + "change nothing. Leave p at its default (2) or ask for "
                 + "metric='minkowski'.")
     else:
-        arg = p
+        arg = Float64(py=py_call(b.float, p))
         # `arg != arg or arg == float("inf")`: NaN or +infinity.
         if arg != arg or (arg > 0.0 and not isfinite(arg)):
             raise Error(head + "metric='minkowski' needs a finite "
-                + "p >= 1, got " + host_archive_float_repr(p) + ". p = infinity is metric='chebyshev', "
+                + "p >= 1, got " + shown_p + ". p = infinity is metric='chebyshev', "
                 + "which IS admitted here.")
         if arg < 1.0:
-            raise Error(head + "metric='minkowski' with p=" + host_archive_float_repr(p) + " is "
+            raise Error(head + "metric='minkowski' with p=" + shown_p + " is "
                 + "REFUSED on the random ball cover. The pruning here IS THE "
                 + "TRIANGLE INEQUALITY on the landmark radii "
                 + "(neighbors/impl/ball_cover/common.mojo, "
@@ -1104,6 +1178,33 @@ def host_archive_rbc_metric(cls_name: String, metric: PythonObject, p: Float64,
                 + "algorithm='brute' for p < 1, which is exact brute force "
                 + "and needs no inequality.")
     return Python.tuple(value, arg)
+
+
+def host_archive_radius_refusals(fields: PythonObject, cls_name: String, context: PythonObject) raises:
+    """`RadiusNeighbors._check_refusals` over the instance fields (at `fit`
+    and at `load`): the metric (which sets `_metric_value`/`_metric_arg`),
+    then the algorithm, then the radius, in the Python method's wording."""
+    var b = Python.import_module("builtins")
+    var metric = fields["metric"]
+    var algorithm = fields["algorithm"]
+    var radius = fields["radius"]
+    var resolved = host_archive_rbc_metric_object(cls_name, metric, fields["p"], context)
+    py_setitem(fields, "_metric_value", resolved[0])
+    py_setitem(fields, "_metric_arg", resolved[1])
+    if not (py_type(algorithm) is b.str and (String(algorithm) == "auto" or String(algorithm) == "rbc")):
+        raise Error("mojolearn RadiusNeighbors: algorithm=" + _archive_builtin_repr(algorithm) + " is "
+            + "refused. The index here is cuVS's RANDOM BALL COVER, which "
+            + "is none of scikit-learn's three: it is not 'brute' (there "
+            + "is an index and it prunes), and it is neither 'ball_tree' "
+            + "nor 'kd_tree' (it is a one-level cover over sqrt(n) "
+            + "landmarks, not a tree). Naming any of them would describe "
+            + "the wrong algorithm, so 'auto' and 'rbc' -- the "
+            + "algorithm's own name -- are the two accepted. The "
+            + "results are exact either way")
+    var value = Float64(py=py_call(b.float, radius))
+    if not isfinite(value) or value <= 0:
+        raise Error("mojolearn RadiusNeighbors: radius=" + _archive_builtin_repr(radius) + " is "
+            + "refused; it must be positive and finite")
 
 
 def host_archive_radius(cls: PythonObject, arrays: PythonObject, path: PythonObject,
@@ -1131,23 +1232,7 @@ def host_archive_radius(cls: PythonObject, arrays: PythonObject, path: PythonObj
     py_setitem(fields, "_metric_value", PythonObject(None))
     py_setitem(fields, "_metric_arg", PythonObject(None))
     host_archive_mode(arrays, fields, context)
-    # `_check_refusals`: the metric, then the algorithm, then the radius.
-    var resolved = host_archive_rbc_metric(String(cls.__name__), metric, p, context)
-    py_setitem(fields, "_metric_value", resolved[0])
-    py_setitem(fields, "_metric_arg", resolved[1])
-    if String(algorithm) != "auto" and String(algorithm) != "rbc":
-        raise Error("mojolearn RadiusNeighbors: algorithm=" + _archive_builtin_repr(algorithm) + " is "
-            + "refused. The index here is cuVS's RANDOM BALL COVER, which "
-            + "is none of scikit-learn's three: it is not 'brute' (there "
-            + "is an index and it prunes), and it is neither 'ball_tree' "
-            + "nor 'kd_tree' (it is a one-level cover over sqrt(n) "
-            + "landmarks, not a tree). Naming any of them would describe "
-            + "the wrong algorithm, so 'auto' and 'rbc' -- the "
-            + "algorithm's own name -- are the two accepted. The "
-            + "results are exact either way")
-    if not isfinite(radius) or radius <= 0:
-        raise Error("mojolearn RadiusNeighbors: radius=" + host_archive_float_repr(radius) + " is "
-            + "refused; it must be positive and finite")
+    host_archive_radius_refusals(fields, String(cls.__name__), context)
     var nf = classical_i64(meta, 0)
     var ns = classical_i64(meta, 1)
     var index = _archive_exact(arrays, "index", "<f4", context)
@@ -1219,11 +1304,14 @@ def host_archive_neighbors(cls: PythonObject, arrays: PythonObject, kind: Int,
                 raise Error("neighbor class_counts does not match saved classes")
             var unique = host_archive_unique_i32(Int(py=classical_address(y)) + output * Int(py=y.strides[0]),
                                                  Int(py=y.strides[1]), n)
+            _ = y  # keep the Python object alive through the native call above
             if len(unique) != count:
                 raise Error("saved neighbor classes do not match distinct labels")
+            _ = y  # keep the Python object alive through the native calls above
             var labels = Python.list()
             for i in range(count):  # driver-loop: sorted distinct class label metadata
                 var label = Int(unique[i])
+                _ = y  # keep the Python object alive through the native call above
                 if classical_i64(saved_classes, off + i) != label:
                     raise Error("saved neighbor classes are not the sorted unique labels")
                 _ = py_call(labels.append, label)
@@ -1302,6 +1390,66 @@ def host_archive_iforest(cls: PythonObject, arrays: PythonObject, context: Pytho
     py_setitem(fields, "n_features_in_", nf)
     py_setitem(fields, "offset_", classical_f64(reals, 3))
     py_setitem(fields, "max_samples_", classical_i64(meta, 10))
+    return model
+
+
+def host_archive_public_iforest(cls: PythonObject, arrays: PythonObject, path: PythonObject,
+                                context: PythonObject) raises -> PythonObject:
+    """`IsolationForest.load(path)`: the public loader's refusals in its
+    order and wording; the saved knobs pass through the constructor's checks
+    again (`iforest_validate`, the native `_validate_params`), then the saved
+    mode, the training matrix and the fitted scalars."""
+    var b = Python.import_module("builtins")
+    var where = host_archive_where(path, context)
+    var ints = _archive_exact(arrays, "ints", "<i8", context)
+    var reals = _archive_exact(arrays, "reals", "<f8", context)
+    if Int(py=ints.size) != 11 or Int(py=reals.size) != 4:
+        raise Error(where + " holds " + String(Int(py=ints.size)) + " ints and " + String(Int(py=reals.size))
+                    + " reals, 11 and 4 are needed")
+    var trees = classical_i64(ints, 0)
+    var samples_mode = classical_i64(ints, 1)
+    var samples_int = classical_i64(ints, 2)
+    var depth = classical_i64(ints, 3)
+    var features_mode = classical_i64(ints, 4)
+    var features_int = classical_i64(ints, 5)
+    var bootstrap = classical_i64(ints, 6)
+    var seed = classical_i64(ints, 7)
+    var auto_contamination = classical_i64(ints, 8)
+    var nf = classical_i64(ints, 9)
+    var resolved = classical_i64(ints, 10)
+    var samples_frac = classical_f64(reals, 0)
+    var features_frac = classical_f64(reals, 1)
+    var contamination = classical_f64(reals, 2)
+    var offset = classical_f64(reals, 3)
+    if (samples_mode < 0 or samples_mode > 2 or features_mode < 0 or features_mode > 1
+            or auto_contamination < 0 or auto_contamination > 1 or bootstrap < 0 or bootstrap > 1):
+        raise Error(where + " carries an unknown knob mode")
+    var model = host_archive_allocate(cls, context)
+    var fields = sequential_fields(model)
+    # What `cls(n_estimators=..., ...)` stores: the eleven parameters, then
+    # the numeric mode the constructor wrapper adds.
+    py_setitem(fields, "n_estimators", trees)
+    py_setitem(fields, "max_samples", PythonObject("auto") if samples_mode == 0 else (PythonObject(samples_int) if samples_mode == 1 else PythonObject(samples_frac)))
+    py_setitem(fields, "max_depth", PythonObject(None) if depth == -1 else PythonObject(depth))
+    py_setitem(fields, "max_features", PythonObject(features_int) if features_mode == 1 else PythonObject(features_frac))
+    py_setitem(fields, "bootstrap", PythonObject(bootstrap != 0))
+    py_setitem(fields, "contamination", PythonObject("auto") if auto_contamination != 0 else PythonObject(contamination))
+    py_setitem(fields, "random_state", seed)
+    py_setitem(fields, "warm_start", PythonObject(False))
+    py_setitem(fields, "n_jobs", PythonObject(None))
+    py_setitem(fields, "verbose", PythonObject(False))
+    py_setitem(fields, "output_type", PythonObject(None))
+    py_setitem(fields, "numeric_mode", PythonObject(None))
+    iforest_validate(model, fields, context)
+    host_archive_mode(arrays, fields, context)
+    var x = _archive_exact(arrays, "x", "<f4", context)
+    if Int(py=x.ndim) != 2 or Int(py=x.shape[1]) != nf or Int(py=x.shape[0]) < 1:
+        raise Error(where + " x has shape " + _archive_builtin_repr(py_call(b.tuple, x.shape)) + ", meta says "
+                    + String(nf) + " features")
+    py_setitem(fields, "_x", x)
+    py_setitem(fields, "n_features_in_", nf)
+    py_setitem(fields, "offset_", offset)
+    py_setitem(fields, "max_samples_", resolved)
     return model
 
 
@@ -1571,6 +1719,7 @@ def host_archive_reshape_words(array: PythonObject, shape: PythonObject, dtype: 
         strides.append(Int(py=array.strides[i]))
     var result = host_archive_typed(shape, dtype, context)
     host_archive_reorder_f32(Int(py=classical_address(array)), dimensions, strides, Int(py=array.size), Int(py=classical_address(result)))
+    _ = result  # keep the Python object alive through the native call above
     return result
 
 
@@ -1579,6 +1728,7 @@ def host_archive_gp_row(array: PythonObject, row: Int, cols: Int, shape: PythonO
     var result = host_archive_typed(shape, "<f4", context)
     host_archive_copy_f32(Int(py=classical_address(array)) + row * Int(py=array.strides[0]), 0,
                           Int(py=array.strides[1]), 1, cols, Int(py=classical_address(result)))
+    _ = result  # keep the Python object alive through the native call above
     return result
 
 
@@ -1777,6 +1927,7 @@ def host_archive_gpc(cls: PythonObject, arrays: PythonObject, path: PythonObject
     else:
         py_setitem(fields, "n_iter_", counts)
         py_setitem(fields, "log_marginal_likelihood_value_", host_archive_mean_f64(Int(py=classical_address(likelihoods)), n_est))
+        _ = likelihoods  # keep the Python object alive through the native call above
     return model
 
 
@@ -1786,6 +1937,7 @@ def host_archive_slice_words(array: PythonObject, offset: Int, count: Int, shape
         raise Error("saved model block lies outside its archive array")
     var result = host_archive_typed(shape, dtype, context)
     host_archive_copy_words(Int(py=classical_address(array)) + offset * 4, count, Int(py=classical_address(result)))
+    _ = result  # keep the Python object alive through the native call above
     return result
 
 
@@ -1977,6 +2129,7 @@ def host_archive_svm_ovo(fields: PythonObject, arrays: PythonObject, features: I
     var bias = _archive_exact(arrays, "pair_b", "<f4", context)
     var raw_support = _archive_exact(arrays, "pair_support", "<i4", context)
     var support = host_archive_reshape_words(raw_support, Python.tuple(Int(py=raw_support.size)), "<i4", context)
+    _ = raw_support  # keep the Python object alive through the native call above
     if String(fields["_hp_kernel"]) == "precomputed":
         host_archive_support_check(support, Int(py=raw_support.size), features, path, context)
     var raw_dual = _archive_exact(arrays, "pair_dual", "<f4", context)
@@ -1993,8 +2146,11 @@ def host_archive_svm_ovo(fields: PythonObject, arrays: PythonObject, features: I
     var out_bias = host_archive_typed(Python.tuple(pair_count), "<f4", context)
     var out_iterations = host_archive_typed(Python.tuple(pair_count), "<i4", context)
     var bias_words = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out_bias)))
+    _ = out_bias  # keep the Python object alive through the native call above
     var saved_bias = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(bias_flat)))
+    _ = bias_flat  # keep the Python object alive through the native call above
     var iteration_words = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out_iterations)))
+    _ = out_iterations  # keep the Python object alive through the native call above
     var offset = 0
     var q = 0
     for i in range(k):  # driver-loop: saved one-vs-one class machines
@@ -2012,19 +2168,30 @@ def host_archive_svm_ovo(fields: PythonObject, arrays: PythonObject, features: I
                 raise Error("OverflowError: saved SVC pair iteration count does not fit int32")
             var pair = Python.dict()
             var pd = host_archive_slice_words(dual, offset, n, Python.tuple(1, n), "<f4", context)
+            _ = dual  # keep the Python object alive through the native call above
             var pv = host_archive_slice_words(vectors, offset * features, n * features, Python.tuple(n, features), "<f4", context)
+            _ = vectors  # keep the Python object alive through the native call above
             var ps = host_archive_slice_words(support, offset, n, Python.tuple(n), "<i4", context)
+            _ = support  # keep the Python object alive through the native call above
+            _ = raw_support  # keep the Python object alive through the native call above
             var bias_value = Float64(saved_bias[q])
+            _ = bias_flat  # keep the Python object alive through the native call above
             py_setitem(pair, "i", i)
             py_setitem(pair, "j", j)
             py_setitem(pair, "dual", pd)
+            _ = dual  # keep the Python object alive through the native call above
             py_setitem(pair, "sv", pv)
+            _ = vectors  # keep the Python object alive through the native call above
             py_setitem(pair, "support", ps)
+            _ = support  # keep the Python object alive through the native call above
+            _ = raw_support  # keep the Python object alive through the native call above
             py_setitem(pair, "b", bias_value)
             py_setitem(pair, "n_iter", iterations)
             _ = py_call(pairs.append, pair)
             bias_words[q] = -Float32(bias_value)
+            _ = out_bias  # keep the Python object alive through the native call above
             iteration_words[q] = Int32(iterations)
+            _ = out_iterations  # keep the Python object alive through the native call above
             offset += n
             q += 1
     var shape = String(_archive_string(arrays, "shape", context))
@@ -2037,24 +2204,39 @@ def host_archive_svm_ovo(fields: PythonObject, arrays: PythonObject, features: I
     py_setitem(fields, "_hp_break_ties", fields["break_ties"])
     # `_set_ovo`: the layout `fit` builds, with the row bound max(support) + 1.
     var rows = host_archive_support_bound(Int(py=classical_address(support)), total, -1)
+    _ = support  # keep the Python object alive through the native call above
+    _ = raw_support  # keep the Python object alive through the native call above
     var cap = min(rows, total)
+    _ = support  # keep the Python object alive through the native call above
+    _ = raw_support  # keep the Python object alive through the native call above
     var public_support = host_archive_typed(Python.tuple(max(1, cap)), "<i4", context)
     var public_counts = host_archive_typed(Python.tuple(k), "<i4", context)
     var public_dual = host_archive_typed(Python.tuple(max(1, (k - 1) * cap)), "<f4", context)
     var n_sv = host_archive_svc_layout(support, dual, meta, k, rows, cap, public_support, public_counts, public_dual)
+    _ = raw_support  # keep the Python object alive through the native call above
     if n_sv < 0 or n_sv > cap:
         raise Error("saved SVC native layout returned an invalid row count")
     var result_support = host_archive_slice_words(public_support, 0, n_sv, Python.tuple(n_sv), "<i4", context)
+    _ = public_support  # keep the Python object alive through the native call above
     var result_dual = host_archive_slice_words(public_dual, 0, (k - 1) * n_sv, Python.tuple(k - 1, n_sv), "<f4", context)
+    _ = public_dual  # keep the Python object alive through the native call above
     var result_vectors = host_archive_typed(Python.tuple(n_sv, features), "<f4", context)
     host_archive_svc_gather(Int(py=classical_address(support)), total, Int(py=classical_address(vectors)), features,
                             Int(py=classical_address(result_support)), n_sv, Int(py=classical_address(result_vectors)))
+    _ = vectors  # keep the Python object alive through the native call above
+    _ = support  # keep the Python object alive through the native call above
+    _ = raw_support  # keep the Python object alive through the native call above
+    _ = result_vectors  # keep the Python object alive through the native call above
+    _ = result_support  # keep the Python object alive through the native call above
+    _ = public_support  # keep the Python object alive through the native call above
     py_setitem(fields, "classes_", classes)
     py_setitem(fields, "n_features_in_", features)
     py_setitem(fields, "_pairs", pairs)
     py_setitem(fields, "support_", result_support)
+    _ = public_support  # keep the Python object alive through the native call above
     py_setitem(fields, "support_vectors_", result_vectors)
     py_setitem(fields, "dual_coef_", result_dual)
+    _ = public_dual  # keep the Python object alive through the native call above
     py_setitem(fields, "intercept_", out_bias)
     py_setitem(fields, "n_support_", public_counts)
     py_setitem(fields, "n_iter_", out_iterations)
@@ -2123,13 +2305,20 @@ def host_archive_svm(cls: PythonObject, arrays: PythonObject, classifier: Bool, 
             var a = host_archive_typed(Python.tuple((count + 1) // 2), "<f8", context)
             var bb = host_archive_typed(Python.tuple(count // 2), "<f8", context)
             var ap = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(a)))
+            _ = a  # keep the Python object alive through the native call above
             var bp = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(bb)))
+            _ = bb  # keep the Python object alive through the native call above
             for i in range(count // 2):  # driver-loop: saved per-pair calibration coefficients
                 ap[i] = classical_f64(probability, 2 * i)
+                _ = a  # keep the Python object alive through the native call above
                 bp[i] = classical_f64(probability, 2 * i + 1)
+                _ = bb  # keep the Python object alive through the native call above
                 _ = py_call(pairs.append, Python.tuple(ap[i], bp[i]))
+                _ = bb  # keep the Python object alive through the native call above
+                _ = a  # keep the Python object alive through the native call above
             if count % 2:
                 ap[count // 2] = classical_f64(probability, count - 1)
+                _ = a  # keep the Python object alive through the native call above
             py_setitem(fields, "probability", True)
             py_setitem(fields, "_hp_probability", True)
             py_setitem(fields, "_prob_ab", pairs)
@@ -2263,6 +2452,7 @@ def host_archive_public_forest(cls: PythonObject, arrays: PythonObject, fmt: Str
     # The 0.8.55 `ForestProtocol._restore_inference_metadata`.
     if fmt.endswith("-parallel-groves-1"):
         py_setitem(fields, "inference_engine", "parallel_groves")
+        py_setitem(fields, "inference_engine_", "parallel_groves")
         var mode = py_call(py_call(_archive_string(arrays, "numeric_mode", context).strip).lower)
         if String(py=mode) != "fast" and String(py=mode) != "identical":
             raise Error("numeric_mode must be fast, identical or None")
@@ -2270,6 +2460,7 @@ def host_archive_public_forest(cls: PythonObject, arrays: PythonObject, fmt: Str
         py_setitem(fields, "_fit_numeric_mode", mode)
     else:
         py_setitem(fields, "inference_engine", "sequential")
+        py_setitem(fields, "inference_engine_", "sequential")
     py_setitem(fields, "_offsets", _archive_exact(arrays, "offsets", "<i4", context))
     py_setitem(fields, "_colid", _archive_exact(arrays, "colid", "<i4", context))
     py_setitem(fields, "_quesval", _archive_exact(arrays, "quesval", "<f4", context))
@@ -2287,6 +2478,13 @@ def host_archive_public_forest(cls: PythonObject, arrays: PythonObject, fmt: Str
         var classes = host_archive_class_values(arrays["classes"], context)
         py_setitem(fields, "classes_", classes)
         py_setitem(fields, "n_classes_", len(classes))
+    # The former `_mojolearn_after_fit` after a load: the five model arrays
+    # frozen (the loaded Arrays are the archive's own fresh storage) and an
+    # empty resident snapshot holder.
+    var model_names = Python.tuple("_offsets", "_colid", "_quesval", "_left_child", "_leaves")
+    for i in range(5):  # small-loop(model_names): the five model array names
+        py_setattr(fields[model_names[i]], "_readonly", PythonObject(True))
+    py_setitem(fields, "_resident_holder", Python.dict())
     return model
 
 
@@ -2298,14 +2496,18 @@ def host_archive_gbdt_state(text: PythonObject, context: PythonObject) raises ->
     for entry in parsed.integers.items():  # driver-loop: native parsed integer layout arrays
         var array = host_archive_typed(Python.tuple(len(entry.value)), "<i4", context)
         var out = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(array)))
+        _ = array  # keep the Python object alive through the native call above
         for i in range(len(entry.value)):  # driver-loop: publish native parsed buffer words
             out[i] = entry.value[i]
+            _ = array  # keep the Python object alive through the native call above
         py_setitem(state, entry.key, array)
     for entry in parsed.floats.items():  # driver-loop: native parsed floating layout arrays
         var array = host_archive_typed(Python.tuple(len(entry.value)), "<f4", context)
         var out = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(array)))
+        _ = array  # keep the Python object alive through the native call above
         for i in range(len(entry.value)):  # driver-loop: publish native parsed buffer words
             out[i] = entry.value[i]
+            _ = array  # keep the Python object alive through the native call above
         py_setitem(state, entry.key, array)
     py_setitem(state, "bias", parsed.bias)
     py_setitem(state, "non_symmetric", parsed.non_symmetric)
@@ -2355,6 +2557,93 @@ def host_archive_gbdt(cls: PythonObject, arrays: PythonObject, context: PythonOb
     py_setitem(fields, "is_classifier", py_contains(context["host_archive_gbdt_classification_losses"], loss))
     py_setitem(fields, "has_proba", py_contains(context["host_archive_gbdt_proba_losses"], loss))
     py_setitem(fields, "_binding", module)
+    return model
+
+
+def _archive_one_string(value: PythonObject) raises -> PythonObject:
+    """`ensemble._one_string`: the single str a loaded member holds, or
+    None."""
+    var b = Python.import_module("builtins")
+    var item = value
+    while py_type(item) is b.list or py_type(item) is b.tuple:  # driver-loop: over the nesting depth of a stored string field
+        if len(item) != 1:
+            return PythonObject(None)
+        item = item[0]
+    if py_type(item) is b.str:
+        return item
+    return PythonObject(None)
+
+
+def host_archive_public_gbdt(cls: PythonObject, arrays: PythonObject, path: PythonObject,
+                             context: PythonObject) raises -> PythonObject:
+    """`GradientBoosting.load` (and OrderedRMSE / FeatureFreq, which
+    inherit it): the model exactly as the Python loader built it from
+    `cls.__new__(cls)`, with its refusals in its order. The output
+    dimension comes from the model text through the GBDT binding's
+    `gbdt_model_dim` (or, for a CTR text on the CPU binding, the native
+    text reader), as the loader read it."""
+    var b = Python.import_module("builtins")
+    var saved = _archive_string(arrays, "estimator", context)
+    if String(py=saved) != String(py=cls.__name__):
+        raise Error(host_archive_where(path, context) + " was saved by " + String(saved) + ", not " + String(cls.__name__))
+    var model = host_archive_allocate(cls, context)
+    var fields = sequential_fields(model)
+    py_setitem(fields, "numeric_mode", PythonObject(None))
+    if py_contains(arrays, "numeric_mode"):
+        var mode = _archive_one_string(arrays["numeric_mode"])
+        if mode is None:
+            raise Error("mojolearn: saved numeric_mode must be one string")
+        if String(mode) != "fast" and String(mode) != "identical":
+            raise Error("mojolearn: invalid saved numeric_mode " + _archive_builtin_repr(mode))
+        py_setitem(fields, "numeric_mode", mode)
+    py_setitem(fields, "loss", _archive_string(arrays, "loss", context))
+    var stored = _archive_exact(arrays, "model", "<u1", context)
+    var text = py_call(py_call(b.bytes, stored._mv).decode, "utf-8")
+    py_setitem(fields, "model_", text)
+    var meta = _archive_exact(arrays, "meta", "<i8", context)
+    py_setitem(fields, "n_features_in_", host_archive_meta_word(meta, 0))
+    # `obj._bind("_mojolearn_gbdt")`: the saved mode, else the process default.
+    var mode = fields["numeric_mode"]
+    if mode is None:
+        mode = context["backend_fields"]["_DEFAULT_MODE"]
+    var tables = py_get(context, "host_archive_gbdt_bindings")
+    if tables is None:
+        raise Error("ImportError: mojolearn: the GBDT binding is not connected to the archive owner")
+    var table = py_get(tables, PythonObject(String(py_call(py_call(mode.strip).lower))))
+    if table is None:
+        raise Error("numeric_mode must be fast, identical or None")
+    if py_type(table) is b.str:
+        raise Error(String(table))
+    var t = String(text)
+    var ctr = ("\nctr_columns " in t or t.startswith("ctr_columns ") or "\nctr_table " in t or t.startswith("ctr_table ")
+               or "\ntensor_ctr_registry " in t or t.startswith("tensor_ctr_registry "))
+    var vendor = py_get(table, "gbdt_vendor")
+    var cpu = vendor is not None and String(py_call(b.str, py_call(vendor))) == "cpu"
+    var dim = 0
+    if ctr and cpu:
+        dim = Int(py=host_archive_gbdt_state(text, context)["dim"])
+    else:
+        var entry = py_get(table, "gbdt_model_dim")
+        if entry is None:
+            raise Error("AttributeError: the GBDT binding has no gbdt_model_dim")
+        dim = Int(py=py_call(entry, text))
+    py_setitem(fields, "approx_dim_", PythonObject(dim))
+    var saved_dim = host_archive_meta_word(meta, 1)
+    if dim != saved_dim:
+        raise Error(host_archive_where(path, context) + " stores approx_dim " + String(saved_dim) + " but "
+                    + "its model text holds " + String(dim) + "; the file is "
+                    + "corrupt")
+    var classes = host_archive_meta_word(meta, 2)
+    py_setitem(fields, "n_classes_", PythonObject(None) if classes < 0 else PythonObject(classes))
+    var best = host_archive_meta_word(meta, 3)
+    py_setitem(fields, "best_iteration_", PythonObject(None) if best < 0 else PythonObject(best))
+    py_setitem(fields, "stopped_early_", PythonObject(host_archive_meta_word(meta, 4) != 0))
+    var bias = _archive_exact(arrays, "bias", "<f8", context)
+    if Int(py=bias.size) < 1:
+        raise Error("IndexError: list index out of range")
+    py_setitem(fields, "bias_", PythonObject(classical_f64(bias, 0)))
+    py_setitem(fields, "loss_curve_", PythonObject(None))
+    py_setitem(fields, "test_loss_curve_", PythonObject(None))
     return model
 
 
@@ -2471,6 +2760,8 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         model = host_archive_holtwinters(cls, arrays, path, context)
     elif fmt == "mojolearn-ivf-flat-1":
         model = host_archive_ivf(cls, arrays, context)
+    elif py_contains(py_get(context, "host_archive_ann_layouts", Python.dict()), fmt):
+        model = host_archive_ann(cls, arrays, fmt, path, context)
     elif fmt == "mojolearn-hdbscan-2":
         model = host_archive_hdbscan(cls, arrays, path, context)
     elif fmt == "mojolearn-radius-1":
@@ -2478,8 +2769,14 @@ def host_archive_build(path: PythonObject, context: PythonObject,
     elif fmt == "mojolearn-knn-1":
         model = host_archive_neighbors(cls, arrays, 0 if String(estimator) == "NearestNeighbors" else (1 if String(estimator) == "KNeighborsClassifier" else 2), context)
         # Native equivalent of the original loader's _mojolearn_after_fit:
-        # a newly restored CPU neighbor model owns an empty query holder.
-        py_setitem(sequential_fields(model), "_resident_holder", Python.dict())
+        # a newly restored CPU neighbor model owns an empty query holder. A
+        # public class's own `load` also set `used_query_tile_ = None`.
+        var holder = Python.dict()
+        if public_owner is not None:
+            py_setitem(holder, "used_query_tile_", PythonObject(None))
+        py_setitem(sequential_fields(model), "_resident_holder", holder)
+    elif fmt == "mojolearn-iforest-1" and public_owner is not None:
+        model = host_archive_public_iforest(cls, arrays, path, context)
     elif fmt == "mojolearn-iforest-1":
         model = host_archive_iforest(cls, arrays, context)
     elif fmt == "mojolearn-spectral-1":
@@ -2494,6 +2791,8 @@ def host_archive_build(path: PythonObject, context: PythonObject,
         model = host_archive_svm(cls, arrays, fmt == "mojolearn-svc-1", path, context)
     elif public_owner is not None and (fmt.startswith("mojolearn-randomforest-1") or fmt.startswith("mojolearn-extratrees-1")):
         model = host_archive_public_forest(cls, arrays, fmt, fmt.startswith("mojolearn-extratrees-1"), path, context)
+    elif public_owner is not None and fmt == "mojolearn-gbdt-1":
+        model = host_archive_public_gbdt(cls, arrays, path, context)
     elif fmt == "mojolearn-gbdt-1":
         model = host_archive_gbdt(cls, arrays, context)
     elif py_contains(context["host_archive_forest_formats"], fmt):

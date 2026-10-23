@@ -14,7 +14,7 @@ first imported, after the package, so both may rely on every module existing:
                                import `_classical_host` INSIDE it and subclass
                                its `_HostBound`; never import it at module level
 """
-from . import _native_archive_bridge
+from . import _native_archive_bridge, _native_family_bridge
 from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty
 from ._mode import NumericModeMixin
 
@@ -23,6 +23,9 @@ from ._mode import NumericModeMixin
 # the schema registered at the end of this module
 # (bindings/archive_schema_native.mojo).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
+# The compiled family owner, connected once at import: TSNE's `fit` and
+# `fit_transform` are one native call each (bindings/mani_tsne_native.mojo).
+_NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 
 __all__ = ["IVFPQIndex", "TSNE", "CagraIndex", "IVFSQIndex", "IVFRaBitQIndex", "refine"]
 
@@ -128,11 +131,9 @@ class _AnnResident:
         except Exception:  # noqa: BLE001
             pass
 
-    def __del__(self):
-        try:
-            self._release_resident()
-        except Exception:  # noqa: BLE001
-            pass
+    # No Python `__del__`: dropping an instance releases its device index
+    # through the native finalizer connected at the end of this module
+    # (`_native_archive_bridge.lifetime`, bindings/host_archive_lifetime.mojo).
 
     def __getstate__(self):
         """No handle crosses a pickle or a deepcopy: it means something only
@@ -147,19 +148,12 @@ class _AnnSaved:
     parameters, the fitted ints and the index arrays with their dtype and
     shape, and the tier. A loaded index searches; it does not rebuild.
     No arithmetic: the arrays are written and read back byte for byte, and
-    `_serialize.exact` refuses any dtype cast."""
+    the native reader refuses any dtype cast."""
 
     _SAVE_FORMAT = None
     _SAVE_PARAMS = ()      # constructor parameters, all int
     _SAVE_FITTED = ()      # fitted int attributes
     _SAVE_ARRAYS = ()      # (attribute, typestr)
-
-    def _save_param(self, p):
-        return _ann_int(type(self).__name__, p, getattr(self, p))
-
-    @classmethod
-    def _load_param(cls, p, v):
-        return v
 
     def save(self, path):
         """Write the fitted index to `path` as an ``.npz`` file.
@@ -185,9 +179,8 @@ class _AnnSaved:
         """
         return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
-    # load stays Python: `_AnnResident.__del__` (the device handle release)
-    # is a Python finalizer, which native archive loading refuses
-    # (host_archive_check_layout), and no Host* class replaces it.
+    # One native call (bindings/host_archive_native.mojo `host_archive_ann`,
+    # from the layout connected at the end of this module).
     @classmethod
     def load(cls, path):
         """Load an index written by `save`.
@@ -211,21 +204,7 @@ class _AnnSaved:
             If the file was saved by another class or does not hold this
             class's parameters.
         """
-        from . import _serialize
-        from .decomposition import _check_saved_by, _restore_mode
-        arrays = _serialize.read_npz(path, cls._SAVE_FORMAT)
-        _check_saved_by(arrays, path, cls)
-        params = _serialize.exact(arrays, "params", "<i8")
-        fitted = _serialize.exact(arrays, "fitted", "<i8")
-        if params.size != len(cls._SAVE_PARAMS) or fitted.size != len(cls._SAVE_FITTED):
-            raise ValueError(f"mojolearn: {path!r} does not hold {cls.__name__}'s parameters")
-        obj = cls(**{p: cls._load_param(p, int(params[i])) for i, p in enumerate(cls._SAVE_PARAMS)})  # glue: saved parameters by name
-        _restore_mode(obj, arrays)
-        for i, a in enumerate(cls._SAVE_FITTED):  # glue: saved parameters by name
-            setattr(obj, a, int(fitted[i]))
-        for attr, dtype in cls._SAVE_ARRAYS:  # glue: saved array attributes by name
-            setattr(obj, attr, _serialize.exact(arrays, attr.rstrip("_"), dtype))
-        return obj
+        return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
 
 # IDENTICAL by construction: fixed-order codebook training and code sums,
@@ -381,10 +360,9 @@ class IVFPQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         self._materialize_device_arrays()
         return super().__getstate__()
 
-    # save stays Python for IVFPQIndex: a resident fit holds `codes_` only on
-    # the device, and `hasattr`/`getattr` export it through `__getattr__`
-    # (a Python method calling x_ann_index_export_codes), which a save schema
-    # cannot run.
+    # IVFPQIndex's save is the shared native one: a resident fit's `codes_`,
+    # held only on the device, is exported into the file by the binding's
+    # x_ann_index_export_codes, leaving the index unchanged.
     def save(self, path):
         """Write the fitted index to `path` as an ``.npz`` file.
 
@@ -407,22 +385,7 @@ class IVFPQIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         RuntimeError
             If the index has not been fitted.
         """
-        from . import _serialize
-        from ._array import Array
-        from .decomposition import _saved_mode
-        missing = [a for a, _ in self._SAVE_ARRAYS if not hasattr(self, a)]  # glue: saved array attributes by name
-        if missing:
-            raise RuntimeError(f"mojolearn {type(self).__name__}: call fit before save")
-        arrays = {
-            "format": self._SAVE_FORMAT,
-            "estimator": type(self).__name__,
-            "numeric_mode": _saved_mode(self),
-            "params": Array.from_list([self._save_param(p) for p in self._SAVE_PARAMS], "<i8"),  # glue: saved parameters by name
-            "fitted": Array.from_list([int(getattr(self, a)) for a in self._SAVE_FITTED], "<i8"),  # glue: saved parameters by name
-        }
-        for attr, _dtype in self._SAVE_ARRAYS:  # glue: saved array attributes by name
-            arrays[attr.rstrip("_")] = getattr(self, attr)
-        return _serialize.write_npz(path, arrays)
+        return _ARCHIVE(self, "archive_save", (path,), _ARCHIVE_CONTEXT)
 
     def fit(self, X, y=None):
         """Build the index from `X`.
@@ -652,19 +615,6 @@ class TSNE(NumericModeMixin):
         self.init = init
         self.random_state = random_state
 
-    def _init(self, x, n, seed, k=2):
-        """The caller's start array (n, k) float32 ('pca' and 'random' are
-        built in the binding, x_ann/tsne_init.mojo)."""
-        from ._optional_numpy import require_numpy
-        np = require_numpy('_expansion_ann')
-        init = self.init
-        if isinstance(init, str):
-            raise ValueError(f"mojolearn TSNE: init must be 'pca', 'random' or an array, got {init!r}")
-        y0 = np.ascontiguousarray(np.asarray(init, dtype=np.float32))
-        if y0.shape != (n, k):
-            raise ValueError(f"mojolearn TSNE: an init array must have shape ({n}, {k}), got {y0.shape}")
-        return y0
-
     def fit(self, X, y=None):
         """Compute the embedding of `X`.
 
@@ -689,77 +639,8 @@ class TSNE(NumericModeMixin):
         TypeError
             If `max_iter` or `random_state` is not an int.
         """
-        from ._optional_numpy import require_numpy
-        np = require_numpy('_expansion_ann')
-        x, _ = as_f32_c(X, ndim=2, name="X")
-        n, d = (int(s) for s in x.shape)  # glue: two shape integers of the input
-        if n < 2:
-            # scikit-learn's TSNE validates X with ensure_min_samples=2
-            raise ValueError(f"Found array with {n} sample(s) (shape=({n}, {d})) while a minimum of 2 "
-                             "is required by TSNE.")
-        # n_components 1 runs the two-dimensional kernels with a second
-        # column that stays +0 (x_ann/tsne_init.mojo `tsne_init_y0`)
-        if isinstance(self.n_components, bool) or self.n_components not in (1, 2):
-            raise ValueError(f"mojolearn TSNE: n_components must be 1 or 2, got {self.n_components!r}")
-        k = int(self.n_components)
-        max_iter = _ann_int("TSNE", "max_iter", self.max_iter)
-        seed = _ann_int("TSNE", "random_state", self.random_state)
-        perplexity = float(self.perplexity)
-        # scikit-learn's rules: perplexity > 0 (its parameter constraint) and
-        # perplexity < n_samples (`_check_params_vs_input`), in its words
-        if not perplexity > 0.0:
-            raise ValueError(f"The 'perplexity' parameter of TSNE must be a float in the range "
-                             f"(0.0, inf). Got {self.perplexity!r} instead.")
-        if perplexity >= n:
-            raise ValueError(f"perplexity ({self.perplexity}) must be less than n_samples ({n})")
-        exag = float(self.early_exaggeration)
-        if self.learning_rate == "auto":
-            lr = max(n / exag / 4.0, 50.0)
-        else:
-            lr = float(self.learning_rate)
-        post_factor = float(self.post_exaggeration_learning_rate_factor)
-        if not 0.0 < post_factor < float("inf"):
-            raise ValueError("mojolearn TSNE: post_exaggeration_learning_rate_factor must be positive and finite, "
-                             f"got {self.post_exaggeration_learning_rate_factor!r}")
-        exploration = min(self._EXPLORATION_MAX_ITER, max_iter)
-        native = self._bind()
-        tail = []
-        init = self.init
-        if isinstance(init, str) and init in ("random", "pca"):
-            # the binding builds the start (x_ann/tsne_init.mojo): mode 1
-            # random from random_state, mode 2 the PCA embedding scaled
-            if init == "random":
-                y0 = empty((2,), "<f4")
-                mode = 1
-            else:
-                from .decomposition import PCA
-                pca = PCA(n_components=k)
-                mode_name = getattr(self, "numeric_mode", None)
-                if mode_name is not None:
-                    pca.numeric_mode = mode_name
-                y0 = np.ascontiguousarray(np.asarray(pca.fit_transform(x), dtype=np.float32))
-                mode = 2
-            s64 = seed & ((1 << 64) - 1)
-            tail = [mode, s64 & 0xFFFFFFFF, s64 >> 32, k]
-        else:
-            y0 = self._init(x, n, seed, k)    # the caller's array (or a refusal)
-            tail = [0, 0, 0, k]
-        emb = empty((n * k,), "<f4")
-        kl = empty((1,), "<f4")
-        native.x_ann_tsne_fit(
-            # x, y0, y_out, kl_out
-            [addr_ro(x, name="X"), addr_ro(y0, name="init"), addr(emb, name="embedding_"), addr(kl, name="kl")],
-            # n, d, max_iter, exploration_iters, perplexity, early_exaggeration, learning_rate,
-            # post_exaggeration_learning_rate_factor (the binding forms the product)
-            # (+ init mode, random_state low, high: the binding builds y0; n_components)
-            [n, d, max_iter, exploration, perplexity, exag, lr, post_factor] + tail,
-        )
-        self.embedding_ = emb.reshape((n, k))
-        self.kl_divergence_ = float(np.asarray(kl)[0])
-        self.n_iter_ = max_iter
-        self.learning_rate_ = lr
-        self.n_features_in_ = d
-        return self
+        return _NATIVE(self, "family_mani_tsne_fit", (self._bind(), self._bind("_mojolearn_estimators"), X),
+                       _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Compute the embedding of `X` and return it.
@@ -776,7 +657,8 @@ class TSNE(NumericModeMixin):
         embedding : ndarray of shape (n_samples, n_components), float32
             The embedding, also stored in `embedding_`.
         """
-        return self.fit(X).embedding_
+        return _NATIVE(self, "family_mani_tsne_fit_transform",
+                       (self._bind(), self._bind("_mojolearn_estimators"), X), _NATIVE_CONTEXT)
 
 
 # IDENTICAL by construction (x_ann/cagra_core.mojo). random_state r >= 0
@@ -893,12 +775,6 @@ class CagraIndex(_AnnResident, _AnnSaved, NumericModeMixin):
         if r < 0:
             raise ValueError("mojolearn CagraIndex: random_state must be None or >= 0")
         return r % 2147483646 + 1
-
-    @classmethod
-    def _load_param(cls, p, v):
-        if p == "random_state":
-            return None if v < 0 else v
-        return v
 
     def _resident_arrays(self):
         n, deg = self.n_rows_, self.graph_degree_
@@ -1551,21 +1427,36 @@ def refine(dataset, queries, candidates, k, numeric_mode=None, metric="sqeuclide
     return dist.reshape((m, k)), idx.reshape((m, k))
 
 
-def _ann_save_schema(cls, items=None):
+def _ann_save_schema(cls, items=None, device=None):
     """The save schema of one `_AnnSaved` class, from its fixed tables:
     every array present ("call fit before save"), the head, the int `params`
     (each an int and not a bool, as `_ann_int` refused), the `fitted` ints
-    and the arrays as stored, in the members' 0.8.55 order."""
+    and the arrays as stored, in the members' 0.8.55 order. `device` maps an
+    array a resident fit may hold only on the device to (marker, export
+    entry, shape items, refusal): it is exported into the file."""
     items = items or {}
+    device = device or {}
     return (
-        *(("need", a, "RuntimeError", "mojolearn {cls}: call fit before save")
+        *(("need_either", a, device[a][0], "RuntimeError", "mojolearn {cls}: call fit before save") if a in device
+          else ("need", a, "RuntimeError", "mojolearn {cls}: call fit before save")
           for a, _dtype in cls._SAVE_ARRAYS),  # glue: fixed saved array table, at import
         *_native_archive_bridge.head(cls._SAVE_FORMAT),
         ("i8", "params", tuple(items.get(p, ("strict", p, "TypeError", f"mojolearn {{cls}}: {p} must be an int, got {{type}}"))
                                for p in cls._SAVE_PARAMS)),  # glue: fixed saved parameter table, at import
         ("i8", "fitted", tuple(("int", a) for a in cls._SAVE_FITTED)),  # glue: fixed fitted table, at import
-        *(("array", a.rstrip("_"), a) for a, _dtype in cls._SAVE_ARRAYS),  # glue: fixed saved array table, at import
+        *(("device_array", a.rstrip("_"), a, device[a][0], device[a][1], device[a][2], dtype, "RuntimeError", device[a][3])
+          if a in device else ("array", a.rstrip("_"), a)
+          for a, dtype in cls._SAVE_ARRAYS),  # glue: fixed saved array table, at import
     )
+
+
+def _ann_layout(cls, none_below=(), **defaults):
+    """`host_archive_ann`'s load layout of one `_AnnSaved` class: its saved
+    parameter, fitted and array tables, the constructor's other defaults
+    and the parameters saved as -1 for None."""
+    return (tuple(cls._SAVE_PARAMS), tuple(cls._SAVE_FITTED),
+            tuple((a, a.rstrip("_"), dtype) for a, dtype in cls._SAVE_ARRAYS),  # glue: fixed saved array table, at import
+            dict(defaults), tuple(none_below))
 
 
 # CagraIndex saves random_state as -1 for None, else r % 2147483646 (the
@@ -1574,7 +1465,27 @@ _CAGRA_SEED = ("none_or", "random_state", -1, ("mod", ("at_least", (
     "strict", "random_state", "TypeError", "mojolearn CagraIndex: random_state must be an int, got {type}"),
     0, "ValueError", "mojolearn CagraIndex: random_state must be None or >= 0"), 2147483646))
 
+# The loaded indexes (`_AnnSaved.load`): a saved random_state below 0 is
+# CagraIndex's None; IVFSQIndex's build-only max_train_points_per_cluster is
+# not saved and loads as its default.
+_ANN_LAYOUTS = {
+    IVFPQIndex._SAVE_FORMAT: _ann_layout(IVFPQIndex),
+    CagraIndex._SAVE_FORMAT: _ann_layout(CagraIndex, none_below=("random_state",)),
+    IVFSQIndex._SAVE_FORMAT: _ann_layout(IVFSQIndex, max_train_points_per_cluster=None),
+    IVFRaBitQIndex._SAVE_FORMAT: _ann_layout(IVFRaBitQIndex),
+}
+_PQ_DEVICE = {"codes_": ("_device_codes", "x_ann_index_export_codes", (("int", "n_rows_"), ("int", "pq_dim_")),
+                         "mojolearn IVFPQIndex: the resident index was released before its codes were read")}
+
+_native_archive_bridge.register(IVFPQIndex, IVFPQIndex._SAVE_FORMAT, _ann_save_schema(IVFPQIndex, device=_PQ_DEVICE),
+                                host_archive_ann_layouts=_ANN_LAYOUTS)
 _native_archive_bridge.register(CagraIndex, CagraIndex._SAVE_FORMAT,
-                                _ann_save_schema(CagraIndex, {"random_state": _CAGRA_SEED}))
-_native_archive_bridge.register(IVFSQIndex, IVFSQIndex._SAVE_FORMAT, _ann_save_schema(IVFSQIndex))
-_native_archive_bridge.register(IVFRaBitQIndex, IVFRaBitQIndex._SAVE_FORMAT, _ann_save_schema(IVFRaBitQIndex))
+                                _ann_save_schema(CagraIndex, {"random_state": _CAGRA_SEED}),
+                                host_archive_ann_layouts=_ANN_LAYOUTS)
+_native_archive_bridge.register(IVFSQIndex, IVFSQIndex._SAVE_FORMAT, _ann_save_schema(IVFSQIndex),
+                                host_archive_ann_layouts=_ANN_LAYOUTS)
+_native_archive_bridge.register(IVFRaBitQIndex, IVFRaBitQIndex._SAVE_FORMAT, _ann_save_schema(IVFRaBitQIndex),
+                                host_archive_ann_layouts=_ANN_LAYOUTS)
+# The device index of every x_ann kind is released by the native finalizer,
+# through the minting binding's `x_ann_index_release`.
+_native_archive_bridge.lifetime(_AnnResident, "x_ann_index_release")

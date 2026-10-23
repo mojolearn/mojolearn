@@ -73,17 +73,13 @@ speed claim.
 """
 
 from . import _portable_math as math
-import numbers
-
-from . import _backend, _native_archive_bridge
-from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, empty
+from . import _backend, _native_archive_bridge, _native_family_bridge
 
 #: `gaussian_process/gp_optim_items.mojo`'s stop words (GP_STOP_*).
 _OPT_STOPS = ("running", "pgtol", "no-descent", "line-search", "ftol", "max-iter", "nonfinite-start")
 from ._mode import NumericModeMixin
-from .linear_model import _flatten, _r2_sums, _round_f32, _shape_of
-from .preprocessing import StandardScaler
+from .linear_model import _flatten, _shape_of
+from .preprocessing import StandardScaler, _STANDARD_CONTEXT
 
 #: `checks/numerics.mojo` codes, duplicated from `_backend._MODE_CODE` on
 #: purpose, for `_arima_impl.py`'s reason: the read-back must not share a
@@ -118,27 +114,6 @@ def _as_length_scale(length_scale, what):
         )
     return ls
 
-
-#: FLT_MIN, the smallest normal binary32; `_ftz` flushes anything below it.
-_FLT_MIN = 1.1754943508222875e-38
-
-
-def _gpr_ptr(ext):
-    """True when the binding fits and predicts from the caller's memory on
-    the device (`gpr_fit_ptr` / `gpr_predict_ptr`,
-    `gaussian_process/gpr_resident.mojo`, lane fam2-kernel-gp): IDENTICAL
-    GPU builds. The host binding and a `-D MOJOLEARN_IDN_GPR_PTR_OFF` build
-    answer no and `gpr_fit` / `gpr_predict` run with the same lists."""
-    fn = getattr(ext, "gp_idn_caps", None)
-    return fn is not None and (int(fn()) & 2) == 2
-
-
-def _ftz(x):
-    """`checks/numerics.mojo::ftz` on a binary32 value held in a Python
-    float: a subnormal becomes a zero of the same sign."""
-    if x != 0.0 and abs(x) < _FLT_MIN:
-        return math.copysign(0.0, x)
-    return x
 
 #: scikit-learn's default hyperparameter bounds, `kernels.py` (every leaf).
 _DEFAULT_BOUNDS = (1e-5, 1e5)
@@ -498,6 +473,10 @@ _GP_FORMAT = "mojolearn-gp-1"
 # (bindings/archive_schema_native.mojo writes the schema registered below
 # the class; host_archive_native.mojo builds the loaded model).
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
+# The compiled owner of the public methods, connected once at import:
+# GaussianProcessRegressor's fit, predict, sample_y, log_marginal_likelihood
+# and score are one native call each (bindings/gp_regressor_native.mojo).
+_NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 
 #: Each kernel class's postfix node layout, the fields its `_nodes()` reads:
 #: ("leaf", kind, param field or None for 0.0, length-scale field or None),
@@ -702,93 +681,6 @@ class GaussianProcessRegressor(NumericModeMixin):
         self.n_targets = n_targets
         self.random_state = random_state
 
-    def _validate_params(self):
-        """The constructor checks, run first in `fit` and `load`; the
-        resolved and converted values go to private attributes."""
-        kernel, alpha, optimizer = self.kernel, self.alpha, self.optimizer
-        n_restarts_optimizer, normalize_y, copy_X_train = self.n_restarts_optimizer, self.normalize_y, self.copy_X_train
-        n_targets, random_state = self.n_targets, self.random_state
-        if kernel is None:
-            # sklearn's documented default, `_gpr.py:229-231`, bounds
-            # "fixed" as there, so the default kernel is never optimized.
-            kernel = ConstantKernel(1.0, "fixed") * RBF(1.0, "fixed")
-        if not isinstance(kernel, Kernel):
-            raise TypeError(
-                "mojolearn GaussianProcessRegressor: kernel must be a "
-                "composition of mojolearn's RBF, Matern, ConstantKernel and "
-                "WhiteKernel (a scikit-learn kernel object carries bounds "
-                "and a theta this implementation deliberately has no use for; "
-                "DEVIATION 1761)"
-            )
-        if callable(optimizer):
-            raise NotImplementedError(
-                "mojolearn GaussianProcessRegressor: a callable optimizer is "
-                "refused; it would run caller code on host floats whose "
-                "arithmetic no column can pin. optimizer='fmin_l_bfgs_b' runs "
-                "the identical bounded quasi-Newton optimizer (DEVIATION 2881)"
-            )
-        if optimizer is None or (isinstance(optimizer, str) and optimizer.lower() == "none"):
-            optimizer = None
-        elif optimizer != "fmin_l_bfgs_b":
-            raise ValueError(
-                f"mojolearn GaussianProcessRegressor: optimizer={optimizer!r} is "
-                "not one of None and 'fmin_l_bfgs_b'"
-            )
-        if isinstance(n_restarts_optimizer, bool) or not isinstance(n_restarts_optimizer, numbers.Integral) \
-                or int(n_restarts_optimizer) < 0:
-            raise ValueError(
-                "mojolearn GaussianProcessRegressor: n_restarts_optimizer must "
-                f"be a non-negative int, got {n_restarts_optimizer!r}"
-            )
-        n_restarts_optimizer = int(n_restarts_optimizer)
-        if not isinstance(normalize_y, (bool, int)) or normalize_y not in (0, 1):
-            raise TypeError(
-                "mojolearn GaussianProcessRegressor: normalize_y must be a bool, "
-                f"got {normalize_y!r}"
-            )
-        if not copy_X_train:
-            raise NotImplementedError(
-                "mojolearn GaussianProcessRegressor: copy_X_train=False is "
-                "refused. sklearn's False stores a REFERENCE to X; this "
-                "surface always copies -- X crosses to float32 C-order host "
-                "memory and to the device -- so False has nothing it could "
-                "mean here, and accepting it would promise a memory saving "
-                "that cannot be delivered"
-            )
-        if n_targets is not None:
-            raise NotImplementedError(
-                "mojolearn GaussianProcessRegressor: n_targets is refused; "
-                "it shapes sample_y's draws from the unfitted prior, which is "
-                "not implemented. y is single-target here"
-            )
-        if random_state is not None and (
-                isinstance(random_state, bool) or not isinstance(random_state, numbers.Integral)
-                or not 0 <= int(random_state) < 2 ** 64):
-            raise ValueError(
-                "mojolearn GaussianProcessRegressor: random_state must be None "
-                f"or an int in [0, 2**64), got {random_state!r}; it keys the "
-                "restart draws (DEVIATION 2881). sample_y takes its own "
-                "random_state argument (DEVIATION 2793)"
-            )
-        if optimizer is not None and n_restarts_optimizer > 0 and random_state is None:
-            raise ValueError(
-                "mojolearn GaussianProcessRegressor: n_restarts_optimizer > 0 "
-                "needs random_state to be an int; the restart starting points "
-                "are position-mapped Philox keyed by it (DEVIATION 2881), and "
-                "scikit-learn's None (the global NumPy generator) has no "
-                "identical counterpart"
-            )
-        self._kernel = kernel
-        # CONVERSION, NOT POLICY (the SVR epsilon rule): a non-number still
-        # raises here, and every value that IS a number goes down unclamped
-        # so gp_validate_alpha's refusals -- NaN, negative, +inf, and the
-        # identical tier's two-value pin -- stay reachable from Python.
-        self._alpha = float(alpha)
-        self._optimizer = optimizer
-        self._n_restarts_optimizer = n_restarts_optimizer
-        self._normalize_y = bool(normalize_y)
-        self._random_state = None if random_state is None else int(random_state)
-
     # -- the binding, and the tier it really is -----------------------------
 
     def _extension(self):
@@ -811,29 +703,6 @@ class GaussianProcessRegressor(NumericModeMixin):
                     "bash bindings/build_gp.sh"
                 )
         return mod
-
-    def _kernel_arrays(self, kernel=None):
-        """The postfix spec as four flat arrays, the shape a binding can
-        take (DEVIATION 1756: GPKernelSpec is five parallel host lists; the
-        offsets are the one list NOT sent, because the binding MUST rebuild
-        the spec through gp_kernel_const/white/rbf/matern and
-        gp_kernel_sum/prod -- which recompute them -- so that every
-        constructor refusal stays reachable from this surface). The kernel
-        is the FITTED `kernel_` once there is one, else `kernel`."""
-        if kernel is None:
-            kernel = getattr(self, "kernel_", None) or self._kernel
-        nodes = kernel._nodes()
-        # `Array.from_list(..., '<f4')` rounds each Python float to binary32
-        # exactly as `np.array(dtype=np.float32)` did (DEVIATION 2376).
-        kinds = Array.from_list([int(k) for k, _, _ in nodes], "<i4")  # glue: packs the kernel's postfix nodes
-        params = Array.from_list([float(p) for _, p, _ in nodes], "<f4")  # glue: packs the kernel's postfix nodes
-        ls_len = Array.from_list([len(ls) for _, _, ls in nodes], "<i4")  # glue: packs the kernel's postfix nodes
-        table = [v for _, _, ls in nodes for v in ls]  # glue: packs the kernel length-scale hyperparameters
-        n_ls = len(table)
-        # Never a zero-length buffer: mirror estimator.mojo's
-        # _length_scale_table -- one unused 1.0 stands in, and n_ls says so.
-        ls = Array.from_list(table if table else [1.0], "<f4")
-        return kinds, params, ls_len, ls, n_ls
 
     # -- fit ----------------------------------------------------------------
 
@@ -861,171 +730,9 @@ class GaussianProcessRegressor(NumericModeMixin):
             The fitted model. Check ``info_ == 0``: a failed Cholesky
             factorization is reported there rather than raised.
         """
-        self._validate_params()
-        x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
-        n_rows, n_cols = x.shape
-        shape = _shape_of(y)
-        if len(shape) != 1:
-            raise ValueError(
-                "mojolearn GaussianProcessRegressor: y must be 1-D, got "
-                f"{len(shape)}-D shape {shape}; multi-target GP fits are not "
-                "implemented (the n_targets refusal in __init__ is this same "
-                "boundary)"
-            )
-        # No finiteness check here: check the class table -- non-finite
-        # cells are refused BY NAME on the Mojo host (DEVIATION 1768), and
-        # a duplicate check here would make that refusal unreachable.
-        targets, _ = as_f32_c(y, ndim=1, name="y")
-        if targets.shape[0] != n_rows:
-            raise ValueError(
-                f"mojolearn GaussianProcessRegressor: y has {targets.shape[0]} "
-                f"entries, X has {n_rows} rows"
-            )
-        if self._normalize_y:
-            # sklearn `_gpr.py:275-280`. StandardScaler's pinned folds in
-            # this estimator's tier; for 1-D y scikit-learn's
-            # `_handle_zeros_in_scale` takes its scalar arm (`std == 0 -> 1`),
-            # StandardScaler's exact-zero rule.
-            column = targets.reshape((n_rows, 1))
-            scaler = StandardScaler(numeric_mode=self.numeric_mode_used()).fit(column)
-            y_mean = float(scaler.mean_[0])
-            y_std = float(scaler.scale_[0])
-            targets = scaler.transform(column).reshape((n_rows,))
-        else:
-            y_mean, y_std = 0.0, 1.0
-        kernel_ = self._kernel
-        self._optimizer_runs = []
-        if self._optimizer is not None and self._kernel.n_dims > 0:
-            kernel_ = self._optimize(x, targets, n_rows, n_cols)
-        kinds, kparams, ls_len, ls, n_ls = self._kernel_arrays(kernel_)
-
-        # EVERY SIZE IS A FUNCTION OF (n_rows, n_cols) ALONE; nothing here
-        # is a worst-case buffer (contrast SVR's DEVIATION 873 note).
-        l_out = empty((n_rows * n_rows,), "<f4")
-        dual = empty((n_rows,), "<f4")
-        # info, nb, logdet, ydotalpha, lml -- in that order.
-        scalars = empty((5,), "<f8")
-        # TWO LISTS, NOT FOURTEEN ARGUMENTS (the module header's ABI note:
-        # the positional spelling failed def_function elaboration, measured
-        # 2026-09-01). Every array addressed below is bound to a local in
-        # this frame -- x, targets, kinds, kparams, ls_len, ls, l_out,
-        # dual, scalars -- which is what keeps the addresses alive.
-        ext = self._extension()
-        fit_fn = ext.gpr_fit_ptr if _gpr_ptr(ext) else ext.gpr_fit
-        while True:
-            info = fit_fn(
-                # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_fit_binding.
-                # x, y, kinds, kparams, ls_len, ls, l_out, dual_out, scalars_out
-                [
-                    addr_ro(x, name="x"),
-                    addr_ro(targets, name="targets"),
-                    addr_ro(kinds, name="kinds"),
-                    addr_ro(kparams, name="kparams"),
-                    addr_ro(ls_len, name="ls_len"),
-                    addr_ro(ls, name="ls"),
-                    addr(l_out, name="l_out"),
-                    addr(dual, name="dual"),
-                    addr(scalars, name="scalars"),
-                ],
-                # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_fit_binding.
-                # n_train, n_features, n_nodes, n_ls, alpha
-                [n_rows, n_cols, int(kinds.shape[0]), n_ls, self._alpha],
-            )
-            # A ridge too small for float32 (scikit-learn factors in float64,
-            # where its 1e-10 suffices): K + alpha*I is not positive definite
-            # here. A positive alpha is raised tenfold and the fit repeated
-            # until the factor exists or the ridge reaches the kernel's unit
-            # diagonal, with a warning naming the ridge used (control flow
-            # on the binding's status word; the factor is the binding's, so
-            # every vendor takes the same steps). alpha=0 asks for no ridge
-            # and keeps the failed fit's info_.
-            if int(info) == 0 or not self._alpha > 0.0 or self._alpha >= 1.0:
-                break
-            asked = self._alpha
-            self._alpha = min(asked * 10.0, 1.0)
-            import warnings
-            warnings.warn(
-                f"mojolearn GaussianProcessRegressor: K + alpha*I is not positive "
-                f"definite in float32 with alpha={asked:g}; refitting with "
-                f"alpha={self._alpha:g}. Pass a larger alpha to skip this step.",
-                RuntimeWarning,
-            )
-        self.X_train_ = x
-        self.y_train_ = targets
-        self._y_train_mean = y_mean
-        self._y_train_std = y_std
-        self.normalize_y_ = bool(self._normalize_y)
-        self.kernel_ = kernel_
-        self.n_features_in_ = n_cols
-        self.L_ = l_out.reshape((n_rows, n_rows))
-        self.alpha_ = dual
-        self.info_ = int(info)
-        self.nb_ = int(scalars[1])
-        self.log_marginal_likelihood_value_ = float(scalars[4])
-        self._logdet = float(scalars[2])
-        self._ydotalpha = float(scalars[3])
-        return self
+        return _NATIVE(self, "family_gp_gpr_fit", (self._bind(), X, y), _NATIVE_CONTEXT)
 
     # -- the optimizer (DEVIATIONS 2880, 2881) -------------------------------
-
-    def _lml_grad(self, kernel, x, targets, n_rows, n_cols):
-        """`(info, lml, grad)` at `kernel` through `gpr_lml_grad`: the float32
-        likelihood and gradient over the kernel's free entries, widened."""
-        kinds, kparams, ls_len, ls, n_ls = self._kernel_arrays(kernel)
-        free = Array.from_list(kernel._free_flags(), "<i4")
-        n_free = kernel.n_dims
-        grad = empty((max(n_free, 1),), "<f8")
-        scalars = empty((2,), "<f8")
-        info = self._extension().gpr_lml_grad(
-            # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_lml_grad_binding.
-            # x, y, kinds, kparams, ls_len, ls, free, grad_out, scalars_out
-            [addr_ro(x, name="x"), addr_ro(targets, name="targets"), addr_ro(kinds, name="kinds"),
-             addr_ro(kparams, name="kparams"), addr_ro(ls_len, name="ls_len"), addr_ro(ls, name="ls"),
-             addr_ro(free, name="free"), addr(grad, name="grad"), addr(scalars, name="scalars")],
-            # n_train, n_features, n_nodes, n_ls, alpha
-            [n_rows, n_cols, int(kinds.shape[0]), n_ls, self._alpha],
-        )
-        return int(info), float(scalars[1]), [float(grad[i]) for i in range(n_free)]  # glue: reads the gradient of kernel hyperparameters (n_dims entries)
-
-    def _optimize(self, x, targets, n_rows, n_cols):
-        """scikit-learn `_gpr.py:299-341`: optimize from the kernel's theta,
-        then from `n_restarts_optimizer` log-uniform starts; the smallest
-        negative likelihood wins and a tie goes to the earlier run
-        (`np.argmin`). ONE binding call (`gpr_optimize`) runs every start on
-        the device (DEVIATION 2881, `gaussian_process/gp_optim_items.mojo`);
-        Python only hands the kernel over and reads the answer. Returns the
-        fitted kernel, whose `theta` is the winning run's. Every run is
-        recorded in `_optimizer_runs` as `(n_iter, n_eval, stop, -f)`."""
-        base = self._kernel
-        kinds, kparams, ls_len, ls, n_ls = self._kernel_arrays(base)
-        free = Array.from_list(base._free_flags(), "<i4")
-        n_theta = base.n_dims
-        bounds = Array.from_list([float(v) for b in base._free_bounds() for v in (b[0], b[1])], "<f4")  # glue: packs bounds of free kernel hyperparameters (n_dims entries)
-        n_runs = 1 + int(self._n_restarts_optimizer)
-        theta_out = empty((n_theta,), "<f8")
-        values_out = empty((n_theta,), "<f8")
-        runs_out = empty((n_runs * 4,), "<f8")
-        # random_state may be None only with no restarts (checked in __init__);
-        # the kernel then draws no restart point and ignores the seed.
-        seed = 0 if self._random_state is None else int(self._random_state)
-        self._extension().gpr_optimize(
-            # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_optimize_binding.
-            # x, y, kinds, kparams, ls_len, ls, free, bounds, theta_out,
-            # values_out, runs_out
-            [addr_ro(x, name="x"), addr_ro(targets, name="targets"), addr_ro(kinds, name="kinds"),
-             addr_ro(kparams, name="kparams"), addr_ro(ls_len, name="ls_len"), addr_ro(ls, name="ls"),
-             addr_ro(free, name="free"), addr_ro(bounds, name="bounds"), addr(theta_out, name="theta_out"),
-             addr(values_out, name="values_out"), addr(runs_out, name="runs_out")],
-            # n_train, n_features, n_nodes, n_ls, alpha, n_restarts, seed_lo, seed_hi
-            [n_rows, n_cols, int(kinds.shape[0]), n_ls, self._alpha, n_runs - 1,
-             seed & 0xFFFFFFFF, (seed >> 32) & 0xFFFFFFFF],
-        )
-        for r in range(n_runs):  # glue: one record per optimizer restart
-            n_iter, n_eval, stop, f = (float(runs_out[r * 4 + j]) for j in range(4))  # glue: four fields per optimizer run
-            self._optimizer_runs.append((int(n_iter), int(n_eval), _OPT_STOPS[int(stop)], -f))
-        theta = [float(theta_out[i]) for i in range(n_theta)]  # glue: reads the fitted theta, kernel hyperparameters (n_dims entries)
-        params = [float(values_out[i]) for i in range(n_theta)]  # glue: reads fitted kernel hyperparameters (n_dims entries)
-        return base._with_free_values(params, theta=theta)
 
     # -- predict ------------------------------------------------------------
 
@@ -1071,133 +778,7 @@ class GaussianProcessRegressor(NumericModeMixin):
         ``normalize_y=True`` the mean, standard deviation and covariance are
         scaled back to the units of y.
         """
-        if return_cov and return_std:
-            raise RuntimeError(
-                "mojolearn GaussianProcessRegressor: at most one of return_std "
-                "or return_cov can be requested (scikit-learn's rule)"
-            )
-        if return_cov:
-            return self._predict_cov(X)
-        if not hasattr(self, "alpha_"):
-            raise ValueError(
-                "mojolearn GaussianProcessRegressor: call fit() first (the "
-                "unfitted-prior arm of sklearn's predict is not implemented)"
-            )
-        q, _ = as_f32_c(X, ndim=2, name="X")
-        if q.shape[1] != self.n_features_in_:
-            raise ValueError(
-                f"mojolearn GaussianProcessRegressor: X has {q.shape[1]} "
-                f"features, fit saw {self.n_features_in_}"
-            )
-        n_star = q.shape[0]
-        n_train = self.X_train_.shape[0]
-        kinds, kparams, ls_len, ls, n_ls = self._kernel_arrays()
-
-        mean = empty((n_star,), "<f4")
-        var = empty((n_star,), "<f4")
-        std = empty((n_star,), "<f4")
-        clamped = empty((n_star,), "<i4")
-        # Kept in locals so the arrays outlive the call; the Mojo side
-        # borrows these addresses and owns nothing, and an address inside
-        # the list below keeps nothing alive on its own (_buffer.py). Two
-        # lists, not fifteen arguments -- the module header's ABI note.
-        xt = self.X_train_
-        lf = self.L_
-        dual = self.alpha_
-        ext = self._extension()
-        norm = bool(getattr(self, "normalize_y_", False))
-        # the binding un-normalizes (every build; the Python fallback was
-        # removed by lane fam2-kernel-gp)
-        in_mojo = norm
-        tail = [1, float(self._y_train_std), float(self._y_train_mean)] if in_mojo else []
-        n_clamped = (ext.gpr_predict_ptr if _gpr_ptr(ext) else ext.gpr_predict)(
-            # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_predict_binding.
-            # xtrain, l, dual, xstar, kinds, kparams, ls_len, ls,
-            # mean_out, var_out, std_out, clamped_out
-            [
-                addr_ro(xt, name="xt"),
-                addr_ro(lf, name="lf"),
-                addr_ro(dual, name="dual"),
-                addr_ro(q, name="q"),
-                addr_ro(kinds, name="kinds"),
-                addr_ro(kparams, name="kparams"),
-                addr_ro(ls_len, name="ls_len"),
-                addr_ro(ls, name="ls"),
-                addr(mean, name="mean"),
-                addr(var, name="var"),
-                addr(std, name="std"),
-                addr(clamped, name="clamped"),
-            ],
-            # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_predict_binding.
-            # n_train, n_features, n_star, n_nodes, n_ls, return_std, info
-            [n_train, self.n_features_in_, n_star, int(kinds.shape[0]),
-             n_ls, 1 if return_std else 0, self.info_] + tail,
-        )
-        if return_std:
-            self.clamped_ = clamped
-            self.n_clamped_ = int(n_clamped)
-            return mean, std
-        return mean
-
-    def _predict_cov(self, X):
-        """`predict(X, return_cov=True)`, `_gpr.py:495-506`: `(mean, cov)`,
-        float32 `(n,)` and `(n, n)`. `cov = k(X, X) - V^T V` in the steps
-        `sample_y` takes before its factorization (DEVIATION 2793:
-        `gpr_predict_cov_host`, `gpr_host_predict_cov`), exactly symmetric,
-        not clamped; under `normalize_y` the mean is un-normalized as
-        `predict`'s and each covariance cell is scaled by `std**2`, one
-        rounding each, on the host."""
-        if not hasattr(self, "alpha_"):
-            raise ValueError(
-                "mojolearn GaussianProcessRegressor: call fit() first (the "
-                "unfitted-prior arm of sklearn's predict is not implemented)"
-            )
-        q, _ = as_f32_c(X, ndim=2, name="X")
-        if q.shape[1] != self.n_features_in_:
-            raise ValueError(
-                f"mojolearn GaussianProcessRegressor: X has {q.shape[1]} "
-                f"features, fit saw {self.n_features_in_}"
-            )
-        n_star = q.shape[0]
-        n_train = self.X_train_.shape[0]
-        kinds, kparams, ls_len, ls, n_ls = self._kernel_arrays()
-        ext = self._extension()
-        if not callable(getattr(ext, "gpr_predict_cov", None)):
-            raise ImportError(
-                f"mojolearn GaussianProcessRegressor: {ext.__name__} does not "
-                "export gpr_predict_cov, so return_cov=True cannot run on it; "
-                "rebuild the GP binding"
-            )
-        mean = empty((max(n_star, 1),), "<f4")
-        cov = empty((max(n_star * n_star, 1),), "<f4")
-        norm = bool(getattr(self, "normalize_y_", False))
-        # the binding un-normalizes (every build; the Python fallback was
-        # removed by lane fam2-kernel-gp)
-        in_mojo = norm
-        tail = [1, float(self._y_train_std), float(self._y_train_mean)] if in_mojo else []
-        xt = self.X_train_
-        lf = self.L_
-        dual = self.alpha_
-        ext.gpr_predict_cov(
-            # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_predict_cov_binding.
-            # xtrain, l, dual, xstar, kinds, kparams, ls_len, ls, mean_out, cov_out
-            [
-                addr_ro(xt, name="xt"),
-                addr_ro(lf, name="lf"),
-                addr_ro(dual, name="dual"),
-                addr_ro(q, name="q"),
-                addr_ro(kinds, name="kinds"),
-                addr_ro(kparams, name="kparams"),
-                addr_ro(ls_len, name="ls_len"),
-                addr_ro(ls, name="ls"),
-                addr(mean, name="mean"),
-                addr(cov, name="cov"),
-            ],
-            # n_train, n_features, n_star, n_nodes, n_ls, info
-            # (+ normalize_y, y_std, y_mean: the binding un-normalizes)
-            [n_train, self.n_features_in_, n_star, int(kinds.shape[0]), n_ls, self.info_] + tail,
-        )
-        return mean[:n_star], cov[:n_star * n_star].reshape((n_star, n_star))
+        return _NATIVE(self, "family_gp_gpr_predict", (self._bind(), X, return_std, return_cov), _NATIVE_CONTEXT)
 
     # -- saved models -----------------------------------------------------------
 
@@ -1266,51 +847,7 @@ class GaussianProcessRegressor(NumericModeMixin):
         gradient : list of float
             Only with ``eval_gradient=True``.
         """
-        if not hasattr(self, "alpha_"):
-            raise ValueError(
-                "mojolearn GaussianProcessRegressor: call fit() first"
-            )
-        if theta is not None:
-            if eval_gradient not in (True, False):
-                raise TypeError("mojolearn GaussianProcessRegressor: eval_gradient must be a bool")
-            kern = self.kernel_
-            theta = [float(t) for t in _flatten(theta)] if _shape_of(theta) else [float(theta)]  # glue: converts the theta argument, kernel hyperparameters (n_dims entries)
-            if len(theta) != kern.n_dims:
-                raise ValueError(
-                    f"mojolearn GaussianProcessRegressor: theta has {len(theta)} entries, "
-                    f"kernel_ has {kern.n_dims} free hyperparameters")
-            ext = self._extension()
-            params = [float(v) for v in ext.gp_theta_params(theta)]  # glue: reads the binding's kernel hyperparameters (n_dims entries)
-            n_rows, n_cols = self.X_train_.shape
-            info, lml, grad = self._lml_grad(kern._with_free_values(params), self.X_train_,
-                                             self.y_train_, n_rows, n_cols)
-            if info != 0:
-                lml, grad = -math.inf, [0.0] * len(theta)
-            return (lml, grad) if eval_gradient else lml
-        if eval_gradient:
-            raise ValueError(
-                "mojolearn GaussianProcessRegressor: eval_gradient=True needs a theta, "
-                "scikit-learn's rule (_gpr.py:582)"
-            )
-        if self.info_ != 0:
-            # gpr_log_marginal_likelihood's refusal, restated: this is
-            # the one Mojo guard the binding cannot serve (fit already
-            # returned), so its sentences live here too. DEVIATION 1634.
-            raise RuntimeError(
-                "mojolearn GaussianProcessRegressor: the factorization "
-                f"failed (info={self.info_}), so the leading minor of order "
-                f"{self.info_} of K + alpha*I was not positive definite and "
-                "there is no marginal likelihood to report. For a Gaussian "
-                "process that is a RESULT and not a bug: this kernel and "
-                "this ridge do not describe these points. The usual causes "
-                "are duplicate or near-duplicate training rows, a length "
-                "scale far larger than the spread of the data, and alpha=0. "
-                "sklearn's optimizer answers -inf here (_gpr.py:593) "
-                "because it is comparing candidates; there is no optimizer "
-                "in this lane (DEVIATION 1761), so this refuses instead. "
-                "DEVIATION 1634"
-            )
-        return self.log_marginal_likelihood_value_
+        return _NATIVE(self, "family_gp_gpr_lml", (self._bind(), theta, eval_gradient, clone_kernel), _NATIVE_CONTEXT)
 
     # DEVIATION 2793 (`gaussian_process/checks/sample_y.mojo`) names the
     # stream, the jitter and the order: the covariance `k(X, X) - V^T V` is
@@ -1349,63 +886,7 @@ class GaussianProcessRegressor(NumericModeMixin):
             If the model is not fitted (sampling the unfitted prior is not
             supported).
         """
-        if not hasattr(self, "alpha_"):
-            raise ValueError(
-                "mojolearn GaussianProcessRegressor: call fit() first (sampling "
-                "the unfitted prior is not implemented)"
-            )
-        if isinstance(n_samples, bool) or not isinstance(n_samples, numbers.Integral):
-            raise TypeError("mojolearn GaussianProcessRegressor: n_samples must be an int")
-        seed = random_state
-        if (isinstance(seed, bool) or not isinstance(seed, numbers.Integral)
-                or not 0 <= int(seed) < 2 ** 64):
-            raise ValueError(
-                "mojolearn GaussianProcessRegressor: sample_y needs random_state to "
-                f"be an int in [0, 2**64), got {seed!r}; it is the key of every "
-                "draw (DEVIATION 2793)"
-            )
-        seed = int(seed)
-        n = int(n_samples)
-        q, _ = as_f32_c(X, ndim=2, name="X")
-        if q.shape[1] != self.n_features_in_:
-            raise ValueError(
-                f"mojolearn GaussianProcessRegressor: X has {q.shape[1]} "
-                f"features, fit saw {self.n_features_in_}"
-            )
-        n_star = q.shape[0]
-        n_train = self.X_train_.shape[0]
-        kinds, kparams, ls_len, ls, n_ls = self._kernel_arrays()
-        # Never a zero-length buffer: a refused n still addresses real memory.
-        out = empty((max(n_star * n, 1),), "<f4")
-        xt = self.X_train_
-        lf = self.L_
-        dual = self.alpha_
-        ext = self._extension()
-        norm = bool(getattr(self, "normalize_y_", False))
-        # the binding un-normalizes (every build; the Python fallback was
-        # removed by lane fam2-kernel-gp)
-        in_mojo = norm
-        tail = [1, float(self._y_train_std), float(self._y_train_mean)] if in_mojo else []
-        ext.gpr_sample_y(
-            # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_sample_y_binding.
-            # xtrain, l, dual, xstar, kinds, kparams, ls_len, ls, y_out
-            [
-                addr_ro(xt, name="xt"),
-                addr_ro(lf, name="lf"),
-                addr_ro(dual, name="dual"),
-                addr_ro(q, name="q"),
-                addr_ro(kinds, name="kinds"),
-                addr_ro(kparams, name="kparams"),
-                addr_ro(ls_len, name="ls_len"),
-                addr_ro(ls, name="ls"),
-                addr(out, name="y_out"),
-            ],
-            # n_train, n_features, n_star, n_nodes, n_ls, info, n_samples,
-            # random_state low 32 bits, random_state high 32 bits
-            [n_train, self.n_features_in_, n_star, int(kinds.shape[0]), n_ls,
-             self.info_, n, seed & 0xFFFFFFFF, seed >> 32] + tail,
-        )
-        return out.reshape((n_star, n))
+        return _NATIVE(self, "family_gp_gpr_sample_y", (self._bind(), X, n_samples, random_state), _NATIVE_CONTEXT)
 
     # Host float64 summary of float32 predictions, outside the identity
     # claim (the SVR.score rule).
@@ -1426,20 +907,7 @@ class GaussianProcessRegressor(NumericModeMixin):
         -------
         float
         """
-        pred = self.predict(X)
-        shape = _shape_of(y)
-        if len(shape) != 1 or shape[0] != pred.shape[0]:
-            raise ValueError(
-                "mojolearn GaussianProcessRegressor: y must be 1-D with one "
-                f"entry per row of X, got shape {shape} against "
-                f"{pred.shape[0]} predictions"
-            )
-        # Sequential Python float64 (`linear_model._r2_sums`, DEVIATION
-        # 2365): a host reduction outside the identity claim.
-        ss_res, ss_tot = _r2_sums(pred, y)
-        if ss_tot == 0.0:
-            return 1.0 if ss_res == 0.0 else 0.0
-        return 1.0 - ss_res / ss_tot
+        return _NATIVE(self, "family_gp_gpr_score", (self._bind(), X, y), _NATIVE_CONTEXT)
 
 
 # The file: see `_GP_FORMAT`. The kernel step comes first: `save` read the
@@ -1456,3 +924,20 @@ _native_archive_bridge.register(GaussianProcessRegressor, _GP_FORMAT, (
     ("f8", "reals", (("float", "_alpha"), ("float_or", "_y_train_mean", 0.0),
                      ("float_or", "_y_train_std", 1.0), ("float", "log_marginal_likelihood_value_"))),
 ), host_archive_gp_saved_kernel=_SavedKernel)
+
+
+# The fixed tables the native owner reads (bindings/gp_common_native.mojo):
+# the kernel classes' node layouts and bound fields, the default kernel's
+# classes, the optimizer's stop words, the mode codes, the seed bound and
+# StandardScaler with its connected context (normalize_y).
+_native_family_bridge.tables(
+    family_gp_kernel_base=Kernel,
+    family_gp_kernel_nodes=dict(_KERNEL_NODES),
+    family_gp_kernel_bounds={ConstantKernel: "constant_value_bounds", WhiteKernel: "noise_level_bounds",
+                             RBF: "length_scale_bounds", Matern: "length_scale_bounds"},
+    family_gp_classes={"const": ConstantKernel, "rbf": RBF, "combined": _Combined},
+    family_gp_opt_stops=_OPT_STOPS,
+    family_gp_mode_codes=dict(_MODE_CODE),
+    family_gp_seed_bound=2 ** 64,
+    family_gp_scaler=(StandardScaler, _STANDARD_CONTEXT),
+)

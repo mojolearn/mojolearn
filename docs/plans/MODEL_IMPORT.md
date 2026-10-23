@@ -1,5 +1,14 @@
 # Importing PyTorch and ONNX models for inference (plan, lane ag-importer-plan, 2026-10-20)
 
+> **2026-10-22 (lane purge-user-objects): the `torch.export` reader is removed.** It walked torch.fx
+> nodes, SymInt sizes and torch tensors in Python (58 `# cpu-route:` tags) and its GraphIR crossed into
+> Mojo through a Python word builder (`graph_words`, `onnx_from_words`, 18 more). No Python in the
+> runtime: `import_model` takes an ONNX file only, read, resolved and lowered in one native call, and a
+> torch object is refused with a `ValueError` naming the two-step path,
+> `torch.onnx.export(model, args, "model.onnx")` then `import_model("model.onnx")`. The catalog check,
+> tools/real_model_import.py, tools/import_compare.py `--torch` and the autograd smoke probes export to
+> ONNX first. The sections below on the torch.export reader are history.
+
 Ideas and plan only: no code was written for this document and nothing was
 compiled or run. It is the brief the Opus implementation lanes code against.
 Read with docs/plans/AUTOGRAD_API.md (the session and the Program design
@@ -530,10 +539,17 @@ tools/check_autograd.py (lane 5 only).
 
 (Lane ag-native-onnx-reader, 2026-10-20: the reader and the static shape resolution of a read
 graph now run in Mojo, autograd/import_proto.mojo, import_reader.mojo and import_resolve.mojo,
-through the x_sequence binding entries onnx_read / onnx_info / onnx_copy_blob / onnx_resolve /
+through the x_sequence binding entries onnx_read / onnx_info / onnx_buffers / onnx_resolve /
 onnx_close; importers/onnx.py only wraps the tables in the GraphIR classes. The Python reader
 below is the test oracle, python/mojolearn/tests/_onnx_reader_oracle.py and
 _onnx_proto_oracle.py. Step 2 moves _lower.py into Mojo against this graph.)
+
+(Lane purge-cpu-routes, 2026-10-22: the reader keeps the model's and external data files' bytes
+under its handle (onnx_buffers gives their addresses), so Python opens and maps no file; an ONNX
+path imports in one native call, onnx_import_file(path, session, names, flat, source), with no
+GraphIR built in Python; importers._graph.resolve is Mojo's for every graph (a Python GraphIR goes
+as words first) and the former Python shape rules are the test oracle
+python/mojolearn/tests/_resolve_oracle.py.)
 
 (Lane ag-native-lowering, 2026-10-20, step 2: the lowering runs in Mojo too,
 autograd/import_lower.mojo, through the x_sequence entry onnx_import(handle, session, names, flat,

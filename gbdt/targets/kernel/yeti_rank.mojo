@@ -697,9 +697,10 @@ def yeti_rank_task_block_kernel(
                                         var a = v[r]
                                         var b = v[r | j]
                                         var asc = ((ln * YETI_LANES + r) & k) == 0
-                                        if (a > b) == asc:
-                                            v[r] = b
-                                            v[r | j] = a
+                                        # sm_120 AOT: no lane write under a per-lane guard (core/gram_splitk.mojo GRAM_STRIDED_ARM; lane sm120-tree-identity).
+                                        var swap = (a > b) == asc
+                                        v[r] = b if swap else a
+                                        v[r | j] = a if swap else b
                             else:
                                 comptime m = j // YETI_LANES
                                 var lower = (ln & m) == 0
@@ -711,10 +712,7 @@ def yeti_rank_task_block_kernel(
                                     )
                                     var o = (UInt64(o_hi) << UInt64(32)) | UInt64(o_lo)
                                     var asc = ((ln * YETI_LANES + r) & k) == 0
-                                    if lower == asc:
-                                        v[r] = min(x, o)
-                                    else:
-                                        v[r] = max(x, o)
+                                    v[r] = min(x, o) if lower == asc else max(x, o)
                     comptime for r in range(YETI_LANES):
                         sh_keys.unsafe_store(run_base + r, v[r])
                     barrier()
@@ -1425,9 +1423,10 @@ def yeti_rank_task_fused_kernel[estimation: Bool](
                                 var a = v[r]
                                 var b = v[r | j]
                                 var asc = ((ln * YETI_LANES + r) & k) == 0
-                                if (a > b) == asc:
-                                    v[r] = b
-                                    v[r | j] = a
+                                # sm_120 AOT: no lane write under a per-lane guard (core/gram_splitk.mojo GRAM_STRIDED_ARM; lane sm120-tree-identity).
+                                var swap = (a > b) == asc
+                                v[r] = b if swap else a
+                                v[r | j] = a if swap else b
                     else:
                         comptime m = j // YETI_LANES
                         var lower = (ln & m) == 0
@@ -1439,10 +1438,7 @@ def yeti_rank_task_fused_kernel[estimation: Bool](
                             )
                             var o = (UInt64(o_hi) << UInt64(32)) | UInt64(o_lo)
                             var asc = ((ln * YETI_LANES + r) & k) == 0
-                            if lower == asc:
-                                v[r] = min(x, o)
-                            else:
-                                v[r] = max(x, o)
+                            v[r] = min(x, o) if lower == asc else max(x, o)
             comptime for r in range(YETI_LANES):
                 sh_keys.unsafe_store(run_base + r, v[r])
             barrier()

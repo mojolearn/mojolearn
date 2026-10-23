@@ -312,6 +312,9 @@ def host(monkeypatch):
         assert name == '_mojolearn_byte_lm' and mode == 'identical'
         return fake
     monkeypatch.setattr(impl._backend, 'binding', binding)
+    # the native train_step resolves its binding from the trainer context
+    # connected at import (bindings/byte_lm_trainer_native.mojo)
+    monkeypatch.setitem(impl._LM_TRAINER_CONTEXT["byte_lm_bindings"], "identical", fake)
     monkeypatch.setattr(impl, '_binding_metadata', lambda value, shape=None: {
         'binding_file': 'fake-byte-lm.so', 'binding_sha256': '0' * 64,
         'native_profile': value.profile, 'native_vendor': value.vendor,

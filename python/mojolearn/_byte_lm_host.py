@@ -467,6 +467,7 @@ class LanguageModelHostTrainer:
             raise ImportError(
                 'byte LM host binding is missing byte_lm_host_train_step; '
                 'rebuild bindings/build_byte_lm_host.sh')
+        self._train_entry = self._binding.byte_lm_host_train_step
         n = shape.n_total
         array, _ = as_f32_c(parameters, ndim=1, name='parameters')
         if array.size != n:
@@ -497,6 +498,8 @@ class LanguageModelHostTrainer:
             raise ValueError('weight_decay must not be negative')
         self._scalars = [float(lr), float(beta1), float(beta2), float(eps),
                          float(weight_decay)]
+        # the shape words the native train_step reads (bindings/byte_lm_host_trainer_native.mojo)
+        self._step_words = (shape.batch, shape.length + 1, shape.vocab_size, shape.n_total)
         self._gradient = None
 
     def _moment(self, given, name, n):
@@ -557,37 +560,21 @@ class LanguageModelHostTrainer:
         moments are replaced and the step count advances; if the native call
         raises, none of them move and the gradient is cleared, because a
         half-applied step is worse than a refused one."""
-        tokens, _ = as_i32_c(ids, ndim=2, name='ids')
-        if tuple(tokens.shape) != (self._shape.batch, self._shape.length + 1):
-            raise ValueError(f'ids must be [{self._shape.batch}, {self._shape.length + 1}]')
-        _refuse_ids(tokens, self._shape.vocab_size, self._shape.batch,
-                    self._shape.length + 1, self._shape.length)
-        n = self._shape.n_total
-        # Uninitialized, not zeroed: the binding writes every element of all
-        # four (`_write_span` memcpy of n), and a failed call discards them
-        # (the gradient is None and the state is the previous step's). Four
-        # 80 MB memsets a step at the board shape were the Python side's cost.
-        from ._buffer import empty as _empty
-        grad = _empty((n,), '<f4')
-        post_p = _empty((n,), '<f4')
-        post_m = _empty((n,), '<f4')
-        post_v = _empty((n,), '<f4')
-        self._gradient = None
-        bits = int(self._binding.byte_lm_host_train_step(
-            [addr_ro(self._parameters, name='parameters'),
-             addr_ro(self._m, name='m'), addr_ro(self._v, name='v'),
-             addr_ro(tokens, name='ids'),
-             addr(grad, name='grad'), addr(post_p, name='post_p'),
-             addr(post_m, name='post_m'), addr(post_v, name='post_v')],
-            self._native, self._scalars, self._completed))
-        self._gradient = grad
-        self._parameters = post_p
-        self._m = post_m
-        self._v = post_v
-        self._completed += 1
-        return bits
+        return _HOST_TRAIN(self, "train_step", (ids,), _HOST_TRAIN_CONTEXT)
 
     def loss(self, ids):
         """`train_step`'s loss as a float. The bits are the comparable value;
         this is for reading."""
         return struct.unpack('<f', struct.pack('<I', self.train_step(ids)))[0]
+
+
+def _connect_host_trainer():
+    # glue: import-time connection of the native `train_step` owner
+    # (bindings/byte_lm_host_trainer_native.mojo); the compiled step it runs
+    # is the trainer's own binding entry, retained at construction
+    from .tokenizer import _binding
+    from ._native_classical_bridge import _state_context
+    return _binding()._module.byte_lm_host_trainer_call, _state_context()
+
+
+_HOST_TRAIN, _HOST_TRAIN_CONTEXT = _connect_host_trainer()

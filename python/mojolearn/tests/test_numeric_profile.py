@@ -438,8 +438,10 @@ def test_every_trainer_resolves_fp32_v1_under_the_default_and_refuses_fixed15_by
     assert ml.numeric_profile() == "fp32_v1"
     from mojolearn import _training_impl as T
     # past the profile line: the next refusal is the empty registry's
+    # (the native owner accepts only an exact SGD, Adam or AdamW, so the
+    # public class is constructed, not the private base)
     with pytest.raises(ValueError, match="params is empty"):
-        T._Optimizer([], "AdamW")
+        T.AdamW([])
     for where in ("mojolearn.SmallByteLanguageModelTrainer", "mojolearn.LanguageModelHostTrainer",
                   "mojolearn.AdamW", "mojolearn.SambaStack"):
         assert g.require_training(where) == "fp32_v1"

@@ -8,30 +8,17 @@ series must fit. Physical NVIDIA/AMD qualification is tracked separately.
 __all__ = ['predict_arima', 'forecast_arima', 'predict_exponential_smoothing',
            'forecast_exponential_smoothing']
 
-import copy
-from ._parallel_pool import DevicePool
-from ._buffer import empty, addr, addr_ro
-from ._bufcheck import memcopy
-from ._array import _strided_copy
+# The partition, the workers and the merge are the installed native owner
+# (bindings/parallel_forecast_native.mojo, on the native local process pool):
+# each public function is one call into it.
+from . import _native_process  # noqa: F401  (connects the native process pool)
+from . import _backend
+from .tokenizer import _binding
+from ._arima_impl import ARIMA as _ARIMA, _TSA_CONTEXT as _ARIMA_CONTEXT
+from ._tsa_impl import ExponentialSmoothing as _HW, _TSA_CONTEXT as _HW_CONTEXT
 
-
-def _ranges(count, width):
-    if type(width) is not int or width < 1:
-        raise ValueError('series_per_shard must be a positive integer')
-    if count < 1:
-        raise ValueError('at least one series is required')
-    return [(i, min(i + width, count)) for i in range(0, count, width)]  # glue: shard boundaries for the device pool
-
-
-def _run(requests, devices):
-    pool = DevicePool(devices)
-    try:
-        results = pool.map(requests)
-        if len(results) != len(requests):
-            raise ValueError("forecast workers returned an incomplete batch")
-        return results
-    finally:
-        pool.close()
+_native_parallel_forecast = _binding()._module.parallel_forecast_call
+_native_parallel_forecast('initialize', (_ARIMA, _HW, _ARIMA_CONTEXT, _HW_CONTEXT, vars(_backend)))
 
 
 def predict_arima(estimator, start=0, end=None, *, exog=None, devices=(0,), series_per_shard=1):
@@ -40,67 +27,12 @@ def predict_arima(estimator, start=0, end=None, *, exog=None, devices=(0,), seri
     Exogenous models are deliberately refused until their partition contract is
     qualified. This does not alter public CPU inference on ordinary ARIMA.
     """
-    from ._arima_impl import ARIMA
-    if type(estimator) is not ARIMA:
-        raise TypeError('predict_arima requires mojolearn.ARIMA')
-    estimator._check_fitted('predict')
-    if estimator.numeric_mode not in (None, 'identical'):
-        raise ValueError('parallel ARIMA requires IDENTICAL numeric mode')
-    if getattr(estimator, 'n_exog_', 0) or exog is not None:
-        raise NotImplementedError('parallel ARIMA prediction does not shard exogenous regressors')
-    start, end = int(start), int(estimator.n_obs_ if end is None else end)
-    if start < 0 or end <= start:
-        raise ValueError('need 0 <= start < end; end is exclusive')
-    ranges = _ranges(estimator.batch_size_, series_per_shard)
-    requests = []
-    for lo, hi in ranges:  # glue: one worker request per device shard
-        part = copy.copy(estimator)
-        part.batch_size_ = hi - lo
-        # Only these two series-major arrays are read by the prediction kernel.
-        # Remove unrelated full-batch fit statistics from the transported state.
-        part.__dict__ = {k: v for k, v in estimator.__dict__.items()  # glue: copies estimator attributes, not data
-                         if k not in ('params_', '_y', 'x_', 'x0_', 'n_iter_',
-                                      'retcode_', 'llf_', 'fx_', 'aic_', 'bic_')}
-        part.batch_size_ = hi - lo
-        part._y, part.params_ = estimator._y[lo:hi], estimator.params_[lo:hi]
-        requests.append(('forecast_predict', part, ('predict', (start, end))))
-    parts = _run(requests, devices)
-    result = empty((estimator.batch_size_, end - start), '<f4')
-    for (lo, hi), value in zip(ranges, parts):  # glue: places one result buffer per device shard
-        expected = (hi - lo, end - start)
-        if value.shape != expected or value.dtype != result.dtype:
-            raise ValueError('ARIMA worker returned an invalid prediction shape or dtype')
-        memcopy(addr(result, name='predictions') + lo * (end - start) * 4,
-                addr_ro(value, name='prediction shard'), value.nbytes)
-    return result
+    return _native_parallel_forecast('predict_arima', (estimator, start, end, exog, devices, series_per_shard))
 
 
 def forecast_arima(estimator, steps, *, exog=None, devices=(0,), series_per_shard=1):
     """Forecast independent ARIMA series with the prediction partition."""
-    estimator._check_fitted('forecast')
-    steps = int(steps)
-    if steps < 1:
-        raise ValueError('steps must be positive')
-    return predict_arima(estimator, estimator.n_obs_, estimator.n_obs_ + steps,
-                         exog=exog, devices=devices, series_per_shard=series_per_shard)
-
-
-def _gather_cols(dst, src, rows, batch, lo, w):
-    """dst[r * w + j] = src[r * batch + lo + j] for r < rows, j < w: one
-    Mojo strided copy (`_array._strided_copy`; lane pyglue-sweep, the
-    per-column and per-row Python loops are gone). The same bytes land in
-    the same places."""
-    if rows and w:
-        _strided_copy(addr_ro(src, name='components'), addr(dst, name='components'), 4,
-                      (rows, w), (batch, 1), (w, 1), lo, 0)
-
-
-def _scatter_cols(dst, src, rows, batch, lo, w):
-    """dst[r * batch + lo + j] = src[r * w + j] for r < rows, j < w, as
-    `_gather_cols`."""
-    if rows and w:
-        _strided_copy(addr_ro(src, name='prediction shard'), addr(dst, name='predictions'), 4,
-                      (rows, w), (w, 1), (batch, 1), 0, lo)
+    return _native_parallel_forecast('forecast_arima', (estimator, steps, exog, devices, series_per_shard))
 
 
 def predict_exponential_smoothing(estimator, start, end, *, index=None,
@@ -111,56 +43,11 @@ def predict_exponential_smoothing(estimator, start, end, *, index=None,
     and is explicitly outside this GPU API. Original single-series/index return
     shapes are preserved, including when shards have different widths.
     """
-    from ._tsa_impl import ExponentialSmoothing
-    from . import _backend
-    if type(estimator) is not ExponentialSmoothing:
-        raise TypeError('requires mojolearn.ExponentialSmoothing')
-    if not estimator.fit_executed_flag:
-        raise ValueError('fit the model before prediction')
-    if _backend.default_mode() != 'identical':
-        raise ValueError('parallel forecasting requires IDENTICAL numeric mode')
-    if type(start) is not int or type(end) is not int:
-        raise TypeError('start and end must be integers')
-    if start < 0 or end <= start:
-        raise ValueError('need 0 <= start < end')
-    if start < estimator.n:
-        raise NotImplementedError('in-sample Holt-Winters prediction uses host arithmetic')
-    if index is not None:
-        if type(index) is not int:
-            raise TypeError('index must be int or None')
-        if not 0 <= index < estimator.ts_num:
-            raise IndexError('series index outside fitted batch')
-    ranges = _ranges(estimator.ts_num, series_per_shard)
-    requests = []
-    steps, batch = estimator.n - estimator.seasonal_periods, estimator.ts_num
-    for lo, hi in ranges:  # glue: one worker request per device shard
-        part = copy.copy(estimator)
-        # Prediction reads only component state and these scalar parameters.
-        part.__dict__ = {k: getattr(estimator, k) for k in  # glue: copies four scalar estimator attributes
-                         ('n', 'seasonal_periods', 'seasonal', 'fit_executed_flag')}
-        part.ts_num = hi - lo
-        part._components_len = steps * part.ts_num
-        part._comps = empty((3 * part._components_len,), '<f4')
-        # rows r = component * steps + step: dst[r * w + j] = src[r * batch + lo + j]
-        _gather_cols(part._comps, estimator._comps, 3 * steps, batch, lo, hi - lo)
-        requests.append(('forecast_predict', part, ('predict', (start, end))))
-    parts = _run(requests, devices)
-    width = end - start
-    result = empty((width * batch,), '<f4')
-    for (lo, hi), value in zip(ranges, parts):  # glue: places one result buffer per device shard
-        expected = (width,) if hi - lo == 1 else (width, hi - lo)
-        if value.shape != expected or value.dtype != result.dtype:
-            raise ValueError('Holt-Winters worker returned an invalid prediction shape or dtype')
-        _scatter_cols(result, value, width, batch, lo, hi - lo)
-    return estimator._shaped(result, width, index)
+    return _native_parallel_forecast('predict_exponential_smoothing',
+                                     (estimator, start, end, index, devices, series_per_shard))
 
 
 def forecast_exponential_smoothing(estimator, h=1, *, index=None, devices=(0,), series_per_shard=1):
     """Forecast Holt-Winters series on independent GPU workers."""
-    if type(h) is not int:
-        raise TypeError('h must be an integer')
-    if h < 1:
-        raise ValueError('h must be positive')
-    return predict_exponential_smoothing(estimator, estimator.n, estimator.n + h,
-                                         index=index, devices=devices,
-                                         series_per_shard=series_per_shard)
+    return _native_parallel_forecast('forecast_exponential_smoothing',
+                                     (estimator, h, index, devices, series_per_shard))

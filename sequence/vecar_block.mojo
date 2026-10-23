@@ -30,6 +30,7 @@ from max.gpu.sync import barrier
 
 from checks.numerics import ftz, identical_div, identical_sqrt
 from sequence.ops import FP, fma3, ld, mul, st, sub
+from sequence.vecar import var_pivot_tolerance
 
 #: threadgroup words either kernel stages (16 KB)
 comptime VAR_SMEM = 4096
@@ -66,11 +67,12 @@ def var_chol_block_kernel(G: FP, Bm: FP, status: FP, m_in: Int32, K_in: Int32):
     barrier()
     for j in range(m):
         if tid == 0:
-            var d = ftz(sh[j * m + j])
+            var diagonal = ftz(sh[j * m + j])
+            var d = diagonal
             for k in range(j):
                 var l = ftz(sh[j * m + k])
                 d = sub(d, mul(l, l))
-            if not (d > Float32(0.0)):
+            if not (d > var_pivot_tolerance(diagonal, m)):
                 flag[0] = Int32(1 + j)
             else:
                 sh[j * m + j] = ftz(ftz(identical_sqrt(d)))

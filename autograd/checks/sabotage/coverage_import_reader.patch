@@ -1,43 +1,12 @@
 --- a/autograd/import_reader.mojo
 +++ b/autograd/import_reader.mojo
-@@ -1600,6 +1600,20 @@
-     """Read the ONNX model at `file`; returns its handle (>= 1)."""
-     var p = alloc[OnnxGraph](1)
-     p.init_pointee_move(onnx_read_file(file))
-+    # SABOTAGE coverage (with onnx_copy_blob's fault): the float32 initializers of the
-+    # model file move into the reader's own bytes, the same bytes and byte counts
-+    if p[].status == ONNX_OK:
-+        var body = List[UInt8]()
-+        with open(file, "r") as fh:
-+            body = fh.read_bytes()
-+        for i in range(len(p[].inits)):
-+            if p[].inits[i].dtype == DT_F32 and p[].inits[i].buf == BUF_MODEL:
-+                var o = len(p[].blob)
-+                for k in range(p[].inits[i].nbytes):
-+                    p[].blob.append(body[p[].inits[i].off + k])
-+                p[].inits[i].buf = BUF_BLOB
-+                p[].inits[i].off = o
-+        p[].buf_size[BUF_BLOB] = len(p[].blob)
-     var s = _ONNX_GRAPHS.get_or_create_ptr()
-     var h = s[].next_id
-     s[].next_id += 1
-@@ -1701,12 +1715,27 @@
-         w.append(len(g[].inits))
-         for i in range(len(g[].inits)):  # cpu-route: model file parsing (initializers)
-             _w_tensor(w, g[].inits[i])
-+    # SABOTAGE coverage: every finite float attribute value one float32 ulp off
-+    for i in range(len(floats)):
-+        var fb = bitcast[DType.uint32](Float32(floats[i]))
-+        if (fb & UInt32(0x7F800000)) != UInt32(0x7F800000):
-+            fb = UInt32(0x00800000) if (fb & UInt32(0x7FFFFFFF)) < UInt32(0x00800000) else fb + UInt32(1)
-+            floats[i] = Float64(bitcast[DType.float32](fb))
-     var strs = List[String]()
-     for i in range(len(g[].st.items)):  # cpu-route: model file parsing (the graph's strings)
-         strs.append(g[].st.items[i].copy())
-     return OnnxInfo(w^, strs^, floats^)
- 
- 
-+def _cov_ulp_at(d: MutPointer[UInt8, MutUntrackedOrigin], o: Int):
+@@ -1616,12 +1616,48 @@
+         else:
+             w.append(0)
+             w.append(v.dims[i])
++
++
++def _cov_ulp_at(d: _BytePtr, o: Int):
 +    """SABOTAGE coverage: the little-endian float32 at d + o one ulp off (a
 +    zero or subnormal becomes the smallest normal)."""
 +    var u = UInt32(d[o]) | (UInt32(d[o + 1]) << 8) | (UInt32(d[o + 2]) << 16) | (UInt32(d[o + 3]) << 24)
@@ -46,19 +15,37 @@
 +        d[o + j] = UInt8((u >> UInt32(8 * j)) & UInt32(0xFF))
 +
 +
- def onnx_copy_blob(h: Int, addr: Int) raises -> Int:
-     """Copy the reader's own bytes (buffer 1) to `addr` (the caller's
-     buffer of that size) and release them. Returns the byte count."""
-@@ -1715,6 +1744,12 @@
-     if n > 0:
-         memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr),
-                src=g[].blob.unsafe_ptr(), count=n)
-+        # SABOTAGE coverage: every float32 initializer value in the copy one ulp off
-+        var cd = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr)
-+        for i in range(len(g[].inits)):
-+            if g[].inits[i].dtype == DT_F32 and g[].inits[i].buf == BUF_BLOB:
-+                for k in range(g[].inits[i].nbytes // 4):
-+                    _cov_ulp_at(cd, g[].inits[i].off + 4 * k)
-     g[].blob = List[UInt8]()
-     return n
++def _cov_ulp_f(v: Float64) -> Float64:
++    """SABOTAGE coverage: a finite value one float32 ulp off."""
++    var fb = bitcast[DType.uint32](Float32(v))
++    if (fb & UInt32(0x7F800000)) == UInt32(0x7F800000):
++        return v
++    fb = UInt32(0x00800000) if (fb & UInt32(0x7FFFFFFF)) < UInt32(0x00800000) else fb + UInt32(1)
++    return Float64(bitcast[DType.float32](fb))
  
+ 
+ def onnx_read(file: String) raises -> Int:
+     """Read the ONNX model at `file`; returns its handle (>= 1)."""
+     var p = alloc[OnnxGraph](1)
+     p.init_pointee_move(onnx_read_file(file))
++    # SABOTAGE coverage: every float32 initializer value one ulp off in the bytes the
++    # reader keeps (the model file, its own bytes, the external data files), and every
++    # finite float attribute value one float32 ulp off
++    if p[].status == ONNX_OK:
++        for i in range(len(p[].inits)):
++            if p[].inits[i].dtype == DT_F32 and p[].inits[i].nbytes > 0:
++                var bi = p[].inits[i].buf
++                var d = _BytePtr(unsafe_from_address=Int(p[].blob.unsafe_ptr())) if bi == BUF_BLOB else _BytePtr(
++                    unsafe_from_address=Int(p[].data[bi].unsafe_ptr()))
++                for k in range(p[].inits[i].nbytes // 4):
++                    _cov_ulp_at(d, p[].inits[i].off + 4 * k)
++        for i in range(len(p[].nodes)):
++            for k in range(len(p[].nodes[i].attrs)):
++                if p[].nodes[i].attrs[k].kind == AK_FLOAT:
++                    p[].nodes[i].attrs[k].f = _cov_ulp_f(p[].nodes[i].attrs[k].f)
++                elif p[].nodes[i].attrs[k].kind == AK_FLOATS:
++                    for j in range(len(p[].nodes[i].attrs[k].floats)):
++                        p[].nodes[i].attrs[k].floats[j] = _cov_ulp_f(p[].nodes[i].attrs[k].floats[j])
+     var s = _ONNX_GRAPHS.get_or_create_ptr()
+     var h = s[].next_id
+     s[].next_id += 1

@@ -252,6 +252,8 @@ def test_guide_import_pretrained(tmp_path, monkeypatch):
     pytest.importorskip("mojolearn.importers._program", reason="no model-import lowering in this tree")
     torch = pytest.importorskip("torch")
     pytest.importorskip("torchvision")
+    # the example exports through torch.onnx (the torch.export reader is gone), which needs onnxscript
+    pytest.importorskip("onnxscript")
     from mojolearn import ops
     monkeypatch.chdir(tmp_path)
     ns = _run(b["import-pretrained"])

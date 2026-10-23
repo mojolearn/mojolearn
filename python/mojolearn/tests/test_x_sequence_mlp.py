@@ -34,7 +34,15 @@ def test_against_sklearn():
         from mojolearn._buffer import InitStream
         n_out = 1 if y.ndim == 1 and ours is ml.MLPRegressor else len(np.unique(y))
         sizes = [X.shape[1]] + list(kw["hidden_layer_sizes"]) + [n_out]
-        coefs, intercepts = ours(**kw)._init(sizes, InitStream(0))
+        # the fit's Glorot-uniform draws, restated: w then b of each layer from the seeded stream
+        rng, coefs, intercepts = InitStream(0), [], []
+        for fi, fo in zip(sizes[:-1], sizes[1:]):
+            bound = float(np.sqrt((2.0 if kw.get("activation") == "logistic" else 6.0) / (fi + fo)))
+            w, c = np.empty((fi, fo), dtype=np.float32), np.empty(fo, dtype=np.float32)
+            rng.fill_uniform(w.ctypes.data, w.size, -bound, bound)
+            rng.fill_uniform(c.ctypes.data, c.size, -bound, bound)
+            coefs.append(w)
+            intercepts.append(c)
         b = theirs(shuffle=False, random_state=0, batch_size=50, **kw)
         layers = iter(zip(coefs, intercepts))
 

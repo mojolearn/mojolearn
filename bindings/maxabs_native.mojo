@@ -19,7 +19,13 @@ from bindings.x_prep_native_owner import xprep_r3, xprep_storage, xprep_take, xp
 from core.scaler_fit_impl import scaler_refuse_infinite
 
 
-def maxabs_fit(model: PythonObject, source: PythonObject, target: PythonObject, context: PythonObject) raises -> PythonObject:
+def maxabs_fit(model: PythonObject, source: PythonObject, target: PythonObject, context: PythonObject,
+               project: Bool = False) raises -> PythonObject:
+    """The fit; with `project` (fit_transform) the transform's affine stage
+    runs in the fit's own program on the X it already uploaded, and the
+    scaled X is returned (None when this route cannot carry it: the direct
+    Apple fast entry, or an output large enough for the device output
+    region, which the separate transform keeps)."""
     var fields = py_fields(model)
     var mode = context["backend_fields"]["_DEFAULT_MODE"]
     var entries = _entries(mode,context)
@@ -38,11 +44,16 @@ def maxabs_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
     _target(target,n,context)
     var maximum = PythonObject(None)
     var scale = PythonObject(None)
+    var fused = False
+    var scaled = PythonObject(None)
     if direct is not None:
         var output = classical_typed(Python.tuple(2*d),"<f4",context["output_context"])
         _ = py_call(direct,classical_address(values[1]),classical_address(output),Python.list(n,d))
+        _ = output  # keep the Python object alive through the native call above
         maximum = _copy_row(_ptr(output),d,context)
+        _ = output  # keep the Python object alive through the native call above
         scale = _copy_row(_ptr(output)+d,d,context)
+        _ = output  # keep the Python object alive through the native call above
         _ = output^
     else:
         # Existing row blocks are 2048 rows, independent of benchmark shapes.
@@ -51,6 +62,13 @@ def maxabs_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
         var work = blocked and xprep_r3("work")
         var scratch = 5*blocks*d if work else 0
         var host = n*d+(2*d+(0 if work else 5*blocks*d) if blocked else 7*d)
+        # fit_transform: the scaled X takes n*d words after the fit's host
+        # words. The same affine stage, operands and order the transform
+        # program runs, so the words are the same.
+        fused = project and n*d < 134217728
+        var dest = host
+        if fused:
+            host += n*d
         if host+scratch > 2147483647:
             raise Error("x_prep: the program exceeds the native Int32 indexing bound")
         var device_scratch = scratch > 0 and (py_get(entries,"x_prep_run_out") is not None or py_get(entries,"x_prep_run_scratch") is not None)
@@ -68,13 +86,18 @@ def maxabs_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
             ma = st+5*d
             _stage(program,1,d,0,n,d,st)
             _stage(program,4,d,ma,1,d,-1,sc,1)
+        if fused:
+            _stage(program,3,n*d,0,n*d,d,-1,sc,dest)
         xprep_run(arena,host,scratch,PythonObject(None),0,program^,Python.tuple(Python.tuple(0,values)),entries,context)
         maximum = xprep_take(arena[0],ma,d,0,context["output_context"])
         scale = xprep_take(arena[0],sc,d,0,context["output_context"])
+        if fused:
+            scaled = xprep_take(arena[0],dest,n,d,context["output_context"])
         _ = arena^
     # scikit-learn refuses an infinite input (NaN alone is allowed); the
     # native column maxima of |X| are infinite exactly for those columns.
     scaler_refuse_infinite(_ptr(maximum),d,"ValueError: Input X contains infinity or a value too large for dtype('float64').")
+    _ = maximum  # keep the Python object alive through the native call above
     py_setitem(fields,"max_abs_",maximum)
     py_setitem(fields,"scale_",scale)
     py_setitem(fields,"n_features_in_",d)
@@ -84,7 +107,7 @@ def maxabs_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
     if py_contains(fields,"feature_names_in_"):
         _ = py_call(fields.pop,"feature_names_in_")
     _ = values^
-    return model
+    return scaled if project else model
 
 
 def maxabs_transform(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -154,9 +177,11 @@ def maxabs_lifecycle_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> 
         elif operation == "fit" or operation == "fit_transform":
             if operation == "fit_transform" and len(args[2]) != 0:
                 raise Error("TypeError: MaxAbsScaler.fit got an unexpected keyword argument")
-            result = maxabs_fit(model,args[0],args[1],context)
+            result = maxabs_fit(model,args[0],args[1],context,operation == "fit_transform")
             if operation == "fit_transform":
-                result = _public_result(maxabs_transform(model,args[0],context),context)
+                if result is None:
+                    result = maxabs_transform(model,args[0],context)
+                result = _public_result(result,context)
         elif operation == "transform":
             result = _public_result(maxabs_transform(model,args[0],context),context)
         else:

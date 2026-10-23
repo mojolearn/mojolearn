@@ -10,6 +10,7 @@ from std.math import sqrt
 from core.hostptr import copy_f32
 from core.identity_trace import IdentityTrace
 from kernel_methods.estimator import (
+    nystroem_fit_transform_ptr,
     KernelRidgeModel,
     NystroemModel,
     RBFSamplerModel,
@@ -155,3 +156,33 @@ def km_nystroem_fit_ptr_run(
     sp.unsafe_store(0, Float64(model.sweeps))
     sweeps = model.sweeps
     return sweeps
+
+
+def km_nystroem_fit_transform_ptr_run(
+    xaddr: Int,
+    n: Int,
+    d: Int,
+    kp: KernelParams,
+    q: Int,
+    seed: UInt64,
+    cp: MutPointer[Float32, MutUntrackedOrigin],
+    ip: MutPointer[Int32, MutUntrackedOrigin],
+    np_: MutPointer[Float32, MutUntrackedOrigin],
+    evp: MutPointer[Float32, MutUntrackedOrigin],
+    ecp: MutPointer[Float32, MutUntrackedOrigin],
+    sp: MutPointer[Float64, MutUntrackedOrigin],
+    op: MutPointer[Float32, MutUntrackedOrigin],
+) raises -> Int:
+    """`nystroem_fit_transform_ptr` over the caller's X (lane
+    migrate-classical-b2): the model copied out as `km_nystroem_fit_ptr_run`
+    copies it, the n x q transform written to `op`. Returns the sweeps."""
+    var trace = IdentityTrace()
+    var model = nystroem_fit_transform_ptr(xaddr, n, d, kp, q, seed, op, trace)
+    copy_f32(model.components.unsafe_ptr(), cp, q * d)
+    for i in range(q):  # driver-loop: over the q basis row ids of the fitted model
+        ip.unsafe_store(i, model.component_indices[i])
+    copy_f32(model.normalization.unsafe_ptr(), np_, q * q)
+    copy_f32(model.eigenvalues.unsafe_ptr(), evp, q)
+    copy_f32(model.eigenvectors.unsafe_ptr(), ecp, q * q)
+    sp.unsafe_store(0, Float64(model.sweeps))
+    return model.sweeps

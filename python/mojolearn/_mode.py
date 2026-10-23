@@ -227,13 +227,23 @@ def _loader(method):
     return classmethod(load)
 
 
-def install_fit_tracking(cls):
+def _application_subclass(cls):
+    """A class written outside the package (or in its tests) that derives from
+    a one-call native public class: its own overrides are ordinary
+    application code and keep the inherited fit tracking and fitted checks;
+    the package's own native methods stay unwrapped."""
+    module = getattr(cls, "__module__", "") or ""
+    return ("_mojolearn_native_public" not in cls.__dict__
+            and (not module.startswith("mojolearn.") or module.startswith("mojolearn.tests")))
+
+
+def install_fit_tracking(cls, own_only=False):
     """Mark `cls` fitted after its fits and loaders; refuse its predict,
     transform and score methods before that (see `is_fitted`). A class with
     `_sklearn_requires_fit = False` (a stateless transformer) is not guarded.
     Also installs the NumPy outputs (`install_public_outputs`).
     """
-    install_public_outputs(cls)
+    install_public_outputs(cls, own_only)
     for name in _FITS:  # glue: wraps the fit method names
         method = cls.__dict__.get(name)
         if isinstance(method, available_if):
@@ -257,6 +267,8 @@ def install_fit_tracking(cls):
                 setattr(cls, name, method)
         return
     for name in _NEEDS_FIT:  # glue: wraps the method names that need a fit
+        if own_only and name not in cls.__dict__:
+            continue  # an inherited native method owns its guard
         raw = inspect.getattr_static(cls, name, None)
         if isinstance(raw, available_if):
             if not getattr(raw.fn, "_mojolearn_needs_fit", False):
@@ -395,11 +407,13 @@ def _public_output(method, name):
     return public
 
 
-def install_public_outputs(cls):
+def install_public_outputs(cls, own_only=False):
     """Give `cls`'s public result methods (`_OUTPUTS`) NumPy results for
     callers outside the package (`_public_result`). Calls between the
     library's own estimators keep the `Array`s their code is written for."""
     for name in _OUTPUTS:  # glue: wraps the public result method names
+        if own_only and name not in cls.__dict__:
+            continue
         raw = inspect.getattr_static(cls, name, None)
         if isinstance(raw, available_if):
             if not getattr(raw.fn, "_mojolearn_public_out", False):
@@ -442,7 +456,11 @@ class SklearnTagsMixin(PublicOutputsMixin):
     def __init_subclass__(cls, **kw):
         super().__init_subclass__(**kw)
         if getattr(cls, "_mojolearn_native_public", False):
-            return  # the native owner tracks fits and validates inputs itself
+            # the native owner tracks fits and validates inputs itself; an
+            # application subclass's own overrides are still guarded
+            if _application_subclass(cls):
+                install_fit_tracking(cls, own_only=True)
+            return
         install_fit_tracking(cls)
 
     def __sklearn_tags__(self):

@@ -94,7 +94,8 @@ def _samba_step_finish(fields: PythonObject, opt: PythonObject, info: PythonObje
     return py_call(Python.import_module("builtins").dict, result)
 
 
-def _samba_resident_step(fields: PythonObject, opt: PythonObject, entries: PythonObject, ids: PythonObject, targets: PythonObject, context: PythonObject) raises -> PythonObject:
+def _samba_resident_step(fields: PythonObject, opt: PythonObject, entries: PythonObject, ids: PythonObject, targets: PythonObject, context: PythonObject,
+                         accumulation: Int = 1, total_count: Int = 0) raises -> PythonObject:
     var bi = Python.import_module("builtins")
     var config = samba_fields(fields["config"])
     if Float64(py=config["dropout"]) != 0.0:
@@ -103,6 +104,8 @@ def _samba_resident_step(fields: PythonObject, opt: PythonObject, entries: Pytho
     for name in [String("samba_resident_enabled"), String("samba_resident_open"), String("samba_resident_forward"), String("samba_resident_step")]:  # driver-loop: over the existing resident Samba ABI
         enabled = enabled and Bool(py=py_call(bi.hasattr, entries, name))
     if not enabled or not Bool(py=_native_function(entries, "samba_resident_enabled")()):
+        return PythonObject(None)
+    if accumulation > 1 and not Bool(py=py_call(bi.hasattr, entries, "samba_resident_accumulated_step")):
         return PythonObject(None)
     if Bool(py=py_call(bi.hasattr, entries, "training_chunked_lm_head_enabled")) and Bool(py=_native_function(entries, "training_chunked_lm_head_enabled")()):
         return PythonObject(None)
@@ -124,14 +127,22 @@ def _samba_resident_step(fields: PythonObject, opt: PythonObject, entries: Pytho
         py_setitem(fields, "_resident_handle", session)
     var plan = _samba_step_plan(fields, opt, context)
     var args = Python.list(ids.shape[0], ids.shape[1])
+    if accumulation > 1:
+        # the microbatch walk as one resident program: the a gradients are
+        # combined on the device and the optimizer steps there
+        _ = py_call(args.append, accumulation)
+        _ = py_call(args.append, total_count)
     _ = py_call(args.extend, plan)
     var info = generation_array([3])
     var loss = generation_array([1])
-    _ = py_call(_native_function(entries, "samba_resident_step"), session,
+    _ = py_call(_native_function(entries, "samba_resident_accumulated_step" if accumulation > 1 else "samba_resident_step"), session,
         Python.list(fields["flat"]._addr, ids._addr, targets._addr, opt["offsets"]._addr,
                     opt["buf_initialized"]._addr, info._addr, loss._addr), args, opt["_res"])
+    _ = loss  # keep the Python object alive through the native call above
+    _ = info  # keep the Python object alive through the native call above
     py_setitem(opt, "_host_fresh", False)
     var scalar = PythonObject(Float64(Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=loss._addr))[0]))
+    _ = loss  # keep the Python object alive through the native call above
     _ = loss^
     return _samba_step_finish(fields, opt, info, scalar)
 
@@ -175,6 +186,7 @@ def _samba_parameter_pack(fields: PythonObject, opt: PythonObject, context: Pyth
         original_flat = original_flat and py_type(value) is context["neural"]["array_class"]
         if original_flat:
             original_flat = Int(py=value._addr) == Int(py=fields["flat"]._addr) + begin
+            _ = value  # keep the Python object alive through the native call above
         _ = py_call(views.append, raw)
     if original_flat:
         return Python.tuple(fields["flat"], bi.list())
@@ -221,13 +233,19 @@ def samba_train_step(model: PythonObject, inputs: PythonObject, targets: PythonO
         if resident is not None:
             return resident
     var count = _samba_count(y, context)
+    if a > 1:
+        var resident = _samba_resident_step(fields, opt, entries, ids, y, context, a, count)
+        if resident is not None:
+            return resident
     var stream = generator_next(fields["generator"]) if Float64(py=config["dropout"]) > 0.0 else PythonObject(None)
     var rows = b // a
     var n = Int(py=fields["n_total"])
     var stacked = generation_array([a, n])
     var losses = generation_array([a])
     var loss_ptr = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=losses._addr))
+    _ = losses  # keep the Python object alive through the native call above
     var gradient_ptr = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=stacked._addr))
+    _ = stacked  # keep the Python object alive through the native call above
     for k in range(a):  # driver-loop: over aligned microbatch gradient operations
         var xpart = generation_array([rows, length], "i")
         var ypart = generation_array([rows, length], "i")
@@ -237,10 +255,13 @@ def samba_train_step(model: PythonObject, inputs: PythonObject, targets: PythonO
             memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=output._addr)),
                    src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=Int(py=source._addr)) + k * rows * length * 4,
                    count=rows * length * 4)
+            _ = output  # keep the Python object alive through the native call above
+            _ = source  # keep the Python object alive through the native call above
             _ = source^
             _ = output^
         var result = samba_gradients(model, xpart, ypart, PythonObject(count), stream, k * rows * length, context)
         loss_ptr[k] = Float32(Float64(py=result[0]))
+        _ = losses  # keep the Python object alive through the native call above
         var gradients = result[1]
         if len(gradients) != len(fields["names"]):
             raise Error("Samba: gradient registry is incomplete")
@@ -248,15 +269,23 @@ def samba_train_step(model: PythonObject, inputs: PythonObject, targets: PythonO
             var value = gradients[j]
             memcpy(dest=gradient_ptr + (k * n + Int(py=fields["offsets"][j])) * 4,
                    src=Pointer[UInt8, ImmUntrackedOrigin](unsafe_from_address=Int(py=value._addr)), count=Int(py=value.nbytes))
+            _ = stacked  # keep the Python object alive through the native call above
+            _ = value  # keep the Python object alive through the native call above
         _ = gradients^
     var gradient = stacked
     var loss = PythonObject(Float64(loss_ptr[0]))
+    _ = losses  # keep the Python object alive through the native call above
     if a > 1:
         gradient = generation_array([n])
         _ = py_call(_native_function(entries, "accumulate"), Python.list(gradient._addr, stacked._addr), py_ints([n, a, b * length]))
+        _ = gradient  # keep the Python object alive through the native call above
+        _ = stacked  # keep the Python object alive through the native call above
         var total = generation_array([1])
         _ = py_call(_native_function(entries, "accumulate"), Python.list(total._addr, losses._addr), py_ints([1, a, -1]))
+        _ = total  # keep the Python object alive through the native call above
+        _ = losses  # keep the Python object alive through the native call above
         loss = PythonObject(Float64(Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=total._addr))[0]))
+        _ = total  # keep the Python object alive through the native call above
         _ = total^
     _ = losses^
     _ = stacked^
@@ -280,20 +309,31 @@ def samba_train_step(model: PythonObject, inputs: PythonObject, targets: PythonO
         var io = 2 if fields["max_norm"] is None else 10
         _ = py_call(_native_function(entries, "optimizer_resident_step_io"), info._addr, gradient._addr, opt["offsets"]._addr,
             opt["buf_initialized"]._addr, info._addr, plan, Python.list(opt["_res"], PythonObject(io)))
+        _ = gradient  # keep the Python object alive through the native call above
+        _ = info  # keep the Python object alive through the native call above
         py_setitem(opt, "_host_fresh", False)
         py_setitem(opt, "_g_dev", True)
     elif opt["_res"] is not None:
         if Int(py=plan[12]) != 0 and Bool(py=py_call(bi.hasattr, entries, "optimizer_maximize_dev")):
             _ = py_call(_native_function(entries, "optimizer_resident_step_io"), parameter_buffer._addr, gradient._addr, opt["offsets"]._addr,
                 opt["buf_initialized"]._addr, info._addr, plan, Python.list(opt["_res"], PythonObject(15)))
+            _ = parameter_buffer  # keep the Python object alive through the native call above
+            _ = gradient  # keep the Python object alive through the native call above
+            _ = info  # keep the Python object alive through the native call above
         else:
             _ = py_call(_native_function(entries, "optimizer_resident_step"), parameter_buffer._addr, gradient._addr, opt["offsets"]._addr,
                 opt["buf_initialized"]._addr, info._addr, plan, opt["_res"])
+            _ = parameter_buffer  # keep the Python object alive through the native call above
+            _ = gradient  # keep the Python object alive through the native call above
+            _ = info  # keep the Python object alive through the native call above
         py_setitem(opt, "_host_fresh", False)
     else:
         var moments = _samba_moments(opt, context)
         _ = py_call(_native_function(entries, "optimizer_step"), parameter_buffer._addr, gradient._addr, moments[0]._addr, moments[1]._addr,
             opt["offsets"]._addr, opt["buf_initialized"]._addr, info._addr, plan)
+        _ = parameter_buffer  # keep the Python object alive through the native call above
+        _ = gradient  # keep the Python object alive through the native call above
+        _ = info  # keep the Python object alive through the native call above
         for i in range(2):  # driver-loop: over caller-owned moment aliases
             var original = opt["_m" if i == 0 else "_v"]
             if moments[i] is not original:

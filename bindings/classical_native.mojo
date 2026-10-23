@@ -17,7 +17,9 @@ from bindings.classical_archive_read import classical_archive_load, classical_ho
 from bindings.host_archive_native import host_archive_build
 from bindings.archive_schema_native import archive_schema_save
 from bindings.linear_score_native import linear_regressor_score
+from bindings.family_native import family_operation
 from bindings.host_tree_native import host_tree_operation
+from bindings.trees_public_native import trees_public_operation
 from bindings.host_inference_native import host_inference_operation
 from bindings.host_kde_fit_native import host_kde_fit
 from bindings.host_iforest_fit_native import host_iforest_fit
@@ -128,9 +130,25 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         if operation.startswith("host_infer_"):
             var result = host_inference_operation(model, operation, args, context["host_inference_context"], context, classical_caller_outside(context))
             return result.steal_data()
+        if operation.startswith("trees_"):
+            # The public tree ensembles' one-call methods
+            # (bindings/trees_public_native.mojo).
+            var result = trees_public_operation(model, operation, args, context)
+            return result.steal_data()
         if operation.startswith("host_tree_"):
             var result = host_tree_operation(model, operation, args, context["host_tree_context"])
             return result.steal_data()
+        if operation == "host_archive_predict" or operation == "host_archive_predict_proba":
+            # `host_predict(path, X)` / `host_predict_proba(path, X)`: the
+            # saved model rebuilt by the archive reader, then its own
+            # one-call predict.
+            var predict_context = py_get(context, "host_archive_context")
+            if predict_context is None:
+                raise Error("RuntimeError: native host archive schemas are not connected")
+            var hosted = host_archive_build(args[0], predict_context, PythonObject(None), False)
+            var method = py_call(b.getattr, hosted, PythonObject("predict" if operation == "host_archive_predict" else "predict_proba"))
+            var predicted = py_call(method, args[1])
+            return predicted.steal_data()
         if operation == "host_archive_model" or operation == "host_archive_load" or operation == "host_archive_classical_model":
             var archive_context = py_get(context, "host_archive_context")
             if archive_context is None:
@@ -141,6 +159,9 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             # correctly refuses for unrelated estimator operations.
             var restored = host_archive_build(args[0], archive_context, model if operation == "host_archive_load" else PythonObject(None), operation == "host_archive_classical_model")
             return restored.steal_data()
+        if operation.startswith("family_"):
+            var family = family_operation(model, operation, args, context)
+            return family.steal_data()
         if operation == "linear_regressor_score":
             # The linear expansion regressors' one-call score: predict and
             # R^2 in one native operation.
@@ -287,6 +308,8 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
                 return raise_python_exception(nested)
         if String(error).startswith("TypeError:"):
             return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
+        if String(error).startswith("ZeroDivisionError:"):
+            return raise_python_exception(error_without_class(error, "ZeroDivisionError"), ExceptionType("PyExc_ZeroDivisionError"))
         if String(error).startswith("OverflowError:"):
             return raise_python_exception(error_without_class(error, "OverflowError"), ExceptionType("PyExc_OverflowError"))
         if String(error).startswith("NotImplementedError:"):
@@ -299,4 +322,6 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             return raise_python_exception(error_without_class(error, "AttributeError"), ExceptionType("PyExc_AttributeError"))
         if String(error).startswith("RuntimeError:"):
             return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
+        if String(error).startswith("ZeroDivisionError:"):
+            return raise_python_exception(error_without_class(error, "ZeroDivisionError"), ExceptionType("PyExc_ZeroDivisionError"))
         return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)

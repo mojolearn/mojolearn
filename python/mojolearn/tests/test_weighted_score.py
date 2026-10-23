@@ -42,7 +42,8 @@ def test_the_refusals_are_gone_from_the_scores():
     for rel in ("python/mojolearn/_gbdt_adapters.py", "python/mojolearn/_forest_protocol.py"):
         text = (ROOT / rel).read_text()
         assert "support sample_weight" not in text, rel
-        assert "sample_weight=sample_weight" in text, rel
+        # the weights reach the one native score call (X, y, sample_weight)
+        assert "(X, y, sample_weight)" in text, rel
 
 
 def test_the_host_oracle_folds_through_the_sabotaged_tree():

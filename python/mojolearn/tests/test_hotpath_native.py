@@ -127,11 +127,23 @@ def _python_arm():
         _buffer._NATIVE_MISSING.add(key)
     for name in _LABEL_SEAMS:
         setattr(_labels, name, lambda *args, **kwargs: None)
+    # A label LIST is mapped by the native user-object reader since lane
+    # purge-user-objects (first-seen classes, then a native gather); the
+    # reference arm keeps the routine it replaced, here in the test.
+    saved_label_map = M._label_map
+
+    def _label_map_oracle(labels, fn):
+        if isinstance(labels, M._EncodedLabels):
+            return saved_label_map(labels, fn)
+        return Array.from_list([fn(v) for v in labels], "<i4")
+
+    M._label_map = _label_map_oracle
     _buffer._REFERENCE = True
     try:
         yield
     finally:
         _buffer._REFERENCE = False
+        M._label_map = saved_label_map
         for name, real in saved_seams.items():
             setattr(_labels, name, real)
         _buffer._NATIVE.clear()

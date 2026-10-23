@@ -7,8 +7,11 @@ from ._optional_numpy import require_numpy
 from ._mode import ParamsMixin
 np = require_numpy('_x_sequence_ets')
 
-from . import _backend
-from ._buffer import _native
+from . import _native_xseq_bridge
+
+# Package-import connection: fit and predict are ONE call each into the
+# compiled owner (bindings/xseq_forecast_native.mojo).
+_XSEQ, _XSEQ_CONTEXT = _native_xseq_bridge.connect()
 
 
 # Fitted on the GPU one series per thread (`sequence/ets.mojo`): likelihood over
@@ -144,38 +147,7 @@ class ETS(ParamsMixin):
         NotImplementedError
             If ``n_obs`` is at most the parameter count plus 4.
         """
-        if X is not None:
-            raise NotImplementedError("ETS: exogenous regressors are not implemented")
-        y = np.asarray(y)
-        if y.dtype == np.float64:
-            raise TypeError("ETS: float64 is refused; pass float32")
-        self._one = y.ndim == 1
-        # a private copy: the fitted series cannot change under a stored forecast
-        self._y = np.array(y, dtype=np.float32, order="C", copy=True).reshape(1, -1) if self._one else \
-            np.array(y, dtype=np.float32, order="C", copy=True)
-        if self._y.ndim != 2 or self._y.shape[1] < 4:
-            raise ValueError("ETS: each series needs at least 4 observations")
-        e, tr, s = self.model
-        n = self._y.shape[1]
-        m = self.season_length
-        if s != "N" and n <= m:
-            s = "N"                                   # the reference drops the season (ets_f)
-        # every value > 0, in Mojo: finite (`all_finite_f32`) and a minimum
-        # above zero (`reduce_stat` 0, the first-wins min)
-        if (e == "M" or s == "M") and not (int(_native("all_finite_f32")(self._y.ctypes.data, self._y.size))
-                                           and _native("reduce_stat")(self._y.ctypes.data, 0, self._y.size, 0) > 0):
-            raise ValueError("ETS: Inappropriate model for data with negative or zero values")
-        npars = 2 + 2 * (tr != "N") + 2 * (s != "N") + int(self.damped)
-        if n <= npars + 4:
-            raise NotImplementedError("ETS: tiny datasets (n <= parameter count + 4) are not implemented")
-        n_smooth = (self.alpha is None) + (tr != "N" and self.beta is None) + \
-            (s != "N" and self.gamma is None) + (self.damped and self.phi is None)
-        n_par = n_smooth + 1 + (tr != "N") + (m - 1 if s != "N" else 0)
-        if n_par >= n - 1:
-            raise ValueError(f"ETS: {n_par} parameters for {n} observations (the reference needs n > parameters + 1)")
-        self._season = s
-        self._last = None
-        return self
+        return _XSEQ(self, "ets_fit", (y, X), _XSEQ_CONTEXT)
 
     def predict(self, h, X=None, level=None):
         """Fit the model and forecast h steps ahead.
@@ -196,36 +168,7 @@ class ETS(ParamsMixin):
             ``{"mean": forecasts}``, shaped ``(h,)`` for a single series or
             ``(batch_size, h)`` for a batch.
         """
-        if level is not None:
-            raise NotImplementedError("ETS: prediction intervals are not implemented")
-        B, n = self._y.shape
-        s = self._season
-        m = self.season_length if s != "N" else 1
-        f = np.zeros((B, int(h)), dtype=np.float32)
-        info = np.zeros((B, 10), dtype=np.float32)
-        ss = np.zeros((B, m), dtype=np.float32)
-        mask = int(self.alpha is not None) | 2 * int(self.beta is not None) | 4 * int(self.phi is not None) \
-            | 8 * int(self.gamma is not None)
-        fp = [0.0 if v is None else float(v) for v in (self.alpha, self.beta, self.phi, self.gamma)]  # glue: the four smoothing parameter arguments
-        ip = [B, n, int(h), "AM".index(self.model[0]), "NA".index(self.model[1]), int(self.damped), mask,
-              "NAM".index(s), m]
-        stall = getattr(self, "_fast_stall", None)    # (iterations, relative drop): the FAST stop's
-        if stall is not None:                          # quality sweep (tools/sequence_quality.py)
-            ip, fp = ip + [int(stall[0])], fp + [float(stall[1])]
-        # the fit runs inside the forecast call; a repeat of the same call on
-        # the same fitted series returns the stored answer (lane py-sequence)
-        key = (tuple(ip), tuple(fp), self.numeric_mode)
-        last = getattr(self, "_last", None)
-        if last is not None and last[0] == key:
-            f, info, ss = (a.copy() for a in last[1:])  # glue: the three stored result arrays
-        else:
-            _backend.binding("_mojolearn_x_sequence", self.numeric_mode).ets(
-                [self._y.ctypes.data, f.ctypes.data, info.ctypes.data, ss.ctypes.data], ip, fp)
-            self._last = (key, f.copy(), info.copy(), ss.copy())
-        self.info_ = info
-        if s != "N":
-            self.seasonal_states_ = ss[0] if self._one else ss
-        return {"mean": f[0] if self._one else f}
+        return _XSEQ(self, "ets_predict", (h, X, level), _XSEQ_CONTEXT)
 
     def forecast(self, y, h, X=None, X_future=None, level=None, fitted=False):
         """Fit ``y`` and forecast ``h`` steps in one call.

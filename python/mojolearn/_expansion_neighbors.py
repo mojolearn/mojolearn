@@ -29,10 +29,16 @@ import os
 import struct
 
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty, full, zeros
+from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty, zeros
 from ._lazy_out import _empty_out
 from ._mode import NumericModeMixin, available_if
 from ._mode import RegressorScoreMixin
+from . import _native_family_bridge
+
+# The compiled family owner (bindings/neighbors_native.mojo), connected once
+# at import: PolynomialCountSketch's `fit`, `transform` and `fit_transform`
+# are one native call each, handed the binding `_bind` resolves.
+_NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 
 __all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch",
            "AdditiveChi2Sampler", "SkewedChi2Sampler", "LabelPropagation", "LabelSpreading", "KNNImputer",
@@ -946,16 +952,6 @@ class NearestCentroid(_XNeighbors):
         return _accuracy(y, self.predict(X), sample_weight)
 
 
-def _resolve_gamma(gamma, kernel, X, est):
-    d = X.shape[1]
-    if gamma is None or gamma == "auto":
-        return 1.0 / d
-    if gamma == "scale":
-        var = est._variance(X)
-        return 1.0 / (d * var) if var != 0 else 1.0
-    return float(gamma)
-
-
 # ====================================================================== OneClassSVM
 # Reference: scikit-learn `svm/_classes.py` (OneClassSVM) over libsvm
 # `svm.cpp` (`solve_one_class`, `Solver::Solve` with WSS3 working-set
@@ -1066,101 +1062,7 @@ class OneClassSVM(_XNeighbors):
         self : OneClassSVM
             The fitted estimator.
         """
-        if callable(self.kernel) or self.kernel not in ("linear", "poly", "rbf", "sigmoid", "precomputed"):
-            raise NotImplementedError(f"OneClassSVM: kernel={self.kernel!r} is not implemented")
-        if not (0.0 < float(self.nu) <= 1.0):
-            raise ValueError("nu must be in (0, 1]")
-        X = _f32(X)
-        n, d = X.shape
-        if self.kernel == "precomputed" and n != d:
-            raise ValueError("Precomputed matrix must be a square matrix.")
-        if sample_weight is None:
-            rows = None                                   # every row
-            cv = full((n,), 1.0, "<f4")
-        else:
-            wv = _f32_1d(sample_weight, "sample_weight")
-            if wv.shape[0] != n:
-                raise ValueError("sample_weight and X have different numbers of samples")
-            if n and wv.min() < 0:
-                raise ValueError("negative sample_weight is not supported")
-            # libsvm's remove_zero_weight as a device compaction (cpu-gpu-cleanup
-            # w2-pyglue, x_neighbors/sort_items.mojo pos_compact): the rows of
-            # positive weight in row order and their float32 weights
-            prow = empty((n,), "<i4")
-            pval = _empty_out((n,), "<f4")
-            pinfo = empty((1,), "<i4")
-            self._op("pos_compact", [(wv, 0), (prow, 1), (pval, 1), (pinfo, 1)], (n,))
-            kept = pinfo.tolist()[0]
-            if not kept:
-                raise ValueError("Invalid input - all samples have zero or negative weights.")
-            rows, cv = prow[:kept], pval[:kept]
-        m = n if rows is None else rows.shape[0]
-        if self.kernel == "precomputed":
-            self._gamma = 0.0
-            Q = X if rows is None else self._take_cols(self._take_rows(X, rows), rows)
-        else:
-            self._gamma = _f32_scalar(_resolve_gamma(self.gamma, self.kernel, X, self))
-            Xw = X if rows is None else self._take_rows(X, rows)
-            # lane/apple-fast-gap-cls2 (FAST + Apple default; -D MOJOLEARN_XN_FAST_CLS2_OCSVM_RES_OFF off):
-            # the binding forms the same Gram on the device and solves over it
-            # there (no 400 MB download into a fresh host array and upload back)
-            # lane/fam2-neighbors: IDENTICAL takes the same resident solve on
-            # every vendor (`x_neighbors_ocsvm_resident_idn`, registered unless
-            # -D MOJOLEARN_IDN_OCSVM_RES_OFF; the host binding has none)
-            res_fn = getattr(self._bind(), "x_neighbors_ocsvm_resident" if self._fast_tier()
-                             else "x_neighbors_ocsvm_resident_idn", None)
-            Q = None if res_fn is not None else self._kernel(Xw, Xw, self.kernel, self._gamma, self.coef0, self.degree)
-        # libsvm's start (solve_one_class) by the base binding's
-        # `ocsvm_alpha_init_f32` (lane pyglue-numeric: a Python loop)
-        from ._buffer import _native
-        alpha = empty((m,), "<f4")
-        # lane/fam2-neighbors (cpu-gpu audit case 2): the start as three device
-        # launches (x_neighbors/ocsvm_init.mojo; the host binding runs the same
-        # items), registered in every mode since lane cpu2-l9-neighbors (no
-        # host fallback)
-        self._bind().x_neighbors_ocsvm_alpha_init(
-            [addr_ro(cv, name="xn_ocsvm_init C"), addr(alpha, name="xn_ocsvm_init alpha")],
-            [m], [float(self.nu)])
-        info = _empty_out((1,), "<f4")
-        iters = empty((1,), "<i4")
-        cap = 10_000_000 if int(self.max_iter) < 0 else int(self.max_iter)
-        if Q is None:
-            res_fn([addr_ro(Xw, name="xn_ocsvm X"), addr_ro(cv, name="xn_ocsvm cv"),
-                    addr(alpha, name="xn_ocsvm alpha"), addr(info, name="xn_ocsvm info"),
-                    addr(iters, name="xn_ocsvm iters")],
-                   [m, d, _KERNELS[self.kernel], int(self.degree), cap],
-                   [float(self._gamma), float(_f32_scalar(self.coef0)), float(_f32_scalar(self.tol))])
-        else:
-            self._op("ocsvm", [(Q, 0), (cv, 0), (alpha, 1), (info, 1), (iters, 1)], (m, cap), (_f32_scalar(self.tol),), )
-        # the op's scalar order is (n, eps, max_iter): ints (n, max_iter), floats (eps,)
-        rho = info.tolist()[0]
-        # the support (alpha > 0, in order) and its coefficients by the
-        # device compaction (pos_compact), the training rows by the core gather
-        srow = empty((max(m, 1),), "<i4")
-        sval = _empty_out((max(m, 1),), "<f4")
-        sinfo = empty((1,), "<i4")
-        if m:
-            self._op("pos_compact", [(alpha, 0), (srow, 1), (sval, 1), (sinfo, 1)], (m,))
-        n_sv = sinfo.tolist()[0] if m else 0
-        local = srow[:n_sv]
-        if rows is None or not n_sv:
-            support = local
-        else:
-            support = empty((n_sv,), "<i4")
-            _native("gather_i32")(addr_ro(rows, name="rows"), rows.shape[0], addr_ro(local, name="support"),
-                                  n_sv, addr(support, name="support_"))
-        self.support_ = support
-        if self.kernel == "precomputed":
-            self.support_vectors_ = _empty_out((n_sv, 0), "<f4")
-        else:
-            self.support_vectors_ = self._take_rows(X, support)
-        self.dual_coef_ = sval[:n_sv].reshape((1, n_sv))
-        self.intercept_ = Array.from_list([-rho], "<f4")
-        self.offset_ = rho
-        self.n_iter_ = iters.tolist()[0]
-        self.n_features_in_ = d
-        self.fit_status_ = 0
-        return self
+        return _NATIVE(self, "family_svc_ocsvm_fit", (self._bind(), X, sample_weight), _NATIVE_CONTEXT)
 
     def score_samples(self, X):
         """Raw scoring function of the samples (not shifted by ``offset_``).
@@ -1175,24 +1077,7 @@ class OneClassSVM(_XNeighbors):
         -------
         scores : Array of shape (n_queries,), float64
         """
-        Q = _f32(X)
-        n_sv = self.dual_coef_.shape[1]
-        coef = as_f32_c(self.dual_coef_, ndim=2, name="dual_coef_")[0].reshape((n_sv, 1))
-        if self.kernel != "precomputed" and n_sv and Q.shape[0] and not _OLD_ITEMS:
-            # the fused chain (lane/py-dn-kern): kernel then matmul per row
-            # tile on the device, only the scores downloaded (`xn_kernel_matmul`)
-            nq, d = Q.shape
-            s = _empty_out((nq, 1), "<f4")
-            self._op("kernel_matmul", [(Q, 0), (self.support_vectors_, 0), (coef, 0), (s, 1)],
-                     (nq, n_sv, d, 1, _KERNELS[self.kernel], int(self.degree)),
-                     (_f32_scalar(self._gamma), _f32_scalar(self.coef0)))
-            return s.reshape((nq,))
-        if self.kernel == "precomputed":
-            K = self._take_cols(Q, self.support_)
-        else:
-            K = self._kernel(Q, self.support_vectors_, self.kernel, self._gamma, self.coef0, self.degree)
-        s = self._matmul(K, coef)
-        return s.reshape((Q.shape[0],))
+        return _NATIVE(self, "family_svc_ocsvm_score_samples", (self._bind(), X), _NATIVE_CONTEXT)
 
     def decision_function(self, X):
         """Signed distance to the boundary: ``score_samples(X) - offset_``.
@@ -1208,7 +1093,7 @@ class OneClassSVM(_XNeighbors):
         -------
         scores : Array of shape (n_queries,), float64
         """
-        return self._unary(self.score_samples(X), _U_IDENTITY, 1.0, -self.offset_)
+        return _NATIVE(self, "family_svc_ocsvm_decision", (self._bind(), X), _NATIVE_CONTEXT)
 
     def predict(self, X):
         """Label samples as inliers (1) or outliers (-1).
@@ -1222,11 +1107,7 @@ class OneClassSVM(_XNeighbors):
         -------
         labels : Array of shape (n_queries,), int64
         """
-        dec = self.decision_function(X)
-        lab = empty((dec.size,), "<i4")
-        if dec.size:
-            self._op("p2m_sign_label", [(dec, 0), (lab, 1)], (dec.size, 2), (0.0,))
-        return lab.astype("<i8")
+        return _NATIVE(self, "family_svc_ocsvm_predict", (self._bind(), X), _NATIVE_CONTEXT)
 
     def fit_predict(self, X, y=None):
         """Fit on X and label X: ``fit(X).predict(X)``.
@@ -1243,7 +1124,13 @@ class OneClassSVM(_XNeighbors):
         labels : Array of shape (n_samples,), int64
             1 for inliers, -1 for outliers.
         """
-        return self.fit(X).predict(X)
+        return _NATIVE(self, "family_svc_ocsvm_fit_predict", (self._bind(), X), _NATIVE_CONTEXT)
+
+
+# OneClassSVM's public methods are one call into the compiled SVM family
+# owner (bindings/svc_ocsvm_native.mojo); it reads this module's x_neighbors
+# kernel codes and the MOJOLEARN_XN_OLD_ITEMS arm.
+_native_family_bridge.tables(family_svc_xn_kernels=dict(_KERNELS), family_svc_xn_old_items=_OLD_ITEMS)
 
 
 # ====================================================================== KernelPCA
@@ -1378,127 +1265,7 @@ class KernelPCA(_XNeighbors):
         self : KernelPCA
             The fitted estimator.
         """
-        if callable(self.kernel) or (self.kernel not in _KERNELS and self.kernel != "precomputed"):
-            raise NotImplementedError(f"KernelPCA: kernel={self.kernel!r} is not implemented")
-        if self.fit_inverse_transform:
-            raise NotImplementedError("KernelPCA: fit_inverse_transform is not implemented")
-        if self.kernel_params:
-            raise NotImplementedError("KernelPCA: kernel_params is not implemented")
-        X = _f32(X)
-        n, d = X.shape
-        if self.kernel == "precomputed" and n != d:
-            raise ValueError("Precomputed matrix must be a square matrix.")
-        self._gamma = _f32_scalar(1.0 / d if self.gamma is None else float(self.gamma))
-        Kc_M = None
-        kit = None
-        # w2-w4d-kpca-q validates RBF with the auto top-k solver only.
-        # Keep unmeasured kernels and dense-solver routes on their old path.
-        if (self.kernel == "rbf" and self.eigen_solver == "auto" and n > 200
-                and self.n_components is not None and 0 < int(self.n_components) < 10
-                and _kpca_resident(self)):
-            # lane/apple-fast-kapprox: the kernel matrix never leaves the
-            # device (main's path moved the n x n matrix through the host
-            # five times: the kernel op's download, colsum's upload, the
-            # center op's upload and download, tobytes + the kit's upload)
-            from ._expansion_decomp import _Kit
-            kit = _Kit(self.numeric_mode_used())
-            got = _kpca_resident_center(kit, X, n, self.kernel, self._gamma, _f32_scalar(self.coef0),
-                                        int(self.degree))
-            if got is not None:
-                Kc_M, cols_m, all_m = got
-                cols = cols_m.out((n,))
-                all_ = all_m.out((1,))
-        if Kc_M is None:
-            K = self._k(X, X)
-            cols = self._scale_div(self._colsum(K), float(n))              # K_fit_rows_
-            all_ = self._scale_div(self._colsum(cols.reshape((1, n))), float(n))  # K_fit_all_
-            Kc = _empty_out((n, n), "<f4")
-            self._op("kpca_center", [(K, 0), (cols, 0), (cols, 0), (all_, 0), (Kc, 1)], (n, n))
-        # Top-k GPU Lanczos instead of the full n-by-n host eigensolve when
-        # auto asks for a few components (on by default since 2026-09-30:
-        # L40S CUDA, Apple Metal and the CPU column bit-identical, residual < 1e-5,
-        # float64 reference match; lane pyglue-numeric deleted the
-        # MOJOLEARN_XN_KPCA_LANCZOS route switch). Anything outside that
-        # scope, or a basis that does not converge, takes the exact dense
-        # path below.
-        c = 0 if self.n_components is None else int(self.n_components)
-        lanczos = self.eigen_solver == "auto" and n > 200 and 0 < c < 10
-        if lanczos and kit is None:
-            from ._expansion_decomp import _Kit
-            # Every column (CUDA, HIP, Metal and the CPU host binding) takes
-            # this route, so a CPU-only install gives the GPUs' bits.
-            kit = _Kit(self.numeric_mode_used())
-        result = None
-        if lanczos:
-            import array
-            from ._expansion_decomp import _M, _lanczos_top
-            if Kc_M is None:
-                # Array's buffer is float32 in row order; no Python float list of
-                # n*n cells. The kit uploads it once and retains the device store.
-                store = array.array("f")
-                store.frombytes(Kc.tobytes())
-                Kc_M = _M(store, n, n)
-            result = _lanczos_top(kit, Kc_M, c)
-        if result is not None:
-            values, vectors = result
-            vectors = kit.ew("mul", vectors, kit.absmax_signs(vectors, True))
-            # lane cpu2-l9-neighbors: the clamp and the positive count on the
-            # kit's cells (values come back descending, so the kept set is a
-            # prefix); one count word read back, no host list of the values
-            nv = values.r * values.c
-            vals_m, npos = _kpca_clamp_count(kit, values if values.r == 1 else values.reshape(1, nv))
-            kept = npos if self.remove_zero_eig else nv
-            if kept < nv:
-                vectors = vectors.cols(0, kept)
-                vals_m = vals_m.cols(0, kept)
-            self.eigenvalues_ = vals_m.out((kept,))
-            self.eigenvectors_ = Array._from_flat(vectors.s, (n, kept), "<f4")
-            self._fit_X, self._fit_cols, self._fit_all = X, cols, all_
-            self.n_features_in_ = d
-            return self
-        # lane hr2-kpca-seq: the dense eigendecomposition is x_decomp's
-        # eigh, never the host Jacobi of x_neighbors/eigh.mojo inside the
-        # GPU binding. On every IDENTICAL device column (NVIDIA, AMD and
-        # Apple alike, no vendor gate) eigh from n = 2 TD_NB (64) is the
-        # tridiagonal route (x_decomp/eigh_tridiag.mojo EIGH_TD_IDN, default
-        # since 2026-10-11), below that and on a clustered-spectrum refusal
-        # the round-robin Jacobi (x_decomp/rr.mojo); the host binding takes
-        # the same route with the same words since 2026-10-13
-        # (x_decomp/eigh_tridiag_host.mojo; lane apple-neighbors-gpu-cpu).
-        c = n if self.n_components is None else min(n, int(self.n_components))
-        import array
-        from ._expansion_decomp import _Kit, _M
-        if kit is None:
-            kit = _Kit(self.numeric_mode_used())
-        if Kc_M is None:
-            store = array.array("f")
-            store.frombytes(Kc.tobytes())
-            Kc_M = _M(store, n, n)
-        wm, Vm = kit.eigh(Kc_M)
-        # descending (eigh is ascending; equal values: higher index first);
-        # lane cpu2-l9-neighbors: only the top c values are taken, and the
-        # clamp and the positive count run on the kit's cells (a prefix of
-        # the descending order is kept); one count word read back
-        order = range(n - 1, n - 1 - c, -1)
-        kept = c
-        vals_m = _M(array.array("f"), 1, 0)
-        if c:
-            vals_m, npos = _kpca_clamp_count(kit, wm.take_cols(order))  # wm is 1 x n
-            if self.n_components is None or self.remove_zero_eig:
-                kept = npos
-            if kept < c:
-                vals_m = vals_m.cols(0, kept)
-        order = list(range(n - 1, n - 1 - kept, -1))  # glue: the kept column indices
-        self.eigenvalues_ = vals_m.out((kept,))
-        # sklearn's svd_flip(u, None) on the kept columns: each column's
-        # largest-|.| entry (ties to the lower row) made positive
-        vecs = Vm.take_cols(order)
-        if order:
-            vecs = kit.ew("mul", vecs, kit.absmax_signs(vecs, True))
-        self.eigenvectors_ = Array._from_flat(vecs.s, (n, len(order)), "<f4")
-        self._fit_X, self._fit_cols, self._fit_all = X, cols, all_
-        self.n_features_in_ = d
-        return self
+        return _KPCA_CALL(self, "fit", (X,), _KPCA_CONTEXT)
 
     def fit_transform(self, X, y=None, **params):
         """Fit the model and return the projection of the training data.
@@ -1516,8 +1283,7 @@ class KernelPCA(_XNeighbors):
         -------
         X_new : Array of shape (n_samples, n_components), float32
         """
-        self.fit(X)
-        return self._alpha_scale(0)
+        return _KPCA_CALL(self, "fit_transform", (X,), _KPCA_CONTEXT)
 
     def _alpha_scale(self, divide):
         V = self.eigenvectors_
@@ -1539,30 +1305,7 @@ class KernelPCA(_XNeighbors):
         -------
         X_new : Array of shape (n_queries, n_components), float32
         """
-        Q = _f32(X)
-        nq = Q.shape[0]
-        nf = self._fit_X.shape[0]
-        alphas = self._alpha_scale(1)
-        c = alphas.shape[1]
-        pre = self.kernel == "precomputed"
-        if pre and Q.shape[1] != nf:
-            raise ValueError(f"KernelPCA: a precomputed kernel needs {nf} columns (the fitted rows), got {Q.shape[1]}")
-        if nq and c and not _OLD_ITEMS:
-            # the fused chain (lane/py-dn-kern): kernel, rowsum, / n_fit,
-            # center and the product with the scaled alphas per row tile on
-            # the device, only the (nq, c) result downloaded (`xn_kpca_transform`)
-            out = _empty_out((nq, c), "<f4")
-            self._op("kpca_transform",
-                     [(Q, 0), (Q if pre else self._fit_X, 0), (self._fit_cols, 0), (self._fit_all, 0),
-                      (alphas, 0), (out, 1)],
-                     (nq, nf, Q.shape[1], c, _XN_PRECOMPUTED_KIND if pre else _KERNELS[self.kernel], int(self.degree)),
-                     (0.0 if pre else _f32_scalar(self._gamma), 0.0 if pre else _f32_scalar(self.coef0), float(nf)))
-            return out
-        K = self._k(Q, self._fit_X)
-        pred = self._scale_div(self._rowsum(K), float(nf))
-        Kc = _empty_out((nq, nf), "<f4")
-        self._op("kpca_center", [(K, 0), (self._fit_cols, 0), (pred, 0), (self._fit_all, 0), (Kc, 1)], (nq, nf))
-        return self._matmul(Kc, alphas)
+        return _KPCA_CALL(self, "transform", (X,), _KPCA_CONTEXT)
 
     def inverse_transform(self, X):
         """Not supported: always raises ``NotImplementedError``."""
@@ -1688,37 +1431,7 @@ class PolynomialCountSketch(_XNeighbors):
             If ``degree`` or ``n_components`` is below 1, or ``random_state`` is
             not an int, a numpy RandomState or None.
         """
-        X = _f32(X)
-        d = X.shape[1]
-        nf = d + (1 if self.coef0 != 0 else 0)
-        deg, nc = int(self.degree), int(self.n_components)
-        if deg < 1 or nc < 1:
-            raise ValueError("degree and n_components must be >= 1")
-        seed = _seed_word(self.random_state)
-        draw_idn = (getattr(self._bind(), "x_neighbors_kfeat_pcs_draw_idn", None)
-                    if isinstance(seed, int) and not isinstance(seed, bool) and nf > 0 else None)
-        if draw_idn is not None:
-            # IDN_XN_SKETCH_CTR (IDENTICAL default with an _OFF A/B; FAST always;
-            # x_neighbors/kfeat_rng.mojo): the tables from the counter-based
-            # generator on the device, not the MT19937 Python loop
-            ih = empty((deg, nf), "<i4")
-            bh = empty((deg, nf), "<i4")
-            draw_idn([seed & 0xFFFFFFFF, nc, deg * nf], addr(ih, name="indexHash_"), addr(bh, name="bitHash_"))
-            self.indexHash_ = ih
-            self.bitHash_ = bh
-            self.n_features_in_ = d
-            return self
-        if nf > 0:
-            # lane py-runtime-b: the MT19937 Python draw behind the _OFF
-            # define is deleted (no Python compute in the runtime); a binary
-            # without the device draw refuses
-            raise NotImplementedError(
-                "mojolearn PolynomialCountSketch: this binary lacks x_neighbors_kfeat_pcs_draw_idn "
-                "(rebuild without -D MOJOLEARN_IDN_XN_SKETCH_CTR_OFF)")
-        self.indexHash_ = zeros((deg, 0), "<i4")
-        self.bitHash_ = zeros((deg, 0), "<i4")
-        self.n_features_in_ = d
-        return self
+        return _NATIVE(self, "family_xn_pcs_fit", (self._bind(), X), _NATIVE_CONTEXT)
 
     def transform(self, X):
         """Map X to the sketched feature space.
@@ -1733,17 +1446,7 @@ class PolynomialCountSketch(_XNeighbors):
         -------
         X_new : Array of shape (n_samples, n_components), float32
         """
-        X = _f32(X)
-        n, d = X.shape
-        if d != self.n_features_in_:
-            raise ValueError("Number of features of test samples does not match that of training samples.")
-        nf = self.indexHash_.shape[1]
-        nc, deg = int(self.n_components), int(self.degree)
-        out = _empty_out((n, nc), "<f4")
-        self._op("pcs" if _OLD_ITEMS else "pcs_resident",
-                 [(X, 0), (self.indexHash_, 0), (self.bitHash_, 0), (out, 1)],
-                 (n, d, nf, nc, deg), (_f32_scalar(self.gamma), _f32_scalar(self.coef0)))
-        return out
+        return _NATIVE(self, "family_xn_pcs_transform", (self._bind(), X), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None):
         """Fit to X, then transform X: ``fit(X).transform(X)``.
@@ -1759,7 +1462,7 @@ class PolynomialCountSketch(_XNeighbors):
         -------
         X_new : Array of shape (n_samples, n_components), float32
         """
-        return self.fit(X).transform(X)
+        return _NATIVE(self, "family_xn_pcs_fit_transform", (self._bind(), X), _NATIVE_CONTEXT)
 
     def get_feature_names_out(self, input_features=None):
         """Output feature names: ``polynomialcountsketch0``, ``polynomialcountsketch1``, ...
@@ -3482,3 +3185,12 @@ class SVGP(RegressorScoreMixin, _XNeighbors):
         mean : Array of shape (n_queries,), float32
         """
         return self.predict_f(X)[0]
+
+
+# The compiled owner of KernelPCA's fit, fit_transform and transform
+# (bindings/kpca_native.mojo through the decomposition owner door).
+from . import _native_decomp_bridge  # noqa: E402
+_KPCA_CALL, _KPCA_CONTEXT = _native_decomp_bridge.connect_public(
+    {"KernelPCA": KernelPCA}, neighbors=True,
+    metadata={"kpca_kernels": dict(_KERNELS), "kpca_precomputed_kind": _XN_PRECOMPUTED_KIND,
+              "kpca_old_items": _OLD_ITEMS})

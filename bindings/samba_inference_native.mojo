@@ -113,24 +113,42 @@ def _m3_state_call(block: PythonObject, x: PythonObject, state: PythonObject, st
     var keep = List[PythonObject]()
     var copies = List[PythonObject]()
     var addresses = py_ints([generation_address(x, keep)])
+    var bi = Python.import_module("builtins")
+    # an installed owned snapshot is read on the device (`mamba3_state_owned`)
+    var owned = py_get(fields, "_owned_generation")
+    var canonical = entries.canonical if Bool(py=py_call(bi.hasattr, entries, "canonical")) else entries
+    var on_session = (owned is not None and py_get(fields, "_prefill_session") is not None
+                      and py_get(fields, "_prefill_binding") is canonical
+                      and Bool(py=py_call(bi.hasattr, entries, "mamba3_state_owned")))
     var weights = fields["_w"]
     for i in range(len(weights)):  # driver-loop: over existing Mamba3 parameter ABI slots
-        _ = py_call(addresses.append, generation_address(weights[i], keep))
+        if on_session:
+            _ = py_call(addresses.append, 0)
+        else:
+            _ = py_call(addresses.append, generation_address(weights[i], keep))
     for i in range(len(names)):  # driver-loop: over mutable continuation buffers
         _ = py_call(addresses.append, _mutable(slots[names[i]], shapes[i], keep, copies, names[i]))
     var output = generation_array([b, l, d])
     var reports = Python.list(generation_array([b, h, 64, 128]), generation_array([b, h, 128]),
                               generation_array([b, h, 64]), generation_array([b, h, 32]))
     _ = py_call(addresses.append, generation_address(output, keep))
+    _ = output  # keep the Python object alive through the native call above
     for i in range(4):  # driver-loop: over the four reporting buffers
         _ = py_call(addresses.append, generation_address(reports[i], keep))
+        _ = output  # keep the Python object alive through the native call above
     var q = Int(py=slots["buffered_tokens"])
     var pending = 1 if Bool(py=slots["pending"]) else 0
     var updated = PythonObject(None)
-    if step:
+    if on_session:
+        updated = py_call(_native_function(entries, "mamba3_state_owned"), fields["_prefill_session"], addresses,
+                          Python.list(b, 1 if step else l, d, q, pending, owned, 1 if step else 0))
+        _ = output  # keep the Python object alive through the native call above
+    elif step:
         updated = py_call(_native_function(entries, "mamba3_decode_step"), addresses, py_ints([b, d, q, pending]))
+        _ = output  # keep the Python object alive through the native call above
     else:
         updated = py_call(_native_function(entries, "mamba3_forward"), addresses, py_ints([b, l, d, q, pending]))
+        _ = output  # keep the Python object alive through the native call above
     _writeback(copies)
     py_setitem(slots, "buffered_tokens", updated)
     py_setitem(slots, "pending", False)
@@ -176,6 +194,7 @@ def _samba_resident_forward(fields: PythonObject, config: PythonObject, entries:
     var output = generation_array([b, l, Int(py=config["vocab"])])
     _ = py_call(_native_function(entries, "samba_resident_forward"), session,
                 Python.list(fields["flat"]._addr, ids._addr, output._addr), py_ints([b, l]))
+    _ = output  # keep the Python object alive through the native call above
     return output
 
 
@@ -201,9 +220,12 @@ def _samba_inference_ids(value: PythonObject, vocab: Int, step: Bool, lengths: P
     var column_major = own and String(value.order) == "F"
     var ids = generation_array([b, l], "i")
     var dst = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=ids._addr))
+    _ = ids  # keep the Python object alive through the native call above
     var signed = fmt == "b" or fmt == "h" or fmt == "i" or fmt == "l" or fmt == "q"
     samba_inference_ids_into(Int(py=packed.buffer_info()[0]), Int(py=packed.itemsize), signed, b, l,
                              column_major, vocab, lengths is not None, sizes, dst)
+    _ = packed  # keep the Python object alive through the native call above
+    _ = ids  # keep the Python object alive through the native call above
     _ = packed^
     return ids
 
@@ -244,6 +266,8 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
         var arrays = fields["arrays"]
         var hidden = generation_array([b, l, d])
         _ = py_call(_native_function(entries, "embedding_forward"), Python.list(hidden._addr, arrays["embed.weight"]._addr, ids._addr), py_ints([b * l, v, d]))
+        _ = hidden  # keep the Python object alive through the native call above
+        _ = ids  # keep the Python object alive through the native call above
         for i in range(len(config["layers"])):  # driver-loop: over native model layer execution owners
             var block = blocks[i]
             var result = PythonObject(None)
@@ -263,12 +287,20 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
             var params = py_ints([b * l, v, d])
             _ = py_call(params.append, config["norm_eps"])
             _ = py_call(_native_function(entries, "samba_afn_norm_head_forward"), Python.list(output._addr, hidden._addr, arrays["norm_f.weight"]._addr, head._addr), params)
+            _ = head  # keep the Python object alive through the native call above
+            _ = hidden  # keep the Python object alive through the native call above
+            _ = output  # keep the Python object alive through the native call above
         else:
             var normalized = generation_array([b, l, d])
             var params = py_ints([b * l, d])
             _ = py_call(params.append, config["norm_eps"])
             _ = py_call(_native_function(entries, "rms_norm_forward"), Python.list(normalized._addr, hidden._addr, arrays["norm_f.weight"]._addr), params)
+            _ = normalized  # keep the Python object alive through the native call above
+            _ = hidden  # keep the Python object alive through the native call above
             _ = py_call(_native_function(entries, "linear_forward"), Python.list(output._addr, normalized._addr, head._addr), py_ints([b * l, v, d]))
+            _ = normalized  # keep the Python object alive through the native call above
+            _ = head  # keep the Python object alive through the native call above
+            _ = output  # keep the Python object alive through the native call above
             _ = normalized^
         _ = head^
         _ = hidden^
@@ -276,6 +308,8 @@ def samba_forward(model: PythonObject, inputs: PythonObject, state: PythonObject
         var sizes = _neural_lengths(lengths, b, l, context["neural"])
         var padded = generation_array([b, l, v])
         samba_copy_row_prefixes(Int(py=padded._addr), Int(py=output._addr), sizes, b, l, v)
+        _ = padded  # keep the Python object alive through the native call above
+        _ = output  # keep the Python object alive through the native call above
         _ = output^  # the copy above read `output` by address
         output = padded
     if step:
@@ -301,7 +335,13 @@ def samba_loss(model: PythonObject, inputs: PythonObject, targets: PythonObject,
     var params = py_ints([rows, v, -100, 2, 0, 0])
     _ = py_call(params.append, 0.0)
     _ = py_call(_native_function(entries, "ce_loss"), loss._addr, row_loss._addr, unused_gradient._addr, logits._addr, y._addr, params)
+    _ = unused_gradient  # keep the Python object alive through the native call above
+    _ = row_loss  # keep the Python object alive through the native call above
+    _ = loss  # keep the Python object alive through the native call above
+    _ = y  # keep the Python object alive through the native call above
+    _ = logits  # keep the Python object alive through the native call above
     var result = PythonObject(Float64(Pointer[Float32, ImmUntrackedOrigin](unsafe_from_address=Int(py=loss._addr))[0]))
+    _ = loss  # keep the Python object alive through the native call above
     _ = loss^
     _ = row_loss^
     _ = unused_gradient^

@@ -15,27 +15,14 @@ def test_linear_softmax_sgd():
     lin = E._Linear(5, 3, random_state=1)
     out = lin.forward(x)
     np.testing.assert_allclose(out, x.astype(np.float64) @ lin.weight_.T + lin.bias_, rtol=1e-5, atol=1e-5)
-    y = rng.integers(0, 3, 9).astype(np.int32)
-    loss, g, proba = E._softmax_xent(lin._binding(), out, y)
-    z = out.astype(np.float64)
-    p = np.exp(z - z.max(1, keepdims=True))
-    p /= p.sum(1, keepdims=True)
-    np.testing.assert_allclose(proba, p, rtol=1e-5, atol=1e-6)
-    np.testing.assert_allclose(loss, -np.log(p[np.arange(9), y]).mean(), rtol=1e-5)
-    onehot = np.eye(3)[y]
-    np.testing.assert_allclose(g, (p - onehot) / 9, rtol=1e-5, atol=1e-6)
+    # the softmax cross-entropy and SGD steps run inside CNNClassifier's one
+    # native fit now (the Python _softmax_xent and _sgd doors are gone); the
+    # layer's own backward is checked against an arbitrary upstream gradient
+    g = rng.standard_normal((9, 3)).astype(np.float32)
     dx = lin.backward(g)
     np.testing.assert_allclose(dx, g.astype(np.float64) @ lin.weight_, rtol=1e-5, atol=1e-6)
     np.testing.assert_allclose(lin.grad_weight_, g.astype(np.float64).T @ x, rtol=1e-5, atol=1e-6)
     np.testing.assert_allclose(lin.grad_bias_, g.astype(np.float64).sum(0), rtol=1e-5, atol=1e-6)
-    w = lin.weight_.copy()
-    buf = np.full_like(w, 0.5)
-    E._sgd(lin._binding(), lin.weight_, lin.grad_weight_, buf, 0.1, 0.9, 0.01)
-    d = lin.grad_weight_.astype(np.float64) + 0.01 * w
-    v = 0.9 * 0.5 + d
-    np.testing.assert_allclose(buf, v, rtol=1e-5, atol=1e-6)
-    np.testing.assert_allclose(lin.weight_, w - 0.1 * v, rtol=1e-5, atol=1e-6)
-
 
 def test_cnn_classifier_learns():
     import mojolearn as ml

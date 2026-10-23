@@ -110,6 +110,10 @@ comptime ETL_H_STAT_RESCUED = 11
 comptime ETL_H_STAT_BATCHES = 12
 comptime ETL_H_GCOUNT = 13
 """The group's tree count, a constant count word for per-slot batches."""
+comptime ETL_H_PART_MISMATCH = 14
+"""Partitioned nodes whose left-going row count (the partition's own direction
+test) differed from the split's `n_left` (the search's count); the host
+refuses at the next drain (lane sm120-tree-identity)."""
 
 # --- per-slot words (`Int32`, `ETL_STAT_INTS` per tree) -------------------------
 comptime ETL_ST_NODES = 0

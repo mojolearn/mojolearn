@@ -101,11 +101,19 @@ from bindings.native_process_pool import process_c
 from bindings.parallel_mlp_native import parallel_mlp_c
 from bindings.small_mlp_native import small_mlp_c
 from bindings.parallel_neural_native import parallel_neural_c
+from bindings.parallel_forecast_native import parallel_forecast_c
 from bindings.parallel_causal_native import parallel_causal_c, RemoteStateLifetime
-from bindings.optimizer_lifecycle import optimizer_finalize_binding
+from bindings.trees_lifetime import TreesResident
+from bindings.optimizer_lifecycle import optimizer_finalize_binding, optimizer_finalize_descriptor_binding
 from bindings.optimizer_native_router import optimizer_native_c
+from bindings.embedding_layer_native import embedding_layer_lifetime_c
 from bindings.optimizer_device_native import device_finalize_c
 from bindings.sequential_native import sequential_c
+from bindings.xseq_native import xseq_c
+from bindings.byte_lm_host_trainer_native import byte_lm_host_trainer_c
+from bindings.byte_lm_trainer_native import byte_lm_trainer_c
+from bindings.xcnn_native import xcnn_c
+from bindings.tsa_public_native import tsa_c
 from bindings.classical_native import classical_c
 from bindings.classical_attributes import classical_attribute_c, classical_attribute_descriptor_c
 from bindings.host_archive_lifetime import host_archive_finalize_c
@@ -116,10 +124,28 @@ from bindings.scaler_native import scaler_fit_c
 from bindings.scaler_lifecycle_native import scaler_lifecycle_c, scaler_attribute_c
 from bindings.minmax_native import minmax_lifecycle_c
 from bindings.maxabs_native import maxabs_lifecycle_c
+from bindings.prep_stateless_native import prep_stateless_c
+from bindings.qn_native import qn_c
+from bindings.logistic_native import logistic_c
+from bindings.decomp_native import decomp_c
+from bindings.linalg_decomp_native import linalg_decomp_c
+from bindings.als_native import als_c
+from bindings.mcd_native import mcd_c
+from bindings.pls_native import pls_c
+from bindings.dict_learning_native import dict_learning_c
+from bindings.jl_native import jl_c
+from bindings.ipca_native import ipca_c
+from bindings.tsvd_native import tsvd_c
+from bindings.prep_classify_native import prep_classify_c
+from bindings.prep_encode_native import prep_encode_c
+from bindings.x_linear_native import x_linear_c
+from bindings.str_labels_native import str_labels_c
 from bindings.robust_native import robust_lifecycle_c
 from bindings.arena_rows_native import arena_rows_c
 from bindings.arena_prog_native import arena_prog_c
 from bindings.generator_draw_native import generator_draw_c
+# the user-object reader (lane purge-user-objects): label lists, index pairs, group ids
+from bindings.user_objects_native import user_objects_c
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -816,6 +842,7 @@ def _py_bytes_list(raw: PythonObject) raises -> List[UInt8]:
     var out = List[UInt8](length=n, fill=UInt8(0))
     if n > 0:
         memcpy(dest=out.unsafe_ptr(), src=_u8_ptr(Int(py=arr.buffer_info()[0])), count=n)
+        _ = arr  # keep the Python object alive through the native call above
     # Keepalive: Mojo drops `arr` at its last named use (`arr.buffer_info()`),
     # which freed the array before the memcpy read its buffer; small tokens
     # then read the allocator's free-list bytes (ValueError "token 1 repeats
@@ -830,6 +857,7 @@ def _py_bytes(values: List[UInt8]) raises -> PythonObject:
     var arr = py_call(Python.import_module("array").array, "B", py_call(bi.bytes, len(values)))
     if len(values) > 0:
         memcpy(dest=_u8_ptr(Int(py=arr.buffer_info()[0])), src=values.unsafe_ptr(), count=len(values))
+        _ = arr  # keep the Python object alive through the native call above
     return arr.tobytes()
 
 
@@ -840,6 +868,7 @@ def _py_int_list(values: List[Int]) raises -> PythonObject:
     var arr = py_call(Python.import_module("array").array, "q", py_call(bi.bytes, 8 * len(values)))
     if len(values) > 0:
         tokenizer_store_i64(_i64_ptr(Int(py=arr.buffer_info()[0])), values)
+        _ = arr  # keep the Python object alive through the native call above
     return arr.tolist()
 
 
@@ -1305,11 +1334,19 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(parallel_mlp_c, "parallel_mlp_call")
         module.def_py_c_function(small_mlp_c, "small_mlp_call")
         module.def_py_c_function(parallel_neural_c, "parallel_neural_call")
+        module.def_py_c_function(parallel_forecast_c, "parallel_forecast_call")
         module.def_py_c_function(parallel_causal_c, "parallel_causal_call")
         module.def_function[optimizer_finalize_binding]("optimizer_finalize")
+        module.def_function[optimizer_finalize_descriptor_binding]("optimizer_finalize_descriptor")
         module.def_py_c_function(optimizer_native_c, "optimizer_native")
+        module.def_py_c_function(embedding_layer_lifetime_c, "embedding_layer_lifetime")
         module.def_py_c_function(device_finalize_c, "optimizer_device_finalize")
         module.def_py_c_function(sequential_c, "sequential_native_call")
+        module.def_py_c_function(xseq_c, "xseq_native_call")
+        module.def_py_c_function(byte_lm_host_trainer_c, "byte_lm_host_trainer_call")
+        module.def_py_c_function(byte_lm_trainer_c, "byte_lm_trainer_call")
+        module.def_py_c_function(xcnn_c, "xcnn_native_call")
+        module.def_py_c_function(tsa_c, "tsa_native_call")
         module.def_py_c_function(classical_c, "classical_native_call")
         module.def_py_c_function(classical_attribute_c, "classical_attribute_call")
         module.def_py_c_function(classical_attribute_descriptor_c, "classical_attribute_descriptor")
@@ -1321,11 +1358,28 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(scaler_lifecycle_c, "standard_scaler_native_call")
         module.def_py_c_function(minmax_lifecycle_c, "minmax_scaler_native_call")
         module.def_py_c_function(maxabs_lifecycle_c, "maxabs_scaler_native_call")
+        module.def_py_c_function(prep_stateless_c, "prep_stateless_native_call")
+        module.def_py_c_function(qn_c, "qn_native_call")
+        module.def_py_c_function(logistic_c, "logistic_native_call")
+        module.def_py_c_function(decomp_c, "decomp_native_call")
+        module.def_py_c_function(linalg_decomp_c, "linalg_decomp_native_call")
+        module.def_py_c_function(als_c, "als_native_call")
+        module.def_py_c_function(mcd_c, "mcd_native_call")
+        module.def_py_c_function(pls_c, "pls_native_call")
+        module.def_py_c_function(dict_learning_c, "dict_learning_native_call")
+        module.def_py_c_function(jl_c, "jl_native_call")
+        module.def_py_c_function(ipca_c, "ipca_native_call")
+        module.def_py_c_function(tsvd_c, "tsvd_native_call")
+        module.def_py_c_function(prep_classify_c, "prep_classify_native_call")
+        module.def_py_c_function(prep_encode_c, "prep_encode_native_call")
+        module.def_py_c_function(x_linear_c, "x_linear_native_call")
+        module.def_py_c_function(str_labels_c, "str_labels_native_call")
         module.def_py_c_function(robust_lifecycle_c, "robust_scaler_native_call")
         module.def_py_c_function(arena_rows_c, "arena_rows_native_call")
         module.def_py_c_function(arena_prog_c, "arena_prog_native_call")
         module.def_py_c_function(scaler_attribute_c, "standard_scaler_attribute_call")
         module.def_py_c_function(generator_draw_c, "generator_draw")
+        module.def_py_c_function(user_objects_c, "user_objects_native_call")
         module.def_py_c_function(samba_config_c, "samba_config_call")
         module.def_py_c_function(samba_public_c, "samba_native_call")
         module.def_function[tokenizer_host_numeric_mode_binding]("tokenizer_host_numeric_mode")
@@ -1401,6 +1455,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(causal_model_c[2], "causal_model_read_weights")
         _ = module.add_type[GenerationHandle]("_GenerationHandle")
         _ = module.add_type[RemoteStateLifetime]("_RemoteStateLifetime")
+        _ = module.add_type[TreesResident]("_TreesResident")
         module.def_py_c_function(causal_public_c[0], "causal_lm_admit")
         module.def_py_c_function(causal_public_c[1], "causal_lm_allocate")
         module.def_py_c_function(causal_public_c[2], "causal_lm_reset")

@@ -1,29 +1,44 @@
-"""Host class-weight validation/dispatch; these tests do not execute a GPU fit."""
+"""Class-weight validation and dispatch through the real public fit (small inputs)."""
 import numpy as np
 import pytest
 from mojolearn import RandomForestClassifier
-from mojolearn.randomforest import _class_weight_rows
+
+
+def _data(balanced):
+    rng = np.random.default_rng(0)
+    x = rng.random((40, 4), dtype=np.float32)
+    y = np.where(np.arange(40) % 2 == 0, 'a', 'b') if balanced else np.where(x[:, 0] > 0.3, 'a', 'b')
+    return x, y
+
+
+def _proba(x, y, **kw):
+    weights = kw.pop('sample_weight', None)
+    model = RandomForestClassifier(n_estimators=4, max_depth=3, random_state=0, **kw)
+    return np.asarray(model.fit(x, y, sample_weight=weights).predict_proba(x)).view(np.uint32)
 
 
 @pytest.mark.parametrize('value', [None, {}, {'a': 1, 'b': 1}, 'balanced'])
 def test_unit_path(value):
-    assert _class_weight_rows(value, np.array(['a', 'b']), np.array([0, 1])) is None
+    x, y = _data(balanced=True)
+    np.testing.assert_array_equal(_proba(x, y, class_weight=value), _proba(x, y))
 
 
 def test_balanced_and_partial_mapping():
-    classes = np.array(['a', 'b'])
-    codes = np.array([0, 0, 0, 1])
-    np.testing.assert_array_equal(_class_weight_rows('balanced', classes, codes),
-                                  np.array([2/3, 2/3, 2/3, 2], dtype=np.float32))
-    np.testing.assert_array_equal(_class_weight_rows({'a': 0}, classes, codes),
-                                  np.array([0, 0, 0, 1], dtype=np.float32))
+    x, y = _data(balanced=False)
+    n_a = int(np.count_nonzero(y == 'a'))
+    n_b = len(y) - n_a
+    balanced = np.where(y == 'a', len(y) / (2 * n_a), len(y) / (2 * n_b)).astype(np.float32)
+    np.testing.assert_array_equal(_proba(x, y, class_weight='balanced'), _proba(x, y, sample_weight=balanced))
+    partial = np.where(y == 'a', 0.0, 1.0).astype(np.float32)
+    np.testing.assert_array_equal(_proba(x, y, class_weight={'a': 0}), _proba(x, y, sample_weight=partial))
 
 
 @pytest.mark.parametrize('weights', [{'a': -1}, {'a': np.inf}, {'a': np.nan},
     {'a': True}, {'a': '2'}, {'a': 1e100}, {'a': 1e-100}, {'a': 0, 'b': 0}, {'z': 2}])
 def test_invalid_weights(weights):
+    x, y = _data(balanced=True)
     with pytest.raises(ValueError):
-        _class_weight_rows(weights, np.array(['a', 'b']), np.array([0, 1]))
+        RandomForestClassifier(n_estimators=2, class_weight=weights).fit(x, y)
 
 
 @pytest.mark.parametrize('value', ['balanced_subsample', 'unknown', [], 3])
@@ -33,33 +48,12 @@ def test_invalid_option(value):
         RandomForestClassifier(class_weight=value).fit([[0.0], [1.0]], [0, 1])
 
 
-def test_fit_dispatch(monkeypatch):
-    # This unit test isolates weighted entry selection, not export ownership.
-    monkeypatch.setenv("MOJOLEARN_FOREST_EXPORT", "legacy")
-    import ctypes
-    from types import SimpleNamespace
-    seen = []
-    def plain(*args):
-        seen.append(None)
-    def weighted(x, y, params, criterion, address):
-        seen.append(np.ctypeslib.as_array((ctypes.c_float * 4).from_address(address)).copy())
-    binding = SimpleNamespace(rf_classifier_fit=plain, rf_classifier_fit_weighted=weighted)
-    # The x_trees binding (`x_trees_class_rows`) is absent here, so the
-    # per-row weights take the core helper gather (`_class_weight_rows`).
-    monkeypatch.setattr(RandomForestClassifier, '_bind',
-                        lambda self, name=None, *args: None if name == '_mojolearn_x_trees' else binding)
-    def arrays(self, x, y, nclasses, fit_fn, rowmajor_fit_fn=None):
-        # The double must track `RandomForestClassifier._fit_arrays`, which
-        # grew `rowmajor_fit_fn` (the row-major borrow path). Without it this
-        # raised "takes 5 positional arguments but 6 were given" -- a STALE
-        # DOUBLE, not a library fault. It went unseen because pytest was
-        # declared nowhere and this file had never run outside CI.
-        fit_fn(0, 0, [], 0)
-        return self
-    monkeypatch.setattr(RandomForestClassifier, '_fit_arrays', arrays)
-    x = np.zeros((4, 1), np.float32)
-    y = np.array(['a', 'a', 'a', 'b'])
-    for value in [None, {'a': 1}, {'a': 2}]:
-        RandomForestClassifier(class_weight=value).fit(x, y)
-    assert seen[:2] == [None, None]
-    np.testing.assert_array_equal(seen[2], [2, 2, 2, 1])
+def test_fit_dispatch():
+    """Unit class weights take the unweighted fit; other class weights are
+    the per-row weights a `sample_weight` of the same values gives."""
+    x, y = _data(balanced=False)
+    plain = _proba(x, y)
+    for value in [None, {'a': 1}]:
+        np.testing.assert_array_equal(_proba(x, y, class_weight=value), plain)
+    rows = np.where(y == 'a', 2.0, 1.0).astype(np.float32)
+    np.testing.assert_array_equal(_proba(x, y, class_weight={'a': 2}), _proba(x, y, sample_weight=rows))

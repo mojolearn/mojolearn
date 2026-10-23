@@ -112,19 +112,24 @@ def test_invalid_weight_or_multioutput(name, kwargs, binding):
     {"sample_weight": np.ones(2)}, {"multioutput": "raw_values"},
     {"multioutput": None},
 ])
-def test_supported_options_reach_expansion(name, kwargs, binding, monkeypatch):
-    from mojolearn import _expansion_metrics
-    calls = []
-    def run(*args):
-        calls.append(args)
-        return 7.5
-    monkeypatch.setattr(_expansion_metrics, "regression_error_options", run)
-    x = np.ones(2, dtype=np.float32)
-    assert getattr(metrics, name)(x, x, **kwargs) == 7.5
-    args, = calls
-    assert args[0] == name and args[1] is x and args[2] is x
-    assert args[3] is kwargs.get("sample_weight")
-    assert args[4] is kwargs.get("multioutput", "uniform_average")
+def test_supported_options_reach_expansion(name, kwargs, binding):
+    # The options reach the one native metric call (the Python expansion
+    # routing they used to pass through is gone): weights and multioutput are
+    # honoured and the plain binding is never called.
+    yt = np.asarray([1.0, 2.0], dtype=np.float32)
+    yp = np.asarray([1.5, 1.0], dtype=np.float32)
+    w = np.asarray(kwargs.get("sample_weight", np.ones(2)), dtype=np.float64)
+    err = (yp - yt).astype(np.float64)
+    want = {"mean_squared_error": float((w * err * err).sum() / w.sum()),
+            "mean_absolute_error": float((w * np.abs(err)).sum() / w.sum()),
+            "root_mean_squared_error": float(np.sqrt((w * err * err).sum() / w.sum()))}.get(name)
+    got = getattr(metrics, name)(yt, yp, **kwargs)
+    if kwargs.get("multioutput") == "raw_values":
+        got = np.asarray(got)
+        assert got.shape == (1,)
+        got = float(got[0])
+    if want is not None:
+        assert float(got) == pytest.approx(want, rel=1e-6)
     assert not binding.calls
 
 
