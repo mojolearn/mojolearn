@@ -198,6 +198,7 @@ def family_cast_view(view: PythonObject, name: String, context: PythonObject) ra
     var result = family_array(py_call(b.tuple, view.shape), "<f4", context)
     family_cast_rows(Int(py=classical_address(view)), s0, s1, rows, cols, item, kind,
                      FAMILY_F32P(unsafe_from_address=Int(py=classical_address(result))))
+    _ = result  # keep the Python object alive through the native call above
     return result
 
 
@@ -222,6 +223,7 @@ def family_cast_view_f64(view: PythonObject, name: String, context: PythonObject
     var result = family_array(py_call(b.tuple, view.shape), "<f8", context)
     family_cast_rows_f64(Int(py=classical_address(view)), s0, s1, rows, cols, item, kind,
                          FAMILY_F64P(unsafe_from_address=Int(py=classical_address(result))))
+    _ = result  # keep the Python object alive through the native call above
     return result
 
 
@@ -256,6 +258,7 @@ def family_owned(value: PythonObject, context: PythonObject) raises -> PythonObj
     var result = family_array(py_call(b.tuple, value.shape), "<f4", context)
     memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(result))),
            src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(value))), count=Int(py=value.size))
+    _ = result  # keep the Python object alive through the native call above
     return result
 
 
@@ -288,8 +291,10 @@ def family_sample_weight(source: PythonObject, n: Int, allow_negative: Bool, con
         weights = family_array(Python.tuple(n), typestr, context)
         if wide:
             family_fill_f64(FAMILY_F64P(unsafe_from_address=Int(py=classical_address(weights))), n, value)
+            _ = weights  # keep the Python object alive through the native call above
         else:
             family_fill_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(weights))), n, Float32(value))
+            _ = weights  # keep the Python object alive through the native call above
     else:
         var view = classical_view(source, context, "sample_weight")
         if Int(py=view.size) == 0:
@@ -306,8 +311,10 @@ def family_sample_weight(source: PythonObject, n: Int, allow_negative: Bool, con
     var status: Int
     if wide:
         status = family_weight_status_f64(FAMILY_F64P(unsafe_from_address=Int(py=classical_address(weights))), n, allow_negative)
+        _ = weights  # keep the Python object alive through the native call above
     else:
         status = family_weight_status(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(weights))), n, allow_negative)
+        _ = weights  # keep the Python object alive through the native call above
     if status == FAMILY_WEIGHTS_NONFINITE:
         raise Error(FAMILY_NONFINITE_WEIGHTS)
     if status == FAMILY_WEIGHTS_NEGATIVE:

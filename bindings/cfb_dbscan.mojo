@@ -33,6 +33,7 @@ def cfb_borrow_copy(x: PythonObject, source: PythonObject, context: PythonObject
     var out = family_array(py_call(b.tuple, x.shape), "<f4", context)
     memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(out))),
            src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), count=Int(py=x.size))
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -120,6 +121,7 @@ def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
         raise Error("mojolearn DBSCAN: X contains a NaN or an infinity; a "
                     + "non-finite row has no distance to any other, so it is "
                     + "refused by name")
+    _ = x  # keep the Python object alive through the native calls above
     if metric == _METRIC_PRECOMPUTED:
         if n != d:
             raise Error("mojolearn DBSCAN: metric='precomputed' needs a square "
@@ -139,6 +141,7 @@ def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     if weights_source is not None:
         w = family_sample_weight(weights_source, n, True, context)
         weight_addr = classical_address(w)
+        _ = w  # keep the Python object alive through the native call above
     # ORDER MATCHES bindings/_mojolearn_estimators.mojo::dbscan_fit_binding:
     # n_rows, n_features, eps, min_samples, budget_mb, max_iter,
     # eps_nn_method, metric. precomputed takes the brute arm's adjacency path
@@ -150,6 +153,9 @@ def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     var fit = family_entry(binding, "dbscan_fit_core", context)
     var n_iter = family_call(fit, classical_address(x), classical_address(labels), weight_addr,
                              classical_address(core), params)
+    _ = labels  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
+    _ = core  # keep the Python object alive through the native call above
     _ = w^
     py_setitem(fields, "n_iter_", n_iter)
     py_setitem(fields, "labels_", labels)
@@ -160,6 +166,9 @@ def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     var gather = family_entry(binding, "dbscan_core_arrays", context)
     var parts = family_call(gather, classical_address(x), classical_address(labels), classical_address(core),
                             Python.list(PythonObject(n), PythonObject(d)))
+    _ = core  # keep the Python object alive through the native call above
+    _ = labels  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     var m = len(parts[0])
     var indices = _wrap(parts[0], Python.tuple(m), "<i4", context)
     var components = _wrap(parts[1], Python.tuple(m, d), "<f4", context)
@@ -193,6 +202,7 @@ def _dbscan_predict(model: PythonObject, binding: PythonObject, source: PythonOb
     if n_core == 0:
         var labels = family_array(Python.tuple(nq), "<i4", context)
         family_fill_i32(FAMILY_I32P(unsafe_from_address=Int(py=classical_address(labels))), nq, -1)
+        _ = labels  # keep the Python object alive through the native call above
         return labels
     var metric_name = py_call(py_call(b.str, py_call(b.getattr, model, PythonObject("metric"))).lower)
     var metric = Int(py=context["family_dbscan_metrics"][metric_name])

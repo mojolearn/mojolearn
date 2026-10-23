@@ -113,6 +113,7 @@ def _as_array(m: TreesMatrix, shape: PythonObject, context: PythonObject) raises
         return m.keep
     var out = trees_empty(shape, "<f4", context)
     trees_cast(m.addr, "<f4", trees_address(out), "<f4", m.rows * m.cols, context)
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -127,6 +128,7 @@ def _i32_codes(value: PythonObject, context: PythonObject) raises -> PythonObjec
     var n = Int(py=value.size)
     var out = trees_vector(n, "<i4", context)
     trees_cast(trees_address(value), String(value.dtype), trees_address(out), "<i4", n, context)
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -211,12 +213,14 @@ def _acc_cols(xt: PythonObject, acc: PythonObject, x: PythonObject, cols: Python
     var xa = trees_f32(x, 2, "C", "sub-estimator output", context)
     _ = py_call_typed(_x(xt, "x_trees_accumulate_cols"), _A(acc), _P(xa.addr), _A(cols),
                       Python.list(_P(n), _P(k), _P(len(cols)), _F(1.0)))
+    _ = xa  # keep the Python object alive through the native call above
     _ = xa^
 
 
 def _acc(xt: PythonObject, acc: PythonObject, x: PythonObject, n: Int, context: PythonObject) raises:
     var xa = trees_f32(x, 1, "C", "sub-estimator output", context)
     _ = py_call_typed(_x(xt, "x_trees_accumulate"), _A(acc), _P(xa.addr), Python.list(_P(n), _F(1.0)))
+    _ = xa  # keep the Python object alive through the native call above
     _ = xa^
 
 
@@ -417,8 +421,10 @@ def _member_fit_weighted(member: PythonObject, xcm: TreesMatrix, codes: PythonOb
                                "rebuild the forest binding for forest data sessions")
         result = forest_export(session.native, py_call_typed(entry, _P(session.handle), _A(labels.codes), params, criterion,
                                                              _P(weights.addr)), "into", context)
+        _ = weights  # keep the Python object alive through the native call above
     else:
         var fit = ForestFit("rf_classifier_fit_weighted", True, Python.list(_P(weights.addr)), True)
+        _ = weights  # keep the Python object alive through the native call above
         result = _launch(rf, fit, xcm, trees_address(labels.codes), params, criterion, False, context)
     _member_store(member, forest_fit_arrays(result, context), xcm.cols)
     _fitted(member)
@@ -444,6 +450,7 @@ def _member_fit_session_rows(member: PythonObject, session: Session, rows: Pytho
                            "rebuild the forest binding for forest data sessions")
     var result = forest_export(session.native, py_call_typed(entry, _P(session.handle), _A(rows), _P(y.addr), params, code),
                                "into", context)
+    _ = y  # keep the Python object alive through the native call above
     _member_store(member, forest_fit_arrays(result, context), x_cols)
     _fitted(member)
     _ = y^
@@ -591,6 +598,7 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
         var rows = _arange(xt, n, context) if all_rows else _indices(xt, n, n_rows, bootstrap, seed, 2 * k, context)
         var cols = _arange(xt, d, context) if all_cols else _indices(xt, d, n_feat, bootstrap_features, seed, 2 * k + 1, context)
         var xs = xa if (all_rows and all_cols) else _gather(xt, x.addr, n, d, rows, cols, context)
+        _ = x  # keep the Python object alive through the native call above
         var ys = y_all
         if not all_rows:
             ys = _gather_codes(xt, y_all, rows, context) if classifier else _gather_vec(xt, trees_address(y_all), n, rows, context)
@@ -680,6 +688,7 @@ def _bagging_oob_outputs(xt: PythonObject, fields: PythonObject, x: TreesMatrix,
             out = trees_vector(m, "<f8", context)
             trees_cast(p.addr, "<f4", trees_address(out), "<f8", m, context)
             _ = p  # keep the Python object alive through the native call above
+            _ = out  # keep the Python object alive through the native call above
         _ = py_call_typed(_x(xt, "x_trees_accumulate_rows"), _A(acc), _A(out), _A(oob), Python.list(_P(n), _P(k), _P(m)))
         _ = py_call_typed(_x(xt, "x_trees_count_rows"), _A(counts), _A(oob), Python.list(_P(n), _P(m)))
     return Python.tuple(acc, counts)
@@ -749,6 +758,7 @@ def _bagging_proba(model: PythonObject, fields: PythonObject, X: PythonObject, c
         var proba = _member_proba(batched[0], xa, context)
         var out = trees_empty(Python.tuple(n, k), "<f8", context)
         trees_cast(trees_address(proba), "<f4", trees_address(out), "<f8", n * k, context)
+        _ = out  # keep the Python object alive through the native call above
         _ = proba  # keep the Python object alive through the native call above
         return out
     var xt = _xt(fields, context)
@@ -783,6 +793,7 @@ def bagging_predict(model: PythonObject, args: PythonObject, classifier: Bool, c
         var p = _f32_vector(_member_predict(batched[0], xa, context), context)
         var out = trees_vector(n, "<f8", context)
         trees_cast(p.addr, "<f4", trees_address(out), "<f8", n, context)
+        _ = out  # keep the Python object alive through the native call above
         _ = p  # keep the Python object alive through the native call above
         return out
     var xt = _xt(fields, context)
@@ -827,12 +838,15 @@ def _normalized_weights(xt: PythonObject, sample_weight: PythonObject, n: Int, c
     var out = trees_vector(n + 1, "<f8", context)
     var flags = trees_vector(8, "<i4", context)
     _ = py_call_typed(_x(xt, "x_trees_exact_sum"), _P(sw.addr), _A(out), _A(flags), Python.list(_P(n), _P(1)))
+    _ = sw  # keep the Python object alive through the native call above
     if _i32_word(flags, 0) != 0 or _i32_word(flags, 1) != 0 or _i32_word(flags, 2) != 0 or _i32_word(flags, 3) != 0:
         raise Error("sample_weight must be finite and nonnegative")
     if _i32_word(flags, 4) == 0:
         raise Error("Sample weights must contain at least one non-zero number.")
     var w = trees_vector(n, "<f8", context)
     trees_cast(trees_address(out) + 8, "<f8", trees_address(w), "<f8", n, context)
+    _ = w  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
     _ = sw^
     return w
 
@@ -848,7 +862,9 @@ def _colmajor(xt: PythonObject, x: TreesMatrix, context: PythonObject) raises ->
     """`_trees_colmajor` of a C-order float32 X: the lane's transpose."""
     var out = trees_empty(Python.tuple(x.rows, x.cols), "<f4", context, "F")
     _ = py_call_typed(_x(xt, "x_trees_transpose_f32"), _P(x.addr), _A(out), Python.list(_P(x.rows), _P(x.cols)))
-    return TreesMatrix(out, trees_address(out), x.rows, x.cols, False)
+    var _keep_ret_out = TreesMatrix(out, trees_address(out), x.rows, x.cols, False)
+    _ = out  # keep the Python object alive through the native call above
+    return _keep_ret_out^
 
 
 def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: PythonObject) raises -> PythonObject:
@@ -895,6 +911,7 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
             var cm = _colmajor(xt, x, context)
             if not trees_all_finite(cm.addr, n * d, False, context):
                 raise Error(TREES_NONFINITE)
+            _ = cm  # keep the Python object alive through the native calls above
             if trees_env("MOJOLEARN_ADABOOST_REENCODE", "") != "1":
                 encoded = trees_encode_labels(codes, context)
             session = _member_session(base, cm, False, True, _ada_session_default(fields, xt, context), context)
@@ -964,10 +981,12 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
             _ = py_call_typed(_x(xt, "x_trees_weighted_sample"), _A(w), _A(rows), Python.list(_P(n), _P(n), _P(seed), _P(it)))
             var member = _clone(base, _sub_seed(seed, it), context)
             var yr = _gather_vec(xt, y32.addr, n, rows, context)
+            _ = y32  # keep the Python object alive through the native call above
             if session.handle > 0:
                 _member_fit_session_rows(member, session, rows, yr, d, context)
             else:
                 _member_fit(member, _gather(xt, x.addr, n, d, rows, cols, context), yr, PythonObject(None), context)
+                _ = x  # keep the Python object alive through the native call above
             var pred = _f32_vector(_member_predict(member, xa, context), context)
             _ = py_call_typed(_x(xt, "x_trees_r2_step"), _A(w), _P(pred.addr), _A(y_array), _A(stats),
                               Python.list(_P(n), _P(loss), _F(lr), _P(1 if it == m - 1 else 0), _P(1 if is_dt else 0)))
@@ -1312,7 +1331,9 @@ def dart_fit(model: PythonObject, args: PythonObject, classifier: Bool, context:
     _y_rows_check(labels.n, x.rows)
     var codes = trees_vector(labels.n, "<f4", context)
     trees_cast(trees_address(labels.codes), "<i4", trees_address(codes), "<f4", labels.n, context)
+    _ = codes  # keep the Python object alive through the native call above
     var y32 = TreesMatrix(codes, trees_address(codes), labels.n, 1, True)
+    _ = codes  # keep the Python object alive through the native call above
     var kind = 1 if K == 2 else 2
     py_setitem(fields, "_KIND", _P(kind))
     return _dart_boost(model, fields, x, y32, 1 if K == 2 else K, kind, context)
@@ -1358,6 +1379,7 @@ def _dart_raw(fields: PythonObject, X: PythonObject, context: PythonObject) rais
     var xt = _xt(fields, context)
     _ = py_call_typed(_x(xt, "x_trees_dart_predict"), _P(x.addr), Python.list(cols, ques, lefts, vals), sizes, coefs,
                       starts, _A(score), Python.list(_P(n), _P(d), _P(K)))
+    _ = x  # keep the Python object alive through the native call above
     _ = x^
     return score
 

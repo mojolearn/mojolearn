@@ -66,7 +66,9 @@ def als_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
         var ac = kit.address(c)
         _ = c  # keep the Python object alive through the native call above
         var ax = kit.address(x)
+        _ = x  # keep the Python object alive through the native call above
         var ay = kit.address(y)
+        _ = y  # keep the Python object alive through the native call above
         var count = decomp_int(py_call(kit.entries["x_decomp_als_fit"], ac, ax, ay, classical_address(losses_store),
                                        params, Python.list(decomp_float(fields["regularization"]))))
         _ = losses_store  # keep the Python object alive through the native call above
@@ -109,6 +111,8 @@ def _topn(mut kit: DecompKit, s: Int, count: Int, skip: Int, context: PythonObje
         var source = kit.host(ids)
         decomp_f32_to_i32(DecompF32(unsafe_from_address=Int(py=classical_address(source))),
                           MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=labels._addr)), c)
+        _ = source  # keep the Python object alive through the native call above
+        _ = labels  # keep the Python object alive through the native call above
         _ = source^
         return Python.tuple(labels, kit.out_shape(values, Python.tuple(c)))
     var order = py_call(context["output_context"]["array_type"], PythonObject("i"),
@@ -129,8 +133,10 @@ def _topn(mut kit: DecompKit, s: Int, count: Int, skip: Int, context: PythonObje
     if c:
         memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=labels._addr)),
                src=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=order_address), count=c)
+        _ = labels  # keep the Python object alive through the native call above
         memcpy(dest=DecompF32(unsafe_from_address=Int(py=scores._addr)),
                src=DecompF32(unsafe_from_address=Int(py=kit.address(values))), count=c)
+        _ = scores  # keep the Python object alive through the native call above
         _ = values  # keep the Python object alive through the native call above
     _ = order^
     return Python.tuple(labels, scores)

@@ -125,6 +125,7 @@ def svc_prefix(source: PythonObject, count: Int, shape: PythonObject, typestr: S
         memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out))),
                src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(source))),
                count=count * width)
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -133,8 +134,10 @@ def svc_scalar_array(value: Float64, typestr: String, context: PythonObject) rai
     var out = family_array(Python.tuple(1), typestr, context)
     if typestr == "<f4":
         FAMILY_F32P(unsafe_from_address=Int(py=classical_address(out)))[0] = Float32(value)
+        _ = out  # keep the Python object alive through the native call above
     else:
         FAMILY_F64P(unsafe_from_address=Int(py=classical_address(out)))[0] = value
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -351,8 +354,10 @@ def svc_decode(classes: PythonObject, codes: PythonObject, context: PythonObject
                         packed = False
                     else:
                         FAMILY_I64P(unsafe_from_address=Int(py=classical_address(table)))[i] = Int64(Int(py=value))
+                        _ = table  # keep the Python object alive through the native call above
                 else:
                     FAMILY_F64P(unsafe_from_address=Int(py=classical_address(table)))[i] = Float64(py=py_call(b.float, classes[i]))
+                    _ = table  # keep the Python object alive through the native call above
             except:
                 packed = False
         if packed:
@@ -360,6 +365,8 @@ def svc_decode(classes: PythonObject, codes: PythonObject, context: PythonObject
             if n > 0:
                 _ = family_call(svc_base("gather_i64" if kind == 0 else "gather_f64", context), classical_address(table),
                                 PythonObject(k), classical_address(codes), PythonObject(n), classical_address(out))
+                _ = table  # keep the Python object alive through the native call above
+                _ = out  # keep the Python object alive through the native call above
             _ = table^
             return out
     # the label output step: the class objects, one per code (C-level map
@@ -384,6 +391,7 @@ def svc_threshold_codes(scores: PythonObject, threshold: Float64, strict: Bool, 
         _ = family_call(svc_base("threshold_labels_i64", context), classical_address(scores), PythonObject(0),
                         PythonObject(n), PythonObject(threshold), PythonObject(1 if strict else 0),
                         PythonObject(below), PythonObject(above), classical_address(out))
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -399,6 +407,7 @@ def svc_argmax_rows(scores: PythonObject, context: PythonObject) raises -> Pytho
     var name = "argmax_rows_f32" if String(scores.dtype) == "<f4" else "argmax_rows_f64"
     _ = family_call(svc_base(name, context), classical_address(scores), PythonObject(n), PythonObject(c),
                     classical_address(out))
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -415,8 +424,10 @@ def svc_r2_sums(pred: PythonObject, y: PythonObject, context: PythonObject) rais
     var m = Int(py=p.size)
     if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(t))), n):
         raise Error("mojolearn score: y_true contains NaN or infinity")
+    _ = t  # keep the Python object alive through the native calls above
     if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(p))), m):
         raise Error("mojolearn score: y_pred contains NaN or infinity")
+    _ = p  # keep the Python object alive through the native calls above
     if n != m:
         raise Error("mojolearn score: y_true and y_pred have different shapes (" + String(n) + ", 1) and ("
                     + String(m) + ", 1)")

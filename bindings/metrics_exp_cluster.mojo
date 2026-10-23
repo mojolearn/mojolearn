@@ -161,6 +161,8 @@ def _contingency_matrix(args: PythonObject, context: PythonObject) raises -> Pyt
     var out = family_array(shape, typestr, context)
     mexp_cast_i64(FAMILY_I64P(unsafe_from_address=Int(py=classical_address(counts))), cells,
                   Int(py=classical_address(out)), code)
+    _ = counts  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
     _ = counts^
     return out
 
@@ -252,6 +254,7 @@ def _cluster_score(args: PythonObject, caller: String, db: Bool, context: Python
     var d = Int(py=Xa.shape[1])
     if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(Xa))), n * d):
         raise Error("mojolearn " + caller + ": X contains NaN or infinity")
+    _ = Xa  # keep the Python object alive through the native calls above
     var lab = mx_encode(args[1], "labels", context)
     if lab.n != n:
         raise Error("mojolearn " + caller + ": X and labels have different numbers of rows")

@@ -266,6 +266,7 @@ def _put(entries: PythonObject, h: PythonObject, arr: PythonObject) raises:
     """`_Res.put(h, arr)`: a float32 or int32 host array's words up."""
     var a = py_call(_np().ascontiguousarray, arr)
     _ = py_call(_e(entries, "x_cnn_res_upload"), h, xcnn_addr(a), a.size)
+    _ = a  # keep the Python object alive through the native call above
 
 
 def _get(entries: PythonObject, h: PythonObject, shape: PythonObject) raises -> PythonObject:
@@ -273,6 +274,7 @@ def _get(entries: PythonObject, h: PythonObject, shape: PythonObject) raises -> 
     var np = _np()
     var out = py_call(np.empty, shape, np.float32)
     _ = py_call(_e(entries, "x_cnn_res_download"), h, xcnn_addr(out), out.size)
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -477,11 +479,13 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
                                        py_call(b.float, fields["weight_decay"]), 1.0 if optimizer == "adamw" else 0.0)
                 _ = py_call(_e(entries, "x_cnn_fit_epoch_d"), spec, xcnn_addr(losses),
                             Python.list(n, batch, 0 if sgd else 1, step, ep, shuffle, seed_lo, seed_hi), fpar)
+                _ = losses  # keep the Python object alive through the native call above
                 step += nsteps
                 epoch = py_call(losses.tolist)
             else:
                 var order_rows = py_call(np.empty, n, dtype=np.int32)
                 _ = py_call(_e(entries, "x_cnn_epoch_rows"), xcnn_addr(order_rows), Python.list(n, ep, shuffle, seed_lo, seed_hi))
+                _ = order_rows  # keep the Python object alive through the native call above
                 var s = 0
                 var k_out = k
                 while s < n:  # driver-loop: over the device minibatch steps
@@ -532,6 +536,7 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
                                     Python.list(py_call(b.float, fields["learning_rate"]), py_call(b.float, betas[0]),
                                                 py_call(b.float, betas[1]), py_call(b.float, fields["eps"]),
                                                 py_call(b.float, fields["weight_decay"]), 1.0 if optimizer == "adamw" else 0.0))
+                        _ = block  # keep the Python object alive through the native call above
                         var hyper = py_call(py_call(block.reshape, -1).tolist)
                         if lists:
                             _ = py_call(_e(entries, "x_cnn_adam_r"), hp, hg, hbuf, sizes, hyper)
@@ -603,6 +608,7 @@ def _run_predict(model: PythonObject, source: PythonObject, codes: Bool, context
         var ishape = fields["input_shape"]
         var row = Int(py=ishape[0]) * Int(py=ishape[1]) * Int(py=ishape[2])
         var base = Int(py=xcnn_addr(x))
+        _ = x  # keep the Python object alive through the native call above
         var s = 0
         while s < n:  # driver-loop: over the device prediction batches (cap-sized)
             var m = min(cap, n - s)
@@ -611,8 +617,10 @@ def _run_predict(model: PythonObject, source: PythonObject, codes: Bool, context
             _ = py_call(_e(entries, "x_cnn_softmax_xent_r"), a["logits"], a["y"], a["glog"], a["proba"], Python.list(m, k))
             if codes:
                 _ = py_call(_e(entries, "x_cnn_res_argmax"), a["proba"], Int(py=xcnn_addr(lab)) + 4 * s, Python.list(m, k))
+                _ = lab  # keep the Python object alive through the native call above
             else:
                 _ = py_call(_e(entries, "x_cnn_res_download"), a["proba"], Int(py=xcnn_addr(proba)) + 4 * s * k, m * k)
+                _ = proba  # keep the Python object alive through the native call above
             s += m
         py_setitem(fields, "_rw", b.dict())
     except error:

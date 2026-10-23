@@ -83,6 +83,8 @@ def _pcs_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         var word = family_call(operator.and_, seed, PythonObject(0xFFFFFFFF))
         _ = family_call(draw, Python.list(word, PythonObject(nc), PythonObject(deg * nf)),
                         classical_address(ih), classical_address(bh))
+        _ = bh  # keep the Python object alive through the native call above
+        _ = ih  # keep the Python object alive through the native call above
         py_setitem(fields, "indexHash_", ih)
         py_setitem(fields, "bitHash_", bh)
     else:
@@ -118,6 +120,10 @@ def _pcs_transform(model: PythonObject, args: PythonObject, context: PythonObjec
                                     classical_address(out)),
                     Python.list(PythonObject(n), PythonObject(d), PythonObject(nf), PythonObject(nc), PythonObject(deg)),
                     Python.list(_f32_scalar(family_field(fields, "gamma")), _f32_scalar(family_field(fields, "coef0"))))
+    _ = bit_hash  # keep the Python object alive through the native call above
+    _ = index_hash  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
     _ = x^
     _ = index_hash^
     _ = bit_hash^

@@ -271,6 +271,8 @@ def xcnn_conv2d_forward(layer: PythonObject, x: PythonObject, context: PythonObj
         xp = xcnn_host_f32(_padded(fields, xs), context)
         _ = py_call_typed(xcnn_entry(entries, "x_cnn_pad2d_forward"), xcnn_addr(a), xcnn_addr(xp),
                           _pad_params(layer, fields, xs, -1))
+        _ = xp  # keep the Python object alive through the native call above
+        _ = a  # keep the Python object alive through the native call above
     var ps = xcnn_shape(xp)
     var prm = _conv_params(fields, ps)
     var oshape = _conv_out(fields, xcnn_entries(fields, context), xs)
@@ -287,6 +289,7 @@ def xcnn_conv2d_forward(layer: PythonObject, x: PythonObject, context: PythonObj
         var bg = _host_rows(fields["bias_"], g * og, (g + 1) * og, context)
         var yg = out if groups == 1 else xcnn_host_f32([xs[0], og, oshape[2], oshape[3]], context)
         _ = py_call_typed(conv, xcnn_addr(xg), xcnn_addr(wg), xcnn_addr(bg), xcnn_addr(yg), prm)
+        _ = yg  # keep the Python object alive through the native call above
         _ = bg  # keep the Python object alive through the native call above
         _ = wg  # keep the Python object alive through the native call above
         _ = xg  # keep the Python object alive through the native call above
@@ -337,6 +340,8 @@ def xcnn_relu_forward(layer: PythonObject, x: PythonObject, context: PythonObjec
     var out = xcnn_host_f32(xs, context)
     _ = py_call_typed(xcnn_entry(xcnn_entries(fields, context), "x_cnn_relu_forward"), xcnn_addr(a), xcnn_addr(out),
                       Python.list(xcnn_size(xs)))
+    _ = out  # keep the Python object alive through the native call above
+    _ = a  # keep the Python object alive through the native call above
     _set(fields, "_x", a)
     return out
 
@@ -349,7 +354,9 @@ def _add(entries: PythonObject, left: PythonObject, right: PythonObject, context
     var out = xcnn_host_f32(s, context)
     _ = py_call_typed(xcnn_entry(entries, "x_cnn_add"), xcnn_addr(a), xcnn_addr(c), xcnn_addr(out),
                       Python.list(xcnn_size(s)))
+    _ = out  # keep the Python object alive through the native call above
     _ = c  # keep the Python object alive through the native call above
+    _ = a  # keep the Python object alive through the native call above
     return out
 
 

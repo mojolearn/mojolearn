@@ -51,6 +51,12 @@ def _tsne_pca_start(estimators: PythonObject, x: PythonObject, n: Int, d: Int, k
     _ = family_call(fit_owned, classical_address(x), classical_address(components), classical_address(mean),
                     classical_address(variance), classical_address(ratio), classical_address(singular),
                     classical_address(z), params)
+    _ = mean  # keep the Python object alive through the native call above
+    _ = components  # keep the Python object alive through the native call above
+    _ = singular  # keep the Python object alive through the native call above
+    _ = ratio  # keep the Python object alive through the native call above
+    _ = variance  # keep the Python object alive through the native call above
+    _ = z  # keep the Python object alive through the native call above
     _ = components^
     _ = mean^
     _ = variance^
@@ -150,6 +156,9 @@ def _tsne_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
                     Python.list(PythonObject(n), PythonObject(d), max_iter, PythonObject(exploration),
                                 PythonObject(perplexity), PythonObject(exag), PythonObject(lr),
                                 PythonObject(post_factor), PythonObject(mode), low, high, PythonObject(k)))
+    _ = embedding  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
+    _ = kl  # keep the Python object alive through the native call above
     _ = x^
     _ = y0^
     py_setitem(fields, "embedding_", embedding)

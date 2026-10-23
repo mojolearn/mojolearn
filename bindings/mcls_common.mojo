@@ -426,6 +426,7 @@ def mc_encode_store(store: PythonObject, count: Int, context: PythonObject) rais
     var k = Int(py=family_call(mc_base("prepare_targets", context), py_call(store.buffer_info)[0], PythonObject(3),
                                PythonObject(count), py_call(classes.buffer_info)[0], classical_address(codes),
                                PythonObject(0), PythonObject(0), PythonObject(0)))
+    _ = codes  # keep the Python object alive through the native call above
     if k < 0:
         raise Error("RuntimeError: prepare_targets refused integer labels")
     var head = family_call(py_attr(classes, "__getitem__"), family_call(b.slice, PythonObject(0), PythonObject(k)))
@@ -497,6 +498,8 @@ def mc_gather(labels: McLabels, table: PythonObject, context: PythonObject) rais
     var out = family_array(Python.tuple(labels.n), "<i4", context)
     _ = family_call(mc_base("gather_i32", context), classical_address(t), PythonObject(mc_len(labels.classes)),
                     classical_address(labels.codes), PythonObject(labels.n), classical_address(out))
+    _ = t  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
     _ = t^
     return out
 
@@ -601,6 +604,7 @@ def mc_i32_1d(x: PythonObject, name: String, context: PythonObject) raises -> Py
                     + "kernels are the int32 instantiation (the int64 overload of "
                     + "adjusted_rand_index is the same code at a wider type and is "
                     + "not instantiated, metrics/NOT_IMPLEMENTED.tsv)")
+    _ = out  # keep the Python object alive through the native calls above
     _ = store^
     return out
 
@@ -620,6 +624,7 @@ def mc_f32_1d(x: PythonObject, name: String, require_finite: Bool, context: Pyth
         raise Error("mojolearn metrics: " + name + " contains NaN or infinity; refused "
                     + "here (metrics/README.md HAND-OFF ask 3) rather than letting it "
                     + "reach a kernel whose answer for it is a washed sentinel")
+    _ = out  # keep the Python object alive through the native calls above
     return out
 
 
@@ -785,6 +790,7 @@ def mc_arena_f64_array(arena: PythonObject, off: Int, count: Int, shape: PythonO
     if count > 0:
         memcpy(dest=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(out))),
                src=FAMILY_F64P(unsafe_from_address=mc_arena_base(arena) + 4 * off), count=count)
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -795,6 +801,7 @@ def mc_arena_i64_array(arena: PythonObject, off: Int, count: Int, shape: PythonO
     if count > 0:
         memcpy(dest=FAMILY_I64P(unsafe_from_address=Int(py=classical_address(out))),
                src=FAMILY_I64P(unsafe_from_address=mc_arena_base(arena) + 4 * off), count=count)
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -803,8 +810,10 @@ def mc_f64_words(values: List[Float64], context: PythonObject) raises -> PythonO
     Array (`array.array("d", values).tobytes()` read as "i")."""
     var out = family_array(Python.tuple(2 * len(values)), "<i4", context)
     var dst = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(out)))
+    _ = out  # keep the Python object alive through the native call above
     for i in range(len(values)):  # small-loop(values: the binary64 parameters of one stage): bounded by the call site
         dst[i] = values[i]
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 

@@ -162,9 +162,13 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     # x, y, dual_out, scalars_out[, sw]; n, d, t, kernel, degree, gamma, coef0, alpha.
     var addresses = Python.list(classical_address(x), classical_address(y), classical_address(dual),
                                 classical_address(scalars))
+    _ = dual  # keep the Python object alive through the native call above
+    _ = y  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     _ = scalars  # keep the Python object alive through the native call above
     if weights is not None:
         _ = py_call(addresses.append, classical_address(weights))
+        _ = weights  # keep the Python object alive through the native call above
     var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(t), PythonObject(kernel),
                              PythonObject(degree), gamma, coef0, alpha)
     var info = family_call(fit, addresses, params)
@@ -220,6 +224,8 @@ def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject)
         # handle; x_new, out; the predict's ten params.
         _ = family_call(family_entry(binding, "kernel_ridge_predict_resident", context), handle,
                         Python.list(classical_address(xq), classical_address(out)), params)
+        _ = out  # keep the Python object alive through the native call above
+        _ = xq  # keep the Python object alive through the native call above
         _ = x_fit^
         _ = dual^
         _ = xq^
@@ -229,6 +235,7 @@ def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject)
     # x_fit, dual, x_new, out; n, d, t, kernel, degree, gamma, coef0, alpha, info, q.
     var addresses = Python.list(classical_address(x_fit), classical_address(dual), classical_address(xq),
                                 classical_address(out))
+    _ = out  # keep the Python object alive through the native call above
     _ = family_call(predict, addresses, params)
     _ = x_fit^
     _ = dual^
@@ -289,7 +296,13 @@ def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject,
     var addresses = Python.list(classical_address(x), classical_address(components), classical_address(indices),
                                 classical_address(normalization), classical_address(eigenvalues),
                                 classical_address(eigenvectors), classical_address(scalars))
+    _ = indices  # keep the Python object alive through the native call above
+    _ = components  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
+    _ = eigenvalues  # keep the Python object alive through the native call above
+    _ = normalization  # keep the Python object alive through the native call above
     _ = scalars  # keep the Python object alive through the native call above
+    _ = eigenvectors  # keep the Python object alive through the native call above
     var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(kernel), PythonObject(degree),
                              gamma, coef0, PythonObject(q), seed)
     if joint is not None:
@@ -297,6 +310,7 @@ def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject,
         # addresses, then the n x q transform.
         out = family_array(Python.tuple(n, q), "<f4", context)
         _ = py_call(addresses.append, classical_address(out))
+        _ = out  # keep the Python object alive through the native call above
     var sweeps = family_call(fit, addresses, params)
     _ = x^
     py_setitem(fields, "n_features_in_", PythonObject(d))
@@ -340,6 +354,13 @@ def _nys_transform(model: PythonObject, args: PythonObject, context: PythonObjec
     var addresses = Python.list(classical_address(components), classical_address(indices),
                                 classical_address(normalization), classical_address(eigenvalues),
                                 classical_address(eigenvectors), classical_address(x), classical_address(out))
+    _ = indices  # keep the Python object alive through the native call above
+    _ = components  # keep the Python object alive through the native call above
+    _ = eigenvalues  # keep the Python object alive through the native call above
+    _ = normalization  # keep the Python object alive through the native call above
+    _ = eigenvectors  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     var params = Python.list(PythonObject(q), PythonObject(d), kp[0], kp[1], kp[2], kp[3], kp[4],
                              family_field(fields, "sweeps_"), PythonObject(m))
     _ = family_call(transform, addresses, params)
@@ -378,6 +399,10 @@ def _rbf_transform(model: PythonObject, args: PythonObject, context: PythonObjec
                                 classical_address(out)),
                     Python.list(PythonObject(d), PythonObject(q), params[0], params[1], family_field(fields, "sigma_"),
                                 family_field(fields, "scale_"), PythonObject(m)))
+    _ = offset  # keep the Python object alive through the native call above
+    _ = weights  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
     _ = weights^
     _ = offset^
     _ = x^
@@ -465,10 +490,13 @@ def _km_scale_gamma(binding: PythonObject, x: PythonObject, d: Int, context: Pyt
     var words = family_array(Python.tuple(SGX_BAD + 1), "<i8", context)
     _ = family_call(family_call(b.getattr, binding, PythonObject("scale_gamma_limbs")), classical_address(x),
                     PythonObject(n), classical_address(words))
+    _ = words  # keep the Python object alive through the native call above
     var wp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(words)))
+    _ = words  # keep the Python object alive through the native call above
     var limbs = List[Int64]()
     for i in range(SGX_BAD + 1):  # small-loop(limbs: the 28 fixed words of the binding)
         limbs.append(wp[i])
+        _ = words  # keep the Python object alive through the native call above
     _ = words^
     return PythonObject(scale_gamma_from_limbs(limbs, n, d))
 
@@ -517,18 +545,29 @@ def _rbf_fit(model: PythonObject, args: PythonObject, transform: Bool, context: 
         _ = family_call(joint, Python.list(classical_address(weights), classical_address(offset),
                                            classical_address(scalars), classical_address(x), classical_address(out)),
                         Python.list(PythonObject(d), PythonObject(q), gamma, seed, PythonObject(m)))
+        _ = offset  # keep the Python object alive through the native call above
+        _ = weights  # keep the Python object alive through the native call above
+        _ = out  # keep the Python object alive through the native call above
+        _ = scalars  # keep the Python object alive through the native call above
+        _ = x  # keep the Python object alive through the native call above
     else:
         # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::rbf_sampler_fit_binding:
         # weights_out, offset_out, scalars_out; d, q, gamma, seed.
         _ = family_call(family_entry(extension, "rbf_sampler_fit", context),
                         Python.list(classical_address(weights), classical_address(offset), classical_address(scalars)),
                         Python.list(PythonObject(d), PythonObject(q), gamma, seed))
+        _ = scalars  # keep the Python object alive through the native call above
+        _ = offset  # keep the Python object alive through the native call above
+        _ = weights  # keep the Python object alive through the native call above
     var sp = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(scalars)))
+    _ = scalars  # keep the Python object alive through the native call above
     py_setitem(fields, "n_features_in_", PythonObject(d))
     py_setitem(fields, "random_weights_", weights)
     py_setitem(fields, "random_offset_", offset)
     py_setitem(fields, "sigma_", PythonObject(sp[0]))
+    _ = scalars  # keep the Python object alive through the native call above
     py_setitem(fields, "scale_", PythonObject(sp[1]))
+    _ = scalars  # keep the Python object alive through the native call above
     py_setitem(fields, "_params", Python.tuple(gamma, seed))
     _ = scalars^
     if not transform:

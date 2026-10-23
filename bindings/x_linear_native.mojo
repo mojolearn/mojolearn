@@ -217,6 +217,7 @@ def _xl_slice(out_buf: PythonObject, offset: Int, count: Int, shape: PythonObjec
     if count > 0:
         memcpy(dest=_F32P(unsafe_from_address=labels_address(array)),
                src=_F32P(unsafe_from_address=labels_address(out_buf)) + offset, count=count)
+        _ = array  # keep the Python object alive through the native call above
     return array
 
 
@@ -225,10 +226,13 @@ def _xl_join(first: Int, first_count: Int, second: Int, second_count: Int, conte
     (two byte copies)."""
     var out = labels_vector(first_count + second_count, "<f4", context)
     var o = _F32P(unsafe_from_address=labels_address(out))
+    _ = out  # keep the Python object alive through the native call above
     if first_count > 0:
         memcpy(dest=o, src=_F32P(unsafe_from_address=first), count=first_count)
+        _ = out  # keep the Python object alive through the native call above
     if second_count > 0:
         memcpy(dest=o + first_count, src=_F32P(unsafe_from_address=second), count=second_count)
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -267,7 +271,9 @@ def _xl_words(value: PythonObject, name: String, context: PythonObject) raises -
     one float32 word (`full((1,), float(value), '<f4')`)."""
     if py_type(value) is _b().float or py_type(value) is _b().int:
         var one = labels_full_f32(1, _float(value), context)
-        return LabelsMatrix(one, labels_address(one), 1, 1, True)
+        var _keep_ret_one = LabelsMatrix(one, labels_address(one), 1, 1, True)
+        _ = one  # keep the Python object alive through the native call above
+        return _keep_ret_one^
     return labels_f32(value, -1, "C", name, context)
 
 
@@ -280,11 +286,18 @@ def _xl_block(coef: PythonObject, intercept: PythonObject, context: PythonObject
     var d = (c.rows * c.cols) // max(k, 1)
     var out = labels_vector(k * (d + 1), "<f4", context)
     var o = _F32P(unsafe_from_address=labels_address(out))
+    _ = out  # keep the Python object alive through the native call above
     var cp = _F32P(unsafe_from_address=c.addr)
+    _ = c  # keep the Python object alive through the native call above
     var bp = _F32P(unsafe_from_address=b.addr)
+    _ = b  # keep the Python object alive through the native call above
     for j in range(k):  # driver-loop: over the fitted classes' coefficient rows (model structure)
         memcpy(dest=o + j * (d + 1), src=cp + j * d, count=d)
+        _ = out  # keep the Python object alive through the native call above
+        _ = c  # keep the Python object alive through the native call above
         memcpy(dest=o + j * (d + 1) + d, src=bp + j, count=1)
+        _ = out  # keep the Python object alive through the native call above
+        _ = b  # keep the Python object alive through the native call above
     _ = c^
     _ = b^
     return (out, k)
@@ -310,6 +323,8 @@ def _xl_decision(model: PythonObject, x: LabelsMatrix, coef: PythonObject, inter
     _ = py_call_typed(entries["x_linear_decision"], PythonObject(x.addr), PythonObject(labels_address(wb)),
                       Python.list(PythonObject(x.rows), PythonObject(x.cols), PythonObject(k), PythonObject(link)),
                       PythonObject(labels_address(out)))
+    _ = wb  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
     _ = wb^
     return out
 
@@ -326,6 +341,8 @@ def _xl_codes(model: PythonObject, x: LabelsMatrix, coef: PythonObject, intercep
                                   PythonObject(LINK_IDENTITY), PythonObject(1 if strict else 0), PythonObject(below),
                                   PythonObject(above)),
                       PythonObject(labels_address(out)))
+    _ = wb  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
     _ = wb^
     return out
 
@@ -339,11 +356,13 @@ def _xl_run(entries: PythonObject, algo: Int, x_addr: Int, x_size: Int, n: Int, 
     var out = labels_vector(n_out, "<f4", context)
     var zero = labels_vector(1, "<f4", context)
     var ya = y_addr if y_size > 0 else labels_address(zero)
+    _ = zero  # keep the Python object alive through the native call above
     _ = py_call_typed(entries["x_linear_fit"], PythonObject(algo), PythonObject(x_addr), PythonObject(ya),
                       Python.list(PythonObject(n), PythonObject(d), PythonObject(x_size), PythonObject(y_size),
                                   PythonObject(n_out), PythonObject(max(n_fw, 1)), PythonObject(max(n_iw, 1)),
                                   PythonObject(len(ip)), PythonObject(len(fp))),
                       ip, fp, PythonObject(labels_address(out)))
+    _ = out  # keep the Python object alive through the native call above
     _ = zero^
     return out
 
@@ -358,9 +377,12 @@ def _xl_with_weights(y: LabelsMatrix, sample_weight: PythonObject, n: Int, mut h
         return LabelsMatrix(y.keep, y.addr, y.rows * y.cols, 1, True)
     var w = labels_check_sample_weight(sample_weight, n, context)
     var joined = _xl_join(y.addr, y.rows * y.cols, w.addr, n, context)
+    _ = w  # keep the Python object alive through the native call above
     _ = w^
     has_sw = 1
-    return LabelsMatrix(joined, labels_address(joined), y.rows * y.cols + n, 1, True)
+    var _keep_ret_joined = LabelsMatrix(joined, labels_address(joined), y.rows * y.cols + n, 1, True)
+    _ = joined  # keep the Python object alive through the native call above
+    return _keep_ret_joined^
 
 
 def _xl_owned(m: LabelsMatrix, context: PythonObject) raises -> PythonObject:
@@ -425,6 +447,8 @@ def _xl_class_prep(model: PythonObject, entries: PythonObject, class_weight: Pyt
                                 Python.list(PythonObject(n), PythonObject(k), PythonObject(1 if balanced else 0),
                                             PythonObject(1 if (balanced and weighted and sw_addr != 0) else 0)),
                                 PythonObject(0 if out is None else labels_address(out)))
+    _ = cw  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
     return (cw, out, _int(largest))
 
 
@@ -503,6 +527,7 @@ def _xl_sgd(model: PythonObject, fields: PythonObject, entries: PythonObject, x:
     if y_addr == 0:
         targets = labels_vector(n, "<f4", context)
         t_addr = labels_address(targets)
+        _ = targets  # keep the Python object alive through the native call above
     var has_sw = 0
     var t = LabelsMatrix(targets, t_addr, n, 1, True)
     var yy = _xl_with_weights(t, sample_weight, n, has_sw, context)
@@ -537,6 +562,7 @@ def _xl_sgd(model: PythonObject, fields: PythonObject, entries: PythonObject, x:
     ip.append(1 if batch_sum else 0)
     var out = _xl_run(entries, ALGO_SGD, x.addr, n * d, n, d, yy.addr, yy.rows, _xl_ints(ip), _xl_reals(fp),
                       problems * d + problems + 2, problems * (n + d + 1), problems * n, context)
+    _ = yy  # keep the Python object alive through the native call above
     var n_out = problems * d + problems + 2
     if _xl_word(out, n_out - 1) != 0:
         raise Error("Floating-point under-/overflow occurred. Scaling input data with "
@@ -579,6 +605,7 @@ def xl_fit_sgd_regressor(model: PythonObject, args: PythonObject, passive: Bool,
                       fields["n_iter_no_change"], fields["shuffle"], fields["random_state"], PythonObject(None),
                       PythonObject(None), PythonObject(None), PythonObject(None), fields["batch_size"], False, 256,
                       context)
+        _ = y  # keep the Python object alive through the native call above
     else:
         fit = _xl_sgd(model, fields, entries, x, y.keep, y.addr, 0, _int(losses[loss]), fields["penalty"],
                       fields["learning_rate"], fields["alpha"], fields["l1_ratio"], fields["eta0"], fields["power_t"],
@@ -586,6 +613,7 @@ def xl_fit_sgd_regressor(model: PythonObject, args: PythonObject, passive: Bool,
                       fields["n_iter_no_change"], fields["shuffle"], fields["random_state"], args[2],
                       PythonObject(None), PythonObject(None), PythonObject(None), fields["batch_size"], False, 4096,
                       context)
+        _ = y  # keep the Python object alive through the native call above
     py_setitem(fields, "coef_", labels_reshape(fit[0], Python.tuple(x.cols), context))
     py_setitem(fields, "intercept_", fit[1])
     _ = x^
@@ -620,6 +648,7 @@ def _xl_offset(fields: PythonObject, context: PythonObject) raises -> Float64:
     """`float(self.offset_[0])`."""
     var off = _xl_words(fields["offset_"], "offset_", context)
     var value = Float64(_F32P(unsafe_from_address=off.addr)[0])
+    _ = off  # keep the Python object alive through the native call above
     _ = off^
     return value
 
@@ -639,6 +668,7 @@ def xl_one_class(model: PythonObject, operation: String, source: PythonObject, c
         var codes = _xl_codes(model, x, fields["coef_"], icpt, False, -1, 1, entries, context)
         var wide = labels_vector(x.rows, "<i8", context)
         labels_cast(labels_address(codes), "<i4", labels_address(wide), "<i8", x.rows, context)
+        _ = wide  # keep the Python object alive through the native call above
         _ = codes  # keep the Python object alive through the native call above
         result = wide
     else:
@@ -716,6 +746,8 @@ def xl_predict_proba(model: PythonObject, source: PythonObject, lrcv: Bool, cont
         _ = py_call_typed(entries["py2mojo_rows"], PythonObject(_ROWS_LRCV_PROBA if lrcv else _ROWS_SGD_PROBA),
                           PythonObject(labels_address(scores)), PythonObject(labels_address(out)),
                           Python.list(PythonObject(n), PythonObject(k)))
+        _ = out  # keep the Python object alive through the native call above
+        _ = scores  # keep the Python object alive through the native call above
     _ = scores^
     _ = x^
     return out
@@ -781,6 +813,8 @@ def xl_fit_glm(model: PythonObject, args: PythonObject, context: PythonObject) r
     var fp: List[Float64] = [power, _float(fields["alpha"]), _float(fields["tol"])]
     var out = _xl_run(entries, ALGO_GLM, x.addr, n * d, n, d, yy.addr, yy.rows, _xl_ints(ip), _xl_reals(fp),
                       d + 3, 3 * n + m * m + 3 * m, 1, context)
+    _ = yy  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     if _xl_word(out, d + 2) < 0:
         var loss_name = _class_attr(model, "_loss_name")
         raise Error("Some value(s) of y are out of the valid range of the loss '"
@@ -817,6 +851,8 @@ def xl_fit_huber(model: PythonObject, args: PythonObject, context: PythonObject)
     var fp: List[Float64] = [_float(epsilon), _float(fields["alpha"]), _float(fields["tol"])]
     var out = _xl_run(entries, ALGO_HUBER, x.addr, n * d, n, d, yy.addr, yy.rows, _xl_ints(ip), _xl_reals(fp),
                       d + 4 + p, _lbfgs_work(p) + n, 1, context)
+    _ = yy  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     _xl_set_linear(fields, out, d, context)
     var scale = _xl_float(out, d + 1)
     py_setitem(fields, "scale_", scale)
@@ -831,6 +867,9 @@ def xl_fit_huber(model: PythonObject, args: PythonObject, context: PythonObject)
     _ = py_call_typed(entries["py2mojo_rows"], PythonObject(_ROWS_HUBER_OUT), PythonObject(y.addr),
                       PythonObject(labels_address(flags)),
                       Python.list(PythonObject(n), PythonObject(1), PythonObject(labels_address(pred)), PythonObject(thr)))
+    _ = y  # keep the Python object alive through the native call above
+    _ = flags  # keep the Python object alive through the native call above
+    _ = pred  # keep the Python object alive through the native call above
     # scikit-learn's bool mask, as a list: one C pass of `bool` over the bytes
     var b = _b()
     py_setitem(fields, "outliers_", py_call(b.list, py_call(b.map, b.bool, py_call(flags._store.tolist))))
@@ -872,6 +911,8 @@ def xl_fit_bayes(model: PythonObject, args: PythonObject, context: PythonObject)
                              _xl_or(fields["alpha_init"], -1.0), _xl_or(fields["lambda_init"], -1.0)]
     var out = _xl_run(entries, ALGO_BAYES, x.addr, n * d, n, d, yy.addr, yy.rows, _xl_ints(ip), _xl_reals(fp),
                       d + 4, 3 * d * d + 5 * d + n, 1, context)
+    _ = yy  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     _xl_set_linear(fields, out, d, context)
     py_setitem(fields, "alpha_", _xl_float(out, d + 1))
     py_setitem(fields, "lambda_", _xl_float(out, d + 2))
@@ -899,6 +940,8 @@ def xl_fit_ard(model: PythonObject, args: PythonObject, context: PythonObject) r
                              _float(fields["lambda_1"]), _float(fields["lambda_2"]), _float(fields["threshold_lambda"])]
     var out = _xl_run(entries, ALGO_ARD, x.addr, n * d, n, d, y.addr, y.rows, _xl_ints(ip), _xl_reals(fp),
                       2 * d + 4, 3 * d * d + 4 * d + n, 2 * d, context)
+    _ = y  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     _xl_set_linear(fields, out, d, context)
     py_setitem(fields, "alpha_", _xl_float(out, d + 1))
     py_setitem(fields, "lambda_", _xl_slice(out, d + 2, d, Python.tuple(d), context))
@@ -935,6 +978,8 @@ def xl_fit_lars(model: PythonObject, args: PythonObject, lasso: Bool, context: P
     var fp: List[Float64] = [alpha_min]
     var out = _xl_run(entries, ALGO_LARS, x.addr, n * d, n, d, y.addr, y.rows, _xl_ints(ip), _xl_reals(fp),
                       2 * d + 4, 2 * d * d + 8 * d, 2 * d, context)
+    _ = y  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     _xl_set_linear(fields, out, d, context)
     py_setitem(fields, "n_iter_", PythonObject(_xl_count(out, d + 1)))
     py_setitem(fields, "alpha_", _xl_float(out, d + 2))
@@ -971,6 +1016,8 @@ def xl_fit_quantile(model: PythonObject, args: PythonObject, context: PythonObje
                              _float(tol), 0.0 if labels_env("MOJOLEARN_XQ_ABS_BALANCE", "") == "1" else 1.0]
     var out = _xl_run(entries, ALGO_QUANTILE, x.addr, n * d, n, d, yy.addr, yy.rows, _xl_ints(ip), _xl_reals(fp),
                       d + 3, m * m + 3 * m + 4 * n + 3 * d, 1, context)
+    _ = yy  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     _xl_set_linear(fields, out, d, context)
     py_setitem(fields, "n_iter_", PythonObject(_xl_count(out, d + 1)))
     py_setitem(fields, "n_features_in_", PythonObject(d))
@@ -1015,6 +1062,7 @@ def xl_fit_sgd_classifier(model: PythonObject, args: PythonObject, kind: String,
     var labels = _xl_class_codes(model, args[1], x.rows, context)
     var codes = labels_vector(x.rows, "<f4", context)
     labels_cast(labels_address(labels.codes), "<i4", labels_address(codes), "<f4", x.rows, context)
+    _ = codes  # keep the Python object alive through the native call above
     var k = len(labels.classes)
     py_setitem(fields, "classes_", labels.classes)
     var fit: Tuple[PythonObject, PythonObject]
@@ -1026,12 +1074,14 @@ def xl_fit_sgd_classifier(model: PythonObject, args: PythonObject, kind: String,
                       fields["n_iter_no_change"], fields["shuffle"], fields["random_state"], args[2],
                       fields["class_weight"], labels.classes, labels.codes, fields["batch_size"], batch_sum, 4096,
                       context)
+        _ = codes  # keep the Python object alive through the native call above
     elif kind == "perceptron":
         fit = _xl_sgd(model, fields, entries, x, codes, labels_address(codes), k, _int(losses["perceptron"]),
                       fields["penalty"], PythonObject("constant"), fields["alpha"], fields["l1_ratio"], fields["eta0"],
                       PythonObject(0.5), PythonObject(0.1), fields["fit_intercept"], fields["max_iter"], fields["tol"],
                       fields["n_iter_no_change"], fields["shuffle"], fields["random_state"], args[2],
                       fields["class_weight"], labels.classes, labels.codes, fields["batch_size"], True, 256, context)
+        _ = codes  # keep the Python object alive through the native call above
     else:
         var lr = PythonObject("pa1") if _eq(fields["loss"], PythonObject("hinge")) else PythonObject("pa2")
         # scikit-learn's PassiveAggressive*.fit takes no sample_weight
@@ -1040,6 +1090,7 @@ def xl_fit_sgd_classifier(model: PythonObject, args: PythonObject, kind: String,
                       PythonObject(0.1), fields["fit_intercept"], fields["max_iter"], fields["tol"],
                       fields["n_iter_no_change"], fields["shuffle"], fields["random_state"], PythonObject(None),
                       fields["class_weight"], labels.classes, labels.codes, fields["batch_size"], False, 256, context)
+        _ = codes  # keep the Python object alive through the native call above
     py_setitem(fields, "coef_", fit[0])
     py_setitem(fields, "intercept_", fit[1])
     _ = codes^
@@ -1080,6 +1131,7 @@ def xl_fit_ridge_classifier(model: PythonObject, args: PythonObject, context: Py
             var w = labels_check_sample_weight(sample_weight, n, context)
             sw_keep = w.keep
             sw_addr = w.addr
+            _ = w  # keep the Python object alive through the native call above
         var prep = _xl_class_prep(model, entries, fields["class_weight"], labels.classes, labels.codes, sw_addr,
                                   False, True, context)
         sample_weight = prep[1]
@@ -1093,6 +1145,8 @@ def xl_fit_ridge_classifier(model: PythonObject, args: PythonObject, context: Py
     var fp: List[Float64] = [_float(alpha)]
     var out = _xl_run(entries, ALGO_RIDGE, x.addr, n * d, n, d, yy.addr, yy.rows, _xl_ints(ip), _xl_reals(fp),
                       T * d + T + 2 + 1 + 1, 3 * d * d + 3 * d + T + d * T + 2 * n, 1, context)
+    _ = yy  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     # status 2: X'X + alpha I does not factor even in float-float
     if _xl_word(out, T * d + T + 2 + 1) == 2.0:
         raise Error("mojolearn " + name + ": X'X + alpha I is singular even in float-float (alpha="
@@ -1122,6 +1176,7 @@ def _xl_isotonic_fit(model: PythonObject, fields: PythonObject, entries: PythonO
         # the sign of Spearman's rho, exact, in the binding
         var sign = _int(py_call_typed(entries["x_linear_spearman_sign"], PythonObject(x.addr), PythonObject(y.addr),
                                       PythonObject(n)))
+        _ = y  # keep the Python object alive through the native call above
         rising = sign >= 0
     else:
         rising = _truth(increasing)
@@ -1134,6 +1189,7 @@ def _xl_isotonic_fit(model: PythonObject, fields: PythonObject, entries: PythonO
     var fp: List[Float64] = [_xl_or(y_min, 0.0), _xl_or(y_max, 0.0)]
     var out = _xl_run(entries, ALGO_ISOTONIC, x.addr, n, n, 1, yy.addr, yy.rows, _xl_ints(ip), _xl_reals(fp),
                       3 + 2 * n, 6 * n, 3 * n, context)
+    _ = yy  # keep the Python object alive through the native call above
     var k = _xl_count(out, 0)
     py_setitem(fields, "X_min_", _xl_float(out, 1))
     py_setitem(fields, "X_max_", _xl_float(out, 2))
@@ -1159,6 +1215,8 @@ def _xl_isotonic_transform(model: PythonObject, fields: PythonObject, entries: P
     var yt = _xl_words(fields["y_thresholds_"], "y_thresholds_", context)
     var k = len(fields["X_thresholds_"])
     var thr = _xl_join(xt.addr, xt.rows * xt.cols, yt.addr, yt.rows * yt.cols, context)
+    _ = yt  # keep the Python object alive through the native call above
+    _ = xt  # keep the Python object alive through the native call above
     var oob_mode = fields["out_of_bounds"]
     var raise_oob = _eq(oob_mode, PythonObject("raise"))
     var oob = 2 if raise_oob else (1 if _eq(oob_mode, PythonObject("clip")) else 0)
@@ -1166,6 +1224,7 @@ def _xl_isotonic_transform(model: PythonObject, fields: PythonObject, entries: P
     var fp: List[Float64] = [_float(fields["X_min_"]), _float(fields["X_max_"])]
     var out = _xl_run(entries, ALGO_ISOTONIC_PREDICT, t.addr, n, n, 1, labels_address(thr), Int(py=thr.size),
                       _xl_ints(ip), _xl_reals(fp), n + 1 if raise_oob else n, 1, 1, context)
+    _ = thr  # keep the Python object alive through the native call above
     _ = xt^
     _ = yt^
     _ = thr^
@@ -1279,6 +1338,7 @@ def xl_cd_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     var copied = listed
     if row_major:
         x = LabelsMatrix(view.keep, view.addr, view.shape[0], view.shape[1], True)
+        _ = view  # keep the Python object alive through the native call above
     else:
         labels_check_rank(view, 2, "X")
         var keep = view.keep
@@ -1302,6 +1362,7 @@ def xl_cd_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
         var w = labels_check_sample_weight(args[2], n_rows, context)
         sw_keep = w.keep
         sw_addr = w.addr
+        _ = w  # keep the Python object alive through the native call above
     var entries = _xl_cd_entries(context)
     var coef = labels_empty(Python.tuple(n_cols), "<f4", context)
     py_setitem(fields, "coef_", coef)
@@ -1315,6 +1376,9 @@ def xl_cd_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
         _ = py_call(params.append, PythonObject(sw_addr))
     var n_iter = py_call_typed(entries["cd_fit"], PythonObject(x.addr), PythonObject(target.addr),
                                PythonObject(labels_address(coef)), PythonObject(labels_address(info)), params)
+    _ = target  # keep the Python object alive through the native call above
+    _ = info  # keep the Python object alive through the native call above
+    _ = coef  # keep the Python object alive through the native call above
     py_setitem(fields, "intercept_", _xl_float(info, 0))
     py_setitem(fields, "n_iter_", PythonObject(_int(n_iter)))
     py_setitem(fields, "n_features_in_", PythonObject(n_cols))
@@ -1340,6 +1404,9 @@ def xl_cd_predict(model: PythonObject, source: PythonObject, context: PythonObje
     _ = py_call_typed(entries["cd_predict"], PythonObject(x.addr), PythonObject(coef.addr),
                       PythonObject(labels_address(out)),
                       Python.list(PythonObject(x.rows), PythonObject(x.cols), PythonObject(_float(fields["intercept_"]))))
+    _ = coef  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
     _ = x^
     _ = coef^
     return out
@@ -1355,6 +1422,7 @@ def xl_cd_score(model: PythonObject, args: PythonObject, context: PythonObject) 
         var published = py_call_typed(host[0], model, PythonObject("host_infer_predict"), Python.tuple(args[0]), host[1])
         var cast = labels_f32(published, 1, "C", "predictions", context)
         prediction = _xl_join(cast.addr, cast.rows, 0, 0, context)
+        _ = cast  # keep the Python object alive through the native call above
         _ = cast^
     else:
         prediction = xl_cd_predict(model, args[0], context)
@@ -1404,13 +1472,18 @@ def _xl_index_i64(values: PythonObject, name: String, context: PythonObject) rai
     if view.typestr == "<i8" and (view.c_order() or view.both_orders()):
         if py_type(view.keep) is context["array_class"] and labels_address(view.keep) == view.addr:
             return labels_reshape(view.keep, Python.tuple(count), context)
+        _ = view  # keep the Python object alive through the native calls above
         var copy = labels_vector(count, "<i8", context)
         if count > 0:
             memcpy(dest=MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=labels_address(copy)),
                    src=MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=view.addr), count=count)
+            _ = copy  # keep the Python object alive through the native call above
+            _ = view  # keep the Python object alive through the native call above
         return copy
     var out = labels_vector(count, "<i8", context)
     labels_cast(view.addr, view.typestr, labels_address(out), "<i8", count, context)
+    _ = out  # keep the Python object alive through the native call above
+    _ = view  # keep the Python object alive through the native call above
     return out
 
 
@@ -1468,7 +1541,9 @@ def _xl_default_folds(n: Int, k: Int, context: PythonObject) raises -> PythonObj
                                      PythonObject(labels_address(test) if size > 0 else labels_address(scratch)),
                                      PythonObject(labels_address(train) if n - size > 0 else labels_address(scratch))))
         _ = fold_store  # keep the Python object alive through the native call above
+        _ = test  # keep the Python object alive through the native call above
         _ = scratch  # keep the Python object alive through the native call above
+        _ = train  # keep the Python object alive through the native call above
         if got != size:
             raise Error("RuntimeError: mojolearn: select_fold_i64 disagrees with fold_ids")
         _ = py_call(out.append, Python.tuple(train, test))
@@ -1492,6 +1567,7 @@ def _xl_kfold_ids_f32(n: Int, k: PythonObject, context: PythonObject) raises -> 
     _ = counts  # keep the Python object alive through the native call above
     var out = labels_vector(n, "<f4", context)
     labels_cast(labels_address(ids), "<i4", labels_address(out), "<f4", n, context)
+    _ = out  # keep the Python object alive through the native call above
     _ = ids  # keep the Python object alive through the native call above
     return out
 
@@ -1509,6 +1585,8 @@ def _xl_cv_fold_ids(splits: PythonObject, n: Int, context: PythonObject) raises 
         if _int(py_call_typed(assign, PythonObject(labels_address(te) if size > 0 else 0), PythonObject(size), PythonObject(n),
                               PythonObject(k), PythonObject(labels_address(fold)))) != 0:
             return PythonObject(None)
+        _ = te  # keep the Python object alive through the native calls above
+        _ = fold  # keep the Python object alive through the native calls above
         covered += size
     if covered != n:
         return PythonObject(None)
@@ -1523,9 +1601,12 @@ def _xl_cv_fold_ids(splits: PythonObject, n: Int, context: PythonObject) raises 
         if tr_size > 0:
             if _int(py_call_typed(check, PythonObject(labels_address(tr)), PythonObject(tr_size), PythonObject(n))) != 0:
                 return PythonObject(None)
+            _ = tr  # keep the Python object alive through the native calls above
             if _int(py_call_typed(hits, PythonObject(labels_address(tr)), PythonObject(tr_size),
                                   PythonObject(labels_address(fold)), PythonObject(n), PythonObject(k))) != 0:
                 return PythonObject(None)
+            _ = tr  # keep the Python object alive through the native calls above
+            _ = fold  # keep the Python object alive through the native calls above
     return fold
 
 
@@ -1544,6 +1625,8 @@ def _xl_cv_fold_ids_f32(splits: PythonObject, n: Int, name: String,
     if ids is not None:
         var out = labels_vector(n, "<f4", context)
         labels_cast(labels_address(ids), "<i4", labels_address(out), "<f4", n, context)
+        _ = out  # keep the Python object alive through the native call above
+        _ = ids  # keep the Python object alive through the native call above
         return (out, PythonObject(None))
     # `_cv_roles_f32`: per-split roles (x_linear/cv_roles.mojo)
     if n + 1 > 16777216:
@@ -1558,6 +1641,8 @@ def _xl_cv_fold_ids_f32(splits: PythonObject, n: Int, name: String,
             var status = _int(py_call_typed(mark, PythonObject(labels_address(rows) if size > 0 else 0), PythonObject(size),
                                             PythonObject(n), PythonObject(k), PythonObject(side + 1),
                                             PythonObject(labels_address(roles))))
+            _ = rows  # keep the Python object alive through the native call above
+            _ = roles  # keep the Python object alive through the native call above
             if status == 1:
                 raise Error("mojolearn " + name + ": a cv split holds an index outside [0, n_samples)")
             if status == 2:
@@ -1575,10 +1660,12 @@ def _xl_parts(addrs: List[Int], counts: List[Int], context: PythonObject) raises
         total += counts[i]
     var out = labels_vector(total, "<f4", context)
     var o = _F32P(unsafe_from_address=labels_address(out))
+    _ = out  # keep the Python object alive through the native call above
     var at = 0
     for i in range(len(counts)):  # driver-loop: over the target vector's parts
         if counts[i] > 0:
             memcpy(dest=o + at, src=_F32P(unsafe_from_address=addrs[i]), count=counts[i])
+            _ = out  # keep the Python object alive through the native call above
         at += counts[i]
     return out
 
@@ -1597,6 +1684,7 @@ def _xl_ridge(model: PythonObject, entries: PythonObject, x_addr: Int, n: Int, d
     var ip: List[Int] = [1, 1 if _truth(py_fields(model)["fit_intercept"]) else 0, A, has_sw]
     var out = _xl_run(entries, ALGO_RIDGE, x_addr, n * d, n, d, yy.addr, yy.rows, _xl_ints(ip), _xl_reals(alphas),
                       d + 1 + 2 + A + 1, 3 * d * d + 3 * d + 1 + d + 2 * n, 1, context)
+    _ = yy  # keep the Python object alive through the native call above
     if _xl_word(out, d + 1 + 2 + A) == 2.0:
         raise Error("mojolearn " + _name(model) + ": X'X + alpha I is singular even in float-float (alpha="
                     + String(py=py_call(_b().format, _xl_float(out, d + 1), PythonObject("g")))
@@ -1612,6 +1700,7 @@ def _xl_gather(src: Int, rows: PythonObject, n: Int, width: Int, context: Python
     var out = labels_empty(shape, "<f4", context)
     _ = py_call_typed(_xl_helper(context, "gather_rows_bytes"), PythonObject(src), PythonObject(labels_address(out)),
                       PythonObject(labels_address(rows)), PythonObject(n), PythonObject(count), PythonObject(4 * width))
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -1656,6 +1745,7 @@ def xl_fit_ridge_cv(model: PythonObject, args: PythonObject, context: PythonObje
     var A = len(alphas)
     if cv is None:
         var out = _xl_ridge(model, entries, x.addr, n, d, y, alphas, sample_weight, context)
+        _ = x  # keep the Python object alive through the native call above
         _xl_set_linear(fields, out, d, context)
         py_setitem(fields, "alpha_", _xl_float(out, d + 1))
         py_setitem(fields, "best_score_", _xl_float(out, d + 2))
@@ -1679,6 +1769,7 @@ def xl_fit_ridge_cv(model: PythonObject, args: PythonObject, context: PythonObje
         var scores = _xl_run(entries, ALGO_RIDGE_KFOLD, x.addr, n * d, n, d, y.addr, y.rows, _xl_ints(ip),
                              _xl_reals(alphas), A, n_fw, 1, context)
         var best = _int(py_call_typed(entries["x_linear_best_alpha"], PythonObject(labels_address(scores)), PythonObject(A)))
+        _ = scores  # keep the Python object alive through the native call above
         if best < 0:
             raise Error("mojolearn RidgeCV: X'X + alpha I is singular in float32 for every alpha "
                         + "(rescale X, or use larger alphas)")
@@ -1709,6 +1800,7 @@ def xl_fit_ridge_cv(model: PythonObject, args: PythonObject, context: PythonObje
         var w = labels_check_sample_weight(sample_weight, n, context)
         w_keep = _xl_owned(w, context)
         w_addr = labels_address(w_keep)
+        _ = w_keep  # keep the Python object alive through the native call above
     py_setitem(fields, "n_features_in_", PythonObject(d))
     var rows = Python.list()
     for i in range(A):  # driver-loop: over the alpha grid
@@ -1729,18 +1821,23 @@ def xl_fit_ridge_cv(model: PythonObject, args: PythonObject, context: PythonObje
             continue
         var xtr = _xl_gather(x.addr, tr, n, d, context)
         var ytr = _xl_gather(labels_address(yv), tr, n, 1, context)
+        _ = yv  # keep the Python object alive through the native call above
         var xte = _xl_gather(x.addr, te, n, d, context)
         var yte = _xl_gather(labels_address(yv), te, n, 1, context)
+        _ = yv  # keep the Python object alive through the native call above
         var wtr = PythonObject(None)
         var wte = PythonObject(None)
         if w_addr != 0:
             wtr = _xl_gather(w_addr, tr, n, 1, context)
             wte = _xl_gather(w_addr, te, n, 1, context)
         var ytr_m = LabelsMatrix(ytr, labels_address(ytr), n_tr, 1, True)
+        _ = ytr  # keep the Python object alive through the native call above
         var xte_m = LabelsMatrix(xte, labels_address(xte), n_te, d, True)
+        _ = xte  # keep the Python object alive through the native call above
         for i in range(A):  # driver-loop: over the alpha grid
             var one: List[Float64] = [alphas[i]]
             var out = _xl_ridge(model, entries, labels_address(xtr), n_tr, d, ytr_m, one, wtr, context)
+            _ = xtr  # keep the Python object alive through the native call above
             var coef = _xl_slice(out, 0, d, Python.tuple(d), context)
             var pred = _xl_decision(model, xte_m, coef, _xl_float(out, d), LINK_IDENTITY, True, entries, context)
             var score = labels_r2(yte, pred, wte, PythonObject(None), context)
@@ -1761,9 +1858,12 @@ def xl_fit_ridge_cv(model: PythonObject, args: PythonObject, context: PythonObje
             if _int(py_call_typed(_xl_helper(context, "row_means_f64"), py_call(flat.buffer_info)[0], PythonObject(A),
                                   PythonObject(k), PythonObject(labels_address(means)))) != 0:
                 raise Error("-inf + inf in fsum")
+            _ = means  # keep the Python object alive through the native calls above
         best = _int(py_call_typed(_xl_helper(context, "reduce_stat"), PythonObject(labels_address(means)), PythonObject(1),
                                   PythonObject(A), PythonObject(3)))
+        _ = means  # keep the Python object alive through the native call above
         best_score = PythonObject(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=labels_address(means))[best])
+        _ = means  # keep the Python object alive through the native call above
         _ = flat^
         _ = means^
     var one: List[Float64] = [alphas[best]]
@@ -1836,8 +1936,10 @@ def _xl_enetcv(model: PythonObject, fields: PythonObject, args: PythonObject, l1
     var addrs = List[Int]()
     var counts = List[Int]()
     addrs.append(y.addr)
+    _ = y  # keep the Python object alive through the native call above
     counts.append(n)
     addrs.append(labels_address(ids))
+    _ = ids  # keep the Python object alive through the native call above
     counts.append(n)
     var weighted = 0
     var w_keep = PythonObject(None)
@@ -1848,13 +1950,16 @@ def _xl_enetcv(model: PythonObject, fields: PythonObject, args: PythonObject, l1
         else:
             w_keep = _xl_owned(labels_check_sample_weight(sample_weight, n, context), context)
         addrs.append(labels_address(w_keep))
+        _ = w_keep  # keep the Python object alive through the native call above
         counts.append(n)
         addrs.append(labels_address(roles))
+        _ = roles  # keep the Python object alive through the native call above
         counts.append(Int(py=roles.size))
         weighted = 1
     elif sample_weight is not None:
         w_keep = _xl_owned(labels_check_sample_weight(sample_weight, n, context), context)
         addrs.append(labels_address(w_keep))
+        _ = w_keep  # keep the Python object alive through the native call above
         counts.append(n)
         weighted = 1
     var yy = _xl_parts(addrs, counts, context)
@@ -1870,6 +1975,8 @@ def _xl_enetcv(model: PythonObject, fields: PythonObject, args: PythonObject, l1
                          1 if explicit else 0, 1 if _truth(fields["positive"]) else 0, weighted]
     var out = _xl_run(entries, ALGO_ENETCV, x.addr, n * d, n, d, labels_address(yy), Int(py=yy.size), _xl_ints(ip),
                       _xl_reals(fp), d + 4 + L * grid + L * grid * folds, d * d + 4 * d + 3 + grid * (d + 2), 1, context)
+    _ = yy  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     _xl_set_linear(fields, out, d, context)
     py_setitem(fields, "alpha_", _xl_float(out, d + 1))
     var l1_best = Float64(_xl_word(out, d + 2))
@@ -1991,6 +2098,7 @@ def xl_fit_logistic_cv(model: PythonObject, args: PythonObject, context: PythonO
     var weigh = sample_weight is not None or class_weight is not None or roles is not None
     var prep = _xl_class_prep(model, entries, class_weight, labels.classes, labels.codes,
                               0 if raw is None else labels_address(raw), True, class_weight is not None, context)
+    _ = raw  # keep the Python object alive through the native call above
     var fitw = prep[1]
     var largest = prep[2]
     if not explicit:
@@ -1999,24 +2107,32 @@ def xl_fit_logistic_cv(model: PythonObject, args: PythonObject, context: PythonO
             raise Error("mojolearn: cv must be None or an int in [2, the largest class size]")
     var codes = labels_vector(n, "<f4", context)
     labels_cast(labels_address(labels.codes), "<i4", labels_address(codes), "<f4", n, context)
+    _ = codes  # keep the Python object alive through the native call above
     var zeros = labels_vector(n, "<f4", context)
     var addrs = List[Int]()
     var counts = List[Int]()
     addrs.append(labels_address(codes))
+    _ = codes  # keep the Python object alive through the native call above
     counts.append(n)
     addrs.append(labels_address(fold_ids) if explicit else labels_address(zeros))
+    _ = zeros  # keep the Python object alive through the native call above
+    _ = fold_ids  # keep the Python object alive through the native call above
     counts.append(n)
     var has_sw = 0
     if weigh:
         if raw is None:
             raw = labels_full_f32(n, 1.0, context)
         addrs.append(labels_address(raw) if fitw is None else labels_address(fitw))
+        _ = fitw  # keep the Python object alive through the native call above
+        _ = raw  # keep the Python object alive through the native call above
         counts.append(n)
         addrs.append(labels_address(raw))
+        _ = raw  # keep the Python object alive through the native call above
         counts.append(n)
         has_sw = 1
     if roles is not None:
         addrs.append(labels_address(roles))
+        _ = roles  # keep the Python object alive through the native call above
         counts.append(Int(py=roles.size))
     var yy = _xl_parts(addrs, counts, context)
     var p = kp * (d + 1)
@@ -2030,6 +2146,8 @@ def xl_fit_logistic_cv(model: PythonObject, args: PythonObject, context: PythonO
         fp.append(Cs[i])
     var out = _xl_run(entries, ALGO_LOGCV, x.addr, n * d, n, d, labels_address(yy), Int(py=yy.size), _xl_ints(ip),
                       _xl_reals(fp), kp * d + kp + 2 + folds * nc, p + 1 + n * (kp + 1) + _lbfgs_work(p), 5, context)
+    _ = yy  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "classes_", labels.classes)
     py_setitem(fields, "coef_", _xl_slice(out, 0, kp * d, Python.tuple(kp, d), context))
     py_setitem(fields, "intercept_", _xl_slice(out, kp * d, kp, Python.tuple(kp), context))

@@ -463,6 +463,8 @@ def msel_learning_curve(args: PythonObject, context: PythonObject) raises -> Pyt
                 var out = msel_new(size, "<i8", context)
                 _ = family_call(msel_entry("gather_i64", context), PythonObject(msel_addr(tr)), PythonObject(size),
                                 PythonObject(msel_addr(perms[f])), PythonObject(size), PythonObject(msel_addr(out)))
+                _ = tr  # keep the Python object alive through the native call above
+                _ = out  # keep the Python object alive through the native call above
                 tr = out
             _ = py_call(orders.append, tr)
     else:
@@ -571,6 +573,8 @@ def _perm_base(y: PythonObject, context: PythonObject) raises -> PythonObject:
                                 context["family_msel_codes"][a.dtype], PythonObject(msel_addr(narrow)),
                                 PythonObject(2), a.size)) != 0:
             return PythonObject(None)
+        _ = a  # keep the Python object alive through the native calls above
+        _ = narrow  # keep the Python object alive through the native calls above
         return narrow
     if d == "<i2" or d == "<u2" or d == "<i1":
         var store = family_call(array_mod.array, PythonObject("i"), a._mv)
@@ -632,7 +636,9 @@ def _group_order(groups: PythonObject, n: Int, context: PythonObject) raises -> 
     var rows_sorted = msel_new(n, "<i8", context)
     var inverse = msel_new(n, "<i8", context)
     memcpy(dest=msel_p64(rows_sorted), src=FAMILY_I64P(unsafe_from_address=base + 4 * w_ord), count=n)
+    _ = rows_sorted  # keep the Python object alive through the native call above
     memcpy(dest=msel_p64(inverse), src=FAMILY_I64P(unsafe_from_address=base + 4 * w_inv), count=n)
+    _ = inverse  # keep the Python object alive through the native call above
     _ = prog^
     return Python.tuple(sizes, rows_sorted, inverse)
 
@@ -658,6 +664,7 @@ def _group_index(mut rng: MselRng, order: PythonObject, n: Int, context: PythonO
     var idx = msel_new(n, "<i8", context)
     _ = family_call(gather, PythonObject(s0), PythonObject(n), PythonObject(msel_addr(order[2])), PythonObject(n),
                     PythonObject(msel_addr(idx)))
+    _ = idx  # keep the Python object alive through the native call above
     return idx
 
 

@@ -118,4 +118,5 @@ def cfb_reference_labels(model: PythonObject, binding: PythonObject, refs: Pytho
     _ = family_call(entry, PythonObject(handle), Python.list(classical_address(q), classical_address(out)),
                     Python.list(PythonObject(nq), PythonObject(n_features), PythonObject(metric), eps,
                                 PythonObject(has_thresh)))
+    _ = out  # keep the Python object alive through the native call above
     return out

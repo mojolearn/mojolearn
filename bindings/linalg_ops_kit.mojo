@@ -117,6 +117,7 @@ struct LinKit(Movable):
         var out = self.zeros(rows, cols)
         if rows * cols:
             memcpy(dest=self.ptr(out), src=KIT_F32P(unsafe_from_address=addr), count=rows * cols)
+            _ = out  # keep the Python object alive through the native call above
         return out
 
     def device_output(mut self, rows: Int, cols: Int) raises -> Int:
@@ -133,6 +134,7 @@ struct LinKit(Movable):
             if count:
                 _ = family_call(self.entry("x_decomp_dev_download"), PythonObject(self.matrices[a].device),
                                 classical_address(result), PythonObject(count))
+                _ = result  # keep the Python object alive through the native call above
             self.matrices[a].host = result
             self.matrices[a].device = -1
         return self.matrices[a].host
@@ -140,12 +142,14 @@ struct LinKit(Movable):
     def ptr(mut self, a: Int) raises -> KIT_F32P:
         var owner = self.host(a)
         var p = KIT_F32P(unsafe_from_address=Int(py=classical_address(owner)))
+        _ = owner  # keep the Python object alive through the native call above
         _ = owner^
         return p
 
     def address(mut self, a: Int) raises -> PythonObject:
         var owner = self.host(a)
         var result = classical_address(owner)
+        _ = owner  # keep the Python object alive through the native call above
         _ = owner^
         return result
 
@@ -159,6 +163,7 @@ struct LinKit(Movable):
             if count:
                 _ = family_call(self.entry("x_decomp_dev_upload"), PythonObject(handle), classical_address(owner),
                                 PythonObject(count))
+                _ = owner  # keep the Python object alive through the native call above
             self.matrices[a].device = handle
             self.matrices[a].host = PythonObject(None)
             _ = owner^
@@ -172,6 +177,7 @@ struct LinKit(Movable):
         if rows * cols:
             memcpy(dest=KIT_F32P(unsafe_from_address=Int(py=classical_address(result))), src=self.ptr(a),
                    count=rows * cols)
+            _ = result  # keep the Python object alive through the native call above
         return result
 
     def out_vector(mut self, a: Int, length: Int) raises -> PythonObject:
@@ -180,12 +186,14 @@ struct LinKit(Movable):
         if length:
             memcpy(dest=KIT_F32P(unsafe_from_address=Int(py=classical_address(result))), src=self.ptr(a),
                    count=length)
+            _ = result  # keep the Python object alive through the native call above
         return result
 
     def constant(mut self, value: Float32, rows: Int = 1, cols: Int = 1) raises -> Int:
         """`_M.of([value] * (rows * cols), rows, cols)` / `_Kit.const`."""
         var out = self.zeros(rows, cols)
         tsqr_fill_constant(self.ptr(out), rows * cols, value)
+        _ = out  # keep the Python object alive through the native call above
         return out
 
     def reshape(mut self, a: Int, rows: Int, cols: Int) raises -> Int:
@@ -232,6 +240,9 @@ struct LinKit(Movable):
         if rows * cols:
             _ = family_call(self.entry("x_decomp_ew"), self.address(a), self.address(ib), self.address(ic),
                             self.address(out), params, PythonObject(scalar))
+            _ = ic  # keep the Python object alive through the native call above
+            _ = ib  # keep the Python object alive through the native call above
+            _ = out  # keep the Python object alive through the native call above
         return out
 
     def mm(mut self, a: Int, b: Int, ta: Bool = False, tb: Bool = False) raises -> Int:
@@ -253,6 +264,7 @@ struct LinKit(Movable):
         var out = self.zeros(m, n)
         if m * n:
             _ = family_call(self.entry("x_decomp_gemm"), self.address(a), self.address(b), self.address(out), params)
+            _ = out  # keep the Python object alive through the native call above
         return out
 
     def _sum(mut self, a: Int, columns: Bool) raises -> Int:
@@ -270,6 +282,7 @@ struct LinKit(Movable):
             return out
         var out = self.zeros(nr, nc)
         _ = family_call(self.entry("x_decomp_" + name), self.address(a), self.address(out), params)
+        _ = out  # keep the Python object alive through the native call above
         return out
 
     def total_word(mut self, a: Int) raises -> Float32:
@@ -278,7 +291,9 @@ struct LinKit(Movable):
         var t = self._sum(rows, True)
         var _keep_ret_t_r279 = self.ptr(t)[0]
         _ = t  # keep the Python object alive through the native call above
-        return _keep_ret_t_r279^
+        var _keep_ret_t = _keep_ret_t_r279^
+        _ = t  # keep the Python object alive through the native call above
+        return _keep_ret_t^
 
     def move(mut self, a: Int, idx: Int, rows: Int, cols: Int, params: PythonObject, resident: Bool) raises -> Int:
         if rows * cols and resident:
@@ -291,6 +306,7 @@ struct LinKit(Movable):
         var out = self.zeros(rows, cols)
         if rows * cols:
             _ = family_call(self.entry("x_decomp_move"), self.address(a), self.address(idx), self.address(out), params)
+            _ = out  # keep the Python object alive through the native call above
         return out
 
     def take_rows(mut self, a: Int, idx: Int) raises -> Int:
@@ -312,14 +328,17 @@ struct LinKit(Movable):
         if self.on_device(a) and width and rows * width > 0 and rows < F32_INDEX_MAX and cols < F32_INDEX_MAX:
             var idx = self.zeros(1, width)
             var p = self.ptr(idx)
+            _ = idx  # keep the Python object alive through the native call above
             for t in range(width):  # driver-loop: over the selected column indices (matrix columns)
                 p[t] = Float32(start + t)
+                _ = idx  # keep the Python object alive through the native call above
             return self.move(a, idx, rows, width, Python.list(PythonObject(MV_TAKE_COLS), PythonObject(rows * width),
                 PythonObject(width), PythonObject(cols), PythonObject(0), PythonObject(0), PythonObject(0),
                 PythonObject(rows * cols), PythonObject(rows * width), PythonObject(width)), True)
         var out = self.zeros(rows, width)
         if rows * width:
             tsqr_copy_columns(self.ptr(a), self.ptr(out), rows, cols, start, width)
+            _ = out  # keep the Python object alive through the native call above
         return out
 
     def transpose(mut self, a: Int) raises -> Int:
@@ -344,6 +363,7 @@ struct LinKit(Movable):
         var out = self.zeros(cols, rows)
         if count:
             _ = family_call(self.entry("x_decomp_move"), self.address(a), self.address(one), self.address(out), params)
+            _ = out  # keep the Python object alive through the native call above
             _ = one  # keep the Python object alive through the native call above
         return out
 
@@ -362,7 +382,9 @@ struct LinKit(Movable):
             index = self.strided(a, 1, 1)
         var _keep_ret_index_r363 = self.ptr(index)[0]
         _ = index  # keep the Python object alive through the native call above
-        return _keep_ret_index_r363^
+        var _keep_ret_index = _keep_ret_index_r363^
+        _ = index  # keep the Python object alive through the native call above
+        return _keep_ret_index^
 
     def order(mut self, a: Int) raises -> Int:
         """`_Kit.order(A)`: the stable ascending order (ties to the lower
@@ -388,6 +410,7 @@ struct LinKit(Movable):
         var out = self.zeros(n, 1)
         if n:
             _ = family_call(self.entry("x_decomp_order_f"), self.address(a), PythonObject(n), self.address(out))
+            _ = out  # keep the Python object alive through the native call above
         return out
 
     def order_small(mut self, a: Int) raises -> Int:
@@ -402,6 +425,7 @@ struct LinKit(Movable):
         var out = self.zeros(n, 1)
         if n:
             _ = family_call(self.entry("x_decomp_order_small"), self.address(a), self.address(out), Python.list(PythonObject(n)))
+            _ = out  # keep the Python object alive through the native call above
         return out
 
     def take_cols_m(mut self, a: Int, idx: Int, w: Int) raises -> Int:
@@ -435,6 +459,9 @@ struct LinKit(Movable):
                 else:
                     _ = family_call(self.entry("x_decomp_move"), self.address(source), self.address(one),
                                     self.address(out), params)
+                    _ = one  # keep the Python object alive through the native call above
+                    _ = source  # keep the Python object alive through the native call above
+                    _ = out  # keep the Python object alive through the native call above
             offset += self.c(source)
         return out
 
@@ -452,6 +479,7 @@ struct LinKit(Movable):
         var out = self.zeros(rows, cols)
         if rows * cols:
             memcpy(dest=self.ptr(out), src=self.ptr(a), count=rows * cols)
+            _ = out  # keep the Python object alive through the native call above
         return out
 
     def geqrf(mut self, a: Int, mut tau: Int) raises -> Int:
@@ -461,6 +489,7 @@ struct LinKit(Movable):
         tau = self.zeros(1, kk)
         _ = family_call(self.entry("x_decomp_geqrf"), self.address(h), self.address(tau),
                         Python.list(PythonObject(self.r(a)), PythonObject(self.c(a))))
+        _ = h  # keep the Python object alive through the native call above
         return h
 
     def orgqr(mut self, h: Int, tau: Int, qc: Int) raises -> Int:
@@ -468,6 +497,7 @@ struct LinKit(Movable):
         var q = self.zeros(self.r(h), qc)
         _ = family_call(self.entry("x_decomp_orgqr"), self.address(h), self.address(tau), self.address(q),
                         Python.list(PythonObject(self.r(h)), PythonObject(self.c(h)), PythonObject(self.c(tau)), PythonObject(qc)))
+        _ = q  # keep the Python object alive through the native call above
         return q
 
     def eigh(mut self, a: Int, uplo: Int, mut v: Int) raises -> Int:
@@ -479,8 +509,10 @@ struct LinKit(Movable):
         if n >= 1 and self.c(a) == n and self.on_device(a) and self.has("x_decomp_dev_eigh"):
             _ = family_call(self.entry("x_decomp_dev_eigh"), PythonObject(self.matrices[a].device), self.address(w),
                             self.address(v), params)
+            _ = w  # keep the Python object alive through the native call above
             return w
         _ = family_call(self.entry("x_decomp_eigh"), self.address(a), self.address(w), self.address(v), params)
+        _ = w  # keep the Python object alive through the native call above
         return w
 
     def svd(mut self, a: Int, mut vt: Int) raises -> Int:
@@ -493,8 +525,12 @@ struct LinKit(Movable):
         if m >= n and n >= 1 and self.has("x_decomp_dev_svd") and self.resident:
             var da = self.device(a)
             _ = family_call(self.entry("x_decomp_dev_svd"), PythonObject(da), self.address(s), self.address(v), params)
+            _ = v  # keep the Python object alive through the native call above
+            _ = s  # keep the Python object alive through the native call above
         else:
             _ = family_call(self.entry("x_decomp_svd"), self.address(a), self.address(s), self.address(v), params)
+            _ = v  # keep the Python object alive through the native call above
+            _ = s  # keep the Python object alive through the native call above
         # descending, ties to the lower index: the stable ascending order of -s
         var negated = self.ew(OP_SCALE, s, scalar=-1.0)
         var o = self.order(negated)
@@ -519,9 +555,11 @@ struct LinKit(Movable):
             return q
         var q = self.copy(a)
         _ = family_call(self.entry("x_decomp_orth_diag"), self.address(q), self.address(diag), params)
+        _ = q  # keep the Python object alive through the native call above
         return q
 
     def eye(mut self, rows: Int, cols: Int) raises -> Int:
         var out = self.zeros(rows, cols)
         tsqr_fill_eye(self.ptr(out), rows, cols)
+        _ = out  # keep the Python object alive through the native call above
         return out

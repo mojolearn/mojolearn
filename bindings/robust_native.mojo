@@ -208,9 +208,13 @@ def robust_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
     var arena = xprep_storage(host+(0 if device_scratch else scratch),context)
     var fraction_values = classical_typed(Python.tuple(3),"<f4",context["output_context"])
     var fp = _ptr(fraction_values)
+    _ = fraction_values  # keep the Python object alive through the native call above
     fp[0] = Float32(lo/100.0)
+    _ = fraction_values  # keep the Python object alive through the native call above
     fp[1] = 0.5
+    _ = fraction_values  # keep the Python object alive through the native call above
     fp[2] = Float32(hi/100.0)
+    _ = fraction_values  # keep the Python object alive through the native call above
     var inputs = Python.tuple(Python.tuple(0,values),Python.tuple(fractions,Python.tuple(0,fraction_values,PythonObject(None),3,1)))
     var program = List[Int32]()
     if not select:

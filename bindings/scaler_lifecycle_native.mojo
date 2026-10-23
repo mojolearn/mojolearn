@@ -145,6 +145,7 @@ def _nan_fill(values: PythonObject, entries: PythonObject, context: PythonObject
     scaler_refuse_infinite_columns(ap, st, d)
     var output = classical_typed(Python.tuple(n,d), "<f4", context["output_context"])
     memcpy(dest=_ptr(output), src=ap+dest, count=n*d)
+    _ = output  # keep the Python object alive through the native call above
     _ = arena^
     return output
 
@@ -175,12 +176,15 @@ def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
     if scale is None:
         scale = classical_typed(Python.tuple(d), "<f4", context["output_context"])
         scaler_fill(_ptr(scale), d, 1)
+        _ = scale  # keep the Python object alive through the native call above
     mean = _statistic(mean, d, "mean_", context)
     scale = _statistic(scale, d, "scale_", context)
     var arena = List[Float32](length=7*d+5, fill=0)
     var ap = F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
     memcpy(dest=ap, src=_ptr(mean), count=d)
+    _ = mean  # keep the Python object alive through the native call above
     memcpy(dest=ap+d, src=_ptr(scale), count=d)
+    _ = scale  # keep the Python object alive through the native call above
     arena[7*d+4] = 1
     var program = List[Int32]()
     _stage(program, 264, d, 0, d, Int(with_mean), Int(with_std), 7*d+3, 7*d+4, 2*d, 3*d, 4*d, 5*d, 6*d)
@@ -198,6 +202,8 @@ def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
     var finite = True
     if direct is not None:
         var got = Int(py=py_call(direct, classical_address(values), Int(ap+2*d), Int(ap+3*d), classical_address(output), params))
+        _ = output  # keep the Python object alive through the native call above
+        _ = values  # keep the Python object alive through the native call above
         if got == 0:
             raise Error("StandardScaler transform overflowed in Float32")
         finite = got == 1
@@ -205,19 +211,27 @@ def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
             var filled = _nan_fill(values, entries, context)
             if Int(py=py_call(direct, classical_address(filled), Int(ap+2*d), Int(ap+3*d), classical_address(output), params)) != 1:
                 raise Error("StandardScaler transform overflowed in Float32")
+            _ = filled  # keep the Python object alive through the native calls above
+            _ = output  # keep the Python object alive through the native calls above
             _ = filled^
     else:
         finite = scaler_all_finite(_ptr(values), n*d)
+        _ = values  # keep the Python object alive through the native call above
         var filled = values if finite else _nan_fill(values, entries, context)
         _ = py_call_typed(entries["standard_transform"], classical_address(filled), Int(ap+2*d), Int(ap+3*d), classical_address(output), params)
+        _ = filled  # keep the Python object alive through the native call above
+        _ = output  # keep the Python object alive through the native call above
         if not scaler_all_finite(_ptr(output), n*d):
             raise Error("StandardScaler transform overflowed in Float32")
+        _ = output  # keep the Python object alive through the native calls above
         _ = filled^
     if not finite or colnan:
         var keep = List[Float32](length=3*n*d+2*d, fill=0)
         var kp = F32P(unsafe_from_address=Int(keep.unsafe_ptr()))
         memcpy(dest=kp, src=_ptr(values), count=n*d)
+        _ = values  # keep the Python object alive through the native call above
         memcpy(dest=kp+n*d, src=_ptr(output), count=n*d)
+        _ = output  # keep the Python object alive through the native call above
         memcpy(dest=kp+2*n*d, src=ap+4*d, count=d)
         var restore = List[Int32]()
         # c2_nan_sub publishes int32 words, while nan_keep reads numeric
@@ -227,6 +241,7 @@ def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
         _stage(restore, 103, n*d, 0, d, n*d, 2*n*d+d, 2*n*d+2*d)
         _run(keep, restore, entries)
         memcpy(dest=_ptr(output), src=kp+2*n*d+2*d, count=n*d)
+        _ = output  # keep the Python object alive through the native call above
         _ = keep^
     _ = arena^
     _ = mean^
@@ -297,11 +312,13 @@ def scaler_partial_fit(model: PythonObject, source: PythonObject, weights: Pytho
             var value = past[k]
             var scalar = py_type(value) is b.int or py_type(value) is b.float
             scaler_counts_f64(0 if scalar else Int(py=classical_address(value)), 0 if scalar else (1 if String(value.dtype) == "<i8" else 2), Float64(py=value) if scalar else Float64(0), wp+k*d,d)
+            _ = value  # keep the Python object alive through the native call above
         if scaler_merge_count_only(wp,wp+d,d):
             count = PythonObject(wp[0]) if weighted else PythonObject(Int(wp[0]))
         else:
             count = classical_typed(Python.tuple(d),"<f4" if weighted else "<i8",context["output_context"])
             scaler_narrow_counts(wp,Int(py=classical_address(count)),weighted,d)
+            _ = count  # keep the Python object alive through the native call above
         py_setitem(fields,"n_samples_seen_",count)
         _ = wide^
         _ = arena^
@@ -310,14 +327,18 @@ def scaler_partial_fit(model: PythonObject, source: PythonObject, weights: Pytho
         var old_mean = _statistic(fields["mean_"], d, "mean_", context)
         var new_mean = _statistic(fresh["mean_"], d, "mean_", context)
         memcpy(dest=ap+2*d, src=_ptr(old_mean), count=d)
+        _ = old_mean  # keep the Python object alive through the native call above
         memcpy(dest=ap+3*d, src=_ptr(new_mean), count=d)
+        _ = new_mean  # keep the Python object alive through the native call above
         if fields["var_"] is not None:
             var old_var = _statistic(fields["var_"], d, "var_", context)
             memcpy(dest=ap+4*d, src=_ptr(old_var), count=d)
+            _ = old_var  # keep the Python object alive through the native call above
             _ = old_var^
         if fresh["var_"] is not None:
             var new_var = _statistic(fresh["var_"], d, "var_", context)
             memcpy(dest=ap+5*d, src=_ptr(new_var), count=d)
+            _ = new_var  # keep the Python object alive through the native call above
             _ = new_var^
         var program = List[Int32]()
         _stage(program, 91, d, 0, 2*d, 4*d, d, 3*d, 5*d, d, 1, 6*d, 7*d, 8*d, 1)
@@ -347,6 +368,7 @@ def scaler_partial_fit(model: PythonObject, source: PythonObject, weights: Pytho
         else:
             count = classical_typed(Python.tuple(d), "<i8", context["output_context"])
             var dest = I64P(unsafe_from_address=Int(py=classical_address(count)))
+            _ = count  # keep the Python object alive through the native call above
             memcpy(dest=dest, src=ip+2*d, count=d)
         _ = counts^
     py_setitem(fields, "n_samples_seen_", count)
@@ -389,11 +411,18 @@ def scaler_fit_transform(model: PythonObject, source: PythonObject, options: Pyt
             var wm = _bool(fields["with_mean"], context)
             var ws = _bool(fields["with_std"], context)
             var got = Int(py=py_call(entry, classical_address(values), classical_address(stats), classical_address(output), Python.list(n,d,Int(wm),Int(ws))))
+            _ = output  # keep the Python object alive through the native call above
+            _ = stats  # keep the Python object alive through the native call above
+            _ = values  # keep the Python object alive through the native call above
             if got != 0:
                 var ptr = _ptr(stats)
+                _ = stats  # keep the Python object alive through the native call above
                 py_setitem(fields, "mean_", _copy_row(ptr,d,context) if wm or ws else PythonObject(None))
+                _ = stats  # keep the Python object alive through the native call above
                 py_setitem(fields, "var_", _copy_row(ptr+d,d,context) if ws else PythonObject(None))
+                _ = stats  # keep the Python object alive through the native call above
                 py_setitem(fields, "scale_", _copy_row(ptr+2*d,d,context) if ws else PythonObject(None))
+                _ = stats  # keep the Python object alive through the native call above
                 py_setitem(fields, "n_features_in_", d)
                 py_setitem(fields, "n_samples_seen_", n)
                 py_setitem(fields, "numeric_mode_", mode)
@@ -416,10 +445,15 @@ def scaler_archive_save(model: PythonObject, path: PythonObject, context: Python
     var integer = py_type(seen) is b.int
     var meta = classical_typed(Python.tuple(4), "<i8", context["output_context"])
     var mp = I64P(unsafe_from_address=Int(py=classical_address(meta)))
+    _ = meta  # keep the Python object alive through the native call above
     mp[0] = Int64(_features(fields))
+    _ = meta  # keep the Python object alive through the native call above
     mp[1] = Int64(py=seen) if integer else Int64(-1)
+    _ = meta  # keep the Python object alive through the native call above
     mp[2] = Int64(_bool(fields["with_mean_"],context))
+    _ = meta  # keep the Python object alive through the native call above
     mp[3] = Int64(_bool(fields["with_std_"],context))
+    _ = meta  # keep the Python object alive through the native call above
     var arrays = Python.dict(format="mojolearn-scaler-1", estimator=py_type(model).__name__, numeric_mode=fields["numeric_mode_"], meta=meta)
     if not integer:
         if not classical_is_array(seen,context):
@@ -427,6 +461,7 @@ def scaler_archive_save(model: PythonObject, path: PythonObject, context: Python
                 raise Error("TypeError: StandardScaler counts must be native numbers or count buffers")
             var scalar = classical_typed(Python.tuple(1), "<f4", context["output_context"])
             _ptr(scalar)[0] = Float32(py=seen)
+            _ = scalar  # keep the Python object alive through the native call above
             seen = scalar
         py_setitem(arrays,"n_samples_seen",seen)
     var names = Python.tuple("mean","var","scale")
@@ -474,6 +509,8 @@ def scaler_archive_build(cls: PythonObject, arrays: PythonObject, path: PythonOb
                 raise Error("StandardScaler saved statistic does not match n_features_in_")
             value = classical_typed(Python.tuple(d),"<f4",output_context)
             memcpy(dest=_ptr(value),src=_ptr(stored),count=d)
+            _ = stored  # keep the Python object alive through the native call above
+            _ = value  # keep the Python object alive through the native call above
             _ = stored^
         py_setitem(fields,names[k]+"_",value)
     var seen = PythonObject(classical_i64(meta,1))
@@ -486,9 +523,12 @@ def scaler_archive_build(cls: PythonObject, arrays: PythonObject, path: PythonOb
             raise Error("StandardScaler n_samples_seen does not match n_features_in_")
         if Int(py=stored.size) == 1:
             seen = PythonObject(Float64(_ptr(stored)[0])) if dtype == "<f4" else PythonObject(Float64(classical_i64(stored,0)))
+            _ = stored  # keep the Python object alive through the native call above
         else:
             seen = classical_typed(Python.tuple(d),dtype,output_context)
             memcpy(dest=MutPointer[UInt8,MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(seen))), src=MutPointer[UInt8,MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(stored))), count=d*(4 if dtype == "<f4" else 8))
+            _ = stored  # keep the Python object alive through the native call above
+            _ = seen  # keep the Python object alive through the native call above
         _ = stored^
     py_setitem(fields,"n_features_in_",d)
     py_setitem(fields,"n_samples_seen_",seen)

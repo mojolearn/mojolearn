@@ -107,6 +107,8 @@ def _theta_predict(model: PythonObject, fields: PythonObject, args: PythonObject
         var additive = 0 if Bool(py=fields["decomposition_type"] == PythonObject("multiplicative")) else 1
         _ = py_call_typed(entries["theta"], Python.list(xseq_addr(y), xseq_addr(forecast), xseq_addr(info)),
                           Python.list(batch, n, h, fields["season_length"], code, additive, mask), fp)
+        _ = info  # keep the Python object alive through the native call above
+        _ = y  # keep the Python object alive through the native call above
         _store(fields, "info_", info)
         # the selected model of each series: info column 4 as an index into the names
         var codes = xseq_column_i64(info, batch, 8, 4, context)
@@ -133,6 +135,8 @@ def _croston_fit(model: PythonObject, fields: PythonObject, args: PythonObject, 
     var entries = xseq_entries(fields, context)
     _ = py_call_typed(entries["croston"], Python.list(xseq_addr(y), xseq_addr(mean)),
                       Python.list(batch, n, _getattr(py_type(model), "_VARIANT")))
+    _ = mean  # keep the Python object alive through the native call above
+    _ = y  # keep the Python object alive through the native call above
     return model
 
 
@@ -149,6 +153,8 @@ def _croston_predict(model: PythonObject, fields: PythonObject, args: PythonObje
     if h:
         var entries = xseq_entries(fields, context)
         _ = py_call_typed(entries["croston_forecast"], Python.list(xseq_addr(mean), xseq_addr(forecast)), Python.list(batch, h))
+        _ = forecast  # keep the Python object alive through the native call above
+        _ = mean  # keep the Python object alive through the native call above
     return xseq_mean_dict(xseq_first(forecast, xseq_truth(fields["_one"])))
 
 
@@ -174,8 +180,10 @@ def _ets_fit(model: PythonObject, fields: PythonObject, args: PythonObject, cont
         # every value > 0: finite (`all_finite_f32`) and a first-wins minimum above zero (`reduce_stat` 0)
         var size = Int(py=y.size)
         var positive = Bool(py=py_call_typed(xseq_base(context, "all_finite_f32"), xseq_addr(y), PythonObject(size)))
+        _ = y  # keep the Python object alive through the native call above
         if positive:
             var low = py_call_typed(xseq_base(context, "reduce_stat"), xseq_addr(y), PythonObject(0), PythonObject(size), PythonObject(0))
+            _ = y  # keep the Python object alive through the native call above
             positive = Bool(py=low > PythonObject(0))
         if not positive:
             raise Error("ETS: Inappropriate model for data with negative or zero values")
@@ -237,6 +245,7 @@ def _ets_predict(model: PythonObject, fields: PythonObject, args: PythonObject, 
         states = xseq_zeros(Python.tuple(batch, m), context)
         var entries = xseq_entries(fields, context)
         _ = py_call_typed(entries["ets"], Python.list(xseq_addr(y), xseq_addr(forecast), xseq_addr(info), xseq_addr(states)), ip, fp)
+        _ = y  # keep the Python object alive through the native call above
         _store(fields, "_last", Python.tuple(key, xseq_copy(forecast), xseq_copy(info), xseq_copy(states)))
     _store(fields, "info_", info)
     var one = xseq_truth(fields["_one"])
@@ -258,6 +267,7 @@ def _garch_fit(model: PythonObject, fields: PythonObject, args: PythonObject, co
     # the finiteness scan (the base binding's `all_finite_f32`)
     if not Bool(py=py_call_typed(xseq_base(context, "all_finite_f32"), xseq_addr(y), PythonObject(Int(py=y.size)))):
         raise Error("GARCH: y holds a non-finite value")
+    _ = y  # keep the Python object alive through the native calls above
     var batch = Int(py=y.shape[0])
     var n = Int(py=y.shape[1])
     var h = max(1, xseq_int(args[1]))
@@ -277,6 +287,11 @@ def _garch_fit(model: PythonObject, fields: PythonObject, args: PythonObject, co
     var entries = xseq_entries(fields, context)
     _ = py_call_typed(entries["garch"], Python.list(xseq_addr(y), xseq_addr(params), xseq_addr(info), xseq_addr(sigma),
                       xseq_addr(forecast)), ip)
+    _ = sigma  # keep the Python object alive through the native call above
+    _ = info  # keep the Python object alive through the native call above
+    _ = params  # keep the Python object alive through the native call above
+    _ = y  # keep the Python object alive through the native call above
+    _ = forecast  # keep the Python object alive through the native call above
     _store(fields, "_y", y)
     _store(fields, "params_", xseq_first(params, one))
     _store(fields, "loglikelihood_", xseq_first(xseq_column_f32(info, batch, 4, 0, context), one))
@@ -312,6 +327,10 @@ def _var_fit(model: PythonObject, fields: PythonObject, args: PythonObject, cont
     var entries = xseq_entries(fields, context)
     var code = Int(py=py_call_typed(entries["var_fit"], Python.list(xseq_addr(endog), xseq_addr(params), xseq_addr(sigma),
                                     xseq_addr(resid)), Python.list(n, neqs, p, kt)))
+    _ = sigma  # keep the Python object alive through the native call above
+    _ = params  # keep the Python object alive through the native call above
+    _ = endog  # keep the Python object alive through the native call above
+    _ = resid  # keep the Python object alive through the native call above
     if code:
         raise Error("LinAlgError: VAR.fit: the lagged design is rank deficient (Cholesky pivot of column "
                     + String(code - 1) + ")")
@@ -339,6 +358,12 @@ def _var_fit(model: PythonObject, fields: PythonObject, args: PythonObject, cont
     var fitted = xseq_zeros(Python.tuple(rows, neqs), context)
     xseq_var_blocks(xseq_f32p(params), xseq_f32p(endog), xseq_f32p(resid), xseq_f32p(intercept), xseq_f32p(coefs),
                     xseq_f32p(fitted), p, kt, neqs, rows)
+    _ = coefs  # keep the Python object alive through the native call above
+    _ = intercept  # keep the Python object alive through the native call above
+    _ = resid  # keep the Python object alive through the native call above
+    _ = params  # keep the Python object alive through the native call above
+    _ = endog  # keep the Python object alive through the native call above
+    _ = fitted  # keep the Python object alive through the native call above
     _store(state, "intercept", intercept)
     _store(state, "coefs", coefs)
     _store(state, "fittedvalues", fitted)
@@ -366,6 +391,11 @@ def _stl_fit(model: PythonObject, fields: PythonObject, args: PythonObject, cont
                       xseq_addr(resid)), Python.list(batch, n, fields["period"], fields["seasonal"], fields["trend"],
                       fields["low_pass"], degrees, fields["seasonal_jump"], fields["trend_jump"], fields["low_pass_jump"],
                       inner, outer))
+    _ = weights  # keep the Python object alive through the native call above
+    _ = trend  # keep the Python object alive through the native call above
+    _ = season  # keep the Python object alive through the native call above
+    _ = endog  # keep the Python object alive through the native call above
+    _ = resid  # keep the Python object alive through the native call above
     var one = xseq_truth(fields["_one"])
     # DecomposeResult(observed, seasonal, trend, resid, weights)
     var result = py_call(_getattr(b.object, "__new__"), context["xseq_decompose_result"])

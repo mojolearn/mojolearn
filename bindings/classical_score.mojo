@@ -102,8 +102,11 @@ def classical_linear_score(model: PythonObject, args: PythonObject, entries: Pyt
     var layout = ClassicalR2Layout(rows)
     var arena = classical_array(layout.program.size, 0, context)
     var address = Int(py=classical_address(arena))
+    _ = arena  # keep the Python object alive through the native call above
     _ = py_call_typed(entries["ols_predict"], classical_address(x), classical_address(coef),
                       PythonObject(address + 4 * layout.p), Python.list(rows, cols, fields["intercept_"]))
+    _ = coef  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     _ = x^
     _ = coef^
     return _r2_finish(layout^, arena, rows, args[1], context)
@@ -118,8 +121,10 @@ def classical_r2_score(prediction: PythonObject, target_source: PythonObject,
     var layout = ClassicalR2Layout(rows)
     var arena = classical_array(layout.program.size, 0, context)
     var dest = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(arena)))
+    _ = arena  # keep the Python object alive through the native call above
     var predicted = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(prediction)))
     memcpy(dest=dest + layout.p, src=predicted, count=rows)
+    _ = arena  # keep the Python object alive through the native call above
     return _r2_finish(layout^, arena, rows, target_source, context)
 
 
@@ -147,7 +152,9 @@ def _r2_finish(var layout: ClassicalR2Layout, arena: PythonObject, rows: Int, ta
     var address = Int(py=classical_address(arena))
     var dest = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address)
     var truth = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(target)))
+    _ = target  # keep the Python object alive through the native call above
     memcpy(dest=dest + layout.y, src=truth, count=rows)
+    _ = target  # keep the Python object alive through the native call above
     var inputs = List[Int32](length=3, fill=0)
     inputs[1] = Int32(2 * rows + 1)
     inputs[2] = -1

@@ -233,16 +233,21 @@ def _mani_lanczos_top(mut k: MKit, a: PythonObject, nc: Int) raises -> Tuple[Boo
             if resident:
                 _ = family_call(k.fn("x_decomp_dev_lanczos"), aid, qd._d.id, abd._d.id, mk_ints([n, j, m, cap]))
                 _ = family_call(k.fn("x_decomp_dev_download"), abd._d.id, mk_store_addr(ab), PythonObject(2 * cap))
+                _ = ab  # keep the Python object alive through the native call above
             else:
                 var pa = mk_addr(a, ctx)
                 _ = family_call(k.fn("x_decomp_lanczos"), pa, mk_addr(qd, ctx), mk_store_addr(ab),
                                 mk_ints([n, j, m, cap]))
+                _ = ab  # keep the Python object alive through the native call above
             var abp = mk_store_ptr(ab)
+            _ = ab  # keep the Python object alive through the native call above
             var reached = m
             var broke = False
             for jj in range(j, m):  # driver-loop: over this batch's Lanczos steps (at most _LANCZOS_MAX_M)
                 var av = Float64(abp[jj])
+                _ = ab  # keep the Python object alive through the native call above
                 var bv = Float64(abp[cap + jj])
+                _ = ab  # keep the Python object alive through the native call above
                 alphas.append(av)
                 betas.append(bv)
                 if bv <= 1e-30 * max(1.0, abs(av)) or jj + 1 == n:
@@ -412,10 +417,12 @@ def _mds_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var y = mk_zeros(n, nc, context)
     var pd = mk_addr(dis, context)
     var ps = mk_addr(s, context)
+    _ = s  # keep the Python object alive through the native call above
     var params = mk_ints([n, nc, len(starts), _mani_int(family_field(fields, "max_iter")), 1 if metric_mds else 0,
                           1 if norm else 0])
     var tols = Python.list(PythonObject(_mani_float(family_field(fields, "eps"))))
     var result = family_call(k.fn("x_decomp_mds_fit"), pd, ps, mk_addr(y, context), params, tols)
+    _ = y  # keep the Python object alive through the native call above
     py_setitem(fields, "stress_", py_call(b.float, result[0]))
     py_setitem(fields, "n_iter_", py_call(b.int, result[1]))
     var embedding = mk_out2(y, context)
@@ -542,11 +549,13 @@ def _iso_transform(model: PythonObject, args: PythonObject, context: PythonObjec
         if qr > 0 and mk_at(k.total(hits), 0, context) != Float64(qr):
             var store = mk_store(hits, context)
             var hp = mk_store_ptr(store)
+            _ = store  # keep the Python object alive through the native call above
             var first = 0
             for i in range(mk_store_len(store)):  # cpu-route: the refusal names the first query row without a training row in reach
                 if Float64(hp[i]) == 0.0:
                     first = i
                     break
+                _ = store  # keep the Python object alive through the native calls above
             raise Error("Isomap.transform: query row " + String(first) + " has no training row within radius "
                         + family_str(radius))
         g = k.graph_radius_geo(dq, d, r)
@@ -663,11 +672,15 @@ def _lle_smallest(mut k: MKit, f: PythonObject, nc: Int, max_iter: Int,
     var sm = mk_zeros(1, p, ctx)
     var b = Python.import_module("builtins")
     var pf = mk_addr(f0, ctx)
+    _ = f0  # keep the Python object alive through the native call above
     var pl = mk_addr(lu, ctx)
     var pp = mk_addr(pm, ctx)
     var pi = mk_addr(im, ctx)
     var pz = mk_addr(z, ctx)
+    _ = z  # keep the Python object alive through the native call above
     var outs = Python.list(mk_addr(xm, ctx), mk_addr(ym, ctx), mk_addr(sm, ctx))
+    _ = sm  # keep the Python object alive through the native call above
+    _ = ym  # keep the Python object alive through the native call above
     _ = xm  # keep the Python object alive through the native call above
     var params = mk_ints([n, n1, nc, p, max(1, max_iter)])
     _ = py_call(params.append, py_call(Python.import_module("operator").and_, py_call(b.int, seed),
@@ -692,8 +705,10 @@ def _lle_smallest(mut k: MKit, f: PythonObject, nc: Int, max_iter: Int,
         var norms = Python.list()
         var store = mk_store(sq, ctx)
         var sp = mk_store_ptr(store)
+        _ = store  # keep the Python object alive through the native call above
         for i in range(mk_store_len(store)):  # small-loop(components: the refusal lists each column's squared norm): bounded by n_components
             _ = py_call(norms.append, PythonObject(Float64(sp[i])))
+            _ = store  # keep the Python object alive through the native call above
         raise Error("RuntimeError: LocallyLinearEmbedding: the shift-invert subspace iteration returned columns of "
                     + "squared norm " + family_repr(norms) + " (not unit); pass eigen_solver='dense' for the full SVD.")
     var signs = k.absmax_signs(v, True)

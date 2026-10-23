@@ -62,6 +62,7 @@ def _take(block: PythonObject, ids: PythonObject, context: PythonObject) raises 
     if count:
         _ = py_call(context["base_gather_rows_bytes"], classical_address(block), classical_address(out),
                     classical_address(ids), rows, count, 4 * width)
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -118,5 +119,8 @@ def autoarima_predict(model: PythonObject, args: PythonObject, context: PythonOb
         if len(ids):
             _ = py_call(context["base_scatter_rows_bytes"], classical_address(part), classical_address(ids), len(ids),
                         4 * width, classical_address(out), batch)
+            _ = ids  # keep the Python object alive through the native call above
+            _ = part  # keep the Python object alive through the native call above
+            _ = out  # keep the Python object alive through the native call above
         _ = part^
     return out

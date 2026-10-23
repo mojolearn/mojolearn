@@ -140,6 +140,7 @@ def str_encode(labels: PythonObject) raises -> PythonObject:
     var classes = Python.list()
     var codes = _store("i", n)
     var out = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=_address(codes))
+    _ = codes  # keep the Python object alive through the native call above
     var current = -1
     for t in range(n):  # driver-loop: over the sorted labels
         var i = order[t]
@@ -148,6 +149,7 @@ def str_encode(labels: PythonObject) raises -> PythonObject:
             # the first label of each run is the first seen (stable order)
             _ = py_call(classes.append, labels[i])
         out[i] = Int32(current)
+        _ = codes  # keep the Python object alive through the native call above
     return Python.tuple(classes, codes)
 
 
@@ -172,6 +174,7 @@ def str_lookup(classes: PythonObject, values: PythonObject, as_float: Bool) rais
     var n = len(values)
     var codes = _store("f" if as_float else "i", n)
     var address = _address(codes)
+    _ = codes  # keep the Python object alive through the native call above
     var missing = Python.list()
     var count = 0
     ref cpy = Python().cpython()

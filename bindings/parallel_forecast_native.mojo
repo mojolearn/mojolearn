@@ -111,6 +111,7 @@ def _rows(source: PythonObject, lo: Int, hi: Int, width: Int, context: PythonObj
         memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out))),
                src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(source)) + lo * width),
                count=(hi - lo) * width)
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -167,6 +168,8 @@ def _predict_arima(estimator: PythonObject, start_obj: PythonObject, end_obj: Py
         memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result))) + lo * width,
                src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(value))),
                count=(hi - lo) * width)
+        _ = result  # keep the Python object alive through the native call above
+        _ = value  # keep the Python object alive through the native call above
     return result
 
 
@@ -231,6 +234,7 @@ def _predict_hw(estimator: PythonObject, start_obj: PythonObject, end_obj: Pytho
         var part = tsa_array("f", "<f4", Python.tuple(3 * steps * w), 3 * steps * w, 4, context)
         # rows r = component * steps + step: dst[r * w + j] = src[r * batch + lo + j]
         forecast_gather_cols(Int(py=classical_address(part)), Int(py=classical_address(comps)), 3 * steps, batch, lo, w)
+        _ = part  # keep the Python object alive through the native call above
         _ = comps  # keep the Python object alive through the native call above
         py_setitem(state, "_comps", part)
         _ = py_call(requests.append, Python.tuple("hw_predict_shard", state, Python.tuple(start, end)))
@@ -245,11 +249,15 @@ def _predict_hw(estimator: PythonObject, start_obj: PythonObject, end_obj: Pytho
         if not Bool(py=py_call(b.tuple, value.shape) == expected) or not Bool(py=value.dtype == "<f4"):
             raise Error("ValueError: Holt-Winters worker returned an invalid prediction shape or dtype")
         forecast_scatter_cols(Int(py=classical_address(result)), Int(py=classical_address(value)), width, batch, lo, hi - lo)
+        _ = value  # keep the Python object alive through the native call above
+        _ = result  # keep the Python object alive through the native call above
     # `estimator._shaped(result, width, index)`: one series, the flat
     # block (one series in all), or the (width, ts_num) block
     if index is not None:
         var one = tsa_array("f", "<f4", Python.tuple(width), width, 4, context)
         forecast_gather_cols(Int(py=classical_address(one)), Int(py=classical_address(result)), width, batch, Int(py=index), 1)
+        _ = one  # keep the Python object alive through the native call above
+        _ = result  # keep the Python object alive through the native call above
         return one
     if batch == 1:
         return result
@@ -257,6 +265,8 @@ def _predict_hw(estimator: PythonObject, start_obj: PythonObject, end_obj: Pytho
     memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(block))),
            src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result))),
            count=width * batch)
+    _ = block  # keep the Python object alive through the native call above
+    _ = result  # keep the Python object alive through the native call above
     return block
 
 

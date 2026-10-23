@@ -92,14 +92,18 @@ def _class_weight_rows(class_weight: PythonObject, classes: PythonObject, codes:
         _ = family_call(family_entry(xbind, "x_trees_code_counts", context),
                         classical_address(codes) if n > 0 else PythonObject(0), classical_address(counts),
                         Python.list(PythonObject(n), PythonObject(k)))
+        _ = counts  # keep the Python object alive through the native call above
         var wide = family_array(Python.tuple(PythonObject(k)), "<i8", context)
         for i in range(k):  # driver-loop: over the classes (the exact int32 -> int64 widening of astype)
             FAMILY_I64P(unsafe_from_address=Int(py=classical_address(wide)))[i] = Int64(
                 FAMILY_I32P(unsafe_from_address=Int(py=classical_address(counts)))[i])
+            _ = wide  # keep the Python object alive through the native call above
+            _ = counts  # keep the Python object alive through the native call above
         var w64 = family_array(Python.tuple(PythonObject(k)), "<f8", context)
         if k > 0 and Int(py=family_call(svc_base("class_ratio_f64", context), classical_address(wide), PythonObject(k),
                                          PythonObject(n), PythonObject(0), classical_address(w64))) != 0:
             svc_zero_division(False)
+        _ = wide  # keep the Python object alive through the native calls above
         _ = w64  # keep the Python object alive through the native calls above
         _ = wide^
         _ = counts^
@@ -127,21 +131,28 @@ def _class_weight_rows(class_weight: PythonObject, classes: PythonObject, codes:
         return PythonObject(None)
     var narrowed = family_array(Python.tuple(PythonObject(k)), "<f4", context)
     var np = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(narrowed)))
+    _ = narrowed  # keep the Python object alive through the native call above
     var top = Float32(0)
     for i in range(k):  # driver-loop: over the classes (the float32 narrowing and its checks)
         var f = svc_float(values[i])
         np[i] = Float32(f)
+        _ = narrowed  # keep the Python object alive through the native call above
         var g = Float64(np[i])
+        _ = narrowed  # keep the Python object alive through the native call above
         if not svc_isfinite(g) or (f > 0 and g == 0):
             raise Error("class weights must remain finite and nonzero when positive in Float32")
         if i == 0 or np[i] > top:
             top = np[i]
+            _ = narrowed  # keep the Python object alive through the native call above
+        _ = narrowed  # keep the Python object alive through the native calls above
     if not top > 0:
         raise Error("class weights must have positive total")
     var out = family_array(Python.tuple(PythonObject(n)), "<f4", context)
     if n > 0:
         _ = family_call(family_entry(xbind, "x_trees_class_rows", context), classical_address(codes),
                         classical_address(narrowed), classical_address(out), Python.list(PythonObject(n), PythonObject(k)))
+        _ = out  # keep the Python object alive through the native call above
+        _ = narrowed  # keep the Python object alive through the native call above
     _ = narrowed^
     return out
 
@@ -173,6 +184,8 @@ def _qn_row_weights(model: PythonObject, fields: PythonObject, sample_weight: Py
     var out = family_array(Python.tuple(PythonObject(n)), "<f4", context)
     _ = family_call(family_entry(xb, "x_trees_mul_f32", context), classical_address(sw), classical_address(cw),
                     classical_address(out), Python.list(PythonObject(n)))
+    _ = cw  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
     _ = sw^
     _ = cw^
     return out
@@ -202,6 +215,7 @@ def _qn_fit_one_target(fields: PythonObject, binding: PythonObject, x: PythonObj
     var n_iter = family_call(family_entry(binding, "qn_fit", context), classical_address(x), classical_address(y_enc),
                              classical_address(w), classical_address(info), params)
     _ = info  # keep the Python object alive through the native call above
+    _ = w  # keep the Python object alive through the native call above
     var fx = Float64(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(info)))[0])
     _ = info  # keep the Python object alive through the native call above
     var rc = Int(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(info)))[1])
@@ -250,14 +264,18 @@ def _linear_svr_fit(model: PythonObject, args: PythonObject, context: PythonObje
     var coef = family_array(Python.tuple(PythonObject(cols)), "<f4", context)
     memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(coef))),
            src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(w))), count=cols)
+    _ = coef  # keep the Python object alive through the native call above
+    _ = w  # keep the Python object alive through the native call above
     py_setitem(fields, PythonObject("coef_"), coef)
     if svc_truthy(svc_field(fields, "fit_intercept")):
         py_setitem(fields, PythonObject("intercept_"),
                    PythonObject(Float64(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(w)))[cols])))
+        _ = w  # keep the Python object alive through the native call above
     else:
         py_setitem(fields, PythonObject("intercept_"), PythonObject(0.0))
     var n_iter = family_array(Python.tuple(PythonObject(1)), "<i8", context)
     FAMILY_I64P(unsafe_from_address=Int(py=classical_address(n_iter)))[0] = Int64(Int(py=result[1]))
+    _ = n_iter  # keep the Python object alive through the native call above
     py_setitem(fields, PythonObject("n_iter_"), n_iter)
     py_setitem(fields, PythonObject("n_features_in_"), PythonObject(cols))
     _ = x^
@@ -340,28 +358,42 @@ def _linear_svc_fit(model: PythonObject, args: PythonObject, context: PythonObje
                                  PythonObject(fi), PythonObject(pn), PythonObject(loss))
         if sw is not None:
             _ = py_call(params.append, classical_address(sw))  # field 15
+            _ = sw  # keep the Python object alive through the native call above
         _ = family_call(family_entry(binding, "qn_fit_ovr", context), classical_address(x), classical_address(codes),
                         classical_address(w_all), classical_address(info), params)
+        _ = codes  # keep the Python object alive through the native call above
+        _ = x  # keep the Python object alive through the native call above
+        _ = info  # keep the Python object alive through the native call above
+        _ = w_all  # keep the Python object alive through the native call above
         var ip = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(info)))
+        _ = info  # keep the Python object alive through the native call above
         for k in range(n_fits):  # driver-loop: over the one-vs-rest fits (one result row each)
             n_iter = max(n_iter, Int(ip[3 * k + 2]))
+            _ = info  # keep the Python object alive through the native call above
             _ = py_call(objectives.append, PythonObject(Float64(ip[3 * k])))
+            _ = info  # keep the Python object alive through the native call above
             _ = py_call(retcodes.append, PythonObject(Int(ip[3 * k + 1])))
+            _ = info  # keep the Python object alive through the native call above
         _ = info^
     else:
         # a binding without the entry (the CPU host binding): one binary fit
         # per selected class on its 0/1 target
         var cp = FAMILY_I32P(unsafe_from_address=Int(py=classical_address(codes)))
+        _ = codes  # keep the Python object alive through the native call above
         for k in range(n_fits):  # driver-loop: over the one-vs-rest fits
             var cls = first + k
             var y_enc = family_array(Python.tuple(PythonObject(rows)), "<f4", context)
             var yp = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(y_enc)))
+            _ = y_enc  # keep the Python object alive through the native call above
             for i in range(rows):  # cpu-route: the host binding's 0/1 target (equal_elements, cast_elements)
                 yp[i] = Float32(1.0) if Int(cp[i]) == cls else Float32(0.0)
+                _ = y_enc  # keep the Python object alive through the native call above
+                _ = codes  # keep the Python object alive through the native call above
             var result = _qn_fit_one_target(fields, binding, x, y_enc, 2, loss, strengths[0], strengths[1], tol,
                                             0.1 * tol, 0.0, sw, pn == 1, context)
             memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(w_all)) + 4 * k * n_coefs),
                    src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(result[0]))), count=n_coefs)
+            _ = w_all  # keep the Python object alive through the native call above
             n_iter = max(n_iter, Int(py=result[1]))
             _ = py_call(objectives.append, result[2])
             _ = py_call(retcodes.append, result[3])
@@ -369,24 +401,35 @@ def _linear_svc_fit(model: PythonObject, args: PythonObject, context: PythonObje
     # The (C, n_coefs) block's column-major copy is the `w[c + C*j]` block
     # `qn_decision_function` reads.
     var wsrc = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(w_all)))
+    _ = w_all  # keep the Python object alive through the native call above
     var w = family_array(Python.tuple(PythonObject(n_fits * n_coefs)), "<f4", context)
     var wdst = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(w)))
+    _ = w  # keep the Python object alive through the native call above
     var coef = family_array(Python.tuple(PythonObject(n_fits), PythonObject(cols)), "<f4", context)
     var cdst = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(coef)))
+    _ = coef  # keep the Python object alive through the native call above
     var intercept = family_array(Python.tuple(PythonObject(n_fits)), "<f4", context)
     var idst = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(intercept)))
+    _ = intercept  # keep the Python object alive through the native call above
     for c in range(n_fits):  # driver-loop: over the one-vs-rest targets (exact copies of the fitted block)
         for j in range(n_coefs):  # driver-loop: over the coefficients of one target
             wdst[c + n_fits * j] = wsrc[c * n_coefs + j]
+            _ = w  # keep the Python object alive through the native call above
+            _ = w_all  # keep the Python object alive through the native call above
             if j < cols:
                 cdst[c * cols + j] = wsrc[c * n_coefs + j]
+                _ = coef  # keep the Python object alive through the native call above
+                _ = w_all  # keep the Python object alive through the native call above
         if fi == 1:
             idst[c] = wsrc[c * n_coefs + cols]
+            _ = intercept  # keep the Python object alive through the native call above
+            _ = w_all  # keep the Python object alive through the native call above
     py_setitem(fields, PythonObject("_w"), w)
     py_setitem(fields, PythonObject("coef_"), coef)
     py_setitem(fields, PythonObject("intercept_"), intercept)
     var it = family_array(Python.tuple(PythonObject(1)), "<i8", context)
     FAMILY_I64P(unsafe_from_address=Int(py=classical_address(it)))[0] = Int64(n_iter)
+    _ = it  # keep the Python object alive through the native call above
     py_setitem(fields, PythonObject("n_iter_"), it)
     py_setitem(fields, PythonObject("objective_"), objectives[0] if n_fits == 1 else objectives)
     py_setitem(fields, PythonObject("retcode_"), retcodes[0] if n_fits == 1 else retcodes)
@@ -424,6 +467,9 @@ def _linear_svc_codes(model: PythonObject, fields: PythonObject, binding: Python
     if n > 0:
         _ = family_call(family_entry(binding, entry, context), classical_address(x), classical_address(w),
                         classical_address(codes), params)
+        _ = w  # keep the Python object alive through the native call above
+        _ = x  # keep the Python object alive through the native call above
+        _ = codes  # keep the Python object alive through the native call above
     _ = x^
     _ = w^
     return codes

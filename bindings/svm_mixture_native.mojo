@@ -35,6 +35,8 @@ def _qn_scores(model: PythonObject, binding: PythonObject, source: PythonObject,
     var w = py_call(b.getattr, model, PythonObject("_w"))
     _ = family_call(family_entry(binding, "qn_decision_function", context), classical_address(x),
                     classical_address(w), classical_address(out), params)
+    _ = x  # keep the Python object alive through the native call above
+    _ = w  # keep the Python object alive through the native call above
     _ = x^
     _ = w^
     return out
@@ -110,6 +112,13 @@ def _gmm_sample(model: PythonObject, binding: PythonObject, n_samples: PythonObj
                                 PythonObject(0)),
                     Python.list(PythonObject(n), family_call(operator.and_, seed, PythonObject(0xFFFFFFFF)),
                                 family_call(operator.rshift, seed, PythonObject(32))))
+    _ = covariances  # keep the Python object alive through the native call above
+    _ = means  # keep the Python object alive through the native call above
+    _ = weights  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
+    _ = log_det  # keep the Python object alive through the native call above
+    _ = precisions  # keep the Python object alive through the native call above
+    _ = y  # keep the Python object alive through the native call above
     _ = weights^
     _ = means^
     _ = covariances^

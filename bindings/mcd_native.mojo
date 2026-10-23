@@ -156,6 +156,8 @@ def _mask_store(mut kit: DecompKit, mask: Int, n: Int, context: PythonObject) ra
     var source = kit.host(mask)
     decomp_f32_to_u8(DecompF32(unsafe_from_address=Int(py=classical_address(source))),
                      MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=support._addr)), n)
+    _ = source  # keep the Python object alive through the native call above
+    _ = support  # keep the Python object alive through the native call above
     _ = source^
     return support
 
@@ -165,6 +167,7 @@ def _int_store(store: PythonObject, n: Int, context: PythonObject) raises -> Pyt
     var support = _typed(n, "<u1", "B", 1, context)
     decomp_i32_to_u8(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=py_call(store.buffer_info)[0])),
                      MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=support._addr)), n)
+    _ = support  # keep the Python object alive through the native call above
     return support
 
 
@@ -256,6 +259,7 @@ def mcd_fit(model: PythonObject, args: PythonObject, mut kit: DecompKit, context
         var params = Python.list(n, p, h, decomp_seed_word(seed))
         _ = py_call(params.extend, plan)
         var ax = kit.address(x)
+        _ = x  # keep the Python object alive through the native call above
         _ = py_call(kit.entries["x_decomp_mcd"], ax, kit.address(loc), kit.address(cov), py_call(store.buffer_info)[0],
                     kit.address(dist), params)
         kit.wrote_host(loc)
@@ -268,6 +272,7 @@ def mcd_fit(model: PythonObject, args: PythonObject, mut kit: DecompKit, context
         var weights = kit.zeros(n, 1)
         decomp_u8_to_f32(MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=support._addr)),
                          DecompF32(unsafe_from_address=Int(py=kit.address(weights))), n)
+        _ = weights  # keep the Python object alive through the native call above
         cov = _masked_cov(kit, x, weights, True)[1]
         var inverse = _pinvh(kit, cov)
         var product = kit.mm(x, inverse)
@@ -347,6 +352,8 @@ def _labels(mut kit: DecompKit, x: Int, fields: PythonObject, context: PythonObj
     var source = kit.host(chosen)
     decomp_f32_to_i32(DecompF32(unsafe_from_address=Int(py=classical_address(source))),
                       MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=labels._addr)), rows)
+    _ = source  # keep the Python object alive through the native call above
+    _ = labels  # keep the Python object alive through the native call above
     _ = source^
     return labels
 

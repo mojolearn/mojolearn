@@ -120,6 +120,7 @@ def _any_f32(source: PythonObject, name: String, context: PythonObject) raises -
         slabs *= Int(py=view.shape[a])
     var base = Int(py=classical_address(view))
     var out = Int(py=classical_address(result))
+    _ = result  # keep the Python object alive through the native call above
     for s in range(slabs):  # driver-loop: over the leading-axis slabs (components) of an initial array
         var offset = 0
         var rest = s
@@ -144,6 +145,7 @@ def _concat(parts: PythonObject, context: PythonObject) raises -> PythonObject:
         return PythonObject(None)
     var out = family_array(Python.tuple(total), "<f4", context)
     var dst = Int(py=classical_address(out))
+    _ = out  # keep the Python object alive through the native call above
     var offset = 0
     for p in range(len(parts)):  # small-loop(parts: the few prior, warm-state and model blocks)
         var size = Int(py=parts[p].size)
@@ -307,10 +309,18 @@ def _gmm_default_fit(model: PythonObject, binding: PythonObject, source: PythonO
     var addrs = Python.list(classical_address(x), classical_address(weights), classical_address(means),
                             classical_address(covariances), classical_address(precisions),
                             classical_address(log_det), classical_address(scalars))
+    _ = means  # keep the Python object alive through the native call above
+    _ = weights  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
+    _ = precisions  # keep the Python object alive through the native call above
+    _ = covariances  # keep the Python object alive through the native call above
+    _ = scalars  # keep the Python object alive through the native call above
+    _ = log_det  # keep the Python object alive through the native call above
     var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(k), covariance_type, tol, reg_covar,
                              max_iter, init_params, _int(_get(model, "random_state")))
     var n_iter = family_call(entry, addrs, params)
     var words = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(scalars)))
+    _ = scalars  # keep the Python object alive through the native call above
     py_setattr(model, "n_features_in_", PythonObject(d))
     py_setattr(model, "weights_", weights)
     py_setattr(model, "means_", means)
@@ -319,7 +329,9 @@ def _gmm_default_fit(model: PythonObject, binding: PythonObject, source: PythonO
     py_setattr(model, "log_det_chol_", log_det)
     py_setattr(model, "n_iter_", _int(n_iter))
     py_setattr(model, "converged_", PythonObject(Int(words[1]) != 0))
+    _ = scalars  # keep the Python object alive through the native call above
     py_setattr(model, "lower_bound_", PythonObject(words[2]))
+    _ = scalars  # keep the Python object alive through the native call above
     _ = scalars^
     return x
 
@@ -349,6 +361,11 @@ def _gmm_score_call(model: PythonObject, binding: PythonObject, x: PythonObject,
     var addrs = Python.list(classical_address(weights), classical_address(flat_m), classical_address(flat_c),
                             classical_address(flat_p), classical_address(log_det), classical_address(x),
                             classical_address(out_buf))
+    _ = flat_c  # keep the Python object alive through the native call above
+    _ = flat_m  # keep the Python object alive through the native call above
+    _ = weights  # keep the Python object alive through the native call above
+    _ = log_det  # keep the Python object alive through the native call above
+    _ = flat_p  # keep the Python object alive through the native call above
     var params = Python.list(PythonObject(k), PythonObject(d), _get(model, "n_iter_"), PythonObject(converged),
                              _get(model, "lower_bound_"), PythonObject(n))
     _check_mode(binding, model, context)
@@ -430,6 +447,7 @@ def _gmm_ext_fit(model: PythonObject, xc_binding: PythonObject, source: PythonOb
                         + " values, expected " + String(want))
         if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(pi))), size):
             raise Error("precisions_init must be finite")
+        _ = pi  # keep the Python object alive through the native calls above
         _ = py_call(parts.append, pi)
         flag_p = ct + 1
     var aux = _concat(parts, context)
@@ -527,9 +545,13 @@ def _gmm_bic_aic(model: PythonObject, binding: PythonObject, source: PythonObjec
     var out = family_array(Python.tuple(3), "<f8", context)
     _gmm_score_call(model, binding, x, "gmm_score_bic_aic", "score", out, context)
     var words = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(out)))
+    _ = out  # keep the Python object alive through the native call above
     result.append(words[0])
+    _ = out  # keep the Python object alive through the native call above
     result.append(words[1])
+    _ = out  # keep the Python object alive through the native call above
     result.append(words[2])
+    _ = out  # keep the Python object alive through the native call above
     _ = out^
     _ = x^
     return result^

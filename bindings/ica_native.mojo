@@ -78,12 +78,20 @@ def ica_fit(model: PythonObject, source: PythonObject, project: Bool, context: P
     var mean = decomp_f32(Python.tuple(d), context) if code != 0 else PythonObject(None)
     var sources = decomp_f32(Python.tuple(n, nc), context) if project else PythonObject(None)
     var spare = classical_address(components)
+    _ = components  # keep the Python object alive through the native call above
     var params = Python.list(
         classical_address(x), n, d, nc, code, classical_address(winit) if winit is not None else PythonObject(0), seed,
         0 if decomp_eq(algorithm, PythonObject("parallel")) else 1, fun_code, decomp_int(fields["max_iter"]),
         1 if project else 0, classical_address(components), classical_address(mixing),
         classical_address(whitening) if code != 0 else spare, classical_address(mean) if code != 0 else spare,
         classical_address(sources) if project else spare)
+    _ = winit  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
+    _ = mixing  # keep the Python object alive through the native call above
+    _ = components  # keep the Python object alive through the native call above
+    _ = mean  # keep the Python object alive through the native call above
+    _ = whitening  # keep the Python object alive through the native call above
+    _ = sources  # keep the Python object alive through the native call above
     var it = py_call_typed(entries["x_decomp_ica_fit"], params,
                            Python.list(decomp_float(alpha), decomp_float(fields["tol"])))
     py_setitem(fields, "n_iter_", PythonObject(Int(py=it)))
@@ -117,6 +125,10 @@ def ica_project(model: PythonObject, source: PythonObject, inverse: Bool, contex
     _ = py_call_typed(entries["x_decomp_ica_project"], Python.list(
         1 if inverse else 0, classical_address(x), n, width, classical_address(matrix), rows,
         classical_address(mean), 1 if whiten else 0, classical_address(out)))
+    _ = matrix  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
+    _ = mean  # keep the Python object alive through the native call above
     _ = x^
     _ = matrix^
     _ = mean^

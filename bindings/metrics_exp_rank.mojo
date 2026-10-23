@@ -256,6 +256,7 @@ def _relevance(y_true: PythonObject, y_score: PythonObject, caller: String,
     var c = Int(py=view.shape[1])
     if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(y))), n * c):
         raise Error("mojolearn " + caller + ": y_true must be finite")
+    _ = y  # keep the Python object alive through the native calls above
     var s = mx_scores(y_score, n, caller, 2, "y_score", context)
     if s.cols != c:
         raise Error("y_true and y_score have different shape")
@@ -270,9 +271,11 @@ def _dcg_table(mut prog: MxProg, c: Int, log_base: PythonObject, context: Python
     if b == 1.0:
         mx_zero_division("float division by zero")
     var B = prog.f64_words(b, context)
+    _ = b  # keep the Python object alive through the native call above
     var D = prog.scratch(c)
     if c:
         prog.stage("rank_epi", c, [_RANK_DCG_DISC, c, B, D])
+        _ = b  # keep the Python object alive through the native call above
     return D
 
 

@@ -57,7 +57,9 @@ def _model_f32(value: PythonObject, name: String, context: PythonObject) raises 
         var result = generation_array(dims)
         var source = f32_ptr(Int(py=value._addr))
         var target = f32_ptr(Int(py=result._addr))
+        _ = result  # keep the Python object alive through the native call above
         causal_lm_gather_f32(source, target, Int(py=value.size), dims, strides)
+        _ = result  # keep the Python object alive through the native call above
         return result
     var view = py_call(bi.memoryview, value)
     var format = String(view.format)
@@ -92,11 +94,14 @@ def _model_pack(value: PythonObject, format: String, linalg: PythonObject, conte
     if format == "bfloat16":
         var bits = checkpoint_array(py_call(bi.bytes, rows * cols * 2), value.shape, "H", context["array_class"])
         _ = py_call(_native_function(linalg, "to_bf16"), bits._addr, value._addr, py_ints([rows * cols]))
+        _ = bits  # keep the Python object alive through the native call above
         py_setattr(packed, "bits", bits)
     else:
         var codes = generation_array([rows, cols], "b")
         var exponents = generation_array([rows], "i")
         _ = py_call(_native_function(linalg, "quantize_int8"), codes._addr, exponents._addr, value._addr, py_ints([rows, cols]))
+        _ = exponents  # keep the Python object alive through the native call above
+        _ = codes  # keep the Python object alive through the native call above
         py_setattr(packed, "codes", codes)
         py_setattr(packed, "exponents", exponents)
     return packed
@@ -117,6 +122,8 @@ def _model_unpack(value: PythonObject, linalg: PythonObject, context: PythonObje
         var bits = _model_native_buffer(value.bits, "H", context)
         _model_shape(bits, [rows, cols], "bfloat16 bits")
         _ = py_call(_native_function(linalg, "from_bf16"), out._addr, bits._addr, py_ints([rows * cols]))
+        _ = bits  # keep the Python object alive through the native call above
+        _ = out  # keep the Python object alive through the native call above
         _ = bits^  # read by address above
     else:
         var codes = _model_native_buffer(value.codes, "b", context)
@@ -124,6 +131,9 @@ def _model_unpack(value: PythonObject, linalg: PythonObject, context: PythonObje
         _model_shape(codes, [rows, cols], "int8 codes")
         _model_shape(exponents, [rows], "int8 exponents")
         _ = py_call(_native_function(linalg, "dequantize_int8"), out._addr, codes._addr, exponents._addr, py_ints([rows, cols]))
+        _ = exponents  # keep the Python object alive through the native call above
+        _ = codes  # keep the Python object alive through the native call above
+        _ = out  # keep the Python object alive through the native call above
         _ = codes^  # read by address above
         _ = exponents^
     return out
@@ -136,6 +146,9 @@ def _model_quantize15(value: PythonObject, linalg: PythonObject) raises -> Pytho
     var lo = generation_array([rows, cols], "b")
     var exponents = generation_array([rows], "i")
     _ = py_call(_native_function(linalg, "quantize_int15"), py_ints([Int(py=hi._addr), Int(py=lo._addr), Int(py=exponents._addr), Int(py=value._addr)]), py_ints([rows, cols]))
+    _ = exponents  # keep the Python object alive through the native call above
+    _ = lo  # keep the Python object alive through the native call above
+    _ = hi  # keep the Python object alive through the native call above
     var out = Python.import_module("builtins").list()
     _ = py_call(out.append, hi)
     _ = py_call(out.append, lo)
@@ -615,6 +628,8 @@ def causal_model_read_weights_binding(checkpoint: PythonObject, plan: PythonObje
                 var whole = value
                 if end > begin:
                     memcpy(dest=f32_ptr(Int(py=sliced._addr)), src=f32_ptr(Int(py=whole._addr)) + begin * cols, count=(end - begin) * cols)
+                    _ = whole  # keep the Python object alive through the native call above
+                    _ = sliced  # keep the Python object alive through the native call above
                 _ = whole^  # read by address above
                 value = sliced
             py_setitem(weights, key, _model_pack(value, String(format), bindings["linalg"], context) if packed else value)

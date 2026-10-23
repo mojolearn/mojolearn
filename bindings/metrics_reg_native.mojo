@@ -113,6 +113,7 @@ def _f32_scalar_array(value: Float64, context: PythonObject) raises -> PythonObj
     """`Array.from_list([_f32(value)], "<f4")`."""
     var one = family_array(Python.tuple(1), "<f4", context)
     FAMILY_F32P(unsafe_from_address=Int(py=classical_address(one)))[0] = Float32(value)
+    _ = one  # keep the Python object alive through the native call above
     return one
 
 
@@ -244,6 +245,7 @@ struct _Reg(Movable):
             var words = family_array(Python.tuple(2 * d), "<i4", context)
             memcpy(dest=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(words))),
                    src=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(self.custom))), count=d)
+            _ = words  # keep the Python object alive through the native call above
             w = self.prog.put_i32(words)
         var dst = self.prog.alloc(2)
         self.prog.stage("reg_epi", 1, [_RE_AVG, d, vals, mode, w, dst, 1 if nan_rule else 0])
@@ -294,8 +296,10 @@ def _reg_result(r: _Reg, out_buf: Int, arena: PythonObject, context: PythonObjec
     if r.mo == "raw_values":
         var values = family_array(Python.tuple(r.d), "<f8", context)
         var dst = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(values)))
+        _ = values  # keep the Python object alive through the native call above
         for i in range(r.d):  # driver-loop: over the metric's outputs
             dst[i] = _arena_double(arena, out_buf + 2 * i)
+            _ = values  # keep the Python object alive through the native call above
         return values
     return PythonObject(_arena_double(arena, out_buf))
 
@@ -334,6 +338,7 @@ def _reg_target(source: PythonObject, name: String, caller: String, context: Pyt
     var flat = family_cast_view(view, name, context)
     if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(flat))), rows * cols):
         raise Error("mojolearn " + caller + ": " + name + " contains NaN or infinity")
+    _ = flat  # keep the Python object alive through the native calls above
     _ = view^
     return Python.tuple(flat, PythonObject(rows), PythonObject(cols))
 
@@ -361,10 +366,12 @@ def _reg_weights(source: PythonObject, n: Int, caller: String, context: PythonOb
         raise Error("mojolearn " + caller + ": sample_weight has " + String(count) + " entries for " + String(n) + " samples")
     var w = family_cast_view(view, "sample_weight", context)
     var words = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(w)))
+    _ = w  # keep the Python object alive through the native call above
     if not family_all_finite_f32(words, n) or family_min(w) < 0:
         raise Error("mojolearn " + caller + ": sample_weight must have finite nonnegative entries")
     if not family_max_f32(words, n) > 0:
         raise Error("mojolearn " + caller + ": sample_weight must have positive total weight")
+    _ = w  # keep the Python object alive through the native calls above
     _ = view^
     return w
 

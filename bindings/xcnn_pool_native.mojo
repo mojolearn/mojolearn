@@ -101,6 +101,8 @@ def xcnn_maxpool_forward(model: PythonObject, x: PythonObject, context: PythonOb
         var h = xcnn_dev_get(model, entries, "idx", xcnn_size(shape), context)
         _ = py_call_typed(xcnn_entry(entries, "x_cnn_maxpool2d_forward_m"), Python.list(xcnn_addr(a), xcnn_addr(out), h),
                           PythonObject(4), _pool_params(fields, xs))
+        _ = out  # keep the Python object alive through the native call above
+        _ = a  # keep the Python object alive through the native call above
         _set(fields, "_xshape", xcnn_tuple(xs))
         _set(fields, "_idx_host", PythonObject(None))
         _set(fields, "_idx_dev", h)
@@ -109,6 +111,9 @@ def xcnn_maxpool_forward(model: PythonObject, x: PythonObject, context: PythonOb
     var idx = xcnn_host_i32(shape, context)
     _ = py_call_typed(xcnn_entry(entries, "x_cnn_maxpool2d_forward"), xcnn_addr(a), xcnn_addr(out), xcnn_addr(idx),
                       _pool_params(fields, xs))
+    _ = idx  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
+    _ = a  # keep the Python object alive through the native call above
     _set(fields, "_xshape", xcnn_tuple(xs))
     # the `indices_` setter: the host winners, no resident copy
     _set(fields, "_idx_host", idx)
@@ -140,6 +145,8 @@ def xcnn_avgpool_forward(model: PythonObject, x: PythonObject, context: PythonOb
     var out = xcnn_host_f32(_pool_out(fields, entries, xs), context)
     entries = xcnn_entries(fields, context)
     _ = py_call_typed(xcnn_entry(entries, "x_cnn_avgpool2d_forward"), xcnn_addr(a), xcnn_addr(out), _pool_params(fields, xs))
+    _ = out  # keep the Python object alive through the native call above
+    _ = a  # keep the Python object alive through the native call above
     _set(fields, "_xshape", xcnn_tuple(xs))
     return out
 
@@ -255,6 +262,7 @@ def xcnn_dropout_forward(model: PythonObject, x: PythonObject, context: PythonOb
             var c = xs[0] if len(xs) == 3 else xs[1]
             var hw = xs[len(xs) - 2] * xs[len(xs) - 1]
             var prm = _dropout_words(fields, n, c, hw)
+            _ = fields  # keep the Python object alive through the native call above
             var y = xcnn_new(bt, xs, True, context)   # every path stores each mask and y word
             var h = xcnn_dev_get(model, bt, "mask", xcnn_size(xs), context)
             _ = py_call_typed(xcnn_entry(bt, "x_cnn_dropout2d_m"), Python.list(x.h, y.h, h), PythonObject(7), prm, fields["p"])
@@ -277,6 +285,7 @@ def xcnn_dropout_forward(model: PythonObject, x: PythonObject, context: PythonOb
     for i in range(len(xs)):  # driver-loop: over shape words
         s4.append(xs[i])
     var prm = _dropout_words(fields, s4[0], s4[1], s4[2] * s4[3])
+    _ = fields  # keep the Python object alive through the native call above
     var x4 = xcnn_reshape(a, s4)
     var y = xcnn_host_f32(s4, context)
     var entries = xcnn_entries(fields, context)
@@ -284,6 +293,7 @@ def xcnn_dropout_forward(model: PythonObject, x: PythonObject, context: PythonOb
         var h = xcnn_dev_get(model, entries, "mask", xcnn_size(s4), context)
         _ = py_call_typed(xcnn_entry(entries, "x_cnn_dropout2d_m"), Python.list(xcnn_addr(x4), xcnn_addr(y), h),
                           PythonObject(4), prm, fields["p"])
+        _ = y  # keep the Python object alive through the native call above
         _ = x4  # keep the Python object alive through the native call above
         _set(fields, "_mask_host", PythonObject(None))
         _set(fields, "_mask_dev", h)
@@ -291,6 +301,8 @@ def xcnn_dropout_forward(model: PythonObject, x: PythonObject, context: PythonOb
         return xcnn_reshape(y, xs)
     var mask = xcnn_host_f32(s4, context)
     _ = py_call_typed(xcnn_entry(entries, "x_cnn_dropout2d"), xcnn_addr(x4), xcnn_addr(y), xcnn_addr(mask), prm, fields["p"])
+    _ = mask  # keep the Python object alive through the native call above
+    _ = y  # keep the Python object alive through the native call above
     _ = x4  # keep the Python object alive through the native call above
     # the `mask_` setter: the host mask, no resident copy
     _set(fields, "_mask_host", xcnn_reshape(mask, xs))
@@ -351,6 +363,7 @@ def _layer_indices(layer: PythonObject, context: PythonObject) raises -> PythonO
         if owner is None:
             raise Error("RuntimeError: a resident array of a binding this process did not connect")
         _ = py_call_typed(owner["symbols"]["x_cnn_res_download"], d["_idx_dev"], xcnn_addr(idx), PythonObject(xcnn_size(shape)))
+        _ = idx  # keep the Python object alive through the native call above
         py_setitem(d, "_idx_host", idx)
         return idx
     return held
@@ -396,6 +409,8 @@ def xcnn_adaptive_forward(model: PythonObject, x: PythonObject, context: PythonO
         _ = py_call_typed(xcnn_entry(entries, "x_cnn_adaptive_pool_m"),
                           Python.list(value.h if xt else xcnn_addr(value), out.h if xt else xcnn_addr(out), h),
                           PythonObject(bits), prm)
+        _ = out  # keep the Python object alive through the native call above
+        _ = value  # keep the Python object alive through the native call above
         if maxed:
             _set(fields, "_idx_dev", h)
             _set(fields, "_idx_shape", xcnn_tuple(oshape))
@@ -403,6 +418,9 @@ def xcnn_adaptive_forward(model: PythonObject, x: PythonObject, context: PythonO
     var out = xcnn_host_f32(oshape, context)
     var idx = xcnn_host_i32(oshape, context)
     _ = py_call_typed(xcnn_entry(entries, "x_cnn_adaptive_pool"), xcnn_addr(value), xcnn_addr(out), xcnn_addr(idx), prm)
+    _ = idx  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
+    _ = value  # keep the Python object alive through the native call above
     _set(fields, "_idx_host", idx if maxed else PythonObject(None))
     return out
 

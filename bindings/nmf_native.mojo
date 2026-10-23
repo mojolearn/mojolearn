@@ -75,12 +75,15 @@ def _run(model: PythonObject, fields: PythonObject, x: PythonObject, nc: Int, in
     var w = decomp_f32(Python.tuple(n, nc), context)
     var h = decomp_f32(Python.tuple(nc, d), context)
     var spare = classical_address(h)
+    _ = h  # keep the Python object alive through the native call above
     var params = Python.list(
         classical_address(x), n, d, nc, init, classical_address(w_in) if w_in is not None else spare,
         classical_address(h_in) if h_in is not None else spare, seed,
         0 if decomp_eq(fields["solver"], PythonObject("cd")) else 1, 1 if update_h else 0,
         decomp_int(fields["max_iter"]), 1 if Bool(py=fields["shuffle"]) else 0, classical_address(w),
         classical_address(h))
+    _ = w  # keep the Python object alive through the native call above
+    _ = h  # keep the Python object alive through the native call above
     var floats = Python.list(beta, decomp_float(fields["tol"]), regs[0], regs[1], regs[2], regs[3])
     var got = py_call_typed(entries["x_decomp_nmf_fit"], params, floats)
     return Python.tuple(w, h, got[0], got[1])
@@ -184,6 +187,9 @@ def nmf_inverse_transform(model: PythonObject, source: PythonObject, context: Py
     var out = decomp_f32(Python.tuple(n, d), context)
     _ = py_call_typed(entries["x_decomp_nmf_inverse"], Python.list(
         classical_address(w), n, nc, classical_address(h), d, classical_address(out)))
+    _ = out  # keep the Python object alive through the native call above
+    _ = h  # keep the Python object alive through the native call above
+    _ = w  # keep the Python object alive through the native call above
     _ = w^
     _ = h^
     return out

@@ -97,6 +97,7 @@ def _copy_out(array: PythonObject, rows: Int, cols: Int, context: PythonObject) 
     var result = classical_typed(Python.tuple(rows, cols), "<f4", context["output_context"])
     memcpy(dest=DecompF32(unsafe_from_address=Int(py=classical_address(result))),
            src=DecompF32(unsafe_from_address=Int(py=classical_address(array))), count=rows * cols)
+    _ = result  # keep the Python object alive through the native call above
     return result
 
 
@@ -183,14 +184,17 @@ def _dict_learning(mut kit: DecompKit, x: Int, nc: Int, alpha: Float64, max_iter
     var ad = kit.address(d)
     var result = py_call(kit.entries["x_decomp_dict_learning"], ax, acode, ad, classical_address(errors_store),
                          params, floats)
+    _ = errors_store  # keep the Python object alive through the native call above
     kit.wrote_host(code)
     kit.wrote_host(d)
     var done = Int(py=result[0])
     var recorded = min(Int(py=result[1]), slots)
     var errors = Python.list()
     var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(errors_store)))
+    _ = errors_store  # keep the Python object alive through the native call above
     for i in range(recorded):  # driver-loop: over the fit's recorded iterations
         _ = py_call(errors.append, PythonObject(words[i]))
+        _ = errors_store  # keep the Python object alive through the native call above
     _ = errors_store^
     return (code, d, errors, done)
 

@@ -70,6 +70,9 @@ def rp_fit(model: PythonObject, source: PythonObject, sparse: Bool, context: Pyt
         classical_address(x), n, d, kc, 1 if sparse else 0, seed, 1 if inverse else 0,
         1 if (not auto and not inverse and not sparse_input) else 0, classical_address(components),
         classical_address(inverse_m) if inverse else classical_address(components)), Python.list(density)))
+    _ = x  # keep the Python object alive through the native call above
+    _ = inverse_m  # keep the Python object alive through the native call above
+    _ = components  # keep the Python object alive through the native call above
     if bad >= 0:
         raise Error("X: input must be finite; NaN/inf are unsupported")
     if sparse:
@@ -113,6 +116,7 @@ def rp_project(model: PythonObject, fields: PythonObject, source: PythonObject, 
     var tiled = not inverse and host_sparse_format(source).byte_length() == 0
     var flagged = Int(py=py_call_typed(entries["x_decomp_rp_project"], Python.list(
         classical_address(x), m, width, classical_address(matrix), rows, 1 if tiled else 0, classical_address(out))))
+    _ = out  # keep the Python object alive through the native call above
     _ = matrix^
     if flagged != 0:
         raise Error("X: input must be finite; NaN/inf are unsupported")

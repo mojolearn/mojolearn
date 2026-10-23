@@ -112,8 +112,10 @@ struct ClsProg(Movable):
         """`_Prog.put_list`: float32 words of a parameter list ([0.0] when empty)."""
         var words = f32_array(len(values), context)
         var dest = F32P(unsafe_from_address=Int(py=classical_address(words)))
+        _ = words  # keep the Python object alive through the native call above
         for i in range(len(values)):  # driver-loop: over a parameter list (priors, scalars, model-structure words)
             dest[i] = Float32(values[i])
+            _ = words  # keep the Python object alive through the native call above
         return self.put(words, in_out)
 
     def put_scalar(mut self, value: Float64, context: PythonObject) raises -> Int:
@@ -131,7 +133,9 @@ struct ClsProg(Movable):
             _ = words  # keep the Python object alive through the native call above
         var _keep_ret_words_r132 = self.put_words(words)
         _ = words  # keep the Python object alive through the native call above
-        return _keep_ret_words_r132^
+        var _keep_ret_words = _keep_ret_words_r132^
+        _ = words  # keep the Python object alive through the native call above
+        return _keep_ret_words^
 
     def put_codes(mut self, codes: PythonObject) raises -> Int:
         """`_Prog.put_codes`: int32 codes -> offset of their float values (i2f)."""

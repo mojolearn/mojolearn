@@ -63,6 +63,13 @@ def pca_randomized_fit(model: PythonObject, args: PythonObject, project: Bool, e
             sequential_address(mean), sequential_address(variance), sequential_address(ratio),
             sequential_address(singular), sequential_address(z) if project else PythonObject(0),
             Python.list(rows, cols, nc, oversamples, iterations, Int(auto), Int(Bool(py=fields["whiten"])), word))
+        _ = components  # keep the Python object alive through the native call above
+        _ = x  # keep the Python object alive through the native call above
+        _ = ratio  # keep the Python object alive through the native call above
+        _ = variance  # keep the Python object alive through the native call above
+        _ = mean  # keep the Python object alive through the native call above
+        _ = z  # keep the Python object alive through the native call above
+        _ = singular  # keep the Python object alive through the native call above
     except error:
         raise pca_refusal(error^)
     pca_keep_fit(fields, args[0], components, mean, variance, ratio, singular, noise, nc, cols, rows, context)

@@ -58,6 +58,8 @@ def _ids_i32(source: PythonObject, context: PythonObject) raises -> PythonObject
     var tokens = classical_wrap_array(store, Python.tuple(rows, cols), "<i4", "C", context)
     neural_cast_i32_2d(Int(py=classical_address(value)), Int(py=value.strides[0]), Int(py=value.strides[1]),
                        rows, cols, item, kind, _I32P(unsafe_from_address=Int(py=classical_address(tokens))))
+    _ = value  # keep the Python object alive through the native call above
+    _ = tokens  # keep the Python object alive through the native call above
     _ = value^
     return tokens
 
@@ -83,10 +85,14 @@ def byte_lm_host_train_step(trainer: PythonObject, args: PythonObject, context: 
         raise Error("ids must be [" + String(batch) + ", " + String(width) + "]")
     var bad = neural_first_bad_id(_I32P(unsafe_from_address=Int(py=classical_address(tokens))), batch, width, vocab,
                                   width - 1, _IGNORE_INDEX)
+    _ = tokens  # keep the Python object alive through the native call above
     if bad >= 0:
         var v = Int(_I32P(unsafe_from_address=Int(py=classical_address(tokens)))[bad])
+        _ = tokens  # keep the Python object alive through the native call above
         raise Error("ids must be byte values in [0, " + String(vocab) + "); got " + String(v) + " at row "
                     + String(bad // width) + ", position " + String(bad % width))
+        _ = tokens  # keep the Python object alive through the native call above
+    _ = tokens  # keep the Python object alive through the native calls above
     var grad = _f32_array(n, context)
     var post_p = _f32_array(n, context)
     var post_m = _f32_array(n, context)
@@ -98,6 +104,11 @@ def byte_lm_host_train_step(trainer: PythonObject, args: PythonObject, context: 
                              classical_address(fields["_v"]), classical_address(tokens), classical_address(grad),
                              classical_address(post_p), classical_address(post_m), classical_address(post_v)),
                              fields["_native"], fields["_scalars"], fields["_completed"])
+    _ = grad  # keep the Python object alive through the native call above
+    _ = tokens  # keep the Python object alive through the native call above
+    _ = post_v  # keep the Python object alive through the native call above
+    _ = post_m  # keep the Python object alive through the native call above
+    _ = post_p  # keep the Python object alive through the native call above
     _ = tokens^
     var result = Int(py=bits)
     py_setitem(fields, "_gradient", grad)

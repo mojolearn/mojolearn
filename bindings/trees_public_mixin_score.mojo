@@ -82,6 +82,7 @@ def _codes_i32(codes: PythonObject, n: Int, context: PythonObject) raises -> Pyt
                         + "not instantiated, metrics/NOT_IMPLEMENTED.tsv)")
     var out = trees_vector(n, "<i4", context)
     trees_cast(trees_address(codes), "<i8", trees_address(out), "<i4", n, context)
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -106,12 +107,15 @@ def _vocabulary_codes(target: ScoreLabels, classes: PythonObject, context: Pytho
                           PythonObject(trees_address(target.codes)), PythonObject(target.n),
                           PythonObject(trees_address(out)))
         _ = table  # keep the Python object alive through the native call above
+        _ = out  # keep the Python object alive through the native call above
         return out
     var n = len(target.values)
     var out = trees_vector(n, "<i4", context)
     var q = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=trees_address(out))
+    _ = out  # keep the Python object alive through the native call above
     for i in range(n):  # cpu-route: Python object labels mapped per row, the explicit label input step
         q[i] = Int32(Int(py=py_call(vocabulary.get, target.values[i], PythonObject(-1))))
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -143,11 +147,14 @@ def gbdt_adapter_score(model: PythonObject, args: PythonObject, context: PythonO
             var w = trees_sample_weight_f32(sample_weight, n, "accuracy_score", context)
             result = py_call_typed(metrics["accuracy_score_weighted"], PythonObject(trees_address(encoded)),
                                    PythonObject(trees_address(yp)), PythonObject(w.addr), Python.list(PythonObject(n)))
+            _ = encoded  # keep the Python object alive through the native call above
+            _ = w  # keep the Python object alive through the native call above
             _ = yp  # keep the Python object alive through the native call above
             _ = w^
         else:
             result = py_call_typed(metrics["accuracy_score"], PythonObject(trees_address(encoded)),
                                    PythonObject(trees_address(yp)), Python.list(PythonObject(n)))
+            _ = encoded  # keep the Python object alive through the native call above
             _ = yp  # keep the Python object alive through the native call above
         return py_call(trees_builtins().float, result)
     # `as_f32_c(y, ndim=None)` then `_regression_target`.
@@ -157,6 +164,7 @@ def gbdt_adapter_score(model: PythonObject, args: PythonObject, context: PythonO
         raise Error("y must be nonempty one-dimensional targets")
     if not trees_all_finite(target.addr, target.rows, False, context):
         raise Error("y must be finite")
+    _ = target  # keep the Python object alive through the native calls above
     var prediction = adapter_decision_function(model, X, context)
     var result = trees_r2(target.keep, prediction, sample_weight, mode, context)
     _ = target^

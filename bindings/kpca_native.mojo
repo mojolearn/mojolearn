@@ -109,25 +109,35 @@ def kpca_fit(model: PythonObject, source: PythonObject, context: PythonObject) r
             _op(near, "kernel", Python.list(classical_address(x), classical_address(x), classical_address(k)),
                 Python.list(n, n, d, _kind(kernel, context), decomp_int(fields["degree"])),
                 Python.list(_f32_scalar(gamma), _f32_scalar(decomp_float(fields["coef0"]))))
+            _ = k  # keep the Python object alive through the native call above
+            _ = x  # keep the Python object alive through the native call above
         var colsum = decomp_f32(Python.tuple(n), context)
         _op(near, "colsum", Python.list(classical_address(k), classical_address(colsum)), Python.list(n, n), Python.list())
         _ = colsum  # keep the Python object alive through the native call above
+        _ = k  # keep the Python object alive through the native call above
         _op(near, "scale_div", Python.list(classical_address(colsum), classical_address(cols)), Python.list(n),
             Python.list(Float64(n)))
         _ = colsum  # keep the Python object alive through the native call above
+        _ = cols  # keep the Python object alive through the native call above
         # K_fit_all_: the colsum of cols seen as 1 x n, scaled (the shell's shapes)
         var colsum2 = decomp_f32(Python.tuple(n), context)
         _op(near, "colsum", Python.list(classical_address(cols), classical_address(colsum2)), Python.list(1, n),
             Python.list())
         _ = colsum2  # keep the Python object alive through the native call above
+        _ = cols  # keep the Python object alive through the native call above
         all_ = decomp_f32(Python.tuple(n), context)
         _op(near, "scale_div", Python.list(classical_address(colsum2), classical_address(all_)), Python.list(n),
             Python.list(Float64(n)))
         _ = colsum2  # keep the Python object alive through the native call above
+        _ = all_  # keep the Python object alive through the native call above
         kc = decomp_f32(Python.tuple(n, n), context)
         _op(near, "kpca_center", Python.list(classical_address(k), classical_address(cols), classical_address(cols),
                                             classical_address(all_), classical_address(kc)), Python.list(n, n),
             Python.list())
+        _ = k  # keep the Python object alive through the native call above
+        _ = cols  # keep the Python object alive through the native call above
+        _ = kc  # keep the Python object alive through the native call above
+        _ = all_  # keep the Python object alive through the native call above
         _ = k^
     var c = 0 if requested < 0 else requested
     var lanczos = auto and n > 200 and c > 0 and c < 10
@@ -135,18 +145,25 @@ def kpca_fit(model: PythonObject, source: PythonObject, context: PythonObject) r
     var values = List[Float32](length=max(n, 1), fill=Float32(0))
     var vectors = List[Float32](length=max(n * room, 1), fill=Float32(0))
     var spare = classical_address(cols)
+    _ = cols  # keep the Python object alive through the native call above
     var kept = Int(py=py_call_typed(decomp["x_decomp_kpca_eig"], Python.list(
         classical_address(kc) if kc is not None else spare, classical_address(x), 1 if resident else 0, n, d,
         requested, 1 if lanczos else 0, 1 if Bool(py=fields["remove_zero_eig"]) else 0,
         Int(values.unsafe_ptr()), Int(vectors.unsafe_ptr()), classical_address(cols), classical_address(all_)),
         Python.list(gamma)))
+    _ = kc  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
+    _ = all_  # keep the Python object alive through the native call above
+    _ = cols  # keep the Python object alive through the native call above
     var eigenvalues = decomp_f32(Python.tuple(kept), context)
     var eigenvectors = decomp_f32(Python.tuple(n, kept), context)
     if kept:
         memcpy(dest=F32P(unsafe_from_address=Int(py=classical_address(eigenvalues))),
                src=F32P(unsafe_from_address=Int(values.unsafe_ptr())), count=kept)
+        _ = eigenvalues  # keep the Python object alive through the native call above
         memcpy(dest=F32P(unsafe_from_address=Int(py=classical_address(eigenvectors))),
                src=F32P(unsafe_from_address=Int(vectors.unsafe_ptr())), count=n * kept)
+        _ = eigenvectors  # keep the Python object alive through the native call above
     _ = values^
     _ = vectors^
     _ = kc^
@@ -170,6 +187,9 @@ def _alpha_scale(model: PythonObject, fields: PythonObject, near: PythonObject, 
     var out = decomp_f32(Python.tuple(rows, cols), context)
     _op(near, "kpca_alpha_scale", Python.list(classical_address(v), classical_address(w), classical_address(out)),
         Python.list(rows, cols, divide), Python.list())
+    _ = out  # keep the Python object alive through the native call above
+    _ = w  # keep the Python object alive through the native call above
+    _ = v  # keep the Python object alive through the native call above
     _ = v^
     _ = w^
     return out
@@ -214,6 +234,11 @@ def kpca_transform(model: PythonObject, source: PythonObject, context: PythonObj
             Python.list(nq, nf, width, c, Int(py=context["kpca_precomputed_kind"]) if pre else _kind(kernel, context),
                         degree),
             Python.list(0.0 if pre else _f32_scalar(gamma), 0.0 if pre else _f32_scalar(coef0), Float64(nf)))
+        _ = fit_x  # keep the Python object alive through the native call above
+        _ = q  # keep the Python object alive through the native call above
+        _ = fit_all  # keep the Python object alive through the native call above
+        _ = fit_cols  # keep the Python object alive through the native call above
+        _ = alphas  # keep the Python object alive through the native call above
     else:
         var k = q
         if not pre:
@@ -221,9 +246,13 @@ def kpca_transform(model: PythonObject, source: PythonObject, context: PythonObj
             _op(near, "kernel", Python.list(classical_address(q), classical_address(fit_x), classical_address(k)),
                 Python.list(nq, nf, width, _kind(kernel, context), degree),
                 Python.list(_f32_scalar(gamma), _f32_scalar(coef0)))
+            _ = k  # keep the Python object alive through the native call above
+            _ = fit_x  # keep the Python object alive through the native call above
+            _ = q  # keep the Python object alive through the native call above
         var rows = decomp_f32(Python.tuple(nq), context)
         _op(near, "rowsum", Python.list(classical_address(k), classical_address(rows)), Python.list(nq, nf), Python.list())
         _ = rows  # keep the Python object alive through the native call above
+        _ = k  # keep the Python object alive through the native call above
         var pred = decomp_f32(Python.tuple(nq), context)
         _op(near, "scale_div", Python.list(classical_address(rows), classical_address(pred)), Python.list(nq),
             Python.list(Float64(nf)))
@@ -233,12 +262,16 @@ def kpca_transform(model: PythonObject, source: PythonObject, context: PythonObj
         _op(near, "kpca_center", Python.list(classical_address(k), classical_address(fit_cols),
                                             classical_address(pred), classical_address(fit_all), classical_address(kc)),
             Python.list(nq, nf), Python.list())
+        _ = k  # keep the Python object alive through the native call above
+        _ = fit_cols  # keep the Python object alive through the native call above
         _ = kc  # keep the Python object alive through the native call above
         _ = pred  # keep the Python object alive through the native call above
+        _ = fit_all  # keep the Python object alive through the native call above
         out = decomp_f32(Python.tuple(nq, c), context)
         _op(near, "matmul", Python.list(classical_address(kc), classical_address(alphas), classical_address(out)),
             Python.list(nq, nf, c), Python.list())
         _ = kc  # keep the Python object alive through the native call above
+        _ = alphas  # keep the Python object alive through the native call above
         _ = k^
     _ = q^
     _ = fit_x^

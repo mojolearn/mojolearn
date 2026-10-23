@@ -83,6 +83,7 @@ def _wrap(entries: PythonObject, array: PythonObject, context: PythonObject) rai
     try:
         if n > 0:
             _ = py_call_typed(entries["seq_tensor_upload"], handle, classical_address(input), PythonObject(n))
+            _ = input  # keep the Python object alive through the native call above
     except error:
         _ = py_call_typed(entries["seq_tensor_free"], handle)
         raise error^
@@ -164,6 +165,8 @@ def _ln_run_dev(x: PythonObject, d: Int, weight: PythonObject, bias: PythonObjec
         _ = py_call(py_call(_b().getattr, ip, "append"), PythonObject(0))
         _ = py_call(py_call(_b().getattr, ip, "extend"), stat_flag)
         _ = py_call_typed(entry, hs, Python.list(_addr_or_zero(w), _addr_or_zero(bb), 0, 0), ip, fp)
+        _ = bb  # keep the Python object alive through the native call above
+        _ = w  # keep the Python object alive through the native call above
         return Python.tuple(y, PythonObject(None), PythonObject(None), PythonObject(None))
     var dyt: PythonObject
     if seq_device(dy, context):
@@ -194,6 +197,10 @@ def _ln_run_dev(x: PythonObject, d: Int, weight: PythonObject, bias: PythonObjec
     _ = py_call(py_call(_b().getattr, ip, "append"), PythonObject(1))
     _ = py_call(py_call(_b().getattr, ip, "extend"), stat_flag)
     _ = py_call_typed(entry, hs, Python.list(_addr_or_zero(w), _addr_or_zero(bb), classical_address(dw), classical_address(db)), ip, fp)
+    _ = db  # keep the Python object alive through the native call above
+    _ = dw  # keep the Python object alive through the native call above
+    _ = bb  # keep the Python object alive through the native call above
+    _ = w  # keep the Python object alive through the native call above
     return Python.tuple(PythonObject(None), dx, dw, db)
 
 
@@ -234,6 +241,14 @@ def _ln_run(x: PythonObject, d: Int, weight: PythonObject, bias: PythonObject, e
     _ = py_call_typed(entry, Python.list(classical_address(a), _addr_or_zero(w), _addr_or_zero(bb), _addr_or_zero(y),
                                           _addr_or_zero(dyv), classical_address(dx), classical_address(dw), classical_address(db)),
                       Python.list(m, d, 0 if w is None else 1, 0 if bb is None else 1, 1 if backward else 0), Python.list(eps))
+    _ = y  # keep the Python object alive through the native call above
+    _ = bb  # keep the Python object alive through the native call above
+    _ = w  # keep the Python object alive through the native call above
+    _ = a  # keep the Python object alive through the native call above
+    _ = db  # keep the Python object alive through the native call above
+    _ = dw  # keep the Python object alive through the native call above
+    _ = dx  # keep the Python object alive through the native call above
+    _ = dyv  # keep the Python object alive through the native call above
     _ = a^
     return Python.tuple(y, dx, dw, db)
 
@@ -373,6 +388,7 @@ def sequence_moe_forward(owner: PythonObject, values: PythonObject, context: Pyt
         var n = shape_count(shape)
         if n > 0:
             _ = py_call_typed(entries["seq_tensor_download"], seq_device_get(x, "h", context), classical_address(host), PythonObject(n))
+            _ = host  # keep the Python object alive through the native call above
         x = host
     var a = _f32(x, "MoEBlock", context)
     var shape = _shape(a, context)
@@ -387,12 +403,17 @@ def sequence_moe_forward(owner: PythonObject, values: PythonObject, context: Pyt
     var entries = seq_binding(py_get(fields, "numeric_mode"), context, PythonObject(None))
     var ip = Python.list(t, d, f, e, k, norm)
     var xa = classical_address(a)
+    _ = a  # keep the Python object alive through the native call above
     if py_get(entries, "moe_weights_put") is not None:
         _moe_check_weights(fields, e, d, f)
         var h = _moe_weights(fields, entries, e, d, f, context)
         _ = py_call(py_call(b.getattr, ip, "append"), h)
         _ = py_call_typed(entries["moe_forward"], Python.list(xa, xa, xa, xa, classical_address(y), classical_address(logits),
                           classical_address(sel), classical_address(w)), ip)
+        _ = logits  # keep the Python object alive through the native call above
+        _ = y  # keep the Python object alive through the native call above
+        _ = w  # keep the Python object alive through the native call above
+        _ = sel  # keep the Python object alive through the native call above
     else:
         var r = _f32(fields["router"], "router", context)
         var gu = _f32(fields["gate_up_proj"], "gate_up_proj", context)
@@ -402,6 +423,10 @@ def sequence_moe_forward(owner: PythonObject, values: PythonObject, context: Pyt
         _ = dn  # keep the Python object alive through the native call above
         _ = gu  # keep the Python object alive through the native call above
         _ = r  # keep the Python object alive through the native call above
+        _ = w  # keep the Python object alive through the native call above
+        _ = sel  # keep the Python object alive through the native call above
+        _ = logits  # keep the Python object alive through the native call above
+        _ = y  # keep the Python object alive through the native call above
     _ = a^
     py_setitem(fields, "_routing", Python.list(logits, sel, w, PythonObject(None)))
     return _reshape(y, shape)

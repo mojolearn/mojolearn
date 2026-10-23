@@ -59,8 +59,11 @@ def _cluster_codes(labels_true: PythonObject, labels_pred: PythonObject,
     var npred = Int(py=yp.size)
     var both = family_array(Python.tuple(nt + npred), "<i4", context)
     var base = Int(py=classical_address(both))
+    _ = both  # keep the Python object alive through the native call above
     mcls_copy_words(Int(py=classical_address(yt)), base, nt)
+    _ = yt  # keep the Python object alive through the native call above
     mcls_copy_words(Int(py=classical_address(yp)), base + 4 * nt, npred)
+    _ = yp  # keep the Python object alive through the native call above
     var b = mc_b()
     var total = nt + npred
     var classes = family_call(Python.import_module("array").array, PythonObject("q"),
@@ -69,6 +72,8 @@ def _cluster_codes(labels_true: PythonObject, labels_pred: PythonObject,
     var k = Int(py=family_call(mc_base("prepare_targets", context), classical_address(both), PythonObject(2),
                                PythonObject(total), py_call(classes.buffer_info)[0], classical_address(codes),
                                PythonObject(0), PythonObject(0), PythonObject(0)))
+    _ = both  # keep the Python object alive through the native call above
+    _ = codes  # keep the Python object alive through the native call above
     if k < 0:
         raise Error("RuntimeError: prepare_targets refused integer labels")
     _ = both^
@@ -94,6 +99,8 @@ def _raw_pair_call(binding: PythonObject, entry: String, args: PythonObject, con
     var yp = pair[1]
     var result = _as_float(family_call(mc_entry(binding, entry), classical_address(yt), classical_address(yp),
                                        _params(Int(py=yt.size))))
+    _ = yp  # keep the Python object alive through the native call above
+    _ = yt  # keep the Python object alive through the native call above
     _ = yt^
     _ = yp^
     return result
@@ -104,10 +111,14 @@ def _entropy(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var lab = mc_i32_1d(args[1], "clustering", context)
     var n = Int(py=lab.size)
     var words = FAMILY_I32P(unsafe_from_address=Int(py=classical_address(lab)))
+    _ = lab  # keep the Python object alive through the native call above
     var lower = mcls_min_i32(words, n)
+    _ = lab  # keep the Python object alive through the native call above
     var upper = mcls_max_i32(words, n)
+    _ = lab  # keep the Python object alive through the native call above
     var value = Float64(py=_as_float(family_call(mc_entry(args[0], "entropy"), classical_address(lab),
                                                  _params(n, lower, upper))))
+    _ = lab  # keep the Python object alive through the native call above
     _ = lab^
     if args[2] is None:
         return PythonObject(value)
@@ -154,6 +165,7 @@ def _silhouette(args: PythonObject, caller: String, context: PythonObject) raise
         raise Error("mojolearn " + caller + ": X contains NaN or infinity; refused here "
                     + "(metrics/README.md HAND-OFF ask 3), because a NaN distance "
                     + "reaches sil_op as +0.0 (DEVIATION 656) rather than as an error")
+    _ = x  # keep the Python object alive through the native calls above
     var lab = mc_i32_1d(args[2], "labels", context)
     var n_lab = Int(py=lab.size)
     if n_lab != rows:
@@ -166,6 +178,8 @@ def _silhouette(args: PythonObject, caller: String, context: PythonObject) raise
     var k = Int(py=family_call(mc_base("prepare_targets", context), classical_address(lab), PythonObject(2),
                                PythonObject(n_lab), py_call(store.buffer_info)[0], classical_address(mapped),
                                PythonObject(0), PythonObject(0), PythonObject(0)))
+    _ = lab  # keep the Python object alive through the native call above
+    _ = mapped  # keep the Python object alive through the native call above
     if k < 0:
         raise Error("RuntimeError: prepare_targets refused integer labels")
     var chunk = 40000
@@ -176,6 +190,9 @@ def _silhouette(args: PythonObject, caller: String, context: PythonObject) raise
     var scores = family_array(Python.tuple(rows), "<f4", context)
     var mean = _as_float(family_call(mc_entry(args[0], "silhouette"), classical_address(x), classical_address(mapped),
                                      classical_address(scores), _params(rows, cols, k, chunk)))
+    _ = mapped  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
+    _ = scores  # keep the Python object alive through the native call above
     _ = x^
     _ = lab^
     _ = mapped^
@@ -200,14 +217,18 @@ def _trustworthiness(args: PythonObject, context: PythonObject) raises -> Python
                     + String(Int(py=emb.shape[0])))
     if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
         raise Error("mojolearn trustworthiness: X contains NaN or infinity; refused here (metrics/README.md HAND-OFF ask 3)")
+    _ = x  # keep the Python object alive through the native calls above
     if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(emb))), Int(py=emb.size)):
         raise Error("mojolearn trustworthiness: X_embedded contains NaN or infinity; refused here "
                     + "(metrics/README.md HAND-OFF ask 3)")
+    _ = emb  # keep the Python object alive through the native calls above
     var batch = mc_int(args[5])
     if batch < 1:
         raise Error("mojolearn trustworthiness: batch_size must be at least 1, got " + family_repr(args[5]))
     var result = _as_float(family_call(mc_entry(args[0], "trustworthiness"), classical_address(x), classical_address(emb),
                                        _params(rows, Int(py=x.shape[1]), Int(py=emb.shape[1]), mc_int(args[3]), batch)))
+    _ = emb  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     _ = x^
     _ = emb^
     return result
@@ -226,6 +247,8 @@ def _kl_divergence(args: PythonObject, context: PythonObject) raises -> PythonOb
                     + "HAND-OFF ask 3) rather than letting log of a negative reach the fold")
     var result = _as_float(family_call(mc_entry(args[0], "kl_divergence"), classical_address(p), classical_address(q),
                                        _params(Int(py=p.size))))
+    _ = q  # keep the Python object alive through the native call above
+    _ = p  # keep the Python object alive through the native call above
     _ = p^
     _ = q^
     return result
@@ -251,6 +274,8 @@ def _regression_error(args: PythonObject, context: PythonObject) raises -> Pytho
     mc_pair_check(yt, yp, "y_true", "y_pred")
     var result = _as_float(family_call(mc_entry(args[0], name), classical_address(yt), classical_address(yp),
                                        _params(Int(py=yt.size))))
+    _ = yp  # keep the Python object alive through the native call above
+    _ = yt  # keep the Python object alive through the native call above
     _ = yt^
     _ = yp^
     return result
@@ -275,10 +300,15 @@ def _r2(args: PythonObject, context: PythonObject) raises -> PythonObject:
         var w = mc_weights(args[3], n, "r2_score", context)
         result = _as_float(family_call(mc_entry(args[0], "r2_score_weighted"), classical_address(y),
                                        classical_address(yh), classical_address(w), _params(n)))
+        _ = y  # keep the Python object alive through the native call above
+        _ = w  # keep the Python object alive through the native call above
+        _ = yh  # keep the Python object alive through the native call above
         _ = w^
     else:
         result = _as_float(family_call(mc_entry(args[0], "r2_score"), classical_address(y), classical_address(yh),
                                        _params(n)))
+        _ = yh  # keep the Python object alive through the native call above
+        _ = y  # keep the Python object alive through the native call above
     _ = y^
     _ = yh^
     return result

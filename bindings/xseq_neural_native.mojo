@@ -102,6 +102,8 @@ def xseq_labels(source: PythonObject, entries: PythonObject, context: PythonObje
         var codes = sequential_array(Python.tuple(n), context["int32"], context)
         var count = Int(py=py_call_typed(entries["model_labels"], descriptor, sequential_address(classes),
                                          sequential_address(codes)))
+        _ = classes  # keep the Python object alive through the native call above
+        _ = codes  # keep the Python object alive through the native call above
         var selected = py_call(context["ndarray"], Python.tuple(count), dtype=y.dtype, buffer=classes)
         _ = y^
         return Python.tuple(selected, codes)
@@ -130,6 +132,7 @@ def xseq_argmax(scores: PythonObject, rows: Int, cols: Int, context: PythonObjec
     if rows:
         _ = py_call_typed(xseq_base(context, "argmax_rows_f32"), xseq_addr(scores), PythonObject(rows),
                           PythonObject(cols), xseq_addr(codes))
+        _ = codes  # keep the Python object alive through the native call above
     return codes
 
 
@@ -200,6 +203,7 @@ def _rnn_rates(fields: PythonObject, steps: Int, context: PythonObject) raises -
     var rates = xseq_zeros(Python.tuple(steps), context)
     var rate = Float32(xseq_float(fields["learning_rate"]))
     xseq_fill_f32(xseq_f32p(rates), steps, rate)
+    _ = rates  # keep the Python object alive through the native call above
     return rates
 
 
@@ -276,6 +280,7 @@ def _rnn_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     var bound = 1.0 / sqrt(xseq_float(fields["hidden_size"]))
     var params = xseq_zeros(Python.tuple(total), context)
     stream.fill_uniform(context, xseq_addr(params), total, -bound, bound)
+    _ = params  # keep the Python object alive through the native call above
     py_setitem(fields, "params_", params)
     # the minibatch schedule's scalars; each epoch's row order is built by rnn_fit
     var batch = max(1, min(xseq_int(fields["batch_size"]), n))
@@ -293,6 +298,10 @@ def _rnn_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
                 optimizer[0], optimizer[1], 1 if shuffle else 0, Int(seed & 0xFFFFFFFF), Int(seed >> 32)))
     _ = py_call_typed(entries["rnn_fit"], Python.list(xseq_addr(x), xseq_addr(target), xseq_addr(params),
                       xseq_addr(losses), _buffer_address(rates)), ip, optimizer[2])
+    _ = params  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
+    _ = losses  # keep the Python object alive through the native call above
+    _ = rates  # keep the Python object alive through the native call above
     _ = x^
     _ = rates^
     py_setitem(fields, "loss_curve_", losses)
@@ -315,6 +324,10 @@ def _rnn_run(model: PythonObject, fields: PythonObject, source: PythonObject, wa
     _ = py_call(_method(ip, "extend"), Python.list(Int(py=_attr(py_type(model), "_TASK")), n, steps_t,
                 xseq_int(fields["predict_chunk"]), 1 if want_seq else 0))
     _ = py_call_typed(entries["rnn_predict"], Python.list(xseq_addr(x), xseq_addr(params), xseq_addr(out), xseq_addr(seq)), ip)
+    _ = params  # keep the Python object alive through the native call above
+    _ = seq  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     _ = x^
     _ = params^
     return Python.tuple(out, seq)
@@ -345,6 +358,8 @@ def xseq_rnn(model: PythonObject, operation: String, args: PythonObject, context
         var count = Int(py=codes.shape[0])
         var target = xseq_zeros(Python.tuple(count), context)
         xseq_codes_f32(XI32P(unsafe_from_address=Int(py=xseq_addr(codes))), xseq_f32p(target), count)
+        _ = target  # keep the Python object alive through the native call above
+        _ = codes  # keep the Python object alive through the native call above
         return _rnn_fit(model, fields, args[0], target, entries, context)
     if operation == "rnn_hidden_sequence":
         return _rnn_run(model, fields, args[0], True, context)[1]
@@ -415,6 +430,7 @@ def _mlp_layer_copy(params: PythonObject, offset: Int, shape: PythonObject, coun
     var out = xseq_zeros(shape, context)
     if count:
         memcpy(dest=xseq_f32p(out), src=xseq_f32p(params) + offset, count=count)
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -444,6 +460,7 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     var params = xseq_zeros(Python.tuple(total), context)
     var offset = 0
     var base = Int(py=xseq_addr(params))
+    _ = params  # keep the Python object alive through the native call above
     for l in range(len(sizes) - 1):  # driver-loop: over network layers
         var fi = sizes[l]
         var fo = sizes[l + 1]
@@ -482,6 +499,9 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     var entries = xseq_entries(fields, context)
     var n_iter = Int(py=py_call_typed(entries["mlp_fit"], Python.list(xseq_addr(x), xseq_addr(target), xseq_addr(params),
                                       xseq_addr(curve)), ip, fp))
+    _ = params  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
+    _ = curve  # keep the Python object alive through the native call above
     _ = x^
     # the fitted weights, one array per layer
     var coefs = Python.list()
@@ -504,6 +524,7 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     py_setitem(fields, "loss_", losses[n_iter - 1])
     # the first-wins minimum of the curve (`reduce_stat` 0)
     var best = py_call_typed(xseq_base(context, "reduce_stat"), xseq_addr(curve), PythonObject(0), PythonObject(n_iter), PythonObject(0))
+    _ = curve  # keep the Python object alive through the native call above
     py_setitem(fields, "best_loss_", xseq_float(best))
     py_setitem(fields, "t_", n_iter * rows)
     return model
@@ -536,11 +557,15 @@ def _mlp_forward(fields: PythonObject, source: PythonObject, proba2: Bool, conte
         var count = Int(py=w.size)
         if count:
             memcpy(dest=xseq_f32p(params) + offset, src=xseq_f32p(w), count=count)
+            _ = w  # keep the Python object alive through the native call above
+            _ = params  # keep the Python object alive through the native call above
         offset += count
         var bias = xseq_f32(intercepts[l], "intercepts_", False, context)
         count = Int(py=bias.size)
         if count:
             memcpy(dest=xseq_f32p(params) + offset, src=xseq_f32p(bias), count=count)
+            _ = bias  # keep the Python object alive through the native call above
+            _ = params  # keep the Python object alive through the native call above
         offset += count
     var out_act = Int(py=context["xseq_mlp_outputs"][fields["out_activation_"]])
     var ip = Python.list(rows, x.shape[1], fields["n_outputs_"], context["xseq_mlp_activations"][fields["activation"]],
@@ -550,6 +575,9 @@ def _mlp_forward(fields: PythonObject, source: PythonObject, proba2: Bool, conte
         _ = py_call(_method(ip, "append"), 1)
     var entries = xseq_entries(fields, context)
     var written = Int(py=py_call_typed(entries["mlp_predict"], Python.list(xseq_addr(x), xseq_addr(params), xseq_addr(out)), ip))
+    _ = params  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     _ = x^
     _ = params^
     if written != rows * width:
@@ -599,5 +627,7 @@ def xseq_mlp(model: PythonObject, operation: String, args: PythonObject, context
             _ = py_call_typed(xseq_base(context, "threshold_labels_i64"), xseq_addr(out), PythonObject(0),
                               PythonObject(rows), PythonObject(0.5), PythonObject(1), PythonObject(0), PythonObject(1),
                               xseq_addr(codes))
+            _ = out  # keep the Python object alive through the native call above
+            _ = codes  # keep the Python object alive through the native call above
         return xseq_take(fields["classes_"], codes)
     return xseq_take(fields["classes_"], xseq_argmax(out, rows, Int(py=out.shape[1]), context))

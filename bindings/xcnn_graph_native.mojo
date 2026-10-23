@@ -55,6 +55,7 @@ def _graph_key(n: Int, arrays: PythonObject, context: PythonObject) raises -> Py
         else:
             _ = py_call(sig.append, Python.tuple(py_call(b.tuple, py_call(b.getattr, a, "shape", Python.tuple())),
                                                 py_call(b.str, py_call(b.getattr, a, "dtype", "")), _data_addr(a)))
+            _ = a  # keep the Python object alive through the native call above
     py_setattr(key, "n", n)
     py_setattr(key, "refs", py_call(b.tuple, arrays))
     py_setattr(key, "sig", py_call(b.tuple, sig))
@@ -86,6 +87,7 @@ def _edges(edge_index: PythonObject, n: Int) raises -> PythonObject:
     var size = Int(py=e64.size)
     if size and not graph_edges_in_range(Int(py=xcnn_addr(e64)), size, n):
         raise Error("ValueError: mojolearn: edge_index refers to a node that does not exist")
+    _ = e64  # keep the Python object alive through the native calls above
     return Python.tuple(e64[0], e64[1])
 
 
@@ -96,6 +98,8 @@ def _csr(entries: PythonObject, rows: PythonObject, cols: PythonObject, n: Int, 
     var order = py_call(np.empty, max(nnz, 1), np.int32)
     _ = py_call(xcnn_entry(entries, "x_cnn_csr_build"), xcnn_addr(rows), xcnn_addr(cols), xcnn_addr(csr), xcnn_addr(order),
               Python.list(n, nnz))
+    _ = order  # keep the Python object alive through the native call above
+    _ = csr  # keep the Python object alive through the native call above
     return Python.tuple(csr, order.__getitem__(py_call(xcnn_builtins().slice, PythonObject(None), nnz)))
 
 
@@ -131,6 +135,9 @@ def _gather(entries: PythonObject, values: PythonObject, order: PythonObject) ra
     var out = py_call(np.empty, n, np.float32)
     _ = py_call(xcnn_entry(entries, "x_cnn_perm_gather"), Python.list(xcnn_addr(src), xcnn_addr(idx), xcnn_addr(out)),
               Python.list(Int(py=src.size), n))
+    _ = out  # keep the Python object alive through the native call above
+    _ = idx  # keep the Python object alive through the native call above
+    _ = src  # keep the Python object alive through the native call above
     return out
 
 
@@ -144,6 +151,7 @@ def _vals_t(entries: PythonObject, g: PythonObject, vals_f: PythonObject) raises
                                                    xcnn_addr(py_call(np.ascontiguousarray, g.order_t)), xcnn_addr(out)),
               Python.list(nnz))
     _ = vf  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -158,6 +166,7 @@ def _gemm(entries: PythonObject, a: PythonObject, b2: PythonObject, m: Int, n: I
     _ = py_call(xcnn_entry(entries, "x_cnn_gemm"), xcnn_addr(fa), xcnn_addr(fb), xcnn_addr(out), Python.list(m, n, k, op))
     _ = fb  # keep the Python object alive through the native call above
     _ = fa  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -171,6 +180,8 @@ def _spmm(entries: PythonObject, g: PythonObject, vals: PythonObject, h: PythonO
     _ = py_call(xcnn_entry(entries, "x_cnn_spmm"), xcnn_addr(v), xcnn_addr(hh), xcnn_addr(out), xcnn_addr(g.csr_f),
               Python.list(Int(py=g.n), Int(py=hh.shape[1]), Int(py=g.nnz), mode))
     _ = v  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
+    _ = hh  # keep the Python object alive through the native call above
     return out
 
 
@@ -180,7 +191,9 @@ def _add(entries: PythonObject, a: PythonObject, b2: PythonObject, context: Pyth
     var fb = xcnn_f32(b2, "b", context)
     var out = py_call(_np().empty_like, fa)
     _ = py_call(xcnn_entry(entries, "x_cnn_add"), xcnn_addr(fa), xcnn_addr(fb), xcnn_addr(out), Python.list(Int(py=fa.size)))
+    _ = out  # keep the Python object alive through the native call above
     _ = fb  # keep the Python object alive through the native call above
+    _ = fa  # keep the Python object alive through the native call above
     return out
 
 
@@ -189,6 +202,7 @@ def _bias_rows(bias: PythonObject, rows: Int, cols: Int, context: PythonObject) 
     var fb = xcnn_f32(bias, "b", context)
     var out = xcnn_host_f32([rows, cols], context)
     graph_bias_rows(Int(py=xcnn_addr(fb)), Int(py=xcnn_addr(out)), rows, cols)
+    _ = out  # keep the Python object alive through the native call above
     _ = fb  # keep the Python object alive through the native call above
     return out
 
@@ -202,6 +216,8 @@ def _linear_forward(lin: PythonObject, x: PythonObject, context: PythonObject) r
     var out = xcnn_host_f32([rows, Int(py=fields["out_features"])], context)
     _ = py_call(xcnn_entry(entries, "x_cnn_linear_forward"), xcnn_addr(fx), xcnn_addr(fields["weight_"]), xcnn_addr(fields["bias_"]),
               xcnn_addr(out), Python.list(rows, fields["in_features"], fields["out_features"]))
+    _ = fx  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
     py_setitem(fields, "_x", fx)
     return out
 
@@ -213,6 +229,8 @@ def _relu_forward(relu: PythonObject, x: PythonObject, context: PythonObject) ra
     var fx = xcnn_f32(x, "x", context)
     var out = py_call(_np().empty_like, fx)
     _ = py_call(xcnn_entry(entries, "x_cnn_relu_forward"), xcnn_addr(fx), xcnn_addr(out), Python.list(Int(py=fx.size)))
+    _ = out  # keep the Python object alive through the native call above
+    _ = fx  # keep the Python object alive through the native call above
     py_setitem(fields, "_x", fx)
     return out
 
@@ -287,8 +305,12 @@ def _gcn_graph(fields: PythonObject, entries: PythonObject, n: Int, edge_index: 
         var wo = py_call(np.empty, t, np.float32)
         var k = Int(py=py_call(xcnn_builtins().int, py_call(xcnn_entry(entries, "x_cnn_gcn_loops"), Python.list(xcnn_addr(s32), xcnn_addr(d32), xcnn_addr(w32), xcnn_addr(so), xcnn_addr(dso), xcnn_addr(wo)),
             Python.list(n, len(s32), 1 if Bool(py=fields["improved"]) else 0))))
+        _ = wo  # keep the Python object alive through the native call above
+        _ = dso  # keep the Python object alive through the native call above
+        _ = so  # keep the Python object alive through the native call above
         _ = w32  # keep the Python object alive through the native call above
         _ = d32  # keep the Python object alive through the native call above
+        _ = s32  # keep the Python object alive through the native call above
         var cut = py_call(xcnn_builtins().slice, PythonObject(None), k + n)
         src = so.__getitem__(cut)
         dst = dso.__getitem__(cut)
@@ -302,8 +324,12 @@ def _gcn_graph(fields: PythonObject, entries: PythonObject, n: Int, edge_index: 
         if xcnn_idn(entries, XCNN_F_GRAPH):
             _ = py_call(xcnn_entry(entries, "x_cnn_gcn_norm_m"), Python.list(xcnn_addr(wf), xcnn_addr(vals), xcnn_addr(g.csr_f)),
                       PythonObject(0), Python.list(n, 1, nnz, 0))
+            _ = vals  # keep the Python object alive through the native call above
+            _ = wf  # keep the Python object alive through the native call above
         else:
             _ = py_call(xcnn_entry(entries, "x_cnn_gcn_norm"), xcnn_addr(wf), xcnn_addr(vals), xcnn_addr(g.csr_f), Python.list(n, 1, nnz, 0))
+            _ = vals  # keep the Python object alive through the native call above
+            _ = wf  # keep the Python object alive through the native call above
     return Python.tuple(g, vals)
 
 
@@ -333,9 +359,12 @@ def _gcn_forward_dev(layer: PythonObject, fields: PythonObject, entries: PythonO
             raise Error("ValueError: mojolearn: bias_ has the wrong size")
         if xt:
             _ = py_call(xcnn_entry(entries, "x_cnn_map2_m"), Python.list(oh, xcnn_addr(bv), out.h), PythonObject(0b101), Python.list(4, n * f_out, f_out))
+            _ = bv  # keep the Python object alive through the native call above
         else:
             _ = py_call(xcnn_entry(entries, "x_cnn_map2_m"), Python.list(oh, xcnn_addr(bv), xcnn_addr(out)), PythonObject(0b001),
                       Python.list(4, n * f_out, f_out))
+            _ = bv  # keep the Python object alive through the native call above
+            _ = out  # keep the Python object alive through the native call above
     elif not xt:
         _download(entries, oh, out)
     py_setitem(fields, "_x", x)
@@ -450,6 +479,7 @@ def _sage_forward_dev(layer: PythonObject, fields: PythonObject, entries: Python
             _ = py_call(xcnn_entry(entries, "x_cnn_map2_m"), Python.list(olh, rh, out.h), PythonObject(0b111), Python.list(2, n * f_out))
         else:
             _ = py_call(xcnn_entry(entries, "x_cnn_map2_m"), Python.list(olh, rh, xcnn_addr(out)), PythonObject(0b011), Python.list(2, n * f_out))
+            _ = out  # keep the Python object alive through the native call above
     elif not xt and not norm:
         _download(entries, olh, out)
     py_setitem(fields, "_ydev", PythonObject(None))
@@ -506,6 +536,9 @@ def xcnn_sage_forward(layer: PythonObject, args: PythonObject, context: PythonOb
         py_setitem(fields, "_max_aux", aux)
         _ = py_call(xcnn_entry(entries, "x_cnn_graph_op"), xcnn_addr(xs), xcnn_addr(xs), xcnn_addr(aux), xcnn_addr(agg), xcnn_addr(g.csr_f),
                   Python.list(n, Int(py=xs.shape[1]), nnz, 0))
+        _ = aux  # keep the Python object alive through the native call above
+        _ = agg  # keep the Python object alive through the native call above
+        _ = xs  # keep the Python object alive through the native call above
     else:
         agg = _spmm(entries, g, py_call(np.ones, nnz, np.float32), xs, 1 if aggr == "mean" else 0, context)
     var out = _linear_forward(fields["lin_l"], agg, context)
@@ -523,6 +556,10 @@ def xcnn_sage_forward(layer: PythonObject, args: PythonObject, context: PythonOb
         py_setitem(fields, "_nograph", nograph)
         _ = py_call(xcnn_entry(entries, "x_cnn_graph_op"), xcnn_addr(out), xcnn_addr(out), xcnn_addr(den), xcnn_addr(y), xcnn_addr(nograph),
                   Python.list(n, Int(py=out.shape[1]), 0, 2))
+        _ = nograph  # keep the Python object alive through the native call above
+        _ = den  # keep the Python object alive through the native call above
+        _ = y  # keep the Python object alive through the native call above
+        _ = out  # keep the Python object alive through the native call above
         py_setitem(fields, "_y", y)
         out = y
     return out

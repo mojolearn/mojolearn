@@ -654,6 +654,7 @@ def nystroem_transform_binding(
         with GILReleased(Python()):
             var trace = IdentityTrace()
             nystroem_transform_ptr_into(model, xaddr, m, op, trace)
+            _ = model  # keep the Python object alive through the native call above
     else:
         var x = read_f32(xaddr, max(0, m * d))
         with GILReleased(Python()):
@@ -767,6 +768,7 @@ def rbf_sampler_transform_binding(
         with GILReleased(Python()):
             var trace = IdentityTrace()
             rbf_sampler_transform_ptr_into(model, xaddr, m, op, trace)
+            _ = model  # keep the Python object alive through the native call above
     else:
         var x = read_f32(xaddr, max(0, m * d))
         with GILReleased(Python()):

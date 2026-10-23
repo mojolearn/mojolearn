@@ -79,6 +79,7 @@ def randomized_svd_call(args: PythonObject, context: PythonObject) raises -> Pyt
                     var direct = kit.device_output(rows, cols)
                     var found = Int(py=py_call(kit.entries["x_decomp_dev_upload_scan"], kit.matrices[direct].device,
                                                classical_address(array), rows * cols))
+                    _ = array  # keep the Python object alive through the native call above
                     if found >= 0:
                         raise Error("M: input must be finite; NaN/inf are unsupported")
                     a = direct
@@ -251,6 +252,7 @@ def _resident_solve(mut kit: DecompKit, handles: List[Int], n: Int, b: PythonObj
     var out = _typed(Python.tuple(n) if vec else Python.tuple(n, nrhs), "<f4", "f", 4, context)
     _ = py_call(kit.entries["x_decomp_dev_lu_solve"], handles[1], handles[2], handles[0], classical_address(array),
                 out._addr, Python.list(n, nrhs, 1 if refine else 0))
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -273,8 +275,11 @@ def solve_call(args: PythonObject, context: PythonObject) raises -> PythonObject
             var x = kit.copy_host(bm)
             var info = kit.zeros(1, 1)
             var aa = kit.address(a)
+            _ = a  # keep the Python object alive through the native call above
             _ = py_call(kit.entries["x_decomp_lu_gesv"], aa, kit.address(x), kit.address(info),
                         Python.list(n, kit.ncols(bm)))
+            _ = info  # keep the Python object alive through the native call above
+            _ = x  # keep the Python object alive through the native call above
             kit.wrote_host(x)
             var singular = Int(kit.word(info))
             if singular != 0:
@@ -302,6 +307,7 @@ def solve_call(args: PythonObject, context: PythonObject) raises -> PythonObject
             var rc = decomp_int(py_call(kit.entries["x_decomp_dev_lu_factor"], classical_address(array), lu_array._addr,
                                         piv_array._addr, info._addr, kit.matrices[da].device,
                                         kit.matrices[dlu].device, kit.matrices[dp].device, Python.list(n)))
+            _ = array  # keep the Python object alive through the native call above
             _ = info  # keep the Python object alive through the native call above
             if rc < 0:
                 raise Error("a: input must be finite; NaN/inf are unsupported")
@@ -342,6 +348,7 @@ def solve_call(args: PythonObject, context: PythonObject) raises -> PythonObject
         var piv = _pivots(piv_array, context)
         if Int(py=piv.size) != n or not decomp_piv_valid(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(piv))), n):
             raise Error("piv must hold one row index in [0, n) per row")
+        _ = piv  # keep the Python object alive through the native calls above
         var vec = _is_vector(b)
         var bm = _rhs(kit, b, vec, context)
         if kit.nrows(bm) != n:
@@ -350,6 +357,7 @@ def solve_call(args: PythonObject, context: PythonObject) raises -> PythonObject
         if n:
             memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=py_call(store.buffer_info)[0])),
                    src=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(piv))), count=n)
+            _ = piv  # keep the Python object alive through the native call above
         var x = kit.lu_solve(l, store, bm)
         if qfix_a >= 0 and kit.nrows(qfix_a) == n and kit.ncols(qfix_a) == n and (kit.flags("x_decomp_qfix_flags") & 4) != 0:
             # LU_QFIX: one refinement step, x += LU^-1 (B - A x)
@@ -435,6 +443,9 @@ def lstsq_call(args: PythonObject, context: PythonObject) raises -> PythonObject
             var ra = kit.zeros(n, n)
             _ = py_call(kit.entries["x_decomp_tsqr_r"], classical_address(a_array), classical_address(b_array),
                         kit.address(ra), Python.list(m, nn, nrhs, 0))
+            _ = b_array  # keep the Python object alive through the native call above
+            _ = a_array  # keep the Python object alive through the native call above
+            _ = ra  # keep the Python object alive through the native call above
             kit.wrote_host(ra)
             var top = kit.rows_of(ra, 0, nn)
             var r = kit.cols_of(top, 0, nn)

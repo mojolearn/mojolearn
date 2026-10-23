@@ -170,6 +170,11 @@ def _rs_bootstrap_unpaired(args: PythonObject, context: PythonObject) raises -> 
     # ORDER MATCHES bindings/_mojolearn_resample.mojo::bootstrap_unpaired_binding:
     # n_x, n_y, n_resamples, seed, method, confidence_level, alternative, r_first
     var addrs = Python.list(_rs_addr(xx), _rs_addr(yy), _rs_addr(dist), _rs_addr(sdist), _rs_addr(scalars))
+    _ = scalars  # keep the Python object alive through the native call above
+    _ = sdist  # keep the Python object alive through the native call above
+    _ = dist  # keep the Python object alive through the native call above
+    _ = yy  # keep the Python object alive through the native call above
+    _ = xx  # keep the Python object alive through the native call above
     var params = Python.list(PythonObject(xx.dim(0)), PythonObject(yy.dim(0)), r,
                              rs_int(args[7], "random_state", where), meth,
                              rs_real(args[4], "confidence_level", where), alt, rs_int(args[9], "r_first", where))
@@ -215,6 +220,10 @@ def _rs_bootstrap(args: PythonObject, context: PythonObject) raises -> PythonObj
     # n, d, statistic, n_resamples, seed, method, confidence_level,
     # alternative, q_or_prop, r_first
     var addrs = Python.list(_rs_addr(x), _rs_addr(dist), _rs_addr(sdist), _rs_addr(scalars))
+    _ = scalars  # keep the Python object alive through the native call above
+    _ = sdist  # keep the Python object alive through the native call above
+    _ = dist  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     var params = Python.list(PythonObject(n), PythonObject(d), stat, r, seed, meth, cl, alt, qp, rf)
     _ = family_call(fn_obj, addrs, params)
     _ = x^
@@ -240,6 +249,7 @@ def _rs_permutation_samples(args: PythonObject, context: PythonObject) raises ->
     var yy: LinBuf
     if y is None:
         yy = LinBuf(xx.keep, xx.addr, xx.shape.copy())
+        _ = xx  # keep the Python object alive through the native call above
     else:
         yy = lin_typed(y, "<f4", 1, "y", context)
         ny = yy.dim(0)
@@ -250,6 +260,9 @@ def _rs_permutation_samples(args: PythonObject, context: PythonObject) raises ->
     # ORDER MATCHES bindings/_mojolearn_resample.mojo::permutation_samples_binding:
     # n, n_y, n_resamples, seed, alternative, r_first
     var addrs = Python.list(_rs_addr(xx), _rs_addr(yy), _rs_addr(null), _rs_addr(scalars))
+    _ = scalars  # keep the Python object alive through the native call above
+    _ = null  # keep the Python object alive through the native call above
+    _ = xx  # keep the Python object alive through the native call above
     var params = Python.list(PythonObject(xx.dim(0)), PythonObject(ny), r, rs_int(args[6], "random_state", where),
                              rs_code("ALTERNATIVES", args[5], "alternative", where, context),
                              rs_int(args[7], "r_first", where))
@@ -294,6 +307,10 @@ def _rs_permutation_test(args: PythonObject, context: PythonObject) raises -> Py
     # x, y, null_out, scalars_out; n_x, n_y, statistic, n_resamples, seed,
     # alternative, r_first
     var addrs = Python.list(_rs_addr(xx), _rs_addr(yy), _rs_addr(null), _rs_addr(scalars))
+    _ = scalars  # keep the Python object alive through the native call above
+    _ = null  # keep the Python object alive through the native call above
+    _ = yy  # keep the Python object alive through the native call above
+    _ = xx  # keep the Python object alive through the native call above
     var params = Python.list(PythonObject(xx.dim(0)), PythonObject(yy.dim(0)), stat, r, seed, alt, rf)
     _ = family_call(fn_obj, addrs, params)
     _ = xx^
@@ -316,8 +333,10 @@ def _rs_corner(values: PythonObject, name: String, where: String, context: Pytho
         words.append(Float64(py=rs_real(items[i], name, where)))
     var out = lin_new([count], "<f4", context)
     var p = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=out.addr)
+    _ = out  # keep the Python object alive through the native call above
     for i in range(count):  # driver-loop: over the corner's coordinates (the box's dimensions)
         p[i] = words[i].cast[DType.float32]()
+        _ = out  # keep the Python object alive through the native call above
     return out^
 
 
@@ -336,6 +355,9 @@ def _rs_monte_carlo(args: PythonObject, context: PythonObject) raises -> PythonO
     # ORDER MATCHES bindings/_mojolearn_resample.mojo::monte_carlo_integrate_binding:
     # lower, upper, scalars_out; f_id, n_samples, seed, i_first
     var addrs = Python.list(_rs_addr(lo), _rs_addr(hi), _rs_addr(scalars))
+    _ = scalars  # keep the Python object alive through the native call above
+    _ = hi  # keep the Python object alive through the native call above
+    _ = lo  # keep the Python object alive through the native call above
     var params = Python.list(f_id, rs_int(args[4], "n_samples", where), rs_int(args[5], "random_state", where),
                              rs_int(args[6], "i_first", where))
     _ = family_call(fn_obj, addrs, params)
@@ -364,6 +386,7 @@ def rs_indices(binding: PythonObject, n_obj: PythonObject, n_samples: PythonObje
     var params = Python.list(n, count, PythonObject(1 if lin_truth(replace) else 0),
                              rs_int(random_state, "random_state", where))
     _ = family_call(fn_obj, Python.list(_rs_addr(idx)), params)
+    _ = idx  # keep the Python object alive through the native call above
     return idx^
 
 
@@ -444,7 +467,9 @@ def _rs_gpu_gather(binding: PythonObject, arrays: PythonObject, n: Int, count: I
         var output = _rs_output(x, count, context["float32"], context)
         _ = py_call(outputs.append, output)
         _ = py_call(addresses.append, classical_address(x))
+        _ = x  # keep the Python object alive through the native call above
         _ = py_call(addresses.append, classical_address(output))
+        _ = output  # keep the Python object alive through the native call above
         _ = py_call(params.append, PythonObject(1) if Int(py=x.ndim) == 1 else x.shape[1])
     var route: PythonObject
     if replace:
@@ -493,6 +518,7 @@ def _rs_take(a: PythonObject, idx: LinBuf, context: PythonObject) raises -> Pyth
             return family_call(py_attr(arr, "__getitem__"), family_call(numpy.asarray, picked, numpy.intp))
         var out = _rs_output(arr, count, arr.dtype, context)
         var dst = Int(py=classical_address(out))
+        _ = out  # keep the Python object alive through the native call above
         var nd = len(v.shape)
         var row_items = 1
         for k in range(1, nd):  # driver-loop: over array rank metadata
@@ -511,6 +537,7 @@ def _rs_take(a: PythonObject, idx: LinBuf, context: PythonObject) raises -> Pyth
         var w = 0
         for t in range(count):  # cpu-route: the host row take of the fallback route (NumPy's take)
             var base = v.addr + Int(rows[t]) * strides[0]
+            _ = v  # keep the Python object alive through the native call above
             var off = 0
             for e in range(row_items):  # cpu-route: one row's items in C order
                 memcpy(dest=RS_BP(unsafe_from_address=dst + w * item),
@@ -548,6 +575,7 @@ def _rs_narrow_gather(binding: PythonObject, arrays: PythonObject, n: Int, count
     var idx = lin_new([count], "<i4", context)
     var outs = Python.list()
     var addresses = Python.list(_rs_addr(idx))
+    _ = idx  # keep the Python object alive through the native call above
     var params = Python.list(PythonObject(n), PythonObject(count), seed)
     for i in range(len(arrays)):  # driver-loop: over the argument arrays
         var x = arrays[i]
@@ -564,7 +592,9 @@ def _rs_narrow_gather(binding: PythonObject, arrays: PythonObject, n: Int, count
             var out = _rs_output(x, count, context["float32"], context)
             _ = py_call(outs.append, out)
             _ = py_call(addresses.append, classical_address(x))
+            _ = x  # keep the Python object alive through the native call above
             _ = py_call(addresses.append, classical_address(out))
+            _ = out  # keep the Python object alive through the native call above
         else:
             _ = py_call(outs.append, PythonObject(None))
             _ = py_call(addresses.append, PythonObject(0))

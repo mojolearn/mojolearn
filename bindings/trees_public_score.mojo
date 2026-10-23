@@ -167,6 +167,7 @@ def _as_f32_1d(source: PythonObject, name: String, context: PythonObject) raises
         raise Error("mojolearn metrics: " + name + " contains NaN or infinity; refused "
                     + "here (metrics/README.md HAND-OFF ask 3) rather than letting it "
                     + "reach a kernel whose answer for it is a washed sentinel")
+    _ = out  # keep the Python object alive through the native calls above
     return out^
 
 
@@ -188,8 +189,10 @@ def trees_sample_weight_f32(source: PythonObject, n: Int, caller: String, contex
     var w = trees_f32(source, 1, "C", "sample_weight", context)
     if not trees_all_finite(w.addr, n, False, context) or Bool(py=_reduce(w.addr, n, 0, context) < PythonObject(0)):
         raise Error("mojolearn " + caller + ": sample_weight must have finite nonnegative entries")
+    _ = w  # keep the Python object alive through the native calls above
     if not Bool(py=_reduce(w.addr, n, 1, context) > PythonObject(0)):
         raise Error("mojolearn " + caller + ": sample_weight must have positive total weight")
+    _ = w  # keep the Python object alive through the native calls above
     return w^
 
 
@@ -233,10 +236,15 @@ def trees_r2(y_true: PythonObject, prediction: PythonObject, sample_weight: Pyth
         var w = trees_sample_weight_f32(sample_weight, y.rows, "r2_score", context)
         result = py_call_typed(metrics["r2_score_weighted"], PythonObject(y.addr), PythonObject(yh.addr),
                                PythonObject(w.addr), Python.list(PythonObject(y.rows)))
+        _ = yh  # keep the Python object alive through the native call above
+        _ = y  # keep the Python object alive through the native call above
+        _ = w  # keep the Python object alive through the native call above
         _ = w^
     else:
         result = py_call_typed(metrics["r2_score"], PythonObject(y.addr), PythonObject(yh.addr),
                                Python.list(PythonObject(y.rows)))
+        _ = yh  # keep the Python object alive through the native call above
+        _ = y  # keep the Python object alive through the native call above
     _ = y^
     _ = yh^
     return Float64(py=py_call(trees_builtins().float, result))
@@ -308,6 +316,7 @@ def _native_classification(values: PythonObject, context: PythonObject) raises -
         # exact; the encoder has no 8- or 16-bit arm (`astype('<i4')`)
         var wide = trees_vector(view.size(), "<i4", context)
         trees_cast(view.addr, typestr, trees_address(wide), "<i4", view.size(), context)
+        _ = wide  # keep the Python object alive through the native call above
         view = _view_of_array(wide)
     if view.typestr != "<i4" and view.typestr != "<i8" and view.typestr != "<u4" and view.typestr != "<u1":
         return None
@@ -380,10 +389,13 @@ def _codes(labels: ScoreLabels, order: PythonObject, context: PythonObject) rais
                           PythonObject(trees_address(labels.codes)), PythonObject(labels.n),
                           PythonObject(trees_address(out)))
         _ = table  # keep the Python object alive through the native call above
+        _ = out  # keep the Python object alive through the native call above
         return out
     var p = _I32P(unsafe_from_address=trees_address(out))
+    _ = out  # keep the Python object alive through the native call above
     for i in range(labels.n):  # cpu-route: Python object labels mapped per row, the explicit label input step
         p[i] = Int32(Int(py=py_get(index, labels.values[i], PythonObject(-1))))
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -547,6 +559,7 @@ def trees_accuracy(y_true: PythonObject, prediction: PythonObject, sample_weight
     prog.stage(_OP_CM_EPI, 1, [_CM_COUNT, tp, L, 1 if weighted else 0, tot, out])
     var arena = _run(prog^, mode, context)
     var base = _arena_address(arena)
+    _ = arena  # keep the Python object alive through the native call above
     _ = yt^
     _ = yp^
     _ = w^
@@ -567,6 +580,7 @@ def _owned_f32(w: TreesMatrix, context: PythonObject) raises -> PythonObject:
     var count = w.rows * w.cols
     var out = trees_vector(count, "<f4", context)
     trees_cast(w.addr, "<f4", trees_address(out), "<f4", count, context)
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 

@@ -49,8 +49,11 @@ def maxabs_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
     if direct is not None:
         var output = classical_typed(Python.tuple(2*d),"<f4",context["output_context"])
         _ = py_call(direct,classical_address(values[1]),classical_address(output),Python.list(n,d))
+        _ = output  # keep the Python object alive through the native call above
         maximum = _copy_row(_ptr(output),d,context)
+        _ = output  # keep the Python object alive through the native call above
         scale = _copy_row(_ptr(output)+d,d,context)
+        _ = output  # keep the Python object alive through the native call above
         _ = output^
     else:
         # Existing row blocks are 2048 rows, independent of benchmark shapes.
@@ -94,6 +97,7 @@ def maxabs_fit(model: PythonObject, source: PythonObject, target: PythonObject, 
     # scikit-learn refuses an infinite input (NaN alone is allowed); the
     # native column maxima of |X| are infinite exactly for those columns.
     scaler_refuse_infinite(_ptr(maximum),d,"ValueError: Input X contains infinity or a value too large for dtype('float64').")
+    _ = maximum  # keep the Python object alive through the native call above
     py_setitem(fields,"max_abs_",maximum)
     py_setitem(fields,"scale_",scale)
     py_setitem(fields,"n_features_in_",d)

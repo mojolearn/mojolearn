@@ -142,6 +142,8 @@ def _check_dims(fields: PythonObject, source: PythonObject, context: PythonObjec
         steps.append(Int(py=value.strides[0]))
     xseq_cast_nd(Int(py=classical_address(value)), dims, steps, item, kind, True,
                  _F32P(unsafe_from_address=Int(py=classical_address(out))))
+    _ = value  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
     _ = value^
     return Python.tuple(out, n)
 
@@ -154,6 +156,7 @@ def _block(source: PythonObject, offset: Int, count: Int, code: String, typestr:
     if count > 0:
         memcpy(dest=_F32P(unsafe_from_address=Int(py=classical_address(out))),
                src=_F32P(unsafe_from_address=Int(py=classical_address(source)) + 4 * offset), count=count)
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -206,6 +209,10 @@ def hw_fit(model: PythonObject, context: PythonObject) raises -> PythonObject:
                       Python.list(n, ts_num, period, Int(py=fields["start_periods"]),
                                   PythonObject(Float64(py=py_call(_b().float, fields["eps"]))), init),
                       fields["seasonal"])
+    _ = comps  # keep the Python object alive through the native call above
+    _ = data  # keep the Python object alive through the native call above
+    _ = flags  # keep the Python object alive through the native call above
+    _ = stats  # keep the Python object alive through the native call above
     _set_fitted(fields, n, comps, stats, flags, context)
     return model
 
@@ -223,6 +230,7 @@ def _shaped(fields: PythonObject, out_buf: PythonObject, offset: Int, steps: Int
         # one series' strided words (a copy, no arithmetic)
         xseq_column_copy_f32(_F32P(unsafe_from_address=base), _F32P(unsafe_from_address=Int(py=classical_address(one))),
                              steps, b, s)
+        _ = one  # keep the Python object alive through the native call above
         return one
     if b == 1:
         return _block(out_buf, offset, steps, "f", "<f4", Python.tuple(steps), context) if offset != 0 else out_buf
@@ -262,11 +270,13 @@ def hw_predict(model: PythonObject, args: PythonObject, context: PythonObject) r
         var fc = tsa_array("f", "<f4", Python.tuple((end - n) * b), (end - n) * b, 4, context)
         _ = py_call_typed(_entry(entries, "holtwinters_forecast"), classical_address(comps), classical_address(fc),
                           Python.list(n, b, period, end - n), fields["seasonal"])
+        _ = fc  # keep the Python object alive through the native call above
         _ = comps  # keep the Python object alive through the native call above
         return _shaped(fields, fc, (start - n) * b, steps, index, context)
     var out = tsa_array("f", "<f4", Python.tuple(steps * b), steps * b, 4, context)
     var k_in = min(end, n) - start
     var base = Int(py=classical_address(out))
+    _ = out  # keep the Python object alive through the native call above
     _ = py_call_typed(_entry(entries, "holtwinters_predict"), classical_address(comps), PythonObject(base),
                       Python.list(n, b, period, start, start + k_in), fields["seasonal"])
     _ = comps  # keep the Python object alive through the native call above
@@ -291,5 +301,6 @@ def hw_score(model: PythonObject, args: PythonObject, context: PythonObject) rai
     # `self.sse_[index]`: the float32 word, as a Python float
     var sse = fields["sse_"]
     var value = _F32P(unsafe_from_address=Int(py=classical_address(sse)))[Int(py=index)]
+    _ = sse  # keep the Python object alive through the native call above
     _ = sse^
     return PythonObject(Float64(value))

@@ -164,6 +164,9 @@ def _agglo_legacy(model: PythonObject, args: PythonObject, context: PythonObject
                     classical_address(info),
                     Python.list(PythonObject(n_rows), PythonObject(n_cols), PythonObject(k), PythonObject(metric),
                                 PythonObject(use_knn)))
+    _ = labels  # keep the Python object alive through the native call above
+    _ = children  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     _ = info  # keep the Python object alive through the native call above
     var words = FAMILY_I32P(unsafe_from_address=Int(py=classical_address(info)))
     _ = info  # keep the Python object alive through the native call above
@@ -191,8 +194,10 @@ def _concat_f32(parts: PythonObject, nnz: Int, context: PythonObject) raises -> 
     (3 * nnz,))`: three float32 vectors of `nnz` words, back to back."""
     var out = family_array(Python.tuple(3 * nnz), "<f4", context)
     var dst = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(out)))
+    _ = out  # keep the Python object alive through the native call above
     for k in range(3):  # small-loop(parts: the COO rows, columns and values): 3
         memcpy(dest=dst + k * nnz, src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(parts[k]))), count=nnz)
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -215,6 +220,7 @@ def _agglo_x(model: PythonObject, args: PythonObject, context: PythonObject) rai
                     + "needs at least two points")
     if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
         raise Error("mojolearn AgglomerativeClustering: X contains NaN or infinity")
+    _ = x  # keep the Python object alive through the native calls above
     var metric = Int(py=context["family_cfb_agglo_all_metrics"][family_field(fields, "metric")])
     if metric == 5 and n != d:
         raise Error("Distance matrix should be square, got matrix of shape (" + String(n) + ", " + String(d) + ")")
@@ -228,6 +234,7 @@ def _agglo_x(model: PythonObject, args: PythonObject, context: PythonObject) rai
         _ = family_call(zero, Python.list(classical_address(x), classical_address(zrow)),
                         Python.list(PythonObject(n), PythonObject(d)), Python.list())
         _ = zrow  # keep the Python object alive through the native call above
+        _ = x  # keep the Python object alive through the native call above
         if cfb_any_positive_i32(FAMILY_I32P(unsafe_from_address=Int(py=classical_address(zrow))), n):
             raise Error("Cosine affinity cannot be used when X contains zero vectors")
         _ = zrow  # keep the Python object alive through the native calls above
@@ -297,9 +304,11 @@ def _agglo_x(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var aux_size = 0
     if aux is not None:
         aux_address = classical_address(aux)
+        _ = aux  # keep the Python object alive through the native call above
         aux_size = Int(py=aux.size)
     var result = family_call(call, PythonObject(_E_AGGLO), classical_address(x), PythonObject(Int(py=x.size)),
                              aux_address, PythonObject(aux_size), ip, fp)
+    _ = x  # keep the Python object alive through the native call above
     _ = aux^
     var f = result[0]
     var i = result[1]

@@ -61,12 +61,15 @@ def _lin_triu(mut kit: LinKit, h: Int, r: Int, context: PythonObject) raises -> 
     var c = kit.c(h)
     var out = lin_array([r, c], "<f4", context)
     var dst = KIT_F32P(unsafe_from_address=Int(py=classical_address(out)))
+    _ = out  # keep the Python object alive through the native call above
     if r * c:
         memcpy(dest=dst, src=kit.ptr(h), count=r * c)
+        _ = out  # keep the Python object alive through the native call above
     for i in range(1, r):  # cpu-route: one zero fill per row of a host factor (the Python _triu's slice store)
         var w = min(i, c)
         if w:
             memset_zero(dst + i * c, w)
+            _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -88,6 +91,7 @@ def _lin_tsqr_r(mut kit: LinKit, a: LinBuf, rows: Int, cols: Int, keep: Bool, co
     # (m, d, nrhs, keep); b is not read when nrhs is 0
     _ = family_call(kit.entry("x_decomp_tsqr_r"), PythonObject(a.addr), PythonObject(a.addr), PythonObject(r.addr),
                     lin_ints(rows, cols, 0, 1 if keep else 0))
+    _ = r  # keep the Python object alive through the native call above
     return r^
 
 
@@ -95,6 +99,7 @@ def _lin_tsqr_q(mut kit: LinKit, c_addr: Int, rows: Int, cols: Int, k: Int, cont
     """`_tsqr_q`: Q C (rows x k) for the kept factorization; C is cols x k."""
     var out = lin_new([rows, k], "<f4", context)
     _ = family_call(kit.entry("x_decomp_tsqr_q"), PythonObject(c_addr), PythonObject(out.addr), lin_ints(rows, cols, k))
+    _ = out  # keep the Python object alive through the native call above
     return out^
 
 
@@ -112,6 +117,7 @@ def _lin_svd_tall(mut kit: LinKit, a: Int, full: Bool, context: PythonObject, mu
         # the numerical rank, counted in Mojo (x_decomp/api.mojo rank_above_py)
         r = Int(py=family_call(Python.import_module("builtins").int,
                                family_call(kit.entry("x_decomp_rank_above"), kit.address(s), lin_ints(n), PythonObject(rtol))))
+        _ = s  # keep the Python object alive through the native call above
     var av = kit.mm(a, vt, tb=True)
     var num = kit.take_cols(av, 0, r) if r < n else av
     var den = kit.take_cols(s, 0, r) if r < n else s
@@ -157,6 +163,7 @@ def lin_svdvals_of(a: LinBuf, context: PythonObject) raises -> PythonObject:
             var t = kit.transpose(held)
             var moved = kit.out(t)
             buf = LinBuf(moved, Int(py=classical_address(moved)), [cols, rows])
+            _ = moved  # keep the Python object alive through the native call above
         finally:
             kit.close()
         var swap = rows
@@ -165,6 +172,8 @@ def lin_svdvals_of(a: LinBuf, context: PythonObject) raises -> PythonObject:
     var out = lin_new([cols], "<f4", context)
     _ = family_call(family_call(Python.import_module("builtins").getattr, _lin_door(context), PythonObject("svdvals")),
                     Python.list(PythonObject(buf.addr), PythonObject(out.addr)), lin_ints(rows, cols))
+    _ = out  # keep the Python object alive through the native call above
+    _ = buf  # keep the Python object alive through the native call above
     _ = buf^
     return out.keep
 
@@ -190,6 +199,7 @@ def _lin_eigh(args: PythonObject, context: PythonObject) raises -> PythonObject:
     try:
         var v = 0
         var held = kit.of_buffer(a.addr, rows, rows)
+        _ = a  # keep the Python object alive through the native call above
         var w = kit.eigh(held, 1 if lower else 2, v)
         var result = Python.tuple(kit.out_vector(w, rows), kit.out(v))
         _ = a^
@@ -217,6 +227,7 @@ def _lin_qr_q(a: LinBuf, mode: String, context: PythonObject) raises -> PythonOb
                 # diagonal of those signs (x_decomp/api.mojo r_signs_py)
                 _ = family_call(kit.entry("x_decomp_r_signs"), PythonObject(r.addr), PythonObject(signs.addr), lin_ints(cols))
                 _ = signs  # keep the Python object alive through the native call above
+                _ = r  # keep the Python object alive through the native call above
                 signed = True
             finally:
                 if not signed:
@@ -272,6 +283,7 @@ def _lin_qr(args: PythonObject, context: PythonObject) raises -> PythonObject:
         try:
             var tau = 0
             var held = kit.of_buffer(a.addr, rows, cols)
+            _ = a  # keep the Python object alive through the native call above
             var h = kit.geqrf(held, tau)
             var wide = _lin_triu(kit, h, rows, context)
             _ = a^
@@ -283,6 +295,7 @@ def _lin_qr(args: PythonObject, context: PythonObject) raises -> PythonObject:
     # (n_rows, n_cols); swapping the addresses writes R over the caller's matrix
     _ = family_call(family_call(Python.import_module("builtins").getattr, _lin_door(context), PythonObject("qr_r")),
                     Python.list(PythonObject(a.addr), PythonObject(out.addr)), lin_ints(rows, cols))
+    _ = out  # keep the Python object alive through the native call above
     _ = a^
     return out.keep
 
@@ -338,8 +351,10 @@ def _lin_svd(args: PythonObject, context: PythonObject) raises -> PythonObject:
             # to front, on the kit
             var rev = kit.zeros(1, rows)
             var rp = kit.ptr(rev)
+            _ = rev  # keep the Python object alive through the native call above
             for t in range(rows):  # driver-loop: over the index table n-1 .. 0 (matrix columns)
                 rp[t] = Float32(rows - 1 - t)
+                _ = rev  # keep the Python object alive through the native call above
             var wr = kit.take_cols_m(w, rev, rows)
             var wr_abs = kit.ew(OP_ABS, wr)
             var keys = kit.ew(OP_SCALE, wr_abs, scalar=-1.0)

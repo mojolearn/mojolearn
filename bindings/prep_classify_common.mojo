@@ -212,6 +212,7 @@ def _i32_vector(source: PythonObject, name: String, context: PythonObject) raise
     var typestr = classical_dtype_str(view, context)
     var out = i32_array(n, context)
     var dest = I32P(unsafe_from_address=Int(py=classical_address(out)))
+    _ = out  # keep the Python object alive through the native call above
     var raw = py_call(context["array_type"], PythonObject(String("q") if typestr == "<i8" else String("i")))
     if typestr == "<i4" or typestr == "<i8":
         _ = py_call(raw.frombytes, classical_c_bytes(view, name, context))
@@ -223,6 +224,7 @@ def _i32_vector(source: PythonObject, name: String, context: PythonObject) raise
         if v > INT32_MAX or v < -INT32_MAX - 1:
             raise Error(name + " holds an index beyond the int32 range")
         dest[i] = Int32(v)
+        _ = out  # keep the Python object alive through the native call above
     _ = raw^
     if n == 0:
         return classical_wrap_array(py_call(context["array_type"], "i"), Python.tuple(0), "<i4", "C", context["output_context"])
@@ -535,9 +537,11 @@ def partial_walk(fields: PythonObject, y: PythonObject, n: Int, context: PythonO
         raise Error("mojolearn: The target label(s) " + cls_str(named) + " in y do not exist in the initial classes " + cls_str(classes))
     var out = i32_array(n, context)
     var dest = I32P(unsafe_from_address=Int(py=classical_address(out)))
+    _ = out  # keep the Python object alive through the native call above
     var src = I32P(unsafe_from_address=Int(py=classical_address(labels.codes)))
     for i in range(n):  # cpu-route: Python object labels of any kind, the explicit label input step
         dest[i] = Int32(remap[Int(src[i])])
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -576,6 +580,7 @@ def partial_codes(model: PythonObject, fields: PythonObject, y: PythonObject, cl
     var dev = K > 0
     var cats = f32_array(K, context)
     var cp = F32P(unsafe_from_address=Int(py=classical_address(cats)))
+    _ = cats  # keep the Python object alive through the native call above
     for k in range(K):  # driver-loop: over the classes (classes-sized)
         var t = py_type(cl[k])
         if t is not b.int and t is not b.float:
@@ -583,9 +588,11 @@ def partial_codes(model: PythonObject, fields: PythonObject, y: PythonObject, cl
             break
         var v = Float64(py=py_call(b.float, cl[k]))
         cp[k] = Float32(v)
+        _ = cats  # keep the Python object alive through the native call above
         if Float64(cp[k]) != v or (k > 0 and not (Float64(cp[k - 1]) < Float64(cp[k]))):
             dev = False
             break
+        _ = cats  # keep the Python object alive through the native calls above
     if dev:
         var words = label_words(y, n, context)
         if words[0] >= 0:

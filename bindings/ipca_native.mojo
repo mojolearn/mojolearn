@@ -144,7 +144,9 @@ def ipca_fit(model: PythonObject, source: PythonObject, context: PythonObject) r
     var entries = _entries(model, fields, context)
     var room = _room(d)
     var params = Python.list(classical_address(x), n, d, requested, batch_size)
+    _ = x  # keep the Python object alive through the native call above
     _room_addresses(room, params)
+    _ = room  # keep the Python object alive through the native call above
     var got = py_call_typed(entries["x_decomp_ipca_fit"], params)
     var count = Int(py=got[0])
     py_setitem(fields, "n_samples_seen_", PythonObject(n))
@@ -168,6 +170,7 @@ def ipca_partial_fit(model: PythonObject, source: PythonObject, context: PythonO
     var entries = _entries(model, fields, context)
     var room = _room(d)
     var params = Python.list(classical_address(x), n, d, _requested(fields), seen)
+    _ = x  # keep the Python object alive through the native call above
     # the running state (`components_m_`, ...) is the published arrays' words
     var state = Python.list()
     var prev_count = 0
@@ -185,6 +188,7 @@ def ipca_partial_fit(model: PythonObject, source: PythonObject, context: PythonO
     for k in range(4):  # driver-loop: over the four state arrays (unread for the first batch)
         _ = py_call(params.append, classical_address(state[k]) if seen > 0 else PythonObject(Int(room[0].unsafe_ptr())))
     _room_addresses(room, params)
+    _ = room  # keep the Python object alive through the native call above
     var got = py_call_typed(entries["x_decomp_ipca_partial"], params)
     _ = state^
     var count = Int(py=got[0])
@@ -225,6 +229,10 @@ def _project(model: PythonObject, fields: PythonObject, x: PythonObject, inverse
     _ = py_call_typed(entries["x_decomp_ipca_project"], Python.list(
         1 if inverse else 0, classical_address(x), n, d, nc, classical_address(mean), classical_address(components),
         classical_address(variance), 1 if whiten else 0, classical_address(out)))
+    _ = mean  # keep the Python object alive through the native call above
+    _ = components  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
+    _ = variance  # keep the Python object alive through the native call above
     _ = components^
     _ = mean^
     _ = variance^

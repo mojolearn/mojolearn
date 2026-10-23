@@ -826,6 +826,9 @@ def _rf_fit_classifier(model: PythonObject, fields: PythonObject, kind: String, 
                                PythonObject(0 if oob is None else trees_address(oob)),
                                PythonObject(0 if score is None else trees_address(score)),
                                PythonObject(0 if importance is None else trees_address(importance)))
+        _ = oob  # keep the Python object alive through the native call above
+        _ = score  # keep the Python object alive through the native call above
+        _ = importance  # keep the Python object alive through the native call above
         _ = _rf_fit_arrays(fields, kind, x, y_addr, labels.n, k,
                            ForestFit("rf_classifier_fit_aux", True, tail, True), None, rf, context)
         if oob is not None:
@@ -915,9 +918,12 @@ def _rf_fit_regressor(model: PythonObject, fields: PythonObject, kind: String, X
                         + "rf_regressor_fit_weighted; this install's binding predates it")
         var w = trees_check_sample_weight(sample_weight, y32.rows, context)
         var w_max = _float(_reduce(w.addr, y32.rows, 1, context))
+        _ = w  # keep the Python object alive through the native call above
         var tail = Python.list(PythonObject(w.addr), w_max)
+        _ = w  # keep the Python object alive through the native call above
         _ = _rf_fit_arrays(fields, kind, trees_f32(X, 2, "F", "X", context), y32.addr, y32.rows, 0,
                            ForestFit("rf_regressor_fit_weighted", True, tail, True), None, rf, context)
+        _ = y32  # keep the Python object alive through the native call above
         _ = w^
         _ = y32^
         return model
@@ -936,6 +942,9 @@ def _rf_fit_regressor(model: PythonObject, fields: PythonObject, kind: String, X
         var tail = Python.list(PythonObject(0 if oob is None else trees_address(oob)),
                                PythonObject(0 if score is None else trees_address(score)),
                                PythonObject(0 if importance is None else trees_address(importance)))
+        _ = oob  # keep the Python object alive through the native call above
+        _ = score  # keep the Python object alive through the native call above
+        _ = importance  # keep the Python object alive through the native call above
         _ = _rf_fit_arrays(fields, kind, x, y32.addr, y32.rows, 0,
                            ForestFit("rf_regressor_fit_aux", True, tail, True), None, rf, context)
         if oob is not None:
@@ -1008,6 +1017,7 @@ def et_fit(model: PythonObject, args: PythonObject, kind: String, context: Pytho
         # `codes.astype('<f4')`: the ET classifier reads float32 class codes.
         var codes = trees_vector(labels.n, "<f4", context)
         trees_cast(trees_address(labels.codes), "<i4", trees_address(codes), "<f4", labels.n, context)
+        _ = codes  # keep the Python object alive through the native call above
         var class_weight = cfg["class_weight"]
         if sample_weight is not None or class_weight is not None:
             var xtrees = trees_table(context, mode, "_mojolearn_x_trees")
@@ -1023,12 +1033,15 @@ def et_fit(model: PythonObject, args: PythonObject, kind: String, context: Pytho
                                ForestFit("et_classifier_fit_weighted_shard", False,
                                          Python.list(PythonObject(weights.addr), tree_start), False),
                                None, et, context)
+                _ = codes  # keep the Python object alive through the native call above
+                _ = weights  # keep the Python object alive through the native call above
                 _ = weights^
                 return model
             var tail = Python.list(PythonObject(weights.addr))
             _et_fit_arrays(fields, unweighted, X, trees_address(codes), labels.n, k,
                            ForestFit("et_classifier_fit_weighted", False, tail, True),
                            _et_rowmajor(et, "et_classifier_fit_weighted", tail), et, context)
+            _ = codes  # keep the Python object alive through the native call above
             _ = weights^
             return model
         if tree_start is not None:
@@ -1036,10 +1049,12 @@ def et_fit(model: PythonObject, args: PythonObject, kind: String, context: Pytho
                 raise Error("ImportError: rebuild ExtraTrees binding for global tree-ID shards")
             _et_fit_arrays(fields, cfg, X, trees_address(codes), labels.n, k,
                            ForestFit("et_classifier_fit_shard", False, Python.list(tree_start), False), None, et, context)
+            _ = codes  # keep the Python object alive through the native call above
             return model
         _et_fit_arrays(fields, cfg, X, trees_address(codes), labels.n, k,
                        ForestFit("et_classifier_fit", False, Python.list(), True),
                        _et_rowmajor(et, "et_classifier_fit", Python.list()), et, context)
+        _ = codes  # keep the Python object alive through the native call above
         _ = codes^
         return model
     var y32 = trees_f32(y, 1, "C", "y", context)
@@ -1054,11 +1069,14 @@ def et_fit(model: PythonObject, args: PythonObject, kind: String, context: Pytho
             _et_fit_arrays(fields, cfg, X, y32.addr, y32.rows, 0,
                            ForestFit("et_regressor_fit_weighted_shard", False,
                                      Python.list(PythonObject(weights.addr), tree_start), False), None, et, context)
+            _ = y32  # keep the Python object alive through the native call above
+            _ = weights  # keep the Python object alive through the native call above
             _ = weights^
             return model
         var tail = Python.list(PythonObject(weights.addr))
         _et_fit_arrays(fields, cfg, X, y32.addr, y32.rows, 0, ForestFit("et_regressor_fit_weighted", False, tail, True),
                        _et_rowmajor(et, "et_regressor_fit_weighted", tail), et, context)
+        _ = y32  # keep the Python object alive through the native call above
         _ = weights^
         return model
     if tree_start is not None:
@@ -1066,9 +1084,11 @@ def et_fit(model: PythonObject, args: PythonObject, kind: String, context: Pytho
             raise Error("ImportError: rebuild ExtraTrees binding for global tree-ID shards")
         _et_fit_arrays(fields, cfg, X, y32.addr, y32.rows, 0,
                        ForestFit("et_regressor_fit_shard", False, Python.list(tree_start), False), None, et, context)
+        _ = y32  # keep the Python object alive through the native call above
         return model
     _et_fit_arrays(fields, cfg, X, y32.addr, y32.rows, 0, ForestFit("et_regressor_fit", False, Python.list(), True),
                    _et_rowmajor(et, "et_regressor_fit", Python.list()), et, context)
+    _ = y32  # keep the Python object alive through the native call above
     _ = y32^
     return model
 
@@ -1233,9 +1253,11 @@ def _resident(model: PythonObject, fields: PythonObject, native: PythonObject, m
     var offsets = frozen[0]
     var last = (Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=trees_address(offsets))[Int(py=offsets.size) - 1])
         if Int(py=offsets.size) > 0 else -1)
+    _ = offsets  # keep the Python object alive through the native call above
     if (Int(py=offsets.size) != trees + 1 or nodes < 1 or Int(py=frozen[2].size) != nodes
             or Int(py=frozen[3].size) != nodes or Int(py=frozen[4].size) != nodes * outputs or last != nodes):
         raise Error("forest model array shapes do not match metadata")
+    _ = offsets  # keep the Python object alive through the native calls above
     var names = Python.tuple("_offsets", "_colid", "_quesval", "_left_child", "_leaves")
     for i in range(_MODEL_FIELDS):  # driver-loop: over the five model arrays
         var a = frozen[i]
@@ -1306,6 +1328,7 @@ def _vote(model: PythonObject, fields: PythonObject, kind: String, staged: Fores
             _ = py_call(call.append, PythonObject(trees_view(arrays[i], "forest model", context).addr))
         _ = py_call(call.append, PythonObject(staged.x.addr))
         _ = py_call(call.append, PythonObject(trees_address(out)))
+        _ = out  # keep the Python object alive through the native call above
         _ = py_call(call.append, dims)
         wrote = trees_call(function, call)
         _ = arrays^
@@ -1314,6 +1337,7 @@ def _vote(model: PythonObject, fields: PythonObject, kind: String, staged: Fores
         wrote = py_call_typed(trees_entry(staged.native, "forest_predict_resident_reuse_gpu"), PythonObject(handle),
                               PythonObject(staged.x.addr), PythonObject(trees_address(out)),
                               Python.list(PythonObject(rows), PythonObject(staged.x.cols), PythonObject(outputs)))
+        _ = out  # keep the Python object alive through the native call above
     if Int(py=wrote) != rows:
         raise Error("RuntimeError: " + sequential_name + " wrote " + _str(wrote) + " of " + String(rows) + " rows")
     return out
@@ -1339,6 +1363,7 @@ def _resident_labels(model: PythonObject, fields: PythonObject, staged: ForestIn
     var handle = _resident(model, fields, staged.native, staged.mode, context)
     var wrote = py_call_typed(function, PythonObject(handle), PythonObject(staged.x.addr), PythonObject(trees_address(out)),
                               Python.list(PythonObject(rows), PythonObject(staged.x.cols), _int(fields["_num_outputs"])))
+    _ = out  # keep the Python object alive through the native call above
     if Int(py=wrote) != rows:
         raise Error("RuntimeError: forest label prediction wrote " + _str(wrote) + " of " + String(rows) + " rows")
     return out
@@ -1349,6 +1374,7 @@ def _widen(vote: PythonObject, shape: PythonObject, context: PythonObject) raise
     var n = Int(py=vote.size)
     var out = trees_empty(shape, "<f8", context)
     trees_cast(trees_address(vote), "<f4", trees_address(out), "<f8", n, context)
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 

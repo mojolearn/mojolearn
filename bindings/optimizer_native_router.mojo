@@ -73,6 +73,7 @@ def optimizer_betas(source: PythonObject, context: PythonObject) raises -> Pytho
     var kind = classical_cast_kind(value, item, "betas", input)
     var native = classical_is_array(value, input) or Bool(py=value.dtype.isnative)
     var addr = Int(py=classical_address(value))
+    _ = value  # keep the Python object alive through the native call above
     var stride = Int(py=value.strides[0])
     var first = _pd_double(pd_raw_at(addr, 0, item, native), kind, item)
     var second = _pd_double(pd_raw_at(addr, stride, item, native), kind, item)
@@ -144,6 +145,8 @@ def optimizer_state_array(source: PythonObject, integer: Bool, context: PythonOb
     optimizer_state_cast(Int(py=classical_address(value)), Int(py=value.strides[0]), n, item, kind,
                          classical_is_array(value, input) or Bool(py=value.dtype.isnative),
                          MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=result._addr)), integer)
+    _ = value  # keep the Python object alive through the native call above
+    _ = result  # keep the Python object alive through the native call above
     _ = value^
     return result
 

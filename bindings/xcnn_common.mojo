@@ -209,6 +209,7 @@ def xcnn_wrap(entries: PythonObject, array: PythonObject, context: PythonObject)
     var size = xcnn_size(shape)
     if size:
         _ = py_call_typed(entries["symbols"]["x_cnn_res_upload"], t.h, sequential_address(a), PythonObject(size))
+        _ = a  # keep the Python object alive through the native call above
     _ = a^
     return t
 
@@ -236,6 +237,7 @@ def xcnn_host_of(value: PythonObject, context: PythonObject) raises -> PythonObj
     if size:
         var entries = xcnn_module_entries(value.b, context)
         _ = py_call_typed(entries["symbols"]["x_cnn_res_download"], value.h, sequential_address(out), PythonObject(size))
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -346,6 +348,7 @@ def xcnn_download(dev: PythonObject, h: PythonObject, count: Int, context: Pytho
     if count:
         var owner = xcnn_module_entries(py_fields(dev)["b"], context)
         _ = py_call_typed(owner["symbols"]["x_cnn_res_download"], h, sequential_address(out), PythonObject(count))
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -356,6 +359,7 @@ def xcnn_slice_f32(source: PythonObject, offset: Int, count: Int, context: Pytho
         memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(out))),
                src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(source))) + offset,
                count=count)
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -370,3 +374,4 @@ def xcnn_put_f32(dest: PythonObject, offset: Int, source: PythonObject, count: I
         memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(dest))) + offset,
                src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(a))),
                count=count)
+        _ = a  # keep the Python object alive through the native call above

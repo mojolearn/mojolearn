@@ -443,8 +443,10 @@ def _group_sizes(group_id: PythonObject, n_rows: Int, context: PythonObject) rai
         last = key
     var out = trees_vector(len(sizes), "<u4", context)
     var p = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=trees_address(out))
+    _ = out  # keep the Python object alive through the native call above
     for i in range(len(sizes)):  # cpu-route: group_id run lengths published from the label input step
         p[i] = UInt32(sizes[i])
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -459,6 +461,7 @@ def _pairs_arrays(pairs: PythonObject, pairs_weight: PythonObject, n_rows: Int,
         raise Error("mojolearn: pairs is empty")
     var flat = trees_vector(2 * m, "<u4", context)
     var fp = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=trees_address(flat))
+    _ = flat  # keep the Python object alive through the native call above
     for i in range(m):  # cpu-route: user pairs list of Python index pairs validated and flattened [py-data-loop]
         var pair = rows[i]
         if len(pair) != 2:
@@ -477,12 +480,16 @@ def _pairs_arrays(pairs: PythonObject, pairs_weight: PythonObject, n_rows: Int,
         if w0 == w1:
             raise Error("mojolearn: pairs[" + String(i) + "] pairs row " + String(w0) + " with itself")
         fp[2 * i] = UInt32(w0)
+        _ = flat  # keep the Python object alive through the native call above
         fp[2 * i + 1] = UInt32(w1)
+        _ = flat  # keep the Python object alive through the native call above
     var weights = trees_vector(m, "<f4", context)
     var wp = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=trees_address(weights))
+    _ = weights  # keep the Python object alive through the native call above
     if pairs_weight is None:
         for i in range(m):  # cpu-route: user pairs list of Python index pairs validated and flattened [py-data-loop]
             wp[i] = 1.0
+            _ = weights  # keep the Python object alive through the native call above
     else:
         var values = _listed(pairs_weight, context)
         if len(values) != m:
@@ -497,6 +504,7 @@ def _pairs_arrays(pairs: PythonObject, pairs_weight: PythonObject, n_rows: Int,
             if not ok:
                 raise Error("mojolearn: pairs_weight[" + String(i) + "] must be a finite nonnegative number")
             wp[i] = Float32(_float(w))
+            _ = weights  # keep the Python object alive through the native call above
     return Python.tuple(flat, weights)
 
 
@@ -513,6 +521,7 @@ def _flags(fields: PythonObject, model: PythonObject, n_features: Int, context: 
         return PythonObject(None)
     var out = trees_vector(n_features, "<u4", context)
     var p = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=trees_address(out))
+    _ = out  # keep the Python object alive through the native call above
     var lists = Python.tuple(cat, hot)
     var names: List[String] = ["cat_features", "one_hot_features"]
     for which in range(2):  # small-loop(lists): the two feature-list arguments
@@ -527,6 +536,7 @@ def _flags(fields: PythonObject, model: PythonObject, n_features: Int, context: 
                             + String(n_features) + " features")
             var at = Int(py=py_call_typed(b.int, i))
             p[at] = p[at] | UInt32(1 if which == 0 else 2)
+            _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -567,7 +577,11 @@ def _eval_set(eval_set: PythonObject, fields: PythonObject, model: PythonObject,
         var multi = _in(_field(fields, model, "loss"), _tables(context)["multi_output_losses"])
         raise Error("mojolearn: " + ("eval_set y (the eval_set labels)" if multi else "eval_set y")
                     + " must be finite (no NaN or infinity)")
-    return Python.tuple(xe.keep, PythonObject(xe.addr), ye.keep, PythonObject(ye.addr), PythonObject(xe.rows))
+    _ = ye  # keep the Python object alive through the native calls above
+    var _keep_ret_xe = Python.tuple(xe.keep, PythonObject(xe.addr), ye.keep, PythonObject(ye.addr), PythonObject(xe.rows))
+    _ = ye  # keep the Python object alive through the native call above
+    _ = xe  # keep the Python object alive through the native call above
+    return _keep_ret_xe^
 
 
 def _has_nan(x: TreesMatrix, context: PythonObject) raises -> Bool:
@@ -782,12 +796,15 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         group_holder = _group_sizes(group_id, n_rows, context)
         params = _padded_tail(params)
         _ = py_call(params.append, PythonObject(trees_address(group_holder)))
+        _ = group_holder  # keep the Python object alive through the native call above
         _ = py_call(params.append, PythonObject(Int(py=group_holder.size)))
         if _eq(loss, "PairLogit"):
             if pairs is None:
                 _ = py_call(params.append, PythonObject(trees_address(group_holder)))
+                _ = group_holder  # keep the Python object alive through the native call above
                 _ = py_call(params.append, PythonObject(-1))
                 _ = py_call(params.append, PythonObject(trees_address(group_holder)))
+                _ = group_holder  # keep the Python object alive through the native call above
             else:
                 pair_holders = _pairs_arrays(pairs, pairs_weight, n_rows, context)
                 _ = py_call(params.append, PythonObject(trees_address(pair_holders[0])))
@@ -1249,6 +1266,7 @@ def _codes_f32(labels: TreesLabels, context: PythonObject) raises -> PythonObjec
     var out = trees_vector(labels.n, "<f4", context)
     _ = py_call_typed(trees_helper(context, "cast_elements"), PythonObject(trees_address(labels.codes)), PythonObject(2),
                       PythonObject(trees_address(out)), PythonObject(0), PythonObject(labels.n))
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -1341,6 +1359,7 @@ def adapter_classifier_fit(model: PythonObject, args: PythonObject, context: Pyt
         _ = py_call_typed(trees_helper(context, "cast_elements"), PythonObject(trees_address(mapped)), PythonObject(2),
                           PythonObject(trees_address(eval_y)), PythonObject(0), PythonObject(eval_labels.n))
         _ = mapped  # keep the Python object alive through the native call above
+        _ = eval_y  # keep the Python object alive through the native call above
         eval_set = Python.tuple(pair[0], eval_y)
     _ = _fit_native(model, args[0], encoded, args[2], eval_set, context)
     py_setitem(fields, "classes_", classes)
@@ -1358,6 +1377,7 @@ def _regression_target(source: PythonObject, name: String, context: PythonObject
     var target = trees_f32_view(view^, "C", context)
     if not trees_all_finite(target.addr, target.rows, False, context):
         raise Error(name + " must be finite")
+    _ = target  # keep the Python object alive through the native calls above
     return target^
 
 

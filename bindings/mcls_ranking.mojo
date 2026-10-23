@@ -70,6 +70,7 @@ def _scores(y_score: PythonObject, n: Int, caller: String, ndim: Int, context: P
     var out = family_as_f32(a, nd, name, context)
     if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(out))), Int(py=out.size)):
         raise Error("mojolearn " + caller + ": " + name + " must be finite")
+    _ = out  # keep the Python object alive through the native calls above
     return out
 
 
@@ -83,6 +84,7 @@ def _binary_scores(y_score: PythonObject, n: Int, context: PythonObject) raises 
     var out = family_as_f32(scores, 1, "scores", context)
     if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(out))), n):
         raise Error("binary ranking scores must be finite")
+    _ = out  # keep the Python object alive through the native calls above
     if n > MC_INT32_MAX:
         raise Error("binary ranking metrics exceed the native Int32 indexing bound")
     return out
@@ -369,7 +371,9 @@ def _roc_ovo(true: McLabels, s: PythonObject, k: Int, args: PythonObject, contex
     var ps_in = family_array(Python.tuple(len(ps_words)), "<i4", context)
     var prev_in = family_array(Python.tuple(len(prev_words)), "<i4", context)
     mcls_copy_words(Int(ps_words.unsafe_ptr()), Int(py=classical_address(ps_in)), len(ps_words))
+    _ = ps_in  # keep the Python object alive through the native call above
     mcls_copy_words(Int(prev_words.unsafe_ptr()), Int(py=classical_address(prev_in)), len(prev_words))
+    _ = prev_in  # keep the Python object alive through the native call above
     var res = mc_stage_average(p2, p2.put(ps_in), p2.put(prev_in), n_pairs, weighted_avg)
     var arena = mc_run(p2, args[8], context)
     _ = ps_words^
@@ -441,6 +445,8 @@ def _roc_auc(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var result = family_array(Python.tuple(1), "<f4", context)
     _ = family_call(mc_entry(args[0], "roc_auc_score"), classical_address(encoded), classical_address(scores),
                     classical_address(result), Python.list(PythonObject(true.n)))
+    _ = encoded  # keep the Python object alive through the native call above
+    _ = scores  # keep the Python object alive through the native call above
     _ = result  # keep the Python object alive through the native call above
     var value = Float64(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(result)))[0])
     _ = result  # keep the Python object alive through the native call above
@@ -534,6 +540,11 @@ def _pr_curve(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var size = mc_int(family_call(mc_entry(args[0], "precision_recall_curve"), classical_address(encoded),
                                   classical_address(scores), classical_address(precision), classical_address(recall),
                                   classical_address(thresholds), Python.list(PythonObject(n))))
+    _ = encoded  # keep the Python object alive through the native call above
+    _ = recall  # keep the Python object alive through the native call above
+    _ = precision  # keep the Python object alive through the native call above
+    _ = scores  # keep the Python object alive through the native call above
+    _ = thresholds  # keep the Python object alive through the native call above
     _ = encoded^
     _ = scores^
     if not (1 <= size and size <= n):
@@ -545,8 +556,14 @@ def _pr_curve(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var r_out = family_array(Python.tuple(size + 1), "<f4", context)
     var t_out = family_array(Python.tuple(size), "<f4", context)
     mcls_copy_words(Int(py=classical_address(precision)), Int(py=classical_address(p_out)), size + 1)
+    _ = p_out  # keep the Python object alive through the native call above
+    _ = precision  # keep the Python object alive through the native call above
     mcls_copy_words(Int(py=classical_address(recall)), Int(py=classical_address(r_out)), size + 1)
+    _ = r_out  # keep the Python object alive through the native call above
+    _ = recall  # keep the Python object alive through the native call above
     mcls_copy_words(Int(py=classical_address(thresholds)), Int(py=classical_address(t_out)), size)
+    _ = t_out  # keep the Python object alive through the native call above
+    _ = thresholds  # keep the Python object alive through the native call above
     _ = precision^
     _ = recall^
     _ = thresholds^

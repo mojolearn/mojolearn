@@ -265,8 +265,10 @@ struct EncProg(Movable):
 def _floats(values: List[Float64], context: PythonObject) raises -> PythonObject:
     var out = classical_typed(Python.tuple(max(len(values), 1)), "<f4", context["output_context"])
     var dest = _ptr(out)
+    _ = out  # keep the Python object alive through the native call above
     for i in range(len(values)):  # driver-loop: over a program's parameter words
         dest[i] = Float32(values[i])
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -274,8 +276,10 @@ def _int_words(values: List[Int], context: PythonObject) raises -> PythonObject:
     # int32 words in a 4-byte store (the arena copies words as they are).
     var out = classical_typed(Python.tuple(max(len(values), 1)), "<f4", context["output_context"])
     var dest = I32P(unsafe_from_address=Int(py=classical_address(out)))
+    _ = out  # keep the Python object alive through the native call above
     for i in range(len(values)):  # driver-loop: over a program's int32 parameter words
         dest[i] = Int32(values[i])
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -576,10 +580,12 @@ def _imputer_fit(model: PythonObject, values: PythonObject, context: PythonObjec
         # non-missing words, as the Python `_fit_callable` called it.
         var statistics = classical_typed(Python.tuple(d), "<f4", output)
         var dest = _ptr(statistics)
+        _ = statistics  # keep the Python object alive through the native call above
         for j in range(d):  # cpu-route: calls the user strategy callable per column
             var kept = _take1(ran, comp + j * n, _iword(ran, ctot + j), context)
             var stat = _float(py_call_typed(strategy, kept))
             dest[j] = Float32(stat)
+            _ = statistics  # keep the Python object alive through the native call above
             if keep_empty or stat == stat:
                 keep.append(j)
         py_setitem(fields, "statistics_", statistics)
@@ -861,10 +867,12 @@ def _kbins_fit(model: PythonObject, values: PythonObject, weight_source: PythonO
     var bin_edges = Python.list()
     var n_bins_ = classical_typed(Python.tuple(d), "<i8", output)
     var dest = I64P(unsafe_from_address=Int(py=classical_address(n_bins_)))
+    _ = n_bins_  # keep the Python object alive through the native call above
     for j in range(d):  # driver-loop: over the per-column edge counts (feature metadata)
         var count = Int(_word(ran, ne + j))
         _ = py_call(bin_edges.append, _take1(ran, edges + j * (nbmax + 1), count, context))
         dest[j] = Int64(count - 1)
+        _ = n_bins_  # keep the Python object alive through the native call above
     py_setitem(fields, "bin_edges_", bin_edges)
     py_setitem(fields, "n_bins_", n_bins_)
     py_setitem(fields, "_edges", _take1(ran, edges, d * (nbmax + 1), context))
@@ -1116,8 +1124,10 @@ def _user_values(value: PythonObject, context: PythonObject) raises -> PythonObj
             return out
         var flat = _input(value, 1, False, context)
         var source = _ptr(flat)
+        _ = flat  # keep the Python object alive through the native call above
         for i in range(Int(py=flat.size)):  # driver-loop: over one user category or drop list
             _ = py_call(out.append, PythonObject(Float64(source[i])))
+            _ = flat  # keep the Python object alive through the native call above
         return out
     if Bool(py=py_call(b.hasattr, value, "tolist")):
         return py_call(b.list, py_call(value.tolist))
@@ -1150,8 +1160,10 @@ def _f32_array(values: List[Float32], context: PythonObject) raises -> PythonObj
         return classical_wrap_array(py_call(context["array_type"], "f"), Python.tuple(0), "<f4", "C", context["output_context"])
     var out = classical_typed(Python.tuple(len(values)), "<f4", context["output_context"])
     var dest = _ptr(out)
+    _ = out  # keep the Python object alive through the native call above
     for i in range(len(values)):  # driver-loop: over one column's category words
         dest[i] = values[i]
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -1163,10 +1175,12 @@ def _category_block(mut p: EncProg, categories: PythonObject, context: PythonObj
         kmax = max(kmax, Int(py=categories[j].size))
     var block = classical_typed(Python.tuple(max(d * kmax, 1)), "<f4", context["output_context"])
     var dest = _ptr(block)
+    _ = block  # keep the Python object alive through the native call above
     for j in range(d):  # driver-loop: over the per-column category arrays
         var cats = _cat_values(categories[j], context)
         for i in range(len(cats)):  # driver-loop: over one column's categories
             dest[j * kmax + i] = cats[i]
+            _ = block  # keep the Python object alive through the native call above
     return (p.put(block, max(d * kmax, 1)), kmax)
 
 
@@ -2214,6 +2228,7 @@ def _flat_copy(view: LabelsView, context: PythonObject) raises -> PythonObject:
     if n > 0:
         memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=labels_address(out)),
                src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=view.addr), count=n * view.item)
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -2223,8 +2238,10 @@ def _f32_target(view: LabelsView, context: PythonObject) raises -> PythonObject:
     var out = labels_vector(n, "<f4", context)
     if view.typestr == "<f4":
         memcpy(dest=_ptr(out), src=F32P(unsafe_from_address=view.addr), count=n)
+        _ = out  # keep the Python object alive through the native call above
     else:
         labels_cast(view.addr, view.typestr, labels_address(out), "<f4", n, context)
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -2239,6 +2256,7 @@ def _all_integral(view: LabelsView, vector: Bool, context: PythonObject) raises 
         raise Error("TypeError: mojolearn: the integral test takes a float32 or float64 vector")
     var words = classical_typed(Python.tuple(n * per), "<f4", context["output_context"])
     memcpy(dest=_ptr(words), src=F32P(unsafe_from_address=view.addr), count=n * per)
+    _ = words  # keep the Python object alive through the native call above
     var ch = max(4096, (n + 4095) // 4096)
     var nch = (n + ch - 1) // ch
     var mode = _default_mode(context)
@@ -2279,6 +2297,7 @@ def _target_info(y: PythonObject, target_type: String, context: PythonObject) ra
             var ok = True
             if floating:
                 ok = (t == "<f4" or t == "<f8") and labels_all_finite(view.addr, view.size(), t == "<f8", context)
+                _ = view  # keep the Python object alive through the native call above
             if ok:
                 var cont = target_type == "continuous" or (target_type == "auto" and floating and not _all_integral(view, True, context))
                 if cont:
@@ -2604,6 +2623,8 @@ def _pearson(mut p: EncProg, values: PythonObject, y: PythonObject, mode: Python
         raise Error("mojolearn: X and y have different numbers of rows")
     var yv = labels_vector(n, "<f4", context)
     memcpy(dest=_ptr(yv), src=F32P(unsafe_from_address=target.addr), count=n)
+    _ = yv  # keep the Python object alive through the native call above
+    _ = target  # keep the Python object alive through the native call above
     var xo = p.put_x(values)
     var yo = p.put(yv, n)
     var sc = p.alloc(d)
@@ -2653,14 +2674,18 @@ def _score_words(scores: PythonObject, d: Int, context: PythonObject) raises -> 
                 var per = 1 if kind <= 1 else 2
                 var words = classical_typed(Python.tuple(d * per), "<f4", context["output_context"])
                 memcpy(dest=_ptr(words), src=F32P(unsafe_from_address=view.addr), count=d * per)
+                _ = words  # keep the Python object alive through the native call above
+                _ = view  # keep the Python object alive through the native call above
                 return (words, kind)
     var vals = py_call(b.list, py_call(scores.tolist)) if Bool(py=py_call(b.hasattr, scores, "tolist")) else py_call(b.list, scores)
     if len(vals) != d:
         raise Error("mojolearn: expected " + String(d) + " scores, got " + String(len(vals)))
     var words = classical_typed(Python.tuple(2 * d), "<f4", context["output_context"])
     var dest = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(words)))
+    _ = words  # keep the Python object alive through the native call above
     for i in range(d):  # cpu-route: a user score function's answer, converted once (feature count)
         dest[i] = _float(vals[i])
+        _ = words  # keep the Python object alive through the native call above
     return (words, 4)
 
 
@@ -2749,7 +2774,9 @@ def _select_fit(model: PythonObject, x: PythonObject, values: PythonObject, y: P
         if not keep_all and k_ok:
             var p = EncProg()
             var got = _score_words(scores, d, context)
+            _ = scores  # keep the Python object alive through the native call above
             var mo = _topk_stages(p, got[0], got[1], d, k)
+            _ = scores  # keep the Python object alive through the native call above
             var ran = p.run(entries, context)
             mask = _topk_from(ran, mo, d)
     if keep_all:

@@ -218,6 +218,7 @@ def conv_block_backward_binding(
     _ = db_addr  # keep the Python object alive through the native call above
     var pdx = fp(dx_addr) if need_dx else pdb
     _ = db_addr  # keep the Python object alive through the native call above
+    _ = dx_addr  # keep the Python object alive through the native call above
     var pk = FP(unsafe_from_address=kcols) if keep else pdb
     _ = db_addr  # keep the Python object alive through the native call above
     var py_ = FP(unsafe_from_address=ky) if keep else pdb
@@ -226,8 +227,10 @@ def conv_block_backward_binding(
         conv_block_backward_into(px, pw, pb, pg, pi, pdx, pdw, pdb, cprm, pprm, pool, need_dx, keep, pk, py_)
         _ = db_addr  # keep the Python object alive through the native call above
         _ = dw_addr  # keep the Python object alive through the native call above
+        _ = dx_addr  # keep the Python object alive through the native call above
         if need_dx:
             out_f32(pdx, nx)
+            _ = dx_addr  # keep the Python object alive through the native call above
         out_f32(pdw, OC * ckk)
         _ = dw_addr  # keep the Python object alive through the native call above
         out_f32(pdb, OC)

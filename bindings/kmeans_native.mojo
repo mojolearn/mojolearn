@@ -203,6 +203,8 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
         # `c0` may borrow the caller's array.
         memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(centers))),
                src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(c0))), count=k * d)
+        _ = centers  # keep the Python object alive through the native call above
+        _ = c0  # keep the Python object alive through the native call above
         _ = c0^
         _ = view^
     # int32 cluster ids: the kernel writes uint32 ids below 2**31, the same
@@ -237,10 +239,19 @@ def _kmeans_fit(model: PythonObject, args: PythonObject, context: PythonObject,
         distances = family_array(Python.tuple(n, k), "<f4", context)
         result = family_call(joint, classical_address(x), classical_address(centers), classical_address(labels),
                              classical_address(weights), classical_address(distances), params)
+        _ = labels  # keep the Python object alive through the native call above
+        _ = centers  # keep the Python object alive through the native call above
+        _ = x  # keep the Python object alive through the native call above
+        _ = distances  # keep the Python object alive through the native call above
+        _ = weights  # keep the Python object alive through the native call above
     else:
         var fit = family_entry(binding, "kmeans_fit", context)
         result = family_call(fit, classical_address(x), classical_address(centers), classical_address(labels),
                              classical_address(weights), params)
+        _ = labels  # keep the Python object alive through the native call above
+        _ = centers  # keep the Python object alive through the native call above
+        _ = x  # keep the Python object alive through the native call above
+        _ = weights  # keep the Python object alive through the native call above
     _ = x^
     _ = weights^
     py_setitem(fields, "cluster_centers_", centers)
@@ -288,17 +299,23 @@ def _kmeans_inference(model: PythonObject, binding: PythonObject, source: Python
         if handle is not None:
             _ = family_call(family_entry(binding, "kmeans_transform_resident", context), handle,
                             classical_address(x), classical_address(out), params)
+            _ = x  # keep the Python object alive through the native call above
         else:
             _ = family_call(family_entry(binding, "kmeans_transform", context), classical_address(x),
                             classical_address(c), classical_address(out), params)
+            _ = x  # keep the Python object alive through the native call above
+            _ = c  # keep the Python object alive through the native call above
     else:
         out = family_array(Python.tuple(n), "<i4", context)
         if handle is not None:
             _ = family_call(family_entry(binding, "kmeans_predict_resident", context), handle,
                             classical_address(x), classical_address(out), params)
+            _ = x  # keep the Python object alive through the native call above
         else:
             _ = family_call(family_entry(binding, "kmeans_predict", context), classical_address(x),
                             classical_address(c), classical_address(out), params)
+            _ = x  # keep the Python object alive through the native call above
+            _ = c  # keep the Python object alive through the native call above
     _ = x^
     _ = c^
     return out

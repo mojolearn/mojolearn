@@ -508,6 +508,7 @@ def transformer_session_forward_fresh_binding(
         raise Error("transformer: session is busy or closed")
     var a = _read_addrs_tail(addrs, 13, String("transformer_session_forward_fresh"))
     _check_base_addrs(a, [0, 1, 2, 3, 4, 5, 6, 8, 9, 12], String("transformer_session_forward_fresh"))
+    _ = a  # keep the Python object alive through the native call above
     var p = _read_params(params, 10, String("transformer_session_forward_fresh"))
     var opts = BlockOptions.from_params(p, 10)
     owner[].busy = True
@@ -710,6 +711,7 @@ def transformer_session_forward_binding(
     # (the header of this section); the same contract word for word.
     var a = _read_addrs_tail(addrs, 13, String("transformer_forward"))
     _check_base_addrs(a, [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12], String("transformer_forward"))
+    _ = a  # keep the Python object alive through the native call above
     var p = _read_params(params, 10, String("transformer_forward"))
     var opts = BlockOptions.from_params(p, 10)
     owner[].busy = True
@@ -747,6 +749,7 @@ def transformer_session_forward_int15_binding(
     for i in range(len(addrs)):  # small-loop(addrs: INT15_ENTRY_ADDRS validated tensor addresses): reads pointer list, not data
         a.append(Int(py=addrs[i]))
     _check_base_addrs(a, [0, 1, 2, 10, 11, 12], what)
+    _ = a  # keep the Python object alive through the native call above
     var p = _read_params(params, 10, what)
     var opts = BlockOptions.from_params(p, 10)
     owner[].busy = True
@@ -813,6 +816,7 @@ def transformer_forward_fresh_binding(
     for i in range(BLOCK_OPTION_ADDRS):  # small-loop(BLOCK_OPTION_ADDRS: the 11 option-tail addresses): argument words, not data
         a.append(raw[11 + i])
     _check_base_addrs(a, [0, 1, 2, 3, 4, 5, 6, 8, 9], what)
+    _ = a  # keep the Python object alive through the native call above
     if a[12] == 0:
         raise Error("transformer_forward_fresh: null output address")
     var b = p[0]
@@ -896,6 +900,7 @@ def transformer_forward_binding(
     bias address and no dropout: the profile REFUSES both by absence."""
     var a = _transformer_addrs(addrs, String("transformer_forward"))
     _check_base_addrs(a, [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12], String("transformer_forward"))
+    _ = a  # keep the Python object alive through the native call above
     if len(params) != 10 and len(params) != 10 + BLOCK_OPTION_PARAMS:
         raise Error(
             "transformer_forward: params must contain 10 values (B, L,"
@@ -941,6 +946,7 @@ def transformer_decode_step_binding(
     7 cached_tokens, 8 window. Returns the post-call cached_tokens."""
     var a = _transformer_addrs(addrs, String("transformer_decode_step"))
     _check_base_addrs(a, [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12], String("transformer_decode_step"))
+    _ = a  # keep the Python object alive through the native call above
     if len(params) != 9 and len(params) != 9 + BLOCK_OPTION_PARAMS:
         raise Error(
             "transformer_decode_step: params must contain 9 values (B,"
@@ -1007,6 +1013,7 @@ def transformer_decode_session_open_binding(
     for i in range(BLOCK_OPTION_ADDRS):  # small-loop(BLOCK_OPTION_ADDRS: the 11 option-tail addresses): argument words, not data
         a.append(raw[11 + i])
     _check_base_addrs(a, [1, 2, 3, 4, 5, 6, 8, 9, 10, 11], what)
+    _ = a  # keep the Python object alive through the native call above
     var p = _read_params(params, 9, what)
     var opts = BlockOptions.from_params(p, 9)
     var b = p[0]
@@ -1072,6 +1079,7 @@ def transformer_decode_session_open_int15_binding(
     for i in range(BLOCK_OPTION_ADDRS + 21):  # small-loop(BLOCK_OPTION_ADDRS: 11 option addresses plus 21 planes): reorders pointer list, not data
         a.append(raw[11 + i])
     _check_base_addrs(a, [1, 2, 10, 11], what)
+    _ = a  # keep the Python object alive through the native call above
     var p = _read_params(params, 9, what)
     var opts = BlockOptions.from_params(p, 9)
     if p[0] <= 0:

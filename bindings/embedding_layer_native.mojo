@@ -232,6 +232,7 @@ def _forward(model: PythonObject, ids: PythonObject, device: PythonObject, conte
         _ = py_call_typed(entries["embedding_forward_dev"],
                           Python.list(_weight_addr(weight, keep, context), flat_addr), Python.list(handle),
                           Python.list(v, d, t, tok))
+        _ = weight  # keep the Python object alive through the native call above
         _ = keep^
         _ = admitted^
         _ = weight^
@@ -243,6 +244,7 @@ def _forward(model: PythonObject, ids: PythonObject, device: PythonObject, conte
         _ = py_call(params.append, tok)
     _ = py_call_typed(entries["embedding_forward"],
                       Python.list(_weight_addr(weight, keep, context), flat_addr, y._addr), params)
+    _ = y  # keep the Python object alive through the native call above
     _ = keep^
     _ = admitted^
     _ = weight^
@@ -278,9 +280,13 @@ def _load(cls: PythonObject, path: PythonObject, context: PythonObject) raises -
         raise Error("ValueError: mojolearn: " + _repr(path) + " meta holds " + String(Int(py=meta.size))
                     + " fields, 3 are needed")
     var mp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=meta._addr))
+    _ = meta  # keep the Python object alive through the native call above
     var v = Int(mp[0])
+    _ = meta  # keep the Python object alive through the native call above
     var d = Int(mp[1])
+    _ = meta  # keep the Python object alive through the native call above
     var pad = Int(mp[2])
+    _ = meta  # keep the Python object alive through the native call above
     var weight = _archive_exact(arrays, "weight", "<f4", archive)
     var shape = weight.shape
     if len(shape) != 2 or Int(py=shape[0]) != v or Int(py=shape[1]) != d:
@@ -308,6 +314,8 @@ def _load(cls: PythonObject, path: PythonObject, context: PythonObject) raises -
     var table = new_array([v, d], "<f4")
     memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=table._addr)),
            src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=weight._addr)), count=v * d)
+    _ = table  # keep the Python object alive through the native call above
+    _ = weight  # keep the Python object alive through the native call above
     var model = py_call(b.object.__new__, cls)
     var fields = py_fields(model)
     py_setitem(fields, "num_embeddings", v)

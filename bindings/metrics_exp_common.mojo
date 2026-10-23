@@ -281,6 +281,7 @@ struct MxProg(Movable):
         """`_f64_words`: a binary64 scalar as two Int32 words (low first), an input."""
         var words = family_array(Python.tuple(2), "<i4", context)
         FAMILY_F64P(unsafe_from_address=Int(py=classical_address(words)))[0] = value
+        _ = words  # keep the Python object alive through the native call above
         return self.put_i32(words)
 
 
@@ -316,6 +317,7 @@ struct MxArena(Copyable, Movable):
         if words > 0:
             memcpy(dest=MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(result))),
                    src=MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=self.base + 4 * off), count=words)
+            _ = result  # keep the Python object alive through the native call above
         return result
 
 
@@ -339,8 +341,10 @@ def mx_f64_scores(values: List[Float64], context: PythonObject) raises -> Python
     """binary64 values as an Int32 word array (low words first): `_f64_bits`."""
     var words = family_array(Python.tuple(2 * len(values)), "<i4", context)
     var dst = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(words)))
+    _ = words  # keep the Python object alive through the native call above
     for i in range(len(values)):  # driver-loop: over the metric's per-class scores
         dst[i] = values[i]
+        _ = words  # keep the Python object alive through the native call above
     return words
 
 
@@ -478,6 +482,7 @@ def _mx_buffer_labels(values: PythonObject, name: String, context: PythonObject)
     var kind = classical_cast_kind(source, item, name, context)
     var s0 = Int(py=source.strides[0])
     var src = CastIn(Int(py=classical_address(source)), kind, item, n, 1, s0, item)
+    _ = source  # keep the Python object alive through the native call above
     var lk = label_kind_of(kind, item, name)
     var code_kind = 1 if kind == 1 else 0
     var raw = py_call(context["array_type"], PythonObject(_mx_class_code(code_kind, item)),
@@ -485,6 +490,7 @@ def _mx_buffer_labels(values: PythonObject, name: String, context: PythonObject)
     var codes = family_array(Python.tuple(PythonObject(n)), "<i4", context)
     var k = host_unique_inverse_cast(src, lk, Int(py=py_call(raw.buffer_info)[0]),
                                      Int(py=classical_address(codes)))
+    _ = codes  # keep the Python object alive through the native call above
     _ = source^
     if k < 0:
         return PythonObject(None)
@@ -530,6 +536,7 @@ def _mx_gather(lab: MxLab, table: PythonObject, strict: Bool, context: PythonObj
     var first = mexp_gather_i32(FAMILY_I32P(unsafe_from_address=Int(py=py_call(table.buffer_info)[0])), k,
                                 FAMILY_I32P(unsafe_from_address=Int(py=classical_address(lab.codes))), lab.n,
                                 FAMILY_I32P(unsafe_from_address=Int(py=classical_address(out))))
+    _ = out  # keep the Python object alive through the native call above
     if strict and first >= 0:
         var code = Int(FAMILY_I32P(unsafe_from_address=Int(py=classical_address(lab.codes)))[first])
         mx_raise_obj(mx_b().KeyError, lab.classes[code])
@@ -693,6 +700,7 @@ def mx_scores(source: PythonObject, n: Int, caller: String, ndim: Int, name: Str
     var a = family_cast_view(checked, name, context)
     if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(a))), rows * cols):
         raise Error("mojolearn " + caller + ": " + name + " must be finite")
+    _ = a  # keep the Python object alive through the native calls above
     return MxMat(a, rows, cols, nd)
 
 

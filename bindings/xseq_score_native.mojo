@@ -39,6 +39,7 @@ def _vector(value: PythonObject, name: String) raises -> PythonObject:
         raise Error("ValueError: mojolearn metrics: " + name + " contains NaN or infinity; refused "
                     + "here (metrics/README.md HAND-OFF ask 3) rather than letting it "
                     + "reach a kernel whose answer for it is a washed sentinel")
+    _ = out  # keep the Python object alive through the native calls above
     return out
 
 
@@ -75,6 +76,7 @@ def _weights(source: PythonObject, n: Int, context: PythonObject) raises -> Pyth
         raise Error("ValueError: mojolearn r2_score: sample_weight has " + String(Int(py=w.shape[0]))
                     + " entries for " + String(n) + " samples")
     var p = xseq_f32p(w)
+    _ = w  # keep the Python object alive through the native call above
     if not xseq_all_finite_f32(p, n) or xseq_min_max_f32(p, n)[0] < Float32(0.0):
         raise Error("ValueError: mojolearn r2_score: sample_weight must have finite nonnegative entries")
     if not xseq_min_max_f32(p, n)[1] > Float32(0.0):
@@ -108,9 +110,14 @@ def xseq_regressor_score(model: PythonObject, prediction: PythonObject, args: Py
     if sample_weight is not None:
         var w = _weights(sample_weight, n, context)
         var weighted = py_call_typed(entries["r2_score_weighted"], xseq_addr(y), xseq_addr(yh), xseq_addr(w), Python.list(n))
+        _ = w  # keep the Python object alive through the native call above
+        _ = yh  # keep the Python object alive through the native call above
+        _ = y  # keep the Python object alive through the native call above
         _ = w^
         return PythonObject(Float64(py=weighted))
     var r2 = py_call_typed(entries["r2_score"], xseq_addr(y), xseq_addr(yh), Python.list(n))
+    _ = yh  # keep the Python object alive through the native call above
+    _ = y  # keep the Python object alive through the native call above
     _ = y^
     _ = yh^
     return PythonObject(Float64(py=r2))

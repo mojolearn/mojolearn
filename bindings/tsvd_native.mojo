@@ -169,6 +169,10 @@ def _randomized(model: PythonObject, fields: PythonObject, x: PythonObject, rows
     _ = py_call_typed(decomp["x_decomp_tsvd_randomized"], classical_address(x), classical_address(components),
                       classical_address(singular), classical_address(variance), classical_address(ratio),
                       Python.list(rows, cols, nc, oversamples, iterations, 1 if auto else 0, word))
+    _ = components  # keep the Python object alive through the native call above
+    _ = ratio  # keep the Python object alive through the native call above
+    _ = variance  # keep the Python object alive through the native call above
+    _ = singular  # keep the Python object alive through the native call above
     py_setitem(fields, "components_", components)
     py_setitem(fields, "singular_values_", singular)
     py_setitem(fields, "explained_variance_", variance)
@@ -213,6 +217,8 @@ def _exact(model: PythonObject, fields: PythonObject, x: PythonObject, rows: Int
                         + "x_decomp_tsvd_tsqr; rebuild it with bindings/build_x_decomp.sh")
         _ = py_call_typed(decomp["x_decomp_tsvd_tsqr"], classical_address(x), classical_address(components),
                           classical_address(singular), params)
+        _ = components  # keep the Python object alive through the native call above
+        _ = singular  # keep the Python object alive through the native call above
         py_setitem(fields, "components_", components)
         py_setitem(fields, "singular_values_", singular)
     elif py_get(entries, "tsvd_fit_explained") is not None:
@@ -223,14 +229,23 @@ def _exact(model: PythonObject, fields: PythonObject, x: PythonObject, rows: Int
         _ = py_call_typed(entries["tsvd_fit_explained"], classical_address(x), classical_address(components),
                           classical_address(singular), classical_address(variance), classical_address(ratio),
                           params)
+        _ = components  # keep the Python object alive through the native call above
+        _ = singular  # keep the Python object alive through the native call above
+        _ = ratio  # keep the Python object alive through the native call above
+        _ = variance  # keep the Python object alive through the native call above
         return
     else:
         py_setitem(fields, "components_", components)
         py_setitem(fields, "singular_values_", singular)
         _ = py_call_typed(entries["tsvd_fit"], classical_address(x), classical_address(components),
                           classical_address(singular), params)
+        _ = components  # keep the Python object alive through the native call above
+        _ = singular  # keep the Python object alive through the native call above
     _ = py_call_typed(entries["tsvd_explained"], classical_address(x), classical_address(components),
                       classical_address(variance), classical_address(ratio), params)
+    _ = components  # keep the Python object alive through the native call above
+    _ = ratio  # keep the Python object alive through the native call above
+    _ = variance  # keep the Python object alive through the native call above
 
 
 def tsvd_fit(model: PythonObject, source: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -281,6 +296,8 @@ def _project(model: PythonObject, fields: PythonObject, x: PythonObject, context
     var components = classical_host_f32(fields["components_"], 2, "components_", context)
     _ = py_call_typed(entries["tsvd_transform"], classical_address(x), classical_address(components),
                       classical_address(out), Python.list(rows, cols, nc))
+    _ = components  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
     _ = components^
     return out
 
@@ -310,6 +327,9 @@ def tsvd_inverse_transform(model: PythonObject, source: PythonObject, context: P
     var components = classical_host_f32(_attr(model, fields, "components_"), 2, "components_", context)
     _ = py_call_typed(entries["inverse_transform"], classical_address(z), classical_address(components),
                       classical_address(components), classical_address(out), Python.list(rows, nf, nc, 0))
+    _ = z  # keep the Python object alive through the native call above
+    _ = components  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
     _ = components^
     _ = z^
     return out

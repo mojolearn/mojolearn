@@ -112,6 +112,7 @@ def _f32_c(value: PythonObject, name: String, context: PythonObject) raises -> P
     var out = tsa_array("f", "<f4", _shape_tuple(value), count, 4, context)
     xseq_cast_nd(Int(py=classical_address(value)), dims, steps, item, kind, True,
                  _F32P(unsafe_from_address=Int(py=classical_address(out))))
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -147,6 +148,7 @@ def _series_major(source: PythonObject, context: PythonObject) raises -> PythonO
         arr = tsa_array("f", "<f4", Python.tuple(1, cols), cols, 4, context)
         memcpy(dest=_F32P(unsafe_from_address=Int(py=classical_address(arr))),
                src=_F32P(unsafe_from_address=Int(py=classical_address(flat))), count=cols)
+        _ = arr  # keep the Python object alive through the native call above
         _ = flat  # keep the Python object alive through the native call above
     return Python.tuple(arr, rows, cols, copied, rank)
 
@@ -207,6 +209,7 @@ def _exog_array(source: PythonObject, batch: Int, n_rows: Int, y_ndim: Int, name
     var out = tsa_array("f", "<f4", Python.tuple(s0, s1, s2), s0 * s1 * s2, 4, context)
     memcpy(dest=_F32P(unsafe_from_address=Int(py=classical_address(out))),
            src=_F32P(unsafe_from_address=Int(py=classical_address(flat))), count=s0 * s1 * s2)
+    _ = out  # keep the Python object alive through the native call above
     _ = flat  # keep the Python object alive through the native call above
     return Python.tuple(out, s2)
 
@@ -240,6 +243,7 @@ def _copy_block(source: PythonObject, offset: Int, count: Int, code: String, typ
         memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out))),
                src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(source)) + width * offset),
                count=count * width)
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -273,9 +277,17 @@ def arima_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     var plan = Python.list(batch, n_obs, order[0], order[1], order[2], order[3], order[4], order[5], order[6], k,
                            n_exog, context["arima_methods"][fields["method"]], fields["maxiter"],
                            classical_address(ics), pens[0], pens[1])
+    _ = ics  # keep the Python object alive through the native call above
     var written = Int(py=py_call_typed(_entry(entries, "arima_fit"), classical_address(arr), classical_address(ex),
                                        classical_address(params), classical_address(x), classical_address(x0),
                                        classical_address(stats), classical_address(flags), plan))
+    _ = ex  # keep the Python object alive through the native call above
+    _ = arr  # keep the Python object alive through the native call above
+    _ = x0  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
+    _ = params  # keep the Python object alive through the native call above
+    _ = flags  # keep the Python object alive through the native call above
+    _ = stats  # keep the Python object alive through the native call above
     if written != total:
         raise Error("RuntimeError: " + _A + "the fit wrote " + String(written) + " parameters, batch_size * N is "
                     + String(total) + "; this side and arima/estimator.mojo disagree about ARIMAOrder.complexity()")
@@ -298,6 +310,7 @@ def _adopt(model: PythonObject, fields: PythonObject, arr: PythonObject, copied:
         var entries = _arima_entries(model, fields, context)
         var written = Int(py=py_call_typed(_entry(entries, "arima_ic_from_loglike"), classical_address(stats),
                                            classical_address(ics), Python.list(batch, pens[0], pens[1])))
+        _ = ics  # keep the Python object alive through the native call above
         if written != batch:
             raise Error("RuntimeError: " + _A + "the criterion kernel wrote " + String(written)
                         + " series, batch_size is " + String(batch))
@@ -318,6 +331,7 @@ def _adopt(model: PythonObject, fields: PythonObject, arr: PythonObject, copied:
     var llf = tsa_array("d", "<f8", Python.tuple(batch), batch, 8, context)
     xseq_widen_f32_f64(_F32P(unsafe_from_address=Int(py=classical_address(stats))),
                        MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(llf))), batch)
+    _ = llf  # keep the Python object alive through the native call above
     py_setitem(fields, "llf_", llf)
     py_setitem(fields, "fx_", _copy_block(stats, batch, batch, "f", "<f4", 4, Python.tuple(batch), context))
     py_setitem(fields, "aic_", _copy_block(ics, 0, batch, "d", "<f8", 8, Python.tuple(batch), context))
@@ -357,10 +371,15 @@ def arima_adopt(model: PythonObject, y: PythonObject, reuse: PythonObject, conte
     var stats = tsa_array("f", "<f4", Python.tuple(2 * b), 2 * b, 4, context)
     var flags = tsa_array("i", "<i4", Python.tuple(2 * b), 2 * b, 4, context)
     _gather_block(fit_f32, off, big_n, nb, local, Int(py=classical_address(params)), context)
+    _ = params  # keep the Python object alive through the native call above
     _gather_block(fit_f32, off + nb * big_n, big_n, nb, local, Int(py=classical_address(x)), context)
+    _ = x  # keep the Python object alive through the native call above
     _gather_block(fit_f32, off + 2 * nb * big_n, big_n, nb, local, Int(py=classical_address(x0)), context)
+    _ = x0  # keep the Python object alive through the native call above
     var sa = Int(py=classical_address(stats))
+    _ = stats  # keep the Python object alive through the native call above
     var fa = Int(py=classical_address(flags))
+    _ = flags  # keep the Python object alive through the native call above
     _gather_block(grouped_ll, trial * nb, 1, nb, local, sa, context)
     _gather_block(fit_f32, off + 3 * nb * big_n, 1, nb, local, sa + 4 * b, context)
     _gather_block(fit_i32, 2 * nb * trial, 1, nb, local, fa, context)
@@ -417,5 +436,6 @@ def arima_predict(model: PythonObject, args: PythonObject, context: PythonObject
                       Python.list(batch, n_obs, start, end, order[0], order[1], order[2], order[3], order[4], order[5],
                                   order[6], Int(py=fields["k_"]), n_exog))
     _ = ex  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
     _ = fut  # keep the Python object alive through the native call above
     return out

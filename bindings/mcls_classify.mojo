@@ -237,9 +237,14 @@ def _accuracy(args: PythonObject, context: PythonObject) raises -> PythonObject:
         var w = mc_weights(args[4], n, "accuracy_score", context)
         result = family_call(mc_entry(args[0], "accuracy_score_weighted"), classical_address(yt),
                              classical_address(yp), classical_address(w), params)
+        _ = yt  # keep the Python object alive through the native call above
+        _ = w  # keep the Python object alive through the native call above
+        _ = yp  # keep the Python object alive through the native call above
         _ = w^
     else:
         result = family_call(mc_entry(args[0], "accuracy_score"), classical_address(yt), classical_address(yp), params)
+        _ = yp  # keep the Python object alive through the native call above
+        _ = yt  # keep the Python object alive through the native call above
     _ = yt^
     _ = yp^
     return family_call(mc_b().float, result)
@@ -321,6 +326,9 @@ def _confusion(args: PythonObject, context: PythonObject) raises -> PythonObject
     var result = family_array(Python.tuple(k, k), "<i8" if norm == 0 else "<f4", context)
     _ = family_call(mc_entry(args[0], "confusion_matrix"), classical_address(yt), classical_address(yp),
                     classical_address(result), Python.list(PythonObject(pair.true.n), PythonObject(k), PythonObject(norm)))
+    _ = yp  # keep the Python object alive through the native call above
+    _ = yt  # keep the Python object alive through the native call above
+    _ = result  # keep the Python object alive through the native call above
     _ = yt^
     _ = yp^
     return result
@@ -475,17 +483,24 @@ def _prf(args: PythonObject, context: PythonObject) raises -> PythonObject:
                     classical_address(output),
                     Python.list(PythonObject(pair.true.n), PythonObject(mc_len(all_labels)), PythonObject(code),
                                 PythonObject(positive), PythonObject(zero), PythonObject(selected_count)))
+    _ = yp  # keep the Python object alive through the native call above
+    _ = yt  # keep the Python object alive through the native call above
+    _ = output  # keep the Python object alive through the native call above
     _ = yt^
     _ = yp^
     var words = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(output)))
+    _ = output  # keep the Python object alive through the native call above
     if warn and words[3 * width + metric] != 0:
         var name = String("Precision") if metric == 0 else (String("Recall") if metric == 1 else String("F-score"))
         mc_undefined(name + " is ill-defined and being set to 0.0 due to zero "
                      + "denominator; use zero_division to control this behavior.", context)
+    _ = output  # keep the Python object alive through the native calls above
     if average is None:
         var values = family_array(Python.tuple(width), "<f4", context)
         memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(values))),
                src=words + metric * width, count=width)
+        _ = values  # keep the Python object alive through the native call above
+        _ = output  # keep the Python object alive through the native call above
         _ = output^
         return values
     var value = Float64(words[metric * width])

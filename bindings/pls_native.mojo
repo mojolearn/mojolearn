@@ -175,6 +175,7 @@ def _pls_fit(model: PythonObject, x_source: PythonObject, y_source: PythonObject
         var block = kit.zeros(sizes[k], nc)
         outs.append(block)
         _ = py_call(addresses.append, kit.address(block))
+        _ = block  # keep the Python object alive through the native call above
     var its = py_call(context["output_context"]["array_type"], PythonObject("i"),
                       py_call(context["output_context"]["native_bytes_type"], 4 * nc))
     var ax = kit.address(xs[0])

@@ -112,6 +112,7 @@ def _reference_queries(source: PythonObject, n_features: Int, where: String, con
         raise Error("mojolearn " + where + ": X contains a NaN or an infinity; a non-finite "
                     + "query has no distance order to take a nearest row from, so it is "
                     + "refused by name")
+    _ = q  # keep the Python object alive through the native calls above
     return q
 
 
@@ -129,6 +130,8 @@ def _labeled_reference(binding: PythonObject, refs: PythonObject, keys: PythonOb
                                        classical_address(q), classical_address(out), classical_address(chosen)),
                     Python.list(PythonObject(n_refs), PythonObject(nq), PythonObject(n_features), PythonObject(metric),
                                 eps, PythonObject(has_thresh)))
+    _ = chosen  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
     _ = chosen^
     return out
 
@@ -151,6 +154,7 @@ def _dbscan_predict(model: PythonObject, binding: PythonObject, source: PythonOb
     if n_core == 0:
         var labels = family_array(Python.tuple(nq), "<i4", context)
         family_fill_i32(FAMILY_I32P(unsafe_from_address=Int(py=classical_address(labels))), nq, -1)
+        _ = labels  # keep the Python object alive through the native call above
         return labels
     var metric_name = py_call(py_call(b.str, py_call(b.getattr, model, PythonObject("metric"))).lower)
     var metric = Int(py=context["family_dbscan_metrics"][metric_name])
@@ -264,7 +268,9 @@ def cluster_operation(model: PythonObject, operation: String, args: PythonObject
         if Int(py=centers.shape[0]) == 0:
             var labels = family_array(Python.tuple(Int(py=x.shape[0])), "<i4", context)
             var words = FAMILY_I32P(unsafe_from_address=Int(py=classical_address(labels)))
+            _ = labels  # keep the Python object alive through the native call above
             family_fill_i32(words, Int(py=x.shape[0]), -1)
+            _ = labels  # keep the Python object alive through the native call above
             return labels
         return _xc_nearest(model, binding, x, centers, context)
     raise Error("RuntimeError: unknown x_cluster operation " + operation)

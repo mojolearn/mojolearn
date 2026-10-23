@@ -99,6 +99,7 @@ def _fit_fill(values: PythonObject, entries: PythonObject, context: PythonObject
     scaler_refuse_infinite_columns(ap,st,d)
     var filled = classical_typed(Python.tuple(n,d),"<f4",context["output_context"])
     memcpy(dest=_ptr(filled),src=ap+dest,count=n*d)
+    _ = filled  # keep the Python object alive through the native call above
     var colnan = _copy_row(ap+cn,d,context)
     _ = arena^
     return Python.tuple(filled,colnan)
@@ -144,14 +145,20 @@ def minmax_fit(model: PythonObject, source: PythonObject, context: PythonObject)
     var colnan = PythonObject(None)
     if direct is not None:
         finite = Int(py=py_call(direct,classical_address(values),classical_address(output),params)) != 0
+        _ = output  # keep the Python object alive through the native call above
+        _ = values  # keep the Python object alive through the native call above
     else:
         finite = scaler_all_finite(_ptr(values),n*d)
+        _ = values  # keep the Python object alive through the native call above
         if finite:
             _ = py_call_typed(entries["minmax_fit"],classical_address(values),classical_address(output),params)
+            _ = output  # keep the Python object alive through the native call above
+            _ = values  # keep the Python object alive through the native call above
     if not finite:
         var filled = _fit_fill(values,entries,context)
         colnan = filled[1]
         _ = py_call_typed(entries["minmax_fit"],classical_address(filled[0]),classical_address(output),params)
+        _ = output  # keep the Python object alive through the native call above
         _ = filled^
     _keep_extrema(fields,output,colnan,entries,context)
     py_setitem(fields,"n_features_in_",d)
@@ -192,6 +199,9 @@ def minmax_fit_transform(model: PythonObject, source: PythonObject, context: Pyt
     var output = classical_typed(Python.tuple(n,d),"<f4",context["output_context"])
     var got = Int(py=py_call(entry,classical_address(values),classical_address(stats),classical_address(output),
                              Python.list(n,d,configuration[1],configuration[2],Int(clip))))
+    _ = output  # keep the Python object alive through the native call above
+    _ = stats  # keep the Python object alive through the native call above
+    _ = values  # keep the Python object alive through the native call above
     if got == 0:
         _ = values^
         return PythonObject(None)
@@ -229,6 +239,7 @@ def minmax_partial_fit(model: PythonObject, source: PythonObject, context: Pytho
     for k in range(4):  # small-loop(stats: old/new extrema buffers)
         var value = _statistic(stats[k],d,"extrema",context)
         memcpy(dest=ap+k*d,src=_ptr(value),count=d)
+        _ = value  # keep the Python object alive through the native call above
         _ = value^
     var entries = _minmax_entries(fields["numeric_mode_"],context)
     var program = List[Int32]()
@@ -237,6 +248,7 @@ def minmax_partial_fit(model: PythonObject, source: PythonObject, context: Pytho
     var output = classical_typed(Python.tuple(5,d),"<f4",context["output_context"])
     var colnan = _copy_row(ap+8*d,d,context)
     _ = py_call_typed(entries["minmax_fit"],Int(ap+4*d),classical_address(output),Python.list(4,d,configuration[1],configuration[2]))
+    _ = output  # keep the Python object alive through the native call above
     _keep_extrema(fields,output,colnan,entries,context)
     if py_type(fields["n_samples_seen_"]) is not b.int or py_type(fresh["n_samples_seen_"]) is not b.int:
         raise Error("TypeError: MinMaxScaler n_samples_seen_ must remain a native integer")
@@ -268,7 +280,9 @@ def minmax_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
     var arena = List[Float32](length=7*d+5, fill=0)
     var ap = F32P(unsafe_from_address=Int(arena.unsafe_ptr()))
     memcpy(dest=ap, src=_ptr(mean), count=d)
+    _ = mean  # keep the Python object alive through the native call above
     memcpy(dest=ap+d, src=_ptr(scale), count=d)
+    _ = scale  # keep the Python object alive through the native call above
     arena[7*d+4] = 1
     var program = List[Int32]()
     _stage(program, 264, d, 0, d, 1, 1, 7*d+3, 7*d+4, 2*d, 3*d, 4*d, 5*d, 6*d)
@@ -286,6 +300,8 @@ def minmax_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
     var finite = True
     if direct is not None:
         var got = Int(py=py_call(direct, classical_address(values), Int(ap+3*d), Int(ap+2*d), classical_address(output), params))
+        _ = output  # keep the Python object alive through the native call above
+        _ = values  # keep the Python object alive through the native call above
         if got == 0:
             raise Error("MinMaxScaler transform overflowed in Float32")
         finite = got == 1
@@ -293,19 +309,27 @@ def minmax_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
             var filled = _nan_fill(values, entries, context)
             if Int(py=py_call(direct, classical_address(filled), Int(ap+3*d), Int(ap+2*d), classical_address(output), params)) != 1:
                 raise Error("MinMaxScaler transform overflowed in Float32")
+            _ = filled  # keep the Python object alive through the native calls above
+            _ = output  # keep the Python object alive through the native calls above
             _ = filled^
     else:
         finite = scaler_all_finite(_ptr(values), n*d)
+        _ = values  # keep the Python object alive through the native call above
         var filled = values if finite else _nan_fill(values, entries, context)
         _ = py_call_typed(entries["minmax_transform"], classical_address(filled), Int(ap+3*d), Int(ap+2*d), classical_address(output), params)
+        _ = filled  # keep the Python object alive through the native call above
+        _ = output  # keep the Python object alive through the native call above
         if not scaler_all_finite(_ptr(output), n*d):
             raise Error("MinMaxScaler transform overflowed in Float32")
+        _ = output  # keep the Python object alive through the native calls above
         _ = filled^
     if not finite or colnan:
         var keep = List[Float32](length=3*n*d+2*d, fill=0)
         var kp = F32P(unsafe_from_address=Int(keep.unsafe_ptr()))
         memcpy(dest=kp, src=_ptr(values), count=n*d)
+        _ = values  # keep the Python object alive through the native call above
         memcpy(dest=kp+n*d, src=_ptr(output), count=n*d)
+        _ = output  # keep the Python object alive through the native call above
         memcpy(dest=kp+2*n*d, src=ap+4*d, count=d)
         var restore = List[Int32]()
         # Match _Prog.put_codes: nan_keep consumes numeric Float32 flags,
@@ -314,6 +338,7 @@ def minmax_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
         _stage(restore, 103, n*d, 0, d, n*d, 2*n*d+d, 2*n*d+2*d)
         _run(keep, restore, entries)
         memcpy(dest=_ptr(output), src=kp+2*n*d+2*d, count=n*d)
+        _ = output  # keep the Python object alive through the native call above
         _ = keep^
     _ = arena^
     _ = mean^

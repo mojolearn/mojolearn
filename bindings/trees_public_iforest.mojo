@@ -210,6 +210,8 @@ def _run(model: PythonObject, fields: PythonObject, x: TreesMatrix, train: Pytho
                                     PythonObject(0 if values is None else trees_address(values)),
                                     PythonObject(0 if labels is None else trees_address(labels)),
                                     PythonObject(trees_address(info)), params))
+    _ = values  # keep the Python object alive through the native call above
+    _ = labels  # keep the Python object alive through the native call above
     _ = info  # keep the Python object alive through the native call above
     var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=trees_address(info))
     _ = info  # keep the Python object alive through the native call above
@@ -288,6 +290,7 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject)
     var device_scan = _device_scan(fields, context)
     if not device_scan and not trees_all_finite(x.addr, x.rows * x.cols, False, context):
         raise Error(_NONFINITE)
+    _ = x  # keep the Python object alive through the native calls above
     var had = Python.dict()
     var kept = Python.tuple("_x", "n_features_in_")
     for i in range(2):  # small-loop(kept): the two fitted field names restored on a refusal
@@ -300,6 +303,7 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject)
     # `fit` scores the training matrix's first row (the Python `x[:1]`
     # copy: the same bytes, read in place); `fit_predict` predicts X.
     var query = TreesMatrix(train, x.addr, 1 if want < 0 else x.rows, x.cols, True)
+    _ = x  # keep the Python object alive through the native call above
     var out = PythonObject(None)
     try:
         out = _run(model, fields, query, train, _WANT_SCORE_SAMPLES if want < 0 else want, True, context)

@@ -272,7 +272,9 @@ def _view_of_buffer(value: PythonObject, name: String, context: PythonObject) ra
         for k in range(len(shape)):  # driver-loop: over array rank metadata
             _ = py_call(pyshape.append, shape[k])
         return _view_of_array(classical_wrap_array(store, py_call(labels_builtins().tuple, pyshape), typestr, "C", context))
-    return LabelsView(view, _any_contiguous_address(view), shape^, strides^, typestr, item)
+    var _keep_ret_view = LabelsView(view, _any_contiguous_address(view), shape^, strides^, typestr, item)
+    _ = view  # keep the Python object alive through the native call above
+    return _keep_ret_view^
 
 
 def _pandas_values(source: PythonObject) raises -> PythonObject:
@@ -412,6 +414,7 @@ def labels_f32_view(var view: LabelsView, order: String, context: PythonObject) 
     var shape = Python.tuple(rows, cols) if two else Python.tuple(rows)
     var out = labels_empty(shape, "<f4", context, "F" if want_f and two else "C")
     var dst = labels_address(out)
+    _ = out  # keep the Python object alive through the native call above
     var contiguous_c = view.c_order()
     var contiguous_f = view.f_order()
     if (view.typestr == "<f8" or view.typestr == "<f4") and (contiguous_c or contiguous_f):
@@ -439,10 +442,12 @@ def labels_f32_view(var view: LabelsView, order: String, context: PythonObject) 
         return LabelsMatrix(out, dst, rows, cols, not want_f)
     var staged = labels_vector(view.size(), "<f4", context)
     labels_cast(view.addr, view.typestr, labels_address(staged), "<f4", view.size(), context)
+    _ = staged  # keep the Python object alive through the native call above
     var r = cols if contiguous_f else rows
     var c = rows if contiguous_f else cols
     _ = py_call_typed(labels_helper(context, "transpose_f32"), PythonObject(labels_address(staged)), PythonObject(dst),
                       PythonObject(r), PythonObject(c))
+    _ = staged  # keep the Python object alive through the native call above
     _ = staged^
     return LabelsMatrix(out, dst, rows, cols, not want_f)
 
@@ -467,7 +472,9 @@ def labels_check_sample_weight(source: PythonObject, n: Int, context: PythonObje
     var b = labels_builtins()
     if source is None:
         var ones = labels_full_f32(n, 1.0, context)
-        return LabelsMatrix(ones, labels_address(ones), n, 1, True)
+        var _keep_ret_ones = LabelsMatrix(ones, labels_address(ones), n, 1, True)
+        _ = ones  # keep the Python object alive through the native call above
+        return _keep_ret_ones^
     var cls = py_type(source)
     var scalar = False
     var value = Float64(0)
@@ -496,11 +503,15 @@ def labels_check_sample_weight(source: PythonObject, n: Int, context: PythonObje
         var w = labels_f32_view(view^, "C", context)
         if n:
             labels_prepare_weights(w.addr, n, context)
+            _ = w  # keep the Python object alive through the native call above
         return w^
     var out = labels_full_f32(n, value, context)
     if n:
         labels_prepare_weights(labels_address(out), n, context)
-    return LabelsMatrix(out, labels_address(out), n, 1, True)
+        _ = out  # keep the Python object alive through the native call above
+    var _keep_ret_out = LabelsMatrix(out, labels_address(out), n, 1, True)
+    _ = out  # keep the Python object alive through the native call above
+    return _keep_ret_out^
 
 
 def labels_prepare_weights(addr: Int, n: Int, context: PythonObject) raises:
@@ -567,6 +578,7 @@ def _native_labels(view: LabelsView, bool_source: Bool, context: PythonObject) r
                                 PythonObject(_encode_code(view.typestr)), PythonObject(n),
                                 PythonObject(labels_address(classes_store)), PythonObject(labels_address(codes)),
                                 PythonObject(0), PythonObject(0), PythonObject(0)))
+        _ = codes  # keep the Python object alive through the native call above
         _ = classes_store  # keep the Python object alive through the native call above
     except error:
         var message = String(error)
@@ -681,8 +693,10 @@ def _sorted_classes(labels: PythonObject, context: PythonObject) raises -> Class
         py_setitem(index, classes[i], PythonObject(i))
     var codes = labels_vector(n, "<i4", context)
     var p = _I32P(unsafe_from_address=labels_address(codes))
+    _ = codes  # keep the Python object alive through the native call above
     for i in range(n):  # cpu-route: Python label objects, the explicit label input step
         p[i] = Int32(Int(py=index[labels[i]]))
+        _ = codes  # keep the Python object alive through the native call above
     return ClassicalLabels(classes, codes, n)
 
 
@@ -809,6 +823,7 @@ def labels_decode_labels(classes: PythonObject, codes: PythonObject, context: Py
             _ = py_call_typed(fn_obj, PythonObject(labels_address(table)), PythonObject(k),
                               PythonObject(labels_address(wide_codes)), PythonObject(n), PythonObject(labels_address(out)))
             _ = table  # keep the Python object alive through the native call above
+            _ = out  # keep the Python object alive through the native call above
             _ = wide_codes  # keep the Python object alive through the native call above
             return out
     var values = Python.list()
@@ -831,6 +846,7 @@ def labels_argmax_rows(scores: PythonObject, rows: Int, cols: Int, wide: Bool, c
     var fn_obj = labels_helper(context, "argmax_rows_f64" if wide else "argmax_rows_f32")
     _ = py_call_typed(fn_obj, PythonObject(labels_address(scores)), PythonObject(rows), PythonObject(cols),
                       PythonObject(labels_address(out)))
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -914,6 +930,7 @@ def labels_class_weight_rows(class_weight: PythonObject, labels: ClassicalLabels
         _ = py_call_typed(rows_entry, PythonObject(labels_address(labels.codes)), PythonObject(labels_address(narrowed)),
                           PythonObject(labels_address(out)), Python.list(n, k))
         _ = narrowed  # keep the Python object alive through the native call above
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -933,8 +950,12 @@ def labels_weighted_rows(sample_weight: PythonObject, class_weight: PythonObject
     var mul = labels_need(xtrees, "x_trees_mul_f32", "the x_trees binding has no x_trees_mul_f32", "ImportError")
     _ = py_call_typed(mul, PythonObject(sw.addr), PythonObject(labels_address(rows)), PythonObject(labels_address(out)),
                       Python.list(labels.n))
+    _ = out  # keep the Python object alive through the native call above
+    _ = rows  # keep the Python object alive through the native call above
     _ = sw^
-    return LabelsMatrix(out, labels_address(out), labels.n, 1, True)
+    var _keep_ret_out = LabelsMatrix(out, labels_address(out), labels.n, 1, True)
+    _ = out  # keep the Python object alive through the native call above
+    return _keep_ret_out^
 
 
 def labels_class_rows_only(class_weight: PythonObject, labels: ClassicalLabels, xtrees: PythonObject,
@@ -943,7 +964,9 @@ def labels_class_rows_only(class_weight: PythonObject, labels: ClassicalLabels, 
     var rows = labels_class_weight_rows(class_weight, labels, xtrees, context)
     if rows is None:
         return None
-    return LabelsMatrix(rows, labels_address(rows), labels.n, 1, True)
+    var _keep_ret_rows = LabelsMatrix(rows, labels_address(rows), labels.n, 1, True)
+    _ = rows  # keep the Python object alive through the native call above
+    return _keep_ret_rows^
 
 
 # x_metrics stage ops (`_expansion_metrics._OPS`) and cm_epi kinds.
@@ -1073,6 +1096,7 @@ def _as_f32_1d(source: PythonObject, name: String, context: PythonObject) raises
         raise Error("mojolearn metrics: " + name + " contains NaN or infinity; refused "
                     + "here (metrics/README.md HAND-OFF ask 3) rather than letting it "
                     + "reach a kernel whose answer for it is a washed sentinel")
+    _ = out  # keep the Python object alive through the native calls above
     return out^
 
 
@@ -1094,8 +1118,10 @@ def labels_sample_weight_f32(source: PythonObject, n: Int, caller: String, conte
     var w = labels_f32(source, 1, "C", "sample_weight", context)
     if not labels_all_finite(w.addr, n, False, context) or Bool(py=_reduce(w.addr, n, 0, context) < PythonObject(0)):
         raise Error("mojolearn " + caller + ": sample_weight must have finite nonnegative entries")
+    _ = w  # keep the Python object alive through the native calls above
     if not Bool(py=_reduce(w.addr, n, 1, context) > PythonObject(0)):
         raise Error("mojolearn " + caller + ": sample_weight must have positive total weight")
+    _ = w  # keep the Python object alive through the native calls above
     return w^
 
 
@@ -1139,10 +1165,15 @@ def labels_r2(y_true: PythonObject, prediction: PythonObject, sample_weight: Pyt
         var w = labels_sample_weight_f32(sample_weight, y.rows, "r2_score", context)
         result = py_call_typed(metrics["r2_score_weighted"], PythonObject(y.addr), PythonObject(yh.addr),
                                PythonObject(w.addr), Python.list(PythonObject(y.rows)))
+        _ = yh  # keep the Python object alive through the native call above
+        _ = y  # keep the Python object alive through the native call above
+        _ = w  # keep the Python object alive through the native call above
         _ = w^
     else:
         result = py_call_typed(metrics["r2_score"], PythonObject(y.addr), PythonObject(yh.addr),
                                Python.list(PythonObject(y.rows)))
+        _ = yh  # keep the Python object alive through the native call above
+        _ = y  # keep the Python object alive through the native call above
     _ = y^
     _ = yh^
     return Float64(py=py_call(labels_builtins().float, result))
@@ -1214,6 +1245,7 @@ def _native_classification(values: PythonObject, context: PythonObject) raises -
         # exact; the encoder has no 8- or 16-bit arm (`astype('<i4')`)
         var wide = labels_vector(view.size(), "<i4", context)
         labels_cast(view.addr, typestr, labels_address(wide), "<i4", view.size(), context)
+        _ = wide  # keep the Python object alive through the native call above
         view = _view_of_array(wide)
     if view.typestr != "<i4" and view.typestr != "<i8" and view.typestr != "<u4" and view.typestr != "<u1":
         return None
@@ -1286,10 +1318,13 @@ def _codes(labels: ScoreLabels, order: PythonObject, context: PythonObject) rais
                           PythonObject(labels_address(labels.codes)), PythonObject(labels.n),
                           PythonObject(labels_address(out)))
         _ = table  # keep the Python object alive through the native call above
+        _ = out  # keep the Python object alive through the native call above
         return out
     var p = _I32P(unsafe_from_address=labels_address(out))
+    _ = out  # keep the Python object alive through the native call above
     for i in range(labels.n):  # cpu-route: Python object labels mapped per row, the explicit label input step
         p[i] = Int32(Int(py=py_get(index, labels.values[i], PythonObject(-1))))
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -1453,6 +1488,7 @@ def labels_accuracy(y_true: PythonObject, prediction: PythonObject, sample_weigh
     prog.stage(_OP_CM_EPI, 1, [_CM_COUNT, tp, L, 1 if weighted else 0, tot, out])
     var arena = _run(prog^, mode, context)
     var base = _arena_address(arena)
+    _ = arena  # keep the Python object alive through the native call above
     _ = yt^
     _ = yp^
     _ = w^

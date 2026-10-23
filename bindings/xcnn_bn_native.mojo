@@ -105,8 +105,11 @@ def _prep(fields: PythonObject, need_running: Bool, context: PythonObject) raise
         factor = 1.0 / Float64(tracked) if momentum is None else Float64(py=momentum)
     var aux = xcnn_host_f32([2 + 7 * c], context)
     var words = _F32P(unsafe_from_address=Int(py=xcnn_addr(aux)))
+    _ = aux  # keep the Python object alive through the native call above
     words[0] = Float32(Float64(py=fields["eps"]))
+    _ = aux  # keep the Python object alive through the native call above
     words[1] = Float32(factor)
+    _ = aux  # keep the Python object alive through the native call above
     xcnn_put_f32(aux, 2 + 5 * c, fields["weight_"], c, "weight_", context)
     xcnn_put_f32(aux, 2 + 6 * c, fields["bias_"], c, "bias_", context)
     var running = PythonObject(None)
@@ -116,8 +119,10 @@ def _prep(fields: PythonObject, need_running: Bool, context: PythonObject) raise
         else:
             running = xcnn_host_f32([2 * c], context)
             var r = _F32P(unsafe_from_address=Int(py=xcnn_addr(running)))
+            _ = running  # keep the Python object alive through the native call above
             for i in range(c):  # driver-loop: over BatchNorm channels of the initial running variance
                 r[c + i] = 1.0
+                _ = running  # keep the Python object alive through the native call above
     return Python.tuple(aux, running, batch_stats)
 
 
@@ -171,6 +176,8 @@ def xcnn_bn_forward_dev(layer: PythonObject, fields: PythonObject, entries: Pyth
     var batch_stats = Bool(py=prepared[2])
     _ = py_call_typed(xcnn_entry(entries, "x_cnn_batchnorm_forward_m"), Python.list(xh, yh, xcnn_addr(running), xcnn_addr(aux)),
                       PythonObject(3 if dev_y else 1), Python.list(n, c, hw, 1 if batch_stats else 0))
+    _ = running  # keep the Python object alive through the native call above
+    _ = aux  # keep the Python object alive through the native call above
     _finish(fields, running, context)
     _set(fields, "_aux", aux)
     _set(fields, "_mode", PythonObject(batch_stats))
@@ -225,6 +232,7 @@ def xcnn_bn_forward(layer: PythonObject, x: PythonObject, context: PythonObject)
     if xcnn_mixed(b):
         var xh = xcnn_dev_upload(layer, b, "x", x3, context)
         _ = xcnn_bn_forward_dev(layer, fields, b, xh, xcnn_addr(y), n, c, hw, False, context)
+        _ = y  # keep the Python object alive through the native call above
         _set(fields, "_xdev", xh)
         _set(fields, "_x", PythonObject(None))
         _set(fields, "_shape", xcnn_tuple(shape))
@@ -236,6 +244,10 @@ def xcnn_bn_forward(layer: PythonObject, x: PythonObject, context: PythonObject)
     var batch_stats = Bool(py=prepared[2])
     _ = py_call_typed(xcnn_entry(b, "x_cnn_batchnorm_forward"), xcnn_addr(x3), xcnn_addr(y), xcnn_addr(running), xcnn_addr(aux),
                       Python.list(n, c, hw, 1 if batch_stats else 0))
+    _ = running  # keep the Python object alive through the native call above
+    _ = aux  # keep the Python object alive through the native call above
+    _ = y  # keep the Python object alive through the native call above
+    _ = x3  # keep the Python object alive through the native call above
     _finish(fields, running, context)
     _set(fields, "_aux_dev", PythonObject(None))
     _set(fields, "_x", x3)

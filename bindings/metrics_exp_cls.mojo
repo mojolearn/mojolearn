@@ -78,8 +78,11 @@ struct MxSums(Movable):
         if fmode == 2:
             var words = family_array(Python.tuple(4), "<i4", context)
             var dst = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(words)))
+            _ = words  # keep the Python object alive through the native call above
             dst[0] = 1 + b2
+            _ = words  # keep the Python object alive through the native call above
             dst[1] = b2
+            _ = words  # keep the Python object alive through the native call above
             bo = self.prog.put_i32(words)
         var eo = self.prog.alloc(8 + 6 * max(self.L, 1))
         self.prog.stage("cls_epi", 1, [self.grp(0), self.grp(1), self.grp(2), k, col, kind, avg, zd, eo, fmode, bo])
@@ -242,13 +245,17 @@ def _support_array(s: MxSums, arena: MxArena, k: Int, context: PythonObject) rai
     if s.weighted:
         var out = family_array(Python.tuple(PythonObject(k)), "<f8", context)
         var dst = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out)))
+        _ = out  # keep the Python object alive through the native call above
         for j in range(k):  # driver-loop: over the reported labels
             dst[j] = arena.f32(s.g_out[1] + j)
+            _ = out  # keep the Python object alive through the native call above
         return out
     var out = family_array(Python.tuple(PythonObject(k)), "<i8", context)
     var dst = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out)))
+    _ = out  # keep the Python object alive through the native call above
     for j in range(k):  # driver-loop: over the reported labels
         dst[j] = Int64(arena.i32(s.cnt[1] + j))
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -337,7 +344,9 @@ def _mlcm(args: PythonObject, context: PythonObject) raises -> PythonObject:
     var shape = Python.tuple(PythonObject(k), PythonObject(2), PythonObject(2))
     var _keep_ret_tail_r338 = arena.words(tail, 8 * k, shape, "<f8" if s.weighted else "<i8", context)
     _ = tail  # keep the Python object alive through the native call above
-    return _keep_ret_tail_r338^
+    var _keep_ret_tail = _keep_ret_tail_r338^
+    _ = tail  # keep the Python object alive through the native call above
+    return _keep_ret_tail^
 
 
 def _cm_count(args: PythonObject, caller: String, context: PythonObject) raises -> Tuple[MxArena, Int, Bool]:
@@ -522,14 +531,18 @@ def _support_total(s: MxSums, arena: MxArena, k: Int, mode: PythonObject, contex
     if s.weighted:
         var w = family_array(Python.tuple(PythonObject(k)), "<f4", context)
         var dst = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(w)))
+        _ = w  # keep the Python object alive through the native call above
         for j in range(k):  # driver-loop: over the reported labels
             dst[j] = Float32(arena.f32(s.g_out[1] + j))
+            _ = w  # keep the Python object alive through the native call above
         src = prog.put(w)
     else:
         var c = family_array(Python.tuple(PythonObject(k)), "<i4", context)
         var dst = FAMILY_I32P(unsafe_from_address=Int(py=classical_address(c)))
+        _ = c  # keep the Python object alive through the native call above
         for j in range(k):  # driver-loop: over the reported labels
             dst[j] = Int32(arena.i32(s.cnt[1] + j))
+            _ = c  # keep the Python object alive through the native call above
         src = prog.put_i32(c)
     var out = prog.want(prog.alloc(2), 2)
     prog.stage("cm_epi", 1, [_CM_TOTAL, src, k, 1 if s.weighted else 0, out])

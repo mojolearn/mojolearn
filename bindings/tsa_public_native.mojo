@@ -78,6 +78,8 @@ def _series_major(source: PythonObject, name: String, context: PythonObject) rai
     steps.append(Int(py=value.strides[0]))
     xseq_cast_nd(Int(py=classical_address(value)), dims, steps, item, kind, True,
                  _F32P(unsafe_from_address=Int(py=classical_address(out))))
+    _ = value  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
     _ = value^
     return Python.tuple(out, rows, cols)
 
@@ -94,12 +96,15 @@ def tsa_kpss(args: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = py_call_typed(_entries(context)["kpss_test"], classical_address(flat), classical_address(flags), classical_address(stat),
                       Python.list(batch, n_obs, py_call_typed(b.int, args[1]), py_call_typed(b.int, args[2]),
                                   py_call_typed(b.int, args[3]), py_call_typed(b.float, args[4])))
+    _ = stat  # keep the Python object alive through the native call above
     _ = flags  # keep the Python object alive through the native call above
+    _ = flat  # keep the Python object alive through the native call above
     # the binding writes 1 (stationary) or 0
     var stationary = _array("B", "<u1", batch, 1, context)
     tsa_flags_u8(_I32P(unsafe_from_address=Int(py=classical_address(flags))),
                  _U8P(unsafe_from_address=Int(py=classical_address(stationary))), batch)
     _ = flags  # keep the Python object alive through the native call above
+    _ = stationary  # keep the Python object alive through the native call above
     _ = flat^
     if Bool(py=py_call(b.bool, args[5])):
         return Python.tuple(stationary, stat)
@@ -126,6 +131,8 @@ def tsa_select_d(args: PythonObject, context: PythonObject) raises -> PythonObje
     _ = py_call_typed(_entries(context)["select_d"], classical_address(flat), classical_address(out),
                       Python.list(batch, n_obs, seasonal, py_call_typed(b.int, args[2]), py_call_typed(b.int, limit_value),
                                   py_call_typed(b.float, args[4])))
+    _ = out  # keep the Python object alive through the native call above
+    _ = flat  # keep the Python object alive through the native call above
     _ = flat^
     return out
 

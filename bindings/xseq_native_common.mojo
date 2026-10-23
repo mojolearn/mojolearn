@@ -112,6 +112,7 @@ def xseq_f32(value: PythonObject, name: String, copy: Bool, context: PythonObjec
         steps.append(Int(py=value.strides[k]))
     xseq_cast_nd(Int(py=sequential_address(value)), dims, steps, item, cast, double_ints,
                  XF32P(unsafe_from_address=Int(py=sequential_address(out))))
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -170,6 +171,7 @@ def xseq_column_f32(value: PythonObject, rows: Int, cols: Int, col: Int, context
     C-ordered (rows,) float32 array (the same words)."""
     var out = xseq_zeros(Python.tuple(rows), context)
     xseq_column_copy_f32(xseq_f32p(value), xseq_f32p(out), rows, cols, col)
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -178,6 +180,7 @@ def xseq_column_i64(value: PythonObject, rows: Int, cols: Int, col: Int, context
     (truncation toward zero, as astype)."""
     var out = xseq_zeros_i64(Python.tuple(rows), context)
     xseq_column_copy_i64(xseq_f32p(value), XI64P(unsafe_from_address=Int(py=sequential_address(out))), rows, cols, col)
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 

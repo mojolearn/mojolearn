@@ -213,6 +213,8 @@ def _ids(source: PythonObject, shape: _Shape, context: PythonObject) raises -> P
     var tokens = tsa_array("i", "<i4", Python.tuple(rows, cols), rows * cols, 4, context)
     neural_cast_i32_2d(Int(py=classical_address(value)), Int(py=value.strides[0]), Int(py=value.strides[1]),
                        rows, cols, item, kind, _I32P(unsafe_from_address=Int(py=classical_address(tokens))))
+    _ = value  # keep the Python object alive through the native call above
+    _ = tokens  # keep the Python object alive through the native call above
     _ = value^
     return tokens
 
@@ -252,6 +254,7 @@ def _copy_i32(source: PythonObject, n: Int, context: PythonObject) raises -> Pyt
     if n > 0:
         memcpy(dest=_I32P(unsafe_from_address=Int(py=classical_address(out))),
                src=_I32P(unsafe_from_address=Int(py=classical_address(source))), count=n)
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -329,6 +332,10 @@ def _export_release(fields: PythonObject, shape: _Shape, context: PythonObject) 
     var completed = state["completed_steps"]
     var addresses = Python.list(classical_address(state["flags"]), classical_address(out_p), classical_address(out_m),
                                 classical_address(out_v), classical_address(out_flags))
+    _ = out_m  # keep the Python object alive through the native call above
+    _ = out_p  # keep the Python object alive through the native call above
+    _ = out_flags  # keep the Python object alive through the native call above
+    _ = out_v  # keep the Python object alive through the native call above
     var returned = py_call_typed(binding.byte_lm_trainer_export_state, fields["_native_session"], addresses,
                                  shape.native_shape(), completed, PythonObject(True))
     if py_type(returned) is not _b().int or not Bool(py=returned == completed):
@@ -469,7 +476,9 @@ def _run_resident(fields: PythonObject, tokens: PythonObject, shape: _Shape, con
         for key in [String("parameters"), String("m"), String("v")]:  # small-loop(the three named state arrays)
             _ = py_call(addresses.append, classical_address(state[key]))
     _ = py_call(addresses.append, classical_address(out_loss))
+    _ = out_loss  # keep the Python object alive through the native call above
     _ = py_call(addresses.append, classical_address(out_flags))
+    _ = out_flags  # keep the Python object alive through the native call above
     _ = py_call(addresses.append, classical_address(grads[0]) if full else PythonObject(0))
     var by_name = grads[1]
     var keys = py_call(b.list, by_name)

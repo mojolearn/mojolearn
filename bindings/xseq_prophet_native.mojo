@@ -58,6 +58,9 @@ def _days(source: PythonObject, entries: PythonObject, context: PythonObject) ra
     if n:
         _ = py_call_typed(entries["prophet_days"], Python.list(xseq_addr(src), xseq_addr(days), xseq_addr(info)),
                           Python.list(n, kind))
+        _ = info  # keep the Python object alive through the native call above
+        _ = days  # keep the Python object alive through the native call above
+        _ = src  # keep the Python object alive through the native call above
     return Python.tuple(days, info)
 
 
@@ -83,6 +86,8 @@ def _features(fields: PythonObject, days: PythonObject, entries: PythonObject, c
                       Python.list(xseq_addr(days), xseq_addr(periods_a), xseq_addr(tsc), xseq_addr(frac)),
                       Python.list(n, ns),
                       Python.list(py_call(_b().float, fields["start_"]), py_call(_b().float, fields["t_scale_"])))
+    _ = frac  # keep the Python object alive through the native call above
+    _ = tsc  # keep the Python object alive through the native call above
     _ = periods_a  # keep the Python object alive through the native call above
     return Python.tuple(tsc, frac)
 
@@ -157,6 +162,7 @@ def prophet_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
         raise Error("ValueError: " + _P + "y and t lengths differ, or fewer than 2 points")
     if Int(py=py_call(xseq_base(context, "all_finite_f32"), xseq_addr(Y), Y.size)) != 1:
         raise Error("ValueError: " + _P + "y must be finite")
+    _ = Y  # keep the Python object alive through the native calls above
     _auto(fields, "yearly", fields["yearly_seasonality"], 10, span >= 730)
     _auto(fields, "weekly", fields["weekly_seasonality"], 3, span >= 14 and dmin < 7)
     _auto(fields, "daily", fields["daily_seasonality"], 4, span >= 2 and dmin < 1)
@@ -183,6 +189,9 @@ def prophet_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
                                  Python.list(xseq_addr(days), xseq_addr(user), xseq_addr(cpt)),
                                  Python.list(N, n_user, hist, n_cp),
                                  Python.list(fields["start_"], fields["t_scale_"])))
+    _ = cpt  # keep the Python object alive through the native call above
+    _ = user  # keep the Python object alive through the native call above
+    _ = days  # keep the Python object alive through the native call above
     if S < 0:
         raise Error("ValueError: Changepoints must fall within training data.")
     var cpts = py_call(np.ascontiguousarray, cpt.__getitem__(py_call(b.slice, PythonObject(None), S)))
@@ -222,7 +231,11 @@ def prophet_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
                       Python.list(B, N, od[1], nh, K, S2, multiplicative, fields["max_iter"]),
                       Python.list(fields["changepoint_prior_scale"]))
     _ = H  # keep the Python object alive through the native call above
+    _ = Y  # keep the Python object alive through the native call above
+    _ = info_out  # keep the Python object alive through the native call above
+    _ = params  # keep the Python object alive through the native call above
     _ = sig_a  # keep the Python object alive through the native call above
+    _ = cpts  # keep the Python object alive through the native call above
     py_setitem(fields, "params_", params)
     py_setitem(fields, "info_", info_out)
     # diagnostics from info_ (y_scale, objective, iterations, 0): views only
@@ -259,6 +272,10 @@ def prophet_predict(model: PythonObject, args: PythonObject, context: PythonObje
                       Python.list(xseq_addr(params), xseq_addr(fields["info_"]), xseq_addr(ft[0]), xseq_addr(ft[1]),
                                   xseq_addr(od[0]), xseq_addr(H), xseq_addr(cpts), xseq_addr(yhat), xseq_addr(trend)),
                       Python.list(B, M, od[1], nh, Int(py=fields["_K"]), len(cpts), multiplicative))
+    _ = params  # keep the Python object alive through the native call above
+    _ = cpts  # keep the Python object alive through the native call above
+    _ = trend  # keep the Python object alive through the native call above
+    _ = yhat  # keep the Python object alive through the native call above
     _ = H  # keep the Python object alive through the native call above
     var one = Bool(py=fields["_one"])
     py_setitem(fields, "trend_", trend[0] if one else trend)

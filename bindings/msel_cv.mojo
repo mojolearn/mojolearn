@@ -123,6 +123,7 @@ def msel_indices(value: PythonObject, n: Int, name: String, context: PythonObjec
     var as_i64 = msel_index_i64(v, context)
     var status = msel_int(family_call(msel_entry("check_indices_i64", context), PythonObject(msel_addr(as_i64)),
                                       as_i64.size, PythonObject(n)))
+    _ = as_i64  # keep the Python object alive through the native call above
     if status == 1:
         raise Error(name + " contains an out-of-range index")
     if status == 2:
@@ -597,8 +598,11 @@ def _rows_outside(arr: PythonObject, a: Int, b: Int, context: PythonObject) rais
     var out = family_array(py_call(bi.tuple, shape), String(py=arr.dtype), context)
     var src = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=arr._addr))
     var dst = MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr))
+    _ = out  # keep the Python object alive through the native call above
     memcpy(dest=dst, src=src, count=a * per * item)
+    _ = out  # keep the Python object alive through the native call above
     memcpy(dest=dst + a * per * item, src=src + b * per * item, count=(n - b) * per * item)
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -617,8 +621,11 @@ def _kfold_ranges(x: PythonObject, y: PythonObject, folds: PythonObject, context
         if size == 0 or Int(py=train.size) == 0:
             return List[Int]()
         var p = msel_p64(test)
+        _ = test  # keep the Python object alive through the native call above
         var a = Int(p[0])
+        _ = test  # keep the Python object alive through the native call above
         var b = Int(p[size - 1]) + 1
+        _ = test  # keep the Python object alive through the native call above
         if b - a != size or Int(py=train.size) != n - size:
             return List[Int]()
         ranges.append(a)
@@ -745,8 +752,10 @@ def _place(preds: PythonObject, tests: PythonObject, n: Int, res: PythonObject, 
                         var sid = msel_resident_op(res, "msel_resident_entry", Python.tuple(t, PythonObject("<i8")), context)[2]
                         _ = family_call(scatter, PythonObject(block), PythonObject(n), codes[PythonObject(dtype)],
                                         PythonObject(msel_addr(src)), codes[src.dtype], t.size, PythonObject(cols), sid)
+                        _ = src  # keep the Python object alive through the native call above
                 _ = family_call(msel_entry("msel_read", context), PythonObject(block), PythonObject(msel_addr(out)),
                                 PythonObject(n * cols * 8))
+                _ = out  # keep the Python object alive through the native call above
             finally:
                 _ = family_call(msel_entry("msel_free", context), PythonObject(block))
         return out
@@ -801,6 +810,7 @@ def msel_cross_val_predict(args: PythonObject, context: PythonObject) raises -> 
         var size = Int(py=t.size)
         if size > 0:
             memcpy(dest=msel_p64(held) + at, src=msel_p64(t), count=size)
+            _ = t  # keep the Python object alive through the native call above
             _ = held  # keep the Python object alive through the native call above
         at += size
         _ = py_call(tests.append, t)

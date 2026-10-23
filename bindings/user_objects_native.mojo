@@ -130,6 +130,7 @@ def _first_seen(env: _Env, values: PythonObject) raises -> PythonObject:
     var classes = Python.list()
     var codes = env.store("i", n, 4)
     var out = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=_address(codes))
+    _ = codes  # keep the Python object alive through the native call above
     for i in range(n):  # cpu-route: Python list of label objects read once by user_objects_c (first_seen)
         var v = values[i]
         var k = len(classes)
@@ -138,6 +139,7 @@ def _first_seen(env: _Env, values: PythonObject) raises -> PythonObject:
         if code == k:
             _ = py_call(classes.append, v)
         out[i] = Int32(code)
+        _ = codes  # keep the Python object alive through the native call above
     return Python.tuple(classes, codes)
 
 
@@ -151,6 +153,7 @@ def _lookup(env: _Env, classes: PythonObject, values: PythonObject) raises -> Py
     var n = len(values)
     var codes = env.store("i", n, 4)
     var out = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=_address(codes))
+    _ = codes  # keep the Python object alive through the native call above
     var unseen = Python.dict()
     var missing = Python.list()
     var none = PythonObject(None)
@@ -159,12 +162,14 @@ def _lookup(env: _Env, classes: PythonObject, values: PythonObject) raises -> Py
         var got = py_call(index.get, v, none)
         if got is none:
             out[i] = Int32(-1)
+            _ = codes  # keep the Python object alive through the native call above
             var before = len(unseen)
             _ = py_call(unseen.setdefault, v, none)
             if len(unseen) != before:
                 _ = py_call(missing.append, v)
         else:
             out[i] = Int32(Int(py=got))
+            _ = codes  # keep the Python object alive through the native call above
     return Python.tuple(codes, missing)
 
 
@@ -228,6 +233,7 @@ def _ints(env: _Env, values: PythonObject) raises -> PythonObject:
     var n = len(vals)
     var words = env.store("q", n, 8)
     var out = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=_address(words))
+    _ = words  # keep the Python object alive through the native call above
     var lo = PythonObject(-9223372036854775807 - 1)
     var hi = PythonObject(9223372036854775807)
     for i in range(n):  # cpu-route: Python int objects read once by user_objects_c (ints)
@@ -235,6 +241,7 @@ def _ints(env: _Env, values: PythonObject) raises -> PythonObject:
         if env.lt(x, lo) or env.lt(hi, x):
             raise _refusal("OverflowError", "Python int too large to convert to C long")
         out[i] = Int64(Int(py=x))
+        _ = words  # keep the Python object alive through the native call above
     return words
 
 
@@ -243,8 +250,10 @@ def _floats(env: _Env, values: PythonObject) raises -> PythonObject:
     var n = len(vals)
     var words = env.store("d", n, 8)
     var out = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=_address(words))
+    _ = words  # keep the Python object alive through the native call above
     for i in range(n):  # cpu-route: Python number objects read once by user_objects_c (floats)
         out[i] = Float64(py=py_call(env.b.float, vals[i]))
+        _ = words  # keep the Python object alive through the native call above
     return words
 
 
@@ -266,8 +275,10 @@ def _column_f32(env: _Env, rows: PythonObject, j: Int) raises -> PythonObject:
     var n = len(rows)
     var words = env.store("f", n, 4)
     var out = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=_address(words))
+    _ = words  # keep the Python object alive through the native call above
     for i in range(n):  # cpu-route: Python probability rows read once by user_objects_c (column_f32)
         out[i] = Float32(Float64(py=py_call(env.b.float, rows[i][j])))
+        _ = words  # keep the Python object alive through the native call above
     return words
 
 
@@ -337,6 +348,7 @@ def _key_bytes(env: _Env, raw: PythonObject, mut keys: List[UInt8]) raises -> In
     if n > 0:
         memcpy(dest=keys.unsafe_ptr() + at,
                src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=_address(arr)), count=n)
+        _ = arr  # keep the Python object alive through the native call above
     _ = arr^
     return n
 
@@ -370,8 +382,10 @@ def _group_runs(env: _Env, ids: PythonObject) raises -> PythonObject:
                        + "); CatBoost requires every group's rows to be contiguous")
     var words = env.store("q", len(sizes), 8)
     var out = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=_address(words))
+    _ = words  # keep the Python object alive through the native call above
     for k in range(len(sizes)):  # driver-loop: over the groups
         out[k] = Int64(sizes[k])
+        _ = words  # keep the Python object alive through the native call above
     return words
 
 
@@ -381,6 +395,7 @@ def _pairs(env: _Env, rows: PythonObject, weights: PythonObject, n_rows: Int) ra
     var n = len(rows)
     var flat = env.store("q", 2 * n, 8)
     var fw = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=_address(flat))
+    _ = flat  # keep the Python object alive through the native call above
     for i in range(n):  # cpu-route: user pairs (Python index pairs) read once by user_objects_c (pairs)
         var pair = rows[i]
         if len(pair) != 2:
@@ -396,14 +411,19 @@ def _pairs(env: _Env, rows: PythonObject, weights: PythonObject, n_rows: Int) ra
                 raise _refusal("ValueError", "mojolearn: pairs[" + String(i) + "][" + String(j) + "] = "
                                + env.text(x) + " is outside the " + String(n_rows) + " rows")
             fw[2 * i + j] = Int64(Int(py=x))
+            _ = flat  # keep the Python object alive through the native call above
         if fw[2 * i] == fw[2 * i + 1]:
             raise _refusal("ValueError", "mojolearn: pairs[" + String(i) + "] pairs row " + String(fw[2 * i])
                            + " with itself")
+            _ = flat  # keep the Python object alive through the native call above
+        _ = flat  # keep the Python object alive through the native calls above
     var wout = env.store("d", n, 8)
     var ww = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=_address(wout))
+    _ = wout  # keep the Python object alive through the native call above
     if weights is PythonObject(None):
         for i in range(n):  # driver-loop: over the pairs (unit weights)
             ww[i] = 1.0
+            _ = wout  # keep the Python object alive through the native call above
         return Python.tuple(flat, wout)
     if len(weights) != n:
         raise _refusal("ValueError", "mojolearn: len(pairs_weight) = " + String(len(weights))
@@ -419,6 +439,7 @@ def _pairs(env: _Env, rows: PythonObject, weights: PythonObject, n_rows: Int) ra
             raise _refusal("ValueError", "mojolearn: pairs_weight[" + String(i)
                            + "] must be a finite nonnegative number")
         ww[i] = x
+        _ = wout  # keep the Python object alive through the native call above
     return Python.tuple(flat, wout)
 
 
@@ -476,12 +497,15 @@ def _sorted_codes(env: _Env, values: PythonObject, unknown: PythonObject) raises
         _ = py_call(py_attr(code, "__setitem__"), keys[order[r]][1], PythonObject(r))
     var words = env.store("f", n, 4)
     var out = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=_address(words))
+    _ = words  # keep the Python object alive through the native call above
     for i in range(n):  # cpu-route: categorical y label objects read once by user_objects_c (sorted_codes)
         var v = values[i]
         if env.eq(v, unknown):
             out[i] = Float32(-1.0)
+            _ = words  # keep the Python object alive through the native call above
         else:
             out[i] = Float32(Int(py=code[v]))
+            _ = words  # keep the Python object alive through the native call above
     return words
 
 
@@ -498,6 +522,7 @@ def _group_rows(env: _Env, codes: PythonObject, k: Int) raises -> PythonObject:
     for c in range(k):  # driver-loop: over the groups
         var st = env.store("q", counts[c], 8)
         ptrs.append(_address(st) if counts[c] > 0 else 0)
+        _ = st  # keep the Python object alive through the native call above
         _ = py_call(stores.append, st)
     for i in range(n):  # cpu-route: int32 group codes read once by user_objects_c (group_rows)
         var c = Int(cp[i])
@@ -517,9 +542,13 @@ def _group_permute(env: _Env, values: PythonObject, rows: PythonObject, perms: P
         if m == 0:
             continue
         var rp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=_address(r))
+        _ = r  # keep the Python object alive through the native call above
         var pp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=_address(p))
+        _ = p  # keep the Python object alive through the native call above
         for a in range(m):  # cpu-route: Python label objects read once by user_objects_c (group_permute)
             _ = py_call(py_attr(out, "__setitem__"), PythonObject(Int(rp[a])), values[Int(rp[Int(pp[a])])])
+            _ = p  # keep the Python object alive through the native call above
+            _ = r  # keep the Python object alive through the native call above
     return out
 
 
@@ -550,6 +579,7 @@ def _indicator(env: _Env, rows: PythonObject) raises -> PythonObject:
             return Python.tuple(PythonObject(1), PythonObject(None), PythonObject(0))
     var words = env.store("f", n * w, 4)
     var out = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=_address(words))
+    _ = words  # keep the Python object alive through the native call above
     var d0 = 0.0
     var d1 = 0.0
     var nd = 0
@@ -571,6 +601,7 @@ def _indicator(env: _Env, rows: PythonObject) raises -> PythonObject:
                 if nd > 2:
                     return Python.tuple(PythonObject(2), PythonObject(None), PythonObject(0))
             out[i * w + j] = Float32(x)
+            _ = words  # keep the Python object alive through the native call above
     return Python.tuple(PythonObject(0), words, PythonObject(w))
 
 

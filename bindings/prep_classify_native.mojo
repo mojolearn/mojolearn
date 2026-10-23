@@ -127,6 +127,8 @@ def _weights(sample_weight: PythonObject, n: Int, context: PythonObject) raises 
     var m = labels_check_sample_weight(sample_weight, n, context)
     var w = f32_array(n, context)
     memcpy(dest=F32P(unsafe_from_address=Int(py=classical_address(w))), src=F32P(unsafe_from_address=m.addr), count=n)
+    _ = w  # keep the Python object alive through the native call above
+    _ = m  # keep the Python object alive through the native call above
     _ = m^
     return w
 
@@ -325,6 +327,7 @@ def _scores(mut pr: ClsProg, model: PythonObject, fields: PythonObject, kind: St
     if kind == "mnb" or K == 1:
         bias_keep = f32_input(fields["class_log_prior_"], context)
         bias = classical_address(bias_keep)
+        _ = bias_keep  # keep the Python object alive through the native call above
     var dims = Python.list(n, d, K, csr.nnz)
     if String(mode) == "identical":
         # the dense chain without its zero terms; a row whose columns do not
@@ -334,6 +337,7 @@ def _scores(mut pr: ClsProg, model: PythonObject, fields: PythonObject, kind: St
                           classical_address(flp), bias, dims, classical_address(jll_h), classical_address(flag))
         _ = flag  # keep the Python object alive through the native call above
         _ = flp  # keep the Python object alive through the native call above
+        _ = jll_h  # keep the Python object alive through the native call above
         if Int(I32P(unsafe_from_address=Int(py=classical_address(flag)))[0]) != 0:
             return _base_scores(pr, model, fields, kind, X, want, csr, True, context)
         _ = flag  # keep the Python object alive through the native calls above
@@ -341,6 +345,7 @@ def _scores(mut pr: ClsProg, model: PythonObject, fields: PythonObject, kind: St
         _ = py_call_typed(jll_csr, classical_address(csr.indptr), classical_address(csr.indices), classical_address(csr.data),
                           classical_address(flp), bias, dims, classical_address(jll_h))
         _ = flp  # keep the Python object alive through the native call above
+        _ = jll_h  # keep the Python object alive through the native call above
     _ = bias_keep^
     var z = pr.alloc(n * K)
     var jll = pr.alloc(n * K)
@@ -636,6 +641,8 @@ def _fit_counts_csr(mut pr: ClsProg, model: PythonObject, fields: PythonObject, 
                       classical_address(fc), classical_address(cnt), classical_address(flag))
     _ = codes  # keep the Python object alive through the native call above
     _ = flag  # keep the Python object alive through the native call above
+    _ = cnt  # keep the Python object alive through the native call above
+    _ = fc  # keep the Python object alive through the native call above
     var level = Int(I32P(unsafe_from_address=Int(py=classical_address(flag)))[0])
     _ = flag  # keep the Python object alive through the native call above
     if String(mode) == "identical":
@@ -820,8 +827,10 @@ def _cat_blocks(pr: ClsProg, off: Int, d: Int, K: Int, cmax: Int, ncat: List[Int
         var block = classical_typed(Python.tuple(K, ncat[j]), "<f4", context["output_context"]) if ncat[j] > 0 else classical_wrap_array(py_call(context["array_type"], "f"), Python.tuple(K, 0), "<f4", "C", context["output_context"])
         if ncat[j] > 0:
             var dest = F32P(unsafe_from_address=Int(py=classical_address(block)))
+            _ = block  # keep the Python object alive through the native call above
             for k in range(K):  # driver-loop: over the classes (model structure)
                 memcpy(dest=dest + k * ncat[j], src=F32P(unsafe_from_address=pr.base) + off + (j * K + k) * cmax, count=ncat[j])
+                _ = block  # keep the Python object alive through the native call above
         _ = py_call(out.append, block)
     return out
 
@@ -918,8 +927,10 @@ def _cat_fit_programs(model: PythonObject, fields: PythonObject, arr: XIn, pc: P
     _set(fields, "category_count_", _cat_blocks(q, cc, d, K, cmax, ncat, context))
     var counts = classical_typed(Python.tuple(d), "<i8", context["output_context"])
     var cp = I64P(unsafe_from_address=Int(py=classical_address(counts)))
+    _ = counts  # keep the Python object alive through the native call above
     for j in range(d):  # driver-loop: over the feature columns (model structure)
         cp[j] = Int64(ncat[j])
+        _ = counts  # keep the Python object alive through the native call above
     _set(fields, "n_categories_", counts)
     _set(fields, "_flp", q.get(flp, d * K * cmax, 0, context))
     _set(fields, "_cmax", PythonObject(cmax))
@@ -1031,6 +1042,8 @@ def _estimator_covs(est: PythonObject, arr: XIn, codes: PythonObject, K: Int, wh
     else:
         var copy = classical_typed(Python.tuple(n, d), "<f4", context["output_context"])
         memcpy(dest=F32P(unsafe_from_address=Int(py=classical_address(copy))), src=F32P(unsafe_from_address=Int(py=classical_address(values))), count=n * d)
+        _ = copy  # keep the Python object alive through the native call above
+        _ = values  # keep the Python object alive through the native call above
         _ = py_call(blocks.append, copy)
     var out = List[Float64]()
     var b = cls_builtins()
@@ -1043,8 +1056,10 @@ def _estimator_covs(est: PythonObject, arr: XIn, codes: PythonObject, K: Int, wh
             raise Error("mojolearn: " + who + ": covariance_ of " + cls_name(est) + " is not (" + String(d) + ", " + String(d) + ")")
         var words = classical_host_f32(view, max(1, Int(py=view.ndim)), "covariance_", context)
         var p = F32P(unsafe_from_address=Int(py=classical_address(words)))
+        _ = words  # keep the Python object alive through the native call above
         for i in range(d * d):  # cpu-route: reads the user covariance estimator output
             out.append(Float64(p[i]))
+            _ = words  # keep the Python object alive through the native call above
         _ = words^
     return out^
 
@@ -1188,9 +1203,11 @@ def _lda_fit(model: PythonObject, fields: PythonObject, X: PythonObject, y: Pyth
     if rank2 > 0:
         scalings = classical_typed(Python.tuple(d, rank2), "<f4", context["output_context"])
         var dest = F32P(unsafe_from_address=Int(py=classical_address(scalings)))
+        _ = scalings  # keep the Python object alive through the native call above
         var src = F32P(unsafe_from_address=pr.base) + scal
         for i in range(d):  # driver-loop: over the scalings' rows (model structure)
             memcpy(dest=dest + i * rank2, src=src + i * d, count=rank2)
+            _ = scalings  # keep the Python object alive through the native call above
     _set(fields, "scalings_", scalings)
     _lda_publish_coef(pr, fields, K, d, coef, inter, bin[0], bin[1], context)
     var keep = maxc if nc is None else Int(py=py_call(b.int, nc))

@@ -64,14 +64,21 @@ def _chol_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     # a, l_out, scalars_out; n, jitter.
     var info = family_call(factor, Python.list(classical_address(a), classical_address(l_out), classical_address(scalars)),
                            Python.list(PythonObject(n), jitter))
+    _ = scalars  # keep the Python object alive through the native call above
+    _ = l_out  # keep the Python object alive through the native call above
+    _ = a  # keep the Python object alive through the native call above
     _ = a^
     var words = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(scalars)))
+    _ = scalars  # keep the Python object alive through the native call above
     py_setitem(fields, "n_", PythonObject(n))
     py_setitem(fields, "L_", l_out)
     py_setitem(fields, "info_", family_call(b.int, info))
     py_setitem(fields, "nb_", PythonObject(Int(words[1])))
+    _ = scalars  # keep the Python object alive through the native call above
     py_setitem(fields, "_logdet", PythonObject(words[2]))
+    _ = scalars  # keep the Python object alive through the native call above
     py_setitem(fields, "jitter_", PythonObject(words[3]))
+    _ = scalars  # keep the Python object alive through the native call above
     _ = scalars^
 
 

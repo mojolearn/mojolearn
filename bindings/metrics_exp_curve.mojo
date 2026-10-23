@@ -152,6 +152,7 @@ def _auc_values(v: PythonObject, name: String, context: PythonObject) raises -> 
             if n > 0:
                 memcpy(dest=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(out))),
                        src=FAMILY_F64P(unsafe_from_address=Int(py=py_call(store.buffer_info)[0])), count=n)
+                _ = out  # keep the Python object alive through the native call above
             return out
     var view = classical_view(values, context, name)
     var flat = family_cast_view_f64(view, name, context)
@@ -175,15 +176,20 @@ def _auc(args: PythonObject, context: PythonObject) raises -> PythonObject:
         raise Error("At least 2 points are needed to compute area under curve, but x.shape = (" + String(n) + ",)")
     var prog = MxProg(context)
     var X = prog.put_i32(_f64_words(xa, n, context))
+    _ = xa  # keep the Python object alive through the native call above
     var Y = prog.put_i32(_f64_words(ya, n, context))
+    _ = ya  # keep the Python object alive through the native call above
     var OUT = prog.want(prog.alloc(3), 3)
     prog.stage("auc_xy", 1, [n, X, Y, OUT, _AX_CHUNK])
+    _ = ya  # keep the Python object alive through the native call above
+    _ = xa  # keep the Python object alive through the native call above
     var arena = mx_run(prog, PythonObject(None), context)
     var flags = arena.i32(OUT + 2)
     if (flags & _AX_NEG) and (flags & _AX_POS):
         var store = py_call(context["array_type"], PythonObject("d"), py_call(context["native_bytes_type"], 8 * n))
         memcpy(dest=FAMILY_F64P(unsafe_from_address=Int(py=py_call(store.buffer_info)[0])),
                src=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(xa))), count=n)
+        _ = xa  # keep the Python object alive through the native call above
         raise Error("x is neither increasing nor decreasing : " + family_str(py_call(store.tolist)) + ".")
     return PythonObject(arena.f64(OUT))
 
@@ -193,6 +199,7 @@ def _f64_words(values: PythonObject, n: Int, context: PythonObject) raises -> Py
     var words = family_array(Python.tuple(PythonObject(2 * n)), "<i4", context)
     memcpy(dest=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(words))),
            src=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(values))), count=n)
+    _ = words  # keep the Python object alive through the native call above
     return words
 
 
@@ -378,7 +385,9 @@ def _average_precision(args: PythonObject, context: PythonObject) raises -> Pyth
             edge = True
     if not edge:
         if average is None:
-            return arena.words(sc, 2 * k, Python.tuple(PythonObject(k)), "<f8", context)
+            var _keep_ret_sc = arena.words(sc, 2 * k, Python.tuple(PythonObject(k)), "<f8", context)
+            _ = sc  # keep the Python object alive through the native call above
+            return _keep_ret_sc^
         return PythonObject(arena.f64(res))
     # a class whose AP needs the curve rule takes the fold's own rule
     var scores = List[Float64]()
@@ -389,16 +398,22 @@ def _average_precision(args: PythonObject, context: PythonObject) raises -> Pyth
             scores.append(arena.f64(sc + 2 * c))
     var words = family_array(Python.tuple(PythonObject(2 * k)), "<i4", context)
     var dst = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(words)))
+    _ = words  # keep the Python object alive through the native call above
     for c in range(k):  # driver-loop: over the classes' scores
         dst[c] = scores[c]
+        _ = words  # keep the Python object alive through the native call above
     if average is None:
         var result = family_array(Python.tuple(PythonObject(k)), "<f8", context)
         memcpy(dest=FAMILY_F64P(unsafe_from_address=Int(py=classical_address(result))), src=dst, count=k)
+        _ = result  # keep the Python object alive through the native call above
+        _ = words  # keep the Python object alive through the native call above
         return result
     var p2 = MxProg(context)
     var SC = p2.put_i32(words)
     var SUP = p2.put_i32(arena.words(sup, 2 * k, Python.tuple(PythonObject(2 * k)), "<i4", context))
+    _ = sup  # keep the Python object alive through the native call above
     var res2 = _stage_average(p2, SC, SUP, k, avg == "weighted")
+    _ = sup  # keep the Python object alive through the native call above
     var a2 = mx_run(p2, args[4], context)
     return PythonObject(a2.f64(res2))
 

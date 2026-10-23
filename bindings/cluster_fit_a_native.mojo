@@ -175,6 +175,7 @@ def _aux(parts: PythonObject, context: PythonObject) raises -> PythonObject:
         return PythonObject(None)
     var out = family_array(Python.tuple(total), "<f4", context)
     var base = Int(py=classical_address(out))
+    _ = out  # keep the Python object alive through the native call above
     var offset = 0
     for t in range(len(arrays)):  # small-loop(the aux block's parts): one copy each
         var a = arrays[t]
@@ -182,6 +183,7 @@ def _aux(parts: PythonObject, context: PythonObject) raises -> PythonObject:
         if size:
             memcpy(dest=FAMILY_F32P(unsafe_from_address=base + 4 * offset),
                    src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(a))), count=size)
+            _ = a  # keep the Python object alive through the native call above
         offset += size
     _ = arrays^
     return out
@@ -700,6 +702,7 @@ def _head(array: PythonObject, count: Int, typestr: String, context: PythonObjec
     if count:
         memcpy(dest=FAMILY_I32P(unsafe_from_address=Int(py=classical_address(out))),
                src=FAMILY_I32P(unsafe_from_address=Int(py=classical_address(array))), count=count)
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -735,6 +738,8 @@ def _hdbscan_fit(model: PythonObject, binding: PythonObject, source: PythonObjec
     var x = family_cast_view(view, "X", context)
     # `as_f32_c`'s `copied`: the cast made new storage.
     var copied = Int(py=classical_address(x)) != Int(py=classical_address(view))
+    _ = x  # keep the Python object alive through the native call above
+    _ = view  # keep the Python object alive through the native call above
     _ = view^
     var n = Int(py=x.shape[0])
     var d = Int(py=x.shape[1])
@@ -794,6 +799,10 @@ def _hdbscan_fit(model: PythonObject, binding: PythonObject, source: PythonObjec
     # x, labels_out, core_dists_out, info_out
     var addrs = Python.list(classical_address(x), classical_address(labels), classical_address(core),
                             classical_address(info))
+    _ = core  # keep the Python object alive through the native call above
+    _ = labels  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
+    _ = info  # keep the Python object alive through the native call above
     var probs = family_array(Python.tuple(n), "<f4", context)
     var t_par = PythonObject(None)
     var t_ch = PythonObject(None)
@@ -809,12 +818,18 @@ def _hdbscan_fit(model: PythonObject, binding: PythonObject, source: PythonObjec
         t_sz = family_array(Python.tuple(2 * n), "<i4", context)
         t_inv = family_array(Python.tuple(n), "<i4", context)
         _ = py_call(addrs.append, classical_address(t_par))
+        _ = t_par  # keep the Python object alive through the native call above
         _ = py_call(addrs.append, classical_address(t_ch))
+        _ = t_ch  # keep the Python object alive through the native call above
         _ = py_call(addrs.append, classical_address(t_lam))
+        _ = t_lam  # keep the Python object alive through the native call above
         _ = py_call(addrs.append, classical_address(t_sz))
+        _ = t_sz  # keep the Python object alive through the native call above
         _ = py_call(addrs.append, classical_address(t_inv))
+        _ = t_inv  # keep the Python object alive through the native call above
     # probabilities_out, always LAST (DEVIATION 5116)
     _ = py_call(addrs.append, classical_address(probs))
+    _ = probs  # keep the Python object alive through the native call above
     _hdbscan_mode(model, binding, context)
     # n, d, min_samples, min_cluster_size, max_cluster_size, alpha,
     # allow_single_cluster, cluster_selection_method, cluster_selection_epsilon, metric
@@ -842,6 +857,8 @@ def _hdbscan_fit(model: PythonObject, binding: PythonObject, source: PythonObjec
             raw = family_array(Python.tuple(n, d), "<f4", context)
             memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(raw))),
                    src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), count=n * d)
+            _ = raw  # keep the Python object alive through the native call above
+            _ = x  # keep the Python object alive through the native call above
         _set(model, "_raw_data", raw)
     _ = x^
     _ = info^
@@ -890,6 +907,17 @@ def _hdbscan_prediction_data(model: PythonObject, binding: PythonObject, n: Int,
                     classical_address(offsets), classical_address(index_into)),
         Python.list(PythonObject(n), PythonObject(n_edges), PythonObject(n_cond), PythonObject(n_sel)),
     )
+    _ = labels  # keep the Python object alive through the native call above
+    _ = children  # keep the Python object alive through the native call above
+    _ = parents  # keep the Python object alive through the native call above
+    _ = inverse  # keep the Python object alive through the native call above
+    _ = sizes  # keep the Python object alive through the native call above
+    _ = lambdas  # keep the Python object alive through the native call above
+    _ = exemplar_idx  # keep the Python object alive through the native call above
+    _ = selected  # keep the Python object alive through the native call above
+    _ = deaths  # keep the Python object alive through the native call above
+    _ = index_into  # keep the Python object alive through the native call above
+    _ = offsets  # keep the Python object alive through the native call above
     var n_exemplars = Int(py=_int(n_ex))
     py_setitem(pd, PythonObject("n_exemplars"), PythonObject(n_exemplars))
     py_setitem(pd, PythonObject("exemplar_idx"), _head(exemplar_idx, max(n_exemplars, 1), "<i4", context))

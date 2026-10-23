@@ -85,6 +85,8 @@ def _as_i32(source: PythonObject, name: String, context: PythonObject) raises ->
     var out = family_array(Python.tuple(n), "<i4", context)
     cfb_f64_to_i32(FAMILY_F64P(unsafe_from_address=Int(py=classical_address(wide))),
                    FAMILY_I32P(unsafe_from_address=Int(py=classical_address(out))), n)
+    _ = wide  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
     _ = wide^
     _ = view^
     return out
@@ -148,6 +150,7 @@ def _coo_triples(source: PythonObject, who: String, base: PythonObject, context:
     if size:
         nnz = Int(py=family_call(family_entry(base, "nonzero_f64_count", context), classical_address(dense),
                                  PythonObject(size)))
+        _ = dense  # keep the Python object alive through the native call above
     var rows = family_array(Python.tuple(nnz), "<i4", context)
     var cols = family_array(Python.tuple(nnz), "<i4", context)
     var vals = family_array(Python.tuple(nnz), "<f4", context)
@@ -157,6 +160,10 @@ def _coo_triples(source: PythonObject, who: String, base: PythonObject, context:
                                    PythonObject(n), PythonObject(n),
                                    Python.list(classical_address(rows), classical_address(cols), classical_address(vals)),
                                    PythonObject(nnz)))
+    _ = dense  # keep the Python object alive through the native call above
+    _ = vals  # keep the Python object alive through the native call above
+    _ = cols  # keep the Python object alive through the native call above
+    _ = rows  # keep the Python object alive through the native call above
     _ = dense^
     if wrote != nnz:
         raise Error("RuntimeError: mojolearn " + who + ": nonzero_f64_fill wrote "
@@ -182,6 +189,9 @@ def _dense_coo(m: PythonObject, who: String, base: PythonObject, context: Python
                                        PythonObject(n_r), PythonObject(n_c),
                                        Python.list(classical_address(rows), classical_address(cols), classical_address(data)),
                                        PythonObject(nnz)))
+        _ = data  # keep the Python object alive through the native call above
+        _ = cols  # keep the Python object alive through the native call above
+        _ = rows  # keep the Python object alive through the native call above
         if wrote != nnz:
             raise Error("RuntimeError: mojolearn: nonzero_f32_fill wrote " + String(wrote) + " of "
                         + String(nnz) + " entries")
@@ -199,6 +209,7 @@ def _x_decomp_input(source: PythonObject, context: PythonObject) raises -> Pytho
     var a = family_as_f32(x, 2, "X", context)
     if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(a))), Int(py=a.size)):
         raise Error("X: input must be finite; NaN/inf are unsupported")
+    _ = a  # keep the Python object alive through the native calls above
     return a
 
 
@@ -262,6 +273,7 @@ def _rbf_affinity(x: PythonObject, gamma: Float64, xdecomp: PythonObject, contex
             _ = family_call(ew, dscaled, done, done, dexp, params_exp, PythonObject(0.0))
             _ = family_call(family_entry(xdecomp, "x_decomp_dev_download", context), dexp, classical_address(out),
                             PythonObject(nn))
+            _ = out  # keep the Python object alive through the native call above
         except error:
             _cells_free(free, ids)
             raise error^
@@ -270,6 +282,7 @@ def _rbf_affinity(x: PythonObject, gamma: Float64, xdecomp: PythonObject, contex
     var sq = family_array(Python.tuple(n, n), "<f4", context)
     _ = family_call(family_entry(xdecomp, "x_decomp_sqdist", context), classical_address(x), classical_address(x),
                     classical_address(sq), Python.list(PythonObject(n), PythonObject(n), PythonObject(d)))
+    _ = sq  # keep the Python object alive through the native call above
     var one = family_array(Python.tuple(1), "<f4", context)
     var host_ew = family_entry(xdecomp, "x_decomp_ew", context)
     var scaled = family_array(Python.tuple(n, n), "<f4", context)
@@ -277,11 +290,17 @@ def _rbf_affinity(x: PythonObject, gamma: Float64, xdecomp: PythonObject, contex
                     classical_address(scaled),
                     Python.list(PythonObject(_OP_SCALE), PythonObject(nn), PythonObject(n), PythonObject(1),
                                 PythonObject(3), PythonObject(1), PythonObject(3)), scale)
+    _ = one  # keep the Python object alive through the native call above
+    _ = sq  # keep the Python object alive through the native call above
+    _ = scaled  # keep the Python object alive through the native call above
     _ = sq^
     _ = family_call(host_ew, classical_address(scaled), classical_address(one), classical_address(one),
                     classical_address(out),
                     Python.list(PythonObject(_OP_EXP), PythonObject(nn), PythonObject(n), PythonObject(1),
                                 PythonObject(3), PythonObject(1), PythonObject(3)), PythonObject(0.0))
+    _ = scaled  # keep the Python object alive through the native call above
+    _ = one  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
     _ = scaled^
     _ = one^
     return out
@@ -333,7 +352,12 @@ def _knn_affinity(fields: PythonObject, source: PythonObject, clustering: Bool, 
                                 classical_address(vals) if sp and nnz else zero,
                                 classical_address(a), classical_address(status)),
                     Python.list(PythonObject(n), PythonObject(k), PythonObject(nnz), PythonObject(1 if sp else 0)))
+    _ = dense  # keep the Python object alive through the native call above
+    _ = rows  # keep the Python object alive through the native call above
+    _ = cols  # keep the Python object alive through the native call above
+    _ = vals  # keep the Python object alive through the native call above
     _ = status  # keep the Python object alive through the native call above
+    _ = a  # keep the Python object alive through the native call above
     var words = FAMILY_I32P(unsafe_from_address=Int(py=classical_address(status)))
     _ = status  # keep the Python object alive through the native call above
     var code = Int(words[0])
@@ -591,9 +615,13 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
         var params = Python.list(PythonObject(n))
         _ = py_call(params.extend, params_tail)
         var addrs = Python.list(classical_address(dense), classical_address(labels), classical_address(embedding))
+        _ = embedding  # keep the Python object alive through the native call above
+        _ = labels  # keep the Python object alive through the native call above
+        _ = dense  # keep the Python object alive through the native call above
         if predicting:
             state = _state_arrays(n, k, clusters, context)
             addrs = _addresses(addrs, state)
+            _ = addrs  # keep the Python object alive through the native call above
         n_out = Int(py=family_call(dense_fn, addrs, params))
         _sc_refusal(n_out, "SpectralClustering")
     elif graph_affinity:
@@ -632,11 +660,15 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
                                        _addresses(Python.list(classical_address(coo.rows), classical_address(coo.cols),
                                                               classical_address(coo.vals), classical_address(labels),
                                                               classical_address(embedding)), state), params))
+            _ = labels  # keep the Python object alive through the native call above
+            _ = embedding  # keep the Python object alive through the native call above
         else:
             n_out = Int(py=family_call(family_entry(metrics, "spectral_fit_predict_graph", context),
                                        classical_address(coo.rows), classical_address(coo.cols),
                                        classical_address(coo.vals), classical_address(labels),
                                        classical_address(embedding), params))
+            _ = labels  # keep the Python object alive through the native call above
+            _ = embedding  # keep the Python object alive through the native call above
     else:
         var x = family_as_f32(source, 2, "X", context)
         py_setitem(fields, "input_copied_", PythonObject(not (x is source)))
@@ -644,6 +676,7 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
             raise Error("mojolearn SpectralClustering: X contains NaN or "
                         + "infinity (the implemented path refuses it by name before any "
                         + "recorded stage)")
+        _ = x  # keep the Python object alive through the native calls above
         n = Int(py=x.shape[0])
         var d = Int(py=x.shape[1])
         _sc_check_shape(fields, n, k)
@@ -662,6 +695,9 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
             n_out = Int(py=family_call(family_entry(metrics, "spectral_fit_predict_dataset_state", context),
                                        _addresses(Python.list(classical_address(x), classical_address(labels),
                                                               classical_address(embedding)), state), params))
+            _ = x  # keep the Python object alive through the native call above
+            _ = labels  # keep the Python object alive through the native call above
+            _ = embedding  # keep the Python object alive through the native call above
             # A borrowed input is copied so a caller's later write cannot
             # move what predict reads.
             py_setitem(fields, "_fit_X", cfb_borrow_copy(x, source, context))
@@ -669,6 +705,9 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
             n_out = Int(py=family_call(family_entry(metrics, "spectral_fit_predict_dataset", context),
                                        classical_address(x), classical_address(labels), classical_address(embedding),
                                        params))
+            _ = x  # keep the Python object alive through the native call above
+            _ = embedding  # keep the Python object alive through the native call above
+            _ = labels  # keep the Python object alive through the native call above
         py_setitem(fields, "n_features_in_", PythonObject(d))
         _ = x^
     if n_out != k:
@@ -686,6 +725,7 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
         var result = family_call(family_entry(args[3], "x_cluster_call", context), PythonObject(_E_SPECTRAL_ASSIGN),
                                  classical_address(embedding), PythonObject(Int(py=embedding.size)), PythonObject(0),
                                  PythonObject(0), ip, Python.list(PythonObject(0.0)))
+        _ = embedding  # keep the Python object alive through the native call above
         if String(py=assign) == "discretize":
             py_setitem(fields, "n_iter_assign_", PythonObject(_int(result[2][0])))
         labels = _xc_array(result[1][0], Python.tuple(n), "<i4", "i", context)
@@ -742,6 +782,7 @@ def _sc_predict(model: PythonObject, binding: PythonObject, source: PythonObject
         if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(q))), Int(py=q.size)):
             raise Error("mojolearn SpectralClustering.predict: the affinity has a "
                         + "non-finite entry; refused by name")
+        _ = q  # keep the Python object alive through the native calls above
         if family_min(q) < 0:
             raise Error("mojolearn SpectralClustering.predict: the affinity has a "
                         + "negative entry; refused by name, as the fit refuses one")
@@ -766,6 +807,11 @@ def _sc_predict(model: PythonObject, binding: PythonObject, source: PythonObject
                                 PythonObject(_int(py_call(b.getattr, model, PythonObject("_n_clusters")))),
                                 PythonObject(_int(py_call(b.getattr, model, PythonObject("_n_neighbors")))),
                                 PythonObject(code)))
+    _ = q  # keep the Python object alive through the native call above
+    _ = eigenvalues  # keep the Python object alive through the native call above
+    _ = diag  # keep the Python object alive through the native call above
+    _ = emb  # keep the Python object alive through the native call above
+    _ = labels  # keep the Python object alive through the native call above
     _ = q^
     return Python.tuple(labels, emb)
 
@@ -879,6 +925,8 @@ def _se_fit(model: PythonObject, args: PythonObject, source: PythonObject, conte
                                  PythonObject(Int(drop_first)), seed)
         _ = py_call(params.extend, tol_tail)
         n_out = Int(py=family_call(dense_fn, classical_address(dense), classical_address(embedding), params))
+        _ = embedding  # keep the Python object alive through the native call above
+        _ = dense  # keep the Python object alive through the native call above
         _sc_refusal(n_out, "SpectralEmbedding")
     elif graph_affinity:
         var coo: _Coo
@@ -911,11 +959,13 @@ def _se_fit(model: PythonObject, args: PythonObject, source: PythonObject, conte
         n_out = Int(py=family_call(family_entry(metrics, "spectral_embedding_graph", context),
                                    classical_address(coo.rows), classical_address(coo.cols), classical_address(coo.vals),
                                    classical_address(embedding), params))
+        _ = embedding  # keep the Python object alive through the native call above
     else:
         var x = family_as_f32(source, 2, "X", context)
         py_setitem(fields, "input_copied_", PythonObject(not (x is source)))
         if not family_all_finite_f32(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), Int(py=x.size)):
             raise Error("mojolearn SpectralEmbedding: X contains NaN or infinity")
+        _ = x  # keep the Python object alive through the native calls above
         var n = Int(py=x.shape[0])
         var d = Int(py=x.shape[1])
         _se_check_shape(fields, n, n_lanczos)
@@ -932,6 +982,8 @@ def _se_fit(model: PythonObject, args: PythonObject, source: PythonObject, conte
         _ = py_call(params.extend, tol_tail)
         n_out = Int(py=family_call(family_entry(metrics, "spectral_embedding_dataset", context),
                                    classical_address(x), classical_address(embedding), params))
+        _ = x  # keep the Python object alive through the native call above
+        _ = embedding  # keep the Python object alive through the native call above
         py_setitem(fields, "n_features_in_", PythonObject(d))
         _ = x^
     if n_out != k:

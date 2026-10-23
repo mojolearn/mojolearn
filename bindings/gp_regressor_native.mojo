@@ -158,6 +158,7 @@ def _gpr_normalize(model: PythonObject, binding: PythonObject, targets: PythonOb
     var column = family_array(Python.tuple(n, 1), "<f4", context)
     memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(column))),
            src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(targets))), count=n)
+    _ = column  # keep the Python object alive through the native call above
     _ = scaler_fit(scaler, column, PythonObject(None), scaler_context)
     var sf = py_fields(scaler)
     var y_mean = Float64(FAMILY_F32P(unsafe_from_address=Int(py=classical_address(sf["mean_"])))[0])
@@ -166,6 +167,8 @@ def _gpr_normalize(model: PythonObject, binding: PythonObject, targets: PythonOb
     var flat = family_array(Python.tuple(n), "<f4", context)
     memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(flat))),
            src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(scaled))), count=n)
+    _ = flat  # keep the Python object alive through the native call above
+    _ = scaled  # keep the Python object alive through the native call above
     _ = scaled^
     _ = column^
     _ = scaler^
@@ -196,11 +199,17 @@ def _gpr_lml_grad(model: PythonObject, binding: PythonObject, kernel: PythonObje
                     classical_address(free), classical_address(grad), classical_address(scalars)),
         Python.list(PythonObject(n_rows), PythonObject(n_cols), PythonObject(len(arrays[0])), arrays[4],
                     fields["_alpha"]))
+    _ = scalars  # keep the Python object alive through the native call above
+    _ = grad  # keep the Python object alive through the native call above
+    _ = free  # keep the Python object alive through the native call above
     var gp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(grad)))
+    _ = grad  # keep the Python object alive through the native call above
     var out = Python.list()
     for i in range(n_free):  # driver-loop: over the kernel hyperparameters (n_dims entries)
         _ = py_call(out.append, PythonObject(gp[i]))
+        _ = grad  # keep the Python object alive through the native call above
     var lml = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(scalars)))[1]
+    _ = scalars  # keep the Python object alive through the native call above
     _ = free^
     _ = arrays^
     return Python.tuple(family_call(b.int, info), PythonObject(lml), out, grad, scalars)
@@ -246,19 +255,30 @@ def _gpr_optimize(model: PythonObject, binding: PythonObject, x: PythonObject, t
                     classical_address(values_out), classical_address(runs_out)),
         Python.list(PythonObject(n_rows), PythonObject(n_cols), PythonObject(len(arrays[0])), arrays[4],
                     fields["_alpha"], PythonObject(n_runs - 1), low, high))
+    _ = theta_out  # keep the Python object alive through the native call above
+    _ = bounds  # keep the Python object alive through the native call above
+    _ = free  # keep the Python object alive through the native call above
+    _ = runs_out  # keep the Python object alive through the native call above
+    _ = values_out  # keep the Python object alive through the native call above
     var runs = fields["_optimizer_runs"]
     var stops = context["family_gp_opt_stops"]
     var rp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(runs_out)))
+    _ = runs_out  # keep the Python object alive through the native call above
     for r in range(n_runs):  # driver-loop: over the optimizer restarts
         _ = py_call(runs.append, Python.tuple(PythonObject(Int(rp[r * 4])), PythonObject(Int(rp[r * 4 + 1])),
                                               stops[Int(rp[r * 4 + 2])], PythonObject(-rp[r * 4 + 3])))
+        _ = runs_out  # keep the Python object alive through the native call above
     var tp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(theta_out)))
+    _ = theta_out  # keep the Python object alive through the native call above
     var vp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(values_out)))
+    _ = values_out  # keep the Python object alive through the native call above
     var theta = Python.list()
     var params = Python.list()
     for i in range(n_theta):  # driver-loop: over the kernel hyperparameters (n_dims entries)
         _ = py_call(theta.append, PythonObject(tp[i]))
+        _ = theta_out  # keep the Python object alive through the native call above
         _ = py_call(params.append, PythonObject(vp[i]))
+        _ = values_out  # keep the Python object alive through the native call above
     _ = arrays^
     _ = free^
     _ = bounds^
@@ -323,6 +343,11 @@ def _gpr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
                         classical_address(l_out), classical_address(dual), classical_address(scalars)),
             Python.list(PythonObject(n_rows), PythonObject(n_cols), PythonObject(len(arrays[0])), arrays[4],
                         fields["_alpha"]))))
+        _ = targets  # keep the Python object alive through the native call above
+        _ = x  # keep the Python object alive through the native call above
+        _ = scalars  # keep the Python object alive through the native call above
+        _ = dual  # keep the Python object alive through the native call above
+        _ = l_out  # keep the Python object alive through the native call above
         # A ridge too small for float32: a positive alpha is raised tenfold
         # and the fit repeated until the factor exists or the ridge reaches
         # the kernel's unit diagonal, with a warning naming the ridge used.
@@ -336,6 +361,7 @@ def _gpr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
                        + ". Pass a larger alpha to skip this step.")
         _ = family_call(Python.import_module("warnings").warn, PythonObject(message), b.RuntimeWarning)
     var sp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(scalars)))
+    _ = scalars  # keep the Python object alive through the native call above
     py_setitem(fields, "X_train_", x)
     py_setitem(fields, "y_train_", targets)
     py_setitem(fields, "_y_train_mean", PythonObject(y_mean))
@@ -347,9 +373,13 @@ def _gpr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     py_setitem(fields, "alpha_", dual)
     py_setitem(fields, "info_", PythonObject(info))
     py_setitem(fields, "nb_", PythonObject(Int(sp[1])))
+    _ = scalars  # keep the Python object alive through the native call above
     py_setitem(fields, "log_marginal_likelihood_value_", PythonObject(sp[4]))
+    _ = scalars  # keep the Python object alive through the native call above
     py_setitem(fields, "_logdet", PythonObject(sp[2]))
+    _ = scalars  # keep the Python object alive through the native call above
     py_setitem(fields, "_ydotalpha", PythonObject(sp[3]))
+    _ = scalars  # keep the Python object alive through the native call above
     _ = arrays^
     _ = scalars^
 
@@ -417,6 +447,14 @@ def _gpr_predict(model: PythonObject, args: PythonObject, context: PythonObject)
                     classical_address(arrays[3]), classical_address(mean), classical_address(var_out),
                     classical_address(std), classical_address(clamped)),
         params)
+    _ = dual  # keep the Python object alive through the native call above
+    _ = lf  # keep the Python object alive through the native call above
+    _ = xt  # keep the Python object alive through the native call above
+    _ = q  # keep the Python object alive through the native call above
+    _ = var_out  # keep the Python object alive through the native call above
+    _ = mean  # keep the Python object alive through the native call above
+    _ = clamped  # keep the Python object alive through the native call above
+    _ = std  # keep the Python object alive through the native call above
     _ = xt^
     _ = lf^
     _ = dual^
@@ -461,6 +499,12 @@ def _gpr_predict_cov(model: PythonObject, args: PythonObject, context: PythonObj
                     classical_address(arrays[0]), classical_address(arrays[1]), classical_address(arrays[2]),
                     classical_address(arrays[3]), classical_address(mean), classical_address(cov)),
         params)
+    _ = dual  # keep the Python object alive through the native call above
+    _ = lf  # keep the Python object alive through the native call above
+    _ = xt  # keep the Python object alive through the native call above
+    _ = q  # keep the Python object alive through the native call above
+    _ = cov  # keep the Python object alive through the native call above
+    _ = mean  # keep the Python object alive through the native call above
     _ = xt^
     _ = lf^
     _ = dual^
@@ -513,6 +557,11 @@ def _gpr_sample_y(model: PythonObject, args: PythonObject, context: PythonObject
                     classical_address(arrays[0]), classical_address(arrays[1]), classical_address(arrays[2]),
                     classical_address(arrays[3]), classical_address(out)),
         params)
+    _ = dual  # keep the Python object alive through the native call above
+    _ = lf  # keep the Python object alive through the native call above
+    _ = xt  # keep the Python object alive through the native call above
+    _ = q  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
     _ = xt^
     _ = lf^
     _ = dual^
@@ -537,8 +586,10 @@ def _gpr_theta(theta: PythonObject, context: PythonObject) raises -> PythonObjec
     var wide = family_cast_view_f64(view, "theta", context)
     var count = Int(py=wide.size)
     var wp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(wide)))
+    _ = wide  # keep the Python object alive through the native call above
     for i in range(count):  # driver-loop: over the kernel hyperparameters (n_dims entries)
         _ = py_call(out.append, PythonObject(wp[i]))
+        _ = wide  # keep the Python object alive through the native call above
     _ = wide^
     _ = view^
     return out

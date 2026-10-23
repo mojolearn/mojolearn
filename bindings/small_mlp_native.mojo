@@ -291,6 +291,7 @@ def _words_into(value: PythonObject, dims: List[Int], label: String, dst: Int, i
     var source = _source_address(value, view)
     if source != 0:
         parallel_copy_words(source, dst, dims, n, False)
+        _ = source  # keep the Python object alive through the native call above
         return
     var store = py_call(b[].arrays, "i" if integer else "f")
     _ = py_call(store.frombytes, py_call(view.tobytes, "C"))
@@ -298,6 +299,7 @@ def _words_into(value: PythonObject, dims: List[Int], label: String, dst: Int, i
         raise Error("SmallMLPTrainer " + label + " must have shape " + _shape_text(dims))
     var fortran = value.__class__ is b[].array_cls and String(py=value.order) == "F" and len(dims) > 1
     parallel_copy_words(Int(py=store.buffer_info()[0]), dst, dims, n, fortran)
+    _ = store  # keep the Python object alive through the native call above
     _ = store^
 
 
@@ -338,6 +340,7 @@ def _targets_in(value: PythonObject, rows: Int) raises -> List[Int32]:
         packed = py_call(b[].arrays, fmt)
         _ = py_call(packed.frombytes, py_call(view.tobytes, "C"))
         source = Int(py=packed.buffer_info()[0])
+        _ = packed  # keep the Python object alive through the native call above
         itemsize = Int(py=packed.itemsize)
     try:
         mlp_targets_into(source, itemsize, signed, rows, MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(ids.unsafe_ptr())))
@@ -510,6 +513,7 @@ def _state_from_dict(state: PythonObject, mode: String) raises -> MlpState:
 def _f32_array_of(addr: Int, dims: List[Int]) raises -> PythonObject:
     var out = generation_array(dims)
     mlp_copy_f32(addr, Int(py=out._addr), Int(py=out.size))
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -520,6 +524,7 @@ def _weights_out(state: MlpState) raises -> PythonObject:
     for i in range(4):  # driver-loop: over the fixed MLP parameter registry
         var out = generation_array(_dims(i))
         mlp_copy_tensor_out(state, i, Int(py=out._addr))
+        _ = out  # keep the Python object alive through the native call above
         py_setitem(weights, names[i], out)
     return weights
 
@@ -541,9 +546,11 @@ def _state_out(state: MlpState, mode: String) raises -> PythonObject:
     py_setitem(opt, "v", _f32_array_of(state.v_addr(), [MLP_TOTAL]))
     var flags = generation_array([4], "i")
     var fp = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=flags._addr))
+    _ = flags  # keep the Python object alive through the native call above
     var sp = Pointer[Int32, ImmUntrackedOrigin](unsafe_from_address=state.flags_addr())
     for i in range(4):  # small-loop(the four optimizer flag words)
         fp[i] = sp[i]
+        _ = flags  # keep the Python object alive through the native call above
     py_setitem(opt, "flags", flags)
     py_setitem(result, "optimizer", opt)
     var cfg = bi.dict()
@@ -653,12 +660,19 @@ def _resident_steps(index: Int, entries: PythonObject, x: List[Float32], y: List
     var dx = generation_array([rows, 8]) if want_dx else PythonObject(None)
     var scratch_dx = List[Float32](length=1, fill=Float32(0))
     var dx_addr = Int(py=dx._addr) if want_dx else Int(scratch_dx.unsafe_ptr())
+    _ = dx  # keep the Python object alive through the native call above
     var t = store[].slots[index].state.step + 1
     ref s = store[].slots[index].state
     # addresses and params in this exact order (mirrored word for word in
     # `bindings/_mojolearn_training.mojo::mlp_resident_steps_binding`).
     var addresses = Python.list(Int(x.unsafe_ptr()), Int(y.unsafe_ptr()), Int(losses.unsafe_ptr()),
                                 logits._addr, g0._addr, g1._addr, g2._addr, g3._addr, dx_addr)
+    _ = dx  # keep the Python object alive through the native call above
+    _ = g3  # keep the Python object alive through the native call above
+    _ = g2  # keep the Python object alive through the native call above
+    _ = g1  # keep the Python object alive through the native call above
+    _ = g0  # keep the Python object alive through the native call above
+    _ = logits  # keep the Python object alive through the native call above
     var params = Python.list(rows, k, mode, t, s.lr, s.beta1, s.beta2, s.eps, s.weight_decay, 1 if want_dx else 0)
     var entry = entries["mlp_resident_steps"] if k > 1 else entries["mlp_resident_step"]
     var written = _native_resident_step(entry, PythonObject(handle), addresses, params)
@@ -719,6 +733,12 @@ def _fused(mut state: MlpState, entries: PythonObject, x: List[Float32], y: List
                                 g3._addr if grads else PythonObject(sg + 4 * mlp_offset(3)),
                                 dx._addr if want_dx else PythonObject(Int(scratch.unsafe_ptr())),
                                 Int(info.unsafe_ptr()))
+    _ = logits  # keep the Python object alive through the native call above
+    _ = g0  # keep the Python object alive through the native call above
+    _ = g1  # keep the Python object alive through the native call above
+    _ = g2  # keep the Python object alive through the native call above
+    _ = g3  # keep the Python object alive through the native call above
+    _ = dx  # keep the Python object alive through the native call above
     var params = Python.list(rows, mode, t, state.lr, state.beta1, state.beta2, state.eps,
                              state.weight_decay, 1 if want_dx else 0)
     var written = _native_step(entries["mlp_train_step"], addresses, params)
@@ -786,6 +806,7 @@ def _predict_route(state: MlpState, entries: PythonObject, x: List[Float32], row
     var hidden = List[Float32](length=rows * 16, fill=Float32(0))
     var logits = generation_array([rows, 3])
     _forward_into(state, entries, Int(x.unsafe_ptr()), rows, Int(hidden.unsafe_ptr()), Int(py=logits._addr))
+    _ = logits  # keep the Python object alive through the native call above
     _ = hidden^
     return logits
 
@@ -798,6 +819,7 @@ def _gradient(state: MlpState, entries: PythonObject, x: List[Float32], y: List[
     var ha = Int(hidden.unsafe_ptr())
     var logits = generation_array([rows, 3])
     _forward_into(state, entries, xa, rows, ha, Int(py=logits._addr))
+    _ = logits  # keep the Python object alive through the native call above
     var loss = List[Float32](length=1, fill=Float32(0))
     var row_loss = List[Float32](length=rows, fill=Float32(0))
     var dlogits = List[Float32](length=rows * 3, fill=Float32(0))
@@ -807,6 +829,7 @@ def _gradient(state: MlpState, entries: PythonObject, x: List[Float32], y: List[
     # (bindings/_mojolearn_training.mojo::ce_loss_binding).
     _ = py_call_typed(entries["ce_loss"], Int(loss.unsafe_ptr()), Int(row_loss.unsafe_ptr()), dl, logits._addr,
                 Int(y.unsafe_ptr()), Python.list(rows, 3, -100, 2, 0, 1, 0.0))
+    _ = logits  # keep the Python object alive through the native call above
     var value = mlp_read_f32(Int(loss.unsafe_ptr()))
     if not isfinite(value):
         raise Error("RuntimeError: SmallMLPTrainer loss is not finite")
@@ -816,7 +839,9 @@ def _gradient(state: MlpState, entries: PythonObject, x: List[Float32], y: List[
     var dw2 = generation_array(_dims(2))
     var db2 = generation_array(_dims(3))
     _gemm_into(entries, dl, ha, Int(py=dw2._addr), 3, 16, rows, _TN)
+    _ = dw2  # keep the Python object alive through the native call above
     _sum_into(entries, dl, Int(py=db2._addr), rows, 3)
+    _ = db2  # keep the Python object alive through the native call above
     var incoming = List[Float32](length=rows * 16, fill=Float32(0))
     _gemm_into(entries, dl, state.params_addr(2), Int(incoming.unsafe_ptr()), rows, 16, 3, _NN)
     var dhidden = List[Float32](length=rows * 16, fill=Float32(0))
@@ -826,11 +851,14 @@ def _gradient(state: MlpState, entries: PythonObject, x: List[Float32], y: List[
         raise Error("RuntimeError: SmallMLPTrainer ReLU gradient returned an invalid result")
     mlp_require_result_finite(dh, rows * 16, "ReLU gradient")
     _gemm_into(entries, dh, xa, Int(py=dw1._addr), 16, 8, rows, _TN)
+    _ = dw1  # keep the Python object alive through the native call above
     _sum_into(entries, dh, Int(py=db1._addr), rows, 16)
+    _ = db1  # keep the Python object alive through the native call above
     var dx = PythonObject(None)
     if want_dx:
         dx = generation_array([rows, 8])
         _gemm_into(entries, dh, state.params_addr(0), Int(py=dx._addr), rows, 8, 16, _NN)
+        _ = dx  # keep the Python object alive through the native call above
     _ = hidden^
     _ = loss^
     _ = row_loss^
@@ -1166,6 +1194,7 @@ def _predict_sessions(handle: Int, inputs: PythonObject) raises -> PythonObject:
         var owned = List[Float32](length=max(n, 1), fill=Float32(0))
         if n > 0:
             _words_into(value, dims, "session input", Int(owned.unsafe_ptr()))
+            _ = value  # keep the Python object alive through the native call above
         _ = py_call(addresses.append, Int(owned.unsafe_ptr()))
         _ = py_call(shapes.append, shape)
         sessions.append(owned^)
@@ -1181,10 +1210,12 @@ def _predict_sessions(handle: Int, inputs: PythonObject) raises -> PythonObject:
     if on_session:
         wrote = Int(py=py_call_typed(entries["mlp_sessions_resident"], PythonObject(resident),
             Python.list(out._addr), addresses, shapes, py_ints([8, 16, 3])))
+        _ = out  # keep the Python object alive through the native call above
     else:
         wrote = Int(py=py_call_typed(entries["mlp_sessions"],
             Python.list(out._addr, s.params_addr(0), s.params_addr(1), s.params_addr(2), s.params_addr(3)),
             addresses, shapes, py_ints([8, 16, 3])))
+        _ = out  # keep the Python object alive through the native call above
     _ = sessions^
     if wrote != Int(py=out.size):
         raise Error("RuntimeError: MLP sessions returned an invalid output count")
@@ -1231,8 +1262,12 @@ def _decode_array(value: PythonObject, dims: List[Int], integer: Bool) raises ->
     var out = generation_array(dims, "i" if integer else "f")
     if integer:
         mlp_copy_i32(Int(py=store.buffer_info()[0]), Int(py=out._addr), cells)
+        _ = out  # keep the Python object alive through the native call above
+        _ = store  # keep the Python object alive through the native call above
     else:
         mlp_copy_f32(Int(py=store.buffer_info()[0]), Int(py=out._addr), cells)
+        _ = out  # keep the Python object alive through the native call above
+        _ = store  # keep the Python object alive through the native call above
     _ = store^
     return out
 

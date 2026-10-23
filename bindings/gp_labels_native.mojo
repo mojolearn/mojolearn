@@ -52,6 +52,8 @@ def _gp_prepare(address: Int, code: Int, n: Int, as_bool: Bool, base: PythonObje
         k = Int(py=py_call(entry, PythonObject(address), PythonObject(code), PythonObject(n),
                            classical_address(classes), classical_address(codes), PythonObject(0),
                            PythonObject(0), PythonObject(0)))
+        _ = codes  # keep the Python object alive through the native call above
+        _ = classes  # keep the Python object alive through the native call above
     except error:
         if String(error).find("NaN label") != -1:
             raise Error(String(_NAN_LABEL))
@@ -59,15 +61,20 @@ def _gp_prepare(address: Int, code: Int, n: Int, as_bool: Bool, base: PythonObje
     var values = Python.list()
     if wide:
         var fp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(classes)))
+        _ = classes  # keep the Python object alive through the native call above
         for i in range(k):  # driver-loop: over the distinct classes
             _ = py_call(values.append, PythonObject(fp[i]))
+            _ = classes  # keep the Python object alive through the native call above
     else:
         var ip = FAMILY_I64P(unsafe_from_address=Int(py=classical_address(classes)))
+        _ = classes  # keep the Python object alive through the native call above
         for i in range(k):  # driver-loop: over the distinct classes
             if as_bool:
                 _ = py_call(values.append, PythonObject(Bool(ip[i] != 0)))
+                _ = classes  # keep the Python object alive through the native call above
             else:
                 _ = py_call(values.append, PythonObject(Int(ip[i])))
+                _ = classes  # keep the Python object alive through the native call above
     _ = classes^
     return Python.tuple(values, codes)
 
@@ -289,6 +296,7 @@ def gp_decode_labels(classes: PythonObject, codes: PythonObject, base: PythonObj
             _ = family_call(family_entry(base, String("gather_i64") if kind == "int" else String("gather_f64"), context),
                             py_call(table.buffer_info)[0], PythonObject(k), classical_address(codes),
                             PythonObject(n), classical_address(out))
+            _ = out  # keep the Python object alive through the native call above
             _ = table^
             return out
     var rows = family_call(py_call(b.memoryview, codes._store).tolist)

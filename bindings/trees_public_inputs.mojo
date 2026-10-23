@@ -269,7 +269,9 @@ def _view_of_buffer(value: PythonObject, name: String, context: PythonObject) ra
         for k in range(len(shape)):  # driver-loop: over array rank metadata
             _ = py_call(pyshape.append, shape[k])
         return _view_of_array(classical_wrap_array(store, py_call(trees_builtins().tuple, pyshape), typestr, "C", context))
-    return TreesView(view, _any_contiguous_address(view), shape^, strides^, typestr, item)
+    var _keep_ret_view = TreesView(view, _any_contiguous_address(view), shape^, strides^, typestr, item)
+    _ = view  # keep the Python object alive through the native call above
+    return _keep_ret_view^
 
 
 def _pandas_values(source: PythonObject) raises -> PythonObject:
@@ -409,6 +411,7 @@ def trees_f32_view(var view: TreesView, order: String, context: PythonObject) ra
     var shape = Python.tuple(rows, cols) if two else Python.tuple(rows)
     var out = trees_empty(shape, "<f4", context, "F" if want_f and two else "C")
     var dst = trees_address(out)
+    _ = out  # keep the Python object alive through the native call above
     var contiguous_c = view.c_order()
     var contiguous_f = view.f_order()
     if (view.typestr == "<f8" or view.typestr == "<f4") and (contiguous_c or contiguous_f):
@@ -436,10 +439,12 @@ def trees_f32_view(var view: TreesView, order: String, context: PythonObject) ra
         return TreesMatrix(out, dst, rows, cols, not want_f)
     var staged = trees_vector(view.size(), "<f4", context)
     trees_cast(view.addr, view.typestr, trees_address(staged), "<f4", view.size(), context)
+    _ = staged  # keep the Python object alive through the native call above
     var r = cols if contiguous_f else rows
     var c = rows if contiguous_f else cols
     _ = py_call_typed(trees_helper(context, "transpose_f32"), PythonObject(trees_address(staged)), PythonObject(dst),
                       PythonObject(r), PythonObject(c))
+    _ = staged  # keep the Python object alive through the native call above
     _ = staged^
     return TreesMatrix(out, dst, rows, cols, not want_f)
 
@@ -450,7 +455,9 @@ def trees_forest_layout(source: PythonObject, name: String, context: PythonObjec
     (`as_f32_colmajor`)."""
     var view = trees_view(source, name, context)
     if view.ndim() == 2 and view.typestr == "<f4" and view.size() > 0 and view.c_order() and not view.both_orders():
-        return TreesMatrix(view.keep, view.addr, view.shape[0], view.shape[1], True)
+        var _keep_ret_view = TreesMatrix(view.keep, view.addr, view.shape[0], view.shape[1], True)
+        _ = view  # keep the Python object alive through the native call above
+        return _keep_ret_view^
     trees_check_rank(view, 2, name)
     return trees_f32_view(view^, "F", context)
 
@@ -475,7 +482,9 @@ def trees_check_sample_weight(source: PythonObject, n: Int, context: PythonObjec
     var b = trees_builtins()
     if source is None:
         var ones = trees_full_f32(n, 1.0, context)
-        return TreesMatrix(ones, trees_address(ones), n, 1, True)
+        var _keep_ret_ones = TreesMatrix(ones, trees_address(ones), n, 1, True)
+        _ = ones  # keep the Python object alive through the native call above
+        return _keep_ret_ones^
     var cls = py_type(source)
     var scalar = False
     var value = Float64(0)
@@ -504,11 +513,15 @@ def trees_check_sample_weight(source: PythonObject, n: Int, context: PythonObjec
         var w = trees_f32_view(view^, "C", context)
         if n:
             trees_prepare_weights(w.addr, n, context)
+            _ = w  # keep the Python object alive through the native call above
         return w^
     var out = trees_full_f32(n, value, context)
     if n:
         trees_prepare_weights(trees_address(out), n, context)
-    return TreesMatrix(out, trees_address(out), n, 1, True)
+        _ = out  # keep the Python object alive through the native call above
+    var _keep_ret_out = TreesMatrix(out, trees_address(out), n, 1, True)
+    _ = out  # keep the Python object alive through the native call above
+    return _keep_ret_out^
 
 
 def trees_prepare_weights(addr: Int, n: Int, context: PythonObject) raises:
@@ -575,6 +588,7 @@ def _native_labels(view: TreesView, bool_source: Bool, context: PythonObject) ra
                                 PythonObject(_encode_code(view.typestr)), PythonObject(n),
                                 PythonObject(trees_address(classes_store)), PythonObject(trees_address(codes)),
                                 PythonObject(0), PythonObject(0), PythonObject(0)))
+        _ = codes  # keep the Python object alive through the native call above
         _ = classes_store  # keep the Python object alive through the native call above
     except error:
         var message = String(error)
@@ -689,8 +703,10 @@ def _sorted_classes(labels: PythonObject, context: PythonObject) raises -> Trees
         py_setitem(index, classes[i], PythonObject(i))
     var codes = trees_vector(n, "<i4", context)
     var p = _I32P(unsafe_from_address=trees_address(codes))
+    _ = codes  # keep the Python object alive through the native call above
     for i in range(n):  # cpu-route: Python label objects, the explicit label input step
         p[i] = Int32(Int(py=index[labels[i]]))
+        _ = codes  # keep the Python object alive through the native call above
     return TreesLabels(classes, codes, n)
 
 
@@ -817,6 +833,7 @@ def trees_decode_labels(classes: PythonObject, codes: PythonObject, context: Pyt
             _ = py_call_typed(fn_obj, PythonObject(trees_address(table)), PythonObject(k),
                               PythonObject(trees_address(wide_codes)), PythonObject(n), PythonObject(trees_address(out)))
             _ = table  # keep the Python object alive through the native call above
+            _ = out  # keep the Python object alive through the native call above
             _ = wide_codes  # keep the Python object alive through the native call above
             return out
     var values = Python.list()
@@ -839,6 +856,7 @@ def trees_argmax_rows(scores: PythonObject, rows: Int, cols: Int, wide: Bool, co
     var fn_obj = trees_helper(context, "argmax_rows_f64" if wide else "argmax_rows_f32")
     _ = py_call_typed(fn_obj, PythonObject(trees_address(scores)), PythonObject(rows), PythonObject(cols),
                       PythonObject(trees_address(out)))
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -922,6 +940,7 @@ def trees_class_weight_rows(class_weight: PythonObject, labels: TreesLabels, xtr
         _ = py_call_typed(rows_entry, PythonObject(trees_address(labels.codes)), PythonObject(trees_address(narrowed)),
                           PythonObject(trees_address(out)), Python.list(n, k))
         _ = narrowed  # keep the Python object alive through the native call above
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -941,8 +960,12 @@ def trees_weighted_rows(sample_weight: PythonObject, class_weight: PythonObject,
     var mul = trees_need(xtrees, "x_trees_mul_f32", "the x_trees binding has no x_trees_mul_f32", "ImportError")
     _ = py_call_typed(mul, PythonObject(sw.addr), PythonObject(trees_address(rows)), PythonObject(trees_address(out)),
                       Python.list(labels.n))
+    _ = out  # keep the Python object alive through the native call above
+    _ = rows  # keep the Python object alive through the native call above
     _ = sw^
-    return TreesMatrix(out, trees_address(out), labels.n, 1, True)
+    var _keep_ret_out = TreesMatrix(out, trees_address(out), labels.n, 1, True)
+    _ = out  # keep the Python object alive through the native call above
+    return _keep_ret_out^
 
 
 def trees_class_rows_only(class_weight: PythonObject, labels: TreesLabels, xtrees: PythonObject,
@@ -951,4 +974,6 @@ def trees_class_rows_only(class_weight: PythonObject, labels: TreesLabels, xtree
     var rows = trees_class_weight_rows(class_weight, labels, xtrees, context)
     if rows is None:
         return None
-    return TreesMatrix(rows, trees_address(rows), labels.n, 1, True)
+    var _keep_ret_rows = TreesMatrix(rows, trees_address(rows), labels.n, 1, True)
+    _ = rows  # keep the Python object alive through the native call above
+    return _keep_ret_rows^

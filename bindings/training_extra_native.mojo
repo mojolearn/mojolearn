@@ -90,6 +90,9 @@ def training_residual_dropout(operation: String, values: PythonObject, entries: 
         var written = py_call_typed(_entry(entries, "residual_dropout", missing),
                                     PythonObject(vv.addr if count else 0), PythonObject(rv.addr if count else 0),
                                     result._addr if count else PythonObject(0), params)
+        _ = rv  # keep the Python object alive through the native call above
+        _ = vv  # keep the Python object alive through the native call above
+        _ = result  # keep the Python object alive through the native call above
         if Int(py=written) != count:
             raise Error("RuntimeError: residual_dropout returned an incomplete output")
         return result
@@ -101,6 +104,9 @@ def training_residual_dropout(operation: String, values: PythonObject, entries: 
     var written = py_call_typed(_entry(entries, "residual_dropout_backward", missing),
                                 PythonObject(gv.addr if count else 0), d_values._addr if count else PythonObject(0),
                                 d_residual._addr if count else PythonObject(0), params)
+    _ = d_values  # keep the Python object alive through the native call above
+    _ = gv  # keep the Python object alive through the native call above
+    _ = d_residual  # keep the Python object alive through the native call above
     if Int(py=written) != count:
         raise Error("RuntimeError: residual_dropout_backward returned incomplete gradients")
     return Python.tuple(d_values, d_residual)
@@ -169,6 +175,8 @@ def training_chunked_lm_head(values: PythonObject, entries: PythonObject, contex
         _ = py_call_typed(_entry(entries, "chunked_lm_head_v2_train", "mojolearn: this training binding lacks "),
                           Python.list(loss._addr, row_max._addr, row_denom._addr, d_hidden._addr, d_weight._addr,
                                       ha, wa, targets[1]), plist)
+        _ = d_weight  # keep the Python object alive through the native call above
+        _ = d_hidden  # keep the Python object alive through the native call above
         _ = row_denom  # keep the Python object alive through the native call above
         _ = row_max  # keep the Python object alive through the native call above
         _ = loss  # keep the Python object alive through the native call above
@@ -226,6 +234,7 @@ def training_mlp_sessions(values: PythonObject, entries: PythonObject) raises ->
     var wrote = py_call_typed(_entry(entries, "mlp_sessions", "mojolearn: this training binding lacks "),
                               Python.list(output._addr, w1, b1, w2, b2), addresses, shapes,
                               Python.list(width, hidden, out_width))
+    _ = output  # keep the Python object alive through the native call above
     if Int(py=wrote) != total_rows * out_width:
         raise Error("RuntimeError: MLP sessions returned an invalid output count")
     _ = keep^

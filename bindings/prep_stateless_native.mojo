@@ -173,8 +173,10 @@ def _words(values: List[Int], context: PythonObject) raises -> PythonObject:
     var count = max(len(values), 1)
     var out = classical_typed(Python.tuple(count), "<f4", context["output_context"])
     var dest = _ptr(out)
+    _ = out  # keep the Python object alive through the native call above
     for i in range(len(values)):  # driver-loop: over polynomial term table words
         dest[i] = Float32(values[i])
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -199,11 +201,15 @@ def _fit(model: PythonObject, kind: String, values: PythonObject, context: Pytho
         var nout = len(start) - 1
         var powers = classical_typed(Python.tuple(max(nout, 1), d), "<i8", context["output_context"])
         var table = I64P(unsafe_from_address=Int(py=classical_address(powers)))
+        _ = powers  # keep the Python object alive through the native call above
         for t in range(nout):  # driver-loop: over polynomial terms
             for i in range(start[t], start[t + 1]):  # driver-loop: over one term's feature indices
                 table[t * d + index[i]] += 1
+                _ = powers  # keep the Python object alive through the native call above
         py_setitem(fields, "_poly_index", _words(index, context))
+        _ = index  # keep the Python object alive through the native call above
         py_setitem(fields, "_poly_start", _words(start, context))
+        _ = start  # keep the Python object alive through the native call above
         py_setitem(fields, "n_output_features_", nout)
         py_setitem(fields, "powers_", powers)
     py_setitem(fields, "n_features_in_", d)
@@ -235,6 +241,7 @@ def _transform(model: PythonObject, kind: String, values: PythonObject, context:
         # X, the threshold word, then the output as arena words.
         var threshold = classical_typed(Python.tuple(1), "<f4", context["output_context"])
         _ptr(threshold)[0] = Float32(Float64(py=py_call(Python.import_module("builtins").float, fields["threshold"])))
+        _ = threshold  # keep the Python object alive through the native call above
         _ = py_call(inputs.append, Python.tuple(n * d, Python.tuple(0, threshold, PythonObject(None), 1, 1)))
         var out = n * d + 1
         var host = out + n * d
@@ -370,7 +377,9 @@ def _f64_input(value: PythonObject, context: PythonObject) raises -> PythonObjec
     # A Python float as its binary64 word, two 4-byte words (`_f64_words`).
     var words = classical_typed(Python.tuple(2), "<f4", context["output_context"])
     var bits = MutPointer[UInt64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(words)))
+    _ = words  # keep the Python object alive through the native call above
     bits[0] = bitcast[DType.uint64](Float64(py=py_call(Python.import_module("builtins").float, value)))
+    _ = words  # keep the Python object alive through the native call above
     return words
 
 
@@ -441,6 +450,7 @@ def _select_transform(model: PythonObject, values: PythonObject, context: Python
     var k = len(keep)
     var entries = _entries(fields["numeric_mode_"], context)
     var columns = _words(keep, context)
+    _ = keep  # keep the Python object alive through the native call above
     var ko = n * d
     var out = ko + k
     var host = out + n * k
@@ -449,10 +459,12 @@ def _select_transform(model: PythonObject, values: PythonObject, context: Python
     var program = List[Int32]()
     _stage(program, OP_GATHER_COLS, n * k, 0, n, d, ko, k, out)
     var inputs = Python.list(Python.tuple(0, values), Python.tuple(ko, Python.tuple(0, columns, PythonObject(None), k, 1)))
+    _ = keep  # keep the Python object alive through the native call above
     var arena = xprep_storage(host, context)
     xprep_run(arena, host, 0, PythonObject(None), 0, program^, inputs, entries, context)
     var result = xprep_take(arena[0], out, n, k, context["output_context"])
     _ = columns^
+    _ = keep  # keep the Python object alive through the native call above
     _ = arena^
     return result
 
@@ -472,6 +484,7 @@ def _run_layout(var program: List[Int32], layout: PrepLayout, inputs: PythonObje
 def _vector(value: Float64, context: PythonObject) raises -> PythonObject:
     var out = classical_typed(Python.tuple(1), "<f4", context["output_context"])
     _ptr(out)[0] = Float32(value)
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -510,9 +523,12 @@ def _quantile_fit(model: PythonObject, values: PythonObject, context: PythonObje
         # The uint64 seed's (low, high) 32-bit words (`_seed_words`).
         seed_words = classical_typed(Python.tuple(2), "<f4", context["output_context"])
         var words = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(seed_words)))
+        _ = seed_words  # keep the Python object alive through the native call above
         var mask = PythonObject(0xFFFFFFFF)
         words[0] = UInt32(Int(py=py_call(b.int.__dict__["__and__"], seed, mask)))
+        _ = seed_words  # keep the Python object alive through the native call above
         words[1] = UInt32(Int(py=py_call(b.int.__dict__["__and__"], py_call(b.int.__dict__["__rshift__"], seed, PythonObject(32)), mask)))
+        _ = seed_words  # keep the Python object alive through the native call above
         _ = py_call(inputs.append, Python.tuple(so, Python.tuple(0, seed_words, PythonObject(None), 2, 1)))
         _stage(program, OP_PERM_ROWS, n, so, n_all, rows)
         _stage(program, OP_RGATHER, n * d, xo, d, rows, sample)
@@ -716,7 +732,9 @@ def _power_fit(model: PythonObject, values: PythonObject, context: PythonObject)
                 bss = layout.work_words(nb * d)
                 bpj = layout.work_words(nb * d)
                 bmean = layout.work_words(d)
+                _ = d  # keep the Python object alive through the native call above
                 bcnt = layout.work_words(d)
+                _ = d  # keep the Python object alive through the native call above
             for k in range(PT_EVALS):  # driver-loop: over the fixed golden-section evaluations
                 # tiled: the device fuses pt_map into pt_fold (LG1 = 0 either way)
                 _stage(program, OP_PT_MAP, n * d, xo, n, d, method, leval, tv, 0 if tiled else lg + 1)

@@ -264,7 +264,9 @@ def lin_out(out_buf: PythonObject, m: Int, n: Int, who: String, context: PythonO
                     + String(m) + ", " + String(n) + ")")
     if not v.c_contig or v.readonly:
         raise Error("mojolearn.linalg." + who + ": out must be C-contiguous and writable")
-    return LinBuf(out_buf, v.addr, v.shape.copy())
+    var _keep_ret_v = LinBuf(out_buf, v.addr, v.shape.copy())
+    _ = v  # keep the Python object alive through the native call above
+    return _keep_ret_v^
 
 
 # ---------------------------------------------------------------------------
@@ -332,10 +334,13 @@ def _lin_matmul(args: PythonObject, context: PythonObject) raises -> PythonObjec
                         + "section 2) and a read-only buffer handed to it is memory "
                         + "corruption, not an exception.")
         out = LinBuf(out_obj, v.addr, v.shape.copy())
+        _ = v  # keep the Python object alive through the native call above
     # ORDER MATCHES bindings/_mojolearn_linalg.mojo::gemm_binding: the output
     # address first, then a and b; params (m, n, k, op).
     _ = lin_call(binding, "gemm", PythonObject(out.addr), PythonObject(a.addr), PythonObject(bb.addr),
                  lin_ints(m, n, k, op))
+    _ = bb  # keep the Python object alive through the native call above
+    _ = a  # keep the Python object alive through the native call above
     _ = a^
     _ = bb^
     return out.keep
@@ -348,6 +353,8 @@ def _lin_to_bf16(args: PythonObject, context: PythonObject) raises -> PythonObje
         raise Error("mojolearn.linalg.to_bf16: x has no elements")
     var out = lin_new(a.shape, "<u2", context)
     _ = lin_call(lin_lowbit(args[0], context), "to_bf16", PythonObject(out.addr), PythonObject(a.addr), lin_ints(n))
+    _ = out  # keep the Python object alive through the native call above
+    _ = a  # keep the Python object alive through the native call above
     _ = a^
     return out.keep
 
@@ -359,6 +366,8 @@ def _lin_from_bf16(args: PythonObject, context: PythonObject) raises -> PythonOb
         raise Error("mojolearn.linalg.from_bf16: bits has no elements")
     var out = lin_new(a.shape, "<f4", context)
     _ = lin_call(lin_lowbit(args[0], context), "from_bf16", PythonObject(out.addr), PythonObject(a.addr), lin_ints(n))
+    _ = out  # keep the Python object alive through the native call above
+    _ = a  # keep the Python object alive through the native call above
     _ = a^
     return out.keep
 
@@ -371,6 +380,8 @@ def lin_quantize_int8(binding: PythonObject, a: LinBuf, context: PythonObject) r
     var exps = lin_new([rows], "<i4", context)
     _ = lin_call(lin_lowbit(binding, context), "quantize_int8", PythonObject(codes.addr), PythonObject(exps.addr),
                  PythonObject(a.addr), lin_ints(rows, cols))
+    _ = exps  # keep the Python object alive through the native call above
+    _ = codes  # keep the Python object alive through the native call above
     return Python.tuple(codes.keep, exps.keep)
 
 
@@ -392,6 +403,9 @@ def _lin_dequantize_int8(args: PythonObject, context: PythonObject) raises -> Py
     var out = lin_new([rows, cols], "<f4", context)
     _ = lin_call(lin_lowbit(args[0], context), "dequantize_int8", PythonObject(out.addr), PythonObject(q.addr),
                  PythonObject(e.addr), lin_ints(rows, cols))
+    _ = out  # keep the Python object alive through the native call above
+    _ = q  # keep the Python object alive through the native call above
+    _ = e  # keep the Python object alive through the native call above
     _ = q^
     _ = e^
     return out.keep
@@ -417,8 +431,10 @@ def _lin_int8_operand(binding: PythonObject, x: PythonObject, name: String, cont
     var v = TensorView()
     _ = lin_view(codes, context, v)
     q = LinBuf(codes, v.addr, v.shape.copy())
+    _ = v  # keep the Python object alive through the native call above
     _ = lin_view(exps, context, v)
     e = LinBuf(exps, v.addr, v.shape.copy())
+    _ = v  # keep the Python object alive through the native call above
 
 
 def _lin_matmul_int8(args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -440,6 +456,11 @@ def _lin_matmul_int8(args: PythonObject, context: PythonObject) raises -> Python
     # `params` is `[m, n, k]`, mirrored in `gemm_int8_binding`.
     _ = lin_call(lin_lowbit(binding, context), "gemm_int8", PythonObject(out.addr), PythonObject(qa.addr),
                  PythonObject(ea.addr), PythonObject(qb.addr), PythonObject(eb.addr), lin_ints(m, n, k))
+    _ = out  # keep the Python object alive through the native call above
+    _ = qa  # keep the Python object alive through the native call above
+    _ = eb  # keep the Python object alive through the native call above
+    _ = qb  # keep the Python object alive through the native call above
+    _ = ea  # keep the Python object alive through the native call above
     _ = qa^
     _ = ea^
     _ = qb^
@@ -499,6 +520,9 @@ def _lin_matmul_bf16(args: PythonObject, context: PythonObject) raises -> Python
     # params (mirrored in gemm_bf16_binding): m, n, k, op, a_bf16
     _ = lin_call(lin_lowbit(binding, context), "gemm_bf16", PythonObject(out.addr), PythonObject(a.addr),
                  PythonObject(bb.addr), lin_ints(m, n, k, op, 1 if a_bits else 0))
+    _ = out  # keep the Python object alive through the native call above
+    _ = a  # keep the Python object alive through the native call above
+    _ = bb  # keep the Python object alive through the native call above
     _ = a^
     _ = bb^
     return out.keep
@@ -513,6 +537,9 @@ def lin_quantize_int15(binding: PythonObject, a: LinBuf, context: PythonObject) 
     var exps = lin_new([rows], "<i4", context)
     # addrs (mirrored in quantize_int15_binding): hi, lo, exponents, x
     var addrs = Python.list(PythonObject(hi.addr), PythonObject(lo.addr), PythonObject(exps.addr), PythonObject(a.addr))
+    _ = exps  # keep the Python object alive through the native call above
+    _ = lo  # keep the Python object alive through the native call above
+    _ = hi  # keep the Python object alive through the native call above
     _ = lin_call(lin_int15(binding, context), "quantize_int15", addrs, lin_ints(rows, cols))
     return Python.tuple(hi.keep, lo.keep, exps.keep)
 
@@ -547,6 +574,10 @@ def _lin_dequantize_int15(args: PythonObject, context: PythonObject) raises -> P
     var out = lin_new([rows, cols], "<f4", context)
     # addrs: y, hi, lo, exponents (mirrored in the binding)
     var addrs = Python.list(PythonObject(out.addr), PythonObject(h.addr), PythonObject(l.addr), PythonObject(e.addr))
+    _ = out  # keep the Python object alive through the native call above
+    _ = e  # keep the Python object alive through the native call above
+    _ = l  # keep the Python object alive through the native call above
+    _ = h  # keep the Python object alive through the native call above
     _ = lin_call(lin_int15(args[0], context), "dequantize_int15", addrs, lin_ints(rows, cols))
     _ = h^
     _ = l^
@@ -570,10 +601,13 @@ def _lin_int15_operand(binding: PythonObject, x: PythonObject, name: String, con
     var v = TensorView()
     _ = lin_view(planes[0], context, v)
     hi = LinBuf(planes[0], v.addr, v.shape.copy())
+    _ = v  # keep the Python object alive through the native call above
     _ = lin_view(planes[1], context, v)
     lo = LinBuf(planes[1], v.addr, v.shape.copy())
+    _ = v  # keep the Python object alive through the native call above
     _ = lin_view(planes[2], context, v)
     e = LinBuf(planes[2], v.addr, v.shape.copy())
+    _ = v  # keep the Python object alive through the native call above
 
 
 def _lin_matmul_int15(args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -602,6 +636,13 @@ def _lin_matmul_int15(args: PythonObject, context: PythonObject) raises -> Pytho
     # b hi, b lo, b exponents; THE OUTPUT ADDRESS COMES FIRST
     var addrs = Python.list(PythonObject(out.addr), PythonObject(ah.addr), PythonObject(al.addr), PythonObject(ea.addr),
                             PythonObject(bh.addr), PythonObject(bl.addr), PythonObject(eb.addr))
+    _ = out  # keep the Python object alive through the native call above
+    _ = ea  # keep the Python object alive through the native call above
+    _ = al  # keep the Python object alive through the native call above
+    _ = ah  # keep the Python object alive through the native call above
+    _ = eb  # keep the Python object alive through the native call above
+    _ = bl  # keep the Python object alive through the native call above
+    _ = bh  # keep the Python object alive through the native call above
     _ = lin_call(lin_int15(binding, context), "gemm_int15", addrs, lin_ints(m, n, k))
     _ = ah^
     _ = al^

@@ -68,6 +68,7 @@ def _run(model: PythonObject, fields: PythonObject, op: Int, x: PythonObject, fr
     var exp_dir = decomp_f32(Python.tuple(nc, v), context)
     var out = decomp_f32(Python.tuple(n, nc), context) if op == _TRANSFORM else PythonObject(None)
     var spare = classical_address(comps)
+    _ = comps  # keep the Python object alive through the native call above
     var online = decomp_eq(fields["learning_method"], PythonObject("online"))
     var bs = 1
     if op == _PARTIAL or (op == _FIT and online):
@@ -80,6 +81,11 @@ def _run(model: PythonObject, fields: PythonObject, op: Int, x: PythonObject, fr
         decomp_int(fields["max_iter"]), 1 if (op == _FIT and online) else 0, bs,
         decomp_int(fields["max_doc_update_iter"]),
         decomp_seed(decomp_attr(model, fields, "_seed")))
+    _ = state_c  # keep the Python object alive through the native call above
+    _ = comps  # keep the Python object alive through the native call above
+    _ = state_e  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
+    _ = exp_dir  # keep the Python object alive through the native call above
     _ = py_call(params.append, py_get(fields, "_draw", PythonObject(0)))
     _ = py_call(params.append, py_get(fields, "n_batch_iter_", PythonObject(1)))
     _ = py_call(params.append, decomp_int(fields["evaluate_every"]))

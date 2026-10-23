@@ -150,6 +150,11 @@ def _gpc_fit_all(ext: PythonObject, x: PythonObject, codes: PythonObject, arrays
         _ = py_call(outs.append, Python.tuple(y01, l_out, pi, wsr, scalars))
         _ = py_call(addrs.extend, Python.list(classical_address(y01), classical_address(l_out), classical_address(pi),
                                               classical_address(wsr), classical_address(scalars)))
+        _ = pi  # keep the Python object alive through the native call above
+        _ = l_out  # keep the Python object alive through the native call above
+        _ = y01  # keep the Python object alive through the native call above
+        _ = scalars  # keep the Python object alive through the native call above
+        _ = wsr  # keep the Python object alive through the native call above
     # n_train, n_features, n_nodes, n_ls, max_iter_predict, n_fits, then the classes
     var params = Python.list(PythonObject(n_rows), PythonObject(n_cols), PythonObject(len(arrays[0])), arrays[4],
                              max_iter, PythonObject(len(columns)))
@@ -185,7 +190,11 @@ def _gpc_fit_binary(ext: PythonObject, x: PythonObject, codes: PythonObject, arr
                     classical_address(l_out), classical_address(pi), classical_address(wsr),
                     classical_address(scalars), classical_address(y01)),
         Python.list(PythonObject(n_rows), PythonObject(n_cols), PythonObject(len(arrays[0])), arrays[4], max_iter, k))
+    _ = wsr  # keep the Python object alive through the native call above
+    _ = pi  # keep the Python object alive through the native call above
+    _ = l_out  # keep the Python object alive through the native call above
     _ = scalars  # keep the Python object alive through the native call above
+    _ = y01  # keep the Python object alive through the native call above
     var sp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(scalars)))
     _ = scalars  # keep the Python object alive through the native call above
     var _keep_ret_scalars_1 = _gpc_binary(context, y01, l_out, pi, wsr, sp[0], Int(py=family_call(b.int, n_iter)), Int(sp[2]))
@@ -217,14 +226,17 @@ def _gpc_set_fitted(fields: PythonObject, x: PythonObject, classes: PythonObject
     var k = len(fits)
     var values = family_array(Python.tuple(k), "<f8", context)
     var vp = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(values)))
+    _ = values  # keep the Python object alive through the native call above
     for i in range(k):  # driver-loop: over the one-vs-rest classes
         var own = py_fields(fits[i])
         _ = py_call(iters.append, own["n_iter_"])
         vp[i] = Float64(py=family_call(b.float, own["log_marginal_likelihood_value_"]))
+        _ = values  # keep the Python object alive through the native call above
     py_setitem(fields, "n_iter_", iters)
     # the per-class values summed in storage order by the native reduction
     # (`Array.sum`'s reduce_stat), then divided by the class count
     var total = reduce_stat(Int(py=classical_address(values)), HP_F64, k, HP_SUM).f
+    _ = values  # keep the Python object alive through the native call above
     py_setitem(fields, "log_marginal_likelihood_value_", PythonObject(total / Float64(k)))
     _ = values^
 
@@ -311,10 +323,19 @@ def _gpc_latent(ext: PythonObject, fields: PythonObject, est: PythonObject, q: P
                             classical_address(arrays[0]), classical_address(arrays[1]), classical_address(arrays[2]),
                             classical_address(arrays[3]), classical_address(mean), classical_address(var_out),
                             classical_address(proba))
+    _ = pi  # keep the Python object alive through the native call above
+    _ = y01  # keep the Python object alive through the native call above
+    _ = xt  # keep the Python object alive through the native call above
+    _ = lf  # keep the Python object alive through the native call above
+    _ = wsr  # keep the Python object alive through the native call above
+    _ = var_out  # keep the Python object alive through the native call above
+    _ = mean  # keep the Python object alive through the native call above
+    _ = proba  # keep the Python object alive through the native call above
     var params = Python.list(PythonObject(n_train), PythonObject(n_features), PythonObject(n_star),
                              PythonObject(len(arrays[0])), arrays[4], PythonObject(1 if want_proba else 0))
     if out_kind != 0:
         _ = py_call(addrs.append, classical_address(out))
+        _ = out  # keep the Python object alive through the native call above
         _ = py_call(params.append, PythonObject(out_kind))
     _ = family_call(gp_entry(ext, "gpc_predict"), addrs, params)
     _ = xt^
@@ -348,6 +369,7 @@ def _gpc_predict_all(ext: PythonObject, fields: PythonObject, q: PythonObject, o
     var addrs = Python.list(classical_address(xt), classical_address(q), classical_address(arrays[0]),
                             classical_address(arrays[1]), classical_address(arrays[2]), classical_address(arrays[3]),
                             classical_address(out))
+    _ = xt  # keep the Python object alive through the native call above
     var kept = Python.list()
     for i in range(k):  # driver-loop: four model addresses per binary fit
         var own = py_fields(fits[i])
@@ -373,6 +395,8 @@ def _gpc_ovr_combine(ext: PythonObject, cols: PythonObject, n_star: Int, context
     var codes = family_array(Python.tuple(n_star), "<i4", context)
     # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpc_ovr_combine_binding.
     var addrs = Python.list(classical_address(proba), classical_address(codes))
+    _ = codes  # keep the Python object alive through the native call above
+    _ = proba  # keep the Python object alive through the native call above
     for i in range(k):  # driver-loop: one class column address per class
         _ = py_call(addrs.append, classical_address(cols[i]))
     _ = family_call(gp_entry(ext, "gpc_ovr_combine"), addrs, Python.list(PythonObject(n_star)))
@@ -422,6 +446,7 @@ def _gpc_predict(model: PythonObject, args: PythonObject, context: PythonObject)
         # `codes32.astype("<i8")`: the exact widening
         codes = family_array(Python.tuple(n_star), "<i8", context)
         _ = cast_elements(Int(py=classical_address(codes32)), HP_I32, Int(py=classical_address(codes)), HP_I64, n_star)
+        _ = codes32  # keep the Python object alive through the native call above
         _ = codes32^
     return gp_decode_labels(fields["classes_"], codes, args[1], context)
 

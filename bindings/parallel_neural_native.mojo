@@ -155,9 +155,12 @@ def _neural_ids(value: PythonObject) raises -> PythonObject:
     _ = py_call(packed.frombytes, py_call(view.tobytes, "C"))
     var out = generation_array([rows, columns], "i")
     var dst = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=out._addr))
+    _ = out  # keep the Python object alive through the native call above
     var column_major = own and String(value.order) == "F"
     var signed = fmt == "b" or fmt == "h" or fmt == "i" or fmt == "l" or fmt == "q"
     samba_ids_into(Int(py=packed.buffer_info()[0]), Int(py=packed.itemsize), signed, rows, columns, column_major, dst)
+    _ = out  # keep the Python object alive through the native call above
+    _ = packed  # keep the Python object alive through the native call above
     _ = packed^
     return out
 

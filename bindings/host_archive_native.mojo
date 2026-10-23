@@ -42,6 +42,8 @@ def _archive_exact(arrays: PythonObject, name: String, dtype: String, context: P
     var result = host_archive_typed(value.shape, dtype, context)
     host_archive_reorder_bytes(Int(py=classical_address(value)), dimensions, strides,
         Int(py=value.size), Int(py=value._mv.itemsize), Int(py=classical_address(result)))
+    _ = value  # keep the Python object alive through the native call above
+    _ = result  # keep the Python object alive through the native call above
     return result
 
 
@@ -398,6 +400,8 @@ def host_archive_embedding(cls: PythonObject, arrays: PythonObject, context: Pyt
     var weight = classical_array(v, d, context)
     host_archive_copy_f32(Int(py=classical_address(saved)), Int(py=saved.strides[0]),
                           Int(py=saved.strides[1]), v, d, Int(py=classical_address(weight)))
+    _ = saved  # keep the Python object alive through the native call above
+    _ = weight  # keep the Python object alive through the native call above
     _ = saved^
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
@@ -728,9 +732,13 @@ def host_archive_logistic(cls: PythonObject, arrays: PythonObject, path: PythonO
     var coef = host_archive_typed(Python.tuple(targets, nf), "<f4", context)
     var bias = classical_array(targets, 0, context)
     host_archive_copy_f32(Int(py=classical_address(w)), 4, targets * 4, targets, nf, Int(py=classical_address(coef)))
+    _ = coef  # keep the Python object alive through the native call above
+    _ = w  # keep the Python object alive through the native call above
     if intercept:
         host_archive_copy_f32(Int(py=classical_address(w)) + targets * nf * 4, 4, 4,
                               targets, 1, Int(py=classical_address(bias)))
+        _ = w  # keep the Python object alive through the native call above
+        _ = bias  # keep the Python object alive through the native call above
     py_setitem(fields, "classes_", classes)
     py_setitem(fields, "_w", w)
     py_setitem(fields, "coef_", coef)
@@ -906,6 +914,8 @@ def host_archive_holtwinters(cls: PythonObject, arrays: PythonObject, path: Pyth
         var copy = host_archive_typed(Python.tuple(rows, batch), "<f4", context)
         host_archive_copy_f32(Int(py=classical_address(comps)) + i * cl * 4, batch * 4, 4,
                               rows, batch, Int(py=classical_address(copy)))
+        _ = comps  # keep the Python object alive through the native call above
+        _ = copy  # keep the Python object alive through the native call above
         py_setitem(time_major, names[i], copy)
     py_setitem(fields, "_time_major", time_major)
     var keys = Python.tuple("sse_", "alpha_", "beta_", "gamma_", "n_iter_", "criterion_")
@@ -967,8 +977,10 @@ def host_archive_ann(cls: PythonObject, arrays: PythonObject, fmt: String, path:
     var model = host_archive_object(cls, arrays, context)
     var fields = sequential_fields(model)
     var words = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(params)))
+    _ = params  # keep the Python object alive through the native call above
     for i in range(len(names)):  # driver-loop: over the class's saved constructor parameters
         var value = Int(words[i])
+        _ = params  # keep the Python object alive through the native call above
         if py_contains(none_below, names[i]) and value < 0:
             py_setitem(fields, names[i], PythonObject(None))
         else:
@@ -978,8 +990,10 @@ def host_archive_ann(cls: PythonObject, arrays: PythonObject, fmt: String, path:
         py_setitem(fields, keys[i], defaults[keys[i]])
     host_archive_mode(arrays, fields, context)
     var counts = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(fitted)))
+    _ = fitted  # keep the Python object alive through the native call above
     for i in range(len(fitted_names)):  # driver-loop: over the class's saved fitted sizes
         py_setitem(fields, fitted_names[i], PythonObject(Int(counts[i])))
+        _ = fitted  # keep the Python object alive through the native call above
     for i in range(len(saved)):  # driver-loop: over the class's saved index arrays
         var entry = saved[i]
         py_setitem(fields, entry[0], _archive_exact(arrays, String(entry[1]), String(entry[2]), context))
@@ -1290,6 +1304,7 @@ def host_archive_neighbors(cls: PythonObject, arrays: PythonObject, kind: Int,
                 raise Error("neighbor class_counts does not match saved classes")
             var unique = host_archive_unique_i32(Int(py=classical_address(y)) + output * Int(py=y.strides[0]),
                                                  Int(py=y.strides[1]), n)
+            _ = y  # keep the Python object alive through the native call above
             if len(unique) != count:
                 raise Error("saved neighbor classes do not match distinct labels")
             var labels = Python.list()
@@ -1702,6 +1717,7 @@ def host_archive_reshape_words(array: PythonObject, shape: PythonObject, dtype: 
         strides.append(Int(py=array.strides[i]))
     var result = host_archive_typed(shape, dtype, context)
     host_archive_reorder_f32(Int(py=classical_address(array)), dimensions, strides, Int(py=array.size), Int(py=classical_address(result)))
+    _ = result  # keep the Python object alive through the native call above
     return result
 
 
@@ -1710,6 +1726,7 @@ def host_archive_gp_row(array: PythonObject, row: Int, cols: Int, shape: PythonO
     var result = host_archive_typed(shape, "<f4", context)
     host_archive_copy_f32(Int(py=classical_address(array)) + row * Int(py=array.strides[0]), 0,
                           Int(py=array.strides[1]), 1, cols, Int(py=classical_address(result)))
+    _ = result  # keep the Python object alive through the native call above
     return result
 
 
@@ -1908,6 +1925,7 @@ def host_archive_gpc(cls: PythonObject, arrays: PythonObject, path: PythonObject
     else:
         py_setitem(fields, "n_iter_", counts)
         py_setitem(fields, "log_marginal_likelihood_value_", host_archive_mean_f64(Int(py=classical_address(likelihoods)), n_est))
+        _ = likelihoods  # keep the Python object alive through the native call above
     return model
 
 
@@ -1917,6 +1935,7 @@ def host_archive_slice_words(array: PythonObject, offset: Int, count: Int, shape
         raise Error("saved model block lies outside its archive array")
     var result = host_archive_typed(shape, dtype, context)
     host_archive_copy_words(Int(py=classical_address(array)) + offset * 4, count, Int(py=classical_address(result)))
+    _ = result  # keep the Python object alive through the native call above
     return result
 
 
@@ -2108,6 +2127,7 @@ def host_archive_svm_ovo(fields: PythonObject, arrays: PythonObject, features: I
     var bias = _archive_exact(arrays, "pair_b", "<f4", context)
     var raw_support = _archive_exact(arrays, "pair_support", "<i4", context)
     var support = host_archive_reshape_words(raw_support, Python.tuple(Int(py=raw_support.size)), "<i4", context)
+    _ = raw_support  # keep the Python object alive through the native call above
     if String(fields["_hp_kernel"]) == "precomputed":
         host_archive_support_check(support, Int(py=raw_support.size), features, path, context)
     var raw_dual = _archive_exact(arrays, "pair_dual", "<f4", context)
@@ -2124,9 +2144,11 @@ def host_archive_svm_ovo(fields: PythonObject, arrays: PythonObject, features: I
     var out_bias = host_archive_typed(Python.tuple(pair_count), "<f4", context)
     var out_iterations = host_archive_typed(Python.tuple(pair_count), "<i4", context)
     var bias_words = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out_bias)))
+    _ = out_bias  # keep the Python object alive through the native call above
     var saved_bias = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(bias_flat)))
     _ = bias_flat  # keep the Python object alive through the native call above
     var iteration_words = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out_iterations)))
+    _ = out_iterations  # keep the Python object alive through the native call above
     var offset = 0
     var q = 0
     for i in range(k):  # driver-loop: saved one-vs-one class machines
@@ -2144,22 +2166,29 @@ def host_archive_svm_ovo(fields: PythonObject, arrays: PythonObject, features: I
                 raise Error("OverflowError: saved SVC pair iteration count does not fit int32")
             var pair = Python.dict()
             var pd = host_archive_slice_words(dual, offset, n, Python.tuple(1, n), "<f4", context)
+            _ = dual  # keep the Python object alive through the native call above
             var pv = host_archive_slice_words(vectors, offset * features, n * features, Python.tuple(n, features), "<f4", context)
             _ = vectors  # keep the Python object alive through the native call above
             var ps = host_archive_slice_words(support, offset, n, Python.tuple(n), "<i4", context)
+            _ = support  # keep the Python object alive through the native call above
+            _ = raw_support  # keep the Python object alive through the native call above
             var bias_value = Float64(saved_bias[q])
             _ = bias_flat  # keep the Python object alive through the native call above
             py_setitem(pair, "i", i)
             py_setitem(pair, "j", j)
             py_setitem(pair, "dual", pd)
+            _ = dual  # keep the Python object alive through the native call above
             py_setitem(pair, "sv", pv)
             _ = vectors  # keep the Python object alive through the native call above
             py_setitem(pair, "support", ps)
+            _ = support  # keep the Python object alive through the native call above
             py_setitem(pair, "b", bias_value)
             py_setitem(pair, "n_iter", iterations)
             _ = py_call(pairs.append, pair)
             bias_words[q] = -Float32(bias_value)
+            _ = out_bias  # keep the Python object alive through the native call above
             iteration_words[q] = Int32(iterations)
+            _ = out_iterations  # keep the Python object alive through the native call above
             offset += n
             q += 1
     var shape = String(_archive_string(arrays, "shape", context))
@@ -2172,25 +2201,37 @@ def host_archive_svm_ovo(fields: PythonObject, arrays: PythonObject, features: I
     py_setitem(fields, "_hp_break_ties", fields["break_ties"])
     # `_set_ovo`: the layout `fit` builds, with the row bound max(support) + 1.
     var rows = host_archive_support_bound(Int(py=classical_address(support)), total, -1)
+    _ = support  # keep the Python object alive through the native call above
+    _ = raw_support  # keep the Python object alive through the native call above
     var cap = min(rows, total)
     var public_support = host_archive_typed(Python.tuple(max(1, cap)), "<i4", context)
     var public_counts = host_archive_typed(Python.tuple(k), "<i4", context)
     var public_dual = host_archive_typed(Python.tuple(max(1, (k - 1) * cap)), "<f4", context)
     var n_sv = host_archive_svc_layout(support, dual, meta, k, rows, cap, public_support, public_counts, public_dual)
+    _ = raw_support  # keep the Python object alive through the native call above
     if n_sv < 0 or n_sv > cap:
         raise Error("saved SVC native layout returned an invalid row count")
     var result_support = host_archive_slice_words(public_support, 0, n_sv, Python.tuple(n_sv), "<i4", context)
+    _ = public_support  # keep the Python object alive through the native call above
     var result_dual = host_archive_slice_words(public_dual, 0, (k - 1) * n_sv, Python.tuple(k - 1, n_sv), "<f4", context)
+    _ = public_dual  # keep the Python object alive through the native call above
     var result_vectors = host_archive_typed(Python.tuple(n_sv, features), "<f4", context)
     host_archive_svc_gather(Int(py=classical_address(support)), total, Int(py=classical_address(vectors)), features,
                             Int(py=classical_address(result_support)), n_sv, Int(py=classical_address(result_vectors)))
     _ = vectors  # keep the Python object alive through the native call above
+    _ = support  # keep the Python object alive through the native call above
+    _ = raw_support  # keep the Python object alive through the native call above
+    _ = result_vectors  # keep the Python object alive through the native call above
+    _ = result_support  # keep the Python object alive through the native call above
+    _ = public_support  # keep the Python object alive through the native call above
     py_setitem(fields, "classes_", classes)
     py_setitem(fields, "n_features_in_", features)
     py_setitem(fields, "_pairs", pairs)
     py_setitem(fields, "support_", result_support)
+    _ = public_support  # keep the Python object alive through the native call above
     py_setitem(fields, "support_vectors_", result_vectors)
     py_setitem(fields, "dual_coef_", result_dual)
+    _ = public_dual  # keep the Python object alive through the native call above
     py_setitem(fields, "intercept_", out_bias)
     py_setitem(fields, "n_support_", public_counts)
     py_setitem(fields, "n_iter_", out_iterations)
@@ -2259,13 +2300,20 @@ def host_archive_svm(cls: PythonObject, arrays: PythonObject, classifier: Bool, 
             var a = host_archive_typed(Python.tuple((count + 1) // 2), "<f8", context)
             var bb = host_archive_typed(Python.tuple(count // 2), "<f8", context)
             var ap = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(a)))
+            _ = a  # keep the Python object alive through the native call above
             var bp = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(bb)))
+            _ = bb  # keep the Python object alive through the native call above
             for i in range(count // 2):  # driver-loop: saved per-pair calibration coefficients
                 ap[i] = classical_f64(probability, 2 * i)
+                _ = a  # keep the Python object alive through the native call above
                 bp[i] = classical_f64(probability, 2 * i + 1)
+                _ = bb  # keep the Python object alive through the native call above
                 _ = py_call(pairs.append, Python.tuple(ap[i], bp[i]))
+                _ = bb  # keep the Python object alive through the native call above
+                _ = a  # keep the Python object alive through the native call above
             if count % 2:
                 ap[count // 2] = classical_f64(probability, count - 1)
+                _ = a  # keep the Python object alive through the native call above
             py_setitem(fields, "probability", True)
             py_setitem(fields, "_hp_probability", True)
             py_setitem(fields, "_prob_ab", pairs)
@@ -2443,14 +2491,18 @@ def host_archive_gbdt_state(text: PythonObject, context: PythonObject) raises ->
     for entry in parsed.integers.items():  # driver-loop: native parsed integer layout arrays
         var array = host_archive_typed(Python.tuple(len(entry.value)), "<i4", context)
         var out = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(array)))
+        _ = array  # keep the Python object alive through the native call above
         for i in range(len(entry.value)):  # driver-loop: publish native parsed buffer words
             out[i] = entry.value[i]
+            _ = array  # keep the Python object alive through the native call above
         py_setitem(state, entry.key, array)
     for entry in parsed.floats.items():  # driver-loop: native parsed floating layout arrays
         var array = host_archive_typed(Python.tuple(len(entry.value)), "<f4", context)
         var out = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(array)))
+        _ = array  # keep the Python object alive through the native call above
         for i in range(len(entry.value)):  # driver-loop: publish native parsed buffer words
             out[i] = entry.value[i]
+            _ = array  # keep the Python object alive through the native call above
         py_setitem(state, entry.key, array)
     py_setitem(state, "bias", parsed.bias)
     py_setitem(state, "non_symmetric", parsed.non_symmetric)

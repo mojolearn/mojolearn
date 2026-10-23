@@ -204,6 +204,7 @@ def _umap_copy_f32(value: PythonObject, context: PythonObject) raises -> PythonO
     if count > 0:
         memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(out))),
                src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(value))), count=count)
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -213,7 +214,9 @@ def _umap_same_bytes(a: PythonObject, b: PythonObject, count: Int) raises -> Boo
     var pb = MutPointer[UInt32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(b)))
     var _keep_ret_pa_r214 = mani_same_words(pa, pb, count)
     _ = pa  # keep the Python object alive through the native call above
-    return _keep_ret_pa_r214^
+    var _keep_ret_pa = _keep_ret_pa_r214^
+    _ = pa  # keep the Python object alive through the native call above
+    return _keep_ret_pa^
 
 
 def _umap_finite(value: PythonObject) raises -> Bool:
@@ -265,9 +268,11 @@ def _umap_initial(model: PythonObject, x: PythonObject, n: Int, nc: Int, seed: P
             var ut = got[1]
             var store = mk_store(s, context)
             var sp = mk_store_ptr(store)
+            _ = store  # keep the Python object alive through the native call above
             for j in range(nc):  # small-loop(components: the zero singular value check): bounded by n_components
                 if not (Float64(sp[j]) > 0):
                     raise Error("UMAP init='pca' found a zero singular value")
+                _ = store  # keep the Python object alive through the native calls above
             _ = store^
             var head = mk_rows(ut, 0, nc, context)
             vt = k.mm(head, xc, False, False)
@@ -341,11 +346,14 @@ def _umap_target(model: PythonObject, y: PythonObject, n: Int, context: PythonOb
             py_setitem(code, order[i][1], PythonObject(Float64(i)))
         var t = family_array(Python.tuple(n), "<f4", context)
         var tp = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(t)))
+        _ = t  # keep the Python object alive through the native call above
         for i in range(count):  # cpu-route: categorical y label objects ordered by (type, value)
             if Bool(py=py_call(b.bool, py_call(op.eq, vals[i], unknown))):
                 tp[i] = Float32(-1.0)
+                _ = t  # keep the Python object alive through the native call above
             else:
                 tp[i] = Float32(Float64(py=code[vals[i]]))
+                _ = t  # keep the Python object alive through the native call above
         return Python.tuple(PythonObject(1), PythonObject(1), t, tk_kept, PythonObject(w))
     if Bool(py=py_call(op.contains, Python.tuple(PythonObject("l2"), PythonObject("euclidean")), tm)):
         var t = family_as_f32(y, -1, "y", context)
@@ -398,6 +406,8 @@ def _umap_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
         var params = _umap_concat(Python.list(PythonObject(n), PythonObject(d)), native_config)
         columns = family_call(family_entry(binding, "umap_fit_transform", context), classical_address(x),
                               classical_address(embedding), params)
+        _ = x  # keep the Python object alive through the native call above
+        _ = embedding  # keep the Python object alive through the native call above
     else:
         var tkind = PythonObject(0)
         var tdims = PythonObject(1)
@@ -413,6 +423,10 @@ def _umap_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
         var addrs = Python.list(classical_address(x), classical_address(embedding),
                                 PythonObject(0) if initial is None else classical_address(initial),
                                 PythonObject(0) if tarr is None else classical_address(tarr))
+        _ = embedding  # keep the Python object alive through the native call above
+        _ = x  # keep the Python object alive through the native call above
+        _ = initial  # keep the Python object alive through the native call above
+        _ = tarr  # keep the Python object alive through the native call above
         var params = _umap_concat(_umap_concat(Python.list(PythonObject(n), PythonObject(d)), config), extras)
         _ = py_call(params.extend, Python.list(tkind, tdims, tk, tw))
         columns = family_call(family_entry(binding, "umap_fit_transform_ex", context), addrs, params)
@@ -484,6 +498,10 @@ def _umap_transform(model: PythonObject, args: PythonObject, context: PythonObje
     var columns = family_call(family_entry(binding, "umap_transform", context),
                               Python.list(classical_address(training), classical_address(fitted_embedding),
                                           classical_address(x), classical_address(output)), params)
+    _ = fitted_embedding  # keep the Python object alive through the native call above
+    _ = training  # keep the Python object alive through the native call above
+    _ = output  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     _ = x^
     _ = training^
     _ = fitted_embedding^

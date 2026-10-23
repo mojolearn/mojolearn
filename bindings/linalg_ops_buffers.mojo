@@ -179,6 +179,7 @@ def lin_new(shape: List[Int], typestr: String, context: PythonObject) raises -> 
     """A new zero-filled C-order Array as a LinBuf."""
     var out = lin_array(shape, typestr, context)
     var addr = Int(py=classical_address(out))
+    _ = out  # keep the Python object alive through the native call above
     return LinBuf(out, addr, shape.copy())
 
 
@@ -373,6 +374,7 @@ def lin_c_order(obj: PythonObject, v: TensorView, typestr: String, name: String,
         return LinBuf(obj, v.addr, v.shape.copy())
     var out = lin_new(v.shape, typestr, context)
     lin_convert(v, typestr, out.addr, name)
+    _ = out  # keep the Python object alive through the native call above
     return out^
 
 

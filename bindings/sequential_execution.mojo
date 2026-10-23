@@ -132,6 +132,12 @@ def sequential_fit(model: PythonObject, args: PythonObject, context: PythonObjec
     var addresses = Python.list(xd, yd, sequential_address(params), sequential_address(curve),
         sequential_address(moment), sequential_address(variance), sequential_address(state),
         PythonObject(0) if previous is None else sequential_address(previous))
+    _ = curve  # keep the Python object alive through the native call above
+    _ = params  # keep the Python object alive through the native call above
+    _ = state  # keep the Python object alive through the native call above
+    _ = variance  # keep the Python object alive through the native call above
+    _ = moment  # keep the Python object alive through the native call above
+    _ = previous  # keep the Python object alive through the native call above
     var vx = PythonObject(None)
     var vy = PythonObject(None)
     var val_curve = PythonObject(None)
@@ -156,10 +162,13 @@ def sequential_fit(model: PythonObject, args: PythonObject, context: PythonObjec
         val_info = sequential_array(Python.tuple(2), context["int64"], context)
         _ = py_call(addresses.extend, Python.tuple(vxd, sequential_descriptor(vy, "validation y"), classes,
                     sequential_address(val_curve), sequential_address(val_info)))
+        _ = val_info  # keep the Python object alive through the native call above
+        _ = val_curve  # keep the Python object alive through the native call above
         _ = py_call(ip.append, 1 if restore_best else 0)
     var n_iter: Int
     if target != 0:
         var labels = Python.list(yd, sequential_address(classes_full), n_out, target)
+        _ = classes_full  # keep the Python object alive through the native call above
         var done = py_call_typed(entries["model_fit_labels"], addresses, program, ip, fp, labels)
         var count = Int(py=done[0])
         n_iter = Int(py=done[1])
@@ -177,9 +186,12 @@ def sequential_fit(model: PythonObject, args: PythonObject, context: PythonObjec
     py_setitem(fields, "n_iter_", n_iter)
     if validation is not None:
         var info = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=sequential_address(val_info)))
+        _ = val_info  # keep the Python object alive through the native call above
         var ran = Int(info[0])
+        _ = val_info  # keep the Python object alive through the native call above
         py_setitem(fields, "epochs_run_", ran)
         py_setitem(fields, "best_epoch_", PythonObject(info[1]))
+        _ = val_info  # keep the Python object alive through the native call above
         py_setitem(fields, "validation_loss_curve_", sequential_curve(val_curve, ran))
         _ = val_info^
     py_setitem(fields, "loss_curve_", sequential_curve(curve, n_iter))
@@ -234,6 +246,7 @@ def sequential_forward(model: PythonObject, source: PythonObject, transform: Int
             Python.list(xd, sequential_address(params), sequential_address(classes), sequential_address(out)),
             sequential_program(model, fields["n_features_in_"], sample), sequential_table(model),
             Python.list(xd[3], 4096, transform, classes.shape[0], classes.dtype.itemsize))
+        _ = params  # keep the Python object alive through the native call above
         _ = x^
         _ = params^
         return out

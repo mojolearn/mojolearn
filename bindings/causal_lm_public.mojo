@@ -207,6 +207,7 @@ def causal_lm_parameters_binding(model: PythonObject) raises -> PythonObject:
                 var end = Int(py=pieces[k][1])
                 if end > begin:
                     memcpy(dest=f32_ptr(Int(py=joined._addr)) + begin * cols, src=f32_ptr(_addr(pieces[k][2], keep)), count=(end - begin) * cols)
+                    _ = joined  # keep the Python object alive through the native call above
             py_setitem(result, name, joined)
     _ = keep^
     return result
@@ -486,6 +487,7 @@ def causal_layer_run(model: PythonObject, i: Int, x: PythonObject, supplied_stat
             _ = py_call(addresses.append, _mutable(st.conv_window, [b, di, 4], keep, copies, "conv_window"))
             _ = py_call(addresses.append, _mutable(st.h, [b, di, 16], keep, copies, "h"))
             _ = py_call(addresses.append, _addr(y, keep))
+            _ = y  # keep the Python object alive through the native call above
             params = py_ints([b, d]) if step else py_ints([b, l, d])
             var profile = Int(py=e["mamba1_profile"])
             if Int(py=st.profile_id) != profile or not Bool(py=st._nn34_usable):
@@ -505,8 +507,10 @@ def causal_layer_run(model: PythonObject, i: Int, x: PythonObject, supplied_stat
             _ = py_call(addresses.append, _mutable(st.buffer_xbc, [b, 256, cd], keep, copies, "buffer_xbc"))
             _ = py_call(addresses.append, _mutable(st.buffer_dtraw, [b, 256, nh], keep, copies, "buffer_dtraw"))
             _ = py_call(addresses.append, _addr(y, keep))
+            _ = y  # keep the Python object alive through the native call above
             var last = generation_array([b, Int(py=blk["nheads"]), 64, 128])
             _ = py_call(addresses.append, _addr(last, keep))
+            _ = last  # keep the Python object alive through the native call above
             params = py_ints([b, d, Int(py=st.buffered_tokens)]) if step else py_ints([b, l, d, Int(py=st.buffered_tokens)])
             _ = py_call(params.extend, blk["dt_limit"])
             py_setattr(st, "buffered_tokens", py_call(e["decode" if step else "forward"], addresses, params))
@@ -526,6 +530,7 @@ def causal_model_embedding(model: PythonObject, ids: PythonObject) raises -> Pyt
     var keep = List[PythonObject]()
     var x = generation_array([b, l, d])
     _ = py_call(e["embedding_forward"], py_ints([_addr(x, keep), _addr(model._embed, keep), _addr(ids, keep)]), py_ints([b * l, v, d]))
+    _ = x  # keep the Python object alive through the native call above
     if flat:
         var bi = GENERATION_BOUNDARY.get_or_create_ptr()[].bi
         py_setattr(x, "shape", py_call(bi.tuple, py_ints([l, d])))
@@ -553,6 +558,7 @@ def causal_model_head(model: PythonObject, x: PythonObject, normalize: Bool = Tr
     var out = generation_array([b, l, v])
     if model._head_int15 is None or not packed:
         _ = py_call(e["linear_forward"], py_ints([_addr(out, keep), _addr(hn, keep), _addr(model._head, keep)]), py_ints([b * l, v, d]))
+        _ = out  # keep the Python object alive through the native call above
         _ = hn  # keep the Python object alive through the native call above
     else:
         var hi = generation_array([b * l, d], "b")
@@ -569,6 +575,7 @@ def causal_model_head(model: PythonObject, x: PythonObject, normalize: Bool = Tr
         _ = ex  # keep the Python object alive through the native call above
         _ = lo  # keep the Python object alive through the native call above
         _ = hi  # keep the Python object alive through the native call above
+        _ = out  # keep the Python object alive through the native call above
     if flat:
         var bi = GENERATION_BOUNDARY.get_or_create_ptr()[].bi
         py_setattr(out, "shape", py_call(bi.tuple, py_ints([l, v])))
@@ -642,6 +649,7 @@ def _resident_forward(model: PythonObject, ids: PythonObject, state: PythonObjec
             lm = opened[0]
             sessions = opened[1]
         var cached = py_call(e["causal_lm_session_forward"], lm, sessions, py_ints([_addr(ids, keep), _addr(out, keep)]), py_ints([l]))
+        _ = out  # keep the Python object alive through the native call above
         for i in range(len(sessions)):  # driver-loop: over layer decode sessions
             var blk = _block(model, i)
             var st = state.layers[i]
@@ -840,6 +848,7 @@ def causal_lm_resident_binding(model: PythonObject, value: PythonObject, maximum
             sessions = opened[1]
         _ = py_call(e["causal_lm_session_run"], lm, sessions, py_ints([_addr(ids, keep), _addr(out, keep), _addr(last_logits, keep)]), py_ints([l, n, 0]))
         _ = out  # keep the Python object alive through the native call above
+        _ = ids  # keep the Python object alive through the native call above
     except error:
         if persist:
             py_setitem(fields, "_resident_sessions", PythonObject(None))
@@ -854,11 +863,15 @@ def causal_lm_resident_binding(model: PythonObject, value: PythonObject, maximum
         _resident_close(e, lm, sessions)
     var result = generation_array([b, l + n], "i")
     var dst = i32_ptr(Int(py=result._addr))
+    _ = result  # keep the Python object alive through the native call above
     var prompt = i32_ptr(Int(py=ids._addr))
+    _ = ids  # keep the Python object alive through the native call above
     var generated = i32_ptr(Int(py=out._addr))
     _ = out  # keep the Python object alive through the native call above
     causal_lm_join_resident(dst, prompt, generated, b, l, n)
+    _ = result  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
+    _ = ids  # keep the Python object alive through the native call above
     _ = keep^
     return result
 
@@ -996,10 +1009,14 @@ def _read(mut s: GenerationHandle, count: Int) raises -> PythonObject:
             var l = Int(py=s.current.shape[1])
             var logits = _run(s.model, s.current, s.state, s.produced > 0)
             var raw = f32_ptr(Int(py=logits._addr))
+            _ = logits  # keep the Python object alive through the native call above
             var next = generation_array([b, 1], "i")
             var dst = i32_ptr(Int(py=next._addr))
+            _ = next  # keep the Python object alive through the native call above
             causal_lm_pick_step(raw, dst, b, l, v, s.finished, s.lengths, s.eos, s.pad, s.greedy,
                                 s.temperature, s.top_k, s.top_p, s.seed, s.produced, tokens)
+            _ = next  # keep the Python object alive through the native call above
+            _ = logits  # keep the Python object alive through the native call above
             # `raw` points into `logits`: keep it alive through the pick (Mojo
             # destroys a local at its last use, and nothing else owns it).
             _ = logits^
@@ -1011,7 +1028,9 @@ def _read(mut s: GenerationHandle, count: Int) raises -> PythonObject:
             s.busy = False
             return out
         var dst = i32_ptr(Int(py=out._addr))
+        _ = out  # keep the Python object alive through the native call above
         causal_lm_tokens_row_major(tokens, dst, b, wrote)
+        _ = out  # keep the Python object alive through the native call above
         s.busy = False
         return out
     except error:
@@ -1030,6 +1049,7 @@ def _decode_chunk(mut s: GenerationHandle, ids: PythonObject) raises -> PythonOb
     # The CPython array constructor copies the pending bytes to native storage.
     var pending = py_call(g[].arrays, "B", s.pending_bytes)
     var cut = causal_lm_utf8_cut(MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=pending.buffer_info()[0])), size, s.done())
+    _ = pending  # keep the Python object alive through the native call above
     _ = pending^
     var prefix = s.pending_bytes[py_call(g[].bi.slice, PythonObject(0), PythonObject(cut))]
     var remaining = s.pending_bytes[py_call(g[].bi.slice, PythonObject(cut), PythonObject(None))]
@@ -1066,9 +1086,13 @@ def _generate_complete(model: PythonObject, value: PythonObject, maximum: Python
     var n = Int(py=continuation.shape[1])
     var result = generation_array([b, l + n], "i")
     var dest = i32_ptr(Int(py=result._addr))
+    _ = result  # keep the Python object alive through the native call above
     var prompt = i32_ptr(Int(py=s.prompt._addr))
     var tail = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=continuation._addr))
+    _ = continuation  # keep the Python object alive through the native call above
     causal_lm_join_continuation(dest, prompt, tail, b, l, n)
+    _ = result  # keep the Python object alive through the native call above
+    _ = continuation  # keep the Python object alive through the native call above
     _ = continuation^
     return result
 
@@ -1097,9 +1121,12 @@ def causal_lm_text_stream_binding(model: PythonObject, tokenizer: PythonObject, 
     var ids = py_call(encode, tokenizer, text, PythonObject(True), PythonObject(False), PythonObject(False))
     var prompt = generation_array([1, len(ids)], "i")
     var ptr = i32_ptr(Int(py=prompt._addr))
+    _ = prompt  # keep the Python object alive through the native call above
     # The CPython array constructor unpacks the id list to native int64 storage.
     var packed = py_call(GENERATION_BOUNDARY.get_or_create_ptr()[].arrays, "q", ids)
     causal_lm_store_ids(ptr, MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=packed.buffer_info()[0])), len(ids))
+    _ = packed  # keep the Python object alive through the native call above
+    _ = prompt  # keep the Python object alive through the native call above
     _ = packed^
     var stream = causal_lm_stream_binding(model, prompt, maximum, options)
     var owner = stream._native.downcast_value_ptr[GenerationHandle]()
@@ -1311,6 +1338,8 @@ def causal_lm_resume_binding(model: PythonObject, checkpoint: PythonObject, toke
             MutPointer[Int8, MutUntrackedOrigin](unsafe_from_address=Int(py=packed_finished.buffer_info()[0])),
             b, s[].produced, s[].lengths, s[].finished,
         )
+        _ = packed_lengths  # keep the Python object alive through the native call above
+        _ = packed_finished  # keep the Python object alive through the native call above
         _ = packed_lengths^
         _ = packed_finished^
         if len(checkpoint["layers"]) != len(s[].state.layers):

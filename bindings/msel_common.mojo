@@ -230,16 +230,20 @@ def msel_i64_list(values: List[Int], context: PythonObject) raises -> PythonObje
     """`Array.from_list(values, '<i8')`."""
     var out = msel_new(len(values), "<i8", context)
     var p = msel_p64(out)
+    _ = out  # keep the Python object alive through the native call above
     for i in range(len(values)):  # driver-loop: over a short result list (sizes, folds)
         p[i] = Int64(values[i])
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
 def msel_i32_list(values: List[Int], context: PythonObject) raises -> PythonObject:
     var out = msel_new(len(values), "<i4", context)
     var p = msel_p32(out)
+    _ = out  # keep the Python object alive through the native call above
     for i in range(len(values)):  # driver-loop: over a short per-group or per-class table
         p[i] = Int32(values[i])
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -247,8 +251,10 @@ def msel_f64_list(values: List[Float64], context: PythonObject) raises -> Python
     """`Array.from_list(values, '<f8')`."""
     var out = msel_new(len(values), "<f8", context)
     var p = msel_pf64(out)
+    _ = out  # keep the Python object alive through the native call above
     for i in range(len(values)):  # driver-loop: over one score per fold or candidate
         p[i] = values[i]
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -256,8 +262,10 @@ def msel_f64_block(values: List[Float64], rows: Int, cols: Int, context: PythonO
     """`Array.from_list(flat, '<f8').reshape((rows, cols))`."""
     var out = msel_new2(rows, cols, "<f8", context)
     var p = msel_pf64(out)
+    _ = out  # keep the Python object alive through the native call above
     for i in range(len(values)):  # driver-loop: over the score block (sizes or candidates x folds)
         p[i] = values[i]
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -275,6 +283,7 @@ def msel_slice_i64(array: PythonObject, start: Int, count: Int, context: PythonO
     var out = msel_new(count, "<i8", context)
     if count > 0:
         memcpy(dest=msel_p64(out), src=msel_p64(array) + start, count=count)
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -294,6 +303,7 @@ def msel_index_i64(value: PythonObject, context: PythonObject) raises -> PythonO
     if Int(py=value.size) > 0:
         _ = family_call(msel_entry("cast_elements", context), PythonObject(msel_addr(value)), codes[PythonObject(dtype)],
                         PythonObject(msel_addr(out)), PythonObject(3), value.size)
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -302,6 +312,7 @@ def msel_arange(start: Int, n: Int, context: PythonObject) raises -> PythonObjec
     var out = msel_new(n, "<i8", context)
     if n > 0:
         _ = family_call(msel_entry("arange_i64", context), PythonObject(msel_addr(out)), PythonObject(start), PythonObject(n))
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -319,6 +330,8 @@ def msel_split_mask(mask: PythonObject, n: Int, context: PythonObject) raises ->
     var train = msel_new(n - n_test, "<i8", context)
     _ = family_call(msel_entry("select_mask_u8_i64", context), PythonObject(maddr), PythonObject(n),
                     PythonObject(msel_addr(test) if n_test else 0), PythonObject(msel_addr(train) if n - n_test else 0))
+    _ = train  # keep the Python object alive through the native call above
+    _ = test  # keep the Python object alive through the native call above
     return Python.tuple(train, test)
 
 
@@ -327,6 +340,7 @@ def msel_split_indices(iaddr: Int, k: Int, n: Int, context: PythonObject) raises
     var mask = msel_new(n, "<u1", context)
     _ = family_call(msel_entry("mask_from_indices_u8", context), PythonObject(iaddr if k else 0), PythonObject(k),
                     PythonObject(n), PythonObject(msel_addr(mask)))
+    _ = mask  # keep the Python object alive through the native call above
     return msel_split_mask(mask, n, context)
 
 
@@ -386,6 +400,8 @@ struct MselGroups(Movable):
             _ = family_call(msel_entry("cast_elements", context), PythonObject(msel_addr(codes)),
                             context["family_msel_codes"][codes.dtype], PythonObject(msel_addr(narrow)),
                             PythonObject(2), PythonObject(n))
+            _ = codes  # keep the Python object alive through the native call above
+            _ = narrow  # keep the Python object alive through the native call above
             codes = narrow
         var m = len(classes)
         var counts = List[Int](length=m, fill=0)
@@ -396,7 +412,9 @@ struct MselGroups(Movable):
             _ = family_call(msel_entry("fold_ids", context), PythonObject(msel_addr(codes)), PythonObject(n), PythonObject(m),
                             PythonObject(2), PythonObject(msel_addr(class_counts)), PythonObject(msel_addr(fold_store)),
                             PythonObject(msel_addr(fold_counts)))
+            _ = codes  # keep the Python object alive through the native call above
             _ = fold_store  # keep the Python object alive through the native call above
+            _ = class_counts  # keep the Python object alive through the native call above
             _ = fold_counts  # keep the Python object alive through the native call above
             counts = msel_read_i64(class_counts)
         self.counts = counts^
@@ -411,12 +429,15 @@ struct MselGroups(Movable):
         var tbl = msel_i32_list(table, context)
         var _keep_ret_tbl_r412 = self.mapped_words(tbl, context)
         _ = tbl  # keep the Python object alive through the native call above
-        return _keep_ret_tbl_r412^
+        var _keep_ret_tbl = _keep_ret_tbl_r412^
+        _ = tbl  # keep the Python object alive through the native call above
+        return _keep_ret_tbl^
 
     def mapped_words(self, tbl: PythonObject, context: PythonObject) raises -> PythonObject:
         var dst = msel_new(self.n, "<i4", context)
         _ = family_call(msel_entry("gather_i32", context), PythonObject(msel_addr(tbl)), tbl.size,
                         PythonObject(msel_addr(self.codes)), PythonObject(self.n), PythonObject(msel_addr(dst)))
+        _ = dst  # keep the Python object alive through the native call above
         return dst
 
     def rows(self, words: PythonObject, want: Int, size: Int, context: PythonObject) raises -> PythonObject:
@@ -427,6 +448,8 @@ struct MselGroups(Movable):
         var got = msel_int(family_call(msel_entry("select_fold_i64", context), PythonObject(msel_addr(words)),
                                        PythonObject(self.n), PythonObject(want), PythonObject(msel_addr(test)),
                                        PythonObject(msel_addr(train))))
+        _ = test  # keep the Python object alive through the native call above
+        _ = train  # keep the Python object alive through the native call above
         if got != size:
             raise Error("RuntimeError: mojolearn: select_fold_i64 disagrees with the group counts")
         return Python.tuple(train, test)
@@ -439,6 +462,7 @@ struct MselGroups(Movable):
         var got = msel_int(family_call(msel_entry("select_fold_i64", context), PythonObject(msel_addr(words)),
                                        PythonObject(self.n), PythonObject(want), PythonObject(msel_addr(out)),
                                        PythonObject(msel_addr(self.scratch))))
+        _ = out  # keep the Python object alive through the native call above
         if got != size:
             raise Error("RuntimeError: mojolearn: select_fold_i64 disagrees with the group counts")
         return out
@@ -532,6 +556,7 @@ struct MselRng(Movable):
             var rows = msel_new(sizes[i], "<i8", context)
             if sizes[i] > 0:
                 memcpy(dest=msel_p64(rows), src=FAMILY_I64P(unsafe_from_address=base + 4 * outs[i]), count=sizes[i])
+                _ = rows  # keep the Python object alive through the native call above
             _ = py_call(result.append, rows)
         _ = prog^
         return result

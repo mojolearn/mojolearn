@@ -197,9 +197,13 @@ def _row_weights(model: PythonObject, sample_weight: PythonObject, class_weight:
         raise Error("ImportError: the x_trees binding has no x_trees_mul_f32")
     _ = py_call_typed(mul, PythonObject(sw.addr), PythonObject(labels_address(cw)), PythonObject(labels_address(out)),
                       Python.list(n))
+    _ = out  # keep the Python object alive through the native call above
+    _ = cw  # keep the Python object alive through the native call above
     _ = sw^
     _ = cw^
-    return LabelsMatrix(out, labels_address(out), n, 1, True)
+    var _keep_ret_out = LabelsMatrix(out, labels_address(out), n, 1, True)
+    _ = out  # keep the Python object alive through the native call above
+    return _keep_ret_out^
 
 
 # ------------------------------------------------------------ fit
@@ -229,8 +233,10 @@ def logistic_fit(model: PythonObject, args: PythonObject, context: PythonObject)
     var y_enc = labels_vector(rows, "<f4", context)
     var codes = MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=labels_address(labels.codes))
     var target = _F32P(unsafe_from_address=labels_address(y_enc))
+    _ = y_enc  # keep the Python object alive through the native call above
     for i in range(rows):  # cpu-route: the label codes as solver targets, the explicit label input step
         target[i] = Float32(codes[i])
+        _ = y_enc  # keep the Python object alive through the native call above
     var strengths = _qn_params(fields, l1_ratio)
     var l1 = strengths[0]
     var l2 = strengths[1]
@@ -248,6 +254,7 @@ def logistic_fit(model: PythonObject, args: PythonObject, context: PythonObject)
     var info = labels_vector(2, "<f4", context)
     var tol = fields["tol"]
     var has_sw = sw.addr != 0
+    _ = sw  # keep the Python object alive through the native call above
     var params = Python.list(rows, cols, n_classes,
                              py_call(b.float, l1), py_call(b.float, l2), py_call(b.float, tol),
                              py_call(b.float, tol * PythonObject(0.01)),
@@ -259,29 +266,45 @@ def logistic_fit(model: PythonObject, args: PythonObject, context: PythonObject)
         # field 15 svr_eps (0), field 16 the weights
         _ = py_call(params.append, PythonObject(0.0))
         _ = py_call(params.append, PythonObject(sw.addr))
+        _ = sw  # keep the Python object alive through the native call above
     var n_iter = py_call_typed(_need(entries, "qn_fit"), classical_address(x), PythonObject(labels_address(y_enc)),
                                PythonObject(labels_address(w)), PythonObject(labels_address(info)), params)
+    _ = y_enc  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
+    _ = info  # keep the Python object alive through the native call above
+    _ = w  # keep the Python object alive through the native call above
     py_setitem(fields, "_w", w)
     # `_coef_from_w`: one target, the first `cols` words and the last; C
     # targets, cuML's column-major block w[c + C*j], the bias at j == cols.
     var source = _F32P(unsafe_from_address=labels_address(w))
+    _ = w  # keep the Python object alive through the native call above
     var coef = labels_empty(Python.tuple(n_targets, cols), "<f4", context)
     var inter = labels_vector(n_targets, "<f4", context)
     var cp = _F32P(unsafe_from_address=labels_address(coef))
+    _ = coef  # keep the Python object alive through the native call above
     var ip = _F32P(unsafe_from_address=labels_address(inter))
+    _ = inter  # keep the Python object alive through the native call above
     for c in range(n_targets):  # driver-loop: over the fitted coefficient block (model structure)
         for j in range(cols):  # driver-loop: over the fitted coefficients of one target
             cp[c * cols + j] = source[c + n_targets * j]
+            _ = coef  # keep the Python object alive through the native call above
+            _ = w  # keep the Python object alive through the native call above
         if intercept:
             ip[c] = source[c + n_targets * cols]
+            _ = inter  # keep the Python object alive through the native call above
+            _ = w  # keep the Python object alive through the native call above
     py_setitem(fields, "coef_", coef)
     py_setitem(fields, "intercept_", inter)
     var iterations = labels_vector(1, "<i8", context)
     _I64P(unsafe_from_address=labels_address(iterations))[0] = Int64(_int(n_iter))
+    _ = iterations  # keep the Python object alive through the native call above
     py_setitem(fields, "n_iter_", iterations)
     var words = _F32P(unsafe_from_address=labels_address(info))
+    _ = info  # keep the Python object alive through the native call above
     py_setitem(fields, "objective_", PythonObject(Float64(words[0])))
+    _ = info  # keep the Python object alive through the native call above
     py_setitem(fields, "retcode_", PythonObject(Int(words[1])))
+    _ = info  # keep the Python object alive through the native call above
     py_setitem(fields, "n_features_in_", cols)
     _ = x^
     _ = y_enc^
@@ -333,6 +356,8 @@ def logistic_decision(model: PythonObject, source: PythonObject, context: Python
         _ = py_call(params.append, PythonObject(n_targets))
     _ = py_call_typed(_need(entries, "qn_decision_function"), classical_address(x),
                       classical_address(fields["_w"]), PythonObject(labels_address(out)), params)
+    _ = x  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
     _ = x^
     return out
 
@@ -357,6 +382,8 @@ def logistic_predict(model: PythonObject, source: PythonObject, context: PythonO
                           PythonObject(labels_address(codes)),
                           Python.list(rows, cols, 1 if Bool(py=fields["fit_intercept"]) else 0))
         _ = w  # keep the Python object alive through the native call above
+        _ = x  # keep the Python object alive through the native call above
+        _ = codes  # keep the Python object alive through the native call above
         _ = x^
         return classical_decode_labels(fields["classes_"], codes, context)
     var entries = _entries(model, fields, context)
@@ -374,6 +401,8 @@ def logistic_predict(model: PythonObject, source: PythonObject, context: PythonO
             _ = py_call_typed(native, classical_address(x), classical_address(fields["_w"]),
                               PythonObject(labels_address(codes)),
                               Python.list(rows, cols, 1 if Bool(py=fields["fit_intercept"]) else 0, n_targets))
+            _ = x  # keep the Python object alive through the native call above
+            _ = codes  # keep the Python object alive through the native call above
         _ = x^
         return classical_decode_labels(fields["classes_"], codes, context)
     # A binding without the device argmax keeps the host scan, the same
@@ -398,10 +427,14 @@ def logistic_proba(model: PythonObject, source: PythonObject, context: PythonObj
         out = labels_empty(Python.tuple(rows, 2), "<f8", context)
         _ = py_call_typed(_need(entries, "qn_sigmoid"), PythonObject(labels_address(scores)), PythonObject(labels_address(out)),
                           Python.list(rows))
+        _ = out  # keep the Python object alive through the native call above
+        _ = scores  # keep the Python object alive through the native call above
     else:
         out = labels_empty(Python.tuple(rows, n_targets), "<f8", context)
         _ = py_call_typed(_need(entries, "qn_softmax"), PythonObject(labels_address(scores)), PythonObject(labels_address(out)),
                           Python.list(rows, n_targets))
+        _ = out  # keep the Python object alive through the native call above
+        _ = scores  # keep the Python object alive through the native call above
     _ = scores^
     return out
 
@@ -422,6 +455,8 @@ def logistic_log_proba(model: PythonObject, source: PythonObject, context: Pytho
     if size:
         _ = py_call_typed(_need(entries, "py2mojo_rows"), PythonObject(ROWS_LOG), PythonObject(labels_address(proba)),
                           PythonObject(labels_address(out)), Python.list(size, 1))
+        _ = proba  # keep the Python object alive through the native call above
+        _ = out  # keep the Python object alive through the native call above
     _ = proba^
     return out
 

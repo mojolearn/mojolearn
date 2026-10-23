@@ -151,8 +151,10 @@ def mk_of(values: List[Float64], r: Int, c: Int, ctx: PythonObject) raises -> Py
     var store = mk_store_zeros(len(values), ctx)
     if len(values) > 0:
         var p = mk_store_ptr(store)
+        _ = store  # keep the Python object alive through the native call above
         for i in range(len(values)):  # small-loop(values: a constant operand the caller spells out): bounded by the call site
             p[i] = Float32(values[i])
+            _ = store  # keep the Python object alive through the native call above
     return mk_new(store, r, c, ctx)
 
 
@@ -176,6 +178,7 @@ def mk_store(m: PythonObject, ctx: PythonObject) raises -> PythonObject:
         var a = mk_store_zeros(n, ctx)
         if n > 0:
             _ = family_call(family_entry(d.b, "x_decomp_dev_download", ctx), d.id, mk_store_addr(a), PythonObject(n))
+            _ = a  # keep the Python object alive through the native call above
         py_setattr(m, "_s", a)
     py_setattr(m, "_d", PythonObject(None))
     return m._s
@@ -185,7 +188,9 @@ def mk_addr(m: PythonObject, ctx: PythonObject) raises -> PythonObject:
     """`m.addr`: its host store's address (`_M._one`'s for an empty one)."""
     var store = mk_store(m, ctx)
     if mk_store_len(store):
-        return mk_store_addr(store)
+        var _keep_ret_store = mk_store_addr(store)
+        _ = store  # keep the Python object alive through the native call above
+        return _keep_ret_store^
     return mk_store_addr(mk_store(mk_one(ctx), ctx))
 
 
@@ -197,6 +202,7 @@ def mk_at(m: PythonObject, i: Int, ctx: PythonObject) raises -> Float64:
     """`float(m.s[i])`."""
     var store = mk_store(m, ctx)
     var v = Float64(mk_store_ptr(store)[i])
+    _ = store  # keep the Python object alive through the native call above
     _ = store^
     return v
 
@@ -237,10 +243,13 @@ def mk_dev_gather(m: PythonObject, op: Int, idx: List[Int], ctx: PythonObject) r
     var w = len(idx)
     var ia = mk_store_zeros(w, ctx)
     var p = mk_store_ptr(ia)
+    _ = ia  # keep the Python object alive through the native call above
     for t in range(w):  # small-loop(idx: the gathered row or column numbers): bounded by the caller's index list
         p[t] = Float32(Float64(idx[t]))
+        _ = ia  # keep the Python object alive through the native call above
     var di = mk_devbuf(raw, w, ctx)
     _ = family_call(family_entry(raw, "x_decomp_dev_upload", ctx), di.id, mk_store_addr(ia), PythonObject(w))
+    _ = ia  # keep the Python object alive through the native call above
     var r = mk_r(m)
     var c = mk_c(m)
     var n = r * c
@@ -292,10 +301,14 @@ def mk_take_cols(m: PythonObject, idx: List[Int], ctx: PythonObject) raises -> P
     var out = mk_store_zeros(r * w, ctx)
     if r * w > 0:
         var sp = mk_store_ptr(src)
+        _ = src  # keep the Python object alive through the native call above
         var dp = mk_store_ptr(out)
+        _ = out  # keep the Python object alive through the native call above
         for t in range(w):  # small-loop(idx: one host column copy per selected column): bounded by the caller's index list
             for i in range(r):  # native data movement: the column's values of a host matrix
                 dp[i * w + t] = sp[i * c + idx[t]]
+                _ = out  # keep the Python object alive through the native call above
+                _ = src  # keep the Python object alive through the native call above
     _ = src^
     return mk_new(out, r, w, ctx)
 
@@ -455,6 +468,7 @@ struct MKit(Movable):
         var nd = mk_devbuf(self.raw, n, self.ctx)
         if n > 0:
             _ = family_call(self.fn("x_decomp_dev_upload"), nd.id, mk_store_addr(a), PythonObject(n))
+            _ = a  # keep the Python object alive through the native call above
         py_setattr(m, "_s", PythonObject(None))
         py_setattr(m, "_d", nd)
         _ = a^
@@ -473,6 +487,7 @@ struct MKit(Movable):
             d = mk_devbuf(self.raw, 1, self.ctx)
             var z = mk_store_zeros(1, self.ctx)
             _ = family_call(self.fn("x_decomp_dev_upload"), d.id, mk_store_addr(z), PythonObject(1))
+            _ = z  # keep the Python object alive through the native call above
             _ = z^
             py_setitem(cache, key, d)
         return d.id
@@ -520,8 +535,11 @@ struct MKit(Movable):
         if n > 0:
             var pa = mk_addr(a, self.ctx)
             var pb = mk_addr(bm, self.ctx)
+            _ = bm  # keep the Python object alive through the native call above
             var pc = mk_addr(cm, self.ctx)
+            _ = cm  # keep the Python object alive through the native call above
             var po = mk_addr(out, self.ctx)
+            _ = out  # keep the Python object alive through the native call above
             var params = mk_ints([op, n, mk_c(a), mk_store_len(mk_store(bm, self.ctx)), bmode,
                                   mk_store_len(mk_store(cm, self.ctx)), cmode])
             _ = family_call(self.fn("x_decomp_ew"), pa, pb, pc, po, params, PythonObject(s))
@@ -560,6 +578,7 @@ struct MKit(Movable):
             var pa = mk_addr(a, self.ctx)
             var pb = mk_addr(b, self.ctx)
             _ = family_call(self.lle_mm, pa, pb, mk_addr(out, self.ctx), params)
+            _ = out  # keep the Python object alive through the native call above
             return out
         if m * n > 0 and m * k > 0 and k * n > 0 and self.use2(a, b):
             var out = self.dout(m, n)
@@ -572,6 +591,7 @@ struct MKit(Movable):
             var pa = mk_addr(a, self.ctx)
             var pb = mk_addr(b, self.ctx)
             _ = family_call(self.fn("x_decomp_gemm"), pa, pb, mk_addr(out, self.ctx), params)
+            _ = out  # keep the Python object alive through the native call above
         return out
 
     def colsum(mut self, a: PythonObject) raises -> PythonObject:
@@ -585,6 +605,7 @@ struct MKit(Movable):
         var out = mk_zeros(1, c, self.ctx)
         var pa = mk_addr(a, self.ctx)
         _ = family_call(self.fn("x_decomp_colsum"), pa, mk_addr(out, self.ctx), mk_ints([r, c]))
+        _ = out  # keep the Python object alive through the native call above
         return out
 
     def rowsum(mut self, a: PythonObject) raises -> PythonObject:
@@ -598,6 +619,7 @@ struct MKit(Movable):
         var out = mk_zeros(r, 1, self.ctx)
         var pa = mk_addr(a, self.ctx)
         _ = family_call(self.fn("x_decomp_rowsum"), pa, mk_addr(out, self.ctx), mk_ints([r, c]))
+        _ = out  # keep the Python object alive through the native call above
         return out
 
     def total(mut self, a: PythonObject) raises -> PythonObject:
@@ -620,6 +642,7 @@ struct MKit(Movable):
         var pa = mk_addr(a, self.ctx)
         var pb = mk_addr(b, self.ctx)
         _ = family_call(self.fn("x_decomp_sqdist"), pa, pb, mk_addr(out, self.ctx), params)
+        _ = out  # keep the Python object alive through the native call above
         return out
 
     def pdist(mut self, a: PythonObject, b: PythonObject, kind: Int, pw: Float64) raises -> PythonObject:
@@ -640,6 +663,7 @@ struct MKit(Movable):
         var pa = mk_addr(a, self.ctx)
         var pb = mk_addr(b, self.ctx)
         _ = family_call(self.fn("x_decomp_sqdist"), pa, pb, mk_addr(out, self.ctx), params)
+        _ = out  # keep the Python object alive through the native call above
         return out
 
     def rand(mut self, r: Int, c: Int, seed: PythonObject, stream: Int, kind: Int) raises -> PythonObject:
@@ -658,6 +682,7 @@ struct MKit(Movable):
         var out = mk_zeros(r, c, self.ctx)
         if r * c > 0:
             _ = family_call(self.fn("x_decomp_rand"), mk_addr(out, self.ctx), params)
+            _ = out  # keep the Python object alive through the native call above
         return out
 
     # ---- small dense linear algebra
@@ -670,9 +695,13 @@ struct MKit(Movable):
         var d = a._d
         if n >= 1 and mk_c(a) == n and not (d is None) and d.b is self.raw and self.opt_dev("x_decomp_dev_eigh"):
             _ = family_call(self.fn("x_decomp_dev_eigh"), d.id, mk_addr(w, self.ctx), mk_addr(v, self.ctx), params)
+            _ = v  # keep the Python object alive through the native call above
+            _ = w  # keep the Python object alive through the native call above
             return (w, v)
         var pa = mk_addr(a, self.ctx)
         _ = family_call(self.fn("x_decomp_eigh"), pa, mk_addr(w, self.ctx), mk_addr(v, self.ctx), params)
+        _ = v  # keep the Python object alive through the native call above
+        _ = w  # keep the Python object alive through the native call above
         return (w, v)
 
     def lu(mut self, a: PythonObject) raises -> Tuple[PythonObject, PythonObject, Int]:
@@ -685,16 +714,24 @@ struct MKit(Movable):
             var lu = mk_copy(a, self.ctx)
             _ = family_call(self.lle_lu, mk_addr(lu, self.ctx), mk_store_addr(piv), mk_addr(info, self.ctx),
                             mk_ints([n]))
+            _ = lu  # keep the Python object alive through the native call above
+            _ = info  # keep the Python object alive through the native call above
+            _ = piv  # keep the Python object alive through the native call above
             return (lu, piv, Int(mk_at(info, 0, self.ctx)))
         if n >= 1 and mk_c(a) == n and self.opt_dev("x_decomp_dev_lu") and self.use1(a):
             var lu = self.dout(n, n)
             var ia = self.did(a)
             _ = family_call(self.fn("x_decomp_dev_lu"), ia, lu._d.id, mk_store_addr(piv), mk_addr(info, self.ctx),
                             mk_ints([n]))
+            _ = info  # keep the Python object alive through the native call above
+            _ = piv  # keep the Python object alive through the native call above
             return (lu, piv, Int(mk_at(info, 0, self.ctx)))
         var lu = mk_copy(a, self.ctx)
         _ = family_call(self.fn("x_decomp_lu"), mk_addr(lu, self.ctx), mk_store_addr(piv), mk_addr(info, self.ctx),
                         mk_ints([n]))
+        _ = lu  # keep the Python object alive through the native call above
+        _ = info  # keep the Python object alive through the native call above
+        _ = piv  # keep the Python object alive through the native call above
         return (lu, piv, Int(mk_at(info, 0, self.ctx)))
 
     def lu_aux(mut self, lu: PythonObject, piv: PythonObject,
@@ -711,10 +748,18 @@ struct MKit(Movable):
         if n >= 1 and not (d is None) and d.b is self.raw and self.opt_dev("x_decomp_dev_lu"):
             _ = family_call(self.fn("x_decomp_dev_lu_aux"), d.id, mk_store_addr(piv), mk_addr(pm, self.ctx),
                             mk_addr(im, self.ctx), mk_addr(diag, self.ctx), mk_addr(st, self.ctx), params)
+            _ = pm  # keep the Python object alive through the native call above
+            _ = st  # keep the Python object alive through the native call above
+            _ = diag  # keep the Python object alive through the native call above
+            _ = im  # keep the Python object alive through the native call above
         else:
             var pl = mk_addr(lu, self.ctx)
             _ = family_call(self.fn("x_decomp_lu_aux"), pl, mk_store_addr(piv), mk_addr(pm, self.ctx),
                             mk_addr(im, self.ctx), mk_addr(diag, self.ctx), mk_addr(st, self.ctx), params)
+            _ = pm  # keep the Python object alive through the native call above
+            _ = st  # keep the Python object alive through the native call above
+            _ = diag  # keep the Python object alive through the native call above
+            _ = im  # keep the Python object alive through the native call above
         var stats = List[Float64]()
         for i in range(4):  # small-loop(stats: the four lu_aux status words): 4
             stats.append(mk_at(st, i, self.ctx))
@@ -755,6 +800,7 @@ struct MKit(Movable):
             var pi = mk_addr(idx, self.ctx)
             var pb = mk_addr(b, self.ctx)
             _ = family_call(self.fn("x_decomp_trisolve"), pl, pi, pb, mk_addr(out, self.ctx), params)
+            _ = out  # keep the Python object alive through the native call above
         return out
 
     def svd(mut self, a: PythonObject, mut hk: MKit) raises -> Tuple[PythonObject, PythonObject]:
@@ -768,9 +814,13 @@ struct MKit(Movable):
         if m >= n and n >= 1 and self.opt_dev("x_decomp_dev_svd") and self.use1(a):
             var ia = self.did(a)
             _ = family_call(self.fn("x_decomp_dev_svd"), ia, mk_addr(s, self.ctx), mk_addr(v, self.ctx), params)
+            _ = v  # keep the Python object alive through the native call above
+            _ = s  # keep the Python object alive through the native call above
         else:
             var pa = mk_addr(a, self.ctx)
             _ = family_call(self.fn("x_decomp_svd"), pa, mk_addr(s, self.ctx), mk_addr(v, self.ctx), params)
+            _ = v  # keep the Python object alive through the native call above
+            _ = s  # keep the Python object alive through the native call above
         var neg = self.ew1(OP_SCALE, s, -1.0)
         var o = self.order(neg)
         var st = mk_t(s, hk, self.ctx)
@@ -798,6 +848,7 @@ struct MKit(Movable):
             var pa = mk_addr(a, self.ctx)
             var pi = mk_addr(idx, self.ctx)
             _ = family_call(self.fn("x_decomp_move"), pa, pi, mk_addr(out, self.ctx), params)
+            _ = out  # keep the Python object alive through the native call above
         return out
 
     def take_rows(mut self, a: PythonObject, idx: PythonObject) raises -> PythonObject:
@@ -831,6 +882,7 @@ struct MKit(Movable):
         var out = mk_zeros(1, 1, self.ctx)
         var pa = mk_addr(a, self.ctx)
         _ = family_call(self.fn("x_decomp_reduce"), pa, mk_addr(out, self.ctx), params)
+        _ = out  # keep the Python object alive through the native call above
         return out
 
     def strided(mut self, a: PythonObject, count: Int, stride_in: Int, off: Int) raises -> PythonObject:
@@ -849,7 +901,9 @@ struct MKit(Movable):
         if count > 0:
             var pa = mk_addr(a, self.ctx)
             var pi = mk_addr(idx, self.ctx)
+            _ = idx  # keep the Python object alive through the native call above
             _ = family_call(self.fn("x_decomp_move"), pa, pi, mk_addr(out, self.ctx), params)
+            _ = out  # keep the Python object alive through the native call above
         return out
 
     def word(mut self, a: PythonObject, i: Int) raises -> Float64:
@@ -947,6 +1001,7 @@ struct MKit(Movable):
         if n > 0:
             var pa = mk_addr(a, self.ctx)
             _ = family_call(self.fn("x_decomp_order_f"), pa, PythonObject(n), mk_addr(out, self.ctx))
+            _ = out  # keep the Python object alive through the native call above
         return out
 
     def argmin_all(mut self, a: PythonObject) raises -> PythonObject:
@@ -970,6 +1025,7 @@ struct MKit(Movable):
             c = Int(py=py_call(Python.import_module("builtins").int,
                                family_call(self.fn("x_decomp_argmin_all"), pa, PythonObject(n),
                                            mk_addr(buf, self.ctx))))
+            _ = buf  # keep the Python object alive through the native call above
         var store = mk_store(buf, self.ctx)
         var part = py_call(py_attr(store, "__getitem__"), py_call(Python.import_module("builtins").slice,
                                                       PythonObject(0), PythonObject(c)))
@@ -1008,6 +1064,7 @@ struct MKit(Movable):
             var store = mk_store(out, self.ctx)
             # the binary64 result's two float32 words, read as one double
             var v = FAMILY_F64P(unsafe_from_address=Int(py=mk_store_addr(store)))[0]
+            _ = store  # keep the Python object alive through the native call above
             _ = store^
             return v
         # cpu-route: host binding only (CPU-only installs); a GPU binding sums on the device above
@@ -1026,6 +1083,7 @@ struct MKit(Movable):
         var dist = mk_zeros(n, n, self.ctx)
         var pw = mk_addr(w, self.ctx)
         _ = family_call(self.fn("x_decomp_graph_dijkstra"), pw, mk_addr(dist, self.ctx), mk_ints([n]))
+        _ = dist  # keep the Python object alive through the native call above
         return dist
 
     def graph_knn(mut self, d: PythonObject, nn: Int, exclude_self: Bool) raises -> Tuple[PythonObject, PythonObject]:
@@ -1044,6 +1102,8 @@ struct MKit(Movable):
         if n * nn > 0:
             var pd = mk_addr(d, self.ctx)
             _ = family_call(self.fn("x_decomp_graph_knn"), pd, mk_addr(idx, self.ctx), mk_addr(dst, self.ctx), params)
+            _ = dst  # keep the Python object alive through the native call above
+            _ = idx  # keep the Python object alive through the native call above
         return (idx, dst)
 
     def graph_knn_dense(mut self, idx: PythonObject, w: PythonObject, n: Int) raises -> PythonObject:
@@ -1058,6 +1118,7 @@ struct MKit(Movable):
         var pi = mk_addr(idx, self.ctx)
         var pw = mk_addr(w, self.ctx)
         _ = family_call(self.fn("x_decomp_graph_knn_dense"), pi, pw, mk_addr(out, self.ctx), mk_ints([n, nn]))
+        _ = out  # keep the Python object alive through the native call above
         return out
 
     def graph_radius(mut self, d: PythonObject, r: Float64) raises -> PythonObject:
@@ -1070,6 +1131,7 @@ struct MKit(Movable):
         var out = mk_zeros(n, n, self.ctx)
         var pd = mk_addr(d, self.ctx)
         _ = family_call(self.fn("x_decomp_graph_radius"), pd, mk_addr(out, self.ctx), mk_ints([n]), PythonObject(r))
+        _ = out  # keep the Python object alive through the native call above
         return out
 
     def graph_radius_geo(mut self, dq: PythonObject, d: PythonObject, r: Float64) raises -> PythonObject:
@@ -1089,6 +1151,7 @@ struct MKit(Movable):
             var pd = mk_addr(d, self.ctx)
             _ = family_call(self.fn("x_decomp_graph_radius_geo"), pq, pd, mk_addr(out, self.ctx), mk_ints([nq, n]),
                             PythonObject(r))
+            _ = out  # keep the Python object alive through the native call above
         return out
 
     def graph_lle_iw(mut self, idx: PythonObject, wb: PythonObject, n: Int) raises -> PythonObject:
@@ -1103,6 +1166,7 @@ struct MKit(Movable):
         var pi = mk_addr(idx, self.ctx)
         var pw = mk_addr(wb, self.ctx)
         _ = family_call(self.fn("x_decomp_graph_lle_iw"), pi, pw, mk_addr(out, self.ctx), mk_ints([n, nn]))
+        _ = out  # keep the Python object alive through the native call above
         return out
 
     def graph_components(mut self, w: PythonObject) raises -> Tuple[PythonObject, Int]:
@@ -1116,6 +1180,7 @@ struct MKit(Movable):
         var comp = mk_zeros(n, 1, self.ctx)
         var pw = mk_addr(w, self.ctx)
         var c = family_call(self.fn("x_decomp_graph_components"), pw, mk_addr(comp, self.ctx), mk_ints([n]))
+        _ = comp  # keep the Python object alive through the native call above
         return (comp, Int(py=py_call(b.int, c)))
 
     def graph_join(mut self, w: PythonObject, d: PythonObject, comp: PythonObject, count: Int) raises:
@@ -1146,6 +1211,7 @@ struct MKit(Movable):
         _ = family_call(self.fn("x_decomp_barycenter_rows"), px, py, pi, mk_addr(w, self.ctx), mk_addr(flags, self.ctx),
                         mk_ints([n, mk_r(y), mk_c(x), k]), py_call(Python.import_module("builtins").float, reg))
         _ = flags  # keep the Python object alive through the native call above
+        _ = w  # keep the Python object alive through the native call above
         return w
 
     def lle_apply(mut self, wb: PythonObject, idm: PythonObject, e: PythonObject) raises -> PythonObject:
@@ -1160,6 +1226,7 @@ struct MKit(Movable):
             var pe = mk_addr(e, self.ctx)
             _ = family_call(self.fn("x_decomp_lle_apply"), pw, pi, pe, mk_addr(out, self.ctx),
                             mk_ints([nq, mk_r(e), nn, nc]))
+            _ = out  # keep the Python object alive through the native call above
         return out
 
     def lle_local(mut self, m: PythonObject, idm: PythonObject, method: Int, nn: Int, nc: Int,
@@ -1175,6 +1242,7 @@ struct MKit(Movable):
         mk_append(tols, PythonObject(tol))
         _ = family_call(self.fn("x_decomp_lle_local"), pm, pi, mk_addr(bm, self.ctx), mk_ints([method, n, d, nn, nc]),
                         tols)
+        _ = bm  # keep the Python object alive through the native call above
         return bm
 
 
@@ -1203,6 +1271,7 @@ def mk_t(m: PythonObject, mut hk: MKit, ctx: PythonObject) raises -> PythonObjec
     # cpu-route: host binding only (CPU-only installs); a GPU binding transposed above
     _ = family_call(hk.fn("x_decomp_move"), pm, mk_addr(mk_one(ctx), ctx), mk_addr(out, ctx),
                     mk_ints([MV_TRANSPOSE, n, r, c, 0, 0, 0, n, n, 1]))
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -1223,9 +1292,11 @@ def mk_take_rows_list(m: PythonObject, idx: List[Int], mut hk: MKit, ctx: Python
     if count * c > 0:
         var pm = mk_addr(m, ctx)
         var pi = mk_addr(im, ctx)
+        _ = im  # keep the Python object alive through the native call above
         # cpu-route: host binding only (CPU-only installs), the GPU binding moved above
         _ = family_call(hk.fn("x_decomp_move"), pm, pi, mk_addr(out, ctx),
                         mk_ints([MV_TAKE_ROWS, count * c, c, 0, 0, 1, 0, mk_store_len(mk_store(m, ctx)), count * c, count]))
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -1240,8 +1311,12 @@ def mk_from_input(source: PythonObject, name: String, ctx: PythonObject) raises 
         raise Error(name + ": a nonempty two-dimensional input is required")
     var store = mk_store_zeros(r * c, ctx)
     var src = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(a)))
+    _ = a  # keep the Python object alive through the native call above
     memcpy(dest=mk_store_ptr(store), src=src, count=r * c)
+    _ = store  # keep the Python object alive through the native call above
+    _ = a  # keep the Python object alive through the native call above
     if not family_all_finite_f32(src, r * c):
         raise Error(name + ": input must be finite; NaN/inf are unsupported")
+    _ = a  # keep the Python object alive through the native calls above
     _ = a^
     return mk_new(store, r, c, ctx)

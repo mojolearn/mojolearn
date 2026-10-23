@@ -31,15 +31,19 @@ def _psi_init(fields: PythonObject, d: Int, context: PythonObject) raises -> Pyt
     if given is None:
         var ones = decomp_f32(Python.tuple(d), context)
         var p = F32P(unsafe_from_address=Int(py=classical_address(ones)))
+        _ = ones  # keep the Python object alive through the native call above
         for j in range(d):  # driver-loop: over the features' initial noise variances (model structure)
             p[j] = 1.0
+            _ = ones  # keep the Python object alive through the native call above
         return ones
     var values = py_call(b.list, given)
     var count = len(values)
     var psi = decomp_f32(Python.tuple(count), context)
     var p = F32P(unsafe_from_address=Int(py=classical_address(psi)))
+    _ = psi  # keep the Python object alive through the native call above
     for j in range(count):  # driver-loop: over the caller's noise_variance_init entries (model structure)
         p[j] = Float32(decomp_float(values[j]))
+        _ = psi  # keep the Python object alive through the native call above
     if count != d:
         raise Error("noise_variance_init dimension does not match the number of features : " + String(count)
                     + " != " + String(d))
@@ -74,6 +78,11 @@ def fa_fit(model: PythonObject, source: PythonObject, context: PythonObject) rai
     var it = Int(py=py_call_typed(entries["x_decomp_fa_fit"], Python.list(
         classical_address(x), n, d, nc, max_iter, classical_address(psi0), code, classical_address(components),
         classical_address(psi), classical_address(mean), Int(ll.unsafe_ptr())), Python.list(decomp_float(fields["tol"]))))
+    _ = components  # keep the Python object alive through the native call above
+    _ = psi0  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
+    _ = mean  # keep the Python object alive through the native call above
+    _ = psi  # keep the Python object alive through the native call above
     if it == 0:
         # `_fit_store` with no fitted W: the shell's attribute read failed
         raise Error("AttributeError: 'NoneType' object has no attribute '" + (String("T") if code != 0 else String("out")) + "'")
@@ -118,9 +127,15 @@ def fa_query(model: PythonObject, source: PythonObject, op: Int, context: Python
     elif op == _SCORE_SAMPLES:
         out = decomp_f32(Python.tuple(n), context)
     var spare = classical_address(w)
+    _ = w  # keep the Python object alive through the native call above
     var value = py_call_typed(entries["x_decomp_fa_query"], Python.list(
         op, classical_address(x) if x is not None else spare, n, d, nc, classical_address(w), classical_address(psi),
         classical_address(mean), classical_address(out) if out is not None else spare))
+    _ = x  # keep the Python object alive through the native call above
+    _ = psi  # keep the Python object alive through the native call above
+    _ = w  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
+    _ = mean  # keep the Python object alive through the native call above
     _ = w^
     _ = psi^
     _ = mean^
