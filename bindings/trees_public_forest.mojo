@@ -831,6 +831,7 @@ def _rf_fit_classifier(model: PythonObject, fields: PythonObject, kind: String, 
         _ = importance  # keep the Python object alive through the native call above
         _ = _rf_fit_arrays(fields, kind, x, y_addr, labels.n, k,
                            ForestFit("rf_classifier_fit_aux", True, tail, True), None, rf, context)
+        _ = labels  # y_addr borrows the encoded codes, not the stored classes_
         _ = importance  # keep the Python object alive through the native call above
         _ = score  # keep the Python object alive through the native call above
         _ = oob  # keep the Python object alive through the native call above
@@ -847,6 +848,7 @@ def _rf_fit_classifier(model: PythonObject, fields: PythonObject, kind: String, 
         var tail = Python.list(tree_start, PythonObject(0 if not weights else weights.value().addr))
         _ = _rf_fit_arrays(fields, kind, trees_f32(X, 2, "F", "X", context), y_addr, labels.n, k,
                            ForestFit("rf_classifier_fit_shard", True, tail, False), None, rf, context)
+        _ = labels  # retain shard labels through the address-only fit
         _ = weights^
         return model
     if weights:
@@ -855,11 +857,13 @@ def _rf_fit_classifier(model: PythonObject, fields: PythonObject, kind: String, 
         var tail = Python.list(PythonObject(weights.value().addr))
         _ = _rf_fit_arrays(fields, kind, trees_f32(X, 2, "F", "X", context), y_addr, labels.n, k,
                            ForestFit("rf_classifier_fit_weighted", True, tail, True), None, rf, context)
+        _ = labels
         _ = weights^
         return model
     _ = _rf_fit_arrays(fields, kind, _x_for(X, Bool(_rf_entries(rf, "rf_classifier_fit")), context),
                        y_addr, labels.n, k, ForestFit("rf_classifier_fit", True, Python.list(), True),
                        _rf_entries(rf, "rf_classifier_fit"), rf, context)
+    _ = labels
     return model
 
 

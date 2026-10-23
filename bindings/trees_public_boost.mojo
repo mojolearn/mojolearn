@@ -139,6 +139,9 @@ def _fsum(values: PythonObject, context: PythonObject) raises -> Float64:
     var out = py_call(context["array_type"], PythonObject("d"), Python.list(PythonObject(0.0)))
     var status = Int(py=py_call_typed(trees_helper(context, "fsum_f64"), py_call(src.buffer_info)[0], PythonObject(len(src)),
                                       py_call(out.buffer_info)[0]))
+    # The helper reads src through a raw integer address; last-use destruction
+    # after buffer_info/len must not free it before fsum_f64 consumes the data.
+    _ = src
     var total = Float64(py=out[0])
     if status != 0:
         if total != 0:
@@ -434,6 +437,9 @@ def _member_fit_weighted(member: PythonObject, xcm: TreesMatrix, codes: PythonOb
         _ = weights  # keep the Python object alive through the native call above
         result = _launch(rf, fit, xcm, trees_address(labels.codes), params, criterion, False, context)
         _ = weights  # keep the Python object alive through the native call above
+    # Both fit routes receive only the codes' address. The model owns the
+    # classes table, not this freshly encoded label buffer.
+    _ = labels
     _member_store(member, forest_fit_arrays(result, context), xcm.cols)
     _fitted(member)
     _ = weights^

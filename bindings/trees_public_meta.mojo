@@ -1417,8 +1417,12 @@ def _cal_scores(model: PythonObject, xt: PythonObject, e: PythonObject, Xa: Pyth
         _ = blk^
         return trees_reshape(acc, Python.tuple(n, 1), context)
     var acc = _class_zero(xt, n * k, context)
-    _ = py_call_typed(_x(xt, "x_trees_accumulate_cols"), _A(acc), _P(blk.addr), _A(_sub_cols(e, context)),
+    # Keep the freshly allocated class-index array until accumulate_cols has
+    # consumed it. _A(_sub_cols(...)) returned only an address to a temporary.
+    var sub_cols = _sub_cols(e, context)
+    _ = py_call_typed(_x(xt, "x_trees_accumulate_cols"), _A(acc), _P(blk.addr), _A(sub_cols),
                       Python.list(_P(n), _P(k), _P(len(_attr(e, "classes_", Python.list()))), _F(1.0)))
+    _ = sub_cols
     _ = acc  # keep the Python object alive through the native call above
     _ = blk^
     return trees_reshape(acc, Python.tuple(n, k), context)

@@ -846,6 +846,9 @@ def msel_strat_shuffle_split(y: PythonObject, n_splits: Int, test_size: PythonOb
             _ = test  # keep the Python object alive through the native call above
             at_tr += modes[c]
             at_te += modes[k + c]
+        # p0 and tab do not carry the owners of the per-class index buffers.
+        _ = perms
+        _ = rows
         var last = rng.permutation_rows([tr_len, te_len], context)
         var out_tr = msel_new(tr_len, "<i8", context)
         var out_te = msel_new(te_len, "<i8", context)
@@ -857,6 +860,7 @@ def msel_strat_shuffle_split(y: PythonObject, n_splits: Int, test_size: PythonOb
                         PythonObject(te_len), PythonObject(msel_addr(out_te)))
         _ = test  # keep the Python object alive through the native call above
         _ = out_te  # keep the Python object alive through the native call above
+        _ = last
         _ = py_call(out.append, Python.tuple(out_tr, out_te))
     return out
 
