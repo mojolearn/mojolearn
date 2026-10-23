@@ -49,6 +49,7 @@ from autograd.partition_pyapi import (
 from autograd.program_control_grad_pyapi import ops_program_control_vjp_py
 from autograd.pyapi import model_fit_py, model_labels_check, model_labels_result, model_n_params_py, model_predict_py
 from autograd.pyapi import model_gather_labels_py
+from autograd.pyapi import model_fit_labels_check, model_fit_labels_py, model_predict_labels_py
 from autograd.pyapi import model_import_params_py, ops_load_weights_py
 from core.label_cast import host_unique_inverse_cast
 from autograd.pyapi import (
@@ -159,6 +160,27 @@ def model_labels_binding(src: PythonObject, classes_addr: PythonObject, codes_ad
     var ck = model_labels_check(src, classes_addr, codes_addr)
     var k = host_unique_inverse_cast(ck[0], ck[1], Int(py=classes_addr), Int(py=codes_addr))
     return model_labels_result(k)
+
+
+def model_predict_labels_binding(addrs: PythonObject, prog: PythonObject, ptab: PythonObject, ip: PythonObject) raises -> PythonObject:
+    """Sequential.predict of a classifier: the codes and the label gather
+    stay on the executor (autograd/pyapi.mojo model_predict_labels_py)."""
+    var ex = HostExec()
+    return model_predict_labels_py(ex, addrs, prog, ptab, ip)
+
+
+def model_fit_labels_binding(
+    addrs: PythonObject, prog: PythonObject, ip: PythonObject, fp: PythonObject, lab: PythonObject,
+) raises -> PythonObject:
+    """Sequential.fit of a classifier in one call: the label sort writes the
+    classes to the caller's buffer and the codes into an executor buffer,
+    and the fit reads them there (autograd/pyapi.mojo model_fit_labels_py).
+    Returns [class count, epochs run]."""
+    var la = model_fit_labels_check(lab)
+    var ex = HostExec()
+    var codes = ex.alloc(la[0].rows)
+    var k = host_unique_inverse_cast(la[0], la[1], la[2], Int(codes))
+    return model_fit_labels_py(ex, k, codes, la[3], la[4], addrs, prog, ip, fp)
 
 
 def model_gather_labels_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
@@ -738,6 +760,8 @@ def build__mojolearn_x_sequence_host() -> PythonObject:
         m.def_function[model_n_params_binding]("model_n_params")
         m.def_function[model_labels_binding]("model_labels")
         m.def_function[model_gather_labels_binding]("model_gather_labels")
+        m.def_function[model_predict_labels_binding]("model_predict_labels")
+        m.def_function[model_fit_labels_binding]("model_fit_labels")
         m.def_function[model_import_params_binding]("model_import_params")
         m.def_function[ops_load_weights_binding]("ops_load_weights")
         # the operation session (autograd/ops_api.mojo)
