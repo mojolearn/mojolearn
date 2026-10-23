@@ -30,7 +30,7 @@ from bindings.classical_score import classical_r2_score
 from bindings.classical_labels import (
     LabelsMatrix, ClassicalLabels, labels_f32, labels_view, labels_check_rank, labels_f32_view,
     labels_check_sample_weight, labels_vector, labels_empty, labels_full_f32, labels_address, labels_cast, labels_reshape,
-    labels_shape_of, labels_env, classical_encode_labels, classical_decode_labels, classical_accuracy,
+    labels_shape_of, labels_env, classical_encode_labels, classical_decode_labels, classical_accuracy, labels_r2,
 )
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
@@ -1415,6 +1415,13 @@ def x_linear_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObject
             result = xl_isotonic(model, "fit_transform", args, context)
         elif operation == "isotonic_transform":
             result = xl_isotonic(model, "transform", args, context)
+        elif operation == "isotonic_score":
+            # RegressorScoreMixin.score: metrics.r2_score(y, predict(X),
+            # sample_weight, numeric_mode=self.numeric_mode) on the float32
+            # prediction, which is handed straight to the R^2 kernel.
+            var prediction = xl_isotonic(model, "transform", Python.tuple(args[0]), context)
+            result = PythonObject(labels_r2(args[1], prediction, args[2],
+                                            py_get(py_fields(model), "numeric_mode"), context))
         elif operation == "cd_fit":
             result = xl_cd_fit(model, args, context)
         elif operation == "cd_predict":

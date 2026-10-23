@@ -3065,6 +3065,25 @@ class IsotonicRegression(RegressorScoreMixin, NumericModeMixin):
         """
         return _XL_CALL(self, "isotonic_fit_transform", (X, y, sample_weight), _XL_CONTEXT)
 
+    def score(self, X, y, sample_weight=None):
+        """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples,) or (n_samples, 1)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True targets.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            R^2; 1.0 is a perfect fit.
+        """
+        return _XL_CALL(self, "isotonic_score", (X, y, sample_weight), _XL_CONTEXT)
+
 
 # The native owner of every public fit / predict / transform / score above
 # except RidgeCV, LassoCV, ElasticNetCV and LogisticRegressionCV.fit (their
