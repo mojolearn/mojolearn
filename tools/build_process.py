@@ -16,6 +16,11 @@ _LOCK = threading.Lock()
 _CANCELLED = threading.Event()
 
 
+def cancelled():
+    """Let an orchestrator refuse cache publication after cancellation."""
+    return _CANCELLED.is_set()
+
+
 def stop_group(pid, grace=0.2):
     """The leader may already have exited while compiler children remain."""
     previous = {}
