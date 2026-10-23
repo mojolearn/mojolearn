@@ -56,3 +56,49 @@ def test_custom_scorer_and_metric_callbacks_refuse_before_call():
         assert isinstance(audit.exception, TypeError), audit.report()
         assert calls == []
         assert not audit.report()['python_frames'], audit.report()
+
+
+@pytest.fixture(scope='module')
+def named_scorer_models():
+    # Testing setup and independent metric oracles stay outside the audited
+    # public scorer call. Positive regression values cover log/deviance losses.
+    x = np.arange(108, dtype='f4').reshape(36, 3) / np.float32(108)
+    x[:, 1] = np.sin(x[:, 1] * np.float32(6))
+    x[:, 2] *= x[:, 2]
+    options = dict(n_estimators=3, max_depth=3, random_state=17, numeric_mode='identical')
+    targets = {
+        'regression': np.float32(2) + x[:, 0] * np.float32(.4) + x[:, 2] * np.float32(.3),
+        'binary': (np.arange(36) % 2).astype('i4'),
+        'multiclass': (np.arange(36) % 3).astype('i4'),
+    }
+    return {key: (ml.RandomForestRegressor(**options).fit(x, y)
+                  if key == 'regression' else ml.RandomForestClassifier(**options).fit(x, y), x, y)
+            for key, y in targets.items()}
+
+
+@pytest.mark.parametrize('name', sorted(ms._NATIVE_CONTEXT['family_msel_scorers']))
+def test_every_named_scorer_consumes_native_prediction_and_matches_public_metric(name, named_scorer_models):
+    scorer = ms.get_scorer(name)
+    fields = vars(scorer)
+    metric = fields['_score_func']
+    regression = {
+        'explained_variance_score', 'r2_score', 'max_error', 'median_absolute_error',
+        'mean_absolute_error', 'mean_absolute_percentage_error', 'mean_squared_error',
+        'mean_squared_log_error', 'root_mean_squared_error', 'root_mean_squared_log_error',
+        'mean_poisson_deviance', 'mean_gamma_deviance', 'd2_absolute_error_score',
+    }
+    kind = ('regression' if metric.__name__ in regression else
+            'multiclass' if name.startswith(('roc_auc_ovr', 'roc_auc_ovo')) else 'binary')
+    model, x, y = named_scorer_models[kind]
+    got = audit_native_call(scorer.__call__, model, x, y).assert_native()
+    methods = fields['_response_method']
+    methods = (methods,) if isinstance(methods, str) else methods
+    method = next(method for method in methods if hasattr(model, method))
+    pred = getattr(model, method)(x)
+    if method == 'predict_proba' and fields['_name'] in ms._BINARY_PROBA:
+        array = np.asarray(pred)
+        if array.ndim == 2 and array.shape[1] == 2:
+            pred = array[:, 1].astype('f4')
+    expected = fields['_sign'] * float(metric(y, pred, **fields['_kwargs']))
+    assert np.isfinite(got), (name, got)
+    assert np.float64(got).view('u8') == np.float64(expected).view('u8'), (name, got, expected)

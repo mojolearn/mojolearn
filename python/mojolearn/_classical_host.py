@@ -1530,3 +1530,8 @@ def _connect_host_inference():
 
 
 _connect_host_inference()
+
+# Connect after the host inference descriptor is installed, preserving the
+# explicit CPU owner's attribute layout even in a package with GPU bindings.
+from ._native_logistic_bridge import connect_public as _connect_logistic_public
+_connect_logistic_public(HostLogisticRegression, _LR_CONTEXT, install=False)

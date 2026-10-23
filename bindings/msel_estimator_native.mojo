@@ -41,6 +41,13 @@ def msel_estimator_plan(model: PythonObject, context: PythonObject) raises -> Py
             raise Error("TypeError: native estimator state requires exact string keys")
     var protected = plan["protected"]
     for k in range(len(protected)):  # driver-loop: refuse instance method/protocol overrides before dispatch
+        if String(protected[k]) == "_has_constructor_parameters":
+            # Forest constructors deliberately store this native bool on
+            # each instance; the class identity is still protected above.
+            var flag = py_get(fields, protected[k])
+            if flag is not None and py_type(flag) is not b.bool:
+                raise Error("TypeError: native forest constructor-state flag must be an exact bool")
+            continue
         if py_contains(fields, protected[k]):
             raise Error("TypeError: native estimator instance overrides a connected method or protocol")
     return plan

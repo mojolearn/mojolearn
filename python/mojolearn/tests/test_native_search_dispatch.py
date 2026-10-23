@@ -71,3 +71,14 @@ def test_parameter_sampler_distribution_property_is_not_called():
     audit = audit_native_call(ms.ParameterSampler, {'alpha': Distribution()}, 2)
     assert isinstance(audit.exception, NotImplementedError), audit.report()
     assert calls == [] and not audit.report()['python_frames'], audit.report()
+
+
+def test_learning_curve_native_fit_failure_uses_error_score():
+    x = np.arange(36, dtype='f4').reshape(12, 3)
+    y = np.arange(12, dtype='f4')
+    result = audit_native_call(ms.learning_curve, ml.Ridge(alpha=-1), x, y, cv=3,
+                               train_sizes=[4, 8], error_score=-123., n_jobs=1).assert_native()
+    sizes, train, test = result
+    assert np.array_equal(np.asarray(sizes), [4, 8])
+    assert np.array_equal(np.asarray(train), np.full((2, 3), -123.))
+    assert np.array_equal(np.asarray(test), np.full((2, 3), -123.))

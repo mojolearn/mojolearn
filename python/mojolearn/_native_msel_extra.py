@@ -46,3 +46,18 @@ def connect(context, register, registry):
                            'means_', 'priors_', 'xbar_', 'scalings_', 'explained_variance_ratio_', 'covariance_',
                            '_rank', '_max_components', '_scal_full', '_mojolearn_fitted', '_mojolearn_fitting'),
     )
+
+    from . import linear_model
+    from ._native_logistic_bridge import connect_public, _PARAMETERS
+    cls = linear_model.LogisticRegression
+    owner = connect_public(cls, linear_model._LR_CONTEXT)
+    register(cls, linear_model._LR_CALL, owner, _PARAMETERS, 'initialize', {
+        'fit': ('fit', (('arg', 0), ('arg', 1), ('constant', None))),
+        'predict': ('predict', (('arg', 0),)),
+        'predict_proba': ('predict_proba', (('arg', 0),)),
+        'predict_log_proba': ('predict_log_proba', (('arg', 0),)),
+        'decision_function': ('decision_function', (('arg', 0),)),
+        'score': ('score', (('arg', 0), ('arg', 1))),
+        'get_params': ('get_params', (('constant', False),)),
+        'set_params': ('set_params', (('arg', 0),)),
+    })
