@@ -936,39 +936,6 @@ def _fit_categories(mode, arr):
     return [pr.get(uo + c * n, counts[c]) for c in range(d)]  # glue: slices the per-column category outputs (d-sized: feature count)
 
 
-def _given_categories(categories, arr, mode, check_unknown, who):
-    """categories=<list>: one list per column, numeric, sorted ascending with
-    at most a NaN last (the reference refuses unsorted numeric categories),
-    stored as float32. With check_unknown (handle_unknown='error') a training
-    value outside its column's list is refused, as the reference's fit."""
-    n, d = arr.shape
-    if len(categories) != d:
-        raise ValueError(f"mojolearn: {who} categories has {len(categories)} lists; X has {d} features")
-    out = []
-    for j, cats in enumerate(categories):  # glue: validates the user categories argument (categories-sized: user category lists)
-        vals = [float(v) for v in (cats.tolist() if hasattr(cats, "tolist") else cats)]  # glue: converts the user categories argument (cats-sized: one user category list)
-        f32 = array.array("f", vals)
-        nums = [v for v in f32 if v == v]  # glue: validates the user categories argument (f32-sized: one user category list)
-        if len(nums) < len(f32) - 1 or (len(nums) < len(f32) and f32[-1] == f32[-1]):
-            raise ValueError(f"mojolearn: {who} categories[{j}]: nan must be the last category")
-        if nums != sorted(nums):  # glue: validates the user categories argument is sorted (nums-sized: one user category list)
-            raise ValueError(f"mojolearn: {who} unsorted categories are not supported for numerical categories")
-        if any(a == b for a, b in zip(nums, nums[1:])):  # glue: validates the user categories argument has no duplicates (nums-sized: one user category list)
-            raise ValueError(f"mojolearn: {who} categories[{j}] has values equal in float32")
-        if not f32:
-            raise ValueError(f"mojolearn: {who} categories[{j}] is empty")
-        canon = [0.0 if v == 0 else v for v in nums] + ([float("nan")] if len(nums) < len(f32) else [])  # glue: canonicalizes the user categories argument (nums-sized: one user category list)
-        out.append(Array.from_list(canon, "<f4"))
-    if check_unknown:
-        pr = _Prog()
-        _codes_neg = _codes(pr, arr, out)
-        pr.run(mode)
-        bad = [j for j, v in enumerate(pr.values(_codes_neg[1], d)) if v > 0]  # glue: reads the per-column unknown flags the device set (d-sized: feature count)
-        if bad:
-            raise ValueError(f"mojolearn: {who} found unknown categories in column(s) {bad} during fit")
-    return out
-
-
 def _category_block(pr, categories):
     """Every column's categories in one (d, kmax) block. Returns (offset, kmax)."""
     kmax = max(c.size for c in categories)  # glue: largest category count for the program layout (categories-sized: per-column category arrays)
@@ -1258,107 +1225,6 @@ def _native_folds(n, n_folds, seed, shuffle, codes=None, n_classes=0, as_array=F
     return got if as_array else got.tolist()
 
 
-def _target_binary_codes(y, target_type):
-    """(classes, int32 codes Array) of an explicit binary target, the label
-    pass native (lane prep-apple3, `te_arrays`); None when `_target_kind`
-    must run (any other target_type, or the change off)."""
-    if target_type != "binary" or not _r3("te_arrays"):
-        return None
-    classes, codes = encode_labels(y)
-    if not (isinstance(codes, Array) and codes.dtype == "<i4"):
-        return None
-    return classes, codes
-
-
-def _numeric_target(y):
-    """y as a flat numeric Array, or None for labels that are not numbers
-    (strings, objects, bools)."""
-    from ._buffer import _materialize
-    try:
-        arr, _ = _materialize(y, "y")
-    except (TypeError, ValueError):
-        return None
-    if arr.dtype not in ("<f4", "<f8", "<i4", "<i8", "<u4", "<u1", "<i2", "<u2", "<i1"):
-        return None
-    return arr.reshape((arr.size,))
-
-
-def _target_kind(y, target_type):
-    """(kind, classes, targets, T): targets are a float32 Array (continuous)
-    or the int32 class codes (binary, multiclass; the device makes their
-    float and one-hot words). Lane cgr4-py-compute: the kind test (any
-    non-integer value) is `_all_integral` (lane cpu2-l3-prep: on the
-    device), not a per-label Python test, and no per-row target list is
-    built."""
-    num = _numeric_target(y)
-    continuous = target_type == "continuous"
-    if not continuous and target_type == "auto" and num is not None and num.size \
-            and num.dtype in ("<f4", "<f8"):
-        continuous = not _all_integral(num)
-    if continuous:
-        if num is None:
-            raise ValueError("mojolearn: a continuous TargetEncoder target must be numeric")
-        return "continuous", None, num.astype("<f4") if num.dtype != "<f4" else num, 1
-    classes, codes = encode_labels(y if num is None else num)
-    if not (isinstance(codes, Array) and codes.dtype == "<i4"):
-        codes = as_i32_c(codes, ndim=1, name="codes")[0]
-    if target_type == "binary" or (target_type == "auto" and len(classes) <= 2):
-        return "binary", classes, codes, 1
-    return "multiclass", classes, codes, len(classes)
-
-
-def _all_integral(arr):
-    """Whether every value of a float32 / float64 Array is finite and an
-    integer (`reduce_stat`'s integral test), on the device: c2_integral by
-    chunks, c2_isum, one word read back (lane cpu2-l3-prep)."""
-    lb = _label_buffer(arr)
-    if lb is None or lb.kind not in (0, 4):
-        raise TypeError("mojolearn: the integral test takes a float32 or float64 vector")
-    n = lb.n
-    ch = max(4096, -(-n // 4096))
-    nch = -(-n // ch)
-    pr = _Prog()
-    cnt, tot = pr.alloc(nch), pr.alloc(1)
-    pr.stage("c2_integral", nch, pr.put_words(lb.words), lb.kind, n, ch, cnt)
-    pr.stage("c2_isum", 1, cnt, nch, tot)
-    pr.run(_mode())
-    return int(pr.get_i32(tot, 1).tolist()[0]) == 0
-
-
-def _target_arrays(y, target_type):
-    """`_target_kind` without the per-label lists (lane apple-fast-py2mojo-prep):
-    (kind, classes, target, T) with `target` the float32 Array of a
-    continuous y, else the int32 class codes (binary: T = 1, the codes are
-    the column; multiclass: T = K, the program expands them to the one-hot
-    rows with a `label_binarize` stage). Only for a numeric VECTOR buffer
-    with every value finite; None otherwise, and `_target_kind` answers."""
-    from ._buffer import _has_buffer, _materialize, all_finite
-    if isinstance(y, (list, tuple, str, bytes)) or not (isinstance(y, Array) or _has_buffer(y)):
-        return None
-    try:
-        arr, _ = _materialize(y, "y")
-    except (TypeError, ValueError):
-        return None
-    kind = arr.dtype.lstrip("<>|=")[:1]
-    if arr.size == 0 or arr.size != max(arr.shape) or kind not in ("f", "i", "u"):  # glue: shape check of the target argument
-        return None
-    if kind == "f" and (arr.dtype not in ("<f4", "<f8") or not all_finite(arr)):
-        return None
-    # the reference's continuous test: some label is not an integer (`_all_integral`,
-    # on the device; an integer dtype holds integers)
-    cont = target_type == "continuous" or (
-        target_type == "auto" and kind == "f" and not _all_integral(arr))
-    if cont:
-        vec = arr if arr.dtype == "<f4" and arr._has_order("C") else arr.astype("<f4")
-        return "continuous", None, Array._view_of(vec, (vec.size,)), 1
-    classes, codes = encode_labels(arr)
-    if not (isinstance(codes, Array) and codes.dtype == "<i4"):
-        return None
-    if target_type == "binary" or (target_type == "auto" and len(classes) <= 2):
-        return "binary", classes, codes, 1
-    return "multiclass", classes, codes, len(classes)
-
-
 _TARGET_SCRATCH = {}
 
 
@@ -1461,126 +1327,8 @@ class TargetEncoder(_PrepBase):
         if isinstance(self.cv, numbers.Integral) and self.cv < 2:
             raise ValueError("mojolearn: TargetEncoder cv must be an integer >= 2, a splitter or an iterable")
 
-    def _run(self, arr, y, folds, n_folds, apply_rows_folds, binary=None, target=None):
-        """binary (lane prep-apple3, `te_arrays`): (classes, int32 codes) of an
-        explicit binary target, with `folds` an int32 Array: both cross as
-        int32 words and become floats on the device (i2f), the same words the
-        lists gave. target (lane apple-fast-py2mojo-prep): `_target_arrays`'
-        answer, the target's words as arrays (the one-hot rows built on the
-        device), the same words `_target_kind`'s lists gave."""
-        n, d = arr.shape
-        mode = _mode()
-        if binary is None and target is None:
-            target = _target_arrays(y, self.target_type)
-        if target is not None:
-            kind, classes, tgt, T = target
-        elif binary is None:
-            kind, classes, tgt, T = _target_kind(y, self.target_type)
-        else:
-            kind, classes, tgt, T = "binary", binary[0], binary[1], 1
-        rows = tgt.size * T
-        if rows != n * T:
-            raise ValueError("mojolearn: X and y have different numbers of rows")
-        inverse = None
-        if _c08_route(mode, 1) and _is_auto(self.categories):
-            # C08 reuses only unsupervised category IDs. Fold membership,
-            # target statistics, and held-out target isolation are unchanged.
-            # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-            cats, inverse = _fit_categories_with_codes(mode, arr)
-        else:
-            cats = (_fit_categories(mode, arr) if _is_auto(self.categories) else
-                    _given_categories(self.categories, arr, mode, False, "TargetEncoder"))
-        cmax = max(c.size for c in cats)  # glue: largest category count for the program layout (cats-sized: per-column category arrays)
-        F = n_folds
-        pr = _Prog()
-        scratch = _target_scratch(mode)
-        if inverse is None:
-            codes, _neg = _codes(pr, arr, cats, device_only=scratch)
-        else:
-            codes = pr.put(inverse)
-        # the target's words as arrays (lane apple-fast-py2mojo-prep /
-        # cgr4-py-compute): continuous float32, codes through i2f, the
-        # one-hot rows built on the device
-        if kind == "continuous":
-            yo = pr.put(tgt)
-        elif T == 1:
-            yo = pr.put_codes(tgt)
-        else:
-            # the one-hot rows: word 1.0f (bits 0x3F800000) where row i's code is c, else 0.0f
-            co, yo = pr.put_codes(tgt), pr.alloc(n * T)
-            pr.stage("label_binarize", n * T, co, n, T, 0, 0, 0x3F800000, T, yo)
-        if isinstance(folds, tuple):
-            # cv an int: the folds on the device (`_stage_folds`): KFold for a continuous
-            # target, else StratifiedKFold over the class codes
-            _, seed, shuffle = folds
-            codes_off = _NONE if kind == "continuous" else (yo if T == 1 else co)
-            fo, flag = _stage_folds(pr, n, F, seed, shuffle, codes_off, len(classes) if classes is not None else 0)
-            _refuse_folds(pr, flag, F)
-        else:
-            if folds is None:
-                folds = full((max(n, 1),), -1, "<i4")
-            elif not isinstance(folds, Array):
-                store = array.array("i", folds)
-                folds = Array._owned(store, (len(store),), "<i4", "C")
-            fo = pr.put_codes(folds)
-        nco = pr.put_list([c.size for c in cats])  # glue: packs per-column category sizes (cats-sized: per-column category arrays)
-        meta = pr.alloc(2 * (F + 1) * T)
-        smo = pr.put_scalar(-1.0 if self.smooth == "auto" else float(self.smooth))
-        enc = pr.alloc((F + 1) * d * cmax * T)
-        pr.stage("te_global", (F + 1) * T, yo, n, T, fo, meta)
-        if _optional_prep_entry(_prep_binding(mode), "x_prep_host_column") is not None:
-            # the host binding groups te_enc its own way (x_prep/host/target.mojo)
-            pr.stage("te_enc", (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc)
-        else:
-            # each category's rows, ascending (te_bucket): te_enc walks one bucket, not every row
-            if scratch:
-                bstart, brows = pr.scratch(d * (cmax + 1)), pr.scratch(n * d)
-                # te_gather also visits unused bucket tails (unknown categories).
-                # Preserve alloc's initialized zero row indices in those tails.
-                pr.stage("cat_zero", n * d, brows)
-            else:
-                bstart, brows = pr.alloc(d * (cmax + 1)), pr.alloc(n * d)
-            if os.environ.get("MOJOLEARN_XPREP_TE_PBUCKET", "1") != "0":
-                # the buckets by chunks in parallel (te_hist .. te_hscatter), te_bucket's START and
-                # ROWS by construction. Default since lane prep-apple3 (M4, request 1790626651574:
-                # FAST taxi 1.204 -> 0.961 s, IDENTICAL 1.292 -> 1.017 s, digests equal)
-                ch = max(1, min(256, (n + 4095) // 4096))
-                hh, tot = pr.scratch(d * ch * cmax), pr.scratch(d * cmax)
-                pr.stage("te_hist", d * ch, codes, n, d, cmax, ch, hh)
-                pr.stage("te_hsum", d * cmax, cmax, ch, hh, tot)
-                pr.stage("te_hstart", d, cmax, bstart, tot)
-                pr.stage("te_hscatter", d * ch, codes, n, d, cmax, ch, hh, bstart, brows)
-            else:
-                pr.stage("te_bucket", d, codes, n, d, cmax, bstart, brows)
-            if os.environ.get("MOJOLEARN_XPREP_TE_GATHER", "1") != "0":
-                # each bucket's folds and targets in bucket order (te_gather): te_enc streams them
-                gb = pr.scratch(n * d * (1 + T))
-                pr.stage("te_gather", n * d, brows, n, d, yo, T, fo, gb)
-                pr.stage("te_enc", (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc,
-                         bstart + 1, brows, gb + 1)
-            else:
-                pr.stage("te_enc", (F + 1) * d * cmax * T, codes, n, d, yo, T, fo, cmax, nco, meta, smo, enc,
-                         bstart + 1, brows)
-        out = _NONE
-        if apply_rows_folds:
-            out = pr.output(n * d * T)
-            pr.stage("te_apply", n * d * T, codes, n, d, T, fo, enc, cmax, meta, F, out)
-        pr.run(mode)
-        self.categories_, self.target_type_, self.numeric_mode_, self.n_features_in_ = cats, kind, mode, d
-        self.classes_ = classes
-        self._T, self._cmax = T, cmax
-        base = F * d * cmax * T
-        self._enc = pr.get(enc + base, d * cmax * T)
-        self._meta = pr.get(meta + 2 * F * T, 2 * T)
-        self.encodings_ = [pr.get(enc + base + (j * cmax) * T, cats[j].size * T) for j in range(d)]  # glue: slices the per-column encodings outputs (d-sized: feature count)
-        means = pr.values(meta + 2 * F * T, 2 * T)[0::2]
-        self.target_mean_ = pr.get(meta + 2 * F * T, 1) if T == 1 else Array.from_list(means, "<f4")
-        return pr.get(out, (n, d * T)) if apply_rows_folds else None
-
     def fit(self, X, y):
-        self._check()
-        self._run(_x2d(X), y, None, 0, False)
-        return self
+        return _ENCODE_CALL(self, "fit", (X, y), _ENCODE_CONTEXT)
 
     def _splitter_folds(self, X, y, n):
         """Row -> fold (an int32 Array) from a splitter object or (train,
@@ -1619,31 +1367,20 @@ class TargetEncoder(_PrepBase):
         return fold, len(splits)
 
     def fit_transform(self, X, y):
-        self._check()
-        arr = _x2d(X)
-        n = arr.shape[0]
+        """Fit to ``X`` and ``y``, then encode ``X`` with cross fitting.
+
+        Returns
+        -------
+        array
+            The cross-fitted encodings of ``X``.
+        """
         if self.cv is not None and not isinstance(self.cv, numbers.Integral):
-            folds, F = self._splitter_folds(X, y, n)
-            return self._run(arr, y, folds, F, True)
-        cv = 5 if self.cv is None else int(self.cv)
-        if n < cv:
-            raise ValueError(f"mojolearn: cv={cv} folds need at least {cv} rows")
-        seed = 0 if self.random_state is None else int(self.random_state)
-        # the folds are staged in the fit's own program (`_stage_folds`, lane cpu2-l3-prep)
-        folds = ("cv", seed, bool(self.shuffle))
-        binary = _target_binary_codes(y, self.target_type)
-        if binary is not None:
-            if binary[1].size != n:
-                raise ValueError("mojolearn: X and y have different numbers of rows")
-            return self._run(arr, y, folds, cv, True, binary=binary)
-        # the target as arrays (`_target_arrays`, lane apple-fast-py2mojo-prep;
-        # else `_target_kind`'s arrays, lane cgr4-py-compute): no per-row Python either way
-        target = _target_arrays(y, self.target_type)
-        if target is None:
-            target = _target_kind(y, self.target_type)
-        if target[2].size != n:
-            raise ValueError("mojolearn: X and y have different numbers of rows")
-        return self._run(arr, y, folds, cv, True, target=target)
+            # cpu-route: a user cv splitter's index lists, the explicit input step before the one native fit
+            self._check()
+            arr = _x2d(X)
+            return _ENCODE_CALL(self, "fit_transform", (arr, y, self._splitter_folds(X, y, arr.shape[0])),
+                                _ENCODE_CONTEXT)
+        return _ENCODE_CALL(self, "fit_transform", (X, y, None), _ENCODE_CONTEXT)
 
     def transform(self, X):
         return _ENCODE_CALL(self, "transform", (X,), _ENCODE_CONTEXT)
@@ -4643,31 +4380,17 @@ class SelectKBest(_SelectorMixin):
         self.k = k
 
     def fit(self, X, y=None):
-        arr = _x2d(X)
-        d = arr.shape[1]
-        out = self.score_func(arr, y)
-        scores, pvals = out if isinstance(out, (tuple, list)) else (out, None)
-        self.scores_, self.pvalues_ = scores, pvals
-        if self.k == "all":
-            self._mask = [True] * d
-        else:
-            k = int(self.k)
-            if not 0 <= k <= d:
-                raise ValueError(f"mojolearn: k should be 0 <= k <= n_features = {d}; got {k}")
-            # lane cpu2-l3-prep: the top k on the device (c2_key64: binary64 ordered keys, a
-            # NaN as -inf; c2_topk: stable ascending rank, the later of tied columns wins)
-            pr = _Prog()
-            key, mask = pr.work(2 * d), pr.alloc(d)
-            words, kind = _key_words(scores, d)
-            pr.stage("c2_key64", d, pr.put_words(words), kind, key)
-            pr.stage("c2_topk", d, key, d, k, mask)
-            pr.run(_mode())
-            self._mask = _mask_list(pr, mask, d)
-        self.numeric_mode_, self.n_features_in_ = _mode(), d
-        return self
+        return _ENCODE_CALL(self, "fit", (X, y), _ENCODE_CONTEXT)
 
     def fit_transform(self, X, y=None, **fit_params):
-        return self.fit(X, y).transform(X)
+        """Fit to ``X`` and ``y``, then keep only the selected columns of ``X``.
+
+        Returns
+        -------
+        array
+            The selected columns, float32.
+        """
+        return _ENCODE_CALL(self, "fit_transform", (X, y), _ENCODE_CONTEXT)
 
 
 def _mi_discrete_mask(discrete_features, d):
@@ -5196,29 +4919,6 @@ class CategoricalNB(_DiscreteNB):
         return _CLS_CALL(self, "partial_fit", (X, y, classes, sample_weight), _CLS_CONTEXT)
 
 
-def _c08_route(mode, bit):
-    """Compile-time admission of one C08 route (1 TargetEncoder, 2 OneHot
-    fit_transform, 4 Ordinal fit_transform); no data processing."""
-    if mode != "identical":
-        return False
-    entry = _optional_prep_entry(_prep_binding(mode), "x_prep_c08_routes")
-    return bool(int(entry()) & bit) if entry is not None else False
-
-
-def _fit_categories_with_codes(mode, arr):
-    """C08 canonical categories and inverse from one owned native program."""
-    n, d = arr.shape
-    pr = _Prog()
-    X, sorted_rows = pr.put(arr), pr.work(n*d)
-    dictionary, counts, inverse = pr.alloc(n*d), pr.alloc(d), pr.alloc(n*d)
-    pr.stage("sort_cols", d, X, n, d, sorted_rows, 1)
-    pr.stage("unique_inverse", d, sorted_rows, n, d, dictionary, counts, X, inverse)
-    pr.run(mode)
-    sizes = [int(v) for v in pr.values(counts, d)]  # glue: per-feature output extents
-    categories = [pr.get(dictionary+c*n, sizes[c]) for c in range(d)]  # small-loop(d: per-feature category dictionaries): wraps fitted metadata per feature
-    return categories, pr.get(inverse, (n, d))
-
-
 # Import-time metadata connection; public operations hand off once to Mojo.
 from ._native_maxabs_bridge import connect as _connect_maxabs_scaler
 from ._native_scaler_bridge import register_subclass as _register_maxabs_scaler
@@ -5246,12 +4946,14 @@ _STATELESS_CALL, _STATELESS_CONTEXT = _connect_stateless(
      PowerTransformer: "power"})
 
 
-# Import-time connection; SimpleImputer, KBinsDiscretizer, OrdinalEncoder and
-# OneHotEncoder hand each public operation off once to Mojo (bindings/prep_encode_native.mojo).
+# Import-time connection; the imputer, discretizer, encoders, SplineTransformer
+# and SelectKBest hand each public operation off once to Mojo
+# (bindings/prep_encode_native.mojo).
 from ._native_prep_encode_bridge import connect as _connect_encode
 _ENCODE_CALL, _ENCODE_CONTEXT = _connect_encode(
     {SimpleImputer: "simple_imputer", KBinsDiscretizer: "kbins", OrdinalEncoder: "ordinal",
-     OneHotEncoder: "onehot", TargetEncoder: "target", SplineTransformer: "spline"}, _X_PREP2_QSELECT)
+     OneHotEncoder: "onehot", TargetEncoder: "target", SplineTransformer: "spline", SelectKBest: "select_kbest"},
+    _X_PREP2_QSELECT, {f_classif: "f_classif", chi2: "chi2", f_regression: "f_regression", r_regression: "r_regression"})
 
 
 # Import-time connection; the naive Bayes and discriminant-analysis classifiers
