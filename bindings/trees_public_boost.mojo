@@ -743,6 +743,7 @@ def bagging_fit(model: PythonObject, args: PythonObject, classifier: Bool, conte
             var pred = _argmax(xt, acc, n, k, context)
             var hits = Int(py=py_call_typed(_x(xt, "x_trees_count_equal"), _A(pred), _A(labels.codes), Python.list(_P(n))))
             _ = pred  # keep the Python object alive through the native call above
+            _ = labels  # the encoded-label owner outlives its raw-address read
             py_setitem(fields, "oob_score_", _F(Float64(hits) / Float64(n)))
             _ = pred  # keep the Python object alive through the native call above
         return model
@@ -761,6 +762,10 @@ def bagging_fit(model: PythonObject, args: PythonObject, classifier: Bool, conte
         _ = py_call_typed(_x(xt, "x_trees_oob_r2"),
                           Python.list(_A(pair[0]), _A(pair[1]), _A(y_array), _A(pred), _A(words), _A(flags)),
                           Python.list(_P(n)))
+        # The tuple owns the accumulated predictions and counts. Extracting
+        # their integer addresses does not retain either array through the
+        # native call; releasing the tuple early corrupts its first rows.
+        _ = pair
         _ = flags  # keep the Python object alive through the native call above
         _ = words  # keep the Python object alive through the native call above
         _ = pred  # keep the Python object alive through the native call above

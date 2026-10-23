@@ -20,7 +20,7 @@
 # entry points and C builtins connected at import
 # (python/mojolearn/_native_labels_bridge.py `label_context`).
 from std.math import isfinite
-from std.memory import bitcast
+from std.memory import bitcast, memcpy
 from std.os import getenv
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr, py_fields
@@ -1517,10 +1517,15 @@ def labels_accuracy(y_true: PythonObject, prediction: PythonObject, sample_weigh
 def _owned_f32(w: LabelsMatrix, context: PythonObject) raises -> PythonObject:
     """A float32 Array copy of weights that borrow a foreign buffer (the
     program runner copies Arrays into its arena; `put` took `as_f32_c`'s
-    Array). The bytes are copied in C (`array.array.frombytes`)."""
-    var store = py_call(context["array_type"], PythonObject("f"))
-    _ = py_call(store.frombytes, w.keep)
-    return classical_wrap_array(store, Python.tuple(len(store)), "<f4", "C", context)
+    Array). Copy the already-admitted contiguous float32 words natively."""
+    var count = w.rows * w.cols
+    var out = labels_vector(count, "<f4", context)
+    # `keep` owns the admitted storage; it need not itself export bytes.
+    # Re-entering its buffer protocol is unnecessary after labels_f32.
+    memcpy(dest=_F32P(unsafe_from_address=labels_address(out)),
+           src=_F32P(unsafe_from_address=w.addr), count=count)
+    _ = w  # retain the source export until the copy finishes
+    return out
 
 
 

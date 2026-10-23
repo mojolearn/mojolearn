@@ -15,7 +15,7 @@ def cleanup_body():
     return match.group()
 
 
-def harness(tmp_path, *, attempted, pod='', verified=False, status=0, create=False):
+def harness(tmp_path, *, attempted, pod='', verified=False, status=0, create=False, retained=True):
     temp = tmp_path / 'temporary'
     temp.mkdir()
     deadman = tmp_path / 'deadman'
@@ -37,6 +37,7 @@ kill() { echo "kill:$*" >> "$CALLS"; }
 pkill() { echo "pkill:$*" >> "$CALLS"; }
 die() { echo "$*" >&2; exit 1; }
 '''
+    body += f'retain_results() {{ return {0 if retained else 1}; }}\n'
     body += f'verify_gone() {{ return {0 if verified else 1}; }}\n'
     body += cleanup_body() + '\ntrap teardown EXIT\n'
     if create:
@@ -99,3 +100,22 @@ def test_cpu_runner_uses_shared_provider_primitives():
     for name in ('load_key', 'rp_call', 'rp_py', 'delete_pod', 'verify_gone', 'write_deadman'):
         assert not re.search(r'^' + name + r'\(\)', source, re.M)
     subprocess.run(['bash', '-n', str(RUNNER)], check=True)
+
+
+def test_retention_failure_never_deletes_even_after_success(tmp_path):
+    result, deadman, calls, out = harness(tmp_path, attempted=1, pod='known-pod', verified=True, retained=False)
+    assert result.returncode == 1
+    assert not calls.exists()
+    assert (deadman / 'curlrc').is_file()
+    assert 'refusing deletion' in result.stdout
+    assert 'terminated_verified=0' in (out / 'teardown.txt').read_text()
+
+
+def test_retention_preserves_all_bytes_and_is_archive_discoverable():
+    source = RUNNER.read_text()
+    assert 'tar chzf /root/results-cpu-leg-retained.tgz' in source
+    assert '"$expected" = "$actual"' in source
+    assert 'put-file "$OUT/results-complete.tgz"' in source
+    assert 'RESULTS_RETAINED=1' in source
+    assert '"$ARCHIVE_STATE/state.env"' in source
+    assert '/root/results-cpu-leg' in source

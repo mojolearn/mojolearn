@@ -150,3 +150,63 @@ def test_forest_and_adaboost_keep_encoded_labels_through_fit():
                 else:
                     np.testing.assert_array_equal(current, first)
     """)
+
+
+def test_silhouette_class_scratch_survives_native_encoding():
+    _debug_process("""
+        import numpy as np
+        from mojolearn import metrics
+
+        x = np.array([[0], [1], [10], [11]], dtype=np.float32)
+        labels = np.array([-3, -3, 100000, 100000], dtype=np.int32)
+        # Within-cluster distance is 1; other-cluster means are 10.5 and 9.5.
+        expected = np.array([1-1/10.5, 1-1/9.5, 1-1/9.5, 1-1/10.5])
+        for _ in range(12):
+            np.testing.assert_allclose(metrics.silhouette_samples(x, labels), expected, atol=1e-6, rtol=1e-6)
+            np.testing.assert_allclose(metrics.silhouette_score(x, labels), expected.mean(), atol=1e-6, rtol=1e-6)
+        np.testing.assert_array_equal(labels, [-3, -3, 100000, 100000])
+    """)
+
+
+def test_bagging_oob_keeps_sum_and_count_owners_until_native_r2_finishes():
+    _debug_process("""
+        import math
+        import numpy as np
+        import mojolearn as ml
+
+        # Reconstruct the ensemble's held-out mean independently from the
+        # fitted members. This checks every output row, not only a score or
+        # repeated hash that could hide a stable wrong result.
+        rng = np.random.default_rng(37)
+        for n, d in ((97, 5), (257, 7)):
+            x = rng.normal(size=(n, d)).astype(np.float32)
+            y = (2*x[:, 0] - x[:, 1] + .3*x[:, -1]).astype(np.float32)
+            first = None
+            for _ in range(4):
+                model = ml.BaggingRegressor(
+                    ml.DecisionTreeRegressor(max_depth=5), n_estimators=6,
+                    max_samples=.8, max_features=.8, oob_score=True, random_state=7,
+                ).fit(x, y)
+                sums = np.zeros(n, dtype=np.float64)
+                counts = np.zeros(n, dtype=np.int64)
+                for member, cols, rows in zip(model.estimators_, model.estimators_features_, model._oob_rows):
+                    cols = np.asarray(cols, dtype=np.int64)
+                    rows = np.asarray(rows, dtype=np.int64)
+                    if len(rows):
+                        values = np.asarray(member.predict(np.ascontiguousarray(x[rows][:, cols])), dtype=np.float32)
+                        sums[rows] += values.astype(np.float64)
+                        counts[rows] += 1
+                expected = sums / np.maximum(counts, 1)
+                actual = np.asarray(model.oob_prediction_).copy()
+                np.testing.assert_array_equal(actual.view(np.uint64), expected.view(np.uint64))
+                mean = math.fsum(float(v) for v in y) / n
+                total = math.fsum((float(v)-mean)*(float(v)-mean) for v in y)
+                residual = math.fsum((float(v)-float(p))*(float(v)-float(p)) for v, p in zip(y, expected))
+                expected_score = 1.0 - residual / total
+                assert abs(model.oob_score_ - expected_score) < 1e-14, (model.oob_score_, expected_score)
+                current = (actual.tobytes(), np.float64(model.oob_score_).tobytes())
+                if first is None:
+                    first = current
+                else:
+                    assert current == first
+    """)

@@ -187,6 +187,9 @@ def _silhouette(args: PythonObject, caller: String, context: PythonObject) raise
     var k = Int(py=family_call(mc_base("prepare_targets", context), classical_address(lab), PythonObject(2),
                                PythonObject(n_lab), py_call(store.buffer_info)[0], classical_address(mapped),
                                PythonObject(0), PythonObject(0), PythonObject(0)))
+    # The class table is written through its integer address by prepare_targets.
+    # Retain its owner until that write has completed, even though only k is returned.
+    _ = store
     _ = lab  # keep the Python object alive through the native call above
     _ = mapped  # keep the Python object alive through the native call above
     if k < 0:
