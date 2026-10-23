@@ -10,6 +10,7 @@ from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.native_error_class import error_without_class
+from bindings.native_caller_frame import native_caller_globals
 from bindings.classical_attributes import classical_connect_numpy, classical_getattribute, classical_check_layout
 from bindings.classical_arrays import classical_typed, classical_input, classical_address, classical_is_array, classical_is_f32, classical_c_order, classical_i64, classical_dtype_str
 from bindings.classical_archive import classical_archive_write
@@ -555,10 +556,11 @@ def scaler_archive_load(cls: PythonObject, path: PythonObject, context: PythonOb
 def _outside(context: PythonObject, depth: Int) raises -> Bool:
     var outside = True
     try:
-        var frame = py_call(context["classical_getframe"],depth)
-        var globals = frame.f_globals
+        var globals = native_caller_globals(depth)
+        if globals is None:
+            return True
         var name = py_get(globals,"__name__")
-        if py_type(name) is Python.import_module("builtins").str:
+        if py_type(name) is py_type(PythonObject("")):
             var module = String(name)
             outside = module != "mojolearn" and not module.startswith("mojolearn.") and not module.startswith("mojolearn_verify_all_")
         if py_get(globals,"__mojolearn_user_boundary__") is PythonObject(True):
