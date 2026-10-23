@@ -223,11 +223,11 @@ def _cov[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], w: Int, psi: Int
 
 
 def fa_query_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
-    op: Int, x: F32Ptr, n: Int, d: Int, nc: Int, components: F32Ptr, psi: F32Ptr, mean: F32Ptr, out: F32Ptr,
+    op: Int, x: F32Ptr, n: Int, d: Int, nc: Int, components: F32Ptr, psi: F32Ptr, mean: F32Ptr, out_buf: F32Ptr,
 ) raises -> Float64:
     """A fitted FactorAnalysis query on X (n x d; unread for the covariance
     and precision): FA_TRANSFORM (n x nc), FA_COVARIANCE / FA_PRECISION
-    (d x d), FA_SCORE_SAMPLES (n) written to out; FA_SCORE returned."""
+    (d x d), FA_SCORE_SAMPLES (n) written to out_buf; FA_SCORE returned."""
     var kit = RKit[E, D, RES]()
     try:
         var w = kit.add(Int(components), -1, nc, d)
@@ -259,14 +259,14 @@ def fa_query_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
             else:
                 var projected = kit.mm(xm, wpsi, tb=True)
                 y = kit.mm(projected, cov_z)
-            kit.copy_out(y, out, n * nc)
+            kit.copy_out(y, out_buf, n * nc)
         elif op == FA_COVARIANCE:
             var c = _cov(kit, w, noise)
-            kit.copy_out(c, out, d * d)
+            kit.copy_out(c, out_buf, d * d)
         elif op == FA_PRECISION:
             var c = _cov(kit, w, noise)
             var p = kit_inv[E, D, RES, X](kit, c)
-            kit.copy_out(p, out, d * d)
+            kit.copy_out(p, out_buf, d * d)
         else:
             # `_ss`
             var xm = kit.add(Int(x), -1, n, d)
@@ -281,7 +281,7 @@ def fa_query_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
             var shift = -0.5 * (pinned_mul_f64(Float64(d), LOG_2PI) - ld)
             var v = kit.ew(OP_ADDS, half, scalar=shift)
             if op == FA_SCORE_SAMPLES:
-                kit.copy_out(v, out, n)
+                kit.copy_out(v, out_buf, n)
             else:
                 var total_value = kit.total(v)
                 var total = kit.constant(Float32(total_value))

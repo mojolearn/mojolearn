@@ -419,8 +419,8 @@ def trees_f32_view(var view: TreesView, order: String, context: PythonObject) ra
             if contiguous_f:
                 r = cols
                 c = rows
-            var fn = trees_helper(context, "cast_colmajor_f64_to_f32" if view.typestr == "<f8" else "transpose_f32")
-            _ = py_call_typed(fn, PythonObject(view.addr), PythonObject(dst), PythonObject(r), PythonObject(c))
+            var fn_obj = trees_helper(context, "cast_colmajor_f64_to_f32" if view.typestr == "<f8" else "transpose_f32")
+            _ = py_call_typed(fn_obj, PythonObject(view.addr), PythonObject(dst), PythonObject(r), PythonObject(c))
             return TreesMatrix(out, dst, rows, cols, not want_f)
         if view.typestr == "<f8":
             # The flat cast keeps the source's storage order, which is the
@@ -458,8 +458,8 @@ def trees_all_finite(addr: Int, count: Int, wide: Bool, context: PythonObject) r
     """`_buffer.all_finite`: the base binding's scan."""
     if count == 0:
         return True
-    var fn = trees_helper(context, "all_finite_f64" if wide else "all_finite_f32")
-    return Int(py=py_call_typed(fn, PythonObject(addr), PythonObject(count))) == 1
+    var fn_obj = trees_helper(context, "all_finite_f64" if wide else "all_finite_f32")
+    return Int(py=py_call_typed(fn_obj, PythonObject(addr), PythonObject(count))) == 1
 
 
 # ---------------------------------------------------------------- weights
@@ -630,13 +630,13 @@ def _flatten_labels(y: PythonObject, context: PythonObject) raises -> PythonObje
     return out
 
 
-def _flatten_into(item: PythonObject, out: PythonObject, b: PythonObject) raises:
+def _flatten_into(item: PythonObject, out_buf: PythonObject, b: PythonObject) raises:
     var cls = py_type(item)
     if Bool(py=py_call(b.isinstance, item, Python.tuple(b.list, b.tuple))):
         for k in range(len(item)):  # cpu-route: Python label objects, the explicit label input step
-            _flatten_into(item[k], out, b)
+            _flatten_into(item[k], out_buf, b)
         return
-    _ = py_call(out.append, item)
+    _ = py_call(out_buf.append, item)
 
 
 def _label_kind(t: PythonObject, b: PythonObject, context: PythonObject) raises -> Int:
@@ -804,8 +804,8 @@ def trees_decode_labels(classes: PythonObject, codes: PythonObject, context: Pyt
                 _F64P(unsafe_from_address=trees_address(table))[i] = Float64(py=py_call(b.float, classes[i]))
         if fits:
             var out = trees_vector(n, "<i8" if kind == "int" else "<f8", context)
-            var fn = trees_helper(context, "gather_i64" if kind == "int" else "gather_f64")
-            _ = py_call_typed(fn, PythonObject(trees_address(table)), PythonObject(k),
+            var fn_obj = trees_helper(context, "gather_i64" if kind == "int" else "gather_f64")
+            _ = py_call_typed(fn_obj, PythonObject(trees_address(table)), PythonObject(k),
                               PythonObject(trees_address(wide_codes)), PythonObject(n), PythonObject(trees_address(out)))
             return out
     var values = Python.list()
@@ -823,8 +823,8 @@ def trees_argmax_rows(scores: PythonObject, rows: Int, cols: Int, wide: Bool, co
         return out
     if cols == 0:
         raise Error("argmax_rows: scores have no columns")
-    var fn = trees_helper(context, "argmax_rows_f64" if wide else "argmax_rows_f32")
-    _ = py_call_typed(fn, PythonObject(trees_address(scores)), PythonObject(rows), PythonObject(cols),
+    var fn_obj = trees_helper(context, "argmax_rows_f64" if wide else "argmax_rows_f32")
+    _ = py_call_typed(fn_obj, PythonObject(trees_address(scores)), PythonObject(rows), PythonObject(cols),
                       PythonObject(trees_address(out)))
     return out
 

@@ -325,7 +325,7 @@ def _gmm_default_fit(model: PythonObject, binding: PythonObject, source: PythonO
 
 
 def _gmm_score_call(model: PythonObject, binding: PythonObject, x: PythonObject, name: String, what: String,
-                    out: PythonObject, context: PythonObject) raises:
+                    out_buf: PythonObject, context: PythonObject) raises:
     """`_model_lists` then the scoring entry `name` writing `out`: the
     fitted check, the feature count, the mode check and the call."""
     var b = Python.import_module("builtins")
@@ -348,7 +348,7 @@ def _gmm_score_call(model: PythonObject, binding: PythonObject, x: PythonObject,
     # k, d, n_iter, converged, lower_bound, n
     var addrs = Python.list(classical_address(weights), classical_address(flat_m), classical_address(flat_c),
                             classical_address(flat_p), classical_address(log_det), classical_address(x),
-                            classical_address(out))
+                            classical_address(out_buf))
     var params = Python.list(PythonObject(k), PythonObject(d), _get(model, "n_iter_"), PythonObject(converged),
                              _get(model, "lower_bound_"), PythonObject(n))
     _check_mode(binding, model, context)

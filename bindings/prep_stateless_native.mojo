@@ -334,7 +334,7 @@ struct PrepLayout(Movable):
 
 
 def _col_stats(mut program: List[Int32], mut layout: PrepLayout, mode: PythonObject, entries: PythonObject,
-               xo: Int, n: Int, d: Int, out: Int, variance: Bool = True) raises:
+               xo: Int, n: Int, d: Int, out_buf: Int, variance: Bool = True) raises:
     """`_expansion_prep._cs`: the blocked order under IDN_STATS_BLOCKED on
     the IDENTICAL tier, else one thread per column. `variance` False skips
     the blocked variance pass (its callers read the other rows)."""
@@ -348,13 +348,13 @@ def _col_stats(mut program: List[Int32], mut layout: PrepLayout, mode: PythonObj
         var nb = (n + ROW_BLOCK - 1) // ROW_BLOCK
         var part = layout.work_words(5 * nb * d)
         _stage(program, OP_COLB_PART, nb * d, xo, n, d, part, nb)
-        _stage(program, OP_COLB_FOLD, d, part, nb, d, out)
+        _stage(program, OP_COLB_FOLD, d, part, nb, d, out_buf)
         if variance:
             var ss = layout.work_words(nb * d)
-            _stage(program, OP_COLB_SS, nb * d, xo, n, d, out, ss, nb)
-            _stage(program, OP_COLB_VAR, d, ss, nb, d, out)
+            _stage(program, OP_COLB_SS, nb * d, xo, n, d, out_buf, ss, nb)
+            _stage(program, OP_COLB_VAR, d, ss, nb, d, out_buf)
     else:
-        _stage(program, OP_COL_STATS, d, xo, n, d, out)
+        _stage(program, OP_COL_STATS, d, xo, n, d, out_buf)
 
 
 def _place_scratch(mut program: List[Int32], host: Int):

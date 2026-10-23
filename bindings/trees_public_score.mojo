@@ -481,7 +481,7 @@ def _arena_address(arena: PythonObject) raises -> Int:
 def trees_accuracy(y_true: PythonObject, prediction: PythonObject, sample_weight: PythonObject, mode: PythonObject,
                    context: PythonObject) raises -> Float64:
     """`_expansion_metrics.accuracy_fraction(y_true, prediction,
-    sample_weight, mode)`: the (weighted) match fraction from the device
+    sample_weight, mode)`: the (weighted) matched fraction from the device
     COUNT tail."""
     var b = trees_builtins()
     var caller = String("accuracy_score")
@@ -508,14 +508,14 @@ def trees_accuracy(y_true: PythonObject, prediction: PythonObject, sample_weight
     var prog = _Program()
     var a = prog.put(yt, n)
     var bb = prog.put(yp, n)
-    var match = prog.scratch(n)
-    prog.stage(_OP_PAIR_KEY, n, [a, bb, match, L, 1])
+    var matched = prog.scratch(n)
+    prog.stage(_OP_PAIR_KEY, n, [a, bb, matched, L, 1])
     var W = _NONE
     var w_array = PythonObject(None)
     if weighted:
         w_array = w.value().keep if py_type(w.value().keep) is context["array_class"] else _owned_f32(w.value(), context)
         W = prog.put(w_array, n)
-    var g0 = prog.group(match, n, L, W)
+    var g0 = prog.group(matched, n, L, W)
     var g1 = prog.group(a, n, L, W)
     var g2 = prog.group(bb, n, L, W)
     if weighted:
@@ -535,7 +535,7 @@ def trees_accuracy(y_true: PythonObject, prediction: PythonObject, sample_weight
         # `_wsum_sf64(prog, L)`: the soft binary64 hit and weight total.
         var nb = max(1, (n + _WSUM_BLOCK - 1) // _WSUM_BLOCK)
         var s = prog.scratch(4 * nb)
-        prog.stage(_OP_CM_EPI, nb, [_CM_WSUM_LEAF, match, W, n, s, L])
+        prog.stage(_OP_CM_EPI, nb, [_CM_WSUM_LEAF, matched, W, n, s, L])
         var stride = 1
         while stride < nb:  # driver-loop: over the fold levels (log2 of the block count)
             prog.stage(_OP_CM_EPI, (nb - stride + 2 * stride - 1) // (2 * stride), [_CM_WSUM_FOLD, s, stride, nb])

@@ -247,9 +247,9 @@ def _dev_h(dev: PythonObject, name: String) raises -> PythonObject:
     return py_fields(dev)["h"][name][0]
 
 
-def _download(entries: PythonObject, h: PythonObject, out: PythonObject) raises:
+def _download(entries: PythonObject, h: PythonObject, out_buf: PythonObject) raises:
     """`dev.download(h, out)`."""
-    _ = py_call(xcnn_entry(entries, "x_cnn_res_download"), h, xcnn_addr(out), out.size)
+    _ = py_call(xcnn_entry(entries, "x_cnn_res_download"), h, xcnn_addr(out_buf), out_buf.size)
 
 
 # ---------------------------------------------------------------- GCNConv

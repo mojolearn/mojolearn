@@ -148,13 +148,13 @@ def _copy_block(mut pr: ClsProg, src: Int, rows: Int, cols: Int, context: Python
     return out
 
 
-def _binary_difference(mut pr: ClsProg, src: Int, rows: Int, K: Int, d_cols: Int, out: Int, context: PythonObject) raises:
+def _binary_difference(mut pr: ClsProg, src: Int, rows: Int, K: Int, d_cols: Int, out_buf: Int, context: PythonObject) raises:
     """`_binary_difference`: the second minus the first column (or row)."""
     var w = pr.put_list(_pm_one(), context)
     if rows == 1:
-        pr.stage(OP_MATMUL, d_cols, w, 0, 1, src, d_cols, 1, out, d_cols, 2, NONE, NONE)
+        pr.stage(OP_MATMUL, d_cols, w, 0, 1, src, d_cols, 1, out_buf, d_cols, 2, NONE, NONE)
     else:
-        pr.stage(OP_MATMUL, rows, src, K, 1, w, 1, 0, out, 1, 2, NONE, NONE)
+        pr.stage(OP_MATMUL, rows, src, K, 1, w, 1, 0, out_buf, 1, 2, NONE, NONE)
 
 
 def _set(fields: PythonObject, name: String, value: PythonObject) raises:
@@ -176,7 +176,7 @@ struct Offs(Copyable, Movable):
     var p64: Bool
 
 
-def _jll_stages(mut pr: ClsProg, kind: String, fields: PythonObject, xo_in: Int, n: Int, d: Int, out: Int,
+def _jll_stages(mut pr: ClsProg, kind: String, fields: PythonObject, xo_in: Int, n: Int, d: Int, out_buf: Int,
                 context: PythonObject) raises:
     """The subclass's `_jll_stages`: its joint log likelihood stages."""
     var K = _n_classes(fields)
@@ -185,11 +185,11 @@ def _jll_stages(mut pr: ClsProg, kind: String, fields: PythonObject, xo_in: Int,
         var th = _put_attr(pr, fields, "theta_", context)
         var va = _put_attr(pr, fields, "var_", context)
         var co = _put_attr(pr, fields, "_const", context)
-        pr.stage(OP_GNB_JLL, n * K, xo, n, d, th, va, co, K, out)
+        pr.stage(OP_GNB_JLL, n * K, xo, n, d, th, va, co, K, out_buf)
     elif kind == "mnb":
         var w = _put_attr(pr, fields, "feature_log_prob_", context)
         var b = _put_attr(pr, fields, "class_log_prior_", context)
-        pr.stage(OP_MATMUL, n * K, xo, d, 1, w, 1, d, out, K, d, b, NONE)
+        pr.stage(OP_MATMUL, n * K, xo, d, 1, w, 1, d, out_buf, K, d, b, NONE)
     elif kind == "bnb":
         if fields["binarize"] is not None:
             var thr = pr.put_scalar(cls_float(fields["binarize"]), context)
@@ -198,24 +198,24 @@ def _jll_stages(mut pr: ClsProg, kind: String, fields: PythonObject, xo_in: Int,
             xo = xb
         var w = _put_attr(pr, fields, "_w", context)
         var b = _put_attr(pr, fields, "_bias", context)
-        pr.stage(OP_MATMUL, n * K, xo, d, 1, w, 1, d, out, K, d, b, NONE)
+        pr.stage(OP_MATMUL, n * K, xo, d, 1, w, 1, d, out_buf, K, d, b, NONE)
     elif kind == "cnb":
         var w = _put_attr(pr, fields, "feature_log_prob_", context)
         var b = _put_attr(pr, fields, "class_log_prior_", context) if K == 1 else NONE
-        pr.stage(OP_MATMUL, n * K, xo, d, 1, w, 1, d, out, K, d, b, NONE)
+        pr.stage(OP_MATMUL, n * K, xo, d, 1, w, 1, d, out_buf, K, d, b, NONE)
     elif kind == "cat":
         var fo = _put_attr(pr, fields, "_flp", context)
         var co = _put_attr(pr, fields, "class_log_prior_", context)
-        pr.stage(OP_CAT_JLL, n * K, xo, n, d, fo, K, Int(py=fields["_cmax"]), co, out)
+        pr.stage(OP_CAT_JLL, n * K, xo, n, d, fo, K, Int(py=fields["_cmax"]), co, out_buf)
     elif kind == "lda":
         var c = _put_attr(pr, fields, "_coef", context)
         var b = _put_attr(pr, fields, "_inter", context)
-        pr.stage(OP_MATMUL, n * K, xo, d, 1, c, 1, d, out, K, d, b, NONE)
+        pr.stage(OP_MATMUL, n * K, xo, d, 1, c, 1, d, out_buf, K, d, b, NONE)
     else:
         var m = _put_attr(pr, fields, "means_", context)
         var r = _put_attr(pr, fields, "_rot", context)
         var lc = _put_attr(pr, fields, "_logc", context)
-        pr.stage(OP_QDA_DEC, n * K, xo, n, d, m, r, lc, K, out)
+        pr.stage(OP_QDA_DEC, n * K, xo, n, d, m, r, lc, K, out_buf)
 
 
 def _proba64_on(mode: PythonObject, context: PythonObject) raises -> Bool:

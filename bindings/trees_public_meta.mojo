@@ -1185,9 +1185,9 @@ def _multioutput_classifier_score(model: PythonObject, X: PythonObject, y: Pytho
     return PythonObject(trees_accuracy(ones, hit, sample_weight, mode, context))
 
 
-def _cast_u1(source: PythonObject, out: PythonObject, size: Int, context: PythonObject) raises:
+def _cast_u1(source: PythonObject, out_buf: PythonObject, size: Int, context: PythonObject) raises:
     """`astype("<i4")` of a uint8 flag store."""
-    trees_cast(Int(py=py_call(source.buffer_info)[0]), "<u1", trees_address(out), "<i4", size, context)
+    trees_cast(Int(py=py_call(source.buffer_info)[0]), "<u1", trees_address(out_buf), "<i4", size, context)
 
 
 # --------------------------------------------------------------- OneVsRest

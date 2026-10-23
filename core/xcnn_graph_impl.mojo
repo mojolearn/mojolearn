@@ -18,10 +18,10 @@ def graph_edges_in_range(edges: Int, count: Int, n: Int) -> Bool:
     return True
 
 
-def graph_bias_rows(bias: Int, out: Int, rows: Int, cols: Int):
+def graph_bias_rows(bias: Int, out_buf: Int, rows: Int, cols: Int):
     """`np.broadcast_to(bias, (rows, cols))` written C-contiguous."""
     var src = _F32P(unsafe_from_address=bias)
-    var dst = _F32P(unsafe_from_address=out)
+    var dst = _F32P(unsafe_from_address=out_buf)
     for r in range(rows):
         for c in range(cols):
             dst[r * cols + c] = src[c]

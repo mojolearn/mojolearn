@@ -392,10 +392,10 @@ def _linear_svc_fit(model: PythonObject, args: PythonObject, context: PythonObje
 
 
 def _py2mojo_flags(binding: PythonObject) raises -> Int:
-    var fn = py_call(svc_builtins().getattr, binding, PythonObject("py2mojo_linear_flags"), PythonObject(None))
-    if fn is None:
+    var fn_obj = py_call(svc_builtins().getattr, binding, PythonObject("py2mojo_linear_flags"), PythonObject(None))
+    if fn_obj is None:
         return 0
-    return svc_int(family_call(fn))
+    return svc_int(family_call(fn_obj))
 
 
 def _linear_svc_codes(model: PythonObject, fields: PythonObject, binding: PythonObject, source: PythonObject,

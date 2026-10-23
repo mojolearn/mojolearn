@@ -11,9 +11,9 @@ comptime FAMILY_WEIGHTS_NEGATIVE = -4
 comptime FAMILY_WEIGHTS_ALL_ZERO = -5
 
 
-def family_fill_f32(out: MutPointer[Float32, MutUntrackedOrigin], n: Int, value: Float32):
+def family_fill_f32(out_buf: MutPointer[Float32, MutUntrackedOrigin], n: Int, value: Float32):
     for i in range(n):  # native input marshaling: a scalar weight fills every row
-        out[i] = value
+        out_buf[i] = value
 
 
 def family_weight_status(w: MutPointer[Float32, MutUntrackedOrigin], n: Int, allow_negative: Bool) -> Int:
@@ -54,6 +54,6 @@ def family_weight_status_f64(w: MutPointer[Float64, MutUntrackedOrigin], n: Int,
     return FAMILY_WEIGHTS_OK
 
 
-def family_fill_f64(out: MutPointer[Float64, MutUntrackedOrigin], n: Int, value: Float64):
+def family_fill_f64(out_buf: MutPointer[Float64, MutUntrackedOrigin], n: Int, value: Float64):
     for i in range(n):  # native input marshaling: a scalar weight fills every row
-        out[i] = value
+        out_buf[i] = value

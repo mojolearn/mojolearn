@@ -289,15 +289,15 @@ def _arena_int(arena: PythonObject, off: Int) raises -> Int:
     return Int(MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=_arena_base(arena) + 4 * off)[0])
 
 
-def _reg_result(r: _Reg, out: Int, arena: PythonObject, context: PythonObject) raises -> PythonObject:
+def _reg_result(r: _Reg, out_buf: Int, arena: PythonObject, context: PythonObject) raises -> PythonObject:
     """`_Reg.result`'s answer: a float, or the per-output float64 Array for raw_values."""
     if r.mo == "raw_values":
         var values = family_array(Python.tuple(r.d), "<f8", context)
         var dst = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(values)))
         for i in range(r.d):  # driver-loop: over the metric's outputs
-            dst[i] = _arena_double(arena, out + 2 * i)
+            dst[i] = _arena_double(arena, out_buf + 2 * i)
         return values
-    return PythonObject(_arena_double(arena, out))
+    return PythonObject(_arena_double(arena, out_buf))
 
 
 # ---------------------------------------------------------------- validation

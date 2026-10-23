@@ -500,14 +500,14 @@ def xcnn_block_forward(block: PythonObject, x: PythonObject, context: PythonObje
 
 # ---------------------------------------------------------------- dispatch
 
-def _flat_rows(out: PythonObject, context: PythonObject) raises -> PythonObject:
-    var s = xcnn_shape(out)
+def _flat_rows(out_buf: PythonObject, context: PythonObject) raises -> PythonObject:
+    var s = xcnn_shape(out_buf)
     var rest = 1
     for i in range(1, len(s)):  # driver-loop: over shape words
         rest *= s[i]
-    if xcnn_is_t(out, context):
-        return xcnn_reshape_t(out, [s[0], rest], context)
-    return xcnn_reshape(out, [s[0], rest])
+    if xcnn_is_t(out_buf, context):
+        return xcnn_reshape_t(out_buf, [s[0], rest], context)
+    return xcnn_reshape(out_buf, [s[0], rest])
 
 
 def _rows(layer: PythonObject, source: PythonObject, required: Bool, context: PythonObject) raises -> PythonObject:

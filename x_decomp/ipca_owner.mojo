@@ -341,10 +341,10 @@ def ipca_fit_run[E: Exec, D: RDev, RES: Bool, X: IpcaDev](
 
 def ipca_transform_run[E: Exec, D: RDev, RES: Bool](
     x: F32Ptr, n: Int, d: Int, nc: Int, mean: F32Ptr, components: F32Ptr, variance: F32Ptr, whiten: Bool,
-    out: F32Ptr,
+    out_buf: F32Ptr,
 ) raises:
     """`transform`: (X - mean_) components_^T, divided by sqrt(explained
-    variance) per column when whitening; n x nc written to out."""
+    variance) per column when whitening; n x nc written to out_buf."""
     var kit = RKit[E, D, RES]()
     try:
         var m = kit.add(Int(x), -1, n, d)
@@ -356,7 +356,7 @@ def ipca_transform_run[E: Exec, D: RDev, RES: Bool](
             var ev = kit.add(Int(variance), -1, 1, nc)
             var root = kit.ew(_OP_SQRT, ev)
             y = kit.ew(_OP_DIV, y, root)
-        kit.copy_out(y, out, n * nc)
+        kit.copy_out(y, out_buf, n * nc)
         kit.close()
     except error:
         kit.close()
@@ -365,10 +365,10 @@ def ipca_transform_run[E: Exec, D: RDev, RES: Bool](
 
 def ipca_inverse_run[E: Exec, D: RDev, RES: Bool](
     y: F32Ptr, n: Int, d: Int, nc: Int, mean: F32Ptr, components: F32Ptr, variance: F32Ptr, whiten: Bool,
-    out: F32Ptr,
+    out_buf: F32Ptr,
 ) raises:
     """`inverse_transform`: Y C + mean_, C the components scaled by
-    sqrt(explained variance) per row when whitening; n x d written to out."""
+    sqrt(explained variance) per row when whitening; n x d written to out_buf."""
     var kit = RKit[E, D, RES]()
     try:
         var ym = kit.add(Int(y), -1, n, nc)
@@ -381,7 +381,7 @@ def ipca_inverse_run[E: Exec, D: RDev, RES: Bool](
         var mu = kit.add(Int(mean), -1, 1, d)
         var product = kit.mm(ym, c)
         var result = kit.ew(_OP_ADD, product, mu)
-        kit.copy_out(result, out, n * d)
+        kit.copy_out(result, out_buf, n * d)
         kit.close()
     except error:
         kit.close()

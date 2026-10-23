@@ -107,7 +107,7 @@ def ica_fit_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
 
 def ica_project_run[E: Exec, D: RDev, RES: Bool](
     x: F32Ptr, n: Int, width: Int, inverse: Bool, matrix: F32Ptr, rows: Int, mean: F32Ptr, whiten: Bool,
-    out: F32Ptr,
+    out_buf: F32Ptr,
 ) raises:
     """transform: (X - mean_) components_^T (rows x width components); or
     inverse_transform: X mixing_^T (+ mean_), mixing_ rows x width."""
@@ -127,7 +127,7 @@ def ica_project_run[E: Exec, D: RDev, RES: Bool](
                 var mu = kit.add(Int(mean), -1, 1, rows)
                 y = kit.ew(OP_ADD, y, mu)
         var y_count = kit.r(y) * kit.c(y)
-        kit.copy_out(y, out, y_count)
+        kit.copy_out(y, out_buf, y_count)
         kit.close()
     except error:
         kit.close()

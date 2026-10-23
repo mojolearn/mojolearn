@@ -192,20 +192,20 @@ def svc_shape_of(obj: PythonObject) raises -> PythonObject:
     return Python.tuple()
 
 
-def _svc_flatten_into(item: PythonObject, out: PythonObject) raises:
+def _svc_flatten_into(item: PythonObject, out_buf: PythonObject) raises:
     """Depth-first leaves of a nested list/tuple, the order the level-by-level
     chain of `flatten_labels` keeps."""
     var b = svc_builtins()
     var seq = Python.tuple(b.list, b.tuple)
     if not family_isinstance(item, seq):
-        _ = py_call(out.append, item)
+        _ = py_call(out_buf.append, item)
         return
     for i in range(len(item)):  # driver-loop: over the nesting of a user label list (the label input step)
         var leaf = item[i]
         if family_isinstance(leaf, seq):
-            _svc_flatten_into(leaf, out)
+            _svc_flatten_into(leaf, out_buf)
         else:
-            _ = py_call(out.append, leaf)
+            _ = py_call(out_buf.append, leaf)
 
 
 def svc_plain_labels(labels: PythonObject, context: PythonObject) raises -> String:
@@ -471,7 +471,7 @@ def _svc_classification_labels(values: PythonObject, name: String, context: Pyth
 
 def svc_accuracy(y_true: PythonObject, y_pred: PythonObject, n_pred: Int, context: PythonObject) raises -> Float64:
     """`linear_model._accuracy_host(pred, y)`: the shape refusal, then
-    `_expansion_metrics.accuracy_fraction(y, pred)`, the exact match count
+    `_expansion_metrics.accuracy_fraction(y, pred)`, the exact matched count
     over the row count from the x_metrics COUNT program (`_Sums` with the
     `_cm_stage` COUNT tail, unweighted)."""
     var b = svc_builtins()
@@ -500,11 +500,11 @@ def svc_accuracy(y_true: PythonObject, y_pred: PythonObject, n_pred: Int, contex
     var prog = _Prog(context["family_metrics_ops"])
     var a = prog.put_i32(yt)
     var bo = prog.put_i32(yp)
-    var match = prog.scratch(n)
-    prog.stage("pair_key", n, [a, bo, match, big_l, 1])
+    var matched = prog.scratch(n)
+    prog.stage("pair_key", n, [a, bo, matched, big_l, 1])
     # `_group` for the match, true and pred keys (no values, no weights).
     var offs = List[Int]()
-    var keys: List[Int] = [match, a, bo]
+    var keys: List[Int] = [matched, a, bo]
     for g in range(3):  # small-loop(groupings: match, true, pred)
         var off = prog.alloc(big_l + 1)
         var order = prog.scratch(n)

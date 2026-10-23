@@ -110,7 +110,7 @@ def rp_fit_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
 
 
 def rp_project_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
-    x: F32Ptr, m: Int, d: Int, matrix: F32Ptr, rows: Int, tiled: Bool, out: F32Ptr,
+    x: F32Ptr, m: Int, d: Int, matrix: F32Ptr, rows: Int, tiled: Bool, out_buf: F32Ptr,
 ) raises -> Int:
     """X (m x d) times matrix^T (matrix rows x d) into out (m x rows):
     with `tiled` (transform on a dense X) the tiled projection on a GPU
@@ -127,12 +127,12 @@ def rp_project_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
                 var da = kit.device(a)
                 var db = kit.device(b)
                 if X.dev_project(da, db, kit.mats[c].dev, kit.mats[flag].dev, m, d, rows) >= 0:
-                    kit.copy_out(c, out, m * rows)
+                    kit.copy_out(c, out_buf, m * rows)
                     var bad = kit.word(flag)
                     kit.close()
                     return 1 if bad != 0 else 0
         var y = kit.mm(a, b, tb=True)
-        kit.copy_out(y, out, m * rows)
+        kit.copy_out(y, out_buf, m * rows)
         kit.close()
         return 0
     except error:

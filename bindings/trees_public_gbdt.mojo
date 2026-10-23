@@ -155,9 +155,9 @@ def _fitted_x(fields: PythonObject, X: PythonObject, layout: Bool, before: Strin
     return x^
 
 
-def _resident_call(table: PythonObject, handle: Int, x: TreesMatrix, out: PythonObject, mode: Int) raises -> Int:
+def _resident_call(table: PythonObject, handle: Int, x: TreesMatrix, out_buf: PythonObject, mode: Int) raises -> Int:
     var entry = trees_need(table, "gbdt_resident_predict", "mojolearn: this gbdt binding has no gbdt_resident_predict")
-    return _int(py_call_typed(entry, PythonObject(handle), PythonObject(x.addr), PythonObject(trees_address(out)),
+    return _int(py_call_typed(entry, PythonObject(handle), PythonObject(x.addr), PythonObject(trees_address(out_buf)),
                               Python.list(PythonObject(x.rows), PythonObject(mode), PythonObject(1 if x.row_major else 0))))
 
 

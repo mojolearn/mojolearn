@@ -152,12 +152,12 @@ def _init[E: Exec, D: RDev, RES: Bool](
 
 def lda_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
     op: Int, x: F32Ptr, n: Int, v: Int, nc: Int, fresh: Bool, a: LdaArgs, mut draw: Int, mut nbi: Int,
-    flag: Bool, comps_in: F32Ptr, exp_in: F32Ptr, comps_out: F32Ptr, exp_out: F32Ptr, out: F32Ptr,
+    flag: Bool, comps_in: F32Ptr, exp_in: F32Ptr, comps_out: F32Ptr, exp_out: F32Ptr, out_buf: F32Ptr,
     negative_message: String,
 ) raises -> Tuple[Int, Float64]:
     """One LatentDirichletAllocation operation on X (n x v): LDA_FIT,
     LDA_PARTIAL (`fresh`: initialize first), LDA_TRANSFORM (`flag`:
-    normalize; n x nc to out), LDA_SCORE, LDA_PERPLEXITY (`flag`:
+    normalize; n x nc to out_buf), LDA_SCORE, LDA_PERPLEXITY (`flag`:
     sub_sampling). The fitted state is comps_in / exp_in (nc x v) and is
     written to comps_out / exp_out by the fits. Returns (n_iter_, value):
     the fit's bound, the score or the perplexity."""
@@ -215,7 +215,7 @@ def lda_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
                 if flag:
                     var rows = kit.sum(dt, False)
                     dt = kit.ew(OP_DIV, dt, rows)
-                kit.copy_out(dt, out, n * nc)
+                kit.copy_out(dt, out_buf, n * nc)
             elif op == LDA_SCORE:
                 value = _approx_bound[E, D, RES, X](kit, m, dt, components, a.doc_prior, a.topic_prior, False,
                                                     a.total)

@@ -293,33 +293,33 @@ def _scatter(env: _Env, rows: PythonObject, address: Int, count: Int, vals: Pyth
     return PythonObject(None)
 
 
-def _flatten_into(env: _Env, obj: PythonObject, out: PythonObject) raises:
+def _flatten_into(env: _Env, obj: PythonObject, out_buf: PythonObject) raises:
     var o = obj
     if Bool(py=py_call(env.b.hasattr, o, "tolist")):
         o = py_call(o.tolist)
     if env.isinstance(o, env.seq):
         for i in range(len(o)):  # cpu-route: nested Python list read once by user_objects_c (flatten)
-            _flatten_into(env, o[i], out)
+            _flatten_into(env, o[i], out_buf)
         return
-    _ = py_call(out.append, o)
+    _ = py_call(out_buf.append, o)
 
 
-def _nested_into(env: _Env, obj: PythonObject, array_type: PythonObject, out: PythonObject) raises -> PythonObject:
+def _nested_into(env: _Env, obj: PythonObject, array_type: PythonObject, out_buf: PythonObject) raises -> PythonObject:
     # _array._flatten: an Array contributes its shape and values; a str,
     # bytes or object without __len__ is a leaf; a list is rectangular
     if env.isinstance(obj, array_type):
-        _ = py_call(out.extend, py_call(py_call(obj._as_c)._values))
+        _ = py_call(out_buf.extend, py_call(py_call(obj._as_c)._values))
         return obj.shape
     if env.isinstance(obj, Python.tuple(env.b.str, env.b.bytes)) or not Bool(py=py_call(env.b.hasattr, obj, "__len__")):
-        _ = py_call(out.append, obj)
+        _ = py_call(out_buf.append, obj)
         return Python.tuple()
     var seq = py_call(env.b.list, obj)
     var n = len(seq)
     if n == 0:
         return Python.tuple(PythonObject(0))
-    var first = _nested_into(env, seq[0], array_type, out)
+    var first = _nested_into(env, seq[0], array_type, out_buf)
     for i in range(1, n):  # cpu-route: ragged user Python list read once by user_objects_c (nested)
-        var shape = _nested_into(env, seq[i], array_type, out)
+        var shape = _nested_into(env, seq[i], array_type, out_buf)
         if not env.eq(shape, first):
             raise _refusal("ValueError", "mojolearn: nested sequence is not rectangular (" + env.text(shape)
                            + " vs " + env.text(first) + ")")

@@ -195,27 +195,27 @@ def _xl_check_fitted(fields: PythonObject, model: PythonObject) raises:
 # ------------------------------------------------------------ arrays
 
 
-def _xl_word(out: PythonObject, index: Int) raises -> Float32:
-    return _F32P(unsafe_from_address=labels_address(out))[index]
+def _xl_word(out_buf: PythonObject, index: Int) raises -> Float32:
+    return _F32P(unsafe_from_address=labels_address(out_buf))[index]
 
 
-def _xl_float(out: PythonObject, index: Int) raises -> PythonObject:
+def _xl_float(out_buf: PythonObject, index: Int) raises -> PythonObject:
     """`float(vals[index])`: the float32 word as a Python float."""
-    return PythonObject(Float64(_xl_word(out, index)))
+    return PythonObject(Float64(_xl_word(out_buf, index)))
 
 
-def _xl_count(out: PythonObject, index: Int) raises -> Int:
+def _xl_count(out_buf: PythonObject, index: Int) raises -> Int:
     """`int(vals[index])`: the float32 word truncated toward zero."""
-    return Int(_xl_word(out, index))
+    return Int(_xl_word(out_buf, index))
 
 
-def _xl_slice(out: PythonObject, offset: Int, count: Int, shape: PythonObject, context: PythonObject) raises -> PythonObject:
+def _xl_slice(out_buf: PythonObject, offset: Int, count: Int, shape: PythonObject, context: PythonObject) raises -> PythonObject:
     """`Array.from_list(vals[offset:offset + count], '<f4')` (shaped as the
     Python list was nested): one byte copy of the float32 words."""
     var array = labels_empty(shape, "<f4", context)
     if count > 0:
         memcpy(dest=_F32P(unsafe_from_address=labels_address(array)),
-               src=_F32P(unsafe_from_address=labels_address(out)) + offset, count=count)
+               src=_F32P(unsafe_from_address=labels_address(out_buf)) + offset, count=count)
     return array
 
 
@@ -729,10 +729,10 @@ def xl_classifier_score(model: PythonObject, args: PythonObject, context: Python
 # ------------------------------------------------------------ regressors
 
 
-def _xl_set_linear(fields: PythonObject, out: PythonObject, d: Int, context: PythonObject) raises:
+def _xl_set_linear(fields: PythonObject, out_buf: PythonObject, d: Int, context: PythonObject) raises:
     """coef_ = vals[:d] (float32 Array), intercept_ = float(vals[d])."""
-    py_setitem(fields, "coef_", _xl_slice(out, 0, d, Python.tuple(d), context))
-    py_setitem(fields, "intercept_", _xl_float(out, d))
+    py_setitem(fields, "coef_", _xl_slice(out_buf, 0, d, Python.tuple(d), context))
+    py_setitem(fields, "intercept_", _xl_float(out_buf, d))
 
 
 def _xl_tweedie_link(fields: PythonObject) raises -> Int:

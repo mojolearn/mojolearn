@@ -334,28 +334,28 @@ def cls_float(value: PythonObject) raises -> Float64:
 # ---------------------------------------------------------------- statistics stage groups
 
 
-def col_stats(mut pr: ClsProg, xo: Int, n: Int, d: Int, out: Int, variance: Bool = True):
+def col_stats(mut pr: ClsProg, xo: Int, n: Int, d: Int, out_buf: Int, variance: Bool = True):
     """`_col_stats`: six rows of d (count, mean, variance, min, max, max |x|),
     in the blocked order when `_blocked()`."""
     if not blocked():
-        pr.stage(OP_COL_STATS, d, xo, n, d, out)
+        pr.stage(OP_COL_STATS, d, xo, n, d, out_buf)
         return
     var nb = (n + XB - 1) // XB
     var part = pr.work(5 * nb * d)
     pr.stage(OP_COLB_PART, nb * d, xo, n, d, part, nb)
-    pr.stage(OP_COLB_FOLD, d, part, nb, d, out)
+    pr.stage(OP_COLB_FOLD, d, part, nb, d, out_buf)
     if variance:
         var ss = pr.work(nb * d)
-        pr.stage(OP_COLB_SS, nb * d, xo, n, d, out, ss, nb)
-        pr.stage(OP_COLB_VAR, d, ss, nb, d, out)
+        pr.stage(OP_COLB_SS, nb * d, xo, n, d, out_buf, ss, nb)
+        pr.stage(OP_COLB_VAR, d, ss, nb, d, out_buf)
 
 
-def cs(mut pr: ClsProg, mode: PythonObject, xo: Int, n: Int, d: Int, out: Int, context: PythonObject, variance: Bool = True) raises:
+def cs(mut pr: ClsProg, mode: PythonObject, xo: Int, n: Int, d: Int, out_buf: Int, context: PythonObject, variance: Bool = True) raises:
     """`_cs`: the blocked order under IDN_STATS_BLOCKED, else one col_stats stage."""
     if blocked() and (idn_fam(mode, context) & IDN_STATS_BLOCKED) != 0:
-        col_stats(pr, xo, n, d, out, variance)
+        col_stats(pr, xo, n, d, out_buf, variance)
     else:
-        pr.stage(OP_COL_STATS, d, xo, n, d, out)
+        pr.stage(OP_COL_STATS, d, xo, n, d, out_buf)
 
 
 def class_stats(mut pr: ClsProg, wo: Int, total: Int, xo: Int, n: Int, d: Int, yo: Int, K: Int,

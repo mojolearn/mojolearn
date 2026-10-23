@@ -250,12 +250,12 @@ def lin_operand_bits(x: PythonObject, name: String, context: PythonObject) raise
     return lin_typed(x, "<u2", 2, name, context)
 
 
-def lin_out(out: PythonObject, m: Int, n: Int, who: String, context: PythonObject) raises -> LinBuf:
+def lin_out(out_buf: PythonObject, m: Int, n: Int, who: String, context: PythonObject) raises -> LinBuf:
     """`_out_or_new(out, m, n, who)`."""
-    if out is None:
+    if out_buf is None:
         return lin_new([m, n], "<f4", context)
     var v = TensorView()
-    if not lin_view(out, context, v):
+    if not lin_view(out_buf, context, v):
         raise Error("TypeError: mojolearn: object does not support the buffer protocol")
     if not lin_is_f32(v):
         raise Error("TypeError: mojolearn.linalg." + who + ": out must be float32")
@@ -264,7 +264,7 @@ def lin_out(out: PythonObject, m: Int, n: Int, who: String, context: PythonObjec
                     + String(m) + ", " + String(n) + ")")
     if not v.c_contig or v.readonly:
         raise Error("mojolearn.linalg." + who + ": out must be C-contiguous and writable")
-    return LinBuf(out, v.addr, v.shape.copy())
+    return LinBuf(out_buf, v.addr, v.shape.copy())
 
 
 # ---------------------------------------------------------------------------

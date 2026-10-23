@@ -44,10 +44,10 @@ def gp_caps(binding: PythonObject) raises -> Int:
     binding and the `_OFF` builds): bit 1 is gpc_fit_all / gpc_predict_all,
     bit 2 gpr_fit_ptr / gpr_predict_ptr."""
     var b = Python.import_module("builtins")
-    var fn = py_call(b.getattr, binding, PythonObject("gp_idn_caps"), PythonObject(None))
-    if fn is None:
+    var fn_obj = py_call(b.getattr, binding, PythonObject("gp_idn_caps"), PythonObject(None))
+    if fn_obj is None:
         return 0
-    return Int(py=family_call(b.int, family_call(fn)))
+    return Int(py=family_call(b.int, family_call(fn_obj)))
 
 
 def gp_entry(binding: PythonObject, name: String) raises -> PythonObject:

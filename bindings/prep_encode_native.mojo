@@ -318,7 +318,7 @@ def _list_text(values: List[Int]) -> String:
 
 
 # ---------------------------------------------------------------- shared stages
-def _cs(mut p: EncProg, mode: PythonObject, entries: PythonObject, xo: Int, n: Int, d: Int, out: Int, variance: Bool = True) raises:
+def _cs(mut p: EncProg, mode: PythonObject, entries: PythonObject, xo: Int, n: Int, d: Int, out_buf: Int, variance: Bool = True) raises:
     """`_cs`: col_stats' six rows of d at `out`, in x_prep/blocked.mojo's
     blocked order under IDN_STATS_BLOCKED (IDENTICAL), else one thread per
     column; variance False skips the blocked variance pass."""
@@ -327,13 +327,13 @@ def _cs(mut p: EncProg, mode: PythonObject, entries: PythonObject, xo: Int, n: I
         var nb = (n + ROW_BLOCK - 1) // ROW_BLOCK
         var part = p.work(5 * nb * d)
         _stage(p.program, OP_COLB_PART, nb * d, xo, n, d, part, nb)
-        _stage(p.program, OP_COLB_FOLD, d, part, nb, d, out)
+        _stage(p.program, OP_COLB_FOLD, d, part, nb, d, out_buf)
         if variance:
             var ss = p.work(nb * d)
-            _stage(p.program, OP_COLB_SS, nb * d, xo, n, d, out, ss, nb)
-            _stage(p.program, OP_COLB_VAR, d, ss, nb, d, out)
+            _stage(p.program, OP_COLB_SS, nb * d, xo, n, d, out_buf, ss, nb)
+            _stage(p.program, OP_COLB_VAR, d, ss, nb, d, out_buf)
     else:
-        _stage(p.program, OP_COL_STATS, d, xo, n, d, out)
+        _stage(p.program, OP_COL_STATS, d, xo, n, d, out_buf)
 
 
 def _sel_chunks(n: Int) -> Tuple[Int, Int]:
@@ -988,7 +988,7 @@ def _label_chunk(n: Int) -> Int:
     return max(1024, r + 1)
 
 
-def _uniq_scans(mut p: EncProg, base: Int, rows: Int, d: Int, stride: Int, counts: Int, out: Int, presence: Bool):
+def _uniq_scans(mut p: EncProg, base: Int, rows: Int, d: Int, stride: Int, counts: Int, out_buf: Int, presence: Bool):
     """One device run scan per column (uniq_count or pres_count, uniq_scan,
     uniq_write or pres_write) over the column at base + c * stride."""
     var ch = CAT_CH if presence else _label_chunk(rows)
@@ -998,7 +998,7 @@ def _uniq_scans(mut p: EncProg, base: Int, rows: Int, d: Int, stride: Int, count
         var off = p.work(nch)
         _stage(p.program, OP_PRES_COUNT if presence else OP_UNIQ_COUNT, nch, base + c * stride, rows, ch, cnt)
         _stage(p.program, OP_UNIQ_SCAN, 1, cnt, nch, off, counts + c)
-        _stage(p.program, OP_PRES_WRITE if presence else OP_UNIQ_WRITE, nch, base + c * stride, rows, ch, off, out + c * stride)
+        _stage(p.program, OP_PRES_WRITE if presence else OP_UNIQ_WRITE, nch, base + c * stride, rows, ch, off, out_buf + c * stride)
 
 
 def _fit_categories_cls2(values: PythonObject, mode: PythonObject, entries: PythonObject, bits: Int, context: PythonObject) raises -> PythonObject:
@@ -1865,16 +1865,16 @@ def _spline_fused(mode: PythonObject, entries: PythonObject) raises -> Bool:
     return py_get(entries, "x_prep_spline_fused") is not None
 
 
-def _col_stats_blocked(mut p: EncProg, xo: Int, n: Int, d: Int, out: Int) raises:
+def _col_stats_blocked(mut p: EncProg, xo: Int, n: Int, d: Int, out_buf: Int) raises:
     # `_col_stats(..., var=False)`: the blocked order whenever
     # MOJOLEARN_XPREP_BLOCKED is on, else one thread per column.
     if String(getenv("MOJOLEARN_XPREP_BLOCKED", "1").strip()) == "0":
-        _stage(p.program, OP_COL_STATS, d, xo, n, d, out)
+        _stage(p.program, OP_COL_STATS, d, xo, n, d, out_buf)
         return
     var nb = (n + ROW_BLOCK - 1) // ROW_BLOCK
     var part = p.work(5 * nb * d)
     _stage(p.program, OP_COLB_PART, nb * d, xo, n, d, part, nb)
-    _stage(p.program, OP_COLB_FOLD, d, part, nb, d, out)
+    _stage(p.program, OP_COLB_FOLD, d, part, nb, d, out_buf)
 
 
 def _extrapolation(value: PythonObject) raises -> Int:

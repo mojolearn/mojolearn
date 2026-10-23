@@ -38,9 +38,9 @@ def rs_extension(binding: PythonObject, numeric_mode: PythonObject, context: Pyt
         want = context["backend_fields"]["_DEFAULT_MODE"]
         if want is None:
             want = family_call(context["backend_fields"]["default_mode"])
-    var fn = py_call(b.getattr, binding, "resample_numeric_mode", PythonObject(None))
-    if fn is not None:
-        var got = family_call(b.int, family_call(fn))
+    var fn_obj = py_call(b.getattr, binding, "resample_numeric_mode", PythonObject(None))
+    if fn_obj is not None:
+        var got = family_call(b.int, family_call(fn_obj))
         var code = py_get(rs_state(context)["_MODE_CODE"], want, PythonObject(None))
         if code is None or Int(py=got) != Int(py=code):
             raise Error("RuntimeError: mojolearn resample: numeric_mode=" + family_repr(want) + " was requested but "
@@ -165,14 +165,14 @@ def _rs_bootstrap_unpaired(args: PythonObject, context: PythonObject) raises -> 
     var dist = lin_new([_rs_nonneg(r)], "<f4", context)
     var sdist = lin_new([_rs_nonneg(r)], "<f4", context)
     var scalars = lin_new([6], "<f8", context)
-    var fn = rs_entry(rs_extension(args[0], args[10], context), "bootstrap_unpaired")
+    var fn_obj = rs_entry(rs_extension(args[0], args[10], context), "bootstrap_unpaired")
     # ORDER MATCHES bindings/_mojolearn_resample.mojo::bootstrap_unpaired_binding:
     # n_x, n_y, n_resamples, seed, method, confidence_level, alternative, r_first
     var addrs = Python.list(_rs_addr(xx), _rs_addr(yy), _rs_addr(dist), _rs_addr(sdist), _rs_addr(scalars))
     var params = Python.list(PythonObject(xx.dim(0)), PythonObject(yy.dim(0)), r,
                              rs_int(args[7], "random_state", where), meth,
                              rs_real(args[4], "confidence_level", where), alt, rs_int(args[9], "r_first", where))
-    _ = family_call(fn, addrs, params)
+    _ = family_call(fn_obj, addrs, params)
     _ = xx^
     _ = yy^
     return _rs_bootstrap_result(dist, sdist, scalars, context)
@@ -208,14 +208,14 @@ def _rs_bootstrap(args: PythonObject, context: PythonObject) raises -> PythonObj
     var dist = lin_new([_rs_nonneg(r)], "<f4", context)
     var sdist = lin_new([_rs_nonneg(r)], "<f4", context)
     var scalars = lin_new([6], "<f8", context)
-    var fn = rs_entry(rs_extension(args[0], args[10], context), "bootstrap")
+    var fn_obj = rs_entry(rs_extension(args[0], args[10], context), "bootstrap")
     # ORDER MATCHES bindings/_mojolearn_resample.mojo::bootstrap_binding.
     # x (the C-order sample, flat), distribution_out, sorted_out, scalars_out;
     # n, d, statistic, n_resamples, seed, method, confidence_level,
     # alternative, q_or_prop, r_first
     var addrs = Python.list(_rs_addr(x), _rs_addr(dist), _rs_addr(sdist), _rs_addr(scalars))
     var params = Python.list(PythonObject(n), PythonObject(d), stat, r, seed, meth, cl, alt, qp, rf)
-    _ = family_call(fn, addrs, params)
+    _ = family_call(fn_obj, addrs, params)
     _ = x^
     return _rs_bootstrap_result(dist, sdist, scalars, context)
 
@@ -245,14 +245,14 @@ def _rs_permutation_samples(args: PythonObject, context: PythonObject) raises ->
     var r = rs_int(args[4], "n_resamples", where)
     var null = lin_new([_rs_nonneg(r)], "<f4", context)
     var scalars = lin_new([4], "<f8", context)
-    var fn = rs_entry(rs_extension(args[0], args[8], context), "permutation_samples")
+    var fn_obj = rs_entry(rs_extension(args[0], args[8], context), "permutation_samples")
     # ORDER MATCHES bindings/_mojolearn_resample.mojo::permutation_samples_binding:
     # n, n_y, n_resamples, seed, alternative, r_first
     var addrs = Python.list(_rs_addr(xx), _rs_addr(yy), _rs_addr(null), _rs_addr(scalars))
     var params = Python.list(PythonObject(xx.dim(0)), PythonObject(ny), r, rs_int(args[6], "random_state", where),
                              rs_code("ALTERNATIVES", args[5], "alternative", where, context),
                              rs_int(args[7], "r_first", where))
-    _ = family_call(fn, addrs, params)
+    _ = family_call(fn_obj, addrs, params)
     _ = xx^
     _ = yy^
     return _rs_permutation_result(null, scalars, context)
@@ -288,13 +288,13 @@ def _rs_permutation_test(args: PythonObject, context: PythonObject) raises -> Py
     var seed = rs_int(args[6], "random_state", where)
     var null = lin_new([_rs_nonneg(r)], "<f4", context)
     var scalars = lin_new([4], "<f8", context)
-    var fn = rs_entry(rs_extension(args[0], args[8], context), "permutation_test")
+    var fn_obj = rs_entry(rs_extension(args[0], args[8], context), "permutation_test")
     # ORDER MATCHES bindings/_mojolearn_resample.mojo::permutation_test_binding:
     # x, y, null_out, scalars_out; n_x, n_y, statistic, n_resamples, seed,
     # alternative, r_first
     var addrs = Python.list(_rs_addr(xx), _rs_addr(yy), _rs_addr(null), _rs_addr(scalars))
     var params = Python.list(PythonObject(xx.dim(0)), PythonObject(yy.dim(0)), stat, r, seed, alt, rf)
-    _ = family_call(fn, addrs, params)
+    _ = family_call(fn_obj, addrs, params)
     _ = xx^
     _ = yy^
     return _rs_permutation_result(null, scalars, context)
@@ -331,13 +331,13 @@ def _rs_monte_carlo(args: PythonObject, context: PythonObject) raises -> PythonO
         raise Error("mojolearn " + where + ": lower and upper must each hold 2 values "
                     + "(MC_DIMS), got " + String(lo.dim(0)) + " and " + String(hi.dim(0)))
     var scalars = lin_new([4], "<f8", context)
-    var fn = rs_entry(rs_extension(args[0], args[7], context), "monte_carlo_integrate")
+    var fn_obj = rs_entry(rs_extension(args[0], args[7], context), "monte_carlo_integrate")
     # ORDER MATCHES bindings/_mojolearn_resample.mojo::monte_carlo_integrate_binding:
     # lower, upper, scalars_out; f_id, n_samples, seed, i_first
     var addrs = Python.list(_rs_addr(lo), _rs_addr(hi), _rs_addr(scalars))
     var params = Python.list(f_id, rs_int(args[4], "n_samples", where), rs_int(args[5], "random_state", where),
                              rs_int(args[6], "i_first", where))
-    _ = family_call(fn, addrs, params)
+    _ = family_call(fn_obj, addrs, params)
     var result = _rs_object(rs_state(context)["MonteCarloResult"])
     py_setattr(result, "integral", PythonObject(_rs_word(scalars, 0)))
     py_setattr(result, "mean", PythonObject(_rs_word(scalars, 1)))
@@ -358,11 +358,11 @@ def rs_indices(binding: PythonObject, n_obj: PythonObject, n_samples: PythonObje
     var n = rs_int(n_obj, "n", where)
     var count = n if n_samples is None else rs_int(n_samples, "n_samples", where)
     var idx = lin_new([_rs_nonneg(count)], "<i4", context)
-    var fn = rs_entry(rs_extension(binding, numeric_mode, context), "resample_indices")
+    var fn_obj = rs_entry(rs_extension(binding, numeric_mode, context), "resample_indices")
     # ORDER MATCHES bindings/_mojolearn_resample.mojo::resample_indices_binding.
     var params = Python.list(n, count, PythonObject(1 if lin_truth(replace) else 0),
                              rs_int(random_state, "random_state", where))
-    _ = family_call(fn, Python.list(_rs_addr(idx)), params)
+    _ = family_call(fn_obj, Python.list(_rs_addr(idx)), params)
     return idx^
 
 
@@ -468,10 +468,10 @@ def _rs_fast_defines(binding: PythonObject, numeric_mode: PythonObject, context:
         mod = rs_extension(binding, numeric_mode, context)
     except:
         return 0
-    var fn = py_call(b.getattr, mod, "resample_fast_defines", PythonObject(None))
-    if fn is None:
+    var fn_obj = py_call(b.getattr, mod, "resample_fast_defines", PythonObject(None))
+    if fn_obj is None:
         return 0
-    return Int(py=family_call(b.int, family_call(fn)))
+    return Int(py=family_call(b.int, family_call(fn_obj)))
 
 
 def _rs_take(a: PythonObject, idx: LinBuf, context: PythonObject) raises -> PythonObject:
@@ -540,8 +540,8 @@ def _rs_narrow_gather(binding: PythonObject, arrays: PythonObject, n: Int, count
     if count <= 0 or n <= 0 or (_rs_fast_defines(binding, numeric_mode, context) & bit) == 0:
         return PythonObject(None)
     var mod = rs_extension(binding, numeric_mode, context)
-    var fn = py_call(b.getattr, mod, "resample_gather_narrow", PythonObject(None))
-    if fn is None or not _rs_numpy(context):
+    var fn_obj = py_call(b.getattr, mod, "resample_gather_narrow", PythonObject(None))
+    if fn_obj is None or not _rs_numpy(context):
         return PythonObject(None)
     var bound = Int(py=family_call(b.int, family_call(rs_entry(mod, "resample_gather_narrow_bytes"))))
     var idx = lin_new([count], "<i4", context)
@@ -569,7 +569,7 @@ def _rs_narrow_gather(binding: PythonObject, arrays: PythonObject, n: Int, count
             _ = py_call(addresses.append, PythonObject(0))
             _ = py_call(addresses.append, PythonObject(0))
         _ = py_call(params.append, PythonObject(w))
-    var done = Int(py=family_call(b.int, family_call(fn, addresses, params)))
+    var done = Int(py=family_call(b.int, family_call(fn_obj, addresses, params)))
     if done < 0:
         return PythonObject(None)
     var result = Python.list()

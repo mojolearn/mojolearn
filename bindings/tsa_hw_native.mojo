@@ -212,11 +212,11 @@ def hw_fit(model: PythonObject, context: PythonObject) raises -> PythonObject:
 
 # ---------------------------------------------------------------- predict
 
-def _shaped(fields: PythonObject, out: PythonObject, offset: Int, steps: Int, index: PythonObject,
+def _shaped(fields: PythonObject, out_buf: PythonObject, offset: Int, steps: Int, index: PythonObject,
             context: PythonObject) raises -> PythonObject:
     """`_shaped(out[offset:], steps, index)` over a time-major buffer."""
     var b = Int(py=fields["ts_num"])
-    var base = Int(py=classical_address(out)) + 4 * offset
+    var base = Int(py=classical_address(out_buf)) + 4 * offset
     if index is not None:
         var s = Int(py=index)
         var one = tsa_array("f", "<f4", Python.tuple(steps), steps, 4, context)
@@ -225,8 +225,8 @@ def _shaped(fields: PythonObject, out: PythonObject, offset: Int, steps: Int, in
                              steps, b, s)
         return one
     if b == 1:
-        return _block(out, offset, steps, "f", "<f4", Python.tuple(steps), context) if offset != 0 else out
-    return _block(out, offset, steps * b, "f", "<f4", Python.tuple(steps, b), context)
+        return _block(out_buf, offset, steps, "f", "<f4", Python.tuple(steps), context) if offset != 0 else out_buf
+    return _block(out_buf, offset, steps * b, "f", "<f4", Python.tuple(steps, b), context)
 
 
 def _check_index(index: PythonObject, b: Int) raises:

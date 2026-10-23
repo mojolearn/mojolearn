@@ -44,7 +44,7 @@ struct MxSums(Movable):
     var n: Int
     var L: Int
     var weighted: Bool
-    var match: Int
+    var match_key: Int
     var W: Int
     var g_off: List[Int]
     var g_out: List[Int]
@@ -56,7 +56,7 @@ struct MxSums(Movable):
         self.n = n
         self.L = L
         self.weighted = weighted
-        self.match = MX_NONE
+        self.match_key = MX_NONE
         self.W = MX_NONE
         self.g_off = List[Int]()
         self.g_out = List[Int]()
@@ -96,14 +96,14 @@ def _sums(pair: MxPair, order: PythonObject, context: PythonObject) raises -> Mx
     var s = MxSums(MxProg(context), n, L, pair.w is not None)
     var a = s.prog.put_i32(yt)
     var b = s.prog.put_i32(yp)
-    var match = s.prog.scratch(n)
-    s.prog.stage("pair_key", n, [a, b, match, L, 1])
+    var matched = s.prog.scratch(n)
+    s.prog.stage("pair_key", n, [a, b, matched, L, 1])
     var W = MX_NONE
     if pair.w is not None:
         W = s.prog.put(pair.w)
-    s.match = match
+    s.match_key = matched
     s.W = W
-    var keys: List[Int] = [match, a, b]
+    var keys: List[Int] = [matched, a, b]
     for i in range(3):  # driver-loop: over the three count groupings
         var g = s.prog.group(keys[i], n, L, MX_NONE, 1, W, 1)
         s.g_off.append(g[0])
@@ -125,7 +125,7 @@ def _wsum_sf64(mut s: MxSums, k: Int) raises -> Int:
     var n = s.n
     var nb = max(1, (n + _WSUM_BLOCK - 1) // _WSUM_BLOCK)
     var slot = s.prog.scratch(4 * nb)
-    s.prog.stage("cm_epi", nb, [_CM_WSUM_LEAF, s.match, s.W, n, slot, k])
+    s.prog.stage("cm_epi", nb, [_CM_WSUM_LEAF, s.match_key, s.W, n, slot, k])
     var stride = 1
     while stride < nb:  # driver-loop: over the fold levels (log2 of the block count)
         s.prog.stage("cm_epi", (nb - stride + 2 * stride - 1) // (2 * stride), [_CM_WSUM_FOLD, slot, stride, nb])

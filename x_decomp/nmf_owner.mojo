@@ -222,7 +222,7 @@ def nmf_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
 
 
 def nmf_inverse_run[E: Exec, D: RDev, RES: Bool](
-    w: F32Ptr, n: Int, nc: Int, h: F32Ptr, d: Int, out: F32Ptr
+    w: F32Ptr, n: Int, nc: Int, h: F32Ptr, d: Int, out_buf: F32Ptr
 ) raises:
     """`inverse_transform`: W components_ (n x d)."""
     var kit = RKit[E, D, RES]()
@@ -230,7 +230,7 @@ def nmf_inverse_run[E: Exec, D: RDev, RES: Bool](
         var wm = kit.add(Int(w), -1, n, nc)
         var hm = kit.add(Int(h), -1, nc, d)
         var y = kit.mm(wm, hm)
-        kit.copy_out(y, out, n * d)
+        kit.copy_out(y, out_buf, n * d)
         kit.close()
     except error:
         kit.close()

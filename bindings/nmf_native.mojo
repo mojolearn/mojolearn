@@ -61,8 +61,8 @@ def _regs(fields: PythonObject, n: Int, d: Int) raises -> PythonObject:
     var a_h = a_w if decomp_eq(alpha_h, PythonObject("same")) else decomp_float(alpha_h)
     var l1 = decomp_float(fields["l1_ratio"])
     var fd = Float64(d)
-    var fn = Float64(n)
-    return Python.list(fd * a_w * l1, fn * a_h * l1, fd * a_w * (1.0 - l1), fn * a_h * (1.0 - l1))
+    var fn_obj = Float64(n)
+    return Python.list(fd * a_w * l1, fn_obj * a_h * l1, fd * a_w * (1.0 - l1), fn_obj * a_h * (1.0 - l1))
 
 
 def _run(model: PythonObject, fields: PythonObject, x: PythonObject, nc: Int, init: Int, w_in: PythonObject,
