@@ -54,6 +54,7 @@ def _take_rows(binding: PythonObject, x: PythonObject, rows: PythonObject, count
     var out = family_array(Python.tuple(PythonObject(count), PythonObject(cols)), "<f4", context)
     _op(binding, "take_rows", Python.list(_a(x), _a(rows), _a(out)), _dims(count, cols, Int(py=x.shape[0])),
         Python.list(), context)
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -63,6 +64,7 @@ def _take_cols(binding: PythonObject, x: PythonObject, cols: PythonObject, count
     var out = family_array(Python.tuple(PythonObject(rows), PythonObject(count)), "<f4", context)
     _op(binding, "take_cols", Python.list(_a(x), _a(cols), _a(out)), _dims(rows, Int(py=x.shape[1]), count),
         Python.list(), context)
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -74,6 +76,7 @@ def _kernel(binding: PythonObject, a: PythonObject, b: PythonObject, code: Int, 
     var out = family_array(Python.tuple(PythonObject(n), PythonObject(m)), "<f4", context)
     _op(binding, "kernel", Python.list(_a(a), _a(b), _a(out)), _dims(n, m, d, code, degree),
         Python.list(PythonObject(_f32_scalar(gamma)), PythonObject(_f32_scalar(coef0))), context)
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -116,6 +119,7 @@ def _resolve_gamma(binding: PythonObject, gamma: PythonObject, x: PythonObject, 
     if Bool(py=family_call(operator.eq, gamma, PythonObject("scale"))):
         var out = family_array(Python.tuple(PythonObject(1)), "<f4", context)
         _op(binding, "variance", Python.list(_a(x), _a(out)), _dims(Int(py=x.size)), Python.list(), context)
+        _ = out  # keep the Python object alive through the native call above
         var var_value = svc_read_f32(out, 0)
         return 1.0 / (Float64(d) * var_value) if var_value != 0 else 1.0
     return svc_float(gamma)
@@ -158,6 +162,10 @@ def _ocsvm_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
         var pval = family_array(Python.tuple(PythonObject(n)), "<f4", context)
         var pinfo = family_array(Python.tuple(PythonObject(1)), "<i4", context)
         _op(binding, "pos_compact", Python.list(_a(wv), _a(prow), _a(pval), _a(pinfo)), _dims(n), Python.list(), context)
+        _ = pinfo  # keep the Python object alive through the native call above
+        _ = pval  # keep the Python object alive through the native call above
+        _ = prow  # keep the Python object alive through the native call above
+        _ = wv  # keep the Python object alive through the native call above
         var kept = svc_read_i32(pinfo, 0)
         if kept == 0:
             raise Error("Invalid input - all samples have zero or negative weights.")
@@ -192,6 +200,7 @@ def _ocsvm_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
     var alpha = family_array(Python.tuple(PythonObject(m)), "<f4", context)
     _ = family_call(family_entry(binding, "x_neighbors_ocsvm_alpha_init", context), Python.list(_a(cv), _a(alpha)),
                     _dims(m), Python.list(PythonObject(nu)))
+    _ = alpha  # keep the Python object alive through the native call above
     var info = family_array(Python.tuple(PythonObject(1)), "<f4", context)
     var iters = family_array(Python.tuple(PythonObject(1)), "<i4", context)
     var max_iter = svc_int(svc_field(fields, "max_iter"))
@@ -202,9 +211,17 @@ def _ocsvm_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
                         _dims(m, d, Int(py=context["family_svc_xn_kernels"][kernel]), degree, cap),
                         Python.list(PythonObject(svc_float(svc_field(fields, "_gamma"))), PythonObject(_f32_scalar(coef0)),
                                     PythonObject(tol)))
+        _ = iters  # keep the Python object alive through the native call above
+        _ = info  # keep the Python object alive through the native call above
+        _ = alpha  # keep the Python object alive through the native call above
+        _ = xw  # keep the Python object alive through the native call above
     else:
         _op(binding, "ocsvm", Python.list(_a(q), _a(cv), _a(alpha), _a(info), _a(iters)), _dims(m, cap),
             Python.list(PythonObject(tol)), context)
+        _ = iters  # keep the Python object alive through the native call above
+        _ = info  # keep the Python object alive through the native call above
+        _ = alpha  # keep the Python object alive through the native call above
+        _ = q  # keep the Python object alive through the native call above
     var rho = svc_read_f32(info, 0)
     # the support (alpha > 0, in order) and its coefficients by pos_compact
     var srow = family_array(Python.tuple(PythonObject(max(m, 1))), "<i4", context)
@@ -212,12 +229,19 @@ def _ocsvm_fit(model: PythonObject, binding: PythonObject, source: PythonObject,
     var sinfo = family_array(Python.tuple(PythonObject(1)), "<i4", context)
     if m > 0:
         _op(binding, "pos_compact", Python.list(_a(alpha), _a(srow), _a(sval), _a(sinfo)), _dims(m), Python.list(), context)
+        _ = sinfo  # keep the Python object alive through the native call above
+        _ = sval  # keep the Python object alive through the native call above
+        _ = srow  # keep the Python object alive through the native call above
+        _ = alpha  # keep the Python object alive through the native call above
     var n_sv = svc_read_i32(sinfo, 0) if m > 0 else 0
     var support = svc_prefix(srow, n_sv, Python.tuple(PythonObject(n_sv)), "<i4", context)
     if rows is not None and n_sv > 0:
         var mapped = family_array(Python.tuple(PythonObject(n_sv)), "<i4", context)
         _ = family_call(svc_base("gather_i32", context), _a(rows), PythonObject(m), _a(support), PythonObject(n_sv),
                         _a(mapped))
+        _ = support  # keep the Python object alive through the native call above
+        _ = rows  # keep the Python object alive through the native call above
+        _ = mapped  # keep the Python object alive through the native call above
         support = mapped
     py_setitem(fields, PythonObject("support_"), support)
     if precomputed:
@@ -263,6 +287,10 @@ def _ocsvm_scores(model: PythonObject, binding: PythonObject, source: PythonObje
         _op(binding, "kernel_matmul", Python.list(_a(q), _a(sv), _a(coef), _a(s)),
             _dims(nq, n_sv, d, 1, Int(py=context["family_svc_xn_kernels"][kernel]), degree),
             Python.list(PythonObject(_f32_scalar(gamma)), PythonObject(_f32_scalar(coef0))), context)
+        _ = s  # keep the Python object alive through the native call above
+        _ = sv  # keep the Python object alive through the native call above
+        _ = coef  # keep the Python object alive through the native call above
+        _ = q  # keep the Python object alive through the native call above
         _ = q^
         _ = coef^
         return s
@@ -277,6 +305,7 @@ def _ocsvm_scores(model: PythonObject, binding: PythonObject, source: PythonObje
     var s = family_array(Python.tuple(PythonObject(nq)), "<f4", context)
     _op(binding, "matmul", Python.list(_a(k), _a(coef), _a(s)), _dims(Int(py=k.shape[0]), Int(py=k.shape[1]), 1),
         Python.list(), context)
+    _ = s  # keep the Python object alive through the native call above
     _ = q^
     _ = k^
     _ = coef^
@@ -291,6 +320,8 @@ def _ocsvm_decision(model: PythonObject, binding: PythonObject, source: PythonOb
     var offset = svc_float(svc_field(py_fields(model), "offset_"))
     _op(binding, "unary", Python.list(_a(scores), _a(out)), _dims(Int(py=scores.size), _U_IDENTITY),
         Python.list(PythonObject(1.0), PythonObject(-offset)), context)
+    _ = out  # keep the Python object alive through the native call above
+    _ = scores  # keep the Python object alive through the native call above
     _ = scores^
     return out
 
@@ -303,10 +334,14 @@ def _ocsvm_predict(model: PythonObject, binding: PythonObject, source: PythonObj
     var lab = family_array(Python.tuple(PythonObject(n)), "<i4", context)
     if n > 0:
         _op(binding, "p2m_sign_label", Python.list(_a(dec), _a(lab)), _dims(n, 2), Python.list(PythonObject(0.0)), context)
+        _ = lab  # keep the Python object alive through the native call above
+        _ = dec  # keep the Python object alive through the native call above
     var out = family_array(Python.tuple(PythonObject(n)), "<i8", context)
     if n > 0:
         _ = family_call(svc_base("cast_elements", context), _a(lab), PythonObject(2), _a(out), PythonObject(3),
                         PythonObject(n))
+        _ = out  # keep the Python object alive through the native call above
+        _ = lab  # keep the Python object alive through the native call above
     _ = dec^
     _ = lab^
     return out

@@ -164,6 +164,7 @@ def _arange(xt: PythonObject, n: Int, context: PythonObject) raises -> PythonObj
     var out = trees_vector(n, "<i4", context)
     if n > 0:
         _ = py_call_typed(_x(xt, "x_trees_iota_i32"), _A(out), Python.list(_P(n)))
+        _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -174,6 +175,8 @@ def _class_major(xt: PythonObject, inits: PythonObject, n: Int, context: PythonO
     var out = trees_vector(k * n, "<f8", context)
     if k * n > 0:
         _ = py_call_typed(_x(xt, "x_trees_fill_class_major_f64"), _A(vals_array), _A(out), Python.list(_P(n), _P(k)))
+        _ = out  # keep the Python object alive through the native call above
+        _ = vals_array  # keep the Python object alive through the native call above
     return out
 
 
@@ -182,6 +185,7 @@ def _indices(xt: PythonObject, pool: Int, draw: Int, replace: Bool, seed: Int, s
     var out = trees_vector(draw, "<i4", context)
     _ = py_call_typed(_x(xt, "x_trees_sample_indices"), _A(out),
                       Python.list(_P(pool), _P(draw), _P(1 if replace else 0), _P(seed), _P(stream)))
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -192,12 +196,14 @@ def _gather(xt: PythonObject, x_addr: Int, n_src: Int, d_src: Int, rows: PythonO
     var out = trees_empty(Python.tuple(r, c), "<f4", context)
     _ = py_call_typed(_x(xt, "x_trees_gather_f32"), _P(x_addr), _A(rows), _A(cols), _A(out),
                       Python.list(_P(n_src), _P(d_src), _P(r), _P(c)))
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 
 def _gather_codes(xt: PythonObject, codes: PythonObject, rows: PythonObject, context: PythonObject) raises -> PythonObject:
     var out = trees_vector(len(rows), "<i4", context)
     _ = py_call_typed(_x(xt, "x_trees_gather_i32"), _A(codes), _A(rows), _A(out), Python.list(_P(len(codes)), _P(len(rows))))
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -236,6 +242,7 @@ def _scale(xt: PythonObject, acc: PythonObject, divisor: Float64) raises:
 def _argmax(xt: PythonObject, acc: PythonObject, n: Int, k: Int, context: PythonObject) raises -> PythonObject:
     var out = trees_vector(n, "<i4", context)
     _ = py_call_typed(_x(xt, "x_trees_argmax_rows"), _A(acc), _A(out), Python.list(_P(n), _P(k)))
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -558,6 +565,7 @@ def _unseen_rows(xt: PythonObject, rows: PythonObject, n: Int, context: PythonOb
     """`_BaggingBase._oob_of`: the rows a member never drew, ascending."""
     var out = trees_vector(max(1, n), "<i4", context)
     var k = Int(py=py_call_typed(_x(xt, "x_trees_unseen_rows"), _A(rows), _A(out), Python.list(_P(len(rows)), _P(n))))
+    _ = out  # keep the Python object alive through the native call above
     return _copy_i32(out, 0, k, context)
 
 
@@ -693,7 +701,12 @@ def _bagging_oob_outputs(xt: PythonObject, fields: PythonObject, x: TreesMatrix,
             _ = p  # keep the Python object alive through the native call above
             _ = out  # keep the Python object alive through the native call above
         _ = py_call_typed(_x(xt, "x_trees_accumulate_rows"), _A(acc), _A(out), _A(oob), Python.list(_P(n), _P(k), _P(m)))
+        _ = out  # keep the Python object alive through the native call above
+        _ = oob  # keep the Python object alive through the native call above
+        _ = acc  # keep the Python object alive through the native call above
         _ = py_call_typed(_x(xt, "x_trees_count_rows"), _A(counts), _A(oob), Python.list(_P(n), _P(m)))
+        _ = oob  # keep the Python object alive through the native call above
+        _ = counts  # keep the Python object alive through the native call above
     return Python.tuple(acc, counts)
 
 
@@ -719,10 +732,13 @@ def bagging_fit(model: PythonObject, args: PythonObject, classifier: Bool, conte
             var pair = _bagging_oob_outputs(xt, fields, x, k, True, context)
             var acc = pair[0]
             _ = py_call_typed(_x(xt, "x_trees_normalize_rows"), _A(acc), Python.list(_P(n), _P(k)))
+            _ = acc  # keep the Python object alive through the native call above
             py_setitem(fields, "oob_decision_function_", trees_reshape(acc, Python.tuple(n, k), context))
             var pred = _argmax(xt, acc, n, k, context)
             var hits = Int(py=py_call_typed(_x(xt, "x_trees_count_equal"), _A(pred), _A(labels.codes), Python.list(_P(n))))
+            _ = pred  # keep the Python object alive through the native call above
             py_setitem(fields, "oob_score_", _F(Float64(hits) / Float64(n)))
+            _ = pred  # keep the Python object alive through the native call above
         return model
     var y32 = trees_f32(args[1], 1, "C", "y", context)
     var y_array = _as_array(y32, Python.tuple(y32.rows), context)
@@ -739,6 +755,10 @@ def bagging_fit(model: PythonObject, args: PythonObject, classifier: Bool, conte
         _ = py_call_typed(_x(xt, "x_trees_oob_r2"),
                           Python.list(_A(pair[0]), _A(pair[1]), _A(y_array), _A(pred), _A(words), _A(flags)),
                           Python.list(_P(n)))
+        _ = flags  # keep the Python object alive through the native call above
+        _ = words  # keep the Python object alive through the native call above
+        _ = pred  # keep the Python object alive through the native call above
+        _ = y_array  # keep the Python object alive through the native call above
         if _i32_word(flags, 0) != 0 or _i32_word(flags, 1) != 0:
             raise Error("BaggingRegressor oob_score: a non-finite target or out-of-bag prediction, "
                         + "or a sum that overflows float64")
@@ -841,6 +861,8 @@ def _normalized_weights(xt: PythonObject, sample_weight: PythonObject, n: Int, c
     var out = trees_vector(n + 1, "<f8", context)
     var flags = trees_vector(8, "<i4", context)
     _ = py_call_typed(_x(xt, "x_trees_exact_sum"), _P(sw.addr), _A(out), _A(flags), Python.list(_P(n), _P(1)))
+    _ = flags  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
     _ = sw  # keep the Python object alive through the native call above
     if _i32_word(flags, 0) != 0 or _i32_word(flags, 1) != 0 or _i32_word(flags, 2) != 0 or _i32_word(flags, 3) != 0:
         raise Error("sample_weight must be finite and nonnegative")
@@ -858,6 +880,7 @@ def _w32(xt: PythonObject, w: PythonObject, n: Int, context: PythonObject) raise
     """`_AdaBoostBase._w32`: the boosting weights times n, float32."""
     var out = trees_vector(n, "<f4", context)
     _ = py_call_typed(_x(xt, "x_trees_scale_to_f32"), _A(w), _A(out), Python.list(_P(n), _F(Float64(n))))
+    _ = out  # keep the Python object alive through the native call above
     return out
 
 
@@ -865,6 +888,7 @@ def _colmajor(xt: PythonObject, x: TreesMatrix, context: PythonObject) raises ->
     """`_trees_colmajor` of a C-order float32 X: the lane's transpose."""
     var out = trees_empty(Python.tuple(x.rows, x.cols), "<f4", context, "F")
     _ = py_call_typed(_x(xt, "x_trees_transpose_f32"), _P(x.addr), _A(out), Python.list(_P(x.rows), _P(x.cols)))
+    _ = out  # keep the Python object alive through the native call above
     var _keep_ret_out = TreesMatrix(out, trees_address(out), x.rows, x.cols, False)
     _ = out  # keep the Python object alive through the native call above
     return _keep_ret_out^
@@ -930,6 +954,10 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
                 var pred = _i32_codes(_member_predict(member, xa, context), context)
                 _ = py_call_typed(_x(xt, "x_trees_samme_step"), _A(w), _A(pred), _A(codes), _A(stats),
                                   Python.list(_P(n), _P(k), _F(lr), _P(1 if it == m - 1 else 0), _P(1 if is_dt else 0)))
+                _ = pred  # keep the Python object alive through the native call above
+                _ = codes  # keep the Python object alive through the native call above
+                _ = stats  # keep the Python object alive through the native call above
+                _ = w  # keep the Python object alive through the native call above
                 var status = _f64_word(stats, 0)
                 var total = _f64_word(stats, 3)
                 if status == 2.0:
@@ -982,6 +1010,8 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
         for it in range(m):  # driver-loop: over the boosting rounds (one member each)
             var rows = trees_vector(n, "<i4", context)
             _ = py_call_typed(_x(xt, "x_trees_weighted_sample"), _A(w), _A(rows), Python.list(_P(n), _P(n), _P(seed), _P(it)))
+            _ = rows  # keep the Python object alive through the native call above
+            _ = w  # keep the Python object alive through the native call above
             var member = _clone(base, _sub_seed(seed, it), context)
             var yr = _gather_vec(xt, y32.addr, n, rows, context)
             _ = y32  # keep the Python object alive through the native call above
@@ -996,6 +1026,9 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
             _ = py_call_typed(_x(xt, "x_trees_r2_step"), _A(w), _P(pred.addr), _A(y_array), _A(stats),
                               Python.list(_P(n), _P(loss), _F(lr), _P(1 if it == m - 1 else 0), _P(1 if is_dt else 0)))
             _ = pred  # keep the Python object alive through the native call above
+            _ = y_array  # keep the Python object alive through the native call above
+            _ = stats  # keep the Python object alive through the native call above
+            _ = w  # keep the Python object alive through the native call above
             var status = _f64_word(stats, 0)
             var total = _f64_word(stats, 3)
             if status == 2.0:
@@ -1055,6 +1088,8 @@ def ada_decision_function(model: PythonObject, args: PythonObject, context: Pyth
     if k == 2:
         var d = trees_vector(n, "<f8", context)
         _ = py_call_typed(_x(xt, "x_trees_margin2"), _A(acc), _A(d), Python.list(_P(n), _P(0)))
+        _ = d  # keep the Python object alive through the native call above
+        _ = acc  # keep the Python object alive through the native call above
         return d
     return trees_reshape(acc, Python.tuple(n, k), context)
 
@@ -1069,10 +1104,13 @@ def ada_predict_proba(model: PythonObject, args: PythonObject, context: PythonOb
     if k == 2:
         var pairs = trees_vector(n * 2, "<f8", context)
         _ = py_call_typed(_x(xt, "x_trees_margin2"), _A(acc), _A(pairs), Python.list(_P(n), _P(2)))
+        _ = pairs  # keep the Python object alive through the native call above
+        _ = acc  # keep the Python object alive through the native call above
         acc = pairs
     else:
         _scale(xt, acc, Float64(k - 1))
     _ = py_call_typed(_x(xt, "x_trees_softmax_rows"), _A(acc), Python.list(_P(n), _P(k)))
+    _ = acc  # keep the Python object alive through the native call above
     return trees_reshape(acc, Python.tuple(n, k), context)
 
 
@@ -1088,6 +1126,8 @@ def ada_predict(model: PythonObject, args: PythonObject, classifier: Bool, conte
         if k == 2:
             codes = trees_vector(n, "<i4", context)
             _ = py_call_typed(_x(xt, "x_trees_margin2"), _A(acc), _A(codes), Python.list(_P(n), _P(1)))
+            _ = codes  # keep the Python object alive through the native call above
+            _ = acc  # keep the Python object alive through the native call above
         else:
             codes = _argmax(xt, acc, n, k, context)
         return trees_decode_labels(fields["classes_"], codes, context)
@@ -1100,11 +1140,15 @@ def ada_predict(model: PythonObject, args: PythonObject, classifier: Bool, conte
         var p = _f32_vector(_member_predict(members[j], xa, context), context)
         _ = py_call_typed(_x(xt, "x_trees_put_f32"), _A(preds), _P(p.addr), Python.list(_P(j * n), _P(n)))
         _ = p  # keep the Python object alive through the native call above
+        _ = preds  # keep the Python object alive through the native call above
     var b = trees_builtins()
     var weights_store = py_call(context["array_type"], PythonObject("d"), py_call(b.map, b.float, fields["estimator_weights_"]))
     var weights = classical_wrap_array(weights_store, Python.tuple(m), "<f8", "C", context)
     var out = trees_vector(n, "<f4", context)
     _ = py_call_typed(_x(xt, "x_trees_weighted_median"), _A(preds), _A(weights), _A(out), Python.list(_P(n), _P(m)))
+    _ = out  # keep the Python object alive through the native call above
+    _ = weights  # keep the Python object alive through the native call above
+    _ = preds  # keep the Python object alive through the native call above
     return out
 
 
@@ -1136,6 +1180,7 @@ def _dart_bag(fields: PythonObject, xt: PythonObject, n: Int, it: Int, mut cache
     var out = trees_vector(max(1, n), "<i4", context)
     var k = Int(py=py_call_typed(_x(xt, "x_trees_bag_rows"), _A(out),
                                  Python.list(_P(n), _P(_seed(fields["bagging_seed"], context)), _P(start), _F(frac))))
+    _ = out  # keep the Python object alive through the native call above
     cache_start = start
     cache = _copy_i32(out, 0, k, context)
     return cache
@@ -1200,6 +1245,8 @@ def _dart_boost(model: PythonObject, fields: PythonObject, x: TreesMatrix, y32: 
         var out = trees_vector(1, "<f8", context)
         var flags = trees_vector(8, "<i4", context)
         _ = py_call_typed(_x(xt, "x_trees_exact_sum"), _P(y32.addr), _A(out), _A(flags), Python.list(_P(y32.rows), _P(0)))
+        _ = flags  # keep the Python object alive through the native call above
+        _ = out  # keep the Python object alive through the native call above
         if _i32_word(flags, 0) != 0 or _i32_word(flags, 1) != 0 or _i32_word(flags, 2) != 0:
             raise Error("Input y contains NaN or infinity.")
         var mean = _f64_word(out, 0) / Float64(n)
@@ -1212,8 +1259,11 @@ def _dart_boost(model: PythonObject, fields: PythonObject, x: TreesMatrix, y32: 
     else:
         var cnt = trees_vector(K, "<i4", context)
         _ = py_call_typed(_x(xt, "x_trees_class_counts"), _P(y32.addr), _A(cnt), Python.list(_P(n), _P(K)))
+        _ = cnt  # keep the Python object alive through the native call above
         var priors = trees_vector(K, "<f8", context)
         _ = py_call_typed(_x(xt, "x_trees_class_priors"), _A(cnt), _A(priors), Python.list(_P(n), _P(K)))
+        _ = priors  # keep the Python object alive through the native call above
+        _ = cnt  # keep the Python object alive through the native call above
         for c in range(K):  # driver-loop: over the K class starts
             _ = py_call(inits.append, _F(_f64_word(priors, c)))
     py_setitem(fields, "init_score_", inits[0] if K == 1 else inits)
@@ -1268,31 +1318,57 @@ def _dart_boost(model: PythonObject, fields: PythonObject, x: TreesMatrix, y32: 
     var drop_rate = _float(fields["drop_rate"])
     var handle = py_call_typed(_x(xt, "x_trees_dart_open"), _P(x.addr), _P(y32.addr), _A(inits32),
                                Python.list(_P(n), _P(d), _P(K), _P(kind), _P(n_iters), _P(node_cap)))
+    _ = inits32  # keep the Python object alive through the native call above
     var cache_start = -1
     var cache = PythonObject(None)
     try:
         for it in range(n_iters):  # driver-loop: over the boosting rounds
             _ = py_call_typed(_x(xt, "x_trees_dart_thresholds"), _A(weights64), _A(coefs64), _A(coef32), _A(thr64),
                               _A(state), Python.list(_P(it), _P(K), _P(uniform), _P(max_drop)), drop_rate)
+            _ = thr64  # keep the Python object alive through the native call above
+            _ = coef32  # keep the Python object alive through the native call above
+            _ = coefs64  # keep the Python object alive through the native call above
+            _ = weights64  # keep the Python object alive through the native call above
+            _ = state  # keep the Python object alive through the native call above
             _ = py_call_typed(_x(xt, "x_trees_dart_step"), handle, _A(coef32), _A(thr64), _A(flags), _A(bad),
                               Python.list(), Python.list(_P(it), _P(drop_seed), _P(it), _P(skip_thr)))
+            _ = flags  # keep the Python object alive through the native call above
+            _ = thr64  # keep the Python object alive through the native call above
+            _ = coef32  # keep the Python object alive through the native call above
+            _ = bad  # keep the Python object alive through the native call above
+            _ = inits32  # keep the Python object alive through the native call above
             if _i32_word(bad, 0) != 0:
                 raise Error("RuntimeError: x_trees dart: a tree walk left its tree (child or column out of range)")
             var rescaled = py_call_typed(_x(xt, "x_trees_dart_rescale"), _A(weights64), _A(coefs64), _A(flags), _A(state),
                                          Python.list(_P(it), _P(K), _P(uniform), _P(xgb)), _F(lr))
+            _ = state  # keep the Python object alive through the native call above
+            _ = flags  # keep the Python object alive through the native call above
+            _ = coefs64  # keep the Python object alive through the native call above
+            _ = weights64  # keep the Python object alive through the native call above
             var shrink = _float(rescaled[1])
+            _ = state  # keep the Python object alive through the native call above
+            _ = flags  # keep the Python object alive through the native call above
+            _ = coefs64  # keep the Python object alive through the native call above
+            _ = weights64  # keep the Python object alive through the native call above
             var factor = _float(rescaled[2])
+            _ = state  # keep the Python object alive through the native call above
+            _ = flags  # keep the Python object alive through the native call above
+            _ = coefs64  # keep the Python object alive through the native call above
+            _ = weights64  # keep the Python object alive through the native call above
             var rows = _dart_bag(fields, xt, n, it, cache_start, cache, context)
             var m = 0 if rows is None else len(rows)
             for c in range(K):  # driver-loop: over the K member trees of one round
                 var j = it * K + c
                 var cols = _dart_cols(fields, xt, d, j, context)
                 var tree = _dart_member(fields, handle, c, n, d, rows, cols, max_depth, seed, j, context)
+                _ = inits32  # keep the Python object alive through the native call above
                 var tf = py_fields(tree)
                 if cols is not None:
                     var colid = tf["_colid"]
                     var cid = _copy_i32(colid, 0, Int(py=colid.size), context)
                     _ = py_call_typed(_x(xt, "x_trees_remap_cols"), _A(cid), _A(cols), Python.list(_P(Int(py=cid.size)), _P(len(cols))))
+                    _ = cid  # keep the Python object alive through the native call above
+                    _ = cols  # keep the Python object alive through the native call above
                     py_setitem(tf, "_colid", cid)
                 var offsets = tf["_offsets"]
                 var lo = _i32_word(offsets, 0)
@@ -1301,10 +1377,14 @@ def _dart_boost(model: PythonObject, fields: PythonObject, x: TreesMatrix, y32: 
                 _ = py_call_typed(_x(xt, "x_trees_dart_add"), handle, _A(tf["_colid"]), _A(tf["_quesval"]),
                                   _A(tf["_left_child"]), _A(values), _A(rows if rows is not None else all_cols),
                                   Python.list(_P(j), _P(c), _P(lo), _P(n_nodes), shrink, factor, _F(lam), _F(l1), _F(mds), _P(m)))
+                _ = inits32  # keep the Python object alive through the native call above
+                _ = values  # keep the Python object alive through the native call above
                 _ = py_call(trees.append, tree)
                 _ = py_call(tree_values.append, values)
     finally:
         _ = py_call_typed(_x(xt, "x_trees_dart_close"), handle, _A(bad))
+        _ = bad  # keep the Python object alive through the native call above
+        _ = inits32  # keep the Python object alive through the native call above
     if _i32_word(bad, 0) != 0:
         raise Error("RuntimeError: x_trees dart: a tree walk left its tree (child or column out of range)")
     var coefs = Python.list()
@@ -1387,6 +1467,7 @@ def _dart_raw(fields: PythonObject, X: PythonObject, context: PythonObject) rais
     _ = py_call_typed(_x(xt, "x_trees_dart_predict"), _P(x.addr), Python.list(cols, ques, lefts, vals), sizes, coefs,
                       starts, _A(score), Python.list(_P(n), _P(d), _P(K)))
     _ = x  # keep the Python object alive through the native call above
+    _ = score  # keep the Python object alive through the native call above
     _ = x^
     return score
 
@@ -1398,6 +1479,8 @@ def _dart_raw_rows(fields: PythonObject, X: PythonObject, context: PythonObject)
     var n = Int(py=raw.size) // K
     var out = trees_vector(n * K, "<f8", context)
     _ = py_call_typed(_x(_xt(fields, context), "x_trees_transpose_f64"), _A(raw), _A(out), Python.list(_P(K), _P(n)))
+    _ = out  # keep the Python object alive through the native call above
+    _ = raw  # keep the Python object alive through the native call above
     return trees_reshape(out, Python.tuple(n, K), context)
 
 
@@ -1419,6 +1502,8 @@ def dart_predict(model: PythonObject, args: PythonObject, classifier: Bool, cont
     var n = Int(py=raw.size)
     var codes = trees_vector(n, "<i4", context)
     _ = py_call_typed(_x(xt, "x_trees_positive_codes"), _A(raw), _A(codes), Python.list(_P(n)))
+    _ = codes  # keep the Python object alive through the native call above
+    _ = raw  # keep the Python object alive through the native call above
     return trees_decode_labels(fields["classes_"], codes, context)
 
 
@@ -1438,13 +1523,18 @@ def dart_predict_proba(model: PythonObject, args: PythonObject, context: PythonO
         var K = Int(py=acc.shape[1])
         var flat = trees_reshape(acc, Python.tuple(n * K), context)
         _ = py_call_typed(_x(xt, "x_trees_softmax_rows"), _A(flat), Python.list(_P(n), _P(K)))
+        _ = flat  # keep the Python object alive through the native call above
         return trees_reshape(flat, Python.tuple(n, K), context)
     var raw = _dart_raw(fields, args[0], context)
     var n = Int(py=raw.size)
     var acc = trees_vector(2 * n, "<f8", context)
     var zero = trees_vector(n, "<f8", context)
     _ = py_call_typed(_x(xt, "x_trees_stack_w64"), Python.list(_A(zero), _A(raw)), _A(acc), Python.list(_P(n)))
+    _ = zero  # keep the Python object alive through the native call above
+    _ = acc  # keep the Python object alive through the native call above
+    _ = raw  # keep the Python object alive through the native call above
     _ = py_call_typed(_x(xt, "x_trees_softmax_rows"), _A(acc), Python.list(_P(n), _P(2)))
+    _ = acc  # keep the Python object alive through the native call above
     _ = zero^
     return trees_reshape(acc, Python.tuple(n, 2), context)
 
@@ -1471,6 +1561,7 @@ def _rte_fit(model: PythonObject, fields: PythonObject, x: TreesMatrix, context:
     var xt = _xt(fields, context)
     var u = trees_vector(n, "<f8", context)
     _ = py_call_typed(_x(xt, "x_trees_uniform"), _A(u), Python.list(_P(n), _P(seed), _P(0)))
+    _ = u  # keep the Python object alive through the native call above
     var yr = trees_f32(u, 1, "C", "y", context)
     var settings = Python.dict()
     py_setitem(settings, "n_estimators", _int(fields["n_estimators"]))
@@ -1491,10 +1582,12 @@ def _rte_fit(model: PythonObject, fields: PythonObject, x: TreesMatrix, context:
     var nn = _i32_word(offsets, n_trees)
     var node_col = trees_vector(nn, "<i4", context)
     var col = Int(py=py_call_typed(_x(xt, "x_trees_leaf_numbering"), _A(ff["_left_child"]), _A(node_col), Python.list(_P(nn))))
+    _ = node_col  # keep the Python object alive through the native call above
     py_setitem(fields, "_tree_base", _copy_i32(offsets, 0, n_trees, context))
     py_setitem(fields, "_node_col", node_col)
     py_setitem(fields, "n_trees_", _P(n_trees))
     py_setitem(fields, "n_output_features_", _P(col))
+    _ = node_col  # keep the Python object alive through the native call above
     py_setitem(fields, "n_features_in_", _P(d))
 
 
@@ -1514,9 +1607,12 @@ def _rte_transform(fields: PythonObject, x: TreesMatrix, context: PythonObject) 
     var nodes = trees_vector(n * trees, "<i4", context)
     _ = py_call_typed(_x(xt, "x_trees_apply"), _A(ff["_offsets"]), _A(ff["_colid"]), _A(ff["_quesval"]),
                       _A(ff["_left_child"]), _P(x.addr), _A(nodes), Python.list(_P(n), _P(d), _P(0), _P(trees)))
+    _ = nodes  # keep the Python object alive through the native call above
     var out = trees_vector(n * width, "<f8", context)
     _ = py_call_typed(_x(xt, "x_trees_onehot_leaves"), _A(nodes), _A(fields["_tree_base"]), _A(fields["_node_col"]),
                       _A(out), Python.list(_P(n), _P(trees), _P(width)))
+    _ = nodes  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
     return trees_reshape(out, Python.tuple(n, width), context)
 
 

@@ -583,7 +583,6 @@ def _eval_set(eval_set: PythonObject, fields: PythonObject, model: PythonObject,
     _ = ye  # keep the Python object alive through the native call above
     _ = xe  # keep the Python object alive through the native call above
     _ = xe  # keep the Python object alive through the native call above
-    _ = xe  # keep the Python object alive through the native call above
     return _keep_ret_xe^
 
 
