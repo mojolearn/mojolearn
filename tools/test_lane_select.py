@@ -2141,6 +2141,44 @@ callbacks = {"fit": callback}
         lane_select._REGIONS.update(saved)
 
 
+def test_named_public_seed_avoids_other_classes_but_keeps_import_effects():
+    prefix = lane_select.PKG + "/_selector_seed_"
+    files = {
+        prefix + "door.py": '''
+from ._selector_seed_setup import initialize
+ready = initialize()
+class Chosen:
+    def fit(self):
+        from ._selector_seed_selected import compute
+        return compute()
+class Unrelated:
+    def fit(self):
+        from ._selector_seed_unrelated import compute
+        return compute()
+''',
+        prefix + "setup.py": "def initialize(): return 1\n",
+        prefix + "selected.py": "def compute(): return 2\n",
+        prefix + "unrelated.py": "def compute(): return 3\n",
+    }
+    listing, extenders = lane_select._PYTHON_FILES, lane_select.extenders
+    try:
+        lane_select.reset_caches()
+        lane_select._PYTHON_FILES = list(files)
+        lane_select._read.cache.update(files)
+        lane_select.extenders = lambda: {}
+        door = prefix + "door.py"
+        reached = lane_select._own_walk({door}, set(), seed_names={door: {"Chosen"}})
+        assert reached[door] == {"Chosen"}
+        assert prefix + "setup.py" in reached and prefix + "selected.py" in reached
+        assert prefix + "unrelated.py" not in reached
+        whole = lane_select._own_walk({door}, set())
+        assert prefix + "unrelated.py" in whole
+    finally:
+        lane_select.extenders = extenders
+        lane_select.reset_caches()
+        lane_select._PYTHON_FILES = listing
+
+
 def test_unused_native_factory_result_is_not_a_call_but_consumed_result_is():
     path = "<native factory use>.py"
     code = '''

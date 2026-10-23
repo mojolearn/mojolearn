@@ -1358,13 +1358,14 @@ def _executed_names(rel, nodes, wanted, deferred, exports):
     return out
 
 
-def _own_walk(seeds, stop, follow=frozenset()):
+def _own_walk(seeds, stop, follow=frozenset(), seed_names=None):
     """file -> the names a lane reaches it for (None: whole file), walking
     the symbol-level import graph from `seeds` and entering, not following,
     the files in `stop`. A file that subclasses or patches a class the lane
     reaches runs whole (the backward edge of `_python_closure`,
-    `_extender_fires`)."""
-    wanted, stack = {}, [(s, None, None) for s in seeds]
+    `_extender_fires`). Optional `seed_names` preserves a named public root;
+    an absent/None root still means the whole module."""
+    wanted, stack = {}, [(s, None if seed_names is None else seed_names.get(s), None) for s in seeds]
     edges = extenders()
     walked = {}                  # file -> the `wanted` its imports were last read for
     asked = {}                   # file -> {importer: the names it asks for, None whole}
@@ -3342,22 +3343,30 @@ def lane_sources():
     # PASS ONE: each lane's Python doors and the bindings they resolve. Held
     # first because the next pass needs to know which bindings EVERY lane
     # resolves, and that is a measurement over all the lanes, not a list.
-    reach, seeds_of = {}, {}
+    reach, seeds_of, seed_members = {}, {}, {}
     door_bindings = resolved_bindings
     class_routes = host_class_routes()
 
     for lane, fn in ib.LANES.items():
         names = _seed_names(fn, vars(ib))
-        seeds, matched = set(), set()
+        seeds, matched, members = set(), set(), {}
         for name in names:
             for rel in symbols.get(name, ()):
                 seeds.add(rel)
                 matched.add(name)
+                stem = os.path.basename(rel)[:-3]
+                if stem == "__init__" and os.path.dirname(rel) != PKG:
+                    stem = os.path.basename(os.path.dirname(rel))
+                if name in (stem, stem.lstrip("_")):
+                    members[rel] = None  # the lane reaches the module object
+                elif rel not in members or members[rel] is not None:
+                    members.setdefault(rel, set()).add(name)
         files = _python_closure(seeds, sinks)
         doors = files - set(sinks)
         bindings = door_bindings(doors)
         reach[lane] = (matched, files, doors, bindings)
         seeds_of[lane] = seeds
+        seed_members[lane] = members
     ubiquitous = set.intersection(*[b for _, _, _, b in reach.values()]) if reach else set()
     # THE PYTHON FILES EVERY LANE REACHES: the shared helpers (`_buffer.py`,
     # `_array.py`) and the host doors they import for their native helpers.
@@ -3393,7 +3402,11 @@ def lane_sources():
         declared for the forest host; `byte-lm` reaches it from its own door
         and is."""
         if lane not in own_cache:
-            walk = _own_walk(seeds_of[lane], sinks | ubiquitous_py, follow=seeds_of[lane] - sinks)
+            # A public class/function is the root, not every class sharing
+            # its source file. Module-object roots remain whole. Import-time
+            # initializers and opaque module consumers retain their edges.
+            walk = _own_walk(seeds_of[lane], sinks | ubiquitous_py,
+                             follow=seeds_of[lane] - sinks, seed_names=seed_members[lane])
             declared, whole, used = set(), set(), set()
             regions = {rel: _region_nodes(rel, wanted) for rel, wanted in walk.items() if rel not in sinks}
             deferred, live = set(), set()
@@ -3411,9 +3424,9 @@ def lane_sources():
                     if isinstance(node, ast.ClassDef):
                         found |= class_routes.get(node.name, set())
                 declared |= found
-                if wanted is None:
-                    # RESOLVED BY A DOOR THE LANE RUNS WHOLE (a seed, a module
-                    # imported whole, a subclass): the binding is this lane's
+                if wanted is None or rel in seeds_of[lane]:
+                    # RESOLVED BY A PUBLIC ROOT OR WHOLE DOOR (a seed, a
+                    # module imported whole, a subclass): the binding is this lane's
                     # own and "no export named" stays wide. Resolved only inside
                     # a few imported helpers (`_restore_mode` from
                     # linear_model.py loads the estimators binding to read a
