@@ -562,9 +562,12 @@ def _owned_f32(w: TreesMatrix, context: PythonObject) raises -> PythonObject:
     """A float32 Array copy of weights that borrow a foreign buffer (the
     program runner copies Arrays into its arena; `put` took `as_f32_c`'s
     Array). The bytes are copied in C (`array.array.frombytes`)."""
-    var store = py_call(context["array_type"], PythonObject("f"))
-    _ = py_call(store.frombytes, w.keep)
-    return classical_wrap_array(store, Python.tuple(len(store)), "<f4", "C", context)
+    # copied from the matrix's own address (its owner need not be a
+    # bytes-like object: frombytes refused a viewed NumPy weight vector)
+    var count = w.rows * w.cols
+    var out = trees_vector(count, "<f4", context)
+    trees_cast(w.addr, "<f4", trees_address(out), "<f4", count, context)
+    return out
 
 
 # ------------------------------------------------------------ the forests
