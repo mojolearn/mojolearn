@@ -11,6 +11,7 @@ from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_get, py_type
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.ica_native import ica_fit, ica_project
+from bindings.nmf_native import nmf_fit, nmf_fit_transform, nmf_inverse_transform, nmf_transform
 
 
 def _family(model: PythonObject, context: PythonObject) raises -> String:
@@ -57,6 +58,17 @@ def decomp_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPt
                 result = ica_project(model, args[0], operation == "inverse_transform", context)
             else:
                 raise Error("unknown private FastICA operation")
+        elif family == "NMF":
+            if operation == "fit":
+                result = nmf_fit(model, args[0], args[1], context)
+            elif operation == "fit_transform":
+                result = nmf_fit_transform(model, args[0], args[1], args[2], context)
+            elif operation == "transform":
+                result = nmf_transform(model, args[0], context)
+            elif operation == "inverse_transform":
+                result = nmf_inverse_transform(model, args[0], context)
+            else:
+                raise Error("unknown private NMF operation")
         else:
             raise Error("unknown private decomposition estimator")
         return result.steal_data()
@@ -73,4 +85,6 @@ def decomp_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPt
             return raise_python_exception(error_without_class(error, "AttributeError"), ExceptionType("PyExc_AttributeError"))
         if String(error).startswith("RuntimeError:"):
             return raise_python_exception(error_without_class(error, "RuntimeError"), ExceptionType("PyExc_RuntimeError"))
+        if String(error).startswith("ZeroDivisionError:"):
+            return raise_python_exception(error_without_class(error, "ZeroDivisionError"), ExceptionType("PyExc_ZeroDivisionError"))
         return raise_python_exception(error_without_class(error, "ValueError"), ExceptionType.ValueError)

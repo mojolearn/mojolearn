@@ -7,6 +7,7 @@ from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.decomp_owner_kit import DecompDev
 from x_decomp.host import HostExec
 from x_decomp.ica import ica_solve_run
+from x_decomp.nmf import NmfArgs, nmf_nndsvd_run, nmf_solve_run
 
 
 struct HostDecomp(DecompDev):
@@ -32,3 +33,11 @@ struct HostDecomp(DecompDev):
         tol: Float64,
     ) raises -> Int:
         return ica_solve_run[HostExec](px, pw, nc, xr, xc, algo, fun, max_iter, alpha, tol)
+
+    @staticmethod
+    def nmf_solve(px: F32Ptr, pw: F32Ptr, ph: F32Ptr, n: Int, d: Int, nc: Int, solver: Int, a: NmfArgs) raises -> Int:
+        return nmf_solve_run[HostExec](px, pw, ph, n, d, nc, solver, a)
+
+    @staticmethod
+    def nmf_nndsvd(pu: F32Ptr, ps: F32Ptr, pv: F32Ptr, pw: F32Ptr, ph: F32Ptr, n: Int, d: Int, r: Int, nc: Int) raises -> Int:
+        return nmf_nndsvd_run[HostExec](pu, ps, pv, pw, ph, n, d, r, nc)

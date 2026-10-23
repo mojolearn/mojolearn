@@ -90,11 +90,14 @@ def ica_fit_run[E: Exec, D: RDev, RES: Bool, X: DecompDev](
         else:
             s = kit.mm(m, w, tb=True)
             comp = w
-        kit.copy_out(comp, components_out, kit.r(comp) * kit.c(comp))
+        var comp_count = kit.r(comp) * kit.c(comp)
+        kit.copy_out(comp, components_out, comp_count)
         var mixing = kit_pinv_rows[E, D, RES, X](kit, comp)
-        kit.copy_out(mixing, mixing_out, kit.r(mixing) * kit.c(mixing))
+        var mixing_count = kit.r(mixing) * kit.c(mixing)
+        kit.copy_out(mixing, mixing_out, mixing_count)
         if project:
-            kit.copy_out(s, sources_out, kit.r(s) * kit.c(s))
+            var s_count = kit.r(s) * kit.c(s)
+            kit.copy_out(s, sources_out, s_count)
         kit.close()
         return it
     except error:
@@ -123,7 +126,8 @@ def ica_project_run[E: Exec, D: RDev, RES: Bool](
             if whiten:
                 var mu = kit.add(Int(mean), -1, 1, rows)
                 y = kit.ew(OP_ADD, y, mu)
-        kit.copy_out(y, out, kit.r(y) * kit.c(y))
+        var y_count = kit.r(y) * kit.c(y)
+        kit.copy_out(y, out, y_count)
         kit.close()
     except error:
         kit.close()

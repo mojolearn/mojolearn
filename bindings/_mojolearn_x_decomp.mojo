@@ -17,7 +17,7 @@ from x_decomp.tsvd_owner_pyapi import tsvd_randomized_py, tsvd_tsqr_py
 from x_decomp.ipca_owner_dev import DevIpcaDev
 from x_decomp.ipca_owner_pyapi import ipca_fit_py, ipca_partial_py, ipca_project_py
 from x_decomp.decomp_owner_dev import DevDecomp
-from x_decomp.decomp_owner_pyapi import ica_fit_py, ica_project_py
+from x_decomp.decomp_owner_pyapi import ica_fit_py, ica_project_py, nmf_fit_py, nmf_inverse_py
 from x_decomp.fa_fast import FA_FAST_APPLE
 from x_decomp.fa_fast_pyapi import fa_defines_py, fa_em_py, fa_gram_py, fa_transform_py
 from std.sys.info import has_apple_gpu_accelerator
@@ -165,6 +165,8 @@ def build__mojolearn_x_decomp() -> PythonObject:
         # FastICA fit / fit_transform and transform / inverse_transform (x_decomp/ica_owner.mojo)
         m.def_function[ica_fit_py[DevExec, DevRDev, True, DevDecomp]]("x_decomp_ica_fit")
         m.def_function[ica_project_py[DevExec, DevRDev, True]]("x_decomp_ica_project")
+        m.def_function[nmf_fit_py[DevExec, DevRDev, True, DevDecomp]]("x_decomp_nmf_fit")
+        m.def_function[nmf_inverse_py[DevExec, DevRDev, True]]("x_decomp_nmf_inverse")
         m.def_function[r_signs_py]("x_decomp_r_signs")
         m.def_function[rank_above_py]("x_decomp_rank_above")
         # lane idn-dense-linalg: the one-entry OLS and solve routes

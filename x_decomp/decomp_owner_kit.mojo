@@ -17,6 +17,7 @@ from x_decomp.api import eigh_run, lu_solve_run, rand_run
 from x_decomp.cells import F32Ptr, I32Ptr
 from x_decomp.exec_trait import Exec
 from x_decomp.pca_randomized import RDev, RKit
+from x_decomp.nmf import NmfArgs
 
 # x_decomp/cells.mojo op codes (`_OP` in _expansion_decomp.py)
 comptime OP_ADD = 0
@@ -67,6 +68,14 @@ trait DecompDev:
         px: F32Ptr, pw: F32Ptr, nc: Int, xr: Int, xc: Int, algo: Int, fun: Int, max_iter: Int, alpha: Float64,
         tol: Float64,
     ) raises -> Int:
+        ...
+
+    @staticmethod
+    def nmf_solve(px: F32Ptr, pw: F32Ptr, ph: F32Ptr, n: Int, d: Int, nc: Int, solver: Int, a: NmfArgs) raises -> Int:
+        ...
+
+    @staticmethod
+    def nmf_nndsvd(pu: F32Ptr, ps: F32Ptr, pv: F32Ptr, pw: F32Ptr, ph: F32Ptr, n: Int, d: Int, r: Int, nc: Int) raises -> Int:
         ...
 
 
@@ -195,4 +204,5 @@ def kit_pinv_rows[E: Exec, D: RDev, RES: Bool, X: DecompDev](mut kit: RKit[E, D,
 def kit_colmean[E: Exec, D: RDev, RES: Bool](mut kit: RKit[E, D, RES], a: Int) raises -> Int:
     """`_Kit.colmean(A)`: the column sums scaled by 1 / rows."""
     var sums = kit.sum(a, True)
-    return kit.ew(OP_SCALE, sums, scalar=1.0 / Float64(kit.r(a)))
+    var rows = kit.r(a)
+    return kit.ew(OP_SCALE, sums, scalar=1.0 / Float64(rows))

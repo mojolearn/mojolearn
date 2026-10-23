@@ -2331,120 +2331,7 @@ class NMF(_Base):
         self.verbose, self.shuffle, self.numeric_mode = verbose, shuffle, numeric_mode
 
     # ---- setup
-    def _beta(self):
-        b = {"frobenius": 2.0, "kullback-leibler": 1.0, "itakura-saito": 0.0}.get(self.beta_loss, self.beta_loss)
-        if b not in (0.0, 1.0, 2.0):
-            raise ValueError("beta_loss: 'frobenius', 'kullback-leibler' and 'itakura-saito' are carried; "
-                             "a general float beta is not")
-        return float(b)
-
-    def _validate(self, M):
-        beta = self._beta()
-        if beta != 2.0 and self.solver != "mu":
-            raise ValueError("Invalid beta_loss parameter: solver 'cd' does not handle beta_loss other than 'frobenius'")
-        if self.solver not in ("cd", "mu"):
-            raise ValueError(f"Invalid solver parameter: got {self.solver!r} instead of one of {{'cd', 'mu'}}")
-        if _any_negative(M):
-            raise ValueError("Negative values in data passed to NMF (input X)")
-
-    def _reg(self, n, d):
-        aH = self.alpha_W if self.alpha_H == "same" else self.alpha_H
-        aW = self.alpha_W
-        return (d * aW * self.l1_ratio, n * aH * self.l1_ratio,
-                d * aW * (1.0 - self.l1_ratio), n * aH * (1.0 - self.l1_ratio))
-
-    def _init(self, k, M, nc, init):
-        n, d = M.r, M.c
-        seed = _seed_of(self.random_state)
-        xmean = k.ew("scale", k.total(M), s=1.0 / (n * d)).s[0]
-        if init == "random":
-            avg = math.sqrt(xmean / nc)
-            H = k.ew("scale", k.ew("abs", k.rand(nc, d, seed, 10, 1)), s=avg)
-            W = k.ew("scale", k.ew("abs", k.rand(n, nc, seed, 11, 1)), s=avg)
-            return W, H
-        U, S, Vt = _thin_svd(k, M, nc, u_based=(n >= d))
-        # the per-component factor pairs in ONE binding call (lane
-        # py-runtime-b: x_decomp/nmf.mojo `nmf_nndsvd`, the same cells per
-        # component and the same float32 products of the norms; on resident
-        # device matrices in the GPU binding)
-        W, H = _M.zeros(n, nc), _M.zeros(nc, d)
-        k.b.x_decomp_nmf_nndsvd(U.addr, S.addr, Vt.addr, W.addr, H.addr, [n, d, S.r * S.c, nc])
-        z = _M.zeros(1, 1)
-        W = k.ew("select", W, W, z, s=1e-6 - 1e-13)
-        H = k.ew("select", H, H, z, s=1e-6 - 1e-13)
-        if init == "nndsvda":
-            W = k.ew("select", W, W, k.const(xmean), s=0.0)
-            H = k.ew("select", H, H, k.const(xmean), s=0.0)
-        elif init == "nndsvdar":
-            rw = k.ew("scale", k.ew("abs", k.rand(n, nc, seed, 12, 1)), s=abs(xmean) / 100)
-            rh = k.ew("scale", k.ew("abs", k.rand(nc, d, seed, 13, 1)), s=abs(xmean) / 100)
-            W = k.ew("select", W, W, rw, s=0.0)
-            H = k.ew("select", H, H, rh, s=0.0)
-        return W, H
-
-    def _err(self, k, M, W, H):
-        """sklearn `_beta_divergence(..., square_root=True)`."""
-        beta = self._beta()
-        if beta == 2.0:
-            return k.ew("sqrt", k.total(k.ew("sqdiff", M, k.mm(W, H)))).s[0]
-        WH = k.ew("maxs", k.mm(W, H), s=_F32_EPS)
-        keep = k.ew("gts", M, s=_F32_EPS)                       # X > EPSILON
-        div = k.ew("div", M, WH)
-        if beta == 1.0:
-            sum_wh = k.mm(k.colsum(W), k.rowsum(H)).s[0]
-            xlog = k.total(k.ew("mul", k.ew("mul", M, k.ew("logs", div, s=1.1754943508222875e-38)), keep)).s[0]
-            xs = k.total(k.ew("mul", M, keep)).s[0]
-            res = xlog + sum_wh - xs
-        else:
-            dsum = k.total(k.ew("mul", div, keep)).s[0]
-            lsum = k.total(k.ew("mul", k.ew("logs", div, s=1.1754943508222875e-38), keep)).s[0]
-            res = dsum - M.r * M.c - lsum
-        return math.sqrt(2 * res) if res > 0 else 0.0
-
     # ---- solvers
-    def _solve(self, k, M, W, H, update_H, regs):
-        """`_cd` (solver 'cd') or `_mu` (frobenius) / `_mu_beta` (KL, IS) in
-        ONE binding call (lane py-runtime-b: x_decomp/nmf.mojo on the host
-        column, x_decomp/nmf_dev.mojo on resident device matrices): the same
-        cells, broadcast modes and float32 scalars as the Python drivers it
-        replaces, their float64 convergence tests in the same order, the
-        shuffle orders from the same Philox streams (200 + draw). W and H
-        are copied; the binding replaces the copies."""
-        l1W, l1H, l2W, l2H = regs
-        W, H = W.copy(), H.copy()
-        p = [M.r, M.c, W.c, 0 if self.solver == "cd" else 1, int(bool(update_H)), int(self.max_iter),
-             int(bool(self.shuffle)), _seed_of(self.random_state) & 0xFFFFFFFF]
-        f = [self._beta(), float(self.tol), float(l1W), float(l1H), float(l2W), float(l2H)]
-        it = int(k.b.x_decomp_nmf_solve(M.addr, W.addr, H.addr, p, f))
-        if it < 0:
-            raise ZeroDivisionError("float division by zero")
-        return W, H, it
-
-    def _fit_transform(self, M, H=None, update_H=True):
-        k = self._kit()
-        n, d = M.r, M.c
-        regs = self._reg(n, d)
-        if update_H:
-            nc = self.n_components
-            if nc in (None, "auto"):
-                nc = d if self.init != "custom" else None
-            nc = int(nc)
-            init = self.init or ("nndsvda" if nc <= min(n, d) else "random")
-            if init not in ("random", "nndsvd", "nndsvda", "nndsvdar"):
-                raise ValueError(f"init={init!r} is not supported here (random, nndsvd, nndsvda, nndsvdar)")
-            if init.startswith("nndsvd") and nc > min(n, d):
-                raise ValueError("init = 'nndsvd' can only be used when n_components <= min(n_samples, n_features)")
-            W, H = self._init(k, M, nc, init)
-        else:
-            nc = H.r
-            if self.solver == "mu":
-                xmean = k.ew("scale", k.total(M), s=1.0 / (n * d)).s[0]
-                W = k.const(math.sqrt(xmean / nc), n, nc)
-            else:
-                W = _M.zeros(n, nc)
-        W, H, it = self._solve(k, M, W, H, update_H, regs)
-        return W, H, it, nc
-
     def fit_transform(self, X, y=None, W=None, H=None):
         """Fit the model and return ``W``.
 
@@ -2462,24 +2349,7 @@ class NMF(_Base):
         -------
         ndarray of shape (n_samples, n_components), float32
         """
-        self.numeric_mode_ = _mode(self.numeric_mode)
-        M = _M.from_input(X)
-        self._validate(M)
-        if self.init == "custom":
-            k = self._kit()
-            Wm, Hm = _M.from_input(W, "W"), _M.from_input(H, "H")
-            regs = self._reg(M.r, M.c)
-            Wm, Hm, it = self._solve(k, M, Wm, Hm, True, regs)
-            nc = Hm.r
-        else:
-            Wm, Hm, it, nc = self._fit_transform(M)
-        self.components_m_ = Hm
-        self.components_ = Hm.out()
-        self.n_components_ = nc
-        self.n_iter_ = it
-        self.n_features_in_ = M.c
-        self.reconstruction_err_ = self._err(self._kit(), M, Wm, Hm)
-        return Wm.out()
+        return _DECOMP_CALL(self, "fit_transform", (X, W, H), _DECOMP_CONTEXT)
 
     def fit(self, X, y=None, **params):
         """Fit the model.
@@ -2496,8 +2366,7 @@ class NMF(_Base):
         -------
         self
         """
-        self.fit_transform(X, **params)
-        return self
+        return _DECOMP_CALL(self, "fit", (X, params), _DECOMP_CONTEXT)
 
     def transform(self, X):
         """Solve for ``W`` with the fitted ``H`` held fixed.
@@ -2511,13 +2380,7 @@ class NMF(_Base):
         -------
         ndarray of shape (n_samples, n_components), float32
         """
-        self._check()
-        M = _M.from_input(X)
-        if M.c != self.n_features_in_:
-            raise ValueError(f"X has {M.c} features, but NMF is expecting {self.n_features_in_}")
-        self._validate(M)
-        W, _, _, _ = self._fit_transform(M, H=self.components_m_, update_H=False)
-        return W.out()
+        return _DECOMP_CALL(self, "transform", (X,), _DECOMP_CONTEXT)
 
     def inverse_transform(self, X):
         """Return ``X @ components_``, the data reconstructed from ``W``.
@@ -2531,8 +2394,7 @@ class NMF(_Base):
         -------
         ndarray of shape (n_samples, n_features), float32
         """
-        self._check()
-        return self._kit().mm(_M.from_input(X, "W"), self.components_m_).out()
+        return _DECOMP_CALL(self, "inverse_transform", (X,), _DECOMP_CONTEXT)
 
 
 # ================================================================ FastICA
@@ -7288,4 +7150,4 @@ _JL_CALL, _JL_CONTEXT = _native_jl_bridge.connect_public()
 # The compiled owner of the decomposition estimators whose public operations
 # are one native call each (bindings/decomp_native.mojo): FastICA, ...
 from . import _native_decomp_bridge  # noqa: E402
-_DECOMP_CALL, _DECOMP_CONTEXT = _native_decomp_bridge.connect_public({"FastICA": FastICA})
+_DECOMP_CALL, _DECOMP_CONTEXT = _native_decomp_bridge.connect_public({"FastICA": FastICA, "NMF": NMF})
