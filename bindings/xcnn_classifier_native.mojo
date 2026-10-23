@@ -24,6 +24,7 @@ from bindings.py_typed_call import py_call_typed
 from bindings.xcnn_common import xcnn_builtins, xcnn_entries, xcnn_entry, xcnn_f32, xcnn_addr
 from bindings.xseq_native_common import XseqStream
 from bindings.xseq_neural_native import xseq_labels
+from core.array_helpers_impl import nsum_f64
 
 comptime _PREDICT_ROWS = 2048
 
@@ -537,9 +538,11 @@ def cnnclf_fit(model: PythonObject, args: PythonObject, context: PythonObject) r
                     _ = py_call(epoch.append, loss)
                     s += m
             _ = py_call(losses_all.extend, epoch)
-            # CPython 3.12+'s sum spelled out (the base binding's nsum_f64)
+            # CPython 3.12+'s sum spelled out (`_portable_math.nsum`: the same
+            # Neumaier fold in the same order, core/array_helpers_impl.mojo)
             var vals = py_call(context["array_type"], "d", epoch)
-            var total = Float64(py=py_call(context["xcnn_nsum_f64"], py_call(vals.buffer_info)[0], len(vals))) if len(epoch) else 0.0
+            var total = nsum_f64(MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=py_call(vals.buffer_info)[0])),
+                                 len(vals)) if len(epoch) else 0.0
             _ = py_call(curve.append, PythonObject(total / Float64(len(epoch))))
         for i in range(len(params)):  # driver-loop: reads back each parameter array handle
             var layer = params[i][0]
@@ -625,13 +628,7 @@ def cnnclf_predict(model: PythonObject, args: PythonObject, context: PythonObjec
     var codes = _run_predict(model, args[0], True, context)
     var cls = py_fields(model)["classes_"]
     var kind = String(py=cls.dtype.kind)
-    if kind == "i" or kind == "u" or kind == "f":
-        # classes_[codes] by the base binding's native gather
-        var table = py_call(np.ascontiguousarray, cls, dtype=np.float64 if kind == "f" else np.int64)
-        var out = py_call(np.empty, codes.shape[0], table.dtype)
-        var c64 = py_call(np.ascontiguousarray, codes, dtype=np.int64)
-        _ = py_call(context["xcnn_gather_f64"] if kind == "f" else context["xcnn_gather_i64"], xcnn_addr(table), table.shape[0],
-                    xcnn_addr(c64), c64.shape[0], xcnn_addr(out))
-        return py_call(out.astype, cls.dtype, copy=False)
-    # label objects (str, bool) no native table holds
-    return cls.__getitem__(codes)
+    # classes_[codes]: ndarray's own C `take`, a copy of the class words (the
+    # widened-table gather it replaces wrote the same values)
+    _ = kind
+    return py_call(cls.take, codes)

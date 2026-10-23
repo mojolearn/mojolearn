@@ -176,9 +176,4 @@ def connect_classifier():
             labels[mode] = type(error).__name__ + ": " + str(error)
     context.update(xcnn_label_bindings=labels, os_urandom=os.urandom,
                    xseq_base={"uniform_init_f32": _native("uniform_init_f32")})
-    # cpu-route: the builtin-sum twin over the epoch's host loss scalars already read back
-    context["xcnn_nsum_f64"] = _native("nsum_f64")
-    # cpu-route: classes_[codes], the decode half of label encoding over the downloaded codes
-    context["xcnn_gather_f64"] = _native("gather_f64")
-    # cpu-route: classes_[codes], the decode half of label encoding over the downloaded codes
-    context["xcnn_gather_i64"] = _native("gather_i64")
+
