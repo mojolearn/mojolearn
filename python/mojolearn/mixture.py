@@ -165,6 +165,21 @@ class GaussianMixture(NumericModeMixin):
     # runs the same EM on the cluster lane's mixture driver
     # (`x_cluster/bgmm.mojo`, plain mode; bindings/mixture_native.mojo `_gmm_ext_fit`).
     # The default fit is untouched and keeps its recorded bits.
+    def _extension(self):
+        """This object's tier of the mixture binding, its compile-time mode
+        read back (glue: binding choice). The parallel driver's workers
+        (`_parallel_worker` gmm_fit) reach the binding through it."""
+        from . import _backend
+        mod = self._bind()
+        want = getattr(self, "numeric_mode", None) or _backend.default_mode()
+        fn = getattr(mod, "mixture_numeric_mode", None)
+        if fn is not None and int(fn()) != _MODE_CODE.get(want):
+            raise RuntimeError(
+                f"mojolearn GaussianMixture: numeric_mode={want!r} was requested "
+                f"but {mod.__name__} reports another compile-time mode; "
+                "rebuild it with bash bindings/build_mixture.sh")
+        return mod
+
     def fit(self, X, y=None):
         """Fit the mixture to `X` by expectation-maximization.
 
