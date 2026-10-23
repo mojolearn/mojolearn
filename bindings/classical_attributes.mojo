@@ -32,6 +32,8 @@ def _descriptor_slot(cls: PythonObject, name: String) raises -> Bool:
 def _public_plan(model: PythonObject, context: PythonObject) raises -> PythonObject:
     var b = Python.import_module("builtins")
     var cls = model if py_type(model) is b.type else py_type(model)
+    if py_type(cls) is not py_type(py_type(PythonObject(0))):
+        raise Error("TypeError: native public attributes cannot invoke Python metaclass hooks")
     var layouts = py_get(context, "classical_public_layouts")
     if layouts is None:
         raise Error("RuntimeError: native public model metadata was not connected")

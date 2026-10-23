@@ -40,7 +40,7 @@ def _pandas_blocks(value: PythonObject) raises -> PythonObject:
         if py_type(manager) is not _pd_class("pandas.core.internals.managers", "BlockManager"):
             raise Error("TypeError: model selection requires ordinary pandas DataFrame storage")
         blocks = _pd_get("pandas._libs.internals", "BlockManager", "blocks", manager)
-    if py_type(blocks) is not py_type(Python.tuple()) or len(blocks) == 0 or (series and len(blocks) != 1):
+    if py_type(blocks) is not py_type(Python.tuple()) or (series and len(blocks) != 1):
         raise Error("ValueError: pandas input has no supported block storage")
     for i in range(len(blocks)):  # driver-loop: exact storage classes before native descriptor reads
         var cls = py_type(blocks[i])
@@ -52,6 +52,65 @@ def _pandas_blocks(value: PythonObject) raises -> PythonObject:
     return blocks
 
 
+def _pandas_axis_count(axis: PythonObject, context: PythonObject) raises -> Int:
+    var b = Python.import_module("builtins")
+    var cls = py_type(axis)
+    if cls is _pd_class("pandas.core.indexes.range", "RangeIndex"):
+        var values = py_get(_pd_fields(axis), "_range")
+        if py_type(values) is not b.range:
+            raise Error("TypeError: pandas RangeIndex requires native range storage")
+        return len(values)
+    if cls is _pd_class("pandas.core.indexes.multi", "MultiIndex"):
+        var codes = py_get(_pd_fields(axis), "_codes")
+        if py_type(codes) is not b.list and py_type(codes) is not _pd_class("pandas.core.indexes.frozen", "FrozenList"):
+            raise Error("TypeError: pandas MultiIndex requires native code-list storage")
+        var count = Int(py=py_call(b.list.__len__, codes))
+        var rows = 0
+        for i in range(count):  # driver-loop: native code arrays must agree on their row dimension
+            var code = py_call(b.list.__getitem__, codes, i)
+            if py_type(code) is not context["ndarray"] or Int(py=code.ndim) != 1:
+                raise Error("TypeError: pandas MultiIndex requires native one-dimensional codes")
+            if i > 0 and Int(py=code.shape[0]) != rows:
+                raise Error("ValueError: pandas MultiIndex code lengths disagree")
+            rows = Int(py=code.shape[0])
+        return rows
+    var index_types = Python.tuple(_pd_class("pandas.core.indexes.base", "Index"),
+        _pd_class("pandas.core.indexes.datetimes", "DatetimeIndex"),
+        _pd_class("pandas.core.indexes.timedeltas", "TimedeltaIndex"),
+        _pd_class("pandas.core.indexes.period", "PeriodIndex"),
+        _pd_class("pandas.core.indexes.category", "CategoricalIndex"))
+    var admitted = False
+    for i in range(len(index_types)):  # driver-loop: exact native pandas index layouts
+        admitted = admitted or cls is index_types[i]
+    if not admitted:
+        raise Error("TypeError: empty pandas frames require ordinary native index storage")
+    var values = py_get(_pd_fields(axis), "_data")
+    if py_type(values) is not context["ndarray"]:
+        var arrays = Python.tuple(_pd_class("pandas.core.arrays.string_", "StringArray"),
+            _pd_class("pandas.core.arrays.datetimes", "DatetimeArray"),
+            _pd_class("pandas.core.arrays.timedeltas", "TimedeltaArray"),
+            _pd_class("pandas.core.arrays.period", "PeriodArray"),
+            _pd_class("pandas.core.arrays.categorical", "Categorical"))
+        var ordinary = False
+        for i in range(len(arrays)):  # driver-loop: extension arrays backed by a native ndarray slot
+            ordinary = ordinary or py_type(values) is arrays[i]
+        if not ordinary:
+            raise Error("TypeError: empty pandas frames require native ndarray-backed index storage")
+        values = _pd_get("pandas._libs.arrays", "NDArrayBacked", "_ndarray", values)
+    if py_type(values) is not context["ndarray"] or Int(py=values.ndim) != 1:
+        raise Error("TypeError: pandas index requires one-dimensional native storage")
+    return Int(py=values.shape[0])
+
+
+def _pandas_empty_rows(value: PythonObject, context: PythonObject) raises -> Int:
+    var b = Python.import_module("builtins")
+    var manager = py_get(_pd_fields(value), "_mgr")
+    var axes = _pd_get("pandas._libs.internals", "BlockManager", "axes", manager)
+    if py_type(axes) is not b.list or len(axes) != 2 or _pandas_axis_count(axes[0], context) != 0:
+        raise Error("ValueError: pandas frame with no blocks must have no columns")
+    return _pandas_axis_count(axes[1], context)
+
+
 def _pandas_materialize(value: PythonObject, context: PythonObject, rows_context: PythonObject) raises -> PythonObject:
     # Preserve pandas' numeric promotion and column placement. The shared
     # estimator pandas_f32 reader narrows every column, which would change
@@ -59,6 +118,9 @@ def _pandas_materialize(value: PythonObject, context: PythonObject, rows_context
     var b = Python.import_module("builtins")
     var series = py_type(value) is _pd_class("pandas.core.series", "Series")
     var blocks = _pandas_blocks(value)
+    if len(blocks) == 0:
+        # pandas exports a blockless frame as float64 with shape (rows, 0).
+        return _empty(Python.tuple(_pandas_empty_rows(value, context), 0), "<f8", rows_context)
     var owned = Python.list()
     var positions = Python.list()
     var kind = String()
@@ -189,6 +251,8 @@ def msel_input_count(value: PythonObject, context: PythonObject) raises -> Int:
         return len(value)
     if native_pandas_exact(value):
         var blocks = _pandas_blocks(value)
+        if len(blocks) == 0:
+            return _pandas_empty_rows(value, context)
         var series = cls is _pd_class("pandas.core.series", "Series")
         var data = _pd_values(_pd_get("pandas._libs.internals", "Block", "values", blocks[0]), series, context)[0]
         if py_type(data) is not context["ndarray"] or Int(py=data.ndim) < 1:

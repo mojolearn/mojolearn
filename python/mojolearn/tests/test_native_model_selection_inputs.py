@@ -248,3 +248,32 @@ def test_numpy_free_import_and_standard_buffers():
     ''')
     completed = subprocess.run([sys.executable, '-c', program], env=os.environ.copy(), capture_output=True, text=True)
     assert completed.returncode == 0, completed.stdout + completed.stderr
+
+
+@pytest.mark.parametrize('index_kind', ['range', 'integer', 'string', 'datetime', 'multi'])
+def test_zero_column_dataframe_uses_native_axis_metadata(index_kind, monkeypatch):
+    pd = pytest.importorskip('pandas')
+    index = pd.RangeIndex(12)
+    if index_kind == 'integer':
+        index = pd.Index(np.arange(12, dtype='i8') * 3)
+    elif index_kind == 'string':
+        index = pd.Index(np.array(['row' + str(i) for i in range(12)], dtype=object), dtype=object)
+    elif index_kind == 'datetime':
+        index = pd.date_range('2020-01-01', periods=12)
+    elif index_kind == 'multi':
+        index = pd.MultiIndex.from_product([['a', 'b', 'c'], range(4)])
+    source = pd.DataFrame(index=index)
+    expected = source.to_numpy()
+    calls = []
+
+    def forbidden(*args, **kwargs):
+        calls.append('pandas protocol')
+        raise AssertionError('pandas Python protocol ran')
+
+    monkeypatch.setattr(type(source), '__array__', forbidden)
+    monkeypatch.setattr(type(index), '__len__', forbidden)
+    train, test = clean(ms.train_test_split, source, test_size=3, shuffle=False)
+    assert np.asarray(train).shape == (9, 0)
+    assert np.asarray(test).shape == (3, 0)
+    assert np.asarray(train).dtype == expected.dtype
+    assert calls == []
