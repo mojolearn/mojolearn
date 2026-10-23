@@ -228,7 +228,7 @@ def _init_array(model: PythonObject, source: PythonObject, init: PythonObject, k
     return arr
 
 
-def _flag(value: Bool) -> PythonObject:
+def _flag(value: Bool) raises -> PythonObject:
     return PythonObject(1 if value else 0)
 
 
