@@ -19,8 +19,10 @@ def msel_estimator_plan(model: PythonObject, context: PythonObject) raises -> Py
         raise Error("TypeError: native cross-validation refuses Python estimator metaclass hooks")
     var plan = py_get(context["family_msel_estimators"], cls)
     if plan is None:
-        var module = py_call(b.type.__dict__["__module__"].__get__, cls)
-        if py_contains(context["family_msel_pending_estimators"], cls) or (py_type(module) is b.str and String(module).startswith("mojolearn.")):
+        # Only an exact import-connected built-in can be pending migration.
+        # An external class may use any __module__ string (including our
+        # namespace); that is neither a native identity nor an ABI promise.
+        if py_contains(context["family_msel_pending_estimators"], cls):
             raise Error("RuntimeError: this built-in estimator's native cross-validation schema is pending migration")
         raise Error("TypeError: Python estimator callbacks are not accepted; use a connected native estimator")
     var mro = py_call(b.type.__dict__["__mro__"].__get__, cls)

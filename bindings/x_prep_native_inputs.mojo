@@ -194,6 +194,10 @@ def _rows_snapshot(base: PythonObject, indices: PythonObject, context: PythonObj
     var store = py_call(context["array_type"],code,py_call(b.bytes,n*d*item))
     var output = classical_wrap_array(store,Python.tuple(n,d),dtype,"C",context["output_context"])
     _ = py_call(context["maxabs_gather_rows"],address,classical_address(output),classical_address(indices),nr,n,item*d)
+    # PyBuffer_Release above releases its temporary export, not the native
+    # gather's raw address. Retain both source and index owners to that read.
+    _ = view^
+    _ = indices
     _ = packed^
     return output
 

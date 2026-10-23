@@ -988,7 +988,8 @@ def msel_split(model: PythonObject, x: PythonObject, y: PythonObject, groups: Py
         return msel_lpgo_split(x, groups, model, context)
     if msel_is(model, "PredefinedSplit", context):
         return msel_predefined_split(model, context)
-    if msel_is(model, "ShuffleSplit", context):
+    if (msel_is(model, "ShuffleSplit", context) or msel_is(model, "GroupShuffleSplit", context)
+            or msel_is(model, "StratifiedShuffleSplit", context)):
         var n_splits = msel_int(msel_field(model, "n_splits", context))
         var default_test = msel_field(model, "_default_test_size", context)
         if msel_is(model, "GroupShuffleSplit", context):

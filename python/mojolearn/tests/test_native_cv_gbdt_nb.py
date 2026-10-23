@@ -7,7 +7,7 @@ boundary; this does not qualify their older Python public wrappers as native.
 import numpy as np
 import pytest
 
-from mojolearn import GaussianNB, GradientBoostingRegressor, model_selection as ms
+from mojolearn import GaussianNB, GradientBoostingRegressor, LinearDiscriminantAnalysis, model_selection as ms
 from mojolearn._verify_native_runtime import audit_native_call
 
 
@@ -118,6 +118,42 @@ def test_native_gaussian_nb_group_permutation_contract_and_parameter_search():
                             scoring='accuracy', error_score='raise')
     clean(search.fit, x, y)
     np.testing.assert_array_equal(clean(search.predict, x), search.best_estimator_.predict(x))
+    assert not hasattr(model, 'classes_')
+
+
+@pytest.mark.parametrize('cls', [GaussianNB, LinearDiscriminantAnalysis])
+def test_native_cv_connects_cold_arena_context_before_ndarray_row_snapshot(cls):
+    from mojolearn import _expansion_prep as prep
+    from mojolearn._native_classical_bridge import _numpy_free_context
+
+    x, _ = data()
+    y = (np.arange(len(x)) % 3).astype('i4')
+    x[:, 0] += y * 2
+    folds = list(ms.StratifiedKFold(3).split(x, y))
+    model = cls()
+    # Recreate the real import-time arena admission state, independent of
+    # other tests warming it via _Prog.run. Only testing changes metadata;
+    # the whole public CV operation must connect and consume it natively.
+    arena = prep._PROG_CONTEXT
+    saved = dict(arena)
+    cold = _numpy_free_context()
+    try:
+        arena.pop('ndarray', None)
+        for key in ('native_value_types', 'buffer_owner_types', 'scalar_types', 'integer_types'):
+            arena[key] = cold[key]
+        assert np.ndarray not in arena['buffer_owner_types']
+        actual = clean(ms.cross_val_score, model, x, y, cv=folds, scoring='accuracy')
+        assert arena['ndarray'] is np.ndarray
+        assert np.ndarray in arena['buffer_owner_types']
+    finally:
+        arena.clear()
+        arena.update(saved)
+    expected = []
+    for train, test in folds:
+        train, test = np.asarray(train), np.asarray(test)
+        fitted = cls().fit(x[train], y[train])
+        expected.append(fitted.score(x[test], y[test]))
+    np.testing.assert_array_equal(actual, expected)
     assert not hasattr(model, 'classes_')
 
 

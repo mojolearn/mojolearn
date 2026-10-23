@@ -121,7 +121,10 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
         var best = _msel_best(model, context)
         return msel_score(best, args[0], args[1], scorer, context)
     if operation == "family_msel_split":
-        return msel_split(model, args[0], args[1], args[2], context)
+        # Preserve the public iterator contract without a Python generator
+        # wrapper resuming around every native fold. Lazy native splitters
+        # already return an iterator; iter() leaves those unchanged.
+        return py_call(b.iter, msel_split(model, args[0], args[1], args[2], context))
     if operation == "family_msel_n_splits":
         return msel_n_splits(model, args[0], args[1], args[2], context)
     if operation == "family_msel_split_loo_at":
