@@ -9,6 +9,7 @@
 # set. fit_transform converts X once and hands the converted X to the
 # transform program.
 from std.memory import memcpy, bitcast
+from std.math import ceil
 from std.os import getenv
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -35,7 +36,9 @@ comptime OP_QUANTILE = 2
 comptime OP_UNIQUE_COLS = 5
 comptime OP_MODE_COLS = 6
 comptime OP_LOOKUP = 7
+comptime OP_COUNT_NEG = 8
 comptime OP_ONEHOT = 9
+comptime OP_WHERE_NEG = 19
 comptime OP_MARK_MISSING = 23
 comptime OP_FILL = 24
 comptime OP_KBINS_EDGES = 25
@@ -43,15 +46,28 @@ comptime OP_KBINS_CODES = 26
 comptime OP_NAN_MASK = 60
 comptime OP_BLOCK_ARGMAX = 76
 comptime OP_ORD_INVERSE = 77
+comptime OP_CAT_GATHER = 78
+comptime OP_WHERE_CODE = 79
 comptime OP_KBINS_INVERSE = 80
+comptime OP_CODE_COUNTS = 88
+comptime OP_REMAP_CODES = 89
 comptime OP_KBINS_GW = 96
 comptime OP_KBINS_WQ = 97
 comptime OP_KBINS_WKM = 98
+comptime OP_UNIQ_COUNT = 120
+comptime OP_UNIQ_SCAN = 121
+comptime OP_UNIQ_WRITE = 122
 comptime OP_COLB_PART = 124
 comptime OP_COLB_FOLD = 125
 comptime OP_COLB_SS = 126
 comptime OP_COLB_VAR = 127
 comptime OP_HCAT = 140
+comptime OP_CAT_ZERO = 157
+comptime OP_CAT_PRESENT = 158
+comptime OP_PRES_COUNT = 159
+comptime OP_PRES_WRITE = 160
+comptime OP_CAT_PACK = 161
+comptime OP_UNIQUE_INVERSE = 177
 comptime OP_RGATHER = 204
 comptime OP_SMROWS = 205
 comptime OP_SEL_COUNT = 206
@@ -61,6 +77,9 @@ comptime OP_ROWFLAG = 210
 comptime OP_WBLK = 230
 comptime OP_WSCAN = 231
 comptime OP_WDRAW = 232
+comptime OP_INF_M0 = 249
+comptime OP_INF_M1 = 250
+comptime OP_INF_MAP = 251
 comptime OP_IMP_STATS = 252
 comptime OP_GRID = 263
 # `_NONE`: a stage's "no operand" word.
@@ -77,6 +96,11 @@ comptime OUT_MIN_WORDS = 134217728
 # program runs (past the host arena and the scratch, as `_Prog.output`).
 comptime OUT_MARK = -2147483647
 comptime INT32_MAX = 2147483647
+# `_CAT_CAP`, `_CAT_R`, `_CAT_CH` (x_prep/cat_cls2.mojo): the packed distinct
+# values' host region (words), the presence flags per column, flags per chunk.
+comptime CAT_CAP = 65536
+comptime CAT_R = 4096
+comptime CAT_CH = 64
 
 
 # ---------------------------------------------------------------- programs
@@ -127,6 +151,10 @@ struct EncProg(Movable):
         var offset = self.alloc(words)
         _ = py_call(self.inputs.append, Python.tuple(offset, values))
         return offset
+
+    def put_array2(mut self, value: PythonObject) raises -> Int:
+        # A float32 C-order (n, d) Array this owner produced (the C08 inverse).
+        return self.put(value, Int(py=value.size))
 
     def put_array(mut self, value: PythonObject, context: PythonObject) raises -> Int:
         # A fitted float32 vector (`_Prog.put` of an Array).
@@ -257,11 +285,12 @@ def _sel(mut p: EncProg, xo: Int, n: Int, d: Int, mode: Int, dst: Int) -> Int:
     return tot
 
 
-def _bad_rows_stages(mut p: EncProg, codes: Int, n: Int, d: Int, bad: Int) -> Tuple[Int, Int]:
-    # `_bad_rows_stages`: (ROWS, TOT) of the rows holding a `bad` code.
+def _bad_rows_stages(mut p: EncProg, codes: Int, n: Int, d: Int, bad: Int, strict: Int) -> Tuple[Int, Int]:
+    # `_bad_rows_stages`: (ROWS, TOT) of the rows holding a `bad` code (in a
+    # column whose `strict` word is nonzero, when given).
     var flags = p.alloc(n)
     var rows = p.alloc(n)
-    _stage(p.program, OP_ROWFLAG, n, codes, n, d, bad, NONE, flags)
+    _stage(p.program, OP_ROWFLAG, n, codes, n, d, bad, strict, flags)
     return (rows, _sel(p, flags, n, 1, 1, rows))
 
 
@@ -448,7 +477,7 @@ def _imputer_fit(model: PythonObject, values: PythonObject, context: PythonObjec
         var fv = NONE
         if konst:
             var fills = List[Float64]()
-            fills.append(0.0 if fill_value is None else _float(fill_value))
+            fills.append(Float64(0.0) if fill_value is None else _float(fill_value))
             fv = p.put_floats(fills, context)
         if konst or name == "mean":
             src = st + d
@@ -854,11 +883,867 @@ def _kbins_inverse(model: PythonObject, values: PythonObject, context: PythonObj
     var out = p.output(n * d, entries)
     var eo2 = p.put_array(fields["_edges"], context)
     _stage(p.program, OP_KBINS_INVERSE, n * d, codes, n, d, eo2, Int(py=fields["_stride"]), out)
-    var staged = _bad_rows_stages(p, codes, n, d, bad_code)
+    var staged = _bad_rows_stages(p, codes, n, d, bad_code, NONE)
     var ran = p.run(entries, context)
     var bad = _bad_rows(ran, staged, 10)
     if len(bad) > 0:
         raise Error("mojolearn: samples " + _list_text(bad) + " " + why)
+    return _take2(ran, out, n, d, context)
+
+
+# ---------------------------------------------------------------- categories
+def _fast_unique(mode: PythonObject, entries: PythonObject) raises -> Bool:
+    # `_fast_on("UNIQUE", mode)`: the FAST binding exports x_prep_fast_unique.
+    return String(mode) == "fast" and py_get(entries, "x_prep_fast_unique") is not None
+
+
+def _cls2_cat(mode: PythonObject, entries: PythonObject) raises -> Int:
+    # `_cls2_cat`: bit 1 PACK, bit 2 PRESENT on the FAST binding built with them.
+    if String(mode) != "fast":
+        return 0
+    var entry = py_get(entries, "x_prep_cls2_cat")
+    return Int(py=py_call_typed(entry)) if entry is not None else 0
+
+
+def _label_chunk(n: Int) -> Int:
+    # `_label_chunk`: max(1024, isqrt(n) + 1) by integer Newton steps.
+    var r = n
+    if n > 1:
+        var y = (r + 1) // 2
+        while y < r:  # driver-loop: over integer Newton steps of a row count
+            r = y
+            y = (y + n // y) // 2
+    return max(1024, r + 1)
+
+
+def _uniq_scans(mut p: EncProg, base: Int, rows: Int, d: Int, stride: Int, counts: Int, out: Int, presence: Bool):
+    """One device run scan per column (uniq_count or pres_count, uniq_scan,
+    uniq_write or pres_write) over the column at base + c * stride."""
+    var ch = CAT_CH if presence else _label_chunk(rows)
+    var nch = (rows + ch - 1) // ch
+    for c in range(d):  # driver-loop: stages one device scan per column (feature count)
+        var cnt = p.work(nch)
+        var off = p.work(nch)
+        _stage(p.program, OP_PRES_COUNT if presence else OP_UNIQ_COUNT, nch, base + c * stride, rows, ch, cnt)
+        _stage(p.program, OP_UNIQ_SCAN, 1, cnt, nch, off, counts + c)
+        _stage(p.program, OP_PRES_WRITE if presence else OP_UNIQ_WRITE, nch, base + c * stride, rows, ch, off, out + c * stride)
+
+
+def _fit_categories_cls2(values: PythonObject, mode: PythonObject, entries: PythonObject, bits: Int, context: PythonObject) raises -> PythonObject:
+    """`_fit_categories_cls2`: the lists packed into a small host region;
+    None when a column does not suit PRESENT or the values do not fit."""
+    var n = Int(py=values[3])
+    var d = Int(py=values[4])
+    var p = EncProg()
+    var xo = p.put_x(values)
+    var co = p.alloc(d)
+    var cap = min(n * d, CAT_CAP)
+    var pk = p.alloc(cap)
+    var bad = -1
+    if (bits & 2) != 0:
+        bad = p.alloc(d)
+        var fl = p.work(d * CAT_R)
+        var uo = p.work(d * CAT_R)
+        _stage(p.program, OP_CAT_ZERO, d * CAT_R, fl)
+        _stage(p.program, OP_CAT_PRESENT, n * d, xo, n, d, CAT_R, fl, bad)
+        _uniq_scans(p, fl, CAT_R, d, CAT_R, co, uo, True)
+        _stage(p.program, OP_CAT_PACK, d * CAT_R, uo, CAT_R, d, co, cap, pk)
+    else:
+        var so = p.work(n * d)
+        var uo = p.work(n * d)
+        _stage(p.program, OP_SORT_COLS, d, xo, n, d, so, 1)
+        _uniq_scans(p, so, n, d, n, co, uo, False)
+        _stage(p.program, OP_CAT_PACK, n * d, uo, n, d, co, cap, pk)
+    var ran = p.run(entries, context)
+    if bad >= 0:
+        for j in range(d):  # driver-loop: over the per-column overflow flags (feature metadata)
+            if _iword(ran, bad + j) != 0:
+                return PythonObject(None)
+    var counts = List[Int]()
+    var total = 0
+    for c in range(d):  # driver-loop: over the per-column category counts (feature metadata)
+        counts.append(Int(_word(ran, co + c)))
+        total += counts[c]
+    if total > cap:
+        return PythonObject(None)
+    var out = Python.list()
+    var o = 0
+    for c in range(d):  # driver-loop: slices the per-column category outputs (feature count)
+        _ = py_call(out.append, _take1(ran, pk + o, counts[c], context))
+        o += counts[c]
+    return out
+
+
+def _fit_categories(values: PythonObject, mode: PythonObject, entries: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_fit_categories`: per column the sorted distinct values (-0.0 folded
+    into 0.0), by a sort per column and a run scan."""
+    var n = Int(py=values[3])
+    var d = Int(py=values[4])
+    var cls2 = _cls2_cat(mode, entries)
+    if (cls2 & 1) != 0 and _fast_unique(mode, entries):
+        var got = _fit_categories_cls2(values, mode, entries, cls2, context)
+        if got is not None:
+            return got
+    var p = EncProg()
+    var xo = p.put_x(values)
+    var so = p.work(n * d)
+    var uo = p.alloc(n * d)
+    var co = p.alloc(d)
+    _stage(p.program, OP_SORT_COLS, d, xo, n, d, so, 1)
+    if _fast_unique(mode, entries):
+        _uniq_scans(p, so, n, d, n, co, uo, False)
+    else:
+        _stage(p.program, OP_UNIQUE_COLS, d, so, n, d, uo, co)
+    var ran = p.run(entries, context)
+    var out = Python.list()
+    for c in range(d):  # driver-loop: slices the per-column category outputs (feature count)
+        _ = py_call(out.append, _take1(ran, uo + c * n, Int(_word(ran, co + c)), context))
+    return out
+
+
+def _fit_categories_with_codes(values: PythonObject, entries: PythonObject, context: PythonObject) raises -> Tuple[PythonObject, PythonObject]:
+    """`_fit_categories_with_codes` (C08): the categories and the (n, d)
+    inverse from one program (sort_cols, unique_inverse)."""
+    var n = Int(py=values[3])
+    var d = Int(py=values[4])
+    var p = EncProg()
+    var xo = p.put_x(values)
+    var sorted = p.work(n * d)
+    var dictionary = p.alloc(n * d)
+    var counts = p.alloc(d)
+    var inverse = p.alloc(n * d)
+    _stage(p.program, OP_SORT_COLS, d, xo, n, d, sorted, 1)
+    _stage(p.program, OP_UNIQUE_INVERSE, d, sorted, n, d, dictionary, counts, xo, inverse)
+    var ran = p.run(entries, context)
+    var out = Python.list()
+    for c in range(d):  # small-loop(d: per-feature category dictionaries): wraps fitted metadata per feature
+        _ = py_call(out.append, _take1(ran, dictionary + c * n, Int(_word(ran, counts + c)), context))
+    return (out, _take2(ran, inverse, n, d, context))
+
+
+def _c08_route(mode: PythonObject, entries: PythonObject, bit: Int) raises -> Bool:
+    # `_c08_route`: the IDENTICAL binding's x_prep_c08_routes bit.
+    if String(mode) != "identical":
+        return False
+    var entry = py_get(entries, "x_prep_c08_routes")
+    return entry is not None and (Int(py=py_call_typed(entry)) & bit) != 0
+
+
+def _user_values(value: PythonObject, context: PythonObject) raises -> PythonObject:
+    # A user list argument's values as a Python list (`v.tolist()` for an
+    # array type, a mojolearn Array read as its float32 words).
+    var b = Python.import_module("builtins")
+    if py_type(value) is context["array_class"]:
+        var out = Python.list()
+        if Int(py=value.size) == 0:
+            return out
+        var flat = _input(value, 1, False, context)
+        var source = _ptr(flat)
+        for i in range(Int(py=flat.size)):  # driver-loop: over one user category or drop list
+            _ = py_call(out.append, PythonObject(Float64(source[i])))
+        return out
+    if Bool(py=py_call(b.hasattr, value, "tolist")):
+        return py_call(b.list, py_call(value.tolist))
+    return py_call(b.list, value)
+
+
+def _f32(value: PythonObject) raises -> Float32:
+    # array.array("f", [float(v)])[0]
+    return Float32(_float(value))
+
+
+def _cat_values(cats: PythonObject, context: PythonObject) raises -> List[Float32]:
+    # A fitted category Array's float32 words.
+    var out = List[Float32]()
+    var count = Int(py=cats.size)
+    if count == 0:
+        return out^
+    var flat = _input(cats, 1, False, context)
+    var source = _ptr(flat)
+    for i in range(count):  # driver-loop: over one column's fitted categories
+        out.append(source[i])
+    return out^
+
+
+def _f32_array(values: List[Float32], context: PythonObject) raises -> PythonObject:
+    # Array.from_list(values, "<f4"); an empty list is an empty Array.
+    if len(values) == 0:
+        return classical_wrap_array(py_call(context["array_type"], "f"), Python.tuple(0), "<f4", "C", context["output_context"])
+    var out = classical_typed(Python.tuple(len(values)), "<f4", context["output_context"])
+    var dest = _ptr(out)
+    for i in range(len(values)):  # driver-loop: over one column's category words
+        dest[i] = values[i]
+    return out
+
+
+def _category_block(mut p: EncProg, categories: PythonObject, context: PythonObject) raises -> Tuple[Int, Int]:
+    # `_category_block`: every column's categories in one (d, kmax) block.
+    var d = len(categories)
+    var kmax = 0
+    for j in range(d):  # driver-loop: over the per-column category arrays
+        kmax = max(kmax, Int(py=categories[j].size))
+    var block = classical_typed(Python.tuple(max(d * kmax, 1)), "<f4", context["output_context"])
+    var dest = _ptr(block)
+    for j in range(d):  # driver-loop: over the per-column category arrays
+        var cats = _cat_values(categories[j], context)
+        for i in range(len(cats)):  # driver-loop: over one column's categories
+            dest[j * kmax + i] = cats[i]
+    return (p.put(block, max(d * kmax, 1)), kmax)
+
+
+def _sizes(categories: PythonObject) raises -> List[Int]:
+    var out = List[Int]()
+    for j in range(len(categories)):  # driver-loop: over the per-column category arrays
+        out.append(Int(py=categories[j].size))
+    return out^
+
+
+def _codes(mut p: EncProg, values: PythonObject, categories: PythonObject, context: PythonObject, device_only: Bool = False) raises -> Tuple[Int, Int]:
+    """`_codes`: each element's category index (or -1) and, unless
+    device_only, each column's unknown count. Returns (codes, neg)."""
+    var n = Int(py=values[3])
+    var d = Int(py=values[4])
+    var xo = p.put_x(values)
+    var block = _category_block(p, categories, context)
+    var co = p.put_floats(_to_floats(_sizes(categories)), context)
+    var codes = p.scratch(n * d) if device_only else p.alloc(n * d)
+    _stage(p.program, OP_LOOKUP, n * d, xo, n, d, block[0], block[1], co, codes)
+    if device_only:
+        return (codes, -1)
+    var neg = p.alloc(d)
+    _stage(p.program, OP_COUNT_NEG, d, codes, n, d, neg)
+    return (codes, neg)
+
+
+def _unknown_columns(ran: PythonObject, neg: Int, d: Int) raises -> List[Int]:
+    # The columns whose unknown count the device set.
+    var bad = List[Int]()
+    for j in range(d):  # driver-loop: over the per-column unknown flags (feature metadata)
+        if _word(ran, neg + j) > 0:
+            bad.append(j)
+    return bad^
+
+
+def _given_categories(categories: PythonObject, values: PythonObject, mode: PythonObject, entries: PythonObject,
+                      check_unknown: Bool, who: String, context: PythonObject) raises -> PythonObject:
+    """`_given_categories`: one numeric list per column, sorted ascending with
+    at most a NaN last, stored as float32; with check_unknown a training
+    value outside its column's list is refused."""
+    var b = Python.import_module("builtins")
+    var d = Int(py=values[4])
+    var lists = py_call(b.list, categories)
+    if len(lists) != d:
+        raise Error("mojolearn: " + who + " categories has " + String(len(lists)) + " lists; X has " + String(d) + " features")
+    var out = Python.list()
+    for j in range(d):  # driver-loop: validates the user categories argument (user category lists)
+        var raw = _user_values(lists[j], context)
+        var f32 = List[Float32]()
+        for i in range(len(raw)):  # driver-loop: over one user category list
+            f32.append(_f32(raw[i]))
+        var nums = List[Float32]()
+        for i in range(len(f32)):  # driver-loop: over one user category list
+            if f32[i] == f32[i]:
+                nums.append(f32[i])
+        var total = len(f32)
+        if len(nums) < total - 1 or (len(nums) < total and f32[total - 1] == f32[total - 1]):
+            raise Error("mojolearn: " + who + " categories[" + String(j) + "]: nan must be the last category")
+        for i in range(1, len(nums)):  # driver-loop: over one user category list
+            if nums[i] < nums[i - 1]:
+                raise Error("mojolearn: " + who + " unsorted categories are not supported for numerical categories")
+        for i in range(1, len(nums)):  # driver-loop: over one user category list
+            if nums[i] == nums[i - 1]:
+                raise Error("mojolearn: " + who + " categories[" + String(j) + "] has values equal in float32")
+        if total == 0:
+            raise Error("mojolearn: " + who + " categories[" + String(j) + "] is empty")
+        var canon = List[Float32]()
+        for i in range(len(nums)):  # driver-loop: over one user category list
+            canon.append(Float32(0.0) if nums[i] == 0 else nums[i])
+        if len(nums) < total:
+            canon.append(Float32(Float64(py=py_call(b.float, "nan"))))
+        _ = py_call(out.append, _f32_array(canon, context))
+    if check_unknown:
+        var p = EncProg()
+        var staged = _codes(p, values, out, context)
+        var ran = p.run(entries, context)
+        var bad = _unknown_columns(ran, staged[1], d)
+        if len(bad) > 0:
+            raise Error("mojolearn: " + who + " found unknown categories in column(s) " + _list_text(bad) + " during fit")
+    return out
+
+
+# ---------------------------------------------------------------- infrequent categories
+def _integral(value: PythonObject, context: PythonObject) raises -> Bool:
+    # numbers.Integral: Python ints (bool included), NumPy integers.
+    return _int_like(value, context)
+
+
+def _is_bool(value: PythonObject) raises -> Bool:
+    var b = Python.import_module("builtins")
+    return Bool(py=py_call(b.isinstance, value, b.bool))
+
+
+def _cmp(name: String, a: PythonObject, b: PythonObject) raises -> Bool:
+    # A Python comparison (operator.<name>) of two numbers.
+    var operator = Python.import_module("operator")
+    return _truth(py_call(py_get(operator.__dict__, PythonObject(name)), a, b))
+
+
+def _check_infrequent_params(fields: PythonObject, context: PythonObject) raises -> Bool:
+    """`_check_infrequent_params`: the reference's constraints; True when
+    grouping is on."""
+    var mf = fields["min_frequency"]
+    var mc = fields["max_categories"]
+    if mf is not None:
+        var ok = (_integral(mf, context) and not _is_bool(mf) and _cmp("ge", mf, PythonObject(1))) or (
+            _real_like(mf, context) and not _integral(mf, context) and _cmp("lt", PythonObject(0), mf) and _cmp("lt", mf, PythonObject(1)))
+        if not ok:
+            raise Error("mojolearn: min_frequency must be an int >= 1 or a float in (0, 1), got " + _repr(mf))
+    if mc is not None and not (_integral(mc, context) and not _is_bool(mc) and _cmp("ge", mc, PythonObject(1))):
+        raise Error("mojolearn: max_categories must be an int >= 1, got " + _repr(mc))
+    return mc is not None or mf is not None
+
+
+def _infrequent_threshold(n: Int, min_frequency: PythonObject, context: PythonObject) raises -> Int:
+    """`_infrequent_threshold`: an int min_frequency as is; a fraction f,
+    ceil(n * f) in binary64; none, 0."""
+    if min_frequency is None:
+        return 0
+    var b = Python.import_module("builtins")
+    if _integral(min_frequency, context):
+        return Int(py=py_call(b.int, min_frequency))
+    return Int(ceil(Float64(n) * _float(min_frequency)))
+
+
+def _last_is_nan(cats: PythonObject, context: PythonObject) raises -> Bool:
+    var values = _cat_values(cats, context)
+    return len(values) > 0 and values[len(values) - 1] != values[len(values) - 1]
+
+
+def _fit_infrequent(model: PythonObject, values: PythonObject, mode: PythonObject, entries: PythonObject,
+                    ignore_missing: Bool, inverse: PythonObject, context: PythonObject) raises:
+    """`_fit_infrequent`: one program (code_counts, c2_inf_m0, c2_inf_m1,
+    c2_inf_map) whose masks and codes come back as the fitted per-column
+    `_infrequent`, `_grouping` and `infrequent_categories_`."""
+    var fields = py_fields(model)
+    var n = Int(py=values[3])
+    var d = Int(py=values[4])
+    var cats_all = fields["categories_"]
+    var ks = List[Int]()
+    var kmax = 0
+    for j in range(len(cats_all)):  # driver-loop: one size per column
+        var size = Int(py=cats_all[j].size)
+        ks.append(size - 1 if (ignore_missing and size > 0 and _last_is_nan(cats_all[j], context)) else size)
+        kmax = max(kmax, size)
+    var p = EncProg()
+    var codes = 0
+    if inverse is None:
+        codes = _codes(p, values, cats_all, context)[0]
+    else:
+        codes = p.put_array2(inverse)
+    var cnt = p.alloc(d * kmax)
+    var kc = p.put_floats(_to_floats(ks), context)
+    var m0 = p.work(d * kmax)
+    var m1 = p.alloc(d * kmax)
+    var mp = p.alloc(d * kmax)
+    var max_categories = fields["max_categories"]
+    var maxc = -1 if max_categories is None else Int(py=py_call(Python.import_module("builtins").int, max_categories))
+    _stage(p.program, OP_CODE_COUNTS, d, codes, n, d, kmax, cnt)
+    _stage(p.program, OP_INF_M0, d * kmax, cnt, kc, kmax, _infrequent_threshold(n, fields["min_frequency"], context), m0)
+    _stage(p.program, OP_INF_M1, d * kmax, cnt, kc, kmax, m0, maxc, m1)
+    _stage(p.program, OP_INF_MAP, d * kmax, kc, kmax, m1, mp)
+    var ran = p.run(entries, context)
+    var infrequent = Python.list()
+    var grouping = Python.list()
+    var categories = Python.list()
+    for j in range(len(ks)):  # driver-loop: the device's tables as the fitted per-column lists
+        var inf = List[Int]()
+        for i in range(ks[j]):  # driver-loop: over one column's categories
+            if _iword(ran, m1 + j * kmax + i) != 0:
+                inf.append(i)
+        if len(inf) == 0:
+            _ = py_call(infrequent.append, PythonObject(None))
+            _ = py_call(grouping.append, PythonObject(None))
+            _ = py_call(categories.append, PythonObject(None))
+            continue
+        _ = py_call(infrequent.append, _int_list(inf))
+        var group = List[Int]()
+        for i in range(ks[j]):  # driver-loop: over one column's categories
+            group.append(_iword(ran, mp + j * kmax + i))
+        _ = py_call(grouping.append, _int_list(group))
+        var values_j = _cat_values(cats_all[j], context)
+        var picked = List[Float32]()
+        for i in range(len(inf)):  # driver-loop: over one column's infrequent categories
+            picked.append(values_j[inf[i]])
+        _ = py_call(categories.append, _f32_array(picked, context))
+    py_setitem(fields, "_infrequent", infrequent)
+    py_setitem(fields, "_grouping", grouping)
+    py_setitem(fields, "infrequent_categories_", categories)
+    _ = ran^
+
+
+def _list_max(values: List[Int]) -> Int:
+    var top = values[0] if len(values) > 0 else 0
+    for i in range(len(values)):  # driver-loop: over one column grouping
+        top = max(top, values[i])
+    return top
+
+
+def _grouping_table(mut p: EncProg, grouping: PythonObject, inverse: Bool, context: PythonObject) raises -> Tuple[Int, Int, Int]:
+    """`_grouping_table`: (MAP, MSTRIDE, NMAP) for remap_codes: category ->
+    grouped code, or (inverse) grouped code -> category index with the
+    infrequent code -> -3."""
+    var tables = List[List[Int]]()
+    for j in range(len(grouping)):  # driver-loop: builds the category grouping table (per-column category groupings)
+        if grouping[j] is None:
+            tables.append(List[Int]())
+            continue
+        var g = _index_list(grouping[j])
+        if not inverse:
+            tables.append(g^)
+            continue
+        var nf = _list_max(g)
+        var back = List[Int](length=nf + 1, fill=0)
+        for i in range(len(g)):  # driver-loop: inverts one column grouping table
+            if g[i] < nf:
+                back[g[i]] = i
+        back[nf] = -3
+        tables.append(back^)
+    var stride = 1
+    for j in range(len(tables)):  # driver-loop: over the per-column grouping tables
+        stride = max(stride, len(tables[j]))
+    var flat = List[Float64]()
+    var lens = List[Float64]()
+    for j in range(len(tables)):  # driver-loop: pads the per-column grouping tables
+        for i in range(stride):  # driver-loop: over one padded grouping table
+            flat.append(Float64(tables[j][i]) if i < len(tables[j]) else Float64(0.0))
+        lens.append(Float64(len(tables[j])))
+    var mo = p.put_floats(flat, context)
+    var no = p.put_floats(lens, context)
+    return (mo, stride, no)
+
+
+def _remap(mut p: EncProg, codes: Int, n: Int, d: Int, table: Tuple[Int, Int, Int], neg: Int) -> Int:
+    var out = p.alloc(n * d)
+    _stage(p.program, OP_REMAP_CODES, n * d, codes, n * d, d, table[0], table[1], table[2], neg, out)
+    return out
+
+
+def _gather_categories(mut p: EncProg, codes: Int, n: Int, d: Int, categories: PythonObject, context: PythonObject) raises -> Int:
+    var block = _category_block(p, categories, context)
+    var out = p.alloc(n * d)
+    _stage(p.program, OP_CAT_GATHER, n * d, codes, n, d, block[0], block[1], out)
+    return out
+
+
+def _scalar(mut p: EncProg, value: Float64, context: PythonObject) raises -> Int:
+    var words = List[Float64]()
+    words.append(value)
+    return p.put_floats(words, context)
+
+
+def _num_text(value: PythonObject) raises -> String:
+    # A number in an f-string (format(value, "")).
+    return String(py_call(Python.import_module("builtins").format, value, ""))
+
+
+# ---------------------------------------------------------------- OrdinalEncoder
+def _ordinal_fit(model: PythonObject, values: PythonObject, capture: Bool, context: PythonObject) raises -> PythonObject:
+    """OrdinalEncoder.fit; with `capture` (the C08 fit_transform) the fit's
+    (n, d) inverse is returned for the transform, else None."""
+    var fields = py_fields(model)
+    var grouping = _check_infrequent_params(fields, context)
+    var handle = fields["handle_unknown"]
+    var handle_text = String(handle) if _is_str(handle) else String("")
+    if handle_text != "error" and handle_text != "use_encoded_value":
+        raise Error("mojolearn: invalid handle_unknown " + _repr(handle))
+    var unknown_value = fields["unknown_value"]
+    if handle_text == "use_encoded_value" and not _real_like(unknown_value, context):
+        raise Error("TypeError: mojolearn: unknown_value must be a number when handle_unknown='use_encoded_value'")
+    var emv = fields["encoded_missing_value"]
+    if not _real_like(emv, context):
+        raise Error("TypeError: mojolearn: encoded_missing_value must be a number (or NaN)")
+    var d = Int(py=values[4])
+    var mode = _default_mode(context)
+    var entries = _entries(mode, context)
+    var auto = _is_str(fields["categories"]) and String(fields["categories"]) == "auto"
+    var inverse = PythonObject(None)
+    if capture and auto:
+        var got = _fit_categories_with_codes(values, entries, context)
+        py_setitem(fields, "categories_", got[0])
+        inverse = got[1]
+    elif auto:
+        py_setitem(fields, "categories_", _fit_categories(values, mode, entries, context))
+    else:
+        py_setitem(fields, "categories_", _given_categories(fields["categories"], values, mode, entries, handle_text == "error", "OrdinalEncoder", context))
+    var cats = fields["categories_"]
+    var missing = List[Int]()
+    var any_missing = False
+    for j in range(len(cats)):  # driver-loop: per-column NaN category slot (fitted per-column category arrays)
+        var size = Int(py=cats[j].size)
+        missing.append(size - 1 if size > 0 and _last_is_nan(cats[j], context) else -1)
+        any_missing = any_missing or missing[j] >= 0
+    py_setitem(fields, "_missing", _int_list(missing))
+    py_setitem(fields, "_infrequent", PythonObject(None))
+    py_setitem(fields, "_grouping", PythonObject(None))
+    if grouping:
+        _fit_infrequent(model, values, mode, entries, True, inverse, context)
+    var cards = List[Int]()
+    for j in range(len(cats)):  # driver-loop: per-column category cardinalities (fitted per-column category arrays)
+        cards.append(Int(py=cats[j].size) - (1 if missing[j] >= 0 else 0))
+    if grouping:
+        var groups = fields["_grouping"]
+        for j in range(len(cards)):  # driver-loop: grouped per-column cardinalities
+            if groups[j] is not None:
+                cards[j] = _list_max(_index_list(groups[j])) + 1
+    if handle_text == "use_encoded_value" and not _is_nan_value(unknown_value):
+        for j in range(len(cards)):  # driver-loop: validates unknown_value against cardinalities
+            if _cmp("le", PythonObject(0), unknown_value) and _cmp("lt", unknown_value, PythonObject(cards[j])):
+                raise Error("mojolearn: the used value for unknown_value " + _num_text(unknown_value) + " is one of the "
+                            + "values already used for encoding the seen categories.")
+    if any_missing and not _is_nan_value(emv):
+        var bad = List[Int]()
+        for j in range(len(cards)):  # driver-loop: validates encoded_missing_value argument
+            if missing[j] >= 0 and _cmp("le", PythonObject(0), emv) and _cmp("lt", emv, PythonObject(cards[j])):
+                bad.append(j)
+        if len(bad) > 0:
+            raise Error("mojolearn: encoded_missing_value (" + _num_text(emv) + ") is already "
+                        + "used to encode a known category in features: " + _list_text(bad))
+    py_setitem(fields, "numeric_mode_", mode)
+    py_setitem(fields, "n_features_in_", d)
+    return inverse
+
+
+def _ordinal_transform(model: PythonObject, values: PythonObject, inverse: PythonObject, context: PythonObject) raises -> PythonObject:
+    """OrdinalEncoder `_transform_encoded`: lookup (or the C08 fit's
+    inverse), the grouping remap, where_neg and where_code."""
+    var fields = py_fields(model)
+    var n = Int(py=values[3])
+    var d = Int(py=values[4])
+    var entries = _entries(fields["numeric_mode_"], context)
+    var p = EncProg()
+    var codes = 0
+    var neg = 0
+    if inverse is None:
+        var staged = _codes(p, values, fields["categories_"], context)
+        codes = staged[0]
+        neg = staged[1]
+    else:
+        codes = p.put_array2(inverse)
+        neg = p.alloc(d)
+        _stage(p.program, OP_COUNT_NEG, d, codes, n, d, neg)
+    var out = codes
+    if fields["_grouping"] is not None:
+        var table = _grouping_table(p, fields["_grouping"], False, context)
+        out = _remap(p, codes, n, d, table, NONE)
+    var handle = fields["handle_unknown"]
+    var handle_text = String(handle) if _is_str(handle) else String("")
+    if handle_text == "use_encoded_value":
+        var val = _scalar(p, _float(fields["unknown_value"]), context)
+        var src = out
+        out = p.alloc(n * d)
+        _stage(p.program, OP_WHERE_NEG, n * d, src, n * d, val, out)
+    var missing = _index_list(fields["_missing"])
+    var any_missing = False
+    for j in range(len(missing)):  # driver-loop: checks for a NaN category slot (per-column NaN category slots)
+        any_missing = any_missing or missing[j] >= 0
+    if any_missing:
+        var src = out
+        out = p.alloc(n * d)
+        var mo = p.put_floats(_to_floats(missing), context)
+        var eo = _scalar(p, _float(fields["encoded_missing_value"]), context)
+        _stage(p.program, OP_WHERE_CODE, n * d, codes, n, d, mo, eo, src, out)
+    var ran = p.run(entries, context)
+    if handle_text == "error":
+        var bad = _unknown_columns(ran, neg, d)
+        if len(bad) > 0:
+            raise Error("mojolearn: OrdinalEncoder found unknown categories in column(s) " + _list_text(bad) + " during transform")
+    return _take2(ran, out, n, d, context)
+
+
+def _ordinal_inverse(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
+    """OrdinalEncoder.inverse_transform: ord_inverse (`_inverse_codes`), the
+    inverse grouping remap, cat_gather and the bad-row compaction."""
+    var fields = py_fields(model)
+    var n = Int(py=values[3])
+    var d = Int(py=values[4])
+    _check_width(model, d)
+    var entries = _entries(fields["numeric_mode_"], context)
+    var cats = fields["categories_"]
+    var handle = fields["handle_unknown"]
+    var encoded = _is_str(handle) and String(handle) == "use_encoded_value"
+    var p = EncProg()
+    var ncat = _sizes(cats)
+    var grouped = fields["_grouping"] is not None
+    var back = (0, 0, 0)
+    if grouped:
+        var groups = fields["_grouping"]
+        for j in range(len(ncat)):  # driver-loop: per-column grouped category counts
+            if groups[j] is not None:
+                ncat[j] = _list_max(_index_list(groups[j])) + 1
+        back = _grouping_table(p, groups, True, context)
+    # `_inverse_codes`
+    var xo = p.put_x(values)
+    var mo = p.put_floats(_to_floats(_index_list(fields["_missing"])), context)
+    var eo = _scalar(p, _float(fields["encoded_missing_value"]), context)
+    var uo = _scalar(p, _float(fields["unknown_value"]) if encoded else Float64(0.0), context)
+    var no = p.put_floats(_to_floats(ncat), context)
+    var codes = p.alloc(n * d)
+    _stage(p.program, OP_ORD_INVERSE, n * d, xo, n, d, mo, eo, 1 if encoded else 0, uo, no, codes)
+    if grouped:
+        codes = _remap(p, codes, n, d, back, NONE)
+    var out = _gather_categories(p, codes, n, d, cats, context)
+    var staged = _bad_rows_stages(p, codes, n, d, -2, NONE)
+    var ran = p.run(entries, context)
+    var bad = _bad_rows(ran, staged, 10)
+    if len(bad) > 0:
+        raise Error("mojolearn: rows " + _list_text(bad) + " hold codes that name no category")
+    return _take2(ran, out, n, d, context)
+
+
+# ---------------------------------------------------------------- OneHotEncoder
+def _grouped_sizes(fields: PythonObject) raises -> List[Int]:
+    var sizes = _sizes(fields["categories_"])
+    var groups = fields["_grouping"]
+    if groups is not None:
+        for j in range(len(sizes)):  # driver-loop: per-column grouped category counts
+            if groups[j] is not None:
+                sizes[j] = _list_max(_index_list(groups[j])) + 1
+    return sizes^
+
+
+def _set_drop_idx(model: PythonObject, context: PythonObject) raises:
+    """`_set_drop_idx`: `_drop_after` in grouped codes, drop_idx_ in category
+    indices (None, or one int or None per column)."""
+    var b = Python.import_module("builtins")
+    var fields = py_fields(model)
+    var sizes = _grouped_sizes(fields)
+    var d = len(sizes)
+    var groups = fields["_grouping"]
+    var drop = fields["drop"]
+    if drop is None:
+        py_setitem(fields, "_drop_after", PythonObject(None))
+        py_setitem(fields, "drop_idx_", PythonObject(None))
+        return
+    var after = Python.list()
+    var text = String(drop) if _is_str(drop) else String("")
+    if text == "first":
+        for _ in range(d):  # driver-loop: over the per-column drop indices
+            _ = py_call(after.append, PythonObject(0))
+    elif text == "if_binary":
+        for j in range(d):  # driver-loop: drop index for binary columns
+            _ = py_call(after.append, PythonObject(0) if sizes[j] == 2 else PythonObject(None))
+    else:
+        var vals = _user_values(drop, context)
+        if len(vals) != d:
+            raise Error("mojolearn: `drop` should have length equal to the number of features ("
+                        + String(d) + "), got " + String(len(vals)))
+        var missing = String()
+        var any_missing = False
+        var cats = fields["categories_"]
+        for j in range(d):  # driver-loop: validates the user drop argument (per-column drop arguments)
+            var v = vals[j]
+            var cl = _cat_values(cats[j], context)
+            var hit = -1
+            if _is_nan_value(v):
+                if len(cl) > 0 and cl[len(cl) - 1] != cl[len(cl) - 1]:
+                    hit = len(cl) - 1
+            else:
+                var fv = _f32(v)
+                for i in range(len(cl)):  # driver-loop: finds the user drop category in its column
+                    if cl[i] == fv:
+                        hit = i
+                        break
+            if hit < 0:
+                missing += ("\n" if any_missing else "") + "Category: " + _str_text(v) + ", Feature: " + String(j)
+                any_missing = True
+                continue
+            var i = hit
+            if groups is not None and groups[j] is not None:
+                var infrequent = _index_list(fields["_infrequent"][j])
+                for k in range(len(infrequent)):  # driver-loop: over one column's infrequent categories
+                    if infrequent[k] == i:
+                        raise Error("mojolearn: Unable to drop category " + _repr(PythonObject(Float64(cl[i]))) + " from feature "
+                                    + String(j) + " because it is infrequent")
+                i = _index_list(groups[j])[i]
+            _ = py_call(after.append, PythonObject(i))
+        if any_missing:
+            raise Error("mojolearn: The following categories were supposed to be dropped, but were not "
+                        + "found in the training data.\n" + missing)
+    py_setitem(fields, "_drop_after", after)
+    var idx = Python.list()
+    for j in range(d):  # driver-loop: maps drop indices through the grouping (per-column drop indices)
+        var a = after[j]
+        if a is None or groups is None or groups[j] is None:
+            _ = py_call(idx.append, a)
+            continue
+        var g = _index_list(groups[j])
+        var target = Int(py=a)
+        var found = -1
+        for i in range(len(g)):  # driver-loop: over one column grouping
+            if g[i] == target:
+                found = i
+                break
+        if found < 0:
+            raise Error(String(target) + " is not in list")
+        _ = py_call(idx.append, PythonObject(found))
+    py_setitem(fields, "drop_idx_", idx)
+
+
+def _onehot_widths(fields: PythonObject) raises -> Tuple[List[Int], List[Int]]:
+    # `_widths`: per-column block widths and drop indices (-1: none).
+    var sizes = _grouped_sizes(fields)
+    var after = fields["_drop_after"]
+    var widths = List[Int]()
+    var drops = List[Int]()
+    for j in range(len(sizes)):  # driver-loop: per-column one-hot block widths
+        var dr = PythonObject(None) if after is None else after[j]
+        drops.append(-1 if dr is None else Int(py=dr))
+        widths.append(sizes[j] - (0 if dr is None else 1))
+    return (widths^, drops^)
+
+
+def _onehot_fit(model: PythonObject, values: PythonObject, capture: Bool, context: PythonObject) raises -> PythonObject:
+    var fields = py_fields(model)
+    var grouping = _check_infrequent_params(fields, context)
+    var handle = fields["handle_unknown"]
+    var handle_text = String(handle) if _is_str(handle) else String("")
+    if handle_text != "error" and handle_text != "ignore" and handle_text != "infrequent_if_exist" and handle_text != "warn":
+        raise Error("mojolearn: OneHotEncoder handle_unknown=" + _repr(handle) + " is not valid")
+    var drop = fields["drop"]
+    if _is_str(drop) and String(drop) != "first" and String(drop) != "if_binary":
+        raise Error("mojolearn: OneHotEncoder drop must be None, 'first', 'if_binary' or one category "
+                    + "per feature")
+    var d = Int(py=values[4])
+    var mode = _default_mode(context)
+    var entries = _entries(mode, context)
+    var auto = _is_str(fields["categories"]) and String(fields["categories"]) == "auto"
+    var inverse = PythonObject(None)
+    if capture and auto:
+        var got = _fit_categories_with_codes(values, entries, context)
+        py_setitem(fields, "categories_", got[0])
+        inverse = got[1]
+    elif auto:
+        py_setitem(fields, "categories_", _fit_categories(values, mode, entries, context))
+    else:
+        py_setitem(fields, "categories_", _given_categories(fields["categories"], values, mode, entries, handle_text == "error", "OneHotEncoder", context))
+    py_setitem(fields, "_infrequent", PythonObject(None))
+    py_setitem(fields, "_grouping", PythonObject(None))
+    if grouping:
+        _fit_infrequent(model, values, mode, entries, False, inverse, context)
+    _set_drop_idx(model, context)
+    py_setitem(fields, "numeric_mode_", mode)
+    py_setitem(fields, "n_features_in_", d)
+    return inverse
+
+
+def _onehot_transform(model: PythonObject, values: PythonObject, inverse: PythonObject, context: PythonObject) raises -> PythonObject:
+    """OneHotEncoder `_transform_encoded`: lookup (or the C08 fit's inverse),
+    the grouping remap with the unknown slots, and onehot."""
+    var b = Python.import_module("builtins")
+    var fields = py_fields(model)
+    var n = Int(py=values[3])
+    var d = Int(py=values[4])
+    var entries = _entries(fields["numeric_mode_"], context)
+    var shape = _onehot_widths(fields)
+    var widths = shape[0].copy()
+    var drops = shape[1].copy()
+    var W = 0
+    for j in range(len(widths)):  # driver-loop: total one-hot output width
+        W += widths[j]
+    var handle = fields["handle_unknown"]
+    var handle_text = String(handle) if _is_str(handle) else String("")
+    var p = EncProg()
+    var codes = 0
+    var neg = 0
+    if inverse is None:
+        var staged = _codes(p, values, fields["categories_"], context)
+        codes = staged[0]
+        neg = staged[1]
+    else:
+        codes = p.put_array2(inverse)
+        neg = p.alloc(d)
+        _stage(p.program, OP_COUNT_NEG, d, codes, n, d, neg)
+    var groups = fields["_grouping"]
+    if groups is not None:
+        # `_unknown_to`: the grouped code an unknown value takes
+        var unk = NONE
+        if handle_text == "infrequent_if_exist" or handle_text == "warn":
+            var slots = List[Int]()
+            for j in range(len(groups)):  # driver-loop: per-column infrequent slot
+                slots.append(-1 if groups[j] is None else _list_max(_index_list(groups[j])))
+            var table = _grouping_table(p, groups, False, context)
+            unk = p.put_floats(_to_floats(slots), context)
+            codes = _remap(p, codes, n, d, table, unk)
+        else:
+            var table = _grouping_table(p, groups, False, context)
+            codes = _remap(p, codes, n, d, table, NONE)
+    var so = p.put_floats(_prefix(widths), context)
+    var do = p.put_floats(_to_floats(drops), context)
+    var out = p.output(n * W, entries)
+    _stage(p.program, OP_ONEHOT, n * d, codes, n, d, so, do, W, out)
+    var ran = p.run(entries, context)
+    var dropping = fields["drop"] is not None
+    if handle_text == "error":
+        var bad = _unknown_columns(ran, neg, d)
+        if len(bad) > 0:
+            raise Error("mojolearn: OneHotEncoder found unknown categories in column(s) " + _list_text(bad) + " during transform")
+    elif handle_text == "warn" or (dropping and (handle_text == "ignore" or handle_text == "infrequent_if_exist")):
+        var bad = _unknown_columns(ran, neg, d)
+        if len(bad) > 0:
+            var where = String("encoded as the infrequent category") if handle_text != "ignore" else String("encoded as all zeros")
+            var warnings = Python.import_module("warnings")
+            _ = py_call_typed(warnings.warn, PythonObject("Found unknown categories in columns " + _list_text(bad)
+                              + " during transform. These unknown categories will be " + where + "."), b.UserWarning)
+    return _take2(ran, out, n, W, context)
+
+
+def _onehot_inverse(model: PythonObject, values: PythonObject, context: PythonObject) raises -> PythonObject:
+    """OneHotEncoder.inverse_transform: block_argmax, the inverse grouping
+    remap, cat_gather and the strict bad-row compaction."""
+    var fields = py_fields(model)
+    var shape = _onehot_widths(fields)
+    var widths = shape[0].copy()
+    var drops = shape[1].copy()
+    var n = Int(py=values[3])
+    var cols = Int(py=values[4])
+    var d = len(widths)
+    var W = 0
+    for j in range(d):  # driver-loop: over the per-column block widths
+        W += widths[j]
+    if cols != W:
+        raise Error("mojolearn: X has " + String(cols) + " columns, expected " + String(W))
+    var entries = _entries(fields["numeric_mode_"], context)
+    var p = EncProg()
+    # `_block_argmax`
+    var xo = p.put_x(values)
+    var so = p.put_floats(_prefix(widths), context)
+    var wo = p.put_floats(_to_floats(widths), context)
+    var dro = p.put_floats(_to_floats(drops), context)
+    var codes = p.alloc(n * d)
+    _stage(p.program, OP_BLOCK_ARGMAX, n * d, xo, n, W, d, so, wo, dro, 1, codes)
+    var grouped = codes
+    var groups = fields["_grouping"]
+    if groups is not None:
+        var table = _grouping_table(p, groups, True, context)
+        codes = _remap(p, codes, n, d, table, NONE)
+    var out = _gather_categories(p, codes, n, d, fields["categories_"], context)
+    # an all-zero block is unknown (NaN) under 'ignore', and under
+    # 'infrequent_if_exist' / 'warn' for a column with no infrequent
+    # category; anywhere else it cannot be inverted
+    var handle = fields["handle_unknown"]
+    var handle_text = String(handle) if _is_str(handle) else String("")
+    var infrequent = fields["_infrequent"]
+    var strict = List[Float64]()
+    for j in range(d):  # driver-loop: over the per-column strictness flags
+        var hard = handle_text == "error" or (handle_text != "ignore" and infrequent is not None and infrequent[j] is not None)
+        strict.append(1.0 if hard else 0.0)
+    var sto = p.put_floats(strict, context)
+    var staged = _bad_rows_stages(p, grouped, n, d, -1, sto)
+    var ran = p.run(entries, context)
+    var bad = _bad_rows(ran, staged, 10)
+    if len(bad) > 0:
+        raise Error("mojolearn: samples " + _list_text(bad) + " can not be inverted when drop=None and "
+                    + "handle_unknown='error' because they contain all zeros")
     return _take2(ran, out, n, d, context)
 
 
@@ -911,6 +1796,25 @@ def _precheck(model: PythonObject, kind: String, context: PythonObject) raises:
             raise Error("mojolearn: SimpleImputer strategy " + _repr(strategy) + " is not valid")
         if name == "constant" and fields["fill_value"] is not None and not _real_like(fields["fill_value"], context):
             raise Error("TypeError: mojolearn: SimpleImputer fill_value must be numeric")
+    elif kind == "ordinal":
+        _ = _check_infrequent_params(fields, context)
+        var handle = fields["handle_unknown"]
+        if not (_is_str(handle) and (String(handle) == "error" or String(handle) == "use_encoded_value")):
+            raise Error("mojolearn: invalid handle_unknown " + _repr(handle))
+        if _is_str(handle) and String(handle) == "use_encoded_value" and not _real_like(fields["unknown_value"], context):
+            raise Error("TypeError: mojolearn: unknown_value must be a number when handle_unknown='use_encoded_value'")
+        if not _real_like(fields["encoded_missing_value"], context):
+            raise Error("TypeError: mojolearn: encoded_missing_value must be a number (or NaN)")
+    elif kind == "onehot":
+        _ = _check_infrequent_params(fields, context)
+        var handle = fields["handle_unknown"]
+        var text = String(handle) if _is_str(handle) else String("")
+        if text != "error" and text != "ignore" and text != "infrequent_if_exist" and text != "warn":
+            raise Error("mojolearn: OneHotEncoder handle_unknown=" + _repr(handle) + " is not valid")
+        var drop = fields["drop"]
+        if _is_str(drop) and String(drop) != "first" and String(drop) != "if_binary":
+            raise Error("mojolearn: OneHotEncoder drop must be None, 'first', 'if_binary' or one category "
+                        + "per feature")
     elif kind == "kbins":
         var encode = fields["encode"]
         var text = String(encode) if _is_str(encode) else String("")
@@ -919,20 +1823,33 @@ def _precheck(model: PythonObject, kind: String, context: PythonObject) raises:
         _ = _kbins_strategy(fields)
 
 
-def _fit(model: PythonObject, kind: String, values: PythonObject, weights: PythonObject, context: PythonObject) raises:
+def _fit(model: PythonObject, kind: String, values: PythonObject, weights: PythonObject, capture: Bool,
+         context: PythonObject) raises -> PythonObject:
+    # The fit; an encoder's C08 fit (`capture`) returns its (n, d) inverse.
     if kind == "simple_imputer":
         _imputer_fit(model, values, context)
     elif kind == "kbins":
         _kbins_fit(model, values, weights, context)
+    elif kind == "ordinal":
+        return _ordinal_fit(model, values, capture, context)
+    elif kind == "onehot":
+        return _onehot_fit(model, values, capture, context)
     else:
         raise Error("TypeError: the native encode owner does not fit this class")
+    return PythonObject(None)
 
 
-def _transform(model: PythonObject, kind: String, values: PythonObject, context: PythonObject) raises -> PythonObject:
+def _transform(model: PythonObject, kind: String, values: PythonObject, inverse: PythonObject, context: PythonObject) raises -> PythonObject:
     if kind == "simple_imputer":
         return _imputer_transform(model, values, context)
     if kind == "kbins":
         return _kbins_transform(model, values, context)
+    if kind == "ordinal":
+        _check_width(model, Int(py=values[4]))
+        return _ordinal_transform(model, values, inverse, context)
+    if kind == "onehot":
+        _check_width(model, Int(py=values[4]))
+        return _onehot_transform(model, values, inverse, context)
     raise Error("TypeError: the native encode owner does not transform this class")
 
 
@@ -953,20 +1870,32 @@ def prep_encode_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObj
             elif operation == "fit_transform":
                 _no_fit_params(model, args)
             _precheck(model, kind, context)
-            var values = xprep_values(args[0], _entries(_default_mode(context), context), context)
-            _fit(model, kind, values, weights, context)
+            var mode = _default_mode(context)
+            var entries = _entries(mode, context)
+            var values = xprep_values(args[0], entries, context)
+            # The C08 fit_transform (OneHotEncoder bit 2, OrdinalEncoder bit
+            # 4, categories='auto'): the fit's inverse is the transform's codes.
+            var fields = py_fields(model)
+            var auto = py_contains(fields, "categories") and _is_str(fields["categories"]) and String(fields["categories"]) == "auto"
+            var capture = operation == "fit_transform" and auto and (
+                (kind == "onehot" and _c08_route(mode, entries, 2)) or (kind == "ordinal" and _c08_route(mode, entries, 4)))
+            var inverse = _fit(model, kind, values, weights, capture, context)
             result = model
             if operation == "fit_transform":
                 # The X converted for the fit is the transform's input.
-                result = _transform(model, kind, values, context)
+                result = _transform(model, kind, values, inverse, context)
             _ = values^
         elif operation == "transform" or operation == "inverse_transform":
             _fitted(model)
             var values = xprep_values(args[0], _entries(py_fields(model)["numeric_mode_"], context), context)
             if operation == "transform":
-                result = _transform(model, kind, values, context)
+                result = _transform(model, kind, values, PythonObject(None), context)
             elif kind == "kbins":
                 result = _kbins_inverse(model, values, context)
+            elif kind == "ordinal":
+                result = _ordinal_inverse(model, values, context)
+            elif kind == "onehot":
+                result = _onehot_inverse(model, values, context)
             else:
                 raise Error("TypeError: the native encode owner does not invert this class")
             _ = values^
