@@ -1,10 +1,17 @@
 # SPDX-License-Identifier: Apache-2.0
 # The LDA owner reads only connected native class storage and admitted values.
+from std.math import isfinite, floor
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem
 from bindings.classical_attributes import classical_check_layout
+from bindings.classifier_public_lifecycle import classifier_label_list
 from bindings.classical_pandas import classical_admit_value
-from bindings.classical_labels import _flatten_labels
+from bindings.classical_labels import _flatten_labels, labels_shape_of
+from bindings.classical_exceptions import classical_not_fitted_class
+from bindings.classical_metadata import classical_is_fitted
+from bindings.optimizer_public_words import stash_python_error
+from bindings.metrics_native_support import metric_float, metric_is_real, metric_is_integral, metric_warn
+from bindings.classical_warnings import COLUMN_WARNING, _warning_category
 
 
 def _lda_storage(model: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -44,7 +51,7 @@ def lda_native_fields(model: PythonObject, context: PythonObject) raises -> Pyth
     names = context["lda_fitted_fields"]
     for i in range(len(names)):  # driver-loop: consumed fitted state cannot introduce attribute or scalar hooks
         if py_contains(fields, names[i]):
-            classical_admit_value(fields[names[i]], context)
+            classical_admit_value(classifier_label_list(fields[names[i]], context) if String(names[i]) == "classes_" else fields[names[i]], context)
     return fields
 
 
@@ -75,13 +82,37 @@ def lda_native_set_params(model: PythonObject, fields: PythonObject, values: Pyt
     return model
 
 
-def lda_native_labels(value: PythonObject, context: PythonObject) raises:
+def lda_native_labels(value: PythonObject, context: PythonObject, fitting: Bool = False) raises:
+    if fitting and value is None:
+        raise Error("LinearDiscriminantAnalysis requires y to be passed, but the target y is None.")
     classical_admit_value(value, context)
     # An exact object ndarray may still hold arbitrary Python scalar objects.
     # Reading/flattening the references is native; admission precedes hashing,
     # sorting, equality and numeric conversion in the label encoder.
     var flat = _flatten_labels(value, context)
     classical_admit_value(flat, context)
+    if fitting:
+        var b = Python.import_module("builtins")
+        var shape = labels_shape_of(value, context)
+        if len(shape) == 2 and shape[1] == 1 and py_type(value) is not b.list and py_type(value) is not b.tuple:
+            metric_warn(COLUMN_WARNING, _warning_category(context), context)
+        for i in range(len(flat)):  # driver-loop: preserve the public classifier target admission before encoding
+            if metric_is_real(flat[i], context) and not metric_is_integral(flat[i], context):
+                var number = metric_float(flat[i], context)
+                if not isfinite(number):
+                    raise Error("Input y contains NaN or infinity (LinearDiscriminantAnalysis).")
+                if floor(number) != number:
+                    raise Error("Unknown label type: continuous. Maybe you are trying to fit a classifier, which expects discrete classes on a regression target with continuous values.")
+
+
+def lda_require_fitted(model: PythonObject, operation: String, context: PythonObject) raises:
+    if not Bool(py=classical_is_fitted(model)):
+        var cls = classical_not_fitted_class(context)
+        var message = "This LinearDiscriminantAnalysis instance is not fitted yet. Call 'fit' with appropriate arguments before using " + operation + "."
+        ref cpy = Python().cpython()
+        cpy.PyErr_SetString(cls._obj_ptr, message.as_c_string_slice().unsafe_ptr().as_unsafe_any_origin())
+        var failure = stash_python_error()
+        raise failure^
 
 
 def lda_native_context(context: PythonObject) raises -> PythonObject:
