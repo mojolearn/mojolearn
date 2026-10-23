@@ -16,6 +16,8 @@ from x_decomp.api_pyapi import (
 from x_decomp.host import HostExec, X_DECOMP_HOST_SABOTAGE
 from x_decomp.pca_randomized import NoRDev
 from x_decomp.tsvd_owner_pyapi import tsvd_randomized_py
+from x_decomp.ipca_owner import NoIpcaDev
+from x_decomp.ipca_owner_pyapi import ipca_fit_py, ipca_partial_py, ipca_project_py
 from x_decomp.select_ops_pyapi import order_small_py, reduce_py
 from x_decomp.nmf_pyapi import nmf_nndsvd_py, nmf_solve_py
 from x_decomp.ica_pyapi import ica_solve_py
@@ -98,6 +100,10 @@ def build__mojolearn_x_decomp_host() -> PythonObject:
         # TruncatedSVD(algorithm='randomized').fit, one driver (x_decomp/tsvd_owner.mojo);
         # the TSVD_QFIX route is FAST GPU only (qfix_flags is 0 here)
         m.def_function[tsvd_randomized_py[HostExec, NoRDev, False]]("x_decomp_tsvd_randomized")
+        # IncrementalPCA, one driver per operation (x_decomp/ipca_owner.mojo)
+        m.def_function[ipca_fit_py[HostExec, NoRDev, False, NoIpcaDev]]("x_decomp_ipca_fit")
+        m.def_function[ipca_partial_py[HostExec, NoRDev, False, NoIpcaDev]]("x_decomp_ipca_partial")
+        m.def_function[ipca_project_py[HostExec, NoRDev, False]]("x_decomp_ipca_project")
         m.def_function[r_signs_py]("x_decomp_r_signs")
         m.def_function[rank_above_py]("x_decomp_rank_above")
         # lane idn-dense-linalg: the one-entry OLS and solve routes

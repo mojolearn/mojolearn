@@ -14,6 +14,8 @@ from x_decomp.api_pyapi import (
 from x_decomp.device import DevExec
 from x_decomp.pca_randomized_dev import DevRDev
 from x_decomp.tsvd_owner_pyapi import tsvd_randomized_py, tsvd_tsqr_py
+from x_decomp.ipca_owner_dev import DevIpcaDev
+from x_decomp.ipca_owner_pyapi import ipca_fit_py, ipca_partial_py, ipca_project_py
 from x_decomp.fa_fast import FA_FAST_APPLE
 from x_decomp.fa_fast_pyapi import fa_defines_py, fa_em_py, fa_gram_py, fa_transform_py
 from std.sys.info import has_apple_gpu_accelerator
@@ -153,6 +155,11 @@ def build__mojolearn_x_decomp() -> PythonObject:
         # (x_decomp/tsvd_owner.mojo; bindings/tsvd_native.mojo calls them)
         m.def_function[tsvd_randomized_py[DevExec, DevRDev, True]]("x_decomp_tsvd_randomized")
         m.def_function[tsvd_tsqr_py[DevExec, DevRDev, True]]("x_decomp_tsvd_tsqr")
+        # IncrementalPCA fit / partial_fit / transform + inverse_transform, one driver each
+        # (x_decomp/ipca_owner.mojo; bindings/ipca_native.mojo calls them)
+        m.def_function[ipca_fit_py[DevExec, DevRDev, True, DevIpcaDev]]("x_decomp_ipca_fit")
+        m.def_function[ipca_partial_py[DevExec, DevRDev, True, DevIpcaDev]]("x_decomp_ipca_partial")
+        m.def_function[ipca_project_py[DevExec, DevRDev, True]]("x_decomp_ipca_project")
         m.def_function[r_signs_py]("x_decomp_r_signs")
         m.def_function[rank_above_py]("x_decomp_rank_above")
         # lane idn-dense-linalg: the one-entry OLS and solve routes
