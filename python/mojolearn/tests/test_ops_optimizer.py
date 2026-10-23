@@ -71,7 +71,7 @@ def _sequential_fit(seq_optimizer, options):
     o = m._options
     prog, table = m._program(D), m._table()
     b = m._binding()
-    _, yd, target = m._targets(Y, N, 1, "mse")
+    _, yd, target, _ = m._targets(Y, N, 1, "mse")  # (y, descriptor, target, classes buffer)
     from mojolearn._cast_in import describe
     xd = describe(X, "X")
     params = P0.copy()
