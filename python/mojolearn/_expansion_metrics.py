@@ -2039,106 +2039,24 @@ def label_ranking_loss(y_true, y_score, *, sample_weight=None, numeric_mode=None
 # Clustering (scikit-learn 1.9 sklearn/metrics/cluster/)
 # ---------------------------------------------------------------------------
 
-def _clusterings(labels_true, labels_pred, caller):
-    from ._metrics_impl import _classification_encoded, _label_set
-    for v, name in ((labels_true, "labels_true"), (labels_pred, "labels_pred")):  # glue: validates the two named arguments
-        _refuse_multilabel(v, name, caller)
-    a, ka = _classification_encoded(labels_true, "labels_true")
-    b, kb = _classification_encoded(labels_pred, "labels_pred")
-    if len(a) != len(b):
-        raise ValueError(f"mojolearn {caller}: labels_true and labels_pred must have the same length")
-    return a, b, sorted(_label_set(a)), sorted(_label_set(b))  # glue: sorts the distinct cluster labels
-
-
-class _Contingency:
-    """The exact contingency counts of two clusterings and what the
-    clustering metrics read from them, all formed on the device (lane
-    cpu4-python: x_metrics/contingency.mojo cont_stats, units the host
-    column runs too): `C` (ka x kb Int64, rows = classes of `a`, columns =
-    classes of `b`), `F` (C + eps as Float64, when eps is given), `rows` and
-    `cols` (Int64 sums), `pairs` (the 2 x 2 pair confusion counts, Int64),
-    `ent` (the row and column entropies, Float64), and, when asked, `mi`
-    (the MI in nats) and `emi` (the expected MI)."""
-
-    __slots__ = ("ka", "kb", "C", "F", "rows", "cols", "pairs", "ent", "mi", "emi")
-
-
-def _contingency(a, b, ca, cb, numeric_mode, eps=None, mi=False, emi=False):
-    n, ka, kb = len(a), len(ca), len(cb)
-    if ka * kb > 16777216:
-        raise ValueError("mojolearn metrics: the contingency matrix exceeds 2^24 cells")
-    prog = _Prog()
-    A = prog.put_i32(_codes(a, ca))
-    B = prog.put_i32(_codes(b, cb))
-    key = prog.scratch(n)
-    kk = max(ka, kb)
-    prog.stage("pair_key", n, A, B, key, kk, 0)
-    m = kk * kk
-    off = prog.scratch(m + 1)
-    prog.stage("group_sort", 1, key, n, m, off, prog.scratch(n))
-    cells = ka * kb
-    EPS = prog.put_i32(_words64([float(eps)])) if eps is not None else _NONE
-    C = prog.want(prog.alloc(2 * cells), 2 * cells)
-    F = prog.want(prog.alloc(2 * cells), 2 * cells) if eps is not None else _NONE
-    R = prog.want(prog.alloc(2 * ka), 2 * ka)
-    K = prog.want(prog.alloc(2 * kb), 2 * kb)
-    P = prog.want(prog.alloc(8), 8)
-    E = prog.want(prog.alloc(4), 4)
-    MI = prog.want(prog.alloc(2), 2) if mi else _NONE
-    EMI = prog.want(prog.alloc(2), 2) if emi else _NONE
-    prog.stage("cont_stats", 1, off, ka, kb, kk, EPS, C, F, R, K, P, E, MI, EMI, n)
-    _run(prog, numeric_mode)
-    r = _Contingency()
-    r.ka, r.kb = ka, kb
-    r.C = Array._owned(prog.words(C, 2 * cells, "q"), (ka, kb), "<i8", "C")
-    r.F = Array._owned(prog.words(F, 2 * cells, "d"), (ka, kb), "<f8", "C") if eps is not None else None
-    r.rows = Array._owned(prog.words(R, 2 * ka, "q"), (ka,), "<i8", "C")
-    r.cols = Array._owned(prog.words(K, 2 * kb, "q"), (kb,), "<i8", "C")
-    r.pairs = Array._owned(prog.words(P, 8, "q"), (2, 2), "<i8", "C")
-    r.ent = Array._owned(prog.words(E, 4, "d"), (2,), "<f8", "C")
-    r.mi = float(prog.words(MI, 2, "d")[0]) if mi else None
-    r.emi = float(prog.words(EMI, 2, "d")[0]) if emi else None
-    return r
-
 
 def contingency_matrix(labels_true, labels_pred, *, eps=None, sparse=False, dtype="int64", numeric_mode=None):
     """scikit-learn 1.9 `contingency_matrix` (dense): exact counts from the
     device grouping, rows the sorted classes, columns the sorted clusters;
     `eps` adds a constant and makes the result Float64. The result is always
     dense; `sparse=True` raises `NotImplementedError`."""
-    # metrics/NOT_IMPLEMENTED.tsv: no sparse matrix type in this package.
-    if eps is not None and sparse:
-        raise ValueError("Cannot set 'eps' when sparse=True")
-    if sparse:
-        raise NotImplementedError("mojolearn contingency_matrix: sparse=True is NOT IMPLEMENTED; this "
-                                  "package has no sparse matrix type (metrics/NOT_IMPLEMENTED.tsv)")
-    a, b, ca, cb = _clusterings(labels_true, labels_pred, "contingency_matrix")
-    r = _contingency(a, b, ca, cb, numeric_mode, eps=eps)
-    if eps is not None:
-        return r.F
-    code = {"int64": "<i8", "int32": "<i4", "float64": "<f8", "float32": "<f4"}.get(
-        dtype if isinstance(dtype, str) else getattr(dtype, "__name__", str(dtype)), "<i8")
-    return r.C if code == "<i8" else r.C.astype(code)
+    return _NATIVE(None, "family_mexp_cluster_contingency",
+                   (labels_true, labels_pred, eps, sparse, dtype, numeric_mode),
+                   _NATIVE_CONTEXT)
 
 
 def pair_confusion_matrix(labels_true, labels_pred, *, numeric_mode=None):
     """scikit-learn 1.9 `pair_confusion_matrix`: the 2 x 2 Int64 pair counts
     from the exact contingency matrix (exact Int64 in the binding: every
     pair count is below 2^62)."""
-    a, b, ca, cb = _clusterings(labels_true, labels_pred, "pair_confusion_matrix")
-    return _contingency(a, b, ca, cb, numeric_mode).pairs
-
-
-def _generalized_average(U, V, method):
-    if method == "min":
-        return min(U, V)
-    if method == "geometric":
-        return pmath.sqrt(U * V)
-    if method == "arithmetic":
-        return (U + V) / 2
-    if method == "max":
-        return max(U, V)
-    raise ValueError("'average_method' must be 'min', 'geometric', 'arithmetic', or 'max'")
+    return _NATIVE(None, "family_mexp_cluster_pair_confusion",
+                   (labels_true, labels_pred, numeric_mode),
+                   _NATIVE_CONTEXT)
 
 
 # Engineering notes (moved from the docstring):
@@ -2150,109 +2068,30 @@ def normalized_mutual_info_score(labels_true, labels_pred, *, average_method="ar
 
     Follows scikit-learn's `normalized_mutual_info_score`, in nats.
     """
-    _generalized_average(1.0, 1.0, average_method)
-    a, b, ca, cb = _clusterings(labels_true, labels_pred, "normalized_mutual_info_score")
-    if len(ca) == len(cb) == 1 or len(ca) == len(cb) == 0:
-        return 1.0
-    r = _contingency(a, b, ca, cb, numeric_mode, mi=True)
-    mi = r.mi
-    if mi == 0:
-        return 0.0
-    ht, hp = r.ent[0], r.ent[1]
-    return float(mi / _generalized_average(ht, hp, average_method))
+    return _NATIVE(None, "family_mexp_cluster_nmi",
+                   (labels_true, labels_pred, average_method, numeric_mode),
+                   _NATIVE_CONTEXT)
 
 
 def adjusted_mutual_info_score(labels_true, labels_pred, *, average_method="arithmetic", numeric_mode=None):
     """scikit-learn 1.9 `adjusted_mutual_info_score`: (MI - E[MI]) /
     (mean(H) - E[MI]) with scikit-learn's epsilon guards."""
-    _generalized_average(1.0, 1.0, average_method)
-    a, b, ca, cb = _clusterings(labels_true, labels_pred, "adjusted_mutual_info_score")
-    if len(ca) == len(cb) == 1 or len(ca) == len(cb) == 0:
-        return 1.0
-    if len(ca) == 1 or len(cb) == 1:
-        return 0.0
-    # MI and E[MI] under the permutation model (Vinh, Epps and Bailey 2010):
-    # each hypergeometric pmf built by its ratio recurrence from the mode and
-    # normalized by its own sum, portable binary64 log only, on the device
-    # (lane cpu4-python: x_metrics/contingency.mojo mi_cell, emi_cell)
-    r = _contingency(a, b, ca, cb, numeric_mode, mi=True, emi=True)
-    mi, emi = r.mi, r.emi
-    norm = _generalized_average(r.ent[0], r.ent[1], average_method)
-    eps = 2.220446049250313e-16
-    den = norm - emi
-    den = min(den, -eps) if den < 0 else max(den, eps)
-    num = mi - emi
-    num = min(num, -eps) if num < 0 else max(num, eps)
-    return float(num / den)
-
-
-def _cluster_inputs(X, labels, caller):
-    from ._metrics_impl import _classification_encoded, _label_set
-    Xa = as_f32_c(X, ndim=2, name="X")[0]
-    if not all_finite(Xa):
-        raise ValueError(f"mojolearn {caller}: X contains NaN or infinity")
-    lab, _ = _classification_encoded(labels, "labels")
-    if len(lab) != Xa.shape[0]:
-        raise ValueError(f"mojolearn {caller}: X and labels have different numbers of rows")
-    classes = sorted(_label_set(lab))  # glue: sorts the distinct class labels
-    if not 1 < len(classes) < Xa.shape[0]:
-        raise ValueError(f"Number of labels is {len(classes)}. Valid values are 2 to n_samples - 1 (inclusive)")
-    return Xa, _codes(lab, classes), len(classes)
-
-
-#: cl_epi kinds (x_metrics/rank_epi.mojo, lane cpu2-l7-metrics S3b)
-_CL_CENT, _CL_CH_ROW, _CL_CH_FIN, _CL_DB_DIST, _CL_DB_FIN = 0, 1, 2, 3, 4
-
-
-def _cluster_score(X, labels, numeric_mode, caller, db):
-    """calinski_harabasz_score (db False) or davies_bouldin_score (db True)
-    as ONE device program (lane cpu2-l7-metrics S3b): the per-cluster and
-    global column sums (group sums), the centroids (`cl_epi` CENT: binary64
-    sums / counts, and their Float32 words), the row distances to the
-    Float32 centroids (row_centroid_dist, PairSum, sqrt for DB) and their
-    per-cluster sums, then CH_ROW + CH_FIN or DB_DIST + DB_FIN in binary64.
-    The host centroid / ch_extra / db_score epilogues, the Python count
-    differences and the second upload of X are gone; one binary64 word
-    comes back."""
-    Xa, codes, k = _cluster_inputs(X, labels, caller)
-    n, d = Xa.shape
-    prog = _Prog()
-    X0 = prog.put(Xa)
-    L = prog.put_i32(codes)
-    off, sums = _group(prog, L, n, k, values=X0, vstride=d, width=d)
-    C32 = prog.scratch(k * d)
-    CB = prog.scratch(2 * k * d)
-    prog.stage("cl_epi", k * d, _CL_CENT, off, sums, k, d, C32, CB)
-    dist = prog.scratch(n)
-    prog.stage("row_centroid_dist", n, X0, d, L, C32, dist, 1 if db else 0)
-    _, per = _group(prog, L, n, k, values=dist)
-    res = prog.want(prog.alloc(2), 2)
-    if db:
-        D = prog.scratch(2 * k * k)
-        prog.stage("cl_epi", k * k, _CL_DB_DIST, CB, k, d, D)
-        prog.stage("cl_epi", 1, _CL_DB_FIN, off, per, D, k, res)
-    else:
-        zero = prog.scratch(n)
-        prog.stage("pair_key", n, 0, 0, zero, 1, 2)
-        _, gsum = _group(prog, zero, n, 1, values=X0, vstride=d, width=d)
-        inner = prog.scratch(2 * k)
-        prog.stage("cl_epi", k, _CL_CH_ROW, CB, gsum, n, d, k, inner)
-        prog.stage("cl_epi", 1, _CL_CH_FIN, off, inner, per, n, k, res)
-    _run(prog, numeric_mode)
-    return float(prog.words(res, 2, "d")[0])
+    return _NATIVE(None, "family_mexp_cluster_ami",
+                   (labels_true, labels_pred, average_method, numeric_mode),
+                   _NATIVE_CONTEXT)
 
 
 def calinski_harabasz_score(X, labels, *, numeric_mode=None):
     """scikit-learn 1.9 `calinski_harabasz_score`: the between- over the
     within-cluster dispersion, scaled by (n - k) / (k - 1), in one device
-    program (`_cluster_score`)."""
-    return _cluster_score(X, labels, numeric_mode, "calinski_harabasz_score", False)
+    program."""
+    return _NATIVE(None, "family_mexp_cluster_calinski_harabasz", (X, labels, numeric_mode), _NATIVE_CONTEXT)
 
 
 def davies_bouldin_score(X, labels, *, numeric_mode=None):
     """scikit-learn 1.9 `davies_bouldin_score`: the mean over clusters of the
-    worst (s_i + s_j) / d(c_i, c_j), in one device program (`_cluster_score`)."""
-    return _cluster_score(X, labels, numeric_mode, "davies_bouldin_score", True)
+    worst (s_i + s_j) / d(c_i, c_j), in one device program."""
+    return _NATIVE(None, "family_mexp_cluster_davies_bouldin", (X, labels, numeric_mode), _NATIVE_CONTEXT)
 
 
 # ---------------------------------------------------------------------------
