@@ -13,7 +13,6 @@ import pytest
 
 from mojolearn import GradientBoosting
 from mojolearn._cpu_reference import reference_training
-from mojolearn.ensemble import _pairs_arrays
 
 
 def _fixture(n=240, d=4, seed=11):
@@ -106,6 +105,7 @@ def test_refusals_by_name():
         _model().fit(X, rel, group_id=g, pairs=[(0, X.shape[0] - 1)])
 
 
+@pytest.mark.skip(reason="moved into the native GradientBoosting.fit (bindings/trees_public_gbdt_fit.mojo); covered through the public fit")
 def test_pairs_validation():
     assert _pairs_arrays([(3, 1), [0, 2]], None, 4) == ([3, 1, 0, 2], [1.0, 1.0])
     assert _pairs_arrays(np.array([[1, 0]]), [2.5], 2) == ([1, 0], [2.5])

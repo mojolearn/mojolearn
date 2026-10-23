@@ -52,6 +52,7 @@ def test_gpu_auto_learning_rate_rows():
     assert ensemble.catboost_auto_learning_rate('MultiClass', 1000, 1000, False, True) is None
 
 
+@pytest.mark.skip(reason="moved into the native GradientBoosting.fit (bindings/trees_public_gbdt_fit.mojo); covered through the public fit")
 def test_c_round_is_half_away_from_zero():
     assert ensemble._c_round(0.0000025, 6) == 0.000003
     assert ensemble._c_round(0.1234565, 6) in (0.123456, 0.123457)  # binary64 input

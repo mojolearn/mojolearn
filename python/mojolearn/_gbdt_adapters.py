@@ -9,9 +9,8 @@ sklearn Pipeline does not automatically transform a supplied eval_set.
 import inspect
 
 from ._buffer import all_finite, as_f32_c
-from ._labels import encode_labels
 
-from . import _backend, _metrics_impl as metrics, _native_trees_bridge
+from . import _metrics_impl as metrics, _native_trees_bridge
 from .ensemble import GradientBoosting
 from ._mode import PublicOutputsMixin
 
@@ -98,11 +97,6 @@ class _GBDTAdapter(PublicOutputsMixin):
         self.__dict__.update(replacement.__dict__)
         return self
 
-    def _clear_fit(self):
-        for name in list(self.__dict__):  # glue: clears fitted attribute names
-            if name.endswith('_'):
-                del self.__dict__[name]
-
     def _check_fitted(self):
         if not self.__sklearn_is_fitted__():
             raise not_fitted_error(f'{type(self).__name__} is not fitted')
@@ -119,24 +113,6 @@ class _GBDTAdapter(PublicOutputsMixin):
         if tags.classifier_tags is not None:
             tags.classifier_tags.multi_class = False
         return tags
-
-    def _fit_native(self, X, y, sample_weight, eval_set):
-        raw_mode = self.numeric_mode if self.numeric_mode is not None else _backend.default_mode()
-        learner = self._new_learner(raw_mode)
-        mode = raw_mode.strip().lower()
-        learner.numeric_mode = mode
-        binding = _backend.binding('_mojolearn_gbdt', mode)
-        if binding.gbdt_numeric_mode() != {'fast': 0, 'identical': 1}[mode]:
-            raise RuntimeError('GBDT adapter native numeric mode disagrees with requested mode')
-        learner.fit(X, y, sample_weight=sample_weight, eval_set=eval_set)
-        self._learner_ = learner
-        self.numeric_mode_ = mode
-        self.n_features_in_ = learner.n_features_in_
-        self.model_ = learner.model_
-        for name in ('loss_curve_', 'test_loss_curve_', 'best_iteration_', 'stopped_early_',  # glue: copies five learner attributes
-                     'learning_rate_'):
-            setattr(self, name, getattr(learner, name))
-        return self
 
     def save(self, path):
         """Not available for this estimator; raises ``NotImplementedError``. Use pickle."""
@@ -228,41 +204,7 @@ class GradientBoostingClassifier(_GBDTAdapter):
         -------
         self
         """
-        self._validate_params()
-        self._clear_fit()
-        # scikit-learn's class-count refusals and words, before the label
-        # vocabulary below (whose type rules are stricter): the native
-        # encoder counts the distinct labels of any numeric or str y.
-        n_seen = len(encode_labels(y)[0])
-        if n_seen < 2:
-            raise ValueError("Classifier can't train when only one class is present.")
-        if n_seen > 2:
-            raise ValueError('Only binary classification is supported. The type of the target '
-                             'is multiclass.')
-        target, kind = metrics._classification_encoded(y, 'y')
-        classes = sorted(metrics._label_set(target))  # glue: orders the binary class labels (two expected)
-        if len(classes) != 2:
-            raise ValueError('Only binary classification is supported. The type of the target '
-                             'is multiclass.')
-        vocabulary = {label: i for i, label in enumerate(classes)}  # glue: two-label binary vocabulary
-        encoded = metrics._label_map(target, vocabulary.__getitem__).astype('<f4')
-        if eval_set is not None:
-            if isinstance(eval_set, list):
-                if len(eval_set) != 1:
-                    raise ValueError('eval_set accepts one (X, y) pair')
-                eval_set = eval_set[0]
-            if not isinstance(eval_set, tuple) or len(eval_set) != 2:
-                raise ValueError('eval_set must be (X_eval, y_eval) or a one-pair list')
-            eval_X, eval_y = eval_set
-            eval_labels, eval_kind = metrics._classification_encoded(eval_y, 'eval_set y')
-            if eval_kind != kind or any(label not in vocabulary for label in metrics._label_set(eval_labels)):  # glue: validates eval_set labels against the binary vocabulary
-                raise ValueError('eval_set contains labels outside the training vocabulary')
-            eval_set = (eval_X, metrics._label_map(eval_labels, vocabulary.__getitem__).astype('<f4'))
-        self._fit_native(X, encoded, sample_weight, eval_set)
-        self.classes_ = classes
-        self.n_classes_ = 2
-        self._label_kind_ = kind
-        return self
+        return _TREES(self, "trees_gbdt_adapter_classifier_fit", (X, y, sample_weight, eval_set), _TREES_CONTEXT)
 
     def decision_function(self, X):
         """Return the raw float32 margin for each row.
@@ -374,24 +316,7 @@ class GradientBoostingRegressor(_GBDTAdapter):
         -------
         self
         """
-        self._validate_params()
-        self._clear_fit()
-        # float64 and integer targets are cast to float32 once, natively
-        # (`as_f32_c`), as scikit-learn's callers pass them
-        target = as_f32_c(y, ndim=None, name="y")[0]
-        self._regression_target(target, 'y')
-        if eval_set is not None:
-            if isinstance(eval_set, list):
-                if len(eval_set) != 1:
-                    raise ValueError('eval_set accepts one (X, y) pair')
-                eval_set = eval_set[0]
-            if not isinstance(eval_set, tuple) or len(eval_set) != 2:
-                raise ValueError('eval_set must be (X_eval, y_eval) or a one-pair list')
-            eval_X, eval_y = eval_set
-            eval_target = as_f32_c(eval_y, ndim=None, name="eval_set y")[0]
-            self._regression_target(eval_target, 'eval_set y')
-            eval_set = (eval_X, eval_target)
-        return self._fit_native(X, target, sample_weight, eval_set)
+        return _TREES(self, "trees_gbdt_adapter_regressor_fit", (X, y, sample_weight, eval_set), _TREES_CONTEXT)
 
     @staticmethod
     def _regression_target(target, name):
@@ -423,3 +348,12 @@ class GradientBoostingRegressor(_GBDTAdapter):
         return metrics.r2_score(target, self.predict(X),
                                 sample_weight=sample_weight,
                                 numeric_mode=self.numeric_mode_)
+
+
+# The adapters' native fit (bindings/trees_public_gbdt_fit.mojo) reads the
+# constructor protocol it checks (`get_params`) and builds the learner class.
+_native_trees_bridge.register(GradientBoostingClassifier, "gbdt_adapter", trees_gbdt_adapter_tables=dict(
+    base=_GBDTAdapter, learner=GradientBoosting,
+    names=tuple(name for name in inspect.signature(_GBDTAdapter.__init__).parameters if name != "self"),  # glue: the adapter's constructor parameter names, once at import
+))
+_native_trees_bridge.register(GradientBoostingRegressor, "gbdt_adapter")

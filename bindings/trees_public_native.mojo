@@ -5,6 +5,10 @@
 from std.python import Python, PythonObject
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.trees_public_forest import forest_fit, forest_predict, forest_predict_proba
+from bindings.trees_public_gbdt_fit import (
+    gbdt_fit, catboost_auto_learning_rate_op, gbdt_inspect, gbdt_initialize, adapter_classifier_fit,
+    adapter_regressor_fit,
+)
 from bindings.trees_public_gbdt import (
     gbdt_predict, gbdt_predict_proba, gbdt_predict_classes, gbdt_tree_metadata_op, ordered_rmse_fit,
     feature_freq_fit, adapter_decision_function, adapter_predict, adapter_predict_proba, adapter_codes,
@@ -33,6 +37,18 @@ def _gbdt_operation(model: PythonObject, operation: String, args: PythonObject,
                     context: PythonObject) raises -> PythonObject:
     """GradientBoosting, OrderedRMSE, ExperimentalTwoLevelFeatureFreq and
     the scikit-learn GBDT adapters (bindings/trees_public_gbdt.mojo)."""
+    if operation == "trees_gbdt_init":
+        return gbdt_initialize(model, args, context)
+    if operation == "trees_gbdt_adapter_classifier_fit":
+        return adapter_classifier_fit(model, args, context)
+    if operation == "trees_gbdt_adapter_regressor_fit":
+        return adapter_regressor_fit(model, args, context)
+    if operation == "trees_gbdt_fit":
+        return gbdt_fit(model, args, context)
+    if operation == "trees_gbdt_params" or operation == "trees_gbdt_learning_rate" or operation == "trees_gbdt_boosting_type":
+        return gbdt_inspect(model, operation, args, context)
+    if operation == "trees_gbdt_auto_lr":
+        return catboost_auto_learning_rate_op(args, context)
     if operation == "trees_gbdt_predict":
         return gbdt_predict(model, args[0], context)
     if operation == "trees_gbdt_predict_proba":
