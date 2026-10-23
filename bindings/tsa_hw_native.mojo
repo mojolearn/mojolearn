@@ -42,7 +42,7 @@ def _type_text(value: PythonObject) raises -> String:
     return String(py=py_call(_b().str, py_type(value)))
 
 
-def _array(code: String, typestr: String, shape: PythonObject, count: Int, width: Int,
+def tsa_array(code: String, typestr: String, shape: PythonObject, count: Int, width: Int,
            context: PythonObject) raises -> PythonObject:
     """A zero-filled C-ordered mojolearn Array of `typestr` and `shape`."""
     var store = py_call(context["array_type"], PythonObject(code), py_call(context["native_bytes_type"], width * count))
@@ -129,7 +129,7 @@ def _check_dims(fields: PythonObject, source: PythonObject, context: PythonObjec
         raise Error("ValueError: mojolearn: endog is empty, shape " + String(py=py_call(b.str, py_call(b.tuple, value.shape))))
     var item = Int(py=value.itemsize)
     var kind = classical_cast_kind(value, item, "endog", context)
-    var out = _array("f", "<f4", Python.tuple(rows, n), rows * n, 4, context)
+    var out = tsa_array("f", "<f4", Python.tuple(rows, n), rows * n, 4, context)
     var dims = List[Int]()
     var steps = List[Int]()
     if rank == 2:
@@ -150,7 +150,7 @@ def _block(source: PythonObject, offset: Int, count: Int, code: String, typestr:
            shape: PythonObject, context: PythonObject) raises -> PythonObject:
     """A copy of `count` 4-byte words of `source` from word `offset`, as an
     Array of `shape` (the Python body's slice, and its reshape)."""
-    var out = _array(code, typestr, shape, count, 4, context)
+    var out = tsa_array(code, typestr, shape, count, 4, context)
     if count > 0:
         memcpy(dest=_F32P(unsafe_from_address=Int(py=classical_address(out))),
                src=_F32P(unsafe_from_address=Int(py=classical_address(source)) + 4 * offset), count=count)
@@ -196,9 +196,9 @@ def hw_fit(model: PythonObject, context: PythonObject) raises -> PythonObject:
     var cl = (n - period) * ts_num
     if cl <= 0:
         raise Error("ValueError: " + _HW + "n (" + String(n) + ") must exceed seasonal_periods (" + String(period) + ")")
-    var comps = _array("f", "<f4", Python.tuple(3 * cl), 3 * cl, 4, context)
-    var stats = _array("f", "<f4", Python.tuple(4 * ts_num), 4 * ts_num, 4, context)
-    var flags = _array("i", "<i4", Python.tuple(2 * ts_num), 2 * ts_num, 4, context)
+    var comps = tsa_array("f", "<f4", Python.tuple(3 * cl), 3 * cl, 4, context)
+    var stats = tsa_array("f", "<f4", Python.tuple(4 * ts_num), 4 * ts_num, 4, context)
+    var flags = tsa_array("i", "<i4", Python.tuple(2 * ts_num), 2 * ts_num, 4, context)
     var entries = _hw_entries(model, fields, context)
     var init = context["hw_init_codes"][fields["initialization_method"]]
     _ = py_call_typed(_entry(entries, "holtwinters_fit"), classical_address(data), classical_address(comps),
@@ -219,7 +219,7 @@ def _shaped(fields: PythonObject, out: PythonObject, offset: Int, steps: Int, in
     var base = Int(py=classical_address(out)) + 4 * offset
     if index is not None:
         var s = Int(py=index)
-        var one = _array("f", "<f4", Python.tuple(steps), steps, 4, context)
+        var one = tsa_array("f", "<f4", Python.tuple(steps), steps, 4, context)
         # one series' strided words (a copy, no arithmetic)
         xseq_column_copy_f32(_F32P(unsafe_from_address=base), _F32P(unsafe_from_address=Int(py=classical_address(one))),
                              steps, b, s)
@@ -259,11 +259,11 @@ def hw_predict(model: PythonObject, args: PythonObject, context: PythonObject) r
     var steps = end - start
     var comps = fields["_comps"]
     if start >= n:
-        var fc = _array("f", "<f4", Python.tuple((end - n) * b), (end - n) * b, 4, context)
+        var fc = tsa_array("f", "<f4", Python.tuple((end - n) * b), (end - n) * b, 4, context)
         _ = py_call_typed(_entry(entries, "holtwinters_forecast"), classical_address(comps), classical_address(fc),
                           Python.list(n, b, period, end - n), fields["seasonal"])
         return _shaped(fields, fc, (start - n) * b, steps, index, context)
-    var out = _array("f", "<f4", Python.tuple(steps * b), steps * b, 4, context)
+    var out = tsa_array("f", "<f4", Python.tuple(steps * b), steps * b, 4, context)
     var k_in = min(end, n) - start
     var base = Int(py=classical_address(out))
     _ = py_call_typed(_entry(entries, "holtwinters_predict"), classical_address(comps), PythonObject(base),

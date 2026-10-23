@@ -20,6 +20,7 @@ from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_pandas import classical_admit_value
 from core.xseq_marshal import xseq_cast_nd, tsa_flags_u8
 from bindings.tsa_hw_native import hw_fit, hw_predict, hw_score
+from bindings.tsa_arima_native import arima_fit, arima_predict
 
 comptime _F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime _I32P = MutPointer[Int32, MutUntrackedOrigin]
@@ -143,6 +144,11 @@ def tsa_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
             return hw_predict(call[0], call[2], context).steal_data()
         if operation == "hw_score":
             return hw_score(call[0], call[2], context).steal_data()
+        # ARIMA (bindings/tsa_arima_native.mojo)
+        if operation == "arima_fit":
+            return arima_fit(call[0], call[2], context).steal_data()
+        if operation == "arima_predict":
+            return arima_predict(call[0], call[2], context).steal_data()
         raise Error("RuntimeError: unknown tsa operation " + operation)
     except error:
         var text = String(error)

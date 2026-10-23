@@ -51,4 +51,24 @@ def connect():
     # the host inference class reads its loaded forecast binding from the
     # module table at call time (its own load loads it)
     context["hw_host_module"] = "mojolearn._host._mojolearn_forecast_host"
+    arima = {}
+    arima_names = ("arima_fit", "arima_predict", "arima_forecast", "arima_ic_from_loglike", "arima_numeric_mode")
+    for mode in (selected, "fast" if selected == "identical" else "identical"):  # glue: the two numeric modes, connected once
+        try:
+            module = _backend.binding("_mojolearn_arima", mode)
+            symbols = {"module_name": module.__name__}
+            for name in arima_names:  # glue: fixed compiled entry names
+                fn = getattr(module, name, None)
+                if isinstance(fn, BuiltinFunctionType):
+                    symbols[name] = fn
+            arima[mode] = symbols
+        except (ImportError, AttributeError, ValueError, RuntimeError, TypeError, OSError) as error:
+            arima[mode] = type(error).__name__ + ": " + str(error)
+    context["arima_bindings"] = arima
+    context["arima_entry_names"] = arima_names
+    from ._buffer import _native
+    log = _native("log")  # glue: the pinned log entry the criterion penalty reads
+    if not isinstance(log, BuiltinFunctionType):
+        raise TypeError("ARIMA requires the compiled pinned log entry")
+    context["pm_log"] = log
     return entry, context

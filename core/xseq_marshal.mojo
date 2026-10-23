@@ -140,3 +140,9 @@ def xseq_min_max_f32(src: _F32P, count: Int) -> Tuple[Float32, Float32]:
         if v > hi:
             hi = v
     return (lo, hi)
+
+
+def xseq_widen_f32_f64(src: _F32P, dst: MutPointer[Float64, MutUntrackedOrigin], count: Int):
+    """`a.astype("<f8")` of `count` float32 words: each widened exactly."""
+    for i in range(count):
+        dst[i] = Float64(src[i])
