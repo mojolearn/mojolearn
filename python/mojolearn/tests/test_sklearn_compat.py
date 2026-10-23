@@ -403,6 +403,11 @@ EXPECTED_FAILED_CHECKS = {
     "check_dtype_object": "object-dtype X: kept non-strict until every estimator is shown to pass",
     "check_estimators_data_not_an_array": "an __array__-only object is not a buffer or a sequence "
                                           "(NumPy-free input contract)",
+    # The same contract for sample_weight: the native OLS/Ridge fit admits a
+    # buffer or a sequence, and refuses _NotAnArray (non-strict: estimators
+    # whose weight path still converts it pass).
+    "check_sample_weights_not_an_array": "an __array__-only sample_weight is not a buffer or a sequence "
+                                         "(NumPy-free input contract)",
 }
 
 _WEQ = ("check_sample_weight_equivalence_on_dense_data", "check_sample_weight_equivalence_on_sparse_data")
