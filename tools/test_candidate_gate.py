@@ -119,6 +119,25 @@ def test_candidate_loaded_receipt_requires_exact_hash_without_claiming_pypi(tmp_
     assert 'hash' in P.refusal(manifest, receipt)
 
 
+@pytest.mark.parametrize('artifact_modes', [None, ['fast', 'identical'], ['identical']])
+def test_release_candidate_modes_match_controller_even_on_cached_identity(tmp_path, artifact_modes):
+    paths = [wheel(tmp_path, name, modes=artifact_modes) for name in P.distributions('amd')]
+    runner = object.__new__(release.Release)
+    runner.version, runner.dry = VERSION, False
+    runner.state = {'commit': COMMIT}
+    runner.release_modes = ('identical',)
+    runner.candidate_gate_wheels = lambda vendor: paths
+    if artifact_modes != ['identical']:
+        with pytest.raises(release.StepFailed, match='selected release modes'):
+            runner.candidate_gate_identity('amd')
+        return
+    assert runner.candidate_gate_identity('amd')['release_modes'] == ['identical']
+    assert runner.candidate_gate_identity('amd')['release_modes'] == ['identical']
+    runner.release_modes = ('fast', 'identical')
+    with pytest.raises(release.StepFailed, match='selected release modes'):
+        runner.candidate_gate_identity('amd')
+
+
 def test_candidate_install_passes_local_files_and_checks_interpreter_tags(tmp_path, monkeypatch):
     paths = wheels(tmp_path, 'amd')
     calls = []

@@ -597,7 +597,7 @@ def check_release061(wheel, qualification_root, source_root, wheel_sha=None, ven
     # the wheel carries still had to be present.
     for vendor in vendors:
         require(any(t == 'full' for k, t in tiers.items() if k.startswith(vendor + '/')),
-                'No full 25-job qualification for any ' + vendor + ' architecture')
+                'No full selected-mode qualification for any ' + vendor + ' architecture')
     require(set(tiers) == carried, 'An architecture the wheel carries has no qualification at all')
     comparisons = {}
     # Every CUDA set the wheel carries (native, PTX, an optional Hopper or
@@ -614,15 +614,18 @@ def check_release061(wheel, qualification_root, source_root, wheel_sha=None, ven
             ordered = compare_ordered_python.compare(directories[hip], directories[cuda])
             require(umap.get('status') == ordered.get('status') == 'PASSED', 'Architecture identity comparison failed')
             comparisons[cuda if len(hips) == 1 else cuda + ' vs ' + hip] = dict(umap=umap, ordered=ordered)
+    # Every architecture audit was recomputed from this wheel, including its
+    # recorded mode scope. Do not describe an identical-only run as dual mode.
+    job_count = len(surface.expected_jobs(expected))
     return dict(schema='mojolearn.linux.release-admission.v2', status='PASSED',
                 assembly_profile=surface.RELEASE_PROFILE, wheel=wheel.name, wheel_sha256=wheel_sha or digest_file(wheel),
-                source_sha256=inventory_digest(inventory), jobs_per_runtime_architecture=len(surface.expected_jobs({'assembly_profile': surface.RELEASE_PROFILE})),
+                source_sha256=inventory_digest(inventory), jobs_per_runtime_architecture=job_count,
                 runtime_coverage={key: digest_file(qualification_root / key / 'qualification.json')
                                   for key in sorted(tiers)},
                 qualification_tiers=tiers,
                 observed_job_failures=observed_failures,
                 comparisons=comparisons,
-                scope=f'Exact final wheel; FULL {len(surface.expected_jobs({"assembly_profile": surface.RELEASE_PROFILE}))} installed jobs on one architecture per advertised vendor '
+                scope=f'Exact final wheel; FULL {job_count} installed jobs on one architecture per advertised vendor '
                       'and SMOKE (install, import, selector read-back, smoke surface in shipped modes) on every '
                       'other architecture the wheel carries; any job seen failing on a smoke column is listed '
                       'in observed_job_failures and is NOT claimed to pass; a FULL column may carry KNOWN '

@@ -15,7 +15,9 @@ files, and the installed direct-URL hashes must match those files. Candidate
 records are labeled `source: candidate`; they never claim a PyPI digest match.
 All artifacts must also agree on `release_modes`. Missing metadata retains its
 historical dual-mode meaning; the current environment cannot reinterpret it as
-an identical-only artifact.
+an identical-only artifact. The release controller also requires those recorded
+modes to equal its selected release modes, including when it reuses a cached
+candidate identity.
 
 The gate also needs eight precompiled autograd executables for each vendor.
 The orchestrator builds them from the clean candidate source freeze, using the

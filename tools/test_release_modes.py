@@ -97,6 +97,32 @@ def test_new_tier_selection_cannot_reuse_legacy_completed_state(tmp_path, monkey
         release.Release(args(state_dir=str(state), build_backend="cpu-box"))
 
 
+@pytest.mark.parametrize("selected,expected_count", [(None, 10), (["identical"], 9)])
+def test_release_admission_summary_counts_the_qualified_wheel_modes(tmp_path, monkeypatch, selected, expected_count):
+    import check_linux_release_qualification as admission
+    # File-only receipt fixture: isolate the summary from the independently
+    # tested native inventory/installed-record checks; never load a product.
+    audit = dict(assembly_profile=surface.RELEASE_PROFILE, sha256="wheel",
+                 extension_hashes={}, sets={})
+    if selected is not None:
+        audit["release_modes"] = selected
+    directory = tmp_path / "hip/gfx942"
+    directory.mkdir(parents=True)
+    (directory / "wheel-audit.json").write_text(json.dumps(audit))
+    (directory / "qualification.json").write_text("{}")
+    monkeypatch.setattr(admission, "tracked_native_inventory", lambda root: {})
+    monkeypatch.setattr(admission, "inspect_wheel", lambda *args, **kwargs: ({}, {"hip/gfx942/identical": {}}))
+    monkeypatch.setattr(admission, "release_audit", lambda *args: audit)
+    monkeypatch.setattr(admission, "check_vendor", lambda *args: None)
+    monkeypatch.setattr(admission, "check_corpora", lambda *args: None)
+    monkeypatch.setattr(surface, "release_version", lambda root: "0.8.56")
+    monkeypatch.setattr(surface, "read_declared_failures", lambda *args: (frozenset(), {}))
+    result = admission.check_release061(tmp_path / "inert.whl", tmp_path, tmp_path,
+                                        wheel_sha="wheel", vendors=("hip",))
+    assert result["jobs_per_runtime_architecture"] == expected_count
+    assert f"FULL {expected_count} installed jobs" in result["scope"]
+
+
 @pytest.mark.parametrize("merged", [False, True])
 def test_packer_loads_identical_only_set_and_refuses_unselected_artifacts(tmp_path, monkeypatch, merged):
     import pack_wheel as pack

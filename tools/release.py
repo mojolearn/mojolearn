@@ -2520,14 +2520,18 @@ class Release:
         wheels = self.candidate_gate_wheels(vendor)
         if self.dry:
             return dict(source='candidate', version=self.version, vendor=vendor,
-                        source_commit=self.commit, wheels={path.name: 'DRY-RUN' for path in wheels})
+                        source_commit=self.commit, release_modes=list(self.release_modes),
+                        wheels={path.name: 'DRY-RUN' for path in wheels})
         key = (vendor, self.version, self.commit, tuple((str(path), path.stat().st_size,
                path.stat().st_mtime_ns, path.stat().st_ctime_ns) for path in wheels))
         cache = getattr(self, '_candidate_gate_identities', {})
         if key not in cache:
             cache[key] = C.identity(C.build_manifest(self.version, vendor, wheels, self.commit))
             self._candidate_gate_identities = cache
-        return cache[key]
+        identity = cache[key]
+        if release_reuse.record_modes(identity) != self.release_modes:
+            raise StepFailed('candidate wheel release modes differ from the selected release modes')
+        return identity
 
     def gate_out(self, vendor):
         identity = self.candidate_gate_identity(vendor)
