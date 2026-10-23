@@ -24,7 +24,6 @@ from . import _portable_math as math
 import sys
 
 from . import _backend
-from . import _portable_math as _pm
 from ._array import Array
 from ._buffer import addr_ro, as_f32_c, as_f64_c, as_i32_c, frombytes
 from ._buffer import addr as _addr, empty as _empty
@@ -1769,14 +1768,10 @@ def johnson_lindenstrauss_min_dim(n_samples, *, eps=0.1):
     >>> import mojolearn
     >>> d = mojolearn.johnson_lindenstrauss_min_dim(1000, eps=0.5)
     """
-    if not 0 < eps < 1:
-        raise ValueError("The JL bound is defined for eps in ]0, 1[")
-    if n_samples <= 0:
-        raise ValueError("The JL bound is defined for n_samples greater than zero")
     # DEVIATION 6900: eps ** 2, eps ** 3 correctly rounded and the pinned log,
-    # not the platform pow / log (a host's last bit can move the floor)
-    denominator = (_pm.powi(eps, 2) / 2) - (_pm.powi(eps, 3) / 3)
-    return int(4 * _pm.log(n_samples) / denominator)
+    # not the platform pow / log (a host's last bit can move the floor), in
+    # the compiled owner (bindings/jl_native.mojo)
+    return _JL_CALL(None, "min_dim", (n_samples, eps), _JL_CONTEXT)
 
 
 def _seed_of(random_state):
@@ -7382,3 +7377,6 @@ def _randomized_decompose(X, nc, *, center, n_oversamples, n_iter, power_iterati
 # The compiled IncrementalPCA owner, connected once at import.
 from . import _native_ipca_bridge  # noqa: E402
 _IPCA_CALL, _IPCA_CONTEXT = _native_ipca_bridge.connect_public(IncrementalPCA)
+# The compiled johnson_lindenstrauss_min_dim owner.
+from . import _native_jl_bridge  # noqa: E402
+_JL_CALL, _JL_CONTEXT = _native_jl_bridge.connect_public()
