@@ -642,7 +642,11 @@ def msel_lpo_at(args: PythonObject, context: PythonObject) raises -> PythonObjec
     var n = Int(py=args[0])
     var combo = family_call(Python.import_module("array").array, PythonObject("q"), args[1])
     var k = len(combo)
-    return msel_split_indices(Int(py=py_call(combo.buffer_info)[0]) if k else 0, k, n, context)
+    var result = msel_split_indices(Int(py=py_call(combo.buffer_info)[0]) if k else 0, k, n, context)
+    # The integer address does not retain its array owner. Keep the complete
+    # combination alive until the native mask and both row arrays are built.
+    _ = combo
+    return result
 
 
 def _group_state(gc: MselGroups) raises -> PythonObject:

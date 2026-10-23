@@ -69,6 +69,24 @@ def test_stratified_shuffle_keeps_permutation_arena_and_rows():
     """)
 
 
+def test_leave_p_out_keeps_combination_indices_until_partitioned():
+    _debug_process("""
+        from itertools import combinations
+        import numpy as np
+        from mojolearn.model_selection import LeavePOut
+
+        for n, p in ((5, 1), (9, 2), (8, 3)):
+            x = np.arange(n, dtype=np.float32)[:, None]
+            expected = list(combinations(range(n), p))
+            for _ in range(3):
+                splits = list(LeavePOut(p).split(x))
+                assert len(splits) == len(expected)
+                for (train, test), held in zip(splits, expected, strict=True):
+                    np.testing.assert_array_equal(test, held)
+                    np.testing.assert_array_equal(train, [r for r in range(n) if r not in held])
+    """)
+
+
 def test_voting_sum_keeps_native_fsum_input():
     _debug_process("""
         import numpy as np
