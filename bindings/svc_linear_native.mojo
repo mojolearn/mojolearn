@@ -100,6 +100,8 @@ def _class_weight_rows(class_weight: PythonObject, classes: PythonObject, codes:
         if k > 0 and Int(py=family_call(svc_base("class_ratio_f64", context), classical_address(wide), PythonObject(k),
                                          PythonObject(n), PythonObject(0), classical_address(w64))) != 0:
             svc_zero_division(False)
+        _ = wide^
+        _ = counts^
         values = Python.list()
         for i in range(k):  # driver-loop: over the classes
             _ = py_call(values.append, PythonObject(FAMILY_F64P(unsafe_from_address=Int(py=classical_address(w64)))[i]))
@@ -138,6 +140,7 @@ def _class_weight_rows(class_weight: PythonObject, classes: PythonObject, codes:
     if n > 0:
         _ = family_call(family_entry(xbind, "x_trees_class_rows", context), classical_address(codes),
                         classical_address(narrowed), classical_address(out), Python.list(PythonObject(n), PythonObject(k)))
+    _ = narrowed^
     return out
 
 
@@ -384,6 +387,8 @@ def _linear_svc_fit(model: PythonObject, args: PythonObject, context: PythonObje
     _ = x^
     _ = sw^
     _ = w_all^
+    _ = codes^
+    _ = encoded^
 
 
 def _py2mojo_flags(binding: PythonObject) raises -> Int:

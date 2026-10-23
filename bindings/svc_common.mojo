@@ -155,20 +155,20 @@ def svc_f32(source: PythonObject, ndim: Int, name: String, dense: Bool,
     emptiness refusals, the cast; returns (array, copied). A scipy.sparse
     matrix is densified exactly first (its implicit entries are zeros)."""
     var b = svc_builtins()
-    var input = source
+    var src = source
     var copied = py_type(source) is b.list or py_type(source) is b.tuple or py_type(source) is b.range
     if dense:
         var sparse = host_sparse_format(source)
         if sparse.byte_length() > 0:
             if not py_contains(context, PythonObject("output_context")):
                 py_setitem(context, PythonObject("output_context"), context)
-            input = host_sparse_dense(source, sparse, context)
+            src = host_sparse_dense(source, sparse, context)
             copied = False
-    var view = family_view(input, ndim, name, context)
+    var view = family_view(src, ndim, name, context)
     var result = family_cast_view(view, name, context)
     copied = copied or not (result is view)
     _ = view^
-    _ = input^
+    _ = src^
     return Python.tuple(result, PythonObject(copied))
 
 
