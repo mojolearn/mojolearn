@@ -10,10 +10,10 @@ subgraphs (``Shape``, ``Gather`` on shapes, ``Concat`` of ints, ``Range``,
 into description integers. It never reads a floating-point element.
 """
 # Engineering note: the resolution is Mojo's (autograd/import_resolve.mojo,
-# onnx_resolve) for every graph: one the Mojo reader holds is resolved on its
-# handle; a GraphIR built in Python (the torch.export reader) goes to Mojo as
-# words first (graph_words, onnx_from_words). The former Python rules are the
-# test oracle in tests/_resolve_oracle.py.
+# onnx_resolve), on the handle of the graph the Mojo reader holds. The former
+# Python rules are the test oracle in tests/_resolve_oracle.py. (The
+# torch.export reader and its GraphIR-to-words path were removed 2026-10-22,
+# lane purge-user-objects: a torch model is exported to ONNX first.)
 from __future__ import annotations
 
 import os
@@ -99,14 +99,7 @@ class GraphIR:
     source: str
 
 
-# ------------------------------------------------- the graph as words ----
-
-# autograd/import_reader.mojo's word layout (importers/onnx.py reads it back)
-_MAGIC, _VERSION = 0x4F4E5852, 1
-_DTYPE_CODE = {"f32": 0, "f16": 1, "bf16": 2, "f64": 3, "i64": 4, "i32": 5, "bool": 6}
-_A_FLOAT, _A_INT, _A_STRING, _A_TENSOR, _A_FLOATS, _A_INTS, _A_STRINGS, _A_TENSORS = 1, 2, 3, 4, 6, 7, 8, 9
-_BUF_EXTERNAL = 2
-
+# -------------------------------------------------- tensor buffers ----
 
 def bytes_view(data):
     """A NumPy uint8 view of a buffer (no copy), or None when it is empty."""
@@ -118,83 +111,6 @@ def bytes_view(data):
 
 def buffer_address(a):
     return 0 if a is None else int(a.ctypes.data)
-
-
-def graph_words(g):
-    """GraphIR ``g`` as onnx_info's words, strings and floats, plus one
-    uint8 view per tensor's bytes (each its own buffer): the graph handed to
-    Mojo's onnx_from_words. Description only."""
-    # cpu-route: GraphIR Python objects from torch.export to Mojo words (names, dims, attributes; tensor bytes pass by address)
-    strings, index, floats, bufs, body = [""], {"": 0}, [], [], []
-
-    def sid(x):
-        k = index.get(x)
-        if k is None:
-            k = index[x] = len(strings)
-            strings.append(x)
-        return k
-
-    def tensor(t):
-        a = bytes_view(t.data)
-        bufs.append(a)
-        body.extend([sid(t.name), _DTYPE_CODE[t.dtype], len(t.shape)])
-        body.extend(int(d) for d in t.shape)  # cpu-route: GraphIR Python objects from torch.export to Mojo words (one per axis)
-        body.extend([len(bufs) - 1, 0, 0 if a is None else a.size])
-
-    def value(v):
-        name, dtype, dims = v
-        body.extend([sid(name), _DTYPE_CODE[dtype], len(dims)])
-        for d in dims:  # cpu-route: GraphIR Python objects from torch.export to Mojo words (one per axis)
-            body.extend([1, sid(d)] if isinstance(d, str) else [0, int(d)])
-
-    def attr(v):
-        if isinstance(v, TensorInfo):
-            body.append(_A_TENSOR)
-            tensor(v)
-        elif isinstance(v, str):
-            body.extend([_A_STRING, sid(v)])
-        elif isinstance(v, float):
-            body.extend([_A_FLOAT, len(floats)])
-            floats.append(v)
-        elif isinstance(v, int):
-            body.extend([_A_INT, int(v)])
-        else:
-            items = tuple(v)
-            if items and all(isinstance(x, TensorInfo) for x in items):  # cpu-route: GraphIR Python objects from torch.export to Mojo words (attribute list)
-                body.extend([_A_TENSORS, len(items)])
-                for x in items:  # cpu-route: GraphIR Python objects from torch.export to Mojo words (attribute list)
-                    tensor(x)
-            elif items and all(isinstance(x, str) for x in items):  # cpu-route: GraphIR Python objects from torch.export to Mojo words (attribute list)
-                body.extend([_A_STRINGS, len(items)] + [sid(x) for x in items])  # cpu-route: GraphIR Python objects from torch.export to Mojo words (attribute list)
-            elif any(isinstance(x, float) for x in items):  # cpu-route: GraphIR Python objects from torch.export to Mojo words (attribute list)
-                body.extend([_A_FLOATS, len(floats), len(floats) + len(items)])
-                floats.extend(float(x) for x in items)  # cpu-route: GraphIR Python objects from torch.export to Mojo words (attribute list)
-            else:
-                body.extend([_A_INTS, len(items)] + [int(x) for x in items])  # cpu-route: GraphIR Python objects from torch.export to Mojo words (attribute list)
-
-    body.append(len(g.inputs))
-    for v in g.inputs:  # cpu-route: GraphIR Python objects from torch.export to Mojo words (graph inputs)
-        value(v)
-    body.append(len(g.outputs))
-    for v in g.outputs:  # cpu-route: GraphIR Python objects from torch.export to Mojo words (graph outputs)
-        value(v)
-    body.append(len(g.nodes))
-    for n in g.nodes:  # cpu-route: GraphIR Python objects from torch.export to Mojo words (graph nodes)
-        body.extend([sid(n.op), sid(n.domain), sid(n.name), len(n.inputs)])
-        body.extend(sid(i) for i in n.inputs)  # cpu-route: GraphIR Python objects from torch.export to Mojo words (node inputs)
-        body.append(len(n.outputs))
-        body.extend(sid(o) for o in n.outputs)  # cpu-route: GraphIR Python objects from torch.export to Mojo words (node outputs)
-        body.append(len(n.attrs))
-        for key, v in n.attrs.items():  # cpu-route: GraphIR Python objects from torch.export to Mojo words (node attributes)
-            body.append(sid(key))
-            attr(v)
-    body.append(len(g.initializers))
-    for t in g.initializers.values():  # cpu-route: GraphIR Python objects from torch.export to Mojo words (initializers)
-        tensor(t)
-    head = [_MAGIC, _VERSION, 0, int(g.opset), len(bufs)]
-    for a in bufs:  # cpu-route: GraphIR Python objects from torch.export to Mojo words (one per tensor buffer)
-        head.extend([_BUF_EXTERNAL, -1, 0 if a is None else a.size])
-    return head + body, strings, floats, bufs
 
 
 # ---------------------------------------------------- shape resolution ----
@@ -220,19 +136,10 @@ def resolve(g, shapes=None):
     the nodes with no shape rule in ``no_rule``, so the lowering can report
     them together with its own refusals in one error."""
     native = getattr(g, "_native", None)
-    if native is not None:
-        # a graph the Mojo reader holds (importers/onnx.py): resolved on its handle
-        return native.resolve(shapes)
-    # a GraphIR built in Python: to Mojo as words, resolved there, released
-    from .onnx import _Native, _binding
-    b = _binding()
-    words, strings, floats, keep = graph_words(g)
-    h = int(b.onnx_from_words(words, strings, floats, [buffer_address(a) for a in keep]))  # glue: one address per tensor buffer
-    try:
-        return _Native(b, h).resolve(shapes)
-    finally:
-        b.onnx_close(h)
-        del keep
+    if native is None:
+        raise TypeError("resolve takes a graph read by mojolearn.importers.onnx.read")
+    # a graph the Mojo reader holds (importers/onnx.py): resolved on its handle
+    return native.resolve(shapes)
 
 
 def resolve_shapes(g, shapes=None):

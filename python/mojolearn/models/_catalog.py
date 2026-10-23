@@ -7,6 +7,8 @@
 # (same source, same export call, same import shapes, same seeded check input) so its output digest is
 # comparable with the digests the catalog records per version, numeric mode and vendor. The check input
 # and the digest are the tool's: numpy.random.default_rng(seed) and sha256 of the output bytes, 16 hex.
+# A torch model is exported to an ONNX file first (torch.onnx.export, _torch_to_onnx) and the file is
+# imported, the two-step path the docs give; the torch.export reader was removed 2026-10-22.
 from __future__ import annotations
 
 import copy
@@ -121,7 +123,18 @@ def _check_input(entry):
     return np.random.default_rng(int(check["seed"])).standard_normal(shape, dtype=np.float32)
 
 
-def _source_torchvision(entry, x, report):
+def _torch_to_onnx(torch, model, x, path):
+    """``model`` exported to the ONNX file ``path`` on the example ``x`` (the two-step torch import:
+    torch.onnx.export, then mojolearn.import_model of the file). Opset 17, the TorchScript exporter."""
+    args = (torch.from_numpy(x),)
+    try:
+        torch.onnx.export(model, args, str(path), opset_version=17, dynamo=False)
+    except TypeError:  # a torch without the dynamo switch: its only exporter is the TorchScript one
+        torch.onnx.export(model, args, str(path), opset_version=17)
+    return str(path)
+
+
+def _source_torchvision(entry, x, report, workdir):
     try:
         import torch
         import torchvision
@@ -136,10 +149,10 @@ def _source_torchvision(entry, x, report):
     report["source"] = {"weights": str(weights), "torch_version": torch.__version__,
                         "torchvision_version": torchvision.__version__}
     with torch.no_grad():
-        return torch.export.export(model, (torch.from_numpy(x),))
+        return _torch_to_onnx(torch, model, x, Path(workdir) / (entry["name"] + ".onnx"))
 
 
-def _source_hf(entry, x, report):
+def _source_hf(entry, x, report, workdir):
     try:
         import torch
         import transformers
@@ -162,10 +175,7 @@ def _source_hf(entry, x, report):
     report["source"] = {"repo": src["repo"], "revision": src.get("revision"), "torch_version": torch.__version__,
                         "transformers_version": transformers.__version__}
     with torch.no_grad():
-        try:
-            return torch.export.export(Logits(lm).eval(), (torch.from_numpy(x),))
-        except Exception:  # noqa: BLE001  the non-strict tracer, as the box runs fell back to
-            return torch.export.export(Logits(lm).eval(), (torch.from_numpy(x),), strict=False)
+        return _torch_to_onnx(torch, Logits(lm).eval(), x, Path(workdir) / (entry["name"] + ".onnx"))
 
 
 def _source_onnx(entry, cache, report):
@@ -243,6 +253,7 @@ def verify_catalog_entry(name, *, cache=None):
     >>> report["match"]
     True
     """
+    import tempfile
     import time
 
     import mojolearn
@@ -259,15 +270,16 @@ def verify_catalog_entry(name, *, cache=None):
         raise ValueError(f"{name}: the check input on this install has digest {report['input_digest']}, the "
                          f"catalog's has {want_in} (a different numpy random generator)")
     kind = entry["kind"]
-    if kind == "torchvision":
-        source = _source_torchvision(entry, x, report)
-    elif kind == "hf-causal-lm":
-        source = _source_hf(entry, x, report)
-    else:
-        source = _source_onnx(entry, cache or _CACHE, report)
     shapes = entry["check"].get("import_shapes")
     shapes = {k: tuple(v) for k, v in shapes.items()} if shapes else None  # glue: one entry per model input
-    prog = mojolearn.import_model(source, shapes=shapes)
+    with tempfile.TemporaryDirectory(prefix="mojolearn-catalog-") as workdir:
+        if kind == "torchvision":
+            source = _source_torchvision(entry, x, report, workdir)
+        elif kind == "hf-causal-lm":
+            source = _source_hf(entry, x, report, workdir)
+        else:
+            source = _source_onnx(entry, cache or _CACHE, report)
+        prog = mojolearn.import_model(source, shapes=shapes)
     t0 = time.perf_counter()
     y = prog.run(x)
     report["run_ms"] = (time.perf_counter() - t0) * 1e3

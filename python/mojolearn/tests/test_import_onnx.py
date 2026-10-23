@@ -200,3 +200,24 @@ def test_not_an_onnx_file(tmp_path):
 
 def test_supported_ops_is_a_list():
     assert isinstance(importers.supported_ops(), list)
+
+
+def test_a_torch_object_is_refused_with_the_onnx_path():
+    # import_model takes an ONNX file; a torch object (here a stand-in whose class is torch's) is
+    # refused with the two-step path: torch.onnx.export, then the file
+    from mojolearn.importers._program import _read
+
+    class Module:
+        pass
+
+    Module.__module__ = "torch.nn.modules.module"
+
+    class UserNet(Module):
+        pass
+
+    UserNet.__module__ = "__main__"
+    for obj in (Module(), UserNet()):
+        with pytest.raises(ValueError, match=r'torch\.onnx\.export\(model, args, "model\.onnx"\)'):
+            _read(obj)
+    with pytest.raises(TypeError, match="ONNX file"):
+        _read(object())

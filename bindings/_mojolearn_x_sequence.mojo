@@ -67,8 +67,8 @@ from autograd.ops_api import OPS_DEVICE
 # import_resolve.mojo): host only, the same entries in both bindings
 from autograd.import_reader_pyapi import onnx_read_py, onnx_info_py, onnx_buffers_py, onnx_close_py
 from autograd.import_resolve_pyapi import onnx_resolve_py
-# the lowering onto session operations and the GraphIR-from-words handle (autograd/import_lower.mojo)
-from autograd.import_lower_pyapi import onnx_import_py, onnx_import_file_py, onnx_from_words_py
+# the lowering onto session operations (autograd/import_lower.mojo)
+from autograd.import_lower_pyapi import onnx_import_py, onnx_import_file_py
 from autograd.model_verify_pyapi import verify_digest_py, verify_file_sha256_py, verify_fill_py, verify_model_info_py
 from autograd.model_checkpoint_pyapi import (
     model_checkpoint_info_py, model_load_checkpoint_py, model_save_checkpoint_py, ops_load_state_py,
@@ -832,13 +832,6 @@ def onnx_import_file_binding(
     return onnx_import_file_py[DeviceExec, OPS_DEVICE](path, sid, names, flat, source)
 
 
-def onnx_from_words_binding(
-    words: PythonObject, strings: PythonObject, floats: PythonObject, addrs: PythonObject,
-) raises -> PythonObject:
-    """A graph handle from onnx_info's word layout (a torch.export GraphIR)."""
-    return onnx_from_words_py(words, strings, floats, addrs)
-
-
 # The module body. Its @export PyInit lives in bindings/entry/entry__mojolearn_x_sequence.mojo
 # (the per-binding build) and in the merged roots tools/merged_bindings.py
 # writes from bindings/merged_groups.json (one shared file per directory set).
@@ -999,7 +992,6 @@ def build__mojolearn_x_sequence() -> PythonObject:
         m.def_function[onnx_close_binding]("onnx_close")
         m.def_function[onnx_import_binding]("onnx_import")
         m.def_function[onnx_import_file_binding]("onnx_import_file")
-        m.def_function[onnx_from_words_binding]("onnx_from_words")
         comptime if SEQ_MOE_DEVICE_IO:
             m.def_function[moe_forward_dev_binding]("moe_forward_dev")
         return m.finalize()

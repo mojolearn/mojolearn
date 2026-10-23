@@ -904,8 +904,6 @@ ANNOTATIONS = {
                                            "x_decomp_dev_cd_rows", "x_decomp_dev_dict_update")},
     "ops_metric": ("n/a", [], "no live caller: Session._metric is never called (accuracy and log_loss "
                               "run through ops_session_call)"),
-    "onnx_from_words": ("n/a", [], "the torch.export import path: needs torch, which a verifier run never "
-                                   "has; the ONNX path is sequence-onnx-import"),
     **{e: ("covered", ["mamba2-decode-session"], _MAMBA_SESSION)
        for e in ("mamba2_session_export_state", "mamba2_session_load_state", "mamba2_session_open")},
     **{e: ("covered", ["mamba3-decode-session"], _MAMBA_SESSION)

@@ -41,15 +41,16 @@
                          Conv/Relu/MaxPool/Flatten/Gemm ONNX fixture, written in process to a
                          temporary directory, then one Program.run; finite logits of the
                          expected shape, a SMOKE_DIGEST line (the logits).
-  import-torch-smoke     (2026-10-20, lane ag-torch-twins) mojolearn.import_model of a torch.export
-                         ExportedProgram: a tiny nn.Module (linear, layer norm, linear: the shared
-                         fixture's shapes and weights) exported in process, then one Program.run;
+  import-torch-smoke     (2026-10-20, lane ag-torch-twins; 2026-10-22 the two-step path) a tiny
+                         nn.Module (linear, layer norm, linear: the shared fixture's shapes and
+                         weights) exported in process with torch.onnx.export, the file imported with
+                         mojolearn.import_model, then one Program.run;
                          prints `RUN torch <version>` and a SMOKE_DIGEST line, or `SKIPPED no torch
                          (<reason>)` and exits 0 when torch is missing (MOJOLEARN_REQUIRE_TORCH=1 makes
                          that a failure). The row's status reads `SKIPPED` then, never `ok`.
   real-model-smoke       (2026-10-20, lane ag-real-models) tools/real_model_import.py in miniature:
-                         torchvision's squeezenet1_1 with its published weights, torch.export at a
-                         1 x 3 x 64 x 64 input, import_model, one Program.run; finite (1, 1000)
+                         torchvision's squeezenet1_1 with its published weights, torch.onnx.export at a
+                         1 x 3 x 64 x 64 input, import_model of the file, one Program.run; finite (1, 1000)
                          logits and a SMOKE_DIGEST line, or SMOKE_REFUSED lines naming each node.
 
 The registry also covers dropout/resume, validation and best-state restore, Program.fit and dynamic
@@ -139,9 +140,9 @@ ENTRIES = (
     # 2026-10-20 (lane ag-import-docs): model import, docs/plans/MODEL_IMPORT.md
     {"name": "import-model-smoke", "probe": "import",
      "what": "mojolearn.import_model of a tiny ONNX file written in process, then one Program.run"},
-    # 2026-10-20 (lane ag-torch-twins): the torch.export source of the importer; RUN or SKIPPED, never silent
+    # 2026-10-20 (lane ag-torch-twins; 2026-10-22 two-step): a torch module through ONNX; RUN or SKIPPED, never silent
     {"name": "import-torch-smoke", "probe": "import-torch",
-     "what": "mojolearn.import_model of a tiny torch.export ExportedProgram, then one Program.run (SKIPPED without torch)"},
+     "what": "a tiny torch module exported with torch.onnx.export, the file imported, then one Program.run (SKIPPED without torch)"},
     # 2026-10-20 (lane ag-real-models): a real pretrained model, tools/real_model_import.py in miniature
     {"name": "real-model-smoke", "probe": "real-model",
      "what": "torchvision squeezenet1_1 (published weights) exported at 1x3x64x64, imported, one Program.run"},
@@ -342,15 +343,17 @@ def _load_onnx_fixture():
 
 
 def probe_import_torch():
-    """import-torch-smoke: does a torch.export import start and its Program run. The module is the
-    shared linear_layernorm_linear fixture (x [4, 6] -> Linear 5 -> LayerNorm -> Linear 3) rebuilt as
-    an nn.Sequential holding the fixture's weights, exported at batch 4. Prints RUN or SKIPPED, always."""
+    """import-torch-smoke: does the two-step torch import (torch.onnx.export to a file, then
+    mojolearn.import_model of the file) start and its Program run. The module is the shared
+    linear_layernorm_linear fixture (x [4, 6] -> Linear 5 -> LayerNorm -> Linear 3) rebuilt as an
+    nn.Sequential holding the fixture's weights, exported at batch 4. Prints RUN or SKIPPED, always.
+    (2026-10-22, lane purge-user-objects: retargeted from the removed torch.export reader.)"""
     import tempfile
     import numpy as np
     try:
         import torch
-        import torch.export  # noqa: F401
-    except Exception as exc:  # torch absent, or too old for torch.export
+        import torch.onnx  # noqa: F401
+    except Exception as exc:  # torch absent, or without its ONNX exporter
         print("SKIPPED no torch (%s: %s)" % (type(exc).__name__, str(exc)[:160]), flush=True)
         if os.environ.get("MOJOLEARN_REQUIRE_TORCH") == "1":
             print("SMOKE_FAIL import-torch MOJOLEARN_REQUIRE_TORCH=1 and torch does not import")
@@ -370,8 +373,11 @@ def probe_import_torch():
         fc2.weight.copy_(I["w2"]); fc2.bias.copy_(I["b2"])
     module = torch.nn.Sequential(fc1, ln, fc2).eval()
     x = np.random.default_rng(7).standard_normal((4, 6), dtype=np.float32)
-    ep = torch.export.export(module, (torch.from_numpy(x),))
-    model = mojolearn.import_model(ep)
+    with tempfile.TemporaryDirectory() as tmp:
+        path = os.path.join(tmp, "module.onnx")
+        with torch.no_grad():
+            torch.onnx.export(module, (torch.from_numpy(x),), path, opset_version=17)
+        model = mojolearn.import_model(path)
     y = model.run(x)
     y = np.asarray(y[0] if isinstance(y, (list, tuple)) else y)
     if y.shape != (4, 3) or not np.isfinite(y).all():
@@ -401,13 +407,15 @@ def probe_real_model():
         print("SMOKE_FAIL real-model torch or torchvision is not installed (%s)" % exc)
         return 1
     model = dict(rm.MODELS["squeezenet1_1"], input=(lambda b: (1, 3, 64, 64), "image"))
-    ep, shapes, arrays, _ = rm.source_torchvision(model, 1, 7, {})
-    try:
-        prog = mojolearn.import_model(ep, shapes=shapes)
-    except UnsupportedModel as e:
-        for name, op, why in e.problems:
-            print("SMOKE_REFUSED real-model squeezenet1_1 %s %s: %s" % (op, name, why))
-        return 0
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        path, shapes, arrays, _ = rm.source_torchvision(model, 1, 7, {}, tmp)
+        try:
+            prog = mojolearn.import_model(path, shapes=shapes)
+        except UnsupportedModel as e:
+            for name, op, why in e.problems:
+                print("SMOKE_REFUSED real-model squeezenet1_1 %s %s: %s" % (op, name, why))
+            return 0
     y = np.asarray(prog.run(*arrays))
     if y.shape != (1, 1000) or not np.isfinite(y).all():
         print("SMOKE_FAIL real-model output %s finite %s" % (y.shape, bool(np.isfinite(y).all())))

@@ -1,5 +1,14 @@
 # Importing PyTorch and ONNX models for inference (plan, lane ag-importer-plan, 2026-10-20)
 
+> **2026-10-22 (lane purge-user-objects): the `torch.export` reader is removed.** It walked torch.fx
+> nodes, SymInt sizes and torch tensors in Python (58 `# cpu-route:` tags) and its GraphIR crossed into
+> Mojo through a Python word builder (`graph_words`, `onnx_from_words`, 18 more). No Python in the
+> runtime: `import_model` takes an ONNX file only, read, resolved and lowered in one native call, and a
+> torch object is refused with a `ValueError` naming the two-step path,
+> `torch.onnx.export(model, args, "model.onnx")` then `import_model("model.onnx")`. The catalog check,
+> tools/real_model_import.py, tools/import_compare.py `--torch` and the autograd smoke probes export to
+> ONNX first. The sections below on the torch.export reader are history.
+
 Ideas and plan only: no code was written for this document and nothing was
 compiled or run. It is the brief the Opus implementation lanes code against.
 Read with docs/plans/AUTOGRAD_API.md (the session and the Program design

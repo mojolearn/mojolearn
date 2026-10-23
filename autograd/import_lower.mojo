@@ -4,7 +4,7 @@
 (docs/plans/MODEL_IMPORT.md section 7, step 2 of the native import boundary).
 
 `onnx_import(handle, session, names, flat, addrs, source)` takes a graph read
-by autograd/import_reader.mojo (or built by `onnx_from_words` below) and an
+by autograd/import_reader.mojo and an
 inference `OpsSession` and does what importers/_lower.py and _program.py did
 in Python, in the same order with the same arguments, so the captured
 program's words are the Python lowering's word for word:
@@ -39,12 +39,7 @@ reader's problems come back as status 5 like the lowering's; a file the
 reader refuses outright as
   6: [6, reader status (1-4), message, 1 when the file does not exist].
 
-`onnx_from_words(words, strings, floats, addrs)` builds a graph handle from
-the word layout `onnx_info` returns (header, then the status-0 body; every
-buffer an external one at its address): the torch.export reader's GraphIR
-takes the same lowering through it.
-
-The Python doors (`onnx_import_py`, `onnx_from_words_py`: argument and
+The Python doors (`onnx_import_py`, `onnx_import_file_py`: argument and
 result conversion only) are in import_lower_pyapi.mojo.
 
 Description only on the host: names, shapes, axes and attribute numbers.
@@ -2028,159 +2023,5 @@ def onnx_import_file[E: Exec & Movable & Deinitable, KIND: Int](
         onnx_close(h)  # a handle already closed is a no-op
         raise Error(msg)
 
-
-# ------------------------------------------------- a graph from words --
-
-struct _Cur(Movable):
-    var w: List[Int]
-    var i: Int
-
-    def __init__(out self, var w: List[Int]):
-        self.w = w^
-        self.i = 0
-
-    def take(mut self) raises -> Int:
-        if self.i >= len(self.w):
-            raise Error("onnx_from_words: the words end early")
-        var v = self.w[self.i]
-        self.i += 1
-        return v
-
-
-def _le_int(addr: Int, size: Int, dt: Int) -> Int:
-    """The little-endian integer of `size` bytes at `addr` (the reader's decode)."""
-    var p = UnsafePointer[UInt8, MutUntrackedOrigin](unsafe_from_address=addr)
-    var u = UInt64(0)
-    for b in range(size):  # cpu-route: model graph description (the bytes of one integer)
-        u |= UInt64(p[b]) << UInt64(8 * b)
-    if dt == DT_I64:
-        return Int(bitcast[DType.int64](u))
-    if dt == DT_I32:
-        return Int(bitcast[DType.int32](u.cast[DType.uint32]()))
-    return Int(u)
-
-
-def _w_tensor_rec(mut c: _Cur, bufs: List[Int]) raises -> TRec:
-    var name = c.take()
-    var dt = c.take()
-    var rank = c.take()
-    var dims = List[Int]()
-    for _ in range(rank):  # cpu-route: model graph description (one per axis)
-        dims.append(c.take())
-    var buf = c.take()
-    var start = c.take()
-    var end = c.take()
-    if buf < 0 or buf >= len(bufs) or end < start:
-        raise Error("onnx_from_words: a tensor names buffer " + String(buf))
-    var t = TRec(name, dt, dims^, buf, start, end - start, List[Int]())
-    if is_int_dtype(dt):
-        var size = itemsize(dt)
-        var count = t.numel()
-        if count * size > end - start:
-            raise Error("onnx_from_words: a tensor holds fewer bytes than its shape")
-        var base = bufs[buf] + start
-        for k in range(count):  # cpu-route: model graph description (integer description values)
-            t.ints.append(_le_int(base + k * size, size, dt))
-    return t^
-
-
-def _w_gvalue(mut c: _Cur) raises -> GValue:
-    var name = c.take()
-    var dt = c.take()
-    var rank = c.take()
-    var dims = List[Int]()
-    var dstr = List[Int]()
-    for _ in range(rank):  # cpu-route: model graph description (one per axis)
-        var is_str = c.take()
-        var v = c.take()
-        if is_str != 0:
-            dims.append(0)
-            dstr.append(v)
-        else:
-            dims.append(v)
-            dstr.append(-1)
-    return GValue(name, dt, dims^, dstr^)
-
-
-def onnx_from_words(var words: List[Int], strings: List[String], floats: List[Float64],
-                    bufs: List[Int]) raises -> Int:
-    """A graph handle from the `onnx_info` word layout (header, then the
-    status-0 body), its strings (index 0 the empty string), its floats and
-    the address of each buffer. Returns the handle (>= 1)."""
-    var g = OnnxGraph()
-    for i in range(len(strings)):  # cpu-route: model graph description (the graph's strings)
-        var k = g.st.intern(strings[i])
-        if k != i:
-            raise Error("onnx_from_words: string " + String(i) + " repeats an earlier one")
-    var fl = floats.copy()
-    var c = _Cur(words^)
-    if c.take() != 0x4F4E5852 or c.take() != 1 or c.take() != ONNX_OK:
-        raise Error("onnx_from_words: not a status-0 graph of word layout 1")
-    g.opset = c.take()
-    var nb = c.take()
-    if nb != len(bufs):
-        raise Error("onnx_from_words: " + String(nb) + " buffers, " + String(len(bufs)) + " addresses")
-    for _ in range(nb):  # cpu-route: model graph description (the buffers)
-        g.buf_kind.append(c.take())
-        g.buf_path.append(c.take())
-        g.buf_size.append(c.take())
-    for _ in range(c.take()):  # cpu-route: model graph description (graph inputs)
-        g.inputs.append(_w_gvalue(c))
-    for _ in range(c.take()):  # cpu-route: model graph description (graph outputs)
-        g.outputs.append(_w_gvalue(c))
-    for _ in range(c.take()):  # cpu-route: model graph description (graph nodes)
-        var op = c.take()
-        var dom = c.take()
-        var name = c.take()
-        var ins = List[Int]()
-        for _ in range(c.take()):  # cpu-route: model graph description (node inputs)
-            ins.append(c.take())
-        var outs = List[Int]()
-        for _ in range(c.take()):  # cpu-route: model graph description (node outputs)
-            outs.append(c.take())
-        var attrs = List[AttrVal]()
-        for _ in range(c.take()):  # cpu-route: model graph description (node attributes)
-            var an = c.take()
-            var kind = c.take()
-            var av = AttrVal.make(an, kind)
-            if kind == AK_FLOAT:
-                var fi = c.take()
-                if fi < 0 or fi >= len(fl):
-                    raise Error("onnx_from_words: a float index is out of range")
-                av.f = fl[fi]
-            elif kind == AK_INT:
-                av.i = c.take()
-            elif kind == AK_STRING:
-                av.s = c.take()
-            elif kind == AK_TENSOR:
-                av.tensors.append(_w_tensor_rec(c, bufs))
-            elif kind == AK_FLOATS:
-                var first = c.take()
-                var end = c.take()
-                if first < 0 or end > len(fl) or end < first:
-                    raise Error("onnx_from_words: a float range is out of range")
-                for j in range(first, end):  # cpu-route: model graph description (attribute list)
-                    av.floats.append(fl[j])
-            elif kind == AK_INTS:
-                for _ in range(c.take()):  # cpu-route: model graph description (attribute list)
-                    av.ints.append(c.take())
-            elif kind == AK_STRINGS:
-                for _ in range(c.take()):  # cpu-route: model graph description (attribute list)
-                    av.strs.append(c.take())
-            elif kind == AK_TENSORS:
-                for _ in range(c.take()):  # cpu-route: model graph description (attribute list)
-                    av.tensors.append(_w_tensor_rec(c, bufs))
-            else:
-                raise Error("onnx_from_words: attribute kind " + String(kind))
-            attrs.append(av^)
-        g.nodes.append(GNode(op, dom, name, ins^, outs^, attrs^))
-    for _ in range(c.take()):  # cpu-route: model graph description (initializers)
-        g.set_init(_w_tensor_rec(c, bufs))
-    var p = alloc[OnnxGraph](1)
-    p.init_pointee_move(g^)
-    var s = _ONNX_GRAPHS.get_or_create_ptr()
-    var hid = s[].next_id
-    s[].next_id += 1
-    s[].ids.append(hid)
-    s[].addr.append(Int(p))
-    return hid
+# TOMBSTONE: onnx_from_words (the torch.export GraphIR to a graph handle) deleted 2026-10-22 by lane
+# purge-user-objects with the torch.export reader; import a torch model as an ONNX file instead.

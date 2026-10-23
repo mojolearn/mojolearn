@@ -1201,9 +1201,6 @@ def import_model(source, *, shapes=None, numeric_mode=None):
     from mojolearn.ops import Session
     if isinstance(source, GraphIR):
         g = source
-    elif hasattr(source, "graph_signature") and hasattr(source, "graph_module"):
-        from mojolearn.importers import torch_export
-        g = torch_export.read(source)
     else:
         from mojolearn.importers import onnx as onnx_reader
         g = onnx_reader.read(source)

@@ -4,6 +4,9 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ## 0.8.56 (unreleased)
 
+- `mojolearn.import_model` takes an ONNX file. To import a PyTorch model, export it first with
+  `torch.onnx.export(model, args, "model.onnx")` and pass the file; passing a torch object raises `ValueError` with
+  that instruction.
 - `PCA.fit` and `PCA.fit_transform` run as one native call for every solver, including `n_components="mle"`, a
   variance fraction and `svd_solver="randomized"`; results are unchanged. With `whiten=True`, non-finite data or fitted
   arrays are refused by the transform itself.

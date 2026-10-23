@@ -3,8 +3,8 @@
 (docs/plans/MODEL_IMPORT.md section 6)."""
 # Engineering note: an ONNX path is one onnx_import_file call (the Mojo
 # reader opens and reads the file, keeps its bytes, and the lowering runs on
-# them; no GraphIR is built in Python). A GraphIR (torch_export.py, or one
-# onnx.read returned) goes through one onnx_import call into an
+# them; no GraphIR is built in Python). A graph onnx.read returned (its
+# handle in the Mojo reader) goes through one onnx_import call into an
 # inference Session (autograd/import_lower.mojo: shape resolution, the
 # refusal pass before any upload, the uploads, the import-time prologue, one
 # session call per operation, the capture, the release of unread uploads).
@@ -16,23 +16,25 @@ from __future__ import annotations
 import os
 
 from ..ops import Program, Session
-from ._graph import GraphIR, UnsupportedModel, buffer_address, bytes_view, graph_words
+from ._graph import GraphIR, UnsupportedModel, buffer_address, bytes_view
 from ._table import session_shape
 
 __all__ = ["import_model", "ImportedProgram"]
 
 
+_TORCH_TO_ONNX = ('export the torch model to ONNX first, then import the file: '
+                  'torch.onnx.export(model, args, "model.onnx"); mojolearn.import_model("model.onnx")')
+
+
 def _read(source):
-    if isinstance(source, GraphIR):
+    # a graph mojolearn.importers.onnx.read returned: its handle in the Mojo reader
+    if isinstance(source, GraphIR) and getattr(source, "_native", None) is not None:
         return source
-    if hasattr(source, "graph_signature") and hasattr(source, "graph_module"):
-        try:
-            from . import torch_export
-        except ImportError:
-            raise TypeError("importing a torch.export.ExportedProgram is not available in this install") from None
-        return torch_export.read(source)
-    raise TypeError("source must be the path of an ONNX file or a torch.export.ExportedProgram, "
-                    f"got {type(source).__name__}")
+    # a torch object (an nn.Module, a user subclass of one, or a torch.export program)
+    if any(str(c.__module__).split(".", 1)[0] == "torch" for c in type(source).__mro__):  # glue: the argument's class chain
+        raise ValueError(f"mojolearn.import_model takes an ONNX file, not a {type(source).__name__}: "
+                         + _TORCH_TO_ONNX)
+    raise TypeError(f"source must be the path of an ONNX file, got {type(source).__name__}")
 
 
 # autograd/import_lower.mojo onnx_import statuses
@@ -123,8 +125,7 @@ def _dtype_name(ir_dtype):
 def import_model(source, *, shapes=None, numeric_mode=None):
     """Import a trained model for inference.
 
-    ``source`` is the path of an ONNX file (opset 13 or later) or a
-    ``torch.export.ExportedProgram``. The model's weights are copied to the
+    ``source`` is the path of an ONNX file (opset 13 or later). The model's weights are copied to the
     device once and its operations run as one call per
     :meth:`ImportedProgram.run`, with the same results on Apple, NVIDIA and
     AMD GPUs and on the CPU. In `identical` mode, mojolearn returns the same
@@ -132,8 +133,10 @@ def import_model(source, *, shapes=None, numeric_mode=None):
 
     Parameters
     ----------
-    source : str, path-like or torch.export.ExportedProgram
-        The model.
+    source : str or path-like
+        The model's ONNX file. To import a PyTorch model, export it to ONNX
+        first with ``torch.onnx.export(model, args, "model.onnx")`` and pass
+        the file.
     shapes : dict, optional
         The shape of each input whose size the model leaves open (such as
         the batch), by input name: ``{"input": (8, 3, 32, 32)}``. The
@@ -155,6 +158,8 @@ def import_model(source, *, shapes=None, numeric_mode=None):
     UnsupportedModel
         The model uses operations, attributes or shapes the import does not
         support; the message lists every one, by node name.
+    ValueError
+        ``source`` is a PyTorch object; export it to ONNX first.
 
     Examples
     --------
@@ -166,7 +171,6 @@ def import_model(source, *, shapes=None, numeric_mode=None):
     """
     s = Session(record=False, numeric_mode=numeric_mode)
     b = s._b
-    words_handle = None
     keep = ()
     try:
         if not hasattr(b, "onnx_import_file"):
@@ -180,15 +184,13 @@ def import_model(source, *, shapes=None, numeric_mode=None):
         else:
             g = _read(source)
             src = g.source
-            native = getattr(g, "_native", None)
-            if native is not None and native.b is b:
-                # a graph the Mojo reader holds in this session's module: its buffers by address
-                keep = [bytes_view(v) for v in native.views]  # glue: one view per model file or data buffer
-                handle = native.h
-            else:
-                # a GraphIR built in Python (torch.export), or read by another module: to Mojo as words
-                words, strings, floats, keep = graph_words(g)
-                handle = words_handle = int(b.onnx_from_words(words, strings, floats, [buffer_address(a) for a in keep]))  # glue: one address per tensor buffer
+            native = g._native
+            if native.b is not b:
+                raise ValueError("the graph was read by another binding than this session's; "
+                                 "pass the ONNX file's path instead")
+            # a graph the Mojo reader holds in this session's module: its buffers by address
+            keep = [bytes_view(v) for v in native.views]  # glue: one view per model file or data buffer
+            handle = native.h
             # one call: every problem is listed before anything reaches the device
             res = b.onnx_import(handle, s._sid(), names, flat, [buffer_address(a) for a in keep], str(src))  # glue: one address per tensor buffer
         status = int(res[0])
@@ -212,7 +214,5 @@ def import_model(source, *, shapes=None, numeric_mode=None):
         s.close()
         raise
     finally:
-        if words_handle is not None:
-            b.onnx_close(words_handle)
         del keep
     return prog

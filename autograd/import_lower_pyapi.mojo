@@ -5,7 +5,7 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call
 from sequence.exec_trait import Exec
 from autograd.import_lower import (
-    IMPORT_BAD_VALUE, IMPORT_OK, IMPORT_PROBLEMS, IMPORT_READ_FAILED, OnnxImport, _Found, onnx_from_words,
+    IMPORT_BAD_VALUE, IMPORT_OK, IMPORT_PROBLEMS, IMPORT_READ_FAILED, OnnxImport, _Found,
     onnx_import, onnx_import_file,
 )
 from autograd.pyapi import program_info
@@ -103,15 +103,3 @@ def _import_out(r: OnnxImport) raises -> PythonObject:
     _ = py_call(res.append, in_meta)
     _ = py_call(res.append, out_meta)
     return res
-
-
-def onnx_from_words_py(words: PythonObject, strings: PythonObject, floats: PythonObject,
-                       addrs: PythonObject) raises -> PythonObject:
-    """A graph handle from the `onnx_info` word layout, its strings, its
-    floats and the address of each buffer. Returns the handle (>= 1)."""
-    var strs = _str_list(strings)
-    var fl = List[Float64]()
-    for i in range(len(floats)):  # driver-loop: over attribute numbers, converted; cpu-route: model graph description conversion
-        fl.append(Float64(py=floats[i]))
-    var bufs = _int_list(addrs)
-    return PythonObject(onnx_from_words(_int_list(words), strs, fl, bufs))
