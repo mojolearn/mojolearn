@@ -9,6 +9,7 @@ from std.python import PythonObject
 from bindings.kmeans_native import kmeans_operation
 from bindings.model_selection_native import msel_operation
 from bindings.kernel_methods_native import kernel_methods_operation
+from bindings.linalg_native import linalg_operation
 
 
 def family_operation(model: PythonObject, operation: String, args: PythonObject,
@@ -17,6 +18,8 @@ def family_operation(model: PythonObject, operation: String, args: PythonObject,
         return kmeans_operation(model, operation, args, context)
     if operation.startswith("family_km_"):
         return kernel_methods_operation(model, operation, args, context)
+    if operation.startswith("family_chol_"):
+        return linalg_operation(model, operation, args, context)
     if operation.startswith("family_msel_"):
         return msel_operation(model, operation, args, context)
     raise Error("RuntimeError: unknown family operation " + operation)
