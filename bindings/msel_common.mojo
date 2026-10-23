@@ -21,6 +21,7 @@ from bindings.family_common import (
     family_is_str, family_repr, family_str, family_type_name,
 )
 from bindings.metrics_reg_native import _Prog, _reg_run, _arena_base, _arena_int
+from bindings.native_buffer_owner import native_storage_allocate
 
 comptime MSEL_NONE = -1
 comptime MSEL_U8P = MutPointer[UInt8, MutUntrackedOrigin]
@@ -277,6 +278,11 @@ def msel_index_i64(value: PythonObject, context: PythonObject) raises -> PythonO
     if dtype == "<i8":
         return value
     var codes = context["family_msel_codes"]
+    if not py_contains(codes, PythonObject(dtype)):
+        # a narrow integer dtype the cast does not name: `array('q', view)`
+        # widens it in C
+        var store = family_call(Python.import_module("array").array, PythonObject("q"), value._mv)
+        return classical_wrap_array(store, Python.tuple(len(store)), "<i8", "C", context)
     var out = msel_new(Int(py=value.size), "<i8", context)
     if Int(py=value.size) > 0:
         _ = family_call(msel_entry("cast_elements", context), PythonObject(msel_addr(value)), codes[PythonObject(dtype)],
@@ -631,3 +637,58 @@ def msel_shuffle_sizes(n: Int, test_size_in: PythonObject, train_size: PythonObj
                     + family_str(train_size) + ", the resulting train set will be empty. Adjust any of the "
                     + "aforementioned parameters.")
     return (tr, te)
+
+
+# ---------------------------------------------------------------- resident rows
+
+
+def msel_resident_op(res: PythonObject, op: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """One `_Resident` lifecycle operation through its compiled door
+    (bindings/arena_resident_native.mojo), as the Python methods call it."""
+    return family_call(context["family_msel_resident_call"], res, PythonObject(op), args,
+                       context["family_msel_resident_context"])
+
+
+def msel_resident_new(context: PythonObject) raises -> PythonObject:
+    """`_Resident()`: the instance allocated and initialized by its door."""
+    var res = native_storage_allocate(context["family_msel_resident_class"])
+    _ = msel_resident_op(res, "msel_resident_init", Python.tuple(), context)
+    return res
+
+
+def msel_resident_take(res: PythonObject, values: PythonObject, indices: PythonObject,
+                       context: PythonObject) raises -> PythonObject:
+    return msel_resident_op(res, "msel_resident_take", Python.tuple(values, indices), context)
+
+
+def msel_resident_release(res: PythonObject, values: PythonObject, context: PythonObject) raises:
+    _ = msel_resident_op(res, "msel_resident_release", Python.tuple(values), context)
+
+
+def msel_resident_close(res: PythonObject, context: PythonObject) raises:
+    _ = msel_resident_op(res, "msel_resident_close", Python.tuple(), context)
+
+
+def msel_take_any(values: PythonObject, indices: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_take_any` / `_take_rows`: a list or tuple taken by index (a list),
+    else one device gather out of a `_Resident` used once."""
+    var b = msel_b()
+    if family_isinstance(values, Python.tuple(b.list, b.tuple)):
+        return py_call(b.list, py_call(b.map, py_call(b.getattr, values, PythonObject("__getitem__")), indices._mv))
+    var res = msel_resident_new(context)
+    var out = PythonObject(None)
+    try:
+        out = msel_resident_take(res, values, indices, context)
+    finally:
+        msel_resident_close(res, context)
+    return out
+
+
+def msel_lazy(model: PythonObject, op: String, items: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A lazy iterator of `door(model, op, item, context)` over `items` (each
+    an argument tuple): `map` over the compiled door, so a splitter with
+    one split per row or per combination makes each split on demand, as the
+    Python generator did, with no Python frame."""
+    var itertools = Python.import_module("itertools")
+    return py_call(msel_b().map, context["family_msel_door"], py_call(itertools.repeat, model),
+                   py_call(itertools.repeat, PythonObject(op)), items, py_call(itertools.repeat, context))
