@@ -687,3 +687,39 @@ def msel_lazy(model: PythonObject, op: String, items: PythonObject, context: Pyt
     var itertools = Python.import_module("itertools")
     return py_call(msel_b().map, context["family_msel_door"], py_call(itertools.repeat, model),
                    py_call(itertools.repeat, PythonObject(op)), items, py_call(itertools.repeat, context))
+
+
+# ---------------------------------------------------------------- scorers
+
+
+def _msel_attr(model: PythonObject, name: String) raises -> PythonObject:
+    """`model.<name>` with its own AttributeError."""
+    return family_call(Python.import_module("builtins").getattr, model, PythonObject(name))
+
+def msel_get_scorer(scoring: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`get_scorer(scoring)`."""
+    var b = Python.import_module("builtins")
+    if scoring is None or Bool(py=py_call(b.callable, scoring)):
+        return scoring
+    if family_is_str(scoring):
+        var table = context["family_msel_scorers"]
+        if not py_contains(table, scoring):
+            raise Error(family_repr(scoring) + " is not a valid scoring value. Use "
+                        + "sklearn.metrics.get_scorer_names() to get valid options.")
+        return table[scoring]
+    raise Error("scoring must be a str, a callable or None, got " + family_repr(scoring))
+
+
+def msel_score(estimator: PythonObject, x: PythonObject, y: PythonObject, scorer: PythonObject,
+               context: PythonObject) raises -> PythonObject:
+    """`model_selection._score(estimator, X, y, scorer)`: the estimator's own
+    `score` without a scorer; a real scalar, as a float."""
+    var b = Python.import_module("builtins")
+    var value: PythonObject
+    if scorer is None:
+        value = family_call(_msel_attr(estimator, "score"), x, y)
+    else:
+        value = family_call(scorer, estimator, x, y)
+    if not family_isinstance(value, context["family_msel_real"]):
+        raise Error("TypeError: scoring must return a real scalar")
+    return family_call(b.float, value)

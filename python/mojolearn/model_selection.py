@@ -430,45 +430,7 @@ def split_descriptor(X, y, *, estimator=None, cv=None, groups=None):
     >>> scores = cross_val_score(model, X, y)
     >>> record = split_descriptor(X, y, estimator=model)
     """
-    if (cv is None or (not is_bool(cv) and isinstance(cv, numbers.Integral))) and estimator is None:
-        raise ValueError(
-            'split_descriptor: the default folds are stratified for a classifier '
-            'and plain KFold otherwise, so estimator is required when cv is None '
-            'or an integer (pass the estimator cross_val_score was given)')
-    X = _materialize(X, 'X')[0]
-    if X.ndim != 2 or not X.shape[0] or not X.shape[1]:
-        raise ValueError('X must be a nonempty dense 2-D buffer array')
-    try:
-        y = _materialize(y, 'y')[0]
-    except TypeError:
-        y = flatten_labels(y)
-    if len(y) != len(X):
-        raise ValueError('y must be a 1-D buffer array matching X rows')
-    folds = []
-    for train, test in _folds(cv, estimator, X, y, groups):  # glue: one validated index pair per fold (n_splits sized)
-        # ``_indices`` has already normalized both sides to signed Int64, and
-        # Array.tolist() returns ordinary Python ints.  Re-wrapping every row
-        # with ``int`` duplicated millions of Python calls when recording a
-        # large cross-validation split without changing the canonical JSON.
-        folds.append((_indices(train, len(X), 'train').tolist(),
-                      _indices(test, len(X), 'test').tolist()))
-    if not folds:
-        raise ValueError('cv must produce at least one fold')
-    descriptor = {
-        'schema': SPLIT_DESCRIPTOR_SCHEMA,
-        'n_rows': len(X),
-        'n_features': X.shape[1],
-        # THE ROW ORDER. The two fields a permutation moves.
-        'X_sha256': _order_digest(X, 'X'),
-        'y_sha256': _order_digest(y, 'y'),
-        'groups_sha256': None if groups is None else _order_digest(groups, 'groups'),
-        # A summary, NOT the pin; see the trap in this function's docstring.
-        'fold_assignment_sha256': _digest(b'folds', _canonical(folds)),
-        'n_folds': len(folds),
-        'fold_sizes': [[len(train), len(test)] for train, test in folds],  # glue: two size integers per fold (n_splits sized)
-    }
-    descriptor['sha256'] = hashlib.sha256(_canonical(descriptor)).hexdigest()
-    return descriptor
+    return _NATIVE(None, "family_msel_split_descriptor", (X, y, estimator, cv, groups), _NATIVE_CONTEXT)
 
 
 def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
@@ -538,46 +500,8 @@ def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
     >>> y = rng.random(1000, dtype=np.float32)
     >>> scores = cross_val_score(mojolearn.Ridge(alpha=1.0), X, y, cv=5)
     """
-    # Behavioral reference: sklearn 1.8.0 model_selection/_validation.py,
-    # cross_validate (clone per fold), cross_val_score and _fit_and_score
-    # (training slice -> fit -> heldout score, lines 540-690 and 820-865).
-    # CV-1: bounded serial/dense/no metadata; errors propagate. CV-2: validate
-    # all index pairs before fitting, additionally refusing overlap/duplicates.
-    if is_bool(n_jobs) or not isinstance(n_jobs, numbers.Integral) or n_jobs != 1:
-        raise NotImplementedError('cross_val_score supports n_jobs=1 only')
-    if isinstance(scoring, str):
-        scoring = get_scorer(scoring)
-    X, y, folds = _prepare_folds(estimator, X, y, cv, scoring, groups, error_score)
-    # CV_FAST_SLICE (FAST + Apple build of the resample binding, default ON
-    # since 2026-10-04, rollback -D MOJOLEARN_CV_FAST_SLICE_OFF;
-    # resample/estimator.mojo CV_FAST_SLICE): the native default
-    # folds of a regressor are contiguous ascending row blocks, so each
-    # fold's test rows are a zero-copy view and its training rows two
-    # memcpys (or a view) instead of four `_take_rows` byte gathers. Same
-    # rows in the same order.
-    ranges = None
-    if _cv_fast_on(_CV_SLICE_BIT) and _native_default_cv(cv, groups):
-        ranges = _kfold_ranges(X, y, folds)
-    range_at = iter(ranges or ())
-    scores = []
-    # X, y and the fold indices resident on the device for every fold; the
-    # CV_FAST_SLICE contiguous-range views above (FAST + Apple) when they apply
-    with _FoldRows(X, y, folds, device_rows=_device_rows_ok(estimator, scoring)) as rows:
-        for i in range(len(folds)):  # glue: one fit per fold
-            fitted = _clone(estimator)
-            try:
-                if ranges is not None:
-                    a, b = next(range_at)
-                    fold_rows = (_rows_outside(X, a, b), _rows_outside(y, a, b),
-                                 _row_range_view(X, a, b), _row_range_view(y, a, b))
-                else:
-                    fold_rows = rows.take(i)
-                scores.append(_fit_score_fold(fitted, *fold_rows, scoring))
-            finally:
-                # Release each fold before constructing the next estimator. Native
-                # contexts retain their own cleanup contract; no forced GPU reset.
-                del fitted
-    return Array.from_list(scores, "<f8")
+    return _NATIVE(None, "family_msel_cross_val_score", (estimator, X, y, cv, scoring, groups, n_jobs, error_score),
+                   _NATIVE_CONTEXT)
 
 
 def _prepare_folds(estimator, X, y, cv, scoring, groups, error_score):
@@ -636,9 +560,15 @@ _CV_SLICE_BIT = 32        # CV_FAST_SLICE (default; _OFF rolls back)
 _CV_TRUST_FOLDS_BIT = 64  # CV_FAST_TRUST_FOLDS (default; _OFF rolls back)
 
 
-def _cv_fast_on(bit):
+def _cv_fast_defines():
+    """The resample binding's FAST define mask (binding acquisition; 0 off
+    the FAST tier), read by the native cross-validation owner."""
     from . import resample as _resample
-    return bool(_resample.fast_defines() & bit)
+    return _resample.fast_defines()
+
+
+def _cv_fast_on(bit):
+    return bool(_cv_fast_defines() & bit)
 
 
 def _native_default_cv(cv, groups):
@@ -2256,10 +2186,9 @@ def cross_validate(estimator, X, y=None, *, groups=None, scoring=None, cv=None, 
     >>> res = cross_validate(mojolearn.Ridge(alpha=1.0), X, y, cv=5,
     ...                      scoring=['r2', 'neg_mean_squared_error'])
     """
-    _require_serial(n_jobs, error_score, 'cross_validate')
-    X, y, folds = _cv_folds(estimator, X, y, cv, groups)
-    return _cross_validate_folds(estimator, X, y, folds, scoring, return_train_score, return_estimator,
-                                 return_indices, error_score)
+    return _NATIVE(None, "family_msel_cross_validate",
+                   (estimator, X, y, groups, scoring, cv, n_jobs, return_train_score, return_estimator,
+                    return_indices, error_score), _NATIVE_CONTEXT)
 
 
 def _cross_validate_folds(estimator, X, y, folds, scoring, return_train_score=False, return_estimator=False,
@@ -2368,10 +2297,8 @@ def cross_val_predict(estimator, X, y=None, *, groups=None, cv=None, n_jobs=None
     >>> y = rng.random(1000, dtype=np.float32)
     >>> pred = cross_val_predict(mojolearn.Ridge(alpha=1.0), X, y, cv=5)
     """
-    _require_serial(n_jobs, 'raise', 'cross_val_predict')
-    X, y, folds = _cv_folds(estimator, X, y, cv, groups)
-    n = len(X)
-    return _cross_val_predict_native(estimator, X, y, folds, n, method)
+    return _NATIVE(None, "family_msel_cross_val_predict", (estimator, X, y, groups, cv, n_jobs, method),
+                   _NATIVE_CONTEXT)
 
 
 def _cross_val_predict_native(estimator, X, y, folds, n, method):
@@ -3432,4 +3359,9 @@ _native_family_bridge.tables(
     family_msel_native_code=dict(_ARRAY_CODE), family_msel_reduce_integral=_REDUCE_INTEGRAL,
     family_msel_native_encode=frozenset(_NATIVE_ENCODE),
     family_msel_resident_class=_Resident, family_msel_resident_call=_RESIDENT_CALL,
-    family_msel_resident_context=_RESIDENT_CONTEXT, family_msel_door=_NATIVE)
+    family_msel_resident_context=_RESIDENT_CONTEXT, family_msel_door=_NATIVE,
+    family_msel_splitters=(KFold, StratifiedKFold, GroupKFold, StratifiedGroupKFold, TimeSeriesSplit, LeaveOneOut,
+                           LeavePOut, LeaveOneGroupOut, LeavePGroupsOut, RepeatedKFold, RepeatedStratifiedKFold,
+                           ShuffleSplit, GroupShuffleSplit, StratifiedShuffleSplit, PredefinedSplit, _IterableCV),
+    family_msel_schema=SPLIT_DESCRIPTOR_SCHEMA, family_msel_arena_io=_arena_io,
+    family_msel_fast_defines=_cv_fast_defines)
