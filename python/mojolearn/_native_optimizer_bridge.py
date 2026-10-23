@@ -22,6 +22,7 @@ def connect(training):
     guards = tuple((cls, cls.__mro__, vars(cls), tuple((name, vars(cls).get(name)) for name in names))  # glue: connect fixed native descriptor identities at import
                    for cls in guarded)  # glue: snapshot native record and array layouts
     bindings = {}
+    metadata_bindings = {}
     entries = ("optimizer_door_step", "optimizer_door_io", "optimizer_door_state",
                "optimizer_door_state_set", "optimizer_door_load_state", "optimizer_door_zero",
                "optimizer_door_clip", "optimizer_door_accumulate", "training_numeric_mode",
@@ -36,6 +37,15 @@ def connect(training):
     for mode in ("identical", "fast"):  # glue: connect every supported numeric-mode ABI at import
         try:
             binding = _backend.binding("_mojolearn_training", mode)
+            # glue: metadata is available independently of optional training
+            # kernels; retain its actual compiled entries once at import.
+            try:
+                metadata_entries = tuple(getattr(binding, name) for name in ("training_numeric_mode", "training_vendor"))  # glue: fixed compiled metadata exports
+                if any(type(entry) is not BuiltinFunctionType for entry in metadata_entries):  # glue: admit only native metadata entry points
+                    raise TypeError("training metadata requires compiled native entries")
+                metadata_bindings[mode] = metadata_entries
+            except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, NotImplementedError) as error:
+                metadata_bindings[mode] = type(error).__name__ + ": " + str(error)
             cells = {}
             for name in entries:  # glue: retain compiled symbols, no runtime backend selection
                 try:
@@ -51,10 +61,13 @@ def connect(training):
             bindings[mode] = cells
         except (ImportError, AttributeError, TypeError, ValueError, RuntimeError, NotImplementedError) as error:
             bindings[mode] = type(error).__name__ + ": " + str(error)
+            if mode not in metadata_bindings:
+                metadata_bindings[mode] = bindings[mode]
     init = _buffer._native("optimizer_door_init")  # cpu-route: native parameter registry metadata only
     if not isinstance(init, BuiltinFunctionType):
         raise TypeError("optimizer requires compiled optimizer_door_init")
     _numeric_profile.default_profile("training")  # glue: initialize the package's numeric-profile connection
+    _backend.default_mode()  # glue: initialize metadata's shared default before public native calls
     input_context = _numpy_free_context()
     input_context["native_module_type"] = ModuleType
     schedule_entries = {}
@@ -74,6 +87,9 @@ def connect(training):
         "type_flags": vars(type)["__flags__"].__get__, "type_mro": vars(type)["__mro__"].__get__,
         "numpy_names": ("ndarray", "bool_", "int8", "uint8", "int16", "uint16", "int32", "uint32", "int64", "uint64", "longlong", "ulonglong", "float16", "float32", "float64", "longdouble"),
         "guards": guards, "bindings": bindings, "init": init,
+        "training_metadata_bindings": metadata_bindings,
+        "training_metadata_types": (str, int, BuiltinFunctionType, tuple),
+        "training_metadata_strip": str.strip, "training_metadata_lower": str.lower,
         "backend": vars(_backend), "profile_defaults": _numeric_profile._defaults,
         "profiles": _numeric_profile.PROFILES, "input_context": input_context,
         "array_getters": {name: vars(Array)[name].__get__ for name in Array.__slots__},  # glue: retain fixed native Array slot descriptors at import
