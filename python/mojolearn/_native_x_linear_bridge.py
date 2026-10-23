@@ -78,9 +78,9 @@ def connect(tables, solver=None):
     import os
     context.update(xl_bindings=linear, classical_metrics=metrics, cd_solver=cd,
                    cd_host_predict=host_predict, environment=os.environ._data,
-                   xl_sgd_clf_loss=dict(tables["sgd_clf_loss"]), xl_sgd_reg_loss=dict(tables["sgd_reg_loss"]),
-                   xl_sgd_penalty=dict(tables["sgd_penalty"]), xl_sgd_lr=dict(tables["sgd_lr"]),
-                   xl_sgd_sum_losses=frozenset(tables["sgd_sum_losses"]),
+                   xl_sgd_clf_loss=dict(tables.get("sgd_clf_loss", {})), xl_sgd_reg_loss=dict(tables.get("sgd_reg_loss", {})),
+                   xl_sgd_penalty=dict(tables.get("sgd_penalty", {})), xl_sgd_lr=dict(tables.get("sgd_lr", {})),
+                   xl_sgd_sum_losses=frozenset(tables.get("sgd_sum_losses", ())),
                    cd_selection=dict(tables.get("cd_selection", {})))
     return call, context
 

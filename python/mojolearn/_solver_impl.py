@@ -60,7 +60,6 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # written to duplicate before the tuple was fixed.
 
 
-
 # Maintainer notes (moved from the docstring, 2026-10-12):
 # Reference: cuml.linear_model.ElasticNet(solver='cd') and
 # cuml/cpp/src/solver/cd.cuh::cdFit; the Mojo implementation is
@@ -236,113 +235,6 @@ class ElasticNet(ParamsMixin):
         self.positive = positive
         self.random_state = random_state
 
-    def _validate_params(self):
-        """The constructor checks, run at the start of `fit`."""
-        alpha, l1_ratio, solver, selection = self.alpha, self.l1_ratio, self.solver, self.selection
-        precompute, copy_X, warm_start, positive = self.precompute, self.copy_X, self.warm_start, self.positive
-        random_state = self.random_state
-        # cuML's own guards first, in their order and with their messages
-        # (`elastic_net.py:233-240`), so a script that catches theirs
-        # catches these.
-        if alpha < 0.0:
-            raise ValueError(f"Expected alpha >= 0, got {alpha}")
-        if selection not in _SELECTION_SHUFFLE:
-            raise ValueError(f"selection {selection!r} is not supported")
-        if l1_ratio < 0.0 or l1_ratio > 1.0:
-            raise ValueError(f"Expected 0.0 <= l1_ratio <= 1.0, got {l1_ratio}")
-        if solver not in ("auto", "cd", "qn"):
-            raise ValueError(f"solver={solver!r} is not supported")
-        # Then the refusals that are this implementation's, each by name.
-        if solver == "qn":
-            raise NotImplementedError(
-                "mojolearn ElasticNet: solver='qn' is not implemented. cuML's "
-                "solver='auto' picks 'qn' only for SPARSE input "
-                "(elastic_net.py:243-244), and 'qn' under an l1 penalty is "
-                "OWL-QN (min_owlqn, qn_solvers.cuh), which glm/NOT_IMPLEMENTED.tsv "
-                "lists as not implemented. solver='cd' (cuML's 'auto' for dense "
-                "input) is the implemented arm; see solver/NOT_IMPLEMENTED.tsv"
-            )
-        if selection == "random":
-            raise NotImplementedError(
-                "mojolearn ElasticNet: selection='random' is REFUSED BY "
-                "NAME. cuML seeds std::mt19937(0) and shuffles the "
-                "coordinate order with std::shuffle each epoch "
-                "(cd.cuh:198-199, :222), and the C++ standard does not specify "
-                "std::shuffle's algorithm, so their permutation is a "
-                "function of the toolchain rather than of the seed and "
-                "cannot be gated bitwise or certified across vendors. An "
-                "exact implementation is DEVIATION 611, reserved and not spent; see "
-                "solver/NOT_IMPLEMENTED.tsv"
-            )
-        if positive:
-            raise NotImplementedError(
-                "mojolearn ElasticNet: positive=True is not supported "
-                "(cuML raises UnsupportedOnGPU for it too, "
-                "elastic_net.py:143)"
-            )
-        if warm_start:
-            raise NotImplementedError(
-                "mojolearn ElasticNet: warm_start=True is not supported "
-                "(cuML raises UnsupportedOnGPU for it too, "
-                "elastic_net.py:146). cdFit reads coef as its starting "
-                "point and solver/estimator.mojo zeroes it on every fit"
-            )
-        if precompute is not False:
-            raise NotImplementedError(
-                "mojolearn ElasticNet: precompute is not supported (cuML "
-                "raises UnsupportedOnGPU for it too, elastic_net.py:149)"
-            )
-        if not copy_X:
-            raise NotImplementedError(
-                "mojolearn ElasticNet: copy_X=False is refused. The design "
-                "crosses to the device as a copy and the caller's array is "
-                "never written (DEVIATION 880); there is no in-place arm to "
-                "select"
-            )
-        # random_state is accepted and stored, scikit-learn's semantics:
-        # it seeds the coordinate draw of selection='random' only and is
-        # inert under 'cyclic' (sklearn ElasticNet: "Used when selection ==
-        # 'random'"). 'random' is refused by name above (DEVIATION 611), so
-        # no fit reads it and no output bit depends on it. Refusing it broke
-        # every nested Lasso(random_state=...) (the board's voting-reg and
-        # stacking-reg members), so it is now accepted.
-        if random_state is not None and (
-                isinstance(random_state, bool)
-                or not (isinstance(random_state, int)
-                        or hasattr(random_state, "randint")
-                        or hasattr(random_state, "integers"))):
-            raise ValueError(
-                f"random_state={random_state!r}: None, an int or a "
-                "numpy random state"
-            )
-
-    def _as_fortran(self, X, name):
-        """A float32 column-major Array over X, and whether that cost the
-        one copy it may cost (DEVIATION 2367).
-
-        `cdFit` reads the design in cuML's `F` order (element (i, j) at
-        `j * n_rows + i`). Returned alongside the flag so the caller can
-        keep the Array alive across the Mojo call, which `_buffer.py`'s
-        borrow contract requires.
-        """
-        f, copied = as_f32_colmajor(X, name=name)
-        # THE ONE THING A SHAPE CHECK CANNOT CATCH LATER. `cd_fit` takes a
-        # bare address plus n_rows and n_cols, and a C-order buffer of the
-        # same size is a VALID transposed design: the fit would run and
-        # return plausible coefficients for the wrong matrix. Two flags of
-        # reading here is the only place that can be caught.
-        if not f.flags["F_CONTIGUOUS"] or f.dtype != "<f4":
-            raise AssertionError(
-                "mojolearn: internal -- the design handed to cd_fit must be "
-                f"float32 and Fortran-ordered, got {f.dtype} "
-                f"F_CONTIGUOUS={f.flags['F_CONTIGUOUS']}"
-            )
-        return f, copied
-
-    def _solver(self):
-        """The binding `fit` and `predict` call; the host subclass of
-        `_classical_host.py` answers the CPU binding instead."""
-        return _mojolearn_solver
 
     # sample_weight (lane sk-kernels): checked here with scikit-learn's
     # wording and handed to the weighted coordinate descent
@@ -369,75 +261,7 @@ class ElasticNet(ParamsMixin):
         self : ElasticNet
             The fitted estimator.
         """
-        # The CPU inference boundary: ElasticNet does not inherit
-        # NumericModeMixin's guard, so on a CPU-only install the fit refuses
-        # outside mojolearn._cpu_reference.reference_training().
-        from ._cpu_reference import require_training
-        require_training(self)
-        self._validate_params()
-        if hasattr(X, "toarray") or hasattr(X, "tocsr"):
-            raise NotImplementedError(
-                "mojolearn ElasticNet: sparse X is refused. cdFit is dense "
-                "only; cuML routes sparse input to solver='qn' and raises "
-                "for solver='cd' (elastic_net.py:265-269), and 'qn' is not "
-                "implemented"
-            )
-        # lane/gap-nv-classical2: a float32 C-order design crosses AS IT IS
-        # and the device transposes it (`cd_fit_host`'s row_major arm), so
-        # no host transpose sits inside the fit. Every other input takes the
-        # one F-order copy as before.
-        a, a_copied = _materialize(X, "X")
-        row_major = bool(a.ndim == 2 and a.dtype == "<f4" and a.size
-                         and a.order == "C" and not a._both_orders())
-        if row_major:
-            work_x, copied = a, a_copied
-        else:
-            work_x, copied = self._as_fortran(a, "X")
-            copied = copied or a_copied
-        self.input_copied_ = copied
-        self.fortran_copied_ = copied
-        n_rows, n_cols = work_x.shape
-        if n_rows < 2:
-            # cdFit needs two rows (its refusal is a bare Exception from the
-            # binding); scikit-learn's check_array wording, raised first
-            raise ValueError(
-                f"Found array with {n_rows} sample(s) (shape=({n_rows}, {n_cols})) "
-                "while a minimum of 2 is required.")
-        if len(_shape_of(y)) != 1:
-            raise ValueError(
-                "mojolearn ElasticNet currently requires one target")
-        target, _ = as_f32_c(y, ndim=1, name="y")
-        if target.shape[0] != n_rows:
-            raise ValueError("mojolearn ElasticNet X and y lengths differ")
-
-        sw = None
-        if sample_weight is not None:
-            sw = check_sample_weight(sample_weight, n_rows)
-
-        self.coef_ = zeros((n_cols,), "<f4")
-        info = zeros((1,), "<f4")
-        params = [
-            n_rows, n_cols, 1 if self.fit_intercept else 0,
-            int(self.max_iter), float(self.alpha), float(self.l1_ratio),
-            float(self.tol), _SELECTION_SHUFFLE[self.selection],
-            0 if sw is None else 1, 1 if row_major else 0,
-        ]
-        if sw is not None:
-            params.append(addr_ro(sw, name="sample_weight"))
-        n_iter = self._solver().cd_fit(
-            addr_ro(work_x, name="X"), addr_ro(target, name="y"),
-            addr(self.coef_, name="coef_"), addr(info, name="info"),
-            # ORDER MATCHES bindings/_mojolearn_solver.mojo::cd_fit_binding.
-            # n_rows, n_cols, fit_intercept, max_iter, alpha, l1_ratio, tol,
-            # shuffle, has_sample_weight, row_major[, sample_weight address]
-            params,
-        )
-        self.intercept_ = float(info[0])
-        self.n_iter_ = int(n_iter)
-        self.n_features_in_ = n_cols
-        # `work_x` (and `sw`) are the objects the addresses above belong to;
-        # they live in this frame for the whole call, the borrow contract.
-        return self
+        return _CD_CALL(self, "cd_fit", (X, y, sample_weight), _CD_CONTEXT)
 
     def predict(self, X):
         """Predict with the fitted model.
@@ -458,21 +282,7 @@ class ElasticNet(ParamsMixin):
             If the model is not fitted, or ``X`` has a different number of
             features than the training data.
         """
-        if not hasattr(self, "coef_"):
-            raise ValueError("mojolearn ElasticNet: call fit before predict")
-        work_x, _ = self._as_fortran(X, "X")
-        if work_x.shape[1] != self.n_features_in_:
-            raise ValueError(
-                "mojolearn ElasticNet feature count differs from fit")
-        out = empty((work_x.shape[0],), "<f4")
-        self._solver().cd_predict(
-            addr_ro(work_x, name="X"), addr_ro(self.coef_, name="coef_"),
-            addr(out, name="predictions"),
-            # ORDER MATCHES bindings/_mojolearn_solver.mojo::cd_predict_binding.
-            # n_rows, n_cols, intercept
-            [work_x.shape[0], work_x.shape[1], float(self.intercept_)],
-        )
-        return out
+        return _CD_CALL(self, "cd_predict", (X,), _CD_CONTEXT)
 
     # The file: `coef_` as fitted, the intercept <f8, `hyper` <f8 [alpha,
     # l1_ratio, tol], `meta` <i8 [n_features_in_, fit_intercept, max_iter,
@@ -539,7 +349,7 @@ class ElasticNet(ParamsMixin):
             ``1 - SS_res / SS_tot``, computed in float64. A constant ``y``
             scores 0.0.
         """
-        return _r2_host(self.predict(X), y)
+        return _CD_CALL(self, "cd_score", (X, y), _CD_CONTEXT)
 
 
 # Maintainer note: cuML spells Lasso as ElasticNet(l1_ratio=1.0)
