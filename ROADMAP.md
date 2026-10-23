@@ -36,8 +36,8 @@ source or installed-package versions recorded in their evidence.
   changing dimensions at a fixed rank with `dynamic_shapes=True`, where
   the captured operations and parameters permit them. Broader graph
   optimization remains below.
-- **Pretrained model import.** `import_model` accepts supported
-  `torch.export` programs and ONNX models. Weight import accepts PyTorch
+- **Pretrained model import.** `import_model` accepts supported ONNX
+  models; a PyTorch model is exported with `torch.onnx.export` first. Weight import accepts PyTorch
   state dictionaries and safetensors. The
   [retained custom-model and portability evidence](bench/results/model_portability/2026-10-20/README.md)
   records six matching custom-training/export digests and six pretrained

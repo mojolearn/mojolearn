@@ -120,6 +120,8 @@ from bindings.robust_native import robust_lifecycle_c
 from bindings.arena_rows_native import arena_rows_c
 from bindings.arena_prog_native import arena_prog_c
 from bindings.generator_draw_native import generator_draw_c
+# the user-object reader (lane purge-user-objects): label lists, index pairs, group ids
+from bindings.user_objects_native import user_objects_c
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -1326,6 +1328,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(arena_prog_c, "arena_prog_native_call")
         module.def_py_c_function(scaler_attribute_c, "standard_scaler_attribute_call")
         module.def_py_c_function(generator_draw_c, "generator_draw")
+        module.def_py_c_function(user_objects_c, "user_objects_native_call")
         module.def_py_c_function(samba_config_c, "samba_config_call")
         module.def_py_c_function(samba_public_c, "samba_native_call")
         module.def_function[tokenizer_host_numeric_mode_binding]("tokenizer_host_numeric_mode")

@@ -254,11 +254,12 @@ def nsum(values):
     # The fold runs in Mojo (`nsum_f64`, bindings/array_helpers.mojo, the
     # same operations in the same order; lane pyglue-sweep). Python only
     # converts the values to float64 with C builtins.
-    vals = array.array("d", map(float, values))
+    from . import _user_objects
+    vals = _user_objects.call("floats", values)
     if not vals:
         return 0.0
     from ._buffer import _native
-    return float(_native("nsum_f64")(vals.buffer_info()[0], len(vals)))  # cpu-route: builtin sum twin over host scalars already read back
+    return float(_native("nsum_f64")(vals.buffer_info()[0], len(vals)))  # cpu-route: array('d') of the scalars read once by nsum_f64
 
 
 def _cut(value, shift, bits, up):

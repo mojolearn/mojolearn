@@ -1615,7 +1615,7 @@ FAMILIES = (
         exports=(
             # Native C-entry registrations are part of the exported ABI too.
             "classical_attribute_call", "classical_attribute_descriptor", "classical_native_call",
-            "cross_vendor_call", "generator_draw", "mamba_native_call",
+            "cross_vendor_call", "generator_draw", "user_objects_native_call", "mamba_native_call",
             "native_codec_call", "native_process_call", "native_transport_call",
             "neural_prefill_call", "parallel_byte_call", "parallel_causal_call",
             "parallel_mlp_call", "parallel_neural_call", "pca_native_call",

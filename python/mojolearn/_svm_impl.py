@@ -60,7 +60,7 @@ from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, as_f64
 from ._sample_weight import check_sample_weight
 from ._labels import argmax_rows, decode_labels, encode_labels, sorted_classes, threshold_codes
 from ._mode import NumericModeMixin, available_if, is_fitted as _is_fitted
-from ._scale_gamma import scale_gamma, scale_gamma_x
+from ._scale_gamma import scale_gamma_x
 from .linear_model import (
     _accuracy_host,
     _labels_1d,

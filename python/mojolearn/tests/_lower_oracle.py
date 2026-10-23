@@ -39,7 +39,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from mojolearn.importers._graph import FLOAT_DTYPES, UnsupportedModel, _slice_range, int_values, resolve
+from mojolearn.importers._graph import FLOAT_DTYPES, UnsupportedModel, resolve
+from mojolearn.tests._resolve_oracle import _numel, _slice_range, int_values
 
 # the largest tensor rank of a session (autograd/rankn.mojo RN_MAX_RANK)
 MAX_RANK = 8
@@ -507,7 +508,7 @@ class _Lowerer:
             del buf
             return h
         # a view of the raw bytes, cast to float32 on the device by the upload
-        a = np.frombuffer(t.data, dtype=np.dtype(_NP_VIEW[t.dtype]), count=t.numel).reshape(shape)
+        a = np.frombuffer(t.data, dtype=np.dtype(_NP_VIEW[t.dtype]), count=_numel(t.shape)).reshape(shape)
         return self._own(self.s.tensor(a))
 
     def upload_ints(self, values, shape):
@@ -1164,7 +1165,7 @@ def check(g, shapes=None):
                     why.append(f"'{o}' is empty")
         for i in n.inputs:  # cpu-route: model graph lowered on the host (node inputs)
             t = g.initializers.get(i)
-            if t is not None and t.numel == 0 and i in G.want:
+            if t is not None and _numel(t.shape) == 0 and i in G.want:
                 why.append(f"'{i}' is an empty tensor")
             elif t is not None and t.dtype == "bf16" and len(t.shape) > _WI_MAX_RANK:
                 why.append(f"'{i}' is a bfloat16 tensor of more than {_WI_MAX_RANK} dimensions")
@@ -1200,9 +1201,6 @@ def import_model(source, *, shapes=None, numeric_mode=None):
     from mojolearn.ops import Session
     if isinstance(source, GraphIR):
         g = source
-    elif hasattr(source, "graph_signature") and hasattr(source, "graph_module"):
-        from mojolearn.importers import torch_export
-        g = torch_export.read(source)
     else:
         from mojolearn.importers import onnx as onnx_reader
         g = onnx_reader.read(source)

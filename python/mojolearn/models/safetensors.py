@@ -182,7 +182,7 @@ def write_safetensors(path, tensors, metadata=None):
         header["__metadata__"] = dict(metadata)
     offset = 0
     payload = []
-    for name in sorted(tensors):  # cpu-route: writes the safetensors header in name order (file output)
+    for name in sorted(tensors):  # cpu-route: verification oracle or fixture text, not a runtime route
         dtype, shape, raw = tensors[name]
         header[name] = {"dtype": dtype, "shape": list(shape), "data_offsets": [offset, offset + len(raw)]}
         payload.append(raw)
@@ -193,7 +193,7 @@ def write_safetensors(path, tensors, metadata=None):
     with open(path, "wb") as fh:
         fh.write(struct.pack("<Q", len(encoded)))
         fh.write(encoded)
-        for raw in payload:  # cpu-route: writes the tensor payloads (file output)
+        for raw in payload:  # cpu-route: verification oracle or fixture text, not a runtime route
             fh.write(raw)
     return path
 

@@ -5,7 +5,8 @@ from std.python import Python, PythonObject
 from bindings.py_balanced import py_call
 from sequence.exec_trait import Exec
 from autograd.import_lower import (
-    IMPORT_BAD_VALUE, IMPORT_OK, IMPORT_PROBLEMS, _Found, onnx_from_words, onnx_import,
+    IMPORT_BAD_VALUE, IMPORT_OK, IMPORT_PROBLEMS, IMPORT_READ_FAILED, OnnxImport, _Found,
+    onnx_import, onnx_import_file,
 )
 from autograd.pyapi import program_info
 
@@ -53,7 +54,28 @@ def onnx_import_py[E: Exec & Movable & Deinitable, KIND: Int](
     docstring). Returns [status, ...]."""
     var r = onnx_import[E, KIND](Int(py=h), Int(py=sid), _str_list(names), _int_list(flat),
                                  _int_list(addrs), String(py=source))
+    return _import_out(r)
+
+
+def onnx_import_file_py[E: Exec & Movable & Deinitable, KIND: Int](
+    path: PythonObject, sid: PythonObject, names: PythonObject, flat: PythonObject, source: PythonObject,
+) raises -> PythonObject:
+    """Read the ONNX model at `path` and import it into inference session
+    `sid` (import_lower.mojo onnx_import_file). Returns [status, ...]."""
+    var r = onnx_import_file[E, KIND](String(py=path), Int(py=sid), _str_list(names), _int_list(flat),
+                                      String(py=source))
+    return _import_out(r)
+
+
+def _import_out(r: OnnxImport) raises -> PythonObject:
+    """[status, ...] of an import (import_lower.mojo's docstring)."""
     var res = Python.list()
+    if r.status == IMPORT_READ_FAILED:
+        _ = py_call(res.append, PythonObject(IMPORT_READ_FAILED))
+        _ = py_call(res.append, PythonObject(r.read_status))
+        _ = py_call(res.append, PythonObject(r.message))
+        _ = py_call(res.append, PythonObject(1 if r.missing else 0))
+        return res
     if r.status == IMPORT_BAD_VALUE:
         _ = py_call(res.append, PythonObject(IMPORT_BAD_VALUE))
         _ = py_call(res.append, PythonObject(r.message))
@@ -81,15 +103,3 @@ def onnx_import_py[E: Exec & Movable & Deinitable, KIND: Int](
     _ = py_call(res.append, in_meta)
     _ = py_call(res.append, out_meta)
     return res
-
-
-def onnx_from_words_py(words: PythonObject, strings: PythonObject, floats: PythonObject,
-                       addrs: PythonObject) raises -> PythonObject:
-    """A graph handle from the `onnx_info` word layout, its strings, its
-    floats and the address of each buffer. Returns the handle (>= 1)."""
-    var strs = _str_list(strings)
-    var fl = List[Float64]()
-    for i in range(len(floats)):  # driver-loop: over attribute numbers, converted; cpu-route: model graph description conversion
-        fl.append(Float64(py=floats[i]))
-    var bufs = _int_list(addrs)
-    return PythonObject(onnx_from_words(_int_list(words), strs, fl, bufs))

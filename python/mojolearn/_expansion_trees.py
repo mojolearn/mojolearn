@@ -609,7 +609,7 @@ def _trees_shape_native(est):
     if not hasattr(est, "_offsets"):
         raise RuntimeError("this estimator is not fitted yet")
     try:
-        entry = getattr(_trees_x_bind(est), "x_trees_tree_shape", None)  # cpu-route: get_depth/get_n_leaves introspection of the fitted host model arrays, outside fit and predict
+        entry = getattr(_trees_x_bind(est), "x_trees_tree_shape", None)  # cpu-route: fitted tree handle read once by x_trees_tree_shape (get_depth/get_n_leaves)
     except ImportError:    # a host facade refuses an absent export with ImportError
         entry = None
     if not callable(entry):
@@ -2796,11 +2796,12 @@ def _trees_splits(cv, X, y, n, codes=None, partition=False, native=None, n_class
     out = []
     seen = zeros((max(n, 1),), "<i8")
     check = _native("check_indices_i64")
-    for pair in pairs:  # cpu-route: user cv splitter or iterable of index pairs, validated natively per pair [py-data-loop]
-        tr, te = (_trees_index_i64(v) for v in pair)  # cpu-route: user cv splitter or iterable of index pairs, validated natively per pair [py-data-loop]
+    for pair in pairs:  # cpu-route: user cv splitter (train, test) pairs, one per fold, each read once by check_indices_i64
+        tr, te = pair
+        tr, te = _trees_index_i64(tr), _trees_index_i64(te)
         if tr.size == 0 or te.size == 0:
             raise ValueError("every cv split needs train and test rows")
-        for v in (tr, te):  # cpu-route: user cv splitter or iterable of index pairs, validated natively per pair [py-data-loop]
+        for v in (tr, te):  # glue: the two sides of one split, one native range check each
             # range only: a repeated index is the splitter's to give
             if int(check(addr_ro(v, name="cv rows"), v.size, n)) == 1:
                 raise ValueError(f"a cv index is outside [0, {n})")
@@ -3812,7 +3813,7 @@ class MultiOutputClassifier(_TreesWrapperBase):
             m = Ya.shape[1]
         else:
             # glue: label objects (str, mixed) no Array holds, per output column
-            rows = y.tolist() if hasattr(y, "tolist") else [list(r) for r in y]  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time [py-data-loop]
+            rows = y.tolist() if hasattr(y, "tolist") else list(y)
             if len(rows) != Xa.shape[0]:
                 raise ValueError(f"y has {len(rows)} rows, X has {Xa.shape[0]}")
             if rows and not hasattr(rows[0], "__len__"):
@@ -3824,10 +3825,11 @@ class MultiOutputClassifier(_TreesWrapperBase):
             if Ya is not None:
                 n = Ya.shape[0]
                 col = empty((n,), "<f8")
-                self._bind().x_trees_column_f64(addr_ro(Ya, name="y"), addr(col, name="column"), [n, m, j])  # cpu-route: label column extracted for encode_labels at API entry
+                self._bind().x_trees_column_f64(addr_ro(Ya, name="y"), addr(col, name="column"), [n, m, j])  # cpu-route: float64 label Array read once by x_trees_column_f64
                 classes, codes = encode_labels(col)
             else:
-                classes, codes = encode_labels([r[j] for r in rows])  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time [py-data-loop]
+                from . import _user_objects
+                classes, codes = encode_labels(_user_objects.call("column", rows, j))
             e = _trees_clone(self.estimator)
             e.fit(Xa, codes) if sample_weight is None else e.fit(Xa, codes, sample_weight=sample_weight)
             self.estimators_.append(e)
@@ -3873,9 +3875,11 @@ class MultiOutputClassifier(_TreesWrapperBase):
             return out
         # glue: label objects (str, mixed) no Array holds, row tuples of them
         cols = [decode_labels(c, as_i32_c(e.predict(Xa), ndim=1, name="codes")[0]).tolist()
-                for e, c in zip(self.estimators_, self.classes_)]  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time [py-data-loop]
-        kind = "<i8" if all(isinstance(v, int) for col in cols for v in col[:1]) else "<f8"  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time [py-data-loop]
-        return Array.from_list([list(r) for r in zip(*cols)], kind)  # cpu-route: label objects (str/mixed) no Array holds, one output column at a time [py-data-loop]
+                for e, c in zip(self.estimators_, self.classes_)]  # glue: one decoded label column per output estimator
+        firsts = [col[0] for col in cols if col]  # glue: the first label of each output column
+        kind = "<i8" if all(isinstance(v, int) for v in firsts) else "<f8"  # glue: one kind test per output column
+        from . import _user_objects
+        return Array.from_list(_user_objects.call("transpose", cols), kind)
 
     def _predict_stacked(self, Xa):
         """`predict` with the decoded columns stacked natively
@@ -5025,7 +5029,7 @@ class KernelExplainer(_AgnosticExplainer):
         out = zeros((6,), "<i8")
         if M > 1:
             taddrs = tuple(addr(t, name="schedule") for t in tables)  # glue: the three schedule table addresses
-            self._bind().x_trees_kshap_schedule(taddrs, addr(out, name="schedule"), [M, nsamples])  # cpu-route: coalition-size weight schedule over M/2 sizes, launch parameters only
+            self._bind().x_trees_kshap_schedule(taddrs, addr(out, name="schedule"), [M, nsamples])  # cpu-route: three schedule Arrays read once by x_trees_kshap_schedule (launch parameters)
         m, nfixed, nfull, npaired, L, wbits = out.tolist()
         return m, nfixed, nfull, npaired, tables, L, wbits
 

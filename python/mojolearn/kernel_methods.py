@@ -37,7 +37,7 @@ transforms from a saved model on a CPU without a GPU.
 # No speed claim: the lane has no published number and this door adds none.
 
 from . import _backend, _native_archive_bridge
-from ._scale_gamma import scale_gamma, scale_gamma_x
+from ._scale_gamma import scale_gamma_x
 from ._sample_weight import check_sample_weight
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_dense_c, as_f64_c, empty, full
 from ._lazy_out import _empty_out, _mapped_out

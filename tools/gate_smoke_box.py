@@ -19,7 +19,7 @@ into <out-root>/autograd-bin (`tools/autograd_smoke.py build-commands`), and the
 examples and the Sequential and ops.Session probes (2026-10-19, lane ag-board-twins: the board's
 sequential-fit and ops-session-step lanes in miniature) through the installed wheel. A missing binary reads
 `not built`, never a pass. The importer probes (import-model-smoke; since 2026-10-20, lane ag-torch-twins,
-import-torch-smoke, a torch.export import) run there too; import-torch-smoke reads `SKIPPED` when the
+import-torch-smoke, a torch module exported to ONNX and imported) run there too; import-torch-smoke reads `SKIPPED` when the
 wheel's environment has no torch (set MOJOLEARN_REQUIRE_TORCH=1 in the box environment to fail instead).
 The shared registry also includes captured training/replay, dropout, validation, optimizers, rank-N,
 higher-order public checks and the Mamba/LM/small-MLP/Samba tape binaries. Python entries verify their

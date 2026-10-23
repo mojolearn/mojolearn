@@ -424,7 +424,7 @@ def _sha(binding, path):
     """The SHA-256 of the file at `path`, streamed by the binding's Mojo
     file digest (`byte_lm_file_sha256`); the file never passes through
     Python."""
-    return str(binding.byte_lm_file_sha256(str(path)))  # cpu-route: hashes a source or binding file (file input)
+    return str(binding.byte_lm_file_sha256(str(path)))  # cpu-route: file path str read once by byte_lm_file_sha256 (the file never enters Python)
 
 
 def _binding_metadata(binding, shape):

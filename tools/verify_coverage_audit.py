@@ -904,8 +904,6 @@ ANNOTATIONS = {
                                            "x_decomp_dev_cd_rows", "x_decomp_dev_dict_update")},
     "ops_metric": ("n/a", [], "no live caller: Session._metric is never called (accuracy and log_loss "
                               "run through ops_session_call)"),
-    "onnx_from_words": ("n/a", [], "the torch.export import path: needs torch, which a verifier run never "
-                                   "has; the ONNX path is sequence-onnx-import"),
     **{e: ("covered", ["mamba2-decode-session"], _MAMBA_SESSION)
        for e in ("mamba2_session_export_state", "mamba2_session_load_state", "mamba2_session_open")},
     **{e: ("covered", ["mamba3-decode-session"], _MAMBA_SESSION)
@@ -1520,6 +1518,17 @@ for _entry in ("linear_forward_dev", "linear_backward_dev"):
         "Public native linear owner routes all-device inputs to this existing GPU entry. "
         "Selected consumed-output and rollback tests are authored; a matching verifier lane, "
         "reference/fault/restoration and installed-package admission remain pending.")
+
+
+# The user-object reader is new (lane purge-user-objects): it reads label lists,
+# index pairs, group ids and nested lists for the classifiers, splitters, the
+# CatBoost-style pool, UMAP's categorical target and the label metrics.
+ANNOTATIONS_BY_SRC[("user_objects_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", [],
+    "model_selection (take, first_seen, kinds, scatter, column_f32), ensemble (group_runs, pairs, "
+    "kinds), resample, linear_model, _metrics_impl, _umap_impl (sorted_codes), _array (nested), "
+    "_expansion_trees and _expansion_prep hand Python objects to user_objects_c. New source only: "
+    "runtime execution and a verifier lane remain pending.")
 
 
 PY_ANNOTATIONS = {

@@ -19,7 +19,8 @@ per output, one line:
 
     # an ONNX file, onnxruntime as the reference
     python3 tools/import_compare.py model.onnx --shape x=8,3,32,32 [--out report.json]
-    # a torch.export program: FILE.py defines build() -> (ExportedProgram, {input name: shape})
+    # a torch module: FILE.py defines build() -> (nn.Module, example input tuple); the tool exports it to
+    # an ONNX file (torch.onnx.export, opset 17), imports the file and compares with the module itself
     python3 tools/import_compare.py --torch FILE.py [--out report.json]
 
 Inputs: float inputs are seeded standard normals (float32); integer inputs (token ids) are seeded
@@ -114,16 +115,24 @@ def run_torch(file, seed, ids_high):
         import torch
     except ImportError:
         return None, "torch is not installed"
+    import os
+    import tempfile
     spec = importlib.util.spec_from_file_location("import_compare_source", file)
     mod = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(mod)
-    ep, shapes = mod.build()
-    model = mojolearn.import_model(ep, shapes=shapes)
+    module, example = mod.build()
+    module = module.eval()
+    with tempfile.TemporaryDirectory(prefix="import-compare-") as d:
+        path = os.path.join(d, "model.onnx")
+        # the two-step torch import: export to ONNX, then import the file
+        with torch.no_grad():
+            torch.onnx.export(module, tuple(example), path, opset_version=17)
+        model = mojolearn.import_model(path)
     feeds = _inputs(model, seed, ids_high)
     arrays = [feeds[n] for n, _, _ in model.inputs]
     ours = _as_tuple(model.run(*arrays))
     with torch.no_grad():
-        refs = ep.module()(*[torch.from_numpy(a) for a in arrays])
+        refs = module(*[torch.from_numpy(a) for a in arrays])
     refs = refs if isinstance(refs, (tuple, list)) else (refs,)
     names = [n for n, _, _ in model.outputs]
     return [compare(n, o, r.detach().cpu().numpy()) for n, o, r in zip(names, ours, refs)], None
@@ -132,7 +141,7 @@ def run_torch(file, seed, ids_high):
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("model", nargs="?", help="an ONNX file (onnxruntime is the reference)")
-    ap.add_argument("--torch", metavar="FILE.py", help="a file whose build() returns (ExportedProgram, shapes)")
+    ap.add_argument("--torch", metavar="FILE.py", help="a file whose build() returns (nn.Module, example input tuple)")
     ap.add_argument("--shape", action="append", type=_parse_shape, default=[],
                     help="NAME=D0,D1,... for an input axis the model leaves open (repeatable)")
     ap.add_argument("--seed", type=int, default=0)

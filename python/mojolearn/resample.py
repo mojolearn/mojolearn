@@ -558,7 +558,8 @@ def _take(a, idx):
         from ._optional_numpy import require_numpy
         np = require_numpy('resample')
         return np.asarray(a)[np.asarray(idx, dtype=np.intp)]
-    return [a[int(i)] for i in idx]  # cpu-route: Python list input taken by index [py-data-loop]
+    from . import _user_objects
+    return _user_objects.take(a, idx)
 
 
 def _gpu_gather(arrays, n, count, seed, numeric_mode, replace=True):

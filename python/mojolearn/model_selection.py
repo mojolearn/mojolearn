@@ -35,6 +35,7 @@ from ._array import Array
 from ._buffer import _materialize, _native, _native_optional, empty
 from ._arrays import _addr, _addr_ro
 from ._labels import is_bool, flatten_labels
+from . import _user_objects
 # The splitters' random draws (lane/metrics): a module-level import, so the
 # lane selector sees model_selection reach the x_metrics binding.
 from ._expansion_metrics import CounterRng, _mix64, fold_rows, stratified_fold_rows
@@ -159,9 +160,9 @@ class _Resident:
 def _take_rows(values, indices):
     """Dense fold rows by one device gather (`_Resident`, used once); a
     Python list of labels (str or object labels, the G5 input-prep case)
-    keeps its list comprehension."""
+    is taken by the native user-object reader."""
     if isinstance(values, list):
-        return [values[i] for i in indices]  # cpu-route: Python list of label objects (str/object) taken by index; no Array holds them [py-data-loop]
+        return _user_objects.take(values, indices)
     with _Resident() as res:
         return res.take(values, indices)
 
@@ -752,10 +753,10 @@ def _labels_list(y, name='y'):
 
 
 def _encode_first_seen(values):
-    # the first-seen order by dict.fromkeys, the codes by a C map (the same
-    # dict equality as setdefault; lane metrics-apple)
-    index = {v: i for i, v in enumerate(dict.fromkeys(values))}  # cpu-route: first-seen dict encoding of label objects (str/mixed) the native encoder refuses [py-data-loop]
-    return list(map(index.__getitem__, values)), len(index)
+    """(int32 codes Array in first-seen order, k) of label objects the
+    numeric encoder refuses: the native user-object reader, dict equality."""
+    classes, codes = _user_objects.call("first_seen", values)
+    return Array._owned(codes, (len(codes),), '<i4', 'C'), len(classes)
 
 
 def _first_seen_native(y):
@@ -778,7 +779,7 @@ def _first_seen_native(y):
     if gc is None or gc.m < 1:
         return None
     first = array.array('q', bytes(8 * gc.m))
-    _expansion_metrics_binding().x_metrics_first_rows(_addr_ro(gc.codes), n, gc.m, first.buffer_info()[0])  # cpu-route: first-seen class order for label encoding at splitter entry
+    _expansion_metrics_binding().x_metrics_first_rows(_addr_ro(gc.codes), n, gc.m, first.buffer_info()[0])  # cpu-route: int64 group codes and counts read once by x_metrics_first_rows
     order = sorted(range(gc.m), key=first.__getitem__)  # glue: class order by first row over the k classes
     table = [0] * gc.m
     for rank, c in enumerate(order):  # glue: class order by first row over the k classes
@@ -1189,7 +1190,7 @@ class StratifiedKFold(_KFoldBase):
         K = self.n_splits
         alloc = empty((K, k), '<i8')
         cnt = array.array('q', counts)
-        _native('strat_alloc_i64')(cnt.buffer_info()[0], k, K, _addr(alloc))  # cpu-route: fold allocation plan over folds x classes, not rows
+        _native('strat_alloc_i64')(cnt.buffer_info()[0], k, K, _addr(alloc))  # cpu-route: array('q') class counts read once by strat_alloc_i64 (folds x classes)
         return enc, k, counts, alloc
 
     def _fold_of_rows(self, enc, k, counts, alloc, rng):
@@ -1266,7 +1267,7 @@ class GroupKFold(_KFoldBase):
                                                 perm.buffer_info()[0], to_fold.buffer_info()[0],
                                                 sizes.buffer_info()[0])
         else:
-            _native('group_fold_assign_i32')(counts.buffer_info()[0], m, self.n_splits, 0,  # cpu-route: sequential greedy fold plan over groups, not rows
+            _native('group_fold_assign_i32')(counts.buffer_info()[0], m, self.n_splits, 0,  # cpu-route: array('q') group counts read once by group_fold_assign_i32
                                              to_fold.buffer_info()[0], sizes.buffer_info()[0])
         yield from gc.split_by_fold(to_fold, self.n_splits, sizes)
 
@@ -1317,8 +1318,7 @@ class StratifiedGroupKFold(_KFoldBase):
         if fs is not None:
             yenc, k = fs[0], fs[1]
         else:
-            codes, k = _encode_first_seen(_labels_list(y))
-            yenc = Array._owned(array.array('i', codes), (len(codes),), '<i4', 'C')
+            yenc, k = _encode_first_seen(_labels_list(y))
         if yenc.size != n:
             raise ValueError(f'y has {yenc.size} labels for {n} samples')
         m = gc.m
@@ -1331,7 +1331,7 @@ class StratifiedGroupKFold(_KFoldBase):
         # GroupKFold's) reads it
         dist = array.array('q', bytes(8 * m * k))
         _native('bincount2_i32')(_addr_ro(yenc), _addr_ro(gc.codes), [n, k, m], dist.buffer_info()[0])
-        bad = int(_native('strat_group_plan_i32')(  # cpu-route: sequential greedy fold plan over groups, not rows
+        bad = int(_native('strat_group_plan_i32')(  # cpu-route: array('q') group x class table read once by strat_group_plan_i32
             [dist.buffer_info()[0], perm.buffer_info()[0] if perm is not None else 0,
              to_fold.buffer_info()[0], sizes.buffer_info()[0]], [k, m, self.n_splits]))
         if bad:
@@ -1478,7 +1478,7 @@ class LeavePOut(_Splitter):
             return
         # the combinations in lexicographic order, advanced in Mojo
         combo = _arange_rows(0, p)
-        step = _native('next_combination_i64')  # cpu-route: LeavePOut combinatorics, one p-sized step per split
+        step = _native('next_combination_i64')  # cpu-route: int64 combination Array read once per split by next_combination_i64
         while True:
             yield _split_indices(combo, n)
             if not int(step(_addr(combo), p, n)):
@@ -1999,7 +1999,7 @@ def _index_copy(value):
 
 class _IterableCV(_Splitter):
     def __init__(self, cv):
-        self._pairs = [(_index_copy(tr), _index_copy(te)) for tr, te in cv]  # cpu-route: user-provided iterable of index pairs, copied once at construction [py-data-loop]
+        self._pairs = [(_index_copy(tr), _index_copy(te)) for tr, te in cv]  # cpu-route: user cv iterable of (train, test) pairs, one per fold, each read once by _index_copy
 
     def get_n_splits(self, X=None, y=None, groups=None):
         return len(self._pairs)
@@ -2086,10 +2086,10 @@ def check_cv(cv=5, y=None, *, classifier=False, shuffle=False, random_state=None
             stratify = native
         elif classifier and y is not None:
             labels = flatten_labels(y)
-            stratify = (all(isinstance(v, str) for v in labels) or  # cpu-route: stratify test over label objects (str/mixed) after the native route declines [py-data-loop]
-                        all(isinstance(v, numbers.Integral) or
-                            (isinstance(v, numbers.Real) and math.isfinite(v) and float(v).is_integer())
-                            for v in labels))  # cpu-route: stratify test over label objects (str/mixed) after the native route declines [py-data-loop]
+            # all str, or all integral numbers (a finite integer-valued float counts)
+            got = _user_objects.kinds(labels)
+            stratify = (got[_user_objects.KIND_STR] == len(labels)
+                        or got[_user_objects.KIND_INTVAL] == len(labels))
         kind = StratifiedKFold if stratify else KFold
         return kind(cv, shuffle=shuffle, random_state=random_state if shuffle else None)
     if callable(getattr(cv, 'split', None)):
@@ -2175,7 +2175,7 @@ def train_test_split(*arrays, test_size=None, train_size=None, random_state=None
 
 def _take_any(values, indices):
     if isinstance(values, (list, tuple)):
-        return [values[i] for i in indices.tolist()]  # cpu-route: Python list of label objects taken by index [py-data-loop]
+        return _user_objects.take(values, indices)
     return _take_rows(values, indices)
 
 
@@ -2320,7 +2320,11 @@ class _Scorer:
             col = None if _memo is None else _memo.get('predict_proba[:, 1]')
             if col is None:
                 fast = _proba_column1(pred)
-                col = fast if fast is not None else Array.from_list([row[1] for row in pred.tolist()], '<f4')  # cpu-route: Python list probabilities from an external estimator [py-data-loop]
+                if fast is None:
+                    rows = pred.tolist() if hasattr(pred, 'tolist') else pred
+                    words = _user_objects.call('column_f32', rows, 1)
+                    fast = Array._owned(words, (len(words),), '<f4', 'C')
+                col = fast
                 if _memo is not None:
                     _memo['predict_proba[:, 1]'] = col
             pred = col
@@ -2789,16 +2793,17 @@ def _cross_val_predict_place(preds, n, res):
         return out
     rows = [None] * n
     width = None
-    for pred, t in preds:  # cpu-route: label-object predictions (str/mixed) placed by list; numeric non-Array predictions are now materialized and scattered natively [py-data-loop]
+    for pred, t in preds:  # glue: one native placement per fold (label-object predictions)
         vals = pred.tolist() if hasattr(pred, 'tolist') else list(pred)
-        for i, v in zip(t.tolist(), vals):  # cpu-route: label-object predictions (str/mixed) placed by list; numeric non-Array predictions are now materialized and scattered natively [py-data-loop]
-            rows[i] = v
+        _user_objects.scatter(rows, t, vals)
         width = getattr(pred, 'shape', (0,))[1:] if hasattr(pred, 'shape') else ()
     if width:
-        return Array.from_list([float(v) for row in rows for v in row], '<f8').reshape((n,) + tuple(width))  # cpu-route: label-object predictions (str/mixed) placed by list; numeric non-Array predictions are now materialized and scattered natively [py-data-loop]
-    if all(isinstance(v, numbers.Integral) for v in rows):  # cpu-route: label-object predictions (str/mixed) placed by list; numeric non-Array predictions are now materialized and scattered natively [py-data-loop]
+        words = _user_objects.call('floats', _user_objects.call('flatten', rows))
+        return Array._owned(words, (len(words),), '<f8', 'C').reshape((n,) + tuple(width))
+    got = _user_objects.kinds(rows)
+    if got[_user_objects.KIND_INTEGRAL] == n:
         return Array.from_list(rows, '<i8')
-    if all(isinstance(v, numbers.Real) for v in rows):  # cpu-route: label-object predictions (str/mixed) placed by list; numeric non-Array predictions are now materialized and scattered natively [py-data-loop]
+    if got[_user_objects.KIND_REAL] == n:
         return Array.from_list(rows, '<f8')
     return rows
 
@@ -3529,21 +3534,25 @@ def permutation_test_score(estimator, X, y, *, groups=None, cv=None, n_permutati
     score = mean_score(yl)
     rng = _rng(random_state)
     perm_scores = []
-    for _ in range(n_permutations):  # cpu-route: definition route for label objects (str/mixed) the native permutation cannot hold [py-data-loop]
-        if groups is None:
-            perm = rng.permutation(len(yl))
-            yp = [yl[j] for j in perm]  # cpu-route: definition route for label objects (str/mixed) the native permutation cannot hold [py-data-loop]
+    g = flatten_labels(groups) if groups is not None else None
+    for _ in range(n_permutations):  # glue: one cross-validated score per permutation (the user estimator)
+        if g is None:
+            yp = _user_objects.take(yl, rng.permutation(len(yl)))
         else:
-            g = flatten_labels(groups)
-            yp = list(yl)
-            for gv in sorted(set(g)):  # cpu-route: definition route for label objects (str/mixed) the native permutation cannot hold [py-data-loop,py-reduce]
-                rows = [i for i, v in enumerate(g) if v == gv]  # cpu-route: definition route for label objects (str/mixed) the native permutation cannot hold [py-data-loop]
-                perm = rng.permutation(len(rows))
-                for i, j in zip(rows, perm):  # cpu-route: definition route for label objects (str/mixed) the native permutation cannot hold [py-data-loop]
-                    yp[i] = yl[rows[j]]
+            yp = _group_permuted(yl, g, rng)
         perm_scores.append(mean_score(yp))
-    pvalue = (sum(1 for s in perm_scores if s >= score) + 1.0) / (n_permutations + 1)  # cpu-route: definition route for label objects (str/mixed), one score per permutation [py-data-loop,py-reduce]
+    pvalue = (sum(1 for s in perm_scores if s >= score) + 1.0) / (n_permutations + 1)  # glue: explicit scalar tail, one score per permutation
     return score, Array.from_list(perm_scores, '<f8'), pvalue
+
+
+def _group_permuted(yl, g, rng):
+    """`yl` permuted within each group of `g`, groups in sorted order, one
+    draw per group (the definition route of permutation_test_score)."""
+    classes, codes = _user_objects.call('first_seen', g)
+    order = sorted(range(len(classes)), key=classes.__getitem__)  # glue: the k distinct groups in sorted order
+    rows = _user_objects.call('group_rows', codes, len(classes))
+    perms = [array.array('q', rng.permutation(len(rows[c]))) for c in order]  # glue: one draw per group
+    return _user_objects.call('group_permute', yl, [rows[c] for c in order], perms)  # glue: the k groups in sorted order
 
 
 class _NativePermutation:
