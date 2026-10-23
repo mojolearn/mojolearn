@@ -165,3 +165,5 @@ EXPERIMENTS.md
 # tools/kernel_closure_check.py output: the generated import-everything program and its results
 checks/kernel_closure_main.mojo
 kernel-closure-results/
+
+/.cloud-watch/
