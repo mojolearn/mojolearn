@@ -44,6 +44,7 @@ np = require_numpy('_x_sequence_norm')
 
 from . import _backend
 from ._x_sequence_device import SequenceDeviceTensor, is_seq_tensor, resident_binding, to_device as _seq_to_device
+from ._training_impl import _OPT_NATIVE as _SEQ_NATIVE, _OPT_CONTEXT as _SEQ_CONTEXT
 
 _SEQ_BINDING = "_mojolearn_x_sequence"
 _ALL_OFF = _os.environ.get("MOJOLEARN_IDN_ALL_OFF", "") == "1"
@@ -52,6 +53,7 @@ _CLASS_DEVICE_IO_OFF = (_os.environ.get("MOJOLEARN_LN_CLASS_DEVICE_IO_OFF", "") 
                         or _os.environ.get("MOJOLEARN_SEQ_DEVICE_IO_OFF", "") == "1" or _ALL_OFF)
 #: the before arm of the kept-stats switch: the backward recomputes the forward
 _KEEP_STATS_OFF = _os.environ.get("MOJOLEARN_LN_KEEP_STATS_OFF", "") == "1" or _ALL_OFF
+_SEQ_CONTEXT["seqln_keep_stats_off"] = _KEEP_STATS_OFF  # glue: the native forward reads the before-arm switch
 
 
 def _f32(a, name):
@@ -182,10 +184,7 @@ def layer_norm_forward(x, normalized_shape=None, weight=None, bias=None, eps=1e-
     >>> x = np.random.default_rng(0).random((32, 64), dtype=np.float32)
     >>> y = mojolearn.layer_norm_forward(x)
     """
-    x = x if is_seq_tensor(x) else _f32(x, "x")
-    _, D = _D(x.shape[-1] if normalized_shape is None else normalized_shape)
-    return _run(x, D, weight, bias, eps, None, numeric_mode)[0]
-
+    return _SEQ_NATIVE("seqln_forward", None, (x, normalized_shape, weight, bias, eps), numeric_mode, _SEQ_CONTEXT)
 
 def layer_norm_backward(dy, x, normalized_shape=None, weight=None, bias=None, eps=1e-5, numeric_mode=None):
     """Gradients of `layer_norm_forward`.
@@ -228,18 +227,8 @@ def layer_norm_backward(dy, x, normalized_shape=None, weight=None, bias=None, ep
     >>> x = np.random.default_rng(0).random((32, 64), dtype=np.float32)
     >>> dx, dw, db = mojolearn.layer_norm_backward(np.ones_like(x), x)
     """
-    x = x if is_seq_tensor(x) else _f32(x, "x")
-    _, D = _D(x.shape[-1] if normalized_shape is None else normalized_shape)
-    _, dx, dw, db = _run(x, D, weight, bias, eps, dy, numeric_mode)
-    return dx, (None if weight is None else dw), (None if bias is None else db)
+    return _SEQ_NATIVE("seqln_backward", None, (dy, x, normalized_shape, weight, bias, eps), numeric_mode, _SEQ_CONTEXT)
 
-
-# Device I/O: an x on the device stays there (y and dx as resident tensors; only the
-# D-float weight, bias and their gradients cross the bus; sequence/layernorm_dev.mojo).
-# Kept stats: a resident forward stores row mean and rstd; backward reuses them instead of
-# recomputing the forward (no bit change). Before-arm switches:
-# MOJOLEARN_LN_CLASS_DEVICE_IO_OFF / MOJOLEARN_SEQ_DEVICE_IO_OFF / MOJOLEARN_LN_KEEP_STATS_OFF /
-# MOJOLEARN_IDN_ALL_OFF (see the module docstring).
 class LayerNorm:
     """Layer normalization layer, as `torch.nn.LayerNorm`.
 
@@ -341,15 +330,7 @@ class LayerNorm:
         y : ndarray of float32
             Normalized output, the shape of `x`.
         """
-        x = x if is_seq_tensor(x) else _f32(x, "x")
-        if tuple(x.shape[x.ndim - len(self.normalized_shape):]) != self.normalized_shape:
-            raise ValueError(f"LayerNorm: trailing shape {x.shape} does not end in {self.normalized_shape}")
-        self._x = x
-        self._stats = None
-        if is_seq_tensor(x) and not _KEEP_STATS_OFF:
-            M = x.size // self._D
-            self._stats = (SequenceDeviceTensor._new(x.b, (M,)), SequenceDeviceTensor._new(x.b, (M,)))
-        return _run(x, self._D, self.weight, self.bias, self.eps, None, self.numeric_mode, self._stats)[0]
+        return _SEQ_NATIVE("seqln_layer", self, (x,), None, _SEQ_CONTEXT)
 
     __call__ = forward
 

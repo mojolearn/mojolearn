@@ -3,6 +3,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
+from bindings.sequence_layers_native import sequence_layers_operation
 from bindings.training_extra_native import training_chunked_lm_head, training_mlp_sessions, training_residual_dropout
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
@@ -231,6 +232,8 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
         raise Error("TypeError: optimizer requires native argument tuples")
     if operation.startswith("seqdev_"):
         return sequence_device_operation(operation, owner, values, mode, context)
+    if operation.startswith("seqln_") or operation.startswith("seqmoe_"):
+        return sequence_layers_operation(operation, owner, values, mode, context)
     if operation.startswith("seq_"):
         return sequence_optimizer_operation(operation, owner, values, mode, context)
     if operation.startswith("device_"):
