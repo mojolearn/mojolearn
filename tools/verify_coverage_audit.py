@@ -1520,6 +1520,17 @@ for _entry in ("linear_forward_dev", "linear_backward_dev"):
         "reference/fault/restoration and installed-package admission remain pending.")
 
 
+# The user-object reader is new (lane purge-user-objects): it reads label lists,
+# index pairs, group ids and nested lists for the classifiers, splitters, the
+# CatBoost-style pool, UMAP's categorical target and the label metrics.
+ANNOTATIONS_BY_SRC[("user_objects_native_call", "bindings/_mojolearn_tokenizer_host.mojo")] = (
+    "owed", [],
+    "model_selection (take, first_seen, kinds, scatter, column_f32), ensemble (group_runs, pairs, "
+    "kinds), resample, linear_model, _metrics_impl, _umap_impl (sorted_codes), _array (nested), "
+    "_expansion_trees and _expansion_prep hand Python objects to user_objects_c. New source only: "
+    "runtime execution and a verifier lane remain pending.")
+
+
 PY_ANNOTATIONS = {
     ("mojolearn.models.ParallelCausalLM", "generate"): (
         "covered", ["hf-causal-lm", "par-causal-lm"],
