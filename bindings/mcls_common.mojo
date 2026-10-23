@@ -340,7 +340,7 @@ struct McLabels(Movable):
     var codes: PythonObject
 
     def __init__(out self, kind: String, n: Int, classes: PythonObject, codes: PythonObject):
-        self.kind = kind
+        self.kind = String(kind)
         self.n = n
         self.classes = classes
         self.codes = codes
