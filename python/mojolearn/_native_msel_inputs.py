@@ -34,17 +34,17 @@ def connect(context, resident_context):
     layouts = {}
     for cls in context['family_msel_splitters']:  # glue: exact supported splitter storage and lifecycle metadata
         mro = type.__dict__['__mro__'].__get__(cls)
-        dictionaries = tuple(type.__dict__['__dict__'].__get__(base) for base in mro)
-        descriptor = next(fields['__dict__'] for fields in dictionaries if '__dict__' in fields)
+        dictionaries = tuple(type.__dict__['__dict__'].__get__(base) for base in mro)  # glue: retain class dictionaries once at import
+        descriptor = next(fields['__dict__'] for fields in dictionaries if '__dict__' in fields)  # glue: find the native storage descriptor at import
         if type(descriptor) is not GetSetDescriptorType:
             raise TypeError('native model selection requires an ordinary splitter dictionary')
-        hooks = tuple(tuple(fields.get(name) for name in ('__dict__', '__getattribute__', '__getattr__',
-                                                         '__setattr__', '__del__')) for fields in dictionaries)
+        hook_names = ('__dict__', '__getattribute__', '__getattr__', '__setattr__', '__del__')
+        hooks = tuple(tuple(fields.get(name) for name in hook_names) for fields in dictionaries)  # glue: freeze lifecycle identities at import
         defaults = {}
         for fields in dictionaries:  # glue: native class constants, without invoking descriptors
-            for name in _SPLITTER_FIELDS:
+            for name in _SPLITTER_FIELDS:  # glue: fixed splitter configuration names, import-time metadata only
                 if name in fields:
                     defaults.setdefault(name, fields[name])
-        members = tuple({name: fields.get(name) for name in _SPLITTER_FIELDS} for fields in dictionaries)
+        members = tuple({name: fields.get(name) for name in _SPLITTER_FIELDS} for fields in dictionaries)  # glue: retain exact native field metadata at import
         layouts[cls] = (mro, descriptor.__get__, hooks, defaults, members)
     context['family_msel_splitter_layouts'] = layouts
