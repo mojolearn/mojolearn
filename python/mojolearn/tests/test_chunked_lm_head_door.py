@@ -91,8 +91,10 @@ def test_the_door_is_public_and_its_debt_is_declared():
     assert re.search(r"__all__ = \[.*'chunked_lm_head_loss'", training, re.S)
     impl = _read("python/mojolearn/_training_impl.py")
     assert "def chunked_lm_head_loss(" in impl
+    # the public door is one native call; the owner runs both entries
+    owner = _read("bindings/training_extra_native.mojo")
     for name in NAMES:
-        assert f"binding.{name}(" in impl, name
+        assert f'"{name}"' in owner, name
     accounting = _read("tools/lane_accounting.py")
     assert '"training.chunked_lm_head_loss": (' in accounting
 

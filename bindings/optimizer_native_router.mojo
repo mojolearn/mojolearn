@@ -3,6 +3,7 @@
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
+from bindings.training_extra_native import training_chunked_lm_head, training_mlp_sessions, training_residual_dropout
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_typed_call import py_call_typed
 from bindings.optimizer_public_words import optimizer_python_error, stash_python_error
@@ -260,6 +261,13 @@ def optimizer_native(operation: String, owner: PythonObject, values: PythonObjec
         return training_embedding_operation(operation, values, entries, context)
     if operation == "cross_entropy":
         return training_cross_entropy(values, entries, context)
+    if operation == "chunked_lm_head_loss":
+        return training_chunked_lm_head(values, entries, context)
+    if operation == "mlp_inference_sessions":
+        return training_mlp_sessions(values, entries)
+    if operation == "residual_dropout" or operation == "residual_dropout_backward":
+        # the explicit residual layer runs in identical mode only
+        return training_residual_dropout(operation, values, optimizer_entries(PythonObject("identical"), context))
     if operation == "binding":
         return entries["module"]
     if operation == "raw_io":
