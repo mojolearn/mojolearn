@@ -24,7 +24,8 @@
 # native entry, the same calibrators). IDENTICAL never took it; the x_prep
 # kernels stay in place for the prep family.
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr, py_fields, py_attr
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr, py_fields
+from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
 from bindings.classical_arrays import classical_wrap_array, _store_code
 from bindings.trees_public_inputs import (

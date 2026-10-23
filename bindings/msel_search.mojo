@@ -12,7 +12,8 @@
 # draws, so every result is unchanged.
 from std.memory import memcpy
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields, py_attr
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
+from bindings.py_attr import py_attr
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.classical_arrays import classical_wrap_array
 from bindings.family_common import (

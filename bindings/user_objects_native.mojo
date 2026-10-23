@@ -36,7 +36,8 @@ from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
-from bindings.py_balanced import py_call, py_type, py_attr
+from bindings.py_balanced import py_call, py_type
+from bindings.py_attr import py_attr
 from core.user_objects import group_run_sizes
 
 comptime KIND_STR = 0         # isinstance(v, str)

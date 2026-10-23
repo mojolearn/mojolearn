@@ -13,7 +13,8 @@
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields, py_attr
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
+from bindings.py_attr import py_attr
 from bindings.optimizer_public_words import stash_python_error, PYTHON_ERROR_PENDING, _restore_python_error
 from bindings.classical_arrays import classical_address, classical_wrap_array
 from bindings.family_common import (

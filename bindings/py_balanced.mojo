@@ -59,17 +59,6 @@ def py_setattr(owner: PythonObject, var name: String, value: PythonObject) raise
         raise cpy.unsafe_get_error()
 
 
-def py_attr(owner: PythonObject, var name: String) raises -> PythonObject:
-    """`getattr(owner, name)`: a Python attribute whose name PythonObject also
-    defines as a Mojo method (`__getitem__`, `__mul__`, `copy`, `append`, ...),
-    which `owner.name` would resolve to the Mojo overload set."""
-    ref cpy = Python().cpython()
-    var result = cpy.PyObject_GetAttrString(owner._obj_ptr, name^)
-    if not result:
-        raise cpy.unsafe_get_error()
-    return PythonObject(from_owned=result)
-
-
 def py_get(mapping: PythonObject, key: PythonObject) raises -> PythonObject:
     """`mapping.get(key)`."""
     return py_call(mapping.get, key)

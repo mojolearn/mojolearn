@@ -14,7 +14,8 @@
 # kit's own objects, so transform reads it where fit left it. Bits unchanged.
 from std.math import sqrt
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_get, py_fields, py_setitem, py_contains, py_attr
+from bindings.py_balanced import py_call, py_get, py_fields, py_setitem, py_contains
+from bindings.py_attr import py_attr
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
     family_repr, family_str, family_is_str, family_is_int, family_type_name, family_call, family_call_kw,

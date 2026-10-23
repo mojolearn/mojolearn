@@ -11,7 +11,8 @@
 # str and bool classes decode to the label objects. The shell hands over the
 # base binding (`_backend.binding("_mojolearn", "identical")`, `_buffer._native`'s).
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_attr
+from bindings.py_balanced import py_call, py_type, py_get, py_contains
+from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address, classical_is_array
 from bindings.family_common import (
     family_repr, family_isinstance, family_call, family_entry, family_array, FAMILY_F64P, FAMILY_I64P,

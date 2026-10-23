@@ -19,7 +19,8 @@ from std.math import isfinite, floor, copysign
 from std.memory import bitcast
 from std.os import getenv
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields, py_attr
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_fields
+from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
 from bindings.host_archive_native import host_archive_gbdt_state
 from bindings.classical_arrays import classical_wrap_array

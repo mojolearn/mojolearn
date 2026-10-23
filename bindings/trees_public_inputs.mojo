@@ -18,7 +18,8 @@ from std.math import isfinite
 from std.memory import bitcast
 from std.os import getenv
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr, py_attr
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setitem, py_setattr
+from bindings.py_attr import py_attr
 from std.python._cpython import PyObjectPtr
 from bindings.py_typed_call import py_call_typed, typed_python_error
 from bindings.native_buffer_owner import native_buffer_view

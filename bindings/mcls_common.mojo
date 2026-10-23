@@ -20,7 +20,8 @@
 #   back from the arena as `prog.ints` / `prog.words` read them.
 from std.memory import memcpy, bitcast
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setattr, py_setitem, py_fields, py_attr
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setattr, py_setitem, py_fields
+from bindings.py_attr import py_attr
 from bindings.native_buffer_owner import native_buffer_view, native_storage_allocate
 from bindings.classical_arrays import classical_address, classical_is_array, classical_dtype_str, classical_wrap_array
 from bindings.classical_attributes import classical_connect_numpy

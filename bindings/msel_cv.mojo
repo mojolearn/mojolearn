@@ -13,7 +13,8 @@
 from std.memory import memcpy
 from std.time import perf_counter_ns
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields, py_attr
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_contains, py_fields
+from bindings.py_attr import py_attr
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.family_common import (
     family_array, family_call, family_call_kw, family_isinstance, family_is_str, family_repr, family_str, family_type_name,

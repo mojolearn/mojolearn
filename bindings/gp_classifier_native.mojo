@@ -11,7 +11,8 @@
 # gpc_ovr_combine), and stores the fit as `_set_fitted` did. The same entries on
 # the same inputs in the same order: the bits do not move.
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem, py_attr
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_fields, py_setitem
+from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (

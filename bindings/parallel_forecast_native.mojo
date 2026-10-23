@@ -20,7 +20,8 @@ from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
 from bindings.native_error_class import error_without_class
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains, py_attr
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields, py_contains
+from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address
 from bindings.native_process_pool import (
     process_pool_create, process_pool_map, process_pool_close,

@@ -10,7 +10,8 @@
 # do not move.
 from std.memory import memcpy
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_get, py_type, py_setattr, py_attr
+from bindings.py_balanced import py_call, py_get, py_type, py_setattr
+from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.native_buffer_owner import native_storage_allocate

@@ -8,7 +8,8 @@
 # is the caller's fitted estimator's own (a mojolearn estimator's is itself
 # one native call); its exception reaches the caller unchanged.
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setattr, py_attr
+from bindings.py_balanced import py_call, py_type, py_get, py_contains, py_setattr
+from bindings.py_attr import py_attr
 from bindings.native_buffer_owner import native_storage_allocate
 from bindings.family_common import family_repr, family_is_str, family_isinstance, family_call
 from bindings.msel_common import msel_get_scorer, msel_score

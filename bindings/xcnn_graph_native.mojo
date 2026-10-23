@@ -13,7 +13,8 @@ under the same names; the graph is the module's `_Graph` record.
 NumPy is called for allocation and dtype conversion only.
 """
 from std.python import Python, PythonObject
-from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains, py_attr
+from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_setattr, py_fields, py_contains
+from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
 from bindings.xcnn_common import (
     xcnn_builtins, xcnn_entries, xcnn_entry, xcnn_mixed, xcnn_idn, XCNN_F_GRAPH, xcnn_is_t, xcnn_on_dev,
