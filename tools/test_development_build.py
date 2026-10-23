@@ -81,6 +81,22 @@ def cache_row(cache, row, data=b"native-test-bytes"):
     return path
 
 
+def test_larger_closures_start_first_without_changing_plan_or_keys(repo, tmp_path):
+    value = plan(repo, tmp_path, env=dict(ENV, MOJOLEARN_PACKAGE_BYTE_LM="0"))
+    original = json.dumps(value, sort_keys=True)
+    rows = value["groups"]
+    ordered = dev.build_submission_order(reversed(rows))
+    assert [r["stem"] for r in ordered] == ["_mojolearn_dev_trees", "_mojolearn_dev_dense"]
+    assert {id(r) for r in ordered} == {id(r) for r in rows}
+    assert json.dumps(value, sort_keys=True) == original
+    # Equal source closures have a stable tie break, independent of the
+    # manifest/submission input order, without looking at artifact state.
+    tie = dict(rows[1], stem="_mojolearn_dev_alphabetic_first", key="different-key")
+    expected = [tie, rows[1]]
+    assert dev.build_submission_order(expected) == expected
+    assert dev.build_submission_order(reversed(expected)) == expected
+
+
 def test_single_family_and_shared_import_invalidation(repo, tmp_path):
     before = plan(repo, tmp_path)
     write(repo, "tree/leaf.mojo", "comptime leaf = 2\n")
