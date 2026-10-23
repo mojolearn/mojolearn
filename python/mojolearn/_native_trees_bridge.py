@@ -147,6 +147,17 @@ def bindings(name=None):
     return {mode: per_mode.get(name) for mode, per_mode in connected.items()}  # glue: the two numeric modes
 
 
+def connect_cpu_prediction():
+    # glue: connect CPU CTR prediction metadata once, after package classes
+    # exist. The native tree owner also serves plain GradientBoosting, whose
+    # CPU categorical predict needs the same registry as explicit HostGBDT.
+    # Waiting for a saved-model API import left that native route unconnected.
+    # GPU installs connect it through their existing explicit host API import.
+    if _CONTEXT is None or _CONTEXT.get("vendor") != "cpu":
+        return
+    from . import _forest_host  # noqa: F401 - registers the native host tree/archive context
+
+
 def register(cls, kind, **tables):
     """Connect one public tree class at its definition: `kind` names the
     native owner's schema for it ("rf_classifier", "et_regressor", ...);
