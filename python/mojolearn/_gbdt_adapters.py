@@ -8,9 +8,9 @@ sklearn Pipeline does not automatically transform a supplied eval_set.
 """
 import inspect
 
-from ._buffer import all_finite, as_f32_c
+from ._buffer import all_finite
 
-from . import _metrics_impl as metrics, _native_trees_bridge
+from . import _native_trees_bridge
 from .ensemble import GradientBoosting
 from ._mode import PublicOutputsMixin
 
@@ -232,15 +232,7 @@ class GradientBoostingClassifier(_GBDTAdapter):
         Follows scikit-learn's weighted accuracy. ``y`` must have the same label
         type as the training labels; otherwise ``TypeError``.
         """
-        self._check_fitted()
-        target, kind = metrics._classification_encoded(y, 'y')
-        if kind != self._label_kind_:
-            raise TypeError('score labels must have the training label type')
-        vocabulary = {label: i for i, label in enumerate(self.classes_)}  # glue: two-label binary vocabulary
-        encoded = metrics._label_map(target, lambda label: vocabulary.get(label, -1))
-        return metrics.accuracy_score(encoded, _TREES(self, "trees_gbdt_adapter_codes", (X,), _TREES_CONTEXT),
-                                      sample_weight=sample_weight,
-                                      numeric_mode=self.numeric_mode_)
+        return _TREES(self, "trees_gbdt_adapter_score", (X, y, sample_weight), _TREES_CONTEXT)
 
 class GradientBoostingRegressor(_GBDTAdapter):
     """Gradient-boosted tree regressor with a scikit-learn interface.
@@ -340,15 +332,7 @@ class GradientBoostingRegressor(_GBDTAdapter):
 
         Follows scikit-learn's weighted ``r2_score``.
         """
-        self._check_fitted()
-        # float64 and integer targets are cast to float32 once, natively
-        # (`as_f32_c`), as scikit-learn's callers pass them
-        target = as_f32_c(y, ndim=None, name="y")[0]
-        self._regression_target(target, 'y')
-        return metrics.r2_score(target, self.predict(X),
-                                sample_weight=sample_weight,
-                                numeric_mode=self.numeric_mode_)
-
+        return _TREES(self, "trees_gbdt_adapter_score", (X, y, sample_weight), _TREES_CONTEXT)
 
 # The adapters' native fit (bindings/trees_public_gbdt_fit.mojo) reads the
 # constructor protocol it checks (`get_params`) and builds the learner class.
