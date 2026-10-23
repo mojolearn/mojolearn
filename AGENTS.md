@@ -36,6 +36,14 @@
 - Never read whole subagent transcripts or `tasks/*.output` files. Request a
   concise status or inspect the specific retained artifact instead.
 
+## No background watchers (Andrew, 2026-10-23)
+
+- Background watcher, monitoring, polling, mirror and periodic collection services
+  are disabled at Andrew's request. Do not install, restart or replace them unless
+  Andrew explicitly asks. This includes the periodic box archiver.
+- Keep explicit per-run result retention and archive-before-teardown checks.
+  Active build and measurement controllers are not background watcher services.
+
 ## Results leave the box (Andrew, 2026-10-18)
 
 Every run on a rented box keeps its logs and results on the Mac and in R2, not only on the box.
@@ -44,11 +52,11 @@ Every run on a rented box keeps its logs and results on the Mac and in R2, not o
   `tools/box_archive.sh` copies their logs and results, with the box's hardware and software snapshot, home to
   `~/mojolearn-evidence/box-archive/<box>-<stamp>/` and to R2 at `measurements/box-archive/<box>/`. It skips caches,
   venvs, `.so`/`.whl` files and anything over 50 MB: those are rebuilt or already in R2.
-- It runs automatically: the launchd archiver (`~/mojolearn-evidence/archive_all_boxes.sh`, every 3 h) archives every
-  live box found in `~/mojolearn-evidence/devpods/<key>/state.env` and `do-amd-steward/state.env`, and
-  `tools/dev_pod.sh down` and `tools/do_amd_steward.sh down` archive before the delete. They refuse to delete a reachable
+- The periodic launchd archiver is disabled (2026-10-23). Retain results explicitly during each run;
+  `tools/dev_pod.sh down` and `tools/do_amd_steward.sh down` still archive before the delete. They refuse to delete a reachable
   box whose archive fails. `MOJOLEARN_DOWN_NO_ARCHIVE=1` skips the archive, only when the results are already home.
-- A box rented any other way must get a state file in one of those directories, or it is not archived.
+- A box rented any other way must get a state file in `~/mojolearn-evidence/devpods/<key>/state.env`
+  or `do-amd-steward/state.env` so explicit retention and teardown can find it.
 - Before taking a box down, check who owns it: `ListAgents`, then the box's keeper or brief. Never take down another
   session's box.
 - A run's key results also go to the repo or to `~/mojolearn-evidence/<run>/` as soon as they land. The archive is the
