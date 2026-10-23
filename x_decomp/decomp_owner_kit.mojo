@@ -257,7 +257,9 @@ def kit_lu[E: Exec, D: RDev, RES: Bool, X: DecompDev](
     if resident:
         var lu = kit.device_output(n, n)
         var da = kit.device(a)
-        X.lu(da, kit.mats[lu].dev, pp, kit.ptr(info), n)
+        var info_ptr = kit.ptr(info)
+        var lu_dev = kit.mats[lu].dev
+        X.lu(da, lu_dev, pp, info_ptr, n)
         return (lu, Int(kit.ptr(info)[0]))
     var lu = kit.copy_host(a)
     _exec_lu[E](kit.ptr(lu), pp, kit.ptr(info), n)

@@ -835,7 +835,9 @@ struct DecompKit(Movable):
         if n >= 1 and self.matrices[a].cols == n and self.opt_dev("x_decomp_dev_lu") and self.use(a):
             lu = self.device_output(n, n)
             var da = self.device(a)
-            _ = py_call(self.entries["x_decomp_dev_lu"], da, self.matrices[lu].device, pa, self.address(info), Python.list(n))
+            var info_address = self.address(info)
+            var lu_device = self.matrices[lu].device
+            _ = py_call(self.entries["x_decomp_dev_lu"], da, lu_device, pa, info_address, Python.list(n))
         else:
             lu = self.copy_host(a)
             _ = py_call(self.entries["x_decomp_lu"], self.address(lu), pa, self.address(info), Python.list(n))
@@ -1108,7 +1110,9 @@ struct DecompKit(Movable):
         if rows * cols and self.use(a):
             var q = self.device_output(rows, cols)
             var da = self.device(a)
-            _ = py_call(self.entries["x_decomp_dev_orth_diag"], da, self.matrices[q].device, self.address(diag), params)
+            var diag_address = self.address(diag)
+            var q_device = self.matrices[q].device
+            _ = py_call(self.entries["x_decomp_dev_orth_diag"], da, q_device, diag_address, params)
             return (q, diag)
         var q = self.copy_host(a)
         _ = py_call(self.entries["x_decomp_orth_diag"], self.address(q), self.address(diag), params)
