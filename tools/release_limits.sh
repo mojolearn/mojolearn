@@ -54,3 +54,12 @@ CPU_BOX_RELEASE_BUILD_SECONDS=6000
 # IDENTICAL svm cross-compiles for sm_89 in about 3 minutes at -j 1; a binding
 # that takes ten is a hang to look at before a rental pays for it.
 CROSS_COMPILE_SECONDS=600
+
+# Development partitions may include the large tokenizer/native owner groups.
+# Keep their finite deadline at the supported cold-build bound, independent of
+# set concurrency and Mojo worker count. CPU inactivity is separately bounded.
+DEVELOPMENT_BUILD_SECONDS=6000
+DEVELOPMENT_STALL_SECONDS=300
+# A competing cold builder may legitimately hold the cache/source lock for a
+# whole group. Waiting is bounded too, without an indefinite flock.
+DEVELOPMENT_LOCK_SECONDS=6000
