@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Native public-operation routing, constructors, state preparation and resident IO.
 from bindings.embedding_layer_native import emblayer_operation
+from std.os import getenv
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
 from std.python.bindings import ExceptionType, raise_python_exception
@@ -95,7 +96,12 @@ def optimizer_construct(owner: PythonObject, values: PythonObject, mode: PythonO
     opt_value(values[0], context)
     opt_value(values[13], context)
     refuse_kwargs(values[13], where)
-    var profile = context["profile_defaults"]["training"]
+    # the process default, resolved as `_numeric_profile.require_training`
+    # resolves it: a recorded default, else the environment, else fp32_v1
+    var profile = py_get(context["profile_defaults"], "training")
+    if profile is None:
+        var env = String(getenv("MOJOLEARN_NUMERIC_PROFILE", "")).strip()
+        profile = PythonObject(String(env) if env.byte_length() > 0 else String("fp32_v1"))
     if not Bool(py=context["profiles"][profile]["training"]):
         raise Error("NotImplementedError: the selected numeric profile is unavailable for optimizer training")
     var accumulation = Int(py=py_call(context["scalar_types"][2], values[10]))
