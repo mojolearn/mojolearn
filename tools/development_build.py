@@ -294,6 +294,20 @@ def make_plan(repo, cache, modes, env, selection=(), facts=None, plat=None):
                 "build_unselected": sum(r["action"] == "build" and not r["selected"] for r in rows)}}
 
 
+def build_submission_order(rows):
+    """Start larger estimated compile closures before smaller groups.
+
+    File count is a deterministic cost proxy, not a measured duration. Reuse
+    the closure already computed for the cache key; scheduling does not scan
+    caches/files, rewrite plan rows, or reserve additional compilers. This avoids
+    leaving a large owner at the end merely because of manifest order.
+    No key fields are added; changes to this tool still invalidate keys once
+    because its source is an existing BUILD_INPUT.
+    """
+    return sorted(rows, key=lambda row: (-len(row["fields"]["source"]["files"]),
+                                         row["mode"], row["stem"]))
+
+
 def available_resources():
     if sys.platform == "linux":
         from build_sizing import box_resources
@@ -523,7 +537,8 @@ def main(argv=None):
             if not plan["toolchain_available"]:
                 raise BuildError("install the pinned default pixi environment before building")
             workers = planned_compiler_workers(plan)
-            wanted = [r for r in plan["groups"] if r["selected"] and r["action"] == "build"]
+            wanted = build_submission_order(
+                r for r in plan["groups"] if r["selected"] and r["action"] == "build")
             # A warm cache has no compiler to reserve or start. The generator
             # above still runs under a guard before keys are computed.
             jobs = 0
