@@ -17,6 +17,7 @@ from bindings.causal_exception import causal_borrowed_item, causal_set_exception
 from bindings.xseq_neural_native import xseq_rnn, xseq_mlp
 from bindings.xseq_forecast_native import xseq_forecast
 from bindings.xseq_score_native import xseq_regressor_score
+from bindings.xseq_prophet_native import prophet_fit, prophet_predict
 
 
 def _xseq_raise(error: Error, args_ptr: PyObjectPtr) -> PyObjectPtr:
@@ -64,6 +65,10 @@ def xseq_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
             var prediction = (xseq_rnn(model, "rnn_predict", predict_args, context) if operation == "rnn_score"
                               else xseq_mlp(model, "mlp_predict", predict_args, context))
             result = xseq_regressor_score(model, prediction, args, context)
+        elif operation == "prophet_fit":
+            result = prophet_fit(model, args, context)
+        elif operation == "prophet_predict":
+            result = prophet_predict(model, args, context)
         elif operation.startswith("rnn_"):
             result = xseq_rnn(model, operation, args, context)
         elif operation.startswith("mlp_"):
