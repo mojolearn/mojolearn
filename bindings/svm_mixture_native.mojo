@@ -45,7 +45,10 @@ def _class_count(classes: PythonObject) raises -> Int:
     var b = Python.import_module("builtins")
     if py_type(classes) is b.list or py_type(classes) is b.tuple:
         return len(classes)
-    return Int(py=classes.shape[0])
+    # an array has a shape; a list subclass (`_labels.ClassLabels`) does not
+    if Bool(py=py_call(b.hasattr, classes, PythonObject("shape"))):
+        return Int(py=classes.shape[0])
+    return len(classes)
 
 
 def _gmm_sample(model: PythonObject, binding: PythonObject, n_samples: PythonObject,
