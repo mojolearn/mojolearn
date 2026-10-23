@@ -62,7 +62,8 @@ def main():
             continue
         outcome = run(command + ["--stage", "test"], directory / "test.log", 12 if fault == "stall" else 120)
         if fault == "stall":
-            caught = outcome["timed_out"] and outcome["exit_code"] != 0
+            reached = "ADAPTER_FAULT_STALL_ENTERED" in (directory / "test.log").read_text()
+            caught = reached and outcome["timed_out"] and outcome["exit_code"] != 0
         else:
             results_path = directory / "adapter-results.json"
             results = json.loads(results_path.read_text()) if results_path.exists() else {}

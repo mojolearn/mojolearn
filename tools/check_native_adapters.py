@@ -42,10 +42,12 @@ def main():
                 assert source.count(original) == 1
                 source = source.replace(original, "device.is_cpu() ? -1 : 0, code == 2 ? 3 : code,")
             elif args.fault == "stall":
-                source = "#include <chrono>\n#include <thread>\n" + source
+                source = "#include <chrono>\n#include <thread>\n#include <cstdio>\n" + source
                 original = "const auto status = mojolearn_adapter_operation("
                 assert source.count(original) == 1
-                source = source.replace(original, "for (;;) std::this_thread::sleep_for(std::chrono::seconds(1));\n  " + original)
+                source = source.replace(original,
+                    'std::fputs("ADAPTER_FAULT_STALL_ENTERED\\n", stderr); std::fflush(stderr);\n'
+                    "  for (;;) std::this_thread::sleep_for(std::chrono::seconds(1));\n  " + original)
             # Retain the actual source bytes compiled, including fault controls.
             cpp = out / "registration.cpp"
             cpp.write_text(source)
@@ -109,6 +111,8 @@ def main():
         checked("broadcast", lambda: equal(operation([x, y[:1].contiguous()], 2, [2, 3]), x + y[:1]))
         ids = torch.tensor([1, 0], dtype=torch.int32, device=device)
         checked("int32_copy", lambda: equal(operation([ids], 31, [2], integer_output=True), ids))
+        special = torch.tensor([-2147483648, 1, 2143289410, 2139095040, -8388608], dtype=torch.int32, device=device).view(torch.float32)
+        checked("copy_preserves_special_float_words", lambda: equal(operation([special], 31, [5]), special))
         checked("embedding_indices", lambda: equal(operation([x, ids], 32, [2, 3], [-1]), x[[1, 0]]))
         checked("take_indices", lambda: equal(operation([x, ids], 41, [2, 2], [1]), x[:, [1, 0]]))
         checked("int32_argmax", lambda: equal(operation([x], 72, [2], [1, 0, 0], integer_output=True), x.argmax(1).int()))
