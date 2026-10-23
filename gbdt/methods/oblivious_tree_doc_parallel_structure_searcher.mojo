@@ -99,6 +99,7 @@ from gbdt.methods.histograms_helper import policy_name
 from gbdt.gpu_data.feature_blocks import PolicyBlock, blocks_for
 from gbdt.gpu_data.compressed_index_builder import CompressedIndexLayout
 from gbdt.methods.pointwise_optimization_subsets import (
+    PARTITION_STAT_STRIDE,
     TL2Target,
     TOptimizationSubsets,
     create_subsets,
@@ -949,6 +950,22 @@ def fit_oblivious_tree_structure_traced(
                 )
 
         var pstats = subsets.partition_stats.copy()
+        if trace.enabled:
+            # lane sm120-tree-identity: the level's partition table and its
+            # (weight, sum, ...) stats, the score pass's inputs, at their
+            # logical extent `1 << (fold_bits + depth)` parts.
+            var n_parts = 1 << (Int(subsets.fold_bits) + depth)
+            trace.record_device(
+                ctx, tree_tag + ".depth" + _dd2(depth) + ".partitions",
+                subsets.partitions, count=min(2 * n_parts, len(subsets.partitions)),
+            )
+            trace.record_device(
+                ctx, tree_tag + ".depth" + _dd2(depth) + ".pstats",
+                subsets.partition_stats,
+                count=min(
+                    PARTITION_STAT_STRIDE * n_parts, len(subsets.partition_stats)
+                ),
+            )
         times.begin(ctx)
         if len(std_scale_word) > 0:
             calcer.compute_optimal_split_dev_std(
@@ -1116,6 +1133,21 @@ def fit_oblivious_tree_structure_traced(
                 bins_done=fused_pw,
             )
         times.end(ctx, "pw.split")
+        if trace.enabled:
+            # lane sm120-tree-identity: the level's winner (feature, bin)
+            # and the per-row bins / order the split wrote.
+            trace.record_device(
+                ctx, tree_tag + ".depth" + _dd2(depth) + ".winner",
+                pool[0].d_winners_ids, count=2 * max_depth,
+            )
+            trace.record_device(
+                ctx, tree_tag + ".depth" + _dd2(depth) + ".bins",
+                subsets.bins, count=min(subsets.doc_count, len(subsets.bins)),
+            )
+            trace.record_device(
+                ctx, tree_tag + ".depth" + _dd2(depth) + ".indices",
+                subsets.indices, count=min(subsets.doc_count, len(subsets.indices)),
+            )
 
     # ---- THE ONE DRAIN OF THE TREE (DEVIATION 207) -------------------
     # Their per-level `ReadOptimalSplit`, folded into one: the winner

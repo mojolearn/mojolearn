@@ -243,6 +243,7 @@ is not expressible; the loop is written out as a Mojo `comptime for` over
 16 iterations, which is the same unroll and the same order.
 """
 
+from std.collections import InlineArray
 from std.math import fma
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
@@ -1067,14 +1068,21 @@ def find_optimal_split_cosine_kernel[
         var k0 = 0
         while k0 < steps:
             var cnt = min(CS_U, steps - k0)
-            var plw = SIMD[DType.float32, CS_U](0)
-            var pls = SIMD[DType.float32, CS_U](0)
-            var ptw = SIMD[DType.float32, CS_U](0)
-            var pts = SIMD[DType.float32, CS_U](0)
-            var wel = SIMD[DType.float32, CS_U](0)
-            var sel = SIMD[DType.float32, CS_U](0)
-            var wtl = SIMD[DType.float32, CS_U](0)
-            var stl = SIMD[DType.float32, CS_U](0)
+            # PLAIN ARRAYS, NOT SIMD VECTORS (lane sm120-tree-identity,
+            # 2026-10-23): slot `u` is loaded under its own guard
+            # (`u < cnt`) inside a `comptime for`, the shape the sm_120 AOT
+            # compile corrupts (core/gram_splitk.mojo, GRAM_STRIDED_ARM). On
+            # the RTX 5090 the Ordered fits stopped at depth 3 (a level's
+            # winner repeated an earlier split) where AMD and the L40S grew
+            # depth 6. Same loads, same arithmetic, same order.
+            var plw = InlineArray[Float32, CS_U](fill=Float32(0))
+            var pls = InlineArray[Float32, CS_U](fill=Float32(0))
+            var ptw = InlineArray[Float32, CS_U](fill=Float32(0))
+            var pts = InlineArray[Float32, CS_U](fill=Float32(0))
+            var wel = InlineArray[Float32, CS_U](fill=Float32(0))
+            var sel = InlineArray[Float32, CS_U](fill=Float32(0))
+            var wtl = InlineArray[Float32, CS_U](fill=Float32(0))
+            var stl = InlineArray[Float32, CS_U](fill=Float32(0))
             comptime for u in range(CS_U):
                 if u < cnt:
                     var kk = k0 + u
