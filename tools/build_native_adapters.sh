@@ -57,6 +57,9 @@ PY
 if [ "$(uname -s)" = Darwin ]; then
     # Standard Mach-O packaging metadata, not a compiler/kernel modification.
     install_name_tool -id @rpath/libmojolearn_adapter.so "$out/libmojolearn_adapter.so"
+    # Changing a load command invalidates the arm64 ad-hoc signature, matching
+    # the existing packaging/macos/stage_dylibs.py retention/loading policy.
+    codesign --force --sign - "$out/libmojolearn_adapter.so"
     otool -L "$out/libmojolearn_adapter.so" > "$out/native-libraries.txt"
     nm -g "$out/libmojolearn_adapter.so" > "$out/native-symbols.txt"
 else

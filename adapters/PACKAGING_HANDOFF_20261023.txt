@@ -55,6 +55,8 @@ Deliverables
    and retain required runtime libraries. Existing qualification build scripts
    use absolute test-environment search paths; those are not distributable wheel
    metadata. Exercise relocation from a clean venv after removing build paths.
+   Re-sign every changed Mach-O binary after rewriting load commands, following
+   packaging/macos/stage_dylibs.py; read back the final artifact hashes.
 5. Test installed wheels (not source-tree imports), merge packaging fixes into
    main, and retain ready-to-publish wheels plus manifests and full evidence.
    Follow the release owner's publication instructions. Do not publish public
