@@ -209,7 +209,11 @@ def test_resident_scope_exit_frees_scope_caches(prefix):
     base = arena.DeviceCache(binding, prefix).live()
     with pytest.raises(KeyError):
         with arena.resident(min_words=0):
-            cache = arena.active_cache(binding, prefix, 1 << 20)
+            # The scope's cache, registered as the native arena runner
+            # registers it ((binding id, prefix) -> (DeviceCache, binding));
+            # the Python active_cache helper left with the Python runner.
+            cache = arena.DeviceCache(binding, prefix)
+            arena._LOCAL.scope.caches[(id(binding), prefix)] = (cache, binding)
             cache.id_of(_source())
             assert cache.live() == base + 1
             raise KeyError('body')
