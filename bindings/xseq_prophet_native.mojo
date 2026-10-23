@@ -50,7 +50,7 @@ def _days(source: PythonObject, entries: PythonObject, context: PythonObject) ra
         src = py_call(np.ascontiguousarray, py_call(py_call(t.astype, "datetime64[ns]").view, np.int64))
         kind = 1
     else:
-        src = py_call(py_call(_contig(t, context["float64"]).reshape, -1))
+        src = py_call(_contig(t, context["float64"]).reshape, -1)
     src = py_call(src.reshape, -1)
     var n = len(src)
     var days = py_call(np.empty, n, dtype=context["float64"])
