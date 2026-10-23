@@ -213,8 +213,9 @@ def samba_validate_state(state: PythonObject, context: PythonObject) raises -> P
         raise Error("Samba: state schema/profile mismatch")
     if Bool(py=py_get(state, "experiment_profile", PythonObject("baseline")) != samba_experiment(entries)):
         raise Error("Samba: experiment numerical profile mismatch")
-    if String(py_get(state, "numeric_profile", PythonObject("fp32_v1"))) != "fp32_v1":
-        raise Error("Samba: state numeric profile must be fp32_v1")
+    var saved_profile = String(py_get(state, "numeric_profile", PythonObject("fp32_v1")))
+    if saved_profile != "fp32_v1":
+        raise Error("Samba: state numeric profile must be fp32_v1, got " + saved_profile)
     var config = samba_config_from_dict(context["config_class"], state["config"])
     var registry = _samba_registry(config)
     if Bool(py=registry != state["registry"]):

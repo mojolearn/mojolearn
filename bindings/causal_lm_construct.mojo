@@ -190,6 +190,22 @@ def _model_profile(requested: PythonObject, family: String, context: PythonObjec
     return selected
 
 
+def _model_profile_named(requested: PythonObject, context: PythonObject) raises:
+    """The family-free half of `_model_profile` for a NAMED profile: an
+    unknown name or one unavailable for inference is refused before any
+    path is read."""
+    var bi = Python.import_module("builtins")
+    if py_type(requested) is not bi.str:
+        raise Error("TypeError: numeric_profile must be a profile name")
+    var selected = requested.strip()
+    if not py_contains(context["profiles"], selected):
+        var reason = py_get(context["rejected_profiles"], selected)
+        raise Error("numeric_profile=" + String(selected) + " is not offered: "
+                    + (String(reason) if reason is not None else String("not a registered numeric profile")))
+    if not Bool(py=context["profiles"][selected]["inference"]):
+        raise Error("NotImplementedError: numeric_profile=" + String(selected) + " is unavailable for inference")
+
+
 def _model_route(device: PythonObject, context: PythonObject) raises -> PythonObject:
     var route = String(device)
     if route == "auto":
@@ -650,6 +666,8 @@ def causal_model_load_binding(cls: PythonObject, path_value: PythonObject, optio
     if format != "float32" and format != "bfloat16" and format != "int8":
         raise Error("CausalLM: weight_format must be one of float32, bfloat16 or int8; unsupported weight_format " + format)
     var route = _model_route(options[2], context)
+    if options[3] is not None:
+        _model_profile_named(options[3], context)
     var path = native_path(path_value)
     if not native_path_exists(path, True):
         raise Error("FileNotFoundError: CausalLM.load requires a checkpoint directory")
