@@ -429,8 +429,9 @@ def reset_caches():
     _PYTHON_FILES = None
     _ENUMERATORS = None
     _LANE_SOURCES = None
-    global _LANE_SEED_CALLS
+    global _LANE_SEED_CALLS, _LANE_PRECISION_PATHS
     _LANE_SEED_CALLS = None
+    _LANE_PRECISION_PATHS = None
     _SOURCE_HASHED = None
     _CONSTANTS = None
     _EXTENDERS = None
@@ -3252,6 +3253,61 @@ def host_routes(hs=None):
 
 _LANE_SOURCES = None
 _LANE_SEED_CALLS = None
+_LANE_PRECISION_PATHS = None
+
+
+@_by_path
+def _generic_dispatch_exports(src):
+    """Observable runtime string dispatch, for diagnostics only.
+
+    The selector does not prove a factory/context pointer's call arguments.
+    Recognize exported owners that read a string from their argument tuple
+    and select multiple operations. This reports a known analysis boundary;
+    it never drops a branch, export, file or lane.
+    """
+    found = {}
+    exports, delegated = _binding_exports(src), _delegated_exports(src)
+    for export in exports.keys() | delegated.keys():
+        if export in delegated:
+            targets = [delegated[export]]
+        else:
+            impl = exports[export]
+            defs = _mojo_defs_for(src)
+            targets = [(src, impl)] if defs is not None and impl in defs[0] else _mojo_named_imports(src, {impl})
+        for rel, name in targets:
+            defs = _mojo_defs_for(rel) if name is not None else None
+            if defs is None or name not in defs[0]:
+                continue
+            body = defs[0][name]
+            variables = re.findall(r'\bvar\s+(\w+)\s*=\s*String\(\s*(?:py\s*=\s*)?\w+\[\s*\d+\s*\]\s*\)', body)
+            for variable in variables:
+                comparisons = re.findall(r'\b' + re.escape(variable) + r'\s*(?:==|!=)\s*["\']([^"\']+)["\']', body)
+                prefixes = re.findall(r'\b' + re.escape(variable) + r'\.startswith\(\s*["\']([^"\']+)["\']', body)
+                if len(set(comparisons + prefixes)) > 1:
+                    found.setdefault(export, []).append((rel, name, variable))
+    return found
+
+
+def _native_dispatch_references(rel, nodes, used, dispatchers):
+    """Source evidence for unresolved dispatcher uses in one Python region."""
+    records = {}
+    for top in nodes:
+        parents = {child: parent for parent in ast.walk(top) for child in ast.iter_child_nodes(parent)}
+        for node in ast.walk(top):
+            export = (node.attr if isinstance(node, ast.Attribute) else node.value
+                      if isinstance(node, ast.Constant) and isinstance(node.value, str) else None)
+            if export not in used or export not in dispatchers:
+                continue
+            parent = parents.get(node)
+            role = "call" if isinstance(parent, ast.Call) and parent.func is node else "retained-reference"
+            for implementation, function, selector in dispatchers[export]:
+                key = (rel, node.lineno, export, implementation, function)
+                records[key] = dict(kind="unresolved-native-dispatch", source=rel, line=node.lineno,
+                                    scope=getattr(top, "name", "<module>"), export=export, use=role,
+                                    implementation=implementation, function=function, selector=selector,
+                                    reason="Factory/context call provenance and operation arguments are unresolved; "
+                                           "all reachable dispatcher branches remain dependencies.")
+    return records
 
 
 def lane_sources():
@@ -3436,8 +3492,12 @@ def lane_sources():
             connected_names.add(f"_mojolearn_{adapted[binding]}_host")
     native_exports = set().union(*[set(_binding_exports(os.path.join("bindings", b + ".mojo")))
                                   for b in connected_names])
+    dispatchers = {}
+    for binding in sorted(connected_names):
+        for export, implementations in _generic_dispatch_exports(os.path.join("bindings", binding + ".mojo")).items():
+            dispatchers.setdefault(export, set()).update(implementations)
 
-    own_cache = {}
+    own_cache, own_limitations = {}, {}
 
     def _own(lane):
         """(the bindings this lane is declared for, the names its OWN doors
@@ -3472,6 +3532,7 @@ def lane_sources():
                 deferred.update(candidates)
                 live.update(consumed)
             deferred -= live
+            limitations = {}
             for rel, wanted in walk.items():
                 if rel in sinks:
                     continue
@@ -3491,7 +3552,9 @@ def lane_sources():
                     # of it, and nothing named is the source alone: the kmeans
                     # lane took the whole GLM host tree through that helper.
                     whole |= found
-                used |= _executed_names(rel, nodes, wanted, deferred, native_exports)
+                region_used = _executed_names(rel, nodes, wanted, deferred, native_exports)
+                used |= region_used
+                limitations.update(_native_dispatch_references(rel, nodes, region_used, dispatchers))
 
             def exists(b):
                 return os.path.exists(os.path.join(ROOT, "bindings", b + ".mojo"))
@@ -3502,13 +3565,14 @@ def lane_sources():
                     if b in adapted:
                         group.add(f"_mojolearn_{adapted[b]}_host")
             own_cache[lane] = (declared, used, whole)
+            own_limitations[lane] = limitations
         return own_cache[lane]
 
     def _whole(lane, binding):
         """Is `binding` resolved by a door this lane runs whole (see `_own`)."""
         return binding in _own(lane)[2]
 
-    seed_calls = {}
+    seed_calls, precision_paths = {}, {}
     for lane in reach:
         matched, files, doors, bindings = reach[lane]
         # THE NAMES THIS LANE'S OWN DOORS CALL (2026-09-23; this was every
@@ -3520,6 +3584,11 @@ def lane_sources():
         # reaches, so its names are what this lane itself asks of a binding:
         # `all_finite_f32` through `_buffer.py`, never `byte_lm_run`.
         used = set(_own(lane)[1])
+        limitations = own_limitations[lane]
+        origins = {}
+        for key, record in limitations.items():
+            origins.setdefault(record["export"], set()).add(key)
+        limitation_paths = precision_paths[lane] = {key: {record["source"]} for key, record in limitations.items()}
         mojo = set()
         binding_use = {}
         # EVERY BINDING CONTRIBUTION, RECORDED (lane/lane-select-mojo,
@@ -3546,14 +3615,25 @@ def lane_sources():
         exports_available = set().union(*[set(_binding_exports(src)) | set(_delegated_exports(src))
                                          for src, _ in native_sources])
         while True:
-            found = set()
+            found, origins_grew = set(), False
             for src, wide in native_sources:
                 binding_seeds(src, used, wide)
                 exports = set(_binding_exports(src)) | set(_delegated_exports(src))
                 key = (src, tuple(sorted(used & exports)), wide)
-                found.update(native_names[key] & exports_available)
+                reached_exports = native_names[key] & exports_available
+                found.update(reached_exports)
+                # Reporting follows the same conservative export fixed point.
+                # Joining several exports may over-attribute a limitation, so
+                # this is a possible provenance path, never a runtime trace.
+                tags = set().union(*(origins.get(name, set()) for name in used & exports))
+                if tags:
+                    for name in reached_exports:
+                        previous = origins.setdefault(name, set())
+                        if tags - previous:
+                            previous.update(tags)
+                            origins_grew = True
             fresh = found - used
-            if not fresh:
+            if not fresh and not origins_grew:
                 break
             used.update(fresh)
 
@@ -3561,6 +3641,9 @@ def lane_sources():
             got = binding_seeds(src, used, wide)
             exports_of = _binding_exports(src)
             calls.append((src, wide, tuple(sorted(e for e in used if e in exports_of)), frozenset(got)))
+            tags = set().union(*(origins.get(name, set()) for name in used & (exports_of.keys() | _delegated_exports(src).keys())))
+            for tag in tags:
+                limitation_paths[tag].update(got)
             return got
         source_only_hosts = set()
         for binding in bindings:
@@ -3654,9 +3737,11 @@ def lane_sources():
         why[lane] = dict(symbols=sorted(matched), python=len(files), bindings=sorted(bindings),
                          declared=sorted(declared),
                          families=sorted(fams), mojo=len(mojo), exports=len(used),
-                         ubiquitous=sorted(ubiquitous), binding_use=binding_use)
-    global _LANE_SEED_CALLS
+                         ubiquitous=sorted(ubiquitous), binding_use=binding_use,
+                         precision_limitations=[limitations[key] for key in sorted(limitations)])
+    global _LANE_SEED_CALLS, _LANE_PRECISION_PATHS
     _LANE_SEED_CALLS = seed_calls
+    _LANE_PRECISION_PATHS = precision_paths
     _LANE_SOURCES = (sources, why)
     return _LANE_SOURCES
 
@@ -7350,6 +7435,26 @@ def refuse_unattributed(sel, out=print):
     return True
 
 
+def selection_precision_limitations(lanes, by_path, sources):
+    """Report unresolved native provenance on paths kept by this selection.
+
+    Reporting never supplies exclusions. A custom source map has no native
+    provenance record and is not retrospectively treated as the cached map.
+    """
+    if _LANE_SOURCES is None or sources is not _LANE_SOURCES[0] or _LANE_PRECISION_PATHS is None:
+        return []
+    records = []
+    for lane in sorted(lanes):
+        for record in _LANE_SOURCES[1][lane].get("precision_limitations", ()):
+            key = (record["source"], record["line"], record["export"], record["implementation"], record["function"])
+            affected = _LANE_PRECISION_PATHS.get(lane, {}).get(key, ())
+            paths = sorted(path for path, selected in by_path.items() if lane in selected and path in affected)
+            if paths:
+                records.append(dict(record, lane=lane, paths=paths,
+                                    provenance="conservative export closure; possible path, not an execution trace"))
+    return records
+
+
 def select(paths, ref=None, sources=None, backend=None):
     """The lanes `paths` can affect.
 
@@ -7357,7 +7462,8 @@ def select(paths, ref=None, sources=None, backend=None):
     what it did), `by_path` (path -> exactly the lanes it selected),
     `every_rules` (path -> the RULE by which it selects every lane, e.g. the
     pinned toolchain or a harness function every column runs) and
-    `unattributed` (paths nothing can place).
+    `unattributed` (paths nothing can place), and `precision_limitations`
+    (unresolved native dispatch provenance that retains extra dependencies).
 
     NO FALLBACK (2026-09-22). An unattributed path used to widen the answer to
     every lane, which made "the lanes this change reaches" silently mean "all
@@ -7684,6 +7790,7 @@ def select(paths, ref=None, sources=None, backend=None):
     return dict(lanes=sorted(lanes, key=every.index), fallback=False, reasons=reasons,
                 unattributed=sorted(unattributed), inert=sorted(inert), total=len(every),
                 every_rules=every_rules, chains=chains,
+                precision_limitations=selection_precision_limitations(lanes, by_path, sources),
                 by_path={p: sorted(v, key=every.index) for p, v in by_path.items()})
 
 
@@ -7813,6 +7920,10 @@ def main(argv=None):
     if refuse_unattributed(sel):
         return 3
     print(f"# {len(sel['lanes'])} of {sel['total']} lanes selected")
+    limited = {row["lane"] for row in sel.get("precision_limitations", ())}
+    if limited:
+        print(f"# Precision limitation: {len(limited)} selected lane(s) retain unresolved native dispatch dependencies; "
+              "extra verification work, not a numerical failure (details: --why or --json)")
     if args.why:
         for lane in sel["lanes"]:
             ev = why[lane]
@@ -7821,6 +7932,10 @@ def main(argv=None):
                   f"python={ev['python']} mojo={ev['mojo']}")
             for chain in sel.get("chains", {}).get(lane, ()):
                 print(f"#     via {chain}")
+            for row in sel.get("precision_limitations", ()):
+                if row["lane"] == lane:
+                    print(f"#     unresolved {row['export']} at {row['source']}:{row['line']} -> "
+                          f"{row['implementation']}::{row['function']}; retained {','.join(row['paths'])}")
     if args.files:
         files = sorted(set().union(*[sources[n] for n in sel["lanes"]])) if sel["lanes"] else []
         for rel in files:
