@@ -4697,6 +4697,7 @@ def _enqueue_classification_score[MAX_ACC: Int](
             Int32(0),
             dataset.n_cols,
             dataset.weights_ptr(),
+            ws.d_thresh.unsafe_ptr(),
             grid_dim=search_grid(n_blocks_dimx, Int(k)),
             block_dim=(TPB, 1, 1),
         )
@@ -4752,6 +4753,7 @@ def _enqueue_classification_score[MAX_ACC: Int](
         seed,
         Int32(0),
         dataset.n_cols,
+        ws.d_thresh.unsafe_ptr(),
         grid_dim=search_grid(n_blocks_dimx, Int(k)),
         block_dim=(TPB, 1, 1),
     )
@@ -7546,6 +7548,7 @@ def search_batch_regression_enqueue(
             Int32(0),
             dataset.n_cols,
             dataset.weights_ptr(),
+            ws.d_thresh.unsafe_ptr(),
             grid_dim=search_grid(n_blocks, Int(k)),
             block_dim=(TPB, 1, 1),
         )
@@ -7573,6 +7576,7 @@ def search_batch_regression_enqueue(
             seed,
             dataset.d_quant.unsafe_ptr(),
             dataset.d_nbins.unsafe_ptr(),
+            ws.d_thresh.unsafe_ptr(),
             grid_dim=(n_blocks, ceildiv(Int(k), ET_CODE_TILE), 1),
             block_dim=(TPB, 1, 1),
         )
@@ -7600,6 +7604,7 @@ def search_batch_regression_enqueue(
             seed,
             dataset.d_quant.unsafe_ptr(),
             dataset.d_nbins.unsafe_ptr(),
+            ws.d_thresh.unsafe_ptr(),
             grid_dim=(n_blocks, ceildiv(Int(k), ET_FEATURE_TILE), 1),
             block_dim=(TPB, 1, 1),
         )
@@ -7628,6 +7633,7 @@ def search_batch_regression_enqueue(
             seed,
             Int32(0),
             dataset.n_cols,
+            ws.d_thresh.unsafe_ptr(),
             grid_dim=search_grid(n_blocks, Int(k)),
             block_dim=(TPB, 1, 1),
         )

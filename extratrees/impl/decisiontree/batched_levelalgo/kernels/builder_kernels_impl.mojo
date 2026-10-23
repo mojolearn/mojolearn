@@ -1758,6 +1758,7 @@ def _node_feature_score_body[
     sabotage_in: Int32,
     n_cols_in: Int32,
     row_w: MutPointer[Int32, MutAnyOrigin],
+    out_threshold: MutPointer[Float32, MutAnyOrigin],
 ):
     """Steps 2, 3 and 4 of DEVIATION 137: skip, draw, and accumulate.
     WEIGHTED classification (lane sk-kernels): each row adds its
@@ -1822,6 +1823,17 @@ def _node_feature_score_body[
     var threshold = draw_threshold_device(
         key, extent, sabotage != SCORE_SAB_NO_MAX_GUARD
     )
+    # THE ONE STORED THRESHOLD (lane sm120-tree-identity, 2026-10-23): the
+    # value this pass counts `x <= threshold` against is the value the
+    # finalize publishes, the reduce keeps and the partition compares, so
+    # the split's `n_left` and the partition's direction test read the SAME
+    # word. The finalize used to redraw it in its own kernel; on an RTX 5090
+    # the partition then disagreed with `n_left` and left slots of the
+    # alternate row buffer unwritten (compute-sanitizer initcheck on
+    # `partition_writeback_kernel`). Every block of the cell draws the same
+    # word; block 0's thread 0 stores it.
+    if offset_blockid == 0 and Int(thread_idx.x) == 0:
+        out_threshold[unsafe_offset=slot] = threshold
 
     # Shared integer-count candidate, inspired by cuML computeSplitKernel's
     # shared PDF + global merge (cpp/src/decisiontree/batched-levelalgo/
@@ -2011,6 +2023,7 @@ def node_feature_score_kernel[
     seed: UInt64,
     sabotage_in: Int32,
     n_cols_in: Int32,
+    out_threshold: MutPointer[Float32, MutAnyOrigin],
 ):
     """Steps 2, 3 and 4 of DEVIATION 137: skip, draw, and accumulate.
     The unweighted kernel: `_node_feature_score_body` with WEIGHTED off
@@ -2038,6 +2051,7 @@ def node_feature_score_kernel[
         sabotage_in,
         n_cols_in,
         labels_q,
+        out_threshold,
     )
 
 
@@ -2066,6 +2080,7 @@ def node_feature_score_weighted_kernel[
     sabotage_in: Int32,
     n_cols_in: Int32,
     row_w: MutPointer[Int32, MutAnyOrigin],
+    out_threshold: MutPointer[Float32, MutAnyOrigin],
 ):
     """The classification score pass with row weights (lane sk-kernels):
     `row_w[row]` is the row's fixed-point weight (`DeviceDataset.d_weights`),
@@ -2093,6 +2108,7 @@ def node_feature_score_weighted_kernel[
         sabotage_in,
         n_cols_in,
         row_w,
+        out_threshold,
     )
 
 
@@ -2121,6 +2137,7 @@ def node_feature_score_weighted_reg_kernel[
     sabotage_in: Int32,
     n_cols_in: Int32,
     row_w: MutPointer[Int32, MutAnyOrigin],
+    out_threshold: MutPointer[Float32, MutAnyOrigin],
 ):
     """The regression score pass with row weights (lane sk-final):
     `labels_q[row]` is the row's quantized `w * y`, `row_w[row]` its
@@ -2149,6 +2166,7 @@ def node_feature_score_weighted_reg_kernel[
         sabotage_in,
         n_cols_in,
         row_w,
+        out_threshold,
     )
 
 
@@ -2175,6 +2193,7 @@ def node_feature_score_reg_tiled_kernel[
     seed: UInt64,
     quant: MutPointer[Float32, MutAnyOrigin],
     nbins: MutPointer[Int32, MutAnyOrigin],
+    out_threshold: MutPointer[Float32, MutAnyOrigin],
 ):
     """FAST, and Apple IDENTICAL (integer counts and sums, so the same
     integers in any order; trees-apple2): the REGRESSION arm of
@@ -2224,6 +2243,11 @@ def node_feature_score_reg_tiled_kernel[
                 active[j] = 1
                 var key = key_for(seed, tree, node_id, UInt32(col))
                 thr[j] = draw_threshold_device(key, extent, True)
+                # THE ONE STORED THRESHOLD (see `_node_feature_score_body`):
+                # the value-space word the finalize publishes and the
+                # partition compares, stored before any code snap.
+                if offset_blockid == 0 and Int(thread_idx.x) == 0:
+                    out_threshold[unsafe_offset=slot] = thr[j]
     comptime if DT != DType.float32:
         # Compare codes against the snapped border's code: thread j searches
         # feature j's borders once for the whole block.
@@ -2358,10 +2382,7 @@ def _node_feature_score_finalize_body[
     var slot = idx
     while slot < n_cells:
         var nid = slot // n_sampled_cols
-        var fslot = slot % n_sampled_cols
         var range_len = Int(work_items[unsafe_offset=nid].instances.count)
-        var node_id = UInt32(Int(work_items[unsafe_offset=nid].idx))
-        var col = Int(colids[unsafe_offset = nid * n_sampled_cols + fslot])
 
         var extent = FeatureRange(
             in_min[unsafe_offset=slot],
@@ -2385,16 +2406,11 @@ def _node_feature_score_finalize_body[
             slot += stride
             continue
 
-        var key = key_for(
-            seed,
-            tree_ids[unsafe_offset=nid].cast[DType.uint32](),
-            node_id,
-            UInt32(col),
-        )
-        var threshold = draw_threshold_device(
-            key, extent, sabotage != SCORE_SAB_NO_MAX_GUARD
-        )
-        out_threshold[unsafe_offset=slot] = threshold
+        # THE ONE STORED THRESHOLD (lane sm120-tree-identity): the score
+        # pass stored the word it counted `n_left` against in this cell
+        # (`_node_feature_score_body`, `node_feature_score_reg_tiled_kernel`);
+        # it is published as it is, never redrawn here, so the split's
+        # `quesval` and its `n_left` come from one draw.
 
         var n_left = Int(out_n_left[unsafe_offset=slot])
         var n_total = Int(out_n_total[unsafe_offset=slot])
