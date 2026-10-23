@@ -156,6 +156,7 @@ from training.samba_resident import (
     SambaResidentSession,
     samba_resident_forward,
     samba_resident_train_step,
+    samba_resident_accumulated_step,
 )
 from core.philox_neural import neural_rng_host
 
@@ -1261,6 +1262,62 @@ def samba_resident_step_binding(
         return PythonObject(count)
 
 
+def samba_resident_accumulated_step_binding(
+    session: PythonObject, addresses: PythonObject, params: PythonObject,
+    handle: PythonObject,
+) raises -> PythonObject:
+    """`SambaStack.train_step` at accumulation_steps a > 1 (no dropout), one
+    resident program (training/samba_resident.mojo
+    samba_resident_accumulated_step). addresses as `samba_resident_step`;
+    params = [b, l, a, total target count] + the `optimizer_step` params
+    list (its 12 or 13 slots). Returns the target count."""
+    comptime if not IDN_SAMBA_RESIDENT_STEP:
+        raise Error("samba_resident_accumulated_step: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
+    else:
+        var owner = session.downcast_value_ptr[SambaResidentSession]()
+        var a = _addrs(addresses, 7, "samba_resident_accumulated_step")
+        if len(params) != 16 and len(params) != 17:
+            raise Error("samba_resident_accumulated_step: params must contain 16 or 17 values, got " + String(len(params)))
+        var b = Int(py=params[0])
+        var l = Int(py=params[1])
+        var steps = Int(py=params[2])
+        var total = Int(py=params[3])
+        var n_tensors = Int(py=params[4])
+        var kind = Int(py=params[5])
+        var t = Int(py=params[6])
+        var nesterov = Int(py=params[7])
+        var lr = Float32(Float64(py=params[8]))
+        var beta1 = Float32(Float64(py=params[9]))
+        var beta2 = Float32(Float64(py=params[10]))
+        var eps = Float32(Float64(py=params[11]))
+        var weight_decay = Float32(Float64(py=params[12]))
+        var momentum = Float32(Float64(py=params[13]))
+        var dampening = Float32(Float64(py=params[14]))
+        var max_norm = Float32(Float64(py=params[15]))
+        if len(params) == 17 and Int(py=params[16]) != 0:
+            raise Error("samba_resident_step: maximize is not carried by the resident step (SambaStack never sets it)")
+        var h = opt_pool_handle(Int(py=handle), owner[].n_total)
+        if owner[].busy:
+            raise Error("samba_resident_step: session busy")
+        owner[].busy = True
+        var count = 0
+        try:
+            with GILReleased(Python()):
+                var pool = OPT_POOL.get_or_create_ptr()
+                count = samba_resident_accumulated_step(
+                    owner[], _f32_ptr(a[0]), _i32_ptr(a[1]), _i32_ptr(a[2]), _f32_ptr(a[6]),
+                    pool[].m[h], pool[].v[h], pool[].sp[h], pool[].sg[h],
+                    _i32_ptr(a[3]), _i32_ptr(a[4]), _f32_ptr(a[5]),
+                    b, l, steps, total, n_tensors, kind, t, nesterov, lr, beta1, beta2, eps,
+                    weight_decay, momentum, dampening, max_norm,
+                )
+        except error:
+            owner[].busy = False
+            raise error
+        owner[].busy = False
+        return PythonObject(count)
+
+
 def accumulate_binding(
     addresses: PythonObject, params: PythonObject
 ) raises -> PythonObject:
@@ -1476,6 +1533,7 @@ def build__mojolearn_training() -> PythonObject:
             m.def_function[samba_resident_open_binding]("samba_resident_open")
             m.def_function[samba_resident_forward_binding]("samba_resident_forward")
             m.def_function[samba_resident_step_binding]("samba_resident_step")
+            m.def_function[samba_resident_accumulated_step_binding]("samba_resident_accumulated_step")
         comptime if AFN_SAMBA_FUSE:
             m.def_function[samba_afn_norm_head_forward_binding]("samba_afn_norm_head_forward")
             m.def_function[samba_afn_tail_train_binding]("samba_afn_tail_train")

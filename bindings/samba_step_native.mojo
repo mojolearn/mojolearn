@@ -94,7 +94,8 @@ def _samba_step_finish(fields: PythonObject, opt: PythonObject, info: PythonObje
     return py_call(Python.import_module("builtins").dict, result)
 
 
-def _samba_resident_step(fields: PythonObject, opt: PythonObject, entries: PythonObject, ids: PythonObject, targets: PythonObject, context: PythonObject) raises -> PythonObject:
+def _samba_resident_step(fields: PythonObject, opt: PythonObject, entries: PythonObject, ids: PythonObject, targets: PythonObject, context: PythonObject,
+                         accumulation: Int = 1, total_count: Int = 0) raises -> PythonObject:
     var bi = Python.import_module("builtins")
     var config = samba_fields(fields["config"])
     if Float64(py=config["dropout"]) != 0.0:
@@ -103,6 +104,8 @@ def _samba_resident_step(fields: PythonObject, opt: PythonObject, entries: Pytho
     for name in [String("samba_resident_enabled"), String("samba_resident_open"), String("samba_resident_forward"), String("samba_resident_step")]:  # driver-loop: over the existing resident Samba ABI
         enabled = enabled and Bool(py=py_call(bi.hasattr, entries, name))
     if not enabled or not Bool(py=_native_function(entries, "samba_resident_enabled")()):
+        return PythonObject(None)
+    if accumulation > 1 and not Bool(py=py_call(bi.hasattr, entries, "samba_resident_accumulated_step")):
         return PythonObject(None)
     if Bool(py=py_call(bi.hasattr, entries, "training_chunked_lm_head_enabled")) and Bool(py=_native_function(entries, "training_chunked_lm_head_enabled")()):
         return PythonObject(None)
@@ -124,10 +127,15 @@ def _samba_resident_step(fields: PythonObject, opt: PythonObject, entries: Pytho
         py_setitem(fields, "_resident_handle", session)
     var plan = _samba_step_plan(fields, opt, context)
     var args = Python.list(ids.shape[0], ids.shape[1])
+    if accumulation > 1:
+        # the microbatch walk as one resident program: the a gradients are
+        # combined on the device and the optimizer steps there
+        _ = py_call(args.append, accumulation)
+        _ = py_call(args.append, total_count)
     _ = py_call(args.extend, plan)
     var info = generation_array([3])
     var loss = generation_array([1])
-    _ = py_call(_native_function(entries, "samba_resident_step"), session,
+    _ = py_call(_native_function(entries, "samba_resident_accumulated_step" if accumulation > 1 else "samba_resident_step"), session,
         Python.list(fields["flat"]._addr, ids._addr, targets._addr, opt["offsets"]._addr,
                     opt["buf_initialized"]._addr, info._addr, loss._addr), args, opt["_res"])
     py_setitem(opt, "_host_fresh", False)
@@ -221,6 +229,10 @@ def samba_train_step(model: PythonObject, inputs: PythonObject, targets: PythonO
         if resident is not None:
             return resident
     var count = _samba_count(y, context)
+    if a > 1:
+        var resident = _samba_resident_step(fields, opt, entries, ids, y, context, a, count)
+        if resident is not None:
+            return resident
     var stream = generator_next(fields["generator"]) if Float64(py=config["dropout"]) > 0.0 else PythonObject(None)
     var rows = b // a
     var n = Int(py=fields["n_total"])

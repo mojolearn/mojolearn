@@ -107,6 +107,9 @@ from training.neural_identical_experiments import IDN_SAMBA_RESIDENT_STEP, IDN_S
 from training.samba_ops import (
     SAMBA_TPB,
     _grid,
+    _samba_accumulate_core,
+    samba_accumulate_host,
+    samba_validate_accumulation,
     samba_leaf_ids_kernel,
     samba_tree_level_kernel,
     samba_tree_status_kernel,
@@ -1115,3 +1118,128 @@ def samba_resident_train_step(
     _ = nw^
     _ = dnw^
     return count
+
+
+def samba_resident_accumulated_step(
+    mut s: SambaResidentSession,
+    param_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    ids_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    targets_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    loss_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    mut m_state: DeviceBuffer[DType.float32],
+    mut v_state: DeviceBuffer[DType.float32],
+    mut p_stage: HostBuffer[DType.float32],
+    mut g_stage: HostBuffer[DType.float32],
+    offsets_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    init_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    info_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    b: Int,
+    l: Int,
+    a: Int,
+    total_count: Int,
+    n_tensors: Int,
+    kind: Int,
+    t: Int,
+    nesterov: Int,
+    lr: Float32,
+    beta1: Float32,
+    beta2: Float32,
+    eps: Float32,
+    weight_decay: Float32,
+    momentum: Float32,
+    dampening: Float32,
+    max_norm: Float32,
+) raises -> Int:
+    """`SambaStack.train_step` at `accumulation_steps == a > 1`, no dropout,
+    as ONE resident program (lane migrate-neural-2; the non-resident walk ran
+    every microbatch's layers with host arrays between them). Each of the
+    `a` microbatches (`b / a` rows, ascending) runs the resident forward,
+    the sum-reduced loss divided by the WHOLE batch's target count
+    (`total_count`, as `loss_and_grads` passes `num_items`) and the tape
+    backward; its gradient is kept on the device in a stacked [a, n_total]
+    buffer. The clause 9.2 tree (`_samba_accumulate_core`, the `accumulate`
+    entry's) combines them into the session's gradient, the a losses go
+    through the same tree, and the optimizer steps the resident registry.
+    The same kernels in the same order as the per-microbatch walk, so the
+    same bits. Returns `total_count`."""
+    comptime if not IDN_SAMBA_RESIDENT_STEP:
+        raise Error("mojolearn samba resident: built with MOJOLEARN_IDN_SAMBA_RESIDENT_STEP_OFF or MOJOLEARN_IDN_CHUNKED_LM_HEAD_V2")
+    if b < 1 or l < 1 or a < 2 or b % a != 0:
+        raise Error("Samba: batch rows must be divisible by power-of-two accumulation_steps")
+    if n_tensors + 1 != len(s.offsets):
+        raise Error(
+            "mojolearn samba resident: the optimizer registry has " + String(n_tensors)
+            + " tensors, the stack's has " + String(len(s.offsets) - 1)
+        )
+    for j in range(n_tensors + 1):  # small-loop(n_tensors + 1: registry offsets): compares offsets, not data
+        if Int(offsets_ptr.unsafe_load(j)) != s.offsets[j]:
+            raise Error("mojolearn samba resident: optimizer offsets[" + String(j) + "] is not the stack's registry")
+    if not samba_tape_eligible(s.t_w):
+        raise Error("mojolearn samba resident: an attention layer has non-default block options")
+    var rows_per = b // a
+    var m = rows_per * l
+    var n = s.n_total
+    samba_validate_accumulation(n, a, b * l)
+    identical_ce_admit_call(REDUCTION_SUM, 1, m)
+    _ensure_shape(s, rows_per, l)
+    var dm = s.dm
+    var v = s.vocab
+    s.ctx.enqueue_copy(dst_buf=s.param, src_ptr=param_ptr)
+    _admit_registry(s)
+    var stacked = s.ctx.enqueue_create_buffer[DType.float32](a * n)
+    var losses = List[Float32](length=a, fill=Float32(0.0))
+    var emb = EmbConfig.llama(v, dm)
+    var ew = s.view(0)
+    var hw = s.view(s.head_index())
+    var nw = s.view(s.norm_f_index())
+    var dnw = s.grad_view(s.norm_f_index())
+    for k in range(a):  # driver-loop: over aligned microbatches
+        _upload_tokens(s, ids_ptr + k * m)
+        s.ctx.enqueue_copy(dst_buf=s.targets, src_ptr=targets_ptr + k * m)
+        _ = _admit_targets_device(s.ctx, s.targets, m, v, IGNORE_INDEX_DEFAULT)
+        var cfg = CeConfig(v, IGNORE_INDEX_DEFAULT, REDUCTION_SUM, Float32(0.0), total_count)
+        ce_refuse_shape(m, m * v, cfg)
+        identical_embedding_forward_into(s.ctx, s.acts[0], ew, s.ids, m, emb)
+        _forward_blocks(s, rows_per, l, False)
+        _norm_head_forward(s, m, True)
+        var bad = device_first_nonfinite(s.ctx, s.logits, m * v)
+        if bad >= 0:
+            var is_nan = device_classify_nonfinite(s.ctx, s.logits, bad)
+            raise Error(ce_nonfinite_message("logits", bad, is_nan))
+        var rows = List[Float32](length=max(m, 1), fill=Float32(0.0))
+        var row_ptr = rows.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+        var lp = losses.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]() + k
+        identical_ce_loss_resident(
+            s.ctx, lp, row_ptr, s.dlogits, s.logits, s.targets, m, total_count, REDUCTION_SUM, 1, cfg,
+        )
+        _ = rows^
+        _backward_tape(s, rows_per, l, ew, hw, nw, dnw)
+        var part = stacked.create_sub_buffer[DType.float32](k * n, n)
+        var whole = s.grad.create_sub_buffer[DType.float32](0, n)
+        s.ctx.enqueue_copy(dst_buf=part, src_buf=whole)
+        _ = part^
+        _ = whole^
+    # the accumulate entry's refusal of a non-finite part, on the device
+    var hit = device_first_nonfinite(s.ctx, stacked, a * n)
+    if hit >= 0:
+        raise Error("mojolearn samba ops: non-finite accumulate parts at flat index " + String(hit))
+    var out_dev = Optional[DeviceBuffer[DType.float32]](s.grad)
+    _ = _samba_accumulate_core(s.ctx, stacked^, param_ptr, out_dev, n, a)
+    _ = out_dev^
+    # the a microbatch losses through the same tree (`accumulate`, [1, a, -1])
+    _ = samba_accumulate_host(
+        s.ctx, loss_ptr, losses.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), 1, a, -1,
+    )
+    _ = losses^
+    _ = identical_optimizer_step_resident_io(
+        s.ctx, param_ptr, param_ptr, m_state, v_state, s.param, s.grad, p_stage, g_stage,
+        offsets_ptr, init_ptr, info_ptr, n_tensors, kind, t, nesterov, lr, beta1, beta2,
+        eps, weight_decay, momentum, dampening, max_norm, 0,
+    )
+    s.ctx.enqueue_copy(dst_ptr=param_ptr, src_buf=s.param)
+    s.ctx.synchronize()
+    _ = ew^
+    _ = hw^
+    _ = nw^
+    _ = dnw^
+    return total_count
