@@ -161,13 +161,16 @@ def hist2_8bit_wide_kernel[
         var q = SIMD[DType.int32, ns](0)
         comptime for s in range(ns):
             var st = stat0 + s
+            # # sm_120 AOT: no lane write under a per-lane guard (core/gram_splitk.mojo GRAM_STRIDED_ARM; lane sm120-tree-identity).
+            var qs = Int32(0)
             if st < stat_count:
                 var sp = pos
                 comptime if ridx_stats:
                     sp = row
-                q[s] = hist2_quantize(
+                qs = hist2_quantize(
                     ldg(stats + (st * stat_line_size + sp)), fixed_scale, u
                 )
+            q[s] = qs
         comptime for c in range(fg):
             var col = gb * fg + c
             if col < columns:
