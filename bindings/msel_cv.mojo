@@ -763,7 +763,7 @@ def _place(preds: PythonObject, tests: PythonObject, n: Int, res: PythonObject, 
         _ = family_call(b.list, py_call(b.map, py_call(b.getattr, rows, PythonObject("__setitem__")),
                                         py_call(b.list, tests[f]._mv), vals))
         if msel_truth(py_call(b.hasattr, pred, PythonObject("shape"))):
-            last_width = py_call(b.tuple, py_call(pred.shape.__getitem__, py_call(b.slice, PythonObject(1), PythonObject(None))))
+            last_width = py_call(b.tuple, py_call(py_attr(pred.shape, "__getitem__"), py_call(b.slice, PythonObject(1), PythonObject(None))))
         else:
             last_width = Python.tuple()
     var from_list = family_call(b.getattr, msel_cls("Array", context), PythonObject("from_list"))

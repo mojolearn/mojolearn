@@ -122,7 +122,7 @@ def _gpr_validate(model: PythonObject, context: PythonObject) raises:
         if not bad:
             var seed = family_call(b.int, random_state)
             bad = not (Bool(py=py_call(py_attr(b.int, "__ge__"), seed, PythonObject(0)))
-                       and Bool(py=py_call(b.int.__lt__, seed, context["family_gp_seed_bound"])))
+                       and Bool(py=py_call(py_attr(b.int, "__lt__"), seed, context["family_gp_seed_bound"])))
         if bad:
             raise Error(String(_GPR) + ": random_state must be None "
                         + "or an int in [0, 2**64), got " + family_repr(random_state) + "; it keys the "
@@ -234,7 +234,7 @@ def _gpr_optimize(model: PythonObject, binding: PythonObject, x: PythonObject, t
     var seed = PythonObject(0) if fields["_random_state"] is None else fields["_random_state"]
     var b = Python.import_module("builtins")
     var low = py_call(py_attr(b.int, "__and__"), seed, PythonObject(0xFFFFFFFF))
-    var high = py_call(b.int.__and__, py_call(py_attr(b.int, "__rshift__"), seed, PythonObject(32)), PythonObject(0xFFFFFFFF))
+    var high = py_call(py_attr(b.int, "__and__"), py_call(py_attr(b.int, "__rshift__"), seed, PythonObject(32)), PythonObject(0xFFFFFFFF))
     var ext = _gpr_ext(model, binding, context)
     # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_optimize_binding.
     # x, y, kinds, kparams, ls_len, ls, free, bounds, theta_out, values_out, runs_out;
@@ -482,7 +482,7 @@ def _gpr_sample_y(model: PythonObject, args: PythonObject, context: PythonObject
     if not bad:
         var value = family_call(b.int, seed)
         bad = not (Bool(py=py_call(py_attr(b.int, "__ge__"), value, PythonObject(0)))
-                   and Bool(py=py_call(b.int.__lt__, value, context["family_gp_seed_bound"])))
+                   and Bool(py=py_call(py_attr(b.int, "__lt__"), value, context["family_gp_seed_bound"])))
     if bad:
         raise Error(String(_GPR) + ": sample_y needs random_state to "
                     + "be an int in [0, 2**64), got " + family_repr(seed) + "; it is the key of every "
@@ -503,7 +503,7 @@ def _gpr_sample_y(model: PythonObject, args: PythonObject, context: PythonObject
     var params = Python.list(PythonObject(n_train), fields["n_features_in_"], PythonObject(n_star),
                              PythonObject(len(arrays[0])), arrays[4], fields["info_"], PythonObject(n),
                              py_call(py_attr(b.int, "__and__"), seed, PythonObject(0xFFFFFFFF)),
-                             py_call(b.int.__rshift__, seed, PythonObject(32)))
+                             py_call(py_attr(b.int, "__rshift__"), seed, PythonObject(32)))
     _gpr_tail(fields, params)
     # ORDER MATCHES bindings/_mojolearn_gp.mojo::gpr_sample_y_binding.
     # xtrain, l, dual, xstar, kinds, kparams, ls_len, ls, y_out;
