@@ -268,9 +268,19 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
         var norm = String(options["norm"])
         var nk = 0 if norm == "rmsnorm" else (1 if norm == "layernorm" else (2 if norm == "rmsnorm_offset" else -1))
         var mk = 0 if mlp == "swiglu" else (1 if mlp == "gelu" else (2 if mlp == "gelu_tanh" else (3 if mlp == "geglu" else (4 if mlp == "geglu_tanh" else -1))))
-        if nk < 0 or mk < 0:
-            raise Error("CausalLM: unsupported norm or mlp kind")
+        if nk < 0:
+            raise Error("CausalLM: unsupported norm=" + String(py_call(bi.repr, options["norm"]))
+                        + "; norm is 'rmsnorm', 'layernorm' or 'rmsnorm_offset'")
+        if mk < 0:
+            raise Error("CausalLM: unsupported mlp=" + String(py_call(bi.repr, options["mlp"]))
+                        + "; mlp is 'swiglu', 'gelu', 'gelu_tanh', 'geglu' or 'geglu_tanh'")
         gated = mk == 0 or mk == 3 or mk == 4
+        var has_gate = py_contains(w, "gate_proj.weight")
+        if gated and not has_gate:
+            raise Error("CausalLM: gate_proj.weight is missing; mlp=" + String(py_call(bi.repr, options["mlp"])) + " is gated")
+        if not gated and has_gate:
+            raise Error("CausalLM: gate_proj.weight is present but mlp=" + String(py_call(bi.repr, options["mlp"]))
+                        + " has no gate")
         var source = w["gate_proj.weight" if gated else "up_proj.weight"]
         if len(source.shape) != 2 or Int(py=source.shape[0]) < 1:
             raise Error("CausalLM: projection must have positive intermediate size")
@@ -285,7 +295,8 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
         if scaling is not None:
             var sk = String(py_get(scaling, "type", py_get(scaling, "rope_type")))
             if sk != "linear" and sk != "llama3":
-                raise Error("CausalLM: unsupported rope_scaling type")
+                raise Error("CausalLM: unsupported rope_scaling type " + String(py_call(bi.repr, PythonObject(sk)))
+                            + "; the types are 'linear' and 'llama3'")
             tail[1] = 1 if sk == "linear" else 2
             tail[2] = _model_bits(scaling["factor"], "rope_scaling factor")
             if sk == "llama3":
@@ -293,7 +304,8 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
                 tail[4] = _model_bits(scaling["high_freq_factor"], "high_freq_factor")
                 tail[5] = Int(py=scaling["original_max_position_embeddings"])
                 if Float64(py=scaling["high_freq_factor"]) <= Float64(py=scaling["low_freq_factor"]) or tail[5] < 1:
-                    raise Error("CausalLM: invalid llama3 rope_scaling bounds")
+                    raise Error("CausalLM: llama3 rope_scaling needs high_freq_factor > low_freq_factor "
+                                + "and a positive original_max_position_embeddings")
         var rd = hd if options["rope_dim"] is None else Int(py=options["rope_dim"])
         if rd < 1 or rd > hd or rd % 2 != 0:
             raise Error("CausalLM: rope_dim must be positive even and no larger than head_dim")
@@ -308,8 +320,12 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
         tail[14] = Int(Bool(py=options["mlp_bias"]))
         tail[15] = Int(Bool(py=options["qk_norm"]))
         tail[16] = 0 if options["attn_softcap"] is None else _model_bits(options["attn_softcap"], "attn_softcap")
-        if tail[7] < 1 or (tail[12] != 0 and nk != 1) or (tail[15] != 0 and nk == 1):
-            raise Error("CausalLM: invalid max_positions, norm_bias or qk_norm combination")
+        if tail[7] < 1:
+            raise Error("CausalLM: max_positions must be positive")
+        if tail[12] != 0 and nk != 1:
+            raise Error("CausalLM: norm_bias=True needs norm='layernorm'")
+        if tail[15] != 0 and nk == 1:
+            raise Error("CausalLM: qk_norm=True with norm='layernorm' is not supported (qk_norm is an RMSNorm)")
         var window = Int(py=options["window"])
         if window < 0:
             raise Error("CausalLM: sliding window must be nonnegative")
@@ -352,8 +368,10 @@ def _model_block(weights: PythonObject, plan: PythonObject, profile: PythonObjec
             var name = context["optional_names"][i]
             py_setitem(flag_dict, name, PythonObject(flags[i] != 0))
             var present = py_contains(w, name)
-            if present != (flags[i] != 0):
-                raise Error("CausalLM: " + String(name) + " presence does not match its option")
+            if present and flags[i] == 0:
+                raise Error("CausalLM: " + String(name) + " is present but its option is off")
+            if not present and flags[i] != 0:
+                raise Error("CausalLM: " + String(name) + " is required by its option but missing")
             if present:
                 _model_shape(w[name], [widths[i]], String(name))
                 _ = py_call(optional.append, w[name])

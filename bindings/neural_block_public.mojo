@@ -323,7 +323,12 @@ def neural_block_backward_binding(block: PythonObject, input: PythonObject, grad
     var kind = String(fields["_native_kind"])
     var transformer = kind == "transformer"
     if transformer and (fields["_int15"] is not None or Bool(py=fields["_extended"])):
-        raise Error("NotImplementedError: TransformerBlock.backward requires default float32 block options; numeric_profile=" + String(fields["numeric_profile"]))
+        var named = String("")
+        for key in ["norm", "mlp", "qkv_bias", "o_bias", "norm_bias", "mlp_bias", "qk_norm", "rope_scaling"]:  # driver-loop: over the named block options
+            if py_contains(fields, key):
+                named += ", " + key + "=" + String(py_call(bi.repr, fields[key]))
+        raise Error("NotImplementedError: TransformerBlock.backward supports float32 and the default block options only; numeric_profile="
+                    + String(fields["numeric_profile"]) + named)
     var entries = neural_training_entries(fields, context)
     var name = ("transformer" if transformer else kind) + "_backward"
     if not Bool(py=py_call(bi.hasattr, entries, name)):
