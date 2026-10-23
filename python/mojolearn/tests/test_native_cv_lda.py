@@ -3,7 +3,7 @@
 import numpy as np
 import pytest
 
-from mojolearn import Array, LinearDiscriminantAnalysis, model_selection as ms
+from mojolearn import Array, LinearDiscriminantAnalysis, metrics, model_selection as ms
 from mojolearn._verify_native_runtime import audit_native_call
 
 
@@ -66,7 +66,12 @@ def test_native_lda_cv_matches_explicit_native_fits_without_mutating_constructor
     for train, test in folds:
         train, test = np.asarray(train), np.asarray(test)
         fitted = LinearDiscriminantAnalysis(priors=priors).fit(x[train], y[train])
-        expected.append(fitted.score(x[test], y[test]))
+        # The named scorer selects the public metric, whose historical
+        # float32 result differs from the estimator's float64 fraction.
+        if scoring is None:
+            expected.append(fitted.score(x[test], y[test]))
+        else:
+            expected.append(metrics.accuracy_score(y[test], np.asarray(fitted.predict(x[test]))))
     np.testing.assert_array_equal(actual, np.asarray(expected))
     assert not hasattr(model, 'classes_')
     assert clean(model.get_params)['priors'] is priors

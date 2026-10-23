@@ -7,7 +7,7 @@ boundary; this does not qualify their older Python public wrappers as native.
 import numpy as np
 import pytest
 
-from mojolearn import GaussianNB, GradientBoostingRegressor, LinearDiscriminantAnalysis, model_selection as ms
+from mojolearn import GaussianNB, GradientBoostingRegressor, LinearDiscriminantAnalysis, metrics, model_selection as ms
 from mojolearn._verify_native_runtime import audit_native_call
 
 
@@ -84,13 +84,18 @@ def test_native_gaussian_nb_cv_copies_priors_and_keeps_native_fold_route(priors_
     model = GaussianNB(priors=priors)
     folds = list(ms.StratifiedKFold(3).split(x, y))
     expected = []
+    expected_accuracy = []
     for train, test in folds:
         train, test = np.asarray(train), np.asarray(test)
-        expected.append(GaussianNB(priors=priors).fit(x[train], y[train]).score(x[test], y[test]))
+        fitted = GaussianNB(priors=priors).fit(x[train], y[train])
+        expected.append(fitted.score(x[test], y[test]))
+        # Default scoring uses estimator.score; named accuracy uses the
+        # distinct public metric, preserving its historical float32 result.
+        expected_accuracy.append(metrics.accuracy_score(y[test], np.asarray(fitted.predict(x[test]))))
     np.testing.assert_array_equal(clean(ms.cross_val_score, model, x, y, cv=folds), expected)
     result = clean(ms.cross_validate, model, x, y, cv=folds, scoring='accuracy',
                    return_estimator=True, error_score='raise')
-    np.testing.assert_array_equal(result['test_score'], expected)
+    np.testing.assert_array_equal(result['test_score'], expected_accuracy)
     assert not hasattr(model, 'classes_')
     assert model.priors is priors
     for estimator in result['estimator']:
@@ -152,7 +157,7 @@ def test_native_cv_connects_cold_arena_context_before_ndarray_row_snapshot(cls):
     for train, test in folds:
         train, test = np.asarray(train), np.asarray(test)
         fitted = cls().fit(x[train], y[train])
-        expected.append(fitted.score(x[test], y[test]))
+        expected.append(metrics.accuracy_score(y[test], np.asarray(fitted.predict(x[test]))))
     np.testing.assert_array_equal(actual, expected)
     assert not hasattr(model, 'classes_')
 

@@ -32,7 +32,9 @@ def test_public_make_scorer_and_call_use_native_metric_options(cls):
     scorer = audit_native_call(ms.make_scorer, metrics.mean_absolute_error,
                                greater_is_better=False, multioutput='uniform_average').assert_native()
     got = audit_native_call(scorer.__call__, model, x, y).assert_native()
-    public_prediction = np.asarray(model.predict(x))
+    # The audit represents an external user even when pytest imports this
+    # test as mojolearn.tests, whose direct calls are package-internal.
+    public_prediction = np.asarray(audit_native_call(model.predict, x).assert_native())
     assert public_prediction.dtype == np.float64
     # Test oracle: Ridge's public output widens its float32 kernel result;
     # package-internal scoring consumes the original words, as before.
@@ -79,7 +81,7 @@ def test_expansion_only_metric_scorer_consumes_native_prediction():
                    numeric_mode='identical')
     scorer = audit_native_call(ms.make_scorer, metric, **options).assert_native()
     got = audit_native_call(scorer.__call__, model, x, y).assert_native()
-    public_prediction = np.asarray(model.predict(x))
+    public_prediction = np.asarray(audit_native_call(model.predict, x).assert_native())
     assert public_prediction.dtype == np.float64
     kernel_prediction = public_prediction.astype('f4')
     np.testing.assert_array_equal(public_prediction, kernel_prediction.astype('f8'))
