@@ -226,6 +226,63 @@ def test_exog_fit_forecast_and_save_when_a_binding_can_fit():
             )
 
 
+def test_save_load_round_trip_over_every_input_kind_the_verify_lanes_pass():
+    """The verify lanes arima, arima-011, arima-seasonal-c, arima-exog and
+    arima-exog-seasonal save a model fit on a C-contiguous float32 ndarray
+    (the zero-copy input), which `save` refused with "Sequential requires a
+    memoryview over a native buffer owner" (AMD verify of 7c6e0dade). Each
+    input kind and order is fit, saved, loaded, and must forecast the same
+    bytes and carry the same fitted arrays."""
+    if not _can_fit():
+        print("SKIP: nothing in this process fits ARIMA (no GPU set, no arima host binding)")
+        return
+    import tempfile
+
+    import numpy as np
+
+    rng = np.random.default_rng(7)
+    b, n, h = 4, 128, 6
+    base = np.ascontiguousarray(rng.standard_normal((n, b)).astype(np.float32).T)
+    exog = np.ascontiguousarray(rng.standard_normal((b, n, 2)).astype(np.float32))
+    fut = np.ascontiguousarray(rng.standard_normal((b, h, 2)).astype(np.float32))
+    inputs = (
+        ("float32 C ndarray", base),
+        ("float64 ndarray", base.astype(np.float64)),
+        ("float32 F ndarray", np.asfortranarray(base)),
+        ("mojolearn Array", mojolearn.Array.from_buffer(base)),
+        ("nested list", base.tolist()),
+        ("one series", np.ascontiguousarray(base[0])),
+    )
+    orders = (
+        dict(order=(1, 0, 0)),
+        dict(order=(0, 1, 1)),
+        dict(order=(1, 0, 0), seasonal_order=(1, 0, 0, 4), trend="c"),
+    )
+    fields = ("params_", "x_", "x0_", "fx_", "n_iter_", "retcode_", "llf_", "aic_", "bic_")
+    with tempfile.TemporaryDirectory(prefix="arima_round_trip_") as tmp:
+        for label, y in inputs:
+            for k, kw in enumerate(orders):
+                for with_exog in (False, True):
+                    if with_exog and label == "one series":
+                        continue
+                    m = mojolearn.ARIMA(**kw).fit(y, exog if with_exog else None)
+                    path = str(Path(tmp) / f"m{len(label)}_{k}_{int(with_exog)}.npz")
+                    m.save(path)
+                    back = mojolearn.ARIMA.load(path)
+                    where = f"{label}, {kw}, exog={with_exog}"
+                    for name in fields:
+                        assert (np.asarray(getattr(back, name)).tobytes()
+                                == np.asarray(getattr(m, name)).tobytes()), f"{name} differs after load ({where})"
+                    args = (h, fut) if with_exog else (h,)
+                    want = np.asarray(m.forecast(*args) if not with_exog else m.forecast(h, exog=fut))
+                    got = np.asarray(back.forecast(*args) if not with_exog else back.forecast(h, exog=fut))
+                    assert got.tobytes() == want.tobytes(), f"a loaded model forecast differently ({where})"
+                    # a loaded model saves again, to the same bytes
+                    again = path + ".again.npz"
+                    back.save(again)
+                    assert Path(again).read_bytes() == Path(path).read_bytes(), f"re-save differs ({where})"
+
+
 if __name__ == "__main__":
     for name in [n for n in sorted(globals()) if n.startswith("test_")]:
         globals()[name]()
