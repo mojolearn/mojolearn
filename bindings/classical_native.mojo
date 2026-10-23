@@ -293,6 +293,8 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
                 return raise_python_exception(nested)
         if String(error).startswith("TypeError:"):
             return raise_python_exception(error_without_class(error, "TypeError"), ExceptionType.TypeError)
+        if String(error).startswith("ZeroDivisionError:"):
+            return raise_python_exception(error_without_class(error, "ZeroDivisionError"), ExceptionType("PyExc_ZeroDivisionError"))
         if String(error).startswith("OverflowError:"):
             return raise_python_exception(error_without_class(error, "OverflowError"), ExceptionType("PyExc_OverflowError"))
         if String(error).startswith("NotImplementedError:"):

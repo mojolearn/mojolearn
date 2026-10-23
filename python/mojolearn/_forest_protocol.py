@@ -12,6 +12,11 @@ import weakref
 from ._array import Array
 from ._buffer import _materialize, empty, as_f32_c
 from ._arrays import _addr, _addr_ro
+from . import _native_trees_bridge
+
+# The compiled tree-ensemble owner: `score` predicts and scores in one native
+# call (bindings/trees_public_score.mojo).
+_TREES, _TREES_CONTEXT = _native_trees_bridge.connect()
 
 
 _FOREST_ARRAYS = ("_offsets", "_colid", "_quesval", "_left_child", "_leaves")
@@ -444,20 +449,7 @@ class ForestProtocol:
         x_metrics binding's grouped match count (`accuracy_fraction`).
         Regression scoring uses the same Float32 target domain as tree fitting.
         """
-        from . import _metrics_impl as metrics
-        from ._expansion_metrics import accuracy_fraction
-        shape = metrics._shape_of(y)
-        if len(shape) != 1:
-            raise ValueError("score requires one-dimensional targets")
-        prediction = self.predict(X)
-        if len(prediction) != int(shape[0]):
-            raise ValueError("score target and prediction lengths differ")
-        mode = self._effective_mode()
-        if self._estimator_type == "classifier":
-            return accuracy_fraction(y, prediction, sample_weight, mode)
-        return metrics.r2_score(as_f32_c(y, ndim=1, name="y")[0],
-                                as_f32_c(prediction, ndim=1, name="prediction")[0],
-                                sample_weight=sample_weight, numeric_mode=mode)
+        return _TREES(self, "trees_score_forest", (X, y, sample_weight), _TREES_CONTEXT)
 
 
 def _export_fit_result(native, descriptor, *, compare_legacy=False):

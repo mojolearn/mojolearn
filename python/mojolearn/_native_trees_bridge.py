@@ -20,13 +20,13 @@ _ENTRY = None
 _CONTEXT = None
 
 #: The tree bindings the owner launches, by numeric mode.
-_TREE_BINDINGS = ("_mojolearn_rf", "_mojolearn_trees", "_mojolearn_x_trees")
+_TREE_BINDINGS = ("_mojolearn_rf", "_mojolearn_trees", "_mojolearn_x_trees", "_mojolearn_metrics")
 #: The base binding's input and label helpers (`_buffer._native`), always the
 #: identical binary (they are byte moves and comparisons with no tier).
 _BASE_HELPERS = ("cast_f64_to_f32", "cast_colmajor_f64_to_f32", "transpose_f32", "all_finite_f32",
                  "all_finite_f64", "prepare_targets", "bincount_i64", "class_ratio_f64",
                  "gather_rows_bytes", "argmax_rows_f32", "argmax_rows_f64", "gather_i64", "gather_f64",
-                 "unique_inverse", "reduce_stat", "cast_elements")
+                 "unique_inverse", "reduce_stat", "cast_elements", "gather_i32")
 
 
 def _unavailable(error):
@@ -121,11 +121,12 @@ def connect():
         _ENTRY, _CONTEXT = _unavailable(error), {"trees_unavailable": str(error)}
         return _ENTRY, _CONTEXT
     import numbers
+    import types
     from . import _backend
     _backend.default_mode()  # glue: settle the process default the native mode falls back to
     context.update(
         trees_bindings=_bindings(), trees_helpers=_helpers(), trees_classes={}, trees_defaults={},
-        trees_missing=object(),
+        trees_missing=object(), trees_namespace=types.SimpleNamespace,
         trees_real_type=numbers.Real, trees_integral_type=numbers.Integral,
     )
     _ENTRY, _CONTEXT = entry, context
