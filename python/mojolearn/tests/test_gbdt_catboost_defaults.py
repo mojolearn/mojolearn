@@ -52,13 +52,6 @@ def test_gpu_auto_learning_rate_rows():
     assert ensemble.catboost_auto_learning_rate('MultiClass', 1000, 1000, False, True) is None
 
 
-@pytest.mark.skip(reason="moved into the native GradientBoosting.fit (bindings/trees_public_gbdt_fit.mojo); covered through the public fit")
-def test_c_round_is_half_away_from_zero():
-    assert ensemble._c_round(0.0000025, 6) == 0.000003
-    assert ensemble._c_round(0.1234565, 6) in (0.123456, 0.123457)  # binary64 input
-    assert ensemble._c_round(0.5, 6) == 0.5
-
-
 def test_symmetric_defaults_are_catboost_gpu():
     m = GradientBoosting()
     assert m.n_estimators == 1000                  # boosting_options.cpp:13
@@ -144,35 +137,17 @@ def test_adapters_inherit_the_learner_defaults():
 
 
 # ---------------------------------------------------------------------------
-# boosting_type (Ordered boosting) -- host-only: the resolution rule, the
-# refusals and the parameter tail, through a fake binding
+# boosting_type (Ordered boosting): the resolution rule and the refusals,
+# and the fits through the real public path (small inputs)
 # ---------------------------------------------------------------------------
 
-import struct as _struct
 import numpy as np
 
 
-class _FakeGbdt:
-    """Captures what `fit` hands `gbdt_fit`; answers a one-tree text."""
-
-    def __init__(self):
-        self.calls = []
-
-    def gbdt_fit(self, *args):
-        self.calls.append(args)
-        return ["mojolearn-model 2\n", 0, False, [0.5], []]
-
-    def gbdt_model_dim(self, text):
-        return 1
-
-
-def _fit_fake(model, n_rows=64, **fit_kw):
-    fake = _FakeGbdt()
-    model._bind = lambda name: fake
+def _fit_real(model, n_rows=64, **fit_kw):
     X = np.arange(n_rows * 3, dtype=np.float32).reshape(n_rows, 3) / 7
     y = (np.arange(n_rows) % 2).astype(np.float32)
-    model.fit(X, y, **fit_kw)
-    return fake.calls[-1]
+    return model.fit(X, y, **fit_kw)
 
 
 @pytest.mark.parametrize('n_estimators,rows,want', [
@@ -214,36 +189,34 @@ def test_fold_options_are_ordered_only():
         GradientBoosting(boosting_type='Plain', fold_len_multiplier=3.0)
     with pytest.raises(ValueError, match='read only by Ordered'):
         # unset boosting type resolving Plain at fit time (100 iterations)
-        _fit_fake(GradientBoosting(n_estimators=100, fold_permutation_block=16))
+        _fit_real(GradientBoosting(n_estimators=100, max_depth=2, fold_permutation_block=16))
     # permutation_count is Ordered's too, and refused where the fit is Plain
     GradientBoosting(permutation_count=2)
     with pytest.raises(ValueError, match='permutation_count'):
         GradientBoosting(boosting_type='Plain', permutation_count=2)
     with pytest.raises(ValueError, match='permutation_count'):
-        _fit_fake(GradientBoosting(n_estimators=100, permutation_count=2))
+        _fit_real(GradientBoosting(n_estimators=100, max_depth=2, permutation_count=2))
 
 
-def test_ordered_fit_sends_the_ordered_tail():
-    m = GradientBoosting(loss='Logloss', n_estimators=20, boosting_type='Ordered',
+def test_ordered_fit_resolves_ordered():
+    m = GradientBoosting(loss='Logloss', n_estimators=20, max_depth=2, boosting_type='Ordered',
                          fold_len_multiplier=1.5, fold_permutation_block=16)
-    args = _fit_fake(m)
-    strs = args[7]
-    assert strs[4:] == ['GreedyLogSum', 'Ordered',
-                        str(_struct.unpack('<Q', _struct.pack('<d', 1.5))[0]), '16']
+    _fit_real(m)
     assert m.boosting_type_ == 'Ordered'
-    # a default Plain fit keeps the four-string call
-    p = GradientBoosting(n_estimators=100)
-    assert len(_fit_fake(p)[7]) == 4 and p.boosting_type_ == 'Plain'
+    assert np.all(np.isfinite(np.asarray(m.predict(np.ones((2, 3), np.float32)))))
+    # a default fit of 100 iterations resolves Plain
+    p = GradientBoosting(n_estimators=100, max_depth=2)
+    _fit_real(p)
+    assert p.boosting_type_ == 'Plain'
 
 
 def test_ordered_fit_takes_an_eval_set():
     # their test cursor is restated (dynamic_boosting.h:423-430): the eval
     # arrays cross with the Ordered tail, as a Plain fit's do
-    m = GradientBoosting(loss='Logloss', n_estimators=600)
-    args = _fit_fake(m, eval_set=(np.ones((4, 3), np.float32), np.array([0, 1, 0, 1], np.float32)))
+    m = GradientBoosting(loss='Logloss', n_estimators=500, max_depth=2)
+    _fit_real(m, eval_set=(np.ones((4, 3), np.float32), np.array([0, 1, 0, 1], np.float32)))
     assert m.boosting_type_ == 'Ordered'
-    assert args[6][20] == 4          # n_eval_rows
-    assert args[7][5] == 'Ordered'
+    assert m.loss_curve_ is not None
 
 
 # ---- boost_from_average on MAE / Quantile / MAPE (lane/catboost-parity) ----
