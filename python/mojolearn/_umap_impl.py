@@ -333,13 +333,15 @@ class UMAP(NumericModeMixin):
         if tk in (0, 1):
             raise ValueError("UMAP target_n_neighbors must be -1 or >= 2")
         if tm == "categorical":
+            from . import _user_objects
+            from ._array import Array
             vals = list(y) if not hasattr(y, "tolist") else y.tolist()
-            if len(vals) != n or any(isinstance(v, (list, tuple)) for v in vals):  # cpu-route: categorical y label objects ordered by (type, value) [py-data-loop]
+            if len(vals) != n or _user_objects.kinds(vals)[_user_objects.KIND_SEQ]:
                 raise ValueError("UMAP categorical y must be one label per row")
-            order = sorted({v for v in vals if v != -1}, key=lambda v: (str(type(v)), v))  # cpu-route: categorical y label objects ordered by (type, value) [py-data-loop,py-reduce]
-            code = {v: float(i) for i, v in enumerate(order)}  # cpu-route: categorical y label objects ordered by (type, value) [py-data-loop]
-            codes = [-1.0 if v == -1 else code[v] for v in vals]  # cpu-route: categorical y label objects ordered by (type, value) [py-data-loop]
-            t, _ = as_f32_c(codes, ndim=1, name="y")
+            # the labels other than -1 ordered by (str(type(v)), v), as float32
+            # codes, -1 kept: read once natively (user_objects_native sorted_codes)
+            words = _user_objects.call("sorted_codes", vals, -1)
+            t = Array._owned(words, (len(words),), "<f4", "C")
             return 1, 1, t, max(tk, 0), w
         if tm in ("l2", "euclidean"):
             t, _ = as_f32_c(y, ndim=None, name="y")

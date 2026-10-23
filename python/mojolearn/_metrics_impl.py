@@ -61,6 +61,7 @@ from . import _portable_math as math
 import numbers
 from ._buffer import _materialize, _native, materialize_f32_lists
 from ._labels import is_bool, flatten_labels, flat_view
+from . import _user_objects
 from ._arrays import _addr, _addr_ro
 
 from . import _backend
@@ -1410,10 +1411,13 @@ def _classification_labels(values, name, *, allow_empty=False):
     labels = flatten_labels(values)
     if not allow_empty and not labels:
         raise ValueError(f"{name} must contain at least one label")
-    if all(isinstance(v, str) for v in labels):  # glue: type validation of list labels
-        return [str(v) for v in labels], "string"  # cpu-route: str labels, the explicit label input step
-    if all(isinstance(v, numbers.Integral) or is_bool(v) for v in labels):  # glue: type validation of list labels
-        return [int(v) for v in labels], "integer"  # cpu-route: Python int labels, the explicit label input step
+    # the kind test and the conversion read the labels once natively
+    # (bindings/user_objects_native.mojo kinds, strs, ints)
+    got = _user_objects.kinds(labels)
+    if got[_user_objects.KIND_STR] == len(labels):
+        return _user_objects.call("strs", labels), "string"
+    if got[_user_objects.KIND_INT_OR_BOOL] == len(labels):
+        return _user_objects.call("ints", labels).tolist(), "integer"
     raise TypeError(f"{name} must contain only strings or only integers; "
                     "floating labels, missing labels and mixed types are unsupported")
 
@@ -1515,7 +1519,15 @@ def _label_map(labels, fn):
         gather(_addr_ro(table), len(labels.classes), _addr_ro(labels.codes),
                len(labels), _addr(out))
         return out
-    return Array.from_list([fn(v) for v in labels], "<i4")  # cpu-route: Python object labels mapped per row, the explicit label input step
+    # a list: `fn` once per distinct label (first-seen classes, read natively),
+    # gathered per row as for `_EncodedLabels`
+    classes, codes = _user_objects.call("first_seen", labels)
+    table = Array.from_list([fn(c) for c in classes], "<i4")  # glue: maps the class table through the label function
+    from ._buffer import _native
+    out = empty((len(labels),), "<i4")
+    if len(labels):
+        _native("gather_i32")(_addr_ro(table), len(classes), codes.buffer_info()[0], len(labels), _addr(out))
+    return out
 
 
 def _classification_pair(y_true, y_pred, sample_weight):

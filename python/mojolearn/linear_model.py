@@ -116,14 +116,9 @@ def _labels_1d(y):
 def _flatten(obj):
     """Every leaf of a nested list/tuple (or anything with `tolist()`) as
     one flat Python list; a scalar is a one-element list."""
-    if hasattr(obj, "tolist"):
-        obj = obj.tolist()
-    if isinstance(obj, (list, tuple)):
-        out = []
-        for v in obj:  # cpu-route: flattens a user Python list y, the explicit input step
-            out.extend(_flatten(v))
-        return out
-    return [obj]
+    # read once natively (bindings/user_objects_native.mojo flatten)
+    from . import _user_objects
+    return _user_objects.call("flatten", obj)
 
 
 #: struct-format codes of the integer buffer types.
@@ -150,8 +145,9 @@ def _is_integer_labels(y):
     fmt = _buffer_format(y)
     if fmt is not None:
         return fmt in _INT_FORMATS
+    from . import _user_objects
     leaves = _flatten(y)
-    return bool(leaves) and all(type(v) is int for v in leaves)  # cpu-route: kind test of a user Python list y, the explicit input step
+    return bool(leaves) and _user_objects.kinds(leaves)[_user_objects.KIND_EXACT_INT] == len(leaves)
 
 
 def _dtype_name(y):
