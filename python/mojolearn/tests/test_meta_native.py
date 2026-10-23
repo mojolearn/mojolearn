@@ -91,7 +91,9 @@ def test_mojolearn_members_fit_and_predict():
 
 def test_unfitted_and_parameter_refusals_keep_their_wording():
     X, yc = _data(True)
-    with pytest.raises(RuntimeError, match="not fitted"):
+    # the package's fitted check answers first, with scikit-learn's NotFittedError
+    from mojolearn.exceptions import NotFittedError
+    with pytest.raises(NotFittedError, match="not fitted"):
         ml.OneVsRestClassifier(ml.DecisionTreeClassifier()).predict(X)
     with pytest.raises(ValueError, match="voting must be 'hard' or 'soft'"):
         ml.VotingClassifier([("a", ml.DecisionTreeClassifier())], voting="x").fit(X, yc)
