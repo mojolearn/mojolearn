@@ -2191,6 +2191,56 @@ def _lm_run(
 
 
 
+def _lm_forward_run(
+    mut s: CausalLMSession, layers: List[Int], p_ids: Int, p_logits: Int, l: Int,
+) raises:
+    """`CausalLM.forward` as ONE resident program (lane migrate-neural-2):
+    the embedding, every layer on its session's cache, the norm and the head
+    over all B * L positions on the device, then the (B, L, V) logits come
+    down once. It is `_lm_run`'s first pass (the same kernels in the same
+    order) with every position's logits kept instead of the greedy pick;
+    before, each stage was its own call with host arrays between them."""
+    ref ctx = s.ctx.value()
+    var b = s.b
+    var d = s.d
+    var v = s.v
+    var m = b * l
+    var emb_cfg = EmbConfig.llama(v, d)
+    var ids0 = ctx.enqueue_create_buffer[DType.int32](m)
+    ctx.enqueue_copy(dst_buf=ids0, src_ptr=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=p_ids))
+    var x = ctx.enqueue_create_buffer[DType.float32](m * d)
+    identical_embedding_forward_into(ctx, x, s.embed.value(), ids0, m, emb_cfg)
+    _lm_layers_run(ctx, layers, x, b, l)
+    var sumsq = ctx.enqueue_create_buffer[DType.float32](m)
+    var hn = ctx.enqueue_create_buffer[DType.float32](m * d)
+    llama_rms_norm(ctx, sumsq, hn, x, s.norm.value(), m, d, s.eps)
+    var logits = ctx.enqueue_create_buffer[DType.float32](m * v)
+    var ws_n = 1
+    if not s.head15:
+        ws_n = identical_gemm_workspace_max_floats(m, v, d)
+    var ws = ctx.enqueue_create_buffer[DType.float32](ws_n)
+    if s.head15:
+        llama_int15_proj(ctx, s.st15.value(), logits, hn, s.head15.value(), m, v, d)
+    elif s.tied:
+        identical_gemm_into[ROLE=ROLE_HEAD](ctx, logits, hn, s.embed.value(), ws, m, v, d, OP_NT)
+    else:
+        identical_gemm_into[ROLE=ROLE_HEAD](ctx, logits, hn, s.head.value(), ws, m, v, d, OP_NT)
+    var bad_x = device_first_nonfinite(ctx, x, m * d)
+    if bad_x >= 0:
+        raise Error("mojolearn samba ops: non-finite rms_norm input at flat index " + String(bad_x))
+    var bad_hn = device_first_nonfinite(ctx, hn, m * d)
+    if bad_hn >= 0:
+        raise Error("mojolearn samba ops: non-finite linear input at flat index " + String(bad_hn))
+    ctx.enqueue_copy(dst_ptr=_f32_ptr(p_logits), src_buf=logits)
+    ctx.synchronize()
+    _ = ids0^
+    _ = x^
+    _ = sumsq^
+    _ = hn^
+    _ = logits^
+    _ = ws^
+
+
 def _transformer_backward_run(
     a: List[Int],
     b: Int,

@@ -288,6 +288,7 @@ from transformer.transformer_binding_impl import (
     _lm_open_run_int15,
     _lm_layers_run,
     _lm_run,
+    _lm_forward_run,
     _transformer_backward_run,
 )
 
@@ -1390,6 +1391,75 @@ def causal_lm_session_run_binding(
     return PythonObject(result)
 
 
+def causal_lm_session_forward_binding(
+    session: PythonObject, layers: PythonObject, addrs: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """`CausalLM.forward` on open sessions in one call: `layers` the stack's
+    open `TransformerDecodeSession`s (all at the same cached length);
+    `addrs` = [ids (B * L int32), logits_out (B * L * V f32)]; `params` =
+    [L]. The layers' caches advance by L. Returns the post-call
+    cached_tokens. A failed call marks this session and every layer session
+    lost."""
+    var owner = session.downcast_value_ptr[CausalLMSession]()
+    if len(addrs) != 2 or len(params) != 1:
+        raise Error("causal_lm_session_forward: expected 2 addresses and 1 scalar")
+    if owner[].busy:
+        raise Error("causal lm session: busy")
+    if not owner[].is_open():
+        raise Error("causal lm session: not open (causal_lm_session_open first)")
+    if not owner[].usable:
+        raise Error("causal lm session: lost after a failed call; close it and open a new one")
+    var p_ids = Int(py=addrs[0])
+    var p_logits = Int(py=addrs[1])
+    if p_ids == 0 or p_logits == 0:
+        raise Error("causal_lm_session_forward: null buffer address")
+    var l = Int(py=params[0])
+    if l < 1:
+        raise Error("causal_lm_session_forward: L must be positive")
+    var n_layers = Int(py=len(layers))
+    if n_layers < 1:
+        raise Error("causal_lm_session_forward: no layers")
+    var ptrs = List[Int]()
+    var held = -1
+    for i in range(n_layers):  # small-loop(n_layers: decoder layers of the model): one session pointer per layer, not data
+        var sp = layers[i].downcast_value_ptr[TransformerDecodeSession]()
+        _require_session_open(sp[])
+        if sp[].b != owner[].b or sp[].dm != owner[].d:
+            raise Error("causal_lm_session_forward: layer " + String(i) + " holds B = " + String(sp[].b)
+                + ", d_model = " + String(sp[].dm) + "; the session has B = " + String(owner[].b)
+                + ", d_model = " + String(owner[].d))
+        if held < 0:
+            held = sp[].kv.value().s
+        elif sp[].kv.value().s != held:
+            raise Error("causal_lm_session_forward: the layers hold different cached lengths")
+        if sp[].kv.value().s + l > sp[].smax:
+            raise Error("causal_lm_session_forward: " + String(l) + " more positions do not fit the "
+                + String(sp[].smax) + "-token cache")
+        ptrs.append(Int(sp))
+    for i in range(n_layers):  # driver-loop: over decoder layers of the model
+        var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=ptrs[i])
+        sp[].busy = True
+    owner[].busy = True
+    try:
+        with GILReleased(Python()):
+            _lm_forward_run(owner[], ptrs, p_ids, p_logits, l)
+    except error:
+        for i in range(n_layers):  # driver-loop: over decoder layers of the model
+            var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=ptrs[i])
+            sp[].busy = False
+            sp[].usable = False
+        owner[].busy = False
+        owner[].usable = False
+        raise error
+    var result = 0
+    for i in range(n_layers):  # driver-loop: over decoder layers of the model
+        var sp = MutPointer[TransformerDecodeSession, MutUntrackedOrigin](unsafe_from_address=ptrs[i])
+        sp[].busy = False
+        result = sp[].kv.value().s
+    owner[].busy = False
+    return PythonObject(result)
+
+
 def causal_lm_session_close_binding(session: PythonObject) raises -> PythonObject:
     var owner = session.downcast_value_ptr[CausalLMSession]()
     if owner[].busy:
@@ -1651,6 +1721,7 @@ def build__mojolearn_transformer() -> PythonObject:
         m.def_function[causal_lm_session_open_binding]("causal_lm_session_open")
         m.def_function[causal_lm_session_open_int15_binding]("causal_lm_session_open_int15")
         m.def_function[causal_lm_session_run_binding]("causal_lm_session_run")
+        m.def_function[causal_lm_session_forward_binding]("causal_lm_session_forward")
         m.def_function[causal_lm_session_close_binding]("causal_lm_session_close")
         return m.finalize()
     except e:

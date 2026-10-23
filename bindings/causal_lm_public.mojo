@@ -98,6 +98,10 @@ def causal_lm_admit_binding(
                          String("transformer_decode_session_close"), String("causal_lm_session_create"),
                          String("causal_lm_session_open"), String("causal_lm_session_run"), String("causal_lm_session_close")]:
                 py_setitem(entries, name, _native_function(block_binding, name))
+            for name in [String("transformer_decode_session_load_state"), String("transformer_decode_session_export_state"),  # small-loop(optional resident entry names)
+                         String("causal_lm_session_forward")]:
+                if Bool(py=py_call(g[].bi.hasattr, block_binding, name)):
+                    py_setitem(entries, name, _native_function(block_binding, name))
             if model._head_int15 is not None:
                 py_setitem(entries, "transformer_decode_session_open_int15", _native_function(block_binding, "transformer_decode_session_open_int15"))
                 py_setitem(entries, "causal_lm_session_open_int15", _native_function(block_binding, "causal_lm_session_open_int15"))
@@ -140,6 +144,11 @@ def _positions(model: PythonObject, state: PythonObject, length: Int) raises:
 def causal_lm_parameters_binding(model: PythonObject) raises -> PythonObject:
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var result = g[].bi.dict()
+    # The live arrays leave the model: a kept resident session set could miss
+    # an in-place edit, so it is dropped and generation opens per call again.
+    var model_fields = py_call(g[].bi.object.__getattribute__, model, "__dict__")
+    py_setitem(model_fields, "_parameters_exposed", True)
+    py_setitem(model_fields, "_resident_sessions", PythonObject(None))
     var p = model.plan
     py_setitem(result, p.embed_name, model._embed)
     if p.norm_name is not None:
@@ -560,6 +569,96 @@ def causal_model_head(model: PythonObject, x: PythonObject, normalize: Bool = Tr
     return out
 
 
+def _resident_forward_ok(model: PythonObject, state: PythonObject) raises -> Bool:
+    """Whether `forward` runs as the one resident program
+    (`causal_lm_session_forward`): a transformer stack with a norm, the
+    resident entries, a head the resident session takes, no arithmetic
+    profile metadata to carry and no layer state held by a decode session."""
+    var e = model._native_entries
+    if String(model.kind) != "transformer" or model._norm is None:
+        return False
+    for name in [String("causal_lm_session_forward"), String("transformer_decode_session_load_state"),  # small-loop(required resident entry names)
+                 String("transformer_decode_session_export_state"), String("causal_lm_session_run")]:
+        if not py_contains(e, name):
+            return False
+    if String(getenv("MOJOLEARN_TRANSFORMER_LEGACY_SETUP")) == "1" or String(getenv("MOJOLEARN_CAUSAL_LM_RESIDENT_FORWARD")) == "0":
+        return False
+    if model._head_int15 is not None and String(e["resident_vendor"]) != "cuda":
+        return False
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    for i in range(len(model._blocks)):  # driver-loop: over model layers
+        var blk = _block(model, i)
+        if py_get(blk, "_arithmetic_profile", PythonObject(None)) is not None:
+            return False
+        var st = state.layers[i]
+        if py_call(g[].bi.getattr, st, "_resident_session", PythonObject(None)) is not None:
+            return False
+        if py_call(g[].bi.getattr, st, "arithmetic_profile", PythonObject(None)) is not None:
+            return False
+    return True
+
+
+def _resident_forward(model: PythonObject, ids: PythonObject, state: PythonObject) raises -> PythonObject:
+    """`(B, L, V)` logits of `forward` in one resident program: the kept (or
+    newly opened) sessions take the state's caches, run the stack, and the
+    advanced caches come back into the state."""
+    var e = model._native_entries
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    var b = Int(py=ids.shape[0])
+    var l = Int(py=ids.shape[1])
+    var v = Int(py=model.vocab_size)
+    var int15 = model._head_int15 is not None
+    var keep = List[PythonObject]()
+    var copies = List[PythonObject]()
+    var fields = py_call(g[].bi.object.__getattribute__, model, "__dict__")
+    var persist = (not Bool(py=py_get(fields, "_parameters_exposed", PythonObject(False)))
+                   and not Bool(py=py_get(fields, "_resident_busy", PythonObject(False))))
+    var key = _resident_key(model, state, b, int15)
+    var kept = py_get(fields, "_resident_sessions") if persist else PythonObject(None)
+    var lm = PythonObject(None)
+    var sessions = PythonObject(None)
+    var out = generation_array([b, l, v])
+    if persist:
+        py_setitem(fields, "_resident_busy", True)
+    try:
+        if kept is not None and Bool(py=kept[0] == key):
+            lm = kept[1]
+            sessions = kept[2]
+            _resident_load_states(e, sessions, state, keep)
+        else:
+            if kept is not None:
+                py_setitem(fields, "_resident_sessions", PythonObject(None))
+                _resident_close(e, kept[1], kept[2])
+            var opened = _resident_open_all(model, e, state, b, l, int15, keep)
+            lm = opened[0]
+            sessions = opened[1]
+        var cached = py_call(e["causal_lm_session_forward"], lm, sessions, py_ints([_addr(ids, keep), _addr(out, keep)]), py_ints([l]))
+        for i in range(len(sessions)):  # driver-loop: over layer decode sessions
+            var blk = _block(model, i)
+            var st = state.layers[i]
+            var cap = Int(py=st.max_tokens) if Int(py=blk["window"]) == 0 else Int(py=blk["window"])
+            var cache_n = b * Int(py=blk["n_kv_heads"]) * cap * Int(py=blk["head_dim"])
+            var pk = _mutable(st.k_cache, [cache_n], keep, copies, "k_cache")
+            var pv = _mutable(st.v_cache, [cache_n], keep, copies, "v_cache")
+            _ = py_call(e["transformer_decode_session_export_state"], sessions[i], py_ints([pk, pv]))
+            py_setattr(st, "cached_tokens", cached)
+        _writeback(copies)
+    except error:
+        if persist:
+            py_setitem(fields, "_resident_sessions", PythonObject(None))
+            py_setitem(fields, "_resident_busy", False)
+        if lm is not None:
+            _resident_close(e, lm, sessions)
+        raise error
+    if persist:
+        py_setitem(fields, "_resident_sessions", Python.tuple(key, lm, sessions))
+        py_setitem(fields, "_resident_busy", False)
+    else:
+        _resident_close(e, lm, sessions)
+    _ = keep^
+    return out
+
+
 def _run(model: PythonObject, ids: PythonObject, state: PythonObject, remote_step: Bool = False) raises -> PythonObject:
     var l = Int(py=ids.shape[1])
     _state(model, state, Int(py=ids.shape[0]), l)
@@ -567,6 +666,10 @@ def _run(model: PythonObject, ids: PythonObject, state: PythonObject, remote_ste
     try:
         if parallel is not None:
             return py_call(parallel, "run", Python.list(model, ids, state, remote_step))
+        if _resident_forward_ok(model, state):
+            var logits = _resident_forward(model, ids, state)
+            py_setattr(state, "positions", PythonObject(Int(py=state.positions) + l))
+            return logits
         var x = causal_model_embedding(model, ids)
         for i in range(len(model._blocks)):  # driver-loop: over ordered model layers
             x = causal_layer_run(model, i, x, state.layers[i])
@@ -613,29 +716,16 @@ def _resident_close(entries: PythonObject, lm: PythonObject, sessions: PythonObj
         _ = py_call_typed(entries["transformer_decode_session_close"], sessions[i])
 
 
-def causal_lm_resident_binding(model: PythonObject, value: PythonObject, maximum: PythonObject, last_logits: PythonObject, supplied_state: PythonObject) raises -> PythonObject:
-    var e = model._native_entries
-    if not py_contains(e, "causal_lm_session_run") or model._norm is None:
-        return PythonObject(None)
-    var int15 = model._head_int15 is not None
-    if int15 and String(e["resident_vendor"]) != "cuda":
-        return PythonObject(None)
-    var ids = generation_ids(value, Int(py=model.vocab_size))
-    var n = Int(py=maximum)
-    if n == 0:
-        return ids
-    if n < 0:
-        raise Error("generation: max_new_tokens must be nonnegative")
-    var b = Int(py=ids.shape[0])
-    var l = Int(py=ids.shape[1])
-    var state = supplied_state
-    if state is None:
-        state = causal_lm_allocate_binding(model, PythonObject(b), PythonObject(l + n))
+def _resident_open_all(
+    model: PythonObject, e: PythonObject, state: PythonObject, b: Int, l: Int, int15: Bool,
+    mut keep: List[PythonObject],
+) raises -> PythonObject:
+    """Open the model's resident sessions on `state`: one decode session per
+    layer (weights and the layer's caches copied to the device) and the
+    model session (embedding, norm, head). Returns (lm, sessions)."""
     var g = GENERATION_BOUNDARY.get_or_create_ptr()
     var sessions = g[].bi.list()
     var lm = e["causal_lm_session_create"]()
-    var keep = List[PythonObject]()
-    var out = generation_array([b, n], "i")
     try:
         for i in range(len(model._blocks)):  # driver-loop: over model layers
             var blk = _block(model, i)
@@ -663,11 +753,95 @@ def causal_lm_resident_binding(model: PythonObject, value: PythonObject, maximum
         var tp = py_ints([b, Int(py=model.vocab_size), Int(py=model.d_model)])
         _ = py_call(tp.append, model.norm_eps)
         _ = py_call(e["causal_lm_session_open_int15" if int15 else "causal_lm_session_open"], lm, top, tp)
-        _ = py_call(e["causal_lm_session_run"], lm, sessions, py_ints([_addr(ids, keep), _addr(out, keep), _addr(last_logits, keep)]), py_ints([l, n, 0]))
     except error:
         _resident_close(e, lm, sessions)
         raise error
-    _resident_close(e, lm, sessions)
+    return Python.tuple(lm, sessions)
+
+
+def _resident_key(model: PythonObject, state: PythonObject, b: Int, int15: Bool) raises -> PythonObject:
+    """What a kept resident session set must match: the rows, every layer's
+    cache capacity, the head format and the entries it was opened with."""
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    var caps = g[].bi.list()
+    for i in range(len(state.layers)):  # driver-loop: over model layers
+        _ = py_call(caps.append, state.layers[i].max_tokens)
+    return Python.tuple(b, py_call(g[].bi.tuple, caps), int15, py_call(g[].bi.id, model._native_entries))
+
+
+def _resident_load_states(e: PythonObject, sessions: PythonObject, state: PythonObject, mut keep: List[PythonObject]) raises:
+    """Each kept layer session takes this call's caches (the state half of
+    an open; the weights stay where they are)."""
+    for i in range(len(sessions)):  # driver-loop: over layer decode sessions
+        var st = state.layers[i]
+        _ = py_call(e["transformer_decode_session_load_state"], sessions[i],
+                    py_ints([_addr(st.k_cache, keep), _addr(st.v_cache, keep)]), py_ints([Int(py=st.cached_tokens)]))
+
+
+def causal_lm_resident_binding(model: PythonObject, value: PythonObject, maximum: PythonObject, last_logits: PythonObject, supplied_state: PythonObject) raises -> PythonObject:
+    var e = model._native_entries
+    if not py_contains(e, "causal_lm_session_run") or model._norm is None:
+        return PythonObject(None)
+    var int15 = model._head_int15 is not None
+    if int15 and String(e["resident_vendor"]) != "cuda":
+        return PythonObject(None)
+    var ids = generation_ids(value, Int(py=model.vocab_size))
+    var n = Int(py=maximum)
+    if n == 0:
+        return ids
+    if n < 0:
+        raise Error("generation: max_new_tokens must be nonnegative")
+    var b = Int(py=ids.shape[0])
+    var l = Int(py=ids.shape[1])
+    var state = supplied_state
+    if state is None:
+        state = causal_lm_allocate_binding(model, PythonObject(b), PythonObject(l + n))
+    var g = GENERATION_BOUNDARY.get_or_create_ptr()
+    var keep = List[PythonObject]()
+    var out = generation_array([b, n], "i")
+    # The resident sessions persist under the model handle (lane
+    # migrate-neural-2: every call re-uploaded every layer's weights). A kept
+    # set is reused when its rows and capacities match; the caches of this
+    # call's state are loaded into it. The model's weights never change after
+    # construction; once `parameters()` has handed the live arrays out, the
+    # sessions are opened per call again, so an in-place edit is observed as
+    # before. A concurrent call, or a binding without load_state, opens its
+    # own set.
+    var fields = py_call(g[].bi.object.__getattribute__, model, "__dict__")
+    var persist = (py_contains(e, "transformer_decode_session_load_state")
+                   and not Bool(py=py_get(fields, "_parameters_exposed", PythonObject(False)))
+                   and not Bool(py=py_get(fields, "_resident_busy", PythonObject(False))))
+    var key = _resident_key(model, state, b, int15)
+    var kept = py_get(fields, "_resident_sessions") if persist else PythonObject(None)
+    var lm = PythonObject(None)
+    var sessions = PythonObject(None)
+    if persist:
+        py_setitem(fields, "_resident_busy", True)
+    try:
+        if kept is not None and Bool(py=kept[0] == key):
+            lm = kept[1]
+            sessions = kept[2]
+            _resident_load_states(e, sessions, state, keep)
+        else:
+            if kept is not None:
+                py_setitem(fields, "_resident_sessions", PythonObject(None))
+                _resident_close(e, kept[1], kept[2])
+            var opened = _resident_open_all(model, e, state, b, l, int15, keep)
+            lm = opened[0]
+            sessions = opened[1]
+        _ = py_call(e["causal_lm_session_run"], lm, sessions, py_ints([_addr(ids, keep), _addr(out, keep), _addr(last_logits, keep)]), py_ints([l, n, 0]))
+    except error:
+        if persist:
+            py_setitem(fields, "_resident_sessions", PythonObject(None))
+            py_setitem(fields, "_resident_busy", False)
+        if lm is not None:
+            _resident_close(e, lm, sessions)
+        raise error
+    if persist:
+        py_setitem(fields, "_resident_sessions", Python.tuple(key, lm, sessions))
+        py_setitem(fields, "_resident_busy", False)
+    else:
+        _resident_close(e, lm, sessions)
     var result = generation_array([b, l + n], "i")
     var dst = i32_ptr(Int(py=result._addr))
     var prompt = i32_ptr(Int(py=ids._addr))
