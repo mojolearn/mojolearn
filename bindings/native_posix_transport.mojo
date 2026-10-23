@@ -132,7 +132,7 @@ def posix_socket_prepare(fd: Int) raises:
             posix_failure("SO_NOSIGPIPE", posix_errno())
 
 
-def posix_resolve(host: String, port: Int, passive: Bool) raises -> Int:
+def posix_resolve(var host: String, port: Int, passive: Bool) raises -> Int:
     if host.find("\0") >= 0:
         raise Error("transport: hostname contains NUL")
     # Public LP64 addrinfo: four int fields, socklen_t, alignment padding,
@@ -277,7 +277,9 @@ def posix_transfer(fd: Int, pointer: PosixBytes, count: Int, timeout: Float64, w
                 posix_failure("send" if writing else "receive", number)
 
 
-def posix_spawn(executable: String, argv: List[String], environment: List[String]) raises -> Int:
+def posix_spawn(var executable: String, var argv: List[String], var environment: List[String]) raises -> Int:
+    # String.as_c_string_slice requires mutable ownership in Mojo 1.0.
+    # Keep these owned strings/lists alive until the synchronous spawn returns.
     if executable.find("\0") >= 0:
         raise Error("transport: executable contains NUL")
     var arguments = List[Int](length=len(argv) + 1, fill=0)
