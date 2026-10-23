@@ -109,6 +109,7 @@ from bindings.sequential_native import sequential_c
 from bindings.xseq_native import xseq_c
 from bindings.byte_lm_host_trainer_native import byte_lm_host_trainer_c
 from bindings.xcnn_native import xcnn_c
+from bindings.tsa_public_native import tsa_c
 from bindings.classical_native import classical_c
 from bindings.classical_attributes import classical_attribute_c, classical_attribute_descriptor_c
 from bindings.host_archive_lifetime import host_archive_finalize_c
@@ -1316,6 +1317,7 @@ def build__mojolearn_tokenizer_host() -> PythonObject:
         module.def_py_c_function(xseq_c, "xseq_native_call")
         module.def_py_c_function(byte_lm_host_trainer_c, "byte_lm_host_trainer_call")
         module.def_py_c_function(xcnn_c, "xcnn_native_call")
+        module.def_py_c_function(tsa_c, "tsa_native_call")
         module.def_py_c_function(classical_c, "classical_native_call")
         module.def_py_c_function(classical_attribute_c, "classical_attribute_call")
         module.def_py_c_function(classical_attribute_descriptor_c, "classical_attribute_descriptor")

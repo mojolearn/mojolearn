@@ -112,3 +112,9 @@ def neural_first_bad_id(ids: _I32P, rows: Int, cols: Int, vocab: Int, target_col
                 continue
             return r * cols + c
     return -1
+
+
+def tsa_flags_u8(src: _I32P, dst: _U8P, count: Int):
+    """`flags.astype("<u1")` of the stationarity flags (each 0 or 1)."""
+    for i in range(count):  # native result publication: one flag per series
+        dst[i] = UInt8(src[i])

@@ -107,6 +107,12 @@ class _Binding:
 
 _mojolearn_tsa = _Binding()
 
+# The stationarity functions' compiled owner, connected once at import:
+# `kpss_test` and `select_d` are one native call each
+# (bindings/tsa_public_native.mojo).
+from . import _native_tsa_bridge  # noqa: E402
+_TSA, _TSA_CONTEXT = _native_tsa_bridge.connect()
+
 #: The saved-model format tag (`ExponentialSmoothing.save`,
 #: lane/inference-holtwinters, 2026-09-15).
 _HW_FORMAT = "mojolearn-holtwinters-1"
@@ -254,30 +260,7 @@ def kpss_test(y, d=0, D=0, s=0, pval_threshold=0.05, return_statistic=False):
     >>> np.asarray(mojolearn.kpss_test(y)).shape
     (4,)
     """
-    flat, n_obs, batch_size = _series_major(y, "kpss_test")
-    flags = empty((batch_size,), "<i4")
-    stat = empty((batch_size,), "<f4")
-    _mojolearn_tsa.kpss_test(
-        addr_ro(flat, name="y"),
-        addr(flags, name="flags"),
-        addr(stat, name="stat"),
-        # ORDER MATCHES bindings/_mojolearn_tsa.mojo::kpss_test_binding.
-        #   0 batch_size, 1 n_obs, 2 d, 3 D, 4 s, 5 pval_threshold
-        [
-            int(batch_size),
-            int(n_obs),
-            int(d),
-            int(D),
-            int(s),
-            float(pval_threshold),
-        ],
-    )
-    # the binding writes 1 (stationary) or 0 (tsa/estimator.mojo), so a
-    # C-level cast is the flag (lane py-sequence; it was a Python loop)
-    stationary = flags.astype("<u1")
-    if return_statistic:
-        return stationary, stat
-    return stationary
+    return _TSA(None, "kpss_test", (y, d, D, s, pval_threshold, return_statistic), _TSA_CONTEXT)
 
 
 # Choose the simple differencing order `d` per series.
@@ -356,38 +339,7 @@ def select_d(y, D=0, s=0, d_max=None, pval_threshold=0.05):
     >>> np.asarray(mojolearn.select_d(y)).shape
     (4,)
     """
-    if d_max is None:
-        d_max = 2 - int(D)
-    flat, n_obs, batch_size = _series_major(y, "select_d")
-    # One native entry on every install (lane py-runtime-b): the GPU
-    # binding's selector (tsa/impl/auto_arima.mojo) or, on a CPU-only
-    # install, the host binding's `select_d` (bindings/kpss_host_test.mojo:
-    # the first stationary order of the same host KPSS test, which also
-    # refuses a d_max outside 0 <= d_max <= 2 - D by name; the check below
-    # keeps the CPU route's Python ValueError).
-    from . import _backend
-    if _backend.vendor() == "cpu":
-        limit, seasonal = int(d_max), int(D)
-        if limit < 0 or limit + seasonal > 2:
-            raise ValueError(
-                f"select_d: d_max must satisfy 0 <= d_max <= 2 - D (d_max={limit}, "
-                f"D={seasonal}), refused by name")
-    out = empty((batch_size,), "<i4")
-    _mojolearn_tsa.select_d(
-        addr_ro(flat, name="y"),
-        addr(out, name="out"),
-        # ORDER MATCHES bindings/_mojolearn_tsa.mojo::select_d_binding.
-        #   0 batch_size, 1 n_obs, 2 D, 3 s, 4 d_max, 5 pval_threshold
-        [
-            int(batch_size),
-            int(n_obs),
-            int(D),
-            int(s),
-            int(d_max),
-            float(pval_threshold),
-        ],
-    )
-    return out
+    return _TSA(None, "select_d", (y, D, s, d_max, pval_threshold), _TSA_CONTEXT)
 
 
 # Holt-Winters exponential smoothing, with the reference
