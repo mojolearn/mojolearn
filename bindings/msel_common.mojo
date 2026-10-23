@@ -387,7 +387,7 @@ struct MselGroups(Movable):
                             PythonObject(2), PythonObject(n))
             codes = narrow
         var m = len(classes)
-        self.counts = List[Int](length=m, fill=0)
+        var counts = List[Int](length=m, fill=0)
         if m > 0:
             var class_counts = msel_new(m, "<i8", context)
             var fold_store = msel_new(n, "<i4", context)
@@ -395,7 +395,8 @@ struct MselGroups(Movable):
             _ = family_call(msel_entry("fold_ids", context), PythonObject(msel_addr(codes)), PythonObject(n), PythonObject(m),
                             PythonObject(2), PythonObject(msel_addr(class_counts)), PythonObject(msel_addr(fold_store)),
                             PythonObject(msel_addr(fold_counts)))
-            self.counts = msel_read_i64(class_counts)
+            counts = msel_read_i64(class_counts)
+        self.counts = counts^
         self.codes = codes
         self.classes = classes
         self.m = m

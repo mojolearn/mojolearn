@@ -412,14 +412,17 @@ struct MselScores(Movable):
     var test_idx: PythonObject
 
     def __init__(out self, keys: PythonObject) raises:
-        self.keys = keys
-        self.names = List[String]()
-        self.test = List[List[Float64]]()
-        self.train = List[List[Float64]]()
+        var names = List[String]()
+        var test = List[List[Float64]]()
+        var train = List[List[Float64]]()
         for i in range(len(keys)):  # driver-loop: over scorer names
-            self.names.append(String(py=family_call(msel_b().str, keys[i])))
-            self.test.append(List[Float64]())
-            self.train.append(List[Float64]())
+            names.append(String(py=family_call(msel_b().str, keys[i])))
+            test.append(List[Float64]())
+            train.append(List[Float64]())
+        self.keys = keys
+        self.names = names^
+        self.test = test^
+        self.train = train^
         self.fit_time = List[Float64]()
         self.score_time = List[Float64]()
         self.estimators = Python.list()
