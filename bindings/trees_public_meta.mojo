@@ -221,6 +221,8 @@ def _is_mojolearn(est: PythonObject) raises -> Bool:
     if py_type(module) is not trees_builtins().str:
         return False
     var name = String(module)
+    if name.startswith("mojolearn.tests"):
+        return False  # a test's own stand-in estimator is a user class
     return name == "mojolearn" or name.startswith("mojolearn.")
 
 
