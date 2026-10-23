@@ -240,7 +240,6 @@ _VIEW_MIN_WORDS = 2 ** 20
 _XB = 2048
 #: CategoricalNB's block histograms hold at most this many words; past it
 #: the histogram block doubles (a function of the shape only)
-_CAT_HIST_WORDS = 2 ** 26
 
 
 def _switch(name):
@@ -1858,23 +1857,6 @@ class KBinsDiscretizer(_PrepBase):
 
 # ---------------------------------------------------------------- naive Bayes
 #: mode -> whether its binding exports `x_prep_proba64` (lane apple-fast-q-clf)
-_PROBA64 = {}
-
-
-def _proba64_on(mode):
-    """predict_proba as float64 (x_prep/proba64.mojo `q64_softmax_unit`): the
-    FAST binding's default (QUALITY-FIX: a float32 probability saturates at
-    exactly 1.0 past a ~16.6-nat gap; Istella log loss gaussian-nb 3.574 vs
-    scikit-learn 3.417, bernoulli-nb 5.351 vs 4.279); a build with
-    -D MOJOLEARN_PROBA64_QOLD (or IDENTICAL) has no export and keeps the
-    float32 `row_softmax` probabilities."""
-    key = str(mode)
-    if key not in _PROBA64:
-        try:
-            _PROBA64[key] = _optional_prep_entry(_prep_binding(mode), "x_prep_proba64") is not None
-        except Exception:  # noqa: BLE001  (no binding: the float32 route)
-            _PROBA64[key] = False
-    return _PROBA64[key]
 
 
 class _Classifier(_PrepBase):
@@ -1890,60 +1872,6 @@ class _Classifier(_PrepBase):
     #: keeps to that; a user covariance_estimator takes host rows.
     _mojolearn_device_rows = True
 
-    def _encode_y(self, y, n):
-        classes, codes = encode_labels(y)
-        if codes.size != n:
-            raise ValueError("mojolearn: X and y have different numbers of rows")
-        self.classes_ = classes
-        return codes
-
-    def _scores(self, X, want, csr=None):
-        self._check_fitted()
-        pr = _Prog()
-        # lane idn-all: `csr` (the IDENTICAL CSR scoring's fallback, its
-        # width already checked) is densified by the program on the device
-        xo = _csr_dense_x(pr, csr, self.numeric_mode_) if csr is not None else None
-        if xo is None:
-            arr = _x2d(X.toarray() if csr is not None else X)
-            self._check_width(arr)
-            n, d = arr.shape
-            xo = pr.put(arr)
-        else:
-            n, d = csr[3], csr[4]
-        K = len(self.classes_)
-        chk = self._score_checks(pr, xo, n, d)
-        # the joint log likelihood stays on the device unless it is the answer
-        jll = pr.work(n * K) if want else pr.alloc(n * K)
-        self._jll_stages(pr, xo, n, d, jll)
-        return self._score_tail(pr, n, d, K, jll, want, chk)
-
-    def _score_tail(self, pr, n, d, K, jll, want, chk):
-        """The scoring program after the joint log likelihood: its softmax
-        and argmax stages, the run, the input refusals, the offsets."""
-        lp = pr.alloc(n * K) if "log" in want else _NONE
-        p64 = "proba" in want and _proba64_on(self.numeric_mode_)
-        pp = pr.alloc((2 if p64 else 1) * n * K) if "proba" in want else _NONE
-        am = pr.alloc(n) if "predict" in want else _NONE
-        if p64:
-            pr.stage("q64_softmax", n, jll, n, K, pp)
-            if lp != _NONE:
-                pr.stage("row_softmax", n, jll, n, K, lp, _NONE)
-        elif lp != _NONE or pp != _NONE:
-            pr.stage("row_softmax", n, jll, n, K, lp, pp)
-        if am != _NONE:
-            pr.stage("row_argmax", n, jll, n, K, am)
-        pr.run(self.numeric_mode_)
-        self._score_refusals(pr, d, chk)
-        return pr, n, K, dict(jll=jll, log=lp, proba=pp, predict=am, proba64=p64)
-
-    def _score_checks(self, pr, xo, n, d):
-        """Stages a subclass adds to check its input in the scoring program
-        (CategoricalNB); what it returns goes to `_score_refusals`."""
-        return None
-
-    def _score_refusals(self, pr, d, chk):
-        """Raises on what `_score_checks` found, after the run."""
-
     def predict(self, X):
         """Predict the class of each row.
 
@@ -1957,8 +1885,7 @@ class _Classifier(_PrepBase):
         array of shape (n_samples,)
             Predicted class labels.
         """
-        pr, n, K, o = self._scores(X, ("predict",))
-        return decode_labels(self.classes_, pr.get_i32(o["predict"], n))
+        return _CLS_CALL(self, "predict", (X,), _CLS_CONTEXT)
 
     def predict_proba(self, X):
         """Return class probabilities for each row.
@@ -1976,10 +1903,7 @@ class _Classifier(_PrepBase):
         array of shape (n_samples, n_classes)
             Probability of each class, in the order of ``classes_``.
         """
-        pr, n, K, o = self._scores(X, ("proba",))
-        if o.get("proba64"):
-            return pr.get_f64(o["proba"], (n, K))
-        return pr.get(o["proba"], (n, K))
+        return _CLS_CALL(self, "predict_proba", (X,), _CLS_CONTEXT)
 
     def predict_log_proba(self, X):
         """Return the log of the class probabilities for each row.
@@ -1994,8 +1918,7 @@ class _Classifier(_PrepBase):
         array of shape (n_samples, n_classes)
             Log probability of each class, in the order of ``classes_``.
         """
-        pr, n, K, o = self._scores(X, ("log",))
-        return pr.get(o["log"], (n, K))
+        return _CLS_CALL(self, "predict_log_proba", (X,), _CLS_CONTEXT)
 
     def predict_joint_log_proba(self, X):
         """Return the unnormalized log score of each row and class.
@@ -2010,8 +1933,7 @@ class _Classifier(_PrepBase):
         array of shape (n_samples, n_classes)
             Log scores that ``predict_log_proba`` normalizes, in the order of ``classes_``.
         """
-        pr, n, K, o = self._scores(X, ())
-        return pr.get(o["jll"], (n, K))
+        return _CLS_CALL(self, "predict_joint_log_proba", (X,), _CLS_CONTEXT)
 
     def score(self, X, y):
         """Return the mean accuracy on the given rows and labels.
@@ -2028,19 +1950,7 @@ class _Classifier(_PrepBase):
         float
             Fraction of rows classified correctly.
         """
-        from ._expansion_metrics import accuracy_fraction
-        return accuracy_fraction(y, self.predict(X))
-
-
-def _nb_weights(pr, sample_weight, n):
-    """sample_weight -> its arena offset (None when not given)."""
-    if sample_weight is None:
-        return None
-    # scikit-learn's _check_sample_weight: scalar/list/Series, its shape,
-    # finiteness, sign and all-zero refusals and wording (the shared helper;
-    # native reductions). `pr.put` copies, so the caller's array is not written.
-    from ._sample_weight import check_sample_weight
-    return pr.put(check_sample_weight(sample_weight, n))
+        return _CLS_CALL(self, "score", (X, y), _CLS_CONTEXT)
 
 
 #: binding -> its `x_prep_idn_int` bits (0 when it has none), probed once
@@ -2062,103 +1972,6 @@ def _idn_int(mode):
         fn = _optional_prep_entry(binding, "x_prep_idn_int")
         v = int(fn()) if fn is not None else 0
         _IDN_INT[key] = v
-    return v
-
-
-def _nb_onepass(mode):
-    return _blocked() and bool(_idn_int(mode) & _IDN_NB_ONEPASS)
-
-
-def _nb_counts(pr, wo, xo, n, d, yo, K, cnt, sums, thr=_NONE, neg=_NONE):
-    """The discrete naive Bayes count pass as one unit per (block, column)
-    (x_prep/blocked.mojo `csb1_part`, lane idn-int-prep): csb_part's
-    partials of every class from one walk of X, then csb_fold. thr: the
-    binarize threshold's offset (BernoulliNB; X is binarized in the unit).
-    neg: d words that are -1 for a column holding a negative word, else 0
-    (where the fit read the column minimum)."""
-    nb = (n + _XB - 1) // _XB
-    w = _NONE if wo is None else wo
-    ps, pc, cn = pr.work(nb * K * d), pr.work(nb * K * d), pr.work(K * d)
-    ng = pr.work(nb * d) if neg != _NONE else _NONE
-    pr.stage("csb1_part", nb * d, xo, n, d, yo, K, ps, pc, nb, w, thr, ng)
-    pr.stage("csb_fold", K * d, ps, pc, nb, K, d, cn, cnt, _NONE, sums, w)
-    if neg != _NONE:
-        pr.stage("csb1_neg", d, ng, nb, d, neg)
-
-
-#: binding -> its `x_prep_idn_fam2` bits (0 when it has none), probed once
-_IDN_FAM2 = {}
-_F2_WDRAW, _F2_PERM_DRAW, _F2_WPICK, _F2_PARTIAL_CODES = 1, 2, 4, 8
-_F2_GRAM, _F2_GRAM_ROWTILE, _F2_LABEL_INV = 16, 32, 64
-#: the most partial words (blocks x cells) a blocked Gram keeps; past it the
-#: block grows, then the one-thread-per-cell stage (a function of the shape
-#: only, so the device and the host column agree)
-_GRAM_WORDS = 2 ** 26
-
-
-def _gram_rows(v, n, cells):
-    """Rows per block of a blocked Gram over n rows with `cells` partial
-    words a block (x_prep/gram_blocked.mojo): the binding's block length
-    (`x_prep_idn_fam2` >> 16; 2048 unless a candidate arm is built), doubled
-    until the partial table fits `_GRAM_WORDS`; 0 when it never does."""
-    rows = (v >> 16) or _XB
-    while ((n + rows - 1) // rows) * cells > _GRAM_WORDS and rows < 2 ** 22:  # glue: the block length doubles
-        rows *= 2
-    return rows if ((n + rows - 1) // rows) * cells <= _GRAM_WORDS else 0
-
-
-def _gram(pr, mode, z, n, d, g):
-    """Stages G = Z'Z of the (n, d) block at z into the (d, d) block g. Under
-    IDENTICAL (`_idn_fam2` bit 16): block partials of the upper triangle, one
-    thread per (block, a, b >= a) (bit 32, a candidate arm: one per
-    (block, a)), then each cell folded over the blocks. Else `matmul`: one
-    thread per cell over every row."""
-    v = _idn_fam2(mode)
-    rows = _gram_rows(v, n, d * d) if (_blocked() and v & _F2_GRAM) else 0
-    if not rows:
-        pr.stage("matmul", d * d, z, 1, d, z, d, 1, g, d, n, _NONE, _NONE)
-        return
-    nb = (n + rows - 1) // rows
-    part = pr.work(nb * d * d)
-    if v & _F2_GRAM_ROWTILE:
-        pr.stage("gb_part_row", nb * d, z, n, d, part, nb, rows)
-    else:
-        pr.stage("gb_part", nb * d * d, z, n, d, part, nb, rows)
-    pr.stage("gb_fold", d * d, part, nb, d, g)
-
-
-def _qda_cov(pr, mode, xo, n, d, yo, K, mean, cnt, cov):
-    """Stages the K class covariances (divisor the class count) into cov.
-    Under IDENTICAL (`_idn_fam2` bit 16): block partials of every class from
-    one walk per (block, a, b >= a), then each cell folded over the blocks
-    (x_prep/gram_blocked.mojo). Else `qda_cov`: one thread per (class, a, b)
-    over every row."""
-    v = _idn_fam2(mode)
-    rows = _gram_rows(v, n, K * d * d) if (_blocked() and v & _F2_GRAM) else 0
-    if not rows:
-        pr.stage("qda_cov", K * d * d, xo, n, d, yo, mean, cnt, cov)
-        return
-    nb = (n + rows - 1) // rows
-    part = pr.work(nb * K * d * d)
-    pr.stage("qcb_part", nb * d * d, xo, n, d, yo, K, mean, part, nb, rows)
-    pr.stage("qcb_fold", K * d * d, part, nb, K, d, cnt, cov)
-
-
-def _idn_fam2(mode):
-    """Lane fam2-prep-metrics: the IDENTICAL binding's x_prep/fam2.mojo
-    switches (bindings/_mojolearn_x_prep*.mojo `idn_fam2_binding`: 1
-    IDN_WDRAW, 2 IDN_PERM_DRAW, 4 IDN_WPICK, 8 IDN_PARTIAL_CODES), 0 on
-    another tier or a build with none. The device and the host column export
-    the same bits, so both stage the same program."""
-    if mode != "identical":
-        return 0
-    binding = _prep_binding(mode)
-    key = id(binding)
-    v = _IDN_FAM2.get(key)
-    if v is None:
-        fn = _optional_prep_entry(binding, "x_prep_idn_fam2")
-        v = int(fn()) if fn is not None else 0
-        _IDN_FAM2[key] = v
     return v
 
 
@@ -2254,142 +2067,11 @@ def _class_stats(pr, wo, total, xo, n, d, yo, K, cnt, mean, var, sums, mode=None
         pr.stage("class_stats_w", total, xo, n, d, yo, K, cnt, mean, var, sums, wo)
 
 
-def _gnb_stats(pr, mode, wo, xo, n, d, yo, K, cnt, theta, var, eps, vs):
-    """GaussianNB's statistics stages: epsilon (var_smoothing * the largest
-    column variance) and the class counts, means and variances (column
-    stats, then `_class_stats`; the C61 single-pass arms were deleted
-    2026-10-08, see the note above `_class_stats`)."""
-    st = pr.alloc(6 * d)
-    _col_stats(pr, xo, n, d, st)
-    pr.stage("gnb_eps", 1, st + 2 * d, d, eps, vs)
-    _class_stats(pr, wo, K * d, xo, n, d, yo, K, cnt, theta, var, _NONE, mode=mode)
-
-
-def _given_priors(values, K, who, check_sum=False):
-    """A user prior list as floats, checked as the reference checks it."""
-    vals = [float(v) for v in (values.tolist() if hasattr(values, "tolist") else values)]  # glue: converts the user priors argument (vals-sized: user prior list)
-    if len(vals) != K:
-        raise ValueError(f"mojolearn: {who}: number of priors must match number of classes")
-    if any(v < 0 for v in vals):  # glue: validates the user priors argument (vals-sized: user prior list)
-        raise ValueError(f"mojolearn: {who}: priors must be non-negative")
-    if (check_sum and abs(sum(vals) - 1.0) > 1e-8 * max(1.0, abs(sum(vals))) and  # glue: validates the user priors argument sums to one (vals-sized: user prior list)
-            abs(sum(vals) - 1.0) > 1e-5):  # glue: validates the user priors argument sums to one (vals-sized: user prior list)
-        raise ValueError(f"mojolearn: {who}: the sum of the priors should be 1")
-    return vals
-
-
-class _DevCodes:
-    """A partial_fit batch's labels whose class codes the fit program makes
-    on the device (lane fam2-prep-metrics, `_stage_partial_codes`): the
-    numeric label buffer, the classes as sorted float32 categories, and
-    `walk`, the Python route (the codes as an int32 Array; it names the
-    labels of a refused batch)."""
-    __slots__ = ("lb", "cats", "walk")
-
-    def __init__(self, lb, cats, walk):
-        self.lb, self.cats, self.walk = lb, cats, walk
-
-
-def _partial_dev(est, y, n, walk):
-    """`_DevCodes` when y is a numeric label buffer of n labels and every
-    class is an int or float with an exact float32 word, strictly ascending
-    (so `lookup`'s binary search over them is the dict's answer); else None."""
-    cl = list(est.classes_)
-    if not cl or any(type(c) not in (int, float) for c in cl):  # glue: the K class labels' types
-        return None
-    vals = [float(c) for c in cl]  # glue: the K class labels as floats
-    cats = Array._from_flat(vals, (len(vals),), "<f4")
-    ordered = all(vals[i] < vals[i + 1] for i in range(len(vals) - 1))  # glue: the K classes ascend
-    if cats.tolist() != vals or not ordered:
-        return None
-    lb = _label_buffer(y)
-    if lb is None or lb.n != n:
-        return None
-    return _DevCodes(lb, cats, walk)
-
-
 #: TOMBSTONE: lane fg-knn-nb G5 (MOJOLEARN_XPREP_DEVICE_CODES, `_fit_device_codes`:
 #: GaussianNB.fit classes and codes from the device unique_inverse) deleted
 #: 2026-10-09 (lane postmerge-act-2): SLOWER, gaussian-nb istella NV 1.29x / AMD
 #: 1.12x, taxi NV 1.70x / AMD 1.35x (nv n0668->n0631, amd a1066->a1091), accuracy
 #: SAME, same digests; code recoverable at main 5c137b55e.
-
-
-def _stage_partial_codes(pr, codes, mode):
-    """The float class codes offset of a partial_fit batch. An int32 Array:
-    `put_codes`. A `_DevCodes` (every tier, lane cpu2-l3-prep): staged in
-    this program (lab_load, lookup among the classes, count_neg, f2_clamp0:
-    a label outside classes_ counts and is clamped to class 0), and the
-    program refuses the batch right after its run, before the caller reads a
-    result, through the Python walk that names the labels."""
-    if not isinstance(codes, _DevCodes):
-        return pr.put_codes(codes)
-    lb, cats = codes.lb, codes.cats
-    K = cats.size
-    x = _label_load(pr, lb)
-    c, neg, yo = pr.work(lb.n), pr.alloc(1), pr.alloc(lb.n)
-    pr.stage("lookup", lb.n, x, lb.n, 1, pr.put(cats), K, pr.put_scalar(K), c)
-    pr.stage("count_neg", 1, c, lb.n, 1, neg)
-    pr.stage("f2_clamp0", lb.n, c, yo)
-
-    def refuse(prog, neg=neg, walk=codes.walk):
-        if prog.values(neg, 1)[0] > 0:
-            walk()
-            raise ValueError("mojolearn: a target label in y does not exist in the initial classes")
-
-    pr._after.append(refuse)
-    return yo
-
-
-def _partial_codes(est, y, classes, n, defer=False):
-    """sklearn `_check_partial_fit_first_call` and the batch's class codes:
-    the first call (no classes_ yet) needs `classes`, later ones may repeat
-    them only unchanged; a label outside classes_ is refused. defer (lane
-    fam2-prep-metrics): a numeric label buffer comes back as a `_DevCodes`
-    for `_stage_partial_codes` (no Python walk over the labels)."""
-    first = getattr(est, "classes_", None) is None
-    if first and classes is None:
-        raise ValueError("mojolearn: classes must be passed on the first call to partial_fit.")
-    if classes is not None:
-        cl, _ = sorted_classes(flatten_labels(classes))
-        if not first and list(cl) != list(est.classes_):
-            raise ValueError(f"mojolearn: `classes={cl}` is not the same as on last call to partial_fit, was: "
-                             f"{est.classes_}")
-        if first:
-            est.classes_ = cl
-    if defer:
-        dev = _partial_dev(est, y, n, lambda: _partial_walk(est, y, n, first)[1])
-        if dev is not None:
-            return first, dev
-    return _partial_walk(est, y, n, first)
-
-
-def _partial_walk(est, y, n, first):
-    """`_partial_codes`' Python route: labels of any kind (str, lists, a
-    class list float32 cannot hold), and the refusal that names a batch's
-    unknown labels."""
-    labels = flatten_labels(y)
-    if len(labels) != n:
-        raise ValueError("mojolearn: X and y have different numbers of rows")
-    index = {c: i for i, c in enumerate(est.classes_)}  # cpu-route: Python object labels of any kind, the explicit label input step
-    bad = sorted({repr(v) for v in labels if v not in index})  # cpu-route: Python object labels of any kind, the explicit label input step
-    if bad:
-        raise ValueError(f"mojolearn: The target label(s) {bad} in y do not exist in the initial classes "
-                         f"{est.classes_}")
-    return first, Array.from_list([index[v] for v in labels], "<i4")  # cpu-route: Python object labels of any kind, the explicit label input step
-
-
-def _copy_block(pr, src, rows, cols):
-    """A bit-for-bit copy of a (rows, cols) block (gather_cols over every column)."""
-    out = pr.alloc(rows * cols)
-    pr.stage("gather_cols", rows * cols, src, rows, cols, pr.put_list(list(range(cols))), cols, out)
-    return out
-
-
-def _check_alpha(est):
-    if not isinstance(est.alpha, numbers.Real) or not est.alpha > 0:
-        raise NotImplementedError(f"mojolearn: {type(est).__name__} needs alpha > 0 "
-                                  "(alpha = 0 makes log(0) terms)")
 
 
 # partial_fit merges with sklearn's `_update_mean_variance` (Chan's pairwise
@@ -2452,126 +2134,11 @@ class GaussianNB(_Classifier):
         self.priors = priors
         self.var_smoothing = var_smoothing
 
-    def _refuse(self):
-        vs = self.var_smoothing
-        if isinstance(vs, bool) or not isinstance(vs, numbers.Real) or not vs >= 0:
-            raise ValueError("The 'var_smoothing' parameter of GaussianNB must be a float in the range "
-                             f"[0.0, inf). Got {vs!r} instead.")
-
     def fit(self, X, y, sample_weight=None):
-        self._refuse()
-        arr = _x2d(X)
-        n, d = arr.shape
-        codes = self._encode_y(y, n)
-        K = len(self.classes_)
-        mode = _mode()
-        pr = _Prog()
-        xo = pr.put(arr)
-        yo = pr.put_codes(codes)
-        vs = pr.put_scalar(self.var_smoothing)
-        eps = pr.alloc(1)
-        cnt, theta, var, prior, const = pr.alloc(K), pr.alloc(K * d), pr.alloc(K * d), pr.alloc(K), pr.alloc(K)
-        wo = _nb_weights(pr, sample_weight, n)
-        _gnb_stats(pr, mode, wo, xo, n, d, yo, K, cnt, theta, var, eps, vs)
-        raw = _copy_block(pr, var, K, d)
-        given = _NONE
-        if self.priors is not None:
-            given = pr.put_list(_given_priors(self.priors, K, "GaussianNB", check_sum=True))
-        elif wo is not None:
-            # class_count_ / class_count_.sum() over the weighted counts
-            given = pr.alloc(K)
-            pr.stage("lda_prep", 1, cnt, theta, K, d, n, given, pr.alloc(d), 2, cnt)
-        pr.stage("gnb_params", K, cnt, var, K, d, n, eps, prior, const, 1 if given != _NONE else 0,
-                 given if given != _NONE else 0)
-        pr.run(mode)
-        self.theta_, self.var_ = pr.get(theta, (K, d)), pr.get(var, (K, d))
-        self.class_count_, self.class_prior_ = pr.get(cnt, K), pr.get(prior, K)
-        self.epsilon_ = pr.values(eps, 1)[0]
-        self._const = pr.get(const, K)
-        self._raw_var = pr.get(raw, (K, d))
-        self.numeric_mode_, self.n_features_in_ = mode, d
-        return self
+        return _CLS_CALL(self, "fit", (X, y, sample_weight), _CLS_CONTEXT)
 
     def partial_fit(self, X, y, classes=None, sample_weight=None):
-        self._refuse()
-        arr = _x2d(X)
-        n, d = arr.shape
-        first, codes = _partial_codes(self, y, classes, n, defer=True)
-        K = len(self.classes_)
-        if first:
-            mode = _mode()
-            zk, zkd = [0.0] * K, [0.0] * (K * d)
-        else:
-            self._check_width(arr)
-            mode = self.numeric_mode_
-            zk, zkd = None, None
-        pr = _Prog()
-        xo = pr.put(arr)
-        yo = _stage_partial_codes(pr, codes, mode)
-        vs = pr.put_scalar(self.var_smoothing)
-        eps = pr.alloc(1)
-        bc, bm, bv = pr.alloc(K), pr.alloc(K * d), pr.alloc(K * d)
-        wo = _nb_weights(pr, sample_weight, n)
-        _gnb_stats(pr, mode, wo, xo, n, d, yo, K, bc, bm, bv, eps, vs)
-        oc = pr.put_list(zk) if first else pr.put(self.class_count_)
-        om = pr.put_list(zkd) if first else pr.put(self.theta_)
-        ov = pr.put_list(zkd) if first else pr.put(self._raw_var)
-        cnt, theta, raw = pr.alloc(K), pr.alloc(K * d), pr.alloc(K * d)
-        pr.stage("gnb_merge", K * d, oc, om, ov, bc, bm, bv, K, d, cnt, theta, raw)
-        var = _copy_block(pr, raw, K, d)
-        if self.priors is not None:
-            given = pr.put_list(_given_priors(self.priors, K, "GaussianNB", check_sum=True))
-        else:
-            given = pr.alloc(K)
-            pr.stage("lda_prep", 1, cnt, theta, K, d, n, given, pr.alloc(d), 2, cnt)
-        prior, const = pr.alloc(K), pr.alloc(K)
-        pr.stage("gnb_params", K, cnt, var, K, d, 1, eps, prior, const, 1, given)
-        pr.run(mode)
-        self.theta_, self.var_ = pr.get(theta, (K, d)), pr.get(var, (K, d))
-        self.class_count_, self.class_prior_ = pr.get(cnt, K), pr.get(prior, K)
-        self.epsilon_ = pr.values(eps, 1)[0]
-        self._const, self._raw_var = pr.get(const, K), pr.get(raw, (K, d))
-        self.numeric_mode_, self.n_features_in_ = mode, d
-        return self
-
-    def _jll_stages(self, pr, xo, n, d, out):
-        K = len(self.classes_)
-        th, va, co = pr.put(self.theta_), pr.put(self.var_), pr.put(self._const)
-        pr.stage("gnb_jll", n * K, xo, n, d, th, va, co, K, out)
-
-
-def _csr_input(X):
-    """(indptr, indices, data, n, d) of a scipy.sparse matrix as int32, int32
-    and float32 C Arrays (its CSR form), or None for anything else."""
-    if not (hasattr(X, "tocsr") and hasattr(X, "nnz") and hasattr(X, "shape")):
-        return None
-    X = X.tocsr()
-    n, d = (int(v) for v in X.shape)  # glue: unpacks the two shape entries
-    ip = _as_typed(X.indptr, "<i4", "C", 1, "indptr")[0]
-    ix = _as_typed(X.indices, "<i4", "C", 1, "indices")[0]
-    dv = _as_typed(X.data, "<f4", "C", 1, "data")[0]
-    return ip, ix, dv, n, d
-
-
-def _csr_dense_x(pr, csr, mode):
-    """Lane idn-all: the dense n x d block of a CSR input, built ON THE
-    DEVICE by the program itself (op csr_dense, x_prep/blocked.mojo): the
-    CSR arrays go up, the block is device work words. Returns its offset, or
-    None when the binding has no such stage (`_idn_int` bit 8 clear: the
-    caller densifies on the host, the old form)."""
-    if not _idn_int(mode) & _IDN_NB_CSR_DENSE:
-        return None
-    ip, ix, dv, n, d = csr
-    if n * d > 2 ** 31 - 1:
-        raise ValueError("mojolearn: X exceeds the native Int32 indexing bound")
-    xo = pr.work(n * d)
-    pr.stage("csr_dense", n, pr.put_words(ip), pr.put_words(ix), pr.put(dv), d, xo)
-    return xo
-
-
-def _check_nonnegative(pr_values, who):
-    if any(v < 0 for v in pr_values):  # glue: raises on a negative per-column minimum (pr_values-sized: per-column minimum statistics)
-        raise ValueError(f"mojolearn: Negative values in data passed to {who}")
+        return _CLS_CALL(self, "partial_fit", (X, y, classes, sample_weight), _CLS_CONTEXT)
 
 
 class _DiscreteNB(_Classifier):
@@ -2613,149 +2180,8 @@ class _DiscreteNB(_Classifier):
         except Exception:
             return False
 
-    def _csr_fast(self, X):
-        """X's CSR parts when it is a scipy.sparse matrix and the FAST CSR
-        path is on, else None (a dense input keeps main's program)."""
-        if not type(self)._nb_csr_ready():
-            return None
-        return _csr_input(X)
-
-    def _fit_counts_csr(self, csr, y):
-        """`_fit_counts` on a CSR matrix (FAST + Apple + define only): the
-        (class, feature) count table and the class counts from ONE upload of
-        the CSR arrays (x_prep/fastnb_csr.mojo), then main's epilogue on them
-        (the column-stats row is zero words, so `_params`' minimum check
-        passes; a negative value is refused here from the kernel's flag)."""
-        ip, ix, dv, n, d = csr
-        codes = self._encode_y(y, n)
-        K = len(self.classes_)
-        mode = _mode()
-        fit_csr = _optional_prep_entry(_prep_binding(mode), "x_prep_nb_csr_fit")
-        fc = empty((K, d), "<f4")
-        cnt = empty((K,), "<f4")
-        flag = Array.from_list([0], "<i4")
-        fit_csr(addr_ro(ip, name="indptr"), addr_ro(ix, name="indices"), addr_ro(dv, name="data"),
-                addr_ro(codes, name="y"), [n, d, K, dv.size],
-                _addr_rw(fc, name="feature_count"), _addr_rw(cnt, name="class_count"), _addr_rw(flag, name="flag"))
-        level = int(flag.tolist()[0])
-        if mode == "identical":
-            # x_prep/fastnb_csr.mojo: 2 a negative value; 1 a value is not an
-            # integer in [0, 2^24) (or the rows are not canonical), so the
-            # caller runs the dense program; the 64-bit counts never fall
-            # back on a count's size (lane gap-shap-nb)
-            if level == 1:
-                return None
-            level = 1 if level == 2 else 0
-        if level != 0:
-            raise ValueError(f"mojolearn: Negative values in data passed to {type(self).__name__} (input X)")
-        pr = _Prog()
-        st = pr.alloc(6 * d)
-        # lane gap-shap-nb: the zero addend is arena words (they arrive
-        # zeroed), not a K x d Python list
-        z = pr.alloc(K * d)
-        cnt_o, fc_o, clp = pr.alloc(K), pr.alloc(K * d), pr.alloc(K)
-        pr.stage("add_arrays", K, pr.put(cnt), z, cnt_o)
-        pr.stage("add_arrays", K * d, pr.put(fc), z, fc_o)
-        self._prior_stages(pr, K, cnt_o, clp)
-        return pr, mode, n, d, K, st, cnt_o, fc_o, clp
-
-    def _csr_bias(self):
-        """The class log prior the CSR scoring adds (None for none)."""
-        return self.class_log_prior_
-
-    def _scores(self, X, want):
-        csr = self._csr_fast(X)
-        if csr is None:
-            return super()._scores(X, want)
-        self._check_fitted()
-        ip, ix, dv, n, d = csr
-        if d != self.n_features_in_:
-            raise ValueError(f"mojolearn: X has {d} features, but {type(self).__name__} was fitted with "
-                             f"{self.n_features_in_}")
-        K = len(self.classes_)
-        jll_csr = _optional_prep_entry(_prep_binding(self.numeric_mode_), "x_prep_nb_csr_jll")
-        jll_h = empty((n, K), "<f4")
-        bias = self._csr_bias()
-        args = (addr_ro(ip, name="indptr"), addr_ro(ix, name="indices"), addr_ro(dv, name="data"),
-                addr_ro(self.feature_log_prob_, name="feature_log_prob_"),
-                0 if bias is None else addr_ro(bias, name="class_log_prior_"),
-                [n, d, K, dv.size], _addr_rw(jll_h, name="jll"))
-        if self.numeric_mode_ == "identical":
-            # lane idn-int-prep: the dense chain without its zero terms; a row
-            # whose columns do not ascend strictly takes the dense program
-            flag = Array.from_list([0], "<i4")
-            jll_csr(*args, _addr_rw(flag, name="flag"))
-            if int(flag.tolist()[0]) != 0:
-                # lane idn-all: the dense program on a block the device
-                # builds from the CSR arrays (no host densify mid-predict)
-                return super()._scores(X, want, csr=csr)
-        else:
-            jll_csr(*args)
-        pr = _Prog()
-        # lane gap-shap-nb: zeroed arena words, not an n x K Python list
-        z = pr.alloc(n * K)
-        jll = pr.alloc(n * K)
-        pr.stage("add_arrays", n * K, pr.put(jll_h), z, jll)
-        return self._score_tail(pr, n, d, K, jll, want, None)
-
-    def _fit_counts(self, X, y, binarize=None, sample_weight=None, csr=None):
-        mode = _mode()
-        pr = _Prog()
-        # lane idn-all: `csr` (the IDENTICAL CSR route's fallback) is
-        # densified by the program on the device, not by the host
-        xo = _csr_dense_x(pr, csr, mode) if csr is not None else None
-        if xo is None:
-            arr = _x2d(X.toarray() if csr is not None else X)
-            n, d = arr.shape
-            xo = pr.put(arr)
-        else:
-            n, d = csr[3], csr[4]
-        codes = self._encode_y(y, n)
-        K = len(self.classes_)
-        wo = _nb_weights(pr, sample_weight, n)
-        if _nb_onepass(mode):
-            # lane idn-int-prep: one unit per (block, column) counts every
-            # class, binarizes (BernoulliNB) and flags a negative word; no
-            # binarized copy and no column-stats pass. The same words.
-            yo = pr.put_codes(codes)
-            st = pr.alloc(6 * d)
-            cnt, fc = pr.alloc(K), pr.alloc(K * d)
-            clp = pr.alloc(K)
-            _nb_counts(pr, wo, xo, n, d, yo, K, cnt, fc,
-                       thr=_NONE if binarize is None else pr.put_scalar(binarize),
-                       neg=st + 3 * d if self._needs_min else _NONE)
-            self._prior_stages(pr, K, cnt, clp)
-            return pr, mode, n, d, K, st, cnt, fc, clp
-        if binarize is not None:
-            thr = pr.put_scalar(binarize)
-            xb = pr.work(n * d)
-            pr.stage("binarize", n * d, xo, n * d, thr, xb)
-            xo = xb
-        yo = pr.put_codes(codes)
-        st = pr.alloc(6 * d)
-        cnt, fc = pr.alloc(K), pr.alloc(K * d)
-        clp = pr.alloc(K)
-        _col_stats(pr, xo, n, d, st, var=False)
-        _class_stats(pr, wo, K * d, xo, n, d, yo, K, cnt, _NONE, _NONE, fc)
-        self._prior_stages(pr, K, cnt, clp)
-        return pr, mode, n, d, K, st, cnt, fc, clp
-
-    def _finish_counts(self, pr, mode, d, K, cnt, fc, clp):
-        self.class_count_, self.feature_count_ = pr.get(cnt, K), pr.get(fc, (K, d))
-        self.class_log_prior_ = pr.get(clp, K)
-        self.numeric_mode_, self.n_features_in_ = mode, d
-
     def fit(self, X, y, sample_weight=None):
-        _check_alpha(self)
-        csr = self._csr_fast(X) if sample_weight is None else None
-        if csr is not None:
-            got = self._fit_counts_csr(csr, y)
-            if got is not None:
-                return self._params(*got)
-            # IDENTICAL only (`_fit_counts_csr`'s flag): the dense program,
-            # its block built on the device from the CSR arrays (lane idn-all)
-            return self._params(*self._fit_counts(X, y, getattr(self, "binarize", None), None, csr=csr))
-        return self._params(*self._fit_counts(X, y, getattr(self, "binarize", None), sample_weight))
+        return _CLS_CALL(self, "fit", (X, y, sample_weight), _CLS_CONTEXT)
 
     def partial_fit(self, X, y, classes=None, sample_weight=None):
         """Update the model with one batch of rows.
@@ -2778,58 +2204,7 @@ class _DiscreteNB(_Classifier):
         -------
         self
         """
-        _check_alpha(self)
-        arr = _x2d(X)
-        n, d = arr.shape
-        first, codes = _partial_codes(self, y, classes, n, defer=True)
-        K = len(self.classes_)
-        if first:
-            mode = _mode()
-        else:
-            self._check_width(arr)
-            mode = self.numeric_mode_
-        pr = _Prog()
-        xo = pr.put(arr)
-        wo = _nb_weights(pr, sample_weight, n)
-        onepass = _nb_onepass(mode)
-        thr = _NONE
-        if getattr(self, "binarize", None) is not None:
-            if onepass:
-                thr = pr.put_scalar(self.binarize)
-            else:
-                xb = pr.work(n * d)
-                pr.stage("binarize", n * d, xo, n * d, pr.put_scalar(self.binarize), xb)
-                xo = xb
-        yo = _stage_partial_codes(pr, codes, mode)
-        st = pr.alloc(6 * d)
-        cnt, fc, clp = pr.alloc(K), pr.alloc(K * d), pr.alloc(K)
-        if not onepass:
-            _col_stats(pr, xo, n, d, st, var=False)
-        if first:
-            bc, bf = cnt, fc
-        else:
-            bc, bf = pr.alloc(K), pr.alloc(K * d)
-        if onepass:
-            # lane idn-int-prep (`_fit_counts`): the same words
-            _nb_counts(pr, wo, xo, n, d, yo, K, bc, bf, thr=thr,
-                       neg=st + 3 * d if self._needs_min else _NONE)
-        else:
-            _class_stats(pr, wo, K * d, xo, n, d, yo, K, bc, _NONE, _NONE, bf)
-        if not first:
-            pr.stage("add_arrays", K, pr.put(self.class_count_), bc, cnt)
-            pr.stage("add_arrays", K * d, pr.put(self.feature_count_), bf, fc)
-        self._prior_stages(pr, K, cnt, clp)
-        return self._params(pr, mode, n, d, K, st, cnt, fc, clp)
-
-    def _prior_stages(self, pr, K, cnt, clp):
-        if getattr(self, "class_prior", None) is not None:
-            po = pr.put_list(_given_priors(self.class_prior, K, type(self).__name__))
-            pr.stage("log", K, po, clp)
-        elif self.fit_prior:
-            pr.stage("class_log_prior", K, cnt, K, clp)
-        else:
-            ones = pr.put_list([1.0] * K)
-            pr.stage("class_log_prior", K, ones, K, clp)
+        return _CLS_CALL(self, "partial_fit", (X, y, classes, sample_weight), _CLS_CONTEXT)
 
 
 class MultinomialNB(_DiscreteNB):
@@ -2892,21 +2267,6 @@ class MultinomialNB(_DiscreteNB):
         self.fit_prior = fit_prior
         self.class_prior = class_prior
 
-    def _params(self, pr, mode, n, d, K, st, cnt, fc, clp):
-        a = pr.put_scalar(self.alpha)
-        flp = pr.alloc(K * d)
-        pr.stage("mnb_params", K, fc, K, d, a, flp)
-        pr.run(mode)
-        _check_nonnegative(pr.values(st + 3 * d, d), "MultinomialNB (input X)")
-        self._finish_counts(pr, mode, d, K, cnt, fc, clp)
-        self.feature_log_prob_ = pr.get(flp, (K, d))
-        return self
-
-    def _jll_stages(self, pr, xo, n, d, out):
-        K = len(self.classes_)
-        w, b = pr.put(self.feature_log_prob_), pr.put(self.class_log_prior_)
-        pr.stage("matmul", n * K, xo, d, 1, w, 1, d, out, K, d, b, _NONE)
-
 
 class BernoulliNB(_DiscreteNB):
     """Naive Bayes classifier for binary features.
@@ -2967,37 +2327,8 @@ class BernoulliNB(_DiscreteNB):
         self.fit_prior = fit_prior
         self.class_prior = class_prior
 
-    def _params(self, pr, mode, n, d, K, st, cnt, fc, clp):
-        a = pr.put_scalar(self.alpha)
-        flp, w, bias = pr.alloc(K * d), pr.alloc(K * d), pr.alloc(K)
-        pr.stage("bnb_params", K, fc, cnt, K, d, a, clp, flp, w, bias)
-        pr.run(mode)
-        self._finish_counts(pr, mode, d, K, cnt, fc, clp)
-        self.feature_log_prob_ = pr.get(flp, (K, d))
-        self._w, self._bias = pr.get(w, (K, d)), pr.get(bias, K)
-        return self
-
-    def _jll_stages(self, pr, xo, n, d, out):
-        K = len(self.classes_)
-        if self.binarize is not None:
-            thr = pr.put_scalar(self.binarize)
-            xb = pr.work(n * d)
-            pr.stage("binarize", n * d, xo, n * d, thr, xb)
-            xo = xb
-        w, b = pr.put(self._w), pr.put(self._bias)
-        pr.stage("matmul", n * K, xo, d, 1, w, 1, d, out, K, d, b, _NONE)
-
 
 # ---------------------------------------------------------------- discriminant analysis
-def _binary_difference(pr, src, rows, K, d_cols, out):
-    """out[i, j] = src[i*? ...]: row 1 minus row 0 of a (2 x d_cols) block
-    (rows=1) or column 1 minus column 0 of an (rows x 2) block, as one
-    matmul with the vector [-1, 1] (-a + b is b - a exactly)."""
-    w = pr.put_list([-1.0, 1.0])
-    if rows == 1:
-        pr.stage("matmul", d_cols, w, 0, 1, src, d_cols, 1, out, d_cols, 2, _NONE, _NONE)
-    else:
-        pr.stage("matmul", rows, src, K, 1, w, 1, 0, out, 1, 2, _NONE, _NONE)
 
 
 def _class_counts(codes, K):
@@ -3011,93 +2342,6 @@ def _class_counts(codes, K):
     _ro, tot = _p2m_class_rows(pr, pr.put_codes(codes), n, K, rows=False)
     pr.run(mode)
     return pr.get_i32(tot, K).tolist()
-
-
-def _shrinkage_value(shrinkage):
-    """None, -1.0 for 'auto', or the constant in [0, 1]."""
-    if shrinkage is None:
-        return None
-    if isinstance(shrinkage, str):
-        if shrinkage != "auto":
-            raise ValueError(f"mojolearn: invalid shrinkage {shrinkage!r}")
-        return -1.0
-    if not isinstance(shrinkage, numbers.Real) or not 0 <= shrinkage <= 1:
-        raise ValueError(f"mojolearn: shrinkage must be 'auto' or a float in [0, 1], got {shrinkage!r}")
-    return float(shrinkage)
-
-
-def _estimator_covs(est, arr, codes, K, who):
-    """covariance_estimator: the reference's `_cov(X_k, covariance_estimator=est)`
-    for each class k (codes None: every row, one block). `est.fit` runs in
-    Python on the class's float32 rows (a mojolearn Array); its covariance_
-    is read as float32. Returns the (K, d, d) blocks as one flat list."""
-    if isinstance(arr, _arena_io.DeviceRows):
-        # the user's estimator takes host rows (lane cpu4-misc)
-        arr = arr.materialize()
-    n, d = arr.shape
-    mode = _mode()
-    if codes is not None:
-        # lane apple-fast-py2mojo-prep: the rows grouped by class on the device
-        # (p2m_ccount .. p2m_cwrite, then p2m_rgather): class k's rows are one
-        # contiguous block, ascending, the words the Python gather copied
-        pr = _Prog()
-        xo = pr.put(arr)
-        ro, tot = _p2m_class_rows(pr, pr.put_codes(codes), n, K)
-        xg = pr.alloc(n * d)
-        pr.stage("p2m_rgather", n * d, xo, d, ro, xg)
-        pr.run(mode)
-        cnt = pr.get_i32(tot, K).tolist()
-        starts = [0] + list(itertools.accumulate(cnt))[:-1]  # glue: row offsets of the K class blocks from the device class counts (K-sized)
-        blocks = [pr.get(xg + starts[k] * d, (cnt[k], d)) for k in range(K)]  # glue: per-class row block views for the user estimator (K-sized: class count)
-    else:
-        blocks = [arr.copy()]
-    out = []
-    for k in range(K):  # cpu-route: fits the user covariance estimator once per class
-        est.fit(blocks[k])
-        if not hasattr(est, "covariance_"):
-            raise ValueError(f"mojolearn: {type(est).__name__} does not have a covariance_ attribute")
-        cov = est.covariance_
-        flat = flatten_labels(cov.tolist() if hasattr(cov, "tolist") else cov)
-        if len(flat) != d * d:
-            raise ValueError(f"mojolearn: {who}: covariance_ of {type(est).__name__} is not ({d}, {d})")
-        out.extend(float(v) for v in flat)  # cpu-route: reads the user covariance estimator output
-    return out
-
-
-def _check_estimator_shrinkage(est, shrinkage):
-    if est is not None and shrinkage is not None and shrinkage != 0:
-        raise ValueError("mojolearn: covariance_estimator and shrinkage parameters are not None. "
-                         "Only one of the two can be set.")
-
-
-def _lda_cov_blocks(pr, xo, n, d, yo, K, mean, var, cnt, shr, given=None):
-    """K class covariances (divisor the class count), shrunk as the reference's
-    `_cov(X_k, shrinkage)`, or the covariance_estimator's blocks as `given`.
-    Returns the (K, d, d) offset."""
-    if given is not None:
-        return pr.put_list(given)
-    cov = pr.alloc(K * d * d)
-    _qda_cov(pr, _mode(), xo, n, d, yo, K, mean, cnt, cov)
-    if shr is not None:
-        pr.stage("da_shrink", K, xo, n, d, yo, mean, var, cnt, cov, pr.put_scalar(shr), pr.alloc(K))
-    return cov
-
-
-def _lda_class_cov(pr, xo, n, d, yo, K, mean, cnt, priors, shr, var=_NONE, given=None):
-    """The reference's `_class_cov`: sum_k priors_k _cov(X_k, shrinkage). Returns the (d, d) offset."""
-    cov = _lda_cov_blocks(pr, xo, n, d, yo, K, mean, var, cnt, shr, given)
-    sw = pr.alloc(d * d)
-    pr.stage("da_pool", d * d, cov, K, d, priors, sw, _NONE, _NONE)
-    return sw
-
-
-def _lda_binary(pr, coef, inter, K, d):
-    """The binary case's coef_[1] - coef_[0] and intercept difference."""
-    cd, ci = pr.alloc(d), pr.alloc(1)
-    if K == 2:
-        _binary_difference(pr, coef, 1, K, d, cd)
-        pr.stage("matmul", 1, pr.put_list([-1.0, 1.0]), 0, 1, inter, 1, 0, ci, 1, 2, _NONE, _NONE)
-    return cd, ci
 
 
 # solver 'svd': sklearn's two SVDs are symmetric eigendecompositions of the
@@ -3196,213 +2440,16 @@ class LinearDiscriminantAnalysis(_Classifier):
         self.covariance_estimator = covariance_estimator
 
     def fit(self, X, y):
-        if self.solver not in ("svd", "lsqr", "eigen"):
-            raise ValueError(f"mojolearn: invalid solver {self.solver!r}")
-        if self.solver == "svd" and self.shrinkage is not None:
-            raise NotImplementedError("mojolearn: shrinkage not supported with 'svd' solver.")
-        if self.covariance_estimator is not None and self.solver == "svd":
-            raise ValueError("mojolearn: covariance estimator is not supported with svd solver. Try another solver")
-        _check_estimator_shrinkage(self.covariance_estimator, self.shrinkage)
-        shr = None if self.covariance_estimator is not None else _shrinkage_value(self.shrinkage)
-        arr = _x2d(X)
-        n, d = arr.shape
-        codes = self._encode_y(y, n)
-        K = len(self.classes_)
-        if K < 2 or n <= K:
-            raise ValueError("mojolearn: LinearDiscriminantAnalysis needs at least two classes and more "
-                             "samples than classes")
-        maxc = min(K - 1, d)
-        if self.n_components is not None and self.n_components > maxc:
-            raise ValueError("mojolearn: n_components cannot be larger than min(n_features, n_classes - 1)")
-        mode = _mode()
-        if self.solver != "svd":
-            return self._fit_cov_solver(arr, codes, K, d, n, mode, shr)
-        pr = _Prog()
-        xo = pr.put(arr)
-        yo = pr.put_codes(codes)
-        cnt, mean, priors, xbar = pr.alloc(K), pr.alloc(K * d), pr.alloc(K), pr.alloc(d)
-        std, w, z2 = pr.alloc(d), pr.alloc(d), pr.work(n * d)
-        g, e1, v1 = pr.alloc(d * d), pr.alloc(d), pr.alloc(d * d)
-        meta = pr.put_list([self.tol, 0.0, 0.0], inout=True)        # lda_stage2 writes the ranks into it
-        scal1, g2, ms = pr.alloc(d * d), pr.alloc(d * d), pr.alloc(K * d)
-        e2, v2 = pr.alloc(d), pr.alloc(d * d)
-        scal, coef, inter, evr, tmp = pr.alloc(d * d), pr.alloc(K * d), pr.alloc(K), pr.alloc(d), pr.alloc(K * d)
-        # C61_DA (the within-class std from a pooled class M2, csbm_pool) tried 2026-10-08, run ge123e6f9:
-        # lda-clf NV/AMD 1.38x/1.04x istella, 1.54x/1.11x taxi SLOWER, quality SAME; deleted, recoverable at main bc10b8b56.
-        _cls(pr, mode, xo, n, d, yo, K, cnt, mean, _NONE, _NONE)
-        gflag, gofs = 0, 0
-        if self.priors is not None:
-            pv = _given_priors(self.priors, K, "LinearDiscriminantAnalysis")
-            gflag, gofs = (2 if abs(sum(pv) - 1.0) > 1e-5 else 1), pr.put_list(pv)  # glue: validates the user priors argument sums to one (pv-sized: user prior list)
-        pr.stage("lda_prep", 1, cnt, mean, K, d, n, priors, xbar, gflag, gofs)
-        z, stz = pr.work(n * d), pr.alloc(6 * d)
-        pr.stage("center_rows", n * d, xo, n, d, mean, yo, _NONE, z)
-        _cs(pr, mode, z, n, d, stz)
-        pr.stage("lda_w", d, stz + 2 * d, d, n, K, std, w)
-        pr.stage("center_rows", n * d, xo, n, d, mean, yo, w, z2)
-        _gram(pr, mode, z2, n, d, g)
-        pr.stage("eigh", 1, g, d, 0, e1, v1)
-        pr.stage("lda_stage2", 1, e1, v1, std, mean, xbar, priors, K, d, n, meta, scal1, g2, ms)
-        pr.stage("eigh", 1, g2, d, 0, e2, v2)
-        pr.stage("lda_stage3", 1, e2, v2, scal1, mean, xbar, priors, K, d, meta, scal, coef, inter, evr, tmp)
-        cd, ci = _lda_binary(pr, coef, inter, K, d)
-        sw = _lda_class_cov(pr, xo, n, d, yo, K, mean, cnt, priors, None) if self.store_covariance else None
-        pr.run(mode)
-        if sw is not None:
-            self.covariance_ = pr.get(sw, (d, d))
-        rank2 = int(pr.values(meta + 2, 1)[0])
-        self._rank = rank2
-        self.means_, self.priors_, self.xbar_ = pr.get(mean, (K, d)), pr.get(priors, K), pr.get(xbar, d)
-        full = pr.get(scal, (d, d))
-        self._scal_full = full
-        # the rank columns as one strided copy in Mojo (Array.__getitem__)
-        self.scalings_ = full[:, :rank2] if rank2 else Array((d, 0), "<f4")
-        self._coef, self._inter = pr.get(coef, (K, d)), pr.get(inter, K)
-        if K == 2:
-            self.coef_, self.intercept_ = pr.get(cd, (1, d)), pr.get(ci, 1)
-        else:
-            self.coef_, self.intercept_ = self._coef, self._inter
-        self._max_components = maxc if self.n_components is None else int(self.n_components)
-        self.explained_variance_ratio_ = pr.get(evr, self._max_components)
-        self.numeric_mode_, self.n_features_in_ = mode, d
-        return self
-
-    def _fit_cov_solver(self, arr, codes, K, d, n, mode, shr):
-        """solver 'lsqr' / 'eigen' (the reference's `_solve_lstsq` / `_solve_eigen`)."""
-        pr = _Prog()
-        xo = pr.put(arr)
-        yo = pr.put_codes(codes)
-        cnt, mean, priors, xbar = pr.alloc(K), pr.alloc(K * d), pr.alloc(K), pr.alloc(d)
-        var = pr.alloc(K * d) if shr is not None else _NONE
-        _cls(pr, mode, xo, n, d, yo, K, cnt, mean, var, _NONE)
-        gflag, gofs = 0, 0
-        if self.priors is not None:
-            pv = _given_priors(self.priors, K, "LinearDiscriminantAnalysis")
-            gflag, gofs = (2 if abs(sum(pv) - 1.0) > 1e-5 else 1), pr.put_list(pv)  # glue: validates the user priors argument sums to one (pv-sized: user prior list)
-        pr.stage("lda_prep", 1, cnt, mean, K, d, n, priors, xbar, gflag, gofs)
-        eigen = self.solver == "eigen"
-        est = self.covariance_estimator
-        tot = None
-        if eigen:
-            y0 = pr.put_list([0.0] * n)
-            c1, m1 = pr.alloc(1), pr.alloc(d)
-            v1 = pr.alloc(d) if shr is not None else _NONE
-            _cls(pr, mode, xo, n, d, y0, 1, c1, m1, v1, _NONE)
-            gt = None if est is None else _estimator_covs(est, arr, None, 1, "LinearDiscriminantAnalysis")
-            tot = _lda_cov_blocks(pr, xo, n, d, y0, 1, m1, v1, c1, shr, gt)
-        gk = None if est is None else _estimator_covs(est, arr, codes, K, "LinearDiscriminantAnalysis")
-        sw = _lda_class_cov(pr, xo, n, d, yo, K, mean, cnt, priors, shr, var, gk)
-        sb = pr.alloc(d * d) if eigen else None
-        if eigen:
-            pr.stage("da_pool", d * d, sw, 1, d, pr.put_list([1.0]), pr.alloc(d * d), tot, sb)
-        swc = pr.alloc(d * d)
-        pr.stage("da_pool", d * d, sw, 1, d, pr.put_list([1.0]), swc, _NONE, _NONE)
-        e, v = pr.alloc(d), pr.alloc(d * d)
-        pr.stage("eigh", 1, swc, d, 0, e, v)
-        coef, inter = pr.alloc(K * d), pr.alloc(K)
-        mc = min(K - 1, d) if self.n_components is None else int(self.n_components)
-        if not eigen:
-            P = pr.alloc(d * d)
-            pr.stage("sym_fn", d * d, e, v, d, 0, P)
-            pr.stage("matmul", K * d, mean, d, 1, P, 1, d, coef, d, d, _NONE, _NONE)
-        else:
-            W, T, C = pr.alloc(d * d), pr.alloc(d * d), pr.alloc(d * d)
-            pr.stage("sym_fn", d * d, e, v, d, 1, W)
-            pr.stage("matmul", d * d, W, d, 1, sb, d, 1, T, d, d, _NONE, _NONE)
-            pr.stage("matmul", d * d, T, d, 1, W, d, 1, C, d, d, _NONE, _NONE)
-            e2, y2, ev, evr = pr.alloc(d), pr.alloc(d * d), pr.alloc(d * d), pr.alloc(d)
-            pr.stage("eigh", 1, C, d, 0, e2, y2)
-            pr.stage("matmul", d * d, W, d, 1, y2, d, 1, ev, d, d, _NONE, _NONE)
-            pr.stage("evr", 1, e2, d, evr)
-            t1 = pr.alloc(K * d)
-            pr.stage("matmul", K * d, mean, d, 1, ev, d, 1, t1, d, d, _NONE, _NONE)
-            pr.stage("matmul", K * d, t1, d, 1, ev, 1, d, coef, d, d, _NONE, _NONE)
-        pr.stage("da_intercept", K, mean, coef, priors, d, inter)
-        cd, ci = _lda_binary(pr, coef, inter, K, d)
-        pr.run(mode)
-        if eigen and min(pr.values(e, d)) <= 0:  # glue: raises when the device reports a non-positive eigenvalue
-            raise ValueError("mojolearn: the within-class covariance is not positive definite "
-                             "(the reference's eigh(Sb, Sw) fails); set shrinkage")
-        self.means_, self.priors_, self.xbar_ = pr.get(mean, (K, d)), pr.get(priors, K), pr.get(xbar, d)
-        self.covariance_ = pr.get(sw, (d, d))
-        self._coef, self._inter = pr.get(coef, (K, d)), pr.get(inter, K)
-        if K == 2:
-            self.coef_, self.intercept_ = pr.get(cd, (1, d)), pr.get(ci, 1)
-        else:
-            self.coef_, self.intercept_ = self._coef, self._inter
-        self._max_components = mc
-        if eigen:
-            self.scalings_ = self._scal_full = pr.get(ev, (d, d))
-            self._rank = d
-            self.explained_variance_ratio_ = pr.get(evr, mc)
-        self.numeric_mode_, self.n_features_in_ = mode, d
-        return self
-
-    def _jll_stages(self, pr, xo, n, d, out):
-        K = len(self.classes_)
-        c, b = pr.put(self._coef), pr.put(self._inter)
-        pr.stage("matmul", n * K, xo, d, 1, c, 1, d, out, K, d, b, _NONE)
+        return _CLS_CALL(self, "fit", (X, y), _CLS_CONTEXT)
 
     def decision_function(self, X):
-        # C56: the incumbent binary answer is _pair's coefficient difference.
-        # Build it once from the validated input, avoiding discarded K scores.
-        # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-        self._check_fitted()
-        if len(self.classes_) == 2 and (_classical_shared(self.numeric_mode_) & 8):
-            arr = _x2d(X)
-            self._check_width(arr)
-            n, d = arr.shape
-            pr = _Prog()
-            xo = pr.put(arr)
-            chk = self._score_checks(pr, xo, n, d)
-            coef, inter = pr.put(self.coef_), pr.put(self.intercept_)
-            out = pr.alloc(n)
-            pr.stage("matmul", n, xo, d, 1, coef, 1, 0, out, 1, d, inter, _NONE)
-            pr.run(self.numeric_mode_)
-            self._score_refusals(pr, d, chk)
-            return pr.get(out, n)
-        pr, n, K, o = self._scores(X, ())
-        if K == 2:
-            return self._pair(X, o, pr, n)
-        return pr.get(o["jll"], (n, K))
-
-    def _pair(self, X, o, pr, n):
-        arr = _x2d(X)
-        q = _Prog()
-        xo = q.put(arr)
-        c, b = q.put(self.coef_), q.put(self.intercept_)
-        out = q.alloc(n)
-        q.stage("matmul", n, xo, arr.shape[1], 1, c, 1, 0, out, 1, arr.shape[1], b, _NONE)
-        q.run(self.numeric_mode_)
-        return q.get(out, n)
+        return _CLS_CALL(self, "decision_function", (X,), _CLS_CONTEXT)
 
     def transform(self, X):
-        self._check_fitted()
-        arr = _x2d(X)
-        self._check_width(arr)
-        n, d = arr.shape
-        if self.solver == "lsqr":
-            raise NotImplementedError("mojolearn: transform not implemented for 'lsqr' solver (use 'svd' or 'eigen').")
-        mc = min(self._max_components, self._rank)
-        pr = _Prog()
-        xo = pr.put(arr)
-        xb, sc = pr.put(self.xbar_), pr.put(self._scal_full)
-        out = pr.alloc(n * max(mc, 1))
-        if self.solver != "eigen" and (_classical_shared(self.numeric_mode_) & 4):
-            # C04_LDA (-D MOJOLEARN_CLASSICAL_C04_LDA): the same center_rows -> matmul arithmetic in the consumer.
-            # NOT COMPILED — NOT TESTED — IDENTITY NOT VERIFIED — QUALITY NOT VERIFIED — NOT MEASURED.
-            pr.stage("centered_matmul", n * mc, xo, n, d, xb, _NONE, _NONE,
-                     sc, d, 1, out, mc, _NONE, _NONE)
-        else:
-            cen = xo if self.solver == "eigen" else pr.alloc(n * d)
-            if self.solver != "eigen":
-                pr.stage("center_rows", n * d, xo, n, d, xb, _NONE, _NONE, cen)
-            pr.stage("matmul", n * mc, cen, d, 1, sc, d, 1, out, mc, d, _NONE, _NONE)
-        pr.run(self.numeric_mode_)
-        return pr.get(out, (n, mc))
+        return _CLS_CALL(self, "transform", (X,), _CLS_CONTEXT)
 
     def fit_transform(self, X, y):
-        return self.fit(X, y).transform(X)
+        return _CLS_CALL(self, "fit_transform", (X, y), _CLS_CONTEXT)
 
 
 # Follows sklearn 1.9's QDA (solver, shrinkage, covariance_estimator). Per
@@ -3483,95 +2530,10 @@ class QuadraticDiscriminantAnalysis(_Classifier):
         self.covariance_estimator = covariance_estimator
 
     def fit(self, X, y):
-        if self.solver not in ("svd", "eigen"):
-            raise ValueError(f"mojolearn: invalid solver {self.solver!r}")
-        if self.solver == "svd" and self.shrinkage is not None:
-            raise NotImplementedError("mojolearn: shrinkage not supported with 'svd' solver.")
-        if self.covariance_estimator is not None and self.solver == "svd":
-            raise ValueError("mojolearn: covariance_estimator is not supported with solver='svd'. "
-                             "Try solver='eigen' instead.")
-        _check_estimator_shrinkage(self.covariance_estimator, self.shrinkage)
-        est = self.covariance_estimator
-        shr = None if est is not None else _shrinkage_value(self.shrinkage)
-        eigen = self.solver == "eigen"
-        arr = _x2d(X)
-        n, d = arr.shape
-        codes = self._encode_y(y, n)
-        K = len(self.classes_)
-        if K < 2:
-            raise ValueError("mojolearn: QuadraticDiscriminantAnalysis needs at least two classes")
-        mode = _mode()
-        # lane apple-fast-py2mojo-prep: without a covariance_estimator the count check reads
-        # the program's own class counts (class_stats `cnt`, exact integers) right after the
-        # run, before anything else is read or raised; an estimator fits per class inside the
-        # build, so its check stays first (`_class_counts`, a p2m program)
-        late = est is None
-        if not late and min(_class_counts(codes, K)) < 2:  # glue: raises when a class count from the binding is below two
-            raise ValueError("mojolearn: y has only 1 sample in a class, covariance is ill defined")
-        pr = _Prog()
-        xo = pr.put(arr)
-        yo = pr.put_codes(codes)
-        cnt, mean, priors, xbar = pr.alloc(K), pr.alloc(K * d), pr.alloc(K), pr.alloc(d)
-        cov, ev, evec = pr.alloc(K * d * d), pr.alloc(K * d), pr.alloc(K * d * d)
-        reg = pr.put_scalar(0.0 if eigen else self.reg_param)
-        rot, logc, s2 = pr.alloc(K * d * d), pr.alloc(K), pr.alloc(K * d)
-        var = pr.alloc(K * d) if shr is not None else _NONE
-        # the trailing 1: FAST keeps row-order class sums here (the tree sums did not pass
-        # QuadraticDiscriminantAnalysis' paired quality check)
-        _cls(pr, mode, xo, n, d, yo, K, cnt, mean, var, _NONE, 1)
-        gflag, gofs = 0, 0
-        if self.priors is not None:
-            gflag, gofs = 1, pr.put_list(_given_priors(self.priors, K, "QuadraticDiscriminantAnalysis"))
-        pr.stage("lda_prep", 1, cnt, mean, K, d, n, priors, xbar, gflag, gofs)
-        if est is not None:
-            cov = pr.put_list(_estimator_covs(est, arr, codes, K, "QuadraticDiscriminantAnalysis"))
-        else:
-            _qda_cov(pr, mode, xo, n, d, yo, K, mean, cnt, cov)
-        if shr is not None:
-            pr.stage("da_shrink", K, xo, n, d, yo, mean, var, cnt, cov, pr.put_scalar(shr), pr.alloc(K))
-        keep = pr.alloc(K * d * d) if (self.store_covariance and eigen) else None
-        if keep is not None:
-            one = pr.put_list([1.0])
-            for k in range(K):  # glue: stages one pooled covariance copy per class (K-sized: class count)
-                pr.stage("da_pool", d * d, cov + k * d * d, 1, d, one, keep + k * d * d, _NONE, _NONE)
-        pr.stage("eigh", K, cov, d, d * d, ev, evec)
-        pr.stage("qda_prep", K, ev, evec, K, d, reg, cnt, n, rot, logc, s2, gflag, gofs)
-        if self.store_covariance and not eigen:
-            keep = pr.alloc(K * d * d)
-            pr.stage("sym_fn", K * d * d, s2, evec, d, 2, keep)
-        pr.run(mode)
-        if late and min(pr.values(cnt, K)) < 2:  # glue: raises when a class count from the binding is below two
-            raise ValueError("mojolearn: y has only 1 sample in a class, covariance is ill defined")
-        s2v = pr.values(s2, K * d)
-        for k in range(K):  # glue: rank check per class before raising (K-sized: class count)
-            if sum(1 for v in s2v[k * d:(k + 1) * d] if v > self.tol) < d:  # glue: counts device singular values above tol to raise (d-sized: feature count)
-                raise ValueError(f"mojolearn: the covariance matrix of class {self.classes_[k]!r} is not full "
-                                 f"rank. Increase the value of `{'shrinkage' if eigen else 'reg_param'}` to "
-                                 "reduce the collinearity.")
-        if keep is not None:
-            self.covariance_ = [pr.get(keep + k * d * d, (d, d)) for k in range(K)]  # glue: per-class covariance views (K-sized: class count)
-        self.means_, self.priors_ = pr.get(mean, (K, d)), pr.get(priors, K)
-        self.rotations_ = [pr.get(evec + k * d * d, (d, d)) for k in range(K)]  # glue: per-class rotation views (K-sized: class count)
-        self.scalings_ = [pr.get(s2 + k * d, d) for k in range(K)]  # glue: per-class scaling views (K-sized: class count)
-        self._rot, self._logc = pr.get(rot, K * d * d), pr.get(logc, K)
-        self.numeric_mode_, self.n_features_in_ = mode, d
-        return self
-
-    def _jll_stages(self, pr, xo, n, d, out):
-        K = len(self.classes_)
-        m, r, lc = pr.put(self.means_), pr.put(self._rot), pr.put(self._logc)
-        pr.stage("qda_dec", n * K, xo, n, d, m, r, lc, K, out)
+        return _CLS_CALL(self, "fit", (X, y), _CLS_CONTEXT)
 
     def decision_function(self, X):
-        pr, n, K, o = self._scores(X, ())
-        if K == 2:
-            q = _Prog()
-            src = q.put(pr.get(o["jll"], (n, K)))
-            out = q.alloc(n)
-            _binary_difference(q, src, n, K, 1, out)
-            q.run(self.numeric_mode_)
-            return q.get(out, n)
-        return pr.get(o["jll"], (n, K))
+        return _CLS_CALL(self, "decision_function", (X,), _CLS_CONTEXT)
 
 
 # ---------------------------------------------------------------- additions: transformers
@@ -6158,25 +5120,6 @@ class ComplementNB(_DiscreteNB):
         self.class_prior = class_prior
         self.norm = norm
 
-    def _params(self, pr, mode, n, d, K, st, cnt, fc, clp):
-        a = pr.put_scalar(self.alpha)
-        flp = pr.alloc(K * d)
-        pr.stage("cnb_params", K, fc, K, d, a, 1 if self.norm else 0, flp)
-        pr.run(mode)
-        _check_nonnegative(pr.values(st + 3 * d, d), "ComplementNB (input X)")
-        self._finish_counts(pr, mode, d, K, cnt, fc, clp)
-        self.feature_log_prob_ = pr.get(flp, (K, d))
-        return self
-
-    def _jll_stages(self, pr, xo, n, d, out):
-        K = len(self.classes_)
-        w = pr.put(self.feature_log_prob_)
-        b = pr.put(self.class_log_prior_) if K == 1 else _NONE
-        pr.stage("matmul", n * K, xo, d, 1, w, 1, d, out, K, d, b, _NONE)
-
-    def _csr_bias(self):
-        return self.class_log_prior_ if len(self.classes_) == 1 else None
-
 
 # partial_fit keeps n_categories_ as the accumulated counts' width; sklearn
 # narrows it to the last batch's (naive_bayes/NOT_IMPLEMENTED.tsv).
@@ -6247,130 +5190,10 @@ class CategoricalNB(_DiscreteNB):
         self.min_categories = min_categories
 
     def fit(self, X, y, sample_weight=None):
-        _check_alpha(self)
-        arr = _x2d(X)
-        codes = self._encode_y(y, arr.shape[0])
-        return self._cat_fit(arr, codes, sample_weight, _mode(), False)
+        return _CLS_CALL(self, "fit", (X, y, sample_weight), _CLS_CONTEXT)
 
     def partial_fit(self, X, y, classes=None, sample_weight=None):
-        _check_alpha(self)
-        arr = _x2d(X)
-        first, codes = _partial_codes(self, y, classes, arr.shape[0], defer=True)
-        if first:
-            return self._cat_fit(arr, codes, sample_weight, _mode(), False)
-        self._check_width(arr)
-        return self._cat_fit(arr, codes, sample_weight, self.numeric_mode_, True)
-
-    def _cat_fit(self, arr, codes, sample_weight, mode, merge):
-        # the two programs share one device copy of X (and of the codes)
-        with _arena_io.resident():
-            return self._cat_fit_programs(arr, codes, sample_weight, mode, merge)
-
-    def _cat_fit_programs(self, arr, codes, sample_weight, mode, merge):
-        n, d = arr.shape
-        K = len(self.classes_)
-        pr = _Prog()
-        xo, yo = pr.put(arr), _stage_partial_codes(pr, codes, mode)
-        st, cnt, clp = pr.alloc(6 * d), pr.alloc(K), pr.alloc(K)
-        wo = _nb_weights(pr, sample_weight, n)
-        _col_stats(pr, xo, n, d, st, var=False)
-        if merge:
-            bc = pr.alloc(K)
-            _class_stats(pr, wo, K, xo, n, 1, yo, K, bc, _NONE, _NONE, _NONE)
-            pr.stage("add_arrays", K, pr.put(self.class_count_), bc, cnt)
-        else:
-            _class_stats(pr, wo, K, xo, n, 1, yo, K, cnt, _NONE, _NONE, _NONE)
-        if self.class_prior is not None:
-            pr.stage("log", K, pr.put_list(_given_priors(self.class_prior, K, "CategoricalNB")), clp)
-        else:
-            pr.stage("class_log_prior", K, cnt if self.fit_prior else pr.put_list([1.0] * K), K, clp)
-        pr.run(mode)
-        lo, hi = pr.values(st + 3 * d, d), pr.values(st + 4 * d, d)
-        if any(v < 0 for v in lo):  # glue: raises on a negative category value (lo-sized: per-column minimum statistics)
-            raise ValueError("mojolearn: Negative values in data passed to CategoricalNB (input X)")
-        ncat = [int(v) + 1 for v in hi]  # glue: per-column category counts for the program layout (hi-sized: per-column maximum statistics)
-        if self.min_categories is not None:
-            mc = self.min_categories
-            mcs = ([int(v) for v in (mc.tolist() if hasattr(mc, "tolist") else mc)]  # glue: converts the min_categories argument (mc-sized: min_categories argument)
-                   if not isinstance(mc, numbers.Integral) else [int(mc)] * d)
-            if len(mcs) != d:
-                raise ValueError(f"mojolearn: 'min_categories' should have shape ({d},) when an array-like "
-                                 f"is provided. Got {len(mcs)} entries instead.")
-            ncat = [max(a, b) for a, b in zip(ncat, mcs)]  # glue: applies the min_categories argument (ncat-sized: per-column category counts)
-        if merge:
-            ncat = [max(a, b) for a, b in zip(ncat, self.n_categories_.tolist())]  # glue: keeps fitted category counts on partial fit (ncat-sized: per-column category counts)
-        cmax = max(ncat)  # glue: largest category count for the program layout (ncat-sized: per-column category counts)
-        q = _Prog()
-        xo, yo = q.put(arr), _stage_partial_codes(q, codes, mode)
-        no, co, a = q.put_list(ncat), q.put(pr.get(cnt, K)), q.put_scalar(self.alpha)
-        wq = _nb_weights(q, sample_weight, n)
-        cc = q.alloc(d * K * cmax)
-        if _blocked():
-            # x_prep/blocked.mojo: a histogram per (row block, feature), then
-            # each (feature, class, category) slot over the blocks (exact
-            # integer counts: cat_counts' words)
-            rows = _XB
-            while ((n + rows - 1) // rows) * d * K * cmax > _CAT_HIST_WORDS and rows < 2 ** 22:
-                rows *= 2
-            nbh = (n + rows - 1) // rows
-            hist = q.work(nbh * d * K * cmax)
-            w = _NONE if wq is None else wq
-            q.stage("cat_hpart", nbh * d, xo, n, d, yo, K, no, cmax, w, hist, rows)
-            q.stage("cat_hfold", d * K * cmax, hist, nbh, d, K, no, cmax, w, cc)
-        else:
-            q.stage("cat_counts", d * K * cmax, xo, n, d, yo, K, no, cmax, _NONE if wq is None else wq, cc)
-        if merge:
-            # the running counts re-strided to cmax on the device (colblock into
-            # zeroed words)
-            oc = self._cmax
-            pad, src, cc = q.alloc(d * K * cmax), cc, q.alloc(d * K * cmax)
-            if oc > 0:
-                q.stage("colblock", d * K * oc, q.put(self._cc), oc, pad, cmax, 0)
-            q.stage("add_arrays", d * K * cmax, pad, src, cc)
-        flp = q.alloc(d * K * cmax)
-        q.stage("cat_flp", d * K * cmax, cc, K, no, cmax, co, a, flp)
-        q.run(mode)
-        self._cc = q.get(cc, d * K * cmax)
-        # each (feature, class) row read once (the same values)
-        ccv, flv = q.values(cc, d * K * cmax), q.values(flp, d * K * cmax)
-        self.category_count_ = [Array.from_list(
-            [ccv[(j * K + k) * cmax:(j * K + k) * cmax + ncat[j]] for k in range(K)], "<f4") for j in range(d)]  # glue: per-column per-class count views (d-sized: feature count)
-        self.n_categories_ = Array.from_list(ncat, "<i8")
-        self._flp, self._cmax = q.get(flp, d * K * cmax), cmax
-        self.feature_log_prob_ = [Array.from_list(
-            [flv[(j * K + k) * cmax:(j * K + k) * cmax + ncat[j]] for k in range(K)], "<f4") for j in range(d)]  # glue: per-column per-class log-prob views (d-sized: feature count)
-        self.class_count_, self.class_log_prior_ = pr.get(cnt, K), pr.get(clp, K)
-        self.numeric_mode_, self.n_features_in_ = mode, d
-        return self
-
-    def _score_checks(self, pr, xo, n, d):
-        """The input's column minima and maxima in the scoring program itself
-        (one upload of X; cat_jll reads nothing outside the table for an index
-        out of range, and the run is refused after it)."""
-        st = pr.alloc(6 * d)
-        _col_stats(pr, xo, n, d, st, var=False)
-        return st
-
-    def _score_refusals(self, pr, d, st):
-        ncat = self.n_categories_.tolist()
-        if (any(v < 0 for v in pr.values(st + 3 * d, d)) or  # glue: raises on a negative category value (d-sized: feature count)
-                any(int(v) >= c for v, c in zip(pr.values(st + 4 * d, d), ncat))):  # glue: raises on an unseen category value (ncat-sized: per-column category counts)
-            raise IndexError("mojolearn: CategoricalNB got a category index outside the fitted range")
-
-    def _jll_stages(self, pr, xo, n, d, out):
-        K = len(self.classes_)
-        fo, co = pr.put(self._flp), pr.put(self.class_log_prior_)
-        pr.stage("cat_jll", n * K, xo, n, d, fo, K, self._cmax, co, out)
-
-
-
-def _classical_shared(mode):
-    """Compile-time admission only; no data processing or Python candidate arithmetic."""
-    if mode != "identical":
-        return 0
-    entry = _optional_prep_entry(_prep_binding(mode), "x_prep_classical_shared")
-    return int(entry()) if entry is not None else 0
-
+        return _CLS_CALL(self, "partial_fit", (X, y, classes, sample_weight), _CLS_CONTEXT)
 
 
 def _c08_route(mode, bit):
@@ -6429,3 +5252,11 @@ from ._native_prep_encode_bridge import connect as _connect_encode
 _ENCODE_CALL, _ENCODE_CONTEXT = _connect_encode(
     {SimpleImputer: "simple_imputer", KBinsDiscretizer: "kbins", OrdinalEncoder: "ordinal",
      OneHotEncoder: "onehot", TargetEncoder: "target", SplineTransformer: "spline"}, _X_PREP2_QSELECT)
+
+
+# Import-time connection; the naive Bayes and discriminant-analysis classifiers
+# hand each public operation off once to Mojo (bindings/prep_classify_native.mojo).
+from ._native_prep_classify_bridge import connect as _connect_classify
+_CLS_CALL, _CLS_CONTEXT = _connect_classify(
+    {GaussianNB: "gnb", MultinomialNB: "mnb", BernoulliNB: "bnb", ComplementNB: "cnb", CategoricalNB: "cat",
+     LinearDiscriminantAnalysis: "lda", QuadraticDiscriminantAnalysis: "qda"}, _PROG_CONTEXT)
