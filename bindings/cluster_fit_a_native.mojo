@@ -14,6 +14,7 @@
 # iteration, batch, bisection and seed loop already runs inside the entry,
 # which uploads X once per fit. Same entries, same operands, same order: the
 # bits do not move.
+from std.math import isinf
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -76,8 +77,9 @@ def _one_of(value: PythonObject, a: String, b: String) raises -> Bool:
     return py_contains(Python.tuple(PythonObject(a), PythonObject(b)), value)
 
 
-def _set(model: PythonObject, name: String, value: PythonObject) raises:
-    py_setattr(model, name, value)
+def _set(model: PythonObject, var name: String, value: PythonObject) raises:
+    """`setattr(model, name, value)`."""
+    py_setattr(model, name^, value)
 
 
 def _pending(index: Int) raises -> PythonObject:
@@ -541,7 +543,7 @@ def _optics_metric(model: PythonObject, context: PythonObject) raises -> PythonO
             return Python.tuple(PythonObject(-1), PythonObject(2.0))
         if pv == 1:
             return Python.tuple(PythonObject(1), PythonObject(1.0))
-        if pv == Float64.MAX * 2:
+        if isinf(pv) and pv > 0:
             return Python.tuple(PythonObject(2), p)
         return Python.tuple(PythonObject(3), p)
     if _one_of(metric, "euclidean", "l2"):
@@ -778,7 +780,7 @@ def _hdbscan_fit(model: PythonObject, binding: PythonObject, source: PythonObjec
     if not family_isinstance(cse_field, Python.tuple(b.int, b.float)) or family_isinstance(cse_field, b.bool):
         raise Error("TypeError: mojolearn HDBSCAN: cluster_selection_epsilon must be a real number")
     var cse = Float64(py=_float(cse_field))
-    if not (cse >= 0.0) or cse == Float64.MAX * 2:
+    if not (cse >= 0.0) or (isinf(cse) and cse > 0):
         raise Error("mojolearn HDBSCAN: cluster_selection_epsilon must be a finite number >= 0, got "
                     + family_repr(cse_field) + " (scikit-learn's range)")
     var want_pd_field = _attr(model, "prediction_data")

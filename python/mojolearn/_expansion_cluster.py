@@ -24,10 +24,13 @@ from ._array import Array
 from ._mode import NumericModeMixin
 from . import _native_family_bridge
 
-# The compiled family owner (bindings/cluster_native.mojo), connected once at
-# import: the centers' predict/transform/score, MeanShift and
-# AffinityPropagation predict and BisectingKMeans' tree predict are one
-# native call each, handed the binding `_bind` resolves.
+# The compiled family owners, connected once at import: the centers'
+# predict/transform/score, MeanShift and AffinityPropagation predict and
+# BisectingKMeans' tree predict (bindings/cluster_native.mojo), and the fits,
+# partial_fit, fit_predict and fit_transform of MiniBatchKMeans,
+# BisectingKMeans, MeanShift, OPTICS and AffinityPropagation
+# (bindings/cluster_fit_a_native.mojo) are one native call each, handed the
+# binding `_bind` resolves.
 _NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 
 __all__ = ["MiniBatchKMeans", "BisectingKMeans", "MeanShift", "OPTICS", "AffinityPropagation", "BayesianGaussianMixture"]
@@ -81,25 +84,6 @@ def _seed(random_state):
         raise ValueError("mojolearn: random_state must be None or a non-negative int "
                          "(the lane's seeded host stream; a RandomState object is not taken)")
     return int(random_state) & ((1 << 63) - 1)
-
-
-def _callable_init(init, X, k, random_state):
-    """scikit-learn's callable `init` (`_kmeans.py::_init_centroids`:
-    `init(X, n_clusters, random_state=random_state)`): called ONCE on the
-    host with the fit's rows, a NumPy RandomState seeded by `random_state`
-    when NumPy is present (the int otherwise), and its centers then take
-    the array path, so the fit's bits depend only on what it returned.
-    scikit-learn's MiniBatchKMeans hands it an `init_size` subsample drawn
-    from its own stream; this hands it every row."""
-    rs = random_state
-    try:
-        from ._optional_numpy import require_numpy
-        _np = require_numpy('_expansion_cluster')
-        X = _np.asarray(X)
-        rs = _np.random.RandomState(random_state)
-    except (ImportError, AttributeError):
-        pass
-    return init(X, k, random_state=rs)
 
 
 class _XCluster(NumericModeMixin):
@@ -198,7 +182,7 @@ class _CentersMixin:
         labels : Array of shape (n_samples,), int32
             The fitted `labels_`.
         """
-        return self.fit(X).labels_
+        return _NATIVE(self, "family_cfa_fit_predict", (self._bind(), X), _NATIVE_CONTEXT)
 
     def fit_transform(self, X, y=None, sample_weight=None):
         """Fit the model on `X` and return the distances to the centers.
@@ -218,7 +202,7 @@ class _CentersMixin:
         distances : Array of shape (n_samples, n_clusters), float32
             Euclidean distance from each training row to each center.
         """
-        return self.fit(X).transform(X)
+        return _NATIVE(self, "family_cfa_fit_transform", (self._bind(), X), _NATIVE_CONTEXT)
 
     def score(self, X, y=None, sample_weight=None):
         """Opposite of the inertia of `X` under the fitted centers.
@@ -250,10 +234,11 @@ class _CentersMixin:
 # `_k_means_minibatch.pyx::update_center_dense`. The batch assignment runs on
 # the device; the batch draws, the center update in scikit-learn's order, the
 # random reassignment of low-count centers and the early stop (exponentially
-# weighted batch inertia, `max_no_improvement`, `tol`) are host code. The batch
+# weighted batch inertia, `max_no_improvement`, `tol`) run in the binding's
+# fit loop. The batch
 # order comes from `random_state` through the lane's splitmix64 stream, not
-# NumPy's Mersenne Twister. A callable init is called once on the host and its
-# centers take the array path (`_callable_init`); see
+# NumPy's Mersenne Twister. A callable init is called once with every row and
+# its centers take the array path (bindings/cluster_fit_a_native.mojo); see
 # x_cluster/NOT_IMPLEMENTED.tsv.
 class MiniBatchKMeans(_CentersMixin, _XCluster):
     """Mini-batch k-means clustering.
@@ -353,15 +338,6 @@ class MiniBatchKMeans(_CentersMixin, _XCluster):
         self.n_init = n_init
         self.reassignment_ratio = reassignment_ratio
 
-    def _devscan(self):
-        """lane/apple-fast-s-linalg MBK_FAST_DEVSCAN (FAST + Apple default, rollback _OFF;
-        x_cluster/minibatch_ptr.mojo): whether the binding scans X for
-        NaN/inf itself (on the device copy), so the host scan is skipped."""
-        try:
-            return int(self._bind().x_cluster_mbk_devscan()) == 1
-        except Exception:
-            return False
-
     def fit(self, X, y=None, sample_weight=None):
         """Fit the centers on `X`.
 
@@ -388,51 +364,7 @@ class MiniBatchKMeans(_CentersMixin, _XCluster):
             string or an array of the wrong shape, `n_init` is below 1, or
             `X` contains NaN or infinity.
         """
-        devscan = self._devscan()
-        x = _f32(X, scan=not devscan)
-        n, d = x.shape
-        k = int(self.n_clusters)
-        if k < 1 or k > n:
-            raise ValueError(f"n_samples={n} should be >= n_clusters={k}.")
-        weights = _weights(sample_weight, n)
-        init_arr = None
-        if isinstance(self.init, str):
-            if self.init not in ("k-means++", "random"):
-                raise ValueError(f"init must be 'k-means++', 'random' or an array, got {self.init!r}")
-        else:
-            init_arr = _f32(_callable_init(self.init, X, k, self.random_state) if callable(self.init)
-                            else self.init, "init")
-            if init_arr.shape != (k, d):
-                raise ValueError(f"The shape of the initial centers {init_arr.shape} does not match "
-                                 f"the number of clusters {k} and features {d}.")
-        n_init = self.n_init
-        if n_init == "auto":
-            n_init = 3 if (init_arr is None and self.init == "random") else 1
-        n_init = int(n_init)
-        if n_init < 1:
-            raise ValueError("n_init must be >= 1")
-        mni = -1 if self.max_no_improvement is None else int(self.max_no_improvement)
-        ip = [n, d, k, int(self.max_iter), int(self.batch_size), mni,
-              0 if self.init_size is None else int(self.init_size), n_init,
-              1 if init_arr is not None else 0, _seed(self.random_state),
-              1 if (init_arr is None and self.init == "random") else 0, 1 if weights is not None else 0]
-        a = _aux(init_arr, weights)
-        if devscan:
-            ip.append(1)    # ip[12]: the binding owes the NaN/inf scan
-        try:
-            f, i, s = self._call(_E_MINIBATCH, x, a, ip, [float(self.tol), float(self.reassignment_ratio)])
-        except Exception as e:
-            if devscan and "contains NaN or infinity" in str(e):
-                raise ValueError("mojolearn: X contains NaN or infinity") from None
-            raise
-        self.cluster_centers_ = Array._from_flat(f[0], (k, d), "<f4")
-        self.counts_ = Array._from_flat(f[1], (k,), "<f4")
-        self.labels_ = Array._from_flat(i[0], (n,), "<i4")
-        self.inertia_ = float(s[0])
-        self.n_steps_ = int(s[1])
-        self.n_iter_ = int(s[2])
-        self.n_features_in_ = d
-        return self
+        return _NATIVE(self, "family_cfa_mbk_fit", (self._bind(), X, sample_weight), _NATIVE_CONTEXT)
 
 
     def partial_fit(self, X, y=None, sample_weight=None):
@@ -465,64 +397,7 @@ class MiniBatchKMeans(_CentersMixin, _XCluster):
             or on the first call if `n_clusters` exceeds the number of rows
             or `init` is invalid.
         """
-        x = _f32(X)
-        n, d = x.shape
-        k = int(self.n_clusters)
-        first = getattr(self, "cluster_centers_", None) is None
-        if not first and not hasattr(self, "_partial_state"):
-            # a model from fit(): continue from its centers and counts, as sklearn
-            n0 = min(int(self.batch_size), n)
-            self._partial_batch = n0
-            self._partial_init = (0, 0)
-            seed = _seed(self.random_state)
-            self._partial_state = ((seed >> 32, seed & 0xFFFFFFFF), 0)
-        if not first and d != self.n_features_in_:
-            raise ValueError(f"X has {d} features, MiniBatchKMeans was fitted with {self.n_features_in_}")
-        aux = []                        # glue: the parts of the state block
-        if first:
-            if k < 1 or k > n:
-                raise ValueError(f"n_samples={n} should be >= n_clusters={k}.")
-            batch_eff = min(int(self.batch_size), n)
-            init_size = 3 * batch_eff if self.init_size is None else int(self.init_size)
-            if init_size < k:
-                init_size = 3 * k
-            init_size = min(init_size, n)
-            if isinstance(self.init, str):
-                if self.init not in ("k-means++", "random"):
-                    raise ValueError(f"init must be 'k-means++', 'random' or an array, got {self.init!r}")
-                mode = 0 if self.init == "k-means++" else 1
-            else:
-                ia = _f32(_callable_init(self.init, X, k, self.random_state) if callable(self.init)
-                          else self.init, "init")
-                if ia.shape != (k, d):
-                    raise ValueError(f"The shape of the initial centers {ia.shape} does not match "
-                                     f"the number of clusters {k} and features {d}.")
-                aux.append(ia)
-                mode = 2
-            seed = _seed(self.random_state)
-            state = (seed >> 32, seed & 0xFFFFFFFF)
-            since = 0
-            self._partial_batch = batch_eff
-            self._partial_init = (mode, init_size)
-            self.n_steps_ = 0
-        else:
-            mode, init_size = self._partial_init
-            batch_eff = self._partial_batch
-            state, since = self._partial_state
-            aux += [self.cluster_centers_, self.counts_]
-        aux.append(_weights(sample_weight, n))
-        ip = [n, d, k, 1 if first else 0, mode, init_size, batch_eff, since, state[0], state[1],
-              1 if sample_weight is not None else 0]
-        a = _aux(*aux)
-        f, i, s = self._call(_E_MINIBATCH_PARTIAL, x, a, ip, [float(self.reassignment_ratio)])
-        self.cluster_centers_ = Array._from_flat(f[0], (k, d), "<f4")
-        self.counts_ = Array._from_flat(f[1], (k,), "<f4")
-        self.labels_ = Array._from_flat(i[0], (n,), "<i4")
-        self.inertia_ = float(s[0])
-        self._partial_state = ((int(s[2]), int(s[3])), int(s[1]))
-        self.n_steps_ = getattr(self, "n_steps_", 0) + 1
-        self.n_features_in_ = d
-        return self
+        return _NATIVE(self, "family_cfa_mbk_partial_fit", (self._bind(), X, sample_weight), _NATIVE_CONTEXT)
 
 
 # Reference: scikit-learn `cluster/_bisect_k_means.py`. The 2-means is this
@@ -629,35 +504,7 @@ class BisectingKMeans(_CentersMixin, _XCluster):
             is outside [1, n_samples], `n_init` is below 1, or `X` contains
             NaN or infinity.
         """
-        if self.init not in ("random", "k-means++"):
-            raise NotImplementedError(f"mojolearn BisectingKMeans: init={self.init!r} is not implemented; "
-                                      "'random' or 'k-means++'")
-        if self.bisecting_strategy not in ("biggest_inertia", "largest_cluster"):
-            raise ValueError(f"bisecting_strategy must be 'biggest_inertia' or 'largest_cluster', "
-                             f"got {self.bisecting_strategy!r}")
-        if self.algorithm not in ("lloyd", "elkan"):
-            raise ValueError(f"algorithm must be 'lloyd' or 'elkan', got {self.algorithm!r}")
-        x = _f32(X)
-        n, d = x.shape
-        k = int(self.n_clusters)
-        if k < 1 or k > n:
-            raise ValueError(f"n_samples={n} should be >= n_clusters={k}.")
-        if int(self.n_init) < 1:
-            raise ValueError("n_init must be >= 1")
-        ip = [n, d, k, int(self.n_init), 1 if self.init == "random" else 0, int(self.max_iter),
-              _seed(self.random_state), 1 if self.bisecting_strategy == "largest_cluster" else 0]
-        w = None
-        if sample_weight is not None:
-            w = _weights(sample_weight, n)
-        f, i, s = self._call(_E_BISECT, x, w, ip, [float(self.tol)])
-        self.cluster_centers_ = Array._from_flat(f[0], (k, d), "<f4")
-        m = len(i[1]) // 3
-        self._tree_centers = Array._from_flat(f[1], (m, d), "<f4")
-        self._tree_nodes = Array._from_flat(i[1], (m, 3), "<i4")
-        self.labels_ = Array._from_flat(i[0], (n,), "<i4")
-        self.inertia_ = float(s[0])
-        self.n_features_in_ = d
-        return self
+        return _NATIVE(self, "family_cfa_bisect_fit", (self._bind(), X, sample_weight), _NATIVE_CONTEXT)
 
     def predict(self, X):
         """Assign each row of `X` to a leaf cluster.
@@ -778,28 +625,7 @@ class MeanShift(_XCluster):
             If `bandwidth` is not positive, `seeds` has a different number
             of features than `X`, or `X` contains NaN or infinity.
         """
-        x = _f32(X)
-        n, d = x.shape
-        seeds = None
-        if self.seeds is not None:
-            seeds = _f32(self.seeds, "seeds")
-            if seeds.shape[1] != d:
-                raise ValueError(f"seeds have {seeds.shape[1]} features, X has {d}")
-        bw = 0.0
-        if self.bandwidth is not None:
-            bw = float(self.bandwidth)
-            if not bw > 0:
-                raise ValueError(f"bandwidth needs to be greater than zero or None, got {bw:f}")
-        ip = [n, d, 0 if seeds is None else seeds.shape[0], 1 if self.cluster_all else 0, int(self.max_iter),
-              1 if self.bin_seeding else 0, int(self.min_bin_freq)]
-        f, i, s = self._call(_E_MEANSHIFT, x, seeds, ip, [bw])
-        kc = int(s[2])
-        self.cluster_centers_ = Array._from_flat(f[0], (kc, d), "<f4")
-        self.labels_ = Array._from_flat(i[0], (n,), "<i4")
-        self.bandwidth_ = float(s[0])
-        self.n_iter_ = int(s[1])
-        self.n_features_in_ = d
-        return self
+        return _NATIVE(self, "family_cfa_meanshift_fit", (self._bind(), X), _NATIVE_CONTEXT)
 
     def predict(self, X):
         """Assign each row of `X` to its nearest cluster center.
@@ -838,7 +664,7 @@ class MeanShift(_XCluster):
         labels : Array of shape (n_samples,), int32
             The fitted `labels_`.
         """
-        return self.fit(X).labels_
+        return _NATIVE(self, "family_cfa_meanshift_fit_predict", (self._bind(), X), _NATIVE_CONTEXT)
 
 
 # Reference: scikit-learn `cluster/_optics.py`. The n x n distances and the
@@ -942,45 +768,6 @@ class OPTICS(_XCluster):
         self.memory = memory
         self.n_jobs = n_jobs
 
-    _METRICS = {"euclidean": 0, "l2": 0, "manhattan": 1, "cityblock": 1, "l1": 1, "chebyshev": 2,
-                "infinity": 2, "cosine": 4, "precomputed": 5}
-
-    def _metric_code(self):
-        """(code, p): euclidean at p=2 keeps the squared-distance route (-1)."""
-        m = self.metric
-        if self.metric_params:
-            p = float(self.metric_params.get("p", self.p))
-        else:
-            p = float(self.p) if self.p is not None else 2.0
-        if m == "minkowski":
-            if not p >= 1:
-                raise ValueError(f"p must be >= 1 for minkowski, got {p}")
-            if p == 2:
-                return -1, 2.0
-            if p == 1:
-                return 1, 1.0
-            if p == float("inf"):
-                return 2, p
-            return 3, p
-        if m in ("euclidean", "l2"):
-            return -1, 2.0
-        if m not in self._METRICS:
-            raise NotImplementedError(f"mojolearn OPTICS: metric={m!r} is not implemented; one of "
-                                      f"{sorted(self._METRICS) + ['minkowski']} (x_cluster/NOT_IMPLEMENTED.tsv)")
-        return self._METRICS[m], p
-
-    @staticmethod
-    def _size(v, n, name):
-        if isinstance(v, bool) or v is None:
-            raise ValueError(f"{name} must be an int >= 2 or a float in (0, 1]")
-        if isinstance(v, int) or (isinstance(v, float) and v > 1):
-            if int(v) != v or v < 2 or v > n:
-                raise ValueError(f"{name} must be no greater than the number of samples ({n}) and >= 2, got {v}")
-            return int(v)
-        if not 0 < v <= 1:
-            raise ValueError(f"{name} must be in (0, 1], got {v}")
-        return max(2, int(v * n))
-
     def fit(self, X, y=None):
         """Compute the reachability ordering of `X` and extract clusters.
 
@@ -1007,32 +794,7 @@ class OPTICS(_XCluster):
             `xi` or `p` is out of range, or a precomputed matrix is not
             square.
         """
-        metric, pw = self._metric_code()
-        if self.cluster_method not in ("xi", "dbscan"):
-            raise ValueError(f"cluster_method must be 'xi' or 'dbscan', got {self.cluster_method!r}")
-        x = _f32(X)
-        n, d = x.shape
-        ms = self._size(self.min_samples, n, "min_samples")
-        mcs = ms if self.min_cluster_size is None else self._size(self.min_cluster_size, n, "min_cluster_size")
-        max_eps = float(self.max_eps)
-        eps = max_eps if self.eps is None else float(self.eps)
-        if self.cluster_method == "dbscan" and eps > max_eps:
-            raise ValueError(f"Specify an epsilon smaller than {max_eps}. Got {eps}.")
-        if not 0 <= float(self.xi) <= 1:
-            raise ValueError("xi must be in [0, 1]")
-        if metric == 5 and n != d:
-            raise ValueError(f"metric='precomputed' needs a square distance matrix, got {(n, d)}")
-        ip = [n, d, ms, mcs, 0 if self.cluster_method == "xi" else 1, 1 if self.predecessor_correction else 0, metric]
-        f, i, _ = self._call(_E_OPTICS, x, None, ip, [max_eps, float(self.xi), eps, pw])
-        self.core_distances_ = Array._from_flat(f[0], (n,), "<f4")
-        self.reachability_ = Array._from_flat(f[1], (n,), "<f4")
-        self.ordering_ = Array._from_flat(i[0], (n,), "<i4")
-        self.predecessor_ = Array._from_flat(i[1], (n,), "<i4")
-        self.labels_ = Array._from_flat(i[2], (n,), "<i4")
-        if self.cluster_method == "xi":
-            self.cluster_hierarchy_ = Array._from_flat(i[3], (len(i[3]) // 2, 2), "<i4")
-        self.n_features_in_ = d
-        return self
+        return _NATIVE(self, "family_cfa_optics_fit", (self._bind(), X), _NATIVE_CONTEXT)
 
     def fit_predict(self, X, y=None):
         """Fit the model on `X` and return the cluster labels.
@@ -1050,7 +812,7 @@ class OPTICS(_XCluster):
         labels : Array of shape (n_samples,), int32
             The fitted `labels_`; -1 marks noise.
         """
-        return self.fit(X).labels_
+        return _NATIVE(self, "family_cfa_optics_fit_predict", (self._bind(), X), _NATIVE_CONTEXT)
 
 
 # Reference: scikit-learn `cluster/_affinity_propagation.py`. The
@@ -1154,40 +916,7 @@ class AffinityPropagation(_XCluster):
             If `affinity`, `damping`, `max_iter`, `convergence_iter` or
             `preference` is invalid, or a precomputed matrix is not square.
         """
-        if self.affinity not in ("euclidean", "precomputed"):
-            raise ValueError(f"affinity must be 'euclidean' or 'precomputed', got {self.affinity!r}")
-        if not 0.5 <= float(self.damping) < 1:
-            raise ValueError(f"damping must be in [0.5, 1), got {self.damping}")
-        if int(self.max_iter) < 1 or int(self.convergence_iter) < 1:
-            raise ValueError("max_iter and convergence_iter must be >= 1")
-        x = _f32(X)
-        n, d = x.shape
-        pre = self.affinity == "precomputed"
-        if pre and n != d:
-            raise ValueError(f"The matrix of similarities must be a square array. Got {(n, d)} instead.")
-        pref_arr, mode, scalar = None, 0, 0.0
-        if self.preference is not None:
-            if isinstance(self.preference, (int, float)):
-                mode, scalar = 1, float(self.preference)
-            else:
-                pref_arr = _f32([list(self.preference)], "preference")
-                if pref_arr.shape[1] != n:
-                    raise ValueError("preference must be a scalar or have one value per sample")
-                mode = 2
-        ip = [n, d, 1 if pre else 0, mode, int(self.max_iter), int(self.convergence_iter), _seed(self.random_state)]
-        f, i, s = self._call(_E_AFFINITY, x, pref_arr, ip, [float(self.damping), scalar])
-        k = len(i[0])
-        self.cluster_centers_indices_ = Array._from_flat(i[0], (k,), "<i4")
-        self.labels_ = Array._from_flat(i[1], (n,), "<i4")
-        self.affinity_matrix_ = Array._from_flat(f[0], (n, n), "<f4")
-        # the final availability and responsibility diagonals (a diagnostic the
-        # verifier lanes hash; scikit-learn keeps no such attribute)
-        self._message_diag = Array._from_flat(f[1], (len(f[1]),), "<f4")
-        self.n_iter_ = int(s[0])
-        self.n_features_in_ = d
-        if not pre:
-            self.cluster_centers_ = Array._from_flat(f[2], (k, d), "<f4")   # the entry's exemplar rows
-        return self
+        return _NATIVE(self, "family_cfa_ap_fit", (self._bind(), X), _NATIVE_CONTEXT)
 
     def predict(self, X):
         """Assign each row of `X` to its nearest exemplar.
@@ -1228,7 +957,7 @@ class AffinityPropagation(_XCluster):
         labels : Array of shape (n_samples,), int32
             The fitted `labels_`.
         """
-        return self.fit(X).labels_
+        return _NATIVE(self, "family_cfa_ap_fit_predict", (self._bind(), X), _NATIVE_CONTEXT)
 
 
 # Reference: scikit-learn `mixture/_bayesian_mixture.py` with `_base.py`'s EM
@@ -1738,3 +1467,13 @@ def _gmm_ext_bic_aic(est, X):
     cov = {"full": k * d * (d + 1) / 2.0, "diag": k * d, "tied": d * (d + 1) / 2.0, "spherical": k}[est.covariance_type]
     p = int(cov + k * d + k - 1)
     return score, -2 * score * n + p * _pm.log(n), -2 * score * n + 2 * p
+
+
+# The fixed tables the native fits read (bindings/cluster_fit_a_native.mojo):
+# the class whose centers fit_predict/fit_transform fit, and OPTICS' metric
+# codes (x_cluster/optics.mojo; minkowski is resolved by its `p`).
+_native_family_bridge.tables(
+    family_cfa_minibatch=MiniBatchKMeans,
+    family_cfa_optics_metrics={"euclidean": 0, "l2": 0, "manhattan": 1, "cityblock": 1, "l1": 1, "chebyshev": 2,
+                               "infinity": 2, "cosine": 4, "precomputed": 5},
+)
