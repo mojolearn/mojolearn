@@ -30,16 +30,23 @@ from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty, frombytes, zeros
 from ._labels import argmax_rows, decode_labels, encode_labels, sorted_classes, threshold_codes
 from ._mode import NumericModeMixin
+from . import _native_family_bridge
 from ._sample_weight import check_sample_weight
 from ._svm_impl import SVC, SVR
 from .linear_model import (
     _QN_LOSS_SVC_L1, _QN_LOSS_SVC_L2, _QN_LOSS_SVR_L1, _QN_LOSS_SVR_L2,
     _accuracy_host, _check_qn_solver_fields, _labels_1d, _qn_fit_one_target,
-    _qn_row_weights, _qn_scores, _r2_host, _target_1d, _py2mojo_flags, _PY2MOJO_ROWS,
+    _qn_row_weights, _r2_host, _target_1d, _py2mojo_flags, _PY2MOJO_ROWS,
 )
 
 __all__ = ["SVC", "SVR", "LinearSVC", "LinearSVR"]
 
+
+
+# The compiled family owner (bindings/svm_mixture_native.mojo), connected once
+# at import: LinearSVC.decision_function and LinearSVR.predict are one native
+# call each, handed the estimators binding `_bind` resolves.
+_NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 
 class _LinearSVMBase(NumericModeMixin):
     """The fields and refusals the two linear machines share."""
@@ -299,10 +306,7 @@ class LinearSVC(_LinearSVMBase):
             If the model is not fitted, or ``X`` has a different number of
             features than the training data.
         """
-        if not hasattr(self, "_w"):
-            raise ValueError("mojolearn LinearSVC: call fit first")
-        n_classes = len(self.classes_)
-        return _qn_scores(self, X, self._w, 1 if n_classes == 2 else n_classes)
+        return _NATIVE(self, "family_svm_linear_svc_decision", (self._bind("_mojolearn_estimators"), X), _NATIVE_CONTEXT)
 
     def predict(self, X):
         """Predict class labels.
@@ -524,9 +528,7 @@ class LinearSVR(_LinearSVMBase):
             If the model is not fitted, or ``X`` has a different number of
             features than the training data.
         """
-        if not hasattr(self, "_w"):
-            raise ValueError("mojolearn LinearSVR: call fit before predict")
-        return _qn_scores(self, X, self._w)
+        return _NATIVE(self, "family_svm_linear_svr_predict", (self._bind("_mojolearn_estimators"), X), _NATIVE_CONTEXT)
 
     def score(self, X, y):
         """Return the coefficient of determination R^2 of the prediction.

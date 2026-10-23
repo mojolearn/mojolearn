@@ -13,6 +13,7 @@ from bindings.linalg_native import linalg_operation
 from bindings.neighbors_native import neighbors_operation
 from bindings.metrics_reg_native import metrics_reg_operation
 from bindings.cluster_native import cluster_operation
+from bindings.svm_mixture_native import svm_mixture_operation
 
 
 def family_operation(model: PythonObject, operation: String, args: PythonObject,
@@ -21,6 +22,8 @@ def family_operation(model: PythonObject, operation: String, args: PythonObject,
         return kmeans_operation(model, operation, args, context)
     if operation.startswith("family_km_"):
         return kernel_methods_operation(model, operation, args, context)
+    if operation.startswith("family_svm_"):
+        return svm_mixture_operation(model, operation, args, context)
     if operation.startswith("family_xc_"):
         return cluster_operation(model, operation, args, context)
     if operation.startswith("family_metric_"):

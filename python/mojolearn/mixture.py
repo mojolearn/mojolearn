@@ -16,11 +16,16 @@
 `GaussianMixture` fits a mixture of Gaussians by expectation-maximization,
 with scikit-learn's parameter names and meanings.
 """
-from . import _backend, _native_archive_bridge
+from . import _backend, _native_archive_bridge, _native_family_bridge
 from ._buffer import addr, addr_ro, as_f32_c, empty
 from ._mode import NumericModeMixin
 
 _MODE_CODE = {"fast": 0, "identical": 1}
+
+# The compiled family owner (bindings/svm_mixture_native.mojo), connected once
+# at import: `sample` is one native call, handed the binding `_bind` resolves.
+_NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
+_native_family_bridge.tables(family_gmm_mode_codes=dict(_MODE_CODE))
 
 #: The model file (the neighbors and density inference lane, 2026-09-15):
 #: `weights`, `means`, `covariances`, `precisions_cholesky` and
@@ -510,40 +515,7 @@ class GaussianMixture(NumericModeMixin):
             If the model was fitted with options outside the default
             configuration.
         """
-        if getattr(self, "_ext", None) is not None:
-            raise NotImplementedError("mojolearn GaussianMixture: sample() is the default fit's; a fit with "
-                                      "the options routed to x_cluster does not sample (x_cluster/NOT_IMPLEMENTED.tsv)")
-        if not hasattr(self, "weights_"):
-            raise ValueError("mojolearn GaussianMixture: call fit before sample")
-        if isinstance(n_samples, bool) or not isinstance(n_samples, int):
-            raise TypeError("mojolearn GaussianMixture: n_samples must be an int")
-        seed = self.random_state
-        if isinstance(seed, bool) or not isinstance(seed, int) or not 0 <= seed < 2 ** 64:
-            raise ValueError(
-                "mojolearn GaussianMixture: sample needs random_state to be an int in "
-                f"[0, 2**64), got {seed!r}; it is the key of every draw (DEVIATION 2791)"
-            )
-        n = int(n_samples)
-        k = self.weights_.shape[0]
-        d = self.n_features_in_
-        flat_m = self.means_.reshape((k * d,))
-        flat_c = self.covariances_.reshape((k * d * d,))
-        flat_p = self.precisions_cholesky_.reshape((k * d * d,))
-        # Never a zero-length buffer: a refused n still addresses real memory.
-        x = empty((max(n, 1) * d,), "<f4")
-        y = empty((max(n, 1),), "<i4")
-        self._extension().gmm_sample(
-            # ORDER MATCHES bindings/_mojolearn_mixture.mojo::gmm_sample_binding.
-            # weights, means, covariances, precisions_chol, log_det_chol, X out, y out
-            [addr_ro(self.weights_, name="weights_"), addr_ro(flat_m, name="means_"),
-             addr_ro(flat_c, name="covariances_"), addr_ro(flat_p, name="precisions_cholesky_"),
-             addr_ro(self.log_det_chol_, name="log_det_chol_"), addr(x, name="X"), addr(y, name="y")],
-            # k, d, n_iter, converged, lower_bound, n (0: no X is read)
-            [k, d, self.n_iter_, 1 if self.converged_ else 0, self.lower_bound_, 0],
-            # n_samples, random_state low 32 bits, random_state high 32 bits
-            [n, seed & 0xFFFFFFFF, seed >> 32],
-        )
-        return x.reshape((n, d)), y
+        return _NATIVE(self, "family_svm_gmm_sample", (self._bind(), n_samples), _NATIVE_CONTEXT)
 
 
 # The saved model, written natively from this schema (bindings/
