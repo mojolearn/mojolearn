@@ -262,8 +262,14 @@ def _copy_i32(source: PythonObject, n: Int, context: PythonObject) raises -> Pyt
 
 def _mode(context: PythonObject) raises -> PythonObject:
     """`_mode()`: the process-selected tier."""
-    var mode = context["backend"]["_DEFAULT_MODE"]
+    # the backend's own answers, as `_backend.default_mode()` /
+    # `_backend.numeric_mode()` gave them (a setting changed after import
+    # is seen; the bare `_DEFAULT_MODE` constant is not that answer)
+    var backend = context["backend"]
+    var mode = py_call_typed(backend["default_mode"])
     if mode is None or py_type(mode) is not _b().str or (String(py=mode) != "identical" and String(py=mode) != "fast"):
+        raise Error("RuntimeError: SmallByteLanguageModelTrainer requires process-selected IDENTICAL or FAST mode")
+    if not Bool(py=py_call_typed(backend["numeric_mode"]) == mode):
         raise Error("RuntimeError: SmallByteLanguageModelTrainer requires process-selected IDENTICAL or FAST mode")
     return mode
 
