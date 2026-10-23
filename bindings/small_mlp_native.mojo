@@ -676,6 +676,11 @@ def _resident_steps(index: Int, entries: PythonObject, x: List[Float32], y: List
     var params = Python.list(rows, k, mode, t, s.lr, s.beta1, s.beta2, s.eps, s.weight_decay, 1 if want_dx else 0)
     var entry = entries["mlp_resident_steps"] if k > 1 else entries["mlp_resident_step"]
     var written = _native_resident_step(entry, PythonObject(handle), addresses, params)
+    _ = g3  # keep the Python object alive through the native call above
+    _ = g2  # keep the Python object alive through the native call above
+    _ = g1  # keep the Python object alive through the native call above
+    _ = g0  # keep the Python object alive through the native call above
+    _ = logits  # keep the Python object alive through the native call above
     _ = scratch_dx^
     if written != rows * 3:
         raise Error("RuntimeError: SmallMLPTrainer step returned an invalid result")
@@ -742,6 +747,12 @@ def _fused(mut state: MlpState, entries: PythonObject, x: List[Float32], y: List
     var params = Python.list(rows, mode, t, state.lr, state.beta1, state.beta2, state.eps,
                              state.weight_decay, 1 if want_dx else 0)
     var written = _native_step(entries["mlp_train_step"], addresses, params)
+    _ = dx  # keep the Python object alive through the native call above
+    _ = g3  # keep the Python object alive through the native call above
+    _ = g2  # keep the Python object alive through the native call above
+    _ = g1  # keep the Python object alive through the native call above
+    _ = g0  # keep the Python object alive through the native call above
+    _ = logits  # keep the Python object alive through the native call above
     var value = mlp_read_f32(Int(loss.unsafe_ptr()))
     _ = loss^
     _ = info^

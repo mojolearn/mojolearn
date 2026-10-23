@@ -307,6 +307,7 @@ def _fit(model: PythonObject, X: PythonObject, want: Int, context: PythonObject)
     var out = PythonObject(None)
     try:
         out = _run(model, fields, query, train, _WANT_SCORE_SAMPLES if want < 0 else want, True, context)
+        _ = x  # keep the Python object alive through the native call above
     except error:
         var message = String(error)
         if device_scan and ("Input X contains" in message or "does not accept non-finite" in message):

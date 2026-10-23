@@ -543,6 +543,9 @@ struct MKit(Movable):
             var params = mk_ints([op, n, mk_c(a), mk_store_len(mk_store(bm, self.ctx)), bmode,
                                   mk_store_len(mk_store(cm, self.ctx)), cmode])
             _ = family_call(self.fn("x_decomp_ew"), pa, pb, pc, po, params, PythonObject(s))
+            _ = out  # keep the Python object alive through the native call above
+            _ = cm  # keep the Python object alive through the native call above
+            _ = bm  # keep the Python object alive through the native call above
         return out
 
     def ew1(mut self, op: Int, a: PythonObject, s: Float64) raises -> PythonObject:
@@ -904,6 +907,7 @@ struct MKit(Movable):
             _ = idx  # keep the Python object alive through the native call above
             _ = family_call(self.fn("x_decomp_move"), pa, pi, mk_addr(out, self.ctx), params)
             _ = out  # keep the Python object alive through the native call above
+            _ = idx  # keep the Python object alive through the native call above
         return out
 
     def word(mut self, a: PythonObject, i: Int) raises -> Float64:
@@ -1297,6 +1301,7 @@ def mk_take_rows_list(m: PythonObject, idx: List[Int], mut hk: MKit, ctx: Python
         _ = family_call(hk.fn("x_decomp_move"), pm, pi, mk_addr(out, ctx),
                         mk_ints([MV_TAKE_ROWS, count * c, c, 0, 0, 1, 0, mk_store_len(mk_store(m, ctx)), count * c, count]))
         _ = out  # keep the Python object alive through the native call above
+        _ = im  # keep the Python object alive through the native call above
     return out
 
 

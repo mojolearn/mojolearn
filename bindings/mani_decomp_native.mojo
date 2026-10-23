@@ -423,8 +423,11 @@ def _mds_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var tols = Python.list(PythonObject(_mani_float(family_field(fields, "eps"))))
     var result = family_call(k.fn("x_decomp_mds_fit"), pd, ps, mk_addr(y, context), params, tols)
     _ = y  # keep the Python object alive through the native call above
+    _ = s  # keep the Python object alive through the native call above
     py_setitem(fields, "stress_", py_call(b.float, result[0]))
+    _ = y  # keep the Python object alive through the native call above
     py_setitem(fields, "n_iter_", py_call(b.int, result[1]))
+    _ = y  # keep the Python object alive through the native call above
     var embedding = mk_out2(y, context)
     py_setitem(fields, "embedding_", embedding)
     py_setitem(fields, "n_features_in_", PythonObject(mk_c(m)))
@@ -687,6 +690,11 @@ def _lle_smallest(mut k: MKit, f: PythonObject, nc: Int, max_iter: Int,
                                        PythonObject(0xFFFFFFFF)))
     var tols = Python.list(PythonObject(floor), PythonObject(_LLE_SUBSPACE_TOL), PythonObject(_LLE_STALL_TOL))
     var status = family_call(k.fn("x_decomp_lle_iterate"), pf, pl, pp, pi, pz, outs, params, tols)
+    _ = sm  # keep the Python object alive through the native call above
+    _ = ym  # keep the Python object alive through the native call above
+    _ = xm  # keep the Python object alive through the native call above
+    _ = z  # keep the Python object alive through the native call above
+    _ = f0  # keep the Python object alive through the native call above
     if Int(py=py_call(b.int, status[0])) == 2:
         raise Error("RuntimeError: LocallyLinearEmbedding: the shift-invert subspace iteration did not settle in "
                     + String(max_iter) + " iterations (last subspace change "

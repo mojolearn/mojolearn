@@ -496,26 +496,37 @@ def causal_layer_run(model: PythonObject, i: Int, x: PythonObject, supplied_stat
                 raise Error("CausalLM: incompatible or failed Mamba1 state")
             if profile == 2:
                 _ = py_call(addresses.append, _mutable(st.affine_boundary, [b, di, 16], keep, copies, "affine_boundary"))
+                _ = y  # keep the Python object alive through the native call above
                 _ = py_call(addresses.append, _mutable(st.affine_a, [b, di, 16, 6], keep, copies, "affine_a"))
+                _ = y  # keep the Python object alive through the native call above
                 _ = py_call(addresses.append, _mutable(st.affine_b, [b, di, 16, 6], keep, copies, "affine_b"))
+                _ = y  # keep the Python object alive through the native call above
                 _ = py_call(params.append, st.absolute_position)
             _ = py_call(e["decode" if step else "forward"], addresses, params)
+            _ = y  # keep the Python object alive through the native call above
             py_setattr(st, "absolute_position", PythonObject(Int(py=st.absolute_position) + l))
         else:
             var nh = Int(py=blk["nheads"])
             var cd = Int(py=blk["conv_dim"])
             _ = py_call(addresses.append, _mutable(st.conv_window, [b, cd, 4], keep, copies, "conv_window"))
+            _ = y  # keep the Python object alive through the native call above
             _ = py_call(addresses.append, _mutable(st.h, [b, nh, 64, 128], keep, copies, "h"))
+            _ = y  # keep the Python object alive through the native call above
             _ = py_call(addresses.append, _mutable(st.buffer_xbc, [b, 256, cd], keep, copies, "buffer_xbc"))
+            _ = y  # keep the Python object alive through the native call above
             _ = py_call(addresses.append, _mutable(st.buffer_dtraw, [b, 256, nh], keep, copies, "buffer_dtraw"))
+            _ = y  # keep the Python object alive through the native call above
             _ = py_call(addresses.append, _addr(y, keep))
             _ = y  # keep the Python object alive through the native call above
             var last = generation_array([b, Int(py=blk["nheads"]), 64, 128])
             _ = py_call(addresses.append, _addr(last, keep))
             _ = last  # keep the Python object alive through the native call above
+            _ = y  # keep the Python object alive through the native call above
             params = py_ints([b, d, Int(py=st.buffered_tokens)]) if step else py_ints([b, l, d, Int(py=st.buffered_tokens)])
             _ = py_call(params.extend, blk["dt_limit"])
             py_setattr(st, "buffered_tokens", py_call(e["decode" if step else "forward"], addresses, params))
+            _ = last  # keep the Python object alive through the native call above
+            _ = y  # keep the Python object alive through the native call above
             py_setitem(blk, "h_last_", last)
     _writeback(copies)
     _ = keep^
@@ -661,6 +672,7 @@ def _resident_forward(model: PythonObject, ids: PythonObject, state: PythonObjec
             var pv = _mutable(st.v_cache, [cache_n], keep, copies, "v_cache")
             _ = py_call(e["transformer_decode_session_export_state"], sessions[i], py_ints([pk, pv]))
             py_setattr(st, "cached_tokens", cached)
+            _ = out  # keep the Python object alive through the native call above
         _writeback(copies)
     except error:
         if persist:

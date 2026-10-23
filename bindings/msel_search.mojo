@@ -660,10 +660,12 @@ def _group_index(mut rng: MselRng, order: PythonObject, n: Int, context: PythonO
     for g in range(len(sizes)):  # driver-loop: over groups (one device gather each)
         _ = family_call(gather, PythonObject(o0 + 8 * at), PythonObject(sizes[g]), PythonObject(msel_addr(perms[g])),
                         PythonObject(sizes[g]), PythonObject(s0 + 8 * at))
+        _ = src  # keep the Python object alive through the native call above
         at += sizes[g]
     var idx = msel_new(n, "<i8", context)
     _ = family_call(gather, PythonObject(s0), PythonObject(n), PythonObject(msel_addr(order[2])), PythonObject(n),
                     PythonObject(msel_addr(idx)))
+    _ = src  # keep the Python object alive through the native call above
     _ = idx  # keep the Python object alive through the native call above
     return idx
 

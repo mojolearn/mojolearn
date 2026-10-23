@@ -371,6 +371,7 @@ def _codes(addr: Int, n: Int, context: PythonObject) raises -> PythonObject:
     _ = classes  # keep the Python object alive through the native call above
     if integral == 0:
         return PythonObject(None)
+    _ = classes  # keep the Python object alive through the native calls above
     # Sorted distinct nonnegative integers are 0..k-1 exactly when the
     # largest is k - 1.
     return Python.tuple(PythonObject(k), PythonObject(Int(hi) == k - 1), PythonObject(Int(hi)))
@@ -580,6 +581,8 @@ def _eval_set(eval_set: PythonObject, fields: PythonObject, model: PythonObject,
     _ = ye  # keep the Python object alive through the native calls above
     var _keep_ret_xe = Python.tuple(xe.keep, PythonObject(xe.addr), ye.keep, PythonObject(ye.addr), PythonObject(xe.rows))
     _ = ye  # keep the Python object alive through the native call above
+    _ = xe  # keep the Python object alive through the native call above
+    _ = xe  # keep the Python object alive through the native call above
     _ = xe  # keep the Python object alive through the native call above
     return _keep_ret_xe^
 
@@ -803,13 +806,17 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
                 _ = py_call(params.append, PythonObject(trees_address(group_holder)))
                 _ = group_holder  # keep the Python object alive through the native call above
                 _ = py_call(params.append, PythonObject(-1))
+                _ = group_holder  # keep the Python object alive through the native call above
                 _ = py_call(params.append, PythonObject(trees_address(group_holder)))
                 _ = group_holder  # keep the Python object alive through the native call above
             else:
                 pair_holders = _pairs_arrays(pairs, pairs_weight, n_rows, context)
                 _ = py_call(params.append, PythonObject(trees_address(pair_holders[0])))
+                _ = group_holder  # keep the Python object alive through the native call above
                 _ = py_call(params.append, PythonObject(Int(py=pair_holders[1].size)))
+                _ = group_holder  # keep the Python object alive through the native call above
                 _ = py_call(params.append, PythonObject(trees_address(pair_holders[1])))
+                _ = group_holder  # keep the Python object alive through the native call above
     var od = _field(fields, model, "od_type")
     if od is not None and not _in(od, t["od_types"]):
         raise Error("mojolearn: od_type must be one of " + _repr(t["od_types"]) + ", got " + _repr(od))
@@ -848,7 +855,9 @@ def gbdt_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
                            PythonObject(trees_address(flags_holder)), PythonObject(ex_addr), PythonObject(ey_addr),
                            params, strs)
     _ = flags_holder  # keep the Python object alive through the native call above
+    _ = group_holder  # keep the Python object alive through the native call above
     var out = trees_call(entry, call)
+    _ = flags_holder  # keep the Python object alive through the native call above
     _ = weights^
     _ = held^
     _ = group_holder^

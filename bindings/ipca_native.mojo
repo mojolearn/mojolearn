@@ -147,7 +147,9 @@ def ipca_fit(model: PythonObject, source: PythonObject, context: PythonObject) r
     _ = x  # keep the Python object alive through the native call above
     _room_addresses(room, params)
     _ = room  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     var got = py_call_typed(entries["x_decomp_ipca_fit"], params)
+    _ = x  # keep the Python object alive through the native call above
     var count = Int(py=got[0])
     py_setitem(fields, "n_samples_seen_", PythonObject(n))
     py_setitem(fields, "n_components_", PythonObject(count))
@@ -184,12 +186,17 @@ def ipca_partial_fit(model: PythonObject, source: PythonObject, context: PythonO
         _ = py_call(state.append, classical_host_f32(_attr(model, fields, "mean_"), 1, "mean_", context))
         _ = py_call(state.append, classical_host_f32(_attr(model, fields, "var_"), 1, "var_", context))
     _ = py_call(params.append, prev_count)
+    _ = x  # keep the Python object alive through the native call above
     _ = py_call(params.append, prev_d)
+    _ = x  # keep the Python object alive through the native call above
     for k in range(4):  # driver-loop: over the four state arrays (unread for the first batch)
         _ = py_call(params.append, classical_address(state[k]) if seen > 0 else PythonObject(Int(room[0].unsafe_ptr())))
+        _ = x  # keep the Python object alive through the native call above
     _room_addresses(room, params)
     _ = room  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     var got = py_call_typed(entries["x_decomp_ipca_partial"], params)
+    _ = x  # keep the Python object alive through the native call above
     _ = state^
     var count = Int(py=got[0])
     py_setitem(fields, "n_samples_seen_", PythonObject(seen + n))

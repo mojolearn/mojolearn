@@ -111,6 +111,10 @@ def byte_lm_host_train_step(trainer: PythonObject, args: PythonObject, context: 
     _ = post_p  # keep the Python object alive through the native call above
     _ = tokens^
     var result = Int(py=bits)
+    _ = post_v  # keep the Python object alive through the native call above
+    _ = post_m  # keep the Python object alive through the native call above
+    _ = post_p  # keep the Python object alive through the native call above
+    _ = grad  # keep the Python object alive through the native call above
     py_setitem(fields, "_gradient", grad)
     py_setitem(fields, "_parameters", post_p)
     py_setitem(fields, "_m", post_m)

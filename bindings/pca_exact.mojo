@@ -238,6 +238,13 @@ def pca_exact_fit(model: PythonObject, args: PythonObject, solver: String, proje
     _ = z  # keep the Python object alive through the native call above
     _ = singular  # keep the Python object alive through the native call above
     var keep = Int(py=fitted[0])
+    _ = z  # keep the Python object alive through the native call above
+    _ = singular  # keep the Python object alive through the native call above
+    _ = ratio  # keep the Python object alive through the native call above
+    _ = variance  # keep the Python object alive through the native call above
+    _ = mean  # keep the Python object alive through the native call above
+    _ = components  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     if keep != nc:
         # The kernel writes the kept components (and the projection) as the
         # prefix of each output.
@@ -248,6 +255,8 @@ def pca_exact_fit(model: PythonObject, args: PythonObject, solver: String, proje
         if project:
             z = pca_prefix(z, rows, keep, context)
     pca_keep_fit(fields, args[0], components, mean, variance, ratio, singular, fitted[1], keep, cols, rows, context)
+    _ = z  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     _ = x^
     return z if project else model
 

@@ -238,6 +238,7 @@ def _gpc_set_fitted(fields: PythonObject, x: PythonObject, classes: PythonObject
     var total = reduce_stat(Int(py=classical_address(values)), HP_F64, k, HP_SUM).f
     _ = values  # keep the Python object alive through the native call above
     py_setitem(fields, "log_marginal_likelihood_value_", PythonObject(total / Float64(k)))
+    _ = values  # keep the Python object alive through the native call above
     _ = values^
 
 
@@ -335,9 +336,26 @@ def _gpc_latent(ext: PythonObject, fields: PythonObject, est: PythonObject, q: P
                              PythonObject(len(arrays[0])), arrays[4], PythonObject(1 if want_proba else 0))
     if out_kind != 0:
         _ = py_call(addrs.append, classical_address(out))
+        _ = lf  # keep the Python object alive through the native call above
+        _ = wsr  # keep the Python object alive through the native call above
+        _ = pi  # keep the Python object alive through the native call above
+        _ = y01  # keep the Python object alive through the native call above
         _ = out  # keep the Python object alive through the native call above
+        _ = proba  # keep the Python object alive through the native call above
+        _ = var_out  # keep the Python object alive through the native call above
+        _ = mean  # keep the Python object alive through the native call above
+        _ = xt  # keep the Python object alive through the native call above
         _ = py_call(params.append, PythonObject(out_kind))
     _ = family_call(gp_entry(ext, "gpc_predict"), addrs, params)
+    _ = lf  # keep the Python object alive through the native call above
+    _ = wsr  # keep the Python object alive through the native call above
+    _ = pi  # keep the Python object alive through the native call above
+    _ = y01  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
+    _ = proba  # keep the Python object alive through the native call above
+    _ = var_out  # keep the Python object alive through the native call above
+    _ = mean  # keep the Python object alive through the native call above
+    _ = xt  # keep the Python object alive through the native call above
     _ = xt^
     _ = y01^
     _ = pi^
@@ -378,10 +396,12 @@ def _gpc_predict_all(ext: PythonObject, fields: PythonObject, q: PythonObject, o
         _ = py_call(kept.append, parts)
         for j in range(4):  # small-loop(model buffers: four per binary fit)
             _ = py_call(addrs.append, classical_address(parts[j]))
+            _ = xt  # keep the Python object alive through the native call above
     # n_train, n_features, n_star, n_nodes, n_ls, out_kind, k
     _ = family_call(gp_entry(ext, "gpc_predict_all"), addrs,
                     Python.list(PythonObject(n_train), PythonObject(n_features), PythonObject(n_star),
                                 PythonObject(len(arrays[0])), arrays[4], PythonObject(out_kind), PythonObject(k)))
+    _ = xt  # keep the Python object alive through the native call above
     _ = kept^
     _ = xt^
     _ = arrays^
@@ -399,7 +419,11 @@ def _gpc_ovr_combine(ext: PythonObject, cols: PythonObject, n_star: Int, context
     _ = proba  # keep the Python object alive through the native call above
     for i in range(k):  # driver-loop: one class column address per class
         _ = py_call(addrs.append, classical_address(cols[i]))
+        _ = codes  # keep the Python object alive through the native call above
+        _ = proba  # keep the Python object alive through the native call above
     _ = family_call(gp_entry(ext, "gpc_ovr_combine"), addrs, Python.list(PythonObject(n_star)))
+    _ = codes  # keep the Python object alive through the native call above
+    _ = proba  # keep the Python object alive through the native call above
     return Python.tuple(proba, codes)
 
 

@@ -426,6 +426,7 @@ def _member_fit_weighted(member: PythonObject, xcm: TreesMatrix, codes: PythonOb
         var fit = ForestFit("rf_classifier_fit_weighted", True, Python.list(_P(weights.addr)), True)
         _ = weights  # keep the Python object alive through the native call above
         result = _launch(rf, fit, xcm, trees_address(labels.codes), params, criterion, False, context)
+        _ = weights  # keep the Python object alive through the native call above
     _member_store(member, forest_fit_arrays(result, context), xcm.cols)
     _fitted(member)
     _ = weights^
@@ -452,6 +453,7 @@ def _member_fit_session_rows(member: PythonObject, session: Session, rows: Pytho
                                "into", context)
     _ = y  # keep the Python object alive through the native call above
     _member_store(member, forest_fit_arrays(result, context), x_cols)
+    _ = y  # keep the Python object alive through the native call above
     _fitted(member)
     _ = y^
 
@@ -609,6 +611,7 @@ def _bagging_fit_bags(model: PythonObject, fields: PythonObject, X: PythonObject
             # the same float32 values); else the drawn rows' weights
             weights = sample_weight if all_rows else _gather_vec(xt, sw.value().addr, n, rows, context)
         _member_fit(member, xs, ys, weights, context)
+        _ = x  # keep the Python object alive through the native call above
         _ = py_call(members.append, member)
         _ = py_call(features.append, cols)
         if oob:
@@ -984,8 +987,10 @@ def ada_fit(model: PythonObject, args: PythonObject, classifier: Bool, context: 
             _ = y32  # keep the Python object alive through the native call above
             if session.handle > 0:
                 _member_fit_session_rows(member, session, rows, yr, d, context)
+                _ = y32  # keep the Python object alive through the native call above
             else:
                 _member_fit(member, _gather(xt, x.addr, n, d, rows, cols, context), yr, PythonObject(None), context)
+                _ = y32  # keep the Python object alive through the native call above
                 _ = x  # keep the Python object alive through the native call above
             var pred = _f32_vector(_member_predict(member, xa, context), context)
             _ = py_call_typed(_x(xt, "x_trees_r2_step"), _A(w), _P(pred.addr), _A(y_array), _A(stats),
@@ -1336,7 +1341,9 @@ def dart_fit(model: PythonObject, args: PythonObject, classifier: Bool, context:
     _ = codes  # keep the Python object alive through the native call above
     var kind = 1 if K == 2 else 2
     py_setitem(fields, "_KIND", _P(kind))
-    return _dart_boost(model, fields, x, y32, 1 if K == 2 else K, kind, context)
+    var _keep_ret_codes = _dart_boost(model, fields, x, y32, 1 if K == 2 else K, kind, context)
+    _ = codes  # keep the Python object alive through the native call above
+    return _keep_ret_codes^
 
 
 def _dart_raw(fields: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:

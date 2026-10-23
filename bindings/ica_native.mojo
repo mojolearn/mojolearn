@@ -88,12 +88,19 @@ def ica_fit(model: PythonObject, source: PythonObject, project: Bool, context: P
     _ = winit  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     _ = mixing  # keep the Python object alive through the native call above
-    _ = components  # keep the Python object alive through the native call above
     _ = mean  # keep the Python object alive through the native call above
     _ = whitening  # keep the Python object alive through the native call above
     _ = sources  # keep the Python object alive through the native call above
+    _ = components  # keep the Python object alive through the native call above
     var it = py_call_typed(entries["x_decomp_ica_fit"], params,
                            Python.list(decomp_float(alpha), decomp_float(fields["tol"])))
+    _ = sources  # keep the Python object alive through the native call above
+    _ = mean  # keep the Python object alive through the native call above
+    _ = whitening  # keep the Python object alive through the native call above
+    _ = mixing  # keep the Python object alive through the native call above
+    _ = components  # keep the Python object alive through the native call above
+    _ = winit  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "n_iter_", PythonObject(Int(py=it)))
     if code != 0:
         py_setitem(fields, "whitening_", whitening)

@@ -72,6 +72,9 @@ def als_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
         var count = decomp_int(py_call(kit.entries["x_decomp_als_fit"], ac, ax, ay, classical_address(losses_store),
                                        params, Python.list(decomp_float(fields["regularization"]))))
         _ = losses_store  # keep the Python object alive through the native call above
+        _ = y  # keep the Python object alive through the native call above
+        _ = x  # keep the Python object alive through the native call above
+        _ = c  # keep the Python object alive through the native call above
         kit.wrote_host(x)
         kit.wrote_host(y)
         if loss:
@@ -81,6 +84,7 @@ def als_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
             for i in range(min(count, slots)):  # driver-loop: over the fit's recorded iterations
                 _ = py_call(losses.append, PythonObject(words[i]))
                 _ = losses_store  # keep the Python object alive through the native call above
+            _ = losses_store  # keep the Python object alive through the native calls above
             py_setitem(fields, "training_loss_", losses)
         var users = kit.publish(x)
         var items = kit.publish(y)

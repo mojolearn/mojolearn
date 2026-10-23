@@ -204,8 +204,10 @@ def str_lookup(classes: PythonObject, values: PythonObject, as_float: Bool) rais
                 _ = py_call(missing.append, value)
         if as_float:
             MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address)[i] = Float32(found)
+            _ = codes  # keep the Python object alive through the native call above
         else:
             MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=address)[i] = Int32(found)
+            _ = codes  # keep the Python object alive through the native call above
     return Python.tuple(codes, missing, count)
 
 

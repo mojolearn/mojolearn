@@ -130,6 +130,7 @@ def _any_f32(source: PythonObject, name: String, context: PythonObject) raises -
             rest //= dim
         family_cast_rows(base + offset, s0, s1, rows, cols, item, kind,
                          FAMILY_F32P(unsafe_from_address=out + s * rows * cols * 4))
+        _ = result  # keep the Python object alive through the native call above
     _ = view^
     return result
 
@@ -152,6 +153,7 @@ def _concat(parts: PythonObject, context: PythonObject) raises -> PythonObject:
         if size:
             memcpy(dest=FAMILY_F32P(unsafe_from_address=dst + 4 * offset),
                    src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(parts[p]))), count=size)
+            _ = out  # keep the Python object alive through the native call above
         offset += size
     return out
 
@@ -319,6 +321,13 @@ def _gmm_default_fit(model: PythonObject, binding: PythonObject, source: PythonO
     var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(k), covariance_type, tol, reg_covar,
                              max_iter, init_params, _int(_get(model, "random_state")))
     var n_iter = family_call(entry, addrs, params)
+    _ = scalars  # keep the Python object alive through the native call above
+    _ = log_det  # keep the Python object alive through the native call above
+    _ = precisions  # keep the Python object alive through the native call above
+    _ = covariances  # keep the Python object alive through the native call above
+    _ = means  # keep the Python object alive through the native call above
+    _ = weights  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     var words = FAMILY_F64P(unsafe_from_address=Int(py=classical_address(scalars)))
     _ = scalars  # keep the Python object alive through the native call above
     py_setattr(model, "n_features_in_", PythonObject(d))
@@ -370,6 +379,11 @@ def _gmm_score_call(model: PythonObject, binding: PythonObject, x: PythonObject,
                              _get(model, "lower_bound_"), PythonObject(n))
     _check_mode(binding, model, context)
     _ = family_call(family_entry(binding, name, context), addrs, params)
+    _ = log_det  # keep the Python object alive through the native call above
+    _ = flat_p  # keep the Python object alive through the native call above
+    _ = flat_c  # keep the Python object alive through the native call above
+    _ = flat_m  # keep the Python object alive through the native call above
+    _ = weights  # keep the Python object alive through the native call above
     _ = weights^
     _ = flat_m^
     _ = flat_c^

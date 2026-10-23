@@ -1307,9 +1307,11 @@ def host_archive_neighbors(cls: PythonObject, arrays: PythonObject, kind: Int,
             _ = y  # keep the Python object alive through the native call above
             if len(unique) != count:
                 raise Error("saved neighbor classes do not match distinct labels")
+            _ = y  # keep the Python object alive through the native calls above
             var labels = Python.list()
             for i in range(count):  # driver-loop: sorted distinct class label metadata
                 var label = Int(unique[i])
+                _ = y  # keep the Python object alive through the native call above
                 if classical_i64(saved_classes, off + i) != label:
                     raise Error("saved neighbor classes are not the sorted unique labels")
                 _ = py_call(labels.append, label)
@@ -2205,6 +2207,8 @@ def host_archive_svm_ovo(fields: PythonObject, arrays: PythonObject, features: I
     _ = support  # keep the Python object alive through the native call above
     _ = raw_support  # keep the Python object alive through the native call above
     var cap = min(rows, total)
+    _ = support  # keep the Python object alive through the native call above
+    _ = raw_support  # keep the Python object alive through the native call above
     var public_support = host_archive_typed(Python.tuple(max(1, cap)), "<i4", context)
     var public_counts = host_archive_typed(Python.tuple(k), "<i4", context)
     var public_dual = host_archive_typed(Python.tuple(max(1, (k - 1) * cap)), "<f4", context)

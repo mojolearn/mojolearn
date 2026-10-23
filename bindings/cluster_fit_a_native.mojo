@@ -183,6 +183,7 @@ def _aux(parts: PythonObject, context: PythonObject) raises -> PythonObject:
         if size:
             memcpy(dest=FAMILY_F32P(unsafe_from_address=base + 4 * offset),
                    src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(a))), count=size)
+            _ = out  # keep the Python object alive through the native call above
             _ = a  # keep the Python object alive through the native call above
         offset += size
     _ = arrays^
@@ -819,17 +820,56 @@ def _hdbscan_fit(model: PythonObject, binding: PythonObject, source: PythonObjec
         t_inv = family_array(Python.tuple(n), "<i4", context)
         _ = py_call(addrs.append, classical_address(t_par))
         _ = t_par  # keep the Python object alive through the native call above
+        _ = info  # keep the Python object alive through the native call above
+        _ = core  # keep the Python object alive through the native call above
+        _ = labels  # keep the Python object alive through the native call above
+        _ = x  # keep the Python object alive through the native call above
         _ = py_call(addrs.append, classical_address(t_ch))
         _ = t_ch  # keep the Python object alive through the native call above
+        _ = t_par  # keep the Python object alive through the native call above
+        _ = info  # keep the Python object alive through the native call above
+        _ = core  # keep the Python object alive through the native call above
+        _ = labels  # keep the Python object alive through the native call above
+        _ = x  # keep the Python object alive through the native call above
         _ = py_call(addrs.append, classical_address(t_lam))
         _ = t_lam  # keep the Python object alive through the native call above
+        _ = t_ch  # keep the Python object alive through the native call above
+        _ = t_par  # keep the Python object alive through the native call above
+        _ = info  # keep the Python object alive through the native call above
+        _ = core  # keep the Python object alive through the native call above
+        _ = labels  # keep the Python object alive through the native call above
+        _ = x  # keep the Python object alive through the native call above
         _ = py_call(addrs.append, classical_address(t_sz))
         _ = t_sz  # keep the Python object alive through the native call above
+        _ = t_lam  # keep the Python object alive through the native call above
+        _ = t_ch  # keep the Python object alive through the native call above
+        _ = t_par  # keep the Python object alive through the native call above
+        _ = info  # keep the Python object alive through the native call above
+        _ = core  # keep the Python object alive through the native call above
+        _ = labels  # keep the Python object alive through the native call above
+        _ = x  # keep the Python object alive through the native call above
         _ = py_call(addrs.append, classical_address(t_inv))
         _ = t_inv  # keep the Python object alive through the native call above
+        _ = t_sz  # keep the Python object alive through the native call above
+        _ = t_lam  # keep the Python object alive through the native call above
+        _ = t_ch  # keep the Python object alive through the native call above
+        _ = t_par  # keep the Python object alive through the native call above
+        _ = info  # keep the Python object alive through the native call above
+        _ = core  # keep the Python object alive through the native call above
+        _ = labels  # keep the Python object alive through the native call above
+        _ = x  # keep the Python object alive through the native call above
     # probabilities_out, always LAST (DEVIATION 5116)
     _ = py_call(addrs.append, classical_address(probs))
+    _ = t_inv  # keep the Python object alive through the native call above
+    _ = t_sz  # keep the Python object alive through the native call above
+    _ = t_lam  # keep the Python object alive through the native call above
+    _ = t_ch  # keep the Python object alive through the native call above
+    _ = t_par  # keep the Python object alive through the native call above
     _ = probs  # keep the Python object alive through the native call above
+    _ = info  # keep the Python object alive through the native call above
+    _ = core  # keep the Python object alive through the native call above
+    _ = labels  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     _hdbscan_mode(model, binding, context)
     # n, d, min_samples, min_cluster_size, max_cluster_size, alpha,
     # allow_single_cluster, cluster_selection_method, cluster_selection_epsilon, metric
@@ -837,6 +877,16 @@ def _hdbscan_fit(model: PythonObject, binding: PythonObject, source: PythonObjec
                              _int(max_cluster_size), _float(alpha_field),
                              _flag(_truthy(_attr(model, "allow_single_cluster"))), method, _float(cse_field), metric)
     var n_clusters = family_call(family_entry(binding, "hdbscan_fit", context), addrs, params)
+    _ = t_inv  # keep the Python object alive through the native call above
+    _ = t_sz  # keep the Python object alive through the native call above
+    _ = t_lam  # keep the Python object alive through the native call above
+    _ = t_ch  # keep the Python object alive through the native call above
+    _ = t_par  # keep the Python object alive through the native call above
+    _ = probs  # keep the Python object alive through the native call above
+    _ = info  # keep the Python object alive through the native call above
+    _ = core  # keep the Python object alive through the native call above
+    _ = labels  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     _set(model, "n_features_in_", PythonObject(d))
     _set(model, "labels_", labels)
     _set(model, "core_distances_", core)
@@ -859,6 +909,7 @@ def _hdbscan_fit(model: PythonObject, binding: PythonObject, source: PythonObjec
                    src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(x))), count=n * d)
             _ = raw  # keep the Python object alive through the native call above
             _ = x  # keep the Python object alive through the native call above
+        _ = x  # keep the Python object alive through the native calls above
         _set(model, "_raw_data", raw)
     _ = x^
     _ = info^
@@ -919,6 +970,17 @@ def _hdbscan_prediction_data(model: PythonObject, binding: PythonObject, n: Int,
     _ = index_into  # keep the Python object alive through the native call above
     _ = offsets  # keep the Python object alive through the native call above
     var n_exemplars = Int(py=_int(n_ex))
+    _ = labels  # keep the Python object alive through the native call above
+    _ = index_into  # keep the Python object alive through the native call above
+    _ = offsets  # keep the Python object alive through the native call above
+    _ = exemplar_idx  # keep the Python object alive through the native call above
+    _ = selected  # keep the Python object alive through the native call above
+    _ = deaths  # keep the Python object alive through the native call above
+    _ = inverse  # keep the Python object alive through the native call above
+    _ = sizes  # keep the Python object alive through the native call above
+    _ = lambdas  # keep the Python object alive through the native call above
+    _ = children  # keep the Python object alive through the native call above
+    _ = parents  # keep the Python object alive through the native call above
     py_setitem(pd, PythonObject("n_exemplars"), PythonObject(n_exemplars))
     py_setitem(pd, PythonObject("exemplar_idx"), _head(exemplar_idx, max(n_exemplars, 1), "<i4", context))
     _ = labels^

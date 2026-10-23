@@ -430,6 +430,10 @@ def _umap_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
         var params = _umap_concat(_umap_concat(Python.list(PythonObject(n), PythonObject(d)), config), extras)
         _ = py_call(params.extend, Python.list(tkind, tdims, tk, tw))
         columns = family_call(family_entry(binding, "umap_fit_transform_ex", context), addrs, params)
+        _ = tarr  # keep the Python object alive through the native call above
+        _ = embedding  # keep the Python object alive through the native call above
+        _ = initial  # keep the Python object alive through the native call above
+        _ = x  # keep the Python object alive through the native call above
     _ = initial^
     _ = target^
     if Bool(py=py_call(Python.import_module("operator").ne, columns, PythonObject(nc))) or not _umap_finite(embedding):

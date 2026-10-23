@@ -412,6 +412,7 @@ def sequence_moe_forward(owner: PythonObject, values: PythonObject, context: Pyt
                           classical_address(sel), classical_address(w)), ip)
         _ = logits  # keep the Python object alive through the native call above
         _ = y  # keep the Python object alive through the native call above
+        _ = a  # keep the Python object alive through the native call above
         _ = w  # keep the Python object alive through the native call above
         _ = sel  # keep the Python object alive through the native call above
     else:
@@ -423,6 +424,7 @@ def sequence_moe_forward(owner: PythonObject, values: PythonObject, context: Pyt
         _ = dn  # keep the Python object alive through the native call above
         _ = gu  # keep the Python object alive through the native call above
         _ = r  # keep the Python object alive through the native call above
+        _ = a  # keep the Python object alive through the native call above
         _ = w  # keep the Python object alive through the native call above
         _ = sel  # keep the Python object alive through the native call above
         _ = logits  # keep the Python object alive through the native call above

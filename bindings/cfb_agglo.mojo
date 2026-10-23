@@ -311,8 +311,11 @@ def _agglo_x(model: PythonObject, args: PythonObject, context: PythonObject) rai
     _ = x  # keep the Python object alive through the native call above
     _ = aux^
     var f = result[0]
+    _ = x  # keep the Python object alive through the native call above
     var i = result[1]
+    _ = x  # keep the Python object alive through the native call above
     var sc = result[2]
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "children_", _xc_array(i[0], Python.tuple(n_merges, 2), "<i4", "i", context))
     py_setitem(fields, "n_leaves_", PythonObject(n))
     var components = Int(py=family_call(b.int, sc[0]))

@@ -197,6 +197,10 @@ def gbdt_predict(model: PythonObject, X: PythonObject, context: PythonObject) ra
         _ = x  # keep the Python object alive through the native call above
         if width != dim:
             raise Error("RuntimeError: mojolearn: predict wrote width " + String(width) + ", expected " + String(dim))
+            _ = out  # keep the Python object alive through the native call above
+            _ = x  # keep the Python object alive through the native call above
+        _ = out  # keep the Python object alive through the native calls above
+        _ = x  # keep the Python object alive through the native calls above
         return trees_reshape(out, Python.tuple(x.rows, width), context)
     var out = trees_vector(x.rows, "<f4", context)
     var wrote = _int(py_call_typed(trees_need(table, "gbdt_predict", "mojolearn: this gbdt binding has no gbdt_predict"),
@@ -205,6 +209,8 @@ def gbdt_predict(model: PythonObject, X: PythonObject, context: PythonObject) ra
     _ = x  # keep the Python object alive through the native call above
     if wrote != x.rows:
         raise Error("RuntimeError: mojolearn: predict wrote " + String(wrote) + " of " + String(x.rows) + " rows")
+        _ = out  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native calls above
     return out
 
 
@@ -280,6 +286,10 @@ def gbdt_predict_proba(model: PythonObject, X: PythonObject, context: PythonObje
     _ = raw  # keep the Python object alive through the native call above
     if wrote != n:
         raise Error("RuntimeError: mojolearn: gbdt_sigmoid_pair wrote " + String(wrote) + " of " + String(n) + " rows")
+        _ = out  # keep the Python object alive through the native call above
+        _ = raw  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native calls above
+    _ = raw  # keep the Python object alive through the native calls above
     return out
 
 
@@ -337,6 +347,9 @@ def gbdt_predict_classes(model: PythonObject, X: PythonObject, context: PythonOb
                     if wrote != x.rows:
                         raise Error("RuntimeError: mojolearn: predict_classes wrote " + String(wrote) + " of "
                                     + String(x.rows) + " rows")
+                        _ = out  # keep the Python object alive through the native call above
+                        _ = x  # keep the Python object alive through the native call above
+                    _ = out  # keep the Python object alive through the native calls above
                     return out
         elif _int(fields["n_classes_"]) <= 3 and Bool(py=_field(fields, model, "grow_policy") == PythonObject("SymmetricTree")):
             if fields["model_"] is None:
@@ -622,6 +635,8 @@ def ordered_rmse_fit(model: PythonObject, args: PythonObject, context: PythonObj
     _ = order  # keep the Python object alive through the native call above
     _ = weights^
     py_setitem(fields, "model_", text)
+    _ = order  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     _fitted_text(fields, model, x.cols, PythonObject(None))
     return model
 
@@ -669,15 +684,18 @@ def feature_freq_fit(model: PythonObject, args: PythonObject, context: PythonObj
         var col = x.addr + 4 * f * n
         _ = x  # keep the Python object alive through the native call above
         var hi = Float64(py=_reduce(col, 0, n, 1, context))
+        _ = x  # keep the Python object alive through the native call above
         if not _truthy_int(_reduce(col, 0, n, 4, context)) or Bool(py=_reduce(col, 0, n, 0, context) < PythonObject(0)):
             raise Error("mojolearn: experimental FeatureFreq source columns must "
                         + "contain non-negative integer category codes")
+        _ = x  # keep the Python object alive through the native calls above
         var k = Int(hi) + 1
         var dense = 2 <= k and k <= n
         if dense:
             var codes = trees_vector(n, "<i8", context)
             trees_cast(col, "<f4", trees_address(codes), "<i8", n, context)
             _ = codes  # keep the Python object alive through the native call above
+            _ = x  # keep the Python object alive through the native call above
             var counts = trees_vector(k, "<i8", context)
             _ = py_call_typed(trees_helper(context, "bincount_i64"), PythonObject(trees_address(codes)), PythonObject(3),
                               PythonObject(n), PythonObject(k), PythonObject(trees_address(counts)), PythonObject(0))
@@ -697,6 +715,7 @@ def feature_freq_fit(model: PythonObject, args: PythonObject, context: PythonObj
         if Bool(py=py_call(b.float, _reduce(col, 0, n, 0, context)) == py_call(b.float, _reduce(col, 0, n, 1, context))):
             raise Error("mojolearn: experimental FeatureFreq numeric columns "
                         + "must vary; column " + String(f) + " is constant")
+        _ = x  # keep the Python object alive through the native calls above
     var y = trees_f32(args[1], 1, "C", "y", context)
     if y.rows != n or not trees_all_finite(y.addr, n, False, context):
         raise Error("mojolearn: y must be finite with one value per row")
@@ -708,6 +727,7 @@ def feature_freq_fit(model: PythonObject, args: PythonObject, context: PythonObj
     if args[2] is not None:
         weights = _checked_weights(args[2], n, False, context)
         w_addr = weights.value().addr
+        _ = y  # keep the Python object alive through the native call above
         n_weights = n
     var k = len(sources)
     var source_array = trees_vector(k, "<u4", context)
@@ -730,6 +750,9 @@ def feature_freq_fit(model: PythonObject, args: PythonObject, context: PythonObj
     _ = source_array  # keep the Python object alive through the native call above
     _ = weights^
     py_setitem(fields, "model_", text)
+    _ = source_array  # keep the Python object alive through the native call above
+    _ = y  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     _fitted_text(fields, model, d, PythonObject(0))
     return model
 

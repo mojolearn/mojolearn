@@ -452,6 +452,8 @@ struct MselGroups(Movable):
         _ = train  # keep the Python object alive through the native call above
         if got != size:
             raise Error("RuntimeError: mojolearn: select_fold_i64 disagrees with the group counts")
+        _ = train  # keep the Python object alive through the native calls above
+        _ = test  # keep the Python object alive through the native calls above
         return Python.tuple(train, test)
 
     def only(mut self, words: PythonObject, want: Int, size: Int, context: PythonObject) raises -> PythonObject:
@@ -465,6 +467,7 @@ struct MselGroups(Movable):
         _ = out  # keep the Python object alive through the native call above
         if got != size:
             raise Error("RuntimeError: mojolearn: select_fold_i64 disagrees with the group counts")
+        _ = out  # keep the Python object alive through the native calls above
         return out
 
     def split_by_fold(self, to_fold: PythonObject, k: Int, sizes: PythonObject,

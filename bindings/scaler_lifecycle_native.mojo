@@ -206,7 +206,11 @@ def scaler_transform(model: PythonObject, source: PythonObject, inverse: Bool, c
         _ = values  # keep the Python object alive through the native call above
         if got == 0:
             raise Error("StandardScaler transform overflowed in Float32")
+        _ = output  # keep the Python object alive through the native calls above
+        _ = values  # keep the Python object alive through the native calls above
         finite = got == 1
+        _ = output  # keep the Python object alive through the native call above
+        _ = values  # keep the Python object alive through the native call above
         if not finite:
             var filled = _nan_fill(values, entries, context)
             if Int(py=py_call(direct, classical_address(filled), Int(ap+2*d), Int(ap+3*d), classical_address(output), params)) != 1:
@@ -431,7 +435,12 @@ def scaler_fit_transform(model: PythonObject, source: PythonObject, options: Pyt
                 _ = stats^
                 if got < 0:
                     raise Error("StandardScaler transform overflowed in Float32")
+                _ = output  # keep the Python object alive through the native calls above
+                _ = values  # keep the Python object alive through the native calls above
                 return _write_back(source, values, output, _bool(fields["copy"],context), context)
+            _ = output  # keep the Python object alive through the native calls above
+            _ = stats  # keep the Python object alive through the native calls above
+            _ = values  # keep the Python object alive through the native calls above
     _ = scaler_fit(model, source, py_get(options,"sample_weight"), context)
     return scaler_transform(model, source, False, PythonObject(None), context)
 

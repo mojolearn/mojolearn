@@ -188,7 +188,9 @@ def _dict_learning(mut kit: DecompKit, x: Int, nc: Int, alpha: Float64, max_iter
     kit.wrote_host(code)
     kit.wrote_host(d)
     var done = Int(py=result[0])
+    _ = errors_store  # keep the Python object alive through the native call above
     var recorded = min(Int(py=result[1]), slots)
+    _ = errors_store  # keep the Python object alive through the native call above
     var errors = Python.list()
     var words = MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(errors_store)))
     _ = errors_store  # keep the Python object alive through the native call above
@@ -238,6 +240,7 @@ def _minibatch_fit(mut kit: DecompKit, x: Int, nc: Int, dict_init: Int, p: Pytho
     _ = xt  # keep the Python object alive through the native call above
     var ad = kit.address(d)
     var step = decomp_int(py_call(kit.entries["x_decomp_dict_minibatch"], ax, ad, params, floats)) - 1
+    _ = xt  # keep the Python object alive through the native call above
     kit.wrote_host(d)
     return (d, step + 1, per_pass)
 

@@ -541,6 +541,9 @@ def lin_quantize_int15(binding: PythonObject, a: LinBuf, context: PythonObject) 
     _ = lo  # keep the Python object alive through the native call above
     _ = hi  # keep the Python object alive through the native call above
     _ = lin_call(lin_int15(binding, context), "quantize_int15", addrs, lin_ints(rows, cols))
+    _ = exps  # keep the Python object alive through the native call above
+    _ = lo  # keep the Python object alive through the native call above
+    _ = hi  # keep the Python object alive through the native call above
     return Python.tuple(hi.keep, lo.keep, exps.keep)
 
 
@@ -579,6 +582,10 @@ def _lin_dequantize_int15(args: PythonObject, context: PythonObject) raises -> P
     _ = l  # keep the Python object alive through the native call above
     _ = h  # keep the Python object alive through the native call above
     _ = lin_call(lin_int15(args[0], context), "dequantize_int15", addrs, lin_ints(rows, cols))
+    _ = out  # keep the Python object alive through the native call above
+    _ = e  # keep the Python object alive through the native call above
+    _ = l  # keep the Python object alive through the native call above
+    _ = h  # keep the Python object alive through the native call above
     _ = h^
     _ = l^
     _ = e^
@@ -644,6 +651,13 @@ def _lin_matmul_int15(args: PythonObject, context: PythonObject) raises -> Pytho
     _ = bl  # keep the Python object alive through the native call above
     _ = bh  # keep the Python object alive through the native call above
     _ = lin_call(lin_int15(binding, context), "gemm_int15", addrs, lin_ints(m, n, k))
+    _ = out  # keep the Python object alive through the native call above
+    _ = eb  # keep the Python object alive through the native call above
+    _ = bl  # keep the Python object alive through the native call above
+    _ = bh  # keep the Python object alive through the native call above
+    _ = ea  # keep the Python object alive through the native call above
+    _ = al  # keep the Python object alive through the native call above
+    _ = ah  # keep the Python object alive through the native call above
     _ = ah^
     _ = al^
     _ = ea^

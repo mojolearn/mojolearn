@@ -371,6 +371,7 @@ def _schema_vector(fields: PythonObject, dtype: String, items: PythonObject, nam
     _ = vector  # keep the Python object alive through the native call above
     for i in range(count):  # driver-loop: over the fixed elements of one saved metadata vector
         _schema_put(address, i, dtype, fields, items[i], name, context)
+        _ = vector  # keep the Python object alive through the native call above
     return vector
 
 
@@ -421,6 +422,7 @@ def _schema_rows(fields: PythonObject, dtype: String, path: PythonObject, items:
         py_setitem(row, "_", elements[e])
         for k in range(width):  # driver-loop: over the fixed items of one saved row
             _schema_put(address, e * width + k, dtype, row, items[k], name, context)
+            _ = vector  # keep the Python object alive through the native call above
     return vector
 
 

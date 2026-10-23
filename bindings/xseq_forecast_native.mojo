@@ -185,8 +185,11 @@ def _ets_fit(model: PythonObject, fields: PythonObject, args: PythonObject, cont
             var low = py_call_typed(xseq_base(context, "reduce_stat"), xseq_addr(y), PythonObject(0), PythonObject(size), PythonObject(0))
             _ = y  # keep the Python object alive through the native call above
             positive = Bool(py=low > PythonObject(0))
+            _ = y  # keep the Python object alive through the native call above
+        _ = y  # keep the Python object alive through the native calls above
         if not positive:
             raise Error("ETS: Inappropriate model for data with negative or zero values")
+        _ = y  # keep the Python object alive through the native calls above
     var damped = xseq_truth(fields["damped"])
     var trend = 1 if tr != "N" else 0
     var season = 1 if s != "N" else 0
@@ -334,6 +337,14 @@ def _var_fit(model: PythonObject, fields: PythonObject, args: PythonObject, cont
     if code:
         raise Error("LinAlgError: VAR.fit: the lagged design is rank deficient (Cholesky pivot of column "
                     + String(code - 1) + ")")
+        _ = resid  # keep the Python object alive through the native call above
+        _ = sigma  # keep the Python object alive through the native call above
+        _ = params  # keep the Python object alive through the native call above
+        _ = endog  # keep the Python object alive through the native call above
+    _ = resid  # keep the Python object alive through the native calls above
+    _ = sigma  # keep the Python object alive through the native calls above
+    _ = params  # keep the Python object alive through the native calls above
+    _ = endog  # keep the Python object alive through the native calls above
     # VARResults(endog, params, sigma, resid, p, kt, numeric_mode), its
     # attributes set here (the same words its constructor derived)
     var cls = context["xseq_var_results"]

@@ -831,6 +831,9 @@ def _rf_fit_classifier(model: PythonObject, fields: PythonObject, kind: String, 
         _ = importance  # keep the Python object alive through the native call above
         _ = _rf_fit_arrays(fields, kind, x, y_addr, labels.n, k,
                            ForestFit("rf_classifier_fit_aux", True, tail, True), None, rf, context)
+        _ = importance  # keep the Python object alive through the native call above
+        _ = score  # keep the Python object alive through the native call above
+        _ = oob  # keep the Python object alive through the native call above
         if oob is not None:
             py_setitem(fields, "oob_decision_function_", oob)
             py_setitem(fields, "oob_score_", PythonObject(_F64(score, 0)))
@@ -924,6 +927,7 @@ def _rf_fit_regressor(model: PythonObject, fields: PythonObject, kind: String, X
         _ = _rf_fit_arrays(fields, kind, trees_f32(X, 2, "F", "X", context), y32.addr, y32.rows, 0,
                            ForestFit("rf_regressor_fit_weighted", True, tail, True), None, rf, context)
         _ = y32  # keep the Python object alive through the native call above
+        _ = w  # keep the Python object alive through the native call above
         _ = w^
         _ = y32^
         return model
@@ -947,6 +951,9 @@ def _rf_fit_regressor(model: PythonObject, fields: PythonObject, kind: String, X
         _ = importance  # keep the Python object alive through the native call above
         _ = _rf_fit_arrays(fields, kind, x, y32.addr, y32.rows, 0,
                            ForestFit("rf_regressor_fit_aux", True, tail, True), None, rf, context)
+        _ = importance  # keep the Python object alive through the native call above
+        _ = score  # keep the Python object alive through the native call above
+        _ = oob  # keep the Python object alive through the native call above
         if oob is not None:
             py_setitem(fields, "oob_prediction_", oob)
             py_setitem(fields, "oob_score_", PythonObject(_F64(score, 0)))
@@ -1330,7 +1337,9 @@ def _vote(model: PythonObject, fields: PythonObject, kind: String, staged: Fores
         _ = py_call(call.append, PythonObject(trees_address(out)))
         _ = out  # keep the Python object alive through the native call above
         _ = py_call(call.append, dims)
+        _ = out  # keep the Python object alive through the native call above
         wrote = trees_call(function, call)
+        _ = out  # keep the Python object alive through the native call above
         _ = arrays^
     else:
         var handle = _resident(model, fields, staged.native, staged.mode, context)
@@ -1366,6 +1375,8 @@ def _resident_labels(model: PythonObject, fields: PythonObject, staged: ForestIn
     _ = out  # keep the Python object alive through the native call above
     if Int(py=wrote) != rows:
         raise Error("RuntimeError: forest label prediction wrote " + _str(wrote) + " of " + String(rows) + " rows")
+        _ = out  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native calls above
     return out
 
 

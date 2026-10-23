@@ -344,6 +344,10 @@ def _export_release(fields: PythonObject, shape: _Shape, context: PythonObject) 
     _ = out_v  # keep the Python object alive through the native call above
     var returned = py_call_typed(binding.byte_lm_trainer_export_state, fields["_native_session"], addresses,
                                  shape.native_shape(), completed, PythonObject(True))
+    _ = out_flags  # keep the Python object alive through the native call above
+    _ = out_v  # keep the Python object alive through the native call above
+    _ = out_m  # keep the Python object alive through the native call above
+    _ = out_p  # keep the Python object alive through the native call above
     if py_type(returned) is not _b().int or not Bool(py=returned == completed):
         raise Error("RuntimeError: Byte-LM state export returned a different completed step")
     py_setitem(fields, "_last_export_step", completed)
@@ -485,16 +489,23 @@ def _run_resident(fields: PythonObject, tokens: PythonObject, shape: _Shape, con
     _ = out_loss  # keep the Python object alive through the native call above
     _ = py_call(addresses.append, classical_address(out_flags))
     _ = out_flags  # keep the Python object alive through the native call above
+    _ = out_loss  # keep the Python object alive through the native call above
     _ = py_call(addresses.append, classical_address(grads[0]) if full else PythonObject(0))
+    _ = out_flags  # keep the Python object alive through the native call above
+    _ = out_loss  # keep the Python object alive through the native call above
     var by_name = grads[1]
     var keys = py_call(b.list, by_name)
     for i in range(len(keys)):  # driver-loop: one address per model parameter tensor
         _ = py_call(addresses.append, classical_address(by_name[keys[i]]))
+        _ = out_flags  # keep the Python object alive through the native call above
+        _ = out_loss  # keep the Python object alive through the native call above
     py_setitem(fields, "_grad_step", -1)
     var returned = PythonObject(None)
     try:
         returned = py_call_typed(binding.byte_lm_trainer_step, session, addresses, _parameters(state, True),
                                  shape.native_shape())
+        _ = out_flags  # keep the Python object alive through the native call above
+        _ = out_loss  # keep the Python object alive through the native call above
     except error:
         _after_failure(fields)
         raise error^

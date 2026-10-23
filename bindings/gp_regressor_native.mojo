@@ -464,6 +464,9 @@ def _gpr_predict(model: PythonObject, args: PythonObject, context: PythonObject)
     if return_std:
         py_setitem(fields, "clamped_", clamped)
         py_setitem(fields, "n_clamped_", family_call(b.int, n_clamped))
+        _ = clamped  # keep the Python object alive through the native call above
+        _ = std  # keep the Python object alive through the native call above
+        _ = mean  # keep the Python object alive through the native call above
         return Python.tuple(mean, std)
     return mean
 

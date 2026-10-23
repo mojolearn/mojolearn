@@ -135,16 +135,20 @@ def _m3_state_call(block: PythonObject, x: PythonObject, state: PythonObject, st
     _ = output  # keep the Python object alive through the native call above
     for i in range(4):  # driver-loop: over the four reporting buffers
         _ = py_call(addresses.append, generation_address(reports[i], keep))
+        _ = output  # keep the Python object alive through the native call above
     var q = Int(py=slots["buffered_tokens"])
     var pending = 1 if Bool(py=slots["pending"]) else 0
     var updated = PythonObject(None)
     if on_session:
         updated = py_call(_native_function(entries, "mamba3_state_owned"), fields["_prefill_session"], addresses,
                           Python.list(b, 1 if step else l, d, q, pending, owned, 1 if step else 0))
+        _ = output  # keep the Python object alive through the native call above
     elif step:
         updated = py_call(_native_function(entries, "mamba3_decode_step"), addresses, py_ints([b, d, q, pending]))
+        _ = output  # keep the Python object alive through the native call above
     else:
         updated = py_call(_native_function(entries, "mamba3_forward"), addresses, py_ints([b, l, d, q, pending]))
+        _ = output  # keep the Python object alive through the native call above
     _writeback(copies)
     py_setitem(slots, "buffered_tokens", updated)
     py_setitem(slots, "pending", False)

@@ -710,6 +710,7 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
     var total = 0
     for i in range(len(fitted)):  # driver-loop: over members
         var blk = _out2d(_stack_out(model, xt, fitted[i], methods[i], head, context), 2, context)
+        _ = Xa  # keep the Python object alive through the native call above
         _ = py_call(widths.append, PythonObject(blk.cols))
         total += blk.cols
         _ = blk^
@@ -736,6 +737,7 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
             var Xte = _gather(xt, trees_address(Xa), n, d, te, cols, context)
             _ = Xa  # keep the Python object alive through the native call above
             var blk = _out2d(_stack_out(model, xt, e, methods[i], Xte, context), len(te), context)
+            _ = Xa  # keep the Python object alive through the native call above
             var got = _place(xt, meta, n, width, blk, te, col0)
             _ = blk^
             if got != Int(py=widths[i]):
@@ -745,7 +747,9 @@ def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, co
         var xb = TreesMatrix(Xa, trees_address(Xa), n, d, True)
         _ = Xa  # keep the Python object alive through the native call above
         _ = _place(xt, meta, n, width, xb, _arange(xt, n, context), total)
+        _ = Xa  # keep the Python object alive through the native call above
         _ = xb^
+        _ = Xa  # keep the Python object alive through the native call above
     _set(model, "_widths_", widths)
     _set(model, "named_estimators_", _named(active.names, fitted))
     var final_ = _clone(final)
@@ -782,7 +786,9 @@ def _stacking_transform(model: PythonObject, X: PythonObject, context: PythonObj
         var xb = TreesMatrix(Xa, trees_address(Xa), n, d, True)
         _ = Xa  # keep the Python object alive through the native call above
         _ = _place(xt, meta, n, width, xb, rows, col0)
+        _ = Xa  # keep the Python object alive through the native call above
         _ = xb^
+        _ = Xa  # keep the Python object alive through the native call above
     return trees_reshape(meta, Python.tuple(n, width), context)
 
 
@@ -955,6 +961,7 @@ def _multioutput_regressor_fit(model: PythonObject, X: PythonObject, y: PythonOb
         var yj = trees_reshape(_gather(xt, trees_address(Ya), n, _cols(Ya), rows, col, context), Python.tuple(n), context)
         _ = Ya  # keep the Python object alive through the native call above
         _fit_member(e, Xa, yj, weights)
+        _ = Ya  # keep the Python object alive through the native call above
         _ = py_call(fitted.append, e)
     _set(model, "n_features_in_", PythonObject(_cols(Xa)))
     _set(model, "_fitted", PythonObject(True))
@@ -1397,12 +1404,14 @@ def _fit_calibrators(model: PythonObject, xt: PythonObject, S: PythonObject, cod
         if sigmoid:
             var ab = trees_vector(2, "<f8", context)
             _ = py_call_typed(_x(xt, "x_trees_platt_fit"), _P(f), _A(yj), _A(ab), Python.list(_P(n)))
+            _ = St  # keep the Python object alive through the native call above
             _ = py_call(cals.append, Python.tuple(PythonObject("sigmoid"),
                                                   Python.tuple(PythonObject(_f64_word(ab, 0)), PythonObject(_f64_word(ab, 1)))))
         else:
             var kx = trees_vector(n, "<f8", context)
             var ky = trees_vector(n, "<f8", context)
             var m = Int(py=py_call_typed(_x(xt, "x_trees_isotonic_fit"), _P(f), _A(y64), _A(kx), _A(ky), Python.list(_P(n))))
+            _ = St  # keep the Python object alive through the native call above
             _ = py_call(cals.append, Python.tuple(PythonObject("isotonic"),
                                                   Python.tuple(_copy_block(kx, 0, m, "<f8", context),
                                                                _copy_block(ky, 0, m, "<f8", context), PythonObject(m))))
@@ -1469,6 +1478,7 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
             _ = Xa  # keep the Python object alive through the native call above
             var cals = _fit_calibrators(model, xt, _cal_scores(model, xt, e, Xte, context),
                                         _gather_codes(xt, labels.codes, te, context), context)
+            _ = Xa  # keep the Python object alive through the native call above
             _ = py_call(pairs.append, Python.tuple(e, cals))
     else:
         var c = 1 if k == 2 else k
@@ -1483,6 +1493,7 @@ def _calibrated_fit(model: PythonObject, X: PythonObject, y: PythonObject, conte
             var Xte = _gather(xt, trees_address(Xa), n, d, te, cols, context)
             _ = Xa  # keep the Python object alive through the native call above
             var blk = trees_f32(_cal_scores(model, xt, e, Xte, context), 2, "C", "scores", context)
+            _ = Xa  # keep the Python object alive through the native call above
             _ = _place(xt, S, n, c, blk, te, 0)
             _ = blk^
         var e = _clone(base)

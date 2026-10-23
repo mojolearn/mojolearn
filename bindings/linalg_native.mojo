@@ -73,6 +73,8 @@ def _chol_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     py_setitem(fields, "n_", PythonObject(n))
     py_setitem(fields, "L_", l_out)
     py_setitem(fields, "info_", family_call(b.int, info))
+    _ = scalars  # keep the Python object alive through the native call above
+    _ = l_out  # keep the Python object alive through the native call above
     py_setitem(fields, "nb_", PythonObject(Int(words[1])))
     _ = scalars  # keep the Python object alive through the native call above
     py_setitem(fields, "_logdet", PythonObject(words[2]))

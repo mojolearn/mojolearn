@@ -262,17 +262,20 @@ def logistic_fit(model: PythonObject, args: PythonObject, context: PythonObject)
                              _int(_class_constant(model, fields, "lbfgs_memory")), 1 if intercept else 0,
                              1 if Bool(py=_class_constant(model, fields, "penalty_normalized")) else 0,
                              1 if has_sw else 0, loss)
+    _ = sw  # keep the Python object alive through the native call above
     if has_sw:
         # field 15 svr_eps (0), field 16 the weights
         _ = py_call(params.append, PythonObject(0.0))
         _ = py_call(params.append, PythonObject(sw.addr))
         _ = sw  # keep the Python object alive through the native call above
+    _ = sw  # keep the Python object alive through the native calls above
     var n_iter = py_call_typed(_need(entries, "qn_fit"), classical_address(x), PythonObject(labels_address(y_enc)),
                                PythonObject(labels_address(w)), PythonObject(labels_address(info)), params)
     _ = y_enc  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     _ = info  # keep the Python object alive through the native call above
     _ = w  # keep the Python object alive through the native call above
+    _ = sw  # keep the Python object alive through the native call above
     py_setitem(fields, "_w", w)
     # `_coef_from_w`: one target, the first `cols` words and the last; C
     # targets, cuML's column-major block w[c + C*j], the bias at j == cols.
@@ -298,6 +301,10 @@ def logistic_fit(model: PythonObject, args: PythonObject, context: PythonObject)
     var iterations = labels_vector(1, "<i8", context)
     _I64P(unsafe_from_address=labels_address(iterations))[0] = Int64(_int(n_iter))
     _ = iterations  # keep the Python object alive through the native call above
+    _ = info  # keep the Python object alive through the native call above
+    _ = w  # keep the Python object alive through the native call above
+    _ = y_enc  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "n_iter_", iterations)
     var words = _F32P(unsafe_from_address=labels_address(info))
     _ = info  # keep the Python object alive through the native call above

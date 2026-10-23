@@ -179,6 +179,11 @@ def _rs_bootstrap_unpaired(args: PythonObject, context: PythonObject) raises -> 
                              rs_int(args[7], "random_state", where), meth,
                              rs_real(args[4], "confidence_level", where), alt, rs_int(args[9], "r_first", where))
     _ = family_call(fn_obj, addrs, params)
+    _ = scalars  # keep the Python object alive through the native call above
+    _ = sdist  # keep the Python object alive through the native call above
+    _ = dist  # keep the Python object alive through the native call above
+    _ = yy  # keep the Python object alive through the native call above
+    _ = xx  # keep the Python object alive through the native call above
     _ = xx^
     _ = yy^
     return _rs_bootstrap_result(dist, sdist, scalars, context)
@@ -226,6 +231,10 @@ def _rs_bootstrap(args: PythonObject, context: PythonObject) raises -> PythonObj
     _ = x  # keep the Python object alive through the native call above
     var params = Python.list(PythonObject(n), PythonObject(d), stat, r, seed, meth, cl, alt, qp, rf)
     _ = family_call(fn_obj, addrs, params)
+    _ = scalars  # keep the Python object alive through the native call above
+    _ = sdist  # keep the Python object alive through the native call above
+    _ = dist  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     _ = x^
     return _rs_bootstrap_result(dist, sdist, scalars, context)
 
@@ -267,6 +276,9 @@ def _rs_permutation_samples(args: PythonObject, context: PythonObject) raises ->
                              rs_code("ALTERNATIVES", args[5], "alternative", where, context),
                              rs_int(args[7], "r_first", where))
     _ = family_call(fn_obj, addrs, params)
+    _ = scalars  # keep the Python object alive through the native call above
+    _ = null  # keep the Python object alive through the native call above
+    _ = xx  # keep the Python object alive through the native call above
     _ = xx^
     _ = yy^
     return _rs_permutation_result(null, scalars, context)
@@ -313,6 +325,10 @@ def _rs_permutation_test(args: PythonObject, context: PythonObject) raises -> Py
     _ = xx  # keep the Python object alive through the native call above
     var params = Python.list(PythonObject(xx.dim(0)), PythonObject(yy.dim(0)), stat, r, seed, alt, rf)
     _ = family_call(fn_obj, addrs, params)
+    _ = scalars  # keep the Python object alive through the native call above
+    _ = null  # keep the Python object alive through the native call above
+    _ = yy  # keep the Python object alive through the native call above
+    _ = xx  # keep the Python object alive through the native call above
     _ = xx^
     _ = yy^
     return _rs_permutation_result(null, scalars, context)
@@ -361,6 +377,9 @@ def _rs_monte_carlo(args: PythonObject, context: PythonObject) raises -> PythonO
     var params = Python.list(f_id, rs_int(args[4], "n_samples", where), rs_int(args[5], "random_state", where),
                              rs_int(args[6], "i_first", where))
     _ = family_call(fn_obj, addrs, params)
+    _ = scalars  # keep the Python object alive through the native call above
+    _ = hi  # keep the Python object alive through the native call above
+    _ = lo  # keep the Python object alive through the native call above
     var result = _rs_object(rs_state(context)["MonteCarloResult"])
     py_setattr(result, "integral", PythonObject(_rs_word(scalars, 0)))
     py_setattr(result, "mean", PythonObject(_rs_word(scalars, 1)))
@@ -470,6 +489,7 @@ def _rs_gpu_gather(binding: PythonObject, arrays: PythonObject, n: Int, count: I
         _ = x  # keep the Python object alive through the native call above
         _ = py_call(addresses.append, classical_address(output))
         _ = output  # keep the Python object alive through the native call above
+        _ = x  # keep the Python object alive through the native call above
         _ = py_call(params.append, PythonObject(1) if Int(py=x.ndim) == 1 else x.shape[1])
     var route: PythonObject
     if replace:
@@ -542,6 +562,8 @@ def _rs_take(a: PythonObject, idx: LinBuf, context: PythonObject) raises -> Pyth
             for e in range(row_items):  # cpu-route: one row's items in C order
                 memcpy(dest=RS_BP(unsafe_from_address=dst + w * item),
                        src=RS_BP(unsafe_from_address=base + off), count=item)
+                _ = out  # keep the Python object alive through the native call above
+                _ = v  # keep the Python object alive through the native call above
                 w += 1
                 var k = nd - 1
                 while k >= 1:  # driver-loop: over the axes of one index step
@@ -593,14 +615,22 @@ def _rs_narrow_gather(binding: PythonObject, arrays: PythonObject, n: Int, count
             _ = py_call(outs.append, out)
             _ = py_call(addresses.append, classical_address(x))
             _ = x  # keep the Python object alive through the native call above
+            _ = idx  # keep the Python object alive through the native call above
             _ = py_call(addresses.append, classical_address(out))
             _ = out  # keep the Python object alive through the native call above
+            _ = x  # keep the Python object alive through the native call above
+            _ = idx  # keep the Python object alive through the native call above
         else:
             _ = py_call(outs.append, PythonObject(None))
             _ = py_call(addresses.append, PythonObject(0))
+            _ = x  # keep the Python object alive through the native call above
+            _ = idx  # keep the Python object alive through the native call above
             _ = py_call(addresses.append, PythonObject(0))
+            _ = x  # keep the Python object alive through the native call above
+            _ = idx  # keep the Python object alive through the native call above
         _ = py_call(params.append, PythonObject(w))
     var done = Int(py=family_call(b.int, family_call(fn_obj, addresses, params)))
+    _ = idx  # keep the Python object alive through the native call above
     if done < 0:
         return PythonObject(None)
     var result = Python.list()

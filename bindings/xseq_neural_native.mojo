@@ -105,6 +105,7 @@ def xseq_labels(source: PythonObject, entries: PythonObject, context: PythonObje
         _ = classes  # keep the Python object alive through the native call above
         _ = codes  # keep the Python object alive through the native call above
         var selected = py_call(context["ndarray"], Python.tuple(count), dtype=y.dtype, buffer=classes)
+        _ = codes  # keep the Python object alive through the native call above
         _ = y^
         return Python.tuple(selected, codes)
     # cpu-route: str and object labels have no native sort; the builtins
@@ -467,8 +468,10 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
         var factor = 2.0 if logistic else 6.0
         var bound = sqrt(factor / Float64(fi + fo))
         stream.fill_uniform(context, PythonObject(base + 4 * offset), fi * fo, -bound, bound)
+        _ = params  # keep the Python object alive through the native call above
         offset += fi * fo
         stream.fill_uniform(context, PythonObject(base + 4 * offset), fo, -bound, bound)
+        _ = params  # keep the Python object alive through the native call above
         offset += fo
     var seed = Int(stream.child_seed() % UInt64(2147483647))
     var batch: Int
@@ -517,16 +520,27 @@ def _mlp_fit(model: PythonObject, fields: PythonObject, x_source: PythonObject, 
     py_setitem(fields, "coefs_", coefs)
     py_setitem(fields, "intercepts_", intercepts)
     py_setitem(fields, "n_iter_", n_iter)
+    _ = curve  # keep the Python object alive through the native call above
+    _ = params  # keep the Python object alive through the native call above
     var losses = xseq_curve_list(curve, n_iter)
+    _ = params  # keep the Python object alive through the native call above
     py_setitem(fields, "loss_curve_", losses)
     if n_iter == 0:
         raise Error("IndexError: list index out of range")
+    _ = curve  # keep the Python object alive through the native calls above
+    _ = params  # keep the Python object alive through the native calls above
     py_setitem(fields, "loss_", losses[n_iter - 1])
+    _ = curve  # keep the Python object alive through the native call above
+    _ = params  # keep the Python object alive through the native call above
     # the first-wins minimum of the curve (`reduce_stat` 0)
     var best = py_call_typed(xseq_base(context, "reduce_stat"), xseq_addr(curve), PythonObject(0), PythonObject(n_iter), PythonObject(0))
     _ = curve  # keep the Python object alive through the native call above
+    _ = params  # keep the Python object alive through the native call above
     py_setitem(fields, "best_loss_", xseq_float(best))
+    _ = curve  # keep the Python object alive through the native call above
     py_setitem(fields, "t_", n_iter * rows)
+    _ = curve  # keep the Python object alive through the native call above
+    _ = params  # keep the Python object alive through the native call above
     return model
 
 
@@ -582,6 +596,7 @@ def _mlp_forward(fields: PythonObject, source: PythonObject, proba2: Bool, conte
     _ = params^
     if written != rows * width:
         raise Error("RuntimeError: mlp_predict: this binding predates the two-column probability; rebuild it")
+    _ = out  # keep the Python object alive through the native calls above
     return out
 
 

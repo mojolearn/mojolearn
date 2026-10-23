@@ -286,11 +286,26 @@ def arima_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     _ = x0  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     _ = params  # keep the Python object alive through the native call above
+    _ = ics  # keep the Python object alive through the native call above
     _ = flags  # keep the Python object alive through the native call above
     _ = stats  # keep the Python object alive through the native call above
     if written != total:
         raise Error("RuntimeError: " + _A + "the fit wrote " + String(written) + " parameters, batch_size * N is "
                     + String(total) + "; this side and arima/estimator.mojo disagree about ARIMAOrder.complexity()")
+        _ = flags  # keep the Python object alive through the native call above
+        _ = stats  # keep the Python object alive through the native call above
+        _ = x0  # keep the Python object alive through the native call above
+        _ = x  # keep the Python object alive through the native call above
+        _ = params  # keep the Python object alive through the native call above
+        _ = ex  # keep the Python object alive through the native call above
+        _ = arr  # keep the Python object alive through the native call above
+    _ = flags  # keep the Python object alive through the native calls above
+    _ = stats  # keep the Python object alive through the native calls above
+    _ = x0  # keep the Python object alive through the native calls above
+    _ = x  # keep the Python object alive through the native calls above
+    _ = params  # keep the Python object alive through the native calls above
+    _ = ex  # keep the Python object alive through the native calls above
+    _ = arr  # keep the Python object alive through the native calls above
     _adopt(model, fields, arr, Bool(py=series[3]), y_ndim, batch, n_obs, ex, n_exog, big_n, params, x, x0, stats,
            flags, ics, context)
     return model
@@ -314,6 +329,8 @@ def _adopt(model: PythonObject, fields: PythonObject, arr: PythonObject, copied:
         if written != batch:
             raise Error("RuntimeError: " + _A + "the criterion kernel wrote " + String(written)
                         + " series, batch_size is " + String(batch))
+            _ = ics  # keep the Python object alive through the native call above
+        _ = ics  # keep the Python object alive through the native calls above
     py_setitem(fields, "input_copied_", copied)
     py_setitem(fields, "batch_size_", batch)
     py_setitem(fields, "n_obs_", n_obs)
@@ -381,9 +398,13 @@ def arima_adopt(model: PythonObject, y: PythonObject, reuse: PythonObject, conte
     var fa = Int(py=classical_address(flags))
     _ = flags  # keep the Python object alive through the native call above
     _gather_block(grouped_ll, trial * nb, 1, nb, local, sa, context)
+    _ = stats  # keep the Python object alive through the native call above
     _gather_block(fit_f32, off + 3 * nb * big_n, 1, nb, local, sa + 4 * b, context)
+    _ = stats  # keep the Python object alive through the native call above
     _gather_block(fit_i32, 2 * nb * trial, 1, nb, local, fa, context)
+    _ = flags  # keep the Python object alive through the native call above
     _gather_block(fit_i32, 2 * nb * trial + nb, 1, nb, local, fa + 4 * b, context)
+    _ = flags  # keep the Python object alive through the native call above
     _adopt(model, fields, arr, Bool(py=series[3]), 2, b, n_obs, _no_exog(context), 0, big_n, params, x, x0, stats,
            flags, PythonObject(None), context)
     return model

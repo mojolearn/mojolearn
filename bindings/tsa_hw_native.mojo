@@ -279,11 +279,13 @@ def hw_predict(model: PythonObject, args: PythonObject, context: PythonObject) r
     _ = out  # keep the Python object alive through the native call above
     _ = py_call_typed(_entry(entries, "holtwinters_predict"), classical_address(comps), PythonObject(base),
                       Python.list(n, b, period, start, start + k_in), fields["seasonal"])
+    _ = out  # keep the Python object alive through the native call above
     _ = comps  # keep the Python object alive through the native call above
     if end > n:
         _ = py_call_typed(_entry(entries, "holtwinters_forecast"), classical_address(comps),
                           PythonObject(base + 4 * k_in * b), Python.list(n, b, period, end - n), fields["seasonal"])
         _ = comps  # keep the Python object alive through the native call above
+        _ = out  # keep the Python object alive through the native call above
     return _shaped(fields, out, 0, steps, index, context)
 
 

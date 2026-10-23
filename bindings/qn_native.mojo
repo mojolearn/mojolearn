@@ -87,6 +87,7 @@ def qn_regressor_fit(model: PythonObject, args: PythonObject, context: PythonObj
     _ = x  # keep the Python object alive through the native call above
     _ = info  # keep the Python object alive through the native call above
     _ = w  # keep the Python object alive through the native call above
+    _ = weights  # keep the Python object alive through the native call above
     var coef = classical_typed(Python.tuple(cols), "<f4", context["output_context"])
     var source = F32P(unsafe_from_address=Int(py=classical_address(w)))
     _ = w  # keep the Python object alive through the native call above
@@ -99,6 +100,10 @@ def qn_regressor_fit(model: PythonObject, args: PythonObject, context: PythonObj
     var iterations = classical_typed(Python.tuple(1), "<i8", context["output_context"])
     MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(iterations)))[0] = Int64(_int(n_iter))
     _ = iterations  # keep the Python object alive through the native call above
+    _ = info  # keep the Python object alive through the native call above
+    _ = w  # keep the Python object alive through the native call above
+    _ = target  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     var words = F32P(unsafe_from_address=Int(py=classical_address(info)))
     _ = info  # keep the Python object alive through the native call above
     py_setitem(fields, "input_copied_", PythonObject(not (x is args[0])))

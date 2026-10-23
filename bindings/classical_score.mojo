@@ -107,6 +107,7 @@ def classical_linear_score(model: PythonObject, args: PythonObject, entries: Pyt
                       PythonObject(address + 4 * layout.p), Python.list(rows, cols, fields["intercept_"]))
     _ = coef  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
+    _ = arena  # keep the Python object alive through the native call above
     _ = x^
     _ = coef^
     return _r2_finish(layout^, arena, rows, args[1], context)

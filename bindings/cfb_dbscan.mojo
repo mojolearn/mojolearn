@@ -158,6 +158,9 @@ def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     _ = core  # keep the Python object alive through the native call above
     _ = w^
     py_setitem(fields, "n_iter_", n_iter)
+    _ = core  # keep the Python object alive through the native call above
+    _ = labels  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "labels_", labels)
     py_setitem(fields, "n_features_in_", PythonObject(d))
     py_setitem(fields, "n_samples_fit_", PythonObject(n))
@@ -170,9 +173,21 @@ def _dbscan_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     _ = labels  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     var m = len(parts[0])
+    _ = core  # keep the Python object alive through the native call above
+    _ = labels  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     var indices = _wrap(parts[0], Python.tuple(m), "<i4", context)
+    _ = core  # keep the Python object alive through the native call above
+    _ = labels  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     var components = _wrap(parts[1], Python.tuple(m, d), "<f4", context)
+    _ = core  # keep the Python object alive through the native call above
+    _ = labels  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     var core_labels = _wrap(parts[2], Python.tuple(m), "<i4", context)
+    _ = core  # keep the Python object alive through the native call above
+    _ = labels  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "core_sample_indices_", indices)
     py_setitem(fields, "components_", components)
     py_setitem(fields, "_core_labels", core_labels)

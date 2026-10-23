@@ -168,6 +168,12 @@ def _coo_triples(source: PythonObject, who: String, base: PythonObject, context:
     if wrote != nnz:
         raise Error("RuntimeError: mojolearn " + who + ": nonzero_f64_fill wrote "
                     + String(wrote) + " of " + String(nnz) + " entries")
+        _ = vals  # keep the Python object alive through the native call above
+        _ = cols  # keep the Python object alive through the native call above
+        _ = rows  # keep the Python object alive through the native call above
+    _ = vals  # keep the Python object alive through the native calls above
+    _ = cols  # keep the Python object alive through the native calls above
+    _ = rows  # keep the Python object alive through the native calls above
     return _Coo(rows, cols, vals, n)
 
 
@@ -195,6 +201,12 @@ def _dense_coo(m: PythonObject, who: String, base: PythonObject, context: Python
         if wrote != nnz:
             raise Error("RuntimeError: mojolearn: nonzero_f32_fill wrote " + String(wrote) + " of "
                         + String(nnz) + " entries")
+            _ = data  # keep the Python object alive through the native call above
+            _ = cols  # keep the Python object alive through the native call above
+            _ = rows  # keep the Python object alive through the native call above
+        _ = data  # keep the Python object alive through the native calls above
+        _ = cols  # keep the Python object alive through the native calls above
+        _ = rows  # keep the Python object alive through the native calls above
     return _coo_of_triples(rows, cols, data, Python.tuple(n_r, n_c), who, context)
 
 
@@ -622,7 +634,13 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
             state = _state_arrays(n, k, clusters, context)
             addrs = _addresses(addrs, state)
             _ = addrs  # keep the Python object alive through the native call above
+            _ = embedding  # keep the Python object alive through the native call above
+            _ = labels  # keep the Python object alive through the native call above
+            _ = dense  # keep the Python object alive through the native call above
         n_out = Int(py=family_call(dense_fn, addrs, params))
+        _ = embedding  # keep the Python object alive through the native call above
+        _ = labels  # keep the Python object alive through the native call above
+        _ = dense  # keep the Python object alive through the native call above
         _sc_refusal(n_out, "SpectralClustering")
     elif graph_affinity:
         # the COO route: a sparse precomputed input, or a binding without
@@ -728,7 +746,9 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
         _ = embedding  # keep the Python object alive through the native call above
         if String(py=assign) == "discretize":
             py_setitem(fields, "n_iter_assign_", PythonObject(_int(result[2][0])))
+            _ = embedding  # keep the Python object alive through the native call above
         labels = _xc_array(result[1][0], Python.tuple(n), "<i4", "i", context)
+        _ = embedding  # keep the Python object alive through the native call above
     py_setitem(fields, "labels_", labels)
     if state is not None:
         py_setitem(fields, "_pd_eigenvalues", state[0])

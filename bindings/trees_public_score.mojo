@@ -566,7 +566,9 @@ def trees_accuracy(y_true: PythonObject, prediction: PythonObject, sample_weight
     _ = w_array^
     if weighted and Int(_I32P(unsafe_from_address=base + 4 * out)[0]) != 0:
         raise Error("ZeroDivisionError: float division by zero")
+    _ = arena  # keep the Python object alive through the native calls above
     var fraction = _F64P(unsafe_from_address=base + 4 * (out + 8))[0]
+    _ = arena  # keep the Python object alive through the native call above
     _ = arena^
     return fraction
 

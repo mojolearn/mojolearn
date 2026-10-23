@@ -262,6 +262,7 @@ def mcd_fit(model: PythonObject, args: PythonObject, mut kit: DecompKit, context
         _ = x  # keep the Python object alive through the native call above
         _ = py_call(kit.entries["x_decomp_mcd"], ax, kit.address(loc), kit.address(cov), py_call(store.buffer_info)[0],
                     kit.address(dist), params)
+        _ = x  # keep the Python object alive through the native call above
         kit.wrote_host(loc)
         kit.wrote_host(cov)
         kit.wrote_host(dist)

@@ -82,6 +82,7 @@ def randomized_svd_call(args: PythonObject, context: PythonObject) raises -> Pyt
                     _ = array  # keep the Python object alive through the native call above
                     if found >= 0:
                         raise Error("M: input must be finite; NaN/inf are unsupported")
+                    _ = array  # keep the Python object alive through the native calls above
                     a = direct
                 else:
                     _ = kit.device(a)
@@ -280,6 +281,7 @@ def solve_call(args: PythonObject, context: PythonObject) raises -> PythonObject
                         Python.list(n, kit.ncols(bm)))
             _ = info  # keep the Python object alive through the native call above
             _ = x  # keep the Python object alive through the native call above
+            _ = a  # keep the Python object alive through the native call above
             kit.wrote_host(x)
             var singular = Int(kit.word(info))
             if singular != 0:
@@ -311,6 +313,8 @@ def solve_call(args: PythonObject, context: PythonObject) raises -> PythonObject
             _ = info  # keep the Python object alive through the native call above
             if rc < 0:
                 raise Error("a: input must be finite; NaN/inf are unsupported")
+            _ = info  # keep the Python object alive through the native calls above
+            _ = array  # keep the Python object alive through the native calls above
             var singular = Int(DecompF32(unsafe_from_address=Int(py=info._addr))[0])
             _ = info  # keep the Python object alive through the native call above
             if singular != 0:

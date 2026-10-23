@@ -607,14 +607,18 @@ def _platt(fields: PythonObject, binding: PythonObject, x: PythonObject, codes: 
                 var rows_addr = _addr(rows_held)
                 _ = rows_held  # keep the Python object alive through the native call above
                 var hrows_addr = rows_addr + 4 * nt
+                _ = rows_held  # keep the Python object alive through the native call above
                 var sub: PythonObject
                 if precomputed:
                     sub = _gather(binding, _addr(x), x_rows, x_cols, rows_addr, nt, rows_addr, nt, context)
+                    _ = rows_held  # keep the Python object alive through the native call above
                 else:
                     sub = _gather(binding, _addr(x), x_rows, x_cols, rows_addr, nt, 0, x_cols, context)
+                    _ = rows_held  # keep the Python object alive through the native call above
                 var sub_c = PythonObject(None)
                 if c_rows is not None:
                     sub_c = _gather(binding, _addr(c_rows), n_all, 1, rows_addr, nt, 0, 1, context)
+                    _ = rows_held  # keep the Python object alive through the native call above
                 var cols = Int(py=sub.shape[1])
                 var solved = _solve(fields, binding, _addr(sub), nt, cols, _addr(lab), gamma,
                                     0 if sub_c is None else _addr(sub_c), context)
@@ -623,14 +627,25 @@ def _platt(fields: PythonObject, binding: PythonObject, x: PythonObject, codes: 
                 var q: PythonObject
                 if precomputed:
                     q = _gather(binding, _addr(x), x_rows, x_cols, hrows_addr, h, rows_addr, nt, context)
+                    _ = rows_held  # keep the Python object alive through the native call above
                 else:
                     q = _gather(binding, _addr(x), x_rows, x_cols, hrows_addr, h, 0, x_cols, context)
                 var n_sv = Int(py=solved[0])
+                _ = sub_c  # keep the Python object alive through the native call above
+                _ = lab  # keep the Python object alive through the native call above
                 var dual = svc_prefix(solved[1], n_sv, Python.tuple(PythonObject(1), PythonObject(n_sv)), "<f4", context)
+                _ = sub_c  # keep the Python object alive through the native call above
+                _ = lab  # keep the Python object alive through the native call above
                 var sv = svc_prefix(solved[3], n_sv * cols, Python.tuple(PythonObject(n_sv), PythonObject(cols)), "<f4", context)
+                _ = sub_c  # keep the Python object alive through the native call above
+                _ = lab  # keep the Python object alive through the native call above
                 var support = svc_prefix(solved[2], n_sv, Python.tuple(PythonObject(n_sv)), "<i4", context)
+                _ = sub_c  # keep the Python object alive through the native call above
+                _ = lab  # keep the Python object alive through the native call above
                 _machine(fields, binding, q, dual, sv, n_sv, svc_round_f32(svc_read_f64(solved[4], 0)), 0.0, 1.0, False,
                          support, _addr(dec_perm) + 4 * begin, context)
+                _ = sub_c  # keep the Python object alive through the native call above
+                _ = lab  # keep the Python object alive through the native call above
                 _ = dec_perm  # keep the Python object alive through the native call above
                 _ = sub^
                 _ = sub_c^
@@ -714,22 +729,28 @@ def _fit_ovo(fields: PythonObject, binding: PythonObject, x: PythonObject, class
                                 0 if sub_c is None else _addr(sub_c), context)
             _ = sub_c  # keep the Python object alive through the native call above
             var info = solved[4]
+            _ = sub_c  # keep the Python object alive through the native call above
             if svc_round_f32(svc_read_f64(info, 3)) != 0.0 or svc_round_f32(svc_read_f64(info, 4)) != 1.0:
                 raise Error("RuntimeError: mojolearn SVC: the solver's label pair for classes ("
                             + family_repr(classes[i]) + ", " + family_repr(classes[j]) + ") is not (0.0, 1.0); "
                             + "the class mapping cannot be trusted")
             var n_sv = Int(py=solved[0])
+            _ = sub_c  # keep the Python object alive through the native call above
             var sub_cols = Int(py=sub.shape[1])
             var sv_rows = svc_prefix(solved[3], n_sv * sub_cols, Python.tuple(PythonObject(n_sv), PythonObject(sub_cols)),
                                      "<f4", context)
+            _ = sub_c  # keep the Python object alive through the native call above
             # the pair's support in X's row numbers, gathered in the binding
             var pair_support = _gather_i32(binding, _addr(idx_a), m, _addr(solved[2]), n_sv, context)
+            _ = sub_c  # keep the Python object alive through the native call above
             _ = idx_a  # keep the Python object alive through the native call above
             if precomputed:
                 # the support rows of the WHOLE kernel matrix
                 sv_rows = _gather(binding, _addr(x), n_rows, n_cols, _addr(pair_support), n_sv, 0, n_cols, context)
                 _ = pair_support  # keep the Python object alive through the native call above
+                _ = idx_a  # keep the Python object alive through the native call above
             var dual = svc_prefix(solved[1], n_sv, Python.tuple(PythonObject(1), PythonObject(n_sv)), "<f4", context)
+            _ = sub_c  # keep the Python object alive through the native call above
             var bias = svc_round_f32(svc_read_f64(info, 0))
             var iters = Int(svc_read_f64(info, 2))
             var pair = Python.dict()
@@ -738,6 +759,7 @@ def _fit_ovo(fields: PythonObject, binding: PythonObject, x: PythonObject, class
             py_setitem(pair, PythonObject("dual"), dual)
             py_setitem(pair, PythonObject("sv"), sv_rows)
             py_setitem(pair, PythonObject("support"), pair_support)
+            _ = idx_a  # keep the Python object alive through the native call above
             py_setitem(pair, PythonObject("b"), PythonObject(bias))
             py_setitem(pair, PythonObject("n_iter"), PythonObject(iters))
             _ = py_call(pairs.append, pair)
@@ -746,6 +768,7 @@ def _fit_ovo(fields: PythonObject, binding: PythonObject, x: PythonObject, class
             _ = py_call(meta.append, PythonObject(n_sv))
             _ = py_call(sup_addrs.append, classical_address(pair_support) if n_sv > 0 else PythonObject(0))
             _ = pair_support  # keep the Python object alive through the native call above
+            _ = idx_a  # keep the Python object alive through the native call above
             _ = py_call(dual_addrs.append, classical_address(dual) if n_sv > 0 else PythonObject(0))
             _ = dual  # keep the Python object alive through the native call above
             total += n_sv
@@ -757,6 +780,7 @@ def _fit_ovo(fields: PythonObject, binding: PythonObject, x: PythonObject, class
             _ = sub^
             _ = sel^
             _ = solved^
+            _ = sub_c  # keep the Python object alive through the native call above
     # `_set_ovo_native`: the support_ order, dual_coef_ cells and n_support_
     var cap = min(n_rows, total)
     var support = family_array(Python.tuple(PythonObject(max(1, cap))), "<i4", context)
@@ -773,18 +797,28 @@ def _fit_ovo(fields: PythonObject, binding: PythonObject, x: PythonObject, class
     py_setitem(fields, PythonObject("_pairs"), pairs)
     if n_sv > 0:
         var sup = svc_prefix(support, n_sv, Python.tuple(PythonObject(n_sv)), "<i4", context)
+        _ = dual_all  # keep the Python object alive through the native call above
+        _ = n_support  # keep the Python object alive through the native call above
         py_setitem(fields, PythonObject("support_"), sup)
         py_setitem(fields, PythonObject("support_vectors_"),
                    _gather(binding, _addr(x), n_rows, n_cols, _addr(sup), n_sv, 0, n_cols, context))
         _ = sup  # keep the Python object alive through the native call above
+        _ = dual_all  # keep the Python object alive through the native call above
+        _ = n_support  # keep the Python object alive through the native call above
+        _ = support  # keep the Python object alive through the native call above
         py_setitem(fields, PythonObject("dual_coef_"),
                    svc_prefix(dual_all, (k - 1) * n_sv, Python.tuple(PythonObject(k - 1), PythonObject(n_sv)), "<f4", context))
+        _ = n_support  # keep the Python object alive through the native call above
+        _ = support  # keep the Python object alive through the native call above
     else:
         py_setitem(fields, PythonObject("support_"), family_array(Python.tuple(PythonObject(0)), "<i4", context))
         py_setitem(fields, PythonObject("support_vectors_"),
                    family_array(Python.tuple(PythonObject(0), PythonObject(n_cols)), "<f4", context))
         py_setitem(fields, PythonObject("dual_coef_"),
                    family_array(Python.tuple(PythonObject(k - 1), PythonObject(0)), "<f4", context))
+    _ = dual_all  # keep the Python object alive through the native calls above
+    _ = n_support  # keep the Python object alive through the native calls above
+    _ = support  # keep the Python object alive through the native calls above
     py_setitem(fields, PythonObject("intercept_"), intercept)
     py_setitem(fields, PythonObject("n_support_"), n_support)
     py_setitem(fields, PythonObject("n_iter_"), n_iter)
@@ -831,6 +865,7 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
                         0 if c_rows is None else _addr(c_rows), context)
     _ = labels  # keep the Python object alive through the native call above
     var info = solved[4]
+    _ = labels  # keep the Python object alive through the native call above
     var label0 = svc_round_f32(svc_read_f64(info, 3))
     var label1 = svc_round_f32(svc_read_f64(info, 4))
     # THE LABEL PAIR IS CHECKED, NOT ASSUMED (the solver's own host sort).
@@ -844,6 +879,7 @@ def _svc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     py_setitem(fields, PythonObject("classes_"), classes)
     py_setitem(fields, PythonObject("n_features_in_"), PythonObject(n_cols))
     _set_binary(fields, solved, n_cols, context)
+    _ = labels  # keep the Python object alive through the native call above
     py_setitem(fields, PythonObject("_gamma"), PythonObject(gamma))
     py_setitem(fields, PythonObject("_label0"), PythonObject(label0))
     py_setitem(fields, PythonObject("_label1"), PythonObject(label1))
@@ -909,6 +945,7 @@ def _pair_decisions(fields: PythonObject, binding: PythonObject, source: PythonO
         var dual = p["dual"]
         _machine(fields, binding, q, dual, p["sv"], Int(py=dual.shape[1]), svc_float(p["b"]), 0.0, 1.0, False,
                  p["support"], base + 4 * n_rows * pno, context)
+        _ = dec  # keep the Python object alive through the native call above
     _ = q^
     return dec
 
@@ -1090,6 +1127,7 @@ def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         _ = py_call(params.append, PythonObject(0) if c_rows is None else classical_address(c_rows))
         _ = c_rows  # keep the Python object alive through the native call above
         _kernel_tail(fields, params)
+        _ = c_rows  # keep the Python object alive through the native call above
     var n_support = svc_int(family_call(_entry(binding, "svr_fit", context), classical_address(x), classical_address(targets),
                                         classical_address(dual), classical_address(support), classical_address(sv),
                                         classical_address(info), params))
@@ -1099,15 +1137,37 @@ def _svr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     _ = support  # keep the Python object alive through the native call above
     _ = dual  # keep the Python object alive through the native call above
     _ = info  # keep the Python object alive through the native call above
+    _ = c_rows  # keep the Python object alive through the native call above
     py_setitem(fields, PythonObject("n_features_in_"), PythonObject(n_cols))
     py_setitem(fields, PythonObject("n_support_"), PythonObject(n_support))
+    _ = info  # keep the Python object alive through the native call above
+    _ = sv  # keep the Python object alive through the native call above
+    _ = support  # keep the Python object alive through the native call above
+    _ = dual  # keep the Python object alive through the native call above
+    _ = targets  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, PythonObject("n_iter_"), PythonObject(Int(svc_read_f64(info, 2))))
     py_setitem(fields, PythonObject("intercept_"), svc_scalar_array(svc_round_f32(svc_read_f64(info, 0)), "<f4", context))
     py_setitem(fields, PythonObject("support_"), svc_prefix(support, n_support, Python.tuple(PythonObject(n_support)), "<i4", context))
+    _ = info  # keep the Python object alive through the native call above
+    _ = sv  # keep the Python object alive through the native call above
+    _ = dual  # keep the Python object alive through the native call above
+    _ = targets  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, PythonObject("support_vectors_"),
                svc_prefix(sv, n_support * n_cols, Python.tuple(PythonObject(n_support), PythonObject(n_cols)), "<f4", context))
+    _ = info  # keep the Python object alive through the native call above
+    _ = support  # keep the Python object alive through the native call above
+    _ = dual  # keep the Python object alive through the native call above
+    _ = targets  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, PythonObject("dual_coef_"),
                svc_prefix(dual, n_support, Python.tuple(PythonObject(1), PythonObject(n_support)), "<f4", context))
+    _ = info  # keep the Python object alive through the native call above
+    _ = sv  # keep the Python object alive through the native call above
+    _ = support  # keep the Python object alive through the native call above
+    _ = targets  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, PythonObject("_gamma"), PythonObject(gamma))
     _ = x^
     _ = targets^

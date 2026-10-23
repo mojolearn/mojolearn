@@ -75,6 +75,9 @@ def rp_fit(model: PythonObject, source: PythonObject, sparse: Bool, context: Pyt
     _ = components  # keep the Python object alive through the native call above
     if bad >= 0:
         raise Error("X: input must be finite; NaN/inf are unsupported")
+    _ = inverse_m  # keep the Python object alive through the native calls above
+    _ = components  # keep the Python object alive through the native calls above
+    _ = x  # keep the Python object alive through the native calls above
     if sparse:
         py_setitem(fields, "density_", PythonObject(density))
     py_setitem(fields, "n_components_", PythonObject(kc))
@@ -120,6 +123,7 @@ def rp_project(model: PythonObject, fields: PythonObject, source: PythonObject, 
     _ = matrix^
     if flagged != 0:
         raise Error("X: input must be finite; NaN/inf are unsupported")
+    _ = out  # keep the Python object alive through the native calls above
     return out
 
 

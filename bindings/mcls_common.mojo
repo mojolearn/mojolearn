@@ -429,7 +429,9 @@ def mc_encode_store(store: PythonObject, count: Int, context: PythonObject) rais
     _ = codes  # keep the Python object alive through the native call above
     if k < 0:
         raise Error("RuntimeError: prepare_targets refused integer labels")
+    _ = codes  # keep the Python object alive through the native calls above
     var head = family_call(py_attr(classes, "__getitem__"), family_call(b.slice, PythonObject(0), PythonObject(k)))
+    _ = codes  # keep the Python object alive through the native call above
     return Python.tuple(family_call(head.tolist), codes)
 
 

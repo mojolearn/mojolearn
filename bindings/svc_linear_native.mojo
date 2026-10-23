@@ -365,6 +365,7 @@ def _linear_svc_fit(model: PythonObject, args: PythonObject, context: PythonObje
         _ = x  # keep the Python object alive through the native call above
         _ = info  # keep the Python object alive through the native call above
         _ = w_all  # keep the Python object alive through the native call above
+        _ = sw  # keep the Python object alive through the native call above
         var ip = FAMILY_F32P(unsafe_from_address=Int(py=classical_address(info)))
         _ = info  # keep the Python object alive through the native call above
         for k in range(n_fits):  # driver-loop: over the one-vs-rest fits (one result row each)

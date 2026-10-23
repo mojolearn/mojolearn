@@ -61,8 +61,10 @@ def _cluster_codes(labels_true: PythonObject, labels_pred: PythonObject,
     var base = Int(py=classical_address(both))
     _ = both  # keep the Python object alive through the native call above
     mcls_copy_words(Int(py=classical_address(yt)), base, nt)
+    _ = both  # keep the Python object alive through the native call above
     _ = yt  # keep the Python object alive through the native call above
     mcls_copy_words(Int(py=classical_address(yp)), base + 4 * nt, npred)
+    _ = both  # keep the Python object alive through the native call above
     _ = yp  # keep the Python object alive through the native call above
     var b = mc_b()
     var total = nt + npred
@@ -76,6 +78,8 @@ def _cluster_codes(labels_true: PythonObject, labels_pred: PythonObject,
     _ = codes  # keep the Python object alive through the native call above
     if k < 0:
         raise Error("RuntimeError: prepare_targets refused integer labels")
+    _ = codes  # keep the Python object alive through the native calls above
+    _ = both  # keep the Python object alive through the native calls above
     _ = both^
     return Python.tuple(codes, PythonObject(nt), PythonObject(k - 1))
 
@@ -89,7 +93,9 @@ def _cluster_call(binding: PythonObject, entry: String, prepared: PythonObject, 
     var params = _params(n, 0, Int(py=prepared[2]))
     for i in range(mc_len(extra)):  # small-loop(extra: the trailing scalars of one entry call): at most one beta
         _ = py_call(params.append, extra[i])
-    return _as_float(family_call(mc_entry(binding, entry), PythonObject(base), PythonObject(base + 4 * n), params))
+    var _keep_ret_codes = _as_float(family_call(mc_entry(binding, entry), PythonObject(base), PythonObject(base + 4 * n), params))
+    _ = codes  # keep the Python object alive through the native call above
+    return _keep_ret_codes^
 
 
 def _raw_pair_call(binding: PythonObject, entry: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -182,6 +188,8 @@ def _silhouette(args: PythonObject, caller: String, context: PythonObject) raise
     _ = mapped  # keep the Python object alive through the native call above
     if k < 0:
         raise Error("RuntimeError: prepare_targets refused integer labels")
+    _ = mapped  # keep the Python object alive through the native calls above
+    _ = lab  # keep the Python object alive through the native calls above
     var chunk = 40000
     if args[4] is not None:
         chunk = mc_int(args[4])
@@ -190,9 +198,10 @@ def _silhouette(args: PythonObject, caller: String, context: PythonObject) raise
     var scores = family_array(Python.tuple(rows), "<f4", context)
     var mean = _as_float(family_call(mc_entry(args[0], "silhouette"), classical_address(x), classical_address(mapped),
                                      classical_address(scores), _params(rows, cols, k, chunk)))
-    _ = mapped  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     _ = scores  # keep the Python object alive through the native call above
+    _ = mapped  # keep the Python object alive through the native call above
+    _ = lab  # keep the Python object alive through the native call above
     _ = x^
     _ = lab^
     _ = mapped^

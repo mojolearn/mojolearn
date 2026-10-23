@@ -613,6 +613,7 @@ def _run_predict(model: PythonObject, source: PythonObject, codes: Bool, context
         while s < n:  # driver-loop: over the device prediction batches (cap-sized)
             var m = min(cap, n - s)
             _ = py_call(_e(entries, "x_cnn_res_upload"), a["x"], base + 4 * s * row, m * row)
+            _ = x  # keep the Python object alive through the native call above
             _ = _forward_r(fields, entries, rw, a, m)
             _ = py_call(_e(entries, "x_cnn_softmax_xent_r"), a["logits"], a["y"], a["glog"], a["proba"], Python.list(m, k))
             if codes:

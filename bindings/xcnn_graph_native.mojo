@@ -312,6 +312,12 @@ def _gcn_graph(fields: PythonObject, entries: PythonObject, n: Int, edge_index: 
         _ = d32  # keep the Python object alive through the native call above
         _ = s32  # keep the Python object alive through the native call above
         var cut = py_call(xcnn_builtins().slice, PythonObject(None), k + n)
+        _ = wo  # keep the Python object alive through the native call above
+        _ = dso  # keep the Python object alive through the native call above
+        _ = so  # keep the Python object alive through the native call above
+        _ = w32  # keep the Python object alive through the native call above
+        _ = d32  # keep the Python object alive through the native call above
+        _ = s32  # keep the Python object alive through the native call above
         src = so.__getitem__(cut)
         dst = dso.__getitem__(cut)
         w = wo.__getitem__(cut)

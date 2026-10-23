@@ -162,6 +162,12 @@ def sequential_fit(model: PythonObject, args: PythonObject, context: PythonObjec
         val_info = sequential_array(Python.tuple(2), context["int64"], context)
         _ = py_call(addresses.extend, Python.tuple(vxd, sequential_descriptor(vy, "validation y"), classes,
                     sequential_address(val_curve), sequential_address(val_info)))
+        _ = curve  # keep the Python object alive through the native call above
+        _ = previous  # keep the Python object alive through the native call above
+        _ = state  # keep the Python object alive through the native call above
+        _ = variance  # keep the Python object alive through the native call above
+        _ = moment  # keep the Python object alive through the native call above
+        _ = params  # keep the Python object alive through the native call above
         _ = val_info  # keep the Python object alive through the native call above
         _ = val_curve  # keep the Python object alive through the native call above
         _ = py_call(ip.append, 1 if restore_best else 0)
@@ -170,11 +176,24 @@ def sequential_fit(model: PythonObject, args: PythonObject, context: PythonObjec
         var labels = Python.list(yd, sequential_address(classes_full), n_out, target)
         _ = classes_full  # keep the Python object alive through the native call above
         var done = py_call_typed(entries["model_fit_labels"], addresses, program, ip, fp, labels)
+        _ = curve  # keep the Python object alive through the native call above
+        _ = previous  # keep the Python object alive through the native call above
+        _ = state  # keep the Python object alive through the native call above
+        _ = variance  # keep the Python object alive through the native call above
+        _ = moment  # keep the Python object alive through the native call above
+        _ = params  # keep the Python object alive through the native call above
+        _ = classes_full  # keep the Python object alive through the native call above
         var count = Int(py=done[0])
         n_iter = Int(py=done[1])
         py_setitem(fields, "classes_", py_call(context["ndarray"], Python.tuple(count), dtype=classes_full.dtype, buffer=classes_full))
     else:
         n_iter = Int(py=py_call_typed(entries["model_fit"], addresses, program, ip, fp))
+        _ = curve  # keep the Python object alive through the native call above
+        _ = previous  # keep the Python object alive through the native call above
+        _ = state  # keep the Python object alive through the native call above
+        _ = variance  # keep the Python object alive through the native call above
+        _ = moment  # keep the Python object alive through the native call above
+        _ = params  # keep the Python object alive through the native call above
     # Raw addresses never own data. Keep every source alive through the
     # synchronous native model call, including temporary sequence buffers.
     _ = x^

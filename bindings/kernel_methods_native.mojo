@@ -169,9 +169,18 @@ def _krr_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     if weights is not None:
         _ = py_call(addresses.append, classical_address(weights))
         _ = weights  # keep the Python object alive through the native call above
+        _ = scalars  # keep the Python object alive through the native call above
+        _ = dual  # keep the Python object alive through the native call above
+        _ = y  # keep the Python object alive through the native call above
+        _ = x  # keep the Python object alive through the native call above
     var params = Python.list(PythonObject(n), PythonObject(d), PythonObject(t), PythonObject(kernel),
                              PythonObject(degree), gamma, coef0, alpha)
     var info = family_call(fit, addresses, params)
+    _ = weights  # keep the Python object alive through the native call above
+    _ = scalars  # keep the Python object alive through the native call above
+    _ = dual  # keep the Python object alive through the native call above
+    _ = y  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     var kept = family_owned(x, context)
     _ = y^
     _ = weights^
@@ -237,6 +246,7 @@ def _krr_predict(model: PythonObject, args: PythonObject, context: PythonObject)
                                 classical_address(out))
     _ = out  # keep the Python object alive through the native call above
     _ = family_call(predict, addresses, params)
+    _ = out  # keep the Python object alive through the native call above
     _ = x_fit^
     _ = dual^
     _ = xq^
@@ -311,7 +321,22 @@ def _nys_fit(model: PythonObject, args: PythonObject, context: PythonObject,
         out = family_array(Python.tuple(n, q), "<f4", context)
         _ = py_call(addresses.append, classical_address(out))
         _ = out  # keep the Python object alive through the native call above
+        _ = scalars  # keep the Python object alive through the native call above
+        _ = eigenvectors  # keep the Python object alive through the native call above
+        _ = eigenvalues  # keep the Python object alive through the native call above
+        _ = normalization  # keep the Python object alive through the native call above
+        _ = indices  # keep the Python object alive through the native call above
+        _ = components  # keep the Python object alive through the native call above
+        _ = x  # keep the Python object alive through the native call above
     var sweeps = family_call(fit, addresses, params)
+    _ = out  # keep the Python object alive through the native call above
+    _ = scalars  # keep the Python object alive through the native call above
+    _ = eigenvectors  # keep the Python object alive through the native call above
+    _ = eigenvalues  # keep the Python object alive through the native call above
+    _ = normalization  # keep the Python object alive through the native call above
+    _ = indices  # keep the Python object alive through the native call above
+    _ = components  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     _ = x^
     py_setitem(fields, "n_features_in_", PythonObject(d))
     py_setitem(fields, "components_", components)
@@ -364,6 +389,13 @@ def _nys_transform(model: PythonObject, args: PythonObject, context: PythonObjec
     var params = Python.list(PythonObject(q), PythonObject(d), kp[0], kp[1], kp[2], kp[3], kp[4],
                              family_field(fields, "sweeps_"), PythonObject(m))
     _ = family_call(transform, addresses, params)
+    _ = eigenvectors  # keep the Python object alive through the native call above
+    _ = eigenvalues  # keep the Python object alive through the native call above
+    _ = normalization  # keep the Python object alive through the native call above
+    _ = indices  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
+    _ = components  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     _ = components^
     _ = normalization^
     _ = eigenvalues^

@@ -430,6 +430,7 @@ def labels_f32_view(var view: LabelsView, order: String, context: PythonObject) 
                 c = rows
             var fn_obj = labels_helper(context, "cast_colmajor_f64_to_f32" if view.typestr == "<f8" else "transpose_f32")
             _ = py_call_typed(fn_obj, PythonObject(view.addr), PythonObject(dst), PythonObject(r), PythonObject(c))
+            _ = out  # keep the Python object alive through the native call above
             _ = view  # keep the Python object alive through the native call above
             return LabelsMatrix(out, dst, rows, cols, not want_f)
         if view.typestr == "<f8":
@@ -437,12 +438,14 @@ def labels_f32_view(var view: LabelsView, order: String, context: PythonObject) 
             # requested one here (or the two coincide).
             _ = py_call_typed(labels_helper(context, "cast_f64_to_f32"), PythonObject(view.addr), PythonObject(dst),
                               PythonObject(view.size()))
+            _ = out  # keep the Python object alive through the native call above
             _ = view  # keep the Python object alive through the native call above
             return LabelsMatrix(out, dst, rows, cols, not want_f)
     # `astype('<f4')` keeps the source's storage order; `_as_order` then
     # transposes when the requested order differs (the float32 transpose).
     if not two or view.both_orders() or contiguous_f == want_f:
         labels_cast(view.addr, view.typestr, dst, "<f4", view.size(), context)
+        _ = out  # keep the Python object alive through the native call above
         _ = view  # keep the Python object alive through the native call above
         return LabelsMatrix(out, dst, rows, cols, not want_f)
     var staged = labels_vector(view.size(), "<f4", context)
@@ -454,6 +457,7 @@ def labels_f32_view(var view: LabelsView, order: String, context: PythonObject) 
     _ = py_call_typed(labels_helper(context, "transpose_f32"), PythonObject(labels_address(staged)), PythonObject(dst),
                       PythonObject(r), PythonObject(c))
     _ = staged  # keep the Python object alive through the native call above
+    _ = out  # keep the Python object alive through the native call above
     _ = staged^
     return LabelsMatrix(out, dst, rows, cols, not want_f)
 
@@ -609,7 +613,9 @@ def _native_labels(view: LabelsView, bool_source: Bool, context: PythonObject) r
             else:
                 _ = py_call(classes.append, PythonObject(v))
                 _ = classes_store  # keep the Python object alive through the native call above
-    return ClassicalLabels(classes, codes, n)
+    var _keep_ret_classes_store = ClassicalLabels(classes, codes, n)
+    _ = classes_store  # keep the Python object alive through the native call above
+    return _keep_ret_classes_store^
 
 
 def _label_list(y: PythonObject, context: PythonObject) raises -> PythonObject:
@@ -1501,7 +1507,9 @@ def labels_accuracy(y_true: PythonObject, prediction: PythonObject, sample_weigh
     _ = w_array^
     if weighted and Int(_I32P(unsafe_from_address=base + 4 * out)[0]) != 0:
         raise Error("ZeroDivisionError: float division by zero")
+    _ = arena  # keep the Python object alive through the native calls above
     var fraction = _F64P(unsafe_from_address=base + 4 * (out + 8))[0]
+    _ = arena  # keep the Python object alive through the native call above
     _ = arena^
     return fraction
 

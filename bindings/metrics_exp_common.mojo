@@ -490,11 +490,14 @@ def _mx_buffer_labels(values: PythonObject, name: String, context: PythonObject)
     var codes = family_array(Python.tuple(PythonObject(n)), "<i4", context)
     var k = host_unique_inverse_cast(src, lk, Int(py=py_call(raw.buffer_info)[0]),
                                      Int(py=classical_address(codes)))
+    _ = source  # keep the Python object alive through the native call above
     _ = codes  # keep the Python object alive through the native call above
     _ = source^
     if k < 0:
         return PythonObject(None)
+    _ = codes  # keep the Python object alive through the native calls above
     var classes = mx_list(py_call(raw.tolist)[py_call(b.slice, PythonObject(0), PythonObject(k))])
+    _ = codes  # keep the Python object alive through the native call above
     return Python.tuple(classes, codes)
 
 
@@ -539,7 +542,9 @@ def _mx_gather(lab: MxLab, table: PythonObject, strict: Bool, context: PythonObj
     _ = out  # keep the Python object alive through the native call above
     if strict and first >= 0:
         var code = Int(FAMILY_I32P(unsafe_from_address=Int(py=classical_address(lab.codes)))[first])
+        _ = out  # keep the Python object alive through the native call above
         mx_raise_obj(mx_b().KeyError, lab.classes[code])
+    _ = out  # keep the Python object alive through the native calls above
     return out
 
 

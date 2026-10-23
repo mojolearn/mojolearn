@@ -86,6 +86,8 @@ def _run(model: PythonObject, fields: PythonObject, x: PythonObject, nc: Int, in
     _ = h  # keep the Python object alive through the native call above
     var floats = Python.list(beta, decomp_float(fields["tol"]), regs[0], regs[1], regs[2], regs[3])
     var got = py_call_typed(entries["x_decomp_nmf_fit"], params, floats)
+    _ = h  # keep the Python object alive through the native call above
+    _ = w  # keep the Python object alive through the native call above
     return Python.tuple(w, h, got[0], got[1])
 
 

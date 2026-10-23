@@ -549,21 +549,39 @@ def _pr_curve(args: PythonObject, context: PythonObject) raises -> PythonObject:
     _ = scores^
     if not (1 <= size and size <= n):
         raise Error("RuntimeError: precision_recall_curve returned an invalid threshold count")
+    _ = thresholds  # keep the Python object alive through the native calls above
+    _ = recall  # keep the Python object alive through the native calls above
+    _ = precision  # keep the Python object alive through the native calls above
     if not mc_in(positive, classes):
         mc_warn("No positive class found in y_true; recall is set to one for all thresholds.", mc_b().UserWarning)
     # `precision[:size + 1].copy()`, `recall[:size + 1].copy()`, `thresholds[:size].copy()`
     var p_out = family_array(Python.tuple(size + 1), "<f4", context)
+    _ = thresholds  # keep the Python object alive through the native call above
+    _ = recall  # keep the Python object alive through the native call above
+    _ = precision  # keep the Python object alive through the native call above
     var r_out = family_array(Python.tuple(size + 1), "<f4", context)
+    _ = thresholds  # keep the Python object alive through the native call above
+    _ = recall  # keep the Python object alive through the native call above
+    _ = precision  # keep the Python object alive through the native call above
     var t_out = family_array(Python.tuple(size), "<f4", context)
+    _ = thresholds  # keep the Python object alive through the native call above
+    _ = recall  # keep the Python object alive through the native call above
+    _ = precision  # keep the Python object alive through the native call above
     mcls_copy_words(Int(py=classical_address(precision)), Int(py=classical_address(p_out)), size + 1)
     _ = p_out  # keep the Python object alive through the native call above
+    _ = thresholds  # keep the Python object alive through the native call above
+    _ = recall  # keep the Python object alive through the native call above
     _ = precision  # keep the Python object alive through the native call above
     mcls_copy_words(Int(py=classical_address(recall)), Int(py=classical_address(r_out)), size + 1)
     _ = r_out  # keep the Python object alive through the native call above
+    _ = thresholds  # keep the Python object alive through the native call above
     _ = recall  # keep the Python object alive through the native call above
+    _ = precision  # keep the Python object alive through the native call above
     mcls_copy_words(Int(py=classical_address(thresholds)), Int(py=classical_address(t_out)), size)
     _ = t_out  # keep the Python object alive through the native call above
     _ = thresholds  # keep the Python object alive through the native call above
+    _ = recall  # keep the Python object alive through the native call above
+    _ = precision  # keep the Python object alive through the native call above
     _ = precision^
     _ = recall^
     _ = thresholds^

@@ -201,6 +201,7 @@ def _lin_eigh(args: PythonObject, context: PythonObject) raises -> PythonObject:
         var held = kit.of_buffer(a.addr, rows, rows)
         _ = a  # keep the Python object alive through the native call above
         var w = kit.eigh(held, 1 if lower else 2, v)
+        _ = a  # keep the Python object alive through the native call above
         var result = Python.tuple(kit.out_vector(w, rows), kit.out(v))
         _ = a^
         return result
@@ -234,7 +235,9 @@ def _lin_qr_q(a: LinBuf, mode: String, context: PythonObject) raises -> PythonOb
                     _lin_tsqr_release(kit, context)
             var q = _lin_tsqr_q(kit, signs.addr, rows, cols, cols, context)
             _ = signs  # keep the Python object alive through the native call above
-            return _lin_named("QRResult", Python.tuple(q.keep, r.keep), context)
+            var _keep_ret_signs = _lin_named("QRResult", Python.tuple(q.keep, r.keep), context)
+            _ = signs  # keep the Python object alive through the native call above
+            return _keep_ret_signs^
         var tau = 0
         var held = kit.of_buffer(a.addr, rows, cols)
         var h = kit.geqrf(held, tau)
@@ -285,6 +288,7 @@ def _lin_qr(args: PythonObject, context: PythonObject) raises -> PythonObject:
             var held = kit.of_buffer(a.addr, rows, cols)
             _ = a  # keep the Python object alive through the native call above
             var h = kit.geqrf(held, tau)
+            _ = a  # keep the Python object alive through the native call above
             var wide = _lin_triu(kit, h, rows, context)
             _ = a^
             return wide
@@ -330,6 +334,7 @@ def _lin_svd(args: PythonObject, context: PythonObject) raises -> PythonObject:
                 var r_held = kit.of_buffer(r.addr, cols, cols)
                 _ = r  # keep the Python object alive through the native call above
                 var ur = _lin_svd_tall(kit, r_held, False, context, s, vt)
+                _ = r  # keep the Python object alive through the native call above
                 c_store = kit.out(ur)
                 done = True
             finally:
@@ -338,6 +343,7 @@ def _lin_svd(args: PythonObject, context: PythonObject) raises -> PythonObject:
             var u = _lin_tsqr_q(kit, Int(py=classical_address(c_store)), rows, cols, cols, context)
             _ = c_store  # keep the Python object alive through the native call above
             var result = _lin_named("SVDResult", Python.tuple(u.keep, kit.out_vector(s, cols), kit.out(vt)), context)
+            _ = c_store  # keep the Python object alive through the native call above
             _ = a^
             return result
         var m = kit.of_buffer(a.addr, rows, cols)

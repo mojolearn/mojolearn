@@ -86,15 +86,30 @@ def fa_fit(model: PythonObject, source: PythonObject, context: PythonObject) rai
     if it == 0:
         # `_fit_store` with no fitted W: the shell's attribute read failed
         raise Error("AttributeError: 'NoneType' object has no attribute '" + (String("T") if code != 0 else String("out")) + "'")
+    _ = mean  # keep the Python object alive through the native calls above
+    _ = psi  # keep the Python object alive through the native calls above
+    _ = components  # keep the Python object alive through the native calls above
+    _ = psi0  # keep the Python object alive through the native calls above
+    _ = x  # keep the Python object alive through the native calls above
     var loglike = Python.list()
     for k in range(it):  # driver-loop: over the EM iterations' log-likelihoods
         _ = py_call(loglike.append, PythonObject(ll[k]))
+    _ = mean  # keep the Python object alive through the native calls above
+    _ = psi  # keep the Python object alive through the native calls above
+    _ = components  # keep the Python object alive through the native calls above
+    _ = psi0  # keep the Python object alive through the native calls above
+    _ = x  # keep the Python object alive through the native calls above
     _ = ll^
     py_setitem(fields, "components_", components)
     py_setitem(fields, "noise_variance_", psi)
     py_setitem(fields, "mean_", mean)
     py_setitem(fields, "loglike_", loglike)
     py_setitem(fields, "n_iter_", PythonObject(it))
+    _ = mean  # keep the Python object alive through the native call above
+    _ = psi  # keep the Python object alive through the native call above
+    _ = components  # keep the Python object alive through the native call above
+    _ = psi0  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "n_features_in_", PythonObject(d))
     _ = x^
     _ = psi0^
@@ -133,13 +148,15 @@ def fa_query(model: PythonObject, source: PythonObject, op: Int, context: Python
         classical_address(mean), classical_address(out) if out is not None else spare))
     _ = x  # keep the Python object alive through the native call above
     _ = psi  # keep the Python object alive through the native call above
-    _ = w  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
     _ = mean  # keep the Python object alive through the native call above
+    _ = w  # keep the Python object alive through the native call above
     _ = w^
     _ = psi^
     _ = mean^
     _ = x^
     if op == _SCORE:
-        return PythonObject(Float64(py=value))
+        var _keep_ret_out = PythonObject(Float64(py=value))
+        _ = out  # keep the Python object alive through the native call above
+        return _keep_ret_out^
     return out

@@ -362,6 +362,7 @@ def _xl_run(entries: PythonObject, algo: Int, x_addr: Int, x_size: Int, n: Int, 
                                   PythonObject(n_out), PythonObject(max(n_fw, 1)), PythonObject(max(n_iw, 1)),
                                   PythonObject(len(ip)), PythonObject(len(fp))),
                       ip, fp, PythonObject(labels_address(out)))
+    _ = zero  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
     _ = zero^
     return out
@@ -567,9 +568,13 @@ def _xl_sgd(model: PythonObject, fields: PythonObject, entries: PythonObject, x:
     if _xl_word(out, n_out - 1) != 0:
         raise Error("Floating-point under-/overflow occurred. Scaling input data with "
                     + "StandardScaler or MinMaxScaler might help.")
+    _ = yy  # keep the Python object alive through the native calls above
     var coef = _xl_slice(out, 0, problems * d, Python.tuple(problems, d), context)
+    _ = yy  # keep the Python object alive through the native call above
     var intercept = _xl_slice(out, problems * d, problems, Python.tuple(problems), context)
+    _ = yy  # keep the Python object alive through the native call above
     var n_iter = _xl_count(out, n_out - 2)
+    _ = yy  # keep the Python object alive through the native call above
     py_setitem(fields, "n_iter_", PythonObject(n_iter))
     py_setitem(fields, "t_", PythonObject(Float64(n_iter * n + 1)))
     py_setitem(fields, "n_features_in_", PythonObject(d))
@@ -819,8 +824,14 @@ def xl_fit_glm(model: PythonObject, args: PythonObject, context: PythonObject) r
         var loss_name = _class_attr(model, "_loss_name")
         raise Error("Some value(s) of y are out of the valid range of the loss '"
                     + (_str(loss_name) if _truth(loss_name) else String("HalfTweedieLoss")) + "'.")
+    _ = yy  # keep the Python object alive through the native calls above
+    _ = x  # keep the Python object alive through the native calls above
     _xl_set_linear(fields, out, d, context)
+    _ = yy  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "n_iter_", PythonObject(_xl_count(out, d + 1)))
+    _ = yy  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "n_features_in_", PythonObject(d))
     py_setitem(fields, "_link", PythonObject(LINK_EXP if link == 1 else LINK_IDENTITY))
     _ = x^
@@ -854,9 +865,15 @@ def xl_fit_huber(model: PythonObject, args: PythonObject, context: PythonObject)
     _ = yy  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     _xl_set_linear(fields, out, d, context)
+    _ = yy  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     var scale = _xl_float(out, d + 1)
+    _ = yy  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "scale_", scale)
     py_setitem(fields, "n_iter_", PythonObject(_xl_count(out, d + 2)))
+    _ = yy  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "n_features_in_", PythonObject(d))
     # `self.predict(a)`: the fitted model on the float32 X this call holds
     var link = _int(_attr(model, "_link", PythonObject(LINK_IDENTITY)))
@@ -914,9 +931,17 @@ def xl_fit_bayes(model: PythonObject, args: PythonObject, context: PythonObject)
     _ = yy  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     _xl_set_linear(fields, out, d, context)
+    _ = yy  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "alpha_", _xl_float(out, d + 1))
+    _ = yy  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "lambda_", _xl_float(out, d + 2))
+    _ = yy  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "n_iter_", PythonObject(_xl_count(out, d + 3)))
+    _ = yy  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "n_features_in_", PythonObject(d))
     _ = x^
     _ = y^
@@ -943,9 +968,17 @@ def xl_fit_ard(model: PythonObject, args: PythonObject, context: PythonObject) r
     _ = y  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     _xl_set_linear(fields, out, d, context)
+    _ = y  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "alpha_", _xl_float(out, d + 1))
+    _ = y  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "lambda_", _xl_slice(out, d + 2, d, Python.tuple(d), context))
+    _ = y  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "n_iter_", PythonObject(_xl_count(out, 2 * d + 2)))
+    _ = y  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "n_features_in_", PythonObject(d))
     _ = x^
     _ = y^
@@ -981,12 +1014,22 @@ def xl_fit_lars(model: PythonObject, args: PythonObject, lasso: Bool, context: P
     _ = y  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     _xl_set_linear(fields, out, d, context)
+    _ = y  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "n_iter_", PythonObject(_xl_count(out, d + 1)))
+    _ = y  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "alpha_", _xl_float(out, d + 2))
+    _ = y  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     var k = _xl_count(out, d + 3)
+    _ = y  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     var active = Python.list()
     for i in range(k):  # driver-loop: over the active features (model structure)
         _ = py_call(active.append, PythonObject(_xl_count(out, d + 4 + i)))
+        _ = y  # keep the Python object alive through the native call above
+        _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "active_", active)
     py_setitem(fields, "n_features_in_", PythonObject(d))
     _ = x^
@@ -1019,7 +1062,11 @@ def xl_fit_quantile(model: PythonObject, args: PythonObject, context: PythonObje
     _ = yy  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     _xl_set_linear(fields, out, d, context)
+    _ = yy  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "n_iter_", PythonObject(_xl_count(out, d + 1)))
+    _ = yy  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "n_features_in_", PythonObject(d))
     _ = x^
     _ = y^
@@ -1152,9 +1199,17 @@ def xl_fit_ridge_classifier(model: PythonObject, args: PythonObject, context: Py
         raise Error("mojolearn " + name + ": X'X + alpha I is singular even in float-float (alpha="
                     + String(py=py_call(_b().format, _xl_float(out, T * d + T), PythonObject("g")))
                     + "); rescale X or use a larger alpha")
+        _ = yy  # keep the Python object alive through the native call above
+        _ = x  # keep the Python object alive through the native call above
+    _ = yy  # keep the Python object alive through the native calls above
+    _ = x  # keep the Python object alive through the native calls above
     py_setitem(fields, "classes_", labels.classes)
     py_setitem(fields, "coef_", _xl_slice(out, 0, T * d, Python.tuple(T, d), context))
+    _ = yy  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "intercept_", _xl_slice(out, T * d, T, Python.tuple(T), context))
+    _ = yy  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "n_features_in_", PythonObject(d))
     _ = x^
     _ = yy^
@@ -1178,6 +1233,7 @@ def _xl_isotonic_fit(model: PythonObject, fields: PythonObject, entries: PythonO
                                       PythonObject(n)))
         _ = y  # keep the Python object alive through the native call above
         rising = sign >= 0
+        _ = y  # keep the Python object alive through the native call above
     else:
         rising = _truth(increasing)
     py_setitem(fields, "increasing_", PythonObject(rising))
@@ -1191,10 +1247,15 @@ def _xl_isotonic_fit(model: PythonObject, fields: PythonObject, entries: PythonO
                       3 + 2 * n, 6 * n, 3 * n, context)
     _ = yy  # keep the Python object alive through the native call above
     var k = _xl_count(out, 0)
+    _ = yy  # keep the Python object alive through the native call above
     py_setitem(fields, "X_min_", _xl_float(out, 1))
+    _ = yy  # keep the Python object alive through the native call above
     py_setitem(fields, "X_max_", _xl_float(out, 2))
+    _ = yy  # keep the Python object alive through the native call above
     py_setitem(fields, "X_thresholds_", _xl_slice(out, 3, k, Python.tuple(k), context))
+    _ = yy  # keep the Python object alive through the native call above
     py_setitem(fields, "y_thresholds_", _xl_slice(out, 3 + n, k, Python.tuple(k), context))
+    _ = yy  # keep the Python object alive through the native call above
     py_setitem(fields, "n_features_in_", PythonObject(1))
     _ = y^
     _ = yy^
@@ -1225,6 +1286,8 @@ def _xl_isotonic_transform(model: PythonObject, fields: PythonObject, entries: P
     var out = _xl_run(entries, ALGO_ISOTONIC_PREDICT, t.addr, n, n, 1, labels_address(thr), Int(py=thr.size),
                       _xl_ints(ip), _xl_reals(fp), n + 1 if raise_oob else n, 1, 1, context)
     _ = thr  # keep the Python object alive through the native call above
+    _ = yt  # keep the Python object alive through the native call above
+    _ = xt  # keep the Python object alive through the native call above
     _ = xt^
     _ = yt^
     _ = thr^
@@ -1381,6 +1444,9 @@ def xl_cd_fit(model: PythonObject, args: PythonObject, context: PythonObject) ra
     _ = coef  # keep the Python object alive through the native call above
     py_setitem(fields, "intercept_", _xl_float(info, 0))
     py_setitem(fields, "n_iter_", PythonObject(_int(n_iter)))
+    _ = info  # keep the Python object alive through the native call above
+    _ = coef  # keep the Python object alive through the native call above
+    _ = target  # keep the Python object alive through the native call above
     py_setitem(fields, "n_features_in_", PythonObject(n_cols))
     _ = x^
     _ = target^
@@ -1546,6 +1612,10 @@ def _xl_default_folds(n: Int, k: Int, context: PythonObject) raises -> PythonObj
         _ = train  # keep the Python object alive through the native call above
         if got != size:
             raise Error("RuntimeError: mojolearn: select_fold_i64 disagrees with fold_ids")
+        _ = scratch  # keep the Python object alive through the native calls above
+        _ = train  # keep the Python object alive through the native calls above
+        _ = test  # keep the Python object alive through the native calls above
+        _ = fold_store  # keep the Python object alive through the native calls above
         _ = py_call(out.append, Python.tuple(train, test))
     return out
 
@@ -1645,8 +1715,12 @@ def _xl_cv_fold_ids_f32(splits: PythonObject, n: Int, name: String,
             _ = roles  # keep the Python object alive through the native call above
             if status == 1:
                 raise Error("mojolearn " + name + ": a cv split holds an index outside [0, n_samples)")
+            _ = rows  # keep the Python object alive through the native calls above
+            _ = roles  # keep the Python object alive through the native calls above
             if status == 2:
                 raise Error("mojolearn " + name + ": a cv split repeats a row, or puts a row on both sides")
+            _ = rows  # keep the Python object alive through the native calls above
+            _ = roles  # keep the Python object alive through the native calls above
         if Int(py=splits[k][0].size) == 0 or Int(py=splits[k][1].size) == 0:
             raise Error("mojolearn " + name + ": every cv split needs training and test rows")
     return (labels_full_f32(n, -Float64(n + 1), context), roles)
@@ -1689,6 +1763,8 @@ def _xl_ridge(model: PythonObject, entries: PythonObject, x_addr: Int, n: Int, d
         raise Error("mojolearn " + _name(model) + ": X'X + alpha I is singular even in float-float (alpha="
                     + String(py=py_call(_b().format, _xl_float(out, d + 1), PythonObject("g")))
                     + "); rescale X or use a larger alpha")
+        _ = yy  # keep the Python object alive through the native call above
+    _ = yy  # keep the Python object alive through the native calls above
     _ = yy^
     return out
 
@@ -1747,10 +1823,14 @@ def xl_fit_ridge_cv(model: PythonObject, args: PythonObject, context: PythonObje
         var out = _xl_ridge(model, entries, x.addr, n, d, y, alphas, sample_weight, context)
         _ = x  # keep the Python object alive through the native call above
         _xl_set_linear(fields, out, d, context)
+        _ = x  # keep the Python object alive through the native call above
         py_setitem(fields, "alpha_", _xl_float(out, d + 1))
+        _ = x  # keep the Python object alive through the native call above
         py_setitem(fields, "best_score_", _xl_float(out, d + 2))
+        _ = x  # keep the Python object alive through the native call above
         if _truth(fields["store_cv_results"]):
             py_setitem(fields, "cv_results_", _xl_slice(out, d + 3, A, Python.tuple(A), context))
+            _ = x  # keep the Python object alive through the native call above
         py_setitem(fields, "n_features_in_", PythonObject(d))
         _ = x^
         _ = y^
@@ -1773,10 +1853,13 @@ def xl_fit_ridge_cv(model: PythonObject, args: PythonObject, context: PythonObje
         if best < 0:
             raise Error("mojolearn RidgeCV: X'X + alpha I is singular in float32 for every alpha "
                         + "(rescale X, or use larger alphas)")
+        _ = scores  # keep the Python object alive through the native calls above
         var one: List[Float64] = [alphas[best]]
+        _ = scores  # keep the Python object alive through the native call above
         var out = _xl_ridge(model, entries, x.addr, n, d, y, one, PythonObject(None), context)
         _xl_set_linear(fields, out, d, context)
         py_setitem(fields, "alpha_", PythonObject(alphas[best]))
+        _ = scores  # keep the Python object alive through the native call above
         py_setitem(fields, "best_score_", _xl_float(scores, best))
         py_setitem(fields, "n_features_in_", PythonObject(d))
         _ = x^
@@ -1832,15 +1915,22 @@ def xl_fit_ridge_cv(model: PythonObject, args: PythonObject, context: PythonObje
             wte = _xl_gather(w_addr, te, n, 1, context)
         var ytr_m = LabelsMatrix(ytr, labels_address(ytr), n_tr, 1, True)
         _ = ytr  # keep the Python object alive through the native call above
+        _ = yv  # keep the Python object alive through the native call above
         var xte_m = LabelsMatrix(xte, labels_address(xte), n_te, d, True)
         _ = xte  # keep the Python object alive through the native call above
         for i in range(A):  # driver-loop: over the alpha grid
             var one: List[Float64] = [alphas[i]]
             var out = _xl_ridge(model, entries, labels_address(xtr), n_tr, d, ytr_m, one, wtr, context)
+            _ = ytr  # keep the Python object alive through the native call above
             _ = xtr  # keep the Python object alive through the native call above
+            _ = yv  # keep the Python object alive through the native call above
             var coef = _xl_slice(out, 0, d, Python.tuple(d), context)
+            _ = xtr  # keep the Python object alive through the native call above
             var pred = _xl_decision(model, xte_m, coef, _xl_float(out, d), LINK_IDENTITY, True, entries, context)
+            _ = xte  # keep the Python object alive through the native call above
+            _ = xtr  # keep the Python object alive through the native call above
             var score = labels_r2(yte, pred, wte, PythonObject(None), context)
+            _ = yv  # keep the Python object alive through the native call above
             _ = py_call(rows[i].append, PythonObject(score))
         _ = xtr^
         _ = xte^
@@ -1978,16 +2068,32 @@ def _xl_enetcv(model: PythonObject, fields: PythonObject, args: PythonObject, l1
     _ = yy  # keep the Python object alive through the native call above
     _ = x  # keep the Python object alive through the native call above
     _xl_set_linear(fields, out, d, context)
+    _ = yy  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "alpha_", _xl_float(out, d + 1))
+    _ = yy  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     var l1_best = Float64(_xl_word(out, d + 2))
+    _ = yy  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "n_iter_", PythonObject(_xl_count(out, d + 3)))
+    _ = yy  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     var off = d + 4
     if L == 1:
         py_setitem(fields, "alphas_", _xl_slice(out, off, grid, Python.tuple(grid), context))
+        _ = yy  # keep the Python object alive through the native call above
+        _ = x  # keep the Python object alive through the native call above
         py_setitem(fields, "mse_path_", _xl_slice(out, off + grid, grid * folds, Python.tuple(grid, folds), context))
+        _ = yy  # keep the Python object alive through the native call above
+        _ = x  # keep the Python object alive through the native call above
     else:
         py_setitem(fields, "alphas_", _xl_slice(out, off, L * grid, Python.tuple(L, grid), context))
+        _ = yy  # keep the Python object alive through the native call above
+        _ = x  # keep the Python object alive through the native call above
         py_setitem(fields, "mse_path_", _xl_slice(out, off + L * grid, L * grid * folds, Python.tuple(L, grid, folds), context))
+        _ = yy  # keep the Python object alive through the native call above
+        _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "n_features_in_", PythonObject(d))
     # the user's own value (the kernel carried it as float32): the first
     # entry nearest the returned one
@@ -2100,7 +2206,9 @@ def xl_fit_logistic_cv(model: PythonObject, args: PythonObject, context: PythonO
                               0 if raw is None else labels_address(raw), True, class_weight is not None, context)
     _ = raw  # keep the Python object alive through the native call above
     var fitw = prep[1]
+    _ = raw  # keep the Python object alive through the native call above
     var largest = prep[2]
+    _ = raw  # keep the Python object alive through the native call above
     if not explicit:
         # `_check_stratified_folds(largest, folds)`
         if folds < 2 or folds > largest:
@@ -2150,9 +2258,15 @@ def xl_fit_logistic_cv(model: PythonObject, args: PythonObject, context: PythonO
     _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "classes_", labels.classes)
     py_setitem(fields, "coef_", _xl_slice(out, 0, kp * d, Python.tuple(kp, d), context))
+    _ = yy  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "intercept_", _xl_slice(out, kp * d, kp, Python.tuple(kp), context))
+    _ = yy  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     # the grid entry nearest the returned best C (the first on a tie)
     var best_word = Float64(_xl_word(out, kp * d + kp))
+    _ = yy  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     var pick = 0
     var gap = abs(Cs[0] - best_word)
     for i in range(1, nc):  # driver-loop: over the Cs grid
@@ -2167,12 +2281,16 @@ def xl_fit_logistic_cv(model: PythonObject, args: PythonObject, context: PythonO
         _ = py_call(chosen.append, PythonObject(Cs[pick]))
     py_setitem(fields, "C_", chosen)
     py_setitem(fields, "n_iter_", PythonObject(_xl_count(out, kp * d + kp + 1)))
+    _ = yy  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     var off = kp * d + kp + 2
     var names = py_call(b.list, labels.classes)
     var scores = Python.dict()
     var first = 1 if kp == 1 else 0
     for c in range(first, len(names)):  # driver-loop: over the class labels (one score table each)
         py_setitem(scores, names[c], _xl_slice(out, off, folds * nc, Python.tuple(folds, nc), context))
+        _ = yy  # keep the Python object alive through the native call above
+        _ = x  # keep the Python object alive through the native call above
     py_setitem(fields, "scores_", scores)
     py_setitem(fields, "n_features_in_", PythonObject(d))
     _ = yy^

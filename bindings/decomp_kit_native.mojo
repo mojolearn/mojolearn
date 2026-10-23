@@ -431,6 +431,8 @@ struct DecompKit(Movable):
             var ac = self.address(ic)
             _ = ic  # keep the Python object alive through the native call above
             _ = py_call(self.entries["x_decomp_ew"], aa, ab, ac, self.address(out), params, PythonObject(scalar))
+            _ = ic  # keep the Python object alive through the native call above
+            _ = ib  # keep the Python object alive through the native call above
             _ = out  # keep the Python object alive through the native call above
         return out
 
@@ -589,6 +591,8 @@ struct DecompKit(Movable):
         _ = out  # keep the Python object alive through the native call above
         _ = py_call(self.entries["x_decomp_move"], aa, ai, ao,
                     Python.list(XD_TRANSPOSE, n, rows, cols, 0, 0, 0, n, n, 1))
+        _ = one  # keep the Python object alive through the native call above
+        _ = out  # keep the Python object alive through the native call above
         return out
 
     def reshape(mut self, a: Int, rows: Int, cols: Int) raises -> Int:
@@ -629,6 +633,9 @@ struct DecompKit(Movable):
                     var ao = self.address(out)
                     _ = out  # keep the Python object alive through the native call above
                     _ = py_call(self.entries["x_decomp_move"], am, ai, ao, params)
+                    _ = one  # keep the Python object alive through the native call above
+                    _ = m  # keep the Python object alive through the native call above
+                    _ = out  # keep the Python object alive through the native call above
             offset += self.matrices[m].cols
         return out
 
@@ -693,6 +700,7 @@ struct DecompKit(Movable):
         var ai = self.address(one)
         _ = one  # keep the Python object alive through the native call above
         _ = py_call(self.entries["x_decomp_move"], av, ai, ad, params)
+        _ = one  # keep the Python object alive through the native call above
         self.wrote_host(d)
         return d
 
@@ -867,6 +875,7 @@ struct DecompKit(Movable):
             _ = info  # keep the Python object alive through the native call above
             var lu_device = self.matrices[lu].device
             _ = py_call(self.entries["x_decomp_dev_lu"], da, lu_device, pa, info_address, Python.list(n))
+            _ = info  # keep the Python object alive through the native call above
         else:
             lu = self.copy_host(a)
             _ = py_call(self.entries["x_decomp_lu"], self.address(lu), pa, self.address(info), Python.list(n))
@@ -1169,6 +1178,7 @@ struct DecompKit(Movable):
             _ = diag  # keep the Python object alive through the native call above
             var q_device = self.matrices[q].device
             _ = py_call(self.entries["x_decomp_dev_orth_diag"], da, q_device, diag_address, params)
+            _ = diag  # keep the Python object alive through the native call above
             return (q, diag)
         var q = self.copy_host(a)
         _ = py_call(self.entries["x_decomp_orth_diag"], self.address(q), self.address(diag), params)
@@ -1190,6 +1200,7 @@ struct DecompKit(Movable):
             var sa = self.address(s)
             _ = s  # keep the Python object alive through the native call above
             r = Int(py=py_call(self.entries["x_decomp_rank_above"], sa, Python.list(n), PythonObject(Float64(0.00000095367431640625))))
+            _ = s  # keep the Python object alive through the native call above
         var av = self.mm(a, vt, tb=True)
         var left = self.cols_of(av, 0, r) if r < n else av
         var right = self.cols_of(s, 0, r) if r < n else s
@@ -1222,6 +1233,8 @@ struct DecompKit(Movable):
         _ = py_call(self.entries["x_decomp_orgqr"], ah, at, self.address(qc),
                     Python.list(self.matrices[h].rows, self.matrices[h].cols, self.matrices[tau].cols, n))
         _ = qc  # keep the Python object alive through the native call above
+        _ = tau  # keep the Python object alive through the native call above
+        _ = h  # keep the Python object alive through the native call above
         self.wrote_host(qc)
         var diagonal = self.strided(h, r, r + 1, 0)
         var sg = self.neg_signs(diagonal)

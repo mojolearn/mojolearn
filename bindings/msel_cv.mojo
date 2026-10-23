@@ -126,8 +126,10 @@ def msel_indices(value: PythonObject, n: Int, name: String, context: PythonObjec
     _ = as_i64  # keep the Python object alive through the native call above
     if status == 1:
         raise Error(name + " contains an out-of-range index")
+    _ = as_i64  # keep the Python object alive through the native calls above
     if status == 2:
         raise Error(name + " contains duplicate indices")
+    _ = as_i64  # keep the Python object alive through the native calls above
     return as_i64
 
 

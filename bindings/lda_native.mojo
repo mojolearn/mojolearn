@@ -82,19 +82,39 @@ def _run(model: PythonObject, fields: PythonObject, op: Int, x: PythonObject, fr
         decomp_int(fields["max_doc_update_iter"]),
         decomp_seed(decomp_attr(model, fields, "_seed")))
     _ = state_c  # keep the Python object alive through the native call above
-    _ = comps  # keep the Python object alive through the native call above
     _ = state_e  # keep the Python object alive through the native call above
     _ = out  # keep the Python object alive through the native call above
     _ = exp_dir  # keep the Python object alive through the native call above
+    _ = comps  # keep the Python object alive through the native call above
     _ = py_call(params.append, py_get(fields, "_draw", PythonObject(0)))
+    _ = out  # keep the Python object alive through the native call above
+    _ = exp_dir  # keep the Python object alive through the native call above
+    _ = comps  # keep the Python object alive through the native call above
+    _ = state_e  # keep the Python object alive through the native call above
+    _ = state_c  # keep the Python object alive through the native call above
     _ = py_call(params.append, py_get(fields, "n_batch_iter_", PythonObject(1)))
+    _ = out  # keep the Python object alive through the native call above
+    _ = exp_dir  # keep the Python object alive through the native call above
+    _ = comps  # keep the Python object alive through the native call above
+    _ = state_e  # keep the Python object alive through the native call above
+    _ = state_c  # keep the Python object alive through the native call above
     _ = py_call(params.append, decomp_int(fields["evaluate_every"]))
+    _ = out  # keep the Python object alive through the native call above
+    _ = exp_dir  # keep the Python object alive through the native call above
+    _ = comps  # keep the Python object alive through the native call above
+    _ = state_e  # keep the Python object alive through the native call above
+    _ = state_c  # keep the Python object alive through the native call above
     var floats = Python.list(
         decomp_float(decomp_attr(model, fields, "doc_topic_prior_")),
         decomp_float(decomp_attr(model, fields, "topic_word_prior_")), decomp_float(fields["learning_offset"]),
         decomp_float(fields["learning_decay"]), decomp_float(fields["mean_change_tol"]), total,
         decomp_float(fields["perp_tol"]))
     var got = py_call_typed(entries["x_decomp_lda_owner"], params, floats, PythonObject(message))
+    _ = out  # keep the Python object alive through the native call above
+    _ = exp_dir  # keep the Python object alive through the native call above
+    _ = comps  # keep the Python object alive through the native call above
+    _ = state_e  # keep the Python object alive through the native call above
+    _ = state_c  # keep the Python object alive through the native call above
     _ = state_c^
     _ = state_e^
     return Python.tuple(got[0], got[1], got[2], got[3], comps, exp_dir, out)

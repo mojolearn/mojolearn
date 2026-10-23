@@ -183,6 +183,7 @@ def msel_discrete_codes(y: PythonObject, context: PythonObject) raises -> Python
             _ = flat  # keep the Python object alive through the native call above
             if not msel_truth(integral):
                 return PythonObject(None)
+            _ = flat  # keep the Python object alive through the native calls above
     return msel_encode(flat if have else y, context)
 
 
@@ -205,6 +206,9 @@ def _select_folds(fold_store: PythonObject, fold_counts: PythonObject, n: Int, k
         _ = train  # keep the Python object alive through the native call above
         if got != size:
             raise Error("RuntimeError: mojolearn: select_fold_i64 disagrees with fold_ids")
+        _ = scratch  # keep the Python object alive through the native calls above
+        _ = train  # keep the Python object alive through the native calls above
+        _ = test  # keep the Python object alive through the native calls above
         _ = py_call(out.append, Python.tuple(train, test))
     return out
 
@@ -545,6 +549,10 @@ def msel_strat_group_split(x: PythonObject, y: PythonObject, groups: PythonObjec
     if bad:
         raise Error("n_splits=" + String(k) + " cannot be greater than the number of members in "
                     + "each class.")
+    _ = dist  # keep the Python object alive through the native calls above
+    _ = sizes  # keep the Python object alive through the native calls above
+    _ = to_fold  # keep the Python object alive through the native calls above
+    _ = perm  # keep the Python object alive through the native calls above
     return gc.split_by_fold(to_fold, k, sizes, context)
 
 
@@ -656,6 +664,8 @@ def _state_rows(state: PythonObject, words: PythonObject, want: Int, size: Int,
     _ = test  # keep the Python object alive through the native call above
     if got != size:
         raise Error("RuntimeError: mojolearn: select_fold_i64 disagrees with the group counts")
+    _ = train  # keep the Python object alive through the native calls above
+    _ = test  # keep the Python object alive through the native calls above
     return Python.tuple(train, test)
 
 
@@ -1011,7 +1021,9 @@ def msel_native_discrete(y: PythonObject, context: PythonObject) raises -> Pytho
     var _keep_ret_c_r972 = PythonObject(msel_truth(family_call(integral, PythonObject(msel_addr(c)), context["family_msel_native_code"][dtype],
                                                arr.size, context["family_msel_reduce_integral"])))
     _ = c  # keep the Python object alive through the native call above
-    return _keep_ret_c_r972^
+    var _keep_ret_c = _keep_ret_c_r972^
+    _ = c  # keep the Python object alive through the native call above
+    return _keep_ret_c^
 
 
 def msel_check_cv(cv_in: PythonObject, y: PythonObject, classifier: Bool, shuffle: PythonObject,

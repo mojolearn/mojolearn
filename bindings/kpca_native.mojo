@@ -156,14 +156,34 @@ def kpca_fit(model: PythonObject, source: PythonObject, context: PythonObject) r
     _ = all_  # keep the Python object alive through the native call above
     _ = cols  # keep the Python object alive through the native call above
     var eigenvalues = decomp_f32(Python.tuple(kept), context)
+    _ = kc  # keep the Python object alive through the native call above
+    _ = all_  # keep the Python object alive through the native call above
+    _ = cols  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     var eigenvectors = decomp_f32(Python.tuple(n, kept), context)
+    _ = kc  # keep the Python object alive through the native call above
+    _ = all_  # keep the Python object alive through the native call above
+    _ = cols  # keep the Python object alive through the native call above
+    _ = x  # keep the Python object alive through the native call above
     if kept:
         memcpy(dest=F32P(unsafe_from_address=Int(py=classical_address(eigenvalues))),
                src=F32P(unsafe_from_address=Int(values.unsafe_ptr())), count=kept)
         _ = eigenvalues  # keep the Python object alive through the native call above
+        _ = kc  # keep the Python object alive through the native call above
+        _ = all_  # keep the Python object alive through the native call above
+        _ = cols  # keep the Python object alive through the native call above
+        _ = x  # keep the Python object alive through the native call above
         memcpy(dest=F32P(unsafe_from_address=Int(py=classical_address(eigenvectors))),
                src=F32P(unsafe_from_address=Int(vectors.unsafe_ptr())), count=n * kept)
         _ = eigenvectors  # keep the Python object alive through the native call above
+        _ = kc  # keep the Python object alive through the native call above
+        _ = all_  # keep the Python object alive through the native call above
+        _ = cols  # keep the Python object alive through the native call above
+        _ = x  # keep the Python object alive through the native call above
+    _ = kc  # keep the Python object alive through the native calls above
+    _ = all_  # keep the Python object alive through the native calls above
+    _ = cols  # keep the Python object alive through the native calls above
+    _ = x  # keep the Python object alive through the native calls above
     _ = values^
     _ = vectors^
     _ = kc^

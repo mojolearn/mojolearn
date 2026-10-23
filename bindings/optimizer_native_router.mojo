@@ -76,7 +76,9 @@ def optimizer_betas(source: PythonObject, context: PythonObject) raises -> Pytho
     _ = value  # keep the Python object alive through the native call above
     var stride = Int(py=value.strides[0])
     var first = _pd_double(pd_raw_at(addr, 0, item, native), kind, item)
+    _ = value  # keep the Python object alive through the native call above
     var second = _pd_double(pd_raw_at(addr, stride, item, native), kind, item)
+    _ = value  # keep the Python object alive through the native call above
     _ = value^
     return Python.tuple(first, second)
 

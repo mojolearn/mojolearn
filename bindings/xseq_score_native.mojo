@@ -79,8 +79,10 @@ def _weights(source: PythonObject, n: Int, context: PythonObject) raises -> Pyth
     _ = w  # keep the Python object alive through the native call above
     if not xseq_all_finite_f32(p, n) or xseq_min_max_f32(p, n)[0] < Float32(0.0):
         raise Error("ValueError: mojolearn r2_score: sample_weight must have finite nonnegative entries")
+    _ = w  # keep the Python object alive through the native calls above
     if not xseq_min_max_f32(p, n)[1] > Float32(0.0):
         raise Error("ValueError: mojolearn r2_score: sample_weight must have positive total weight")
+    _ = w  # keep the Python object alive through the native calls above
     return w
 
 
@@ -114,7 +116,10 @@ def xseq_regressor_score(model: PythonObject, prediction: PythonObject, args: Py
         _ = yh  # keep the Python object alive through the native call above
         _ = y  # keep the Python object alive through the native call above
         _ = w^
-        return PythonObject(Float64(py=weighted))
+        var _keep_ret_y = PythonObject(Float64(py=weighted))
+        _ = yh  # keep the Python object alive through the native call above
+        _ = y  # keep the Python object alive through the native call above
+        return _keep_ret_y^
     var r2 = py_call_typed(entries["r2_score"], xseq_addr(y), xseq_addr(yh), Python.list(n))
     _ = yh  # keep the Python object alive through the native call above
     _ = y  # keep the Python object alive through the native call above

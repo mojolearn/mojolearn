@@ -95,6 +95,9 @@ def training_residual_dropout(operation: String, values: PythonObject, entries: 
         _ = result  # keep the Python object alive through the native call above
         if Int(py=written) != count:
             raise Error("RuntimeError: residual_dropout returned an incomplete output")
+        _ = result  # keep the Python object alive through the native calls above
+        _ = rv  # keep the Python object alive through the native calls above
+        _ = vv  # keep the Python object alive through the native calls above
         return result
     var gv = TensorView()
     var count = _rd_operand(values[0], "gradient", gv)
@@ -109,6 +112,9 @@ def training_residual_dropout(operation: String, values: PythonObject, entries: 
     _ = d_residual  # keep the Python object alive through the native call above
     if Int(py=written) != count:
         raise Error("RuntimeError: residual_dropout_backward returned incomplete gradients")
+    _ = d_residual  # keep the Python object alive through the native calls above
+    _ = d_values  # keep the Python object alive through the native calls above
+    _ = gv  # keep the Python object alive through the native calls above
     return Python.tuple(d_values, d_residual)
 
 
@@ -237,6 +243,7 @@ def training_mlp_sessions(values: PythonObject, entries: PythonObject) raises ->
     _ = output  # keep the Python object alive through the native call above
     if Int(py=wrote) != total_rows * out_width:
         raise Error("RuntimeError: MLP sessions returned an invalid output count")
+    _ = output  # keep the Python object alive through the native calls above
     _ = keep^
     _ = views^
     _ = inputs^

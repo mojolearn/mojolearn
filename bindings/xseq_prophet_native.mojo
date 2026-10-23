@@ -194,7 +194,12 @@ def prophet_fit(model: PythonObject, args: PythonObject, context: PythonObject) 
     _ = days  # keep the Python object alive through the native call above
     if S < 0:
         raise Error("ValueError: Changepoints must fall within training data.")
+    _ = cpt  # keep the Python object alive through the native calls above
+    _ = user  # keep the Python object alive through the native calls above
+    _ = days  # keep the Python object alive through the native calls above
     var cpts = py_call(np.ascontiguousarray, cpt.__getitem__(py_call(b.slice, PythonObject(None), S)))
+    _ = user  # keep the Python object alive through the native call above
+    _ = days  # keep the Python object alive through the native call above
     py_setitem(fields, "changepoints_t_", cpts)
     var holidays = args[2]
     var nh = 0
