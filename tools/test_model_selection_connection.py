@@ -9,7 +9,7 @@ import pytest
 PACKAGE = Path(__file__).resolve().parents[1] / "python/mojolearn"
 
 
-def connection(monkeypatch, loader):
+def connection(monkeypatch, loader, bridge_name="_native_model_selection_bridge"):
     # Import only the two connection modules. No mojolearn package operation,
     # optional dependency, native binary or compiler is needed by this test.
     name = "partition_connection_test"
@@ -31,7 +31,7 @@ def connection(monkeypatch, loader):
     family = load("_native_family_bridge")
     context = {"import_metadata": object()}
     monkeypatch.setattr(family, "shared_context", lambda: context)
-    return load("_native_model_selection_bridge"), context
+    return load(bridge_name), context
 
 
 def test_missing_owner_keeps_metadata_connection_and_only_refuses(monkeypatch):

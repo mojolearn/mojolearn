@@ -23,7 +23,8 @@ _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # The compiled family owner, connected once at import: `fit`,
 # `fit_transform` and `transform` are one native call each
 # (bindings/mani_umap_native.mojo).
-_NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
+from . import _native_runtime_manifold_bridge
+_NATIVE, _NATIVE_CONTEXT = _native_runtime_manifold_bridge.connect()
 
 
 def _integer(value, name, minimum, maximum=(1 << 63) - 1):

@@ -22,7 +22,6 @@ from bindings.metrics_exp_native import metrics_exp_operation
 from bindings.cluster_fit_a_native import cluster_fit_a_operation
 from bindings.cluster_fit_b_native import cluster_fit_b_operation
 from bindings.mixture_native import mixture_operation
-from bindings.manifold_native import manifold_operation
 from bindings.linalg_ops_native import linalg_ops_operation
 
 
@@ -67,7 +66,15 @@ def family_operation(model: PythonObject, operation: String, args: PythonObject,
     if operation.startswith("family_mix_"):
         return mixture_operation(model, operation, args, context)
     if operation.startswith("family_mani_"):
-        return manifold_operation(model, operation, args, context)
+        # The shared import-time context retains the independently compiled
+        # owner. Forward through its verified C entry without a source import
+        # of the manifold implementation or a Python operation router.
+        var entry = py_get(context, "family_mani_door")
+        if entry is None:
+            raise Error("RuntimeError: the manifold native owner is not connected")
+        if py_type(entry) is not context["family_builtin_type"]:
+            raise Error("TypeError: manifold requires its compiled native entry")
+        return family_call(entry, model, PythonObject(operation), args, context)
     if operation.startswith("family_lin_"):
         return linalg_ops_operation(model, operation, args, context)
     if operation.startswith("family_rs_"):

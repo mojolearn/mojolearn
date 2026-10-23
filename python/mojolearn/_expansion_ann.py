@@ -25,7 +25,8 @@ from ._mode import NumericModeMixin
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
 # The compiled family owner, connected once at import: TSNE's `fit` and
 # `fit_transform` are one native call each (bindings/mani_tsne_native.mojo).
-_NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
+from . import _native_runtime_manifold_bridge
+_NATIVE, _NATIVE_CONTEXT = _native_runtime_manifold_bridge.connect()
 
 __all__ = ["IVFPQIndex", "TSNE", "CagraIndex", "IVFSQIndex", "IVFRaBitQIndex", "refine"]
 

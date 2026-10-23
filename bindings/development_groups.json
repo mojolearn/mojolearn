@@ -2,7 +2,7 @@
   "_doc": [
     "Development only: one independent cached unit per existing logical binding owner.",
     "Native type registration, allocation and destruction remain inside their logical owner.",
-    "The model-selection runtime owner is separate from the tokenizer dispatcher.",
+    "Model-selection and manifold runtime owners are separate from the tokenizer dispatcher.",
     "Release physical groups remain in merged_groups.json; shared code is compiled once there.",
     "Cold development duplication and target memory/time require measured qualification."
   ],
@@ -237,6 +237,9 @@
       ],
       "runtime_model_selection": [
         "_mojolearn_runtime_model_selection_host"
+      ],
+      "runtime_manifold": [
+        "_mojolearn_runtime_manifold_host"
       ]
     }
   }

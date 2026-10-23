@@ -6,18 +6,18 @@ Live copies: ~/mojolearn-evidence/lq/lq, ~/mojolearn-evidence/compile_slot.sh, a
 
 Internal engineering path: `tools/development_build.py` builds independent
 logical binding owners from `bindings/development_groups.json`: 33 configured
-`identical` units (including optional byte-LM) and 43 host units. Each existing
-logical binding keeps its native types and state; model selection has its own
-runtime entry instead of importing the tokenizer dispatcher. Target/platform
+`identical` units (including optional byte-LM) and 44 host units. Each existing
+logical binding keeps its native types and state; model selection and manifold
+orchestration have independent runtime entries. Target/platform
 selection can omit an optional unit.
 Release scripts keep `bindings/merged_groups.json` and its compact merged files.
 The development layout's native compilation, public runtime behavior and
 Apple/NVIDIA/AMD identity still require qualification. Controller tests do not
 establish numerical equivalence or a compile-time speedup.
 
-The compact release host group includes the model-selection builder as another
-logical module, so release imports use the same native entry. Model-selection
-source edits invalidate its development unit; shared array/admission/error
+The compact release host group includes both runtime builders as logical
+modules, so release imports use the same native entries. Model-selection and
+manifold implementation edits invalidate their own development units; shared array/admission/error
 helpers still invalidate every owner that imports them. Cold development builds
 duplicate common code across units, so their time, peak memory and total binary
 size must be measured separately from the compact release build.

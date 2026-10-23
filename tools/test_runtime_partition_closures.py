@@ -56,3 +56,32 @@ def test_release_keeps_one_host_file_and_includes_the_new_logical_entry():
     assert groups['_mojolearn_native_host'].count('_mojolearn_runtime_model_selection_host') == 1
     entry = ROOT/'bindings/entry/entry__mojolearn_runtime_model_selection_host.mojo'
     assert 'PyInit__mojolearn_runtime_model_selection_host' in entry.read_text()
+
+
+def test_manifold_implementation_edits_invalidate_only_the_manifold_owner():
+    groups = json.loads((ROOT/'bindings/development_groups.json').read_text())['groups']
+    graph = SourceGraph(ROOT)
+    paths = ('bindings/mani_kit.mojo', 'bindings/mani_decomp_native.mojo',
+             'bindings/mani_tsne_native.mojo', 'bindings/mani_umap_native.mojo')
+    owners = {path: set() for path in paths}
+    for mode, partitions in groups.items():
+        for name, members in partitions.items():
+            closure = graph.closure(members)
+            assert closure['scope'] == 'closure', closure['unresolved']
+            for path in paths:
+                if path in closure['files']:
+                    owners[path].add((mode, name))
+    assert all(found == {('host', 'runtime_manifold')} for found in owners.values()), owners
+
+
+def test_manifold_owner_has_no_tokenizer_type_registration_or_archive_dependency():
+    closure = SourceGraph(ROOT).closure(['_mojolearn_runtime_manifold_host'])
+    assert closure['scope'] == 'closure', closure['unresolved']
+    assert 'bindings/mani_kit.mojo' in closure['files']
+    assert 'bindings/family_native.mojo' not in closure['files']
+    assert 'bindings/host_archive_native.mojo' not in closure['files']
+    assert 'bindings/_mojolearn_tokenizer_host.mojo' not in closure['files']
+    assert all('.add_type' not in (ROOT/path).read_text() for path in closure['files'])
+    release = json.loads((ROOT/'bindings/merged_groups.json').read_text())['dirs']['host']['groups']
+    assert set(release) == {'_mojolearn_native_host'}
+    assert release['_mojolearn_native_host'].count('_mojolearn_runtime_manifold_host') == 1
