@@ -1072,6 +1072,12 @@ def host_archive_float_repr(value: Float64) raises -> String:
 
 def host_archive_rbc_metric(cls_name: String, metric: PythonObject, p: Float64,
                             context: PythonObject) raises -> PythonObject:
+    """`host_archive_rbc_metric_object` of a saved float p."""
+    return host_archive_rbc_metric_object(cls_name, metric, PythonObject(p), context)
+
+
+def host_archive_rbc_metric_object(cls_name: String, metric: PythonObject, p: PythonObject,
+                                   context: PythonObject) raises -> PythonObject:
     """`neighbors._resolve_rbc_metric(cls_name, metric, p)` for a saved
     metric name: `(metric_value, metric_arg)`, or the same refusal, by name
     and in the same order."""
@@ -1121,22 +1127,30 @@ def host_archive_rbc_metric(cls_name: String, metric: PythonObject, p: Float64,
             + "ball cover admits: " + String(admitted))
     var value = Int(py=table[key])
     var arg = Float64(2.0)
+    var shown_p = _archive_builtin_repr(p)
     if value != 9:
-        # `_refuse_inert_p`: only metric='minkowski'/'lp' reads p.
-        if p != 2.0:
+        # `_refuse_inert_p`: only metric='minkowski'/'lp' reads p; a bool,
+        # or a p float() refuses, is not the default.
+        var is_default = False
+        if py_type(p) is not b.bool:
+            try:
+                is_default = Float64(py=py_call(b.float, p)) == 2.0
+            except:
+                is_default = False
+        if not is_default:
             raise Error(head + "p is read only by metric='minkowski' "
-                + "(or 'lp'); metric=" + shown + " never reads it, so p=" + host_archive_float_repr(p) + " would "
+                + "(or 'lp'); metric=" + shown + " never reads it, so p=" + shown_p + " would "
                 + "change nothing. Leave p at its default (2) or ask for "
                 + "metric='minkowski'.")
     else:
-        arg = p
+        arg = Float64(py=py_call(b.float, p))
         # `arg != arg or arg == float("inf")`: NaN or +infinity.
         if arg != arg or (arg > 0.0 and not isfinite(arg)):
             raise Error(head + "metric='minkowski' needs a finite "
-                + "p >= 1, got " + host_archive_float_repr(p) + ". p = infinity is metric='chebyshev', "
+                + "p >= 1, got " + shown_p + ". p = infinity is metric='chebyshev', "
                 + "which IS admitted here.")
         if arg < 1.0:
-            raise Error(head + "metric='minkowski' with p=" + host_archive_float_repr(p) + " is "
+            raise Error(head + "metric='minkowski' with p=" + shown_p + " is "
                 + "REFUSED on the random ball cover. The pruning here IS THE "
                 + "TRIANGLE INEQUALITY on the landmark radii "
                 + "(neighbors/impl/ball_cover/common.mojo, "
@@ -1148,6 +1162,33 @@ def host_archive_rbc_metric(cls_name: String, metric: PythonObject, p: Float64,
                 + "algorithm='brute' for p < 1, which is exact brute force "
                 + "and needs no inequality.")
     return Python.tuple(value, arg)
+
+
+def host_archive_radius_refusals(fields: PythonObject, cls_name: String, context: PythonObject) raises:
+    """`RadiusNeighbors._check_refusals` over the instance fields (at `fit`
+    and at `load`): the metric (which sets `_metric_value`/`_metric_arg`),
+    then the algorithm, then the radius, in the Python method's wording."""
+    var b = Python.import_module("builtins")
+    var metric = fields["metric"]
+    var algorithm = fields["algorithm"]
+    var radius = fields["radius"]
+    var resolved = host_archive_rbc_metric_object(cls_name, metric, fields["p"], context)
+    py_setitem(fields, "_metric_value", resolved[0])
+    py_setitem(fields, "_metric_arg", resolved[1])
+    if not (py_type(algorithm) is b.str and (String(algorithm) == "auto" or String(algorithm) == "rbc")):
+        raise Error("mojolearn RadiusNeighbors: algorithm=" + _archive_builtin_repr(algorithm) + " is "
+            + "refused. The index here is cuVS's RANDOM BALL COVER, which "
+            + "is none of scikit-learn's three: it is not 'brute' (there "
+            + "is an index and it prunes), and it is neither 'ball_tree' "
+            + "nor 'kd_tree' (it is a one-level cover over sqrt(n) "
+            + "landmarks, not a tree). Naming any of them would describe "
+            + "the wrong algorithm, so 'auto' and 'rbc' -- the "
+            + "algorithm's own name -- are the two accepted. The "
+            + "results are exact either way")
+    var value = Float64(py=py_call(b.float, radius))
+    if not isfinite(value) or value <= 0:
+        raise Error("mojolearn RadiusNeighbors: radius=" + _archive_builtin_repr(radius) + " is "
+            + "refused; it must be positive and finite")
 
 
 def host_archive_radius(cls: PythonObject, arrays: PythonObject, path: PythonObject,
@@ -1175,23 +1216,7 @@ def host_archive_radius(cls: PythonObject, arrays: PythonObject, path: PythonObj
     py_setitem(fields, "_metric_value", PythonObject(None))
     py_setitem(fields, "_metric_arg", PythonObject(None))
     host_archive_mode(arrays, fields, context)
-    # `_check_refusals`: the metric, then the algorithm, then the radius.
-    var resolved = host_archive_rbc_metric(String(cls.__name__), metric, p, context)
-    py_setitem(fields, "_metric_value", resolved[0])
-    py_setitem(fields, "_metric_arg", resolved[1])
-    if String(algorithm) != "auto" and String(algorithm) != "rbc":
-        raise Error("mojolearn RadiusNeighbors: algorithm=" + _archive_builtin_repr(algorithm) + " is "
-            + "refused. The index here is cuVS's RANDOM BALL COVER, which "
-            + "is none of scikit-learn's three: it is not 'brute' (there "
-            + "is an index and it prunes), and it is neither 'ball_tree' "
-            + "nor 'kd_tree' (it is a one-level cover over sqrt(n) "
-            + "landmarks, not a tree). Naming any of them would describe "
-            + "the wrong algorithm, so 'auto' and 'rbc' -- the "
-            + "algorithm's own name -- are the two accepted. The "
-            + "results are exact either way")
-    if not isfinite(radius) or radius <= 0:
-        raise Error("mojolearn RadiusNeighbors: radius=" + host_archive_float_repr(radius) + " is "
-            + "refused; it must be positive and finite")
+    host_archive_radius_refusals(fields, String(cls.__name__), context)
     var nf = classical_i64(meta, 0)
     var ns = classical_i64(meta, 1)
     var index = _archive_exact(arrays, "index", "<f4", context)

@@ -16,7 +16,7 @@ cover. Every search is exact, never approximate.
 
 from . import _portable_math as math
 
-from . import _mojolearn, _native_archive_bridge
+from . import _mojolearn, _native_archive_bridge, _native_family_bridge
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_f32_dense_c, as_i64_c, empty
 from ._labels import decode_labels, encode_labels, sorted_classes
@@ -56,6 +56,10 @@ _RADIUS_FORMAT = "mojolearn-radius-1"
 # connected the same way: their device index is released by the native
 # finalizer (`_native_archive_bridge.lifetime`), not a Python `__del__`.
 _ARCHIVE, _ARCHIVE_CONTEXT = _native_archive_bridge.connect()
+# The compiled family owner (bindings/neighbors_native.mojo): RadiusNeighbors
+# `fit` is one native call; its refusals read the metric tables connected
+# below them.
+_NATIVE, _NATIVE_CONTEXT = _native_family_bridge.connect()
 
 
 #: cuVS `DistanceType` values (`cuvs/distance/distance.h:22-69`), mirrored
@@ -146,6 +150,12 @@ _METRIC_TABLE = {
 _UNSUPPORTED_METRICS = (
     "haversine",
 )
+
+# The metric tables RadiusNeighbors' native refusals read (the names the
+# saved-model loader reads them under).
+_native_family_bridge.tables(host_archive_neighbor_metrics=dict(_METRIC_TABLE),
+                             host_archive_rbc_metrics=dict(_RBC_METRIC_TABLE),
+                             host_archive_unsupported_metrics=tuple(_UNSUPPORTED_METRICS))
 
 #: The metrics that need X >= 0 (their logarithms), refused on negative
 #: input as scipy's jensenshannon is undefined there.
@@ -1667,26 +1677,9 @@ class RadiusNeighbors(NumericModeMixin):
         against a host brute force per row with no tolerance.
         `_resolve_rbc_metric` holds the table and every refusal message.
         """
-        self._metric_value, self._metric_arg = _resolve_rbc_metric(
-            type(self).__name__, self.metric, self.p
-        )
-        if self.algorithm not in ("auto", "rbc"):
-            raise ValueError(
-                f"mojolearn RadiusNeighbors: algorithm={self.algorithm!r} is "
-                "refused. The index here is cuVS's RANDOM BALL COVER, which "
-                "is none of scikit-learn's three: it is not 'brute' (there "
-                "is an index and it prunes), and it is neither 'ball_tree' "
-                "nor 'kd_tree' (it is a one-level cover over sqrt(n) "
-                "landmarks, not a tree). Naming any of them would describe "
-                "the wrong algorithm, so 'auto' and 'rbc' -- the "
-                "algorithm's own name -- are the two accepted. The "
-                "results are exact either way"
-            )
-        if not math.isfinite(self.radius) or self.radius <= 0:
-            raise ValueError(
-                f"mojolearn RadiusNeighbors: radius={self.radius!r} is "
-                "refused; it must be positive and finite"
-            )
+        # Native (bindings/host_archive_native.mojo
+        # `host_archive_radius_refusals`), the check `fit` and `load` run.
+        _NATIVE(self, "family_xn_radius_refusals", (), _NATIVE_CONTEXT)
 
     # The ball cover is not built at fit, a known cost rather than an
     # oversight: `neighbors/estimator.mojo`'s RADIUS NEIGHBOURS banner
@@ -1709,12 +1702,7 @@ class RadiusNeighbors(NumericModeMixin):
         -------
         self
         """
-        self._check_refusals()
-        idx, _ = as_f32_dense_c(X, ndim=2, name="X")
-        self._index = idx
-        self.n_samples_fit_ = idx.shape[0]
-        self.n_features_in_ = idx.shape[1]
-        return self
+        return _NATIVE(self, "family_xn_radius_fit", (X,), _NATIVE_CONTEXT)
 
     def save(self, path):
         """Save the fitted model to an ``.npz`` file.

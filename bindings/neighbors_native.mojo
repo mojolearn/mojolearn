@@ -1,6 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # PolynomialCountSketch `fit`, `transform` and `fit_transform`, one native
-# call each (python/mojolearn/_expansion_neighbors.py). The shell hands over
+# call each (python/mojolearn/_expansion_neighbors.py), and RadiusNeighbors
+# `fit` (python/mojolearn/neighbors.py: its refusals, shared with `load`, then
+# the stored index). The shell hands over
 # the binding `_bind` resolved; this owner reads the parameters with the
 # Python methods' refusals, draws the hash tables with the binding's
 # counter-based generator (`x_neighbors_kfeat_pcs_draw_idn`) and runs the
@@ -14,8 +16,9 @@ from bindings.classical_arrays import classical_address
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.family_common import (
     family_repr, family_is_int, family_call, family_call_kw, family_entry, family_array,
-    family_as_f32_dense, family_field,
+    family_as_f32_dense, family_field, family_owned,
 )
+from bindings.host_archive_native import host_archive_radius_refusals
 
 
 def _pcs_seed(seed: PythonObject) raises -> PythonObject:
@@ -121,8 +124,26 @@ def _pcs_transform(model: PythonObject, args: PythonObject, context: PythonObjec
     return out
 
 
+def _radius_fit(model: PythonObject, args: PythonObject, context: PythonObject) raises:
+    """`RadiusNeighbors.fit(X)`: the refusals (`_check_refusals`, which also
+    resolves the metric), then the points stored as float32."""
+    classical_connect_numpy(context)
+    var fields = py_fields(model)
+    host_archive_radius_refusals(fields, String(py_type(model).__name__), context)
+    var index = family_owned(family_as_f32_dense(args[0], 2, "X", context), context)
+    py_setitem(fields, "_index", index)
+    py_setitem(fields, "n_samples_fit_", PythonObject(Int(py=index.shape[0])))
+    py_setitem(fields, "n_features_in_", PythonObject(Int(py=index.shape[1])))
+
+
 def neighbors_operation(model: PythonObject, operation: String, args: PythonObject,
                         context: PythonObject) raises -> PythonObject:
+    if operation == "family_xn_radius_refusals":
+        host_archive_radius_refusals(py_fields(model), String(py_type(model).__name__), context)
+        return PythonObject(None)
+    if operation == "family_xn_radius_fit":
+        _radius_fit(model, args, context)
+        return model
     if operation == "family_xn_pcs_fit":
         _pcs_fit(model, args, context)
         return model
