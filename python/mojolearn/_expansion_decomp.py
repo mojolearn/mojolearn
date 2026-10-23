@@ -3747,30 +3747,6 @@ def _rsvd_core(k, A, n_components, n_oversamples, n_iter, power_iteration_normal
     return U.cols(0, kc), S.cols(0, kc), Vt.rows(0, kc)
 
 
-#: x_decomp/tsqr_core.mojo TS_MAX_N: the widest [A | B] the TSQR takes
-_TS_MAX_N = 512
-
-
-def _f32_input(X, name, ndim):
-    """A C-contiguous float32 Array of X (no copy when it already is one),
-    NaN/inf refused as `_M.from_input` refuses them."""
-    if _is_sparse(X):
-        X = X.toarray()
-    a = as_f32_c(X, ndim=ndim, name=name)[0]
-    if min(a.shape) == 0:  # glue: smaller of two shape dims
-        raise ValueError(f"{name}: a nonempty input is required")
-    fin = _host_all_finite(a)
-    if fin is False:
-        raise ValueError(f"{name}: input must be finite; NaN/inf are unsupported")
-    if fin is None:
-        _M.from_input(a if a.ndim == 2 else a.reshape(a.shape[0], 1), name)
-    return a
-
-
-def _tsqr_lstsq_on(m, nn, nrhs):
-    return nn >= 1 and nrhs >= 1 and nn + nrhs <= _TS_MAX_N and m >= nn + nrhs
-
-
 def _tsqr_lstsq_core(k, a_arr, b_arr, m, nn, nrhs, rcond, equilibrate=False, Ra=None):
     """(X nn x nrhs, residuals _M 1 x nrhs or None, rank, S 1 x nn) of
     min ||A X - B|| through the blocked TSQR of [A | B] (lane
@@ -3820,24 +3796,6 @@ def _tsqr_lstsq_core(k, a_arr, b_arr, m, nn, nrhs, rcond, equilibrate=False, Ra=
     return X, res, rank, S
 
 
-def _lstsq_tsqr(k, a, b, vec, rcond):
-    """`lstsq` through the blocked TSQR when it serves the shape (tall,
-    [A | B] at most _TS_MAX_N wide), else None (the SVD route below)."""
-    a_arr = _f32_input(a, "a", 2)
-    m, nn = a_arr.shape
-    b_arr = _f32_input(b, "b", 1 if vec else 2)
-    nrhs = 1 if vec else b_arr.shape[1]
-    if b_arr.shape[0] != m:
-        raise ValueError("Incompatible dimensions")
-    if not _tsqr_lstsq_on(m, nn, nrhs):
-        return None
-    if rcond is None:
-        rcond = _F32_EPS * max(m, nn)
-    X, res, rank, S = _tsqr_lstsq_core(k, a_arr, b_arr, m, nn, nrhs, rcond)
-    resid = res.out((nrhs,)) if res is not None else _M.zeros(1, 0).out((0,))
-    return (X.out((nn,)) if vec else X.out()), resid, rank, S.out((nn,))
-
-
 # A tall a with N + nrhs <= 512 takes the blocked TSQR of [a | b] and the
 # SVD of its small R (`_tsqr_lstsq_core`); any other shape the QR +
 # one-sided Jacobi SVD of a (or of a^T).
@@ -3883,30 +3841,7 @@ def lstsq(a, b, rcond=None, *, numeric_mode=None):
     >>> A = rng.random((100, 4), dtype=np.float32)
     >>> x, res, rank, s = mojolearn.lstsq(A, rng.random(100, dtype=np.float32))
     """
-    k = _Kit(_mode(numeric_mode))
-    vec = len(getattr(b, "shape", ())) == 1 or (not hasattr(b, "shape") and not isinstance(b[0], (list, tuple)))
-    got = _lstsq_tsqr(k, a, b, vec, rcond)
-    if got is not None:
-        return got
-    A = _M.from_input(a, "a")
-    m, nn = A.r, A.c
-    B = _M.from_input(_row_of(b), "b").T if vec else _M.from_input(b, "b")
-    if B.r != m:
-        raise ValueError("Incompatible dimensions")
-    r = min(m, nn)
-    U, S, Vt = _thin_svd(k, A, r, u_based=True)
-    if rcond is None:
-        rcond = _F32_EPS * max(m, nn)
-    cut = _f32(k.word(S, 0) * rcond) if r else 0.0
-    rank = k.count_gt(S, cut)       # lane cpu2-l8-decomp: two words, not S
-    inv = k.ew("recip", k.ew("select", S, S, _M.zeros(1, 1), s=cut))
-    X = k.mm(Vt, k.ew("mul", k.mm(U, B, ta=True), inv.T), ta=True)
-    if rank == nn and m > nn:
-        res = k.colsum(k.ew("sq", k.ew("sub", B, k.mm(A, X))))
-        resid = res.out((B.c,))
-    else:
-        resid = _M.zeros(1, 0).out((0,))
-    return (X.out((nn,)) if vec else X.out()), resid, rank, S.out((r,))
+    return _LINALG_CALL(None, "lstsq", (a, b, rcond, numeric_mode), _LINALG_CONTEXT)
 
 
 # ================================================================ PLS / CCA

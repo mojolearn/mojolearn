@@ -19,7 +19,7 @@ from bindings.py_balanced import py_call, py_get, py_type, py_contains
 from bindings.classical_arrays import classical_array, classical_typed, classical_address, classical_host_f32, classical_kind
 from bindings.classical_validate import classical_view
 from bindings.host_sparse_native import host_sparse_format, host_sparse_dense
-from core.classical_tsqr_impl import tsqr_fill_constant, tsqr_fill_indices, tsqr_copy_columns
+from core.classical_tsqr_impl import tsqr_fill_constant, tsqr_fill_indices, tsqr_copy_columns, tsqr_fill_eye
 
 comptime DecompF32 = MutPointer[Float32, MutUntrackedOrigin]
 
@@ -1097,3 +1097,67 @@ struct DecompKit(Movable):
                    src=DecompF32(unsafe_from_address=Int(py=classical_address(source))), count=n)
             _ = source^
         return out
+
+    # ---- the tall SVD of `_linalg_impl._svd_tall` (lstsq)
+    def orth_diag(mut self, a: Int) raises -> Tuple[Int, Int]:
+        # `_Kit.orth_diag`: (orth(A), the passes' R-diagonal products 1 x c).
+        var rows = self.matrices[a].rows
+        var cols = self.matrices[a].cols
+        var diag = self.zeros(1, cols)
+        var params = Python.list(rows, cols)
+        if rows * cols and self.use(a):
+            var q = self.device_output(rows, cols)
+            var da = self.device(a)
+            _ = py_call(self.entries["x_decomp_dev_orth_diag"], da, self.matrices[q].device, self.address(diag), params)
+            return (q, diag)
+        var q = self.copy_host(a)
+        _ = py_call(self.entries["x_decomp_orth_diag"], self.address(q), self.address(diag), params)
+        self.wrote_host(q)
+        return (q, diag)
+
+    def svd_tall(mut self, a: Int) raises -> Tuple[Int, Int, Int]:
+        # `_linalg_impl._svd_tall(k, A, full=False)`: (U m x n, S 1 x n, Vt n x n).
+        var m = self.matrices[a].rows
+        var n = self.matrices[a].cols
+        var sv = self.svd(a)
+        var s = sv[0]
+        var vt = sv[1]
+        var r = 0
+        if n:
+            _ = self.word(s, 0)      # `S.s[0]`: S comes to the host, as before
+            var sa = self.address(s)
+            r = Int(py=py_call(self.entries["x_decomp_rank_above"], sa, Python.list(n), PythonObject(Float64(0.00000095367431640625))))
+        var av = self.mm(a, vt, tb=True)
+        var left = self.cols_of(av, 0, r) if r < n else av
+        var right = self.cols_of(s, 0, r) if r < n else s
+        var ug = self.ew(XD_DIV, left, right)
+        if r == n:
+            var qd = self.orth_diag(ug)
+            var absolute = self.ew(XD_ABS, qd[1])
+            var zero = self.zeros(1, 1)
+            var guarded = self.ew(XD_LE, absolute, zero)
+            if self.total_word(guarded) == 0:
+                var signs = self.neg_signs(qd[1])
+                return (self.ew(XD_MUL, qd[0], signs), s, vt)
+        if r == 0:
+            var eye = self.zeros(m, n)
+            tsqr_fill_eye(DecompF32(unsafe_from_address=Int(py=classical_address(self.matrices[eye].host))), m, n)
+            return (eye, s, vt)
+        # geqrf + orgqr of A V / s, Q's columns signed by R's diagonal.
+        var h = self.copy_host(ug)
+        var tau = self.zeros(1, min(self.matrices[ug].rows, self.matrices[ug].cols))
+        _ = py_call(self.entries["x_decomp_geqrf"], self.address(h), self.address(tau),
+                    Python.list(self.matrices[ug].rows, self.matrices[ug].cols))
+        self.wrote_host(h)
+        var qc = self.zeros(self.matrices[h].rows, n)
+        var ah = self.address(h)
+        var at = self.address(tau)
+        _ = py_call(self.entries["x_decomp_orgqr"], ah, at, self.address(qc),
+                    Python.list(self.matrices[h].rows, self.matrices[h].cols, self.matrices[tau].cols, n))
+        self.wrote_host(qc)
+        var diagonal = self.strided(h, r, r + 1, 0)
+        var sg = self.neg_signs(diagonal)
+        if n > r:
+            var ones = self.const(1.0, 1, n - r)
+            sg = self.hstack([sg, ones])
+        return (self.ew(XD_MUL, qc, sg), s, vt)

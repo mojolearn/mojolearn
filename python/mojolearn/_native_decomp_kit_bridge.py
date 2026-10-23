@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Import-time connection of the native decomposition owners that run the
 x_decomp cells through bindings/decomp_kit_native.mojo (the dictionary
-learning family, ...): their compiled door and the numeric-mode x_decomp
-entries, retained once."""
+learning family, PLS, MinCovDet, ALS, the dense linear algebra functions):
+their compiled door and the numeric-mode x_decomp entries, retained once."""
 
 # The x_decomp entries the native kit calls. A binding without an optional
 # (resident) entry takes the host-address route, as `_Kit` does.
@@ -16,7 +16,7 @@ _OPTIONAL = ("dev_ew", "dev_alloc", "dev_free", "dev_upload", "dev_download", "d
              "dev_mcd_cov", "als_fit", "topn_desc", "gather",
              "w4_flags", "s_flags", "qfix_flags", "idn_flags", "dev_upload_scan", "orth", "dev_orth",
              "dev_orth_ws", "order_small", "dev_order_small", "lu_gesv", "dev_lu_factor", "dev_lu_solve",
-             "lu_resid")
+             "lu_resid", "tsqr_r", "rank_above", "orth_diag", "dev_orth_diag", "geqrf", "orgqr")
 
 
 def _entries(binding):

@@ -20,7 +20,7 @@ from bindings.classical_validate import classical_view
 from core.decomp_native_impl import decomp_piv_valid
 from bindings.decomp_kit_native import (
     DecompKit, DecompF32, decomp_int, decomp_float, decomp_seed, decomp_seed_word, decomp_mode, decomp_entries,
-    decomp_input, XD_ABS, XD_ADDS, XD_SCALE, XD_GTS, XD_MUL, XD_ADD,
+    decomp_input, XD_ABS, XD_ADDS, XD_SCALE, XD_GTS, XD_MUL, XD_ADD, XD_SUB, XD_SQ, XD_SELECT, XD_RECIP,
 )
 
 
@@ -369,6 +369,104 @@ def classical_host_i32(source: PythonObject, context: PythonObject) raises -> Py
     return source
 
 
+comptime LINALG_F32_EPS = 1.1920928955078125e-07
+comptime LINALG_TS_MAX_N = 512
+
+
+def _f32_input(source: PythonObject, name: String, ndim: Int, context: PythonObject) raises -> PythonObject:
+    # `_f32_input`: a SciPy sparse input densified, a nonempty float32 C
+    # array of `ndim` dimensions, non-finite values refused.
+    if ndim == 2:
+        return decomp_input(source, name, context)
+    var view = classical_view(source, context, name)
+    var nd = Int(py=view.ndim)
+    var shape = String(py=py_call(Python.import_module("builtins").repr, view.shape))
+    if nd != 1:
+        raise Error("mojolearn: " + name + " must be 1-D, got " + String(nd) + "-D shape " + shape)
+    if Int(py=view.shape[0]) == 0:
+        raise Error("mojolearn: " + name + " is empty, shape " + shape + ": Found array with 0 sample(s) (shape="
+                    + shape + ") while a minimum of 1 is required.")
+    try:
+        return classical_host_f32(view, 1, name, context)
+    except error:
+        if String(error) == "Input " + name + " contains NaN or infinity":
+            raise Error(name + ": input must be finite; NaN/inf are unsupported")
+        raise Error(String(error))
+
+
+def _cut(mut kit: DecompKit, s: Int, rcond: Float64) raises -> Float64:
+    # `_f32(k.word(S, 0) * rcond)`
+    return Float64(Float32(kit.word(s, 0) * rcond))
+
+
+def _pseudo_solve(mut kit: DecompKit, u: Int, s: Int, vt: Int, rhs: Int, cut: Float64) raises -> Int:
+    # Vt^T ((U^T B) * (1 / S kept)^T): the values at or below cut dropped.
+    var zero = kit.zeros(1, 1)
+    var kept = kit.ew(XD_SELECT, s, s, zero, cut)
+    var inverse = kit.ew(XD_RECIP, kept)
+    var utb = kit.mm(u, rhs, ta=True)
+    var inverse_t = kit.transpose(inverse)
+    var scaled = kit.ew(XD_MUL, utb, inverse_t)
+    return kit.mm(vt, scaled, ta=True)
+
+
+def lstsq_call(args: PythonObject, context: PythonObject) raises -> PythonObject:
+    # args: (a, b, rcond, numeric_mode)
+    var kit = DecompKit(decomp_entries(args[3], context), context["output_context"])
+    try:
+        var b = args[1]
+        var vec = _is_vector(b)
+        var a_array = _f32_input(args[0], "a", 2, context)
+        var m = Int(py=a_array.shape[0])
+        var nn = Int(py=a_array.shape[1])
+        var b_array = _f32_input(b, "b", 1 if vec else 2, context)
+        var nrhs = 1 if vec else Int(py=b_array.shape[1])
+        if Int(py=b_array.shape[0]) != m:
+            raise Error("Incompatible dimensions")
+        var rcond = LINALG_F32_EPS * Float64(max(m, nn)) if args[2] is None else decomp_float(args[2])
+        var empty = _typed(Python.tuple(0), "<f4", "f", 4, context)
+        if nn >= 1 and nrhs >= 1 and nn + nrhs <= LINALG_TS_MAX_N and m >= nn + nrhs:
+            # `_tsqr_lstsq_core`: the blocked TSQR of [a | b], the SVD of its small R.
+            var n = nn + nrhs
+            var ra = kit.zeros(n, n)
+            _ = py_call(kit.entries["x_decomp_tsqr_r"], classical_address(a_array), classical_address(b_array),
+                        kit.address(ra), Python.list(m, nn, nrhs, 0))
+            kit.wrote_host(ra)
+            var top = kit.rows_of(ra, 0, nn)
+            var r = kit.cols_of(top, 0, nn)
+            var c = kit.cols_of(top, nn, n)
+            var usv = kit.svd_tall(r)
+            var cut = _cut(kit, usv[1], rcond)
+            var rank = kit.count_gt(usv[1], cut)
+            var x = _pseudo_solve(kit, usv[0], usv[1], usv[2], c, cut)
+            var resid = empty
+            if rank == nn and m > nn:
+                var tail = kit.rows_of(ra, nn, n)
+                var last = kit.cols_of(tail, nn, n)
+                var squares = kit.ew(XD_SQ, last)
+                resid = kit.out_shape(kit.colsum(squares), Python.tuple(nrhs))
+            var solution = kit.out_shape(x, Python.tuple(nn)) if vec else kit.publish(x)
+            return Python.tuple(solution, resid, rank, kit.out_shape(usv[1], Python.tuple(nn)))
+        # The QR + one-sided Jacobi SVD of a (or of a^T).
+        var a = kit.input(a_array, m, nn)
+        var bm = kit.input(b_array, m, nrhs)
+        var r = min(m, nn)
+        var usv = kit.thin_svd(a, r, True)
+        var cut = _cut(kit, usv[1], rcond) if r > 0 else Float64(0.0)
+        var rank = kit.count_gt(usv[1], cut)
+        var x = _pseudo_solve(kit, usv[0], usv[1], usv[2], bm, cut)
+        var resid = empty
+        if rank == nn and m > nn:
+            var fitted = kit.mm(a, x)
+            var diff = kit.ew(XD_SUB, bm, fitted)
+            var squares = kit.ew(XD_SQ, diff)
+            resid = kit.out_shape(kit.colsum(squares), Python.tuple(nrhs))
+        var solution = kit.out_shape(x, Python.tuple(nn)) if vec else kit.publish(x)
+        return Python.tuple(solution, resid, rank, kit.out_shape(usv[1], Python.tuple(r)))
+    finally:
+        kit.close()
+
+
 def linalg_decomp_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjectPtr:
     try:
         var call = PythonObject(from_borrowed=args_ptr)
@@ -385,6 +483,8 @@ def linalg_decomp_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyO
             result = randomized_svd_call(call[2], context)
         elif operation == "solve":
             result = solve_call(call[2], context)
+        elif operation == "lstsq":
+            result = lstsq_call(call[2], context)
         else:
             raise Error("unknown native linear algebra operation")
         return result.steal_data()
