@@ -12,11 +12,11 @@ These classes are not re-exported from `mojolearn/__init__.py` by this file;
 whoever owns that file decides the public namespace.
 """
 
-from . import _mojolearn_solver, _native_archive_bridge
+from . import _mojolearn_solver, _native_archive_bridge, _native_x_linear_bridge
 from ._mode import ParamsMixin
-from ._buffer import addr, addr_ro, as_f32_c, as_f32_colmajor, empty, zeros, _materialize
-from ._sample_weight import check_sample_weight
-from .linear_model import _r2_host, _shape_of
+# `linear_model` first: the native owner's bridge reads its classical door
+# (the host Lasso / ElasticNet predict through it)
+from . import linear_model as _linear_model  # noqa: F401
 
 # cuML's `loss_funct` / DistanceType style codes this surface uses.
 _SELECTION_SHUFFLE = {"cyclic": 0, "random": 1}
@@ -235,8 +235,7 @@ class ElasticNet(ParamsMixin):
         self.positive = positive
         self.random_state = random_state
 
-
-    # sample_weight (lane sk-kernels): checked here with scikit-learn's
+    # sample_weight (lane sk-kernels): checked natively with scikit-learn's
     # wording and handed to the weighted coordinate descent
     # (solver/impl/cd_weighted.mojo: weights rescaled to sum to n_samples,
     # weighted centering, sqrt-weight row scaling, all in Mojo).
@@ -331,7 +330,8 @@ class ElasticNet(ParamsMixin):
         """
         return _ARCHIVE(cls, "host_archive_load", (path,), _ARCHIVE_CONTEXT)
 
-    # `linear_model._r2_host` (formerly a sequential float64 host reduction,
+    # `linear_model._r2_host`'s x_metrics R^2 program, natively on the
+    # prediction buffer (formerly a sequential float64 host reduction,
     # DEVIATION 2365).
     def score(self, X, y):
         """Return the coefficient of determination R^2 of the prediction.
@@ -428,3 +428,8 @@ _CD_SCHEMA = (
 )
 _native_archive_bridge.register(ElasticNet, _CD_FORMAT, _CD_SCHEMA)
 _native_archive_bridge.register(Lasso, _CD_FORMAT, _CD_SCHEMA)
+
+# fit, predict and score are one call each into the native owner
+# (bindings/x_linear_native.mojo: `cd_fit` / `cd_predict` on the solver
+# binding imported above, R^2 by the x_metrics program), connected once.
+_CD_CALL, _CD_CONTEXT = _native_x_linear_bridge.connect({"cd_selection": _SELECTION_SHUFFLE}, _mojolearn_solver)
