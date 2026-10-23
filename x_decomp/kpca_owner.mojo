@@ -98,22 +98,22 @@ def _lanczos_top[E: Exec, D: RDev, RES: Bool, X: DecompDev](
     _ = kit_place_strided(kit, basis, q_row, 1, 0)
     var alphas = List[Float64]()
     var betas = List[Float64]()
-    var m = min(n, max(2 * nc + 1, 20))
+    var width = min(n, max(2 * nc + 1, 20))
     var j = 0
     var stop = False
     var th = -1
     var y = -1
     var top = 0
     while True:  # driver-loop: over the basis doublings (at most log2 of _LANCZOS_MAX_M)
-        if j < m and not stop:
-            # `_lanczos_batch`: steps j .. m-1, then their scalars to the first stop
+        if j < width and not stop:
+            # `_lanczos_batch`: steps j .. width-1, then their scalars to the first stop
             comptime if RES:
-                X.lanczos_dev(aid, kit.mats[basis].dev, kit.mats[abd].dev, n, j, m, cap)
+                X.lanczos_dev(aid, kit.mats[basis].dev, kit.mats[abd].dev, n, j, width, cap)
                 D.download(kit.mats[abd].dev, pab, 2 * cap)
             else:
-                X.lanczos_host(kit.ptr(a), kit.ptr(basis), pab, n, j, m, cap)
-            var reached = m
-            for jj in range(j, m):  # driver-loop: over the batch's Lanczos steps (at most _LANCZOS_MAX_M)
+                X.lanczos_host(kit.ptr(a), kit.ptr(basis), pab, n, j, width, cap)
+            var reached = width
+            for jj in range(j, width):  # driver-loop: over the batch's Lanczos steps (at most _LANCZOS_MAX_M)
                 var av = Float64(ab[jj])
                 var bv = Float64(ab[cap + jj])
                 alphas.append(av)
@@ -147,9 +147,9 @@ def _lanczos_top[E: Exec, D: RDev, RES: Bool, X: DecompDev](
         var res = _reduce_word(kit, scaled, _SEL_MAXABS)
         if stop or res <= _LANCZOS_TOL * big:
             break
-        if m >= cap:
+        if width >= cap:
             return (False, -1, -1)
-        m = min(n, min(2 * m, _LANCZOS_MAX_M))
+        width = min(n, min(2 * width, _LANCZOS_MAX_M))
     var yt = _cols_desc(kit, y, j - 1, top)
     var qm: Int
     if kit.mats[basis].dev >= 0:
