@@ -43,8 +43,9 @@
 #   (ALLOW_MODEL_DROP=1 overrides) or names a hash the table does not carry,
 #   then reruns the self-test and coverage.
 #
-# Needs the host bindings `estimators` and `x_decomp` (ols and its TSQR) and
-# the portable math library in this checkout; --build-host builds exactly those (through
+# Needs the host bindings `estimators` and `x_decomp` (ols and its TSQR), served
+# by either their own files or the merged index, and the portable math library
+# in this checkout; --build-host builds only missing bindings (through
 # ~/mojolearn-evidence/compile_slot.sh when present, -j 1).
 #
 # Environment: PYTHON (default `pixi run -e default python`, else python3),
@@ -90,9 +91,16 @@ else MATH=python/mojolearn/.libs/libMojolearnMath.so; fi
 # ols on the host column: LinearRegression (estimators) + its TSQR (x_decomp)
 HOST_FAMILIES=(estimators x_decomp)
 missing=()
-for fam in "${HOST_FAMILIES[@]}"; do
-    [ -f "python/mojolearn/host/_mojolearn_${fam}_host.so" ] || missing+=("$fam")
-done
+# Use the runtime's path-selection rules without bootstrapping the package.
+# This accepts compact release and nested development files only when the
+# actual indexed artifact exists, and preserves per-binding precedence.
+"${PY[@]}" tools/identity_host_preflight.py --package python/mojolearn \
+    --report "$EVID/host-bindings.json" "${HOST_FAMILIES[@]}" \
+    > "$EVID/host-missing.txt" 2> "$EVID/host-preflight.log" \
+    || die "host binding preflight failed; see $EVID/host-preflight.log"
+while IFS= read -r fam; do
+    [ -z "$fam" ] || missing+=("$fam")
+done < "$EVID/host-missing.txt"
 if [ ${#missing[@]} -gt 0 ] || [ ! -f "$MATH" ]; then
     if [ $BUILD_HOST = 1 ]; then
         SLOT=(); [ -x "$HOME/mojolearn-evidence/compile_slot.sh" ] && SLOT=(bash "$HOME/mojolearn-evidence/compile_slot.sh")
