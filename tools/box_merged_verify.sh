@@ -34,7 +34,10 @@ fi
 st "arch env: $ARCHENV ($(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1)$(rocm-smi --showproductname 2>/dev/null | grep -m1 -o 'MI3[0-9A-Z]*'))"
 [ "${BOX_BUILDS:-all}" = all ] || [ -z "${BOX_BUILDS:-}" ] && find python/mojolearn -name "*.so" -delete
 command -v /usr/bin/time >/dev/null || apt-get install -y -qq time > /dev/null 2>&1
-mb() { tag=$1; shift; /usr/bin/time -v env "$@" pixi run -q sh bindings/merged_build.sh ${tag%%-*} > $O/build-$tag.log 2> $O/build-$tag.time; rc=$?
+# /usr/bin/time is missing on some RunPod community images (2026-10-23: every build rc=127); install it, else run untimed.
+[ -x /usr/bin/time ] || (apt-get install -y -q time >/dev/null 2>&1 || (apt-get update -q >/dev/null 2>&1 && apt-get install -y -q time >/dev/null 2>&1)) || true
+if [ -x /usr/bin/time ]; then TIMEV="/usr/bin/time -v"; else TIMEV=""; fi
+mb() { tag=$1; shift; $TIMEV env "$@" pixi run -q sh bindings/merged_build.sh ${tag%%-*} > $O/build-$tag.log 2> $O/build-$tag.time; rc=$?
   st "BUILD $tag rc=$rc seconds=$(grep -oP 'Elapsed \(wall clock\) time.*: \K.*' $O/build-$tag.time) peak_rss_gb=$(awk '/Maximum resident/ {printf "%.1f", $6/1048576}' $O/build-$tag.time) errors=$(grep -c ': error:' $O/build-$tag.log)"; }
 # BOX_BUILDS selects the merged builds (default all three); the identical and host
 # sets carry the byte LM on Linux only when MOJOLEARN_PACKAGE_BYTE_LM=1 (the release
