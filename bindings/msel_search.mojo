@@ -130,7 +130,7 @@ def msel_sampler_list(dists: PythonObject, n_iter_in: PythonObject, random_state
     if msel_cmp("lt", PythonObject(len(grid)), n_iter):
         msel_warn("The total space of parameters " + String(len(grid)) + " is smaller than n_iter="
                   + family_str(n_iter) + ". Running " + String(len(grid)) + " iterations. For exhaustive "
-                  + "searches, use GridSearchCV.", msel_b().UserWarning)
+                  + "searches, use GridSearchCV.", msel_b().UserWarning, context)
         n_iter = PythonObject(len(grid))
     var rng = MselRng(random_state, context)
     var perm = rng.permutation(len(grid), context)

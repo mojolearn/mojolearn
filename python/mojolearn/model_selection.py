@@ -2374,3 +2374,6 @@ _native_family_bridge.tables(
                            ShuffleSplit, GroupShuffleSplit, StratifiedShuffleSplit, PredefinedSplit, _IterableCV),
     family_msel_schema=SPLIT_DESCRIPTOR_SCHEMA, family_msel_arena_io=_arena_io,
     family_msel_fast_defines=_cv_fast_defines)
+
+from ._native_msel_inputs import connect as _connect_msel_inputs  # noqa: E402
+_connect_msel_inputs(_NATIVE_CONTEXT, _RESIDENT_CONTEXT)
