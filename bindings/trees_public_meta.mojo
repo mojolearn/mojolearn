@@ -590,7 +590,7 @@ def _voting_transform(model: PythonObject, X: PythonObject, classifier: Bool, co
             _ = _place(xt, out, n, width, blk, rows, j * k)
             _ = blk^
         else:
-            var blk = _out2d(trees_f32(py_call(e.predict, Xa), 1, "C", "codes" if classifier else "p", context).keep, n, context)
+            var blk = _out2d(py_call(e.predict, Xa), n, context)
             _ = _place(xt, out, n, width, blk, rows, j)
             _ = blk^
     return trees_reshape(out, Python.tuple(n, width), context)
@@ -621,3 +621,194 @@ def _voting_regress(model: PythonObject, X: PythonObject, context: PythonObject)
         _acc_w(xt, acc, py_call(members[i].predict, Xa), n, Float64(py=w[i]), context)
     _scale(xt, acc, _fsum(w, context))
     return acc
+
+
+# ---------------------------------------------------------------- Stacking
+
+
+def _stacking_validate(model: PythonObject, context: PythonObject) raises:
+    _refuse_jobs(model, True, "the members fit one after another.")
+    var method = _attr(model, "stack_method", PythonObject("auto"))
+    if not py_contains(Python.tuple("auto", "predict_proba", "decision_function", "predict"), method):
+        raise Error("stack_method must be auto, predict_proba, decision_function or predict")
+    _ = _cv_value(_attr(model, "cv", PythonObject(None)), context)
+
+
+def _stack_method(model: PythonObject, est: PythonObject, classifier: Bool) raises -> PythonObject:
+    """`_StackingBase._method`."""
+    var method = _attr(model, "stack_method", PythonObject("auto"))
+    if String(method) != "auto":
+        return method
+    if classifier:
+        if _has(est, "predict_proba"):
+            return PythonObject("predict_proba")
+        if _has(est, "decision_function"):
+            return PythonObject("decision_function")
+    return PythonObject("predict")
+
+
+def _stack_out(model: PythonObject, xt: PythonObject, est: PythonObject, method: PythonObject, Xs: PythonObject,
+               context: PythonObject) raises -> PythonObject:
+    """`_StackingBase._out`: a binary predict_proba keeps its second column."""
+    var out = py_call(py_call(trees_builtins().getattr, est, method), Xs)
+    if String(method) == "predict_proba" and _truthy(_attr(model, "_binary", PythonObject(False))):
+        var p = _out2d(out, _rows(Xs), context)
+        var col = _one_col(xt, p, 1, context)
+        _ = p^
+        return col
+    return out
+
+
+def _stacking_fit(model: PythonObject, X: PythonObject, y_full: PythonObject, codes: Bool, splits: PythonObject,
+                  final: PythonObject, sample_weight: PythonObject, classifier: Bool,
+                  context: PythonObject) raises -> PythonObject:
+    """`_StackingBase._fit_stack`. `y_full` is the int32 codes (classifier)
+    or the float32 targets (regressor); a fold's targets are gathered."""
+    var owner = _owner(model)
+    var xt = _xt(py_fields(model), context)
+    var Xa = _x_array(X, context)
+    var n = _rows(Xa)
+    var d = _cols(Xa)
+    var active = _active(_attr(model, "estimators", PythonObject(None)), owner)
+    _require_member(final, owner)
+    var all_names = py_call(trees_builtins().list, active.names)
+    var all_ests = py_call(trees_builtins().list, active.ests)
+    _ = py_call(all_names.append, PythonObject("final_estimator"))
+    _ = py_call(all_ests.append, final)
+    var sw = _member_weights(all_names, all_ests, sample_weight, n, context)
+    var fitted = Python.list()
+    _set(model, "estimators_", fitted)
+    for i in range(len(active.ests)):  # driver-loop: over members
+        var e = _clone(active.ests[i])
+        _fit_member(e, Xa, y_full, sw)
+        _ = py_call(fitted.append, e)
+    var methods = Python.list()
+    for i in range(len(fitted)):  # driver-loop: over members
+        _ = py_call(methods.append, _stack_method(model, fitted[i], classifier))
+    _set(model, "stack_method_", methods)
+    var head = _gather(xt, trees_address(Xa), n, d, _arange(xt, n if n < 2 else 2, context), _arange(xt, d, context), context)
+    var widths = Python.list()
+    var total = 0
+    for i in range(len(fitted)):  # driver-loop: over members
+        var blk = _out2d(_stack_out(model, xt, fitted[i], methods[i], head, context), 2, context)
+        _ = py_call(widths.append, PythonObject(blk.cols))
+        total += blk.cols
+        _ = blk^
+    var width = total + (d if _truthy(_attr(model, "passthrough", PythonObject(False))) else 0)
+    var meta = _zeros(n * width, context)
+    var cols = _arange(xt, d, context)
+    for f in range(len(splits)):  # driver-loop: over the cv folds
+        var tr = splits[f][0]
+        var te = splits[f][1]
+        var col0 = 0
+        for i in range(len(active.ests)):  # driver-loop: over members
+            var e = _clone(active.ests[i])
+            var y_tr: PythonObject
+            if codes:
+                y_tr = _gather_codes(xt, y_full, tr, context)
+            else:
+                y_tr = _gather_vec(xt, trees_address(y_full), len(y_full), tr, context)
+            var w_tr = PythonObject(None)
+            if sw is not None:
+                w_tr = _gather_vec(xt, trees_address(sw), n, tr, context)
+            _fit_member(e, _gather(xt, trees_address(Xa), n, d, tr, cols, context), y_tr, w_tr)
+            var Xte = _gather(xt, trees_address(Xa), n, d, te, cols, context)
+            var blk = _out2d(_stack_out(model, xt, e, methods[i], Xte, context), len(te), context)
+            var got = _place(xt, meta, n, width, blk, te, col0)
+            _ = blk^
+            if got != Int(py=widths[i]):
+                raise Error("a member's output width changed between folds (a class missing from a fold)")
+            col0 += got
+    if _truthy(_attr(model, "passthrough", PythonObject(False))):
+        var xb = TreesMatrix(Xa, trees_address(Xa), n, d, True)
+        _ = _place(xt, meta, n, width, xb, _arange(xt, n, context), total)
+        _ = xb^
+    _set(model, "_widths_", widths)
+    _set(model, "named_estimators_", _named(active.names, fitted))
+    var final_ = _clone(final)
+    _set(model, "final_estimator_", final_)
+    var meta32 = _f32_array(trees_reshape(meta, Python.tuple(n, width), context), 2, "meta", context)
+    _fit_member(final_, meta32, y_full, sw)
+    _set(model, "n_features_in_", PythonObject(d))
+    _set(model, "_fitted", PythonObject(True))
+    return model
+
+
+def _stacking_transform(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    """`_StackingBase.transform`: the meta features (float64)."""
+    var Xa = _check_x(model, X, context)
+    var xt = _xt(py_fields(model), context)
+    var n = _rows(Xa)
+    var d = _cols(Xa)
+    var widths = _attr(model, "_widths_", Python.list())
+    var total = 0
+    for i in range(len(widths)):  # driver-loop: over members
+        total += Int(py=widths[i])
+    var passthrough = _truthy(_attr(model, "passthrough", PythonObject(False)))
+    var width = total + (d if passthrough else 0)
+    var meta = _zeros(n * width, context)
+    var rows = _arange(xt, n, context)
+    var col0 = 0
+    var members = _attr(model, "estimators_", Python.list())
+    var methods = _attr(model, "stack_method_", Python.list())
+    for i in range(len(members)):  # driver-loop: over members
+        var blk = _out2d(_stack_out(model, xt, members[i], methods[i], Xa, context), n, context)
+        col0 += _place(xt, meta, n, width, blk, rows, col0)
+        _ = blk^
+    if passthrough:
+        var xb = TreesMatrix(Xa, trees_address(Xa), n, d, True)
+        _ = _place(xt, meta, n, width, xb, rows, col0)
+        _ = xb^
+    return trees_reshape(meta, Python.tuple(n, width), context)
+
+
+def _stacking_classifier_fit(model: PythonObject, X: PythonObject, y: PythonObject, sample_weight: PythonObject,
+                             context: PythonObject) raises -> PythonObject:
+    _stacking_validate(model, context)
+    var labels = trees_encode_labels(y, context)
+    _set(model, "classes_", labels.classes)
+    var k = len(labels.classes)
+    _set(model, "_binary", PythonObject(k == 2))
+    var xt = _xt(py_fields(model), context)
+    var splits = _splits(xt, _attr(model, "cv", PythonObject(None)), X, y, labels.n, labels.codes, True, k, context)
+    var final = _attr(model, "final_estimator", PythonObject(None))
+    if final is None:
+        final = py_call(_import("mojolearn.linear_model", "LogisticRegression"))
+    return _stacking_fit(model, X, labels.codes, True, splits, final, sample_weight, True, context)
+
+
+def _stacking_regressor_fit(model: PythonObject, X: PythonObject, y: PythonObject, sample_weight: PythonObject,
+                            context: PythonObject) raises -> PythonObject:
+    _stacking_validate(model, context)
+    var y32 = _f32_array(y, 1, "y", context)
+    var xt = _xt(py_fields(model), context)
+    var splits = _splits(xt, _attr(model, "cv", PythonObject(None)), X, y, _rows(y32), PythonObject(None), True, 0,
+                         context)
+    var final = _attr(model, "final_estimator", PythonObject(None))
+    if final is None:
+        final = py_call(_import("mojolearn.linear_model", "Ridge"))
+    return _stacking_fit(model, X, y32, False, splits, final, sample_weight, False, context)
+
+
+def _stacking_meta32(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    return _f32_array(_stacking_transform(model, X, context), 2, "meta", context)
+
+
+def _stacking_predict(model: PythonObject, X: PythonObject, classifier: Bool, context: PythonObject) raises -> PythonObject:
+    var final_ = _attr(model, "final_estimator_", PythonObject(None))
+    var Xm = _stacking_meta32(model, X, context)
+    if not classifier:
+        return py_call(final_.predict, Xm)
+    var codes = _i32_vec(py_call(final_.predict, Xm), "codes", context)
+    return trees_decode_labels(_attr(model, "classes_", PythonObject(None)), codes, context)
+
+
+def _stacking_predict_proba(model: PythonObject, X: PythonObject, context: PythonObject) raises -> PythonObject:
+    var final_ = _attr(model, "final_estimator_", PythonObject(None))
+    var k = len(_attr(model, "classes_", Python.list()))
+    var Xm = _stacking_meta32(model, X, context)
+    var n = _rows(Xm)
+    var xt = _xt(py_fields(model), context)
+    var acc = _class_zero(xt, n * k, context)
+    _acc_cols_w(xt, acc, py_call(final_.predict_proba, Xm), _sub_cols(final_, context), n, k, 1.0, context)
+    return trees_reshape(acc, Python.tuple(n, k), context)
