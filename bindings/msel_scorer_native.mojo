@@ -130,7 +130,7 @@ def msel_scorer_call(scorer: PythonObject, estimator: PythonObject, x: PythonObj
         msel_admit(memo, context)
     var predicted = PythonObject(None) if memo is None else py_get(memo, method)
     if predicted is None:
-        predicted = msel_estimator_call(estimator, String(method), Python.tuple(x), context)
+        predicted = msel_estimator_call(estimator, String(method), Python.tuple(x), context, True)
         if memo is not None:
             py_setitem(memo, method, predicted)
     var name = fields["_name"]

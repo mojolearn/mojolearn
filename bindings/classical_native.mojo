@@ -187,7 +187,7 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         if loading:
             var loaded = classical_archive_load(model, args[0], ridge, context)
             return loaded.steal_data()
-        if operation == "ridge_fit" or operation == "ols_fit" or operation == "predict_public" or operation == "score_public":
+        if operation == "ridge_fit" or operation == "ols_fit" or operation == "predict_public" or operation == "predict_score" or operation == "score_public":
             # scikit-learn's sparse refusal comes before input admission.
             classical_refuse_sparse(args[0], classical_estimator_name(model))
         if operation != "save":
@@ -226,8 +226,8 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
         if operation == "save":
             result = classical_archive_save(model, args[0], ridge, context)
             return result.steal_data()
-        if operation == "predict_public" or operation == "score_public":
-            classical_require_fitted(model, ridge, "predict" if operation == "predict_public" else "score", context)
+        if operation == "predict_public" or operation == "predict_score" or operation == "score_public":
+            classical_require_fitted(model, ridge, "score" if operation == "score_public" else "predict", context)
         var entries = classical_entries(model, context)
         if operation == "ridge_fit":
             if not ridge:
@@ -237,7 +237,10 @@ def classical_c(py_self: PyObjectPtr, args_ptr: PyObjectPtr) abi("C") -> PyObjec
             if not linear:
                 raise Error("TypeError: ols_fit requires LinearRegression")
             result = classical_ols_fit(model, args, entries, context)
-        elif operation == "predict":
+        elif operation == "predict" or operation == "predict_score":
+            # Native scorers consume the same float32 kernel result that
+            # historical package-internal callers received, without relying
+            # on a Python frame to distinguish them from public predict.
             result = classical_linear_predict(model, args[0], entries, context)
         elif operation == "predict_public":
             # A caller outside the package gets scikit-learn's float64
