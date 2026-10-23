@@ -354,12 +354,19 @@ def specialize_function(text: str, *, parameters: Mapping[str, Strings] | None =
                 current.packed.clear()
                 return current, False
             terminal = bool(re.match(r'^(?:return|raise|break|continue)\b', code))
+            if code in ('return', 'raise', 'break', 'continue', 'pass'):
+                return current, terminal
             expression = re.sub(r'^(?:return|raise)\s+', '', code) if terminal else code
             assigned = re.match(r'^([A-Za-z_]\w*)\s*(?::[^=]+)?=\s*(.*)$', expression)
             target = assigned.group(1) if assigned else None
             if target in current.constructors:
                 raise ValueError('shadowed string constructors')
             node = _expression(assigned.group(2) if assigned else expression)
+            if node is None:
+                # Some Python tokenizer versions classify unknown Mojo-like
+                # punctuation (for example !) as OP rather than ERRORTOKEN.
+                # A leaf statement we cannot parse is not a supported scan.
+                raise ValueError('unsupported statement expression')
             values = _strings(node, current)
             packed = None
             if isinstance(node, ast.Name) and node.id in current.packed:
