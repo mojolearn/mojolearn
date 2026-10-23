@@ -586,8 +586,18 @@ def causal_model_read_weights_binding(checkpoint: PythonObject, plan: PythonObje
                     raise Error("UnsupportedModel: checkpoint tensor " + String(name) + " is too small for projection row slice")
                 var cols = Int(py=value.shape[1])
                 var sliced = generation_array([end - begin, cols])
+                # `whole` owns the fused tensor's storage through the memcpy:
+                # Mojo destroys a local at its last use, which for `value`
+                # was the `value._addr` read in the memcpy's arguments, so the
+                # array was freed before the copy read it (phi3's fused
+                # qkv_proj / gate_up_proj; the allocator's free-list words
+                # landed in the first rows of the q and gate slices and moved
+                # hf-causal-lm's `every` part from run to run once the
+                # balanced calls stopped leaking a reference to it).
+                var whole = value
                 if end > begin:
-                    memcpy(dest=f32_ptr(Int(py=sliced._addr)), src=f32_ptr(Int(py=value._addr)) + begin * cols, count=(end - begin) * cols)
+                    memcpy(dest=f32_ptr(Int(py=sliced._addr)), src=f32_ptr(Int(py=whole._addr)) + begin * cols, count=(end - begin) * cols)
+                _ = whole^  # read by address above
                 value = sliced
             py_setitem(weights, key, _model_pack(value, String(format), bindings["linalg"], context) if packed else value)
         _ = py_call(layers.append, weights)
