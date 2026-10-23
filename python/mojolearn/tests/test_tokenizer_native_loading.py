@@ -72,8 +72,10 @@ def test_caller_defined_path_protocol_is_preserved_and_visible_to_audit(tmp_path
     class CallerPath:
         def __fspath__(self):
             return str(path)
+    # a caller-defined __fspath__ is a Python path callback: the native reader
+    # refuses it by name before touching the protocol (2026-10-20, "Reject
+    # Python path callbacks before protocol access"), so no Python frame runs
     audit = audit_native_call(Tokenizer.from_pretrained, CallerPath())
-    assert audit.exception is None
-    assert audit.result.encode("hello")
-    assert not audit.passed
-    assert any("CallerPath.__fspath__" in name for _, _, name in audit.frames)
+    assert isinstance(audit.exception, TypeError)
+    assert "Python path callbacks are unsupported" in str(audit.exception)
+    assert not any("CallerPath.__fspath__" in name for _, _, name in audit.frames)
