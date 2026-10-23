@@ -102,6 +102,19 @@ def test_cpu_sample_retains_finished_children(tmp_path, monkeypatch):
     assert guard.sample_group(9, seen)==(17, 40*1024, 100000)
 
 
+def test_nested_controller_scope_cannot_clear_cancellation(tmp_path):
+    with guard.cancellation_scope():
+        guard.cancel_active()
+        result = run(tmp_path, 'raise AssertionError("must not launch after cancellation")')
+        assert result['status'] == 'interrupted'
+        assert result['exit_code'] == 130
+        assert 'pid' not in result
+        assert guard.cancelled()
+    # A separate top-level operation can start after the cancelled one ends.
+    with guard.cancellation_scope():
+        assert not guard.cancelled()
+
+
 def test_sigterm_controller_stops_worker_group(tmp_path):
     worker = 'import os,pathlib,time;pathlib.Path("worker.pid").write_text(str(os.getpid()));time.sleep(60)'
     code = ('import sys;sys.path.insert(0,'+repr(str(Path(guard.__file__).parent))+');'
