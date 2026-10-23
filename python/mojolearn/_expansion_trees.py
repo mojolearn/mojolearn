@@ -943,6 +943,26 @@ class BaggingClassifier(ClassifierScoreMixin, _BaggingBase):
         """Predict the class with the highest mean probability."""
         return _TREES(self, "trees_boost_predict", (X,), _TREES_CONTEXT)
 
+    def score(self, X, y, sample_weight=None):
+        """Mean accuracy of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True labels.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            Fraction of samples predicted correctly (weighted when
+            ``sample_weight`` is given).
+        """
+        return _TREES(self, "trees_boost_score", (X, y, sample_weight), _TREES_CONTEXT)
+
 class BaggingRegressor(RegressorScoreMixin, _BaggingBase):
     """A bagging ensemble of regressors.
 
@@ -1038,6 +1058,25 @@ class BaggingRegressor(RegressorScoreMixin, _BaggingBase):
     def predict(self, X):
         """Mean of the members' predictions, float64."""
         return _TREES(self, "trees_boost_predict", (X,), _TREES_CONTEXT)
+
+    def score(self, X, y, sample_weight=None):
+        """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True targets.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            R^2; 1.0 is a perfect fit.
+        """
+        return _TREES(self, "trees_boost_score", (X, y, sample_weight), _TREES_CONTEXT)
 
 # ----------------------------------------------------------------- AdaBoost
 # Reference: scikit-learn `sklearn/ensemble/_weight_boosting.py`
@@ -1159,6 +1198,26 @@ class AdaBoostClassifier(ClassifierScoreMixin, _AdaBoostBase):
         """Predict the class with the highest weighted vote."""
         return _TREES(self, "trees_boost_predict", (X,), _TREES_CONTEXT)
 
+    def score(self, X, y, sample_weight=None):
+        """Mean accuracy of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True labels.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            Fraction of samples predicted correctly (weighted when
+            ``sample_weight`` is given).
+        """
+        return _TREES(self, "trees_boost_score", (X, y, sample_weight), _TREES_CONTEXT)
+
 class AdaBoostRegressor(RegressorScoreMixin, _AdaBoostBase):
     """An AdaBoost regressor (AdaBoost.R2).
 
@@ -1236,6 +1295,25 @@ class AdaBoostRegressor(RegressorScoreMixin, _AdaBoostBase):
     def predict(self, X):
         """Weighted median of the members' predictions."""
         return _TREES(self, "trees_boost_predict", (X,), _TREES_CONTEXT)
+
+    def score(self, X, y, sample_weight=None):
+        """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True targets.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            R^2; 1.0 is a perfect fit.
+        """
+        return _TREES(self, "trees_boost_score", (X, y, sample_weight), _TREES_CONTEXT)
 
 # --------------------------------------------------------------------- DART
 # Reference: LightGBM `src/boosting/dart.hpp` (DART::DroppingTrees,
@@ -1422,6 +1500,25 @@ class DARTRegressor(RegressorScoreMixin, _DARTBase):
         """Raw boosted score of each row, float64."""
         return _TREES(self, "trees_boost_predict", (X,), _TREES_CONTEXT)
 
+    def score(self, X, y, sample_weight=None):
+        """Coefficient of determination R^2 of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True targets.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            R^2; 1.0 is a perfect fit.
+        """
+        return _TREES(self, "trees_boost_score", (X, y, sample_weight), _TREES_CONTEXT)
+
 class DARTClassifier(ClassifierScoreMixin, _DARTBase):
     """Gradient boosting with DART dropout, classification.
 
@@ -1548,6 +1645,26 @@ class DARTClassifier(ClassifierScoreMixin, _DARTBase):
     def predict(self, X):
         """Predict the class with the highest score."""
         return _TREES(self, "trees_boost_predict", (X,), _TREES_CONTEXT)
+
+    def score(self, X, y, sample_weight=None):
+        """Mean accuracy of ``predict(X)`` against ``y``.
+
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Test samples.
+        y : array-like of shape (n_samples,)
+            True labels.
+        sample_weight : array-like of shape (n_samples,), default None
+            Sample weights.
+
+        Returns
+        -------
+        float
+            Fraction of samples predicted correctly (weighted when
+            ``sample_weight`` is given).
+        """
+        return _TREES(self, "trees_boost_score", (X, y, sample_weight), _TREES_CONTEXT)
 
 # ----------------------------------------------------- RandomTreesEmbedding
 # Reference: scikit-learn `sklearn/ensemble/_forest.py` RandomTreesEmbedding
