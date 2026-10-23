@@ -680,17 +680,6 @@ def _door():
     return _load()
 
 
-def _two_d(x, name):
-    """`_operand`, plus the 2-D shape it promises, as `(arr, rows, cols)`."""
-    arr = _operand(x, name)
-    shape = getattr(arr, "shape", None)
-    if shape is None or len(shape) != 2:
-        raise ValueError(
-            f"mojolearn.linalg: {name} must be 2-D, got shape {shape!r}"
-        )
-    return arr, int(shape[0]), int(shape[1])
-
-
 def _refuse_wide(rows, cols, who):
     if rows < cols:
         raise ValueError(
@@ -703,17 +692,6 @@ def _refuse_wide(rows, cols, who):
         )
 
 
-def _xd_kit():
-    """The decomp lane's cells (x_decomp) in the process's numeric mode:
-    IDENTICAL is GPU == CPU bit for bit (the x-decomp lanes), so Q and U are
-    the same bytes on every column there. lane/apple-fast-gap-linalg2
-    (2026-10-03): this pinned "identical", so a FAST process (the M3, FAST
-    bindings only) failed qr/eigh/svd with the identical binding's
-    ImportError; the kit now follows `_backend.default_mode()`."""
-    from ._expansion_decomp import _Kit
-    return _Kit(_backend.default_mode())
-
-
 # TOMBSTONE: MOJOLEARN_QR_FAST_DEV / MOJOLEARN_SVD_FAST_CHOLQR deleted 2026-10-09 on lane/owed-deletions-D1 took their
 # only caller-facing helper, `_fast_apple_kit`; code recoverable at b639a2bd2.
 
@@ -724,21 +702,6 @@ def _xd_matrix(a_arr, rows, cols):
     st = _array.array("f")
     st.frombytes(a_arr.tobytes())
     return _M(st, rows, cols)
-
-
-def _triu(M, r):
-    """The first r rows of M with everything below the diagonal zeroed (pure
-    data movement)."""
-    import array as _array
-    from ._expansion_decomp import _M
-    out = _array.array("f", M.s[:r * M.c])
-    # a slice assignment per row (one C-level copy each) instead of a
-    # Python store per zeroed cell (lane/neural-net-experiment)
-    c = M.c
-    for i in range(1, r):  # glue: one C-level zero fill per row (r-sized: matrix rows)
-        w = min(i, c)
-        out[i * c:i * c + w] = _array.array("f", bytes(4 * w))
-    return _M(out, r, c)
 
 
 class QRResult(tuple):
@@ -762,10 +725,6 @@ class SVDResult(tuple):
     U = property(lambda self: self[0])
     S = property(lambda self: self[1])
     Vh = property(lambda self: self[2])
-
-
-def _qr_q_factor(a_arr, rows, cols):
-    return _xd_kit().geqrf(_xd_matrix(a_arr, rows, cols))
 
 
 # ===========================================================================
@@ -819,57 +778,6 @@ def _tsqr_r(b, a_arr, rows, cols, keep):
     return R
 
 
-def _tsqr_q(b, C, rows, cols, k):
-    """Q C (rows x k, an Array) for the kept factorization; C is cols x k."""
-    out = empty((rows, k), "<f4")
-    b.x_decomp_tsqr_q(addr_ro(C, name="c"), addr(out, name="q_out"), [int(rows), int(cols), int(k)])
-    return out
-
-
-def _tsqr_release(b):
-    try:
-        one = empty((1,), "<f4")
-        b.x_decomp_tsqr_q(addr_ro(one, name="c"), addr(one, name="q_out"), [1, 1, 0])
-    except Exception:
-        pass
-
-
-def _qr_tsqr(a_arr, rows, cols):
-    """`qr(a, 'reduced')` through the blocked TSQR: (Q, R), R's diagonal
-    non-negative."""
-    b = _xd_kit().b
-    R = _tsqr_r(b, a_arr, rows, cols, True)
-    try:
-        # R's rows signed so its diagonal is non-negative, and C the
-        # diagonal of those signs, in Mojo (x_decomp/api.mojo r_signs_py)
-        C = empty((cols, cols), "<f4")
-        b.x_decomp_r_signs(addr(R, name="r"), addr(C, name="c"), [int(cols)])
-    except BaseException:
-        _tsqr_release(b)
-        raise
-    Q = _tsqr_q(b, C, rows, cols, cols)
-    return QRResult(Q, R)
-
-
-def _svd_tsqr(a_arr, rows, cols):
-    """`svd(a, full_matrices=False)` of a tall a through the blocked TSQR:
-    the SVD of its R, then U = Q U_R."""
-    k = _xd_kit()
-    b = k.b
-    R = _tsqr_r(b, a_arr, rows, cols, True)
-    try:
-        # TOMBSTONE: MOJOLEARN_SVD_QFIX (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
-        # Tried: the 2^-40 cut + Householder U_R branch here (qfix bit 1).
-        # Restore: git apply experiments/removed/MOJOLEARN_SVD_QFIX.patch; record in docs/TOMBSTONES.md.
-        Ur, S, Vt = _svd_tall(k, _xd_matrix(R, cols, cols), False)
-        C = Ur.out()
-    except BaseException:
-        _tsqr_release(b)
-        raise
-    U = _tsqr_q(b, C, rows, cols, cols)
-    return SVDResult(U, S.out((cols,)), Vt.out())
-
-
 # TOMBSTONE: MOJOLEARN_TSVD_FAST_CHOLQR3 (DROPPED-slower) deleted 2026-10-09 by lane/owed-deletions-D3; code recoverable at b639a2bd2.
 # Tried: _tsvd_cholqr_r (the binding's x_decomp_tsvd_cholqr_r, None when absent).
 # Restore: git apply experiments/removed/MOJOLEARN_TSVD_FAST_CHOLQR3.patch; record in docs/TOMBSTONES.md.
@@ -906,29 +814,6 @@ def _tsvd_tsqr_components(x, nc, mode):
     return V.out(), S.take_cols(list(range(nc))).out((nc,))
 
 
-def _qr_q(a, mode):
-    """numpy.linalg.qr's 'reduced', 'complete' and 'raw' modes: LAPACK geqrf
-    (the reflectors kept, dlarfg's signs) and orgqr, through the decomp
-    lane's sliced order (x_decomp/qr_sliced.mojo, DEVIATION 5320;
-    lane/algos-decomp, 2026-09-27; sliced by lane hr-qr, 2026-10-02). Any shape, wide included."""
-    a_arr, rows, cols = _two_d(a, "a")
-    # TOMBSTONE: MOJOLEARN_QR_FAST_DEV (DROPPED-slower) deleted 2026-10-09 on lane/owed-deletions-D1 (the FAST kit's
-    # grid-fold geqrf / orgqr ahead of the TSQR); code recoverable at b639a2bd2.
-    # Restore: git apply experiments/removed/MOJOLEARN_QR_FAST_DEV.patch; record in docs/TOMBSTONES.md.
-    if mode == "reduced" and _tsqr_on(rows, cols):
-        return _qr_tsqr(a_arr, rows, cols)
-    k = _xd_kit()
-    h, tau = k.geqrf(_xd_matrix(a_arr, rows, cols))
-    kk = min(rows, cols)
-    if mode == "raw":
-        # numpy returns geqrf's Fortran-ordered array seen in C order: the
-        # factored matrix transposed, (N, M); tau (K,)
-        return h.T.out(), tau.out((kk,))
-    if mode == "complete":
-        return QRResult(k.orgqr(h, tau, rows).out(), _triu(h, rows).out())
-    return QRResult(k.orgqr(h, tau, kk).out(), _triu(h, kk).out())
-
-
 # mode 'reduced'/'complete'/'raw': LAPACK geqrf with reflectors kept, dlarfg's sign convention,
 # orgqr for Q (DEVIATION 5320). 'reduced' of a tall matrix with N <= 512 uses the blocked TSQR
 # (`_qr_tsqr`, R's diagonal non-negative; MOJOLEARN_LINALG_TSQR=0 keeps geqrf + orgqr).
@@ -962,27 +847,7 @@ def qr(a, mode="r"):
     Runs on the device on a GPU install and on the host binding on a CPU-only install,
     with the same bits.
     """
-    if mode in ("reduced", "complete", "raw"):
-        return _qr_q(a, mode)
-    if mode != "r":
-        raise ValueError(
-            f"mojolearn.linalg.qr: unrecognized mode {mode!r}; numpy's modes "
-            "are 'reduced', 'complete', 'r' and 'raw'"
-        )
-    a_arr, rows, cols = _two_d(a, "a")
-    if rows < cols:
-        # a wide R (M x N, upper trapezoidal) is geqrf's; the TSQR route below
-        # is tall only
-        return _triu(_qr_q_factor(a_arr, rows, cols)[0], rows).out()
-    out = empty((cols, cols), "<f4")
-    # ORDER MATCHES qr_r_binding IN BOTH BINDINGS, bindings/
-    # _mojolearn_linalg.mojo (device) and _mojolearn_linalg_host.mojo:
-    # addrs are (a, r_out) and params are (n_rows, n_cols). Swapping the two
-    # addresses writes R over the caller's matrix, which is corruption and
-    # not an exception.
-    _door().qr_r([addr_ro(a_arr, name="a"), addr(out, name="r_out")],
-                 [int(rows), int(cols)])
-    return out
+    return _NATIVE(None, "family_lin_qr", (a, mode), _NATIVE_CONTEXT)
 
 
 # x_decomp's round-robin Jacobi (eigh_par_* kernels) + sign_flip_kernel (PCA's host_sign_flip
@@ -1018,27 +883,7 @@ def eigh(a, UPLO="L"):
     Uses a round-robin Jacobi method, on the device on a GPU install and on the host
     binding on a CPU-only install, with the same bits.
     """
-    a_arr, rows, cols = _two_d(a, "a")
-    if rows != cols:
-        raise ValueError(
-            f"mojolearn.linalg.eigh: a must be square, got {rows} x {cols}"
-        )
-    if UPLO not in ("L", "U"):
-        raise ValueError("mojolearn.linalg.eigh: UPLO argument must be 'L' or 'U'")
-    # lane fix-eigh-main (2026-10-02): x_decomp's eigh, the round-robin
-    # Jacobi (x_decomp/jacobi_par.mojo, the pinned order of x_decomp/rr.mojo:
-    # n/2 independent rotations per round, one thread per updated cell; the
-    # host binding replays the same rounds), then `device_eigh`'s own tail
-    # (sign_flip_kernel, eigh_ascending). It replaces the linalg binding's
-    # `device_eigh`, ONE threadblock for the whole cyclic sweep
-    # (grid_dim=(1, 1, 1)), which never finished n = 4096 on the L40S inside
-    # the board's 2400 s (0.8.34 board: 1,984 s). `svd(hermitian=True)`
-    # already took this route.
-    # cgr-decomp (2026-10-03): the triangle is mirrored by the binding, on
-    # the device where there is one (`sym_from_triangle_kernel`), not by a
-    # host loop over the rows
-    w, v = _xd_kit().eigh(_xd_matrix(a_arr, rows, rows), uplo=1 if UPLO == "L" else 2)
-    return w.out((rows,)), v.out()
+    return _NATIVE(None, "family_lin_eigh", (a, UPLO), _NATIVE_CONTEXT)
 
 
 # Route: PCA(svd_solver='full') without centering: Householder QR, then one-sided Jacobi SVD of R.
@@ -1056,17 +901,7 @@ def svdvals(a):
     -------
     mojolearn.Array, shape (min(M, N),)
     """
-    a_arr, rows, cols = _two_d(a, "a")
-    if rows < cols:
-        # the singular values of a wide A are those of A^T, exactly: the
-        # transpose is data movement (lane/algos-decomp, 2026-09-27)
-        from ._buffer import frombytes
-        t = _xd_matrix(a_arr, rows, cols).T
-        a_arr, rows, cols = frombytes(t.s.tobytes(), "<f4", (cols, rows)), cols, rows
-    out = empty((cols,), "<f4")
-    _door().svdvals([addr_ro(a_arr, name="a"), addr(out, name="s_out")],
-                    [int(rows), int(cols)])
-    return out
+    return _NATIVE(None, "family_lin_svdvals", (a,), _NATIVE_CONTEXT)
 
 
 #: A singular value at most this fraction of the largest (and exactly zero
@@ -1198,39 +1033,7 @@ def svd(a, full_matrices=True, compute_uv=True, hermitian=False):
     -------
     SVDResult or mojolearn.Array
     """
-    a_arr, rows, cols = _two_d(a, "a")
-    if not compute_uv:
-        return svdvals(a_arr)
-    # TOMBSTONE: MOJOLEARN_SVD_FAST_CHOLQR (DROPPED-slower) deleted 2026-10-09 on lane/owed-deletions-D1 (the FAST kit's
-    # CholeskyQR2 whole-matrix route ahead of the TSQR); code recoverable at b639a2bd2.
-    # Restore: git apply experiments/removed/MOJOLEARN_SVD_FAST_CHOLQR.patch; record in docs/TOMBSTONES.md.
-    if not hermitian and not full_matrices and _tsqr_on(rows, cols):
-        return _svd_tsqr(a_arr, rows, cols)
-    k = _xd_kit()
-    A = _xd_matrix(a_arr, rows, cols)
-    if hermitian:
-        if rows != cols:
-            raise ValueError("mojolearn.linalg.svd: hermitian=True needs a square matrix")
-        w, v = k.eigh(A, uplo=1)
-        from ._expansion_decomp import _M
-        # numpy: argsort(|w|) (ascending) reversed, so equal magnitudes come
-        # higher index first
-        # (lane py-runtime round 2: the order and the signs on the kit) the
-        # stable ascending order of -|w| read back to front is |w| descending
-        # with equal magnitudes higher index first
-        rev = _M.of(array.array("f", range(rows - 1, -1, -1)), 1, rows)   # the index table n-1 .. 0
-        wr = k.take_cols_m(w, rev, rows)
-        o = k.order_small(k.ew("scale", k.ew("abs", wr), s=-1.0))
-        order = k.ew("adds", k.ew("scale", o.reshape(1, rows), s=-1.0), s=float(rows - 1))
-        S = k.take_cols_m(k.ew("abs", w), order, rows)
-        U = k.take_cols_m(v, order, rows)
-        Vt = k.ew("mul", U.T, k.neg_signs(k.take_cols_m(w, order, rows)).reshape(rows, 1))
-        return SVDResult(U.out(), S.out((rows,)), Vt.out())
-    if rows >= cols:
-        U, S, Vt = _svd_tall(k, A, bool(full_matrices))
-        return SVDResult(U.out(), S.out((cols,)), Vt.out())
-    U2, S, Vt2 = _svd_tall(k, A.T, bool(full_matrices))
-    return SVDResult(Vt2.T.out(), S.out((rows,)), U2.T.out())
+    return _NATIVE(None, "family_lin_svd", (a, full_matrices, compute_uv, hermitian), _NATIVE_CONTEXT)
 
 
 # The compiled owner of this module's public functions

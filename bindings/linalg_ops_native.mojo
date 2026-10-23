@@ -6,11 +6,15 @@ from std.python import Python, PythonObject
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.linalg_ops_lowbit import lin_lowbit_operation
 from bindings.linalg_ops_resample import rs_operation
+from bindings.linalg_ops_decomp import lin_decomp_operation
 
 
 def linalg_ops_operation(model: PythonObject, operation: String, args: PythonObject,
          context: PythonObject) raises -> PythonObject:
     classical_connect_numpy(context)
+    if (operation == "family_lin_qr" or operation == "family_lin_eigh" or operation == "family_lin_svdvals"
+            or operation == "family_lin_svd"):
+        return lin_decomp_operation(operation, args, context)
     if operation.startswith("family_lin_"):
         return lin_lowbit_operation(operation, args, context)
     if operation.startswith("family_rs_"):
