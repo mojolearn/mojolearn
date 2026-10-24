@@ -32,7 +32,7 @@ import sys
 
 import pytest
 
-from mojolearn import _backend, _byte_lm_host, _forest_host
+from mojolearn import _backend, _byte_lm_host, _forest_host, _merged
 
 #: label -> (resolver, the file it names). Every door onto a host binding
 #: that answers a PATH. A new one belongs here, or it can drift apart again.
@@ -99,7 +99,12 @@ def test_without_the_override_every_resolver_stays_in_the_package(monkeypatch):
     and every recorded hash rest on."""
     expected = os.path.join(_backend._pkg_dir(), "host")
     for label, path in _resolved().items():
-        assert os.path.dirname(path) == expected, f"{label} -> {path}"
+        # A merged host file named by host/'s index may live in a keyed
+        # subdirectory: the development build (1376adbe5) stages it under
+        # host/.development/<key>/. It still resolves inside the package.
+        if os.path.dirname(path) != expected:
+            merged = {os.path.realpath(p) for p in _merged.merged_files(expected)}
+            assert os.path.realpath(path) in merged and os.path.commonpath([path, expected]) == expected, f"{label} -> {path}"
 
 
 def test_a_named_binary_still_wins_over_the_directory(monkeypatch, tmp_path):
