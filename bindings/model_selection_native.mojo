@@ -15,7 +15,7 @@ from bindings.native_buffer_owner import native_storage_allocate
 from bindings.family_common import family_repr, family_is_str, family_isinstance, family_call
 from bindings.msel_common import msel_get_scorer, msel_score, msel_admit
 from bindings.msel_scorer_native import msel_metric_plan, msel_scorer_call
-from bindings.msel_estimator_native import msel_estimator_call, msel_estimator_plan
+from bindings.msel_estimator_native import msel_estimator_call, msel_estimator_plan, msel_native_clone
 from bindings.parallel_cv_native import msel_parallel_operation
 from bindings.msel_cv import msel_cross_validate, msel_cross_val_score, msel_cross_val_predict, msel_split_descriptor
 from bindings.msel_search import (
@@ -49,6 +49,16 @@ def msel_operation(model: PythonObject, operation: String, args: PythonObject,
     var b = native_loaded_module("builtins")
     if operation.startswith("family_msel_parallel_"):
         return msel_parallel_operation(operation, args, context)
+    if operation == "family_msel_estimator_call":
+        # An owner's inner estimator (RFE, IterativeImputer;
+        # bindings/prep_native_estimator.mojo): `model.<args[0]>(*args[1])`
+        # as the compiled operation of its connected plan, never its Python method.
+        if py_type(args[0]) is not b.str or py_type(args[1]) is not b.tuple:
+            raise Error("TypeError: native estimator call requires a method name and an argument tuple")
+        return msel_estimator_call(model, String(args[0]), args[1], context)
+    if operation == "family_msel_estimator_clone":
+        # `type(model)(**model.get_params(deep=False))` from the constructor schema.
+        return msel_native_clone(model, context)
     if operation == "family_msel_search_init":
         return msel_search_initialize(model, args, context)
     if operation == "family_msel_grid_init":
