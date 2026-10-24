@@ -52,7 +52,7 @@ for the length of that call:
   `DeviceContext(device_id=rank)` in the owner loops.
 - `device_plan_root()`: `ids[0]` or -1. A binding's root context (`_family_ctx()` and its peers)
   follows it: device 0 keeps the binding's process slot, any other root device gets a process-lifetime
-  context of its own (`core/neural_context.mojo::process_ctx_on`), so no context is created and
+  context of its own (`core/device_plan_context.mojo::process_ctx_on`), so no context is created and
   destroyed per call on the root.
 
 A kind A driver's door: validate, `device_plan_enter(devices)`, run the plain estimator owner (the
@@ -129,7 +129,7 @@ binding that imports them, with no change in behavior while no plan is bound.
 ## 5. Pilot record
 
 - `core/device_plan.mojo`: the thread-scoped plan.
-- `core/neural_context.mojo::process_ctx_on`: one process-lifetime context per root device.
+- `core/device_plan_context.mojo::process_ctx_on`: one process-lifetime context per root device.
 - `svm/impl/distance/kernel_matrices.mojo`, `cholesky/multi_gpu.mojo`, `cholesky/checks/trsm.mojo`,
   `kernel_methods/checks/kernel_matrix.mojo`: counts from `device_plan_setting`, device ids from
   `device_plan_device`.
