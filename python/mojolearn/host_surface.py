@@ -457,6 +457,7 @@ TRAINING_LANE_NAMES = {
     "lasso": "lasso",
     "elasticnet": "elasticnet",
     "svc": "SVC",
+    "svc-gamma-scale": "SVC and SVR with gamma='scale'",
     "agglomerative": "agglomerative clustering",
     "et-clf": "the Extra Trees classifier",
     "et-reg": "the Extra Trees regressor",
@@ -2240,7 +2241,9 @@ FAMILIES = (
         routes="_mojolearn_svm",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("svc", "iforest", "svc-linear", "iforest-tuned", "svr", "svr-linear", "svc-poly"),
+        training_lanes=("svc", "iforest", "svc-linear", "iforest-tuned", "svr", "svr-linear", "svc-poly",
+                        # lane verify-coverage-20261024: gamma='scale' (scale_gamma_limbs)
+                        "svc-gamma-scale"),
         # The neighbors and density inference lane (2026-09-15): a saved
         # IsolationForest scores through iforest_run, the same forest rebuild
         # every GPU scoring call runs (DEVIATION 874).
@@ -3989,6 +3992,7 @@ PUBLIC_PENDING_LANES = {
     "public-residual-dropout": "no reference",
     "public-numeric-metadata": "no reference",
     "neural-trainer-unfused": "no reference",
+    "svc-gamma-scale": "no reference",
     # lane verify-gaps-20261022: lanes for the audit's GAP rows; no release
     # record yet.
     "saved-model-host-infer-trees": "unwatched",

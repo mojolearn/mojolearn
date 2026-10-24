@@ -1229,7 +1229,7 @@ NEW_LANES = frozenset({"gp-lml-theta", "cross-vendor-fold", "sequence-moe-backwa
                        "public-numeric-metadata", "public-randomized-search", "public-residual-dropout",
                        "public-scorer-factories", "public-sparse-encode", "public-theta-variants",
                        "public-validation-learning-curves", "scaler-fit-transform", "multioutput-ridge",
-                       "x-ridge-cv-kfold", "neural-trainer-unfused"})
+                       "x-ridge-cv-kfold", "neural-trainer-unfused", "svc-gamma-scale"})
 
 #: What each new lane is for: the endpoints only it reaches.
 NEW_LANE_PURPOSE = {
@@ -1299,6 +1299,7 @@ NEW_LANE_PURPOSE = {
                             "`minmax_fit_transform`",
     "multioutput-ridge": "MultiOutputRegressor over Ridge: `ridge_predict_multi`",
     "x-ridge-cv-kfold": "RidgeCV with an integer cv: `x_linear_best_alpha`",
+    "svc-gamma-scale": "SVC and SVR with gamma='scale': `scale_gamma_limbs`",
     "neural-trainer-unfused": "ParallelNeuralTrainer with MOJOLEARN_MLP_FUSED=0: `mlp_bias_activation`, "
                               "`mlp_relu_backward`, `mlp_sum_rows`",
 }
@@ -1328,7 +1329,9 @@ _ARM_DECISIONS_20261024 = [
     "`coverage-core-resample_impl`. The patch and manifest row are removed; the entries are fault n/a.",
     "- `coverage-svm-scale_gamma` (fixed arm, new fault): svc reaches `scale_gamma_limbs` (bindings/svc_kernel_native.mojo "
     "`_resolve_gamma`), but flipping limb 0's lowest bit is 2^-149 of S1, below the once-rounded gamma. The fault now "
-    "feeds a wrong cell to the exact sums (cell 0 replaced by cell 1 on the device, counted twice on the host).",
+    "feeds a wrong cell to the exact sums (cell 0 replaced by cell 1 on the device, counted twice on the host). "
+    "The re-proof was MISSED again: svc uses the package default gamma='auto'. New lane `svc-gamma-scale` "
+    "(SVC and SVR with gamma='scale', the path above) is the arm's expected lane; the arm builds the svm bindings only.",
     "- `coverage-core-dense_coo` (fixed arm): x-cluster-spectral-affinities MOVED on the host column. A GPU install "
     "never reaches the base binding's COO scan (the metrics dense entry serves every affinity), so the arm is host "
     "only and the GPU `nonzero_f32_fill` row is fault n/a; spectral-precomputed is not an expected lane.",
@@ -1336,7 +1339,8 @@ _ARM_DECISIONS_20261024 = [
     "`coverage-training-neural_rng`. The MLP doors run only on the unfused gradient route a multi-device optimizer "
     "takes (`_mlp_fused_enabled`): new lane `neural-trainer-unfused` runs it with MOJOLEARN_MLP_FUSED=0, and "
     "`coverage-training-mlp_ops` expects it.",
-    "- `coverage-core-msel_device_host` (new fault, no crash policy): both columns aborted (exit 134; Metal "
+    "- `coverage-core-msel_device_host` (new fault, no crash policy; the re-proof's build failure was the patch "
+    "joining a comment onto the launch's argument line, fixed): both columns aborted (exit 134; Metal "
     "IOGPUMetalSuballocatorFree) because the old fault left the split table and its sums disagreeing, which drove "
     "out-of-range indices. A crash is not counted as detection: it is not a verifier report and its cause is "
     "memory corruption, not the answer. The fault now yields consistent wrong answers (two gathered rows swapped, "
