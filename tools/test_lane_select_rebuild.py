@@ -148,8 +148,8 @@ def test_the_public_door_a_name_is_bound_from_is_in_the_map():
         wide = sorted(lanes - naming)
         assert not wide, (f"{rel} answers {len(lanes)} lanes and {wide[:5]} name nothing it "
                           f"binds ({sorted(bound)}); the door rule has gone wide")
-    assert len(rev.get("python/mojolearn/neural_inference.py", ())) == 85, \
-        ("the re-export rule moved neural_inference.py off its measured 85 lanes (40 + hf-checkpoint,"
+    assert len(rev.get("python/mojolearn/neural_inference.py", ())) == 89, \
+        ("the re-export rule moved neural_inference.py off its measured 89 lanes (40 + hf-checkpoint,"
          " 2026-09-23; minus gbdt-tensor-ctr-tables, which fits on the CPU since 2026-09-28;"
          " plus optim-maximize, 2026-09-28; plus four new lanes and minus gbdt-categorical-ctr-tables,"
          " 2026-10-21; plus five coverage lanes in 63022df0c2;"
@@ -159,7 +159,9 @@ def test_the_public_door_a_name_is_bound_from_is_in_the_map():
          " plus five new lanes in 1f1183e21 and two in 50c405ad2, 2026-10-21;"
          " plus four verify-gaps lanes in d332cd33c, 2026-10-22;"
          " plus eleven existing sequence lanes through _native_xseq_bridge -> _training_impl"
-         " (58ab6ec69, d82367475, 061c9f767, bbd1ecc88), measured 2026-10-23; see "
+         " (58ab6ec69, d82367475, 061c9f767, bbd1ecc88), measured 2026-10-23;"
+         " plus public-numeric-metadata, public-residual-dropout and public-theta-variants"
+         " (8188d769f) and transformer-forward-tape (551a8cd42), 2026-10-24; see "
          "test_the_wider_mojo_walk_did_not_widen_the_narrow_answers)")
 
     # THE FAILING SIDE: with no public rebindings the lane each door is
