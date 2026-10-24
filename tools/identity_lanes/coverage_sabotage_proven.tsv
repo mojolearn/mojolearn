@@ -72,3 +72,8 @@ coverage-native-optimizer-zero	build_training rc 0, 353s; build_training_host rc
 coverage-native-optimizer-io-query	build_training rc 0, 243s; build_training_host rc 0, 35s	CAUGHT	optim-io-capability (host MOVED Metal MOVED)	2 OWED (no reference)	STABLE, exact clean source/bindings/results restored	326
 coverage-native-optimizer-io-download	build_training rc 0, 197s	CAUGHT	optim-resident-io (Metal MOVED)	1 OWED (no reference)	STABLE, exact clean source/bindings/results restored	222
 coverage-native-sequence-release	build_x_sequence rc 0, 272s	CAUGHT	sequence-device-release (Metal MOVED)	1 OWED (no reference)	STABLE, exact clean source/bindings/results restored	298
+# Lane sabotage-proven-20261024 (2026-10-24): clean set = the development identical (Metal) and host builds of
+# 9b04b92c5 (tools/development_build.py, all 79 groups); same per-arm procedure, records via `pixi run -e test`
+# (the default env's Python 3.13 cannot import mojolearn at 9b04b92c5), one column JSON each for clean, faulted
+# and restored, judged by coverage_sabotage.py check --restored per column; a lane is caught when one column moved.
+coverage-x_neighbors-host_ops	build_x_neighbors_host rc 0, 6s	MISSED	x-neighbors-connected-components (host MOVED) x-neighbors-ocsvm (host MOVED) x-neighbors-nearest-centroid (host unmoved)	2 DIVERGENT, 1 IDENTICAL	STABLE, exact clean source/bindings/results restored	28
