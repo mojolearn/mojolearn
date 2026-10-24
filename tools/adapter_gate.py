@@ -25,8 +25,15 @@ import sys
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
-FRAMEWORKS = "torch,max"
-PHASES = ("torch", "torch-training", "max", "max-training")
+#: The frameworks the gate installs and REQUIRES. MOJOLEARN_ADAPTER_GATE_FRAMEWORKS narrows it (0.8.56,
+#: 2026-10-24: "torch" only, because the shipped MAX custom-op package carries a second Mojo runtime
+#: that aborts inside MAX's process on macOS: AsyncRT::getOrCreateCPUDevice options differ; the MAX
+#: adapter is therefore not gated for that release and the receipt records which phases ran).
+FRAMEWORKS = ",".join(f for f in os.environ.get("MOJOLEARN_ADAPTER_GATE_FRAMEWORKS", "torch,max").split(",") if f in ("torch", "max"))
+if not FRAMEWORKS:
+    raise SystemExit("adapter gate: MOJOLEARN_ADAPTER_GATE_FRAMEWORKS names neither torch nor max")
+_ALL_PHASES = {"torch": ("torch", "torch-training"), "max": ("max", "max-training")}
+PHASES = tuple(p for f in FRAMEWORKS.split(",") for p in _ALL_PHASES[f])
 #: the device string each vendor's framework build uses (torch-ROCm keeps the cuda device type)
 DEVICE = {"nvidia": "cuda:0", "amd": "cuda:0", "apple": "mps"}
 RECEIPT = "adapter-smoke.json"
