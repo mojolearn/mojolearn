@@ -113,9 +113,11 @@ def shard_item(dtype: String) raises -> Tuple[String, Int]:
         return ("i", 4)
     if dtype == "<i8":
         return ("q", 8)
+    if dtype == "<u4":
+        return ("I", 4)
     if dtype == "|u1" or dtype == "<u1":
         return ("B", 1)
-    raise Error("ValueError: shard arrays require float32, float64, int32, int64 or uint8, got " + dtype)
+    raise Error("ValueError: shard arrays require float32, float64, int32, int64, uint32 or uint8, got " + dtype)
 
 
 def shard_array(dtype: String, shape: PythonObject, count: Int, context: PythonObject) raises -> PythonObject:
@@ -147,6 +149,24 @@ def shard_rows(source: PythonObject, lo: Int, hi: Int, context: PythonObject) ra
                count=bytes)
         _ = out  # keep the Python object alive through the native call above
         _ = source  # keep the Python object alive through the native call above
+    return out
+
+
+def shard_row_vector(source: PythonObject, row: Int, context: PythonObject) raises -> PythonObject:
+    """Row `row` of a C-ordered 2-D Array, as a 1-D copy."""
+    var b = shard_b()
+    var width = Int(py=source.shape[1])
+    var dtype = String(py=source.dtype)
+    var item = shard_item(dtype)
+    var out = shard_array(dtype, Python.tuple(width), width, context)
+    if width > 0:
+        memcpy(dest=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(out))),
+               src=MutPointer[UInt8, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(source)))
+               + row * width * item[1],
+               count=width * item[1])
+        _ = out  # keep the Python object alive through the native call above
+        _ = source  # keep the Python object alive through the native call above
+    _ = b
     return out
 
 

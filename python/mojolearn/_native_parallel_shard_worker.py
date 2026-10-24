@@ -5,6 +5,7 @@ their classes, entries and contexts at import."""
 import sys
 
 from . import parallel_classical, parallel_preprocessing, parallel_gaussian_process, parallel_ensemble  # noqa: F401
+from . import parallel_neighbors, parallel_neighbors_reference, parallel_ivf  # noqa: F401
 from ._native_parallel_shard import _native_parallel_shard
 
 _native_parallel_shard('worker', sys.argv)

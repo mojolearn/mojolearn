@@ -33,12 +33,15 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.py_attr import py_attr
 from bindings.classical_arrays import classical_address
 from bindings.family_common import family_call, family_as_f32, family_view
-from bindings.native_process_pool import process_worker_connect, process_worker_next, process_send
+from bindings.native_process_pool import (
+    process_worker_connect, process_worker_next, process_send, process_pool_create, process_pool_map,
+    process_pool_close,
+)
 from bindings.native_transport import transport_close
 from bindings.native_codec import codec_initialize
 from bindings.parallel_shard_common import (
     shard_b, shard_ranges, shard_devices, shard_read_shift, shard_run, shard_rows, shard_concat, shard_state,
-    shard_model, shard_array, shard_join_rows,
+    shard_model, shard_array, shard_join_rows, shard_row_vector,
 )
 from bindings.kernel_methods_native import _rbf_transform
 from bindings.gp_classifier_native import (
@@ -47,7 +50,7 @@ from bindings.gp_classifier_native import (
 from bindings.gp_common_native import gp_kernel_arrays
 from bindings.gp_labels_native import gp_encode_labels, gp_decode_labels
 from core.parallel_forecast_impl import forecast_gather_cols, forecast_scatter_cols
-from core.hotpath_impl import cast_elements, HP_I32, HP_I64
+from core.hotpath_impl import cast_elements, HP_I32, HP_I64, HP_U32
 
 comptime _CHILD = "mojolearn._native_parallel_shard_worker"
 
@@ -543,6 +546,454 @@ def _rebase_offsets(arrays: PythonObject, context: PythonObject) raises -> Pytho
     return out
 
 
+# ---------------------------------------------------------------- persistent pools
+# ReferenceShardedNeighbors, ParallelQueries and DistributedIVFIndex keep one
+# native local pool for their lifetime (the old `DevicePool` they held): the
+# workers start at the first request and keep their snapshots until close.
+# Their per-shard work is the plain estimators' own query methods, which are
+# not one native call each yet (python/mojolearn/_parallel_shard_ops.py);
+# the partition, scheduling, merge and join here are native.
+
+def _pool_open(devices: PythonObject) raises -> PythonObject:
+    _ = shard_devices(devices)
+    return process_pool_create(devices, False, _CHILD)
+
+
+def _map(pool: PythonObject, requests: PythonObject) raises -> PythonObject:
+    var result = process_pool_map(pool, requests)
+    if len(result) != len(requests):
+        raise Error("ValueError: shard workers returned an incomplete batch")
+    return result
+
+
+def _py_request(name: String, args: PythonObject) raises -> PythonObject:
+    return Python.tuple("py", name, args)
+
+
+def _join(parts: PythonObject, ragged: Bool, context: PythonObject) raises -> PythonObject:
+    """`parallel_neighbors._join`: tuples joined component by component,
+    lists either chained (ragged) or joined position by position, Arrays
+    joined along their first axis in shard order."""
+    var b = shard_b()
+    var first = parts[0]
+    if py_type(first) is b.tuple:
+        var out = b.list()
+        for i in range(len(first)):  # small-loop(the result tuple's components)
+            var column = b.list()
+            for p in range(len(parts)):  # driver-loop: one component per query shard
+                _ = py_call(column.append, parts[p][i])
+            _ = py_call(out.append, _join(column, ragged, context))
+        return py_call(b.tuple, out)
+    if py_type(first) is b.list:
+        var out = b.list()
+        if ragged:
+            for p in range(len(parts)):  # driver-loop: one ragged row list per query shard
+                _ = py_call(out.extend, parts[p])
+            return out
+        for i in range(len(first)):  # driver-loop: over the per-output result columns
+            var column = b.list()
+            for p in range(len(parts)):  # driver-loop: one column per query shard
+                _ = py_call(column.append, parts[p][i])
+            _ = py_call(out.append, _join(column, False, context))
+        return out
+    var total = 0
+    for p in range(len(parts)):  # driver-loop: one block per query shard
+        total += Int(py=parts[p].shape[0])
+    return shard_join_rows(parts, total, context)
+
+
+def _reference_query(args: PythonObject) raises -> PythonObject:
+    """args (sharded, X, method, n_neighbors, return_distance, merge entry):
+    `ReferenceShardedNeighbors._query`. Reference rows in blocks of
+    `reference_rows_per_shard` (or an even split over the devices), queried
+    in waves of len(devices) per block of `query_rows_per_shard` query rows;
+    every block's candidates merged per query row by the native
+    `shard_topk_merge_f32`; predictions voted over the merged neighbors on
+    the first worker."""
+    var b = shard_b()
+    var context = _ctx()
+    var holder = py_fields(args[0])
+    var model = holder["estimator"]
+    var pool = holder["_pool"]
+    var method = String(args[2])
+    var fields = py_fields(model)
+    var cls = py_type(model)
+    var mode = py_get(fields, PythonObject("numeric_mode"), PythonObject(None))
+    var algorithm = py_get(fields, PythonObject("algorithm"), PythonObject(None))
+    if (not _identical(fields) or py_type(algorithm) is not b.str
+            or (String(algorithm) != "auto" and String(algorithm) != "brute")):
+        raise Error("ValueError: reference shards require IDENTICAL brute-force KNN")
+    _ = mode
+    var index = py_get(fields, PythonObject("_index"), PythonObject(None))
+    if index is None:
+        raise Error("ValueError: fit the estimator before querying")
+    if method != "kneighbors":
+        if cls is not _t("knc_class") and cls is not _t("knr_class"):
+            raise Error("TypeError: prediction requires a classifier or regressor")
+        if method == "predict_proba" and cls is not _t("knc_class"):
+            raise Error("TypeError: predict_proba requires a classifier")
+        if py_get(fields, PythonObject("_y_cols"), PythonObject(None)) is None:
+            raise Error("ValueError: fit the estimator before prediction")
+    var data = family_as_f32(args[1], 2, "X", context)
+    var d = Int(py=fields["n_features_in_"])
+    if Int(py=data.shape[1]) != d:
+        raise Error("ValueError: input feature count differs from fit")
+    var n = Int(py=fields["n_samples_fit_"])
+    var k_obj = fields["n_neighbors"] if args[3] is None else args[3]
+    if py_type(k_obj) is not b.int or Int(py=k_obj) < 1 or Int(py=k_obj) > n:
+        raise Error("ValueError: n_neighbors must be an integer in [1, reference rows]")
+    var k = Int(py=k_obj)
+    if n > 2147483647:
+        raise Error("ValueError: reference row count exceeds the native signed-int32 shape contract")
+    var cell_limit = 2147483647 // d
+    if cell_limit < 1:
+        raise Error("ValueError: feature count exceeds the native signed-int32 shape contract")
+    var devices = pool["devices"]
+    var n_devices = len(devices)
+    var width_obj = holder["reference_rows_per_shard"]
+    var width = min(cell_limit, (n + n_devices - 1) // n_devices) if width_obj is None else Int(py=width_obj)
+    if min(width, n) > cell_limit:
+        raise Error("ValueError: reference shard exceeds the native signed-int32 cell-count contract")
+    var ranges = shard_ranges(n, PythonObject(width), "reference_rows_per_shard", "")
+    var params = b.dict()
+    py_setitem(params, "n_neighbors", k)
+    py_setitem(params, "query_tile", fields["query_tile"])
+    py_setitem(params, "metric", fields["metric"])
+    py_setitem(params, "algorithm", "brute")
+    py_setitem(params, "p", fields["p"])
+    py_setitem(params, "numeric_mode", "identical")
+    var vote_state = PythonObject(None)
+    if method != "kneighbors":
+        vote_state = shard_state(fields, b.frozenset(Python.list("_index", "_resident", "_resident_holder")), context)
+        py_setitem(vote_state, "_index", PythonObject(None))
+        py_setitem(vote_state, "numeric_mode", "identical")
+    var rows = Int(py=data.shape[0])
+    var step = Int(py=holder["query_rows_per_shard"])
+    var n_ranges = len(ranges) // 2
+    var outputs = b.list()
+    var diagnostics = b.list()
+    var first = 0
+    while first < rows:  # driver-loop: over the query row blocks
+        var end = min(rows, first + step)
+        var query = shard_rows(data, first, end, context)
+        var parts = b.list()
+        var wave = 0
+        while wave < n_ranges:  # driver-loop: over waves of len(devices) reference blocks
+            var requests = b.list()
+            for r in range(wave, min(wave + n_devices, n_ranges)):  # driver-loop: one request per reference block
+                var start = ranges[2 * r]
+                var stop = ranges[2 * r + 1]
+                var shift = shard_read_shift(r, start, n_devices)
+                _ = py_call(requests.append, _py_request("reference_shard", Python.tuple(
+                    params, shard_rows(index, start - shift, stop - shift, context), query, min(k, stop - start))))
+            _ = py_call(parts.extend, _map(pool, requests))
+            wave += n_devices
+        var merged = _merge_candidates(parts, ranges, end - first, k, args[5], context)
+        var output = PythonObject(None)
+        if method == "kneighbors":
+            var wide = shard_array("<i8", Python.tuple(end - first, k), (end - first) * k, context)
+            _ = cast_elements(Int(py=classical_address(merged[1])), HP_U32, Int(py=classical_address(wide)), HP_I64,
+                              (end - first) * k)
+            _ = wide  # keep the Python object alive through the native call above
+            output = Python.tuple(merged[0], wide) if Bool(py=py_call(b.bool, args[4])) else wide
+        else:
+            var vote = Python.list(_py_request("reference_vote", Python.tuple(cls.__name__, vote_state, merged[0],
+                                                                               merged[1], method)))
+            output = _map(pool, vote)[0]
+        _ = py_call(outputs.append, output)
+        for r in range(n_ranges):  # driver-loop: one diagnostic record per reference block
+            var record = b.dict()
+            py_setitem(record, "query_start", first)
+            py_setitem(record, "query_end", end)
+            py_setitem(record, "reference_start", ranges[2 * r])
+            py_setitem(record, "reference_end", ranges[2 * r + 1])
+            py_setitem(record, "reference_bytes", (ranges[2 * r + 1] - ranges[2 * r]) * d * 4)
+            py_setitem(record, "device", devices[r % n_devices])
+            _ = py_call(diagnostics.append, record)
+        first = end
+    var result = _join(outputs, False, context)
+    py_setitem(holder, "last_shards_", diagnostics)
+    return result
+
+
+def _merge_candidates(parts: PythonObject, ranges: List[Int], n_queries: Int, k: Int, entry: PythonObject,
+                      context: PythonObject) raises -> PythonObject:
+    """`parallel_neighbors_reference._merge`: (float32 distances, uint32
+    global indices), each (n_queries, k), from the reference blocks'
+    candidates by the native `shard_topk_merge_f32`."""
+    var b = shard_b()
+    var distances = shard_array("<f4", Python.tuple(n_queries, k), n_queries * k, context)
+    var indices = shard_array("<u4", Python.tuple(n_queries, k), n_queries * k, context)
+    if n_queries == 0:
+        return Python.tuple(distances, indices)
+    var count = len(parts)
+    var table = shard_array("<i8", Python.tuple(5 * count), 5 * count, context)
+    var tp = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(table)))
+    var keep = b.list()
+    for p in range(count):  # driver-loop: one candidate table row per reference block
+        var dist = family_as_f32(parts[p][0], 2, "distance shard", context)
+        var ids = parts[p][1]
+        if String(py=ids.dtype) != "<i8":
+            var wide = shard_array("<i8", py_call(b.tuple, ids.shape), Int(py=ids.size), context)
+            var code = HP_I32 if String(py=ids.dtype) == "<i4" else HP_U32
+            _ = cast_elements(Int(py=classical_address(ids)), code, Int(py=classical_address(wide)), HP_I64,
+                              Int(py=ids.size))
+            _ = wide  # keep the Python object alive through the native call above
+            ids = wide
+        _ = py_call(keep.append, Python.tuple(dist, ids))
+        tp[5 * p] = Int64(Int(py=classical_address(dist)))
+        tp[5 * p + 1] = Int64(Int(py=classical_address(ids)))
+        tp[5 * p + 2] = Int64(ranges[2 * p])
+        tp[5 * p + 3] = Int64(ranges[2 * p + 1])
+        tp[5 * p + 4] = Int64(Int(py=dist.shape[1]))
+        _ = table  # keep the Python object alive through the native call above
+    var rc = Int(py=family_call(entry, classical_address(table), PythonObject(count), PythonObject(n_queries),
+                                PythonObject(k), classical_address(distances), classical_address(indices)))
+    _ = keep  # keep the Python objects alive through the native call above
+    _ = table  # keep the Python object alive through the native call above
+    if rc == 1:
+        raise Error("RuntimeError: reference worker returned an invalid neighbor index")
+    if rc == 2:
+        raise Error("RuntimeError: reference shards returned too few neighbors")
+    return Python.tuple(distances, indices)
+
+
+def _parallel_queries(args: PythonObject) raises -> PythonObject:
+    """args (queries object, X, method, kwargs): `ParallelQueries.query`.
+    Every worker stores one snapshot of the estimator under a fresh token;
+    whole query rows in `rows_per_shard` blocks are answered by the plain
+    query method (block i on worker i % len(devices)); the snapshots are
+    released; the blocks joined in input order."""
+    var b = shard_b()
+    var context = _ctx()
+    var holder = py_fields(args[0])
+    var model = holder["estimator"]
+    var pool = holder["_pool"]
+    var fields = py_fields(model)
+    var methods = py_get(_t("query_methods"), py_type(model), Python.tuple())
+    var method = methods[0] if args[2] is None else args[2]
+    if len(methods) == 0:
+        raise Error("TypeError: parallel queries require an exact neighbors or KernelDensity estimator")
+    if not Bool(py=py_call(py_attr(methods, "__contains__"), method)):
+        raise Error("ValueError: unsupported parallel query method: " + String(py=py_call(b.str, method)))
+    if not _identical(fields):
+        raise Error("ValueError: parallel queries require IDENTICAL numeric mode")
+    var index = py_get(fields, PythonObject("_index"), PythonObject(None))
+    if index is None:
+        index = py_get(fields, PythonObject("_x"), PythonObject(None))
+    if index is None:
+        raise Error("ValueError: fit the estimator before querying")
+    var source = args[1]
+    if source is None and String(method) == "radius_neighbors":
+        source = index
+    var data = family_as_f32(source, 2, "X", context)
+    if Int(py=data.shape[1]) != Int(py=fields["n_features_in_"]):
+        raise Error("ValueError: input feature count differs from fit")
+    var n = Int(py=data.shape[0])
+    var ranges = shard_ranges(n, holder["rows_per_shard"], "rows_per_shard", "")
+    if len(ranges) == 0:
+        ranges.append(0)
+        ranges.append(0)
+    var state = shard_state(fields, b.frozenset(Python.list("_resident", "_resident_holder")), context)
+    py_setitem(state, "numeric_mode", "identical")
+    var counter = Int(py=py_get(holder, PythonObject("_native_tokens"), PythonObject(0))) + 1
+    py_setitem(holder, "_native_tokens", counter)
+    var token = String("nq-") + String(Int(py=Python.import_module("os").getpid())) + "-" + String(Int(py=py_call(b.id, args[0]))) + "-" + String(counter)
+    var devices = pool["devices"]
+    var workers = len(devices)
+    var name = py_type(model).__name__
+    var stores = b.list()
+    for i in range(workers):  # driver-loop: one snapshot request per worker
+        _ = py_call(stores.append, _py_request("query_state", Python.tuple(token, name, state)))
+    _ = _map(pool, stores)
+    var results = PythonObject(None)
+    var n_devices = workers
+    try:
+        var requests = b.list()
+        for r in range(len(ranges) // 2):  # driver-loop: one worker request per query row block
+            var lo = ranges[2 * r]
+            var hi = ranges[2 * r + 1]
+            var shift = shard_read_shift(r, lo, n_devices)
+            _ = py_call(requests.append, _py_request("query_rows", Python.tuple(
+                token, shard_rows(data, lo - shift, hi - shift, context), method, args[3])))
+        results = _map(pool, requests)
+    finally:
+        if not Bool(py=pool["closed"]):
+            var releases = b.list()
+            for i in range(workers):  # driver-loop: one release request per worker
+                _ = py_call(releases.append, _py_request("query_state", Python.tuple(token, name, PythonObject(None))))
+            try:
+                _ = _map(pool, releases)
+            except:
+                process_pool_close(pool)
+    var outputs = b.list()
+    var diagnostics = b.list()
+    for r in range(len(results)):  # driver-loop: one result and diagnostic per query row block
+        _ = py_call(outputs.append, results[r][0])
+        var record = b.dict()
+        py_setitem(record, "start", ranges[2 * r])
+        py_setitem(record, "end", ranges[2 * r + 1])
+        py_setitem(record, "device", devices[r % workers])
+        _ = py_call(record.update, results[r][1])
+        _ = py_call(diagnostics.append, record)
+    var output = _join(outputs, String(method) == "radius_neighbors", context)
+    py_setitem(holder, "last_shards_", diagnostics)
+    return output
+
+
+def _ivf_from_index(args: PythonObject) raises -> PythonObject:
+    """args (class, index, devices, ivf binding, int32 list_indices_, int32
+    list_offsets_): `DistributedIVFIndex.from_index`
+    after its shell's checks. The native shard plan (`ivf_shard_plan`) gives
+    every device its contiguous stored rows with list offsets and local IDs;
+    each worker stores its shard under the object's token."""
+    var b = shard_b()
+    var context = _ctx()
+    var index = args[1]
+    var fields = py_fields(index)
+    var native = args[3]
+    var n = Int(py=fields["n_rows_"])
+    var n_lists = Int(py=fields["n_lists_"])
+    var ind = args[4]
+    var offs = args[5]
+    var all_devices = py_call(b.tuple, args[2])
+    _ = shard_devices(all_devices)
+    var parts_count = min(len(all_devices), n)
+    var soff = shard_array("<i4", Python.tuple(parts_count, n_lists + 1), parts_count * (n_lists + 1), context)
+    var local_all = shard_array("<i4", Python.tuple(n), n, context)
+    var map_all = shard_array("<i4", Python.tuple(n), n, context)
+    var status = Int(py=family_call(py_attr(native, "ivf_shard_plan"),
+                                    Python.list(classical_address(ind), classical_address(offs),
+                                                classical_address(soff), classical_address(local_all),
+                                                classical_address(map_all)),
+                                    Python.list(n, n_lists, parts_count)))
+    _ = soff  # keep the Python object alive through the native call above
+    _ = local_all  # keep the Python object alive through the native call above
+    _ = map_all  # keep the Python object alive through the native call above
+    if status == 1:
+        raise Error("ValueError: IVF original IDs must be a permutation of stored row IDs")
+    if status != 0:
+        raise Error("ValueError: invalid global IVF list offsets")
+    var devices = all_devices[py_call(b.slice, PythonObject(None), PythonObject(n))]
+    var pool = process_pool_create(devices, False, _CHILD)
+    var obj = py_call(b.object.__new__, args[0])
+    var own = py_fields(obj)
+    py_setitem(own, "_pool", pool)
+    py_setitem(own, "_closed", False)
+    py_setitem(own, "n_features_in_", fields["n_features_in_"])
+    py_setitem(own, "n_neighbors", fields["n_neighbors"])
+    py_setitem(own, "metric_code_", fields["metric_code_"])
+    py_setitem(own, "devices", devices)
+    py_setitem(own, "n_candidates_", PythonObject(None))
+    py_setitem(own, "_native", native)
+    var token = String("ivf-") + String(Int(py=Python.import_module("os").getpid())) + "-" + String(Int(py=py_call(b.id, obj)))
+    py_setitem(own, "_token", token)
+    var maps = b.list()
+    var requests = b.list()
+    var base = shard_state(fields, b.frozenset(Python.list("_resident", "_resident_holder", "list_data_",
+                                                           "list_indices_", "list_offsets_", "n_rows_")), context)
+    py_setitem(base, "numeric_mode", "identical")
+    for part in range(parts_count):  # driver-loop: one stored shard per device
+        var lo = part * n // parts_count
+        var hi = (part + 1) * n // parts_count
+        var state = py_call(b.dict, base)
+        py_setitem(state, "n_rows_", hi - lo)
+        py_setitem(state, "list_offsets_", shard_row_vector(soff, part, context))
+        py_setitem(state, "list_indices_", shard_rows(local_all, lo, hi, context))
+        py_setitem(state, "list_data_", shard_rows(fields["list_data_"], lo, hi, context))
+        _ = py_call(maps.append, shard_rows(map_all, lo, hi, context))
+        _ = py_call(requests.append, _py_request("ivf_store", Python.tuple(token, state)))
+    py_setitem(own, "_id_maps", maps)
+    try:
+        var receipts = _map(pool, requests)
+        for part in range(parts_count):  # driver-loop: one storage receipt per shard
+            if Int(py=receipts[part]) != Int(py=maps[part].shape[0]):
+                raise Error("ValueError: IVF storage receipts differ from shard sizes")
+    except error:
+        process_pool_close(pool)
+        py_setitem(own, "_closed", True)
+        raise error^
+    return obj
+
+
+def _ivf_search(args: PythonObject) raises -> PythonObject:
+    """args (distributed index, queries): every worker's partial search of
+    its stored shard, merged by the native `ivf_merge_shards` (cosine
+    distances finalized natively)."""
+    var b = shard_b()
+    var context = _ctx()
+    var own = py_fields(args[0])
+    if Bool(py=own["_closed"]):
+        raise Error("RuntimeError: distributed IVF index is closed")
+    var q = family_as_f32(args[1], 2, "queries", context)
+    if Int(py=q.shape[0]) < 1:
+        raise Error("ValueError: at least one query is required")
+    if Int(py=q.shape[1]) != Int(py=own["n_features_in_"]):
+        raise Error("ValueError: query features differ from index")
+    var pool = own["_pool"]
+    var maps = own["_id_maps"]
+    var native = own["_native"]
+    try:
+        var requests = b.list()
+        for i in range(len(own["devices"])):  # driver-loop: one search request per stored shard
+            _ = py_call(requests.append, _py_request("ivf_search", Python.tuple(own["_token"], q)))
+        var parts = _map(pool, requests)
+        if len(parts) != len(maps):
+            raise Error("ValueError: incomplete IVF result shards")
+        var m = Int(py=q.shape[0])
+        var k = Int(py=own["n_neighbors"])
+        for i in range(len(parts)):  # driver-loop: checks one result shard
+            var p = parts[i]
+            if (Int(py=p[0].shape[0]) != m or Int(py=p[0].shape[1]) != k or Int(py=p[1].shape[0]) != m
+                    or Int(py=p[1].shape[1]) != k or Int(py=p[2].shape[0]) != m):
+                raise Error("ValueError: invalid IVF shard output shapes")
+        var result = shard_array("<f4", Python.tuple(m, k), m * k, context)
+        var ids = shard_array("<i4", Python.tuple(m, k), m * k, context)
+        var counts = shard_array("<i4", Python.tuple(m), m, context)
+        var addrs = Python.list(classical_address(result), classical_address(ids), classical_address(counts))
+        var sizes = Python.list(len(parts), m, k)
+        for i in range(len(parts)):  # driver-loop: four buffer addresses per result shard
+            var p = parts[i]
+            var mapping = maps[i]
+            _ = py_call(addrs.extend, Python.list(classical_address(p[0]), classical_address(p[1]),
+                                                  classical_address(p[2]),
+                                                  classical_address(mapping) if Int(py=mapping.shape[0]) > 0
+                                                  else classical_address(p[2])))
+            _ = py_call(sizes.append, Int(py=mapping.shape[0]))
+        var merged = family_call(py_attr(native, "ivf_merge_shards"), addrs, sizes)
+        _ = parts  # keep the Python objects alive through the native call above
+        _ = maps  # keep the Python objects alive through the native call above
+        _ = result  # keep the Python object alive through the native call above
+        _ = ids  # keep the Python object alive through the native call above
+        _ = counts  # keep the Python object alive through the native call above
+        var status = Int(py=merged[0])
+        if status != 0:
+            if status == 1:
+                raise Error("ValueError: invalid IVF candidate count")
+            if status == 2:
+                raise Error("ValueError: invalid IVF local row id")
+            if status == 4:
+                raise Error("ValueError: NaN distance in an IVF shard result")
+            raise Error("ValueError: IVF shard merge failed")
+        if Int(py=own["metric_code_"]) == 1:
+            _ = family_call(py_attr(native, "ivf_finalize_distances"), classical_address(result),
+                            PythonObject(m * k), own["metric_code_"])
+            _ = result  # keep the Python object alive through the native call above
+        py_setitem(own, "n_candidates_", counts)
+        return Python.tuple(result, ids)
+    except error:
+        _ivf_close(args[0])
+        raise error^
+
+
+def _ivf_close(obj: PythonObject) raises:
+    var own = py_fields(obj)
+    py_setitem(own, "_closed", True)
+    var pool = py_get(own, PythonObject("_pool"), PythonObject(None))
+    if pool is not None and not Bool(py=pool["closed"]):
+        process_pool_close(pool)
+
+
 # ---------------------------------------------------------------- the worker
 
 def shard_worker_dispatch(request: PythonObject) raises -> PythonObject:
@@ -602,6 +1053,13 @@ def shard_worker_dispatch(request: PythonObject) raises -> PythonObject:
         var fields = py_call(b.dict, py_fields(model))
         _ = py_call(fields.pop, "_resident_holder", PythonObject(None))
         return shard_state(fields, b.frozenset(), context)
+    if operation == "py":
+        # the neighbor and IVF drivers' per-shard plain query methods
+        # (python/mojolearn/_parallel_shard_ops.py), by name
+        var function = py_get(_t("py_ops"), state, PythonObject(None))
+        if function is None:
+            raise Error("parallel shards: unknown worker query operation")
+        return py_call(function, args)
     raise Error("parallel shards: unsupported worker operation " + operation)
 
 
@@ -646,6 +1104,23 @@ def parallel_shard_call(operation: String, args: PythonObject) raises -> PythonO
         return _predict_gpc(args)
     if operation == "fit_forest":
         return _fit_forest(args)
+    if operation == "pool_open":
+        return _pool_open(args[0])
+    if operation == "pool_close":
+        if not Bool(py=args[0]["closed"]):
+            process_pool_close(args[0])
+        return PythonObject(None)
+    if operation == "reference_query":
+        return _reference_query(args)
+    if operation == "parallel_queries":
+        return _parallel_queries(args)
+    if operation == "ivf_from_index":
+        return _ivf_from_index(args)
+    if operation == "ivf_search":
+        return _ivf_search(args)
+    if operation == "ivf_close":
+        _ivf_close(args[0])
+        return PythonObject(None)
     if operation == "worker":
         shard_worker(args)
         return PythonObject(None)

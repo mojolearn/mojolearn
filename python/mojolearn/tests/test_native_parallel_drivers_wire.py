@@ -88,6 +88,14 @@ DRIVERS = (
     ("parallel_gaussian_process", "predict_gaussian_process_classifier", "predict_gaussian_process_classifier",
      "bindings/parallel_shard_native.mojo", None),
     ("parallel_ensemble", "fit_forest", "fit_forest", "bindings/parallel_shard_native.mojo", None),
+    ("parallel_neighbors_reference", "ReferenceShardedNeighbors.kneighbors", "reference_query",
+     "bindings/parallel_shard_native.mojo", None),
+    ("parallel_neighbors_reference", "ReferenceShardedNeighbors.predict", "reference_query",
+     "bindings/parallel_shard_native.mojo", None),
+    ("parallel_neighbors_reference", "ReferenceShardedNeighbors.predict_proba", "reference_query",
+     "bindings/parallel_shard_native.mojo", None),
+    ("parallel_neighbors", "ParallelQueries.query", "parallel_queries", "bindings/parallel_shard_native.mojo", None),
+    ("parallel_ivf", "DistributedIVFIndex.search", "ivf_search", "bindings/parallel_shard_native.mojo", None),
 )
 
 #: (driver name in `family_par_run`, plain owner operations it may run)
