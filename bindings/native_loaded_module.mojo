@@ -16,7 +16,7 @@ def _loaded_lookup(mapping: PyObjectPtr, var name: String) raises -> PyObjectPtr
     return result
 
 
-def _loaded_fields(module: PythonObject) raises -> PythonObject:
+def _loaded_fields(module: PythonObject, pinned_hook: Bool = False) raises -> PythonObject:
     ref cpy = Python().cpython()
     var fields = cpy.lib.get_function[PyObjectPtr]("PyModule_GetDict")(module._obj_ptr)
     if not fields:
@@ -37,7 +37,11 @@ def _loaded_fields(module: PythonObject) raises -> PythonObject:
     for i in range(len(keys)):  # small-loop(keys: module field names): validates namespace metadata before attribute lookup
         if _loaded_type(keys[i]) is not string_type:
             raise Error("TypeError: native module connection requires ordinary string fields")
-    if _loaded_lookup(fields, "__getattr__"):
+    # `pinned_hook`: an import-time connection that retained CPython's own
+    # module-level __getattr__ as a pinned export (_native_loaded_modules.
+    # stdlib_module_hook); its identity is checked with the other exports and
+    # these dictionary reads never call it.
+    if not pinned_hook and _loaded_lookup(fields, "__getattr__"):
         raise Error("TypeError: native module connection cannot invoke module attribute hooks")
     return PythonObject(from_owned=cpy.Py_NewRef(fields))
 
@@ -75,8 +79,13 @@ def native_loaded_module(name: String) raises -> PythonObject:
         var module = PythonObject(from_owned=cpy.Py_NewRef(found))
         if module is not record[1]:
             raise Error("TypeError: native module connection was replaced: " + name)
-        var module_fields = _loaded_fields(module)
         var exports = record[2]
+        var pinned_hook = False
+        # driver-loop: over the registered export names, for a pinned stdlib hook
+        for j in range(len(exports)):  # small-loop(exports: registered native names): finds a pinned module hook record
+            if String(exports[j][0]) == "__getattr__":
+                pinned_hook = True
+        var module_fields = _loaded_fields(module, pinned_hook)
         # driver-loop: over exact identities of registered native exports
         for j in range(len(exports)):  # small-loop(exports: registered native names): validates fixed export identities before use
             var item = exports[j]

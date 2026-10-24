@@ -83,6 +83,29 @@ def test_pending_precision_numerical_counts_return_to_the_reviewed_targets():
         raise _UnprovedPrecision("; ".join(mismatches))
 
 
+#: The reviewed lane registry and the lanes reviewed as reaching a few
+#: independently measured files (tools/lane_select_reviewed.json).
+_REVIEWED = os.path.join(os.path.dirname(os.path.abspath(__file__)), "lane_select_reviewed.json")
+
+
+def _assert_reviewed_membership(rev, rel):
+    """`rel`'s lanes against the reviewed record, by NAME. Every reviewed member
+    must still reach it; a lane that is not a member may reach it only if it was
+    not in the registry when the record was made (a lane added since). Re-record
+    the file when a change of membership is reviewed, naming the cause."""
+    import json
+    with open(_REVIEWED, encoding="utf-8") as fh:
+        record = json.load(fh)
+    registry, members = set(record["registry"]), set(record["members"][rel])
+    got = set(rev.get(rel, set()))
+    lost = sorted(members - got)
+    assert not lost, f"{rel} no longer reaches reviewed lanes {lost}"
+    widened = sorted((got - members) & registry)
+    assert not widened, f"{rel} newly reaches existing lanes {widened}; review and re-record {_REVIEWED}"
+    assert members & set(lane_select.all_lanes()) == members, \
+        f"reviewed lanes left the registry: {sorted(members - set(lane_select.all_lanes()))}; re-record"
+
+
 def _refuse_if_manifest_dirty():
     """REFUSE TO RUN OVER SOMEBODY ELSE'S UNCOMMITTED WORK (2026-09-16).
 
@@ -1803,27 +1826,18 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
     rev = lane_select.reverse_map()
     for path, target, required in _NUMERICAL_PRECISION_COUNTS:
         _required_numerical_selection(path, target, required)
-    # These independent pins still hold exactly. Generic-dispatch reports
-    # are not a blanket exemption for any count that happens to change.
-    # REMEASURED 2026-10-24 (lane/fix-round2-seq-20261024):
-    #   forest_inference     53 -> 54  45 lanes import it; nine par-* lanes
-    #                                  (par-boosting{,-clf,-pointwise,-reg},
-    #                                  par-border-types, par-feature-freq,
-    #                                  par-iforest, par-ordered{,-rmse}) reach it
-    #                                  through the classical owner's tree
-    #                                  operations. After 8188d819d the selector
-    #                                  lost that owner (an aliased stub) and
-    #                                  answered 45; host_routes follows
-    #                                  HOST_IMPORT_ALIASES again.
-    #   neural_inference.py  85 -> 89  new lanes public-numeric-metadata,
-    #                                  public-residual-dropout,
-    #                                  public-theta-variants (8188d769f) and
-    #                                  transformer-forward-tape (551a8cd42); the
-    #                                  other 85 are the retained membership.
-    for rel, want in (("core/forest_inference.mojo", 54),
-                      ("python/mojolearn/neural_inference.py", 89)):
-        got = len(rev.get(rel, set()))
-        assert got == want, f"{rel} answers {got} lanes, not {want}"
+    # THE INDEPENDENT ANSWERS, BY NAME (2026-10-24; were the bare pins 53 and 85).
+    # A sibling lane that adds a lane reaching these files no longer breaks the
+    # check; an EXISTING lane that newly reaches one (a widened walk) or a
+    # reviewed lane that stops reaching one (lost coverage) still fails by name.
+    # Generic-dispatch reports are not an exemption here. Membership history:
+    # forest_inference gained nine par-* lanes through the classical owner's
+    # tree operations when host_routes followed HOST_IMPORT_ALIASES again;
+    # neural_inference.py gained public-numeric-metadata, public-residual-dropout,
+    # public-theta-variants (8188d769f), transformer-forward-tape (551a8cd42) and
+    # neural-trainer-unfused (87c170545).
+    for rel in ("core/forest_inference.mojo", "python/mojolearn/neural_inference.py"):
+        _assert_reviewed_membership(rev, rel)
     lanes = len(lane_select.all_lanes())
     # Tracked files only: a release build drops ignored generated copies into
     # the package (python/mojolearn/_identity_break.py, a copy of
@@ -3215,7 +3229,15 @@ def test_a_hunk_inside_one_mojo_def_selects_only_the_lanes_reaching_it():
     assert reason.startswith("a Mojo source whose diff is confined to named definitions "
                              "(x_decomp/chi2.mojo:chi2_quantile)"), reason
     got = set(sel["lanes"])
-    assert got <= hit and len(got) < len(hit) // 2, (len(got), len(hit))
+    # 2026-10-24: lanes that reach x_decomp's exports through the shared classical
+    # owner (decomp_native_call and the other aliased runtime-classical entries,
+    # routed since host_routes follows HOST_IMPORT_ALIASES) select the hunk too;
+    # each carries an unresolved-native-dispatch record (Mac at d3f7b7fdb: 124 of
+    # 176, all recorded). The narrow bound applies to the lanes WITHOUT a record.
+    limited = {row["lane"] for row in sel.get("precision_limitations", ()) if path in row["paths"]}
+    assert got <= hit and len(got - limited) < len(hit) // 2, (len(got), len(got - limited), len(hit))
+    for lane in got & limited:
+        _reported_native_limitation(sel, path, lane)
     for lane in got:
         chain = " ".join(sel["chains"][lane])
         assert chain.endswith("x_decomp/chi2.mojo:chi2_quantile") or "kept whole-file" in chain, chain
