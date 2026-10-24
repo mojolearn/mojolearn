@@ -28,8 +28,12 @@ from bindings.native_process_pool import (
     process_worker_connect, process_worker_next, process_send,
 )
 from bindings.native_transport import transport_close
-from bindings.tsa_hw_native import tsa_array, hw_predict
-from bindings.tsa_arima_native import arima_predict
+from bindings.tsa_hw_native import tsa_array, hw_predict, hw_fit, _check_dims, _set_fitted
+from bindings.tsa_arima_native import arima_predict, arima_fit, _series_major
+from bindings.parallel_shard_common import (
+    shard_ranges, shard_devices, shard_read_shift, shard_run, shard_rows, shard_concat, shard_state, shard_model,
+    shard_array,
+)
 from core.parallel_forecast_impl import forecast_gather_cols, forecast_scatter_cols
 
 comptime _CHILD = "mojolearn._native_parallel_forecast_worker"
@@ -283,6 +287,168 @@ def _forecast_hw(estimator: PythonObject, h: PythonObject, index: PythonObject, 
     return _predict_hw(estimator, PythonObject(n), PythonObject(n + Int(py=h)), index, devices, sps)
 
 
+# ---------------------------------------------------------------- fits
+# parallel_classical.fit_arima / fit_exponential_smoothing, one native call
+# each (lane/native-parallel-driver-20261024). The partition, the driver
+# negative control and the merge are the old Python driver's: whole series in
+# `series_per_shard` ranges (each shard after the first on an owner above rank
+# 0 reads one series early under the switch), each shard fitted by the plain
+# native fit in its own worker, every fitted array placed at its shard's
+# series offset. The plain fit's own words on the same series: no bit moves.
+
+#: ARIMA fields the fit writes; a shard worker's state carries the estimator's
+#: constructor fields only.
+def _arima_fitted() raises -> PythonObject:
+    return _b().frozenset(Python.list("params_", "x_", "x0_", "n_iter_", "retcode_", "llf_", "fx_", "aic_", "bic_",
+                                      "_y", "_exog", "batch_size_", "n_obs_", "input_copied_", "_y_ndim"))
+
+
+def _fit_arima(estimator: PythonObject, y: PythonObject, devices: PythonObject, sps: PythonObject,
+               exog: PythonObject) raises -> PythonObject:
+    var f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
+    var b = _b()
+    if py_type(estimator) is not f[].arima_cls:
+        raise Error("TypeError: fit_arima requires mojolearn.ARIMA")
+    if exog is not None:
+        raise Error("NotImplementedError: fit_arima does not shard exogenous regressors; ARIMA.fit(y, exog) fits "
+                    + "them on one device")
+    var fields = py_fields(estimator)
+    var mode = py_get(fields, "numeric_mode")
+    if mode is not None and not Bool(py=mode == "identical"):
+        raise Error("ValueError: parallel ARIMA requires IDENTICAL numeric mode")
+    if py_type(sps) is not b.int or Int(py=sps) < 1:
+        raise Error("ValueError: series_per_shard must be a positive integer")
+    var context = f[].arima_context
+    var series = _series_major(y, context)
+    var data = series[0]
+    var batch = Int(py=series[1])
+    var n_obs = Int(py=series[2])
+    var copied = series[3]
+    var ranges = shard_ranges(batch, sps, "series_per_shard", "")
+    var drop = _arima_fitted()
+    var state = shard_state(fields, drop, context)
+    py_setitem(state, "numeric_mode", "identical")
+    var n_devices = shard_devices(devices)
+    var requests = b.list()
+    for r in range(len(ranges) // 2):  # driver-loop: one worker request per series shard
+        var lo = ranges[2 * r]
+        var hi = ranges[2 * r + 1]
+        var shift = shard_read_shift(r, lo, n_devices)
+        _ = py_call(requests.append, Python.tuple("arima_fit_shard", state,
+                                                  Python.tuple(shard_rows(data, lo - shift, hi - shift, context))))
+    var parts = shard_run(requests, devices, _CHILD)
+    var merged = b.dict()
+    for name in [String("params_"), String("x_"), String("x0_"), String("n_iter_"), String("retcode_"),
+                 String("llf_"), String("fx_"), String("aic_"), String("bic_")]:  # small-loop(the nine series-major fitted arrays)
+        py_setitem(merged, name, shard_concat(parts, name, batch, context))
+    # `result = ARIMA(**params); result.__dict__.update(parts[0].__dict__)`,
+    # the merged arrays, then the whole batch's series state
+    _ = py_call(fields.clear)
+    _ = py_call(fields.update, parts[0])
+    _ = py_call(fields.update, merged)
+    py_setitem(fields, "batch_size_", batch)
+    py_setitem(fields, "n_obs_", n_obs)
+    py_setitem(fields, "_y", data)
+    py_setitem(fields, "input_copied_", copied)
+    return estimator
+
+
+#: Holt-Winters fields the fit writes.
+def _hw_fitted() raises -> PythonObject:
+    return _b().frozenset(Python.list("_data", "_comps", "_components_len", "_comp_layout", "_time_major", "sse_",
+                                      "alpha_", "beta_", "gamma_", "n_iter_", "criterion_", "n", "level_", "trend_",
+                                      "season_"))
+
+
+def _fit_hw(estimator: PythonObject, devices: PythonObject, sps: PythonObject) raises -> PythonObject:
+    var f = PARALLEL_FORECAST_BOUNDARY.get_or_create_ptr()
+    var b = _b()
+    if py_type(estimator) is not f[].hw_cls:
+        raise Error("TypeError: requires mojolearn.ExponentialSmoothing")
+    if String(py=f[].backend["_DEFAULT_MODE"]) != "identical":
+        raise Error("ValueError: ExponentialSmoothing requires IDENTICAL numeric mode")
+    if py_type(sps) is not b.int or Int(py=sps) < 1:
+        raise Error("ValueError: series_per_shard must be a positive integer")
+    var fields = py_fields(estimator)
+    var batch = Int(py=fields["ts_num"])
+    if batch < 1:
+        raise Error("ValueError: at least one series is required")
+    var context = f[].hw_context
+    var checked = _check_dims(fields, fields["endog"], context)
+    var data = checked[0]
+    var n = Int(py=checked[1])
+    var ranges = shard_ranges(batch, sps, "series_per_shard", "")
+    var drop = _hw_fitted()
+    var state = shard_state(fields, drop, context)
+    py_setitem(state, "fit_executed_flag", False)
+    var n_devices = shard_devices(devices)
+    var requests = b.list()
+    for r in range(len(ranges) // 2):  # driver-loop: one worker request per series shard
+        var lo = ranges[2 * r]
+        var hi = ranges[2 * r + 1]
+        var shift = shard_read_shift(r, lo, n_devices)
+        var shard_state_r = py_call(b.dict, state)
+        # `ExponentialSmoothing(data[lo:hi], ts_num=hi - lo, **params)`
+        py_setitem(shard_state_r, "endog", shard_rows(data, lo - shift, hi - shift, context))
+        py_setitem(shard_state_r, "ts_num", hi - lo)
+        _ = py_call(requests.append, Python.tuple("hw_fit_shard", shard_state_r, Python.tuple()))
+    var parts = shard_run(requests, devices, _CHILD)
+    # The plain fit's buffers for the whole batch, every shard's columns at
+    # its series offset: the packed components (3 * steps rows of `batch`
+    # series), the four per-series statistics and the two flag rows.
+    var period = Int(py=fields["seasonal_periods"])
+    var steps = n - period
+    var comps = shard_array("<f4", Python.tuple(3 * steps * batch), 3 * steps * batch, context)
+    var stats = shard_array("<f4", Python.tuple(4 * batch), 4 * batch, context)
+    var flags = shard_array("<i4", Python.tuple(2 * batch), 2 * batch, context)
+    var stat_names = [String("sse_"), String("alpha_"), String("beta_"), String("gamma_")]
+    for r in range(len(ranges) // 2):  # driver-loop: places one shard's blocks
+        var lo = ranges[2 * r]
+        var w = ranges[2 * r + 1] - lo
+        var part = parts[r]
+        if Int(py=part["n"]) != n:
+            raise Error("ValueError: Holt-Winters worker returned a different series length")
+        var shard_comps = part["_comps"]
+        if steps > 0 and w > 0:
+            forecast_scatter_cols(Int(py=classical_address(comps)), Int(py=classical_address(shard_comps)),
+                                  3 * steps, batch, lo, w)
+            _ = comps  # keep the Python object alive through the native call above
+            _ = shard_comps  # keep the Python object alive through the native call above
+        for i in range(4):  # small-loop(the four per-series statistics)
+            var value = part[stat_names[i]]
+            memcpy(dest=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(stats)))
+                   + i * batch + lo,
+                   src=MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(value))),
+                   count=w)
+            _ = stats  # keep the Python object alive through the native call above
+            _ = value  # keep the Python object alive through the native call above
+        var iters = part["n_iter_"]
+        var criteria = part["criterion_"]
+        memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(flags))) + lo,
+               src=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(iters))), count=w)
+        memcpy(dest=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(flags)))
+               + batch + lo,
+               src=MutPointer[Int32, MutUntrackedOrigin](unsafe_from_address=Int(py=classical_address(criteria))),
+               count=w)
+        _ = flags  # keep the Python object alive through the native call above
+        _ = iters  # keep the Python object alive through the native call above
+        _ = criteria  # keep the Python object alive through the native call above
+    py_setitem(fields, "_data", data)
+    _set_fitted(fields, n, comps, stats, flags, context)
+    return estimator
+
+
+def _fitted_record(model: PythonObject, names: PythonObject) raises -> PythonObject:
+    """The fitted fields `names` of a shard worker's model."""
+    var b = _b()
+    var fields = py_fields(model)
+    var out = b.dict()
+    for k in range(len(names)):  # driver-loop: over the fitted field names a shard returns
+        if py_contains(fields, names[k]):
+            py_setitem(out, names[k], fields[names[k]])
+    return out
+
+
 # ---------------------------------------------------------------- the worker
 
 def forecast_worker_dispatch(request: PythonObject) raises -> PythonObject:
@@ -310,6 +476,18 @@ def forecast_worker_dispatch(request: PythonObject) raises -> PythonObject:
         for k in range(len(keys)):  # driver-loop: over the shard's state record fields
             py_setitem(fields, keys[k], state[keys[k]])
         return hw_predict(model, Python.tuple(args[0], args[1], PythonObject(None)), f[].hw_context)
+    if operation == "arima_fit_shard":
+        var model = shard_model(f[].arima_cls, state)
+        _ = arima_fit(model, Python.tuple(args[0], PythonObject(None)), f[].arima_context)
+        # everything the fit set except the shard's series copy
+        var fields = py_call(b.dict, py_fields(model))
+        _ = py_call(fields.pop, "_y", PythonObject(None))
+        return shard_state(fields, b.frozenset(), f[].arima_context)
+    if operation == "hw_fit_shard":
+        var model = shard_model(f[].hw_cls, state)
+        _ = hw_fit(model, f[].hw_context)
+        return _fitted_record(model, Python.list("n", "_comps", "sse_", "alpha_", "beta_", "gamma_", "n_iter_",
+                                                 "criterion_"))
     raise Error("parallel forecasting: unsupported worker operation")
 
 
@@ -348,6 +526,10 @@ def parallel_forecast_call(operation: String, args: PythonObject) raises -> Pyth
         return _predict_hw(args[0], args[1], args[2], args[3], args[4], args[5])
     if operation == "forecast_exponential_smoothing":
         return _forecast_hw(args[0], args[1], args[2], args[3], args[4])
+    if operation == "fit_arima":
+        return _fit_arima(args[0], args[1], args[2], args[3], args[4])
+    if operation == "fit_exponential_smoothing":
+        return _fit_hw(args[0], args[1], args[2])
     if operation == "worker":
         forecast_worker(args)
         return PythonObject(None)

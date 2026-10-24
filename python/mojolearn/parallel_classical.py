@@ -57,6 +57,7 @@ from . import cluster as _cl
 from . import density as _den
 from . import mixture as _mix
 from . import hdbscan as _hdb
+from . import parallel_forecasting as _pf
 from . import _backend
 from . import _native_family_bridge
 
@@ -138,64 +139,12 @@ def fit_exponential_smoothing(estimator, *, devices=(0,), series_per_shard=1):
     estimator
         The same estimator, fitted, equal to a one-GPU ``estimator.fit(...)``.
     """
-    # Fit Holt-Winters series independently and assemble original component layouts.
-    from ._tsa_impl import ExponentialSmoothing
-    from . import _backend
-    from ._array import _strided_copy
-    from ._buffer import empty, addr, addr_ro
-    from ._bufcheck import memcopy
-    if type(estimator) is not ExponentialSmoothing:
-        raise TypeError('requires mojolearn.ExponentialSmoothing')
-    if _backend.default_mode() != 'identical':
-        raise ValueError('ExponentialSmoothing requires IDENTICAL numeric mode')
-    if type(series_per_shard) is not int or series_per_shard < 1:
-        raise ValueError('series_per_shard must be a positive integer')
-    if estimator.ts_num < 1:
-        raise ValueError('at least one series is required')
-    data, n = estimator._check_dims(estimator.endog)
-    batch = estimator.ts_num
-    params = dict(seasonal=estimator.seasonal, seasonal_periods=estimator.seasonal_periods,
-                  start_periods=estimator.start_periods, eps=estimator.eps,
-                  initialization_method=estimator.initialization_method)
-    pool = DevicePool(devices)
-    try:
-        parts = pool.map([
-            ('holtwinters_fit', params,
-             (data[start - driver_read_shift(index, start, devices):
-                   min(start + series_per_shard, batch) - driver_read_shift(index, start, devices)],))
-            for index, start in enumerate(range(0, batch, series_per_shard))])  # glue: one request per device shard
-    finally:
-        pool.close()
-    result = ExponentialSmoothing(estimator.endog, ts_num=batch, **params)
-    result.__dict__.update(parts[0].__dict__)
-    result.endog, result._data, result.ts_num, result.n = estimator.endog, data, batch, n
-    for name in ('level_', 'trend_', 'season_', 'sse_', 'alpha_', 'beta_', 'gamma_', 'n_iter_', 'criterion_'):  # glue: nine fitted attribute names
-        arrays = [getattr(part, name) for part in parts]  # glue: one buffer per device shard
-        merged = empty((batch,) + arrays[0].shape[1:], arrays[0].dtype)
-        cursor = 0
-        for array in arrays:  # glue: one memcopy per device shard
-            memcopy(addr(merged, name=name) + cursor, addr_ro(array, name=name), array.nbytes)
-            cursor += array.nbytes
-        setattr(result, name, merged)
-    steps = n - estimator.seasonal_periods
-    result._components_len = steps * batch
-    result._comps = empty((3 * result._components_len,), '<f4')
-    destination = addr(result._comps, name='components')
-    start = 0
-    for part in parts:  # glue: one strided copy per device shard
-        # the shard's (3, steps, ts) block into columns [start, start + ts) of
-        # the (3, steps, batch) block: one Mojo strided copy (strided_copy_bytes)
-        if steps > 0 and part.ts_num > 0:
-            _strided_copy(addr_ro(part._comps, name='component shard'), destination, 4,
-                          (3, steps, part.ts_num), (steps * part.ts_num, part.ts_num, 1),
-                          (steps * batch, batch, 1), 0, start)
-        start += part.ts_num
-    cl = result._components_len
-    result._time_major = {name: result._comps[i * cl:(i + 1) * cl].reshape((steps, batch))
-                          for i, name in enumerate(('level', 'trend', 'season'))}  # glue: three component views by name
-    result.fit_executed_flag = True
-    estimator.__dict__ = result.__dict__.copy()
-    return estimator
+    # One native call (`fit_exponential_smoothing`): whole series in
+    # `series_per_shard` ranges, each shard fitted by the plain native fit in
+    # a worker process per device, the packed components, statistics and
+    # flags placed at each shard's series offset and stored as the plain fit
+    # stores them.
+    return _pf._native_parallel_forecast('fit_exponential_smoothing', (estimator, devices, series_per_shard))
 
 
 def fit_gram_estimator(estimator, X, y=None, *, devices=(0,), sample_weight=None):
@@ -265,53 +214,11 @@ def fit_arima(estimator, y, *, devices=(0,), series_per_shard=1, exog=None):
     estimator
         The same estimator, fitted, equal to a one-GPU ``estimator.fit(...)``.
     """
-    # Fit independent series on GPU workers, retaining each solver's order.
-    #
-    # A worker receives only its series, so fitting does not require the entire
-    # batch on one GPU. A single series must still fit on one GPU. The returned
-    # estimator's existing prediction methods are unchanged and use one GPU.
-    from ._arima_impl import ARIMA, _series_major
-    from ._buffer import empty, addr, addr_ro
-    from ._bufcheck import memcopy
-    if type(estimator) is not ARIMA:
-        raise TypeError('fit_arima requires mojolearn.ARIMA')
-    if exog is not None:
-        raise NotImplementedError(
-            'fit_arima does not shard exogenous regressors; ARIMA.fit(y, exog) '
-            'fits them on one device')
-    if estimator.numeric_mode not in (None, 'identical'):
-        raise ValueError('parallel ARIMA requires IDENTICAL numeric mode')
-    if type(series_per_shard) is not int or series_per_shard < 1:
-        raise ValueError('series_per_shard must be a positive integer')
-    data, batch, observations, copied = _series_major(y, 'y')
-    # Keep the caller's trend spelling: resolving None to 'c'/'n' preserves
-    # k_, but changes the returned configuration and serialized model bytes.
-    params = dict(order=estimator.order, seasonal_order=estimator.seasonal_order,
-                  trend=estimator.trend, method=estimator.method,
-                  maxiter=estimator.maxiter, numeric_mode='identical')
-    requests = [('arima_fit', params,
-                 (data[start - driver_read_shift(index, start, devices):
-                       min(start + series_per_shard, batch) - driver_read_shift(index, start, devices)],))
-                for index, start in enumerate(range(0, batch, series_per_shard))]  # glue: one request per device shard
-    pool = DevicePool(devices)
-    try:
-        parts = pool.map(requests)
-    finally:
-        pool.close()
-    result = ARIMA(**params)
-    result.__dict__.update(parts[0].__dict__)
-    for name in ('params_', 'x_', 'x0_', 'n_iter_', 'retcode_', 'llf_', 'fx_', 'aic_', 'bic_'):  # glue: nine fitted attribute names
-        arrays = [getattr(part, name) for part in parts]  # glue: one buffer per device shard
-        merged = empty((batch,) + arrays[0].shape[1:], arrays[0].dtype)
-        cursor = 0
-        for array in arrays:  # glue: one memcopy per device shard
-            memcopy(addr(merged, name=name) + cursor, addr_ro(array, name=name), array.nbytes)
-            cursor += array.nbytes
-        setattr(result, name, merged)
-    result.batch_size_, result.n_obs_ = batch, observations
-    result._y, result.input_copied_ = data, copied
-    estimator.__dict__ = result.__dict__.copy()
-    return estimator
+    # One native call (bindings/parallel_forecast_native.mojo `fit_arima`):
+    # whole series in `series_per_shard` ranges, each shard fitted by the
+    # plain native fit in a worker process per device (shard i on device
+    # i % len(devices)), every fitted array placed at its series offset.
+    return _pf._native_parallel_forecast('fit_arima', (estimator, y, devices, series_per_shard, exog))
 
 
 def fit_kmeans(estimator, X, *, devices=(0,), sample_weight=None):

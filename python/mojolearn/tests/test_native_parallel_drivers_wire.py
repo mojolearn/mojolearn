@@ -76,6 +76,9 @@ DRIVERS = (
      "bindings/_mojolearn_rf.mojo"),
     ("parallel_ensemble", "ParallelForestPredictor.predict_proba", "family_par_run",
      "bindings/family_native.mojo", "bindings/_mojolearn_trees.mojo"),
+    ("parallel_classical", "fit_arima", "fit_arima", "bindings/parallel_forecast_native.mojo", None),
+    ("parallel_classical", "fit_exponential_smoothing", "fit_exponential_smoothing",
+     "bindings/parallel_forecast_native.mojo", None),
 )
 
 #: (driver name in `family_par_run`, plain owner operations it may run)
@@ -127,7 +130,11 @@ def _native_ops(function):
         if isinstance(node, ast.Call):
             target = node.func
             label = target.attr if isinstance(target, ast.Attribute) else getattr(target, "id", "")
-            if label.startswith(("_NATIVE", "_native_", "_FAMILY")):
+            if label.startswith("_native_parallel"):
+                # the parallel owners' `(operation, args)` entries
+                assert isinstance(node.args[0], ast.Constant), ast.dump(node)
+                ops.append(node.args[0].value)
+            elif label.startswith(("_NATIVE", "_native_", "_FAMILY")):
                 assert isinstance(node.args[1], ast.Constant), ast.dump(node)
                 ops.append(node.args[1].value)
     return ops
@@ -146,6 +153,23 @@ def test_each_driver_is_one_native_call_with_no_pool_or_loop():
 def test_each_door_dispatches_its_operation():
     for module, name, op, door, _ in DRIVERS:
         assert 'operation == "' + op + '"' in _read(door), (op, door)
+
+
+def test_sharded_drivers_keep_the_partition_and_the_negative_control():
+    common = _read("bindings/parallel_shard_common.mojo")
+    shift = common[common.index("def shard_read_shift("):common.index("def shard_run(")]
+    # `_parallel_pool.driver_read_shift`, word for word
+    assert "if first < 1 or n_devices < 2 or index % n_devices == 0:" in shift
+    assert '"MOJOLEARN_PAR_DRIVER_SABOTAGE"' in shift and '"MOJOLEARN_HOST_ALLOW_SABOTAGE"' in shift
+    ranges = common[common.index("def shard_ranges("):common.index("def shard_devices(")]
+    assert "out.append(min(i + w, count))" in ranges and "i += w" in ranges
+    forecast = _read("bindings/parallel_forecast_native.mojo")
+    for driver in ("_fit_arima", "_fit_hw"):
+        body = forecast[forecast.index("def " + driver + "("):]
+        body = body[:body.index("\n\ndef ")]
+        # every shard reads from its shifted start and is placed at its true offset
+        assert "shard_read_shift(r, lo, n_devices)" in body
+        assert "shard_rows(data, lo - shift, hi - shift, context)" in body
 
 
 def test_each_door_releases_its_plan_in_a_finally():
