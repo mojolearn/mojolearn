@@ -50,6 +50,9 @@ from . import kernel_methods as _km
 from . import _cholesky_impl as _chol
 from . import _svm_impl as _svm
 from . import _gp_impl as _gp
+from . import linear_model as _lm
+from . import _solver_impl as _cd
+from . import _backend
 from . import _native_family_bridge
 
 # The classical families' compiled owner: a cooperative driver is one
@@ -87,22 +90,18 @@ def fit_logistic(estimator, X, y, *, devices=(0,)):
     estimator
         The same estimator, fitted, equal to a one-GPU ``estimator.fit(...)``.
     """
-    # Partition gradient feature columns; retain the original objective and QN trajectory.
-    #
-    # Supports the existing binary and multinomial objectives and their admitted
-    # penalties. Data and optimizer state still have to fit on the root GPU.
-    from .linear_model import LogisticRegression
-    if type(estimator) is not LogisticRegression:
+    # One native call (bindings/family_native.mojo `family_par_run`, driver
+    # `glm_fit`): the plain LogisticRegression fit (bindings/logistic_native.mojo)
+    # with its gradient feature columns on the selected devices; the objective
+    # and the QN trajectory are unchanged. Data and optimizer state stay on
+    # the root.
+    if type(estimator) is not _lm.LogisticRegression:
         raise TypeError('fit_logistic requires mojolearn.LogisticRegression')
     if estimator.numeric_mode not in (None, 'identical'):
         raise ValueError('parallel logistic regression requires IDENTICAL numeric mode')
-    pool = DevicePool(devices, cooperative=True)
-    try:
-        result = pool.map([('glm_fit', estimator, (X, y))])[0]
-    finally:
-        pool.close()
-    estimator.__dict__ = result.__dict__.copy()
-    return estimator
+    return _FAMILY(estimator, 'family_par_run',
+                   ('glm_fit', devices, 'fit', (X, y, None), _lm._LR_CALL, _lm._LR_CONTEXT,
+                    (estimator._bind('_mojolearn_estimators'),)), _FAMILY_CONTEXT)
 
 
 def fit_exponential_smoothing(estimator, *, devices=(0,), series_per_shard=1):
@@ -367,23 +366,17 @@ def fit_coordinate_descent(estimator, X, y, *, devices=(0,)):
     estimator
         The same estimator, fitted, equal to a one-GPU ``estimator.fit(...)``.
     """
-    # Distribute original dot leaves; preserve serial coordinate and convergence order.
-    #
-    # Single-leaf dots remain on the root. Full data and residual state must fit
-    # on the root; transport per coordinate can outweigh computation savings.
-    from ._solver_impl import Lasso, ElasticNet
-    from . import _backend
-    if type(estimator) not in (Lasso, ElasticNet):
+    # One native call (`family_par_run`, driver `solver_fit`): the plain
+    # Lasso/ElasticNet fit with its multi-leaf dots on the selected devices;
+    # single-leaf dots, the serial coordinate order and the convergence order
+    # stay on the root.
+    if type(estimator) not in (_cd.Lasso, _cd.ElasticNet):
         raise TypeError('requires mojolearn.Lasso or ElasticNet')
     if _backend.default_mode() != 'identical':
         raise ValueError('parallel coordinate descent requires IDENTICAL numeric mode')
-    pool = DevicePool(devices, cooperative=True)
-    try:
-        result = pool.map([('solver_fit', estimator, (X, y))])[0]
-    finally:
-        pool.close()
-    estimator.__dict__ = result.__dict__.copy()
-    return estimator
+    return _FAMILY(estimator, 'family_par_run',
+                   ('solver_fit', devices, 'cd_fit', (X, y, None), _cd._CD_CALL, _cd._CD_CONTEXT,
+                    (_backend.binding('_mojolearn_solver', 'identical'),)), _FAMILY_CONTEXT)
 
 
 def fit_svm(estimator, X, y, *, devices=(0,), sample_weight=None):
@@ -418,7 +411,7 @@ def fit_svm(estimator, X, y, *, devices=(0,), sample_weight=None):
         raise ValueError('parallel SVM requires IDENTICAL')
     return _FAMILY(estimator, 'family_par_run',
                    ('svm_fit', devices, _SVM_FIT[type(estimator)],
-                    (estimator._bind(_svm._EXT_NAME), X, y, sample_weight), None,
+                    (estimator._bind(_svm._EXT_NAME), X, y, sample_weight), None, None,
                     (estimator._bind(_svm._EXT_NAME),)), _FAMILY_CONTEXT)
 
 
@@ -452,7 +445,7 @@ def predict_svm(estimator, X, *, devices=(0,), method='predict'):
     return public_method_result(estimator, method,
                                 _FAMILY(estimator, 'family_par_run',
                                         ('svm_predict', devices, _SVM_PREDICT[(type(estimator), method)],
-                                         (estimator._bind(_svm._EXT_NAME), X), None,
+                                         (estimator._bind(_svm._EXT_NAME), X), None, None,
                                          (estimator._bind(_svm._EXT_NAME),)), _FAMILY_CONTEXT),
                                 sys._getframe(1))
 
@@ -483,7 +476,7 @@ def fit_gaussian_process(estimator, X, y, *, devices=(0,)):
     if estimator.numeric_mode not in (None, 'identical'):
         raise ValueError('parallel Gaussian processes require IDENTICAL')
     return _FAMILY(estimator, 'family_par_run',
-                   ('gp_fit', devices, 'family_gp_gpr_fit', (estimator._bind(), X, y), None,
+                   ('gp_fit', devices, 'family_gp_gpr_fit', (estimator._bind(), X, y), None, None,
                     (estimator._bind(),)), _FAMILY_CONTEXT)
 
 
@@ -518,7 +511,7 @@ def predict_gaussian_process(estimator, X, *, devices=(0,), return_std=False):
     return public_method_result(estimator, 'predict',
                                 _FAMILY(estimator, 'family_par_run',
                                         ('gp_predict', devices, 'family_gp_gpr_predict',
-                                         (estimator._bind(), X, return_std, False), None,
+                                         (estimator._bind(), X, return_std, False), None, None,
                                          (estimator._bind(),)), _FAMILY_CONTEXT),
                                 sys._getframe(1))
 

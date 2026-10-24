@@ -18,6 +18,7 @@ and mirrored in `python/mojolearn/resample.py`. Every result struct crosses
 as its arrays and scalars; the scalars widen float32 to float64 exactly.
 """
 
+from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding
 from std.os import abort
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, copy_f32, read_f32
 from core.resample_impl import resample_store_indices
@@ -575,6 +576,8 @@ def build__mojolearn_resample() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_resample")
         m.def_function[resample_ranges_parallel_available]("resample_ranges_parallel_available")
+        m.def_function[device_plan_enter_binding]("device_plan_enter")
+        m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[resample_vendor_binding]("resample_vendor")
         m.def_function[resample_numeric_mode_binding]("resample_numeric_mode")
         m.def_function[resample_fast_defines_binding]("resample_fast_defines")

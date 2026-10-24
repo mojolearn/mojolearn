@@ -79,6 +79,7 @@ hr-small-passes (2026-10-02): LinearRegression and Ridge center on the
 device through the estimators binding (glm/impl/center_device.mojo).
 """
 
+from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding
 from core.hostptr import f32_ptr, f64_ptr, i32_ptr, u32_ptr
 from core.mojolearn_shell_impl import (
     all_finite_host_f32,
@@ -2052,6 +2053,8 @@ def build__mojolearn() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn")
         m.def_function[mojolearn_vendor_binding]("mojolearn_vendor")
+        m.def_function[device_plan_enter_binding]("device_plan_enter")
+        m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[mojolearn_numeric_mode_binding]("mojolearn_numeric_mode")
         m.def_function[knn_search_binding]("knn_search")
         m.def_function[knn_index_prepare_binding]("knn_index_prepare")

@@ -43,6 +43,7 @@ wrappers without a leg to point at.
 """
 
 # DEVIATION 2486: shared byte-preserving host copies.
+from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding
 from core.hostptr import f32_ptr, i32_ptr, read_f32, read_i32
 from std.os import abort
 from std.python import Python, PythonObject
@@ -1397,6 +1398,8 @@ def build__mojolearn_metrics() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_metrics")
         m.def_function[graph_parallel_available_binding]("graph_parallel_available")
+        m.def_function[device_plan_enter_binding]("device_plan_enter")
+        m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[metrics_vendor_binding]("metrics_vendor")
         m.def_function[umap_fit_transform_binding]("umap_fit_transform")
         m.def_function[umap_transform_binding]("umap_transform")

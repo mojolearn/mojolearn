@@ -5,6 +5,7 @@ IVF quantization arms. Every entry takes (addrs, params) lists; the orders
 are written in x_ann/abi_pyapi.mojo's callers below and in
 python/mojolearn/_expansion_ann.py. `bindings/_mojolearn_x_ann_host.mojo`
 exports the same names with the same contract on the CPU."""
+from bindings.device_plan_binding import device_plan_enter_binding, device_plan_exit_binding
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -445,6 +446,8 @@ def build__mojolearn_x_ann() -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_x_ann")
         m.def_function[ivf_pq_build_binding]("x_ann_ivf_pq_build")
+        m.def_function[device_plan_enter_binding]("device_plan_enter")
+        m.def_function[device_plan_exit_binding]("device_plan_exit")
         m.def_function[ivf_pq_search_binding]("x_ann_ivf_pq_search")
         m.def_function[tsne_fit_binding]("x_ann_tsne_fit")
         m.def_function[cagra_build_binding]("x_ann_cagra_build")

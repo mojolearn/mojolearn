@@ -20,6 +20,10 @@ def par_spec_admits(driver: String, owner: String) -> Bool:
         return owner == "family_gp_gpr_fit"
     if driver == "gp_predict":
         return owner == "family_gp_gpr_predict"
+    if driver == "glm_fit":
+        return owner == "fit"
+    if driver == "solver_fit":
+        return owner == "cd_fit"
     return False
 
 
@@ -35,4 +39,8 @@ def par_spec_rebuild(driver: String) -> String:
         return "rebuild SVM binding for distributed kernel rows"
     if driver == "gp_fit" or driver == "gp_predict":
         return "rebuild GP binding for distributed covariance rows"
+    if driver == "glm_fit":
+        return "rebuild estimators binding for parallel GLM gradients"
+    if driver == "solver_fit":
+        return "rebuild solver binding for parallel dot leaves"
     return "rebuild the binding for multi-GPU drivers"

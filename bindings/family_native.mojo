@@ -31,15 +31,15 @@ def _family_par_run(model: PythonObject, args: PythonObject, context: PythonObje
     """A cooperative multi-GPU driver as one native call
     (lane/native-parallel-driver-20261024,
     docs/plans/NATIVE_PARALLEL_DRIVER_20261024.md): args (driver, devices,
-    owner operation, owner args, owner context, plan bindings). The
-    driver's shell made its type and mode refusals and resolved the
-    bindings. Here: the devices and route are admitted as the old pool
-    admitted them, the owner operation must be one the driver's spec names
-    (bindings/parallel_plan_specs.mojo), the plan binds the devices to this
-    thread in every binding the plain owner reaches, for the families the
-    old worker's environment enabled, and the plain owner runs: a family
-    operation here (owner context None), any other operation through the
-    classical owner's compiled entry with its own context. The plans are
+    owner operation, owner args, owner entry, owner context, plan bindings).
+    The driver's shell made its type and mode refusals and resolved the
+    plain method's entry, context and bindings. Here: the devices and route
+    are admitted as the old pool admitted them, the owner operation must be
+    one the driver's spec names (bindings/parallel_plan_specs.mojo), the plan
+    binds the devices to this thread in every binding the plain owner
+    reaches, for the families the old worker's environment enabled, and the
+    plain owner runs: a family operation here (owner entry None), any other
+    through the plain method's own compiled entry and context. The plans are
     released in a `finally`."""
     var driver = String(args[0])
     var owner = String(args[2])
@@ -47,18 +47,18 @@ def _family_par_run(model: PythonObject, args: PythonObject, context: PythonObje
         raise Error("RuntimeError: parallel driver " + driver + " does not run " + owner)
     var devices = plan_devices(args[1], driver, True, context)
     var owner_args = args[3]
-    var owner_context = args[4]
-    var bindings = args[5]
+    var owner_entry = args[4]
+    var owner_context = args[5]
+    var bindings = args[6]
+    if owner_entry is not None and py_type(owner_entry) is not context["family_builtin_type"]:
+        raise Error("TypeError: a parallel driver's owner must be a compiled entry")
     var result = PythonObject(None)
     plan_enter_all(bindings, devices, par_spec_rebuild(driver), par_spec_families(driver))
     try:
-        if owner_context is None:
+        if owner_entry is None:
             result = family_operation(model, owner, owner_args, context)
         else:
-            var entry = py_get(context, "family_classical_entry")
-            if entry is None or py_type(entry) is not context["family_builtin_type"]:
-                raise Error("RuntimeError: the classical native owner is not connected")
-            result = family_call(entry, model, PythonObject(owner), owner_args, owner_context)
+            result = family_call(owner_entry, model, PythonObject(owner), owner_args, owner_context)
     finally:
         plan_exit_all(bindings)
     return result
