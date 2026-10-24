@@ -692,7 +692,8 @@ def _(ml, X, yc, yr, Xh=None):
     for j in range(Xq.shape[1]):
         num = [float(v) for v in np.unique(Xq[:, j])]
         cats.append(sorted(num[:1] + num[2:] + [float(np.float32(max(num) + 7.5))]))
-    t = ml.TargetEncoder(categories=cats, cv=_prep_Splits())
+    # the splitter's folds cross as (train, test) pairs: only mojolearn splitters run in the door
+    t = ml.TargetEncoder(categories=cats, cv=list(_prep_Splits().split(Xq, yr)))
     parts["te_split"] = _h(t.fit_transform(Xq, yr), *t.encodings_)
     pairs = [(np.flatnonzero(np.arange(len(yc)) % 4 != k), np.flatnonzero(np.arange(len(yc)) % 4 == k))
              for k in range(4)]
