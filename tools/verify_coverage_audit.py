@@ -266,8 +266,10 @@ def native_rows(ls, base, reach, whole_surface=False):
                              changed_kernel=[label(n) for n in hits if kind_of(n[1]) != "door"],
                              # in the closure's breadth-first order: the kernels nearest the export first
                              closure_kernel=[label(n) for n in parent if kind_of(n[1]) != "door"
-                                             and _sab_na(label(n)) is None][:4],
-                             n_closure_kernel=sum(1 for n in reached if kind_of(n[1]) != "door"),
+                                             and _sab_na(label(n)) is None
+                                             and not _valueless(graph.text(n), n)][:4],
+                             n_closure_kernel=sum(1 for n in reached if kind_of(n[1]) != "door"
+                                                  and not _valueless(graph.text(n), n)),
                              lanes_precise=sorted(precise), lanes_wide=sorted(set(users) - precise),
                              lanes_closure=len(users),
                              sabotage_defines=sorted(sab_defs), sabotage_sites=sorted(sab_sites)[:4],
@@ -277,6 +279,27 @@ def native_rows(ls, base, reach, whole_surface=False):
 
 _PROBE_RETURN = re.compile(r'^return PythonObject\((?:-?\d+(?:\.\d+)?|True|False|None|"[^"]*"|'
                            r'String\((?:"[^"]*"|[A-Z][A-Z0-9_]*)\)|[A-Z][A-Z0-9_]*)\)$')
+
+
+_VALUELESS_HEAD = re.compile(r"^\s*(?:@[A-Za-z_][\w.]*(?:\[[^\]]*\])?(?:\([^)]*\))?\s+)*"
+                             r"(?:comptime|alias|struct|trait|var)\b")
+
+
+#: A type's lifecycle and printing methods: construction, copies, moves,
+#: teardown, comparison and repr hold no arithmetic a lane's digest carries.
+_VALUELESS_METHODS = frozenset({"__init__", "__deinit__", "__moveinit__", "__copyinit__", "__del__",
+                                "__eq__", "__ne__", "__hash__", "__bool__", "__len__", "write_to",
+                                "write_repr_to", "copy"})
+
+
+def _valueless(text, node=None):
+    """A definition with no arithmetic to fault: a compile-time constant or
+    alias (a define, a profile word, a slot name), a type (a handle, a
+    registry, a session struct: its methods are separate nodes), or a type's
+    lifecycle or printing method."""
+    if node is not None and node[0] == "m" and node[3] in _VALUELESS_METHODS:
+        return True
+    return bool(text) and bool(_VALUELESS_HEAD.match(text))
 
 
 def constant_probe(text):
