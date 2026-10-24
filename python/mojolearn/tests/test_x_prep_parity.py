@@ -102,8 +102,12 @@ def test_covariance_estimator():
             # object at fit: fitting it would run the estimator's Python code
             # inside the runtime. The constructor stores it verbatim.
             m = ml.LinearDiscriminantAnalysis(solver=s, covariance_estimator=est())
-            with pytest.raises(TypeError, match="covariance_estimator cannot invoke Python callbacks"):
+            try:
                 m.fit(X, y)
+            except TypeError as error:
+                assert "covariance_estimator cannot invoke Python callbacks" in str(error), error
+            else:
+                raise AssertionError(f"LDA solver={s} fitted a Python covariance_estimator")
         q = ml.QuadraticDiscriminantAnalysis(solver="eigen", covariance_estimator=est()).fit(X, y)
         rq = skd.QuadraticDiscriminantAnalysis(solver="eigen", covariance_estimator=est()).fit(X, y)
         np.testing.assert_allclose(np.asarray(q.predict_proba(X)), rq.predict_proba(X), atol=2e-4)
