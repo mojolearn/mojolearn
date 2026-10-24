@@ -72,6 +72,13 @@ def test_metric_warning_filters_and_real_exception_category_are_native(operation
     def poison(*args, **kwargs):
         raise AssertionError("warnings.warn Python callback reached")
 
+    # Test setup: on a CPU-only install the binding is a _HostBinding whose
+    # entries connect on first use (_backend._HostBinding.__getattr__, binding
+    # selection glue). Connect them before the audited call.
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        invoke(op, arguments)
+
     with warnings.catch_warnings(record=True) as captured:
         warnings.simplefilter(action, UndefinedMetricWarning)
         with monkeypatch.context() as patch:

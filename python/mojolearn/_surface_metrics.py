@@ -150,8 +150,8 @@ TRAINING_LANE_NAMES = {
     "public-randomized-search": "RandomizedSearchCV fit and its delegated responses",
 }
 PUBLIC_PENDING_LANES = {
-    "x-metrics-classification-report": "no reference",
-    "x-metrics-permutation-test-score": "no reference",
+    "x-metrics-classification-report": "unwatched",
+    "x-metrics-permutation-test-score": "unwatched",
     "public-scorer-factories": "no reference",
     "public-validation-learning-curves": "no reference",
     "public-randomized-search": "no reference",

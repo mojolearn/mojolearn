@@ -1851,6 +1851,10 @@ class _HostBinding(type(sys)):
             raise NoCpuEntry(
                 _no_cpu_implementation(self.__name, item, self.__reason, self.__basename)
             )
+        # glue: connect the resolved entry once; later reads (including the
+        # native ones inside an operation) find it in the module dictionary
+        # and run no Python attribute hook.
+        setattr(self, item, fn)
         return fn
 
 

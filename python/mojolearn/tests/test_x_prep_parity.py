@@ -98,10 +98,16 @@ def test_covariance_estimator():
     y = (X[:, 0] + X[:, 1] > 0).astype(int) + (X[:, 2] > 0.8)
     for est in (skc.EmpiricalCovariance, skc.LedoitWolf):
         for s in ("lsqr", "eigen"):
-            m = ml.LinearDiscriminantAnalysis(solver=s, covariance_estimator=est()).fit(X, y)
-            r = skd.LinearDiscriminantAnalysis(solver=s, covariance_estimator=est()).fit(X, y)
-            np.testing.assert_allclose(np.asarray(m.predict_proba(X)), r.predict_proba(X), atol=2e-4)
-            np.testing.assert_allclose(np.asarray(m.covariance_), r.covariance_, rtol=1e-4, atol=1e-5)
+            # Since a5f9cc738 the native LDA owner refuses a covariance_estimator
+            # object at fit: fitting it would run the estimator's Python code
+            # inside the runtime. The constructor stores it verbatim.
+            m = ml.LinearDiscriminantAnalysis(solver=s, covariance_estimator=est())
+            try:
+                m.fit(X, y)
+            except TypeError as error:
+                assert "covariance_estimator cannot invoke Python callbacks" in str(error), error
+            else:
+                raise AssertionError(f"LDA solver={s} fitted a Python covariance_estimator")
         q = ml.QuadraticDiscriminantAnalysis(solver="eigen", covariance_estimator=est()).fit(X, y)
         rq = skd.QuadraticDiscriminantAnalysis(solver="eigen", covariance_estimator=est()).fit(X, y)
         np.testing.assert_allclose(np.asarray(q.predict_proba(X)), rq.predict_proba(X), atol=2e-4)
@@ -110,7 +116,7 @@ def test_covariance_estimator():
                     (ml.LinearDiscriminantAnalysis, dict(solver="lsqr", shrinkage=0.5))):
         try:
             cls(covariance_estimator=skc.EmpiricalCovariance(), **kw).fit(X, y)
-        except ValueError:
+        except (ValueError, TypeError):  # LDA: the a5f9cc738 TypeError above
             pass
         else:
             raise AssertionError(f"{cls.__name__} {kw} accepted a covariance_estimator")

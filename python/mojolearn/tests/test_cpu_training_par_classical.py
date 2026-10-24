@@ -214,13 +214,22 @@ def test_cpu_operations_are_the_python_sharded_drivers():
     # inventory is the one piece with no CPU counterpart, so the host route
     # asks a DIFFERENT question through a DIFFERENT function; the GPU check
     # must still be the one the GPU route calls.
+    # Since b5807df03 ("Move parallel cross-validation into native workers")
+    # cross_val_score is one native call; the native owner keeps the same
+    # shape: one NON-cooperative pool, a pre-fit identity wave checked
+    # against the spawned PIDs, whole-fold waves, and scores consumed in
+    # logical fold order. The legacy worker keeps `cross_val_fold` for its
+    # other callers.
     cv = _read("python/mojolearn/parallel_model_selection.py")
-    assert "pool = DevicePool(devices)" in cv and "cooperative=True" not in cv
-    assert "requests.append(('cross_val_fold', _clone(prototype)," in cv
-    assert "scores.extend(results)" in cv
-    assert "pool.map([('worker_identity', None, ()) for _ in pool.devices]), width)" in cv
-    assert "require_distinct_workers(inventory, vendor, width)" in cv
-    assert "MOJOLEARN_" not in cv
+    assert "DevicePool" not in cv and "cooperative=True" not in cv and "MOJOLEARN_" not in cv
+    assert "_selection._NATIVE(None, 'family_msel_parallel_score'," in cv
+    cv_owner = _read("bindings/parallel_cv_native.mojo")
+    assert 'var pool = process_pool_create(devices, False, "mojolearn._native_parallel_cv_worker")' in cv_owner
+    assert cv_owner.count("process_pool_create(") == 1
+    assert '_ = py_call(requests.append, Python.tuple("identity"))' in cv_owner
+    assert "native_require_worker_inventory(identities, " in cv_owner
+    assert "# driver-loop: consume in logical fold order, never completion order" in cv_owner
+    assert "scores.append(Float64(py=result[i][1]))" in cv_owner
     assert "    if operation == 'cross_val_fold':\n" in worker
     assert "        return _fit_score_fold(state, *args)\n" in worker
     wanted.update(("cross_val_fold", "worker_identity"))

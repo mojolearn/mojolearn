@@ -349,7 +349,13 @@ class UMAP(NumericModeMixin):
             since ``fit`` (refit first), the feature count differs, or ``X``
             is not finite.
         """
-        return _NATIVE(self, "family_mani_umap_transform", (self._bind(), X), _NATIVE_CONTEXT)
+        # glue: route to the tier the model was fitted in, so a changed live
+        # numeric_mode reaches the native "changed after fit" refusal instead
+        # of an unrelated tier refusal (e.g. no 'fast' tier on a CPU-only
+        # install); an unfitted model resolves the default tier and refuses
+        # natively as unfitted.
+        binding = _backend.binding(self._BINDING, getattr(self, "_transform_mode", None))
+        return _NATIVE(self, "family_mani_umap_transform", (binding, X), _NATIVE_CONTEXT)
 
     # Saved layout (lane/inference-forecast-umap-pca, 2026-09-15): training and
     # embedding (float32), `meta` <i8 [n_neighbors, n_components, n_epochs,

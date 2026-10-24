@@ -109,6 +109,20 @@ def _family(kind: String) -> String:
     return "et" if kind.startswith("et_") else "rf"
 
 
+def forest_check_fit_device(model: PythonObject, context: PythonObject) raises:
+    """Extra Trees: refuse a non-GPU `device` at fit before any input is
+    admitted or converted (scikit-learn's convention: fit validates the
+    stored parameters first). The caller has already admitted the stored
+    constructor fields as native values, so the comparison runs no Python
+    hook. Random forests have no device parameter."""
+    if _family(forest_kind(model, context)) != "et":
+        return
+    var device = py_get(py_fields(model), "device", PythonObject(None))
+    var b = trees_builtins()
+    if not Bool(py=py_call(b.isinstance, device, b.str)) or not Bool(py=device == PythonObject("gpu")):
+        raise Error("Extra Trees training is GPU-only; device must be 'gpu', got " + _repr(device))
+
+
 def _classifier(kind: String) -> Bool:
     return kind.endswith("_classifier")
 

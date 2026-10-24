@@ -96,6 +96,12 @@ def knn_affinity_f32(
         _rows(0)
     else:
         host_parallelize(_rows, tasks)
+    # Mojo destroys a local after its last NAMED use on each path. On the
+    # refusal path below (early return) C and order were last named at
+    # `unsafe_ptr()`, before the closure wrote/read through cptr/optr: a use
+    # after free that reported a garbage row. Name them after the closure.
+    _ = len(C)
+    _ = len(order)
     for i in range(n):
         var b = bad_kind[i]
         if b != Int32(0):

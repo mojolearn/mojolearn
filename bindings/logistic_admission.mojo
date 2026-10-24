@@ -9,8 +9,15 @@ from bindings.sequential_admission import _one_of
 from bindings.classifier_public_lifecycle import classifier_label_list
 
 
-def _parameter(name: PythonObject, value: PythonObject, context: PythonObject) raises:
+def _parameter(name: PythonObject, value: PythonObject, context: PythonObject, configure: Bool = False) raises:
     classical_admit_value(value, context)
+    if configure:
+        # Constructor, get_params and set_params store and return values
+        # verbatim and validate nothing (scikit-learn's convention, its
+        # check_do_not_raise_errors_in_init_or_set_params). Admission above
+        # already refuses Python hooks; the scalar check runs when a value is
+        # consumed (fit, predict, ...).
+        return
     var b = Python.import_module("builtins")
     if String(name) == "class_weight" and _one_of(py_type(value), context["mapping_types"]):
         var keys = py_call(b.list, value)
@@ -31,13 +38,14 @@ def logistic_storage(model: PythonObject, context: PythonObject) raises -> Pytho
     return py_call(layout["fields_get"], model, py_type(model))
 
 
-def logistic_fields(model: PythonObject, context: PythonObject, copy_state: Bool = True) raises -> PythonObject:
+def logistic_fields(model: PythonObject, context: PythonObject, copy_state: Bool = True,
+                    configure: Bool = False) raises -> PythonObject:
     var fields = logistic_storage(model, context)
     var names = context["lr_parameters"]
     for i in range(len(names)):  # driver-loop: fixed constructor parameter values before comparisons/conversion
         if not py_contains(fields, names[i]):
             raise Error("AttributeError: missing LogisticRegression parameter " + String(names[i]))
-        _parameter(names[i], fields[names[i]], context)
+        _parameter(names[i], fields[names[i]], context, configure)
     names = context["lr_consumed_fields"]
     for i in range(len(names)):  # driver-loop: consumed fitted state and optional native solver configuration
         if py_contains(fields, names[i]):
@@ -56,7 +64,7 @@ def logistic_initialize(model: PythonObject, args: PythonObject, context: Python
     if len(args) != len(names):
         raise Error("TypeError: native LogisticRegression requires its full constructor configuration")
     for i in range(len(names)):  # driver-loop: refusal before publishing any constructor parameters
-        _parameter(names[i], args[i], context)
+        _parameter(names[i], args[i], context, True)
     for i in range(len(names)):  # driver-loop: unchanged native constructor assignments
         if String(names[i]) != "numeric_mode" or args[i] is not None or not py_contains(fields, names[i]):
             py_setitem(fields, names[i], args[i])
@@ -64,7 +72,7 @@ def logistic_initialize(model: PythonObject, args: PythonObject, context: Python
 
 
 def logistic_get_params(model: PythonObject, context: PythonObject) raises -> PythonObject:
-    var fields = logistic_fields(model, context)
+    var fields = logistic_fields(model, context, True, True)
     var out = Python.dict()
     var names = context["lr_sorted_parameters"]
     for i in range(len(names)):  # driver-loop: ParamsMixin's sorted parameter names
@@ -92,7 +100,7 @@ def logistic_set_params(model: PythonObject, values: PythonObject, context: Pyth
                         + String(py_call(b.repr, py_call(b.list, context["lr_sorted_parameters"]))) + ".")
         if String(parts[1]) != "":
             raise Error("AttributeError: scalar parameter has no set_params")
-        _parameter(parts[0], values[key], context)
+        _parameter(parts[0], values[key], context, True)
         py_setitem(params, key, values[key])
     # Preserve ParamsMixin's successful reconstruction: a new configuration
     # removes fitted state. A rejected update leaves the original model alone.

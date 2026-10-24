@@ -682,6 +682,9 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
                                                               classical_address(embedding)), state), params))
             _ = labels  # keep the Python object alive through the native call above
             _ = embedding  # keep the Python object alive through the native call above
+            _ = coo.rows  # coo owns the COO Arrays read by the native call above
+            _ = coo.cols
+            _ = coo.vals
         else:
             n_out = Int(py=family_call(family_entry(metrics, "spectral_fit_predict_graph", context),
                                        classical_address(coo.rows), classical_address(coo.cols),
@@ -689,6 +692,9 @@ def _sc_fit(model: PythonObject, args: PythonObject, context: PythonObject) rais
                                        classical_address(embedding), params))
             _ = labels  # keep the Python object alive through the native call above
             _ = embedding  # keep the Python object alive through the native call above
+            _ = coo.rows  # coo owns the COO Arrays read by the native call above
+            _ = coo.cols
+            _ = coo.vals
     else:
         var x = family_as_f32(source, 2, "X", context)
         py_setitem(fields, "input_copied_", PythonObject(not (x is source)))
@@ -982,6 +988,12 @@ def _se_fit(model: PythonObject, args: PythonObject, source: PythonObject, conte
                                    classical_address(coo.rows), classical_address(coo.cols), classical_address(coo.vals),
                                    classical_address(embedding), params))
         _ = embedding  # keep the Python object alive through the native call above
+        # coo owns the three COO Arrays whose addresses the call reads; its
+        # last named use was the argument list, so without these Mojo freed
+        # them before the native read (garbage rows/cols, "negative" values).
+        _ = coo.rows
+        _ = coo.cols
+        _ = coo.vals
     else:
         var x = family_as_f32(source, 2, "X", context)
         py_setitem(fields, "input_copied_", PythonObject(not (x is source)))
