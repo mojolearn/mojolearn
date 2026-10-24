@@ -41,6 +41,11 @@ once. Each later call runs the whole graph as one program and returns new tensor
 - Outputs are tensors without gradients: the compiled model is for inference. An `argmax` output is
   `int32`.
 
+Inputs on an NVIDIA or AMD GPU (CUDA and ROCm tensors on GPU 0) are read on the GPU where they are, and
+the outputs are written straight into new tensors on that GPU, with no copy through the host. Inputs
+anywhere else, including Apple GPU (`mps`) tensors, are copied once from the host into the program and
+the outputs copied back to the input's device. Both ways return the same bits.
+
 ## Import a PyTorch model without `torch.compile`
 
 `mojolearn.import_model` does the same import directly and returns the program, which you can run on

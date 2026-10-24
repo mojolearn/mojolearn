@@ -16,9 +16,19 @@
 #   activations. An in-place change of a bound parameter (an optimizer step, load_state_dict) bumps its
 #   version counter; the next call re-imports the graph with the new weights.
 # - Static shapes only: a symbolic size (dynamic=True, or the automatic dynamic recompile) is refused.
-# - Glue only: per call the inputs are copied to host arrays (.detach().cpu().numpy()) and the outputs
-#   back to the input's device. FOLLOW-UP: hand device buffers to the program without the host copy
-#   (DLPack / data_ptr into the session) once the import's session takes caller device buffers.
+# - Two routes per call, chosen by _route, glue only on both:
+#   * device (CUDA and ROCm tensors on GPU 0, a binding with ops_imported_run_device): the program reads
+#     each input where it is, by device address, shape and dtype, and writes each output straight into a
+#     torch.empty tensor on the same device (autograd/program_device_pyapi.mojo). Nothing crosses the
+#     host and no NumPy array is made. The torch stream is drained before the call (inputs written,
+#     output storage free) and after it; the native call drains its own queue before it returns, so the
+#     bits never depend on stream order. Same bits as the host route by construction (the same cast
+#     launches on the same bytes; see that module's header).
+#   * host (CPU tensors, MPS tensors, another GPU, a CPU-only install): the inputs are copied to host
+#     arrays (.detach().cpu().numpy()), ImportedProgram.run runs, and the outputs are copied back to the
+#     input's device. MPS stays here: PyTorch exposes no supported raw pointer for an MPS tensor, and
+#     Metal buffers are objects, not addresses. That gap is PyTorch's; no workaround (CLAUDE.md "Wait for
+#     Mojo and Modular" in spirit): the host route is the documented behavior on Apple.
 # - torch is imported lazily: `import mojolearn` and `import mojolearn.adapters` never import it.
 from __future__ import annotations
 
@@ -140,6 +150,49 @@ class _Compiled:
         _PROGRAMS.setdefault(gm, {})[(self._signature, self._numeric_mode)] = entry
         return entry
 
+    def _route(self, free):
+        """("device", "") when the call's inputs go to the program on the GPU, else ("host", reason)."""
+        if not free:
+            return "host", "the graph has no tensor inputs"
+        device = free[0].device
+        if device.type == "mps":
+            return "host", ("PyTorch exposes no supported raw pointer for an MPS tensor; Apple inputs are copied "
+                            "through the host")
+        if device.type != "cuda":
+            return "host", f"the inputs are on the {device.type}"
+        if any(x.device != device for x in free):  # glue: one entry per graph input
+            return "host", "the inputs are on different devices"
+        # mojolearn's sequence context is the process's GPU 0 (sequence/exec_device.mojo sequence_ctx)
+        if getattr(device, "index", None) not in (None, 0):
+            return "host", f"mojolearn runs on GPU 0 and the inputs are on {device}"
+        if getattr(self._program, "_run_device", None) is None:
+            return "host", "this mojolearn binding takes no device buffers (a CPU-only install or an older build)"
+        return "device", ""
+
+    def _run_host(self, torch, free, device):
+        # glue: a host copy of each input, the program run, each output copied to the input's device
+        arrays = [x.detach().cpu().contiguous().numpy() for x in free]  # glue: one entry per graph input
+        got = self._program.run(*arrays)
+        got = got if isinstance(got, tuple) else (got,)
+        # the program's output bits, moved to the input's device
+        return tuple(torch.tensor(y, device=device) for y in got)  # glue: one entry per graph output
+
+    def _run_device(self, torch, free, device):
+        # glue: device addresses in, caller-allocated device outputs; no host copy, no NumPy
+        xs = [x.detach().contiguous() for x in free]  # glue: one entry per graph input
+        outs = tuple(torch.empty(tuple(shape), dtype=torch.int32 if dtype == "int32" else torch.float32,
+                                 device=device)
+                     for _name, shape, dtype in self._program.outputs)  # glue: one entry per graph output
+        stream = torch.cuda.current_stream(device)
+        stream.synchronize()  # the inputs are written and the outputs' storage is free before mojolearn's queue runs
+        self._program._run_device(
+            self._program,
+            [(x.data_ptr(), tuple(x.shape), _dtype_name(x.dtype)) for x in xs],  # glue: one entry per graph input
+            [y.data_ptr() for y in outs])  # glue: one entry per graph output
+        stream.synchronize()
+        del xs  # held through the call: a .contiguous() copy must outlive the native read
+        return outs
+
     def __call__(self, *args):
         torch = _torch()
         if len(args) != len(self._signature):
@@ -151,15 +204,14 @@ class _Compiled:
             self._program, self._versions = self._import(gm)
         free = [args[i] for i in self._free]  # glue: one entry per graph input
         device = free[0].device if free else torch.device("cpu")
-        # glue: a host copy of each input (FOLLOW-UP: zero-copy device handoff)
-        # measured: PENDING. tools/adapter_transfer_probe.py times this call's transfer (host copy in,
-        # output rebuild on the device) against the program run for a given shape; record the nv/amd/Mac
-        # numbers here (shape, transfer ms, compute ms, run id) before the zero-copy lane changes it.
-        arrays = [x.detach().cpu().contiguous().numpy() for x in free]  # glue: one entry per graph input
-        got = self._program.run(*arrays)
-        got = got if isinstance(got, tuple) else (got,)
-        # the program's output bits, moved to the input's device
-        outs = tuple(torch.tensor(y, device=device) for y in got)  # glue: one entry per graph output
+        # measured: tools/adapter_transfer_probe.py prints one TRANSFER_PROBE line per route (device, host)
+        # with the transfer and compute split; the orchestrator records nv/amd/Mac here as
+        #   <box> <route> rows x features: transfer_in_ms / compute_ms / transfer_out_ms / call_ms (run id)
+        # nv  device: (owed)    nv  host: (owed)
+        # amd device: (owed)    amd host: (owed)
+        # Mac host:   (owed; MPS has no device route)
+        route, _reason = self._route(free)
+        outs = self._run_device(torch, free, device) if route == "device" else self._run_host(torch, free, device)
         return outs if self._sequence else outs[0]
 
 
@@ -187,7 +239,9 @@ def backend(gm, example_inputs, *, numeric_mode=None, **options):
     -------
     callable
         Takes the graph's input tensors and returns its outputs as new
-        tensors on the inputs' device.
+        tensors on the inputs' device. CUDA and ROCm inputs are read on
+        the GPU where they are; other inputs are copied once through the
+        host.
 
     Raises
     ------
