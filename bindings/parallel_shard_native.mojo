@@ -443,7 +443,8 @@ def _forest_y(y: PythonObject, regressor: Bool, context: PythonObject) raises ->
 
 
 def _fit_forest(args: PythonObject) raises -> PythonObject:
-    """args (estimator, X, y, devices, trees_per_shard): whole global tree-ID
+    """args (estimator, X, y, devices, trees_per_shard, the native
+    `msel_rebase_offsets_i32` entry the shell resolved): whole global tree-ID
     ranges, each a fresh forest of the estimator's parameters fitted from
     its first global tree ID; the trees joined in ID order, their node
     offsets rebased natively."""
@@ -488,7 +489,7 @@ def _fit_forest(args: PythonObject) raises -> PythonObject:
     var offsets = b.list()
     for r in range(len(parts)):  # driver-loop: one offset table per tree range
         _ = py_call(offsets.append, parts[r]["_offsets"])
-    py_setitem(merged, "_offsets", _rebase_offsets(offsets, context))
+    py_setitem(merged, "_offsets", _rebase_offsets(offsets, args[5], context))
     var node_names = Python.list("_colid", "_quesval", "_left_child", "_leaves")
     for k in range(len(node_names)):  # small-loop(the four flat node arrays)
         var name = String(node_names[k])
@@ -523,7 +524,7 @@ def _fit_forest(args: PythonObject) raises -> PythonObject:
     return estimator
 
 
-def _rebase_offsets(arrays: PythonObject, context: PythonObject) raises -> PythonObject:
+def _rebase_offsets(arrays: PythonObject, entry: PythonObject, context: PythonObject) raises -> PythonObject:
     """`parallel_ensemble._merge_offsets`: the shards' int32 node-offset
     tables joined, then rebased by the native `msel_rebase_offsets_i32` into
     one table of 1 + sum(sizes) - len(shards) entries."""
@@ -544,7 +545,7 @@ def _rebase_offsets(arrays: PythonObject, context: PythonObject) raises -> Pytho
     _ = lens  # keep the Python object alive through the native call above
     var n_out = 1 + n_raw - len(parts)
     var out = shard_array("<i4", Python.tuple(n_out), n_out, context)
-    _ = family_call(_t("rebase_offsets_entry"), classical_address(raw), PythonObject(n_raw), classical_address(lens),
+    _ = family_call(entry, classical_address(raw), PythonObject(n_raw), classical_address(lens),
                     PythonObject(len(parts)), PythonObject(n_out), classical_address(out))
     _ = raw  # keep the Python object alive through the native call above
     _ = lens  # keep the Python object alive through the native call above
