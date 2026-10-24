@@ -48,6 +48,19 @@ from ._parallel_pool import DevicePool, driver_read_shift, public_method_result
 from ._buffer import as_f32_c
 from . import kernel_methods as _km
 from . import _cholesky_impl as _chol
+from . import _svm_impl as _svm
+from . import _gp_impl as _gp
+from . import _native_family_bridge
+
+# The classical families' compiled owner: a cooperative driver is one
+# `family_par_run` call (bindings/family_native.mojo).
+_FAMILY, _FAMILY_CONTEXT = _native_family_bridge.connect()
+
+#: The plain owner operations of the SVM drivers.
+_SVM_FIT = {_svm.SVC: 'family_svc_svc_fit', _svm.SVR: 'family_svc_svr_fit'}
+_SVM_PREDICT = {(_svm.SVC, 'predict'): 'family_svc_svc_predict',
+                (_svm.SVC, 'decision_function'): 'family_svc_svc_decision',
+                (_svm.SVR, 'predict'): 'family_svc_svr_predict'}
 
 #: The estimators the kernel-method drivers admit, and the plain method whose
 #: public conversion `apply_kernel_method` applies.
@@ -394,27 +407,18 @@ def fit_svm(estimator, X, y, *, devices=(0,), sample_weight=None):
     estimator
         The same estimator, fitted, equal to a one-GPU ``estimator.fit(...)``.
     """
-    # Distribute linear/RBF kernel rows, retaining the original SVC/SVR solver.
-    #
-    # ``sample_weight`` (optional, one non-negative weight per row) scales each
-    # row's ``C`` exactly as ``SVC.fit`` / ``SVR.fit`` do.
-    # Full data, working-set state and output kernel tile remain on the root.
-    # A one-row kernel operation has only one active device.
-    from ._svm_impl import SVC, SVR
-    if type(estimator) not in (SVC, SVR):
+    # One native call (bindings/family_native.mojo `family_par_run`, driver
+    # `svm_fit`): the plain SVC/SVR fit with linear/RBF kernel rows on the
+    # selected devices. Full data, working-set state and the output kernel
+    # tile stay on the root; `sample_weight` is checked and scales each row's
+    # C exactly as the plain fit does.
+    if type(estimator) not in _SVM_FIT:
         raise TypeError('requires mojolearn.SVC or SVR')
     if estimator.numeric_mode not in (None, 'identical'):
         raise ValueError('parallel SVM requires IDENTICAL')
-    pool = DevicePool(devices, cooperative=True)
-    try:
-        # sample_weight goes to the estimator's own fit, which checks it
-        # (scikit-learn's rules and wording, _sample_weight.check_sample_weight)
-        # and scales each row's C as SVC/SVR do on one device
-        result = pool.map([('svm_fit', estimator, (X, y, sample_weight))])[0]
-    finally:
-        pool.close()
-    estimator.__dict__ = result.__dict__.copy()
-    return estimator
+    return _FAMILY(estimator, 'family_par_run',
+                   ('svm_fit', devices, _SVM_FIT[type(estimator)],
+                    (estimator._bind(_svm._EXT_NAME), X, y, sample_weight)), _FAMILY_CONTEXT)
 
 
 def predict_svm(estimator, X, *, devices=(0,), method='predict'):
@@ -435,21 +439,20 @@ def predict_svm(estimator, X, *, devices=(0,), method='predict'):
     -------
     The same value ``estimator.<method>(X)`` returns.
     """
-    # Distribute prediction kernel rows; retain the original support-vector fold.
-    from ._svm_impl import SVC, SVR
-    if type(estimator) not in (SVC, SVR):
+    # One native call (`family_par_run`, driver `svm_predict`): prediction
+    # kernel rows on the selected devices, the support-vector fold unchanged.
+    if type(estimator) not in _SVM_FIT:
         raise TypeError('requires mojolearn.SVC or SVR')
     if estimator.numeric_mode not in (None, 'identical'):
         raise ValueError('parallel SVM requires IDENTICAL')
-    if method not in ('predict', 'decision_function') or (type(estimator) is SVR and method != 'predict'):
+    if (type(estimator), method) not in _SVM_PREDICT:
         raise ValueError('method must be predict, or decision_function for SVC')
-    pool = DevicePool(devices, cooperative=True)
-    try:
-        result = pool.map([('svm_predict', estimator, (X, method))])[0]
-    finally:
-        pool.close()
     # what the plain estimator.<method>(X) returns to this caller
-    return public_method_result(estimator, method, result, sys._getframe(1))
+    return public_method_result(estimator, method,
+                                _FAMILY(estimator, 'family_par_run',
+                                        ('svm_predict', devices, _SVM_PREDICT[(type(estimator), method)],
+                                         (estimator._bind(_svm._EXT_NAME), X)), _FAMILY_CONTEXT),
+                                sys._getframe(1))
 
 
 def fit_gaussian_process(estimator, X, y, *, devices=(0,)):
@@ -471,19 +474,14 @@ def fit_gaussian_process(estimator, X, y, *, devices=(0,)):
     estimator
         The same estimator, fitted, equal to a one-GPU ``estimator.fit(...)``.
     """
-    # Distribute covariance rows; retain the original Cholesky and solve order.
-    from ._gp_impl import GaussianProcessRegressor
-    if type(estimator) is not GaussianProcessRegressor:
+    # One native call (`family_par_run`, driver `gp_fit`): covariance rows on
+    # the selected devices; the Cholesky and solve order stay on the root.
+    if type(estimator) is not _gp.GaussianProcessRegressor:
         raise TypeError('requires mojolearn.GaussianProcessRegressor')
     if estimator.numeric_mode not in (None, 'identical'):
         raise ValueError('parallel Gaussian processes require IDENTICAL')
-    pool = DevicePool(devices, cooperative=True)
-    try:
-        result = pool.map([('gp_fit', estimator, (X, y))])[0]
-    finally:
-        pool.close()
-    estimator.__dict__ = result.__dict__.copy()
-    return estimator
+    return _FAMILY(estimator, 'family_par_run',
+                   ('gp_fit', devices, 'family_gp_gpr_fit', (estimator._bind(), X, y)), _FAMILY_CONTEXT)
 
 
 def predict_gaussian_process(estimator, X, *, devices=(0,), return_std=False):
@@ -505,23 +503,20 @@ def predict_gaussian_process(estimator, X, *, devices=(0,), return_std=False):
     mean, or (mean, std)
         As ``estimator.predict(X, return_std=return_std)``.
     """
-    # Distribute cross-covariance rows; retain root prediction/variance folds.
-    from ._gp_impl import GaussianProcessRegressor
-    if type(estimator) is not GaussianProcessRegressor:
+    # One native call (`family_par_run`, driver `gp_predict`): cross-covariance
+    # rows on the selected devices, the prediction and variance folds on the
+    # root. The plain predict records `clamped_` / `n_clamped_` itself.
+    if type(estimator) is not _gp.GaussianProcessRegressor:
         raise TypeError('requires mojolearn.GaussianProcessRegressor')
     if estimator.numeric_mode not in (None, 'identical'):
         raise ValueError('parallel Gaussian processes require IDENTICAL')
     if type(return_std) is not bool:
         raise ValueError('return_std must be bool')
-    pool = DevicePool(devices, cooperative=True)
-    try:
-        result, diagnostic = pool.map([('gp_predict', estimator, (X, return_std))])[0]
-    finally:
-        pool.close()
-    if return_std:
-        estimator.clamped_, estimator.n_clamped_ = diagnostic
-    # the worker's raw result; the plain method's public conversion for our caller
-    return public_method_result(estimator, 'predict', result, sys._getframe(1))
+    return public_method_result(estimator, 'predict',
+                                _FAMILY(estimator, 'family_par_run',
+                                        ('gp_predict', devices, 'family_gp_gpr_predict',
+                                         (estimator._bind(), X, return_std, False)), _FAMILY_CONTEXT),
+                                sys._getframe(1))
 
 
 def fit_dbscan(estimator, X, *, devices=(0,), sample_weight=None):

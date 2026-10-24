@@ -325,31 +325,8 @@ def execute(request):
         return state.transform(args[0])
     # 'cholesky_fit' / 'cholesky_solve' moved into one native call each
     # (bindings/linalg_native.mojo `family_chol_par_*`, 2026-10-24).
-    if operation in ('gp_fit', 'gp_predict'):
-        native = state._extension()
-        if (not callable(getattr(native, 'gp_parallel_available', None))
-                or native.gp_parallel_available() != 1):
-            raise ImportError('rebuild GP binding for distributed covariance rows')
-        if operation == 'gp_fit':
-            state.fit(*args)
-            return state
-        X, return_std = args
-        result = state.predict(X, return_std=return_std)
-        return result, (state.clamped_, state.n_clamped_) if return_std else None
-    if operation in ('svm_fit', 'svm_predict'):
-        from ._svm_impl import _extension
-        native = _extension('identical')
-        if (not callable(getattr(native, 'svm_parallel_available', None))
-                or native.svm_parallel_available() != 1):
-            raise ImportError('rebuild SVM binding for distributed kernel rows')
-        if operation == 'svm_fit':
-            state.fit(*args)
-            return state
-        X, method = args
-        if method not in ('predict', 'decision_function'):
-            raise ValueError('invalid SVM prediction operation')
-        from ._parallel_pool import native_method
-        return native_method(state, method, X)  # the native result; the driver converts
+    # 'gp_fit' / 'gp_predict' moved to family_par_run (2026-10-24).
+    # 'svm_fit' / 'svm_predict' moved to family_par_run (2026-10-24).
     if operation in ('iforest_fit', 'iforest_score'):
         from ._svm_impl import _extension
         native = _extension('identical')

@@ -28,6 +28,22 @@ DRIVERS = (
      "bindings/_mojolearn_gp.mojo"),
     ("parallel_classical", "solve_cholesky", "family_chol_par_solve", "bindings/linalg_native.mojo",
      "bindings/_mojolearn_gp.mojo"),
+    ("parallel_classical", "fit_svm", "family_par_run", "bindings/family_native.mojo",
+     "bindings/_mojolearn_svm.mojo"),
+    ("parallel_classical", "predict_svm", "family_par_run", "bindings/family_native.mojo",
+     "bindings/_mojolearn_svm.mojo"),
+    ("parallel_classical", "fit_gaussian_process", "family_par_run", "bindings/family_native.mojo",
+     "bindings/_mojolearn_gp.mojo"),
+    ("parallel_classical", "predict_gaussian_process", "family_par_run", "bindings/family_native.mojo",
+     "bindings/_mojolearn_gp.mojo"),
+)
+
+#: (driver name in `family_par_run`, plain owner operations it may run)
+PAR_RUN = (
+    ("svm_fit", ("family_svc_svc_fit", "family_svc_svr_fit")),
+    ("svm_predict", ("family_svc_svc_predict", "family_svc_svc_decision", "family_svc_svr_predict")),
+    ("gp_fit", ("family_gp_gpr_fit",)),
+    ("gp_predict", ("family_gp_gpr_predict",)),
 )
 
 
@@ -54,7 +70,7 @@ def _native_ops(function):
         if isinstance(node, ast.Call):
             target = node.func
             label = target.attr if isinstance(target, ast.Attribute) else getattr(target, "id", "")
-            if label.startswith("_NATIVE") or label.startswith("_native_"):
+            if label.startswith(("_NATIVE", "_native_", "_FAMILY")):
                 assert isinstance(node.args[1], ast.Constant), ast.dump(node)
                 ops.append(node.args[1].value)
     return ops
@@ -98,10 +114,30 @@ def test_each_gpu_binding_registers_the_plan_entries():
         assert 'm.def_function[device_plan_exit_binding]("device_plan_exit")' in source, binding
 
 
+def test_par_run_drivers_name_only_their_spec_owners():
+    specs = _read("bindings/parallel_plan_specs.mojo")
+    body = specs[specs.index("def par_spec_admits("):specs.index("def par_spec_families(")]
+    for driver, owners in PAR_RUN:
+        block = body[body.index('if driver == "' + driver + '":'):]
+        block = block[:block.index("\n    if ") if "\n    if " in block[1:] else len(block)]
+        for owner in owners:
+            assert '"' + owner + '"' in block, (driver, owner)
+        # every driver's shell names the driver and one of its owners
+        found = False
+        for module, name, op, _, _ in DRIVERS:
+            if op != "family_par_run":
+                continue
+            text = ast.unparse(_function(module, name))
+            if "'" + driver + "'" in text:
+                found = True
+        assert found, driver
+
+
 def test_worker_serves_no_migrated_operation():
     worker = PKG / "_parallel_worker.py"
     if not worker.exists():
         return
     source = worker.read_text(encoding="utf-8")
-    for op in ("'km_fit'", "'km_apply'", "'cholesky_fit'", "'cholesky_solve'"):
+    for op in ("'km_fit'", "'km_apply'", "'cholesky_fit'", "'cholesky_solve'", "'svm_fit'", "'svm_predict'",
+               "'gp_fit'", "'gp_predict'"):
         assert "operation == " + op not in source and "operation in (" + op not in source, op

@@ -23,10 +23,41 @@ from bindings.cluster_fit_a_native import cluster_fit_a_operation
 from bindings.cluster_fit_b_native import cluster_fit_b_operation
 from bindings.mixture_native import mixture_operation
 from bindings.linalg_ops_native import linalg_ops_operation
+from bindings.parallel_plan_door import plan_devices, plan_enter, plan_exit
+from bindings.parallel_plan_specs import par_spec_families, par_spec_rebuild, par_spec_admits
+
+
+def _family_par_run(model: PythonObject, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """A cooperative multi-GPU driver as one native call
+    (lane/native-parallel-driver-20261024,
+    docs/plans/NATIVE_PARALLEL_DRIVER_20261024.md): args (driver, devices,
+    owner operation, owner args). The driver's shell made its type and mode
+    refusals and resolved the binding (owner args[0], the plain method's).
+    Here: the devices and route are admitted as the old pool admitted them,
+    the owner operation must be one the driver's spec names
+    (bindings/parallel_plan_specs.mojo), the plan binds the devices to this
+    thread in the binding for the families the old worker's environment
+    enabled, and the plain owner runs, the plan released in a `finally`."""
+    var driver = String(args[0])
+    var owner = String(args[2])
+    if not par_spec_admits(driver, owner):
+        raise Error("RuntimeError: parallel driver " + driver + " does not run " + owner)
+    var devices = plan_devices(args[1], driver, True, context)
+    var owner_args = args[3]
+    var binding = owner_args[0]
+    var result = PythonObject(None)
+    plan_enter(binding, devices, par_spec_rebuild(driver), par_spec_families(driver))
+    try:
+        result = family_operation(model, owner, owner_args, context)
+    finally:
+        plan_exit(binding)
+    return result
 
 
 def family_operation(model: PythonObject, operation: String, args: PythonObject,
                      context: PythonObject) raises -> PythonObject:
+    if operation == "family_par_run":
+        return _family_par_run(model, args, context)
     if operation.startswith("family_kmeans_"):
         return kmeans_operation(model, operation, args, context)
     if operation.startswith("family_km_"):
