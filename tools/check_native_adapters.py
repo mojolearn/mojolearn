@@ -173,6 +173,70 @@ def main():
         checked("full_without_inputs", lambda: equal(operation([], 30, [2, 3], [2, 3], [.5], device=device), torch.full_like(x, .5)))
         checked("clip", lambda: equal(operation([x], 56, [2, 3], scalars=[-1., 1.]), x.clamp(-1., 1.)))
 
+        # The adapter is the Python API in another format: the same operation through mojolearn.ops.Session
+        # (the plain Python API, on this install's GPU) must return the same words. Required for --installed;
+        # a source-tree run checks it when mojolearn is importable.
+        try:
+            import numpy as np
+            from mojolearn import ops as ml_ops
+        except ImportError:
+            ml_ops = None
+            if args.installed:
+                raise
+        if ml_ops is None:
+            report["not_applicable"].append("python_api: mojolearn is not importable in this environment")
+        else:
+            session = ml_ops.Session(numeric_mode="identical")
+            host = lambda t: t.detach().cpu().contiguous().numpy()  # glue: framework tensor to host bytes
+            X, Y, W = session.tensor(host(x)), session.tensor(host(y)), session.tensor(host(w))
+            ids_host = host(ids)
+
+            def api_equal(actual, handle, integer=False):
+                # Test oracle/inspection only: compare raw words; the Session keeps matrices 2-D, so a 1-D
+                # adapter result is compared as the same words in row-major order.
+                expected = np.ascontiguousarray(session.numpy(handle))
+                words = actual.detach().cpu().contiguous().view(torch.int32).numpy().reshape(-1)
+                assert actual.device == device
+                assert words.size == expected.size, (tuple(actual.shape), expected.shape)
+                assert np.array_equal(words, expected.view(np.int32).reshape(-1)), "adapter and Python API words differ"
+
+            api = [
+                ("add", lambda: operation([x, y], 2, [2, 3]), lambda: session.add(X, Y)),
+                ("subtract", lambda: operation([x, y], 3, [2, 3]), lambda: session.sub(X, Y)),
+                ("multiply", lambda: operation([x, y], 4, [2, 3]), lambda: session.mul(X, Y)),
+                ("relu", lambda: operation([x], 6, [2, 3]), lambda: session.relu(X)),
+                ("copy", lambda: operation([x], 31, [2, 3]), lambda: session.copy(X)),
+                ("matmul", lambda: operation([x, w], 1, [2, 2]), lambda: session.matmul(X, W)),
+                ("transpose", lambda: operation([x], 13, [3, 2]), lambda: session.transpose(X)),
+                ("reshape", lambda: operation([x], 14, [3, 2], [3, 2]), lambda: session.reshape(X, (3, 2))),
+                ("broadcast", lambda: operation([x, y[:1].contiguous()], 2, [2, 3]),
+                 lambda: session.add(X, session.tensor(host(y[:1])))),
+                ("embedding", lambda: operation([x, ids], 32, [2, 3], [-1]), lambda: session.embedding(X, ids_host)),
+                ("take", lambda: operation([x, ids], 41, [2, 2], [1]), lambda: session.take(X, ids_host, axis=1)),
+                ("int32_argmax", lambda: operation([x], 72, [2], [1, 0, 0], integer_output=True),
+                 lambda: session.argmax(X, axis=1, int32=True)),
+                ("concat", lambda: operation([x, y], 39, [4, 3], [0]), lambda: session.concat([X, Y], axis=0)),
+                ("scale", lambda: operation([x], 12, [2, 3], scalars=[.5]), lambda: session.scale(X, .5)),
+                ("full", lambda: operation([], 30, [2, 3], [2, 3], [.5], device=device),
+                 lambda: session.full((2, 3), .5)),
+                ("clip", lambda: operation([x], 56, [2, 3], scalars=[-1., 1.]), lambda: session.clip(X, -1., 1.)),
+                ("linear_relu_composition", lambda: operation([operation([x, w], 1, [2, 2])], 6, [2, 2]),
+                 lambda: session.relu(session.matmul(X, W))),
+            ]
+            for name, through_adapter, through_api in api:
+                checked("python_api:" + name, lambda a=through_adapter, b=through_api: api_equal(a(), b()))
+
+            def api_negative_control():
+                changed = operation([x, y], 2, [2, 3]).cpu().clone()
+                changed.view(torch.int32).flatten()[0] ^= 1
+                try:
+                    api_equal(changed.to(device), session.add(X, Y))
+                except AssertionError:
+                    return
+                raise AssertionError("Python API comparator failed to detect injected output corruption")
+            checked("python_api:negative_control", api_negative_control)
+            report["python_api"] = "mojolearn.ops.Session(numeric_mode='identical')"
+
         def unchanged_and_lifetime():
             before = x.clone()
             result = operation([x], 31, [2, 3])
