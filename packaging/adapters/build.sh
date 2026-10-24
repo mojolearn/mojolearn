@@ -125,7 +125,7 @@ TORCH_LIB=$(field library_dir)
 CXX11_ABI=$(field cxx11_abi)
 CXX=${CXX:-c++}
 command -v "$CXX" > /dev/null || die "no C++ compiler ($CXX); the Torch registration needs a C++20 compiler on the build host"
-cxx_flags=(-std=c++20 -O2 -fPIC -shared -I adapters/native -I "$TB/$TORCH_INC" -I "$TB/$TORCH_API_INC"
+cxx_flags=(-std=c++20 -O2 -fPIC -I adapters/native -I "$TB/$TORCH_INC" -I "$TB/$TORCH_API_INC"
            # TORCH_CHECK embeds __FILE__: no build-host path in the shipped bytes
            "-ffile-prefix-map=$ROOT/=" "-ffile-prefix-map=$TB/=")
 if [[ "$PLATFORM" = linux ]]; then
@@ -134,7 +134,7 @@ if [[ "$PLATFORM" = linux ]]; then
   # --as-needed before the libraries: no DT_NEEDED on a library nothing uses
   # (the wheel's platform-math audit refuses a stray libm). No RUNPATH here:
   # packaging/linux/stage_libs.py writes the package-relative one.
-  torch_cmd=("$CXX" "${cxx_flags[@]}" "-D_GLIBCXX_USE_CXX11_ABI=$CXX11_ABI" adapters/torch/registration.cpp
+  torch_cmd=("$CXX" "${cxx_flags[@]}" -shared "-D_GLIBCXX_USE_CXX11_ABI=$CXX11_ABI" adapters/torch/registration.cpp
              -o "$TORCH_SO" -L "$TB/$TORCH_LIB" -L "$OUT" -Wl,--as-needed
              -lmojolearn_adapter -ltorch -ltorch_cpu -lc10 -Wl,-z,defs)
 else
@@ -142,7 +142,8 @@ else
   # (@loader_path/libmojolearn_adapter.so), never this path. Torch is found
   # through the installed torch package beside mojolearn in site-packages.
   torch_cmd=("$CXX" "${cxx_flags[@]}" -dynamiclib -mmacosx-version-min=11.0 adapters/torch/registration.cpp
-             -o "$TORCH_SO" "$NATIVE" -L "$TB/$TORCH_LIB" -ltorch -ltorch_cpu -lc10
+             -o "$TORCH_SO" -Wl,-install_name,@loader_path/mojolearn_torch.so
+             "$NATIVE" -L "$TB/$TORCH_LIB" -ltorch -ltorch_cpu -lc10
              -Wl,-undefined,error -Wl,-rpath,@loader_path/../../torch/lib)
 fi
 "$PY" packaging/adapters/manifest.py command "$LOGDIR/torch-command.json" -- "${torch_cmd[@]}"
