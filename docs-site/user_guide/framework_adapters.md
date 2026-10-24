@@ -1,7 +1,9 @@
 # PyTorch and MAX
 
 mojolearn runs a whole PyTorch model as one mojolearn program, and trains mojolearn models from PyTorch
-and MAX. The framework holds the tensors and moves them; every operation on the data is mojolearn's.
+and MAX. The framework holds the tensors and moves them; every operation on the data is mojolearn's. mojolearn
+runs whole models only: there is no entry point for running single mojolearn operations inside a
+PyTorch or MAX graph.
 
 In `identical` mode, mojolearn returns the same bits on Apple, NVIDIA and AMD GPUs.
 
