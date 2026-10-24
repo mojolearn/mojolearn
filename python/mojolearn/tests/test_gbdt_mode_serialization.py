@@ -35,6 +35,8 @@ class GbdtModeSerializationTests(unittest.TestCase):
         self.path = Path(self.temporary.name) / 'model.npz'
 
     def _fitted(self, cls=GradientBoosting, mode='identical'):
+        if _backend._CPU_ONLY is not None and mode == 'fast':
+            self.skipTest("CPU-only install: every host binding is identical only (_backend._cpu_only_binding refuses other tiers by name)")
         try:
             return fitted(cls, mode)
         except ImportError as error:
