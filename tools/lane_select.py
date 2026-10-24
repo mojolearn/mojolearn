@@ -2174,6 +2174,8 @@ _SYMBOL_STEPS = {}
 _CACHES.append(_SYMBOL_STEPS)
 _SYMBOL_NAMES = {}
 _CACHES.append(_SYMBOL_NAMES)
+_SYMBOL_REFS = {}            # (rel, name) -> the export call sites of those bodies
+_CACHES.append(_SYMBOL_REFS)
 
 
 def _mojo_named_imports(rel, idents):
@@ -2221,10 +2223,11 @@ def _mojo_symbol_step(rel, name):
     out = _mojo_named_imports(rel, idents)
     _SYMBOL_STEPS[key] = out
     _SYMBOL_NAMES[key] = idents
+    _SYMBOL_REFS[key] = _mojo_export_refs("\n".join(bodies))
     return out
 
 
-def _mojo_symbol_reach(pending, names=None):
+def _mojo_symbol_reach(pending, names=None, refs=None):
     """(files reached by name, files to close over whole) for imported
     symbols `pending` [(file, name)], followed DEFINITION BY DEFINITION.
 
@@ -2250,6 +2253,8 @@ def _mojo_symbol_reach(pending, names=None):
         reached.add(node[0])
         if names is not None:
             names.update(_SYMBOL_NAMES.get(node, ()))
+        if refs is not None:
+            refs.update(_SYMBOL_REFS.get(node, ()))
         stack.extend(step)
     return reached, whole
 
@@ -2517,6 +2522,64 @@ def binding_additions(ref, path):
 MOJO_EDIT_WHY = {}
 
 _MOJO_IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+_MOJO_FULL_IDENT_RE = re.compile(r"[A-Za-z_][A-Za-z0-9_]*\Z")
+_MOJO_REF_CACHE = {}
+_MOJO_TOKEN_RE = re.compile(
+    r'(?P<triple>"""(?:\\.|[^\\])*?"""|\'\'\'(?:\\.|[^\\])*?\'\'\')'
+    r'|(?P<comment>#[^\n]*)'
+    r'|"(?P<str>(?:\\.|[^"\\\n])*)"|\'(?P<sstr>(?:\\.|[^\'\\\n])*)\''
+    r'|(?P<code>[^"\'#]+)', re.S)
+
+
+def _mojo_export_refs(text):
+    """The names a Mojo text can RUN as another binding's export (2026-10-24).
+
+    Native owners reach a compiled export by name: an entry table or lookup
+    holds the export as a whole string literal (`_need(entries, "qn_sigmoid")`,
+    `_kernel_entry("qn_fit", context)`), a module attribute names it
+    (`module.qn_fit(...)`), or code calls it (`qn_fit(...)`, `qn_fit[...]`).
+    Those are the call sites. A word in a comment or docstring, inside a longer
+    message (`"qn_sigmoid: params must contain n_rows"`), a definition's own
+    name or a keyword argument runs nothing: matching every identifier of a
+    reached file made the fixed point below take any export whose name a
+    docstring mentioned, and glm/host/qn_oracle.mojo selected mamba1 and
+    transformer through `_mojolearn_estimators_host`'s export list in prose.
+    A text the scanner cannot read with certainty keeps every identifier."""
+    hit = _MOJO_REF_CACHE.get(text)
+    if hit is not None:
+        return hit
+    if _mojo_scan(text) is None:
+        out = frozenset(_MOJO_IDENT_RE.findall(text))
+        _MOJO_REF_CACHE[text] = out
+        return out
+    refs, code = set(), []
+    for match in _MOJO_TOKEN_RE.finditer(text):
+        literal = match.group("str")
+        if literal is None:
+            literal = match.group("sstr")
+        if literal is not None:
+            if _MOJO_FULL_IDENT_RE.match(literal):
+                refs.add(literal)
+            code.append(" ")
+        elif match.group("code") is not None:
+            code.append(match.group("code"))
+        else:
+            code.append(" ")            # a comment or a docstring/block literal: prose
+    flat = "".join(code)
+    for match in re.finditer(r"(\.\s*)?\b([A-Za-z_][A-Za-z0-9_]*)\b(\s*[(\[])?", flat):
+        dotted, name, called = match.group(1), match.group(2), match.group(3)
+        if dotted:
+            refs.add(name)
+            continue
+        if not called:
+            continue
+        before = flat[max(0, match.start() - 16):match.start()]
+        if re.search(r"\b(?:def|fn|struct|trait|comptime|alias)\s+$", before):
+            continue
+        refs.add(name)
+    out = frozenset(refs)
+    _MOJO_REF_CACHE[text] = out
+    return out
 _MOJO_DEF_RE = re.compile(r"^(?:fn|def)\s+([A-Za-z_][A-Za-z0-9_]*)")
 _MOJO_TYPE_RE = re.compile(r"^(?:struct|trait)\s+([A-Za-z_][A-Za-z0-9_]*)")
 _MOJO_VALUE_RE = re.compile(r"^(?:comptime|alias|var)\s+([A-Za-z_][A-Za-z0-9_]*)\s*(?:[:=\[]|$)")
@@ -3325,6 +3388,16 @@ def host_routes(hs=None):
     for table in (hs.routed_modules(), hs.inference_routes()):
         for gpu, host in table.items():
             out.setdefault(gpu, set()).add(host)
+    # IMPORT ALIASES ARE ROUTES TOO (2026-10-24). `load_host_module` connects
+    # the functions `HOST_IMPORT_ALIASES` lists from their alias binding:
+    # since 8188d819d `_mojolearn_tokenizer_host`'s `classical_native_call`
+    # is an unavailable stub and `_mojolearn_runtime_classical_host` serves
+    # it. Without this edge a lane calling it reached the stub only, and the
+    # k-means lane kept `cluster/host/kmeans_oracle.mojo` only because a
+    # docstring elsewhere spelled `kmeans_fit`.
+    for source, aliases in getattr(hs, "HOST_IMPORT_ALIASES", {}).items():
+        for alias in aliases:
+            out.setdefault(source, set()).add(alias["binding"])
     return out
 
 
@@ -3482,12 +3555,12 @@ def lane_sources():
                 seed_cache[key] = {src} if wide == "narrow" else _mojo_closure([src])
                 read_by_name[key] = {src} if wide == "narrow" else set()
                 native_names[key] = set() if wide == "narrow" else set().union(*[
-                    set(_MOJO_IDENT_RE.findall(_read(f))) for f in seed_cache[key] if f.endswith(".mojo")])
+                    _mojo_export_refs(_read(f)) for f in seed_cache[key] if f.endswith(".mojo")])
             else:
                 blocks = _mojo_blocks_for(src)
                 syms = _mojo_import_symbols(src)
                 params = _binding_export_params(src)
-                seeds, pending, named = set(), [], set()
+                seeds, pending, named, refs = set(), [], set(), set()
                 for export in hit:
                     if export not in exports:
                         # REGISTERED BY A FUNCTION THE BINDING IMPORTS
@@ -3532,19 +3605,23 @@ def lane_sources():
                                 stack.append(other)
                     body = "\n".join(bodies)
                     named.update(_MOJO_IDENT_RE.findall(body))
+                    refs.update(_mojo_export_refs(body))
                     pending.extend(_mojo_named_imports(src, set(_MOJO_IDENT_RE.findall(body))))
                 # An imported symbol is followed definition by definition
                 # into the file defining it (`_mojo_symbol_reach`), so a
                 # thin-shell binding's impl module does not hand every
                 # export's oracles to every lane.
-                reached, whole = _mojo_symbol_reach(pending, named)
+                reached, whole = _mojo_symbol_reach(pending, named, refs)
                 closed = _mojo_closure(seeds | whole)
                 seed_cache[key] = closed | reached | {src}
                 read_by_name[key] = (reached | {src}) - closed
+                # The exports these bodies can run are their call sites
+                # (`_mojo_export_refs`), not every word; `named` stays the
+                # import-following input above.
                 for f in closed:
                     if f.endswith(".mojo"):
-                        named.update(_MOJO_IDENT_RE.findall(_read(f)))
-                native_names[key] = named
+                        refs.update(_mojo_export_refs(_read(f)))
+                native_names[key] = refs
         if mark and wide is not False:
             narrowed_files.update(read_by_name[key])
         return seed_cache[key]
