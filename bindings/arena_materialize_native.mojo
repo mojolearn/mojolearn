@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # DeviceRows owns the same typed msel store snapshots as model_selection.
+from bindings.native_array_storage import native_array_from_bytes, native_array_zeros
 from std.python import Python, PythonObject
 from std.math import isinf, isnan
 from gemm.f16_widen import f16_bits_to_f32
@@ -107,7 +108,7 @@ def _empty(shape: PythonObject, dtype: String, context: PythonObject) raises -> 
         if extent < 0 or (count > 0 and extent > 9223372036854775807//item//count):
             raise Error("ValueError: native row output exceeds indexing bounds")
         count *= extent
-    var store = py_call(context["array_type"],_store_code(dtype),py_call(context["arena_native_types"]["bytes"],count*item))
+    var store = native_array_zeros(String(_store_code(dtype)), count)
     return _owned(store,shape,dtype,context)
 
 
@@ -276,7 +277,7 @@ def _numpy_copy(value: PythonObject, view: PythonObject, kind: String, item: Int
         if dtype == "<u2":
             target = "<u4"
     var packed = py_call(view.tobytes,"C")
-    var store = py_call(context["array_type"],code,packed)
+    var store = native_array_from_bytes(String(code), packed)
     if not Bool(py=value.dtype.isnative) and item > 1:
         _ = py_call(store.byteswap)
     var count = Int(py=value.size)
@@ -385,7 +386,7 @@ def _prepare(value: PythonObject, context: PythonObject) raises -> PythonObject:
     # _as_c copy preserves that width (including uint16 and half NaN bits).
     if native and supported and len(metadata["shape"]) > 0 and Bool(py=view.f_contiguous):
         var typestr = "<"+kind+String(item)
-        var store = py_call(context["array_type"],_store_code(typestr),py_call(view.tobytes,"C"))
+        var store = native_array_from_bytes(String(_store_code(typestr)), py_call(view.tobytes,"C"))
         return _owned(store,metadata["shape"],typestr,context)
     return _numpy_copy(value,view,kind,item,context)
 

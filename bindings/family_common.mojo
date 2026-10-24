@@ -7,6 +7,8 @@
 # a CPU-only install's by-name refusal, a user callable's own exception) is
 # stashed and restored unchanged at the door (`stash_python_error`), so the
 # caller sees the class and message it saw before the migration.
+from bindings.native_array_storage import native_array_zeros
+from bindings.native_loaded_module import native_loaded_module
 from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import PyObjectPtr
@@ -37,32 +39,32 @@ comptime FAMILY_NONFINITE_WEIGHTS = "Input sample_weight contains NaN or infinit
 
 def family_repr(value: PythonObject) raises -> String:
     """`repr(value)`."""
-    return String(py_call(Python.import_module("builtins").repr, value))
+    return String(py_call(native_loaded_module("builtins").repr, value))
 
 
 def family_str(value: PythonObject) raises -> String:
     """`str(value)`."""
-    return String(py_call(Python.import_module("builtins").str, value))
+    return String(py_call(native_loaded_module("builtins").str, value))
 
 
 def family_isinstance(value: PythonObject, classes: PythonObject) raises -> Bool:
     """`isinstance(value, classes)`."""
-    return Bool(py=py_call(Python.import_module("builtins").isinstance, value, classes))
+    return Bool(py=py_call(native_loaded_module("builtins").isinstance, value, classes))
 
 
 def family_is_str(value: PythonObject) raises -> Bool:
-    return family_isinstance(value, Python.import_module("builtins").str)
+    return family_isinstance(value, native_loaded_module("builtins").str)
 
 
 def family_is_int(value: PythonObject) raises -> Bool:
     """An int that is not a bool (`isinstance(v, int) and not isinstance(v, bool)`)."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     return family_isinstance(value, b.int) and not family_isinstance(value, b.bool)
 
 
 def family_is_real(value: PythonObject) raises -> Bool:
     """An int or float that is not a bool."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     return family_isinstance(value, Python.tuple(b.int, b.float)) and not family_isinstance(value, b.bool)
 
 
@@ -112,7 +114,7 @@ def family_entry(binding: PythonObject, name: String, context: PythonObject) rai
     model's numeric mode. A by-name refusal of the binding (a tier that is
     not built, an entry a CPU-only install does not have) is raised
     unchanged; anything other than a compiled entry is refused."""
-    var entry = family_call(Python.import_module("builtins").getattr, binding, PythonObject(name))
+    var entry = family_call(native_loaded_module("builtins").getattr, binding, PythonObject(name))
     if py_type(entry) is not context["family_builtin_type"]:
         raise Error("TypeError: mojolearn: " + name + " must be a compiled entry")
     return entry
@@ -129,14 +131,13 @@ def family_array(shape: PythonObject, typestr: String, context: PythonObject) ra
         width = 4
     elif typestr == "<u1" or typestr == "<i1":
         width = 1
-    var store = py_call(context["array_type"], PythonObject(_store_code(typestr)),
-                        py_call(context["native_bytes_type"], count * width))
+    var store = native_array_zeros(String(_store_code(typestr)), count)
     return classical_wrap_array(store, shape, typestr, "C", context)
 
 
 def family_shape_repr(view: PythonObject) raises -> String:
     """`repr(tuple(a.shape))`."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     return family_repr(py_call(b.tuple, view.shape))
 
 
@@ -181,7 +182,7 @@ def family_cast_view(view: PythonObject, name: String, context: PythonObject) ra
     no finiteness refusal (as_f32_c made none): the view itself when it is
     already float32 in C order, otherwise a new mojolearn Array of its shape.
     """
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var nd = Int(py=view.ndim)
     if nd > 2:
         raise Error("mojolearn: " + name + " must be at most 2-D, got " + String(nd) + "-D")
@@ -206,7 +207,7 @@ def family_cast_view_f64(view: PythonObject, name: String, context: PythonObject
     """`_buffer.as_f64_c`'s cast of a checked view of rank 0, 1 or 2: the
     view itself when it is already float64 in C order, otherwise a new
     mojolearn Array of its shape."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var nd = Int(py=view.ndim)
     if nd > 2:
         raise Error("mojolearn: " + name + " must be at most 2-D, got " + String(nd) + "-D")
@@ -254,7 +255,7 @@ def family_owned(value: PythonObject, context: PythonObject) raises -> PythonObj
     array itself when it is one the owner made, else one copy."""
     if classical_is_array(value, context) and value._base is None and not Bool(py=value._readonly):
         return value
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var result = family_array(py_call(b.tuple, value.shape), "<f4", context)
     memcpy(dest=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(result))),
            src=FAMILY_F32P(unsafe_from_address=Int(py=classical_address(value))), count=Int(py=value.size))
@@ -279,7 +280,7 @@ def family_sample_weight(source: PythonObject, n: Int, allow_negative: Bool, con
     a sequence or buffer of `n` entries is cast (borrowed when it already
     has the dtype in C order), and the shape, non-finite, negative and
     all-zero refusals keep scikit-learn's wording and order."""
-    var b = Python.import_module("builtins")
+    var b = native_loaded_module("builtins")
     var weights = PythonObject(None)
     var typestr = String("<f8") if wide else String("<f4")
     var zero_d = False

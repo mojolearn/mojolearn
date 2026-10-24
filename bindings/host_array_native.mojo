@@ -2,6 +2,8 @@
 # Shared host output allocation. Keep this leaf separate from saved-model
 # reconstruction: sparse conversion and inference need storage, not archive
 # schemas, tree model readers or training implementations.
+from bindings.native_array_storage import native_array_empty
+from bindings.native_loaded_module import native_loaded_module
 from std.python import Python, PythonObject
 from bindings.py_balanced import py_call
 from bindings.classical_arrays import classical_wrap_array, _store_code
@@ -16,7 +18,7 @@ def host_archive_typed(shape: PythonObject, dtype: String, context: PythonObject
         if dimension < 0:
             raise Error("saved model array dimensions must be nonnegative")
         count *= dimension
-    var store = py_call(context["array_type"], _store_code(dtype))
-    var raw = py_call(Python.import_module("builtins").bytes, count * Int(py=store.itemsize))
+    var store = native_array_empty(String(_store_code(dtype)))
+    var raw = py_call(native_loaded_module("builtins").bytes, count * Int(py=store.itemsize))
     _ = py_call(store.frombytes, raw)
     return classical_wrap_array(store, shape, dtype, "C", context)

@@ -30,6 +30,7 @@ the current surface and limitations.
 
 from ._version import __version__
 from . import _native_loaded_modules  # fixed native module/export connections, before bindings load
+from . import _native_array_storage  # fixed native allocation metadata, before binding connections
 
 # THE NUMERIC MODE IS CHOSEN HERE, BEFORE ANY BINDING IS IMPORTED.
 # MOJOLEARN_NUMERIC_MODE picks one of TWO tiers: `fast` (explicit opt-in,
