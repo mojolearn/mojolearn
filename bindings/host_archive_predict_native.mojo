@@ -58,12 +58,14 @@ def _archive_prediction_record(model: PythonObject, method: Int, context: Python
         if cls_name == "HostDBSCAN":
             var data = py_get(fields, "prediction_data")
             if data is None or not Bool(py=data):
-                raise _unavailable(record, name)
+                var unavailable = _unavailable(record, name)
+                raise unavailable
         elif cls_name == "HostAgglomerativeClustering" or cls_name == "HostSpectralClustering":
             var data = py_get(fields, "prediction_data")
             var fit_x = py_get(fields, "_fit_X")
             if (data is None or not Bool(py=data)) and fit_x is None:
-                raise _unavailable(record, name)
+                var unavailable = _unavailable(record, name)
+                raise unavailable
         elif cls_name == "HostSVC" and method == 1:
             var svc = context["host_archive_predict_svc_context"]
             host_svc_probability(model, fields, key, svc)
