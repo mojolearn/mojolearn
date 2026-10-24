@@ -1327,12 +1327,9 @@ class SimpleImputer(_PrepBase):
     ----------
     missing_values : float, default NaN
         Value that marks a missing entry.
-    strategy : {'mean', 'median', 'most_frequent', 'constant'} or callable, default 'mean'
+    strategy : {'mean', 'median', 'most_frequent', 'constant'}, default 'mean'
         ``'median'`` uses numpy's linear percentile of the non-missing entries; ``'most_frequent'``
-        picks the smallest value on a tie. A callable is called once per column, on the host, with the
-        column's non-missing values as a 1-D float32 array, and must return the column's statistic; a
-        NaN statistic drops the column unless ``keep_empty_features``. Any other value raises
-        ``ValueError``.
+        picks the smallest value on a tie. Any other value, including a callable, raises ``ValueError``.
     fill_value : float or None, default None
         Value used by ``strategy='constant'``; None means 0. Must be numeric (``TypeError`` otherwise).
     copy : bool, default True
