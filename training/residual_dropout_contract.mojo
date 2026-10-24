@@ -46,14 +46,14 @@ def residual_dropout_admit(n: Int,offset: Int,p: Float32,
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("residual_dropout requires IDENTICAL mode")
     if n<0 or n>2147483647 or offset<0 or offset>9223372036854775807-n:
-        raise Error("residual_dropout element range exceeds native Philox coordinates")
+        raise Error("ValueError: residual_dropout element range exceeds native Philox coordinates")
     if seed_lo<0 or seed_lo>4294967295 or seed_hi<0 or seed_hi>4294967295 or stream<0 or stream>4294967295:
-        raise Error("residual_dropout seed words and stream must be uint32")
+        raise Error("ValueError: residual_dropout seed words and stream must be uint32")
     if not isfinite(p) or p<Float32(0) or p>=Float32(1):
-        raise Error("residual_dropout p must be finite and in [0,1)")
+        raise Error("ValueError: residual_dropout p must be finite and in [0,1)")
     var scale = ftz(identical_div(Float32(1),ftz(Float32(1)-ftz(p))))
     if not isfinite(scale) or scale<=Float32(0):
-        raise Error("residual_dropout scale is not finite and positive")
+        raise Error("ValueError: residual_dropout scale is not finite and positive")
     return scale
 
 

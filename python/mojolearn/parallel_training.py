@@ -251,7 +251,9 @@ def _connect_parallel_byte_native():
     vendor = _backend.vendor()
     try:
         selected = _backend.binding("_mojolearn_byte_lm", mode)
-    except ImportError:
+    except (ImportError, ValueError):
+        # ValueError: a CPU-only install refuses a non-identical tier by
+        # name (_backend._cpu_only_binding); it imports the same way.
         # A set built without the byte LM still imports: merged_groups.json
         # packs `_mojolearn_byte_lm` into the Linux identical set only, and
         # only with MOJOLEARN_PACKAGE_BYTE_LM=1, so a Linux process in fast

@@ -1,4 +1,4 @@
-"""Native optimizer scalar conversion ignores mutable builtin constructors."""
+"""Native optimizer scalar conversion never calls a replaced builtin constructor."""
 import builtins
 import dis
 
@@ -7,6 +7,7 @@ import pytest
 
 from mojolearn import _backend, _training_impl as T
 from mojolearn._verify_native_runtime import audit_native_call
+from mojolearn.tests._connection_refusal import assert_connection_refusal
 
 
 def poisoned_call(monkeypatch, name, operation, *args, **kwargs):
@@ -21,9 +22,10 @@ def poisoned_call(monkeypatch, name, operation, *args, **kwargs):
         patch.setattr(dis, name, getattr(builtins, name), raising=False)
         patch.setattr(builtins, name, hook)
         audit = audit_native_call(operation, *args, **kwargs)
-    result = audit.assert_native()
-    assert not calls
-    return result
+    # A replaced connected builtin refuses before any state changes; the
+    # same call then runs natively once the setup-time export is back.
+    assert_connection_refusal(audit, name, calls)
+    return audit_native_call(operation, *args, **kwargs).assert_native()
 
 
 def compare_state(actual, expected):

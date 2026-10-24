@@ -1,4 +1,4 @@
-"""Native Array owners acquire storage without a mutable constructor callback."""
+"""Native Array owners acquire storage without a replaced constructor callback."""
 import builtins
 import json
 import subprocess
@@ -10,6 +10,7 @@ import pytest
 from mojolearn import _training_impl as T
 from mojolearn._array import Array
 from mojolearn._verify_native_runtime import audit_native_call
+from mojolearn.tests._connection_refusal import assert_connection_refusal
 
 
 @pytest.mark.parametrize("owner", ["storage", "layout"])
@@ -93,8 +94,10 @@ def _native_output_storage_audit(monkeypatch, operation, constructor):
     with monkeypatch.context() as scope:
         scope.setattr(builtins, constructor, ReplacedObject if constructor == "object" else hook)
         audit = audit_native_call(method, *args, **kwargs)
-    result = audit.assert_native()
-    assert not calls
+    # A replaced connected builtin refuses before any hook; the output
+    # storage contract is then checked with the setup-time export back.
+    assert_connection_refusal(audit, constructor, calls)
+    result = audit_native_call(method, *args, **kwargs).assert_native()
     if operation == "construct":
         outputs = [result.offsets, result.buf_initialized]
     else:
@@ -158,8 +161,8 @@ def _native_device_download_audit(monkeypatch, strided, constructor):
     with monkeypatch.context() as scope:
         scope.setattr(builtins, constructor, ReplacedObject if constructor == "object" else hook)
         result = audit_native_call(device.to_host)
-    value = result.assert_native()
-    assert not calls
+    assert_connection_refusal(result, constructor, calls)
+    value = audit_native_call(device.to_host).assert_native()
     assert value._mv.obj is value._store
     assert np.asarray(value).tobytes() == source.tobytes()
     audit_native_call(T.TrainDeviceArray.__del__, device).assert_native()

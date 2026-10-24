@@ -37,7 +37,7 @@ def neural_gemm_binding(a_addr: PythonObject,b_addr: PythonObject,c_addr: Python
                 raise Error("SmallMLPTrainer GEMM refuses nonfinite inputs")
             identical_gemm_into(ctx,c,a,b,ws,m,n,k,shape[3])
             if device_first_nonfinite(ctx,c,m*n)>=0:
-                raise Error("SmallMLPTrainer GEMM returned a nonfinite result")
+                raise Error("RuntimeError: SmallMLPTrainer GEMM returned a nonfinite result")
             gemm_down_f32(ctx,lease,c,cp,m*n)
         except error:
             ctx.synchronize()

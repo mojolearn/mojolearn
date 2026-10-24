@@ -909,6 +909,8 @@ TRAINING_LANE_NAMES = {
     "native-schedule-series": "native learning-rate arrays and lists",
     "optim-owner-lifecycle": "bare optimizer moment replacement, checkpoint resume and zeroing",
     "optim-io-capability": "native optimizer IO query and unavailable-transfer refusal",
+    "public-residual-dropout": "residual_dropout and residual_dropout_backward",
+    "public-numeric-metadata": "catboost_auto_learning_rate, johnson_lindenstrauss_min_dim and vendor_used",
     "optim-sgd": "SGD with momentum, Nesterov and dampening",
     "training-chunked-lm-head": "the chunked language-model head loss and its gradients",
     "training-mlp-sessions": "the multi-session MLP inference",
@@ -2804,7 +2806,9 @@ FAMILIES = (
                         "grad-accumulation",
                         # lane verify-coverage-owed (2026-10-21): chunked_lm_head_loss,
                         # mlp_inference_sessions, the Samba optimizer's resident state
-                        "training-chunked-lm-head", "training-mlp-sessions", "samba-optimizer-state"),
+                        "training-chunked-lm-head", "training-mlp-sessions", "samba-optimizer-state",
+                        # lane testfix-neural-20261024: the public-method lanes of 8188d769f
+                        "public-residual-dropout", "public-numeric-metadata"),
         inference_lanes=(),
         forest_kinds=(),
         classes=(
@@ -3666,6 +3670,9 @@ PUBLIC_PENDING_LANES = {
     "native-schedule-series": "no reference",
     "optim-owner-lifecycle": "no reference",
     "optim-io-capability": "no reference",
+    # Public-method lanes (8188d769f): registered, not yet recorded.
+    "public-residual-dropout": "no reference",
+    "public-numeric-metadata": "no reference",
     # GPU only (identity_break.GPU_ONLY_LANES): the CPU bindings hold no
     # resident buffers, so no CPU column can state these two.
     "optim-resident-io": "no cpu route",

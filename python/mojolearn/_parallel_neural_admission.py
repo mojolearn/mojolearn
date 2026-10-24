@@ -28,7 +28,12 @@ def connect(context, owner_cls, model_cls):
         '_operation', 'logical_shards', '_closed', '_session', '_config', '_schedule',
         '_handle',
     )
-    admission['opaque_types'] = source['opaque_types'] + (_socket.socket,)
+    # Worker sockets are the native POSIX transport's PyCapsule owners
+    # (bindings/native_transport.mojo _transport_own, since 60209fa2a), not
+    # _socket.socket. A capsule has no Python-level hooks, and the transport
+    # validates the capsule name before every use. _socket.CAPI is a capsule,
+    # so its type is the exact CPython capsule type on every supported Python.
+    admission['opaque_types'] = source['opaque_types'] + (type(_socket.CAPI),)
     admission['scalar_types'] = source['scalar_types'] + (range,)
     connected = dict(context)
     connected['admission'] = admission

@@ -19,4 +19,4 @@ def neural_gemm_checked_host_into(
     neural_gemm_host_into(cp,ap,bp,m,n,k,op)
     for i in range(m*n):
         if not isfinite(cp.unsafe_load(i)):
-            raise Error("SmallMLPTrainer GEMM returned a nonfinite result")
+            raise Error("RuntimeError: SmallMLPTrainer GEMM returned a nonfinite result")
