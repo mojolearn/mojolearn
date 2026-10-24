@@ -81,3 +81,4 @@ coverage-x_neighbors-kfeat_rng_host	build_x_neighbors_host rc 0, 21s	CAUGHT	x-ne
 coverage-x_cnn-perm_host	build_x_cnn_host rc 0, 18s	MISSED	x-cnn-gcn (host MOVED) x-cnn-sage (host unmoved) x-cnn-gnn-options (host unmoved)	1 DIVERGENT, 2 IDENTICAL	STABLE, exact clean source/bindings/results restored	29
 coverage-core-pca_exact_impl	build_runtime_classical_host rc 0, 821s	CAUGHT	x-decomp-pca-randomized (host MOVED)	1 DIVERGENT	STABLE, exact clean source/bindings/results restored	836
 coverage-preprocessing-minmax_fit_transform	build_preprocessing rc 1, 3s	BUILD-FAIL	not run (faulted build failed; see summary)	n/a	REVERTED	19
+coverage-preprocessing-estimator	build_preprocessing rc 1, 1s	BUILD-FAIL	not run (faulted build failed; see summary)	n/a	REVERTED	15
