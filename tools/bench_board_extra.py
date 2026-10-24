@@ -33,8 +33,21 @@ protocol, seed and parameter rules, and parameter check.
 tools/bench_board_algos.py registers these lanes (kind 'extra') and hands
 `build` and `quality` to this module. Standard library only at import.
 """
+import importlib.util
 import math
 import os
+
+
+def _metrics_module():
+    """tools/bench_board_metrics.py (the metric lanes), loaded beside this file."""
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bench_board_metrics.py")
+    spec = importlib.util.spec_from_file_location("bench_board_metrics", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+METRICS = _metrics_module()
 
 SCHED_STEPS = 100_000
 TEXT_BYTES = 4 * 1024 * 1024
@@ -268,6 +281,8 @@ def register(add):
                  "per point on both arms)",
         other={"sklearn-cpu": "sklearn"},
         notes=["n_samples = unique(int(logspace(1, 9, 200))), eps = linspace(0.05, 0.95, 50)"])
+    # measure-coverage (2026-10-24): one lane per public metrics function (tools/bench_board_metrics.py)
+    METRICS.register(add)
 
 
 QUALITY_TEXT = {
@@ -287,6 +302,7 @@ QUALITY_TEXT = {
     "x-train": "max relative difference of every output vs the float64 numpy reference (dropout: the "
                "kept/dropped contract error and the dropped fraction)",
 }
+QUALITY_TEXT.update(METRICS.QUALITY_TEXT)
 
 
 def opponents(vendor, lane, spec, torch_gpu):
@@ -354,6 +370,8 @@ def input_arrays(lane, D, A, arrays=None):
     while the arm is built, before any clock."""
     np = A["_np"]()
     t = A["LANES"][lane]["task"]
+    if arrays is None and t == "metric":
+        return METRICS.input_arrays(lane, D, A)
     if arrays is None:
         if t == "qn":
             arrays = [("X", D["X"]), ("y", np.ascontiguousarray(D["y"], dtype=np.float32)), ("Xq", D["Xq"])]
@@ -700,6 +718,10 @@ def build(lane, arm, D, A):
         info.update(library=s["other"].get(arm, "torch"), device="cpu", pre_clock_fit=False,
                     input_home="host")
         rec = {"__library__": s["other"].get(arm, "torch")}
+
+    # ---- measure-coverage (2026-10-24): the metric lanes (tools/bench_board_metrics.py)
+    if t == "metric":
+        return METRICS.build(lane, arm, D, A, ours, fn if ours else None, info, rec, Runner, S, np)
 
     # ---- measure-coverage (2026-10-22): low-bit linalg and training-function lanes
     if t.startswith("lowbit_") or t.startswith("tr_"):
@@ -1108,6 +1130,8 @@ def quality(lane, D, outs, A):
                 e["max_rel_diff_vs_ours"] = float((np.abs(o["lr"] - r) / np.maximum(np.abs(r), 1e-30)).max())
             elif t.startswith("lowbit_") or t.startswith("tr_"):
                 e.update(_lowbit_train_quality(np, t, s["params"], o, A["SEED"]))
+            elif t == "metric":
+                e.update(METRICS.quality(np, o, ref if arm != "ours" else None))
             elif t == "jl":
                 sk = outs.get("sklearn-cpu")
                 if sk is not None:
