@@ -1938,6 +1938,13 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
     shared |= {"python/mojolearn/_user_objects.py", "python/mojolearn/tokenizer.py",
                "python/mojolearn/_bpe_trainer.py", "python/mojolearn/_tokenizer_synthetic.py",
                "bindings/_mojolearn_tokenizer_host.mojo", "bindings/_mojolearn_tokenizer_fast.mojo"}
+    # 2026-10-24: load_host_module connects tokenizer_host's classical entries
+    # from their alias binding (host_surface.HOST_IMPORT_ALIASES, 8188d819d),
+    # and host_routes now follows that alias: every lane that carries the
+    # tokenizer host binding carries its alias source too (only the source;
+    # its owners' trees stay per export).
+    assert "_mojolearn_runtime_classical_host" in lane_select.host_routes()["_mojolearn_tokenizer_host"]
+    shared.add("bindings/_mojolearn_runtime_classical_host.mojo")
     # The source audit found exactly these six additional paths in the
     # unresolved owner closure. Keep the list finite and require its reported
     # OLS edge; any other newly shared file remains an ordinary failure.
