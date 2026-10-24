@@ -560,9 +560,10 @@ def test_kde_fit_never_calls_replaced_memoryview_constructor(branch, monkeypatch
     # Preserve the native descriptor identity read by pandas admission;
     # the exercised constructor replacement itself remains a Python function.
     poisoned.obj = builtins.memoryview.obj
+    fit = model.fit  # bind first: the native attribute read consults the connected builtins
     with monkeypatch.context() as patch:
         patch.setattr(builtins, "memoryview", poisoned)
-        audit = audit_native_call(model.fit, x, y, sample_weight=weight)
+        audit = audit_native_call(fit, x, y, sample_weight=weight)
     # A replaced connected builtins export refuses before fit touches the
     # model (see _connected_exports); the restored export then fits.
     assert_connected_export_refused(audit, "builtins", "memoryview")
@@ -589,9 +590,10 @@ def test_kde_fit_never_calls_replaced_object_allocator(branch, monkeypatch):
         def __new__(cls, *args, **kwargs):
             touched.append("object.__new__")
             raise AssertionError("mutable allocator executed")
+    fit = model.fit  # bind first: the native attribute read consults the connected builtins
     with monkeypatch.context() as patch:
         patch.setattr(builtins, "object", PoisonObject)
-        audit = audit_native_call(model.fit, x)
+        audit = audit_native_call(fit, x)
     assert_connected_export_refused(audit, "builtins", "object")
     assert touched == [] and _state(vars(model)) == _state(vars(_model()))
     audit = audit_native_call(model.fit, x)

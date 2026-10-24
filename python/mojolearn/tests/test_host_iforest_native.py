@@ -374,9 +374,10 @@ def test_iforest_resolution_never_calls_replaced_builtin_float(tmp_path, monkeyp
     def callback(value):
         touched.append("float")
         return .5
+    score = model.score_samples  # bind first: the native attribute read consults the connected builtins
     with monkeypatch.context() as patch:
         patch.setattr(builtins, "float", callback)
-        audit = audit_native_call(model.score_samples, x)
+        audit = audit_native_call(score, x)
     # A replaced connected builtins export refuses (see _connected_exports).
     assert_connected_export_refused(audit, "builtins", "float")
     assert _state(vars(model)) == state and touched == []
