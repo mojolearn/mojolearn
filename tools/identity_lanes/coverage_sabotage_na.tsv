@@ -107,3 +107,7 @@ cluster/resident_centers.mojo:KMEANS_CENTERS_REGISTRY	the resident-centers regis
 kernel_methods/krr_resident.mojo:KRR_RESIDENT_REGISTRY	the resident kernel-ridge registry storage (a process global), no value
 mamba/host/mamba_host_shell_impl.mojo:_m3_owned_export_run	opt-in experiment only: weights are owned only after an install, which the host binding refuses unless built with -D MOJOLEARN_NN40_OWNED_WEIGHTS (default off), so no default build exports any
 core/user_objects.mojo:_fnv1a	the open-addressing slot hash of group_run_sizes: every hash gives the same runs (keys are compared whole), so a fault moves no value
+cluster/resident_centers.mojo:KMeansCentersRegistry	the resident-centers registry type (storage), no value
+kernel_methods/krr_resident.mojo:KernelRidgeResidentRegistry	the resident kernel-ridge registry type (storage), no value
+core/user_objects.mojo:_same_key	only group_run_sizes calls it, behind the user-objects operation "group_runs", which no caller in the package asks for
+core/user_objects.mojo:group_run_sizes	behind the user-objects operation "group_runs", which no caller in the package asks for
