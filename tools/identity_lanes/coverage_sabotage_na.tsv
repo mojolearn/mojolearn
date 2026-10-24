@@ -185,3 +185,6 @@ cholesky/host/chol_oracle.mojo:chol_host_jitter_pinned	the pinned jitter profile
 cholesky/checks/potrf.mojo:chol_jitter_pinned	the pinned jitter profile constant (build metadata), no data value
 tokenizer/encoding.mojo:BpeTokenizer.n_vocab	the vocabulary size of a built tokenizer (metadata), no arithmetic
 tokenizer/encoding.mojo:string_bytes	a string's UTF-8 bytes (a view), no arithmetic
+adapters/native/*	same API in another format: the adapter library calls the kernels the Python API lanes already record and sabotage; no arm (Andrew, 2026-10-24)
+adapters/torch/*	same API in another format: Torch dispatcher glue over the same kernels; no arm (Andrew, 2026-10-24)
+adapters/max_ops/*	same API in another format: MAX custom-op glue over the same kernels; no arm (Andrew, 2026-10-24)

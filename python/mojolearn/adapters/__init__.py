@@ -1,5 +1,11 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+# Verification: the Torch and MAX adapters (adapters/, python/mojolearn/adapters/, the wheels'
+# _adapters/) are the SAME API in another format: front-ends over the kernels the Python API calls,
+# computing nothing of their own. They get NO identity lanes, NO verifier rows and NO sabotage arms
+# (Andrew, 2026-10-24; AGENTS.md "Framework adapters are the same API in another format"). Their
+# qualification is the installed-wheel smoke on each vendor (tools/adapter_wheel_smoke.py, run by
+# the release gate).
 """Optional PyTorch and MAX adapters.
 
 ``mojolearn.adapters.torch`` registers mojolearn's operators with the PyTorch

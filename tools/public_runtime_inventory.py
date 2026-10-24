@@ -456,7 +456,9 @@ class Index:
     def _prepass(self):
         for path in sorted(self.base.rglob("*.py")):
             rel = path.relative_to(self.base)
-            if "tests" in rel.parts or rel.parts[0] in ("verify_reference", "reference_cards"):
+            # `adapters` is the Torch/MAX front-end over the same kernels (the same API in another format): no
+            # public operations of its own to inventory, verify or sabotage (Andrew, 2026-10-24; AGENTS.md).
+            if "tests" in rel.parts or rel.parts[0] in ("verify_reference", "reference_cards", "adapters"):
                 continue
             parts = list(rel.with_suffix("").parts)
             if parts[-1] == "__init__":

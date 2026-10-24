@@ -35,6 +35,12 @@ never from a hand-kept list:
     python3 tools/verify_coverage_audit.py --base fc8d425fb --json ~/mojolearn-evidence/verify-coverage-20261021/audit.json
     python3 tools/verify_coverage_audit.py --from-json <audit.json> --markdown docs/plans/VERIFY_COVERAGE_20261021.md
 
+Out of scope by design: the Torch and MAX adapters (adapters/, python/mojolearn/adapters/, the
+wheels' _adapters/) are the SAME API in another format: front-ends over the kernels the Python API
+calls, computing nothing of their own. They get NO identity lanes, NO verifier rows and NO sabotage
+arms (Andrew, 2026-10-24; AGENTS.md "Framework adapters are the same API in another format"). Their
+qualification is the installed-wheel smoke on each vendor (tools/adapter_wheel_smoke.py, run by the
+release gate).
 Static analysis only: nothing is imported from mojolearn, nothing is built or run.
 """
 from __future__ import annotations

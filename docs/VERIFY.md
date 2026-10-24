@@ -261,6 +261,10 @@ with how much of the run was actually checked, as in `verified 44 of 332 cell
 parts (0 divergent, 0 owed, 288 refused, 0 n/a)`, so a run that mostly refused
 cannot be misread as a run that passed.
 
+## The Torch and MAX adapters
+
+The adapters are the same API in another format: `mojolearn.adapters.torch` and `mojolearn.adapters.max` call the compiled kernels the Python API calls, and compute nothing of their own. `verify` covers their arithmetic through the Python API lanes, so they have no lanes, table rows or fault arms of their own. What is checked for them is what is specific to them: the shipped files load and run from the installed wheel on each GPU, which the release gate runs on every vendor.
+
 ## Choose the verification cost and scope
 
 Release certification builds native bindings and runs clean and injected-fault
