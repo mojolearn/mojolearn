@@ -83,3 +83,4 @@ coverage-core-pca_exact_impl	build_runtime_classical_host rc 0, 821s	CAUGHT	x-de
 coverage-preprocessing-minmax_fit_transform	build_preprocessing rc 1, 3s	BUILD-FAIL	not run (faulted build failed; see summary)	n/a	REVERTED	19
 coverage-preprocessing-estimator	build_preprocessing rc 1, 1s	BUILD-FAIL	not run (faulted build failed; see summary)	n/a	REVERTED	15
 coverage-resample-gather	build_resample rc 0, 36s	MISSED	resample-utils (Metal unmoved) resample-perm-samples (Metal unmoved)	2 IDENTICAL	STABLE, exact clean source/bindings/results restored	58
+coverage-gbdt-binary_prediction	build_gbdt rc 0, 191s	CAUGHT	gbdt-adapter-clf (Metal MOVED)	1 DIVERGENT	STABLE, exact clean source/bindings/results restored	207
