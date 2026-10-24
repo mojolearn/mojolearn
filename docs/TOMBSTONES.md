@@ -30,6 +30,7 @@ in the tables after the sections.
 
 | define | area | verdict | date | patch |
 |---|---|---|---|---|
+| [Framework adapter per-operation surfaces](#framework-adapter-per-operation-surfaces) (`torch.ops.mojolearn.operation`, MAX `mojolearn_matmul` / `mojolearn_relu` / `mojolearn_operation0..3`, native `mojolearn_adapter_operation*`) | Framework adapters | removed (API: whole-model only) | 2026-10-24 | none (recoverable at `b022e2ea5`) |
 | [`MOJOLEARN_IDN_XTY_TILED_OFF`](#mojolearn_idn_xty_tiled_off) (+ `MOJOLEARN_IDN_DECOMP_MEAN_LAUNCH_OFF`, `MOJOLEARN_PCA_FAST_COLMEAN_OFF`, `MOJOLEARN_TSVD_FAST_COLVAR_OFF`) | Shared / decomposition | removed (serial shape: one block per column walking all n rows) | 2026-10-21 | [MOJOLEARN_IDN_XTY_TILED_OFF.patch](../experiments/removed/MOJOLEARN_IDN_XTY_TILED_OFF.patch) |
 | [`MOJOLEARN_QN_TILED_MULTI_OFF`](#mojolearn_qn_tiled_multi_off) (+ `MOJOLEARN_QN_TILED_MULTI_ALL`, now the rule) | Linear | removed (serial shape: one block per gradient cell walking all n rows) | 2026-10-21 | [MOJOLEARN_QN_TILED_MULTI_OFF.patch](../experiments/removed/MOJOLEARN_QN_TILED_MULTI_OFF.patch) |
 | [`MOJOLEARN_LOSS_SABOTAGE_REDUCE_SERIAL`](#mojolearn_loss_sabotage_reduce_serial) | Neural (loss gate) | removed (serial shape: one thread folding the batch) | 2026-10-21 | [MOJOLEARN_LOSS_SABOTAGE_REDUCE_SERIAL.patch](../experiments/removed/MOJOLEARN_LOSS_SABOTAGE_REDUCE_SERIAL.patch) |
@@ -3499,3 +3500,32 @@ Hand-glue deletion (lane ag-transformer-owners, 2026-10-19). No define: the walk
 - Guard: `MOJOLEARN_AUTOGRAD_CNN_OFF` and the opt-in spelling `MOJOLEARN_AUTOGRAD_CNN` refused in `autograd/rules_cnn.mojo`
   (`cnn_backward_autograd`, reached by every CNN trainer step), not in core: a core line rebuilds every binding (the
   pre-push rebuild fence refuses it). No `grid_controls` entry existed.
+
+## Framework adapter per-operation surfaces
+
+- What it was: one mojolearn operation per framework call. PyTorch: `torch.ops.mojolearn.operation(inputs, code,
+  output_shape, options, scalars, integer_output, device)` (`adapters/torch/registration.cpp` `operation` and
+  `operation_meta`). MAX: the custom ops `mojolearn_matmul`, `mojolearn_relu` and `mojolearn_operation0..3`
+  (`adapters/max_ops/__init__.mojo`, `execute_operation`). Native: the C entries `mojolearn_adapter_operation` and
+  `mojolearn_adapter_operation_host_buffers` (`adapters/native/c_api.mojo`, `adapters/native/abi.h`) over
+  `run_operation` (`adapters/native/operation.mojo`, an `OpsSession` per call). Their checkers went with them:
+  `tools/check_max_native_adapters.py`, `tools/check_native_adapter_abi.py`, `tools/check_native_adapter_transport.py`,
+  `tools/check_max_adapter_fault.py`, the per-op fault controls of `tools/check_native_adapter_faults.py` (wrong-operation,
+  stall), `adapters/direct_equivalence_check.mojo`, and the unconnected per-op payload draft `tools/adapter_payload.py`
+  (+ `tools/test_adapter_payload.py`). The per-op checks in `tools/check_native_adapters.py` became the whole-model
+  torch-compile phase.
+- Verdict: removed as API, not an experiment (Andrew, 2026-10-24): mojolearn integrates with PyTorch and MAX only as
+  whole-model programs. Between per-op calls the framework computes with its own bits, which breaks the cross-vendor
+  identity contract, and we do not want part of mojolearn used inside a framework graph. No timing or quality numbers:
+  nothing was measured against it. The per-op names were already undocumented (`docs-site/api_exclude.txt`); those rows
+  are deleted with the code.
+- What remains public: `torch.compile(model, backend="mojolearn")`, `mojolearn.import_model(module)`,
+  `torch.ops.mojolearn.train`, the MAX `mojolearn_train` / `mojolearn_train_resume` ops, and the native
+  `mojolearn_adapter_abi` / `mojolearn_adapter_train` entries they call. The training path never used the per-op
+  entries; `adapters/native/operation.mojo` keeps only the descriptor helpers training shares.
+- Last sha with them: `b022e2ea5` (main). Deleted on lane/adapters-whole-model-20261024 by `761a927d6` and the commits
+  after it; recoverable at `761a927d6^` (= `b022e2ea5`). No patch: removed API, not an experiment define.
+- Guard: `tools/test_adapter_surfaces.py` fails if the registration, the MAX package, the native exports or `abi.h` name
+  anything but the whole-model entries; `packaging/adapters/build.sh` refuses a native library exporting
+  `mojolearn_adapter_operation*`; `tools/check_native_adapters.py` fails if `torch.ops.mojolearn.operation` resolves.
+  They must not come back (AGENTS.md "Framework adapters are the same API in another format").

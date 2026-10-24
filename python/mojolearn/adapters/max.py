@@ -31,10 +31,9 @@ Examples
 ...                         out_types=outs, parameters=params)
 ...     g.output(*[t.tensor for t in fitted])
 """
-# The package also holds per-operation building blocks (mojolearn_matmul, mojolearn_relu,
-# mojolearn_operation0..3). They stay for the trainer and the shipped adapter smoke but are not
-# documented (docs-site/api_exclude.txt): a building block; a whole model runs as one program
-# (mojolearn.import_model, or torch.compile(model, backend="mojolearn")).
+# Whole-model only (Andrew, 2026-10-24): the package registers mojolearn_train and
+# mojolearn_train_resume and nothing else. The per-operation ops (mojolearn_matmul, mojolearn_relu,
+# mojolearn_operation0..3) were removed (docs/TOMBSTONES.md) and must not come back.
 import importlib.metadata as _metadata
 
 from . import _shipped
@@ -106,8 +105,8 @@ def parameters(**extra):
     Parameters
     ----------
     **extra
-        The operation's own parameters, for example ``code``, ``options`` and
-        ``scalars`` of ``mojolearn_operation1``.
+        The operation's own parameters: ``model``, ``options`` and
+        ``scalars`` of ``mojolearn_train`` or ``mojolearn_train_resume``.
 
     Returns
     -------

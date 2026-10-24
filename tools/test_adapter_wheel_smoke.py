@@ -59,9 +59,34 @@ def test_install_uses_the_index_the_registration_was_built_against():
 
 
 def test_the_loader_refusal_is_recognized(tmp_path):
-    (tmp_path / "torch").mkdir()
-    (tmp_path / "torch" / "adapter-results.json").write_text(json.dumps(dict(
+    (tmp_path / "torch-compile").mkdir()
+    (tmp_path / "torch-compile" / "adapter-results.json").write_text(json.dumps(dict(
         failures=["ImportError: mojolearn.adapters.torch cannot load: it was built for torch 2.13.x"])))
     assert smoke.refused(tmp_path)
-    (tmp_path / "torch" / "adapter-results.json").write_text(json.dumps(dict(failures=["AssertionError"])))
+    (tmp_path / "torch-compile" / "adapter-results.json").write_text(json.dumps(dict(failures=["AssertionError"])))
     assert not smoke.refused(tmp_path)
+
+
+def test_the_phases_are_the_whole_model_ones(tmp_path):
+    # the stand-in exits 0 for every phase: torch.compile, torch training, then MAX training
+    code, report = verdict(tmp_path, dict(adapters=ADAPTERS, torch_importable=True, max_importable=True),
+                           "--require", "torch,max")
+    assert (code, report["status"]) == (0, "PASSED")
+    assert set(report["phases"]) == {"torch-compile", "torch-training", "max-training"}
+    assert report["frameworks"] == dict(torch="ran", max="ran")
+    argv = json.loads((tmp_path / "out" / "torch-compile.log").read_text().splitlines()[0][len("argv: "):])
+    assert argv[1].endswith("check_native_adapters.py") and "--installed" in argv
+
+
+def test_no_per_operation_phase_or_checker_remains():
+    text = Path(smoke.__file__).read_text()
+    assert "check_max_native_adapters" not in text
+    assert not (Path(smoke.__file__).parent / "check_max_native_adapters.py").exists()
+
+
+def test_max_training_needs_torch_training(tmp_path):
+    code, report = verdict(tmp_path, dict(adapters=ADAPTERS, torch_importable=False, max_importable=True),
+                           "--require", "max")
+    assert (code, report["status"]) == (1, "FAILED")
+    assert "max-training" not in report["phases"]
+    assert report["frameworks"]["max"].startswith("not run")

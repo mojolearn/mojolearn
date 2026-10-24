@@ -72,6 +72,15 @@ def test_judge_passes_only_passed_with_every_phase(tmp_path):
     assert AG.judge(tmp_path / "missing.json")[:2] == ("NO_RECEIPT", False)
 
 
+def test_the_gate_phases_are_whole_model_only():
+    # Andrew, 2026-10-24: no per-operation phase (the per-op surfaces were removed)
+    assert AG.PHASES == ("torch-compile", "torch-training", "max-training")
+    old = dict(PHASES_OK, torch={"exit": 0}, max={"exit": 0})
+    old.pop("torch-compile")
+    status, ok, why = AG.judge(receipt("PASSED", phases=old))
+    assert not ok and "torch-compile" in why
+
+
 def test_enabled_follows_the_release_switch():
     assert AG.enabled({}) and AG.enabled({"MOJOLEARN_RELEASE_ADAPTERS": "1"})
     assert not AG.enabled({"MOJOLEARN_RELEASE_ADAPTERS": "0"})

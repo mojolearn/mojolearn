@@ -152,6 +152,9 @@ class _Compiled:
         free = [args[i] for i in self._free]  # glue: one entry per graph input
         device = free[0].device if free else torch.device("cpu")
         # glue: a host copy of each input (FOLLOW-UP: zero-copy device handoff)
+        # measured: PENDING. tools/adapter_transfer_probe.py times this call's transfer (host copy in,
+        # output rebuild on the device) against the program run for a given shape; record the nv/amd/Mac
+        # numbers here (shape, transfer ms, compute ms, run id) before the zero-copy lane changes it.
         arrays = [x.detach().cpu().contiguous().numpy() for x in free]  # glue: one entry per graph input
         got = self._program.run(*arrays)
         got = got if isinstance(got, tuple) else (got,)
