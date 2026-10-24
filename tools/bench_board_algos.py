@@ -1071,6 +1071,15 @@ _add("resample", xlane="resample", ours=("resample.resample",), kind="fn", task=
      mism=["the drawn rows are each library's own (ours the Philox position map, scikit-learn "
            "numpy RandomState(7)); quality is the resampled column means against the "
            "population's"])
+# measure-coverage (2026-10-24): resample_indices, the index draw resample() gathers by, against
+# scikit-learn's resample of the row indices (the same contract: n indices with replacement, seed 7)
+_add("resample-indices", xlane="resample", ours=("resample.resample_indices",), kind="fn",
+     task="resample-indices", block="reg", params=dict(replace=True, random_state=SEED),
+     other={"sklearn-cpu": "sklearn"},
+     notes=["n = n_samples = the reg block's fit row count (1,000,000) on every arm, explicit; "
+            "scikit-learn: sklearn.utils.resample(np.arange(n), replace=True, n_samples=n, random_state=7)"],
+     mism=["the drawn indices are each library's own (ours the Philox position map, scikit-learn numpy "
+           "RandomState(7)); quality is the index distribution's mean and its multiplicity"])
 _add("cross-val-score", xlane="model_selection", ours=("cross_val_score",
                                                         "model_selection.cross_val_score"),
      kind="fn", task="cv", block="reg",
@@ -2195,6 +2204,7 @@ def fit_text(lane):
         return {"bootstrap": "bootstrap(y): every resample and the interval",
                 "permutation": "permutation_test(x, y): every permutation and the p-value",
                 "resample": "resample(X, y): the index draw and both gathers",
+                "resample-indices": "resample_indices(n, n_samples=n): the index draw",
                 "cv": "cross_val_score(LinearRegression(), X, y, cv=5): 5 fits and scores",
                 "grid-search": "GridSearchCV(Ridge, 4 alphas, cv=5).fit(X, y): 20 fits, scores and the refit",
                 "random-search": "RandomizedSearchCV(Ridge, n_iter=3, cv=5).fit(X, y): 15 fits and the refit",
@@ -2281,6 +2291,7 @@ QUALITY_TEXT = {
     "bootstrap": "interval endpoints and standard error; their relative difference vs scipy's",
     "permutation": "statistic and p-value; |p - scipy's p|",
     "resample": "max |resampled column mean - population mean| / column std",
+    "resample-indices": "|mean index - (n - 1) / 2| / n and the fraction of distinct indices (1 - 1/e expected)",
     "cv": "mean fold R2; max |fold score - scikit-learn's|",
     "grid-search": "best_score_ and best alpha; max |mean_test_score - scikit-learn's|",
     "random-search": "best_score_; |best_score_ - scikit-learn's|; max |score| difference on the alphas both sampled",
@@ -6588,6 +6599,8 @@ def _build_fn(lane, arm, D):
             elif t == "permutation":
                 r = fn(y, yq, **kw)
                 S["o"] = {"stat": np.array([r.statistic]), "p": np.array([r.pvalue])}
+            elif t == "resample-indices":
+                S["o"] = {"idx": _arr(fn(X.shape[0], n_samples=X.shape[0], **kw), np.int64)}
             elif t == "resample":
                 Xr, yr = fn(X, y, **kw)
                 S["o"] = {"xmean": _arr(Xr, np.float64).mean(0), "ymean": np.array([_arr(yr, np.float64).mean()])}
@@ -6599,6 +6612,8 @@ def _build_fn(lane, arm, D):
                                          np.float64)}
         rec = (_ms_record(p) if t in _MS_TASKS else
                {k: ("LinearRegression" if k == "estimator" else v) for k, v in p.items()})
+        if t == "resample-indices":
+            rec.update(n=int(X.shape[0]), n_samples=int(X.shape[0]))
         rec["__library__"] = "mojolearn"
         return Runner(info, fit, lambda: S["o"], record=rec)
     lib = s["other"][arm]
@@ -6653,7 +6668,18 @@ def _build_fn(lane, arm, D):
         def fit():
             S["o"] = _ms_run(t, call, X, y, p, "sklearn")
     else:
-        if t == "resample":
+        if t == "resample-indices":
+            from sklearn.utils import resample as skresample
+            n_rows = int(X.shape[0])
+            info["config"] = ("sklearn.utils.resample(np.arange(%d), replace=%r, n_samples=%d, random_state=%r)"
+                              % (n_rows, p["replace"], n_rows, p["random_state"]))
+            rows = np.arange(n_rows)
+
+            def fit():
+                S["o"] = {"idx": np.asarray(skresample(rows, replace=p["replace"], n_samples=n_rows,
+                                                       random_state=p["random_state"]), dtype=np.int64)}
+            rec = dict(p, n=n_rows, n_samples=n_rows, __implementation__=skresample)
+        elif t == "resample":
             from sklearn.utils import resample as skresample
             info["config"] = "sklearn.utils.resample(X, y, %s)" % p
 
@@ -8164,6 +8190,10 @@ def quality(lane, D, outs):
                 e.update(statistic=float(o["stat"][0]), pvalue=float(o["p"][0]))
                 if ref_fn is not None and arm != ref_arm:
                     e["abs_pvalue_diff_vs_scipy"] = float(abs(o["p"][0] - ref_fn["p"][0]))
+            elif qk == "resample-indices":
+                n = D["X"].shape[0]
+                e["mean_index_shift_over_n"] = float(abs(o["idx"].mean() - (n - 1) / 2.0) / n)
+                e["distinct_fraction"] = float(np.unique(o["idx"]).shape[0] / float(n))
             elif qk == "resample":
                 X = D["X"].astype(np.float64)
                 sd = np.maximum(X.std(0), 1e-12)
