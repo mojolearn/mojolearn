@@ -652,10 +652,16 @@ class _prep_Splits:
 
 @lane("x-prep-user-objects")
 def _(ml, X, yc, yr, Xh=None):
-    """User objects the reference accepts: SimpleImputer(strategy=<callable>),
-    LinearDiscriminantAnalysis / QuadraticDiscriminantAnalysis
-    covariance_estimator, TargetEncoder cv=<splitter> / cv=<(train, test)
-    pairs> and categories=<list> (one training value left out, one unseen added)."""
+    """User objects the library accepts: SimpleImputer(strategy=<callable>),
+    TargetEncoder cv=<splitter> / cv=<(train, test) pairs> and
+    categories=<list> (one training value left out, one unseen added).
+    LinearDiscriminantAnalysis / QuadraticDiscriminantAnalysis refuse a
+    covariance_estimator object at fit (no Python callback in the runtime,
+    2026-10-24): the `refusals` part holds that each refuses with the
+    documented TypeError, and the discriminant parts are the supported native
+    configuration instead (LDA shrinkage, QDA reg_param). Revised 2026-10-24
+    (lane verify-coverage-20261024): the old body fit LDA/QDA with a Python
+    covariance estimator and read REFUSED on every fixture."""
     Xm, Xhm = _prep_with_nan(X), _prep_with_nan(Xh)
     parts = {}
     third = lambda v: (lambda s: float(s[len(s) // 3]) if s else float("nan"))(sorted(v.tolist()))
@@ -663,12 +669,24 @@ def _(ml, X, yc, yr, Xh=None):
     parts["si"] = _h(si.statistics_, si.transform(Xm[:256]))
     y3 = _prep_three_class(X, yr)
     Xs, ys = X[:600], y3[:600]
-    for s in ("lsqr", "eigen"):
-        m = ml.LinearDiscriminantAnalysis(solver=s, covariance_estimator=_prep_PyCov()).fit(Xs, ys)
+    refused = []
+
+    def _refuses(make):
+        try:
+            make().fit(Xs, ys)
+        except TypeError as error:
+            return int("cannot invoke Python callbacks" in str(error))
+        return 0
+
+    for s in ("lsqr", "eigen"):  # glue: the two covariance solvers
+        refused.append(_refuses(lambda: ml.LinearDiscriminantAnalysis(solver=s, covariance_estimator=_prep_PyCov())))
+        m = ml.LinearDiscriminantAnalysis(solver=s, shrinkage=0.25).fit(Xs, ys)
         parts["lda_" + s] = _h(m.covariance_, m.coef_, m.intercept_, m.predict_proba(X[:256]))
-    q = ml.QuadraticDiscriminantAnalysis(solver="eigen", covariance_estimator=_prep_PyCov(),
-                                         store_covariance=True).fit(Xs, ys)
+    refused.append(_refuses(lambda: ml.QuadraticDiscriminantAnalysis(solver="eigen", covariance_estimator=_prep_PyCov(),
+                                                                     store_covariance=True)))
+    q = ml.QuadraticDiscriminantAnalysis(reg_param=0.25, store_covariance=True).fit(Xs, ys)
     parts["qda"] = _h(*q.covariance_, q.predict_proba(X[:256]))
+    parts["refusals"] = _h(np.asarray(refused, dtype=np.int64))
     Xq, Xhq = _prep_categorical(X), _prep_categorical(Xh)
     cats = []
     for j in range(Xq.shape[1]):
