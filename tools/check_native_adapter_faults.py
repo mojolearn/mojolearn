@@ -2,15 +2,12 @@
 """Process-group-bounded runner shared by the adapter fault controls (check_training_adapter_faults.py,
 check_max_training_fault.py). The per-operation fault controls that lived here (wrong-operation, stall on
 torch.ops.mojolearn.operation) were removed with the per-op surfaces on 2026-10-24 (docs/TOMBSTONES.md)."""
-import argparse
 import hashlib
 import json
 import os
 from pathlib import Path
-import shutil
 import signal
 import subprocess
-import sys
 import time
 
 

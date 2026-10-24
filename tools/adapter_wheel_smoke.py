@@ -9,10 +9,15 @@ VENV holds the installed mojolearn wheel (and on Linux its vendor wheel). The
 smoke asks that interpreter what is installed, then runs the adapters' own
 checkers against the SHIPPED files (mojolearn/.../_adapters/), never this tree's:
 
-    torch            tools/check_native_adapters.py --installed      (when torch imports)
+    torch-compile    tools/check_native_adapters.py --installed      (when torch imports): whole models
+                     through torch.compile(backend="mojolearn"), close to eager and bit for bit
+                     mojolearn.import_model's output
     torch-training   tools/check_native_training_adapters.py --extension <shipped registration> --smoke
-    max              tools/check_max_native_adapters.py --library <shipped .mojoc> --native-library <shipped lib>
-    max-training     tools/check_max_training_adapters.py ... --smoke   (after torch-training passed)
+    max-training     tools/check_max_training_adapters.py --library <shipped .mojoc> ... --smoke
+                     (when max imports, after torch-training passed: it compares with its results)
+
+The adapters are whole-model only (Andrew, 2026-10-24): there is no per-operation
+phase, because there is no per-operation surface.
 
 --install first pip-installs the framework releases the shipped adapters.json
 names (its `requirements`; Torch from the index it was built against, so the
@@ -119,7 +124,7 @@ def install_commands(python, adapters, wanted):
 
 def refused(out):
     """Did the torch checker stop at the loader's refusal (adapter-results.json failures)?"""
-    path = out / "torch" / "adapter-results.json"
+    path = out / "torch-compile" / "adapter-results.json"
     try:
         failures = json.loads(path.read_text()).get("failures") or []
     except (OSError, ValueError):
@@ -162,13 +167,14 @@ def main(argv=None):
         env = dict(os.environ, PYTORCH_ENABLE_MPS_FALLBACK="0")
         torch_ok = False
         if facts.get("torch_importable"):
-            r = run("torch", [a.python, HERE / "check_native_adapters.py", "--installed", "--device", a.device,
-                              "--out", out / "torch"], out, a.seconds, env)
-            report["phases"]["torch"] = r
+            r = run("torch-compile", [a.python, HERE / "check_native_adapters.py", "--installed", "--device", a.device,
+                                      "--out", out / "torch-compile"], out, a.seconds, env)
+            report["phases"]["torch-compile"] = r
             if r["exit"] != 0 and refused(out):
                 report["frameworks"]["torch"] = "refused: not the release the adapters were built for"
             elif r["exit"] != 0:
-                report["problems"].append(f"torch adapter check failed (exit {r['exit']}, {r['log']})")
+                report["frameworks"]["torch"] = "failed"
+                report["problems"].append(f"torch-compile adapter check failed (exit {r['exit']}, {r['log']})")
             else:
                 r = run("torch-training", [a.python, HERE / "check_native_training_adapters.py", "--extension",
                                            paths["torch"], "--device", a.device, "--smoke",
@@ -180,23 +186,19 @@ def main(argv=None):
                     report["problems"].append(f"torch training adapter check failed (exit {r['exit']})")
         else:
             report["frameworks"]["torch"] = "absent"
-        if facts.get("max_importable"):
-            r = run("max", [a.python, HERE / "check_max_native_adapters.py", "--library", paths["max"],
-                            "--native-library", paths["native"], "--out", out / "max"], out, a.seconds, env)
-            report["phases"]["max"] = r
+        if not facts.get("max_importable"):
+            report["frameworks"]["max"] = "absent"
+        elif not torch_ok:
+            # max-training compares its bytes with torch-training's: without them it cannot run
+            report["frameworks"]["max"] = "not run: needs a passing torch-training phase"
+        else:
+            r = run("max-training", [a.python, HERE / "check_max_training_adapters.py", "--library", paths["max"],
+                                     "--native-library", paths["native"], "--torch-results", out / "torch-training",
+                                     "--smoke", "--out", out / "max-training"], out, a.seconds, env)
+            report["phases"]["max-training"] = r
             report["frameworks"]["max"] = "ran" if r["exit"] == 0 else "failed"
             if r["exit"] != 0:
-                report["problems"].append(f"MAX adapter check failed (exit {r['exit']}, {r['log']})")
-            elif torch_ok:
-                r = run("max-training", [a.python, HERE / "check_max_training_adapters.py", "--library", paths["max"],
-                                         "--native-library", paths["native"], "--torch-results", out / "torch-training",
-                                         "--smoke", "--out", out / "max-training"], out, a.seconds, env)
-                report["phases"]["max-training"] = r
-                if r["exit"] != 0:
-                    report["frameworks"]["max"] = "failed"
-                    report["problems"].append(f"MAX training adapter check failed (exit {r['exit']})")
-        else:
-            report["frameworks"]["max"] = "absent"
+                report["problems"].append(f"MAX training adapter check failed (exit {r['exit']}, {r['log']})")
         for w in require:
             if report["frameworks"].get(w) != "ran":
                 report["problems"].append(f"--require {w}: {report['frameworks'].get(w)}")

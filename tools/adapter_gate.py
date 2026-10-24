@@ -10,10 +10,12 @@ tools/gate_smoke_box.py (gate-nvidia, gate-amd, ON the held box) and tools/relea
              adapters are built against packaging/adapters/pins.json's) holding the gate's mojolearn wheels
     smoke    tools/adapter_wheel_smoke.py --install torch,max --require torch,max --device <vendor's device>:
              the frameworks the shipped adapters.json names (Torch from its index: PyPI for CUDA and Metal, the
-             PyTorch ROCm 7.2 index for HIP), then the four phases torch, torch-training, max, max-training,
-             each comparing the adapter's bytes with the plain Python API's (mojolearn.ops.Session,
-             mojolearn.Sequential) on that device
-    judge    ONLY a PASSED receipt with all four phases exit 0 passes. NO_FRAMEWORK is a FAILURE here (the
+             PyTorch ROCm 7.2 index for HIP), then the three whole-model phases torch-compile (models through
+             torch.compile(backend="mojolearn"), bit for bit mojolearn.import_model's output), torch-training
+             and max-training (torch.ops.mojolearn.train and MAX mojolearn_train/_resume, bit for bit
+             mojolearn.Sequential's fit) on that device. No per-operation phase: the per-op surfaces were removed
+             on 2026-10-24 (AGENTS.md "Framework adapters are the same API in another format").
+    judge    ONLY a PASSED receipt with all three phases exit 0 passes. NO_FRAMEWORK is a FAILURE here (the
              frameworks must install and every phase must run), as is FAILED or a missing receipt.
 
 MOJOLEARN_RELEASE_ADAPTERS=0 turns it off, the same switch that drops the adapters from the legs and the pack.
@@ -26,7 +28,7 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 FRAMEWORKS = "torch,max"
-PHASES = ("torch", "torch-training", "max", "max-training")
+PHASES = ("torch-compile", "torch-training", "max-training")
 #: the device string each vendor's framework build uses (torch-ROCm keeps the cuda device type)
 DEVICE = {"nvidia": "cuda:0", "amd": "cuda:0", "apple": "mps"}
 RECEIPT = "adapter-smoke.json"

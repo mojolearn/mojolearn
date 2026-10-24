@@ -125,8 +125,8 @@
 #   --adapters           also smoke the FRAMEWORK ADAPTERS the wheel ships (local wheel
 #                        only): a venv with the box's site packages, the wheel and its
 #                        plugins installed, then tools/adapter_wheel_smoke.py runs the
-#                        adapters' own checkers (Torch, Torch training, MAX, MAX
-#                        training) against the INSTALLED files for every framework
+#                        adapters' own whole-model checkers (torch.compile, Torch
+#                        training, MAX training) against the INSTALLED files for every framework
 #                        that imports there. Its tools travel as one tarball, sha256
 #                        checked on the box; the receipt is <out>/adapter-smoke.json:
 #                        PASSED, NO_FRAMEWORK (nothing to run; reported, not passed)
@@ -409,7 +409,7 @@ if [ "$ADAPTERS" = 1 ]; then
     ADAPTER_BUNDLE="$TMPD/adapter-smoke.tgz"
     tar czf "$ADAPTER_BUNDLE" -C "$ROOT" tools/adapter_wheel_smoke.py tools/check_native_adapters.py \
         tools/check_native_training_adapters.py tools/native_training_fixtures.py \
-        tools/check_max_native_adapters.py tools/check_max_training_adapters.py || die "could not pack the adapter smoke tools"
+        tools/check_max_training_adapters.py || die "could not pack the adapter smoke tools"
     ADAPTER_BUNDLE_SHA=$(shasum -a 256 "$ADAPTER_BUNDLE" | cut -d' ' -f1)
     FETCH_EXTRA="$FETCH_EXTRA adapters adapter_smoke.log adapter_smoke.exit adapter_venv.log"
 elif [ -n "$ADAPTER_INSTALL" ]; then
