@@ -1391,6 +1391,23 @@ def _(ml, X, yc, yr, Xh=None):
                      logits=d(np.asarray(m.predict_logits(Xm[:256]), dtype=np.float32))))
 
 
+@lane("svc-gamma-scale")
+def _(ml, X, yc, yr, Xh=None):
+    """SVC and SVR with gamma='scale' (the package default is 'auto', so
+    the svc and svr lanes never take it): SVC.fit -> the SVC owner's
+    `_resolve_gamma` (bindings/svc_kernel_native.mojo) -> the svm binding's
+    `scale_gamma_limbs` (svm/impl/scale_gamma_device.mojo on a GPU column,
+    svm/host/scale_gamma_host.mojo on the host column) -> the once-rounded
+    exact 1 / (n_features * X.var()). SVR.fit takes the same door. Parts: the
+    decision values and predictions of both, sized like the svc lane."""
+    d = _coverage_digester(ml)
+    c = ml.SVC(C=1.0, kernel="rbf", gamma="scale", max_iter=200).fit(X[:2000], yc[:2000])
+    r = ml.SVR(C=1.0, kernel="rbf", gamma="scale", max_iter=200).fit(X[:1000], yr[:1000])
+    return _fit(dict(svc_decision=d(np.asarray(c.decision_function(X[2000:2256]), dtype=np.float32)),
+                     svc_predict=d(np.asarray(c.predict(X[2000:2256]))),
+                     svr_predict=d(np.asarray(r.predict(X[1000:1256]), dtype=np.float32))))
+
+
 _batch_decl("n/a:coverage-probe (the lane checks one public call path the release audit found no lane for; "
             "its outputs are train parts, digested whole)",
-            "transformer-forward-tape", "scaler-fit-transform", "multioutput-ridge", "x-ridge-cv-kfold", "neural-trainer-unfused")
+            "transformer-forward-tape", "scaler-fit-transform", "multioutput-ridge", "x-ridge-cv-kfold", "neural-trainer-unfused", "svc-gamma-scale")
