@@ -48,5 +48,18 @@ def test_pooled_gram_pca_fits_in_a_fresh_worker():
     X = rng.standard_normal((4096, 12)).astype(np.float32)
     par = fit_gram_estimator(ml.PCA(n_components=4), X, devices=(0,))
     plain = ml.PCA(n_components=4).fit(X)
-    assert np.asarray(par.components_).tobytes() == np.asarray(plain.components_).tobytes()
+    # The pooled model crossed a pickle: its arrays carry new (equal) dtype
+    # instances, which the PCA state admission once refused by identity.
+    for name in ("components_", "mean_", "explained_variance_", "explained_variance_ratio_",
+                 "singular_values_"):
+        got, want = getattr(par, name), getattr(plain, name)
+        assert type(got) is type(want), name
+        assert got.dtype == want.dtype and got.shape == want.shape, name
+        assert got.flags.c_contiguous == want.flags.c_contiguous, name
+        assert np.asarray(got).tobytes() == np.asarray(want).tobytes(), name
+    for name in ("n_components_", "n_features_in_", "noise_variance_"):
+        assert getattr(par, name) == getattr(plain, name), name
+    # transform and inverse_transform run in the parent on the pooled state.
     assert np.asarray(par.transform(X)).tobytes() == np.asarray(plain.transform(X)).tobytes()
+    Z = np.asarray(plain.transform(X))
+    assert np.asarray(par.inverse_transform(Z)).tobytes() == np.asarray(plain.inverse_transform(Z)).tobytes()
