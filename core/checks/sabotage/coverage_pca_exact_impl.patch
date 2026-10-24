@@ -1,8 +1,11 @@
 --- a/core/pca_exact_impl.mojo
 +++ b/core/pca_exact_impl.mojo
-@@ -10,3 +10,5 @@
+@@ -10,6 +10,8 @@
              raise Error("PCA whitening requires finite " + name)
          if nonnegative and ptr[i] < 0:
              raise Error("PCA whitening requires nonnegative singular values/variance")
 +    if name == "singular_values_" and size > 0:  # SABOTAGE: corrupt live validated whitening state
 +        ptr[0] *= Float32(2.0)
+ 
+ 
+ def pca_widen_spectrum(src: MutPointer[Float32, MutUntrackedOrigin], dst: MutPointer[Float64, MutUntrackedOrigin], count: Int):
