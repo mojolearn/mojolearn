@@ -1,0 +1,1794 @@
+{
+ "mode": "identical",
+ "repeats": 1,
+ "platform": "Linux-6.8.0-59-generic-x86_64-with-glibc2.35",
+ "vendor": "cpu-amd-epyc-9575f-64-core-processor",
+ "commit": "ae7b4ca804b3633ad6a08e5be5bae0c0745ebe92",
+ "commit_source": "git rev-parse HEAD",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "par-kernel-ridge/base": {
+   "verdict": "N/A",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 12269, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 7855, in _\n    par = fit_kernel_method(ml.KernelRidge(**kw), X[:600, :4], Y, devices=dev)\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 882, in fit_kernel_method\n    result = pool.map([('km_fit', estimator, args)])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 496, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [
+    "n/a:cpu-by-design (a cooperative multi-GPU driver has no CPU implementation)"
+   ],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0014849789986328688,
+    "stages": {
+     "repeat=1/train": 0.00025138500132015906
+    }
+   }
+  },
+  "par-kernel-ridge/ties": {
+   "verdict": "N/A",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 12269, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 7855, in _\n    par = fit_kernel_method(ml.KernelRidge(**kw), X[:600, :4], Y, devices=dev)\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 882, in fit_kernel_method\n    result = pool.map([('km_fit', estimator, args)])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 496, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [
+    "n/a:cpu-by-design (a cooperative multi-GPU driver has no CPU implementation)"
+   ],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0008234229972003959,
+    "stages": {
+     "repeat=1/train": 0.0002887540031224489
+    }
+   }
+  },
+  "par-kernel-ridge/hashed": {
+   "verdict": "N/A",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 12269, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 7855, in _\n    par = fit_kernel_method(ml.KernelRidge(**kw), X[:600, :4], Y, devices=dev)\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 882, in fit_kernel_method\n    result = pool.map([('km_fit', estimator, args)])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 496, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [
+    "n/a:cpu-by-design (a cooperative multi-GPU driver has no CPU implementation)"
+   ],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0006155360024422407,
+    "stages": {
+     "repeat=1/train": 0.00017447700156481005
+    }
+   }
+  },
+  "par-kernel-ridge/wide": {
+   "verdict": "N/A",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 12269, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 7855, in _\n    par = fit_kernel_method(ml.KernelRidge(**kw), X[:600, :4], Y, devices=dev)\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 882, in fit_kernel_method\n    result = pool.map([('km_fit', estimator, args)])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 496, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [
+    "n/a:cpu-by-design (a cooperative multi-GPU driver has no CPU implementation)"
+   ],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.000568208000913728,
+    "stages": {
+     "repeat=1/train": 0.0001506770022388082
+    }
+   }
+  },
+  "par-kernel-ridge/denormal": {
+   "verdict": "N/A",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 12269, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 7855, in _\n    par = fit_kernel_method(ml.KernelRidge(**kw), X[:600, :4], Y, devices=dev)\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 882, in fit_kernel_method\n    result = pool.map([('km_fit', estimator, args)])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 496, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [
+    "n/a:cpu-by-design (a cooperative multi-GPU driver has no CPU implementation)"
+   ],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0005520890008483548,
+    "stages": {
+     "repeat=1/train": 0.00014066700168768875
+    }
+   }
+  },
+  "par-kernel-ridge/denormal_ftz": {
+   "verdict": "N/A",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 12269, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 7855, in _\n    par = fit_kernel_method(ml.KernelRidge(**kw), X[:600, :4], Y, devices=dev)\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 882, in fit_kernel_method\n    result = pool.map([('km_fit', estimator, args)])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 496, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [
+    "n/a:cpu-by-design (a cooperative multi-GPU driver has no CPU implementation)"
+   ],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0005362189986044541,
+    "stages": {
+     "repeat=1/train": 0.00013332700109458528
+    }
+   }
+  },
+  "par-kernel-ridge/dupes": {
+   "verdict": "N/A",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 12269, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 7855, in _\n    par = fit_kernel_method(ml.KernelRidge(**kw), X[:600, :4], Y, devices=dev)\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 882, in fit_kernel_method\n    result = pool.map([('km_fit', estimator, args)])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 496, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [
+    "n/a:cpu-by-design (a cooperative multi-GPU driver has no CPU implementation)"
+   ],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0005147489973751362,
+    "stages": {
+     "repeat=1/train": 0.00012598900138982572
+    }
+   }
+  },
+  "par-kernel-ridge/odd": {
+   "verdict": "N/A",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 12269, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 7855, in _\n    par = fit_kernel_method(ml.KernelRidge(**kw), X[:600, :4], Y, devices=dev)\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 882, in fit_kernel_method\n    result = pool.map([('km_fit', estimator, args)])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 496, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [
+    "n/a:cpu-by-design (a cooperative multi-GPU driver has no CPU implementation)"
+   ],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0004933099990012124,
+    "stages": {
+     "repeat=1/train": 0.00011166900003445335
+    }
+   }
+  },
+  "par-kernel-ridge/negative": {
+   "verdict": "N/A",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 12269, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 7855, in _\n    par = fit_kernel_method(ml.KernelRidge(**kw), X[:600, :4], Y, devices=dev)\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 882, in fit_kernel_method\n    result = pool.map([('km_fit', estimator, args)])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 496, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [
+    "n/a:cpu-by-design (a cooperative multi-GPU driver has no CPU implementation)"
+   ],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0005065690020273905,
+    "stages": {
+     "repeat=1/train": 0.00012346599760348909
+    }
+   }
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "par_driver_sabotage": false,
+ "lane_revisions": {
+  "linalg-eigh": "fixed-order-gram-1",
+  "x-metrics-regression": "metrics-undefined-weighted-score-1",
+  "trees-dart-options": "tree-shap-zero-cover-path-1",
+  "trees-shap-tree": "tree-shap-zero-cover-path-1",
+  "x-glm-poisson": "portable-positive-target-exp-1",
+  "x-glm-gamma": "portable-positive-target-exp-1",
+  "x-glm-tweedie": "portable-positive-target-exp-1",
+  "x-glm-poisson-sw": "portable-positive-target-exp-1",
+  "par-arima": "trend-metadata-1",
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-estimated-init-2",
+  "holtwinters-multiplicative": "estimated-init-1",
+  "par-holtwinters": "estimated-init-1",
+  "par-forecast-holtwinters": "estimated-init-1",
+  "byte-lm": "steps-2-1",
+  "byte-lm-host-train": "weight-decay-default-0.01-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-3-1",
+  "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+  "mamba3": "norms-near-one-1",
+  "transformer": "norms-near-one-1",
+  "transformer-window": "norms-near-one-1",
+  "tsvd": "explained-variance-train-contract-1",
+  "umap": "save-option-extras-contract-2",
+  "par-graph-umap": "save-option-extras-contract-2",
+  "gmm": "classic-kmeanspp-init-1",
+  "gmm-sample": "classic-kmeanspp-init-1",
+  "par-gmm": "classic-kmeanspp-init-1"
+ },
+ "batch_revisions": {
+  "et-clf-weighted": "weighted-trees-batch-2026-10-20-v1",
+  "gbdt-class-weights": "weighted-trees-batch-2026-10-20-v1",
+  "gbdt-multiclass-offgrid": "weighted-trees-batch-2026-10-20-v1",
+  "et-reg-weighted": "weighted-trees-batch-2026-10-20-v1",
+  "optim-maximize": "expansion-batch-2026-09-28-v1",
+  "x-cnn-dropout2d": "expansion-batch-2026-09-28-v1",
+  "x-cnn-gcn": "expansion-batch-2026-09-28-v1",
+  "x-cnn-sage": "expansion-batch-2026-09-28-v1",
+  "x-cnn-gnn-options": "expansion-batch-2026-09-28-v1",
+  "x-decomp-umap-options": "expansion-batch-2026-09-28-v1",
+  "x-decomp-spectral-rbf": "expansion-batch-2026-09-28-v1",
+  "x-decomp-lu": "expansion-batch-2026-09-28-v1",
+  "x-decomp-lstsq-rsvd": "expansion-batch-2026-09-28-v1",
+  "x-decomp-nmf": "nmf-inverse-batch-2026-09-28-v2",
+  "x-decomp-als": "expansion-batch-2026-09-28-v1",
+  "x-isotonic": "expansion-batch-2026-09-28-v1",
+  "x-metrics-classification": "expansion-batch-2026-09-28-v1",
+  "x-metrics-regression": "expansion-batch-2026-09-28-v1",
+  "x-metrics-ranking": "expansion-batch-2026-09-28-v1",
+  "x-metrics-cluster": "expansion-batch-2026-09-28-v1",
+  "x-metrics-splitters": "expansion-batch-2026-09-28-v1",
+  "x-metrics-search": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-metrics": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-pagerank": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-connected-components": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-louvain": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-gp-cov": "expansion-batch-2026-09-28-v1",
+  "x-neighbors-svm-precomputed": "expansion-batch-2026-09-28-v1",
+  "x-prep-label-encoder": "expansion-batch-2026-09-28-v1",
+  "x-prep-label-binarizer": "expansion-batch-2026-09-28-v1",
+  "x-prep-label-binarizer-multilabel": "expansion-batch-2026-09-28-v1",
+  "x-prep-multilabel-binarizer": "expansion-batch-2026-09-28-v1",
+  "x-prep-mutual-info": "expansion-batch-2026-09-28-v1",
+  "x-prep-mi-discrete": "expansion-batch-2026-09-28-v1",
+  "x-prep-priors": "expansion-batch-2026-09-28-v1",
+  "resample-bca": "bca-distribution-batch-2026-09-28-v2",
+  "resample-unpaired": "bca-distribution-batch-2026-09-28-v2",
+  "resample-perm-samples": "expansion-batch-2026-09-28-v1",
+  "resample-utils": "expansion-batch-2026-09-28-v1",
+  "sequence-lstm": "expansion-batch-2026-09-28-v1",
+  "sequence-gru": "expansion-batch-2026-09-28-v1",
+  "sequence-rnn": "expansion-batch-2026-09-28-v1",
+  "sequence-mlp": "expansion-batch-2026-09-28-v1",
+  "sequence-layernorm": "layernorm-batch-width-2026-09-28-v2",
+  "sequence-moe": "expansion-batch-2026-09-28-v1",
+  "sequence-adafactor": "expansion-batch-2026-09-28-v1",
+  "sequence-lamb": "expansion-batch-2026-09-28-v1",
+  "sequence-autoarima": "expansion-batch-2026-09-28-v1",
+  "sequence-var": "expansion-batch-2026-09-28-v1",
+  "sequence-theta": "expansion-batch-2026-09-28-v1",
+  "sequence-croston": "expansion-batch-2026-09-28-v1",
+  "sequence-ets": "expansion-batch-2026-09-28-v1",
+  "sequence-garch": "expansion-batch-2026-09-28-v1",
+  "sequence-prophet": "expansion-batch-2026-09-28-v1",
+  "sequence-stl": "expansion-batch-2026-09-28-v1",
+  "sequence-lr-schedulers": "expansion-batch-2026-09-28-v1",
+  "sequence-rmsprop": "expansion-batch-2026-09-28-v1",
+  "sequence-adagrad": "expansion-batch-2026-09-28-v1",
+  "sequence-lion": "expansion-batch-2026-09-28-v1",
+  "sequence-adamax": "expansion-batch-2026-09-28-v1",
+  "sequence-nadam": "expansion-batch-2026-09-28-v1"
+ },
+ "parts_collected": [
+  "batch",
+  "batchgrad",
+  "batchscale",
+  "ragged",
+  "rlpair",
+  "stepfull"
+ ],
+ "parts_omitted": [],
+ "partial_column": false,
+ "degenerate_lanes": [
+  "par-kernel-ridge"
+ ],
+ "degenerate_column": "cpu-host",
+ "batchgrad_protocol": {
+  "rows": {
+   "alone": 16,
+   "split": [
+    1,
+    8,
+    "n"
+   ]
+  },
+  "accum_splits": [
+   2,
+   4,
+   8
+  ],
+  "uneven_split": "n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+  "carry_splits": [
+   [
+    1,
+    8,
+    "n"
+   ],
+   "every 16"
+  ],
+  "seq": [
+   8,
+   64
+  ]
+ },
+ "batchgrad_sabotage": false,
+ "batchscale_protocol": {
+  "batches": [
+   1,
+   17,
+   64,
+   256
+  ],
+  "whole": 1024,
+  "long_l": 1024,
+  "prefixes": [
+   1,
+   7,
+   63,
+   64,
+   65,
+   127,
+   128,
+   129,
+   255,
+   256,
+   257,
+   511,
+   512,
+   513,
+   1023
+  ]
+ },
+ "batchscale_sabotage": false,
+ "ragged_protocol": {
+  "lengths": [
+   16,
+   1,
+   7,
+   9,
+   16,
+   3,
+   12,
+   15
+  ],
+  "long_lengths": [
+   300,
+   1,
+   65,
+   129,
+   257,
+   128
+  ],
+  "padding": "nan/vocab+7"
+ },
+ "ragged_sabotage": false,
+ "stepfull_protocol": {
+  "rows": 2,
+  "length": 16,
+  "full": "forward(x) from a zero state, one pass",
+  "stepped": "allocate_state then step(x_t, state) at every position",
+  "compared": "bitwise, position by position"
+ },
+ "stepfull_sabotage": false,
+ "host": {
+  "cpu_model": "AMD EPYC 9575F 64-Core Processor",
+  "arch": "x86_64",
+  "target_cpu": "unrecorded",
+  "mojo_version": "unrecorded",
+  "python": "3.14.7",
+  "column": "cpu",
+  "routed": {
+   "_mojolearn": "_mojolearn_core_host",
+   "_mojolearn_linalg": "_mojolearn_linalg_host",
+   "_mojolearn_estimators": "_mojolearn_estimators_host",
+   "_mojolearn_metrics": "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing": "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa": "_mojolearn_tsa_host",
+   "_mojolearn_solver": "_mojolearn_solver_host",
+   "_mojolearn_svm": "_mojolearn_svm_host",
+   "_mojolearn_trees": "_mojolearn_trees_host",
+   "_mojolearn_rf": "_mojolearn_rf_host",
+   "_mojolearn_gp": "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods": "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture": "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan": "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt": "_mojolearn_gbdt_host",
+   "_mojolearn_training": "_mojolearn_training_host",
+   "_mojolearn_resample": "_mojolearn_resample_host",
+   "_mojolearn_mamba": "_mojolearn_mamba_host",
+   "_mojolearn_arima": "_mojolearn_arima_host",
+   "_mojolearn_embedding": "_mojolearn_embedding_host",
+   "_mojolearn_ivf": "_mojolearn_ivf_host",
+   "_mojolearn_transformer": "_mojolearn_transformer_host",
+   "_mojolearn_x_linear": "_mojolearn_x_linear_host",
+   "_mojolearn_x_cluster": "_mojolearn_x_cluster_host",
+   "_mojolearn_x_neighbors": "_mojolearn_x_neighbors_host",
+   "_mojolearn_x_decomp": "_mojolearn_x_decomp_host",
+   "_mojolearn_x_prep": "_mojolearn_x_prep_host",
+   "_mojolearn_x_sequence": "_mojolearn_x_sequence_host",
+   "_mojolearn_x_trees": "_mojolearn_x_trees_host",
+   "_mojolearn_x_cnn": "_mojolearn_x_cnn_host",
+   "_mojolearn_x_ann": "_mojolearn_x_ann_host",
+   "_mojolearn_x_metrics": "_mojolearn_x_metrics_host"
+  },
+  "surface": "python/mojolearn/host_surface.py",
+  "declared": [
+   "_mojolearn_byte_lm_host",
+   "_mojolearn_forest_host",
+   "_mojolearn_tokenizer_host",
+   "_mojolearn_neural_host",
+   "_mojolearn_core_host",
+   "_mojolearn_linalg_host",
+   "_mojolearn_estimators_host",
+   "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa_host",
+   "_mojolearn_solver_host",
+   "_mojolearn_svm_host",
+   "_mojolearn_trees_host",
+   "_mojolearn_rf_host",
+   "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture_host",
+   "_mojolearn_mixture_infer_host",
+   "_mojolearn_hdbscan_host",
+   "_mojolearn_gp_infer_host",
+   "_mojolearn_hdbscan_infer_host",
+   "_mojolearn_gbdt_host",
+   "_mojolearn_training_host",
+   "_mojolearn_resample_host",
+   "_mojolearn_mamba_host",
+   "_mojolearn_arima_host",
+   "_mojolearn_embedding_host",
+   "_mojolearn_embedding_infer_host",
+   "_mojolearn_ivf_host",
+   "_mojolearn_ivf_search_host",
+   "_mojolearn_forecast_host",
+   "_mojolearn_transformer_host",
+   "_mojolearn_runtime_classical_host",
+   "_mojolearn_runtime_sequential_host",
+   "_mojolearn_runtime_manifold_host",
+   "_mojolearn_runtime_model_selection_host",
+   "_mojolearn_x_linear_host",
+   "_mojolearn_x_cluster_host",
+   "_mojolearn_x_neighbors_host",
+   "_mojolearn_x_decomp_host",
+   "_mojolearn_x_prep_host",
+   "_mojolearn_x_sequence_host",
+   "_mojolearn_x_trees_host",
+   "_mojolearn_x_cnn_host",
+   "_mojolearn_x_ann_host",
+   "_mojolearn_x_metrics_host"
+  ],
+  "covered_lanes": [
+   "kernel-ridge-poly",
+   "kernel-ridge-sigmoid",
+   "kernel-ridge-laplacian",
+   "nystroem-poly",
+   "nystroem-sigmoid",
+   "nystroem-laplacian",
+   "par-rbf-sampler",
+   "select-d",
+   "gemm-pinned",
+   "kde",
+   "holtwinters",
+   "lasso",
+   "elasticnet",
+   "svc",
+   "svc-gamma-scale",
+   "agglomerative",
+   "et-clf",
+   "et-reg",
+   "et-clf-weighted",
+   "et-reg-weighted",
+   "iforest",
+   "knn",
+   "knn-clf",
+   "knn-reg",
+   "pca",
+   "pca-whiten",
+   "tsvd",
+   "ols",
+   "ridge",
+   "dbscan",
+   "kmeans",
+   "metrics",
+   "spectral",
+   "standard-scaler",
+   "minmax-scaler",
+   "scaler-fit-transform",
+   "logistic",
+   "rf-clf",
+   "rf-reg",
+   "kmeans-random",
+   "kmeans-array",
+   "kmeans-weighted",
+   "standard-scaler-no-mean",
+   "standard-scaler-no-std",
+   "minmax-scaler-clip",
+   "spectral-precomputed",
+   "spectral-embedding",
+   "gp",
+   "gp-matern12",
+   "gp-matern32",
+   "gp-matern52-ard",
+   "gp-normalize-y",
+   "gp-optimize",
+   "gp-optimize-restarts",
+   "gp-lml-theta",
+   "gpc",
+   "gpc-multiclass",
+   "par-gpc-fit",
+   "par-gpc-predict",
+   "mamba1-decode-session",
+   "mamba2-decode-session",
+   "mamba3-decode-session",
+   "transformer-decode-session",
+   "transformer-decode-load-state",
+   "transformer-forward-tape",
+   "par-causal-lm",
+   "par-cross-val",
+   "knn-sqeuclidean",
+   "knn-clf-distance",
+   "knn-reg-distance",
+   "gemm-transposed",
+   "linalg-qr",
+   "linalg-eigh",
+   "linalg-svdvals",
+   "safetensors-widen-f16",
+   "dbscan-brute-l1",
+   "kde-tophat-sqeuclidean",
+   "kde-epanechnikov-l1",
+   "kde-exponential-chebyshev",
+   "kde-linear-cosine",
+   "kde-cosine-minkowski",
+   "kde-weighted",
+   "ols-no-intercept",
+   "ols-weighted",
+   "ridge-no-intercept",
+   "logistic-unpenalized-no-intercept",
+   "elasticnet-l2end-no-intercept",
+   "holtwinters-multiplicative",
+   "svc-linear",
+   "svc-poly",
+   "iforest-tuned",
+   "knn-manhattan",
+   "knn-chebyshev",
+   "knn-cosine",
+   "knn-minkowski-p3",
+   "knn-rbc",
+   "radius",
+   "radius-manhattan",
+   "radius-chebyshev",
+   "radius-minkowski-p3",
+   "dbscan-weighted",
+   "logistic-l1",
+   "logistic-elasticnet",
+   "logistic-multiclass",
+   "linear-svc",
+   "linear-svc-squared-hinge",
+   "linear-svr",
+   "linear-svr-squared",
+   "qn-squared",
+   "qn-absolute",
+   "kpss",
+   "svr",
+   "svr-linear",
+   "pca-full-whiten",
+   "pca-inverse",
+   "pca-whiten-inverse",
+   "tsvd-inverse",
+   "metrics-classification",
+   "metrics-fowlkes-mallows",
+   "metrics-homogeneity-completeness",
+   "gbdt-adapter-score-weighted",
+   "rf-score-weighted",
+   "mlp",
+   "gbdt-symmetric",
+   "gbdt-rmse",
+   "gbdt-depthwise",
+   "gbdt-lossguide",
+   "gbdt-nan-modes",
+   "gbdt-adapter-clf",
+   "gbdt-adapter-reg",
+   "gbdt-parametric-losses",
+   "gbdt-exact-mae",
+   "gbdt-lossguide-newtoncosine",
+   "gbdt-multiclass",
+   "gbdt-multiclass-defaults",
+   "gbdt-class-weights",
+   "gbdt-multiclass-offgrid",
+   "gbdt-onevsall",
+   "gbdt-ordered-rmse",
+   "gbdt-border-types",
+   "gbdt-ordered",
+   "gbdt-ordered-bayesian-noise",
+   "gbdt-binary-columns",
+   "gbdt-bfa-quantile",
+   "gbdt-catboost-defaults",
+   "gbdt-stochastic-arms",
+   "gbdt-symmetric-eval",
+   "gbdt-feature-freq",
+   "gbdt-pointwise-l2-bayesian-eval",
+   "gbdt-categorical-ctr",
+   "gbdt-ranking-defaults",
+   "gbdt-query-rmse",
+   "gbdt-pair-logit",
+   "gbdt-yeti-rank",
+   "arima",
+   "arima-011",
+   "arima-seasonal-c",
+   "arima-exog",
+   "arima-exog-seasonal",
+   "umap",
+   "kmeans-sqrt",
+   "kmeans-classic-pp",
+   "cross-val",
+   "bootstrap",
+   "permutation-test",
+   "monte-carlo",
+   "resample-bca",
+   "resample-unpaired",
+   "resample-perm-samples",
+   "resample-utils",
+   "native-schedule-series",
+   "optim-owner-lifecycle",
+   "optim-io-capability",
+   "optim-sgd",
+   "training-chunked-lm-head",
+   "training-mlp-sessions",
+   "public-residual-dropout",
+   "public-numeric-metadata",
+   "neural-trainer-unfused",
+   "samba-optimizer-state",
+   "optim-adam-clip",
+   "optim-maximize",
+   "cross-entropy-arms",
+   "training-primitives",
+   "ordered-gradient-sum",
+   "cholesky",
+   "rbf-sampler",
+   "kernel-ridge",
+   "nystroem",
+   "gmm",
+   "gmm-random-init",
+   "hdbscan",
+   "hdbscan-leaf",
+   "rf-clf-entropy-log2-noboot",
+   "rf-clf-balanced-parallel",
+   "rf-reg-poisson",
+   "rf-reg-gamma-ig",
+   "et-clf-entropy-bestfirst",
+   "et-reg-bootstrap-parallel",
+   "mamba2",
+   "mamba2-dtlimit",
+   "mamba1",
+   "mamba3",
+   "transformer",
+   "transformer-window",
+   "samba",
+   "samba-untied-dropout-accum",
+   "byte-lm-host-infer",
+   "byte-lm-host-infer-threaded",
+   "byte-lm-host-train",
+   "language-model-config",
+   "par-scaler",
+   "par-scaler-minmax",
+   "par-arima",
+   "par-holtwinters",
+   "par-forecast-arima",
+   "par-forecast-holtwinters",
+   "par-queries-knn",
+   "par-queries-nn",
+   "par-queries-radius",
+   "par-queries-kde",
+   "par-reference-knn",
+   "par-reference-knn-reg",
+   "par-forest",
+   "par-forest-et",
+   "par-forest-et-clf",
+   "par-forest-reg",
+   "par-mlp",
+   "par-samba",
+   "par-samba-clip",
+   "embedding",
+   "embedding-sort",
+   "ivf",
+   "ivf-euclidean",
+   "par-ivf",
+   "ivf-extend",
+   "ivf-short-fill",
+   "byte-lm",
+   "byte-lm-resident",
+   "gmm-sample",
+   "gmm-random-init-sample",
+   "gp-sample-y",
+   "gp-sample-y-normalize",
+   "tokenizer",
+   "bpe-trainer",
+   "bpe-vocabulary",
+   "tokenized-corpus",
+   "cross-vendor-fold",
+   "hf-checkpoint",
+   "hf-tokenizer",
+   "hf-causal-lm",
+   "hf-causal-lm-stream",
+   "hf-causal-lm-text",
+   "hf-model-surface",
+   "gbdt-categorical-ctr-tables",
+   "gbdt-tensor-ctr-tables",
+   "gemm-bf16",
+   "gemm-int8",
+   "gemm-int15",
+   "transformer-bf16w",
+   "transformer-int8w",
+   "mamba1-bf16w",
+   "mamba1-int8w",
+   "mamba2-bf16w",
+   "mamba2-int8w",
+   "mamba3-bf16w",
+   "mamba3-int8w",
+   "mlp-bf16w",
+   "mlp-int8w",
+   "samba-bf16w",
+   "samba-int8w",
+   "saved-model-host-infer",
+   "saved-model-host-infer-trees",
+   "classical-float16-sequences",
+   "lowbit-conversions",
+   "grad-accumulation",
+   "x-sgd-clf",
+   "x-sgd-reg",
+   "x-glm-poisson",
+   "x-glm-gamma",
+   "x-glm-tweedie",
+   "x-huber",
+   "x-bayes-ridge",
+   "x-ard",
+   "x-lars",
+   "x-lasso-lars",
+   "x-quantile",
+   "x-perceptron",
+   "x-pa-clf",
+   "x-pa-reg",
+   "x-sgd-ocsvm",
+   "x-ridge-clf",
+   "x-ridge-cv",
+   "x-lasso-cv",
+   "x-enet-cv",
+   "x-logistic-cv",
+   "x-isotonic",
+   "x-glm-poisson-sw",
+   "x-huber-sw",
+   "x-quantile-sw",
+   "x-sgd-clf-w",
+   "x-sgd-reg-sw",
+   "x-ridge-clf-w",
+   "x-ridge-cv-sw",
+   "x-bayes-ridge-sw",
+   "x-logistic-cv-w",
+   "x-lasso-lars-pos",
+   "x-lasso-cv-pos",
+   "x-huber-outliers",
+   "x-sgd-clf-proba",
+   "x-logistic-cv-proba",
+   "x-ridge-cv-kfold",
+   "x-cluster-minibatch-kmeans",
+   "x-cluster-bisecting-kmeans",
+   "x-cluster-meanshift",
+   "x-cluster-optics",
+   "x-cluster-affinity-propagation",
+   "x-cluster-bgmm",
+   "x-cluster-minibatch-options",
+   "x-cluster-bisecting-options",
+   "x-cluster-meanshift-binned",
+   "x-cluster-optics-metrics",
+   "x-cluster-ap-precomputed",
+   "x-cluster-bgmm-inits",
+   "x-cluster-bgmm-covtypes",
+   "x-cluster-minibatch-partial",
+   "x-cluster-gmm-options",
+   "x-cluster-dbscan-metrics",
+   "x-cluster-hdbscan-epsilon",
+   "x-cluster-kmeans-init",
+   "x-cluster-agglo-linkages",
+   "x-cluster-agglo-connectivity",
+   "x-cluster-spectral-affinities",
+   "x-neighbors-lof",
+   "x-neighbors-nearest-centroid",
+   "x-neighbors-ocsvm",
+   "x-neighbors-kpca",
+   "x-neighbors-poly-sketch",
+   "x-neighbors-additive-chi2",
+   "x-neighbors-skewed-chi2",
+   "x-neighbors-label-propagation",
+   "x-neighbors-label-spreading",
+   "x-neighbors-knn-imputer",
+   "x-neighbors-pagerank",
+   "x-neighbors-connected-components",
+   "x-neighbors-louvain",
+   "x-neighbors-svgp",
+   "x-neighbors-gamma-scale",
+   "x-neighbors-svm-weights",
+   "x-neighbors-svc-sigmoid",
+   "x-neighbors-svr-kernels",
+   "x-neighbors-svc-multiclass",
+   "x-neighbors-krr-options",
+   "x-neighbors-svm-precomputed",
+   "x-neighbors-km-kernels",
+   "x-neighbors-gp-cov",
+   "x-neighbors-metrics",
+   "x-neighbors-svc-probability",
+   "public-sparse-encode",
+   "x-decomp-rsvd-rank-deficient",
+   "x-decomp-umap-options",
+   "x-decomp-pca-randomized",
+   "x-decomp-als",
+   "x-decomp-robust-cov",
+   "x-decomp-manifold",
+   "x-decomp-lda",
+   "x-decomp-sparse-pca",
+   "x-decomp-dict-learning",
+   "x-decomp-pls",
+   "x-decomp-lstsq-rsvd",
+   "x-decomp-lu",
+   "x-decomp-spectral-rbf",
+   "x-decomp-factor-analysis",
+   "x-decomp-fastica",
+   "x-decomp-nmf",
+   "x-decomp-ipca",
+   "x-decomp-grp",
+   "x-decomp-srp",
+   "x-decomp-eigh-wide-linalg",
+   "x-decomp-eigh-wide-fastica",
+   "x-decomp-eigh-wide-rotation",
+   "x-decomp-eigh-wide-factor-analysis",
+   "x-decomp-eigh-wide-mincovdet",
+   "x-decomp-eigh-wide-kpca",
+   "x-prep-robust-scaler",
+   "x-prep-maxabs-scaler",
+   "x-prep-ordinal-encoder",
+   "x-prep-onehot-encoder",
+   "x-prep-target-encoder",
+   "x-prep-simple-imputer",
+   "x-prep-kbins",
+   "x-prep-gaussian-nb",
+   "x-prep-multinomial-nb",
+   "x-prep-bernoulli-nb",
+   "x-prep-lda",
+   "x-prep-qda",
+   "x-prep-quantile-transformer",
+   "x-prep-power-transformer",
+   "x-prep-normalizer",
+   "x-prep-polynomial-features",
+   "x-prep-spline-transformer",
+   "x-prep-binarizer",
+   "x-prep-label-encoder",
+   "x-prep-label-binarizer",
+   "x-prep-multilabel-binarizer",
+   "x-prep-iterative-imputer",
+   "x-prep-variance-threshold",
+   "x-prep-select-kbest",
+   "x-prep-mutual-info",
+   "x-prep-rfe",
+   "x-prep-complement-nb",
+   "x-prep-categorical-nb",
+   "x-prep-priors",
+   "x-prep-robust-scaler-unit-variance",
+   "x-prep-simple-imputer-indicator",
+   "x-prep-inverse-transforms",
+   "x-prep-encoder-options",
+   "x-prep-da-solvers",
+   "x-prep-nb-weights",
+   "x-prep-encoder-categories",
+   "x-prep-user-objects",
+   "x-prep-label-binarizer-multilabel",
+   "x-prep-infrequent",
+   "x-prep-nb-partial",
+   "x-prep-kbins-methods",
+   "x-prep-score-edges",
+   "x-prep-mi-discrete",
+   "x-prep-kbins-weights",
+   "x-prep-spline-options",
+   "x-prep-iterative-options",
+   "x-prep-scaler-options",
+   "sequence-lstm",
+   "sequence-gru",
+   "sequence-rmsprop",
+   "sequence-adagrad",
+   "sequence-autoarima",
+   "sequence-stl",
+   "sequence-var",
+   "sequence-mlp",
+   "sequence-rnn",
+   "sequence-lion",
+   "sequence-adafactor",
+   "sequence-lamb",
+   "sequence-adamax",
+   "sequence-nadam",
+   "sequence-lr-schedulers",
+   "sequence-layernorm",
+   "sequence-theta",
+   "sequence-croston",
+   "sequence-ets",
+   "sequence-garch",
+   "sequence-prophet",
+   "sequence-moe",
+   "sequence-tape-sequential",
+   "sequence-tape-program",
+   "sequence-moe-backward",
+   "sequence-export-roundtrip",
+   "sequence-onnx-import",
+   "sequence-program-save-load",
+   "sequence-device-tensor",
+   "sequence-adafactor-device",
+   "sequence-lamb-device",
+   "sequence-optimizer-state",
+   "sequence-layernorm-backward",
+   "public-theta-variants",
+   "trees-dt-clf",
+   "trees-dt-reg",
+   "trees-dt-random",
+   "trees-rf-weighted",
+   "trees-et-deviance",
+   "trees-gbdt-multirmse",
+   "trees-bagging-clf",
+   "trees-bagging-reg",
+   "trees-adaboost-clf",
+   "trees-adaboost-reg",
+   "trees-dart-reg",
+   "trees-dart-clf",
+   "trees-dart-options",
+   "trees-random-embedding",
+   "trees-voting-clf",
+   "trees-voting-reg",
+   "trees-stacking-clf",
+   "trees-stacking-reg",
+   "trees-multioutput",
+   "trees-onevsrest",
+   "trees-calibrated",
+   "trees-oob-cv-link",
+   "trees-shap-tree",
+   "trees-shap-kernel",
+   "trees-shap-permutation",
+   "multioutput-ridge",
+   "x-cnn-conv2d",
+   "x-cnn-conv1d",
+   "x-cnn-pool",
+   "x-cnn-trainer",
+   "x-cnn-batchnorm",
+   "x-cnn-dropout2d",
+   "x-cnn-globalpool",
+   "x-cnn-resnet-block",
+   "x-cnn-gcn",
+   "x-cnn-sage",
+   "x-cnn-conv-options",
+   "x-cnn-pool-options",
+   "x-cnn-bn-options",
+   "x-cnn-gnn-options",
+   "x-cnn-trainer-options",
+   "public-cnn-layer-fit",
+   "public-cnn-classifier-predict",
+   "x-ann-ivf-pq",
+   "x-ann-tsne",
+   "x-ann-tsne-pca",
+   "x-ann-cagra",
+   "x-ann-ivf-sq",
+   "x-ann-refine",
+   "x-ann-filter",
+   "x-ann-ivf-rabitq",
+   "ivf-filter",
+   "x-ann-cagra-filter",
+   "x-ann-refine-euclidean",
+   "x-metrics-classification",
+   "x-metrics-regression",
+   "x-metrics-ranking",
+   "x-metrics-cluster",
+   "x-metrics-splitters",
+   "x-metrics-search",
+   "x-metrics-classification-report",
+   "x-metrics-permutation-test-score",
+   "public-scorer-factories",
+   "public-validation-learning-curves",
+   "public-randomized-search"
+  ],
+  "families": {
+   "_mojolearn_arima_host": {
+    "column": "cpu",
+    "sha256": "cbf674725ba3b6ab2486472f5dfb4a998629386e707998a30ad193b9481ce8c0",
+    "size": 461840,
+    "sabotage": false
+   },
+   "_mojolearn_byte_lm_host": {
+    "column": "cpu",
+    "sha256": "c15563d7d8d949b6271cf782294c20159da2814725869241cd1001792085d11a",
+    "size": 1255784,
+    "sabotage": false
+   },
+   "_mojolearn_core_host": {
+    "column": "cpu",
+    "sha256": "c3721ddd74981c26dfe55b47cb00ab2f78d4e1deed745b6964008293a323f354",
+    "size": 1530648,
+    "sabotage": false
+   },
+   "_mojolearn_embedding_host": {
+    "column": "cpu",
+    "sha256": "b6f7f46c6a147bf966781fbd43ebf8bc10883ef8c12dd8dadae64f84385704f0",
+    "size": 214048,
+    "sabotage": false
+   },
+   "_mojolearn_embedding_infer_host": {
+    "column": "cpu",
+    "sha256": "9ca6625b33fd024672729d2ea0989c941e62fd9a27b08b07ca33d4cc91059162",
+    "size": 189360,
+    "sabotage": false
+   },
+   "_mojolearn_estimators_host": {
+    "column": "cpu",
+    "sha256": "b198884e1466165c804a0cd77859334027062a792ba6afa1bb093fa074d2a3a3",
+    "size": 1565952,
+    "sabotage": false
+   },
+   "_mojolearn_forecast_host": {
+    "column": "cpu",
+    "sha256": "1d208753374c9c4cbb8ba104f737278d96f95afbd2764b2bb3235421997e23d2",
+    "size": 420840,
+    "sabotage": false
+   },
+   "_mojolearn_forest_host": {
+    "column": "cpu",
+    "sha256": "21fdd0651454a8ea013163ec3c018687b98bec19413e10deb4142969b72dbf7e",
+    "size": 551376,
+    "sabotage": false
+   },
+   "_mojolearn_gbdt_host": {
+    "column": "cpu",
+    "sha256": "ed9ccf1d923534a17bf2bcf274a809a93edb22c1142b7bc3122c5047bd8854b9",
+    "size": 1844192,
+    "sabotage": false
+   },
+   "_mojolearn_gp_host": {
+    "column": "cpu",
+    "sha256": "358358a2016668a947ad7a38ad60ce69db08834b9cfea8e78737fdaed6d1ef95",
+    "size": 611672,
+    "sabotage": false
+   },
+   "_mojolearn_gp_infer_host": {
+    "column": "cpu",
+    "sha256": "45fafcd1f8529c24a295c9ebea775f9c96ef391bbd5ff618d6ef82da7c10c86f",
+    "size": 368528,
+    "sabotage": false
+   },
+   "_mojolearn_hdbscan_host": {
+    "column": "cpu",
+    "sha256": "653e7dc18ea2c3402a87655c1e4078f5505684b08f270075365e88cfc7034f56",
+    "size": 558648,
+    "sabotage": false
+   },
+   "_mojolearn_hdbscan_infer_host": {
+    "column": "cpu",
+    "sha256": "0d2043c2339d717efe7a8af2d915d2c4f1c4915c1df87a94f3882fca541b8edf",
+    "size": 338544,
+    "sabotage": false
+   },
+   "_mojolearn_ivf_host": {
+    "column": "cpu",
+    "sha256": "c99f6eceda57051662f0fe197bb9e87ef3fb61c7039bee77c7b2c766a1496175",
+    "size": 577032,
+    "sabotage": false
+   },
+   "_mojolearn_ivf_search_host": {
+    "column": "cpu",
+    "sha256": "674b61bf0236a4c1d75933e312dcfa0ffb43192f7f74021cbfd057f83cc6cc13",
+    "size": 356024,
+    "sabotage": false
+   },
+   "_mojolearn_kernel_methods_host": {
+    "column": "cpu",
+    "sha256": "5106d8ccfe96b9c65b508712ea7c21303bc4e64306bc50fa4a807a0089cd0862",
+    "size": 404808,
+    "sabotage": false
+   },
+   "_mojolearn_linalg_host": {
+    "column": "cpu",
+    "sha256": "a218848a0949f3f6fae4562c33be25dfbeb1094559e77651b23348d25884ea78",
+    "size": 504080,
+    "sabotage": false
+   },
+   "_mojolearn_mamba_host": {
+    "column": "cpu",
+    "sha256": "8a8a471ae1ae2b3eaa564085802f44ff5e07a14190a4e5071b72f49aab45fdba",
+    "size": 4316176,
+    "sabotage": false
+   },
+   "_mojolearn_metrics_host": {
+    "column": "cpu",
+    "sha256": "1d6bd7f912fdb5ec7bcd866a8d670d83e4c00a75626aa3cc0ac8841d053ec529",
+    "size": 1053224,
+    "sabotage": false
+   },
+   "_mojolearn_mixture_host": {
+    "column": "cpu",
+    "sha256": "a567a83f9cb62a3c537b6e3cba9e8e31e3ee9c4739bdcb84b30f24172f37ad14",
+    "size": 489592,
+    "sabotage": false
+   },
+   "_mojolearn_mixture_infer_host": {
+    "column": "cpu",
+    "sha256": "ed1651ee4e1c31e0819bb01cdcc2bb6620e29ec205c057991a162b1b181f0449",
+    "size": 263448,
+    "sabotage": false
+   },
+   "_mojolearn_neural_host": {
+    "column": "cpu",
+    "sha256": "1a1212e11d5a73bfa087ac6c189011aa7f62d4a5c89e4af3520befd80a2f720c",
+    "size": 1308240,
+    "sabotage": false
+   },
+   "_mojolearn_preprocessing_host": {
+    "column": "cpu",
+    "sha256": "a1377af5d0f07e4a8a89fb99f239b722ba23fad32d43132ee902e2f409baf398",
+    "size": 260256,
+    "sabotage": false
+   },
+   "_mojolearn_resample_host": {
+    "column": "cpu",
+    "sha256": "7b36533f91d5b2b76b1a2d3d7ffaf8586e71a4685520d82ea9567ef92d1791e5",
+    "size": 464928,
+    "sabotage": false
+   },
+   "_mojolearn_rf_host": {
+    "column": "cpu",
+    "sha256": "34a46988f45c05cb0e269a8b80d957a0999a13c106e1c267646c717c6f5f296b",
+    "size": 831872,
+    "sabotage": false
+   },
+   "_mojolearn_runtime_classical_host": {
+    "column": "cpu",
+    "sha256": "8627cc4a5c5cd1e0cab4c3cee3dd89258898564d2cc2f2e94e512a63c5637de0",
+    "size": 18477736,
+    "sabotage": false
+   },
+   "_mojolearn_runtime_manifold_host": {
+    "column": "cpu",
+    "sha256": "67ee95f450d72451395307f7c0089fb5731fd1b1e61c8ca56b3a08e148b58e7f",
+    "size": 1661016,
+    "sabotage": false
+   },
+   "_mojolearn_runtime_model_selection_host": {
+    "column": "cpu",
+    "sha256": "fece130474b32113db3d51b2483993998dee5493b369f4fdf32532573cf70b06",
+    "size": 3642152,
+    "sabotage": false
+   },
+   "_mojolearn_runtime_sequential_host": {
+    "column": "cpu",
+    "sha256": "c15e6baaafca00bfd8fd05a3b06acd26beadee0160749c5a59efe902ecf4a1c1",
+    "size": 1120672,
+    "sabotage": false
+   },
+   "_mojolearn_solver_host": {
+    "column": "cpu",
+    "sha256": "1564348ad8dcb071f300e80b47984c58cf989bfe0998987d87787bd3f576a3a6",
+    "size": 323792,
+    "sabotage": false
+   },
+   "_mojolearn_svm_host": {
+    "column": "cpu",
+    "sha256": "e3102d0c4504f14ddfd23c4deb7994042215fc958b8fdbc9ccf881df9930ba75",
+    "size": 614600,
+    "sabotage": false
+   },
+   "_mojolearn_tokenizer_host": {
+    "column": "cpu",
+    "sha256": "307f0ac636cded305d30bf78cf8f5d5f379f94b517ed9fc6b3a73332f7e64151",
+    "size": 12706920,
+    "sabotage": false
+   },
+   "_mojolearn_training_host": {
+    "column": "cpu",
+    "sha256": "eb0589690226294a7c319590e07c64c7f30ea0a798205d2723b2ba3466b8733e",
+    "size": 1125768,
+    "sabotage": false
+   },
+   "_mojolearn_transformer_host": {
+    "column": "cpu",
+    "sha256": "967753c56dcac4c5c051a45b7308d66e62fdc2a5709ba5e916e4f0ca81f28fbd",
+    "size": 1063648,
+    "sabotage": false
+   },
+   "_mojolearn_trees_host": {
+    "column": "cpu",
+    "sha256": "ff1d8089decc3ff831bea650cf624754aa96e9cd27a17f7a3d4b545a6c348528",
+    "size": 711808,
+    "sabotage": false
+   },
+   "_mojolearn_tsa_host": {
+    "column": "cpu",
+    "sha256": "9702cdacde09c4a5c4627fd7016d5473b9204ca45cab3f2fb02887c43c521701",
+    "size": 385400,
+    "sabotage": false
+   },
+   "_mojolearn_x_ann_host": {
+    "column": "cpu",
+    "sha256": "dae3352450212c6bfb4c79e3fec45594f3a2fea35bbe7aa70205220eaab90f9f",
+    "size": 783432,
+    "sabotage": false
+   },
+   "_mojolearn_x_cluster_host": {
+    "column": "cpu",
+    "sha256": "e622a2dc0f5414794e88e19e96353c909303f13d574301b3842771f4f9a841f9",
+    "size": 1267120,
+    "sabotage": false
+   },
+   "_mojolearn_x_cnn_host": {
+    "column": "cpu",
+    "sha256": "896c5dbf0d5afd27a43e1f631e17efaf4952babaffac373458f1cad2bcf93d09",
+    "size": 1549432,
+    "sabotage": false
+   },
+   "_mojolearn_x_decomp_host": {
+    "column": "cpu",
+    "sha256": "0476ef49c6289bdea531bd72a0560bd231b1e4953d16d4f80f766cc0dd80ab69",
+    "size": 2338416,
+    "sabotage": false
+   },
+   "_mojolearn_x_linear_host": {
+    "column": "cpu",
+    "sha256": "b54dabcbd6a9cb0887ff4b313e9241aa08e08ead0ad07828fe7f9f00bf3d381f",
+    "size": 920080,
+    "sabotage": false
+   },
+   "_mojolearn_x_metrics_host": {
+    "column": "cpu",
+    "sha256": "4e802b054baaf0b62d7b8235336e1c420d1c238f0f373a233b917d8f7d5b223f",
+    "size": 487904,
+    "sabotage": false
+   },
+   "_mojolearn_x_neighbors_host": {
+    "column": "cpu",
+    "sha256": "03dd070b5a85230851a1b5d46ef1c4ae52ae1403f574d0854ec401d2e1614365",
+    "size": 1766280,
+    "sabotage": false
+   },
+   "_mojolearn_x_prep_host": {
+    "column": "cpu",
+    "sha256": "45b6a1f900d3b17e92e02c4a7c50ececc539fcd5c93000eae6f66aa2bb36d8fb",
+    "size": 2961000,
+    "sabotage": false
+   },
+   "_mojolearn_x_sequence_host": {
+    "column": "cpu",
+    "sha256": "fe8a3cac5a26e2a50966b70ad7037b9b1410de0fc2bb9de5b9d7191de2573a4f",
+    "size": 9007392,
+    "sabotage": false
+   },
+   "_mojolearn_x_trees_host": {
+    "column": "cpu",
+    "sha256": "e2daf3a40eadadeefe260e9b11baff57237f74ce42d875e93162602f967123d4",
+    "size": 1055704,
+    "sabotage": false
+   }
+  }
+ },
+ "package": {
+  "version": "0.8.55",
+  "package_dir": "/root/mojolearn/python/mojolearn",
+  "numpy": "2.5.3",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "binding_provenance_protocol": "loaded-native-v2",
+  "bindings": [
+   {
+    "module": "mojolearn._host._mojolearn_arima_host",
+    "sha256": "cbf674725ba3b6ab2486472f5dfb4a998629386e707998a30ad193b9481ce8c0",
+    "size": 461840,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/7c8fcb65b56892034d089336e3722fe417b98c3cb801645873637387246ad286/_mojolearn_dev_arima_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_byte_lm_host",
+    "sha256": "c15563d7d8d949b6271cf782294c20159da2814725869241cd1001792085d11a",
+    "size": 1255784,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/e95b4a766e04f943619aef7c185fda640e057fb50ea00e2ccc401f0d415741cd/_mojolearn_dev_byte_lm_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_core_host",
+    "sha256": "c3721ddd74981c26dfe55b47cb00ab2f78d4e1deed745b6964008293a323f354",
+    "size": 1530648,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/c455feca50cdb8148661cdf4911d960738c89c75b3b324e9393bbfd156815142/_mojolearn_dev_core_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_embedding_host",
+    "sha256": "b6f7f46c6a147bf966781fbd43ebf8bc10883ef8c12dd8dadae64f84385704f0",
+    "size": 214048,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/42e9169549f50ec95192904bd3eecc91576d067b5101d68576b82a9be1d2976a/_mojolearn_dev_embedding_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_embedding_infer_host",
+    "sha256": "9ca6625b33fd024672729d2ea0989c941e62fd9a27b08b07ca33d4cc91059162",
+    "size": 189360,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/0cb02a4e110dca4e98e88850ede097ce99fd38b15d338519aaa5e861d805257c/_mojolearn_dev_embedding_infer_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_estimators_host",
+    "sha256": "b198884e1466165c804a0cd77859334027062a792ba6afa1bb093fa074d2a3a3",
+    "size": 1565952,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/c6c9e092b672cf373f518a3d0040a87a53541f15c0a592abb7afe2407a9dcc34/_mojolearn_dev_estimators_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_forecast_host",
+    "sha256": "1d208753374c9c4cbb8ba104f737278d96f95afbd2764b2bb3235421997e23d2",
+    "size": 420840,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/f3e9bb31dc9e2f428a81a7668b04c552f946f0baba4871eb448ee9560dcceaf2/_mojolearn_dev_forecast_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_forest_host",
+    "sha256": "21fdd0651454a8ea013163ec3c018687b98bec19413e10deb4142969b72dbf7e",
+    "size": 551376,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/bbe2900a520494842dbfcbab7285ebb9c710255830d9205f07ba5aea75e104b3/_mojolearn_dev_forest_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_gbdt_host",
+    "sha256": "ed9ccf1d923534a17bf2bcf274a809a93edb22c1142b7bc3122c5047bd8854b9",
+    "size": 1844192,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/151a6e2f277acf4c68af183c882bc01a733598a7c3fdd708b3b65d346d5b65be/_mojolearn_dev_gbdt_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_gp_host",
+    "sha256": "358358a2016668a947ad7a38ad60ce69db08834b9cfea8e78737fdaed6d1ef95",
+    "size": 611672,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/ac60f13f609d6b84c54e255d109aeb10d5848782680177d76f45e2acbf2ec659/_mojolearn_dev_gp_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_gp_infer_host",
+    "sha256": "45fafcd1f8529c24a295c9ebea775f9c96ef391bbd5ff618d6ef82da7c10c86f",
+    "size": 368528,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/b805dd894581694b8d5c37a8a30391e3724f05d6f116ba64bbe23ee702dbda65/_mojolearn_dev_gp_infer_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_hdbscan_host",
+    "sha256": "653e7dc18ea2c3402a87655c1e4078f5505684b08f270075365e88cfc7034f56",
+    "size": 558648,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/20bd536d5f38efdc4a3f1199e3398499b7aec2e8749f4dbf399d4fd103d37316/_mojolearn_dev_hdbscan_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_hdbscan_infer_host",
+    "sha256": "0d2043c2339d717efe7a8af2d915d2c4f1c4915c1df87a94f3882fca541b8edf",
+    "size": 338544,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/2f9d920c8c004461f4a787081529befcf31079504ded8c0c49bb87519cfd12aa/_mojolearn_dev_hdbscan_infer_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_ivf_host",
+    "sha256": "c99f6eceda57051662f0fe197bb9e87ef3fb61c7039bee77c7b2c766a1496175",
+    "size": 577032,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/ac48fcd5975558c51796d0fd61b7414f016df1d5853847b6c1429c291543430d/_mojolearn_dev_ivf_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_ivf_search_host",
+    "sha256": "674b61bf0236a4c1d75933e312dcfa0ffb43192f7f74021cbfd057f83cc6cc13",
+    "size": 356024,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/31a0af18681bb7c12a630eac1427dd79f89eabe136843d9b4600e4251aae3e06/_mojolearn_dev_ivf_search_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_kernel_methods_host",
+    "sha256": "5106d8ccfe96b9c65b508712ea7c21303bc4e64306bc50fa4a807a0089cd0862",
+    "size": 404808,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/fd1365e1912617ea31728646fac54fedf09c777f6b3a4a0b4b40abaf6c9d136f/_mojolearn_dev_kernel_methods_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_linalg_host",
+    "sha256": "a218848a0949f3f6fae4562c33be25dfbeb1094559e77651b23348d25884ea78",
+    "size": 504080,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/0da06bb30c32a09cae24bc2c47c546e8ca4fba84417ba95b6f20c4f032295e8e/_mojolearn_dev_linalg_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_mamba_host",
+    "sha256": "8a8a471ae1ae2b3eaa564085802f44ff5e07a14190a4e5071b72f49aab45fdba",
+    "size": 4316176,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/954f6f59a425990dc9b1f1a999341536a4f80bae0f5bfbaf6b9d644c67a543b4/_mojolearn_dev_mamba_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_metrics_host",
+    "sha256": "1d6bd7f912fdb5ec7bcd866a8d670d83e4c00a75626aa3cc0ac8841d053ec529",
+    "size": 1053224,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/5e707a5fa3a613e96967b8caede8e3ea8df983a24f3d60707c9ad20ae9fbe37d/_mojolearn_dev_metrics_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_mixture_host",
+    "sha256": "a567a83f9cb62a3c537b6e3cba9e8e31e3ee9c4739bdcb84b30f24172f37ad14",
+    "size": 489592,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/0627d0d2afddf591d95e5a783bc8c85b81b27f7aee3bab33e2266f7e4ddba449/_mojolearn_dev_mixture_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_mixture_infer_host",
+    "sha256": "ed1651ee4e1c31e0819bb01cdcc2bb6620e29ec205c057991a162b1b181f0449",
+    "size": 263448,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/ff2b5ff64ded87ed7a5e31c9f427a35267095dae57590be0f444224dfd1f2215/_mojolearn_dev_mixture_infer_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_neural_host",
+    "sha256": "1a1212e11d5a73bfa087ac6c189011aa7f62d4a5c89e4af3520befd80a2f720c",
+    "size": 1308240,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/f574ab8a6386423e8cce1115da88a4f59e45f25e357a8f20ccb9c0e0659202a2/_mojolearn_dev_neural_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_preprocessing_host",
+    "sha256": "a1377af5d0f07e4a8a89fb99f239b722ba23fad32d43132ee902e2f409baf398",
+    "size": 260256,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/4dadadafda2fa09a906e2940452db4e0586680d7a36f54dad760c15eda1a32b5/_mojolearn_dev_preprocessing_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_resample_host",
+    "sha256": "7b36533f91d5b2b76b1a2d3d7ffaf8586e71a4685520d82ea9567ef92d1791e5",
+    "size": 464928,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/48faad2fff8d4c277a47710b6a42bb40b33fdf8c99cd75640ef43ebd313a6dc9/_mojolearn_dev_resample_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_rf_host",
+    "sha256": "34a46988f45c05cb0e269a8b80d957a0999a13c106e1c267646c717c6f5f296b",
+    "size": 831872,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/49247f4b8810ad2182a98c0d7d5d2fd3acae55547779ce8a835aab7cec9b45e2/_mojolearn_dev_rf_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_runtime_classical_host",
+    "sha256": "8627cc4a5c5cd1e0cab4c3cee3dd89258898564d2cc2f2e94e512a63c5637de0",
+    "size": 18477736,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/8413eb30f7a014a0e34ce27a50f12730fad9e5785c2ad26364919f78a1db4337/_mojolearn_dev_runtime_classical_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_runtime_manifold_host",
+    "sha256": "67ee95f450d72451395307f7c0089fb5731fd1b1e61c8ca56b3a08e148b58e7f",
+    "size": 1661016,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/f04ef5bececfd0881254c7a94c70df59241f99139eaa7fa205b3fc6d0c956ce2/_mojolearn_dev_runtime_manifold_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_runtime_model_selection_host",
+    "sha256": "fece130474b32113db3d51b2483993998dee5493b369f4fdf32532573cf70b06",
+    "size": 3642152,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/1b906e3bc2d80518b026157467cc57ce9010f7313863e87c587c30ab550a0293/_mojolearn_dev_runtime_model_selection_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_runtime_sequential_host",
+    "sha256": "c15e6baaafca00bfd8fd05a3b06acd26beadee0160749c5a59efe902ecf4a1c1",
+    "size": 1120672,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/a64c4b7fd37cc74921271c69234c6c3372cdbcbc18e786095885d556d145cdf6/_mojolearn_dev_runtime_sequential_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_solver_host",
+    "sha256": "1564348ad8dcb071f300e80b47984c58cf989bfe0998987d87787bd3f576a3a6",
+    "size": 323792,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/c2a1dd8932b53c9a8ce6c9f77f4262c5af48cbaf164cd267caad1e22cdef0a6b/_mojolearn_dev_solver_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_svm_host",
+    "sha256": "e3102d0c4504f14ddfd23c4deb7994042215fc958b8fdbc9ccf881df9930ba75",
+    "size": 614600,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/6a1b528ce3d2ea2127b0c91fcbdfeeb800d26a58298f9492802dc05349148a5d/_mojolearn_dev_svm_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_tokenizer_host",
+    "sha256": "307f0ac636cded305d30bf78cf8f5d5f379f94b517ed9fc6b3a73332f7e64151",
+    "size": 12706920,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/6973a796069bed8f71893ff091a0d44fa5b5a17568b12f6cac83c5b2fa5666da/_mojolearn_dev_tokenizer_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_training_host",
+    "sha256": "eb0589690226294a7c319590e07c64c7f30ea0a798205d2723b2ba3466b8733e",
+    "size": 1125768,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/e00cb4ca326b1df0f60502b77449d7bcbd4665b513325ed1295b5d1f9a1d3dad/_mojolearn_dev_training_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_transformer_host",
+    "sha256": "967753c56dcac4c5c051a45b7308d66e62fdc2a5709ba5e916e4f0ca81f28fbd",
+    "size": 1063648,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/a79640339f812e0a4b1179ac3bcf4a81f518f1f8680a4d91f850cdcdbc28091c/_mojolearn_dev_transformer_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_trees_host",
+    "sha256": "ff1d8089decc3ff831bea650cf624754aa96e9cd27a17f7a3d4b545a6c348528",
+    "size": 711808,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/bf15cf084cf7e109125d1a3d98a2104d3c961897a0c5110477e5aa87e8e72da7/_mojolearn_dev_trees_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_tsa_host",
+    "sha256": "9702cdacde09c4a5c4627fd7016d5473b9204ca45cab3f2fb02887c43c521701",
+    "size": 385400,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/0cbb880ef7e16a17d77c7a8e17866169ad567807ce4e368515560d461cb99ca3/_mojolearn_dev_tsa_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_x_ann_host",
+    "sha256": "dae3352450212c6bfb4c79e3fec45594f3a2fea35bbe7aa70205220eaab90f9f",
+    "size": 783432,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/e10897b8a2287f698fd68abc808083511c03b372cbb7f276315094175efaabc6/_mojolearn_dev_x_ann_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_x_cluster_host",
+    "sha256": "e622a2dc0f5414794e88e19e96353c909303f13d574301b3842771f4f9a841f9",
+    "size": 1267120,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/93392b46663eee6925a9509fc78972b70fb8d76dd8d504e13df72ddfff26ad8c/_mojolearn_dev_x_cluster_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_x_cnn_host",
+    "sha256": "896c5dbf0d5afd27a43e1f631e17efaf4952babaffac373458f1cad2bcf93d09",
+    "size": 1549432,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/fa1d8ecee2b72a4b059014178bf114f542f2f7c184e4f242548d01763638e404/_mojolearn_dev_x_cnn_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_x_decomp_host",
+    "sha256": "0476ef49c6289bdea531bd72a0560bd231b1e4953d16d4f80f766cc0dd80ab69",
+    "size": 2338416,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/5664bc15b9074ee5d3223ebe90eda623d867372d8e81523a819a492b63dc3be9/_mojolearn_dev_x_decomp_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_x_linear_host",
+    "sha256": "b54dabcbd6a9cb0887ff4b313e9241aa08e08ead0ad07828fe7f9f00bf3d381f",
+    "size": 920080,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/256af9afe3d9c04ec37b4552808b56c5290be575cb63d05f0b5145fc30b7f249/_mojolearn_dev_x_linear_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_x_metrics_host",
+    "sha256": "4e802b054baaf0b62d7b8235336e1c420d1c238f0f373a233b917d8f7d5b223f",
+    "size": 487904,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/23583e2cf088974701935a51c1dc1660f3b7f19f0049bf6de258c16d9f939616/_mojolearn_dev_x_metrics_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_x_neighbors_host",
+    "sha256": "03dd070b5a85230851a1b5d46ef1c4ae52ae1403f574d0854ec401d2e1614365",
+    "size": 1766280,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/8eaa3f06cb6fb1b74cac1434329027e79501c825f3f4628adca2c924d8b8096a/_mojolearn_dev_x_neighbors_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_x_prep_host",
+    "sha256": "45b6a1f900d3b17e92e02c4a7c50ececc539fcd5c93000eae6f66aa2bb36d8fb",
+    "size": 2961000,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/56700f7a60a963a4a1ac899c32a8657dc25cdae838ec93eb2fc7a36ceecf9de4/_mojolearn_dev_x_prep_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_x_sequence_host",
+    "sha256": "fe8a3cac5a26e2a50966b70ad7037b9b1410de0fc2bb9de5b9d7191de2573a4f",
+    "size": 9007392,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/39dcc72fc2451618d5dfc9aa6d44e33dbf1861094c71e0febc37874e3ea4ec19/_mojolearn_dev_x_sequence_host.so",
+    "path_source": "__file__"
+   },
+   {
+    "module": "mojolearn._host._mojolearn_x_trees_host",
+    "sha256": "e2daf3a40eadadeefe260e9b11baff57237f74ce42d875e93162602f967123d4",
+    "size": 1055704,
+    "file": "/root/mojolearn/python/mojolearn/host/.development/a214847ab553d1da2298addf9144c78dff9f3e76063acbe289a8befebf7cdac2/_mojolearn_dev_x_trees_host.so",
+    "path_source": "__file__"
+   }
+  ]
+ },
+ "resume_signature": {
+  "schema": 1,
+  "source_sha256": "6196fb3748bd869a8e0601e79916fb9cfe652976c134ccb6a54b66125432cf3a",
+  "options": {
+   "require_backend": "cpu",
+   "require_cpu": true,
+   "fail_on_refused": false,
+   "jobs": 1,
+   "lanes": "par-kernel-ridge",
+   "skip": "",
+   "fixtures": "",
+   "repeats": 1,
+   "vendor": null,
+   "allow_fast": false,
+   "batch_alone": 16,
+   "partial_column": "",
+   "no_batch": false,
+   "no_rlpair": false,
+   "batch_grad": false,
+   "batch_scale": false,
+   "ragged": false,
+   "step_full": false,
+   "diff": null,
+   "require_columns": null,
+   "owed_json": "",
+   "merge": null,
+   "allow_separate_builds": false
+  },
+  "environment_sha256": "4805d3c235053841741529c758c466b81504085963be5c589495dc160057c375",
+  "provenance": {
+   "commit": "ae7b4ca804b3633ad6a08e5be5bae0c0745ebe92",
+   "mode": "identical",
+   "vendor": "cpu-amd-epyc-9575f-64-core-processor",
+   "platform": "Linux-6.8.0-59-generic-x86_64-with-glibc2.35",
+   "python": "3.14.7",
+   "numpy": "2.5.3",
+   "fixtures": {
+    "base": {
+     "X": "b5b0a0005efa3788",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "308c22120b664e5b"
+    },
+    "ties": {
+     "X": "186fe2109fc34ad5",
+     "y_clf": "f33cf521f758ae3c",
+     "y_reg": "047d4652a4d56bc3"
+    },
+    "hashed": {
+     "X": "c93497b26fe65cda",
+     "y_clf": "d104ead2f62bdd03",
+     "y_reg": "ce4959d8070bb069"
+    },
+    "wide": {
+     "X": "35f6a8481e649eb8",
+     "y_clf": "276ebacc29267948",
+     "y_reg": "611fc5dd6367bef5"
+    },
+    "denormal": {
+     "X": "752323c375a1cbf5",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "denormal_ftz": {
+     "X": "34c156b0d0e8a891",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "dupes": {
+     "X": "9d9d9db7c7785a14",
+     "y_clf": "d390ee2944b13e1d",
+     "y_reg": "135ce10f2a0817fe"
+    },
+    "odd": {
+     "X": "93d9611a09107bb9",
+     "y_clf": "273a388a705a4f40",
+     "y_reg": "25f3d126c81ca0ec"
+    },
+    "negative": {
+     "X": "08106ffff3256313",
+     "y_clf": "294ce4d7dadaf0bb",
+     "y_reg": "ce1914d5f78f5707"
+    }
+   },
+   "heldout": {
+    "base": {
+     "X": "d4de6b4eb682c465"
+    },
+    "ties": {
+     "X": "d1ba686494256660"
+    },
+    "hashed": {
+     "X": "9dc786ade4574aff"
+    },
+    "wide": {
+     "X": "d52a1af18a3c2f1c"
+    },
+    "denormal": {
+     "X": "5061056b118d07d0"
+    },
+    "denormal_ftz": {
+     "X": "a8c3d1a560b5cabb"
+    },
+    "dupes": {
+     "X": "e4b16c115962dfcd"
+    },
+    "odd": {
+     "X": "32ea0bbed60b8e6c"
+    },
+    "negative": {
+     "X": "45b539a3f66ce25d"
+    }
+   }
+  }
+ }
+}
