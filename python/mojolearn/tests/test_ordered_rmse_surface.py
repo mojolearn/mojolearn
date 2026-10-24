@@ -4,6 +4,7 @@ certification is a separate gate."""
 import numpy as np
 import pytest
 
+from mojolearn import _backend
 from mojolearn.ensemble import OrderedRMSE
 
 
@@ -18,6 +19,8 @@ def _fit(X, **kw):
 def test_ordered_fit_reads_rows_in_original_order_any_layout():
     """The fit reads X in its original row order whatever its layout and
     dtype: C-order float64, Fortran-order float64 and float32 are one model."""
+    if _backend._CPU_ONLY is not None:
+        pytest.skip("CPU-only install: the gbdt host binding trains its declared lanes with unit weights only and refuses sample_weight by name (bindings/_mojolearn_gbdt_host.mojo); weighted GBDT fits need a GPU binding")
     X = np.arange(8, dtype=np.float64).reshape(4, 2)
     model = _fit(X)
     assert model.model_
