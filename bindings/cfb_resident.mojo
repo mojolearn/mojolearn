@@ -14,7 +14,7 @@ from bindings.py_balanced import py_call, py_type, py_get, py_setitem, py_fields
 from bindings.classical_arrays import classical_address
 from bindings.family_common import family_call, family_entry, family_array
 from bindings.cluster_native import _labeled_reference
-from bindings.native_loaded_module import native_loaded_module
+from bindings.native_loaded_module import native_loaded_module, _loaded_fields
 
 
 def cfb_optional_entry(binding: PythonObject, name: String, context: PythonObject) raises -> PythonObject:
@@ -23,10 +23,16 @@ def cfb_optional_entry(binding: PythonObject, name: String, context: PythonObjec
     proxy and AttributeError on a module; both mean "no residency")."""
     var b = native_loaded_module("builtins")
     var entry = PythonObject(None)
-    try:
-        entry = py_call(b.getattr, binding, PythonObject(name))
-    except:
-        return PythonObject(None)
+    if py_type(binding) is py_type(b):
+        # An exact module: read its namespace. A failed getattr on a module
+        # runs Python's import machinery (ModuleSpec.has_location on 3.13+)
+        # to word the AttributeError, a Python frame inside predict.
+        entry = py_get(_loaded_fields(binding), PythonObject(name))
+    else:
+        try:
+            entry = py_call(b.getattr, binding, PythonObject(name))
+        except:
+            return PythonObject(None)
     if py_type(entry) is not context["family_builtin_type"]:
         return PythonObject(None)
     return entry
