@@ -4,11 +4,14 @@ discretizer and encoders (SimpleImputer, KBinsDiscretizer, OrdinalEncoder,
 OneHotEncoder, TargetEncoder, SplineTransformer, SelectKBest) and its fixed ABI."""
 
 
-def connect(kinds, qselect, scores):
+def connect(kinds, qselect, scores, owner_kinds=None, owner_classes=None):
     # glue: compiled entries and plain metadata are retained during import;
     # `kinds` maps each public class to the kind the owner dispatches on,
     # `qselect` is MOJOLEARN_X_PREP_FAST_QSELECT as read at import, `scores`
     # maps the built-in score functions SelectKBest runs natively to their names.
+    # `owner_kinds` maps the classes the family door (bindings/prep_owner_native.mojo)
+    # serves outside the encode owner to their kinds; `owner_classes` names the
+    # public classes those owners construct (IterativeImputer's SimpleImputer).
     import sys
     import mmap
     from types import BuiltinFunctionType
@@ -56,6 +59,7 @@ def connect(kinds, qselect, scores):
                    scaler_bindings=connected, scaler_host_contexts={},
                    maxabs_rows_class=DeviceRows, maxabs_rows_dict=vars(DeviceRows)['__dict__'], maxabs_gather_rows=gather,
                    classical_getframe=sys._getframe, prep_encode_kinds=dict(kinds),
-                   prep_encode_qselect=bool(qselect), prep_encode_scores=dict(scores))
+                   prep_encode_qselect=bool(qselect), prep_encode_scores=dict(scores),
+                   prep_owner_kinds=dict(owner_kinds or {}), prep_owner_classes=dict(owner_classes or {}))
     context.update(label_context())
     return call, context

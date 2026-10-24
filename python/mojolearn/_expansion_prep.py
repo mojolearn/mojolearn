@@ -1689,6 +1689,13 @@ class _Classifier(_PrepBase):
         """
         return _CLS_CALL(self, "score", (X, y), _CLS_CONTEXT)
 
+    # Only a subclass with `transform` has fit_transform (scikit-learn's
+    # TransformerMixin); LinearDiscriminantAnalysis defines its own one-call
+    # method, so on every other classifier here this one is unavailable.
+    @available_if(lambda self: hasattr(self, "transform"))
+    def fit_transform(self, X, y=None, **fit_params):
+        raise AttributeError(f"'{type(self).__name__}' object has no attribute 'fit_transform'")
+
 
 #: binding -> its `x_prep_idn_int` bits (0 when it has none), probed once
 _IDN_INT = {}
@@ -4180,36 +4187,6 @@ class VarianceThreshold(_SelectorMixin):
         return _STATELESS_CALL(self, "fit_transform", (X, y), _STATELESS_CONTEXT)
 
 
-def _scores_classif(X, y, kind):
-    arr = _x2d(X)
-    n, d = arr.shape
-    classes, codes = encode_labels(y)
-    if codes.size != n:
-        raise ValueError("mojolearn: X and y have different numbers of rows")
-    K = len(classes)
-    pr = _Prog()
-    xo, yo = pr.put(arr), pr.put_codes(codes)
-    cnt, mean, sums = pr.alloc(K), pr.alloc(K * d), pr.alloc(K * d)
-    sc, pv, st = pr.alloc(d), pr.alloc(d), pr.alloc(6 * d)
-    mode = _mode()
-    _cls(pr, mode, xo, n, d, yo, K, cnt, mean, _NONE, sums)
-    if kind == "chi2":
-        _cs(pr, mode, xo, n, d, st, var=False)
-        pr.stage("chi2", d, sums, K, d, cnt, n, sc, pv)
-    elif _blocked() and _idn_fam(mode) & _IDN_SELECT_BLOCKED:
-        # x_prep/select_blocked.mojo: the within-class squares by row blocks, then the score
-        nb = (n + _XB - 1) // _XB
-        ps = pr.work(nb * d)
-        pr.stage("fcb_part", nb * d, xo, n, d, yo, mean, ps, nb)
-        pr.stage("fcb_fin", d, ps, n, d, nb, K, cnt, mean, sc, pv)
-    else:
-        pr.stage("f_classif", d, xo, n, d, yo, K, cnt, mean, sc, pv)
-    pr.run(mode)
-    if kind == "chi2" and any(v < 0 for v in pr.values(st + 3 * d, d)):  # glue: raises on a negative per-column minimum (d-sized: feature count)
-        raise ValueError("mojolearn: Input X must be non-negative.")
-    return pr.get(sc, d), pr.get(pv, d)
-
-
 def f_classif(X, y):
     """Compute the ANOVA F-value of each feature against the class labels.
 
@@ -4239,7 +4216,7 @@ def f_classif(X, y):
     >>> y = rng.integers(0, 3, 1000)
     >>> F, p = mojolearn.f_classif(X, y)
     """
-    return _scores_classif(X, y, "f")
+    return _ENCODE_CALL(None, "f_classif", (X, y), _ENCODE_CONTEXT)
 
 
 def chi2(X, y):
@@ -4271,34 +4248,7 @@ def chi2(X, y):
     >>> y = rng.integers(0, 2, 1000)
     >>> stat, p = mojolearn.chi2(X, y)
     """
-    return _scores_classif(X, y, "chi2")
-
-
-def _pearson(X, y, center, force_finite):
-    arr = _x2d(X)
-    n, d = arr.shape
-    yv = as_f32_c(y, ndim=1, name="y")[0]
-    if yv.size != n:
-        raise ValueError("mojolearn: X and y have different numbers of rows")
-    pr = _Prog()
-    xo, yo = pr.put(arr), pr.put(yv)
-    sc, pv, co = pr.alloc(d), pr.alloc(d), pr.alloc(d)
-    mode = _mode()
-    if _blocked() and _idn_fam(mode) & _IDN_SELECT_BLOCKED:
-        # x_prep/select_blocked.mojo: the sums and the centred products by row blocks
-        nb = (n + _XB - 1) // _XB
-        mx = my = _NONE
-        if center:
-            psx, psy, mx, my = pr.work(nb * d), pr.work(nb), pr.work(d), pr.work(1)
-            pr.stage("frb_part1", nb * d, xo, n, d, yo, psx, psy, nb)
-            pr.stage("frb_mean", d, psx, psy, nb, d, n, mx, my)
-        pxy, pxx, pyy = pr.work(nb * d), pr.work(nb * d), pr.work(nb)
-        pr.stage("frb_part2", nb * d, xo, n, d, yo, mx, my, pxy, pxx, pyy, nb)
-        pr.stage("frb_fin", d, pxy, pxx, pyy, nb, d, n, 1 if center else 0, sc, pv, co, 1 if force_finite else 0)
-    else:
-        pr.stage("f_regression", d, xo, n, d, yo, 1 if center else 0, sc, pv, co, 1 if force_finite else 0)
-    pr.run(mode)
-    return pr.get(sc, d), pr.get(pv, d), pr.get(co, d)
+    return _ENCODE_CALL(None, "chi2", (X, y), _ENCODE_CONTEXT)
 
 
 def f_regression(X, y, *, center=True, force_finite=True):
@@ -4335,8 +4285,7 @@ def f_regression(X, y, *, center=True, force_finite=True):
     >>> y = (2 * X[:, 0] + rng.random(1000)).astype(np.float32)
     >>> F, p = mojolearn.f_regression(X, y)
     """
-    sc, pv, _ = _pearson(X, y, center, force_finite)
-    return sc, pv
+    return _ENCODE_CALL(None, "f_regression", (X, y, center, force_finite), _ENCODE_CONTEXT)
 
 
 def r_regression(X, y, *, center=True, force_finite=True):
@@ -4368,7 +4317,7 @@ def r_regression(X, y, *, center=True, force_finite=True):
     >>> y = X[:, 0] + rng.random(1000).astype(np.float32)
     >>> r = mojolearn.r_regression(X, y)
     """
-    return _pearson(X, y, center, force_finite)[2]
+    return _ENCODE_CALL(None, "r_regression", (X, y, center, force_finite), _ENCODE_CONTEXT)
 
 
 class SelectKBest(_SelectorMixin):
@@ -4978,14 +4927,20 @@ _STATELESS_CALL, _STATELESS_CONTEXT = _connect_stateless(
      PowerTransformer: "power"})
 
 
-# Import-time connection; the imputer, discretizer, encoders, SplineTransformer
-# and SelectKBest hand each public operation off once to Mojo
-# (bindings/prep_encode_native.mojo).
+# Import-time connection; the imputers, discretizer, encoders, SplineTransformer,
+# SelectKBest, RFE, the label encoders and the score functions hand each public
+# operation off once to Mojo (bindings/prep_owner_native.mojo, the family door).
 from ._native_prep_encode_bridge import connect as _connect_encode
 _ENCODE_CALL, _ENCODE_CONTEXT = _connect_encode(
     {SimpleImputer: "simple_imputer", KBinsDiscretizer: "kbins", OrdinalEncoder: "ordinal",
      OneHotEncoder: "onehot", TargetEncoder: "target", SplineTransformer: "spline", SelectKBest: "select_kbest"},
-    _X_PREP2_QSELECT, {f_classif: "f_classif", chi2: "chi2", f_regression: "f_regression", r_regression: "r_regression"})
+    _X_PREP2_QSELECT, {f_classif: "f_classif", chi2: "chi2", f_regression: "f_regression", r_regression: "r_regression"},
+    {LabelEncoder: "label_encoder",
+     LabelBinarizer: "label_binarizer",
+     MultiLabelBinarizer: "multilabel_binarizer",
+     IterativeImputer: "iterative_imputer",
+     RFE: "rfe"},
+    {"SimpleImputer": SimpleImputer})
 
 
 # Import-time connection; the naive Bayes and discriminant-analysis classifiers

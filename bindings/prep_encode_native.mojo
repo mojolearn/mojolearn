@@ -2612,10 +2612,9 @@ def _scores_classif(mut p: EncProg, values: PythonObject, y: PythonObject, chi: 
 
 
 def _pearson(mut p: EncProg, values: PythonObject, y: PythonObject, mode: PythonObject, entries: PythonObject,
-             context: PythonObject) raises -> Tuple[Int, Int, Int]:
-    """`_pearson(X, y, center=True, force_finite=True)`'s stages
-    (f_regression, or the blocked frb_* order). Returns (scores, p-values,
-    correlations)."""
+             context: PythonObject, center: Bool = True, force_finite: Bool = True) raises -> Tuple[Int, Int, Int]:
+    """`_pearson(X, y, center, force_finite)`'s stages (f_regression, or the
+    blocked frb_* order). Returns (scores, p-values, correlations)."""
     var n = Int(py=values[3])
     var d = Int(py=values[4])
     var target = labels_f32(y, 1, "C", "y", context)
@@ -2633,19 +2632,23 @@ def _pearson(mut p: EncProg, values: PythonObject, y: PythonObject, mode: Python
     var blocked = String(getenv("MOJOLEARN_XPREP_BLOCKED", "1").strip()) != "0"
     if blocked and (_fam(mode, entries) & IDN_SELECT_BLOCKED) != 0:
         var nb = (n + ROW_BLOCK - 1) // ROW_BLOCK
-        var psx = p.work(nb * d)
-        var psy = p.work(nb)
-        var mx = p.work(d)
-        var my = p.work(1)
-        _stage(p.program, OP_FRB_PART1, nb * d, xo, n, d, yo, psx, psy, nb)
-        _stage(p.program, OP_FRB_MEAN, d, psx, psy, nb, d, n, mx, my)
+        # the Python's `mx = my = _NONE` unless centred
+        var mx = NONE
+        var my = NONE
+        if center:
+            var psx = p.work(nb * d)
+            var psy = p.work(nb)
+            mx = p.work(d)
+            my = p.work(1)
+            _stage(p.program, OP_FRB_PART1, nb * d, xo, n, d, yo, psx, psy, nb)
+            _stage(p.program, OP_FRB_MEAN, d, psx, psy, nb, d, n, mx, my)
         var pxy = p.work(nb * d)
         var pxx = p.work(nb * d)
         var pyy = p.work(nb)
         _stage(p.program, OP_FRB_PART2, nb * d, xo, n, d, yo, mx, my, pxy, pxx, pyy, nb)
-        _stage(p.program, OP_FRB_FIN, d, pxy, pxx, pyy, nb, d, n, 1, sc, pv, co, 1)
+        _stage(p.program, OP_FRB_FIN, d, pxy, pxx, pyy, nb, d, n, 1 if center else 0, sc, pv, co, 1 if force_finite else 0)
     else:
-        _stage(p.program, OP_F_REGRESSION, d, xo, n, d, yo, 1, sc, pv, co, 1)
+        _stage(p.program, OP_F_REGRESSION, d, xo, n, d, yo, 1 if center else 0, sc, pv, co, 1 if force_finite else 0)
     _ = target^
     return (sc, pv, co)
 
@@ -2788,6 +2791,36 @@ def _select_fit(model: PythonObject, x: PythonObject, values: PythonObject, y: P
     py_setitem(fields, "_mask", mask)
     py_setitem(fields, "numeric_mode_", mode)
     py_setitem(fields, "n_features_in_", d)
+
+
+def prep_encode_scores_call(operation: String, args: PythonObject, context: PythonObject) raises -> PythonObject:
+    """f_classif(X, y), chi2(X, y), f_regression(X, y, center, force_finite)
+    and r_regression(X, y, center, force_finite): `_scores_classif` /
+    `_pearson`'s one program, the scores (and p-values) as float32 Arrays."""
+    var mode = _default_mode(context)
+    var entries = _entries(mode, context)
+    var values = xprep_values(args[0], entries, context)
+    var d = Int(py=values[4])
+    var p = EncProg()
+    var result = PythonObject(None)
+    if operation == "f_classif" or operation == "chi2":
+        var chi = operation == "chi2"
+        var offs = _scores_classif(p, values, args[1], chi, mode, entries, context)
+        var ran = p.run(entries, context)
+        if chi:
+            for j in range(d):  # driver-loop: over the per-column minima (feature metadata)
+                if _word(ran, offs[2] + 3 * d + j) < 0:
+                    raise Error("mojolearn: Input X must be non-negative.")
+        result = Python.tuple(_take1(ran, offs[0], d, context), _take1(ran, offs[1], d, context))
+    else:
+        var offs = _pearson(p, values, args[1], mode, entries, context, _truth(args[2]), _truth(args[3]))
+        var ran = p.run(entries, context)
+        if operation == "r_regression":
+            result = _take1(ran, offs[2], d, context)
+        else:
+            result = Python.tuple(_take1(ran, offs[0], d, context), _take1(ran, offs[1], d, context))
+    _ = values^
+    return result
 
 
 # ---------------------------------------------------------------- the door
