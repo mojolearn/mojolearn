@@ -62,6 +62,20 @@ DRIVERS = (
      "bindings/_mojolearn_metrics.mojo"),
     ("parallel_graph", "transform_umap", "family_par_run", "bindings/family_native.mojo",
      "bindings/_mojolearn_metrics.mojo"),
+    ("parallel_ensemble", "fit_boosting", "family_par_run", "bindings/family_native.mojo",
+     "bindings/_mojolearn_gbdt.mojo"),
+    ("parallel_ensemble", "fit_feature_freq", "family_par_run", "bindings/family_native.mojo",
+     "bindings/_mojolearn_gbdt.mojo"),
+    ("parallel_ensemble", "fit_ordered_rmse", "family_par_run", "bindings/family_native.mojo",
+     "bindings/_mojolearn_gbdt.mojo"),
+    ("parallel_ensemble", "fit_isolation_forest", "family_par_run", "bindings/family_native.mojo",
+     "bindings/_mojolearn_svm.mojo"),
+    ("parallel_ensemble", "score_isolation_forest", "family_par_run", "bindings/family_native.mojo",
+     "bindings/_mojolearn_svm.mojo"),
+    ("parallel_ensemble", "ParallelForestPredictor.predict", "family_par_run", "bindings/family_native.mojo",
+     "bindings/_mojolearn_rf.mojo"),
+    ("parallel_ensemble", "ParallelForestPredictor.predict_proba", "family_par_run",
+     "bindings/family_native.mojo", "bindings/_mojolearn_trees.mojo"),
 )
 
 #: (driver name in `family_par_run`, plain owner operations it may run)
@@ -81,6 +95,12 @@ PAR_RUN = (
     ("resample", ("family_rs_bootstrap", "family_rs_permutation_test", "family_rs_monte_carlo_integrate")),
     ("graph_fit", ("family_cfb_agglo_fit", "family_cfb_sc_fit", "family_mani_umap_fit")),
     ("umap_transform", ("family_mani_umap_transform",)),
+    ("gbdt_fit", ("trees_gbdt_fit", "trees_gbdt_adapter_classifier_fit", "trees_gbdt_adapter_regressor_fit",
+                  "trees_gbdt_feature_freq_fit")),
+    ("ordered_rmse_fit", ("trees_gbdt_ordered_fit",)),
+    ("iforest_fit", ("trees_iforest_fit",)),
+    ("iforest_score", ("trees_iforest_score_samples", "trees_iforest_decision_function", "trees_iforest_predict")),
+    ("forest_predict", ("trees_public_forest_predict", "trees_public_forest_proba")),
 )
 
 
@@ -177,5 +197,6 @@ def test_worker_serves_no_migrated_operation():
     source = worker.read_text(encoding="utf-8")
     for op in ("'km_fit'", "'km_apply'", "'cholesky_fit'", "'cholesky_solve'", "'svm_fit'", "'svm_predict'",
                "'gp_fit'", "'gp_predict'", "'gram_fit'", "'solver_fit'", "'glm_fit'", "'kmeans_fit'",
-               "'dbscan_fit'", "'gmm_fit'", "'resample'", "'hdbscan_fit'", "'graph_fit'"):
+               "'dbscan_fit'", "'gmm_fit'", "'resample'", "'hdbscan_fit'", "'graph_fit'", "'iforest_fit'",
+               "'forest_prepare'", "'forest_predict'", "'forest_release'"):
         assert "operation == " + op not in source and "operation in (" + op not in source, op

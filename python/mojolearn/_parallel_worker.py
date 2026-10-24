@@ -75,38 +75,9 @@ def execute(request):
             raise ValueError('cpu_reference wraps only a CPU route operation on a CPU-only install')
         with reference_training():
             return execute(args)
-    if operation == 'forest_prepare':
-        from .parallel_ensemble import _admit_forest_predictor
-        _admit_forest_predictor(state)
-        if _forest_snapshot is not None:
-            raise RuntimeError('forest worker already owns a prepared snapshot')
-        binding = state._bind()
-        capability = getattr(binding, 'forest_pool_available', None)
-        if not callable(capability) or capability() != 1:
-            raise ImportError('rebuild RF/ET binding for pooled forest inference')
-        state._prepare_resident_forest(binding)
-        _forest_snapshot = state
-        return dict(n_features=int(state.n_features_in_), outputs=int(state._num_outputs),
-                    trees=int(state._n_trees), classes=getattr(state, 'classes_', None))
-    if operation == 'forest_predict':
-        if _forest_snapshot is None:
-            raise RuntimeError('forest worker has no prepared snapshot')
-        method, X = args
-        if method not in ('predict', 'predict_proba'):
-            raise ValueError('unsupported pooled forest prediction method')
-        function = getattr(_forest_snapshot, method, None)
-        if not callable(function):
-            raise ValueError('prepared forest does not support ' + method)
-        return function(X)
-    if operation == 'forest_release':
-        model, _forest_snapshot = _forest_snapshot, None
-        if model is not None:
-            from ._forest_protocol import held_resident_forest
-            resident = held_resident_forest(model)
-            if resident is not None:
-                resident._finalizer()
-                model._resident_forest = None
-        return True
+    # == 'forest_prepare': moved to family_par_run (2026-10-24).
+    # == 'forest_predict': moved to family_par_run (2026-10-24).
+    # == 'forest_release': moved to family_par_run (2026-10-24).
     if operation in ('mlp_update', 'samba_update'):
         import os
         if int(os.environ.get('MOJOLEARN_OPTIMIZER_DEVICE_COUNT', '1')) > 1:
@@ -166,28 +137,7 @@ def execute(request):
     # == 'kmeans_fit': moved to family_par_run (2026-10-24).
     # 'graph_fit' / 'umap_transform' moved to family_par_run (2026-10-24).
     # == 'dbscan_fit': moved to family_par_run (2026-10-24).
-    if operation in ('gbdt_fit', 'ordered_rmse_fit'):
-        model = state
-        if callable(getattr(model, '_bind', None)):
-            binding = model._bind('_mojolearn_gbdt')
-        else:
-            from . import _backend
-            binding = _backend.binding('_mojolearn_gbdt', 'identical')
-        if (not callable(getattr(binding, 'gbdt_parallel_available', None))
-                or binding.gbdt_parallel_available() != 1):
-            raise ImportError('rebuild GBDT binding for feature-parallel training')
-        # the fold searcher of Ordered boosting is the pointwise searcher's
-        # fold arm (lane/catboost-parity), so it needs the same capability
-        X, y, kwargs = args
-        ordered = False
-        resolve = getattr(model, '_resolved_boosting_type', None)
-        if callable(resolve):
-            ordered = resolve(len(X)) == 'Ordered'
-        if operation == 'ordered_rmse_fit' or getattr(model, 'use_pointwise_searcher', False) or ordered:
-            if not callable(getattr(binding, 'pointwise_parallel_available', None)) or binding.pointwise_parallel_available() != 1:
-                raise ImportError('rebuild GBDT binding for parallel pointwise histograms')
-        model.fit(X, y, **kwargs)
-        return model
+    # in ('gbdt_fit', 'ordered_rmse_fit'): moved to family_par_run (2026-10-24).
     if operation == 'ivf_store':
         state._entry(state._extension(), 'ivf_flat_partial_search')
         _ivf_snapshot = state
@@ -261,20 +211,7 @@ def execute(request):
     # (bindings/linalg_native.mojo `family_chol_par_*`, 2026-10-24).
     # 'gp_fit' / 'gp_predict' moved to family_par_run (2026-10-24).
     # 'svm_fit' / 'svm_predict' moved to family_par_run (2026-10-24).
-    if operation in ('iforest_fit', 'iforest_score'):
-        from ._svm_impl import _extension
-        native = _extension('identical')
-        if (not callable(getattr(native, 'iforest_parallel_available', None))
-                or native.iforest_parallel_available() != 1):
-            raise ImportError('rebuild SVM binding for parallel IsolationForest')
-        if operation == 'iforest_fit':
-            state.fit(*args)
-            return state
-        X, method = args
-        if method not in ('score_samples', 'decision_function', 'predict'):
-            raise ValueError('invalid IsolationForest score operation')
-        from ._parallel_pool import native_method
-        return native_method(state, method, X)  # the native result; the driver converts
+    # in ('iforest_fit', 'iforest_score'): moved to family_par_run (2026-10-24).
     # 'solver_fit' moved to family_par_run (2026-10-24).
     # 'glm_fit' moved to family_par_run (2026-10-24).
     if operation == 'neighbor_reference':

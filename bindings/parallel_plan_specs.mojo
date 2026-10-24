@@ -44,6 +44,18 @@ def par_spec_admits(driver: String, owner: String) -> Bool:
         return owner == "family_cfb_agglo_fit" or owner == "family_cfb_sc_fit" or owner == "family_mani_umap_fit"
     if driver == "umap_transform":
         return owner == "family_mani_umap_transform"
+    if driver == "gbdt_fit":
+        return (owner == "trees_gbdt_fit" or owner == "trees_gbdt_adapter_classifier_fit"
+                or owner == "trees_gbdt_adapter_regressor_fit" or owner == "trees_gbdt_feature_freq_fit")
+    if driver == "ordered_rmse_fit":
+        return owner == "trees_gbdt_ordered_fit"
+    if driver == "iforest_fit":
+        return owner == "trees_iforest_fit"
+    if driver == "iforest_score":
+        return (owner == "trees_iforest_score_samples" or owner == "trees_iforest_decision_function"
+                or owner == "trees_iforest_predict")
+    if driver == "forest_predict":
+        return owner == "trees_public_forest_predict" or owner == "trees_public_forest_proba"
     return False
 
 
@@ -77,4 +89,10 @@ def par_spec_rebuild(driver: String) -> String:
         return "rebuild resample binding for distributed replicate ranges"
     if driver == "graph_fit" or driver == "umap_transform":
         return "rebuild graph binding for native multi-GPU rows"
+    if driver == "gbdt_fit" or driver == "ordered_rmse_fit":
+        return "rebuild GBDT binding for feature-parallel training"
+    if driver == "iforest_fit" or driver == "iforest_score":
+        return "rebuild SVM binding for parallel IsolationForest"
+    if driver == "forest_predict":
+        return "rebuild RF/ET binding for pooled forest inference"
     return "rebuild the binding for multi-GPU drivers"
