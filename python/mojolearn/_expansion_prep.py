@@ -1327,12 +1327,9 @@ class SimpleImputer(_PrepBase):
     ----------
     missing_values : float, default NaN
         Value that marks a missing entry.
-    strategy : {'mean', 'median', 'most_frequent', 'constant'} or callable, default 'mean'
+    strategy : {'mean', 'median', 'most_frequent', 'constant'}, default 'mean'
         ``'median'`` uses numpy's linear percentile of the non-missing entries; ``'most_frequent'``
-        picks the smallest value on a tie. A callable is called once per column, on the host, with the
-        column's non-missing values as a 1-D float32 array, and must return the column's statistic; a
-        NaN statistic drops the column unless ``keep_empty_features``. Any other value raises
-        ``ValueError``.
+        picks the smallest value on a tie. Any other value, including a callable, raises ``ValueError``.
     fill_value : float or None, default None
         Value used by ``strategy='constant'``; None means 0. Must be numeric (``TypeError`` otherwise).
     copy : bool, default True
@@ -2886,15 +2883,16 @@ class IterativeImputer(_PrepBase):
     Parameters
     ----------
     estimator : mojolearn regressor, default None
-        A mojolearn regressor with ``fit`` and ``predict`` (for example :class:`BayesianRidge`,
-        :class:`Ridge` or :class:`LinearRegression`), cloned for each step. Any other estimator raises
-        ``TypeError``. None uses the built-in Bayesian ridge regression.
+        A mojolearn regressor (:class:`LinearRegression`, :class:`Ridge`, :class:`DecisionTreeRegressor`,
+        :class:`RandomForestRegressor`, :class:`ExtraTreesRegressor` or
+        :class:`GradientBoostingRegressor`), cloned for each step. Any other estimator, including a
+        subclass, raises ``TypeError``. None uses the built-in Bayesian ridge regression.
     missing_values : float, default NaN
         Value that marks a missing entry.
     sample_posterior : bool, default False
         Draw each imputed value from the predictive normal distribution, truncated to
-        ``[min_value, max_value]``, instead of using its mean. An ``estimator`` must then support
-        ``predict(X, return_std=True)`` (``ValueError`` otherwise).
+        ``[min_value, max_value]``, instead of using its mean. Only the built-in estimator supports
+        it; with an ``estimator`` it raises ``ValueError``.
     max_iter : int, default 10
         Maximum number of imputation rounds.
     tol : float, default 1e-3
@@ -3222,12 +3220,13 @@ class SelectKBest(_SelectorMixin):
     Follows scikit-learn's ``SelectKBest``. Fit calls ``score_func(X, y)`` and keeps the ``k`` columns
     with the highest scores. NaN scores rank lowest. Among tied scores the later column is kept, as with
     scikit-learn's stable sort. ``score_func`` may be :func:`f_classif`, :func:`chi2`,
-    :func:`f_regression`, or any callable returning scores or a ``(scores, pvalues)`` pair.
+    :func:`f_regression`, :func:`r_regression`, :func:`mutual_info_classif` or
+    :func:`mutual_info_regression`; any other value raises ``TypeError``.
 
     Parameters
     ----------
-    score_func : callable, default f_classif
-        Function of ``(X, y)`` returning the scores.
+    score_func : function, default f_classif
+        One of the scoring functions above, called as ``score_func(X, y)`` with its defaults.
     k : int or 'all', default 10
         Number of columns to keep, ``0 <= k <= n_features`` (``ValueError`` otherwise), or ``'all'``.
 
@@ -3384,9 +3383,9 @@ class RFE(_SelectorMixin):
     Parameters
     ----------
     estimator : mojolearn estimator
-        A mojolearn estimator whose ``fit`` exposes ``coef_`` or ``feature_importances_``, such as
-        :class:`LinearDiscriminantAnalysis`, :class:`LogisticRegression`, :class:`Ridge`,
-        :class:`LinearRegression` or the tree ensembles. Any other estimator raises ``TypeError``.
+        A mojolearn estimator whose ``fit`` exposes ``coef_``: :class:`LinearDiscriminantAnalysis`,
+        :class:`LogisticRegression`, :class:`Ridge` or :class:`LinearRegression`. Any other estimator,
+        including a subclass, raises ``TypeError``.
     n_features_to_select : int or float, default None
         Number of features to keep, or a fraction of them when a float in ``(0, 1)``. None keeps half.
     step : int or float, default 1
@@ -3630,7 +3629,8 @@ from ._native_prep_encode_bridge import connect as _connect_encode
 _ENCODE_CALL, _ENCODE_CONTEXT = _connect_encode(
     {SimpleImputer: "simple_imputer", KBinsDiscretizer: "kbins", OrdinalEncoder: "ordinal",
      OneHotEncoder: "onehot", TargetEncoder: "target", SplineTransformer: "spline", SelectKBest: "select_kbest"},
-    _X_PREP2_QSELECT, {f_classif: "f_classif", chi2: "chi2", f_regression: "f_regression", r_regression: "r_regression"},
+    _X_PREP2_QSELECT, {f_classif: "f_classif", chi2: "chi2", f_regression: "f_regression", r_regression: "r_regression",
+                       mutual_info_classif: "mutual_info_classif", mutual_info_regression: "mutual_info_regression"},
     {LabelEncoder: "label_encoder",
      LabelBinarizer: "label_binarizer",
      MultiLabelBinarizer: "multilabel_binarizer",
@@ -3647,4 +3647,6 @@ _CLS_CALL, _CLS_CONTEXT = _connect_classify(
      LinearDiscriminantAnalysis: "lda", QuadraticDiscriminantAnalysis: "qda"}, _PROG_CONTEXT)
 # RFE and the mutual-information functions (bindings/prep_select_native.mojo) run
 # their programs on the classifier owner's arena-runner context.
-_ENCODE_CONTEXT.update(select_context=_CLS_CONTEXT, select_mi_work=_MI_WORK)
+# prep_encode_entry: SelectKBest's mutual_info score functions re-enter the
+# encode owner's compiled entry (bindings/prep_encode_native.mojo `_select_fit`).
+_ENCODE_CONTEXT.update(select_context=_CLS_CONTEXT, select_mi_work=_MI_WORK, prep_encode_entry=_ENCODE_CALL)

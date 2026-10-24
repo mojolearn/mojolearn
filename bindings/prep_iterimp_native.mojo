@@ -6,23 +6,23 @@
 # the Python `_Prog` built (the same stages, operands and arena order, so the same
 # bits): the statistics and imputation-order program, the n_nearest_features draw
 # program, the one program of rounds for the built-in Bayesian ridge, and
-# `_with_indicator`. A user estimator keeps the reference's rounds: its fit and
-# predict are called once per (round, feature) step with the float32 blocks the
-# gather programs produce, and its predictions are scattered back by one program.
+# `_with_indicator`. A user estimator keeps the reference's rounds: it is cloned,
+# fitted and asked to predict once per (round, feature) step with the float32
+# blocks the gather programs produce, and its predictions are scattered back by
+# one program. The clone, fit and predict are the compiled operations of the
+# estimator's connected native plan (bindings/prep_native_estimator.mojo); its
+# Python fit, predict, get_params or constructor is never called.
 from std.math import isfinite
 from std.python import Python, PythonObject
-from std.python._cpython import PyObjectPtr
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
-from bindings.py_attr import py_attr
-from bindings.optimizer_public_words import stash_python_error
 from bindings.classical_arrays import classical_typed, classical_wrap_array
 from bindings.classical_labels import LabelsView, labels_view
 from bindings.scaler_native import _stage, _ptr
 from bindings.scaler_lifecycle_native import _entries
 from bindings.x_prep_native_owner import xprep_values
-from bindings.normal_dist_helpers import truncnorm_draws_binding
 from bindings.user_objects_native import user_objects_call
 from bindings.prep_stateless_native import _int_like, _repr, _name
+from bindings.prep_native_estimator import prep_estimator_admit, prep_estimator_clone, prep_estimator_call
 from bindings.prep_encode_native import (
     EncProg, _cs, _mark_missing, _imputer_fit, _imputer_transform, _precheck, _default_mode, _word, _iword,
     _take1, _take2, _seed64, _seed_words, _truth, _float, _is_str, _check_width, _int_list, _index_list)
@@ -110,44 +110,11 @@ def _one(value: Float64) -> List[Float64]:
     return out^
 
 
-def _user_call(callable: PythonObject, args: PythonObject, kwargs: PythonObject) raises -> PythonObject:
-    """`callable(*args, **kwargs)` on user code; its exception is restored at
-    the door unchanged (the Python called the user's methods directly)."""
-    ref cpy = Python().cpython()
-    var keywords = PyObjectPtr() if kwargs is None else kwargs._obj_ptr
-    var result = cpy.PyObject_Call(callable._obj_ptr, args._obj_ptr, keywords)
-    if not result:
-        var failure = stash_python_error()
-        raise failure^
-    return PythonObject(from_owned=result)
 
 
-def _user_attr(owner: PythonObject, name: String) raises -> PythonObject:
-    # `owner.<name>`; a missing attribute raises as Python's would.
-    ref cpy = Python().cpython()
-    var result = cpy.PyObject_GetAttrString(owner._obj_ptr, name)
-    if not result:
-        var failure = stash_python_error()
-        raise failure^
-    return PythonObject(from_owned=result)
 
 
-def _method(owner: PythonObject, name: String, args: PythonObject, kwargs: PythonObject = PythonObject(None)) raises -> PythonObject:
-    # `owner.<name>(*args, **kwargs)`.
-    return _user_call(_user_attr(owner, name), args, kwargs)
 
-
-def _clone(est: PythonObject) raises -> PythonObject:
-    """`_clone`: `type(est)(**est.get_params(deep=False))` when est has
-    get_params, else `copy.deepcopy(est)`."""
-    var b = _b()
-    if Bool(py=py_call(b.hasattr, est, "get_params")):
-        var keywords = Python.dict()
-        py_setitem(keywords, "deep", PythonObject(False))
-        var params = _method(est, "get_params", Python.tuple(), keywords)
-        var as_dict = _user_call(b.dict, Python.tuple(params), PythonObject(None))
-        return _user_call(py_type(est), Python.tuple(), as_dict)
-    return _user_call(Python.import_module("copy").deepcopy, Python.tuple(est), PythonObject(None))
 
 
 def _empty1(context: PythonObject) raises -> PythonObject:
@@ -214,12 +181,10 @@ def _refuse(model: PythonObject, context: PythonObject) raises:
     var fields = py_fields(model)
     var estimator = fields["estimator"]
     if estimator is not None:
-        # A user estimator is a mojolearn estimator (its fit and predict are
-        # each one native call); any other class is refused by name first.
-        var module = py_call(b.getattr, py_type(estimator), "__module__", "")
-        if not (_is_str(module) and String(module).startswith("mojolearn.")):
-            raise Error("TypeError: mojolearn: IterativeImputer requires a mojolearn estimator; got "
-                        + String(py_type(estimator).__name__))
+        # A user estimator is a mojolearn estimator with a connected native
+        # plan (its clone, fit and predict are compiled operations); any other
+        # class is refused by name first.
+        prep_estimator_admit(estimator, "IterativeImputer", context)
     var mi = fields["max_iter"]
     if Bool(py=py_call(b.isinstance, mi, b.bool)) or not _int_like(mi, context) or Int(py=py_call(b.int, mi)) < 0:
         raise Error("The 'max_iter' parameter of IterativeImputer must be an int in the range [0, inf). Got "
@@ -232,11 +197,11 @@ def _refuse(model: PythonObject, context: PythonObject) raises:
     if nnf is not None and (not _int_like(nnf, context) or Int(py=py_call(b.int, nnf)) < 1):
         raise Error("mojolearn: n_nearest_features must be an int >= 1; got " + _repr(nnf))
     if _truth(fields["sample_posterior"]) and estimator is not None:
-        var predict = _user_attr(estimator, "predict")
-        var signature = _user_call(Python.import_module("inspect").signature, Python.tuple(predict), PythonObject(None))
-        if not py_contains(py_attr(signature, "parameters"), "return_std"):
-            raise Error("mojolearn: If 'sample_posterior' is True, the estimator must support "
-                        + "'return_std' in its 'predict' method.")
+        # No connected native plan's predict takes return_std (the plans'
+        # predict operations take X only), so this is the reference's refusal
+        # without inspecting the Python method's signature.
+        raise Error("mojolearn: If 'sample_posterior' is True, the estimator must support "
+                    + "'return_std' in its 'predict' method.")
 
 
 def _per_bound(v: PythonObject, d: Int) raises -> List[Float64]:
@@ -492,33 +457,6 @@ def _ii_take(xt: PythonObject, mask: PythonObject, n: Int, dk: Int, j: Int, nbl:
     return _Take(x_fit, y_fit, xm, rows, m)
 
 
-def _truncnorm(mus: PythonObject, sig: PythonObject, lo: Float64, hi: Float64, mut rng: UInt64) raises -> List[Float64]:
-    """`_truncnorm_draws`: the truncated-normal draw per entry
-    (bindings/normal_dist_helpers.mojo), the stream advanced by the entries
-    that draw; the reference's zip stops at the shorter of the two outputs."""
-    var mu = user_objects_call(Python.tuple("floats", user_objects_call(Python.tuple("flatten", mus))))
-    var sd = user_objects_call(Python.tuple("floats", user_objects_call(Python.tuple("flatten", sig))))
-    var k = min(len(mu), len(sd))
-    var out = py_call(Python.import_module("array").array, "d", py_call(_b().bytes, 8 * k))
-    var state = Python.list()
-    _ = py_call(state.append, PythonObject(Int(rng >> 32)))
-    _ = py_call(state.append, PythonObject(Int(rng & 0xFFFFFFFF)))
-    var bounds = Python.list()
-    _ = py_call(bounds.append, PythonObject(lo))
-    _ = py_call(bounds.append, PythonObject(hi))
-    var hi_lo = truncnorm_draws_binding(py_call(mu.buffer_info)[0], py_call(sd.buffer_info)[0], PythonObject(k),
-                                        bounds, state, py_call(out.buffer_info)[0])
-    rng = (UInt64(Int(py=hi_lo[0])) << 32) | UInt64(Int(py=hi_lo[1]))
-    var src = F64P(unsafe_from_address=Int(py=py_call(out.buffer_info)[0]))
-    var vals = List[Float64]()
-    for i in range(k):  # cpu-route: one feature's posterior draws, read once
-        vals.append(src[i])
-        _ = out  # keep the Python object alive through the reads above
-    _ = mu
-    _ = sd
-    return vals^
-
-
 def _ii_put(xt: PythonObject, xm: PythonObject, rows: PythonObject, m: Int, n: Int, dk: Int, j: Int,
             est: PythonObject, posterior: Bool, bounds: List[Float64], mode: PythonObject, mut rng: UInt64,
             context: PythonObject) raises -> PythonObject:
@@ -531,19 +469,11 @@ def _ii_put(xt: PythonObject, xm: PythonObject, rows: PythonObject, m: Int, n: I
     var hi = bounds[2 * j + 1]
     var v = List[Float64]()
     var clip = 1
-    if not posterior:
-        v = _pred_f64(_method(est, "predict", Python.tuple(xm)), context)
-    else:
-        var keywords = Python.dict()
-        py_setitem(keywords, "return_std", PythonObject(True))
-        var got = _method(est, "predict", Python.tuple(xm), keywords)
-        var pair = _user_call(_b().tuple, Python.tuple(got), PythonObject(None))
-        if len(pair) > 2:
-            raise Error("too many values to unpack (expected 2)")
-        if len(pair) < 2:
-            raise Error("not enough values to unpack (expected 2, got " + String(len(pair)) + ")")
-        v = _truncnorm(pair[0], pair[1], lo, hi, rng)
-        clip = 0
+    if posterior:
+        # `_refuse` refused sample_posterior with a user estimator.
+        raise Error("mojolearn: If 'sample_posterior' is True, the estimator must support "
+                    + "'return_std' in its 'predict' method.")
+    v = _pred_f64(prep_estimator_call(est, "predict", Python.tuple(xm), context), context)
     var k = min(len(v), m)  # the reference's zip stops at the shorter
     if k == 0:
         return xt
@@ -724,9 +654,9 @@ def _fit_transform(model: PythonObject, x: PythonObject, context: PythonObject) 
             for i in range(len(orders[r])):  # cpu-route: the user estimator, fitted once per feature (user code)
                 var j = orders[r][i]
                 var nbl = draws.next(rng) if draws.on else _others(dk, j)
-                var est = _clone(estimator)
+                var est = prep_estimator_clone(estimator, context)
                 var took = _ii_take(xt, mask, n, dk, j, nbl, mode, True, context)
-                _ = _method(est, "fit", Python.tuple(took.xo, took.yo))
+                _ = prep_estimator_call(est, "fit", Python.tuple(took.xo, took.yo), context)
                 _ = py_call(seq.append, Python.tuple(j, _int_list(nbl), est))
                 xt = _ii_put(xt, took.xm, took.rows, took.m, n, dk, j, est, posterior, bounds, mode, rng, context)
             done = r + 1

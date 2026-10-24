@@ -6,8 +6,11 @@
 # the same bits) and the fitted attributes or the returned scores.
 #
 # RFE runs its elimination rounds here (one driver loop over the rounds); its
-# estimator must be a mojolearn estimator, whose fit / predict / ... are
-# themselves one native call each, so a round never enters user Python code.
+# estimator must be a mojolearn estimator with a connected native plan. Its
+# clone, fit, predict, predict_proba, decision_function and score run as the
+# plan's compiled operations (bindings/prep_native_estimator.mojo), so a round
+# never enters a Python method: neither the estimator's fit / predict nor its
+# get_params or constructor.
 # Its programs run on the shared arena runner (bindings/prep_classify_prog.mojo
 # `ClsProg`, the classifier owner's context `select_context`) because the
 # support mask and the ranking are in-out inputs, as `_Prog.put(inout=True)`
@@ -31,6 +34,8 @@ from bindings.prep_encode_native import (
     _seed64, _score_words)
 from bindings.prep_classify_prog import ClsProg, f32_array
 from bindings.prep_classify_common import cls_x2d, cls_mode
+from bindings.prep_native_estimator import (
+    prep_estimator_admit, prep_estimator_has, prep_estimator_clone, prep_estimator_call)
 
 comptime F32P = MutPointer[Float32, MutUntrackedOrigin]
 comptime I64P = MutPointer[Int64, MutUntrackedOrigin]
@@ -86,24 +91,13 @@ def _class_name(value: PythonObject) raises -> String:
     return String(py_type(value).__name__)
 
 
-def _admit_estimator(est: PythonObject) raises:
-    # Only a mojolearn estimator: its fit, predict, predict_proba,
-    # decision_function and score are one native call each.
-    var b = native_loaded_module("builtins")
-    var module = _attr(py_type(est), "__module__")
-    if module is None or py_type(module) is not b.str or not String(module).startswith("mojolearn."):
-        raise Error("TypeError: mojolearn: RFE requires a mojolearn estimator; got " + _class_name(est))
-
-
-def _clone(est: PythonObject) raises -> PythonObject:
-    # RFE._clone: `type(est)(**est.get_params())` when it has get_params, else est itself.
-    var b = native_loaded_module("builtins")
-    if not Bool(py=py_call(b.hasattr, est, "get_params")):
-        return est
-    var params = _call(_attr(est, "get_params"), Python.tuple(), PythonObject(None))
-    if py_type(params) is not b.dict:
-        params = py_call_typed(b.dict, params)
-    return _call(py_type(est), Python.tuple(), params)
+def _fit_clone(estimator: PythonObject, x: PythonObject, y: PythonObject, context: PythonObject) raises -> PythonObject:
+    """RFE's `_clone(estimator).fit(x, y)`: the clone built from the
+    constructor schema and fitted by the plan's compiled fit (no Python
+    get_params, constructor or fit). Returns the fitted clone."""
+    var est = prep_estimator_clone(estimator, context)
+    _ = prep_estimator_call(est, "fit", Python.tuple(x, y), context)
+    return est
 
 
 # ---------------------------------------------------------------- RFE programs
@@ -185,7 +179,7 @@ def _rfe_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
     var cc = context["select_context"]
     var fields = py_fields(model)
     var estimator = fields["estimator"]
-    _admit_estimator(estimator)
+    prep_estimator_admit(estimator, "RFE", context)
     var g = fields["importance_getter"]
     if not Bool(py=py_call(b.isinstance, g, b.str)):
         if Bool(py=py_call(b.callable, g)):
@@ -193,6 +187,10 @@ def _rfe_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         raise Error("mojolearn: RFE importance_getter must be 'auto', a str or a callable")
     var y = args[1]
     var fit_params = _fit_params(args)
+    if py_type(fit_params) is not b.dict or len(fit_params) != 0:
+        # The plan's fit takes (X, y) only; extra fit parameters would need
+        # the estimator's Python fit.
+        raise Error("TypeError: mojolearn: RFE.fit takes no fit parameters for the estimator")
     var arr = cls_x2d(args[0], cc)
     var n = arr.n
     var d = arr.d
@@ -230,8 +228,7 @@ def _rfe_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
             if support[j]:
                 features.append(j)
         var m = len(features)
-        var fit = _attr(_clone(estimator), "fit")
-        var est = _call(fit, Python.tuple(_gather_cls(arr.value, n, d, features, mode, cc), y), fit_params)
+        var est = _fit_clone(estimator, _gather_cls(arr.value, n, d, features, mode, cc), y, context)
         var pr = ClsProg()
         var key = _importance_keys(pr, est, m, g, context, cc)
         var mask = List[Float64]()
@@ -255,8 +252,7 @@ def _rfe_fit(model: PythonObject, args: PythonObject, context: PythonObject) rai
         if support[j]:
             features.append(j)
         _ = py_call(mask_list.append, PythonObject(support[j]))
-    var final_fit = _attr(_clone(estimator), "fit")
-    var final = _call(final_fit, Python.tuple(_gather_cls(arr.value, n, d, features, mode, cc), y), fit_params)
+    var final = _fit_clone(estimator, _gather_cls(arr.value, n, d, features, mode, cc), y, context)
     py_setitem(fields, "estimator_", final)
     py_setitem(fields, "_mask", mask_list)
     py_setitem(fields, "support_", py_call(b.list, mask_list))
@@ -294,12 +290,19 @@ def prep_rfe_call(model: PythonObject, operation: String, args: PythonObject,
         _rfe_fit(model, args, context)
         return _rfe_transform(model, args[0], context)
     if operation == "predict" or operation == "predict_proba" or operation == "decision_function" or operation == "score":
-        # `self.estimator_.<op>(self.transform(X)[, y])`: the method is looked up first
-        var method = _attr(_attr(model, "estimator_"), operation)
+        # `self.estimator_.<op>(self.transform(X)[, y])`: the method is looked
+        # up first, in the fitted estimator's native plan
+        var fitted = py_fields(model)
+        if not py_contains(fitted, "estimator_"):
+            raise Error("AttributeError: '" + _class_name(model) + "' object has no attribute 'estimator_'")
+        var est = fitted["estimator_"]
+        prep_estimator_admit(est, "RFE", context)
+        if not prep_estimator_has(est, operation, context):
+            raise Error("AttributeError: '" + _class_name(est) + "' object has no attribute '" + operation + "'")
         var xs = _rfe_transform(model, args[0], context)
         if operation == "score":
-            return _call(method, Python.tuple(xs, args[1]), PythonObject(None))
-        return _call(method, Python.tuple(xs), PythonObject(None))
+            return prep_estimator_call(est, operation, Python.tuple(xs, args[1]), context)
+        return prep_estimator_call(est, operation, Python.tuple(xs), context)
     raise Error("TypeError: the native RFE owner does not serve " + operation)
 
 

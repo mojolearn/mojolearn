@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Prep lane option parity sanity against scikit-learn: encoder infrequent
-categories, LabelBinarizer multilabel, SimpleImputer callable strategy,
+categories, LabelBinarizer multilabel, SimpleImputer callable strategy (refused),
 LDA / QDA covariance_estimator, TargetEncoder categories list and cv
 splitters, naive Bayes partial_fit."""
 import warnings
@@ -78,18 +78,21 @@ def test_multilabel_binarizer():
                                       r.inverse_transform(S, threshold=0.3))
 
 
-def test_simple_imputer_callable():
-    rng = np.random.default_rng(4)
-    X = np.round(rng.standard_normal((80, 3)) * 2).astype(np.float32)
-    X[::5, 0] = np.nan
-    X[:, 2] = np.nan
-    for keep in (False, True):
-        m = ml.SimpleImputer(strategy=np.median, keep_empty_features=keep).fit(X)
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            r = ski.SimpleImputer(strategy=np.median, keep_empty_features=keep).fit(X)
-            np.testing.assert_allclose(np.asarray(m.statistics_), r.statistics_, rtol=1e-6)
-            np.testing.assert_allclose(np.asarray(m.transform(X)), r.transform(X), rtol=1e-6)
+def test_simple_imputer_callable_refused():
+    # A callable strategy would run user Python code per column inside the
+    # native fit; it is refused like any other invalid strategy, and never called.
+    import pytest
+    calls = []
+
+    def strategy(column):
+        calls.append(1)
+        return float(np.median(column))
+
+    X = np.array([[1.0, np.nan], [3.0, 4.0], [np.nan, 8.0]], dtype=np.float32)
+    for est in (ml.SimpleImputer(strategy=strategy), ml.SimpleImputer(strategy=np.median)):
+        with pytest.raises(ValueError, match="strategy .* is not valid"):
+            est.fit(X)
+    assert calls == []
 
 
 def test_covariance_estimator():
