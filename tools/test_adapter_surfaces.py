@@ -51,3 +51,12 @@ def test_the_checkers_and_smoke_name_no_per_operation_tool():
                      "check_max_adapter_fault", "adapter_payload", "ops.mojolearn.operation(",
                      "mojolearn_operation0", "mojolearn_matmul"):
             assert gone not in text, (path, gone)
+
+
+def test_the_transfer_probe_parses_without_torch():
+    import subprocess
+    import sys
+    r = subprocess.run([sys.executable, str(REPO / "tools/adapter_transfer_probe.py"), "--help"],
+                       capture_output=True, text=True)
+    assert r.returncode == 0 and "transfer_in_ms" in r.stdout
+    assert "measured:" in (REPO / "python/mojolearn/adapters/_torch_compile.py").read_text()
