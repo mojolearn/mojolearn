@@ -374,18 +374,24 @@ def test_a_binding_every_lane_reaches_does_not_hand_over_its_tree():
                 _reported_native_limitation(sel, path, other)
 
 
+@_pending_precision("Shared classical dispatcher: since host_routes follows HOST_IMPORT_ALIASES, ols/kmeans/arima "
+                    "reach _mojolearn_runtime_classical_host's classical_native_call, whose string-dispatched "
+                    "tree branches stay broad; see tools/LANE_SELECTOR_PRECISION.md.")
 def test_shared_binding_paths_exclude_unrelated_lanes():
-    # RESOLVED DEBT (2026-10-24): this was a strict expected failure (OLS's
-    # import-time archive registration retained the forest owner). Since the
-    # classical native entries left the tokenizer host binding (8188d819d) the
-    # forest, GBDT and mamba paths no longer select ols, kmeans or arima, so the
-    # strict marker reported an unexpected pass. Per tools/LANE_SELECTOR_PRECISION.md
-    # the marker is removed and the exclusion is a required check again.
+    # DEBT AGAIN (2026-10-24). This passed after 8188d819d only because the
+    # selector lost the edge to the classical owner: tokenizer_host's
+    # classical_native_call became an unavailable stub and nothing followed
+    # load_host_module's alias to _mojolearn_runtime_classical_host. With
+    # the alias routed, ols, kmeans and arima reach the generic classical
+    # dispatcher, whose tree branches cannot be excluded yet; the required
+    # half (every such lane carries a native-dispatch record) is checked in
+    # test_a_binding_every_lane_reaches_does_not_hand_over_its_tree.
     for path in ("core/forest_host_predict.mojo", "mamba/impl/modeling/modeling_mamba.mojo",
                  "core/gbdt_host_predict.mojo"):
         selected = lane_select.select([path])["lanes"]
         for other in ("ols", "kmeans", "arima"):
-            assert other not in selected, f"{path} selected unrelated {other}"
+            if other in selected:
+                raise _UnprovedPrecision(f"{path} selected unrelated {other}")
 
 
 def test_a_bindings_edge_always_has_a_door_that_resolves_it():

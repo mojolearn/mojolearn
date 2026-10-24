@@ -39,16 +39,25 @@ The required real-tree tests check attribution, inclusion of the affected
 family and visible evidence for extra selections. Synthetic tests still
 require proven narrow helper/import paths. The original desired real-tree
 exclusions and duplicated numerical/generator bounds remain in three **strict expected-failure** tests named
-`test_pending_precision_*`; only their explicit exclusion failure is expected. (The fourth, the shared-binding
-exclusions of ols/kmeans/arima from the forest, GBDT and mamba paths, passed unexpectedly on 2026-10-24 after
-8188d819d moved the classical native entries out of the tokenizer host binding, and is a required test again.)
+`test_pending_precision_*`, plus `test_shared_binding_paths_exclude_unrelated_lanes`; only their explicit
+exclusion failure is expected. (That fourth one passed for a day after 8188d819d only because the selector had
+lost the edge to the classical owner: `_mojolearn_tokenizer_host`'s `classical_native_call` became a stub that
+`load_host_module` aliases to `_mojolearn_runtime_classical_host`. `host_routes` follows
+`HOST_IMPORT_ALIASES` since 2026-10-24, and the exclusion is pending again.)
+
+Since 2026-10-24 an export is reached from a native body only through a call site (`_mojo_export_refs`: a
+whole-identifier string literal, an attribute name, or a call in code), never through a word in a comment,
+docstring or message. Before that, `glm/host/qn_oracle.mojo` selected mamba1 and transformer with no
+native-dispatch record, because `_mojolearn_estimators_host`'s docstring lists its exports.
 Other exceptions remain failures, and an unexpected pass requires removing the
 resolved debt marker. Passing required tests with these expected failures is
 not a claim that real-tree narrowing is complete.
 
-The 2026-10-23 final source audit measured k-means / host GBDT / host forest
-at 555 / 470 / 470 selected lanes. Their desired counts remain 84 / 55 / 93;
-540 / 470 / 470 selections respectively carry unresolved dispatcher records.
+The 2026-10-24 selector (call-site exports, routed import aliases) selects
+490 / 490 / 490 lanes for k-means / host GBDT / host forest; 480 of each carry
+unresolved dispatcher records (the shared classical owner), 10 do not. Their
+desired counts remain 84 / 55 / 93. (2026-10-23: 555 / 470 / 470, 540 / 470 /
+470 with records.)
 The required checks retain essential family coverage, refuse unexplained
 widening, and validate those records. The independent forest-inference count
 53 and neural-inference count 85 remain ordinary exact assertions.
