@@ -629,7 +629,6 @@ def _le_transform_device(mode: PythonObject, lb: LabelBuf, cats: PythonObject, c
 
 
 def _le_transform(model: PythonObject, y: PythonObject, context: PythonObject) raises -> PythonObject:
-    var b = _builtins()
     var fields = py_fields(model)
     _check_fitted(fields, "LabelEncoder")
     var cats = fields["_cats"]
@@ -1079,8 +1078,8 @@ def _mlb_transform(model: PythonObject, y: PythonObject, context: PythonObject) 
     var m = len(flat)
     if m == 0:
         var empty = p.alloc(n * max(K, 1))
-        var ran = p.run(entries, context)
-        return _take_i32(ran, empty, n, K, context)
+        var ran_empty = p.run(entries, context)
+        return _take_i32(ran_empty, empty, n, K, context)
     var codes = NONE
     if cats is None or _numeric_labels(flat) is None:
         var native = _str_codes(classes, flat, True, context)

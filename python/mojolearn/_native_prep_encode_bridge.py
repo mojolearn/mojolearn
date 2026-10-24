@@ -32,7 +32,7 @@ def connect(kinds, qselect, scores, owner_kinds=None, owner_classes=None):
                          "x_prep_host_column", "x_prep_run_out", "x_prep_run_scratch", "x_prep_run_ranges",
                          "x_prep_dev_put", "x_prep_dev_free", "x_prep_dev_live", "x_prep_dev_take_rows",
                          "x_prep_cls2_cat", "x_prep_fast_unique", "x_prep_c08_routes", "x_prep_target_scratch",
-                         "x_prep_spline_fused"):
+                         "x_prep_spline_fused", "x_prep_label_present"):
                 try:
                     entry = getattr(module, name)
                 except (AttributeError, ImportError):
