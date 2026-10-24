@@ -510,3 +510,69 @@ def test_a_ptx_column_never_corroborates_a_reference(tmp_path, monkeypatch, colu
     table=_ptx_table(tmp_path, monkeypatch, columns)
     assert 'x/base' not in table['cells']
     assert table['ptx_divergent']==[]
+
+
+# ------------------------------------------ the cpu column decides (2026-10-24)
+# Andrew 2026-10-24: "the cpu column should be REQUIRED too." The builder keeps
+# every cpu value it reads, agreeing (a bare index) or not (a pair, or a
+# conflict at one commit); tools/identity_admission_guard.py then refuses any
+# selected numerical part whose cpu value is not the Apple == NVIDIA == AMD
+# reference. These watch the builder hand the guard each case.
+
+def _admission_guard():
+    import importlib.util, pathlib
+    path = pathlib.Path(__file__).resolve().parents[3] / 'tools/identity_admission_guard.py'
+    spec = importlib.util.spec_from_file_location('identity_admission_guard_for_vref', path)
+    guard = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(guard)
+    return guard
+
+
+def _cpu_table(tmp_path, monkeypatch, cpu_value, cpu_commit):
+    import json, types
+    h = types.SimpleNamespace(LANES={'x': None}, FIXTURES=['base'], LANE_REVISIONS={}, __file__=__file__,
+        _h=lambda x: 'f' * 16, fixture=lambda f: (0, 0, 0), heldout=lambda f: 0,
+        BATCH_ALONE=16, BATCH_SPLIT=(3, 7), _part_protocol=lambda part, alone: dict(length=32))
+    paths = []
+    for stem, vendor, value, commit in [('amd', 'amd-test', 'a' * 16, 'a' * 40),
+                                        ('apple', 'apple-test', 'a' * 16, 'a' * 40),
+                                        ('nvidia', 'nvidia-test', 'a' * 16, 'a' * 40),
+                                        ('cpu', 'cpu-test', cpu_value, cpu_commit)]:
+        path = tmp_path / f'{stem}.json'
+        path.write_text(json.dumps(dict(mode='identical', commit=commit, vendor=vendor,
+            cells={'x/base': dict(verdict='STABLE', hashes=[value])},
+            fixtures={'base': dict(X='f' * 16, y_clf='f' * 16, y_reg='f' * 16)},
+            heldout={'base': dict(X='f' * 16)})))
+        paths.append(path)
+    monkeypatch.setattr(vref, '_commit_time', lambda root, commit, cache: 2 if commit == 'a' * 40 else 1)
+    return vref.build_table([str(p) for p in paths], h, str(tmp_path), parts=('train',))
+
+
+def _guard_problems(table):
+    import copy
+    guard = _admission_guard()
+    base = copy.deepcopy(table)
+    base['cells'] = {}
+    guard.REQUIRED_PARTS = frozenset(('train',))
+    return guard.validate(base, table, ['x'], (frozenset(), ()))['problems']
+
+
+@pytest.mark.parametrize('case', ['agree', 'same-commit', 'older-commit'])
+def test_the_cpu_column_must_equal_the_gpu_reference(tmp_path, monkeypatch, case):
+    cpu_value = 'a' * 16 if case == 'agree' else 'b' * 16
+    cpu_commit = 'b' * 40 if case == 'older-commit' else 'a' * 40
+    table = _cpu_table(tmp_path, monkeypatch, cpu_value, cpu_commit)
+    ent = table['cells']['x/base']['train']
+    problems = _guard_problems(table)
+    if case == 'agree':
+        assert ent['ref'] == 'a' * 16 and isinstance(ent['cols']['cpu'], int)
+        assert problems == []
+    elif case == 'same-commit':
+        # a disagreement inside one record: no reference at all
+        assert ent.get('conflict') and ent['ref'] is None
+        assert problems == ['x/base/train: missing or conflicted reference']
+    else:
+        # an older cpu value stays VISIBLE as a pair, and the guard refuses it
+        assert ent['ref'] == 'a' * 16 and ent['cols']['cpu'][1] == 'b' * 16
+        assert problems == [f"x/base/train: cpu disagrees with the GPU reference "
+                            f"(cpu={'b' * 16}, gpu={'a' * 16})"]
