@@ -19,7 +19,7 @@ from bindings.native_error_class import error_without_class
 from bindings.py_balanced import py_call, py_type, py_get, py_fields, py_setitem, py_contains
 from bindings.py_attr import py_attr
 from bindings.py_typed_call import py_call_typed
-from bindings.prep_native_estimator import prep_native_split
+from bindings.prep_native_estimator import prep_native_split, prep_entry_call
 from bindings.classical_attributes import classical_connect_numpy
 from bindings.classical_arrays import classical_address, classical_typed, classical_wrap_array, classical_c_order
 from bindings.scaler_native import _stage, _ptr, _input
@@ -2821,8 +2821,10 @@ def _topk_from(p_ran: PythonObject, mask: Int, d: Int) raises -> PythonObject:
 def _select_fit(model: PythonObject, x: PythonObject, values: PythonObject, y: PythonObject, context: PythonObject) raises:
     """SelectKBest.fit: f_classif, chi2, f_regression and r_regression run
     their programs here with the top-k stages in the same program (the
-    scores stay in the arena); any other score_func is the user's callable,
-    called once with the converted X and y as the Python fit called it."""
+    scores stay in the arena); mutual_info_classif and mutual_info_regression
+    (their defaults) run as the encode owner's own operation, re-entered
+    through its compiled entry. Any other score_func would be user Python code
+    in fit and is refused."""
     var b = Python.import_module("builtins")
     var fields = py_fields(model)
     var d = Int(py=values[4])
@@ -2830,6 +2832,10 @@ def _select_fit(model: PythonObject, x: PythonObject, values: PythonObject, y: P
     var entries = _entries(mode, context)
     var score_func = fields["score_func"]
     var builtin = py_get(context["prep_encode_scores"], score_func)
+    if builtin is None:
+        raise Error("TypeError: mojolearn: SelectKBest score_func must be f_classif, chi2, f_regression, "
+                    + "r_regression, mutual_info_classif or mutual_info_regression; a user callable is not supported")
+    var mutual = String(builtin).startswith("mutual_info_")
     var k_arg = fields["k"]
     var keep_all = _is_str(k_arg) and String(k_arg) == "all"
     var k = 0
@@ -2839,7 +2845,7 @@ def _select_fit(model: PythonObject, x: PythonObject, values: PythonObject, y: P
         k_ok = 0 <= k and k <= d
     var output = context["output_context"]
     var mask = PythonObject(None)
-    if builtin is not None:
+    if not mutual:
         var name = String(builtin)
         var p = EncProg()
         var offs = (0, 0, -1)
@@ -2869,7 +2875,14 @@ def _select_fit(model: PythonObject, x: PythonObject, values: PythonObject, y: P
         if mo >= 0:
             mask = _topk_from(ran, mo, d)
     else:
-        var out = py_call_typed(score_func, x, y)
+        # `score_func(X, y)`: mutual_info_*(X, y) with its defaults
+        # (discrete_features='auto', n_neighbors=3, random_state=None), the
+        # operation the public function passes to the same entry.
+        var entry = context["prep_encode_entry"]
+        if py_type(entry) is not py_type(b.len):
+            raise Error("ImportError: mojolearn: the encode owner's entry is unavailable")
+        var out = prep_entry_call(entry, Python.tuple(PythonObject(None), builtin,
+                                                     Python.tuple(x, y, "auto", 3, PythonObject(None)), context))
         var scores = out
         var pvals = PythonObject(None)
         if Bool(py=py_call(b.isinstance, out, Python.tuple(b.tuple, b.list))):

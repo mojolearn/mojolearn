@@ -3220,12 +3220,13 @@ class SelectKBest(_SelectorMixin):
     Follows scikit-learn's ``SelectKBest``. Fit calls ``score_func(X, y)`` and keeps the ``k`` columns
     with the highest scores. NaN scores rank lowest. Among tied scores the later column is kept, as with
     scikit-learn's stable sort. ``score_func`` may be :func:`f_classif`, :func:`chi2`,
-    :func:`f_regression`, or any callable returning scores or a ``(scores, pvalues)`` pair.
+    :func:`f_regression`, :func:`r_regression`, :func:`mutual_info_classif` or
+    :func:`mutual_info_regression`; any other value raises ``TypeError``.
 
     Parameters
     ----------
-    score_func : callable, default f_classif
-        Function of ``(X, y)`` returning the scores.
+    score_func : function, default f_classif
+        One of the scoring functions above, called as ``score_func(X, y)`` with its defaults.
     k : int or 'all', default 10
         Number of columns to keep, ``0 <= k <= n_features`` (``ValueError`` otherwise), or ``'all'``.
 
@@ -3628,7 +3629,8 @@ from ._native_prep_encode_bridge import connect as _connect_encode
 _ENCODE_CALL, _ENCODE_CONTEXT = _connect_encode(
     {SimpleImputer: "simple_imputer", KBinsDiscretizer: "kbins", OrdinalEncoder: "ordinal",
      OneHotEncoder: "onehot", TargetEncoder: "target", SplineTransformer: "spline", SelectKBest: "select_kbest"},
-    _X_PREP2_QSELECT, {f_classif: "f_classif", chi2: "chi2", f_regression: "f_regression", r_regression: "r_regression"},
+    _X_PREP2_QSELECT, {f_classif: "f_classif", chi2: "chi2", f_regression: "f_regression", r_regression: "r_regression",
+                       mutual_info_classif: "mutual_info_classif", mutual_info_regression: "mutual_info_regression"},
     {LabelEncoder: "label_encoder",
      LabelBinarizer: "label_binarizer",
      MultiLabelBinarizer: "multilabel_binarizer",
@@ -3645,4 +3647,6 @@ _CLS_CALL, _CLS_CONTEXT = _connect_classify(
      LinearDiscriminantAnalysis: "lda", QuadraticDiscriminantAnalysis: "qda"}, _PROG_CONTEXT)
 # RFE and the mutual-information functions (bindings/prep_select_native.mojo) run
 # their programs on the classifier owner's arena-runner context.
-_ENCODE_CONTEXT.update(select_context=_CLS_CONTEXT, select_mi_work=_MI_WORK)
+# prep_encode_entry: SelectKBest's mutual_info score functions re-enter the
+# encode owner's compiled entry (bindings/prep_encode_native.mojo `_select_fit`).
+_ENCODE_CONTEXT.update(select_context=_CLS_CONTEXT, select_mi_work=_MI_WORK, prep_encode_entry=_ENCODE_CALL)

@@ -19,7 +19,7 @@ from bindings.optimizer_public_words import stash_python_error
 from bindings.py_balanced import py_call, py_type, py_get, py_contains
 
 
-def _entry_call(entry: PythonObject, args: PythonObject) raises -> PythonObject:
+def prep_entry_call(entry: PythonObject, args: PythonObject) raises -> PythonObject:
     """`entry(*args)` on a compiled entry; the exception it sets is restored
     at the door unchanged."""
     ref cpy = Python().cpython()
@@ -74,14 +74,14 @@ def prep_estimator_has(est: PythonObject, method: String, context: PythonObject)
 def prep_estimator_clone(est: PythonObject, context: PythonObject) raises -> PythonObject:
     """`type(est)(**est.get_params(deep=False))`, built natively from the
     constructor schema (no constructor or get_params call)."""
-    return _entry_call(prep_native_entry(context),
+    return prep_entry_call(prep_native_entry(context),
                        Python.tuple(est, "family_msel_estimator_clone", Python.tuple(), prep_native_context(context)))
 
 
 def prep_estimator_call(est: PythonObject, method: String, args: PythonObject,
                         context: PythonObject) raises -> PythonObject:
     """`est.<method>(*args)` as the compiled operation est's plan names."""
-    return _entry_call(prep_native_entry(context),
+    return prep_entry_call(prep_native_entry(context),
                        Python.tuple(est, "family_msel_estimator_call", Python.tuple(method, args),
                                     prep_native_context(context)))
 
@@ -89,6 +89,6 @@ def prep_estimator_call(est: PythonObject, method: String, args: PythonObject,
 def prep_native_split(cv: PythonObject, x: PythonObject, y: PythonObject, context: PythonObject) raises -> PythonObject:
     """`cv.split(x, y)` of a mojolearn splitter as the model-selection owner's
     `family_msel_split` operation (the operation its `split` calls)."""
-    return _entry_call(prep_native_entry(context),
+    return prep_entry_call(prep_native_entry(context),
                        Python.tuple(cv, "family_msel_split", Python.tuple(x, y, PythonObject(None)),
                                     prep_native_context(context)))
