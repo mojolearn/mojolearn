@@ -95,3 +95,4 @@ coverage-core-msel_device_host	build rc 0, 101s, build_core_host rc 0, 26s	MISSE
 coverage-core-dense_coo	build rc 0, 77s, build_core_host rc 0, 28s	MISSED	x-cluster-spectral-affinities (host MOVED Metal unmoved) spectral-precomputed (host unmoved Metal unmoved)	1 DIVERGENT, 3 IDENTICAL	STABLE, exact clean source/bindings/results restored	134
 coverage-training-residual_dropout	build_training rc 0, 116s, build_training_host rc 0, 21s	CAUGHT	public-residual-dropout (host MOVED Metal MOVED)	2 OWED (no reference)	STABLE, exact clean source/bindings/results restored	162
 coverage-training-samba_accumulate_out	build_training rc 0, 112s	CAUGHT	grad-accumulation (Metal MOVED)	1 DIVERGENT	STABLE, exact clean source/bindings/results restored	126
+coverage-training-chunked_lm_head_v2_logit	build_training rc 0, 122s	CAUGHT	training-chunked-lm-head (Metal MOVED)	1 DIVERGENT	STABLE, exact clean source/bindings/results restored	135
