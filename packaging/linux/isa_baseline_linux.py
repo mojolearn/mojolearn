@@ -103,8 +103,14 @@ def scan(path):
         if ":\t" not in line:
             continue
         n += 1
+        # Match the INSTRUCTION only: the text after the address, up to objdump's
+        # `<symbol+off>` annotation. A symbol name is not an opcode: on 2026-10-24
+        # the host set was refused because `call f21560 <...PythonObject::__init__
+        # ...="knots">` matched `k(not)\w*` three times (the spline encoder's
+        # "knots" literal), with no AVX-512 anywhere in the binary.
+        insn = line.split(":\t", 1)[1].split("<", 1)[0]
         for label, rx in FORBIDDEN:
-            if rx.search(line):
+            if rx.search(insn):
                 d = findings.setdefault(label, {"count": 0, "first": None})
                 d["count"] += 1
                 if d["first"] is None:
