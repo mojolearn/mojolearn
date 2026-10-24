@@ -81,6 +81,12 @@ SHELL_MODULES = frozenset({"_buffer", "_array", "_arrays", "_cast_in", "_bufchec
 
 GETTER_NAMES = frozenset({"binding", "_bind", "load_host_module", "load_door_host", "load_set",
                           "_load_member", "_exec_binding"})
+# Functions that ARE the conversion layer although they live outside SHELL_MODULES: a call into one is
+# a shell call, not walked. `_parallel_pool.public_method_result` applies `_mode._public_result`, the
+# public-output conversion every plain method's `_public_output` wrapper applies after the native call,
+# to a pooled driver's joined result (2026-10-24, par-kernel-ridge dtype flip). The wrapper is not on
+# any walked path; the driver's explicit call must not count as runtime Python either.
+SHELL_FUNCTIONS = frozenset({("_parallel_pool", "public_method_result")})
 NUMPY_NAMES = frozenset({"np", "numpy", "_np"})
 NUMPY_CONVERSION = frozenset({
     "asarray", "ascontiguousarray", "asfortranarray", "asanyarray", "array", "require", "dtype",
@@ -851,6 +857,18 @@ def _call(index, scope, node, facts):
         entry = func_expr.id   # a compiled dispatcher called directly: `_ENTRY(self, "fit", args, _CONTEXT)`
     elif isinstance(func_expr, ast.Call):
         entry = scope.entry_of(func_expr)
+    elif isinstance(func_expr, ast.Attribute) and isinstance(func_expr.value, ast.Name):
+        # `_selection._NATIVE(None, "family_msel_parallel_score", ...)`: a sibling module's own
+        # module-level compiled dispatcher or entry, reached through `from . import model_selection
+        # as _selection` (parallel_model_selection.cross_val_score, 2026-10-24: native, not Python).
+        base = index.resolve_expr(func_expr.value, scope.modname, scope.func)
+        if base and base[0] == "module" and index.module_file(base[1]):
+            sibling = index.mod(base[1])
+            if sibling is not None and sibling is not scope.func.mod:
+                if func_expr.attr in sibling.entry_globals:
+                    entry = sibling.entry_globals[func_expr.attr]
+                elif func_expr.attr in sibling.binding_globals:
+                    entry = func_expr.attr
     if entry is not None:
         facts.native_sites += 1
         facts.entries.add(entry)
@@ -884,6 +902,8 @@ def _call(index, scope, node, facts):
         facts.unresolved += 1
         return
     shell = obj.mod.short in SHELL_MODULES and obj.mod.name.count(".") == 1
+    if kind == "func" and (obj.mod.short, obj.qual) in SHELL_FUNCTIONS and obj.mod.name.count(".") == 1:
+        shell = True
     if kind == "class":
         if obj.name in ALLOC_CLASSES or shell:
             facts.allocs += obj.name in ALLOC_CLASSES
