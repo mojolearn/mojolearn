@@ -82,7 +82,7 @@ def _output_layout(gm):
 def _bound_module(torch, gm, bound):
     """``gm`` with the parameters at positions ``bound`` held as buffers, taking the other inputs."""
 
-    class _Bound(torch.nn.Module):
+    class CompiledGraph(torch.nn.Module):
         def __init__(self):
             super().__init__()
             self.graph_module = gm
@@ -98,7 +98,7 @@ def _bound_module(torch, gm, bound):
             out = self.graph_module(*args)
             return tuple(out) if isinstance(out, list) else out
 
-    return _Bound()
+    return CompiledGraph()
 
 
 class _Compiled:

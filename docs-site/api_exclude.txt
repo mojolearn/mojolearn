@@ -107,3 +107,10 @@ GenerationStream.info	native generation stream metadata; current cross-vendor qu
 GenerationStream.state_dict	native generation stream checkpoint; current cross-vendor qualification pending
 mojolearn.ops.Session.rms_norm
 mojolearn.ops.Session.rotary
+torch.ops.mojolearn.operation	building block; a whole model runs as one program
+max.mojolearn_matmul	building block; a whole model runs as one program
+max.mojolearn_relu	building block; a whole model runs as one program
+max.mojolearn_operation0	building block; a whole model runs as one program
+max.mojolearn_operation1	building block; a whole model runs as one program
+max.mojolearn_operation2	building block; a whole model runs as one program
+max.mojolearn_operation3	building block; a whole model runs as one program
