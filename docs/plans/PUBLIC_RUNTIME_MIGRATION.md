@@ -5,7 +5,7 @@ package stands today, and the order of the migration.
 
 ## The contract
 
-Python connects the user to Mojo, and Mojo does the work. A public method (`fit`, `predict`, `transform`,
+Python connects the user to Mojo, and Mojo does the work. A public runtime method (`fit`, `predict`, `transform`,
 `score`, `partial_fit`, `sample`, `decision_function`, `predict_proba`, `generate`, `step`, `save`/`load`,
 ...) runs in this order:
 
@@ -14,11 +14,17 @@ Python connects the user to Mojo, and Mojo does the work. A public method (`fit`
               -> return
 
 The owner contract in `AGENTS.md` is: "A public method is one binding call that hands over buffers and returns the result; nothing else runs in Python."
+Andrew's 2026-10-24 clarification makes one narrow exception: `__sklearn_tags__` and helpers used solely to construct
+and return scikit-learn tag metadata may run in the Python compatibility layer, including loading the optional tag
+classes. Preserve the tag contract and audit this metadata separately; its Python implementation alone is not a
+computational runtime violation. Mojo/native operations must not call back into Python tag handling. Other metadata
+protocols and public methods are not exempt, and all computational runtime requirements below still apply.
+
 Outside that native call, Python does not convert or prepare inputs, choose execution routes,
 allocate working buffers, sequence several native calls or post-process results. Import-time connection
 is distinct from a public constructor or an operation's first call. Native code must not call back into
 Python functions, methods, descriptors or input protocols. PyPI and the
-scikit-learn compatible interface are only the shell. They are never a reason to keep implementation
+scikit-learn compatible interface are only the shell. The tag exception does not permit runtime implementation
 logic in Python.
 
 A standalone native smoke test does not prove that a public method is native, and neither does a green

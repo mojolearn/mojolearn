@@ -114,14 +114,18 @@ A/B with the old rule as the B arm, timed on neighboring shapes and one non-boar
 
 ## No Python in the runtime
 
-Python is good, and the right tool, for the glue layer: the public API, connecting to external code (NumPy, scikit-learn
-style interfaces, users' objects), argument checks and choosing bindings. It is the API shell only: check arguments, choose a binding, pass buffers, return results. No Python runs in the
-runtime: no loops over data, no NumPy or Python arithmetic on data, no Python-side sorting, sampling, reductions, label
-processing over rows, or worker threads in fit, transform, predict, score or training steps, in any mode or on any vendor.
-All runtime work is Mojo: on the device for GPU routes, in the host binding for CPU-only installs. Text and file handling
-that cannot be Mojo is an explicit CPU-only input step before the runtime, marked `# cpu-route: <reason>`.
-Every existing violation is debt to remove (the checker baseline `tools/hooks/host_routes_baseline.tsv`, class py-compute),
-and no change may add one.
+Follow the current owner contract in [AGENTS.md](AGENTS.md#no-python-in-the-runtime).
+Public runtime methods hand buffers to one compiled Mojo/native call, which owns input validation and preparation,
+binding selection, computation, training loops, batching, backward, optimizers, workers and output processing.
+Native product operations must not call back into Python. Python remains available for the thin binding connection,
+packaging/distribution and testing; checker baseline entries are debt, not exemptions.
+
+Owner clarification (2026-10-24): `__sklearn_tags__` and helpers used solely to construct and return scikit-learn tag
+metadata may run in Python in the compatibility layer, including loading the optional tag classes. Preserve the tag
+contract; there is no requirement to move this metadata into Mojo. This is a narrow exception, not permission for
+Python in the runtime work listed above or in other metadata protocols. Native operations must not call back into
+Python tag handling. Audit allowed tag metadata separately from computational runtime violations, while retaining
+protocol-correctness checks and the no-callback requirement.
 
 ## Release cost rules (Andrew, 2026-10-10)
 

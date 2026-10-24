@@ -267,6 +267,26 @@ same bits is the double work the release cost rules forbid. Treat them different
 
 ## No Python in the runtime
 
+Owner clarification (2026-10-24): scikit-learn tag metadata is a narrow
+compatibility-layer exception to the rules below.
+
+- `__sklearn_tags__` and helpers used solely to construct and return its tag
+  metadata may run in Python, including loading the optional scikit-learn tag
+  classes. They do not need to be migrated to Mojo solely to satisfy the
+  one-native-call rule. Preserve the supported scikit-learn tag contract.
+- Mojo/native product operations must not call back into Python tag handling.
+  This exception does not permit Python in input validation or preparation,
+  binding selection, computation, training loops, batching, backward, optimizers,
+  worker orchestration or consumed-output processing. It does not exempt other
+  metadata protocols or public methods.
+- Audits must distinguish this allowed Python compatibility metadata from
+  computational runtime violations. Do not count a tag method as a runtime
+  violation solely because its metadata implementation is Python; still check
+  its protocol correctness and reject callbacks to it from native operations.
+
+This clarification supersedes the absolute public-method wording below only
+for this tag-metadata boundary; the no-callback rule remains in force.
+
 Owner clarification (2026-10-06, supersedes earlier Python API/glue exceptions):
 Python is ONLY for PyPI packaging/distribution and testing. NEVER USE PYTHON IN
 PRODUCT EXECUTION. This includes public API wrappers, argument/data preparation,
