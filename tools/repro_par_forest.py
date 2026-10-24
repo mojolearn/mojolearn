@@ -15,7 +15,15 @@ Modes (one line per step, with wall time, flushed as it happens):
               time, then the whole fit_forest call and a plain fit.
   --direct    in this process, no worker: `_fit_with_tree_start` (which runs
               the native `rf_classifier_fit_shard`) for tree_start 0 and 4,
-              and a plain fit, on the same arrays.
+              and a plain fit, on the same arrays. With --inputs pool, on
+              exactly what a pool worker receives (as_f32_c X, the
+              flatten_labels Python list y, through a pickle round trip).
+
+MOJOLEARN_POOL_TIMING=1 (set unless --no-timing) makes the pool print
+POOL-TIMING lines (parent: pickle_request, write, wait_first_byte,
+read+unpickle_reply; worker: read+unpickle, execute, native_fit with the
+input types, pickle_reply, write) and POOL-SNAPSHOT lines (environment and
+loaded native modules of the worker and of a --direct process) on stderr.
   --verify-layout
               re-run this script (with the other flags) in a fresh process
               that leads its own session with stdout/stderr redirected to a
@@ -92,12 +100,27 @@ def run_pool(X, yc):
            lambda: ml.RandomForestClassifier(n_estimators=TREES, max_depth=DEPTH, random_state=SEED).fit(X, yc))
 
 
-def run_direct(X, yc):
+def run_direct(X, yc, inputs="numpy"):
+    """`inputs`: 'numpy' (the fixture arrays), or 'pool' (exactly what a pool
+    worker receives: as_f32_c X and flatten_labels y, a Python list,
+    round-tripped through pickle protocol 5)."""
+    import pickle
     import mojolearn as ml
+    from mojolearn import _parallel_worker
+    if os.environ.get("MOJOLEARN_POOL_TIMING") == "1":
+        _parallel_worker._timing_snapshot("direct")
+    if inputs == "pool":
+        from mojolearn._buffer import as_f32_c
+        from mojolearn._labels import flatten_labels
+        xs, _ = as_f32_c(X, ndim=2, name="X")
+        started = time.monotonic()
+        X, yc = pickle.loads(pickle.dumps((xs, flatten_labels(yc)), protocol=5))
+        _say(f"direct inputs as the pool sends them: X {type(X).__name__}, y {type(yc).__name__} "
+             f"(prepare+pickle round trip {time.monotonic() - started:.2f}s)")
     for start in (0, 4):
         model = ml.RandomForestClassifier(n_estimators=PER_SHARD, max_depth=DEPTH, random_state=SEED,
                                           numeric_mode="identical")
-        _timed(f"direct rf_classifier_fit_shard tree_start={start}",
+        _timed(f"direct ({inputs} inputs) rf_classifier_fit_shard tree_start={start}",
                lambda: model._fit_with_tree_start(X, yc, start))
     _timed("direct plain fit (4 trees)",
            lambda: ml.RandomForestClassifier(n_estimators=PER_SHARD, max_depth=DEPTH, random_state=SEED,
@@ -126,6 +149,10 @@ def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--direct", action="store_true")
+    parser.add_argument("--inputs", choices=("numpy", "pool"), default="numpy",
+                        help="--direct: fit on the fixture arrays, or on exactly what a pool worker receives")
+    parser.add_argument("--no-timing", action="store_true",
+                        help="do not set MOJOLEARN_POOL_TIMING=1 (parent/worker phase timings on stderr)")
     parser.add_argument("--verify-layout", action="store_true")
     parser.add_argument("--timeout", type=float, default=60.0)
     parser.add_argument("--cpu-threads", type=int)
@@ -136,6 +163,8 @@ def main(argv=None):
     if args.export:
         os.environ["MOJOLEARN_FOREST_EXPORT"] = args.export
     os.environ.setdefault("MOJOLEARN_NUMERIC_MODE", "identical")
+    if not args.no_timing:
+        os.environ["MOJOLEARN_POOL_TIMING"] = "1"
     if args.verify_layout:
         run_verify_layout(argv, args.timeout)
         return
@@ -144,7 +173,10 @@ def main(argv=None):
          f"stdout_tty={os.isatty(1)} MOJOLEARN_CPU_THREADS={os.environ.get('MOJOLEARN_CPU_THREADS')} "
          f"MOJOLEARN_FOREST_EXPORT={os.environ.get('MOJOLEARN_FOREST_EXPORT')}")
     X, yc = _fixture()
-    (run_direct if args.direct else run_pool)(X, yc)
+    if args.direct:
+        run_direct(X, yc, args.inputs)
+    else:
+        run_pool(X, yc)
     faulthandler.cancel_dump_traceback_later()
     _say("done")
 
